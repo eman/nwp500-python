@@ -20,27 +20,27 @@ This document lists the fields found in the ``status`` object of device status m
    * - ``outsideTemperature``
      - integer
      - °F
-     - The outdoor temperature.
+     - The outdoor/ambient temperature measured by the heat pump.
      - None
    * - ``specialFunctionStatus``
      - integer
      - None
-     - Status of special functions.
+     - Status of special functions (e.g., freeze protection, anti-seize operations).
      - None
    * - ``didReload``
      - integer
      - None
-     - Unknown.
+     - Indicates if the device has recently reloaded or restarted.
      - None
    * - ``errorCode``
      - integer
      - None
-     - Error code if any.
+     - Error code if any fault is detected. See ERROR_CODES.rst for details.
      - None
    * - ``subErrorCode``
      - integer
      - None
-     - Sub error code if any.
+     - Sub error code providing additional error details. See ERROR_CODES.rst for details.
      - None
    * - ``operationMode``
      - integer
@@ -50,67 +50,67 @@ This document lists the fields found in the ``status`` object of device status m
    * - ``operationBusy``
      - integer
      - None
-     - Indicates if the device is busy.
+     - Indicates if the device is currently performing heating operations (1=busy, 0=idle).
      - None
    * - ``freezeProtectionUse``
      - integer
      - None
-     - Whether freeze protection is enabled.
+     - Whether freeze protection is active. When tank water temperature falls below 43°F (6°C), the electric heater activates to prevent freezing.
      - None
    * - ``dhwUse``
      - integer
      - None
-     - DHW usage status.
+     - Domestic Hot Water (DHW) usage status - indicates if hot water is currently being drawn from the tank.
      - None
    * - ``dhwUseSustained``
      - integer
      - None
-     - Sustained DHW usage status.
+     - Sustained DHW usage status - indicates prolonged hot water usage.
      - None
    * - ``dhwTemperature``
      - integer
      - °F
-     - Current DHW temperature.
+     - Current Domestic Hot Water (DHW) outlet temperature.
      - ``raw + 20``
    * - ``dhwTemperatureSetting``
      - integer
      - °F
-     - Target DHW temperature.
+     - Target DHW temperature setting. Range: 95°F (35°C) to 150°F (65.5°C). Default: 120°F (49°C).
      - ``raw + 20``
    * - ``programReservationUse``
      - integer
      - None
-     - Whether a program reservation is in use.
+     - Whether a program reservation (scheduled operation) is in use.
      - None
    * - ``smartDiagnostic``
      - integer
      - None
-     - Smart diagnostic status.
+     - Smart diagnostic status for system health monitoring.
      - None
    * - ``faultStatus1``
      - integer
      - None
-     - Fault status 1.
+     - Fault status register 1 - bitfield indicating various fault conditions.
      - None
    * - ``faultStatus2``
      - integer
      - None
-     - Fault status 2.
+     - Fault status register 2 - bitfield indicating additional fault conditions.
      - None
    * - ``wifiRssi``
      - integer
      - dBm
-     - WiFi signal strength.
+     - WiFi signal strength in dBm (decibel-milliwatts). Typical values: -30 (excellent) to -90 (poor).
      - None
    * - ``ecoUse``
      - integer
      - None
-     - Whether ECO mode is enabled.
+     - Whether ECO (Energy Cut Off) safety feature has been triggered. The ECO switch is a high-temperature safety limit.
      - None
    * - ``dhwTargetTemperatureSetting``
      - integer
      - °F
-     - The target DHW temperature setting.
+     - The target DHW temperature setting (same as dhwTemperatureSetting).
      - ``raw + 20``
    * - ``tankUpperTemperature``
      - integer
@@ -125,72 +125,72 @@ This document lists the fields found in the ``status`` object of device status m
    * - ``dischargeTemperature``
      - integer
      - °F
-     - Discharge temperature.
+     - Compressor discharge temperature - temperature of refrigerant leaving the compressor.
      - ``raw / 10.0``
    * - ``suctionTemperature``
      - integer
      - °F
-     - Suction temperature.
+     - Compressor suction temperature - temperature of refrigerant entering the compressor.
      - ``raw / 10.0``
    * - ``evaporatorTemperature``
      - integer
      - °F
-     - Evaporator temperature.
+     - Evaporator temperature - temperature where heat is absorbed from ambient air.
      - ``raw / 10.0``
    * - ``ambientTemperature``
      - integer
      - °F
-     - Ambient temperature.
+     - Ambient air temperature measured at the heat pump air intake.
      - ``(raw * 9/5) + 32``
    * - ``targetSuperHeat``
      - integer
      - °F
-     - Target super heat value.
+     - Target superheat value - the desired temperature difference ensuring complete refrigerant vaporization.
      - ``raw / 10.0``
    * - ``compUse``
      - integer
      - None
-     - Compressor usage status (On/Off).
+     - Compressor usage status (1=On, 0=Off). The compressor is the main component of the heat pump.
      - None
    * - ``eevUse``
      - integer
      - None
-     - Electronic Expansion Valve usage status.
+     - Electronic Expansion Valve (EEV) usage status (1=active, 0=inactive). The EEV controls refrigerant flow.
      - None
    * - ``evaFanUse``
      - integer
      - None
-     - Evaporator fan usage status.
+     - Evaporator fan usage status (1=On, 0=Off). The fan pulls ambient air through the evaporator coil.
      - None
    * - ``currentInstPower``
      - integer
      - W
-     - Current instantaneous power consumption.
+     - Current instantaneous power consumption in Watts. Does not include heating element power when active.
      - None
    * - ``shutOffValveUse``
      - integer
      - None
-     - Shut-off valve usage status.
+     - Shut-off valve usage status. The valve controls refrigerant flow in the system.
      - None
    * - ``conOvrSensorUse``
      - integer
      - None
-     - Unknown sensor usage status.
+     - Condensate overflow sensor usage status.
      - None
    * - ``wtrOvrSensorUse``
      - integer
      - None
-     - Unknown sensor usage status.
+     - Water overflow/leak sensor usage status. Triggers error E799 if leak detected.
      - None
    * - ``dhwChargePer``
      - integer
      - %
-     - DHW charge percentage.
+     - DHW charge percentage - estimated percentage of hot water capacity available (0-100%).
      - None
    * - ``drEventStatus``
      - integer
      - None
-     - Demand Response event status.
+     - Demand Response (DR) event status. Indicates if utility DR commands are active (CTA-2045).
      - None
    * - ``vacationDaySetting``
      - integer
@@ -285,67 +285,67 @@ This document lists the fields found in the ``status`` object of device status m
    * - ``currentDhwFlowRate``
      - float
      - GPM
-     - Current DHW flow rate.
+     - Current DHW flow rate in Gallons Per Minute.
      - ``raw / 10.0``
    * - ``mixingRate``
      - integer
      - %
-     - Mixing rate.
+     - Mixing valve rate percentage (0-100%). Controls mixing of hot tank water with cold inlet water.
      - None
    * - ``eevStep``
      - integer
      - steps
-     - Electronic Expansion Valve step.
+     - Electronic Expansion Valve (EEV) step position. Valve opening rate expressed as step count.
      - None
    * - ``currentSuperHeat``
      - integer
      - °F
-     - Current super heat value.
+     - Current superheat value - actual temperature difference between suction and evaporator temperatures.
      - ``raw / 10.0``
    * - ``heatUpperUse``
      - integer
      - None
-     - Upper heater usage status (On/Off).
+     - Upper electric heating element usage status (1=On, 0=Off). Power: 3,755W @ 208V or 5,000W @ 240V.
      - None
    * - ``heatLowerUse``
      - integer
      - None
-     - Lower heater usage status (On/Off).
+     - Lower electric heating element usage status (1=On, 0=Off). Power: 3,755W @ 208V or 5,000W @ 240V.
      - None
    * - ``scaldUse``
      - integer
      - None
-     - Scald protection usage.
+     - Scald protection active status. Displays warning when water temperature reaches levels that could cause scalding.
      - None
    * - ``airFilterAlarmUse``
      - integer
      - None
-     - Air filter alarm usage.
+     - Air filter alarm usage - indicates if air filter maintenance reminder is enabled.
      - None
    * - ``airFilterAlarmPeriod``
      - integer
      - hours
-     - Air filter alarm period.
+     - Air filter alarm period setting. Default: 1,000 hours of operation.
      - None
    * - ``airFilterAlarmElapsed``
      - integer
      - hours
-     - Elapsed time for air filter alarm.
+     - Elapsed operation time since last air filter maintenance reset.
      - None
    * - ``cumulatedOpTimeEvaFan``
      - integer
      - hours
-     - Cumulated operation time of the evaporator fan.
+     - Cumulative operation time of the evaporator fan since installation.
      - None
    * - ``cumulatedDhwFlowRate``
      - integer
      - gallons
-     - Cumulated DHW flow rate.
+     - Cumulative DHW flow - total gallons of hot water delivered since installation.
      - None
    * - ``touStatus``
      - integer
      - None
-     - Time of Use status.
+     - Time of Use (TOU) status - indicates if TOU scheduled operation is active.
      - None
    * - ``hpUpperOnTempSetting``
      - integer
@@ -430,47 +430,103 @@ This document lists the fields found in the ``status`` object of device status m
    * - ``drOverrideStatus``
      - integer
      - None
-     - Demand Response override status.
+     - Demand Response override status. User can override DR commands for up to 72 hours.
      - None
    * - ``touOverrideStatus``
      - integer
      - None
-     - Time of Use override status.
+     - Time of Use override status. User can temporarily override TOU schedule.
      - None
    * - ``totalEnergyCapacity``
      - integer
      - Wh
-     - Total energy capacity.
+     - Total energy capacity of the tank in Watt-hours.
      - None
    * - ``availableEnergyCapacity``
      - integer
      - Wh
-     - Available energy capacity.
+     - Available energy capacity - remaining hot water energy available in Watt-hours.
      - None
 
 Operation Modes
 ---------------
 
-The ``operationMode`` field is an integer that maps to the following modes. The mapping from integer to string is not explicitly defined in the manual, so this is based on observation and will be updated as more information is available.
+The ``operationMode`` field is an integer that maps to the following modes. These modes balance energy efficiency and recovery time based on user needs.
 
 .. list-table::
    :header-rows: 1
 
    * - Value
      - Mode
+     - Recovery Time
+     - Energy Efficiency
      - Description
    * - 1
      - Heat Pump
-     - Most energy-efficient mode, using only the heat pump. It has the slowest recovery time.
+     - Very Slow
+     - High
+     - Most energy-efficient mode, using only the heat pump. Recovery time varies with ambient temperature and humidity. Higher ambient temperature and humidity improve efficiency and reduce recovery time.
    * - 2
      - Energy Saver (Hybrid: Efficiency)
-     - Default mode. Combines the heat pump and electric heater for balanced efficiency and recovery time.
+     - Fast
+     - Very High
+     - Default mode. Combines the heat pump and electric heater for balanced efficiency and recovery time. Heat pump is primarily used with electric heater for backup. Applied during initial shipment and factory reset.
    * - 3
      - High Demand (Hybrid: Boost)
-     - Also combines the heat pump and electric heater, but uses the electric heater more frequently for faster recovery.
+     - Very Fast
+     - Low
+     - Combines heat pump and electric heater with more frequent use of electric heater for faster recovery. Suitable when higher hot water supply is needed.
    * - 4
      - Electric
-     - Least energy-efficient mode, using only the upper and lower electric heaters for the fastest recovery time.
+     - Fast
+     - Very Low
+     - Uses only upper and lower electric heaters (not simultaneously). Least energy-efficient with shortest recovery time. Can operate continuously for up to 72 hours before automatically reverting to previous mode.
    * - 5
      - Vacation
-     - Suspends heating to save energy during long absences.
+     - None
+     - Very High
+     - Suspends heating to save energy during absences (0-99 days). Only minimal operations like freeze protection and anti-seize are performed. Heating resumes 9 hours before the vacation period ends.
+
+Technical Notes
+---------------
+
+**Temperature Sensors:**
+
+* Tank temperature sensors operate within -4°F to 149°F (-20°C to 65°C)
+* Outside normal range, system may operate with reduced capacity using opposite heating element
+* All tank temperature readings use conversion formula: ``display_temp = raw + 20``
+
+**Heating Elements:**
+
+* Upper and lower heating elements: 3,755W @ 208V or 5,000W @ 240V
+* Elements do not operate simultaneously in Electric mode
+* Heating elements activate for freeze protection when tank < 43°F (6°C)
+
+**Heat Pump Specifications:**
+
+* Refrigerant: R-134a (28.2 oz / 800 g)
+* Compressor: 208V (25.9A MCA) / 240V (28.8A MCA)
+* Evaporator fan: 0.22A
+* Discharge pressure: 2.654 MPa / 385 PSIG
+* Suction pressure: 1.724 MPa / 250 PSIG
+
+**Safety Features:**
+
+* Freeze Protection: Activates at 43°F (6°C), default setting
+* ECO (Energy Cut Off): High-temperature safety limit switch
+* Condensate Level Sensor: Detects overflow, triggers E990
+* Water Leak Detection: Triggers E799 if leak detected
+* T&P Relief Valve: Temperature & Pressure safety valve
+
+**Communication:**
+
+* WiFi RSSI typical range: -30 dBm (excellent) to -90 dBm (poor)
+* CTA-2045 Demand Response support
+* Maximum 30A circuit breaker rating
+
+See Also
+--------
+
+* ERROR_CODES.rst - Complete error code reference with diagnostics
+* ENERGY_MONITORING.rst - Energy consumption tracking
+* MQTT_MESSAGES.rst - Status message format details

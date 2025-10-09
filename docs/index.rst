@@ -308,6 +308,7 @@ Next Steps
 - :doc:`EVENT_ARCHITECTURE` - Event emitter technical architecture
 - :doc:`ENERGY_MONITORING` - Track power consumption and usage
 - :doc:`DEVICE_STATUS_FIELDS` - Complete field reference
+- :doc:`ERROR_CODES` - Error code reference and troubleshooting
 - :doc:`MQTT_MESSAGES` - Message format details
 
 
@@ -328,6 +329,7 @@ Documentation
    Event Architecture <EVENT_ARCHITECTURE>
    Energy Monitoring <ENERGY_MONITORING>
    Device Status Fields <DEVICE_STATUS_FIELDS>
+   Error Codes <ERROR_CODES>
    MQTT Messages <MQTT_MESSAGES>
    Development History <DEVELOPMENT>
    Contributing <contributing>
