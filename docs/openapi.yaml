@@ -1,0 +1,529 @@
+
+openapi: 3.0.0
+info:
+  title: Navien Smart Control API
+  description: |
+    OpenAPI specification for the Navien Smart Control REST API.
+
+    ## Authentication
+
+    The API uses JWT for authentication. The following steps are required to authenticate:
+
+    1.  **Sign-In**: Send a `POST` request to `/user/sign-in` with the user's email and password.
+    2.  **Receive Tokens**: The server returns an `idToken`, `accessToken`, and `refreshToken`.
+    3.  **Authorize Requests**: Include the `accessToken` in the `Authorization` header of subsequent requests as a Bearer token.
+    4.  **Refresh Token**: When the `accessToken` expires, send a `POST` request to `/auth/refresh` with the `refreshToken` to obtain a new set of tokens.
+  version: 2.1.0
+servers:
+  - url: https://nlus.naviensmartcontrol.com/api/v2.1
+security:
+  - bearerAuth: []
+paths:
+  /user/sign-in:
+    post:
+      summary: User Sign-In
+      description: Authenticates the user and returns tokens.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                userId:
+                  type: string
+                  example: user@example.com
+                password:
+                  type: string
+                  example: "password"
+      responses:
+        '200':
+          description: Successful authentication
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: integer
+                    example: 200
+                  msg:
+                    type: string
+                    example: SUCCESS
+                  data:
+                    type: object
+                    properties:
+                      userInfo:
+                        type: object
+                        properties:
+                          userType:
+                            type: string
+                            example: "O"
+                          userFirstName:
+                            type: string
+                            example: "John"
+                          userLastName:
+                            type: string
+                            example: "Doe"
+                          userStatus:
+                            type: string
+                            example: "NORMAL"
+                          userSeq:
+                            type: integer
+                            example: 36283
+                      legal:
+                        type: array
+                        items:
+                          type: object
+                      token:
+                        type: object
+                        properties:
+                          idToken:
+                            type: string
+                          accessToken:
+                            type: string
+                          refreshToken:
+                            type: string
+                          authenticationExpiresIn:
+                            type: integer
+                            example: 3600
+                          accessKeyId:
+                            type: string
+                          secretKey:
+                            type: string
+                          sessionToken:
+                            type: string
+                          authorizationExpiresIn:
+                            type: integer
+                            example: 3600
+  /auth/refresh:
+    post:
+      summary: Refresh Token
+      description: Refreshes the access token using a refresh token.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                refreshToken:
+                  type: string
+      responses:
+        '200':
+          description: Successful token refresh
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: integer
+                    example: 200
+                  msg:
+                    type: string
+                    example: SUCCESS
+                  data:
+                    type: object
+                    properties:
+                      idToken:
+                        type: string
+                      accessToken:
+                        type: string
+                      refreshToken:
+                        type: string
+                      authenticationExpiresIn:
+                        type: integer
+                        example: 3600
+  /device/list:
+    post:
+      summary: List Devices
+      description: Retrieves a list of devices associated with the user.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                offset:
+                  type: integer
+                  example: 0
+                count:
+                  type: integer
+                  example: 20
+                userId:
+                  type: string
+                  example: "user@example.com"
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: integer
+                    example: 200
+                  msg:
+                    type: string
+                    example: SUCCESS
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        deviceInfo:
+                          type: object
+                          properties:
+                            homeSeq:
+                              type: integer
+                              example: 25004
+                            macAddress:
+                              type: string
+                              example: "04786332fca0"
+                            additionalValue:
+                              type: string
+                              example: "5322"
+                            deviceType:
+                              type: integer
+                              example: 52
+                            deviceName:
+                              type: string
+                              example: "NWP500"
+                            connected:
+                              type: integer
+                              example: 2
+                        location:
+                          type: object
+                          properties:
+                            state:
+                              type: string
+                              example: "California"
+                            city:
+                              type: string
+                              example: "Anytown"
+                            address:
+                              type: string
+                              example: "123 Main Street" 
+  /device/info:
+    post:
+      summary: Device Info
+      description: Retrieves information about a specific device.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                macAddress:
+                  type: string
+                  example: "0123456789ab"
+                additionalValue:
+                  type: string
+                  example: "5322"
+                userId:
+                  type: string
+                  example: "user@example.com"
+      responses:
+        '200':
+          description: Device information
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: integer
+                    example: 200
+                  msg:
+                    type: string
+                    example: SUCCESS
+                  data:
+                    type: object
+                    properties:
+                      deviceInfo:
+                        type: object
+                        properties:
+                          homeSeq:
+                            type: integer
+                            example: 25004
+                          deviceName:
+                            type: string
+                            example: "NWP500"
+                          deviceType:
+                            type: integer
+                            example: 52
+                          installType:
+                            type: string
+                            example: "R"
+                          connected:
+                            type: integer
+                            example: 2
+                      location:
+                        type: object
+                        properties:
+                          state:
+                            type: string
+                            example: "California"
+                          city:
+                            type: string
+                            example: "Anytown"
+                          address:
+                            type: string
+                            example: "123 Main Street"
+                          latitude:
+                            type: number
+                            example: 34.052235
+                          longitude:
+                            type: number
+                            example: -118.243683
+                          altitude:
+                            type: object
+                            nullable: true
+                      installer:
+                        type: object
+                        properties:
+                          installerId:
+                            type: object
+                            nullable: true
+                          installerFirstName:
+                            type: object
+                            nullable: true
+                          installerLastName:
+                            type: object
+                            nullable: true
+                          installerPhoneNumber:
+                            type: object
+                            nullable: true
+                      alarmInfo:
+                        type: object
+                        properties:
+                          isEtcAlarm:
+                            type: integer
+                            example: 1
+                          isErrorAlarm:
+                            type: integer
+                            example: 1
+                      descaling:
+                        type: object
+                        properties:
+                          descalingStartTime:
+                            type: object
+                            nullable: true
+                          descalingEndTime:
+                            type: object
+                            nullable: true
+  /device/firmware/info:
+    post:
+      summary: Firmware Info
+      description: Retrieves firmware information for a device.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                macAddress:
+                  type: string
+                  example: "0123456789ab"
+                additionalValue:
+                  type: string
+                  example: "5322"
+                userId:
+                  type: string
+                  example: "user@example.com"
+      responses:
+        '200':
+          description: Firmware information
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: integer
+                    example: 200
+                  msg:
+                    type: string
+                    example: SUCCESS
+                  data:
+                    type: object
+                    properties:
+                      firmwares:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            macAddress:
+                              type: string
+                              example: "04786332fca0"
+                            additionalValue:
+                              type: string
+                              example: "5322"
+                            deviceType:
+                              type: integer
+                              example: 52
+                            deviceGroup:
+                              type: object
+                              nullable: true
+                            curSwCode:
+                              type: integer
+                              example: 33556241
+                            curVersion:
+                              type: integer
+                              example: 167837696
+                            downloadedVersion:
+                              type: integer
+                              nullable: true
+                              example: 0
+  /device/tou:
+    get:
+      summary: Time of Use
+      description: Retrieves Time of Use (TOU) information for a device.
+      parameters:
+        - name: additionalValue
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: controllerId
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: macAddress
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: userId
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: userType
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: integer
+                    example: 200
+                  msg:
+                    type: string
+                    example: SUCCESS
+                  data:
+                    type: object
+                    properties:
+                      registerPath:
+                        type: string
+                        example: "bt"
+                      sourceType:
+                        type: string
+                        example: "openei"
+                      touInfo:
+                        type: object
+                        properties:
+                          controllerId:
+                            type: string
+                            example: "56496061BT22230408"
+                          manufactureId:
+                            type: string
+                            example: "6760E2532669023"
+                          name:
+                            type: string
+                            example: "E-TOU-C Residential Time of Use Baseline Region V (All Electric Service)"
+                          schedule:
+                            type: array
+                            items:
+                              type: object
+                              properties:
+                                season:
+                                  type: integer
+                                  example: 3615
+                                interval:
+                                  type: array
+                                  items:
+                                    type: object
+                                    properties:
+                                      priceMin:
+                                        type: integer
+                                        example: 36261
+                                      endHour:
+                                        type: integer
+                                        example: 15
+                                      priceMax:
+                                        type: integer
+                                        example: 46378
+                                      week:
+                                        type: integer
+                                        example: 124
+                                      decimalPoint:
+                                        type: integer
+                                        example: 5
+                                      startHour:
+                                        type: integer
+                                        example: 0
+                                      startMinute:
+                                        type: integer
+                                        example: 0
+                                      endMinute:
+                                        type: integer
+                                        example: 59
+                          utility:
+                            type: string
+                            example: "Pacific Gas & Electric Co"
+                          zipCode:
+                            type: integer
+                            example: 94595
+  /app/update-push-token:
+    post:
+      summary: Update Push Token
+      description: Updates the push notification token for the application.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                modelName:
+                  type: string
+                appVersion:
+                  type: string
+                os:
+                  type: string
+                osVersion:
+                  type: string
+                userId:
+                  type: string
+                pushToken:
+                  type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: integer
+                    example: 200
+                  msg:
+                    type: string
+                    example: SUCCESS
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT

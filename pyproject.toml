@@ -1,0 +1,97 @@
+[build-system]
+# AVOID CHANGING REQUIRES: IT WILL BE UPDATED BY PYSCAFFOLD!
+requires = ["setuptools>=46.1.0", "setuptools_scm[toml]>=5"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools_scm]
+# For smarter version schemes and other configuration options,
+# check out https://github.com/pypa/setuptools_scm
+version_scheme = "no-guess-dev"
+
+[tool.ruff]
+# Ruff configuration for code formatting and linting
+line-length = 88
+target-version = "py39"
+
+# Exclude directories
+exclude = [
+    ".bzr",
+    ".direnv",
+    ".eggs",
+    ".git",
+    ".git-rewrite",
+    ".hg",
+    ".mypy_cache",
+    ".nox",
+    ".pants.d",
+    ".pytype",
+    ".ruff_cache",
+    ".svn",
+    ".tox",
+    ".venv",
+    "__pypackages__",
+    "_build",
+    "buck-out",
+    "build",
+    "dist",
+    "node_modules",
+    "venv",
+    "docs/conf.py",
+    "src/nwp500/mqtt_client_updated.py",  # Work in progress file
+]
+
+[tool.ruff.lint]
+# Enable pycodestyle (`E`) and Pyflakes (`F`) codes by default.
+# Add other rules as needed:
+# - isort (I) for import sorting
+# - pyupgrade (UP) for Python version upgrade suggestions
+# - flake8-bugbear (B) for common bugs
+# - flake8-comprehensions (C4) for comprehension improvements
+# - flake8-simplify (SIM) for simplification suggestions
+select = [
+    "E",     # pycodestyle errors
+    "F",     # Pyflakes
+    "W",     # pycodestyle warnings
+    "I",     # isort
+    "UP",    # pyupgrade
+    "B",     # flake8-bugbear
+    "C4",    # flake8-comprehensions
+    "SIM",   # flake8-simplify
+]
+
+ignore = [
+    "E203",  # whitespace before ':' (conflicts with black/ruff format)
+    "E501",  # line too long (handled by formatter)
+    "B904",  # raise from - will be addressed in a future update
+]
+
+# Allow autofix for all enabled rules (when `--fix` is provided)
+fixable = ["ALL"]
+unfixable = []
+
+# Allow unused variables when underscore-prefixed
+dummy-variable-rgx = "^(_+|(_+[a-zA-Z0-9_]*[a-zA-Z0-9]+?))$"
+
+[tool.ruff.lint.per-file-ignores]
+# Ignore import rules in __init__.py files
+"__init__.py" = ["F401", "F403"]
+# Ignore rules in test files
+"tests/**/*.py" = ["B", "SIM"]
+# Ignore import order in examples (they need to modify sys.path first)
+"examples/**/*.py" = ["E402"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["nwp500"]
+
+[tool.ruff.format]
+# Use double quotes for strings
+quote-style = "double"
+
+# Indent with spaces
+indent-style = "space"
+
+# Like Black, respect magic trailing commas
+skip-magic-trailing-comma = false
+
+# Like Black, automatically detect the appropriate line ending
+line-ending = "auto"
