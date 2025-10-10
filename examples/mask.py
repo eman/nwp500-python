@@ -11,24 +11,8 @@ from typing import Optional
 
 
 def mask_mac(mac: Optional[str]) -> str:
-    """Return a masked representation of a MAC-like string.
-
-    - If a MAC-like pattern is detected it is replaced with "[REDACTED_MAC]".
-    - If the input is None/empty we return a redaction tag.
-    - Otherwise we return a short masked fallback showing the last 4 chars.
-    """
-    if not mac:
-        return "[REDACTED_MAC]"
-
-    try:
-        mac_regex = r"(?:[0-9A-Fa-f]{2}[:-]){5}[0-9A-Fa-f]{2}|(?:[0-9A-Fa-f]{12})"
-        masked = re.sub(mac_regex, "[REDACTED_MAC]", mac)
-        if masked and masked != mac:
-            return masked
-        # fallback: always redact to avoid any leakage
-        return "[REDACTED_MAC]"
-    except Exception:
-        return "[REDACTED_MAC]"
+    """Always return fully redacted MAC address label, never expose partial values."""
+    return "[REDACTED_MAC]"
 
 
 def mask_mac_in_topic(topic: str, mac_addr: Optional[str] = None) -> str:
