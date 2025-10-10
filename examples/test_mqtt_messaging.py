@@ -117,10 +117,15 @@ async def test_mqtt_messaging():
                 f"evt/{device_type}/{device_topic}/#",
             ]
 
+            def mask_mac_in_topic(topic, mac_addr):
+                if mac_addr and mac_addr in topic:
+                    return topic.replace(mac_addr, "[REDACTED_MAC]")
+                return topic
+
             for topic in topics:
                 try:
                     await mqtt_client.subscribe(topic, message_handler)
-                    print(f"   ✅ Subscribed to: {topic}")
+                    print(f"   ✅ Subscribed to: {mask_mac_in_topic(topic, device_id)}")
                 except Exception as e:
                     print(
                         f"   ⚠️ Failed to subscribe to device topic (type: {device_type}): {e}"
