@@ -120,16 +120,17 @@ async def test_mqtt_messaging():
                 f"evt/{device_type}/{device_topic}/#",
             ]
 
-            def mask_mac_in_topic(topic, mac_addr):
+            def mask_mac_in_topic(topic: str) -> str:
                 # Mask any MAC address-looking patterns in the topic string
-                # Covers hex format with :, -, or no delimiter (e.g. XX:XX:XX:XX:XX:XX)
-                mac_regex = r"([0-9A-Fa-f]{2}[:-]){5}[0-9A-Fa-f]{2}|([0-9A-Fa-f]{12})"
+                # Covers hex format with :, -, or no delimiter (e.g. XX:XX:XX:XX:XX:XX, XXXX.XXXX.XXXX)
+                # Also covers Cisco-style (XXXX.XXXX.XXXX) and mixed delimiters.
+                mac_regex = r"(?:[0-9A-Fa-f]{2}[:-]){5}[0-9A-Fa-f]{2}|(?:[0-9A-Fa-f]{4}\.[0-9A-Fa-f]{4}\.[0-9A-Fa-f]{4})|(?:[0-9A-Fa-f]{12})"
                 return re.sub(mac_regex, "[REDACTED_MAC]", topic)
 
             for topic in topics:
                 try:
                     await mqtt_client.subscribe(topic, message_handler)
-                    print(f"   ✅ Subscribed to: {mask_mac_in_topic(topic, device_id)}")
+                    print(f"   ✅ Subscribed to: {mask_mac_in_topic(topic)}")
                 except Exception:
                     # Avoid printing exception contents which may contain sensitive identifiers
                     print(f"   ⚠️ Failed to subscribe to device topic (type: {device_type})")
