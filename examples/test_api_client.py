@@ -241,12 +241,15 @@ async def test_convenience_function():
 def main():
     """Main entry point."""
 
-    if len(sys.argv) > 1 and sys.argv[1] == "--convenience":
-        exit_code = asyncio.run(test_convenience_function())
-    else:
-        exit_code = asyncio.run(test_api_client())
-
-    sys.exit(exit_code)
+    try:
+        if len(sys.argv) > 1 and sys.argv[1] == "--convenience":
+            exit_code = asyncio.run(test_convenience_function())
+        else:
+            exit_code = asyncio.run(test_api_client())
+        sys.exit(exit_code)
+    except KeyboardInterrupt:
+        print("\nInterrupted by user. Exiting cleanly.")
+        sys.exit(0)
 
 
 if __name__ == "__main__":
