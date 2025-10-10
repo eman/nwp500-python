@@ -24,7 +24,8 @@ import sys
 
 # Setup logging
 logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    level=logging.INFO,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
 )
 
 from nwp500 import NavienAPIClient, NavienAuthClient, NavienMqttClient
@@ -179,15 +180,9 @@ async def main():
 
             # Show listener counts
             print("4. Listener statistics:")
-            print(
-                f"   temperature_changed: {mqtt_client.listener_count('temperature_changed')} listeners"
-            )
-            print(
-                f"   mode_changed: {mqtt_client.listener_count('mode_changed')} listeners"
-            )
-            print(
-                f"   heating_started: {mqtt_client.listener_count('heating_started')} listeners"
-            )
+            print(f"   temperature_changed: {mqtt_client.listener_count('temperature_changed')} listeners")
+            print(f"   mode_changed: {mqtt_client.listener_count('mode_changed')} listeners")
+            print(f"   heating_started: {mqtt_client.listener_count('heating_started')} listeners")
             print(f"   Total events registered: {len(mqtt_client.event_names())}")
             print()
 
@@ -223,34 +218,22 @@ async def main():
 
             # Step 7: Show event statistics
             print("9. Event statistics:")
-            print(
-                f"   temperature_changed: emitted {mqtt_client.event_count('temperature_changed')} times"
-            )
-            print(
-                f"   mode_changed: emitted {mqtt_client.event_count('mode_changed')} times"
-            )
-            print(
-                f"   status_received: emitted {mqtt_client.event_count('status_received')} times"
-            )
+            print(f"   temperature_changed: emitted {mqtt_client.event_count('temperature_changed')} times")
+            print(f"   mode_changed: emitted {mqtt_client.event_count('mode_changed')} times")
+            print(f"   status_received: emitted {mqtt_client.event_count('status_received')} times")
             print()
 
             # Step 8: Dynamic listener management
             print("10. Demonstrating dynamic listener removal...")
-            print(
-                f"    Before: {mqtt_client.listener_count('temperature_changed')} listeners"
-            )
+            print(f"    Before: {mqtt_client.listener_count('temperature_changed')} listeners")
 
             # Remove one listener
             mqtt_client.off("temperature_changed", alert_on_high_temp)
-            print(
-                f"    After removing alert: {mqtt_client.listener_count('temperature_changed')} listeners"
-            )
+            print(f"    After removing alert: {mqtt_client.listener_count('temperature_changed')} listeners")
 
             # Add it back
             mqtt_client.on("temperature_changed", alert_on_high_temp)
-            print(
-                f"    After adding back: {mqtt_client.listener_count('temperature_changed')} listeners"
-            )
+            print(f"    After adding back: {mqtt_client.listener_count('temperature_changed')} listeners")
             print()
 
             # Step 9: Cleanup

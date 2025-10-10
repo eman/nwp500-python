@@ -215,9 +215,7 @@ class NavienMqttClient(EventEmitter):
         self._manual_disconnect = False
 
         # Command queue
-        self._command_queue: deque[QueuedCommand] = deque(
-            maxlen=self.config.max_queued_commands
-        )
+        self._command_queue: deque[QueuedCommand] = deque(maxlen=self.config.max_queued_commands)
 
         # State tracking for change detection
         self._previous_status: Optional[DeviceStatus] = None
@@ -277,17 +275,13 @@ class NavienMqttClient(EventEmitter):
             _logger.info("Starting automatic reconnection...")
             self._reconnect_task = asyncio.create_task(self._reconnect_with_backoff())
 
-    def _on_connection_resumed_internal(
-        self, connection, return_code, session_present, **kwargs
-    ):
+    def _on_connection_resumed_internal(self, connection, return_code, session_present, **kwargs):
         """Internal handler for connection resumption."""
         _logger.info(
             f"Connection resumed: return_code={return_code}, session_present={session_present}"
         )
         self._connected = True
-        self._reconnect_attempts = (
-            0  # Reset reconnection attempts on successful connection
-        )
+        self._reconnect_attempts = 0  # Reset reconnection attempts on successful connection
 
         # Cancel any pending reconnection task
         if self._reconnect_task and not self._reconnect_task.done():
@@ -295,9 +289,7 @@ class NavienMqttClient(EventEmitter):
             self._reconnect_task = None
 
         # Emit event
-        self._schedule_coroutine(
-            self.emit("connection_resumed", return_code, session_present)
-        )
+        self._schedule_coroutine(self.emit("connection_resumed", return_code, session_present))
 
         # Call user callback
         if self._on_connection_resumed:
@@ -324,16 +316,15 @@ class NavienMqttClient(EventEmitter):
             # Calculate delay with exponential backoff
             delay = min(
                 self.config.initial_reconnect_delay
-                * (
-                    self.config.reconnect_backoff_multiplier
-                    ** (self._reconnect_attempts - 1)
-                ),
+                * (self.config.reconnect_backoff_multiplier ** (self._reconnect_attempts - 1)),
                 self.config.max_reconnect_delay,
             )
 
             _logger.info(
-                f"Reconnection attempt {self._reconnect_attempts}/{self.config.max_reconnect_attempts} "
-                f"in {delay:.1f} seconds..."
+                "Reconnection attempt %d/%d in %.1f seconds...",
+                self._reconnect_attempts,
+                self.config.max_reconnect_attempts,
+                delay,
             )
 
             try:
@@ -380,7 +371,9 @@ class NavienMqttClient(EventEmitter):
             try:
                 # Publish the queued command
                 await self.publish(
-                    topic=command.topic, payload=command.payload, qos=command.qos
+                    topic=command.topic,
+                    payload=command.payload,
+                    qos=command.qos,
                 )
                 sent_count += 1
                 _logger.debug(
@@ -389,9 +382,7 @@ class NavienMqttClient(EventEmitter):
                 )
             except Exception as e:
                 failed_count += 1
-                _logger.error(
-                    f"Failed to send queued command to '{command.topic}': {e}"
-                )
+                _logger.error(f"Failed to send queued command to '{command.topic}': {e}")
                 # Re-queue if there's room
                 if len(self._command_queue) < self.config.max_queued_commands:
                     self._command_queue.append(command)
@@ -404,9 +395,7 @@ class NavienMqttClient(EventEmitter):
                 + (f", {failed_count} failed" if failed_count > 0 else "")
             )
 
-    def _queue_command(
-        self, topic: str, payload: dict[str, Any], qos: mqtt.QoS
-    ) -> None:
+    def _queue_command(self, topic: str, payload: dict[str, Any], qos: mqtt.QoS) -> None:
         """
         Add a command to the queue.
 
@@ -422,21 +411,16 @@ class NavienMqttClient(EventEmitter):
             )
             return
 
-        command = QueuedCommand(
-            topic=topic, payload=payload, qos=qos, timestamp=datetime.utcnow()
-        )
+        command = QueuedCommand(topic=topic, payload=payload, qos=qos, timestamp=datetime.utcnow())
 
         # If queue is full, oldest command will be dropped automatically (deque with maxlen)
         if len(self._command_queue) >= self.config.max_queued_commands:
             _logger.warning(
-                f"Command queue full ({self.config.max_queued_commands}), "
-                "dropping oldest command"
+                f"Command queue full ({self.config.max_queued_commands}), dropping oldest command"
             )
 
         self._command_queue.append(command)
-        _logger.info(
-            f"Queued command to '{topic}' (queue size: {len(self._command_queue)})"
-        )
+        _logger.info(f"Queued command (queue size: {len(self._command_queue)})")
 
     async def connect(self) -> bool:
         """
@@ -469,17 +453,15 @@ class NavienMqttClient(EventEmitter):
 
         try:
             # Build WebSocket MQTT connection with AWS credentials
-            self._connection = (
-                mqtt_connection_builder.websockets_with_default_aws_signing(
-                    endpoint=self.config.endpoint,
-                    region=self.config.region,
-                    credentials_provider=self._create_credentials_provider(),
-                    client_id=self.config.client_id,
-                    clean_session=self.config.clean_session,
-                    keep_alive_secs=self.config.keep_alive_secs,
-                    on_connection_interrupted=self._on_connection_interrupted_internal,
-                    on_connection_resumed=self._on_connection_resumed_internal,
-                )
+            self._connection = mqtt_connection_builder.websockets_with_default_aws_signing(
+                endpoint=self.config.endpoint,
+                region=self.config.region,
+                credentials_provider=self._create_credentials_provider(),
+                client_id=self.config.client_id,
+                clean_session=self.config.clean_session,
+                keep_alive_secs=self.config.keep_alive_secs,
+                on_connection_interrupted=self._on_connection_interrupted_internal,
+                on_connection_resumed=self._on_connection_resumed_internal,
             )
 
             # Connect
@@ -554,7 +536,10 @@ class NavienMqttClient(EventEmitter):
 
             # Call registered handlers that match this topic
             # Need to match against subscription patterns with wildcards
-            for subscription_pattern, handlers in self._message_handlers.items():
+            for (
+                subscription_pattern,
+                handlers,
+            ) in self._message_handlers.items():
                 if self._topic_matches_pattern(topic, subscription_pattern):
                     for handler in handlers:
                         try:
@@ -759,9 +744,7 @@ class NavienMqttClient(EventEmitter):
             "responseTopic": f"cmd/{device_type}/{device_topic}/{self.config.client_id}/res",
         }
 
-    async def subscribe_device(
-        self, device: Device, callback: Callable[[str, dict], None]
-    ) -> int:
+    async def subscribe_device(self, device: Device, callback: Callable[[str, dict], None]) -> int:
         """
         Subscribe to all messages from a specific device.
 
@@ -839,7 +822,8 @@ class NavienMqttClient(EventEmitter):
                 # Check if message contains status data
                 if "response" not in message:
                     _logger.debug(
-                        f"Message does not contain 'response' key, skipping. Keys: {list(message.keys())}"
+                        "Message does not contain 'response' key, skipping. Keys: %s",
+                        list(message.keys()),
                     )
                     return
 
@@ -848,7 +832,8 @@ class NavienMqttClient(EventEmitter):
 
                 if "status" not in response:
                     _logger.debug(
-                        f"Response does not contain 'status' key, skipping. Keys: {list(response.keys())}"
+                        "Response does not contain 'status' key, skipping. Keys: %s",
+                        list(response.keys()),
                     )
                     return
 
@@ -870,7 +855,8 @@ class NavienMqttClient(EventEmitter):
 
             except KeyError as e:
                 _logger.warning(
-                    f"Missing required field in status message: {e}", exc_info=True
+                    f"Missing required field in status message: {e}",
+                    exc_info=True,
                 )
             except ValueError as e:
                 _logger.warning(f"Invalid value in status message: {e}", exc_info=True)
@@ -878,9 +864,7 @@ class NavienMqttClient(EventEmitter):
                 _logger.error(f"Error parsing device status: {e}", exc_info=True)
 
         # Subscribe using the internal handler
-        return await self.subscribe_device(
-            device=device, callback=status_message_handler
-        )
+        return await self.subscribe_device(device=device, callback=status_message_handler)
 
     async def _detect_state_changes(self, status: DeviceStatus):
         """
@@ -918,9 +902,7 @@ class NavienMqttClient(EventEmitter):
                     prev.operationMode,
                     status.operationMode,
                 )
-                _logger.debug(
-                    f"Mode changed: {prev.operationMode} → {status.operationMode}"
-                )
+                _logger.debug(f"Mode changed: {prev.operationMode} → {status.operationMode}")
 
             # Power consumption change
             if status.currentInstPower != prev.currentInstPower:
@@ -1006,7 +988,8 @@ class NavienMqttClient(EventEmitter):
                 # Check if message contains feature data
                 if "response" not in message:
                     _logger.debug(
-                        f"Message does not contain 'response' key, skipping. Keys: {list(message.keys())}"
+                        "Message does not contain 'response' key, skipping. Keys: %s",
+                        list(message.keys()),
                     )
                     return
 
@@ -1015,7 +998,8 @@ class NavienMqttClient(EventEmitter):
 
                 if "feature" not in response:
                     _logger.debug(
-                        f"Response does not contain 'feature' key, skipping. Keys: {list(response.keys())}"
+                        "Response does not contain 'feature' key, skipping. Keys: %s",
+                        list(response.keys()),
                     )
                     return
 
@@ -1034,7 +1018,8 @@ class NavienMqttClient(EventEmitter):
 
             except KeyError as e:
                 _logger.warning(
-                    f"Missing required field in feature message: {e}", exc_info=True
+                    f"Missing required field in feature message: {e}",
+                    exc_info=True,
                 )
             except ValueError as e:
                 _logger.warning(f"Invalid value in feature message: {e}", exc_info=True)
@@ -1042,9 +1027,7 @@ class NavienMqttClient(EventEmitter):
                 _logger.error(f"Error parsing device feature: {e}", exc_info=True)
 
         # Subscribe using the internal handler
-        return await self.subscribe_device(
-            device=device, callback=feature_message_handler
-        )
+        return await self.subscribe_device(device=device, callback=feature_message_handler)
 
     async def request_device_status(self, device: Device) -> int:
         """
@@ -1075,9 +1058,6 @@ class NavienMqttClient(EventEmitter):
     async def request_device_info(self, device: Device) -> int:
         """
         Request device information.
-
-        Args:
-            device: Device object
 
         Returns:
             Publish packet ID
@@ -1219,9 +1199,7 @@ class NavienMqttClient(EventEmitter):
 
         return await self.publish(topic, command)
 
-    async def set_dhw_temperature_display(
-        self, device: Device, display_temperature: int
-    ) -> int:
+    async def set_dhw_temperature_display(self, device: Device, display_temperature: int) -> int:
         """
         Set DHW target temperature using the DISPLAY value (what you see on device/app).
 
@@ -1243,9 +1221,7 @@ class NavienMqttClient(EventEmitter):
         message_temperature = display_temperature - 20
         return await self.set_dhw_temperature(device, message_temperature)
 
-    async def request_energy_usage(
-        self, device: Device, year: int, months: list[int]
-    ) -> int:
+    async def request_energy_usage(self, device: Device, year: int, months: list[int]) -> int:
         """
         Request daily energy usage data for specified month(s).
 
@@ -1327,51 +1303,48 @@ class NavienMqttClient(EventEmitter):
             >>> await mqtt_client.subscribe_energy_usage(device, on_energy_usage)
             >>> await mqtt_client.request_energy_usage(device, 2025, [9])
         """
+
         device_type = device.device_info.device_type
 
         def energy_message_handler(topic: str, message: dict):
-            """Parse energy usage messages and invoke user callback."""
+            """Internal handler to parse energy usage responses."""
             try:
-                _logger.debug(f"Energy handler received message on topic: {topic}")
-                _logger.debug(f"Message keys: {list(message.keys())}")
+                _logger.debug("Energy handler received message on topic: %s", topic)
+                _logger.debug("Message keys: %s", list(message.keys()))
 
-                # Check if message contains response data
                 if "response" not in message:
-                    _logger.debug("Message does not contain 'response' key, skipping")
-                    return
-
-                response_data = message["response"]
-                _logger.debug(f"Response keys: {list(response_data.keys())}")
-
-                # Verify this is an energy usage response
-                if "typeOfUsage" not in response_data:
                     _logger.debug(
-                        "Response does not contain 'typeOfUsage' key, skipping"
+                        "Message does not contain 'response' key, skipping. Keys: %s",
+                        list(message.keys()),
                     )
                     return
 
-                # Parse energy usage response
-                _logger.info(f"Parsing energy usage response from topic: {topic}")
+                response_data = message["response"]
+                _logger.debug("Response keys: %s", list(response_data.keys()))
+
+                if "typeOfUsage" not in response_data:
+                    _logger.debug(
+                        "Response does not contain 'typeOfUsage' key, skipping. Keys: %s",
+                        list(response_data.keys()),
+                    )
+                    return
+
+                _logger.info("Parsing energy usage response from topic: %s", topic)
                 energy_response = EnergyUsageResponse.from_dict(response_data)
 
-                # Invoke user callback with parsed energy data
                 _logger.info("Invoking user callback with parsed EnergyUsageResponse")
                 callback(energy_response)
                 _logger.debug("User callback completed successfully")
 
             except KeyError as e:
-                _logger.warning(
-                    f"Failed to parse energy usage message - missing key: {e}"
-                )
+                _logger.warning("Failed to parse energy usage message - missing key: %s", e)
             except Exception as e:
-                _logger.error(
-                    f"Error in energy usage message handler: {e}", exc_info=True
-                )
+                _logger.error("Error in energy usage message handler: %s", e, exc_info=True)
 
-        # Subscribe to energy usage response topic
         response_topic = (
             f"cmd/{device_type}/{self.config.client_id}/res/energy-usage-daily-query/rd"
         )
+
         return await self.subscribe(response_topic, energy_message_handler)
 
     async def signal_app_connection(self, device: Device) -> int:
@@ -1434,19 +1407,19 @@ class NavienMqttClient(EventEmitter):
             - All tasks automatically stop when client disconnects
         """
         device_id = device.device_info.mac_address
+        # Do not log MAC address; use a generic placeholder to avoid leaking sensitive information
+        redacted_device_id = "DEVICE_ID_REDACTED"
         task_name = f"periodic_{request_type.value}_{device_id}"
 
         # Stop existing task for this device/type if any
         if task_name in self._periodic_tasks:
-            _logger.info(
-                f"Stopping existing periodic {request_type.value} task for {device_id}"
-            )
+            _logger.info(f"Stopping existing periodic {request_type.value} task")
             await self.stop_periodic_requests(device, request_type)
 
         async def periodic_request():
             """Internal coroutine for periodic requests."""
             _logger.info(
-                f"Started periodic {request_type.value} requests for {device_id} "
+                f"Started periodic {request_type.value} requests for {redacted_device_id} "
                 f"(every {period_seconds}s)"
             )
 
@@ -1454,7 +1427,9 @@ class NavienMqttClient(EventEmitter):
                 try:
                     if not self._connected:
                         _logger.warning(
-                            f"Not connected, skipping {request_type.value} request for {device_id}"
+                            "Not connected, skipping %s request for %s",
+                            request_type.value,
+                            redacted_device_id,
                         )
                     else:
                         # Send appropriate request type
@@ -1464,7 +1439,9 @@ class NavienMqttClient(EventEmitter):
                             await self.request_device_status(device)
 
                         _logger.debug(
-                            f"Sent periodic {request_type.value} request for {device_id}"
+                            "Sent periodic %s request for %s",
+                            request_type.value,
+                            redacted_device_id,
                         )
 
                     # Wait for the specified period
@@ -1472,12 +1449,15 @@ class NavienMqttClient(EventEmitter):
 
                 except asyncio.CancelledError:
                     _logger.info(
-                        f"Periodic {request_type.value} requests cancelled for {device_id}"
+                        f"Periodic {request_type.value} requests cancelled for {redacted_device_id}"
                     )
                     break
                 except Exception as e:
                     _logger.error(
-                        f"Error in periodic {request_type.value} request for {device_id}: {e}",
+                        "Error in periodic %s request for %s: %s",
+                        request_type.value,
+                        redacted_device_id,
+                        e,
                         exc_info=True,
                     )
                     # Continue despite errors
@@ -1488,19 +1468,22 @@ class NavienMqttClient(EventEmitter):
         self._periodic_tasks[task_name] = task
 
         _logger.info(
-            f"Started periodic {request_type.value} task for {device_id} "
+            f"Started periodic {request_type.value} task for {redacted_device_id} "
             f"with period {period_seconds}s"
         )
 
     async def stop_periodic_requests(
-        self, device: Device, request_type: Optional[PeriodicRequestType] = None
+        self,
+        device: Device,
+        request_type: Optional[PeriodicRequestType] = None,
     ) -> None:
         """
         Stop sending periodic requests for a device.
 
         Args:
             device: Device object
-            request_type: Type of request to stop. If None, stops all types for this device.
+            request_type: Type of request to stop. If None, stops all types
+                          for this device.
 
         Example:
             >>> # Stop specific request type
@@ -1536,9 +1519,7 @@ class NavienMqttClient(EventEmitter):
 
                 del self._periodic_tasks[task_name]
                 stopped_count += 1
-                _logger.info(
-                    f"Stopped periodic {req_type.value} requests for {device_id}"
-                )
+                # Redact all but last 4 chars of MAC (if format expected), else just redact
 
         if stopped_count == 0:
             _logger.debug(

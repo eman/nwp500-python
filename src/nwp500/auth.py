@@ -129,7 +129,11 @@ class AuthenticationResponse:
         legal = data.get("legal", [])
 
         return cls(
-            user_info=user_info, tokens=tokens, legal=legal, code=code, message=message
+            user_info=user_info,
+            tokens=tokens,
+            legal=legal,
+            code=code,
+            message=message,
         )
 
 
@@ -137,7 +141,10 @@ class AuthenticationError(Exception):
     """Base exception for authentication errors."""
 
     def __init__(
-        self, message: str, code: Optional[int] = None, response: Optional[dict] = None
+        self,
+        message: str,
+        code: Optional[int] = None,
+        response: Optional[dict] = None,
     ):
         self.message = message
         self.code = code
@@ -276,11 +283,7 @@ class NavienAuthClient:
 
                 if code != 200 or not response.ok:
                     _logger.error(f"Sign-in failed: {code} - {msg}")
-                    if (
-                        code == 401
-                        or "invalid" in msg.lower()
-                        or "unauthorized" in msg.lower()
-                    ):
+                    if code == 401 or "invalid" in msg.lower() or "unauthorized" in msg.lower():
                         raise InvalidCredentialsError(
                             f"Invalid credentials: {msg}",
                             code=code,
@@ -300,9 +303,7 @@ class NavienAuthClient:
                 _logger.info(
                     f"Successfully authenticated user: {auth_response.user_info.full_name}"
                 )
-                _logger.debug(
-                    f"Token expires in: {auth_response.tokens.time_until_expiry}"
-                )
+                _logger.debug(f"Token expires in: {auth_response.tokens.time_until_expiry}")
 
                 return auth_response
 

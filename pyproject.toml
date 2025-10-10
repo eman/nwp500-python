@@ -10,7 +10,7 @@ version_scheme = "no-guess-dev"
 
 [tool.ruff]
 # Ruff configuration for code formatting and linting
-line-length = 88
+line-length = 100
 target-version = "py39"
 
 # Exclude directories
@@ -60,7 +60,6 @@ select = [
 
 ignore = [
     "E203",  # whitespace before ':' (conflicts with black/ruff format)
-    "E501",  # line too long (handled by formatter)
     "B904",  # raise from - will be addressed in a future update
 ]
 

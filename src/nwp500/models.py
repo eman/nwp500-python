@@ -364,13 +364,14 @@ class DeviceStatus:
         # Convert enum fields with error handling for unknown values
         if "operationMode" in converted_data:
             try:
-                converted_data["operationMode"] = OperationMode(
-                    converted_data["operationMode"]
-                )
+                converted_data["operationMode"] = OperationMode(converted_data["operationMode"])
             except ValueError:
                 _logger.warning(
-                    f"Unknown operationMode: {converted_data['operationMode']}. Defaulting to STANDBY."
+                    "Unknown operationMode: %s. Defaulting to STANDBY.",
+                    converted_data["operationMode"],
                 )
+                # Default to a safe enum value so callers can rely on .name
+                converted_data["operationMode"] = OperationMode.STANDBY
         if "temperatureType" in converted_data:
             try:
                 converted_data["temperatureType"] = TemperatureUnit(
@@ -378,7 +379,8 @@ class DeviceStatus:
                 )
             except ValueError:
                 _logger.warning(
-                    f"Unknown temperatureType: {converted_data['temperatureType']}. Defaulting to FAHRENHEIT."
+                    "Unknown temperatureType: %s. Defaulting to FAHRENHEIT.",
+                    converted_data["temperatureType"],
                 )
                 # Default to FAHRENHEIT for unknown temperature types
                 converted_data["temperatureType"] = TemperatureUnit.FAHRENHEIT
@@ -451,7 +453,8 @@ class DeviceFeature:
                 )
             except ValueError:
                 _logger.warning(
-                    f"Unknown temperatureType: {converted_data['temperatureType']}. Defaulting to FAHRENHEIT."
+                    "Unknown temperatureType: %s. Defaulting to FAHRENHEIT.",
+                    converted_data["temperatureType"],
                 )
                 # Default to FAHRENHEIT for unknown temperature types
                 converted_data["temperatureType"] = TemperatureUnit.FAHRENHEIT
@@ -641,8 +644,7 @@ class EnergyUsageResponse:
         # Convert usage list to MonthlyEnergyData objects
         if "usage" in converted_data:
             converted_data["usage"] = [
-                MonthlyEnergyData.from_dict(month_data)
-                for month_data in converted_data["usage"]
+                MonthlyEnergyData.from_dict(month_data) for month_data in converted_data["usage"]
             ]
 
         return cls(**converted_data)

@@ -13,7 +13,8 @@ import sys
 
 # Setup logging
 logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    level=logging.INFO,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
 )
 
 # If running from examples directory, add parent to path
@@ -23,6 +24,14 @@ if __name__ == "__main__":
 from nwp500 import NavienAPIClient
 from nwp500.api_client import APIError
 from nwp500.auth import AuthenticationError, NavienAuthClient
+
+import re
+
+
+def mask_mac(mac: str) -> str:
+    """Redact all MAC addresses in the input string."""
+    mac_regex = r"([0-9A-Fa-f]{2}[:-]){5}[0-9A-Fa-f]{2}|([0-9A-Fa-f]{12})"
+    return re.sub(mac_regex, "[REDACTED_MAC]", mac)
 
 
 async def example_basic_usage():
@@ -52,19 +61,39 @@ async def example_basic_usage():
             print(f"✅ Found {len(devices)} device(s)\n")
 
             # Display device information
+            try:
+                from examples.mask import mask_mac  # type: ignore
+            except Exception:
+                # fallback helper if import fails when running examples directly
+
+                def mask_mac(mac: str) -> str:  # pragma: no cover - small fallback
+                    # Always return "[REDACTED_MAC]" regardless of input for safety
+                    return "[REDACTED_MAC]"
+
+            try:
+                from examples.mask import mask_any, mask_location  # type: ignore
+            except Exception:
+
+                def mask_any(_):
+                    return "[REDACTED]"
+
+                def mask_location(_, __):
+                    return "[REDACTED_LOCATION]"
+
             for i, device in enumerate(devices, 1):
                 info = device.device_info
                 loc = device.location
 
                 print(f"Device {i}: {info.device_name}")
-                print(f"  MAC Address: {info.mac_address}")
-                print(f"  Type: {info.device_type}")
+                print(f"  MAC Address: {mask_mac(info.mac_address)}")
+                print(f"  Type: {mask_any(info.device_type)}")
                 print(f"  Connection Status: {info.connected}")
 
+                loc_mask = mask_location(loc.city, loc.state)
+                if loc_mask:
+                    print(f"  Location: {loc_mask}")
                 if loc.address:
-                    print(f"  Location: {loc.address}")
-                if loc.city and loc.state:
-                    print(f"           {loc.city}, {loc.state}")
+                    print("  Address: [REDACTED]")
                 print()
 
             # Get detailed info for first device
@@ -80,10 +109,7 @@ async def example_basic_usage():
                 if detailed_info.device_info.install_type:
                     print(f"  Install Type: {detailed_info.device_info.install_type}")
                 if detailed_info.location.latitude:
-                    print(
-                        f"  Coordinates: {detailed_info.location.latitude}, "
-                        f"{detailed_info.location.longitude}"
-                    )
+                    print("  Coordinates: (available, not shown for privacy)")
                 print()
 
                 # Get firmware information
@@ -113,11 +139,9 @@ async def example_basic_usage():
             print(f"   Error code: {e.code}")
         return 1
 
-    except Exception as e:
-        print(f"\n❌ Unexpected error: {str(e)}")
-        import traceback
-
-        traceback.print_exc()
+    except Exception:
+        # Avoid printing raw exception details to stdout in examples
+        logging.exception("Unexpected error in api_client_example")
         return 1
 
 
@@ -142,14 +166,23 @@ async def example_convenience_function():
 
             print(f"✅ Found {len(devices)} device(s):\n")
 
+            try:
+                from examples.mask import mask_any, mask_location  # type: ignore
+            except Exception:
+
+                def mask_any(_):
+                    return "[REDACTED]"
+
+                def mask_location(_, __):
+                    return "[REDACTED_LOCATION]"
+
             for device in devices:
                 print(f"  • {device.device_info.device_name}")
-                print(f"    MAC: {device.device_info.mac_address}")
-                print(f"    Type: {device.device_info.device_type}")
-                if device.location.city:
-                    print(
-                        f"    Location: {device.location.city}, {device.location.state}"
-                    )
+                print(f"    MAC: {mask_mac(device.device_info.mac_address)}")
+                print(f"    Type: {mask_any(device.device_info.device_type)}")
+                loc_mask = mask_location(device.location.city, device.location.state)
+                if loc_mask:
+                    print(f"    Location: {loc_mask}")
                 print()
 
         return 0

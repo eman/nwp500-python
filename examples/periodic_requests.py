@@ -21,6 +21,13 @@ from nwp500 import (
     PeriodicRequestType,
 )
 
+try:
+    from examples.mask import mask_mac  # type: ignore
+except Exception:
+
+    def mask_mac(mac):  # pragma: no cover - fallback for examples
+        return "[REDACTED_MAC]"
+
 
 async def main():
     email = os.getenv("NAVIEN_EMAIL")
@@ -47,7 +54,7 @@ async def main():
     device_id = device.device_info.mac_address
 
     print(f"   Device: {device.device_info.device_name}")
-    print(f"   MAC: {device_id}")
+    print(f"   MAC: {mask_mac(device_id)}")
 
     # Connect MQTT
     print("\n2. Connecting to MQTT...")
@@ -90,9 +97,7 @@ async def main():
         while elapsed < seconds:
             await asyncio.sleep(interval)
             elapsed += interval
-            print(
-                f"  ... {elapsed}s elapsed (status: {status_count}, info: {info_count})"
-            )
+            print(f"  ... {elapsed}s elapsed (status: {status_count}, info: {info_count})")
 
     # Small delay to ensure subscription is fully established
     await asyncio.sleep(2)
@@ -104,7 +109,9 @@ async def main():
     # Start periodic status requests (default behavior)
     print("\nStarting periodic status requests (every 20 seconds for demo)...")
     await mqtt.start_periodic_requests(
-        device=device, request_type=PeriodicRequestType.DEVICE_STATUS, period_seconds=20
+        device=device,
+        request_type=PeriodicRequestType.DEVICE_STATUS,
+        period_seconds=20,
     )
 
     # Send initial request immediately to get first response
@@ -122,7 +129,9 @@ async def main():
     # Switch to device info requests
     print("\nSwitching to periodic device info requests (every 20 seconds)...")
     await mqtt.start_periodic_requests(
-        device=device, request_type=PeriodicRequestType.DEVICE_INFO, period_seconds=20
+        device=device,
+        request_type=PeriodicRequestType.DEVICE_INFO,
+        period_seconds=20,
     )
 
     # Send initial request immediately
@@ -143,11 +152,15 @@ async def main():
     print("  - Info: every 40 seconds")
 
     await mqtt.start_periodic_requests(
-        device=device, request_type=PeriodicRequestType.DEVICE_STATUS, period_seconds=20
+        device=device,
+        request_type=PeriodicRequestType.DEVICE_STATUS,
+        period_seconds=20,
     )
 
     await mqtt.start_periodic_requests(
-        device=device, request_type=PeriodicRequestType.DEVICE_INFO, period_seconds=40
+        device=device,
+        request_type=PeriodicRequestType.DEVICE_INFO,
+        period_seconds=40,
     )
 
     # Send initial requests for both types
@@ -218,9 +231,8 @@ if __name__ == "__main__":
     except KeyboardInterrupt:
         print("\n\nInterrupted by user")
         sys.exit(0)
-    except Exception as e:
-        print(f"\nError: {e}", file=sys.stderr)
-        import traceback
+    except Exception:
+        import logging
 
-        traceback.print_exc()
+        logging.exception("Error running periodic_requests example")
         sys.exit(1)

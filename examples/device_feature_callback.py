@@ -19,7 +19,8 @@ import sys
 
 # Setup logging
 logging.basicConfig(
-    level=logging.WARNING, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    level=logging.WARNING,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
 )
 logging.getLogger("nwp500.mqtt_client").setLevel(logging.INFO)
 logging.getLogger("nwp500.auth").setLevel(logging.INFO)
@@ -34,6 +35,13 @@ from nwp500.auth import AuthenticationError, NavienAuthClient
 from nwp500.models import DeviceFeature
 from nwp500.mqtt_client import NavienMqttClient
 
+try:
+    from examples.mask import mask_mac  # type: ignore
+except Exception:
+
+    def mask_mac(mac):  # pragma: no cover - fallback
+        return "[REDACTED_MAC]"
+
 
 async def main():
     """Main example function."""
@@ -43,9 +51,7 @@ async def main():
     password = os.getenv("NAVIEN_PASSWORD")
 
     if not email or not password:
-        print(
-            "❌ Error: Please set NAVIEN_EMAIL and NAVIEN_PASSWORD environment variables"
-        )
+        print("❌ Error: Please set NAVIEN_EMAIL and NAVIEN_PASSWORD environment variables")
         print("\nExample:")
         print("  export NAVIEN_EMAIL='your_email@example.com'")
         print("  export NAVIEN_PASSWORD='your_password'")
@@ -65,9 +71,7 @@ async def main():
 
             # Step 2: Get device list
             print("Step 2: Fetching device list...")
-            api_client = NavienAPIClient(
-                auth_client=auth_client, session=auth_client._session
-            )
+            api_client = NavienAPIClient(auth_client=auth_client, session=auth_client._session)
             devices = await api_client.list_devices()
 
             if not devices:
@@ -79,7 +83,7 @@ async def main():
             device_type = device.device_info.device_type
 
             print(f"✅ Using device: {device.device_info.device_name}")
-            print(f"   MAC Address: {device_id}")
+            print(f"   MAC Address: {mask_mac(device_id)}")
             print()
 
             # Step 3: Create MQTT client and connect
@@ -117,86 +121,48 @@ async def main():
                     print(f"  Volume Code:        {feature.volumeCode}")
 
                     print("\nFirmware Versions:")
-                    print(
-                        f"  Controller SW:      {feature.controllerSwVersion} (code: {feature.controllerSwCode})"
-                    )
-                    print(
-                        f"  Panel SW:           {feature.panelSwVersion} (code: {feature.panelSwCode})"
-                    )
-                    print(
-                        f"  WiFi SW:            {feature.wifiSwVersion} (code: {feature.wifiSwCode})"
-                    )
+                    print(f"  Controller SW:      {feature.controllerSwVersion} (code: {feature.controllerSwCode})")
+                    print(f"  Panel SW:           {feature.panelSwVersion} (code: {feature.panelSwCode})")
+                    print(f"  WiFi SW:            {feature.wifiSwVersion} (code: {feature.wifiSwCode})")
 
                     print("\nConfiguration:")
                     print(f"  Temperature Unit:   {feature.temperatureType.name}")
                     print(f"  Temp Formula Type:  {feature.tempFormulaType}")
-                    print(
-                        f"  DHW Temp Range:     {feature.dhwTemperatureMin}°F - {feature.dhwTemperatureMax}°F"
-                    )
+                    print(f"  DHW Temp Range:     {feature.dhwTemperatureMin}°F - {feature.dhwTemperatureMax}°F")
                     print(
                         f"  Freeze Prot Range:  {feature.freezeProtectionTempMin}°F - {feature.freezeProtectionTempMax}°F"
                     )
 
                     print("\nFeature Support:")
-                    print(
-                        f"  Power Control:      {'Supported' if feature.powerUse == 2 else 'Not Available'}"
-                    )
-                    print(
-                        f"  DHW Control:        {'Supported' if feature.dhwUse == 2 else 'Not Available'}"
-                    )
-                    print(
-                        f"  DHW Temp Setting:   Level {feature.dhwTemperatureSettingUse}"
-                    )
-                    print(
-                        f"  Heat Pump Mode:     {'Supported' if feature.heatpumpUse == 2 else 'Not Available'}"
-                    )
-                    print(
-                        f"  Electric Mode:      {'Supported' if feature.electricUse == 2 else 'Not Available'}"
-                    )
-                    print(
-                        f"  Energy Saver:       {'Supported' if feature.energySaverUse == 2 else 'Not Available'}"
-                    )
-                    print(
-                        f"  High Demand:        {'Supported' if feature.highDemandUse == 2 else 'Not Available'}"
-                    )
-                    print(
-                        f"  Eco Mode:           {'Supported' if feature.ecoUse == 2 else 'Not Available'}"
-                    )
+                    print(f"  Power Control:      {'Supported' if feature.powerUse == 2 else 'Not Available'}")
+                    print(f"  DHW Control:        {'Supported' if feature.dhwUse == 2 else 'Not Available'}")
+                    print(f"  DHW Temp Setting:   Level {feature.dhwTemperatureSettingUse}")
+                    print(f"  Heat Pump Mode:     {'Supported' if feature.heatpumpUse == 2 else 'Not Available'}")
+                    print(f"  Electric Mode:      {'Supported' if feature.electricUse == 2 else 'Not Available'}")
+                    print(f"  Energy Saver:       {'Supported' if feature.energySaverUse == 2 else 'Not Available'}")
+                    print(f"  High Demand:        {'Supported' if feature.highDemandUse == 2 else 'Not Available'}")
+                    print(f"  Eco Mode:           {'Supported' if feature.ecoUse == 2 else 'Not Available'}")
 
                     print("\nAdvanced Features:")
-                    print(
-                        f"  Holiday Mode:       {'Supported' if feature.holidayUse == 2 else 'Not Available'}"
-                    )
+                    print(f"  Holiday Mode:       {'Supported' if feature.holidayUse == 2 else 'Not Available'}")
                     print(
                         f"  Program Schedule:   {'Supported' if feature.programReservationUse == 2 else 'Not Available'}"
                     )
                     print(
                         f"  Smart Diagnostic:   {'Supported' if feature.smartDiagnosticUse == 1 else 'Not Available'}"
                     )
-                    print(
-                        f"  WiFi RSSI:          {'Supported' if feature.wifiRssiUse == 2 else 'Not Available'}"
-                    )
-                    print(
-                        f"  Energy Usage:       {'Supported' if feature.energyUsageUse == 2 else 'Not Available'}"
-                    )
+                    print(f"  WiFi RSSI:          {'Supported' if feature.wifiRssiUse == 2 else 'Not Available'}")
+                    print(f"  Energy Usage:       {'Supported' if feature.energyUsageUse == 2 else 'Not Available'}")
                     print(
                         f"  Freeze Protection:  {'Supported' if feature.freezeProtectionUse == 2 else 'Not Available'}"
                     )
-                    print(
-                        f"  Mixing Valve:       {'Supported' if feature.mixingValueUse == 1 else 'Not Available'}"
-                    )
-                    print(
-                        f"  DR Settings:        {'Supported' if feature.drSettingUse == 2 else 'Not Available'}"
-                    )
+                    print(f"  Mixing Valve:       {'Supported' if feature.mixingValueUse == 1 else 'Not Available'}")
+                    print(f"  DR Settings:        {'Supported' if feature.drSettingUse == 2 else 'Not Available'}")
                     print(
                         f"  Anti-Legionella:    {'Supported' if feature.antiLegionellaSettingUse == 2 else 'Not Available'}"
                     )
-                    print(
-                        f"  HPWH:               {'Supported' if feature.hpwhUse == 2 else 'Not Available'}"
-                    )
-                    print(
-                        f"  DHW Refill:         {'Supported' if feature.dhwRefillUse == 2 else 'Not Available'}"
-                    )
+                    print(f"  HPWH:               {'Supported' if feature.hpwhUse == 2 else 'Not Available'}")
+                    print(f"  DHW Refill:         {'Supported' if feature.dhwRefillUse == 2 else 'Not Available'}")
 
                     print("=" * 60)
 
@@ -236,9 +202,7 @@ async def main():
                     print("\n⚠️  Interrupted by user")
 
                 print()
-                print(
-                    f"📊 Summary: Received {feature_count['count']} feature message(s)"
-                )
+                print(f"📊 Summary: Received {feature_count['count']} feature message(s)")
                 print()
 
                 # Disconnect
@@ -246,11 +210,10 @@ async def main():
                 await mqtt_client.disconnect()
                 print("✅ Disconnected successfully")
 
-            except Exception as mqtt_error:
-                print(f"❌ MQTT Error: {mqtt_error}")
-                import traceback
+            except Exception:
+                import logging
 
-                traceback.print_exc()
+                logging.exception("MQTT error in device_feature_callback")
 
                 if mqtt_client.is_connected:
                     await mqtt_client.disconnect()
@@ -269,11 +232,10 @@ async def main():
             print(f"   Error code: {e.code}")
         return 1
 
-    except Exception as e:
-        print(f"\n❌ Unexpected error: {str(e)}")
-        import traceback
+    except Exception:
+        import logging
 
-        traceback.print_exc()
+        logging.exception("Unexpected error in device_feature_callback")
         return 1
 
 

@@ -19,7 +19,19 @@ import sys
 # Add src directory to path for development
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
-from nwp500 import DeviceFeature, NavienAPIClient, NavienAuthClient, NavienMqttClient
+from nwp500 import (
+    DeviceFeature,
+    NavienAPIClient,
+    NavienAuthClient,
+    NavienMqttClient,
+)
+
+try:
+    from examples.mask import mask_mac  # type: ignore
+except Exception:
+
+    def mask_mac(mac):  # pragma: no cover - fallback for examples
+        return "[REDACTED_MAC]"
 
 
 async def main():
@@ -48,7 +60,7 @@ async def main():
     device_id = device.device_info.mac_address
 
     print(f"   Device: {device.device_info.device_name}")
-    print(f"   MAC: {device_id}")
+    print(f"   MAC: {mask_mac(device_id)}")
 
     # Connect MQTT
     print("\n2. Connecting to MQTT...")
@@ -68,10 +80,7 @@ async def main():
         print(f"Controller Serial: {feature.controllerSerialNumber}")
         print(f"Controller SW Version: {feature.controllerSwVersion}")
         print(f"Heat Pump Use: {feature.heatpumpUse}")
-        print(
-            f"DHW Temp Min/Max: {feature.dhwTemperatureMin}/"
-            f"{feature.dhwTemperatureMax}°F"
-        )
+        print(f"DHW Temp Min/Max: {feature.dhwTemperatureMin}/{feature.dhwTemperatureMax}°F")
 
     # Subscribe with typed parsing
     await mqtt.subscribe_device_feature(device, on_device_feature)
@@ -134,9 +143,8 @@ if __name__ == "__main__":
     except KeyboardInterrupt:
         print("\n\nInterrupted by user")
         sys.exit(0)
-    except Exception as e:
-        print(f"\nError: {e}", file=sys.stderr)
-        import traceback
+    except Exception:
+        import logging
 
-        traceback.print_exc()
+        logging.exception("Error running periodic_device_info example")
         sys.exit(1)

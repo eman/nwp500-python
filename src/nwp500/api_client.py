@@ -29,7 +29,10 @@ class APIError(Exception):
     """Raised when API returns an error response."""
 
     def __init__(
-        self, message: str, code: Optional[int] = None, response: Optional[dict] = None
+        self,
+        message: str,
+        code: Optional[int] = None,
+        response: Optional[dict] = None,
     ):
         self.message = message
         self.code = code
@@ -141,7 +144,9 @@ class NavienAPIClient:
                 if code != 200 or not response.ok:
                     _logger.error(f"API error: {code} - {msg}")
                     raise APIError(
-                        f"API request failed: {msg}", code=code, response=response_data
+                        f"API request failed: {msg}",
+                        code=code,
+                        response=response_data,
                     )
 
                 return response_data
@@ -186,9 +191,7 @@ class NavienAPIClient:
         _logger.info(f"Retrieved {len(devices)} device(s)")
         return devices
 
-    async def get_device_info(
-        self, mac_address: str, additional_value: str = ""
-    ) -> Device:
+    async def get_device_info(self, mac_address: str, additional_value: str = "") -> Device:
         """
         Get detailed information about a specific device.
 

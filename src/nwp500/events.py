@@ -93,9 +93,7 @@ class EventEmitter:
         self._listeners[event].append(listener)
 
         # Sort by priority (highest first)
-        self._listeners[event].sort(
-            key=lambda listener: listener.priority, reverse=True
-        )
+        self._listeners[event].sort(key=lambda listener: listener.priority, reverse=True)
 
         _logger.debug(f"Registered listener for '{event}' event (priority: {priority})")
 
@@ -124,13 +122,9 @@ class EventEmitter:
         self._listeners[event].append(listener)
 
         # Sort by priority (highest first)
-        self._listeners[event].sort(
-            key=lambda listener: listener.priority, reverse=True
-        )
+        self._listeners[event].sort(key=lambda listener: listener.priority, reverse=True)
 
-        _logger.debug(
-            f"Registered one-time listener for '{event}' event (priority: {priority})"
-        )
+        _logger.debug(f"Registered one-time listener for '{event}' event (priority: {priority})")
 
     def off(self, event: str, callback: Optional[Callable] = None) -> int:
         """
@@ -164,9 +158,7 @@ class EventEmitter:
         # Remove specific callback
         original_count = len(self._listeners[event])
         self._listeners[event] = [
-            listener
-            for listener in self._listeners[event]
-            if listener.callback != callback
+            listener for listener in self._listeners[event] if listener.callback != callback
         ]
         removed_count = original_count - len(self._listeners[event])
 

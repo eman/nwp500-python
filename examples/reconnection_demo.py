@@ -100,9 +100,7 @@ async def main():
         print("\n" + "=" * 70)
         print("Monitoring connection (60 seconds)...")
         print("=" * 70)
-        print(
-            "\nTo test reconnection, disconnect your internet or simulate a network issue."
-        )
+        print("\nTo test reconnection, disconnect your internet or simulate a network issue.")
         print("The client will automatically reconnect with exponential backoff.")
         print("\nReconnection pattern: 1s, 2s, 4s, 8s, 16s, 32s, 60s (max)")
 
@@ -111,14 +109,10 @@ async def main():
 
             # Show connection status every 5 seconds
             if i % 5 == 0:
-                status = (
-                    "🟢 Connected" if mqtt_client.is_connected else "🔴 Disconnected"
-                )
+                status = "🟢 Connected" if mqtt_client.is_connected else "🔴 Disconnected"
                 reconnecting = ""
                 if mqtt_client.is_reconnecting:
-                    reconnecting = (
-                        f" (Reconnecting: attempt {mqtt_client.reconnect_attempts})"
-                    )
+                    reconnecting = f" (Reconnecting: attempt {mqtt_client.reconnect_attempts})"
                 print(f"\n[{i:2d}s] {status}{reconnecting}")
 
                 # Request status update if connected
