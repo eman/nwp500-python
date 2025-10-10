@@ -35,6 +35,16 @@ from nwp500.models import DeviceFeature, DeviceStatus
 from nwp500.mqtt_client import NavienMqttClient
 
 
+def mask_mac_address(mac):
+    """Mask all but the last two bytes of a MAC address for privacy."""
+    if not mac or len(mac) < 5:
+        return "***"
+    mac_parts = mac.split(":")
+    if len(mac_parts) >= 2:
+        return ":".join(["**"] * (len(mac_parts) - 2) + mac_parts[-2:])
+    # fallback: mask all but last 4 characters
+    return "*" * (len(mac) - 4) + mac[-4:]
+
 async def main():
     """Main example function."""
 
@@ -87,7 +97,7 @@ async def main():
 
             print(f"✅ Found {len(devices)} device(s):")
             for i, device in enumerate(devices):
-                print(f"   {i + 1}. {device.device_info.device_name} ({device.device_info.mac_address})")
+                print(f"   {i + 1}. {device.device_info.device_name} (MAC: {mask_mac_address(device.device_info.mac_address)})")
                 print(f"      Type: {device.device_info.device_type}, Connected: {device.device_info.connected}")
             print()
 
