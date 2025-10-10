@@ -88,8 +88,8 @@ async def test_mqtt_messaging():
 
             # Helper to mask MAC-like strings for safe printing
             def mask_mac(addr: str) -> str:
-                mac_regex = r"([0-9A-Fa-f]{2}[:-]){5}[0-9A-Fa-f]{2}|([0-9A-Fa-f]{12})"
-                return re.sub(mac_regex, "[REDACTED_MAC]", addr)
+                # Always redact to avoid leaking sensitive data
+                return "[REDACTED_MAC]"
 
             print(f"✅ Found device: {device.device_info.device_name}")
             print(f"   MAC Address: {mask_mac(device_id)}")
