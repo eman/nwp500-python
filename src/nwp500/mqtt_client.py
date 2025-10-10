@@ -1407,8 +1407,8 @@ class NavienMqttClient(EventEmitter):
             - All tasks automatically stop when client disconnects
         """
         device_id = device.device_info.mac_address
-        # Redact MAC address for logging (e.g., show only last 4 chars)
-        redacted_device_id = f"...{device_id[-4:]}" if device_id and len(device_id) >= 4 else "unknown"
+        # Do not log MAC address; use a generic placeholder to avoid leaking sensitive information
+        redacted_device_id = "DEVICE_ID_REDACTED"
         task_name = f"periodic_{request_type.value}_{device_id}"
 
         # Stop existing task for this device/type if any
