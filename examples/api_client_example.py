@@ -81,7 +81,7 @@ async def example_basic_usage():
                 if detailed_info.device_info.install_type:
                     print(f"  Install Type: {detailed_info.device_info.install_type}")
                 if detailed_info.location.latitude:
-                    print(f"  Coordinates: {detailed_info.location.latitude}, {detailed_info.location.longitude}")
+                    print("  Coordinates: (available, not shown for privacy)")
                 print()
 
                 # Get firmware information
