@@ -217,8 +217,11 @@ async def test_convenience_function():
             print(f"✅ get_devices() returned {len(devices)} device(s)")
 
             for device in devices:
-                print(f"   - {device.device_info.device_name} ({device.device_info.mac_address})")
-
+                # Redact MAC address when logging for privacy
+                redacted_mac = (
+                    device.device_info.mac_address[-5:] if device.device_info.mac_address else "N/A"
+                )
+                print(f"   - {device.device_info.device_name} (MAC: ***{redacted_mac})")
         return 0
 
     except Exception as e:
