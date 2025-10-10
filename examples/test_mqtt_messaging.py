@@ -120,17 +120,20 @@ async def test_mqtt_messaging():
                 f"evt/{device_type}/{device_topic}/#",
             ]
 
-            def mask_mac_in_topic(topic: str) -> str:
-                # Mask any MAC address-looking patterns in the topic string
-                # Covers hex format with :, -, or no delimiter (e.g. XX:XX:XX:XX:XX:XX, XXXX.XXXX.XXXX)
-                # Also covers Cisco-style (XXXX.XXXX.XXXX) and mixed delimiters.
+            def mask_mac_in_topic(topic: str, mac_addr: str) -> str:
+                # Always redact listed MAC address if present anywhere in topic string
+                # Mask recognized MAC patterns AND any direct insertion of the device MAC (regardless of format).
                 mac_regex = r"(?:[0-9A-Fa-f]{2}[:-]){5}[0-9A-Fa-f]{2}|(?:[0-9A-Fa-f]{4}\.[0-9A-Fa-f]{4}\.[0-9A-Fa-f]{4})|(?:[0-9A-Fa-f]{12})"
-                return re.sub(mac_regex, "[REDACTED_MAC]", topic)
+                topic_masked = re.sub(mac_regex, "[REDACTED_MAC]", topic)
+                # Ensure even if regex fails (e.g., odd format), definitely mask raw MAC address string if present.
+                if mac_addr and mac_addr in topic_masked:
+                    topic_masked = topic_masked.replace(mac_addr, "[REDACTED_MAC]")
+                return topic_masked
 
             for topic in topics:
                 try:
                     await mqtt_client.subscribe(topic, message_handler)
-                    print(f"   ✅ Subscribed to: {mask_mac_in_topic(topic)}")
+                    print(f"   ✅ Subscribed to: {mask_mac_in_topic(topic, device_id)}")
                 except Exception:
                     # Avoid printing exception contents which may contain sensitive identifiers
                     print(f"   ⚠️ Failed to subscribe to device topic (type: {device_type})")
