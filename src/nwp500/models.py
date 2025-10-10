@@ -14,14 +14,26 @@ _logger = logging.getLogger(__name__)
 
 
 class OperationMode(Enum):
-    """Enumeration for the operation modes of the device."""
+    """Enumeration for the operation modes of the device.
 
-    STANDBY = 0  # Device is in standby (e.g., when DHW tank is fully charged)
+    The first set of modes (0-5) are used when commanding the device, while
+    the second set (32, 64, 96) are observed in status messages.
+    """
+
+    # Commanded modes
+    STANDBY = 0
     HEAT_PUMP = 1
     ENERGY_SAVER = 2
     HIGH_DEMAND = 3
     ELECTRIC = 4
     VACATION = 5
+
+    # Observed status modes
+    HEAT_PUMP_MODE = 32
+    HYBRID_EFFICIENCY_MODE = 64
+    HYBRID_BOOST_MODE = 96
+
+    # Aliases
 
 
 class TemperatureUnit(Enum):
