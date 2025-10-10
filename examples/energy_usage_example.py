@@ -112,7 +112,8 @@ async def main():
             return
 
         device = devices[0]
-        print(f"✓ Device: {device.device_info.device_name} ({device.device_info.mac_address})")
+        # Avoid logging sensitive info such as MAC address.
+        print(f"✓ Device detected: {device.device_info.device_name}")
 
         # Connect to MQTT
         print("\nConnecting to MQTT...")
