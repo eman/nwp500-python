@@ -489,6 +489,34 @@ The ``operationMode`` field is an integer that maps to the following modes. Thes
      - Very High
      - Suspends heating to save energy during absences (0-99 days). Only minimal operations like freeze protection and anti-seize are performed. Heating resumes 9 hours before the vacation period ends.
 
+
+Observed Operation Modes (from network traffic analysis)
+--------------------------------------------------------
+
+The following ``operationMode`` values have been observed in status messages from the device. These values appear to correspond to the commanded modes as follows:
+
+.. list-table::
+   :header-rows: 1
+   :widths: 10 30 60
+
+   * - Value
+     - Mode
+     - Notes
+   * - 0
+     - Standby / Vacation
+     - Corresponds to commanded modes ``STANDBY`` (0) and ``VACATION`` (5).
+   * - 32
+     - Heat Pump
+     - Corresponds to commanded mode ``HEAT_PUMP`` (1).
+   * - 64
+     - Energy Saver
+     - Corresponds to commanded mode ``ENERGY_SAVER`` (2).
+   * - 96
+     - High Demand
+     - Corresponds to commanded mode ``HIGH_DEMAND`` (3).
+
+The commanded mode ``ELECTRIC`` (4) has been observed to result in ``operationMode`` values of both 64 and 96 at different times.
+
 Technical Notes
 ---------------
 
