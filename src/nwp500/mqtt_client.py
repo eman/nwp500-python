@@ -1411,7 +1411,7 @@ class NavienMqttClient(EventEmitter):
 
         # Stop existing task for this device/type if any
         if task_name in self._periodic_tasks:
-            _logger.info(f"Stopping existing periodic {request_type.value} task for {device_id}")
+            _logger.info(f"Stopping existing periodic {request_type.value} task")
             await self.stop_periodic_requests(device, request_type)
 
         async def periodic_request():
