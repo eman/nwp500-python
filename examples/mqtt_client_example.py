@@ -97,7 +97,7 @@ async def main():
 
             print(f"✅ Found {len(devices)} device(s):")
             for i, device in enumerate(devices):
-                print(f"   {i + 1}. {device.device_info.device_name} (MAC: {mask_mac_address(device.device_info.mac_address)})")
+                print(f"   {i + 1}. {device.device_info.device_name} (MAC: **MASKED**)")
                 print(f"      Type: {device.device_info.device_type}, Connected: {device.device_info.connected}")
             print()
 
