@@ -69,8 +69,8 @@ async def example_basic_usage():
                 import re
 
                 def mask_mac(mac: str) -> str:  # pragma: no cover - small fallback
-                    mac_regex = r"([0-9A-Fa-f]{2}[:-]){5}[0-9A-Fa-f]{2}|([0-9A-Fa-f]{12})"
-                    return re.sub(mac_regex, "[REDACTED_MAC]", mac)
+                    # Always return "[REDACTED_MAC]" regardless of input for safety
+                    return "[REDACTED_MAC]"
 
             for i, device in enumerate(devices, 1):
                 info = device.device_info
