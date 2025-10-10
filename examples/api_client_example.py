@@ -70,19 +70,30 @@ async def example_basic_usage():
                     # Always return "[REDACTED_MAC]" regardless of input for safety
                     return "[REDACTED_MAC]"
 
+            try:
+                from examples.mask import mask_any, mask_location  # type: ignore
+            except Exception:
+
+                def mask_any(_):
+                    return "[REDACTED]"
+
+                def mask_location(_, __):
+                    return "[REDACTED_LOCATION]"
+
             for i, device in enumerate(devices, 1):
                 info = device.device_info
                 loc = device.location
 
                 print(f"Device {i}: {info.device_name}")
                 print(f"  MAC Address: {mask_mac(info.mac_address)}")
-                print(f"  Type: {info.device_type}")
+                print(f"  Type: {mask_any(info.device_type)}")
                 print(f"  Connection Status: {info.connected}")
 
+                loc_mask = mask_location(loc.city, loc.state)
+                if loc_mask:
+                    print(f"  Location: {loc_mask}")
                 if loc.address:
-                    print(f"  Location: {loc.address}")
-                if loc.city and loc.state:
-                    print(f"           {loc.city}, {loc.state}")
+                    print("  Address: [REDACTED]")
                 print()
 
             # Get detailed info for first device
@@ -155,12 +166,23 @@ async def example_convenience_function():
 
             print(f"✅ Found {len(devices)} device(s):\n")
 
+            try:
+                from examples.mask import mask_any, mask_location  # type: ignore
+            except Exception:
+
+                def mask_any(_):
+                    return "[REDACTED]"
+
+                def mask_location(_, __):
+                    return "[REDACTED_LOCATION]"
+
             for device in devices:
                 print(f"  • {device.device_info.device_name}")
                 print(f"    MAC: {mask_mac(device.device_info.mac_address)}")
-                print(f"    Type: {device.device_info.device_type}")
-                if device.location.city:
-                    print(f"    Location: {device.location.city}, {device.location.state}")
+                print(f"    Type: {mask_any(device.device_info.device_type)}")
+                loc_mask = mask_location(device.location.city, device.location.state)
+                if loc_mask:
+                    print(f"    Location: {loc_mask}")
                 print()
 
         return 0

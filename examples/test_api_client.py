@@ -67,19 +67,30 @@ async def test_api_client():
                 mac_regex = r"([0-9A-Fa-f]{2}[:-]){5}[0-9A-Fa-f]{2}|([0-9A-Fa-f]{12})"
                 return re.sub(mac_regex, "[REDACTED_MAC]", mac)
 
+            try:
+                from examples.mask import mask_any, mask_location  # type: ignore
+            except Exception:
+
+                def mask_any(_):
+                    return "[REDACTED]"
+
+                def mask_location(_, __):
+                    return "[REDACTED_LOCATION]"
+
             for i, device in enumerate(devices, 1):
                 print(f"\nDevice {i}:")
                 print(f"  Name: {device.device_info.device_name}")
                 print("  MAC Address: [REDACTED_MAC]")
-                print(f"  Device Type: {device.device_info.device_type}")
+                print(f"  Device Type: {mask_any(device.device_info.device_type)}")
                 print(f"  Home Seq: {device.device_info.home_seq}")
                 print(f"  Additional Value: {device.device_info.additional_value}")
                 print(f"  Connected: {device.device_info.connected}")
 
-                if device.location.state or device.location.city:
-                    print(f"  Location: {device.location.city}, {device.location.state}")
+                loc_mask = mask_location(device.location.city, device.location.state)
+                if loc_mask:
+                    print(f"  Location: {loc_mask}")
                 if device.location.address:
-                    print(f"  Address: {device.location.address}")
+                    print("  Address: [REDACTED]")
             print()
 
             if not devices:

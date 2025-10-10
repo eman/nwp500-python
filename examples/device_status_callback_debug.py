@@ -71,9 +71,16 @@ async def main():
             device_id = device.device_info.mac_address
             device_type = device.device_info.device_type
 
+            try:
+                from examples.mask import mask_any  # type: ignore
+            except Exception:
+
+                def mask_any(_):
+                    return "[REDACTED]"
+
             print(f"✅ Using device: {device.device_info.device_name}")
             print(f"   MAC Address: {mask_mac(device_id)}")
-            print(f"   Device Type: {device_type}")
+            print(f"   Device Type: {mask_any(device_type)}")
             print()
 
             # Step 3: Create MQTT client and connect

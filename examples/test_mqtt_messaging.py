@@ -86,6 +86,16 @@ async def test_mqtt_messaging():
             device_type = device.device_info.device_type
             additional_value = device.device_info.additional_value
 
+            try:
+                from examples.mask import mask_any, mask_location  # type: ignore
+            except Exception:
+
+                def mask_any(_):
+                    return "[REDACTED]"
+
+                def mask_location(_, __):
+                    return "[REDACTED_LOCATION]"
+
             # Helper to mask MAC-like strings for safe printing
             def mask_mac(addr: str) -> str:
                 # Always redact to avoid leaking sensitive data
@@ -93,7 +103,7 @@ async def test_mqtt_messaging():
 
             print(f"✅ Found device: {device.device_info.device_name}")
             print(f"   MAC Address: {mask_mac(device_id)}")
-            print(f"   Device Type: {device_type}")
+            print(f"   Device Type: {mask_any(device_type)}")
             print(f"   Additional Value: {additional_value}")
             print(f"   Connection Status: {device.device_info.connected}")
             print()
@@ -136,7 +146,15 @@ async def test_mqtt_messaging():
                     print(f"   ✅ Subscribed to: {mask_mac_in_topic(topic, device_id)}")
                 except Exception:
                     # Avoid printing exception contents which may contain sensitive identifiers
-                    print(f"   ⚠️ Failed to subscribe to topic. Device type: {device_type}")
+                    try:
+                        # mask_any should be available from earlier import
+                        from examples.mask import mask_any  # type: ignore
+                    except Exception:
+
+                        def mask_any(_):
+                            return "[REDACTED]"
+
+                    print(f"   ⚠️ Failed to subscribe to topic. Device type: {mask_any(device_type)}")
                     logging.debug(
                         "Subscribe failure for device_type=%s; topic name redacted for privacy",
                         device_type,

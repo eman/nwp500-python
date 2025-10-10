@@ -31,3 +31,34 @@ def mask_mac_in_topic(topic: str, mac_addr: Optional[str] = None) -> str:
 
 
 __all__ = ["mask_mac", "mask_mac_in_topic"]
+
+
+def mask_any(value: Optional[str]) -> str:
+    """Generic redaction for strings considered sensitive in examples.
+
+    Always returns a short redaction tag; keep implementation simple so examples
+    never leak PII in printed output.
+    """
+    if not value:
+        return "[REDACTED]"
+    try:
+        s = str(value)
+        if not s:
+            return "[REDACTED]"
+        # Do not expose the string content in examples
+        return "[REDACTED]"
+    except Exception:
+        return "[REDACTED]"
+
+
+def mask_location(city: Optional[str], state: Optional[str]) -> str:
+    """Redact location fields for examples.
+
+    Returns a single redaction tag if either city or state are present.
+    """
+    if city or state:
+        return "[REDACTED_LOCATION]"
+    return ""
+
+
+__all__.extend(["mask_any", "mask_location"])
