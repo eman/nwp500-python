@@ -27,6 +27,7 @@ from nwp500.auth import AuthenticationError, NavienAuthClient
 
 import re
 
+
 def mask_mac(mac: str) -> str:
     """Redact all MAC addresses in the input string."""
     mac_regex = r"([0-9A-Fa-f]{2}[:-]){5}[0-9A-Fa-f]{2}|([0-9A-Fa-f]{12})"
@@ -64,7 +65,6 @@ async def example_basic_usage():
                 from examples.mask import mask_mac  # type: ignore
             except Exception:
                 # fallback helper if import fails when running examples directly
-                import re
 
                 def mask_mac(mac: str) -> str:  # pragma: no cover - small fallback
                     # Always return "[REDACTED_MAC]" regardless of input for safety

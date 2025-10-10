@@ -60,7 +60,7 @@ async def main():
     device_id = device.device_info.mac_address
 
     print(f"   Device: {device.device_info.device_name}")
-    print(f"   MAC: [REDACTED_MAC]")
+    print(f"   MAC: {mask_mac(device_id)}")
 
     # Connect MQTT
     print("\n2. Connecting to MQTT...")

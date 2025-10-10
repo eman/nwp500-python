@@ -106,7 +106,7 @@ async def main():
             device_type = device.device_info.device_type
 
             print(f"Using device: {device.device_info.device_name}")
-            print(f"MAC Address: [REDACTED_MAC]")
+            print(f"MAC Address: {mask_mac(device_id)}")
             print(f"Device Type: {device_type}")
             print()
 
