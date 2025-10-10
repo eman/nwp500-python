@@ -45,6 +45,7 @@ def mask_mac_address(mac):
     # fallback: mask all but last 4 characters
     return "*" * (len(mac) - 4) + mac[-4:]
 
+
 async def main():
     """Main example function."""
 

@@ -1427,7 +1427,9 @@ class NavienMqttClient(EventEmitter):
                 try:
                     if not self._connected:
                         _logger.warning(
-                            f"Not connected, skipping {request_type.value} request for {redacted_device_id}"
+                            "Not connected, skipping %s request for %s",
+                            request_type.value,
+                            redacted_device_id,
                         )
                     else:
                         # Send appropriate request type
@@ -1436,7 +1438,11 @@ class NavienMqttClient(EventEmitter):
                         elif request_type == PeriodicRequestType.DEVICE_STATUS:
                             await self.request_device_status(device)
 
-                        _logger.debug(f"Sent periodic {request_type.value} request for {redacted_device_id}")
+                        _logger.debug(
+                            "Sent periodic %s request for %s",
+                            request_type.value,
+                            redacted_device_id,
+                        )
 
                     # Wait for the specified period
                     await asyncio.sleep(period_seconds)
@@ -1448,7 +1454,10 @@ class NavienMqttClient(EventEmitter):
                     break
                 except Exception as e:
                     _logger.error(
-                        f"Error in periodic {request_type.value} request for {redacted_device_id}: {e}",
+                        "Error in periodic %s request for %s: %s",
+                        request_type.value,
+                        redacted_device_id,
+                        e,
                         exc_info=True,
                     )
                     # Continue despite errors
