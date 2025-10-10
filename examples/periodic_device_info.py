@@ -80,7 +80,9 @@ async def main():
         print(f"Controller Serial: {feature.controllerSerialNumber}")
         print(f"Controller SW Version: {feature.controllerSwVersion}")
         print(f"Heat Pump Use: {feature.heatpumpUse}")
-        print(f"DHW Temp Min/Max: {feature.dhwTemperatureMin}/{feature.dhwTemperatureMax}°F")
+        print(
+            f"DHW Temp Min/Max: {feature.dhwTemperatureMin}/{feature.dhwTemperatureMax}°F"
+        )
 
     # Subscribe with typed parsing
     await mqtt.subscribe_device_feature(device, on_device_feature)

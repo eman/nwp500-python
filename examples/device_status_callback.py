@@ -57,7 +57,9 @@ async def main():
     password = os.getenv("NAVIEN_PASSWORD")
 
     if not email or not password:
-        print("❌ Error: Please set NAVIEN_EMAIL and NAVIEN_PASSWORD environment variables")
+        print(
+            "❌ Error: Please set NAVIEN_EMAIL and NAVIEN_PASSWORD environment variables"
+        )
         print("\nExample:")
         print("  export NAVIEN_EMAIL='your_email@example.com'")
         print("  export NAVIEN_PASSWORD='your_password'")
@@ -77,7 +79,9 @@ async def main():
 
             # Step 2: Get device list
             print("Step 2: Fetching device list...")
-            api_client = NavienAPIClient(auth_client=auth_client, session=auth_client._session)
+            api_client = NavienAPIClient(
+                auth_client=auth_client, session=auth_client._session
+            )
             devices = await api_client.list_devices()
 
             if not devices:
@@ -111,7 +115,9 @@ async def main():
                 def on_any_message(topic: str, message: dict):
                     """Debug handler to see all messages."""
                     message_count["count"] += 1
-                    print(f"\n📩 Raw Message #{message_count['count']} on topic: {topic}")
+                    print(
+                        f"\n📩 Raw Message #{message_count['count']} on topic: {topic}"
+                    )
                     print(f"   Keys: {list(message.keys())}")
                     if "response" in message:
                         print(f"   Response keys: {list(message['response'].keys())}")
@@ -131,11 +137,21 @@ async def main():
                     # Access typed status fields directly
                     print("Temperatures:")
                     print(f"  DHW Temperature:        {status.dhwTemperature:.1f}°F")
-                    print(f"  DHW Target Setting:     {status.dhwTargetTemperatureSetting:.1f}°F")
-                    print(f"  Tank Upper:             {status.tankUpperTemperature:.1f}°F")
-                    print(f"  Tank Lower:             {status.tankLowerTemperature:.1f}°F")
-                    print(f"  Discharge:              {status.dischargeTemperature:.1f}°F")
-                    print(f"  Ambient:                {status.ambientTemperature:.1f}°F")
+                    print(
+                        f"  DHW Target Setting:     {status.dhwTargetTemperatureSetting:.1f}°F"
+                    )
+                    print(
+                        f"  Tank Upper:             {status.tankUpperTemperature:.1f}°F"
+                    )
+                    print(
+                        f"  Tank Lower:             {status.tankLowerTemperature:.1f}°F"
+                    )
+                    print(
+                        f"  Discharge:              {status.dischargeTemperature:.1f}°F"
+                    )
+                    print(
+                        f"  Ambient:                {status.ambientTemperature:.1f}°F"
+                    )
 
                     print("\nOperation:")
                     print(f"  Mode:                   {status.operationMode.name}")
@@ -153,10 +169,14 @@ async def main():
                     print(f"  Freeze Protection:      {status.freezeProtectionUse}")
 
                     print("\nAdvanced:")
-                    print(f"  Fan RPM:                {status.currentFanRpm}/{status.targetFanRpm}")
+                    print(
+                        f"  Fan RPM:                {status.currentFanRpm}/{status.targetFanRpm}"
+                    )
                     print(f"  EEV Step:               {status.eevStep}")
                     print(f"  Super Heat:             {status.currentSuperHeat:.1f}°F")
-                    print(f"  Flow Rate:              {status.currentDhwFlowRate:.1f} GPM")
+                    print(
+                        f"  Flow Rate:              {status.currentDhwFlowRate:.1f} GPM"
+                    )
                     print(f"  Temperature Unit:       {status.temperatureType.name}")
 
                     print("=" * 60)
@@ -165,8 +185,12 @@ async def main():
                 device_topic = f"navilink-{device_id}"
 
                 # Subscribe to multiple topics to catch all messages
-                await mqtt_client.subscribe(f"cmd/{device_type}/{device_topic}/#", on_any_message)
-                await mqtt_client.subscribe(f"evt/{device_type}/{device_topic}/#", on_any_message)
+                await mqtt_client.subscribe(
+                    f"cmd/{device_type}/{device_topic}/#", on_any_message
+                )
+                await mqtt_client.subscribe(
+                    f"evt/{device_type}/{device_topic}/#", on_any_message
+                )
 
                 # Then subscribe with automatic parsing
                 await mqtt_client.subscribe_device_status(device, on_device_status)

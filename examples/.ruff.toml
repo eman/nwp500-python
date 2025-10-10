@@ -1,4 +1,5 @@
-line-length = 120
+# Ruff configuration for examples directory
+# Inherits from main pyproject.toml but allows E402 for sys.path modifications
 
 [lint]
-extend-ignore = ["E402"]
+extend-ignore = ["E402"]  # Allow imports after sys.path modifications in examples

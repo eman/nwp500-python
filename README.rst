@@ -196,6 +196,25 @@ To set up a development environment, clone the repository and install the requir
     # Run tests
     pytest
 
+**Linting and CI Consistency**
+
+To ensure your local linting matches CI exactly:
+
+.. code-block:: bash
+
+    # Install tox (recommended)
+    pip install tox
+
+    # Run linting exactly as CI does
+    tox -e lint
+
+    # Auto-fix and format
+    tox -e format
+
+For detailed linting setup instructions, see `LINTING_SETUP.md <LINTING_SETUP.md>`_.
+
+For comprehensive development guide, see `DEVELOPMENT.md <DEVELOPMENT.md>`_.
+
 License
 =======
 

@@ -63,7 +63,9 @@ async def main():
     await asyncio.sleep(2)  # Wait for subscription
 
     # Start periodic requests
-    print(f"\n[{datetime.now().strftime('%H:%M:%S')}] Starting periodic status requests (every 10 seconds)...")
+    print(
+        f"\n[{datetime.now().strftime('%H:%M:%S')}] Starting periodic status requests (every 10 seconds)..."
+    )
     await mqtt.start_periodic_requests(
         device=device,
         request_type=PeriodicRequestType.DEVICE_STATUS,
@@ -76,7 +78,9 @@ async def main():
     for i in range(9):  # 9 x 5 = 45 seconds
         await asyncio.sleep(5)
         timestamp = datetime.now().strftime("%H:%M:%S")
-        print(f"[{timestamp}] ... {(i + 1) * 5}s elapsed, messages received: {message_count}")
+        print(
+            f"[{timestamp}] ... {(i + 1) * 5}s elapsed, messages received: {message_count}"
+        )
 
     # Cleanup
     print(f"\n[{datetime.now().strftime('%H:%M:%S')}] Disconnecting...")

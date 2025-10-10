@@ -465,18 +465,18 @@ class NavienMqttClient(EventEmitter):
                     on_connection_interrupted=self._on_connection_interrupted_internal,
                     on_connection_resumed=self._on_connection_resumed_internal,
                 )
-            
+
             # Run connection builder in thread pool to avoid blocking I/O
             self._connection = await self._loop.run_in_executor(None, _build_connection)
 
             # Connect
             _logger.info("Establishing MQTT connection...")
-            
+
             # Run the connect operation in a thread pool to avoid blocking I/O
             def _connect():
                 connect_future = self._connection.connect()
                 return connect_future.result()
-            
+
             connect_result = await self._loop.run_in_executor(None, _connect)
 
             self._connected = True
@@ -532,9 +532,9 @@ class NavienMqttClient(EventEmitter):
             def _disconnect():
                 disconnect_future = self._connection.disconnect()
                 return disconnect_future.result()
-            
+
             await self._loop.run_in_executor(None, _disconnect)
-            
+
             self._connected = False
             self._connection = None
             _logger.info("Disconnected successfully")
@@ -635,9 +635,9 @@ class NavienMqttClient(EventEmitter):
                 )
                 subscribe_result = subscribe_future.result()
                 return subscribe_result, packet_id
-            
+
             subscribe_result, packet_id = await self._loop.run_in_executor(None, _subscribe)
-            
+
             _logger.info(f"Subscribed to '{topic}' with QoS {subscribe_result['qos']}")
 
             # Store subscription and handler
@@ -669,7 +669,7 @@ class NavienMqttClient(EventEmitter):
             def _unsubscribe():
                 unsubscribe_future, packet_id = self._connection.unsubscribe(topic)
                 return unsubscribe_future.result()
-            
+
             await self._loop.run_in_executor(None, _unsubscribe)
 
             # Remove from tracking
@@ -727,9 +727,9 @@ class NavienMqttClient(EventEmitter):
                 )
                 publish_future.result()
                 return packet_id
-            
+
             packet_id = await self._loop.run_in_executor(None, _publish)
-            
+
             _logger.debug(f"Published to '{topic}' with packet_id {packet_id}")
 
             return packet_id

@@ -111,7 +111,9 @@ async def command_queue_demo():
 
             # Step 6: Simulate disconnection and queue commands
             print("\n6. Simulating disconnection...")
-            print("   Note: In real scenarios, this happens automatically during network issues")
+            print(
+                "   Note: In real scenarios, this happens automatically during network issues"
+            )
 
             # Manually disconnect
             await mqtt_client.disconnect()
@@ -145,7 +147,9 @@ async def command_queue_demo():
             print("   Waiting for queued commands to be sent...")
             await asyncio.sleep(3)
 
-            print(f"   ✅ Queue processed! Remaining: {mqtt_client.queued_commands_count}")
+            print(
+                f"   ✅ Queue processed! Remaining: {mqtt_client.queued_commands_count}"
+            )
 
             # Step 9: Test queue limits
             print("\n9. Testing queue limits...")
@@ -156,7 +160,9 @@ async def command_queue_demo():
             for _i in range(config.max_queued_commands + 5):
                 await mqtt_client.request_device_status(device)
 
-            print(f"   Queue size: {mqtt_client.queued_commands_count} (max: {config.max_queued_commands})")
+            print(
+                f"   Queue size: {mqtt_client.queued_commands_count} (max: {config.max_queued_commands})"
+            )
             print("   ✅ Queue properly limited (oldest commands dropped)")
 
             # Clear queue

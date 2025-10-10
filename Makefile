@@ -1,4 +1,4 @@
-.PHONY: help install install-dev lint format test clean build release check-release
+.PHONY: help install install-dev lint format test clean build release check-release ci-lint ci-format ci-check
 
 help:  ## Show this help message
 	@echo 'Usage: make [target]'
@@ -12,6 +12,9 @@ install:  ## Install the package
 install-dev:  ## Install the package with development dependencies
 	pip install -e ".[dev]"
 
+setup-dev:  ## Set up minimal development environment (ruff for linting)
+	python3 scripts/setup-dev.py
+
 lint:  ## Run ruff linter (check only)
 	ruff check src/ tests/ examples/
 
@@ -21,6 +24,16 @@ format:  ## Format code with ruff
 
 format-check:  ## Check code formatting without making changes
 	ruff format --check src/ tests/ examples/
+
+# CI Sync Commands - Mirror exact CI environment locally
+ci-lint:  ## Run linting exactly as CI does (via tox lint)
+	python3 scripts/lint.py
+
+ci-format:  ## Run formatting exactly as CI does (via tox format)
+	python3 scripts/format.py
+
+ci-check: ci-lint  ## Run the same checks as CI (ensures local/CI consistency)
+	@echo "🎉 All CI checks passed locally!"
 
 test:  ## Run tests with pytest
 	pytest

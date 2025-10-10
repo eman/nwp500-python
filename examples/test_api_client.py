@@ -106,7 +106,9 @@ async def test_api_client():
             print("Test 3: Get Device Info")
             print("-" * 70)
             device_info = await client.get_device_info(mac, additional)
-            print(f"✅ Retrieved detailed info for: {device_info.device_info.device_name}")
+            print(
+                f"✅ Retrieved detailed info for: {device_info.device_info.device_name}"
+            )
             print(f"   MAC: {device_info.device_info.mac_address}")
             print(f"   Type: {device_info.device_info.device_type}")
             if device_info.device_info.install_type:
@@ -157,8 +159,12 @@ async def test_api_client():
             print("-" * 70)
             print("✅ DeviceInfo model:")
             print(f"   - home_seq: {type(test_device.device_info.home_seq).__name__}")
-            print(f"   - mac_address: {type(test_device.device_info.mac_address).__name__}")
-            print(f"   - device_type: {type(test_device.device_info.device_type).__name__}")
+            print(
+                f"   - mac_address: {type(test_device.device_info.mac_address).__name__}"
+            )
+            print(
+                f"   - device_type: {type(test_device.device_info.device_type).__name__}"
+            )
             print(f"   - connected: {type(test_device.device_info.connected).__name__}")
 
             print("✅ Location model:")

@@ -49,13 +49,17 @@ async def main():
 
         # Heat pump details
         print("🔵 HEAT PUMP")
-        print(f"   Energy Usage: {energy.total.hpUsage:,} Wh ({energy.total.heat_pump_percentage:.1f}%)")
+        print(
+            f"   Energy Usage: {energy.total.hpUsage:,} Wh ({energy.total.heat_pump_percentage:.1f}%)"
+        )
         print(f"   Operating Time: {energy.total.hpTime} hours")
         print()
 
         # Electric heater details
         print("🔴 ELECTRIC HEATER")
-        print(f"   Energy Usage: {energy.total.heUsage:,} Wh ({energy.total.heat_element_percentage:.1f}%)")
+        print(
+            f"   Energy Usage: {energy.total.heUsage:,} Wh ({energy.total.heat_element_percentage:.1f}%)"
+        )
         print(f"   Operating Time: {energy.total.heTime} hours")
         print()
 
@@ -86,7 +90,11 @@ async def main():
             for day_num, day_data in enumerate(month_data.data, start=1):
                 if day_data.total_usage > 0:  # Only show days with usage
                     date_str = f"{month_data.year}-{month_data.month:02d}-{day_num:02d}"
-                    hp_pct_day = (day_data.hpUsage / day_data.total_usage * 100) if day_data.total_usage > 0 else 0
+                    hp_pct_day = (
+                        (day_data.hpUsage / day_data.total_usage * 100)
+                        if day_data.total_usage > 0
+                        else 0
+                    )
 
                     print(
                         f"   {date_str}: {day_data.total_usage:5,} Wh "
@@ -132,7 +140,9 @@ async def main():
         current_month = now.month
 
         print(f"\nRequesting energy usage for {current_year}-{current_month:02d}...")
-        await mqtt_client.request_energy_usage(device, year=current_year, months=[current_month])
+        await mqtt_client.request_energy_usage(
+            device, year=current_year, months=[current_month]
+        )
         print("✓ Request sent")
 
         # Wait for response

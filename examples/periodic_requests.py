@@ -97,7 +97,9 @@ async def main():
         while elapsed < seconds:
             await asyncio.sleep(interval)
             elapsed += interval
-            print(f"  ... {elapsed}s elapsed (status: {status_count}, info: {info_count})")
+            print(
+                f"  ... {elapsed}s elapsed (status: {status_count}, info: {info_count})"
+            )
 
     # Small delay to ensure subscription is fully established
     await asyncio.sleep(2)

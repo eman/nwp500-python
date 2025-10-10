@@ -77,7 +77,9 @@ async def main():
             if tokens.access_key_id:
                 print("\nAWS Credentials available for IoT/MQTT:")
                 print(f"  Access Key ID: {tokens.access_key_id[:15]}...")
-                print(f"  Session Token: {tokens.session_token[:30] if tokens.session_token else 'N/A'}...")
+                print(
+                    f"  Session Token: {tokens.session_token[:30] if tokens.session_token else 'N/A'}..."
+                )
 
     except InvalidCredentialsError as e:
         print(f"\n❌ Invalid credentials: {e.message}")

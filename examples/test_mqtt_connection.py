@@ -53,7 +53,9 @@ async def test_mqtt_connection():
                 return False
 
             print(f"   ✅ AWS Access Key ID: {tokens.access_key_id[:15]}...")
-            print(f"   ✅ AWS Session Token: {'Present' if tokens.session_token else 'None'}")
+            print(
+                f"   ✅ AWS Session Token: {'Present' if tokens.session_token else 'None'}"
+            )
 
             # Step 2: Create MQTT client
             print("\n2. Creating MQTT client...")

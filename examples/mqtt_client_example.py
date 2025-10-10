@@ -50,7 +50,9 @@ async def main():
     password = os.getenv("NAVIEN_PASSWORD")
 
     if not email or not password:
-        print("❌ Error: Please set NAVIEN_EMAIL and NAVIEN_PASSWORD environment variables")
+        print(
+            "❌ Error: Please set NAVIEN_EMAIL and NAVIEN_PASSWORD environment variables"
+        )
         print("\nExample:")
         print("  export NAVIEN_EMAIL='your_email@example.com'")
         print("  export NAVIEN_PASSWORD='your_password'")
@@ -74,14 +76,18 @@ async def main():
                 return 1
 
             print("✅ AWS IoT credentials obtained")
-            print(f"   Access Key ID: {auth_client.current_tokens.access_key_id[:15]}...")
+            print(
+                f"   Access Key ID: {auth_client.current_tokens.access_key_id[:15]}..."
+            )
             print()
 
             # Step 2: Get device list
             print("Step 2: Fetching device list...")
 
             # Create a new API client that shares the auth client and session
-            api_client = NavienAPIClient(auth_client=auth_client, session=auth_client._session)
+            api_client = NavienAPIClient(
+                auth_client=auth_client, session=auth_client._session
+            )
             # Set the user email so API client knows we're authenticated
 
             devices = await api_client.list_devices()
@@ -95,7 +101,9 @@ async def main():
             print(f"✅ Found {len(devices)} device(s):")
             for i, device in enumerate(devices):
                 print(f"   {i + 1}. {device.device_info.device_name} (MAC: **MASKED**)")
-                print(f"      Type: {device.device_info.device_type}, Connected: {device.device_info.connected}")
+                print(
+                    f"      Type: {device.device_info.device_type}, Connected: {device.device_info.connected}"
+                )
             print()
 
             # Use the first device for this example
@@ -135,7 +143,9 @@ async def main():
                     """Typed callback for device status."""
                     message_count["count"] += 1
                     message_count["status"] += 1
-                    print(f"\n📊 Status Update #{message_count['status']} (Message #{message_count['count']})")
+                    print(
+                        f"\n📊 Status Update #{message_count['status']} (Message #{message_count['count']})"
+                    )
                     print(f"   - DHW Temperature: {status.dhwTemperature:.1f}°F")
                     print(f"   - Tank Upper: {status.tankUpperTemperature:.1f}°F")
                     print(f"   - Tank Lower: {status.tankLowerTemperature:.1f}°F")
@@ -147,7 +157,9 @@ async def main():
                     """Typed callback for device features."""
                     message_count["count"] += 1
                     message_count["feature"] += 1
-                    print(f"\n📋 Device Info #{message_count['feature']} (Message #{message_count['count']})")
+                    print(
+                        f"\n📋 Device Info #{message_count['feature']} (Message #{message_count['count']})"
+                    )
                     print(f"   - Serial: {feature.controllerSerialNumber}")
                     print(f"   - SW Version: {feature.controllerSwVersion}")
                     print(f"   - Heat Pump: {feature.heatpumpUse}")

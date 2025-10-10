@@ -38,7 +38,9 @@ async def main():
 
     # Typed callback
     def on_feature(feature: DeviceFeature):
-        print(f"Device info: Serial {feature.controllerSerialNumber}, FW {feature.controllerSwVersion}")
+        print(
+            f"Device info: Serial {feature.controllerSerialNumber}, FW {feature.controllerSwVersion}"
+        )
 
     # Subscribe with typed parsing
     await mqtt.subscribe_device_feature(device, on_feature)

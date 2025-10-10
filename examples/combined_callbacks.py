@@ -41,7 +41,9 @@ async def main():
     password = os.getenv("NAVIEN_PASSWORD")
 
     if not email or not password:
-        print("❌ Error: Please set NAVIEN_EMAIL and NAVIEN_PASSWORD environment variables")
+        print(
+            "❌ Error: Please set NAVIEN_EMAIL and NAVIEN_PASSWORD environment variables"
+        )
         return 1
 
     print("=" * 70)
@@ -54,7 +56,9 @@ async def main():
             print(f"✅ Authenticated as: {auth_client.current_user.full_name}")
             print()
 
-            api_client = NavienAPIClient(auth_client=auth_client, session=auth_client._session)
+            api_client = NavienAPIClient(
+                auth_client=auth_client, session=auth_client._session
+            )
             devices = await api_client.list_devices()
 
             if not devices:
@@ -92,7 +96,9 @@ async def main():
                     print(f"\n📋 Feature Info #{counts['feature']}")
                     print(f"  Serial: {feature.controllerSerialNumber}")
                     print(f"  FW Version: {feature.controllerSwVersion}")
-                    print(f"  Temp Range: {feature.dhwTemperatureMin}-{feature.dhwTemperatureMax}°F")
+                    print(
+                        f"  Temp Range: {feature.dhwTemperatureMin}-{feature.dhwTemperatureMax}°F"
+                    )
                     print(f"  Heat Pump: {'Yes' if feature.heatpumpUse == 2 else 'No'}")
                     print(f"  Electric: {'Yes' if feature.electricUse == 2 else 'No'}")
 

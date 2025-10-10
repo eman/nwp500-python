@@ -8,7 +8,16 @@ Version 0.2 (Unreleased)
 Added
 -----
 
-- **Non-Blocking MQTT Operations**: All AWS IoT SDK operations are now non-blocking
+- **Local/CI Linting Synchronization**: Complete tooling to ensure consistent linting results
+
+  - Multiple sync methods: tox (recommended), direct scripts, pre-commit hooks, Makefile commands
+  - CI-identical scripts: ``scripts/lint.py`` and ``scripts/format.py`` mirror ``tox -e lint`` and ``tox -e format``
+  - Pre-commit hooks configuration for automatic checking
+  - Comprehensive documentation: ``LINTING_SETUP.md``, ``DEVELOPMENT.md``, ``FIX_LINTING.md``
+  - Makefile commands: ``make ci-lint``, ``make ci-format``, ``make ci-check``
+  - Standardized ruff configuration across all environments
+  - Eliminates "passes locally but fails in CI" issues
+  - Cross-platform support (Linux, macOS, Windows, containers)
   
   - All MQTT operations (connect, disconnect, subscribe, unsubscribe, publish) use ``asyncio.run_in_executor()`` 
   - Eliminates "blocking I/O detected" warnings in Home Assistant and other async applications
