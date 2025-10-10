@@ -1508,7 +1508,7 @@ class NavienMqttClient(EventEmitter):
 
                 del self._periodic_tasks[task_name]
                 stopped_count += 1
-                _logger.info(f"Stopped periodic {req_type.value} requests for {device_id}")
+                # Redact all but last 4 chars of MAC (if format expected), else just redact
 
         if stopped_count == 0:
             _logger.debug(
