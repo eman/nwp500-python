@@ -420,7 +420,7 @@ class NavienMqttClient(EventEmitter):
             )
 
         self._command_queue.append(command)
-        _logger.info(f"Queued command to '{topic}' (queue size: {len(self._command_queue)})")
+        _logger.info(f"Queued command (queue size: {len(self._command_queue)})")
 
     async def connect(self) -> bool:
         """
