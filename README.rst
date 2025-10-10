@@ -15,6 +15,7 @@ Features
 * **Operation Mode Control**: Switch between Heat Pump, Energy Saver, High Demand, Electric, and Vacation modes
 * **Comprehensive Status Data**: Access to 70+ device status fields including compressor status, heater status, flow rates, and more
 * **MQTT Protocol Support**: Low-level MQTT communication with Navien devices
+* **Non-Blocking Async Operations**: Fully compatible with async event loops (Home Assistant safe)
 * **Automatic Reconnection**: Reconnects automatically with exponential backoff during network interruptions
 * **Command Queuing**: Commands sent while disconnected are queued and sent automatically when reconnected
 * **Data Models**: Type-safe data classes with automatic unit conversions

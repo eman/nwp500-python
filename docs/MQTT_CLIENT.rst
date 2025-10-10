@@ -12,6 +12,11 @@ enables:
 - Device control (temperature, mode, power)
 - Bidirectional communication over MQTT
 - Automatic reconnection and error handling
+- **Non-blocking async operations** (compatible with Home Assistant and other async applications)
+
+The client is designed to be fully non-blocking and integrates seamlessly
+with async event loops, avoiding the "blocking I/O detected" warnings
+commonly seen in Home Assistant and similar applications.
 
 Prerequisites
 -------------
@@ -777,6 +782,45 @@ Error Handling
 
 Advanced Usage
 --------------
+
+Non-Blocking Implementation
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The MQTT client is designed to be fully compatible with async event loops
+and will not block or interfere with other async operations. This makes it
+suitable for integration with Home Assistant, web servers, and other 
+async applications.
+
+**Implementation Details:**
+
+- All AWS IoT SDK operations that could block are wrapped with ``asyncio.run_in_executor()``
+- Connection, disconnection, subscription, and publishing operations are non-blocking
+- The client maintains full compatibility with the existing API
+- No additional configuration required for non-blocking behavior
+
+**Home Assistant Integration:**
+
+.. code:: python
+
+   # Safe for use in Home Assistant custom integrations
+   class MyCoordinator(DataUpdateCoordinator):
+       async def _async_update_data(self):
+           # This will not trigger "blocking I/O detected" warnings
+           await self.mqtt_client.request_device_status(self.device)
+           return self.latest_data
+
+**Concurrent Operations:**
+
+.. code:: python
+
+   # MQTT operations will not block other async tasks
+   async def main():
+       # Both tasks run concurrently without blocking
+       await asyncio.gather(
+           mqtt_client.connect(),
+           some_other_async_operation(),
+           web_server.start(),
+       )
 
 Custom Connection Configuration
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

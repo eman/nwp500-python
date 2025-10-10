@@ -8,6 +8,16 @@ Version 0.2 (Unreleased)
 Added
 -----
 
+- **Non-Blocking MQTT Operations**: All AWS IoT SDK operations are now non-blocking
+  
+  - All MQTT operations (connect, disconnect, subscribe, unsubscribe, publish) use ``asyncio.run_in_executor()`` 
+  - Eliminates "blocking I/O detected" warnings in Home Assistant and other async applications
+  - Fully compatible with async event loops without blocking other operations
+  - No API changes required - existing code works without modification
+  - Maintains full performance and reliability of the underlying AWS IoT SDK
+  - Safe for use in Home Assistant custom integrations and other async applications
+  - Updated documentation with non-blocking implementation details
+
 - **Event Emitter Pattern (Phase 1)**: Event-driven architecture for device state changes
   
   - ``EventEmitter`` base class with multiple listeners per event
