@@ -138,8 +138,7 @@ async def test_mqtt_messaging():
                     # Avoid printing exception contents which may contain sensitive identifiers
                     print(f"   ⚠️ Failed to subscribe to: {mask_mac_in_topic(topic, device_id)}")
                     logging.debug(
-                        "Subscribe failure for topic %s (masked); device_type=%s",
-                        mask_mac_in_topic(topic, device_id),
+                        "Subscribe failure for device_type=%s; topic name redacted for privacy",
                         device_type,
                         exc_info=True,
                     )
