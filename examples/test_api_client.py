@@ -70,7 +70,7 @@ async def test_api_client():
             for i, device in enumerate(devices, 1):
                 print(f"\nDevice {i}:")
                 print(f"  Name: {device.device_info.device_name}")
-                print(f"  MAC Address: {_mask_mac(device.device_info.mac_address)}")
+                print(f"  MAC Address: [REDACTED_MAC]")
                 print(f"  Device Type: {device.device_info.device_type}")
                 print(f"  Home Seq: {device.device_info.home_seq}")
                 print(f"  Additional Value: {device.device_info.additional_value}")
