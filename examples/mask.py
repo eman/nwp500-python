@@ -25,8 +25,8 @@ def mask_mac(mac: Optional[str]) -> str:
         masked = re.sub(mac_regex, "[REDACTED_MAC]", mac)
         if masked and masked != mac:
             return masked
-        # fallback: show only last 4 chars
-        return "*" * max(0, len(mac) - 4) + mac[-4:]
+        # fallback: always redact to avoid any leakage
+        return "[REDACTED_MAC]"
     except Exception:
         return "[REDACTED_MAC]"
 
