@@ -86,8 +86,13 @@ async def test_mqtt_messaging():
             device_type = device.device_info.device_type
             additional_value = device.device_info.additional_value
 
+            # Helper to mask MAC-like strings for safe printing
+            def mask_mac(addr: str) -> str:
+                mac_regex = r"([0-9A-Fa-f]{2}[:-]){5}[0-9A-Fa-f]{2}|([0-9A-Fa-f]{12})"
+                return re.sub(mac_regex, "[REDACTED_MAC]", addr)
+
             print(f"✅ Found device: {device.device_info.device_name}")
-            print(f"   MAC Address: {device_id}")
+            print(f"   MAC Address: {mask_mac(device_id)}")
             print(f"   Device Type: {device_type}")
             print(f"   Additional Value: {additional_value}")
             print(f"   Connection Status: {device.device_info.connected}")
@@ -125,8 +130,15 @@ async def test_mqtt_messaging():
                 try:
                     await mqtt_client.subscribe(topic, message_handler)
                     print(f"   ✅ Subscribed to: {mask_mac_in_topic(topic, device_id)}")
-                except Exception as e:
-                    print(f"   ⚠️ Failed to subscribe to device topic (type: {device_type}): {e}")
+                except Exception:
+                    # Avoid printing exception contents which may contain sensitive identifiers
+                    print(f"   ⚠️ Failed to subscribe to device topic (type: {device_type})")
+                    logging.debug(
+                        "Subscribe failure for topic %s (masked): %s",
+                        mask_mac_in_topic(topic, device_id),
+                        "see debug logs for details",
+                        exc_info=True,
+                    )
 
             print()
 
