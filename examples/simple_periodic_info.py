@@ -11,7 +11,12 @@ import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
-from nwp500 import DeviceFeature, NavienAPIClient, NavienAuthClient, NavienMqttClient
+from nwp500 import (
+    DeviceFeature,
+    NavienAPIClient,
+    NavienAuthClient,
+    NavienMqttClient,
+)
 
 
 async def main():
@@ -33,10 +38,7 @@ async def main():
 
     # Typed callback
     def on_feature(feature: DeviceFeature):
-        print(
-            f"Device info: Serial {feature.controllerSerialNumber}, "
-            f"FW {feature.controllerSwVersion}"
-        )
+        print(f"Device info: Serial {feature.controllerSerialNumber}, FW {feature.controllerSwVersion}")
 
     # Subscribe with typed parsing
     await mqtt.subscribe_device_feature(device, on_feature)

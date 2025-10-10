@@ -14,7 +14,8 @@ import sys
 
 # Setup logging with DEBUG level
 logging.basicConfig(
-    level=logging.DEBUG, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    level=logging.DEBUG,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
 )
 
 # If running from examples directory, add parent to path
@@ -26,6 +27,13 @@ from nwp500.auth import AuthenticationError, NavienAuthClient
 from nwp500.models import DeviceStatus
 from nwp500.mqtt_client import NavienMqttClient
 
+try:
+    from examples.mask import mask_mac  # type: ignore
+except Exception:
+
+    def mask_mac(mac):  # pragma: no cover - fallback
+        return "[REDACTED_MAC]"
+
 
 async def main():
     """Main example function."""
@@ -35,9 +43,7 @@ async def main():
     password = os.getenv("NAVIEN_PASSWORD")
 
     if not email or not password:
-        print(
-            "❌ Error: Please set NAVIEN_EMAIL and NAVIEN_PASSWORD environment variables"
-        )
+        print("❌ Error: Please set NAVIEN_EMAIL and NAVIEN_PASSWORD environment variables")
         return 1
 
     print("=" * 70)
@@ -54,9 +60,7 @@ async def main():
 
             # Step 2: Get device list
             print("Step 2: Fetching device list...")
-            api_client = NavienAPIClient(
-                auth_client=auth_client, session=auth_client._session
-            )
+            api_client = NavienAPIClient(auth_client=auth_client, session=auth_client._session)
             devices = await api_client.list_devices()
 
             if not devices:
@@ -67,9 +71,16 @@ async def main():
             device_id = device.device_info.mac_address
             device_type = device.device_info.device_type
 
+            try:
+                from examples.mask import mask_any  # type: ignore
+            except Exception:
+
+                def mask_any(_):
+                    return "[REDACTED]"
+
             print(f"✅ Using device: {device.device_info.device_name}")
-            print(f"   MAC Address: {device_id}")
-            print(f"   Device Type: {device_type}")
+            print(f"   MAC Address: {mask_mac(device_id)}")
+            print(f"   Device Type: {mask_any(device_type)}")
             print()
 
             # Step 3: Create MQTT client and connect
@@ -98,9 +109,7 @@ async def main():
 
                         if "status" in message["response"]:
                             print("   ✅ Contains STATUS data")
-                            status_keys = list(message["response"]["status"].keys())[
-                                :10
-                            ]
+                            status_keys = list(message["response"]["status"].keys())[:10]
                             print(f"   Status sample keys: {status_keys}...")
 
                         if "feature" in message["response"]:
@@ -156,11 +165,10 @@ async def main():
                 await mqtt_client.disconnect()
                 print("✅ Disconnected successfully")
 
-            except Exception as mqtt_error:
-                print(f"❌ MQTT Error: {mqtt_error}")
-                import traceback
+            except Exception:
+                import logging
 
-                traceback.print_exc()
+                logging.exception("MQTT error in device_status_callback_debug")
 
                 if mqtt_client.is_connected:
                     await mqtt_client.disconnect()
@@ -179,11 +187,10 @@ async def main():
             print(f"   Error code: {e.code}")
         return 1
 
-    except Exception as e:
-        print(f"\n❌ Unexpected error: {str(e)}")
-        import traceback
+    except Exception:
+        import logging
 
-        traceback.print_exc()
+        logging.exception("Unexpected error in device_status_callback_debug")
         return 1
 
 

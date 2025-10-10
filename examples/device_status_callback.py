@@ -38,6 +38,16 @@ from nwp500.auth import AuthenticationError, NavienAuthClient
 from nwp500.models import DeviceStatus
 from nwp500.mqtt_client import NavienMqttClient
 
+try:
+    from examples.mask import mask_mac, mask_mac_in_topic  # type: ignore
+except Exception:
+
+    def mask_mac(mac):  # pragma: no cover - fallback
+        return "[REDACTED_MAC]"
+
+    def mask_mac_in_topic(topic, mac):  # pragma: no cover - fallback
+        return topic
+
 
 async def main():
     """Main example function."""
@@ -47,9 +57,7 @@ async def main():
     password = os.getenv("NAVIEN_PASSWORD")
 
     if not email or not password:
-        print(
-            "❌ Error: Please set NAVIEN_EMAIL and NAVIEN_PASSWORD environment variables"
-        )
+        print("❌ Error: Please set NAVIEN_EMAIL and NAVIEN_PASSWORD environment variables")
         print("\nExample:")
         print("  export NAVIEN_EMAIL='your_email@example.com'")
         print("  export NAVIEN_PASSWORD='your_password'")
@@ -69,9 +77,7 @@ async def main():
 
             # Step 2: Get device list
             print("Step 2: Fetching device list...")
-            api_client = NavienAPIClient(
-                auth_client=auth_client, session=auth_client._session
-            )
+            api_client = NavienAPIClient(auth_client=auth_client, session=auth_client._session)
             devices = await api_client.list_devices()
 
             if not devices:
@@ -83,7 +89,7 @@ async def main():
             device_type = device.device_info.device_type
 
             print(f"✅ Using device: {device.device_info.device_name}")
-            print(f"   MAC Address: {device_id}")
+            print(f"   MAC Address: {mask_mac(device_id)}")
             print()
 
             # Step 3: Create MQTT client and connect
@@ -105,9 +111,7 @@ async def main():
                 def on_any_message(topic: str, message: dict):
                     """Debug handler to see all messages."""
                     message_count["count"] += 1
-                    print(
-                        f"\n📩 Raw Message #{message_count['count']} on topic: {topic}"
-                    )
+                    print(f"\n📩 Raw Message #{message_count['count']} on topic: {topic}")
                     print(f"   Keys: {list(message.keys())}")
                     if "response" in message:
                         print(f"   Response keys: {list(message['response'].keys())}")
@@ -127,21 +131,11 @@ async def main():
                     # Access typed status fields directly
                     print("Temperatures:")
                     print(f"  DHW Temperature:        {status.dhwTemperature:.1f}°F")
-                    print(
-                        f"  DHW Target Setting:     {status.dhwTargetTemperatureSetting:.1f}°F"
-                    )
-                    print(
-                        f"  Tank Upper:             {status.tankUpperTemperature:.1f}°F"
-                    )
-                    print(
-                        f"  Tank Lower:             {status.tankLowerTemperature:.1f}°F"
-                    )
-                    print(
-                        f"  Discharge:              {status.dischargeTemperature:.1f}°F"
-                    )
-                    print(
-                        f"  Ambient:                {status.ambientTemperature:.1f}°F"
-                    )
+                    print(f"  DHW Target Setting:     {status.dhwTargetTemperatureSetting:.1f}°F")
+                    print(f"  Tank Upper:             {status.tankUpperTemperature:.1f}°F")
+                    print(f"  Tank Lower:             {status.tankLowerTemperature:.1f}°F")
+                    print(f"  Discharge:              {status.dischargeTemperature:.1f}°F")
+                    print(f"  Ambient:                {status.ambientTemperature:.1f}°F")
 
                     print("\nOperation:")
                     print(f"  Mode:                   {status.operationMode.name}")
@@ -159,14 +153,10 @@ async def main():
                     print(f"  Freeze Protection:      {status.freezeProtectionUse}")
 
                     print("\nAdvanced:")
-                    print(
-                        f"  Fan RPM:                {status.currentFanRpm}/{status.targetFanRpm}"
-                    )
+                    print(f"  Fan RPM:                {status.currentFanRpm}/{status.targetFanRpm}")
                     print(f"  EEV Step:               {status.eevStep}")
                     print(f"  Super Heat:             {status.currentSuperHeat:.1f}°F")
-                    print(
-                        f"  Flow Rate:              {status.currentDhwFlowRate:.1f} GPM"
-                    )
+                    print(f"  Flow Rate:              {status.currentDhwFlowRate:.1f} GPM")
                     print(f"  Temperature Unit:       {status.temperatureType.name}")
 
                     print("=" * 60)
@@ -175,12 +165,8 @@ async def main():
                 device_topic = f"navilink-{device_id}"
 
                 # Subscribe to multiple topics to catch all messages
-                await mqtt_client.subscribe(
-                    f"cmd/{device_type}/{device_topic}/#", on_any_message
-                )
-                await mqtt_client.subscribe(
-                    f"evt/{device_type}/{device_topic}/#", on_any_message
-                )
+                await mqtt_client.subscribe(f"cmd/{device_type}/{device_topic}/#", on_any_message)
+                await mqtt_client.subscribe(f"evt/{device_type}/{device_topic}/#", on_any_message)
 
                 # Then subscribe with automatic parsing
                 await mqtt_client.subscribe_device_status(device, on_device_status)
@@ -215,11 +201,10 @@ async def main():
                 await mqtt_client.disconnect()
                 print("✅ Disconnected successfully")
 
-            except Exception as mqtt_error:
-                print(f"❌ MQTT Error: {mqtt_error}")
-                import traceback
+            except Exception:
+                import logging
 
-                traceback.print_exc()
+                logging.exception("MQTT error in device_status_callback")
 
                 if mqtt_client.is_connected:
                     await mqtt_client.disconnect()
@@ -238,11 +223,10 @@ async def main():
             print(f"   Error code: {e.code}")
         return 1
 
-    except Exception as e:
-        print(f"\n❌ Unexpected error: {str(e)}")
-        import traceback
+    except Exception:
+        import logging
 
-        traceback.print_exc()
+        logging.exception("Unexpected error in device_status_callback")
         return 1
 
 

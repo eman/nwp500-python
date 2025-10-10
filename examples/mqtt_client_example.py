@@ -21,7 +21,8 @@ import sys
 
 # Setup logging
 logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    level=logging.INFO,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
 )
 
 # If running from examples directory, add parent to path
@@ -33,6 +34,13 @@ from nwp500.auth import AuthenticationError, NavienAuthClient
 from nwp500.models import DeviceFeature, DeviceStatus
 from nwp500.mqtt_client import NavienMqttClient
 
+try:
+    from examples.mask import mask_mac  # type: ignore
+except Exception:
+
+    def mask_mac(mac):  # pragma: no cover - fallback for examples
+        return "[REDACTED_MAC]"
+
 
 async def main():
     """Main example function."""
@@ -42,9 +50,7 @@ async def main():
     password = os.getenv("NAVIEN_PASSWORD")
 
     if not email or not password:
-        print(
-            "❌ Error: Please set NAVIEN_EMAIL and NAVIEN_PASSWORD environment variables"
-        )
+        print("❌ Error: Please set NAVIEN_EMAIL and NAVIEN_PASSWORD environment variables")
         print("\nExample:")
         print("  export NAVIEN_EMAIL='your_email@example.com'")
         print("  export NAVIEN_PASSWORD='your_password'")
@@ -68,18 +74,14 @@ async def main():
                 return 1
 
             print("✅ AWS IoT credentials obtained")
-            print(
-                f"   Access Key ID: {auth_client.current_tokens.access_key_id[:15]}..."
-            )
+            print(f"   Access Key ID: {auth_client.current_tokens.access_key_id[:15]}...")
             print()
 
             # Step 2: Get device list
             print("Step 2: Fetching device list...")
 
             # Create a new API client that shares the auth client and session
-            api_client = NavienAPIClient(
-                auth_client=auth_client, session=auth_client._session
-            )
+            api_client = NavienAPIClient(auth_client=auth_client, session=auth_client._session)
             # Set the user email so API client knows we're authenticated
 
             devices = await api_client.list_devices()
@@ -92,12 +94,8 @@ async def main():
 
             print(f"✅ Found {len(devices)} device(s):")
             for i, device in enumerate(devices):
-                print(
-                    f"   {i + 1}. {device.device_info.device_name} ({device.device_info.mac_address})"
-                )
-                print(
-                    f"      Type: {device.device_info.device_type}, Connected: {device.device_info.connected}"
-                )
+                print(f"   {i + 1}. {device.device_info.device_name} (MAC: **MASKED**)")
+                print(f"      Type: {device.device_info.device_type}, Connected: {device.device_info.connected}")
             print()
 
             # Use the first device for this example
@@ -105,9 +103,16 @@ async def main():
             device_id = device.device_info.mac_address
             device_type = device.device_info.device_type
 
-            print(f"Using device: {device.device_info.device_name}")
-            print(f"MAC Address: {device_id}")
-            print(f"Device Type: {device_type}")
+            try:
+                from examples.mask import mask_any  # type: ignore
+            except Exception:
+
+                def mask_any(_):  # pragma: no cover - fallback
+                    return "[REDACTED]"
+
+            print(f"✅ Using device: {device.device_info.device_name}")
+            print(f"   MAC Address: {mask_mac(device_id)}")
+            print(f"   Device Type: {mask_any(device_type)}")
             print()
 
             # Step 3: Create MQTT client and connect
@@ -130,9 +135,7 @@ async def main():
                     """Typed callback for device status."""
                     message_count["count"] += 1
                     message_count["status"] += 1
-                    print(
-                        f"\n📊 Status Update #{message_count['status']} (Message #{message_count['count']})"
-                    )
+                    print(f"\n📊 Status Update #{message_count['status']} (Message #{message_count['count']})")
                     print(f"   - DHW Temperature: {status.dhwTemperature:.1f}°F")
                     print(f"   - Tank Upper: {status.tankUpperTemperature:.1f}°F")
                     print(f"   - Tank Lower: {status.tankLowerTemperature:.1f}°F")
@@ -144,9 +147,7 @@ async def main():
                     """Typed callback for device features."""
                     message_count["count"] += 1
                     message_count["feature"] += 1
-                    print(
-                        f"\n📋 Device Info #{message_count['feature']} (Message #{message_count['count']})"
-                    )
+                    print(f"\n📋 Device Info #{message_count['feature']} (Message #{message_count['count']})")
                     print(f"   - Serial: {feature.controllerSerialNumber}")
                     print(f"   - SW Version: {feature.controllerSwVersion}")
                     print(f"   - Heat Pump: {feature.heatpumpUse}")
@@ -196,11 +197,10 @@ async def main():
                 await mqtt_client.disconnect()
                 print("✅ Disconnected successfully")
 
-            except Exception as mqtt_error:
-                print(f"❌ MQTT Error: {mqtt_error}")
-                import traceback
+            except Exception:
+                import logging
 
-                traceback.print_exc()
+                logging.exception("MQTT error in mqtt_client_example")
 
                 if mqtt_client.is_connected:
                     await mqtt_client.disconnect()
@@ -219,11 +219,10 @@ async def main():
             print(f"   Error code: {e.code}")
         return 1
 
-    except Exception as e:
-        print(f"\n❌ Unexpected error: {str(e)}")
-        import traceback
+    except Exception:
+        import logging
 
-        traceback.print_exc()
+        logging.exception("Unexpected error in mqtt_client_example")
         return 1
 
 

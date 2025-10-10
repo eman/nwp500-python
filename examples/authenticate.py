@@ -13,14 +13,19 @@ import sys
 
 # Setup logging
 logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    level=logging.INFO,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
 )
 
 # If running from examples directory, add parent to path
 if __name__ == "__main__":
     sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
-from nwp500.auth import AuthenticationError, InvalidCredentialsError, NavienAuthClient
+from nwp500.auth import (
+    AuthenticationError,
+    InvalidCredentialsError,
+    NavienAuthClient,
+)
 
 
 async def main():
@@ -72,9 +77,7 @@ async def main():
             if tokens.access_key_id:
                 print("\nAWS Credentials available for IoT/MQTT:")
                 print(f"  Access Key ID: {tokens.access_key_id[:15]}...")
-                print(
-                    f"  Session Token: {tokens.session_token[:30] if tokens.session_token else 'N/A'}..."
-                )
+                print(f"  Session Token: {tokens.session_token[:30] if tokens.session_token else 'N/A'}...")
 
     except InvalidCredentialsError as e:
         print(f"\n❌ Invalid credentials: {e.message}")
