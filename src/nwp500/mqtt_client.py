@@ -24,6 +24,16 @@ from awscrt import mqtt
 from awsiot import mqtt_connection_builder
 
 from .auth import NavienAuthClient
+from .config import AWS_IOT_ENDPOINT, AWS_REGION
+from .constants import (
+    CMD_DEVICE_INFO_REQUEST,
+    CMD_DHW_MODE,
+    CMD_DHW_TEMPERATURE,
+    CMD_ENERGY_USAGE_QUERY,
+    CMD_POWER_OFF,
+    CMD_POWER_ON,
+    CMD_STATUS_REQUEST,
+)
 from .events import EventEmitter
 from .models import (
     Device,
@@ -37,12 +47,6 @@ __copyright__ = "Emmanuel Levijarvi"
 __license__ = "MIT"
 
 _logger = logging.getLogger(__name__)
-
-
-# AWS IoT Configuration
-# From Navien Smart Control API - this is the AWS IoT endpoint for Navien devices
-AWS_IOT_ENDPOINT = "a1t30mldyslmuq-ats.iot.us-east-1.amazonaws.com"
-AWS_REGION = "us-east-1"
 
 
 @dataclass
@@ -1061,7 +1065,7 @@ class NavienMqttClient(EventEmitter):
         command = self._build_command(
             device_type=device_type,
             device_id=device_id,
-            command=16777219,  # Status request command
+            command=CMD_STATUS_REQUEST,  # Status request command
             additional_value=additional_value,
         )
         command["requestTopic"] = topic
@@ -1087,7 +1091,7 @@ class NavienMqttClient(EventEmitter):
         command = self._build_command(
             device_type=device_type,
             device_id=device_id,
-            command=16777217,  # Device info command
+            command=CMD_DEVICE_INFO_REQUEST,  # Device info command
             additional_value=additional_value,
         )
         command["requestTopic"] = topic
@@ -1114,7 +1118,7 @@ class NavienMqttClient(EventEmitter):
         topic = f"cmd/{device_type}/{device_topic}/ctrl"
         mode = "power-on" if power_on else "power-off"
         # Command codes: 33554434 for power-on, 33554433 for power-off
-        command_code = 33554434 if power_on else 33554433
+        command_code = CMD_POWER_ON if power_on else CMD_POWER_OFF
 
         command = self._build_command(
             device_type=device_type,
@@ -1163,7 +1167,7 @@ class NavienMqttClient(EventEmitter):
         command = self._build_command(
             device_type=device_type,
             device_id=device_id,
-            command=33554437,  # DHW mode control command (different from power commands)
+            command=CMD_DHW_MODE,  # DHW mode control command (different from power commands)
             additional_value=additional_value,
             mode="dhw-mode",
             param=[mode_id],
@@ -1205,7 +1209,7 @@ class NavienMqttClient(EventEmitter):
         command = self._build_command(
             device_type=device_type,
             device_id=device_id,
-            command=33554464,  # DHW temperature control command
+            command=CMD_DHW_TEMPERATURE,  # DHW temperature control command
             additional_value=additional_value,
             mode="dhw-temperature",
             param=[temperature],
@@ -1284,7 +1288,7 @@ class NavienMqttClient(EventEmitter):
         command = self._build_command(
             device_type=device_type,
             device_id=device_id,
-            command=16777225,  # Energy usage query command
+            command=CMD_ENERGY_USAGE_QUERY,  # Energy usage query command
             additional_value=additional_value,
             month=months,
             year=year,

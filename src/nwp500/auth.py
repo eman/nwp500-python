@@ -19,17 +19,13 @@ from typing import Any, Optional
 
 import aiohttp
 
+from .config import API_BASE_URL, REFRESH_ENDPOINT, SIGN_IN_ENDPOINT
+
 __author__ = "Emmanuel Levijarvi"
 __copyright__ = "Emmanuel Levijarvi"
 __license__ = "MIT"
 
 _logger = logging.getLogger(__name__)
-
-
-# API Configuration
-API_BASE_URL = "https://nlus.naviensmartcontrol.com/api/v2.1"
-SIGN_IN_ENDPOINT = "/user/sign-in"
-REFRESH_ENDPOINT = "/auth/refresh"
 
 
 @dataclass

@@ -11,6 +11,7 @@ from typing import Any, Optional
 import aiohttp
 
 from .auth import AuthenticationError, NavienAuthClient
+from .config import API_BASE_URL
 from .models import (
     Device,
     FirmwareInfo,
@@ -22,10 +23,6 @@ __copyright__ = "Emmanuel Levijarvi"
 __license__ = "MIT"
 
 _logger = logging.getLogger(__name__)
-
-
-# API Configuration
-API_BASE_URL = "https://nlus.naviensmartcontrol.com/api/v2.1"
 
 
 class APIError(Exception):

@@ -5,9 +5,12 @@ used in the Navien NWP500 water heater communication protocol.
 These models are based on the MQTT message formats and API responses.
 """
 
+import logging
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Optional, Union
+
+_logger = logging.getLogger(__name__)
 
 
 class OperationMode(Enum):
@@ -365,15 +368,18 @@ class DeviceStatus:
                     converted_data["operationMode"]
                 )
             except ValueError:
-                # Default to STANDBY for unknown operation modes
-                converted_data["operationMode"] = OperationMode.STANDBY
-
+                _logger.warning(
+                    f"Unknown operationMode: {converted_data['operationMode']}. Defaulting to STANDBY."
+                )
         if "temperatureType" in converted_data:
             try:
                 converted_data["temperatureType"] = TemperatureUnit(
                     converted_data["temperatureType"]
                 )
             except ValueError:
+                _logger.warning(
+                    f"Unknown temperatureType: {converted_data['temperatureType']}. Defaulting to FAHRENHEIT."
+                )
                 # Default to FAHRENHEIT for unknown temperature types
                 converted_data["temperatureType"] = TemperatureUnit.FAHRENHEIT
 
@@ -444,6 +450,9 @@ class DeviceFeature:
                     converted_data["temperatureType"]
                 )
             except ValueError:
+                _logger.warning(
+                    f"Unknown temperatureType: {converted_data['temperatureType']}. Defaulting to FAHRENHEIT."
+                )
                 # Default to FAHRENHEIT for unknown temperature types
                 converted_data["temperatureType"] = TemperatureUnit.FAHRENHEIT
 
