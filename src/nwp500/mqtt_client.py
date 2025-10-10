@@ -1407,6 +1407,8 @@ class NavienMqttClient(EventEmitter):
             - All tasks automatically stop when client disconnects
         """
         device_id = device.device_info.mac_address
+        # Redact MAC address for logging (e.g., show only last 4 chars)
+        redacted_device_id = f"...{device_id[-4:]}" if device_id and len(device_id) >= 4 else "unknown"
         task_name = f"periodic_{request_type.value}_{device_id}"
 
         # Stop existing task for this device/type if any
@@ -1417,7 +1419,7 @@ class NavienMqttClient(EventEmitter):
         async def periodic_request():
             """Internal coroutine for periodic requests."""
             _logger.info(
-                f"Started periodic {request_type.value} requests for {device_id} "
+                f"Started periodic {request_type.value} requests for {redacted_device_id} "
                 f"(every {period_seconds}s)"
             )
 
@@ -1425,7 +1427,7 @@ class NavienMqttClient(EventEmitter):
                 try:
                     if not self._connected:
                         _logger.warning(
-                            f"Not connected, skipping {request_type.value} request for {device_id}"
+                            f"Not connected, skipping {request_type.value} request for {redacted_device_id}"
                         )
                     else:
                         # Send appropriate request type
@@ -1434,19 +1436,19 @@ class NavienMqttClient(EventEmitter):
                         elif request_type == PeriodicRequestType.DEVICE_STATUS:
                             await self.request_device_status(device)
 
-                        _logger.debug(f"Sent periodic {request_type.value} request for {device_id}")
+                        _logger.debug(f"Sent periodic {request_type.value} request for {redacted_device_id}")
 
                     # Wait for the specified period
                     await asyncio.sleep(period_seconds)
 
                 except asyncio.CancelledError:
                     _logger.info(
-                        f"Periodic {request_type.value} requests cancelled for {device_id}"
+                        f"Periodic {request_type.value} requests cancelled for {redacted_device_id}"
                     )
                     break
                 except Exception as e:
                     _logger.error(
-                        f"Error in periodic {request_type.value} request for {device_id}: {e}",
+                        f"Error in periodic {request_type.value} request for {redacted_device_id}: {e}",
                         exc_info=True,
                     )
                     # Continue despite errors
@@ -1457,7 +1459,7 @@ class NavienMqttClient(EventEmitter):
         self._periodic_tasks[task_name] = task
 
         _logger.info(
-            f"Started periodic {request_type.value} task for {device_id} "
+            f"Started periodic {request_type.value} task for {redacted_device_id} "
             f"with period {period_seconds}s"
         )
 
