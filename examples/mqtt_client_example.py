@@ -39,9 +39,7 @@ try:
 except Exception:
 
     def mask_mac(mac):  # pragma: no cover - fallback for examples
-        if not mac:
-            return "[REDACTED_MAC]"
-        return "*" * max(0, len(mac) - 4) + mac[-4:]
+        return "[REDACTED_MAC]"
 
 
 async def main():
