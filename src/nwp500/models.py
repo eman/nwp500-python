@@ -34,8 +34,6 @@ class OperationMode(Enum):
     HYBRID_BOOST_MODE = 96
 
     # Aliases
-    OFF = 0
-    AWAY = 5
 
 
 class TemperatureUnit(Enum):
