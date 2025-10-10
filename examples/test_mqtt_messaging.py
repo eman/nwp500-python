@@ -14,6 +14,7 @@ import json
 import logging
 import os
 import sys
+import re
 from datetime import datetime
 
 # Setup detailed logging
@@ -115,9 +116,10 @@ async def test_mqtt_messaging():
             ]
 
             def mask_mac_in_topic(topic, mac_addr):
-                if mac_addr and mac_addr in topic:
-                    return topic.replace(mac_addr, "[REDACTED_MAC]")
-                return topic
+                # Mask any MAC address-looking patterns in the topic string
+                # Covers hex format with :, -, or no delimiter (e.g. XX:XX:XX:XX:XX:XX)
+                mac_regex = r'([0-9A-Fa-f]{2}[:-]){5}[0-9A-Fa-f]{2}|([0-9A-Fa-f]{12})'
+                return re.sub(mac_regex, "[REDACTED_MAC]", topic)
 
             for topic in topics:
                 try:
