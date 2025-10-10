@@ -94,7 +94,7 @@ async def test_api_client():
             if device_info.device_info.install_type:
                 print(f"   Install Type: {device_info.device_info.install_type}")
             if device_info.location.latitude and device_info.location.longitude:
-                print(f"   Coordinates: {device_info.location.latitude}, {device_info.location.longitude}")
+                print("   Coordinates: [REDACTED]")
             print()
 
             # Test 4: Get Firmware Info
