@@ -122,7 +122,7 @@ async def test_mqtt_messaging():
                     await mqtt_client.subscribe(topic, message_handler)
                     print(f"   ✅ Subscribed to: {topic}")
                 except Exception as e:
-                    print(f"   ⚠️ Failed to subscribe to {topic}: {e}")
+                    print(f"   ⚠️ Failed to subscribe to device topic (type: {device_type}): {e}")
 
             print()
 
