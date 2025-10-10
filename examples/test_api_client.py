@@ -216,12 +216,9 @@ async def test_convenience_function():
             devices = await api_client.list_devices()
             print(f"✅ get_devices() returned {len(devices)} device(s)")
 
-            for device in devices:
-                # Redact MAC address when logging for privacy
-                redacted_mac = (
-                    device.device_info.mac_address[-5:] if device.device_info.mac_address else "N/A"
-                )
-                print(f"   - {device.device_info.device_name} (MAC: ***{redacted_mac})")
+            for idx, _ in enumerate(devices, start=1):
+                # Do not log sensitive data like device name or MAC address
+                print(f"   - Device #{idx} found.")
         return 0
 
     except Exception as e:
