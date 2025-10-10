@@ -25,6 +25,15 @@ from nwp500 import NavienAPIClient
 from nwp500.api_client import APIError
 from nwp500.auth import AuthenticationError, NavienAuthClient
 
+try:
+    from examples.mask import mask_mac  # type: ignore
+except Exception:
+    import re
+
+    def mask_mac(mac: str) -> str:  # pragma: no cover - fallback for examples
+        mac_regex = r"([0-9A-Fa-f]{2}[:-]){5}[0-9A-Fa-f]{2}|([0-9A-Fa-f]{12})"
+        return re.sub(mac_regex, "[REDACTED_MAC]", mac)
+
 
 async def example_basic_usage():
     """Basic usage example."""
@@ -53,12 +62,22 @@ async def example_basic_usage():
             print(f"✅ Found {len(devices)} device(s)\n")
 
             # Display device information
+            try:
+                from examples.mask import mask_mac  # type: ignore
+            except Exception:
+                # fallback helper if import fails when running examples directly
+                import re
+
+                def mask_mac(mac: str) -> str:  # pragma: no cover - small fallback
+                    mac_regex = r"([0-9A-Fa-f]{2}[:-]){5}[0-9A-Fa-f]{2}|([0-9A-Fa-f]{12})"
+                    return re.sub(mac_regex, "[REDACTED_MAC]", mac)
+
             for i, device in enumerate(devices, 1):
                 info = device.device_info
                 loc = device.location
 
                 print(f"Device {i}: {info.device_name}")
-                print(f"  MAC Address: {info.mac_address}")
+                print(f"  MAC Address: {mask_mac(info.mac_address)}")
                 print(f"  Type: {info.device_type}")
                 print(f"  Connection Status: {info.connected}")
 
@@ -111,11 +130,9 @@ async def example_basic_usage():
             print(f"   Error code: {e.code}")
         return 1
 
-    except Exception as e:
-        print(f"\n❌ Unexpected error: {str(e)}")
-        import traceback
-
-        traceback.print_exc()
+    except Exception:
+        # Avoid printing raw exception details to stdout in examples
+        logging.exception("Unexpected error in api_client_example")
         return 1
 
 
@@ -142,7 +159,7 @@ async def example_convenience_function():
 
             for device in devices:
                 print(f"  • {device.device_info.device_name}")
-                print(f"    MAC: {device.device_info.mac_address}")
+                print(f"    MAC: {mask_mac(device.device_info.mac_address)}")
                 print(f"    Type: {device.device_info.device_type}")
                 if device.location.city:
                     print(f"    Location: {device.location.city}, {device.location.state}")

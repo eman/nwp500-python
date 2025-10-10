@@ -60,10 +60,17 @@ async def test_api_client():
             devices = await client.list_devices()
             print(f"✅ Found {len(devices)} device(s)")
 
+            # Helper to mask MAC addresses for safe printing
+            def _mask_mac(mac: str) -> str:
+                import re
+
+                mac_regex = r"([0-9A-Fa-f]{2}[:-]){5}[0-9A-Fa-f]{2}|([0-9A-Fa-f]{12})"
+                return re.sub(mac_regex, "[REDACTED_MAC]", mac)
+
             for i, device in enumerate(devices, 1):
                 print(f"\nDevice {i}:")
                 print(f"  Name: {device.device_info.device_name}")
-                print(f"  MAC Address: {device.device_info.mac_address}")
+                print(f"  MAC Address: {_mask_mac(device.device_info.mac_address)}")
                 print(f"  Device Type: {device.device_info.device_type}")
                 print(f"  Home Seq: {device.device_info.home_seq}")
                 print(f"  Additional Value: {device.device_info.additional_value}")

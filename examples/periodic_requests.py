@@ -21,6 +21,13 @@ from nwp500 import (
     PeriodicRequestType,
 )
 
+try:
+    from examples.mask import mask_mac  # type: ignore
+except Exception:
+
+    def mask_mac(mac):  # pragma: no cover - fallback for examples
+        return "[REDACTED_MAC]"
+
 
 async def main():
     email = os.getenv("NAVIEN_EMAIL")
@@ -47,7 +54,7 @@ async def main():
     device_id = device.device_info.mac_address
 
     print(f"   Device: {device.device_info.device_name}")
-    print(f"   MAC: {device_id}")
+    print(f"   MAC: {mask_mac(device_id)}")
 
     # Connect MQTT
     print("\n2. Connecting to MQTT...")
@@ -224,9 +231,8 @@ if __name__ == "__main__":
     except KeyboardInterrupt:
         print("\n\nInterrupted by user")
         sys.exit(0)
-    except Exception as e:
-        print(f"\nError: {e}", file=sys.stderr)
-        import traceback
+    except Exception:
+        import logging
 
-        traceback.print_exc()
+        logging.exception("Error running periodic_requests example")
         sys.exit(1)
