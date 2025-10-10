@@ -13,7 +13,8 @@ import sys
 
 # Setup logging
 logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    level=logging.INFO,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
 )
 
 # If running from examples directory, add parent to path
@@ -80,10 +81,7 @@ async def example_basic_usage():
                 if detailed_info.device_info.install_type:
                     print(f"  Install Type: {detailed_info.device_info.install_type}")
                 if detailed_info.location.latitude:
-                    print(
-                        f"  Coordinates: {detailed_info.location.latitude}, "
-                        f"{detailed_info.location.longitude}"
-                    )
+                    print(f"  Coordinates: {detailed_info.location.latitude}, {detailed_info.location.longitude}")
                 print()
 
                 # Get firmware information
@@ -147,9 +145,7 @@ async def example_convenience_function():
                 print(f"    MAC: {device.device_info.mac_address}")
                 print(f"    Type: {device.device_info.device_type}")
                 if device.location.city:
-                    print(
-                        f"    Location: {device.location.city}, {device.location.state}"
-                    )
+                    print(f"    Location: {device.location.city}, {device.location.state}")
                 print()
 
         return 0

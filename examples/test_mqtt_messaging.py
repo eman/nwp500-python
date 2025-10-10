@@ -18,7 +18,8 @@ from datetime import datetime
 
 # Setup detailed logging
 logging.basicConfig(
-    level=logging.DEBUG, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    level=logging.DEBUG,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
 )
 
 from nwp500.api_client import NavienAPIClient
@@ -47,9 +48,7 @@ async def test_mqtt_messaging():
     def message_handler(topic: str, message: dict):
         """Handle all incoming messages with detailed logging."""
         timestamp = datetime.now().strftime("%H:%M:%S.%f")[:-3]
-        messages_received.append(
-            {"timestamp": timestamp, "topic": topic, "message": message}
-        )
+        messages_received.append({"timestamp": timestamp, "topic": topic, "message": message})
 
         print(f"\n{'=' * 80}")
         print(f"📩 MESSAGE RECEIVED at {timestamp}")
@@ -74,9 +73,7 @@ async def test_mqtt_messaging():
 
             # Step 2: Get device info
             print("Step 2: Getting device list...")
-            api_client = NavienAPIClient(
-                auth_client=auth_client, session=auth_client._session
-            )
+            api_client = NavienAPIClient(auth_client=auth_client, session=auth_client._session)
             devices = await api_client.list_devices()
 
             if not devices:
@@ -127,9 +124,7 @@ async def test_mqtt_messaging():
                     await mqtt_client.subscribe(topic, message_handler)
                     print(f"   ✅ Subscribed to: {mask_mac_in_topic(topic, device_id)}")
                 except Exception as e:
-                    print(
-                        f"   ⚠️ Failed to subscribe to device topic (type: {device_type}): {e}"
-                    )
+                    print(f"   ⚠️ Failed to subscribe to device topic (type: {device_type}): {e}")
 
             print()
 
@@ -138,9 +133,7 @@ async def test_mqtt_messaging():
             print()
 
             # Command 1: Signal app connection
-            print(
-                f"📤 [{datetime.now().strftime('%H:%M:%S')}] Signaling app connection..."
-            )
+            print(f"📤 [{datetime.now().strftime('%H:%M:%S')}] Signaling app connection...")
             try:
                 await mqtt_client.signal_app_connection(device)
                 print("   ✅ Sent")
@@ -149,9 +142,7 @@ async def test_mqtt_messaging():
             await asyncio.sleep(3)
 
             # Command 2: Request device info
-            print(
-                f"📤 [{datetime.now().strftime('%H:%M:%S')}] Requesting device info..."
-            )
+            print(f"📤 [{datetime.now().strftime('%H:%M:%S')}] Requesting device info...")
             try:
                 await mqtt_client.request_device_info(device)
                 print("   ✅ Sent")
@@ -160,9 +151,7 @@ async def test_mqtt_messaging():
             await asyncio.sleep(5)
 
             # Command 3: Request device status
-            print(
-                f"📤 [{datetime.now().strftime('%H:%M:%S')}] Requesting device status..."
-            )
+            print(f"📤 [{datetime.now().strftime('%H:%M:%S')}] Requesting device status...")
             try:
                 await mqtt_client.request_device_status(device)
                 print("   ✅ Sent")
@@ -180,9 +169,7 @@ async def test_mqtt_messaging():
 
             for i in range(6):
                 await asyncio.sleep(5)
-                print(
-                    f"[{(i + 1) * 5}s] Still listening... ({len(messages_received)} messages received)"
-                )
+                print(f"[{(i + 1) * 5}s] Still listening... ({len(messages_received)} messages received)")
 
             # Step 7: Summary
             print()
@@ -207,12 +194,8 @@ async def test_mqtt_messaging():
                         if "status" in response:
                             status = response["status"]
                             print("   Type: Status Update")
-                            print(
-                                f"   - DHW Temp: {status.get('dhwTemperature', 'N/A')}"
-                            )
-                            print(
-                                f"   - Operation Mode: {status.get('operationMode', 'N/A')}"
-                            )
+                            print(f"   - DHW Temp: {status.get('dhwTemperature', 'N/A')}")
+                            print(f"   - Operation Mode: {status.get('operationMode', 'N/A')}")
                         elif "channelStatus" in response:
                             print("   Type: Channel Status")
                         else:
@@ -228,7 +211,8 @@ async def test_mqtt_messaging():
                 print("4. AWS IoT permissions issue")
                 print()
                 print(
-                    "Device connection status from API:", device.device_info.connected
+                    "Device connection status from API:",
+                    device.device_info.connected,
                 )
                 print("Expected connection status: 2 (online)")
 

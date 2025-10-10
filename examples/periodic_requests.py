@@ -90,9 +90,7 @@ async def main():
         while elapsed < seconds:
             await asyncio.sleep(interval)
             elapsed += interval
-            print(
-                f"  ... {elapsed}s elapsed (status: {status_count}, info: {info_count})"
-            )
+            print(f"  ... {elapsed}s elapsed (status: {status_count}, info: {info_count})")
 
     # Small delay to ensure subscription is fully established
     await asyncio.sleep(2)
@@ -104,7 +102,9 @@ async def main():
     # Start periodic status requests (default behavior)
     print("\nStarting periodic status requests (every 20 seconds for demo)...")
     await mqtt.start_periodic_requests(
-        device=device, request_type=PeriodicRequestType.DEVICE_STATUS, period_seconds=20
+        device=device,
+        request_type=PeriodicRequestType.DEVICE_STATUS,
+        period_seconds=20,
     )
 
     # Send initial request immediately to get first response
@@ -122,7 +122,9 @@ async def main():
     # Switch to device info requests
     print("\nSwitching to periodic device info requests (every 20 seconds)...")
     await mqtt.start_periodic_requests(
-        device=device, request_type=PeriodicRequestType.DEVICE_INFO, period_seconds=20
+        device=device,
+        request_type=PeriodicRequestType.DEVICE_INFO,
+        period_seconds=20,
     )
 
     # Send initial request immediately
@@ -143,11 +145,15 @@ async def main():
     print("  - Info: every 40 seconds")
 
     await mqtt.start_periodic_requests(
-        device=device, request_type=PeriodicRequestType.DEVICE_STATUS, period_seconds=20
+        device=device,
+        request_type=PeriodicRequestType.DEVICE_STATUS,
+        period_seconds=20,
     )
 
     await mqtt.start_periodic_requests(
-        device=device, request_type=PeriodicRequestType.DEVICE_INFO, period_seconds=40
+        device=device,
+        request_type=PeriodicRequestType.DEVICE_INFO,
+        period_seconds=40,
     )
 
     # Send initial requests for both types

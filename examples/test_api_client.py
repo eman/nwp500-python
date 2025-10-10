@@ -70,9 +70,7 @@ async def test_api_client():
                 print(f"  Connected: {device.device_info.connected}")
 
                 if device.location.state or device.location.city:
-                    print(
-                        f"  Location: {device.location.city}, {device.location.state}"
-                    )
+                    print(f"  Location: {device.location.city}, {device.location.state}")
                 if device.location.address:
                     print(f"  Address: {device.location.address}")
             print()
@@ -90,17 +88,13 @@ async def test_api_client():
             print("Test 3: Get Device Info")
             print("-" * 70)
             device_info = await client.get_device_info(mac, additional)
-            print(
-                f"✅ Retrieved detailed info for: {device_info.device_info.device_name}"
-            )
+            print(f"✅ Retrieved detailed info for: {device_info.device_info.device_name}")
             print(f"   MAC: {device_info.device_info.mac_address}")
             print(f"   Type: {device_info.device_info.device_type}")
             if device_info.device_info.install_type:
                 print(f"   Install Type: {device_info.device_info.install_type}")
             if device_info.location.latitude and device_info.location.longitude:
-                print(
-                    f"   Coordinates: {device_info.location.latitude}, {device_info.location.longitude}"
-                )
+                print(f"   Coordinates: {device_info.location.latitude}, {device_info.location.longitude}")
             print()
 
             # Test 4: Get Firmware Info
@@ -145,12 +139,8 @@ async def test_api_client():
             print("-" * 70)
             print("✅ DeviceInfo model:")
             print(f"   - home_seq: {type(test_device.device_info.home_seq).__name__}")
-            print(
-                f"   - mac_address: {type(test_device.device_info.mac_address).__name__}"
-            )
-            print(
-                f"   - device_type: {type(test_device.device_info.device_type).__name__}"
-            )
+            print(f"   - mac_address: {type(test_device.device_info.mac_address).__name__}")
+            print(f"   - device_type: {type(test_device.device_info.device_type).__name__}")
             print(f"   - connected: {type(test_device.device_info.connected).__name__}")
 
             print("✅ Location model:")
@@ -227,9 +217,7 @@ async def test_convenience_function():
             print(f"✅ get_devices() returned {len(devices)} device(s)")
 
             for device in devices:
-                print(
-                    f"   - {device.device_info.device_name} ({device.device_info.mac_address})"
-                )
+                print(f"   - {device.device_info.device_name} ({device.device_info.mac_address})")
 
         return 0
 

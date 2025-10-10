@@ -19,7 +19,12 @@ import sys
 # Add src directory to path for development
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
-from nwp500 import DeviceFeature, NavienAPIClient, NavienAuthClient, NavienMqttClient
+from nwp500 import (
+    DeviceFeature,
+    NavienAPIClient,
+    NavienAuthClient,
+    NavienMqttClient,
+)
 
 
 async def main():
@@ -68,10 +73,7 @@ async def main():
         print(f"Controller Serial: {feature.controllerSerialNumber}")
         print(f"Controller SW Version: {feature.controllerSwVersion}")
         print(f"Heat Pump Use: {feature.heatpumpUse}")
-        print(
-            f"DHW Temp Min/Max: {feature.dhwTemperatureMin}/"
-            f"{feature.dhwTemperatureMax}°F"
-        )
+        print(f"DHW Temp Min/Max: {feature.dhwTemperatureMin}/{feature.dhwTemperatureMax}°F")
 
     # Subscribe with typed parsing
     await mqtt.subscribe_device_feature(device, on_device_feature)
