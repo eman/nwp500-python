@@ -37,7 +37,6 @@ exclude = [
     "node_modules",
     "venv",
     "docs/conf.py",
-    "src/nwp500/mqtt_client_updated.py",  # Work in progress file
 ]
 
 [tool.ruff.lint]
