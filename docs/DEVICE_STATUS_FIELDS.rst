@@ -6,6 +6,7 @@ This document lists the fields found in the ``status`` object of device status m
 
 .. list-table::
    :header-rows: 1
+   :widths: 10 10 10 36 35
 
    * - Key
      - Datatype
@@ -455,6 +456,7 @@ The ``operationMode`` field is an integer that maps to the following modes. Thes
 
 .. list-table::
    :header-rows: 1
+   :widths: 10 20 15 15 40
 
    * - Value
      - Mode
@@ -527,6 +529,6 @@ Technical Notes
 See Also
 --------
 
-* ERROR_CODES.rst - Complete error code reference with diagnostics
-* ENERGY_MONITORING.rst - Energy consumption tracking
-* MQTT_MESSAGES.rst - Status message format details
+* :doc:`ERROR_CODES` - Complete error code reference with diagnostics
+* :doc:`ENERGY_MONITORING` - Energy consumption tracking
+* :doc:`MQTT_MESSAGES` - Status message format details

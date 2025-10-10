@@ -570,7 +570,7 @@ For ease of use, these wrapper methods are also available:
 
 **start_periodic_device_info_requests()**
 
-.. code:: python
+.. code-block:: python
 
    await mqtt_client.start_periodic_device_info_requests(
        device: Device,
@@ -579,7 +579,7 @@ For ease of use, these wrapper methods are also available:
 
 **start_periodic_device_status_requests()**
 
-.. code:: python
+.. code-block:: python
 
    await mqtt_client.start_periodic_device_status_requests(
        device: Device,
@@ -588,20 +588,20 @@ For ease of use, these wrapper methods are also available:
 
 **stop_periodic_device_info_requests()**
 
-.. code:: python
+.. code-block:: python
 
    await mqtt_client.stop_periodic_device_info_requests(device: Device) -> None
 
 **stop_periodic_device_status_requests()**
 
-.. code:: python
+.. code-block:: python
 
    await mqtt_client.stop_periodic_device_status_requests(device: Device) -> None
 
 stop_all_periodic_tasks()
 '''''''''''''''''''''''''
 
-.. code:: python
+.. code-block:: python
 
    await mqtt_client.stop_all_periodic_tasks() -> None
 
@@ -610,7 +610,7 @@ disconnecting.
 
 **Example:**
 
-.. code:: python
+.. code-block:: python
 
    await mqtt_client.stop_all_periodic_tasks()
 
@@ -951,14 +951,14 @@ automatically handles token refresh:
 Examples
 --------
 
-See the ``examples/`` directory: - ``mqtt_client_example.py``: Complete
-example with device discovery and communication -
-``test_mqtt_connection.py``: Simple connection test
+See the ``examples/`` directory:
+
+- ``mqtt_client_example.py``: Complete example with device discovery and communication
+- ``test_mqtt_connection.py``: Simple connection test
 
 References
 ----------
 
 - :doc:`MQTT_MESSAGES`: Complete MQTT protocol documentation
-- `AWS IoT Device SDK for Python
-  v2 <https://github.com/aws/aws-iot-device-sdk-python-v2>`__
-- `openapi.yaml <openapi.yaml>`__: REST API specification
+- `AWS IoT Device SDK for Python v2 <https://github.com/aws/aws-iot-device-sdk-python-v2>`__
+- `OpenAPI Specification <openapi.yaml>`__: REST API specification

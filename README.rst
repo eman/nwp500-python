@@ -92,20 +92,28 @@ The library provides access to comprehensive device status information:
 Operation Modes
 ===============
 
-Heat Pump Mode (1)
-    Most energy-efficient mode using only the heat pump. Longest recovery time.
+.. list-table:: Operation Modes
+    :header-rows: 1
+    :widths: 25 10 65
 
-Energy Saver Mode (2)
-    Default mode. Balances efficiency and recovery time using both heat pump and electric heater.
-
-High Demand Mode (3)
-    Uses electric heater more frequently for faster recovery time.
-
-Electric Mode (4)
-    Fastest recovery using only electric heaters. Least energy-efficient.
-
-Vacation Mode (5)
-    Suspends heating to save energy during extended absences.
+    * - Mode
+      - ID
+      - Description
+    * - Heat Pump Mode
+      - 1
+      - Most energy-efficient mode using only the heat pump. Longest recovery time.
+    * - Energy Saver Mode
+      - 2
+      - Default mode. Balances efficiency and recovery time using both heat pump and electric heater.
+    * - High Demand Mode
+      - 3
+      - Uses electric heater more frequently for faster recovery time.
+    * - Electric Mode
+      - 4
+      - Fastest recovery using only electric heaters. Least energy-efficient.
+    * - Vacation Mode
+      - 5
+      - Suspends heating to save energy during extended absences.
 
 MQTT Protocol
 =============
@@ -173,8 +181,7 @@ Requirements
 
 Development
 ===========
-
-This project uses PyScaffold 4.6 for project structure and management.
+To set up a development environment, clone the repository and install the required dependencies:
 
 .. code-block:: bash
 

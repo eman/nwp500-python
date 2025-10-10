@@ -87,8 +87,8 @@ compatibility - Automatic credential handling from authentication API -
 Session ID generation for connection tracking
 
 **Key Files:** - ``src/nwp500/mqtt_client.py`` - MQTT client
-implementation - ``docs/MQTT_CLIENT.md`` - Complete documentation -
-``docs/MQTT_MESSAGES.rst`` - Message format reference
+implementation - :doc:`MQTT_CLIENT` - Complete documentation -
+:doc:`MQTT_MESSAGES` - Message format reference
 
 Device Status & Feature Callbacks (October 7, 2025)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -268,9 +268,7 @@ Complete event-driven architecture for device state changes:
 - ``src/nwp500/mqtt_client.py`` - MQTT integration with event emitter
 - ``examples/event_emitter_demo.py`` - Comprehensive demonstration
 - ``tests/test_events.py`` - Unit tests (19 tests)
-- ``docs/EVENT_EMITTER.rst`` - Feature documentation
-- ``docs/EVENT_QUICK_REFERENCE.rst`` - Quick reference guide
-- ``docs/EVENT_ARCHITECTURE.rst`` - Technical architecture
+- :doc:`EVENT_EMITTER` - Feature documentation
 
 **Thread Safety Implementation:**
 

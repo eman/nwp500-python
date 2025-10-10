@@ -296,41 +296,39 @@ Here's a complete example that demonstrates all major features:
        asyncio.run(main())
 
 
-Next Steps
-----------
-
-- :doc:`AUTHENTICATION` - Deep dive into authentication and token management
-- :doc:`API_CLIENT` - Using the REST API client
-- :doc:`MQTT_CLIENT` - Real-time communication and device control
-- :doc:`COMMAND_QUEUE` - Automatic command queuing and reliability
-- :doc:`EVENT_EMITTER` - Event-driven architecture and state change detection
-- :doc:`EVENT_QUICK_REFERENCE` - Event emitter quick reference guide
-- :doc:`EVENT_ARCHITECTURE` - Event emitter technical architecture
-- :doc:`ENERGY_MONITORING` - Track power consumption and usage
-- :doc:`DEVICE_STATUS_FIELDS` - Complete field reference
-- :doc:`ERROR_CODES` - Error code reference and troubleshooting
-- :doc:`MQTT_MESSAGES` - Message format details
-
-
 Documentation
 =============
 
 .. toctree::
    :maxdepth: 2
+   :caption: Getting Started
 
    Overview <readme>
    Authentication <AUTHENTICATION>
    REST API Client <API_CLIENT>
-   API Reference (OpenAPI) <API_REFERENCE>
    MQTT Client <MQTT_CLIENT>
+
+.. toctree::
+   :maxdepth: 2
+   :caption: User Guides
+
    Command Queue <COMMAND_QUEUE>
    Event Emitter <EVENT_EMITTER>
-   Event Quick Reference <EVENT_QUICK_REFERENCE>
-   Event Architecture <EVENT_ARCHITECTURE>
    Energy Monitoring <ENERGY_MONITORING>
+
+.. toctree::
+   :maxdepth: 2
+   :caption: API Reference
+
+   API Reference (OpenAPI) <API_REFERENCE>
    Device Status Fields <DEVICE_STATUS_FIELDS>
    Error Codes <ERROR_CODES>
    MQTT Messages <MQTT_MESSAGES>
+
+.. toctree::
+   :maxdepth: 2
+   :caption: Development
+
    Development History <DEVELOPMENT>
    Contributing <contributing>
    License <license>

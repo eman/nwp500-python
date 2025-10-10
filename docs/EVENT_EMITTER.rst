@@ -1,6 +1,9 @@
+Event Emitter
 =====================
-Event Emitter Pattern
-=====================
+
+.. contents::
+   :local:
+   :depth: 2
 
 Overview
 ========
@@ -484,8 +487,8 @@ Remove all listeners for specific event or all events.
 Best Practices
 ==============
 
-Do's ✅
--------
+Do's
+-----
 
 - **Register handlers before connecting** - Set up event handlers before calling ``connect()``
 - **Use priority for critical operations** - High priority (>50) for safety/shutdown logic
@@ -501,8 +504,8 @@ Do's ✅
     mqtt_client.on('temperature_changed', async_db_save)
     await mqtt_client.connect()
 
-Don'ts ❌
----------
+Don'ts
+-------
 
 - **Don't block in sync handlers** - Avoid ``time.sleep()`` or long computations
 - **Don't register from MQTT threads** - Always register from main thread

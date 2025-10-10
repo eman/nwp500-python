@@ -76,11 +76,14 @@ and use Python's built-in web server for a preview in your web browser
 Code Contributions
 ==================
 
-.. todo:: Please include a reference or explanation about the internals of the project.
+The project is organized around a modular architecture:
 
-   An architecture description, design principles or at least a summary of the
-   main concepts will make it easy for potential contributors to get started
-   quickly.
+- **API Client**: Handles communication with the Navien cloud API, including authentication and device management.
+- **MQTT Client**: Manages real-time device communication using MQTT protocol.
+- **Device Models**: Represent device status, features, and configuration fields.
+- **Event System**: Provides event-driven callbacks for device updates and system events.
+
+Design principles include separation of concerns, clear public APIs, and extensibility for new device features. Contributors should review the `src/nwp500/` directory for module structure and refer to the documentation for details on each component.
 
 Submit an issue
 ---------------
