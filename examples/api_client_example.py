@@ -25,14 +25,12 @@ from nwp500 import NavienAPIClient
 from nwp500.api_client import APIError
 from nwp500.auth import AuthenticationError, NavienAuthClient
 
-try:
-    from examples.mask import mask_mac  # type: ignore
-except Exception:
-    import re
+import re
 
-    def mask_mac(mac: str) -> str:  # pragma: no cover - fallback for examples
-        mac_regex = r"([0-9A-Fa-f]{2}[:-]){5}[0-9A-Fa-f]{2}|([0-9A-Fa-f]{12})"
-        return re.sub(mac_regex, "[REDACTED_MAC]", mac)
+def mask_mac(mac: str) -> str:
+    """Redact all MAC addresses in the input string."""
+    mac_regex = r"([0-9A-Fa-f]{2}[:-]){5}[0-9A-Fa-f]{2}|([0-9A-Fa-f]{12})"
+    return re.sub(mac_regex, "[REDACTED_MAC]", mac)
 
 
 async def example_basic_usage():
