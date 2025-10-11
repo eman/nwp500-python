@@ -318,6 +318,60 @@ async def handle_set_mode_request(mqtt: NavienMqttClient, device: Device, mode_n
         _logger.error(f"Error setting mode: {e}")
 
 
+async def handle_set_dhw_temp_request(mqtt: NavienMqttClient, device: Device, temperature: int):
+    """
+    Set DHW target temperature and display the response.
+
+    Args:
+        mqtt: MQTT client instance
+        device: Device to control
+        temperature: Target temperature in Fahrenheit (display value)
+    """
+    # Validate temperature range
+    # Based on MQTT client documentation: display range approximately 115-150°F
+    if temperature < 115 or temperature > 150:
+        _logger.error(f"Temperature {temperature}°F is out of range. Valid range: 115-150°F")
+        return
+
+    # Set up callback to capture status response after temperature change
+    future = asyncio.get_running_loop().create_future()
+    responses = []
+
+    def on_status_response(status):
+        if not future.done():
+            responses.append(status)
+            # Complete after receiving response
+            future.set_result(None)
+
+    # Subscribe to status updates to see the temperature change result
+    await mqtt.subscribe_device_status(device, on_status_response)
+
+    try:
+        _logger.info(f"Setting DHW target temperature to {temperature}°F...")
+
+        # Send the temperature change command using display temperature
+        await mqtt.set_dhw_temperature_display(device, temperature)
+
+        # Wait for status response (temperature change confirmation)
+        try:
+            await asyncio.wait_for(future, timeout=15)
+
+            if responses:
+                status = responses[0]
+                print(json.dumps(asdict(status), indent=2, default=_json_default_serializer))
+                _logger.info(
+                    f"Temperature change successful. New target: {status.dhwTargetTemperatureSetting}°F"
+                )
+            else:
+                _logger.warning("Temperature command sent but no status response received")
+
+        except asyncio.TimeoutError:
+            _logger.error("Timed out waiting for temperature change confirmation")
+
+    except Exception as e:
+        _logger.error(f"Error setting temperature: {e}")
+
+
 async def handle_monitoring(mqtt: NavienMqttClient, device: Device, output_file: str):
     """Start periodic monitoring and write status to CSV."""
     _logger.info(f"Starting periodic monitoring. Writing updates to {output_file}")
@@ -360,14 +414,27 @@ async def async_main(args: argparse.Namespace):
         await mqtt.connect()
         _logger.info("MQTT client connected.")
 
-        if args.status:
-            await handle_status_request(mqtt, device)
-        elif args.device_info:
+        if args.device_info:
             await handle_device_info_request(mqtt, device)
         elif args.device_feature:
             await handle_device_feature_request(mqtt, device)
         elif args.set_mode:
             await handle_set_mode_request(mqtt, device, args.set_mode)
+            # If --status was also specified, get status after setting mode
+            if args.status:
+                _logger.info("Getting updated status after mode change...")
+                await asyncio.sleep(2)  # Brief pause for device to process
+                await handle_status_request(mqtt, device)
+        elif args.set_dhw_temp:
+            await handle_set_dhw_temp_request(mqtt, device, args.set_dhw_temp)
+            # If --status was also specified, get status after setting temperature
+            if args.status:
+                _logger.info("Getting updated status after temperature change...")
+                await asyncio.sleep(2)  # Brief pause for device to process
+                await handle_status_request(mqtt, device)
+        elif args.status:
+            # Status-only request
+            await handle_status_request(mqtt, device)
         else:  # Default to monitor
             await handle_monitoring(mqtt, device, args.output)
 
@@ -404,13 +471,15 @@ def parse_args(args):
         help="Navien account password. Overrides NAVIEN_PASSWORD env var.",
     )
 
-    # Operation modes
-    group = parser.add_mutually_exclusive_group()
-    group.add_argument(
+    # Status check (can be combined with other actions)
+    parser.add_argument(
         "--status",
         action="store_true",
-        help="Fetch and print the current device status once, then exit.",
+        help="Fetch and print the current device status. Can be combined with control commands.",
     )
+
+    # Primary action modes (mutually exclusive)
+    group = parser.add_mutually_exclusive_group()
     group.add_argument(
         "--device-info",
         action="store_true",
@@ -427,6 +496,12 @@ def parse_args(args):
         metavar="MODE",
         help="Set operation mode and display response. "
         "Options: heat-pump, electric, energy-saver, high-demand, vacation, standby",
+    )
+    group.add_argument(
+        "--set-dhw-temp",
+        type=int,
+        metavar="TEMP",
+        help="Set DHW (Domestic Hot Water) target temperature in Fahrenheit (115-150°F) and display response.",
     )
     group.add_argument(
         "--monitor",

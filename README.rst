@@ -82,6 +82,18 @@ The library includes a command line interface for quick monitoring and device in
     # Set operation mode and see response
     python -m nwp500.cli --set-mode energy-saver
 
+    # Set DHW target temperature and see response
+    python -m nwp500.cli --set-dhw-temp 140
+
+    # Set temperature and then get updated status
+    python -m nwp500.cli --set-dhw-temp 140 --status
+
+    # Set mode and then get updated status
+    python -m nwp500.cli --set-mode energy-saver --status
+
+    # Just get current status (one-time)
+    python -m nwp500.cli --status
+
     # Monitor continuously (default - writes to CSV)
     python -m nwp500.cli --monitor
 
@@ -90,10 +102,11 @@ The library includes a command line interface for quick monitoring and device in
 
 **Available CLI Options:**
 
-* ``--status``: Print current device status as JSON and exit
+* ``--status``: Print current device status as JSON. Can be combined with control commands to see updated status.
 * ``--device-info``: Print comprehensive device information (firmware, model, capabilities) via MQTT as JSON and exit  
 * ``--device-feature``: Print device capabilities and feature settings via MQTT as JSON and exit
 * ``--set-mode MODE``: Set operation mode and display response. Valid modes: heat-pump, energy-saver, high-demand, electric, vacation, standby
+* ``--set-dhw-temp TEMP``: Set DHW (Domestic Hot Water) target temperature in Fahrenheit (115-150°F) and display response
 * ``--monitor``: Continuously monitor status every 30 seconds and log to CSV (default)
 * ``-o, --output``: Specify CSV output filename for monitoring mode
 * ``--email``: Override email (alternative to environment variable)

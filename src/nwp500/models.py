@@ -28,7 +28,7 @@ class OperationMode(Enum):
     - 5: Vacation mode
     """
 
-    # Commanded modes (updated to match MQTT protocol)
+    # Commanded modes
     STANDBY = 0
     HEAT_PUMP = 1  # Heat Pump Only
     ELECTRIC = 2  # Electric Only
