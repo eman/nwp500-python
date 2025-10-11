@@ -59,6 +59,46 @@ Basic Usage
             # Change operation mode
             await api_client.set_device_mode(device, "heat_pump")
 
+Command Line Interface
+======================
+
+The library includes a command line interface for quick monitoring and device information retrieval:
+
+.. code-block:: bash
+
+    # Set credentials via environment variables
+    export NAVIEN_EMAIL="your_email@example.com"
+    export NAVIEN_PASSWORD="your_password"
+
+    # Get current device status (one-time)
+    python -m nwp500.cli --status
+
+    # Get device information
+    python -m nwp500.cli --device-info
+
+    # Get device feature/capability information  
+    python -m nwp500.cli --device-feature
+
+    # Set operation mode and see response
+    python -m nwp500.cli --set-mode energy-saver
+
+    # Monitor continuously (default - writes to CSV)
+    python -m nwp500.cli --monitor
+
+    # Monitor with custom output file
+    python -m nwp500.cli --monitor --output my_data.csv
+
+**Available CLI Options:**
+
+* ``--status``: Print current device status as JSON and exit
+* ``--device-info``: Print comprehensive device information (firmware, model, capabilities) via MQTT as JSON and exit  
+* ``--device-feature``: Print device capabilities and feature settings via MQTT as JSON and exit
+* ``--set-mode MODE``: Set operation mode and display response. Valid modes: heat-pump, energy-saver, high-demand, electric, vacation, standby
+* ``--monitor``: Continuously monitor status every 30 seconds and log to CSV (default)
+* ``-o, --output``: Specify CSV output filename for monitoring mode
+* ``--email``: Override email (alternative to environment variable)
+* ``--password``: Override password (alternative to environment variable)
+
 Device Status Fields
 ====================
 
@@ -145,12 +185,14 @@ Documentation
 Comprehensive documentation is available in the ``docs/`` directory:
 
 * `Device Status Fields`_ - Complete field reference with units and conversions
+* `Device Feature Fields`_ - Device capabilities and firmware information reference
 * `MQTT Messages`_ - MQTT protocol documentation
 * `MQTT Client`_ - MQTT client usage guide
 * `Authentication`_ - Authentication module documentation
 
 .. _MQTT Protocol Documentation: docs/MQTT_MESSAGES.rst
 .. _Device Status Fields: docs/DEVICE_STATUS_FIELDS.rst
+.. _Device Feature Fields: docs/DEVICE_FEATURE_FIELDS.rst
 .. _MQTT Messages: docs/MQTT_MESSAGES.rst
 .. _MQTT Client: docs/MQTT_CLIENT.rst
 .. _Authentication: docs/AUTHENTICATION.rst
@@ -161,6 +203,7 @@ Data Models
 The library includes type-safe data models with automatic unit conversions:
 
 * **DeviceStatus**: Complete device status with 70+ fields
+* **DeviceFeature**: Device capabilities, firmware versions, and configuration limits
 * **OperationMode**: Enumeration of available operation modes
 * **TemperatureUnit**: Celsius/Fahrenheit handling
 * **MqttRequest/MqttCommand**: MQTT message structures
