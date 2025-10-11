@@ -32,7 +32,7 @@ class OperationMode(Enum):
     STANDBY = 0
     HEAT_PUMP = 1  # Heat Pump Only
     ELECTRIC = 2  # Electric Only
-    ENERGY_SAVER = 3  # Energy Saver (was incorrectly 2)
+    ENERGY_SAVER = 3  # Energy Saver
     HIGH_DEMAND = 4  # High Demand
     VACATION = 5
 
@@ -40,8 +40,6 @@ class OperationMode(Enum):
     HEAT_PUMP_MODE = 32
     HYBRID_EFFICIENCY_MODE = 64
     HYBRID_BOOST_MODE = 96
-
-    # Aliases
 
 
 class TemperatureUnit(Enum):
