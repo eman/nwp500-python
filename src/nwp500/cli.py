@@ -268,8 +268,8 @@ async def handle_set_mode_request(mqtt: NavienMqttClient, device: Device, mode_n
         "standby": 0,
         "heat-pump": 1,  # Heat Pump Only
         "electric": 2,  # Electric Only
-        "energy-saver": 3,  # Energy Saver (was incorrectly mapped to 2)
-        "high-demand": 4,  # High Demand (was incorrectly mapped to 3)
+        "energy-saver": 3,  # Energy Saver
+        "high-demand": 4,  # High Demand
         "vacation": 5,
     }
 
