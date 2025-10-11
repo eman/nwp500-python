@@ -117,12 +117,12 @@ This document lists the fields found in the ``status`` object of device status m
      - integer
      - °F
      - Temperature of the upper part of the tank.
-     - ``raw + 20``
+     - ``(raw / 10) * 9/5 + 32`` (decicelsius to Fahrenheit)
    * - ``tankLowerTemperature``
      - integer
      - °F
      - Temperature of the lower part of the tank.
-     - ``raw + 20``
+     - ``(raw / 10) * 9/5 + 32`` (decicelsius to Fahrenheit)
    * - ``dischargeTemperature``
      - integer
      - °F
@@ -142,7 +142,7 @@ This document lists the fields found in the ``status`` object of device status m
      - integer
      - °F
      - Ambient air temperature measured at the heat pump air intake.
-     - ``(raw * 9/5) + 32``
+     - ``(raw / 22.4) * 9/5 + 32``
    * - ``targetSuperHeat``
      - integer
      - °F

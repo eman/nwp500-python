@@ -18,22 +18,28 @@ class OperationMode(Enum):
 
     The first set of modes (0-5) are used when commanding the device, while
     the second set (32, 64, 96) are observed in status messages.
+
+    Command mode IDs (based on MQTT protocol):
+    - 0: Standby (device in idle state)
+    - 1: Heat Pump Only (most efficient, slowest recovery)
+    - 2: Electric Only (least efficient, fastest recovery)
+    - 3: Energy Saver (balanced, good default)
+    - 4: High Demand (maximum heating capacity)
+    - 5: Vacation mode
     """
 
-    # Commanded modes
+    # Commanded modes (updated to match MQTT protocol)
     STANDBY = 0
-    HEAT_PUMP = 1
-    ENERGY_SAVER = 2
-    HIGH_DEMAND = 3
-    ELECTRIC = 4
+    HEAT_PUMP = 1  # Heat Pump Only
+    ELECTRIC = 2  # Electric Only
+    ENERGY_SAVER = 3  # Energy Saver
+    HIGH_DEMAND = 4  # High Demand
     VACATION = 5
 
     # Observed status modes
     HEAT_PUMP_MODE = 32
     HYBRID_EFFICIENCY_MODE = 64
     HYBRID_BOOST_MODE = 96
-
-    # Aliases
 
 
 class TemperatureUnit(Enum):
@@ -329,8 +335,6 @@ class DeviceStatus:
             "dhwTemperature",
             "dhwTemperatureSetting",
             "dhwTargetTemperatureSetting",
-            "tankUpperTemperature",
-            "tankLowerTemperature",
             "freezeProtectionTemperature",
             "dhwTemperature2",
             "hpUpperOnTempSetting",
@@ -371,7 +375,20 @@ class DeviceStatus:
         # Special conversion for ambientTemperature
         if "ambientTemperature" in converted_data:
             raw_temp = converted_data["ambientTemperature"]
-            converted_data["ambientTemperature"] = (raw_temp * 9 / 5) + 32
+            # Based on observed data: raw 503.6 corresponds to 72.5°F
+            # Convert raw value to Celsius first (raw / 22.4 ≈ Celsius)
+            # Then convert Celsius to Fahrenheit
+            celsius = raw_temp / 22.4
+            converted_data["ambientTemperature"] = (celsius * 9 / 5) + 32
+
+        # Special conversion for tank temperatures (decicelsius to Fahrenheit)
+        tank_temp_fields = ["tankUpperTemperature", "tankLowerTemperature"]
+        for field_name in tank_temp_fields:
+            if field_name in converted_data:
+                raw_temp = converted_data[field_name]
+                # Convert from decicelsius (raw / 10.0) to Celsius, then to Fahrenheit
+                celsius = raw_temp / 10.0
+                converted_data[field_name] = (celsius * 9 / 5) + 32
 
         # Convert enum fields with error handling for unknown values
         if "operationMode" in converted_data:
@@ -452,10 +469,22 @@ class DeviceFeature:
         """
         Creates a DeviceFeature object from a raw dictionary.
 
-        Handles enum conversion for temperatureType field.
+        Handles enum conversion for temperatureType field and applies
+        temperature conversions using the same formulas as DeviceStatus.
         """
         # Copy data to avoid modifying the original dictionary
         converted_data = data.copy()
+
+        # Convert temperature fields with 'raw + 20' formula (same as DeviceStatus)
+        temp_add_20_fields = [
+            "dhwTemperatureMin",
+            "dhwTemperatureMax",
+            "freezeProtectionTempMin",
+            "freezeProtectionTempMax",
+        ]
+        for field_name in temp_add_20_fields:
+            if field_name in converted_data:
+                converted_data[field_name] += 20
 
         # Convert temperatureType to enum
         if "temperatureType" in converted_data:

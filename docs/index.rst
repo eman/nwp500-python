@@ -322,6 +322,7 @@ Documentation
 
    API Reference (OpenAPI) <API_REFERENCE>
    Device Status Fields <DEVICE_STATUS_FIELDS>
+   Device Feature Fields <DEVICE_FEATURE_FIELDS>
    Error Codes <ERROR_CODES>
    MQTT Messages <MQTT_MESSAGES>
 
