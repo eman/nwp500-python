@@ -47,7 +47,9 @@ async def set_dhw_temperature_example():
             def on_current_status(status):
                 nonlocal current_status
                 current_status = status
-                logger.info(f"Current DHW target temperature: {status.dhwTargetTemperatureSetting}°F")
+                logger.info(
+                    f"Current DHW target temperature: {status.dhwTargetTemperatureSetting}°F"
+                )
                 logger.info(f"Current DHW temperature: {status.dhwTemperature}°F")
 
             await mqtt_client.subscribe_device_status(device, on_current_status)
@@ -64,7 +66,9 @@ async def set_dhw_temperature_example():
             def on_temp_change_response(status):
                 nonlocal temp_changed
                 logger.info("Temperature change response received!")
-                logger.info(f"New target temperature: {status.dhwTargetTemperatureSetting}°F")
+                logger.info(
+                    f"New target temperature: {status.dhwTargetTemperatureSetting}°F"
+                )
                 logger.info(f"Current DHW temperature: {status.dhwTemperature}°F")
                 logger.info(f"Operation mode: {status.operationMode.name}")
                 logger.info(f"Tank charge: {status.dhwChargePer}%")

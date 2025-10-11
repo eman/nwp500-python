@@ -360,7 +360,8 @@ async def handle_set_dhw_temp_request(mqtt: NavienMqttClient, device: Device, te
                 status = responses[0]
                 print(json.dumps(asdict(status), indent=2, default=_json_default_serializer))
                 _logger.info(
-                    f"Temperature change successful. New target: {status.dhwTargetTemperatureSetting}°F"
+                    f"Temperature change successful. New target: "
+                    f"{status.dhwTargetTemperatureSetting}°F"
                 )
             else:
                 _logger.warning("Temperature command sent but no status response received")
@@ -501,7 +502,8 @@ def parse_args(args):
         "--set-dhw-temp",
         type=int,
         metavar="TEMP",
-        help="Set DHW (Domestic Hot Water) target temperature in Fahrenheit (115-150°F) and display response.",
+        help="Set DHW (Domestic Hot Water) target temperature in Fahrenheit "
+        "(115-150°F) and display response.",
     )
     group.add_argument(
         "--monitor",
