@@ -140,7 +140,8 @@ async def get_authenticated_client(
         and tokens.session_token
     ):
         _logger.info("Using valid cached tokens.")
-        auth_client = NavienAuthClient(email, "dummy")
+        # The password argument is unused when cached tokens are present.
+        auth_client = NavienAuthClient(email, "cached_auth")
         auth_client._user_email = email
         await auth_client._ensure_session()
 
