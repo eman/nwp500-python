@@ -33,7 +33,7 @@ class OperationMode(Enum):
     HEAT_PUMP = 1  # Heat Pump Only
     ELECTRIC = 2  # Electric Only
     ENERGY_SAVER = 3  # Energy Saver (was incorrectly 2)
-    HIGH_DEMAND = 4  # High Demand (was incorrectly 3)
+    HIGH_DEMAND = 4  # High Demand
     VACATION = 5
 
     # Observed status modes
