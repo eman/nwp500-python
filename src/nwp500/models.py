@@ -245,7 +245,7 @@ class DeviceStatus:
     antiLegionellaPeriod: int
     antiLegionellaOperationBusy: bool
     programReservationType: int
-    dhwOperationSetting: OperationMode  # User's configured mode preference (command modes: 1-5)
+    dhwOperationSetting: OperationMode  # User's configured mode preference (command modes: 1-6)
     temperatureType: TemperatureUnit
     tempFormulaType: str
     errorBuzzerUse: bool
