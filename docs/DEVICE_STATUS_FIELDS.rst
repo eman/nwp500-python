@@ -615,7 +615,6 @@ Displaying Status in a User Interface
 For user-facing applications, follow these guidelines:
 
 **Primary Mode Display**
-**Primary Mode Display**
   Use ``dhwOperationSetting`` to show the user's configured mode preference. This is what users expect to see as "the current mode" because it represents their selection.
   
   **Important**: Check for value 6 (``POWER_OFF``) first to show "Off" or "Powered Off" status.
