@@ -373,6 +373,63 @@ async def handle_set_dhw_temp_request(mqtt: NavienMqttClient, device: Device, te
         _logger.error(f"Error setting temperature: {e}")
 
 
+async def handle_power_request(mqtt: NavienMqttClient, device: Device, power_on: bool):
+    """
+    Set device power state and display the response.
+
+    Args:
+        mqtt: MQTT client instance
+        device: Device to control
+        power_on: True to turn on, False to turn off
+    """
+    action = "on" if power_on else "off"
+    _logger.info(f"Turning device {action}...")
+
+    # Set up callback to capture status response after power change
+    future = asyncio.get_running_loop().create_future()
+
+    def on_power_change_response(status: DeviceStatus):
+        if not future.done():
+            future.set_result(status)
+
+    try:
+        # Subscribe to status updates
+        await mqtt.subscribe_device_status(device, on_power_change_response)
+
+        # Send power command
+        await mqtt.set_power(device, power_on)
+
+        # Wait for response with timeout
+        status = await asyncio.wait_for(future, timeout=10.0)
+
+        _logger.info(f"Device turned {action} successfully!")
+
+        # Display relevant status information
+        print(
+            json.dumps(
+                {
+                    "result": "success",
+                    "action": action,
+                    "status": {
+                        "operationMode": status.operationMode.name,
+                        "dhwOperationSetting": status.dhwOperationSetting.name,
+                        "dhwTemperature": f"{status.dhwTemperature}°F",
+                        "dhwChargePer": f"{status.dhwChargePer}%",
+                        "tankUpperTemperature": f"{status.tankUpperTemperature:.1f}°F",
+                        "tankLowerTemperature": f"{status.tankLowerTemperature:.1f}°F",
+                    },
+                },
+                indent=2,
+            )
+        )
+
+    except asyncio.TimeoutError:
+        _logger.error(f"Timed out waiting for power {action} confirmation")
+
+    except Exception as e:
+        _logger.error(f"Error turning device {action}: {e}")
+
+
 async def handle_monitoring(mqtt: NavienMqttClient, device: Device, output_file: str):
     """Start periodic monitoring and write status to CSV."""
     _logger.info(f"Starting periodic monitoring. Writing updates to {output_file}")
@@ -419,6 +476,20 @@ async def async_main(args: argparse.Namespace):
             await handle_device_info_request(mqtt, device)
         elif args.device_feature:
             await handle_device_feature_request(mqtt, device)
+        elif args.power_on:
+            await handle_power_request(mqtt, device, power_on=True)
+            # If --status was also specified, get status after power change
+            if args.status:
+                _logger.info("Getting updated status after power on...")
+                await asyncio.sleep(2)  # Brief pause for device to process
+                await handle_status_request(mqtt, device)
+        elif args.power_off:
+            await handle_power_request(mqtt, device, power_on=False)
+            # If --status was also specified, get status after power change
+            if args.status:
+                _logger.info("Getting updated status after power off...")
+                await asyncio.sleep(2)  # Brief pause for device to process
+                await handle_status_request(mqtt, device)
         elif args.set_mode:
             await handle_set_mode_request(mqtt, device, args.set_mode)
             # If --status was also specified, get status after setting mode
@@ -504,6 +575,16 @@ def parse_args(args):
         metavar="TEMP",
         help="Set DHW (Domestic Hot Water) target temperature in Fahrenheit "
         "(115-150°F) and display response.",
+    )
+    group.add_argument(
+        "--power-on",
+        action="store_true",
+        help="Turn the device on and display response.",
+    )
+    group.add_argument(
+        "--power-off",
+        action="store_true",
+        help="Turn the device off and display response.",
     )
     group.add_argument(
         "--monitor",

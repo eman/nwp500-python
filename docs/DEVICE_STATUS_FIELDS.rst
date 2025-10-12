@@ -44,9 +44,9 @@ This document lists the fields found in the ``status`` object of device status m
      - Sub error code providing additional error details. See ERROR_CODES.rst for details.
      - None
    * - ``operationMode``
-     - integer
+     - OperationMode
      - None
-     - The current operation mode of the device. See Operation Modes section below.
+     - The current **actual operational state** of the device (what it's doing RIGHT NOW). Reports status values: 0=Standby, 32=Heat Pump active, 64=Energy Saver active, 96=High Demand active. See Operation Modes section below for the critical distinction between this and ``dhwOperationSetting``.
      - None
    * - ``operationBusy``
      - integer
@@ -229,9 +229,9 @@ This document lists the fields found in the ``status`` object of device status m
      - Type of program reservation.
      - None
    * - ``dhwOperationSetting``
-     - integer
+     - OperationMode
      - None
-     - DHW operation setting.
+     - User's configured DHW operation mode preference. This field uses the same ``OperationMode`` enum as ``operationMode`` but contains command mode values (1=HEAT_PUMP, 2=ELECTRIC, 3=ENERGY_SAVER, 4=HIGH_DEMAND, 5=VACATION, 6=POWER_OFF). When the device is powered off via the power-off command, this field will show 6 (POWER_OFF). This is how to distinguish between "powered off" vs "on but in standby". See the Operation Modes section below for details.
      - None
    * - ``temperatureType``
      - integer
@@ -469,20 +469,20 @@ The ``operationMode`` field is an integer that maps to the following modes. Thes
      - High
      - Most energy-efficient mode, using only the heat pump. Recovery time varies with ambient temperature and humidity. Higher ambient temperature and humidity improve efficiency and reduce recovery time.
    * - 2
-     - Energy Saver (Hybrid: Efficiency)
-     - Fast
-     - Very High
-     - Default mode. Combines the heat pump and electric heater for balanced efficiency and recovery time. Heat pump is primarily used with electric heater for backup. Applied during initial shipment and factory reset.
-   * - 3
-     - High Demand (Hybrid: Boost)
-     - Very Fast
-     - Low
-     - Combines heat pump and electric heater with more frequent use of electric heater for faster recovery. Suitable when higher hot water supply is needed.
-   * - 4
      - Electric
      - Fast
      - Very Low
      - Uses only upper and lower electric heaters (not simultaneously). Least energy-efficient with shortest recovery time. Can operate continuously for up to 72 hours before automatically reverting to previous mode.
+   * - 3
+     - Energy Saver (Hybrid: Efficiency)
+     - Fast
+     - Very High
+     - Default mode. Combines the heat pump and electric heater for balanced efficiency and recovery time. Heat pump is primarily used with electric heater for backup. Applied during initial shipment and factory reset.
+   * - 4
+     - High Demand (Hybrid: Boost)
+     - Very Fast
+     - Low
+     - Combines heat pump and electric heater with more frequent use of electric heater for faster recovery. Suitable when higher hot water supply is needed.
    * - 5
      - Vacation
      - None
@@ -490,10 +490,10 @@ The ``operationMode`` field is an integer that maps to the following modes. Thes
      - Suspends heating to save energy during absences (0-99 days). Only minimal operations like freeze protection and anti-seize are performed. Heating resumes 9 hours before the vacation period ends.
 
 
-Observed Operation Modes (from network traffic analysis)
+Operation Modes
 --------------------------------------------------------
 
-The following ``operationMode`` values have been observed in status messages from the device. These values appear to correspond to the commanded modes as follows:
+The following ``operationMode`` values in status messages from the device. These values appear to correspond to the commanded modes as follows:
 
 .. list-table::
    :header-rows: 1
@@ -509,13 +509,204 @@ The following ``operationMode`` values have been observed in status messages fro
      - Heat Pump
      - Corresponds to commanded mode ``HEAT_PUMP`` (1).
    * - 64
-     - Energy Saver
-     - Corresponds to commanded mode ``ENERGY_SAVER`` (2).
+     - Energy Saver (Hybrid: Efficiency)
+     - Corresponds to commanded mode ``ENERGY_SAVER`` (3).
    * - 96
-     - High Demand
-     - Corresponds to commanded mode ``HIGH_DEMAND`` (3).
+     - High Demand (Hybrid: Boost)
+     - Corresponds to commanded mode ``HIGH_DEMAND`` (4).
 
-The commanded mode ``ELECTRIC`` (4) has been observed to result in ``operationMode`` values of both 64 and 96 at different times.
+The commanded mode ``ELECTRIC`` (2) has been observed to result in ``operationMode`` values of both 64 and 96 at different times.
+
+Understanding operationMode vs dhwOperationSetting
+---------------------------------------------------
+
+These two fields serve different purposes and it's critical to understand their relationship:
+
+Field Definitions
+^^^^^^^^^^^^^^^^^
+
+**dhwOperationSetting** (OperationMode enum with command values 1-5)
+  The user's **configured mode preference** - what heating mode the device should use when it needs to heat water. This is set via the ``dhw-mode`` command and persists until changed by the user or device.
+  
+  * Type: ``OperationMode`` enum
+  * Values: 
+    
+    * 1 = ``HEAT_PUMP`` (Heat Pump Only)
+    * 2 = ``ELECTRIC`` (Electric Only)
+    * 3 = ``ENERGY_SAVER`` (Hybrid: Efficiency)
+    * 4 = ``HIGH_DEMAND`` (Hybrid: Boost)
+    * 5 = ``VACATION`` (Vacation mode)
+    * 6 = ``POWER_OFF`` (Device is powered off)
+  
+  * Set by: User via app, CLI, or MQTT command
+  * Changes: Only when user explicitly changes the mode or powers device off/on
+  * Meaning: "When heating is needed, use this mode" OR "I'm powered off" (if value is 6)
+  * **Critical**: Value 6 (``POWER_OFF``) indicates the device was powered off via the power-off command. This is how to distinguish between "powered off" and "on but idle".
+
+**operationMode** (OperationMode enum with status values 0, 32, 64, 96)
+  The device's **current actual operational state** - what the device is doing RIGHT NOW. This reflects real-time operation and changes automatically based on whether the device is idle or actively heating.
+  
+  * Type: ``OperationMode`` enum
+  * Values:
+    
+    * 0 = ``STANDBY`` (Idle, not heating)
+    * 32 = ``HEAT_PUMP_MODE`` (Heat Pump actively running)
+    * 64 = ``HYBRID_EFFICIENCY_MODE`` (Energy Saver actively heating)
+    * 96 = ``HYBRID_BOOST_MODE`` (High Demand actively heating)
+  
+  * Set by: Device automatically based on heating demand
+  * Changes: Dynamically as device starts/stops heating
+  * Meaning: "This is what I'm doing right now"
+  * **Note**: This field shows ``STANDBY`` (0) both when device is powered off AND when it's on but not heating. Check ``dhwOperationSetting`` to determine if device is actually powered off (value 6).
+
+Key Relationship
+^^^^^^^^^^^^^^^^
+
+The relationship between these fields can be summarized as:
+
+* ``dhwOperationSetting`` = "What mode to use when heating"
+* ``operationMode`` = "Am I heating right now, and if so, how?"
+
+A device can be **idle** (``operationMode = STANDBY``) while still being **configured** for a specific heating mode (``dhwOperationSetting = ENERGY_SAVER``). When the tank temperature drops and heating begins, ``operationMode`` will change to reflect active heating (e.g., ``HYBRID_EFFICIENCY_MODE``), but ``dhwOperationSetting`` remains unchanged.
+
+Real-World Examples
+^^^^^^^^^^^^^^^^^^^
+
+**Example 1: Energy Saver Mode, Tank is Hot**
+  ::
+
+    dhwOperationSetting = 3 (ENERGY_SAVER)    # Configured mode
+    operationMode = 0 (STANDBY)                # Currently idle
+    dhwChargePer = 100                         # Tank is fully charged
+    
+  *Interpretation:* Device is configured for Energy Saver mode, but water is already at temperature so no heating is occurring.
+
+**Example 2: Energy Saver Mode, Actively Heating**
+  ::
+
+    dhwOperationSetting = 3 (ENERGY_SAVER)           # Configured mode
+    operationMode = 64 (HYBRID_EFFICIENCY_MODE)      # Actively heating
+    operationBusy = true                             # Heating in progress
+    dhwChargePer = 75                                # Tank at 75%
+    
+  *Interpretation:* Device is using Energy Saver mode to heat the tank, currently at 75% charge.
+
+**Example 3: High Demand Mode, Heat Pump Running**
+  ::
+
+    dhwOperationSetting = 4 (HIGH_DEMAND)      # Configured mode
+    operationMode = 32 (HEAT_PUMP_MODE)        # Heat pump active
+    compUse = true                             # Compressor running
+    
+  *Interpretation:* Device is configured for High Demand but is currently running just the heat pump component (hybrid heating will engage electric elements as needed).
+
+**Example 4: Device Powered Off**
+  ::
+
+    dhwOperationSetting = 6 (POWER_OFF)        # Device powered off
+    operationMode = 0 (STANDBY)                # Currently idle
+    operationBusy = false                      # No heating
+    
+  *Interpretation:* Device was powered off using the power-off command. Although ``operationMode`` shows ``STANDBY`` (same as an idle device), the ``dhwOperationSetting`` value of 6 indicates it's actually powered off, not just idle.
+
+Displaying Status in a User Interface
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+For user-facing applications, follow these guidelines:
+
+**Primary Mode Display**
+  Use ``dhwOperationSetting`` to show the user's configured mode preference. This is what users expect to see as "the current mode" because it represents their selection.
+  
+  **Important**: Check for value 6 (``POWER_OFF``) first to show "Off" or "Powered Off" status.
+
+  Example display::
+
+    Mode: Energy Saver      [when dhwOperationSetting = 1-5]
+    Mode: Off               [when dhwOperationSetting = 6]
+
+**Status Indicator**
+  Use ``operationMode`` to show real-time operational status:
+
+  * ``STANDBY`` (0): Show "Idle" or "Standby" indicator (but check ``dhwOperationSetting`` for power-off state)
+  * ``HEAT_PUMP_MODE`` (32): Show "Heating (Heat Pump)" or heating indicator
+  * ``HYBRID_EFFICIENCY_MODE`` (64): Show "Heating (Energy Saver)" or heating indicator
+  * ``HYBRID_BOOST_MODE`` (96): Show "Heating (High Demand)" or heating indicator
+
+**Combined Display Examples**
+  ::
+
+    # Device on and idle
+    Mode: Energy Saver
+    Status: Idle ○
+    Tank: 100%
+    
+    # Device on and heating
+    Mode: Energy Saver
+    Status: Heating ●
+    Tank: 75%
+    
+    # Device powered off
+    Mode: Off
+    Status: Powered Off
+    Tank: 100%
+
+**Code Example**
+  .. code-block:: python
+
+    def format_mode_display(status: DeviceStatus) -> dict:
+        """Format mode and status for UI display."""
+        
+        # Check if device is powered off first
+        if status.dhwOperationSetting == OperationMode.POWER_OFF:
+            return {
+                'configured_mode': 'Off',
+                'operational_state': 'Powered Off',
+                'is_heating': False,
+                'is_powered_on': False,
+                'tank_charge': status.dhwChargePer,
+            }
+        
+        # User's configured mode (what they selected)
+        configured_mode = status.dhwOperationSetting.name.replace('_', ' ').title()
+        
+        # Current operational state
+        if status.operationMode == OperationMode.STANDBY:
+            operational_state = "Idle"
+            is_heating = False
+        elif status.operationMode == OperationMode.HEAT_PUMP_MODE:
+            operational_state = "Heating (Heat Pump)"
+            is_heating = True
+        elif status.operationMode == OperationMode.HYBRID_EFFICIENCY_MODE:
+            operational_state = "Heating (Energy Saver)"
+            is_heating = True
+        elif status.operationMode == OperationMode.HYBRID_BOOST_MODE:
+            operational_state = "Heating (High Demand)"
+            is_heating = True
+        else:
+            operational_state = "Unknown"
+            is_heating = False
+        
+        return {
+            'configured_mode': configured_mode,       # "Energy Saver"
+            'operational_state': operational_state,   # "Idle" or "Heating..."
+            'is_heating': is_heating,                 # True/False
+            'is_powered_on': True,                    # Device is on
+            'tank_charge': status.dhwChargePer,       # 0-100
+        }
+
+**Display Notes**
+
+1. **Never display operationMode as "the mode"** - users don't care that the device is in "HYBRID_EFFICIENCY_MODE", they want to know it's set to "Energy Saver"
+
+2. **Do use operationMode for heating indicators** - it tells you whether the device is actively heating right now
+
+3. **Mode changes affect dhwOperationSetting** - when a user changes the mode, you're setting ``dhwOperationSetting``
+
+4. **operationMode changes automatically** - you cannot directly set this; it changes based on device operation
+
+5. **Both fields use OperationMode enum** - but different value ranges (1-6 for dhwOperationSetting, 0/32/64/96 for operationMode)
+
+6. **Power off detection** - Check if ``dhwOperationSetting == 6`` (``POWER_OFF``) to determine if device is powered off vs just idle
 
 Technical Notes
 ---------------
