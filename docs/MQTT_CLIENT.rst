@@ -442,15 +442,21 @@ set_dhw_mode()
 
    await mqtt_client.set_dhw_mode(device: Device, mode_id: int) -> int
 
-Set DHW (Domestic Hot Water) operation mode.
+Set DHW (Domestic Hot Water) operation mode. This sets the ``dhwOperationSetting`` field, which determines what heating mode the device will use when it needs to heat water.
 
 **Command:** ``33554433``
 
 **Mode:** ``dhw-mode``
 
-**Mode IDs:** - ``1``: Heat Pump (most efficient, longest recovery) -
-``2``: Electric (least efficient, fastest recovery) - ``3``: Energy
-Saver (default, balanced) - ``4``: High Demand (faster recovery)
+**Mode IDs (command values):**
+
+* ``1``: Heat Pump Only (most efficient, longest recovery)
+* ``2``: Electric Only (least efficient, fastest recovery)  
+* ``3``: Energy Saver (default, balanced - Hybrid: Efficiency)
+* ``4``: High Demand (faster recovery - Hybrid: Boost)
+* ``5``: Vacation (suspend heating for 0-99 days)
+
+**Important:** Setting the mode updates ``dhwOperationSetting`` but does not immediately change ``operationMode``. The ``operationMode`` field reflects the device's current operational state and changes automatically when the device starts/stops heating. See :doc:`DEVICE_STATUS_FIELDS` for details on the relationship between these fields.
 
 set_dhw_temperature()
 '''''''''''''''''''''
@@ -749,12 +755,15 @@ Response Message
          "dhwTemperature": 120,
          "tankUpperTemperature": 115,
          "tankLowerTemperature": 110,
-         "operationMode": 3,
+         "operationMode": 64,
+         "dhwOperationSetting": 3,
          "dhwUse": true,
          "compUse": false
        }
      }
    }
+
+Note: ``operationMode`` shows the current operational state (64 = Energy Saver actively heating), while ``dhwOperationSetting`` shows the configured mode preference (3 = Energy Saver). See :doc:`DEVICE_STATUS_FIELDS` for the distinction between these fields.
 
 Error Handling
 --------------

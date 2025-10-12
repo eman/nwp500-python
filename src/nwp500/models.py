@@ -16,8 +16,9 @@ _logger = logging.getLogger(__name__)
 class OperationMode(Enum):
     """Enumeration for the operation modes of the device.
 
-    The first set of modes (0-5) are used when commanding the device, while
-    the second set (32, 64, 96) are observed in status messages.
+    The first set of modes (0-6) are used when commanding the device or appear
+    in dhwOperationSetting, while the second set (32, 64, 96) are observed in
+    the operationMode status field.
 
     Command mode IDs (based on MQTT protocol):
     - 0: Standby (device in idle state)
@@ -26,6 +27,7 @@ class OperationMode(Enum):
     - 3: Energy Saver (balanced, good default)
     - 4: High Demand (maximum heating capacity)
     - 5: Vacation mode
+    - 6: Power Off (device is powered off - appears in dhwOperationSetting only)
     """
 
     # Commanded modes
@@ -35,8 +37,9 @@ class OperationMode(Enum):
     ENERGY_SAVER = 3  # Energy Saver
     HIGH_DEMAND = 4  # High Demand
     VACATION = 5
+    POWER_OFF = 6  # Power Off (appears in dhwOperationSetting when device is off)
 
-    # Observed status modes
+    # Status modes (operationMode field only)
     HEAT_PUMP_MODE = 32
     HYBRID_EFFICIENCY_MODE = 64
     HYBRID_BOOST_MODE = 96
@@ -242,7 +245,7 @@ class DeviceStatus:
     antiLegionellaPeriod: int
     antiLegionellaOperationBusy: bool
     programReservationType: int
-    dhwOperationSetting: int
+    dhwOperationSetting: OperationMode  # User's configured mode preference (command modes: 1-5)
     temperatureType: TemperatureUnit
     tempFormulaType: str
     errorBuzzerUse: bool
@@ -401,6 +404,20 @@ class DeviceStatus:
                 )
                 # Default to a safe enum value so callers can rely on .name
                 converted_data["operationMode"] = OperationMode.STANDBY
+
+        if "dhwOperationSetting" in converted_data:
+            try:
+                converted_data["dhwOperationSetting"] = OperationMode(
+                    converted_data["dhwOperationSetting"]
+                )
+            except ValueError:
+                _logger.warning(
+                    "Unknown dhwOperationSetting: %s. Defaulting to ENERGY_SAVER.",
+                    converted_data["dhwOperationSetting"],
+                )
+                # Default to ENERGY_SAVER as a safe default
+                converted_data["dhwOperationSetting"] = OperationMode.ENERGY_SAVER
+
         if "temperatureType" in converted_data:
             try:
                 converted_data["temperatureType"] = TemperatureUnit(

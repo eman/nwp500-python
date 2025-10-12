@@ -79,6 +79,15 @@ The library includes a command line interface for quick monitoring and device in
     # Get device feature/capability information  
     python -m nwp500.cli --device-feature
 
+    # Turn device on
+    python -m nwp500.cli --power-on
+
+    # Turn device off
+    python -m nwp500.cli --power-off
+
+    # Turn device on and see updated status
+    python -m nwp500.cli --power-on --status
+
     # Set operation mode and see response
     python -m nwp500.cli --set-mode energy-saver
 
@@ -105,6 +114,8 @@ The library includes a command line interface for quick monitoring and device in
 * ``--status``: Print current device status as JSON. Can be combined with control commands to see updated status.
 * ``--device-info``: Print comprehensive device information (firmware, model, capabilities) via MQTT as JSON and exit  
 * ``--device-feature``: Print device capabilities and feature settings via MQTT as JSON and exit
+* ``--power-on``: Turn the device on and display response
+* ``--power-off``: Turn the device off and display response
 * ``--set-mode MODE``: Set operation mode and display response. Valid modes: heat-pump, energy-saver, high-demand, electric, vacation, standby
 * ``--set-dhw-temp TEMP``: Set DHW (Domestic Hot Water) target temperature in Fahrenheit (115-150°F) and display response
 * ``--monitor``: Continuously monitor status every 30 seconds and log to CSV (default)
@@ -156,18 +167,20 @@ Operation Modes
     * - Heat Pump Mode
       - 1
       - Most energy-efficient mode using only the heat pump. Longest recovery time.
-    * - Energy Saver Mode
+    * - Electric Mode
       - 2
+      - Fastest recovery using only electric heaters. Least energy-efficient.
+    * - Energy Saver Mode
+      - 3
       - Default mode. Balances efficiency and recovery time using both heat pump and electric heater.
     * - High Demand Mode
-      - 3
-      - Uses electric heater more frequently for faster recovery time.
-    * - Electric Mode
       - 4
-      - Fastest recovery using only electric heaters. Least energy-efficient.
+      - Uses electric heater more frequently for faster recovery time.
     * - Vacation Mode
       - 5
       - Suspends heating to save energy during extended absences.
+
+**Important:** When you set a mode, you're configuring the ``dhwOperationSetting`` (what mode to use when heating). The device's current operational state is reported in ``operationMode`` (0=Standby, 32=Heat Pump active, 64=Energy Saver active, 96=High Demand active). See the `Device Status Fields documentation <docs/DEVICE_STATUS_FIELDS.rst>`_ for details on this distinction.
 
 MQTT Protocol
 =============

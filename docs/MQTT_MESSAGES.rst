@@ -133,7 +133,7 @@ The device sends a response to a control message on the ``responseTopic`` specif
 
 The ``sessionID`` in the response corresponds to the ``sessionID`` of the request.
 
-The ``response`` object contains a ``status`` object that reflects the new state. For example, after a ``dhw-mode`` command with ``param`` ``[3]``\ , the ``dhwOperationSetting`` in the ``status`` object of the response will be ``3``.
+The ``response`` object contains a ``status`` object that reflects the new state. For example, after a ``dhw-mode`` command with ``param`` ``[3]`` (Energy Saver), the ``dhwOperationSetting`` field in the ``status`` object will be ``3``. Note that ``operationMode`` may still show ``0`` (STANDBY) if the device is not currently heating. See :doc:`DEVICE_STATUS_FIELDS` for the important distinction between ``dhwOperationSetting`` (configured mode) and ``operationMode`` (current operational state).
 
 Device Status Messages
 ----------------------
