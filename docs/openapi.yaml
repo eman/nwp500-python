@@ -410,6 +410,8 @@ paths:
           schema:
             type: string
       responses:
+        '200':
+          description: Time of Use information
           content:
             application/json:
               schema:
