@@ -449,10 +449,10 @@ This document lists the fields found in the ``status`` object of device status m
      - Available energy capacity - remaining hot water energy available in Watt-hours.
      - None
 
-Operation Modes
----------------
+DHW Operation Setting Modes
+----------------------------
 
-The ``operationMode`` field is an integer that maps to the following modes. These modes balance energy efficiency and recovery time based on user needs.
+The ``dhwOperationSetting`` field is an integer that maps to the following modes. These modes balance energy efficiency and recovery time based on user needs.
 
 .. list-table::
    :header-rows: 1
@@ -464,36 +464,41 @@ The ``operationMode`` field is an integer that maps to the following modes. Thes
      - Energy Efficiency
      - Description
    * - 1
-     - Heat Pump
+     - HEAT_PUMP
      - Very Slow
      - High
      - Most energy-efficient mode, using only the heat pump. Recovery time varies with ambient temperature and humidity. Higher ambient temperature and humidity improve efficiency and reduce recovery time.
    * - 2
-     - Electric
+     - ELECTRIC
      - Fast
      - Very Low
      - Uses only upper and lower electric heaters (not simultaneously). Least energy-efficient with shortest recovery time. Can operate continuously for up to 72 hours before automatically reverting to previous mode.
    * - 3
-     - Energy Saver (Hybrid: Efficiency)
+     - ENERGY_SAVER
      - Fast
      - Very High
      - Default mode. Combines the heat pump and electric heater for balanced efficiency and recovery time. Heat pump is primarily used with electric heater for backup. Applied during initial shipment and factory reset.
    * - 4
-     - High Demand (Hybrid: Boost)
+     - HIGH_DEMAND
      - Very Fast
      - Low
      - Combines heat pump and electric heater with more frequent use of electric heater for faster recovery. Suitable when higher hot water supply is needed.
    * - 5
-     - Vacation
+     - VACATION
      - None
      - Very High
      - Suspends heating to save energy during absences (0-99 days). Only minimal operations like freeze protection and anti-seize are performed. Heating resumes 9 hours before the vacation period ends.
+   * - 6
+     - POWER_OFF
+     - None
+     - None
+     - Device is powered off. This value appears in ``dhwOperationSetting`` when the device has been powered off via the power-off command.
 
 
-Operation Modes
---------------------------------------------------------
+Operation Mode Status Values
+-----------------------------
 
-The following ``operationMode`` values in status messages from the device. These values appear to correspond to the commanded modes as follows:
+The following ``operationMode`` values appear in status messages from the device. These values reflect the device's actual operational state (what it's doing right now):
 
 .. list-table::
    :header-rows: 1
@@ -503,19 +508,17 @@ The following ``operationMode`` values in status messages from the device. These
      - Mode
      - Notes
    * - 0
-     - Standby / Vacation
-     - Corresponds to commanded modes ``STANDBY`` (0) and ``VACATION`` (5).
+     - STANDBY
+     - Device is idle, not actively heating. Can occur when device is powered off OR when it's on but not heating. Check ``dhwOperationSetting`` for value 6 (``POWER_OFF``) to distinguish between these states.
    * - 32
-     - Heat Pump
-     - Corresponds to commanded mode ``HEAT_PUMP`` (1).
+     - HEAT_PUMP_MODE
+     - Heat pump is actively running to heat water.
    * - 64
-     - Energy Saver (Hybrid: Efficiency)
-     - Corresponds to commanded mode ``ENERGY_SAVER`` (3).
+     - HYBRID_EFFICIENCY_MODE
+     - Device is actively heating in Energy Saver mode (hybrid efficiency).
    * - 96
-     - High Demand (Hybrid: Boost)
-     - Corresponds to commanded mode ``HIGH_DEMAND`` (4).
-
-The commanded mode ``ELECTRIC`` (2) has been observed to result in ``operationMode`` values of both 64 and 96 at different times.
+     - HYBRID_BOOST_MODE
+     - Device is actively heating in High Demand mode (hybrid boost).
 
 Understanding operationMode vs dhwOperationSetting
 ---------------------------------------------------
@@ -541,7 +544,7 @@ Field Definitions
   * Set by: User via app, CLI, or MQTT command
   * Changes: Only when user explicitly changes the mode or powers device off/on
   * Meaning: "When heating is needed, use this mode" OR "I'm powered off" (if value is 6)
-  * **Critical**: Value 6 (``POWER_OFF``) indicates the device was powered off via the power-off command. This is how to distinguish between "powered off" and "on but idle".
+  * Value 6 (``POWER_OFF``) indicates the device was powered off via the power-off command. This is how to distinguish between "powered off" and "on but idle".
 
 **operationMode** (OperationMode enum with status values 0, 32, 64, 96)
   The device's **current actual operational state** - what the device is doing RIGHT NOW. This reflects real-time operation and changes automatically based on whether the device is idle or actively heating.
