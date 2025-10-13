@@ -205,6 +205,33 @@ async def handle_status_request(mqtt: NavienMqttClient, device: Device):
         _logger.error("Timed out waiting for device status response.")
 
 
+async def handle_status_raw_request(mqtt: NavienMqttClient, device: Device):
+    """Request device status once and print raw MQTT data (no conversions)."""
+    future = asyncio.get_running_loop().create_future()
+    
+    # Subscribe to the raw MQTT topic to capture data before conversion
+    def raw_callback(topic: str, message: dict):
+        if not future.done():
+            # Extract and print the raw status portion
+            if 'response' in message and 'status' in message['response']:
+                print(json.dumps(message['response']['status'], indent=2, default=_json_default_serializer))
+                future.set_result(None)
+            elif 'status' in message:
+                print(json.dumps(message['status'], indent=2, default=_json_default_serializer))
+                future.set_result(None)
+    
+    # Subscribe to all device messages
+    await mqtt.subscribe_device(device, raw_callback)
+    
+    _logger.info("Requesting device status (raw)...")
+    await mqtt.request_device_status(device)
+    
+    try:
+        await asyncio.wait_for(future, timeout=10)
+    except asyncio.TimeoutError:
+        _logger.error("Timed out waiting for device status response.")
+
+
 async def handle_device_info_request(mqtt: NavienMqttClient, device: Device):
     """
     Request comprehensive device information via MQTT and print it.
@@ -504,6 +531,9 @@ async def async_main(args: argparse.Namespace):
                 _logger.info("Getting updated status after temperature change...")
                 await asyncio.sleep(2)  # Brief pause for device to process
                 await handle_status_request(mqtt, device)
+        elif args.status_raw:
+            # Raw status request (no conversions)
+            await handle_status_raw_request(mqtt, device)
         elif args.status:
             # Status-only request
             await handle_status_request(mqtt, device)
@@ -548,6 +578,11 @@ def parse_args(args):
         "--status",
         action="store_true",
         help="Fetch and print the current device status. Can be combined with control commands.",
+    )
+    parser.add_argument(
+        "--status-raw",
+        action="store_true",
+        help="Fetch and print the raw device status as received from MQTT (no conversions applied).",
     )
 
     # Primary action modes (mutually exclusive)
@@ -635,6 +670,12 @@ def setup_logging(loglevel):
 def main(args):
     """Wrapper for the asynchronous main function."""
     args = parse_args(args)
+    
+    # Validate that --status and --status-raw are not used together
+    if args.status and args.status_raw:
+        print("Error: --status and --status-raw cannot be used together.", file=sys.stderr)
+        return 1
+    
     # Set default log level for libraries
     setup_logging(logging.WARNING)
     # Set user-defined log level for this script
