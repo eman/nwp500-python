@@ -273,7 +273,7 @@ class NavienMqttClient(EventEmitter):
             and (not self._reconnect_task or self._reconnect_task.done())
         ):
             _logger.info("Starting automatic reconnection...")
-            self._reconnect_task = asyncio.create_task(self._reconnect_with_backoff())
+            self._schedule_coroutine(self._start_reconnect_task())
 
     def _on_connection_resumed_internal(self, connection, return_code, session_present, **kwargs):
         """Internal handler for connection resumption."""
@@ -298,6 +298,16 @@ class NavienMqttClient(EventEmitter):
         # Send any queued commands
         if self.config.enable_command_queue:
             self._schedule_coroutine(self._send_queued_commands())
+
+    async def _start_reconnect_task(self):
+        """
+        Start the reconnect task within the event loop.
+        
+        This is a helper method to create the reconnect task from within
+        a coroutine that's scheduled via _schedule_coroutine.
+        """
+        if not self._reconnect_task or self._reconnect_task.done():
+            self._reconnect_task = asyncio.create_task(self._reconnect_with_backoff())
 
     async def _reconnect_with_backoff(self):
         """

@@ -205,6 +205,16 @@ Changed
 Fixed
 -----
 
+- **Critical Bug**: Thread-safe reconnection task creation from MQTT callbacks
+  
+  - Fixed ``RuntimeError: no running event loop`` when connection is interrupted
+  - Fixed ``RuntimeWarning: coroutine '_reconnect_with_backoff' was never awaited``
+  - Connection interruption callbacks run in separate threads without event loops
+  - Implemented ``_start_reconnect_task()`` helper method to properly create reconnection tasks
+  - Uses existing ``_schedule_coroutine()`` method for thread-safe task scheduling
+  - Prevents crashes during automatic reconnection after connection interruptions
+  - Ensures reconnection tasks are properly awaited and executed
+
 - **Critical Bug**: Thread-safe event emission from MQTT callbacks
   
   - Fixed ``RuntimeError: no running event loop in thread 'Dummy-1'``
