@@ -29,10 +29,10 @@ This document lists the fields found in the ``status`` object of device status m
      - Status of special functions (e.g., freeze protection, anti-seize operations).
      - None
    * - ``didReload``
-     - integer
+     - bool
      - None
      - Indicates if the device has recently reloaded or restarted.
-     - None
+     - Converted from integer (0 or 1) to bool
    * - ``errorCode``
      - integer
      - None
@@ -49,25 +49,25 @@ This document lists the fields found in the ``status`` object of device status m
      - The current **actual operational state** of the device (what it's doing RIGHT NOW). Reports status values: 0=Standby, 32=Heat Pump active, 64=Energy Saver active, 96=High Demand active. See Operation Modes section below for the critical distinction between this and ``dhwOperationSetting``.
      - None
    * - ``operationBusy``
-     - integer
+     - bool
      - None
-     - Indicates if the device is currently performing heating operations (1=busy, 0=idle).
-     - None
+     - Indicates if the device is currently performing heating operations (True=busy, False=idle).
+     - Converted from integer (0 or 1) to bool
    * - ``freezeProtectionUse``
-     - integer
+     - bool
      - None
      - Whether freeze protection is active. When tank water temperature falls below 43°F (6°C), the electric heater activates to prevent freezing.
-     - None
+     - Converted from integer (0 or 1) to bool
    * - ``dhwUse``
-     - integer
+     - bool
      - None
      - Domestic Hot Water (DHW) usage status - indicates if hot water is currently being drawn from the tank.
-     - None
+     - Converted from integer (0 or 1) to bool
    * - ``dhwUseSustained``
-     - integer
+     - bool
      - None
      - Sustained DHW usage status - indicates prolonged hot water usage.
-     - None
+     - Converted from integer (0 or 1) to bool
    * - ``dhwTemperature``
      - integer
      - °F
@@ -79,10 +79,10 @@ This document lists the fields found in the ``status`` object of device status m
      - Target DHW temperature setting. Range: 95°F (35°C) to 150°F (65.5°C). Default: 120°F (49°C).
      - ``raw + 20``
    * - ``programReservationUse``
-     - integer
+     - bool
      - None
      - Whether a program reservation (scheduled operation) is in use.
-     - None
+     - Converted from integer (0 or 1) to bool
    * - ``smartDiagnostic``
      - integer
      - None
@@ -104,10 +104,10 @@ This document lists the fields found in the ``status`` object of device status m
      - WiFi signal strength in dBm (decibel-milliwatts). Typical values: -30 (excellent) to -90 (poor).
      - None
    * - ``ecoUse``
-     - integer
+     - bool
      - None
      - Whether ECO (Energy Cut Off) safety feature has been triggered. The ECO switch is a high-temperature safety limit.
-     - None
+     - Converted from integer (0 or 1) to bool
    * - ``dhwTargetTemperatureSetting``
      - integer
      - °F
@@ -149,40 +149,40 @@ This document lists the fields found in the ``status`` object of device status m
      - Target superheat value - the desired temperature difference ensuring complete refrigerant vaporization.
      - ``raw / 10.0``
    * - ``compUse``
-     - integer
+     - bool
      - None
-     - Compressor usage status (1=On, 0=Off). The compressor is the main component of the heat pump.
-     - None
+     - Compressor usage status (True=On, False=Off). The compressor is the main component of the heat pump.
+     - Converted from integer (0 or 1) to bool
    * - ``eevUse``
-     - integer
+     - bool
      - None
-     - Electronic Expansion Valve (EEV) usage status (1=active, 0=inactive). The EEV controls refrigerant flow.
-     - None
+     - Electronic Expansion Valve (EEV) usage status (True=active, False=inactive). The EEV controls refrigerant flow.
+     - Converted from integer (0 or 1) to bool
    * - ``evaFanUse``
-     - integer
+     - bool
      - None
-     - Evaporator fan usage status (1=On, 0=Off). The fan pulls ambient air through the evaporator coil.
-     - None
+     - Evaporator fan usage status (True=On, False=Off). The fan pulls ambient air through the evaporator coil.
+     - Converted from integer (0 or 1) to bool
    * - ``currentInstPower``
      - integer
      - W
      - Current instantaneous power consumption in Watts. Does not include heating element power when active.
      - None
    * - ``shutOffValveUse``
-     - integer
+     - bool
      - None
      - Shut-off valve usage status. The valve controls refrigerant flow in the system.
-     - None
+     - Converted from integer (0 or 1) to bool
    * - ``conOvrSensorUse``
-     - integer
+     - bool
      - None
      - Condensate overflow sensor usage status.
-     - None
+     - Converted from integer (0 or 1) to bool
    * - ``wtrOvrSensorUse``
-     - integer
+     - bool
      - None
      - Water overflow/leak sensor usage status. Triggers error E799 if leak detected.
-     - None
+     - Converted from integer (0 or 1) to bool
    * - ``dhwChargePer``
      - integer
      - %
@@ -209,20 +209,20 @@ This document lists the fields found in the ``status`` object of device status m
      - Freeze protection temperature setting.
      - ``raw + 20``
    * - ``antiLegionellaUse``
-     - integer
+     - bool
      - None
      - Whether anti-legionella function is enabled.
-     - None
+     - Converted from integer (0 or 1) to bool
    * - ``antiLegionellaPeriod``
      - integer
      - days
      - Anti-legionella function period.
      - None
    * - ``antiLegionellaOperationBusy``
-     - integer
+     - bool
      - None
      - Whether the anti-legionella function is busy.
-     - None
+     - Converted from integer (0 or 1) to bool
    * - ``programReservationType``
      - integer
      - None
@@ -244,15 +244,15 @@ This document lists the fields found in the ``status`` object of device status m
      - Temperature formula type.
      - None
    * - ``errorBuzzerUse``
-     - integer
+     - bool
      - None
      - Whether the error buzzer is enabled.
-     - None
+     - Converted from integer (0 or 1) to bool
    * - ``currentHeatUse``
-     - integer
+     - bool
      - None
      - Current heat usage.
-     - None
+     - Converted from integer (0 or 1) to bool
    * - ``currentInletTemperature``
      - float
      - °F
@@ -304,25 +304,25 @@ This document lists the fields found in the ``status`` object of device status m
      - Current superheat value - actual temperature difference between suction and evaporator temperatures.
      - ``raw / 10.0``
    * - ``heatUpperUse``
-     - integer
+     - bool
      - None
-     - Upper electric heating element usage status (1=On, 0=Off). Power: 3,755W @ 208V or 5,000W @ 240V.
-     - None
+     - Upper electric heating element usage status (True=On, False=Off). Power: 3,755W @ 208V or 5,000W @ 240V.
+     - Converted from integer (0 or 1) to bool
    * - ``heatLowerUse``
-     - integer
+     - bool
      - None
-     - Lower electric heating element usage status (1=On, 0=Off). Power: 3,755W @ 208V or 5,000W @ 240V.
-     - None
+     - Lower electric heating element usage status (True=On, False=Off). Power: 3,755W @ 208V or 5,000W @ 240V.
+     - Converted from integer (0 or 1) to bool
    * - ``scaldUse``
-     - integer
+     - bool
      - None
      - Scald protection active status. Displays warning when water temperature reaches levels that could cause scalding.
-     - None
+     - Converted from integer (0 or 1) to bool
    * - ``airFilterAlarmUse``
-     - integer
+     - bool
      - None
      - Air filter alarm usage - indicates if air filter maintenance reminder is enabled.
-     - None
+     - Converted from integer (0 or 1) to bool
    * - ``airFilterAlarmPeriod``
      - integer
      - hours
