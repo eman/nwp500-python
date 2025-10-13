@@ -302,7 +302,7 @@ class NavienMqttClient(EventEmitter):
     async def _start_reconnect_task(self):
         """
         Start the reconnect task within the event loop.
-        
+
         This is a helper method to create the reconnect task from within
         a coroutine that's scheduled via _schedule_coroutine.
         """
