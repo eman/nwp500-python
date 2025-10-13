@@ -13,6 +13,24 @@ from typing import Any, Optional, Union
 _logger = logging.getLogger(__name__)
 
 
+def _decicelsius_to_fahrenheit(raw_value: float) -> float:
+    """
+    Convert a raw decicelsius value to Fahrenheit.
+
+    Args:
+        raw_value: Raw value in decicelsius (tenths of degrees Celsius)
+
+    Returns:
+        Temperature in Fahrenheit
+
+    Example:
+        >>> _decicelsius_to_fahrenheit(250)  # 25.0°C
+        77.0
+    """
+    celsius = raw_value / 10.0
+    return (celsius * 9 / 5) + 32
+
+
 class OperationMode(Enum):
     """Enumeration for the operation modes of the device.
 
@@ -306,6 +324,11 @@ class DeviceStatus:
             )
 
         # Convert integer-based booleans
+        # The device uses a non-standard encoding for boolean values:
+        #   0 = Not applicable/disabled (rarely used)
+        #   1 = OFF/Inactive/False
+        #   2 = ON/Active/True
+        # This applies to ALL boolean fields in the device status
         bool_fields = [
             "didReload",
             "operationBusy",
@@ -329,9 +352,11 @@ class DeviceStatus:
             "scaldUse",
             "airFilterAlarmUse",
         ]
+
+        # Convert using the device's encoding: 0 or 1=false, 2=true
         for field_name in bool_fields:
             if field_name in converted_data:
-                converted_data[field_name] = bool(converted_data[field_name])
+                converted_data[field_name] = converted_data[field_name] == 2
 
         # Convert temperatures with 'raw + 20' formula
         add_20_fields = [
@@ -353,15 +378,11 @@ class DeviceStatus:
             if field_name in converted_data:
                 converted_data[field_name] += 20
 
-        # Convert fields with 'raw / 10.0' formula
+        # Convert fields with 'raw / 10.0' formula (non-temperature fields)
         div_10_fields = [
-            "dischargeTemperature",
-            "suctionTemperature",
-            "evaporatorTemperature",
             "targetSuperHeat",
             "currentInletTemperature",
             "currentDhwFlowRate",
-            "currentSuperHeat",
             "hpUpperOnDiffTempSetting",
             "hpUpperOffDiffTempSetting",
             "hpLowerOnDiffTempSetting",
@@ -375,23 +396,28 @@ class DeviceStatus:
             if field_name in converted_data:
                 converted_data[field_name] /= 10.0
 
-        # Special conversion for ambientTemperature
-        if "ambientTemperature" in converted_data:
-            raw_temp = converted_data["ambientTemperature"]
-            # Based on observed data: raw 503.6 corresponds to 72.5°F
-            # Convert raw value to Celsius first (raw / 22.4 ≈ Celsius)
-            # Then convert Celsius to Fahrenheit
-            celsius = raw_temp / 22.4
-            converted_data["ambientTemperature"] = (celsius * 9 / 5) + 32
-
         # Special conversion for tank temperatures (decicelsius to Fahrenheit)
         tank_temp_fields = ["tankUpperTemperature", "tankLowerTemperature"]
         for field_name in tank_temp_fields:
             if field_name in converted_data:
-                raw_temp = converted_data[field_name]
-                # Convert from decicelsius (raw / 10.0) to Celsius, then to Fahrenheit
-                celsius = raw_temp / 10.0
-                converted_data[field_name] = (celsius * 9 / 5) + 32
+                converted_data[field_name] = _decicelsius_to_fahrenheit(converted_data[field_name])
+
+        # Special conversion for dischargeTemperature (decicelsius to Fahrenheit)
+        if "dischargeTemperature" in converted_data:
+            converted_data["dischargeTemperature"] = _decicelsius_to_fahrenheit(
+                converted_data["dischargeTemperature"]
+            )
+
+        # Special conversion for heat pump temperatures (decicelsius to Fahrenheit)
+        heat_pump_temp_fields = [
+            "suctionTemperature",
+            "evaporatorTemperature",
+            "ambientTemperature",
+            "currentSuperHeat",
+        ]
+        for field_name in heat_pump_temp_fields:
+            if field_name in converted_data:
+                converted_data[field_name] = _decicelsius_to_fahrenheit(converted_data[field_name])
 
         # Convert enum fields with error handling for unknown values
         if "operationMode" in converted_data:

@@ -32,7 +32,7 @@ This document lists the fields found in the ``status`` object of device status m
      - bool
      - None
      - Indicates if the device has recently reloaded or restarted.
-     - Converted from integer (0 or 1) to bool
+     - Converted from integer (1=OFF, 2=ON) to bool
    * - ``errorCode``
      - integer
      - None
@@ -52,22 +52,22 @@ This document lists the fields found in the ``status`` object of device status m
      - bool
      - None
      - Indicates if the device is currently performing heating operations (True=busy, False=idle).
-     - Converted from integer (0 or 1) to bool
+     - Converted from integer (1=OFF, 2=ON) to bool
    * - ``freezeProtectionUse``
      - bool
      - None
      - Whether freeze protection is active. When tank water temperature falls below 43°F (6°C), the electric heater activates to prevent freezing.
-     - Converted from integer (0 or 1) to bool
+     - Converted from integer (1=OFF, 2=ON) to bool
    * - ``dhwUse``
      - bool
      - None
      - Domestic Hot Water (DHW) usage status - indicates if hot water is currently being drawn from the tank.
-     - Converted from integer (0 or 1) to bool
+     - Converted from integer (1=OFF, 2=ON) to bool
    * - ``dhwUseSustained``
      - bool
      - None
      - Sustained DHW usage status - indicates prolonged hot water usage.
-     - Converted from integer (0 or 1) to bool
+     - Converted from integer (1=OFF, 2=ON) to bool
    * - ``dhwTemperature``
      - integer
      - °F
@@ -82,7 +82,7 @@ This document lists the fields found in the ``status`` object of device status m
      - bool
      - None
      - Whether a program reservation (scheduled operation) is in use.
-     - Converted from integer (0 or 1) to bool
+     - Converted from integer (1=OFF, 2=ON) to bool
    * - ``smartDiagnostic``
      - integer
      - None
@@ -107,7 +107,7 @@ This document lists the fields found in the ``status`` object of device status m
      - bool
      - None
      - Whether ECO (Energy Cut Off) safety feature has been triggered. The ECO switch is a high-temperature safety limit.
-     - Converted from integer (0 or 1) to bool
+     - Converted from integer (1=OFF, 2=ON) to bool
    * - ``dhwTargetTemperatureSetting``
      - integer
      - °F
@@ -127,22 +127,22 @@ This document lists the fields found in the ``status`` object of device status m
      - integer
      - °F
      - Compressor discharge temperature - temperature of refrigerant leaving the compressor.
-     - ``raw / 10.0``
+     - ``(raw / 10) * 9/5 + 32`` (decicelsius to Fahrenheit)
    * - ``suctionTemperature``
      - integer
      - °F
      - Compressor suction temperature - temperature of refrigerant entering the compressor.
-     - ``raw / 10.0``
+     - ``(raw / 10) * 9/5 + 32`` (decicelsius to Fahrenheit)
    * - ``evaporatorTemperature``
      - integer
      - °F
      - Evaporator temperature - temperature where heat is absorbed from ambient air.
-     - ``raw / 10.0``
+     - ``(raw / 10) * 9/5 + 32`` (decicelsius to Fahrenheit)
    * - ``ambientTemperature``
      - integer
      - °F
      - Ambient air temperature measured at the heat pump air intake.
-     - ``(raw / 22.4) * 9/5 + 32``
+     - ``(raw / 10) * 9/5 + 32`` (decicelsius to Fahrenheit)
    * - ``targetSuperHeat``
      - integer
      - °F
@@ -152,17 +152,17 @@ This document lists the fields found in the ``status`` object of device status m
      - bool
      - None
      - Compressor usage status (True=On, False=Off). The compressor is the main component of the heat pump.
-     - Converted from integer (0 or 1) to bool
+     - Converted from integer (1=OFF, 2=ON) to bool
    * - ``eevUse``
      - bool
      - None
      - Electronic Expansion Valve (EEV) usage status (True=active, False=inactive). The EEV controls refrigerant flow.
-     - Converted from integer (0 or 1) to bool
+     - Converted from integer (1=OFF, 2=ON) to bool
    * - ``evaFanUse``
      - bool
      - None
      - Evaporator fan usage status (True=On, False=Off). The fan pulls ambient air through the evaporator coil.
-     - Converted from integer (0 or 1) to bool
+     - Converted from integer (1=OFF, 2=ON) to bool
    * - ``currentInstPower``
      - integer
      - W
@@ -172,17 +172,17 @@ This document lists the fields found in the ``status`` object of device status m
      - bool
      - None
      - Shut-off valve usage status. The valve controls refrigerant flow in the system.
-     - Converted from integer (0 or 1) to bool
+     - Converted from integer (1=OFF, 2=ON) to bool
    * - ``conOvrSensorUse``
      - bool
      - None
      - Condensate overflow sensor usage status.
-     - Converted from integer (0 or 1) to bool
+     - Converted from integer (1=OFF, 2=ON) to bool
    * - ``wtrOvrSensorUse``
      - bool
      - None
      - Water overflow/leak sensor usage status. Triggers error E799 if leak detected.
-     - Converted from integer (0 or 1) to bool
+     - Converted from integer (1=OFF, 2=ON) to bool
    * - ``dhwChargePer``
      - integer
      - %
@@ -212,7 +212,7 @@ This document lists the fields found in the ``status`` object of device status m
      - bool
      - None
      - Whether anti-legionella function is enabled.
-     - Converted from integer (0 or 1) to bool
+     - Converted from integer (1=OFF, 2=ON) to bool
    * - ``antiLegionellaPeriod``
      - integer
      - days
@@ -222,7 +222,7 @@ This document lists the fields found in the ``status`` object of device status m
      - bool
      - None
      - Whether the anti-legionella function is busy.
-     - Converted from integer (0 or 1) to bool
+     - Converted from integer (1=OFF, 2=ON) to bool
    * - ``programReservationType``
      - integer
      - None
@@ -247,12 +247,12 @@ This document lists the fields found in the ``status`` object of device status m
      - bool
      - None
      - Whether the error buzzer is enabled.
-     - Converted from integer (0 or 1) to bool
+     - Converted from integer (1=OFF, 2=ON) to bool
    * - ``currentHeatUse``
      - bool
      - None
      - Current heat usage.
-     - Converted from integer (0 or 1) to bool
+     - Converted from integer (1=OFF, 2=ON) to bool
    * - ``currentInletTemperature``
      - float
      - °F
@@ -302,27 +302,27 @@ This document lists the fields found in the ``status`` object of device status m
      - integer
      - °F
      - Current superheat value - actual temperature difference between suction and evaporator temperatures.
-     - ``raw / 10.0``
+     - ``(raw / 10) * 9/5 + 32`` (decicelsius to Fahrenheit)
    * - ``heatUpperUse``
      - bool
      - None
      - Upper electric heating element usage status (True=On, False=Off). Power: 3,755W @ 208V or 5,000W @ 240V.
-     - Converted from integer (0 or 1) to bool
+     - Converted from integer (1=OFF, 2=ON) to bool
    * - ``heatLowerUse``
      - bool
      - None
      - Lower electric heating element usage status (True=On, False=Off). Power: 3,755W @ 208V or 5,000W @ 240V.
-     - Converted from integer (0 or 1) to bool
+     - Converted from integer (1=OFF, 2=ON) to bool
    * - ``scaldUse``
      - bool
      - None
      - Scald protection active status. Displays warning when water temperature reaches levels that could cause scalding.
-     - Converted from integer (0 or 1) to bool
+     - Converted from integer (1=OFF, 2=ON) to bool
    * - ``airFilterAlarmUse``
      - bool
      - None
      - Air filter alarm usage - indicates if air filter maintenance reminder is enabled.
-     - Converted from integer (0 or 1) to bool
+     - Converted from integer (1=OFF, 2=ON) to bool
    * - ``airFilterAlarmPeriod``
      - integer
      - hours
