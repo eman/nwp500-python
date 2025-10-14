@@ -396,6 +396,41 @@ Publish a message to an MQTT topic.
 Device Command Methods
 ^^^^^^^^^^^^^^^^^^^^^^
 
+Complete MQTT API Reference
+''''''''''''''''''''''''''''
+
+This section provides a comprehensive reference of all available MQTT client methods for requesting data and controlling devices.
+
+**Request Methods & Corresponding Subscriptions**
+
++------------------------------------+---------------------------------------+----------------------------------------+
+| Request Method                     | Subscribe Method                      | Response Type                          |
++====================================+=======================================+========================================+
+| ``request_device_status()``        | ``subscribe_device_status()``         | ``DeviceStatus`` object                |
++------------------------------------+---------------------------------------+----------------------------------------+
+| ``request_device_info()``          | ``subscribe_device_feature()``        | ``DeviceFeature`` object               |
++------------------------------------+---------------------------------------+----------------------------------------+
+| ``request_energy_usage()``         | ``subscribe_energy_usage()``          | ``EnergyUsageResponse`` object         |
++------------------------------------+---------------------------------------+----------------------------------------+
+| ``set_power()``                    | ``subscribe_device_status()``         | Updated ``DeviceStatus``               |
++------------------------------------+---------------------------------------+----------------------------------------+
+| ``set_dhw_mode()``                 | ``subscribe_device_status()``         | Updated ``DeviceStatus``               |
++------------------------------------+---------------------------------------+----------------------------------------+
+| ``set_dhw_temperature()``          | ``subscribe_device_status()``         | Updated ``DeviceStatus``               |
++------------------------------------+---------------------------------------+----------------------------------------+
+| ``set_dhw_temperature_display()``  | ``subscribe_device_status()``         | Updated ``DeviceStatus``               |
++------------------------------------+---------------------------------------+----------------------------------------+
+
+**Generic Subscriptions**
+
++------------------------------------+---------------------------------------+----------------------------------------+
+| Method                             | Purpose                               | Response Type                          |
++====================================+=======================================+========================================+
+| ``subscribe_device()``             | Subscribe to all device messages      | Raw ``dict`` (all message types)       |
++------------------------------------+---------------------------------------+----------------------------------------+
+| ``subscribe()``                    | Subscribe to any MQTT topic           | Raw ``dict``                           |
++------------------------------------+---------------------------------------+----------------------------------------+
+
 request_device_status()
 '''''''''''''''''''''''
 
@@ -403,11 +438,25 @@ request_device_status()
 
    await mqtt_client.request_device_status(device: Device) -> int
 
-Request current device status.
+Request current device status including temperatures, operation mode, power consumption, and error codes.
 
 **Command:** ``16777219``
 
 **Topic:** ``cmd/{device_type}/navilink-{device_id}/st``
+
+**Response:** Subscribe with ``subscribe_device_status()`` to receive ``DeviceStatus`` objects
+
+**Example:**
+
+.. code:: python
+
+   def on_status(status: DeviceStatus):
+       print(f"Water Temp: {status.dhwTemperature}°F")
+       print(f"Mode: {status.operationMode}")
+       print(f"Power: {status.currentInstPower}W")
+   
+   await mqtt_client.subscribe_device_status(device, on_status)
+   await mqtt_client.request_device_status(device)
 
 request_device_info()
 '''''''''''''''''''''
@@ -416,11 +465,58 @@ request_device_info()
 
    await mqtt_client.request_device_info(device: Device) -> int
 
-Request device information.
+Request device information including firmware version, serial number, temperature limits, and capabilities.
 
 **Command:** ``16777217``
 
 **Topic:** ``cmd/{device_type}/navilink-{device_id}/st/did``
+
+**Response:** Subscribe with ``subscribe_device_feature()`` to receive ``DeviceFeature`` objects
+
+**Example:**
+
+.. code:: python
+
+   def on_feature(feature: DeviceFeature):
+       print(f"Firmware: {feature.controllerSwVersion}")
+       print(f"Serial: {feature.controllerSerialNumber}")
+       print(f"Temp Range: {feature.dhwTemperatureMin}-{feature.dhwTemperatureMax}°F")
+   
+   await mqtt_client.subscribe_device_feature(device, on_feature)
+   await mqtt_client.request_device_info(device)
+
+request_energy_usage()
+''''''''''''''''''''''
+
+.. code:: python
+
+   await mqtt_client.request_energy_usage(device: Device, year: int, months: list[int]) -> int
+
+Request historical daily energy usage data for specified month(s). Returns heat pump and electric heating element consumption with daily breakdown.
+
+**Command:** ``16777225``
+
+**Topic:** ``cmd/{device_type}/navilink-{device_id}/st/energy-usage-daily-query/rd``
+
+**Response:** Subscribe with ``subscribe_energy_usage()`` to receive ``EnergyUsageResponse`` objects
+
+**Parameters:**
+
+- ``year``: Year to query (e.g., 2025)
+- ``months``: List of months to query (1-12). Can request multiple months.
+
+**Example:**
+
+.. code:: python
+
+   def on_energy(energy: EnergyUsageResponse):
+       print(f"Total Usage: {energy.total.total_usage} Wh")
+       print(f"Heat Pump: {energy.total.heat_pump_percentage:.1f}%")
+       for day in energy.daily:
+           print(f"Day {day.day}: {day.total_usage} Wh")
+   
+   await mqtt_client.subscribe_energy_usage(device, on_energy)
+   await mqtt_client.request_energy_usage(device, year=2025, months=[9])
 
 set_power()
 '''''''''''
@@ -434,6 +530,8 @@ Turn device on or off.
 **Command:** ``33554433``
 
 **Mode:** ``power-on`` or ``power-off``
+
+**Response:** Device status is updated; subscribe with ``subscribe_device_status()`` to see changes
 
 set_dhw_mode()
 ''''''''''''''
@@ -456,6 +554,8 @@ Set DHW (Domestic Hot Water) operation mode. This sets the ``dhwOperationSetting
 * ``4``: High Demand (faster recovery - Hybrid: Boost)
 * ``5``: Vacation (suspend heating for 0-99 days)
 
+**Response:** Device status is updated; subscribe with ``subscribe_device_status()`` to see changes
+
 **Important:** Setting the mode updates ``dhwOperationSetting`` but does not immediately change ``operationMode``. The ``operationMode`` field reflects the device's current operational state and changes automatically when the device starts/stops heating. See :doc:`DEVICE_STATUS_FIELDS` for details on the relationship between these fields.
 
 set_dhw_temperature()
@@ -465,13 +565,44 @@ set_dhw_temperature()
 
    await mqtt_client.set_dhw_temperature(device: Device, temperature: int) -> int
 
-Set DHW target temperature.
+Set DHW target temperature using the **MESSAGE value** (20°F lower than display).
 
 **Command:** ``33554433``
 
 **Mode:** ``dhw-temperature``
 
-**Parameters:** - ``temperature``: Target temperature in Fahrenheit
+**Parameters:** 
+
+- ``temperature``: Target temperature in Fahrenheit (message value, not display value)
+
+**Response:** Device status is updated; subscribe with ``subscribe_device_status()`` to see changes
+
+**Important:** The temperature in the message is 20°F lower than what displays on the device/app:
+
+- Message value 120°F → Display shows 140°F
+- Message value 130°F → Display shows 150°F
+
+set_dhw_temperature_display()
+''''''''''''''''''''''''''''''
+
+.. code:: python
+
+   await mqtt_client.set_dhw_temperature_display(device: Device, display_temperature: int) -> int
+
+Set DHW target temperature using the **DISPLAY value** (what you see on device/app). This is a convenience method that automatically converts display temperature to message value.
+
+**Parameters:**
+
+- ``display_temperature``: Target temperature as shown on display/app (Fahrenheit)
+
+**Response:** Device status is updated; subscribe with ``subscribe_device_status()`` to see changes
+
+**Example:**
+
+.. code:: python
+
+   # Set display temperature to 140°F (sends 120°F in message)
+   await mqtt_client.set_dhw_temperature_display(device, 140)
 
 signal_app_connection()
 '''''''''''''''''''''''
@@ -483,6 +614,85 @@ signal_app_connection()
 Signal that the app has connected.
 
 **Topic:** ``evt/{device_type}/navilink-{device_id}/app-connection``
+
+Subscription Methods
+''''''''''''''''''''
+
+subscribe_device_status()
+.........................
+
+.. code:: python
+
+   await mqtt_client.subscribe_device_status(
+       device: Device,
+       callback: Callable[[DeviceStatus], None]
+   ) -> int
+
+Subscribe to device status messages with automatic parsing into ``DeviceStatus`` objects. Use this after calling ``request_device_status()`` or any control commands to receive updates.
+
+**Emits Events:**
+
+- ``status_received``: Every status update (DeviceStatus)
+- ``temperature_changed``: Temperature changed (old_temp, new_temp)
+- ``mode_changed``: Operation mode changed (old_mode, new_mode)
+- ``power_changed``: Power consumption changed (old_power, new_power)
+- ``heating_started``: Device started heating (status)
+- ``heating_stopped``: Device stopped heating (status)
+- ``error_detected``: Error code detected (error_code, status)
+- ``error_cleared``: Error code cleared (error_code)
+
+subscribe_device_feature()
+..........................
+
+.. code:: python
+
+   await mqtt_client.subscribe_device_feature(
+       device: Device,
+       callback: Callable[[DeviceFeature], None]
+   ) -> int
+
+Subscribe to device feature/info messages with automatic parsing into ``DeviceFeature`` objects. Use this after calling ``request_device_info()`` to receive device capabilities and firmware info.
+
+**Emits Events:**
+
+- ``feature_received``: Feature/info received (DeviceFeature)
+
+subscribe_energy_usage()
+........................
+
+.. code:: python
+
+   await mqtt_client.subscribe_energy_usage(
+       device: Device,
+       callback: Callable[[EnergyUsageResponse], None]
+   ) -> int
+
+Subscribe to energy usage query responses with automatic parsing into ``EnergyUsageResponse`` objects. Use this after calling ``request_energy_usage()`` to receive historical energy data.
+
+subscribe_device()
+..................
+
+.. code:: python
+
+   await mqtt_client.subscribe_device(
+       device: Device,
+       callback: Callable[[str, dict], None]
+   ) -> int
+
+Subscribe to all messages from a device (no parsing). Receives all message types as raw dictionaries. Use the specific subscription methods above for automatic parsing.
+
+subscribe()
+...........
+
+.. code:: python
+
+   await mqtt_client.subscribe(
+       topic: str,
+       callback: Callable[[str, dict], None],
+       qos: mqtt.QoS = mqtt.QoS.AT_LEAST_ONCE
+   ) -> int
+
+Subscribe to any MQTT topic. Supports wildcards (``#``, ``+``). Receives raw dictionary messages.
 
 Periodic Request Methods (Optional)
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^

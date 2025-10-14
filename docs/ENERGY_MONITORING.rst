@@ -79,6 +79,45 @@ Total upper electric heater runtime in minutes -
 ``heater2RunningMinuteTotal`` (int): Total lower electric heater runtime
 in minutes
 
+Historical Energy Usage
+-----------------------
+
+Request detailed daily energy usage data for specific months:
+
+.. code:: python
+
+   from nwp500 import NavienMqttClient, EnergyUsageResponse
+   
+   def on_energy_usage(energy: EnergyUsageResponse):
+       print(f"Total Usage: {energy.total.total_usage} Wh")
+       print(f"Heat Pump: {energy.total.heat_pump_percentage:.1f}%")
+       print(f"Electric: {energy.total.heat_element_percentage:.1f}%")
+       
+       # Daily breakdown
+       for day in energy.daily:
+           print(f"Day {day.day}: {day.total_usage} Wh")
+   
+   # Subscribe to energy usage responses
+   await mqtt_client.subscribe_energy_usage(device, on_energy_usage)
+   
+   # Request energy usage for September 2025
+   await mqtt_client.request_energy_usage(device, year=2025, months=[9])
+   
+   # Request multiple months
+   await mqtt_client.request_energy_usage(device, year=2025, months=[7, 8, 9])
+
+**Key Methods:**
+
+- ``request_energy_usage(device, year, months)``: Request historical data
+- ``subscribe_energy_usage(device, callback)``: Subscribe to energy usage responses
+
+**Response Fields:**
+
+- ``total.total_usage`` (int): Total energy consumption in Wh
+- ``total.heat_pump_percentage`` (float): Percentage from heat pump
+- ``total.heat_element_percentage`` (float): Percentage from electric heaters
+- ``daily`` (list): Daily breakdown of usage per day
+
 Energy Capacity
 ---------------
 
