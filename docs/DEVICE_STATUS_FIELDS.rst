@@ -147,7 +147,7 @@ This document lists the fields found in the ``status`` object of device status m
      - integer
      - °F
      - Target superheat value - the desired temperature difference ensuring complete refrigerant vaporization.
-     - ``raw / 10.0``
+     - ``(raw / 10) * 9/5 + 32`` (decicelsius to Fahrenheit)
    * - ``compUse``
      - bool
      - None

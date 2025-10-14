@@ -380,7 +380,6 @@ class DeviceStatus:
 
         # Convert fields with 'raw / 10.0' formula (non-temperature fields)
         div_10_fields = [
-            "targetSuperHeat",
             "currentInletTemperature",
             "currentDhwFlowRate",
             "hpUpperOnDiffTempSetting",
@@ -414,6 +413,7 @@ class DeviceStatus:
             "evaporatorTemperature",
             "ambientTemperature",
             "currentSuperHeat",
+            "targetSuperHeat",
         ]
         for field_name in heat_pump_temp_fields:
             if field_name in converted_data:
