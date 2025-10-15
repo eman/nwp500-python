@@ -120,7 +120,15 @@ Clone the repository
 
 #. You should run::
 
-    pip install -U pip setuptools -e .
+   pip install -U pip setuptools -e .
+
+.. note::
+
+   To run the full test suite (including async tests annotated with
+   ``@pytest.mark.asyncio``), install the testing extras which include
+   ``pytest-asyncio``::
+
+      pip install -e '.[testing]'
 
    to be able to import the package under development in the Python REPL.
 

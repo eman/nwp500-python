@@ -17,6 +17,14 @@ CMD_ANTI_LEGIONELLA_DISABLE = 33554473
 CMD_TOU_DISABLE = 33554475
 CMD_TOU_ENABLE = 33554476
 
+# Note for maintainers:
+# These command codes and the expected payload fields are defined in
+# `docs/MQTT_MESSAGES.rst` under the "Control Messages" section and
+# the subsections for Power Control, DHW Mode, Anti-Legionella,
+# Reservation Management and TOU Settings. When updating constants or
+# payload builders, verify against that document to avoid protocol
+# mismatches.
+
 # Known Firmware Versions and Field Changes
 # Track firmware versions where new fields were introduced to help with debugging
 KNOWN_FIRMWARE_FIELD_CHANGES = {

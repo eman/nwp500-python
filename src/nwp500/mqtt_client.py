@@ -1219,6 +1219,9 @@ class NavienMqttClient(EventEmitter):
 
     async def enable_anti_legionella(self, device: Device, period_days: int) -> int:
         """Enable Anti-Legionella disinfection with a 1-30 day cycle."""
+        # See docs/MQTT_MESSAGES.rst "Anti-Legionella Control" for the
+        # authoritative command code (33554472) and expected payload
+        # format: {"mode": "anti-leg-on", "param": [<period_days>], "paramStr": ""}
         if not 1 <= period_days <= 30:
             raise ValueError("period_days must be between 1 and 30")
 
@@ -1347,6 +1350,9 @@ class NavienMqttClient(EventEmitter):
         enabled: bool = True,
     ) -> int:
         """Update programmed reservations for temperature/mode changes."""
+        # See docs/MQTT_MESSAGES.rst "Reservation Management" for the
+        # command code (16777226) and the reservation object fields
+        # (enable, week, hour, min, mode, param).
         device_id = device.device_info.mac_address
         device_type = device.device_info.device_type
         additional_value = device.device_info.additional_value
@@ -1397,6 +1403,10 @@ class NavienMqttClient(EventEmitter):
         enabled: bool = True,
     ) -> int:
         """Configure Time-of-Use pricing schedule via MQTT."""
+        # See docs/MQTT_MESSAGES.rst "TOU (Time of Use) Settings" for
+        # the command code (33554439) and TOU period fields
+        # (season, week, startHour, startMinute, endHour, endMinute,
+        #  priceMin, priceMax, decimalPoint).
         if not controller_serial_number:
             raise ValueError("controller_serial_number is required")
         if not periods:
