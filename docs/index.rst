@@ -325,6 +325,7 @@ Documentation
    Device Feature Fields <DEVICE_FEATURE_FIELDS>
    Error Codes <ERROR_CODES>
    MQTT Messages <MQTT_MESSAGES>
+   Firmware Tracking <FIRMWARE_TRACKING>
 
 .. toctree::
    :maxdepth: 2

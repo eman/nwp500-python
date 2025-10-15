@@ -10,6 +10,8 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Optional, Union
 
+from . import constants
+
 _logger = logging.getLogger(__name__)
 
 
@@ -303,6 +305,7 @@ class DeviceStatus:
     heUpperOffDiffTempSetting: float
     heLowerOnDiffTempSetting: float
     heLowerOffDiffTempSetting: float
+    heatMinOpTemperature: float
     drOverrideStatus: int
     touOverrideStatus: int
     totalEnergyCapacity: float
@@ -316,6 +319,9 @@ class DeviceStatus:
         """
         # Copy data to avoid modifying the original dictionary
         converted_data = data.copy()
+
+        # Get valid field names for this class
+        valid_fields = {f.name for f in cls.__dataclass_fields__.values()}
 
         # Handle key typo from documentation/API
         if "heLowerOnTDiffempSetting" in converted_data:
@@ -373,6 +379,7 @@ class DeviceStatus:
             "heUpperOffTempSetting",
             "heLowerOnTempSetting",
             "heLowerOffTempSetting",
+            "heatMinOpTemperature",
         ]
         for field_name in add_20_fields:
             if field_name in converted_data:
@@ -456,6 +463,33 @@ class DeviceStatus:
                 )
                 # Default to FAHRENHEIT for unknown temperature types
                 converted_data["temperatureType"] = TemperatureUnit.FAHRENHEIT
+
+        # Filter out any unknown fields not defined in the dataclass
+        # This handles new fields added by firmware updates gracefully
+        unknown_fields = set(converted_data.keys()) - valid_fields
+        if unknown_fields:
+            # Check if any unknown fields are documented in constants
+            known_new_fields = unknown_fields & set(constants.KNOWN_FIRMWARE_FIELD_CHANGES.keys())
+            truly_unknown = unknown_fields - set(constants.KNOWN_FIRMWARE_FIELD_CHANGES.keys())
+
+            if known_new_fields:
+                _logger.info(
+                    "Ignoring known new fields from recent firmware: %s. "
+                    "These fields are documented but not yet implemented in DeviceStatus. "
+                    "Please report this with your firmware version to help us track field changes.",
+                    known_new_fields,
+                )
+
+            if truly_unknown:
+                _logger.warning(
+                    "Discovered new unknown fields from device status: %s. "
+                    "This may indicate a firmware update. Please report this issue with your "
+                    "device firmware version (controllerSwVersion, panelSwVersion, wifiSwVersion) "
+                    "so we can update the library. See constants.KNOWN_FIRMWARE_FIELD_CHANGES.",
+                    truly_unknown,
+                )
+
+            converted_data = {k: v for k, v in converted_data.items() if k in valid_fields}
 
         return cls(**converted_data)
 

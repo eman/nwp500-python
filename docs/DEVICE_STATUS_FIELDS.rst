@@ -428,6 +428,11 @@ This document lists the fields found in the ``status`` object of device status m
      - °F
      - Heater element lower off differential temperature setting.
      - ``raw / 10.0``
+   * - ``heatMinOpTemperature``
+     - float
+     - °F
+     - Minimum operating temperature for the heating element. This sets the lower threshold at which the heating element can operate.
+     - ``raw + 20``
    * - ``drOverrideStatus``
      - integer
      - None
