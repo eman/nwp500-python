@@ -454,7 +454,7 @@ When the device is in vacation mode (``dhwOperationSetting: 5``), the status inc
 
 The device includes Anti-Legionella protection that periodically heats water to 140°F (60°C) to prevent bacterial growth:
 
-* ``antiLegionellaUse``\ : Anti-Legionella function enabled (1 = OFF, 2 = ON)
+* ``antiLegionellaUse``\ : Anti-Legionella enable flag (1 = disabled, 2 = enabled)
 * ``antiLegionellaPeriod``\ : Days between Anti-Legionella cycles (typically 7 days)
 * ``antiLegionellaOperationBusy``\ : Currently performing Anti-Legionella cycle (1 = OFF, 2 = ON)
 
