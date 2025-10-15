@@ -57,6 +57,66 @@ __license__ = "MIT"
 _logger = logging.getLogger(__name__)
 
 
+def _redact(obj, keys_to_redact=None):
+    """Return a redacted copy of obj with sensitive keys masked.
+
+    This is a lightweight sanitizer for log messages to avoid emitting
+    secrets such as access keys, session tokens, passwords, emails,
+    clientIDs and sessionIDs.
+    """
+    if keys_to_redact is None:
+        keys_to_redact = {
+            "access_key_id",
+            "secret_access_key",
+            "secret_key",
+            "session_token",
+            "sessionToken",
+            "sessionID",
+            "clientID",
+            "clientId",
+            "client_id",
+            "password",
+            "pushToken",
+            "push_token",
+            "token",
+            "auth",
+            "macAddress",
+            "email",
+        }
+
+    # Primitive types: return as-is
+    if obj is None or isinstance(obj, (bool, int, float)):
+        return obj
+    if isinstance(obj, str):
+        # avoid printing long secret-like strings fully
+        if len(obj) > 256:
+            return obj[:64] + "...<redacted>..." + obj[-64:]
+        return obj
+
+    # dicts: redact sensitive keys recursively
+    if isinstance(obj, dict):
+        redacted = {}
+        for k, v in obj.items():
+            if str(k) in keys_to_redact:
+                redacted[k] = "<REDACTED>"
+            else:
+                redacted[k] = _redact(v, keys_to_redact)
+        return redacted
+
+    # lists / tuples: redact elements
+    if isinstance(obj, (list, tuple)):
+        return type(obj)(_redact(v, keys_to_redact) for v in obj)
+
+    # fallback: represent object as string but avoid huge dumps
+    try:
+        s = str(obj)
+        if len(s) > 512:
+            return s[:256] + "...<redacted>..."
+        return s
+    except Exception:
+        return "<UNREPRABLE>"
+
+
 @dataclass
 class MqttConnectionConfig:
     """Configuration for MQTT connection."""
@@ -565,7 +625,7 @@ class NavienMqttClient(EventEmitter):
         try:
             # Parse JSON payload
             message = json.loads(payload.decode("utf-8"))
-            _logger.debug(f"Received message on topic '{topic}': {message}")
+            _logger.debug("Received message on topic: %s", topic)
 
             # Call registered handlers that match this topic
             # Need to match against subscription patterns with wildcards
@@ -732,7 +792,7 @@ class NavienMqttClient(EventEmitter):
                 raise RuntimeError("Not connected to MQTT broker")
 
         _logger.debug(f"Publishing to topic: {topic}")
-        _logger.debug(f"Payload: {payload}")
+        _logger.debug("Payload: %s", _redact(payload))
 
         try:
             # Serialize to JSON
