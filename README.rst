@@ -13,6 +13,9 @@ Features
 * **Device Monitoring**: Access real-time status information including temperatures, power consumption, and tank charge level
 * **Temperature Control**: Set target water temperature (100-140°F)
 * **Operation Mode Control**: Switch between Heat Pump, Energy Saver, High Demand, Electric, and Vacation modes
+* **Reservation Management**: Schedule automatic temperature and mode changes
+* **Time of Use (TOU)**: Configure energy pricing schedules for demand response
+* **Anti-Legionella Protection**: Monitor periodic disinfection cycles (140°F heating)
 * **Comprehensive Status Data**: Access to 70+ device status fields including compressor status, heater status, flow rates, and more
 * **MQTT Protocol Support**: Low-level MQTT communication with Navien devices
 * **Non-Blocking Async Operations**: Fully compatible with async event loops (Home Assistant safe)
@@ -189,19 +192,23 @@ The library supports low-level MQTT communication with Navien devices:
 
 **Control Topics**
     * ``cmd/{deviceType}/{deviceId}/ctrl`` - Send control commands
+    * ``cmd/{deviceType}/{deviceId}/ctrl/rsv/rd`` - Manage reservations
+    * ``cmd/{deviceType}/{deviceId}/ctrl/tou/rd`` - Time of Use settings
     * ``cmd/{deviceType}/{deviceId}/st`` - Request status updates
 
 **Control Commands**
     * Power control (on/off)
-    * DHW mode changes
+    * DHW mode changes (including vacation mode)
     * Temperature settings
-    * Reservation management
+    * Reservation management (scheduled mode/temperature changes)
+    * Time of Use (TOU) pricing schedules
 
 **Status Requests**
     * Device information
     * General device status
     * Energy usage queries
     * Reservation information
+    * TOU settings
 
 See the full `MQTT Protocol Documentation`_ for detailed message formats.
 

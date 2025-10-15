@@ -82,8 +82,11 @@ Usage Examples
    # Turn device on/off
    await mqtt_client.set_power(device, power_on=True)
 
-   # Set DHW mode (1=Heat Pump Only, 2=Electric Only, 3=Energy Saver, 4=High Demand)
+   # Set DHW mode (1=Heat Pump Only, 2=Electric Only, 3=Energy Saver, 4=High Demand, 5=Vacation)
    await mqtt_client.set_dhw_mode(device, mode_id=3)
+
+   # Set vacation mode with duration
+   await mqtt_client.set_dhw_mode(device, mode_id=5, vacation_days=7)
 
    # Set target temperature
    await mqtt_client.set_dhw_temperature(device, temperature=120)
@@ -1157,6 +1160,265 @@ applications
    # These are wrappers around start_periodic_requests()
    await mqtt_client.start_periodic_device_info_requests(device)
    await mqtt_client.start_periodic_device_status_requests(device)
+
+Advanced Features
+-----------------
+
+Vacation Mode
+~~~~~~~~~~~~~
+
+Set the device to vacation mode to save energy during extended absences:
+
+.. code:: python
+
+   # Set vacation mode for 7 days
+   await mqtt_client.set_dhw_mode(device, mode_id=5, vacation_days=7)
+   
+   # Check vacation status in device status
+   def on_status(topic: str, message: dict):
+       status = message.get('response', {}).get('status', {})
+       if status.get('dhwOperationSetting') == 5:
+           days_set = status.get('vacationDaySetting', 0)
+           days_elapsed = status.get('vacationDayElapsed', 0)
+           days_remaining = days_set - days_elapsed
+           print(f"Vacation mode: {days_remaining} days remaining")
+   
+   await mqtt_client.subscribe_device(device, on_status)
+   await mqtt_client.request_device_status(device)
+
+Reservation Management
+~~~~~~~~~~~~~~~~~~~~~~
+
+Manage programmed temperature and mode changes:
+
+.. code:: python
+
+   # Create a reservation for weekday mornings
+   reservation = {
+       "enable": 1,  # 1=enabled, 2=disabled
+       "week": 124,  # Weekdays (Mon-Fri)
+       "hour": 6,
+       "min": 30,
+       "mode": 4,  # High Demand mode
+       "param": 120  # Target temperature (140°F display = 120°F message)
+   }
+   
+   # Send reservation update
+   await mqtt_client.publish(
+       topic=f"cmd/52/{device.device_info.mac_address}/ctrl/rsv/rd",
+       payload={
+           "clientID": mqtt_client.client_id,
+           "protocolVersion": 2,
+           "request": {
+               "command": 16777226,
+               "deviceType": 52,
+               "macAddress": device.device_info.mac_address,
+               "reservationUse": 1,  # Enable reservations
+               "reservation": [reservation]
+           },
+           "requestTopic": f"cmd/52/{device.device_info.mac_address}/ctrl/rsv/rd",
+           "responseTopic": "...",
+           "sessionID": str(int(time.time() * 1000))
+       }
+   )
+
+**Week Bitfield Values:**
+
+* ``127`` - All days (Sunday through Saturday)
+* ``124`` - Weekdays (Monday through Friday)
+* ``3`` - Weekend (Saturday and Sunday)
+* ``31`` - Sunday through Thursday
+
+Time of Use (TOU) Pricing
+~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Configure energy pricing schedules for demand response:
+
+.. code:: python
+
+   # Define TOU periods
+   tou_periods = [
+       {
+           "season": 31,  # All seasons
+           "week": 124,   # Weekdays
+           "startHour": 0,
+           "startMinute": 0,
+           "endHour": 14,
+           "endMinute": 59,
+           "priceMin": 34831,  # $0.34831 per kWh
+           "priceMax": 34831,
+           "decimalPoint": 5  # Divide by 100000
+       },
+       {
+           "season": 31,
+           "week": 124,
+           "startHour": 15,
+           "startMinute": 0,
+           "endHour": 20,
+           "endMinute": 59,
+           "priceMin": 45000,  # $0.45 per kWh (peak pricing)
+           "priceMax": 45000,
+           "decimalPoint": 5
+       }
+   ]
+   
+   # Send TOU settings
+   await mqtt_client.publish(
+       topic=f"cmd/52/{device.device_info.mac_address}/ctrl/tou/rd",
+       payload={
+           "clientID": mqtt_client.client_id,
+           "protocolVersion": 2,
+           "request": {
+               "command": 33554439,
+               "deviceType": 52,
+               "macAddress": device.device_info.mac_address,
+               "controllerSerialNumber": device.controller_serial_number,
+               "reservationUse": 2,  # Enable TOU
+               "reservation": tou_periods
+           },
+           "requestTopic": f"cmd/52/{device.device_info.mac_address}/ctrl/tou/rd",
+           "responseTopic": "...",
+           "sessionID": str(int(time.time() * 1000))
+       }
+   )
+
+**Note:** TOU settings help the device optimize operation based on energy prices, potentially reducing costs during peak pricing periods.
+
+Anti-Legionella Monitoring
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Monitor the Anti-Legionella protection cycle that prevents bacterial growth:
+
+.. code:: python
+
+   # Check Anti-Legionella status
+   def on_status(topic: str, message: dict):
+       status = message.get('response', {}).get('status', {})
+       
+       # Check if feature is enabled
+       anti_legionella_enabled = status.get('antiLegionellaUse') == 2
+       
+       # Get cycle period in days
+       period_days = status.get('antiLegionellaPeriod', 0)
+       
+       # Check if currently running
+       is_running = status.get('antiLegionellaOperationBusy') == 2
+       
+       print(f"Anti-Legionella: {'Enabled' if anti_legionella_enabled else 'Disabled'}")
+       print(f"Cycle Period: Every {period_days} days")
+       print(f"Status: {'Running' if is_running else 'Idle'}")
+       
+       if is_running:
+           print("Device is heating to 140°F for bacterial disinfection")
+   
+   await mqtt_client.subscribe_device(device, on_status)
+   await mqtt_client.request_device_status(device)
+
+**Controlling Anti-Legionella:**
+
+.. code:: python
+
+   import time
+   
+   # Enable Anti-Legionella with 7-day cycle
+   await mqtt_client.publish(
+       topic=f"cmd/52/{device.device_info.mac_address}/ctrl",
+       payload={
+           "clientID": mqtt_client.client_id,
+           "protocolVersion": 2,
+           "request": {
+               "command": 33554472,
+               "deviceType": 52,
+               "macAddress": device.device_info.mac_address,
+               "mode": "anti-leg-on",
+               "param": [7],  # 7-day cycle period
+               "paramStr": ""
+           },
+           "requestTopic": f"cmd/52/{device.device_info.mac_address}/ctrl",
+           "responseTopic": "...",
+           "sessionID": str(int(time.time() * 1000))
+       }
+   )
+   
+   # Disable Anti-Legionella (not recommended - health risk)
+   await mqtt_client.publish(
+       topic=f"cmd/52/{device.device_info.mac_address}/ctrl",
+       payload={
+           "clientID": mqtt_client.client_id,
+           "protocolVersion": 2,
+           "request": {
+               "command": 33554473,
+               "deviceType": 52,
+               "macAddress": device.device_info.mac_address,
+               "mode": "anti-leg-off",
+               "param": [],
+               "paramStr": ""
+           },
+           "requestTopic": f"cmd/52/{device.device_info.mac_address}/ctrl",
+           "responseTopic": "...",
+           "sessionID": str(int(time.time() * 1000))
+       }
+   )
+
+**Important Safety Notes:**
+
+* Anti-Legionella heats water to 140°F (60°C) to kill Legionella bacteria
+* Requires a mixing valve to prevent scalding at taps
+* Cycle period is typically 7 days but can be configured for 1-30 days
+* During the cycle, the device will heat the entire tank to the disinfection temperature
+* This is a health safety feature recommended for all water heaters
+* **WARNING**: Disabling Anti-Legionella increases health risks - consult local codes
+
+TOU Quick Enable/Disable
+~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Toggle TOU functionality without modifying the schedule:
+
+.. code:: python
+
+   import time
+   
+   # Enable TOU
+   await mqtt_client.publish(
+       topic=f"cmd/52/{device.device_info.mac_address}/ctrl",
+       payload={
+           "clientID": mqtt_client.client_id,
+           "protocolVersion": 2,
+           "request": {
+               "command": 33554476,
+               "deviceType": 52,
+               "macAddress": device.device_info.mac_address,
+               "mode": "tou-on",
+               "param": [],
+               "paramStr": ""
+           },
+           "requestTopic": f"cmd/52/{device.device_info.mac_address}/ctrl",
+           "responseTopic": "...",
+           "sessionID": str(int(time.time() * 1000))
+       }
+   )
+   
+   # Disable TOU
+   await mqtt_client.publish(
+       topic=f"cmd/52/{device.device_info.mac_address}/ctrl",
+       payload={
+           "clientID": mqtt_client.client_id,
+           "protocolVersion": 2,
+           "request": {
+               "command": 33554475,
+               "deviceType": 52,
+               "macAddress": device.device_info.mac_address,
+               "mode": "tou-off",
+               "param": [],
+               "paramStr": ""
+           },
+           "requestTopic": f"cmd/52/{device.device_info.mac_address}/ctrl",
+           "responseTopic": "...",
+           "sessionID": str(int(time.time() * 1000))
+       }
+   )
+
+**Note:** The TOU schedule remains stored when disabled and will resume when re-enabled.
 
 Troubleshooting
 ---------------

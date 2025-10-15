@@ -381,34 +381,49 @@ paths:
                               example: 0
   /device/tou:
     get:
-      summary: Time of Use
-      description: Retrieves Time of Use (TOU) information for a device.
+      summary: Get Time of Use Settings
+      description: |
+        Retrieves Time of Use (TOU) pricing information for a device. This endpoint returns
+        both utility rate information and device-specific TOU schedules for demand response optimization.
+        
+        The response includes pricing schedules with time periods, days of week, and seasonal variations.
+        Prices are represented as integers scaled by the decimalPoint field (divide by 10^decimalPoint).
       parameters:
         - name: additionalValue
           in: query
           required: true
           schema:
             type: string
+          example: "5322"
+          description: Additional device identifier
         - name: controllerId
           in: query
           required: true
           schema:
             type: string
+          example: "56496061BT22230408"
+          description: Controller serial number
         - name: macAddress
           in: query
           required: true
           schema:
             type: string
+          example: "04786332fca0"
+          description: Device MAC address
         - name: userId
           in: query
           required: true
           schema:
             type: string
+          example: "user@example.com"
+          description: User email address
         - name: userType
           in: query
           required: true
           schema:
             type: string
+          example: "O"
+          description: User type (O = Owner)
       responses:
         '200':
           description: Time of Use information
@@ -452,35 +467,45 @@ paths:
                                 season:
                                   type: integer
                                   example: 3615
+                                  description: Season identifier bitfield for when this schedule applies
                                 interval:
                                   type: array
+                                  description: Array of time periods with pricing information
                                   items:
                                     type: object
                                     properties:
                                       priceMin:
                                         type: integer
                                         example: 36261
+                                        description: Minimum price (divide by 10^decimalPoint for actual price)
                                       endHour:
                                         type: integer
                                         example: 15
+                                        description: End hour for this pricing period (0-23)
                                       priceMax:
                                         type: integer
                                         example: 46378
+                                        description: Maximum price (divide by 10^decimalPoint for actual price)
                                       week:
                                         type: integer
                                         example: 124
+                                        description: Days of week bitfield (124=weekdays, 3=weekend, 127=all days)
                                       decimalPoint:
                                         type: integer
                                         example: 5
+                                        description: Decimal places for price calculation (e.g., 5 means divide by 100000)
                                       startHour:
                                         type: integer
                                         example: 0
+                                        description: Start hour for this pricing period (0-23)
                                       startMinute:
                                         type: integer
                                         example: 0
+                                        description: Start minute (0-59)
                                       endMinute:
                                         type: integer
                                         example: 59
+                                        description: End minute (0-59)
                           utility:
                             type: string
                             example: "Pacific Gas & Electric Co"
