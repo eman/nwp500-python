@@ -469,8 +469,9 @@ class DeviceStatus:
         unknown_fields = set(converted_data.keys()) - valid_fields
         if unknown_fields:
             # Check if any unknown fields are documented in constants
-            known_new_fields = unknown_fields & set(constants.KNOWN_FIRMWARE_FIELD_CHANGES.keys())
-            truly_unknown = unknown_fields - set(constants.KNOWN_FIRMWARE_FIELD_CHANGES.keys())
+            known_firmware_fields = set(constants.KNOWN_FIRMWARE_FIELD_CHANGES.keys())
+            known_new_fields = unknown_fields & known_firmware_fields
+            truly_unknown = unknown_fields - known_firmware_fields
 
             if known_new_fields:
                 _logger.info(
