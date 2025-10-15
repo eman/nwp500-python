@@ -275,8 +275,8 @@ The ``week`` field uses a bitfield where each bit represents a day:
 Common combinations:
 
 * ``127`` (all days): Sunday through Saturday
-* ``124`` (weekdays): Monday through Friday (2+4+8+16+32+64 = 126)
-* ``3`` (weekend): Saturday and Sunday (1+2 = 3)
+* ``62`` (weekdays): Monday through Friday
+* ``65`` (weekend): Saturday and Sunday
 * ``24`` (mid-week): Wednesday and Thursday (8+16 = 24)
 
 TOU (Time of Use) Settings

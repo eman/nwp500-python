@@ -488,8 +488,8 @@ paths:
                                         description: Maximum price (divide by 10^decimalPoint for actual price)
                                       week:
                                         type: integer
-                                        example: 124
-                                        description: Days of week bitfield (124=weekdays, 3=weekend, 127=all days)
+                                        example: 62
+                                        description: Days of week bitfield (62=weekdays [Mon–Fri], 65=weekend [Sat+Sun], 127=all days; Sunday=1, Monday=2, ..., Saturday=64)
                                       decimalPoint:
                                         type: integer
                                         example: 5

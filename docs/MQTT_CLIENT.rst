@@ -1225,8 +1225,8 @@ Manage programmed temperature and mode changes:
 **Week Bitfield Values:**
 
 * ``127`` - All days (Sunday through Saturday)
-* ``124`` - Weekdays (Monday through Friday)
-* ``3`` - Weekend (Saturday and Sunday)
+* ``62`` - Weekdays (Monday through Friday)
+* ``65`` - Weekend (Saturday and Sunday)
 * ``31`` - Sunday through Thursday
 
 Time of Use (TOU) Pricing
