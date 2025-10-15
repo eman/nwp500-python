@@ -38,15 +38,15 @@ async def main() -> None:
         await mqtt_client.connect()
 
         # Listen for reservation responses so we can print the updated schedule
-        response_topic = (
-            f"cmd/{device.device_info.device_type}/{mqtt_client.config.client_id}/res/rsv/rd"
-        )
+        response_topic = f"cmd/{device.device_info.device_type}/{mqtt_client.config.client_id}/res/rsv/rd"
 
         def on_reservation_update(topic: str, message: dict[str, Any]) -> None:
             response = message.get("response", {})
             reservations = response.get("reservation", [])
             print("\nReceived reservation response:")
-            print(f"  reservationUse: {response.get('reservationUse')} (1=enabled, 2=disabled)")
+            print(
+                f"  reservationUse: {response.get('reservationUse')} (1=enabled, 2=disabled)"
+            )
             print(f"  entries: {len(reservations)}")
             for idx, entry in enumerate(reservations, start=1):
                 week_days = NavienAPIClient.decode_week_bitfield(entry.get("week", 0))
@@ -65,7 +65,9 @@ async def main() -> None:
         await mqtt_client.subscribe(response_topic, on_reservation_update)
 
         print("Sending reservation program update...")
-        await mqtt_client.update_reservations(device, [weekday_reservation], enabled=True)
+        await mqtt_client.update_reservations(
+            device, [weekday_reservation], enabled=True
+        )
 
         print("Requesting current reservation program...")
         await mqtt_client.request_reservations(device)
