@@ -16,15 +16,16 @@ CMD_ENERGY_USAGE_QUERY = 16777225
 KNOWN_FIRMWARE_FIELD_CHANGES = {
     # Format: "field_name": {"introduced_in": "version", "description": "what it does"}
     "heatMinOpTemperature": {
-        "introduced_in": "unknown",  # First observed in production devices
+        "introduced_in": "Controller: 184614912, WiFi: 34013184",
         "description": "Minimum operating temperature for heating element",
         "conversion": "raw + 20",
     },
 }
 
-# Latest known firmware versions (update as new versions are discovered)
+# Latest known firmware versions (as of 2025-10-15)
+# These versions have been observed with heatMinOpTemperature field
 LATEST_KNOWN_FIRMWARE = {
-    "controllerSwVersion": None,  # Update when firmware version is observed
-    "panelSwVersion": None,
-    "wifiSwVersion": None,
+    "controllerSwVersion": 184614912,  # Observed on NWP500 device
+    "panelSwVersion": 0,  # Panel SW version not used on this device
+    "wifiSwVersion": 34013184,  # Observed on NWP500 device
 }

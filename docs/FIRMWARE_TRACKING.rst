@@ -38,7 +38,7 @@ The following table tracks known fields that have been introduced in firmware up
      - Conversion
      - Description
    * - ``heatMinOpTemperature``
-     - Unknown version
+     - Controller: 184614912, WiFi: 34013184
      - ``raw + 20``
      - Minimum operating temperature for the heating element. Sets the lower threshold at which the heating element can operate.
 
@@ -125,13 +125,18 @@ Example entry in ``constants.py``:
 Firmware Version History
 ------------------------
 
-This section will be updated as we learn about firmware versions and their changes.
+This section tracks observed firmware versions and their associated changes.
 
-**Latest Known Versions** (as of last update):
+**Latest Known Versions** (as of 2025-10-15):
 
-- Controller SW Version: TBD
-- Panel SW Version: TBD  
-- WiFi SW Version: TBD
+- Controller SW Version: 184614912
+- Panel SW Version: 0 (not used on NWP500 devices)
+- WiFi SW Version: 34013184
+
+**Observed Features:**
+
+- These versions include support for ``heatMinOpTemperature`` field
+- Recirculation pump fields (``recirc*``) are present but not yet documented
 
 *Note: This tracking system was implemented on 2025-10-15. Historical firmware information is not available.*
 

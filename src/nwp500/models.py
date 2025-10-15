@@ -553,6 +553,9 @@ class DeviceFeature:
         # Copy data to avoid modifying the original dictionary
         converted_data = data.copy()
 
+        # Get valid field names for this class
+        valid_fields = {f.name for f in cls.__dataclass_fields__.values()}
+
         # Convert temperature fields with 'raw + 20' formula (same as DeviceStatus)
         temp_add_20_fields = [
             "dhwTemperatureMin",
@@ -577,6 +580,16 @@ class DeviceFeature:
                 )
                 # Default to FAHRENHEIT for unknown temperature types
                 converted_data["temperatureType"] = TemperatureUnit.FAHRENHEIT
+
+        # Filter out any unknown fields (similar to DeviceStatus)
+        unknown_fields = set(converted_data.keys()) - valid_fields
+        if unknown_fields:
+            _logger.info(
+                "Ignoring unknown fields from device feature: %s. "
+                "This may indicate new device capabilities from a firmware update.",
+                unknown_fields,
+            )
+            converted_data = {k: v for k, v in converted_data.items() if k in valid_fields}
 
         return cls(**converted_data)
 
