@@ -81,6 +81,7 @@ def _redact(obj, keys_to_redact=None):
             "token",
             "auth",
             "macAddress",
+            "mac_address",
             "email",
         }
 
