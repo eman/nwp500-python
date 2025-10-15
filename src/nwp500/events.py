@@ -7,6 +7,7 @@ detection.
 """
 
 import asyncio
+import inspect
 import logging
 from collections import defaultdict
 from dataclasses import dataclass
@@ -203,11 +204,11 @@ class EventEmitter:
 
         for listener in listeners:
             try:
-                # Call handler (supports both sync and async)
-                if asyncio.iscoroutinefunction(listener.callback):
-                    await listener.callback(*args, **kwargs)
-                else:
-                    listener.callback(*args, **kwargs)
+                # Call handler and await if it returned an awaitable.
+                result = listener.callback(*args, **kwargs)
+
+                if inspect.isawaitable(result):
+                    await result
 
                 called_count += 1
 
