@@ -310,6 +310,17 @@ class DeviceStatus:
     touOverrideStatus: int
     totalEnergyCapacity: float
     availableEnergyCapacity: float
+    recircOperationBusy: bool
+    recircReservationUse: bool
+    recircOperationMode: int
+    recircTempSetting: float
+    recircTemperature: float
+    recircPumpOperationStatus: int
+    recircFaucetTemperature: float
+    recircHotBtnReady: int
+    recircOperationReason: int
+    recircDhwFlowRate: float
+    recircErrorStatus: int
 
     @classmethod
     def from_dict(cls, data: dict):
@@ -357,6 +368,8 @@ class DeviceStatus:
             "heatLowerUse",
             "scaldUse",
             "airFilterAlarmUse",
+            "recircOperationBusy",
+            "recircReservationUse",
         ]
 
         # Convert using the device's encoding: 0 or 1=false, 2=true
@@ -380,6 +393,9 @@ class DeviceStatus:
             "heLowerOnTempSetting",
             "heLowerOffTempSetting",
             "heatMinOpTemperature",
+            "recircTempSetting",
+            "recircTemperature",
+            "recircFaucetTemperature",
         ]
         for field_name in add_20_fields:
             if field_name in converted_data:
@@ -397,6 +413,7 @@ class DeviceStatus:
             "heUpperOffDiffTempSetting",
             "heLowerOnDiffTempSetting",
             "heLowerOffDiffTempSetting",
+            "recircDhwFlowRate",
         ]
         for field_name in div_10_fields:
             if field_name in converted_data:
