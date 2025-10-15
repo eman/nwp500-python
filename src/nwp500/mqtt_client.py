@@ -793,7 +793,13 @@ class NavienMqttClient(EventEmitter):
                 raise RuntimeError("Not connected to MQTT broker")
 
         _logger.debug(f"Publishing to topic: {topic}")
-        _logger.debug("Payload: %s", _redact(payload))
+        _logger.debug(
+            "Payload: %s",
+            _redact(
+                payload,
+                keys_to_redact=["macAddress", "clientID", "sessionID", "accessKeyId", "secretAccessKey", "sessionToken", "password", "email"],
+            ),
+        )
 
         try:
             # Serialize to JSON
