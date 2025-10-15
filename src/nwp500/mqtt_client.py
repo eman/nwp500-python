@@ -797,7 +797,16 @@ class NavienMqttClient(EventEmitter):
             "Payload: %s",
             _redact(
                 payload,
-                keys_to_redact=["macAddress", "clientID", "sessionID", "accessKeyId", "secretAccessKey", "sessionToken", "password", "email"],
+                keys_to_redact=[
+                    "macAddress",
+                    "clientID",
+                    "sessionID",
+                    "accessKeyId",
+                    "secretAccessKey",
+                    "sessionToken",
+                    "password",
+                    "email",
+                ],
             ),
         )
 
