@@ -311,6 +311,8 @@ class EventEmitter:
         _logger.debug(f"Removed all {total_count} listener(s)")
         return total_count
 
+# End of events module
+
     async def wait_for(
         self,
         event: str,
