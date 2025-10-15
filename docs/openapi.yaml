@@ -1,5 +1,5 @@
 
-openapi: 3.0.0
+openapi: 3.1.0
 info:
   title: Navien Smart Control API
   description: |
@@ -157,6 +157,7 @@ paths:
                   example: "user@example.com"
       responses:
         '200':
+          description: Push token updated successfully
           content:
             application/json:
               schema:
@@ -537,6 +538,7 @@ paths:
                   type: string
       responses:
         '200':
+          description: Push token updated successfully
           content:
             application/json:
               schema:

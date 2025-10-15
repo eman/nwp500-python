@@ -275,6 +275,12 @@ The ``week`` field uses a bitfield where each bit represents a day:
 Common combinations:
 
 * ``127`` (all days): Sunday through Saturday
+* ``62`` (weekdays): Monday through Friday (2+4+8+16+32=62)
+* ``65`` (weekend): Saturday and Sunday (64+1=65)
+
+Common combinations:
+
+* ``127`` (all days): Sunday through Saturday
 * ``62`` (weekdays): Monday through Friday
 * ``65`` (weekend): Saturday and Sunday
 * ``24`` (mid-week): Wednesday and Thursday (8+16 = 24)
