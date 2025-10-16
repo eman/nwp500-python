@@ -22,6 +22,7 @@ from enum import Enum
 from typing import Any, Callable, Optional
 
 from awscrt import mqtt
+from awscrt.exceptions import AwsCrtError
 from awsiot import mqtt_connection_builder
 
 from .auth import NavienAuthClient
@@ -116,6 +117,35 @@ def _redact(obj, keys_to_redact=None):
         return s
     except Exception:
         return "<UNREPRABLE>"
+
+
+def _redact_topic(topic: str) -> str:
+    """
+    Redact sensitive information from MQTT topic strings.
+
+    Topics often contain MAC addresses or device unique identifiers, e.g.:
+    - cmd/52/navilink-04786332fca0/st/did
+    - cmd/52/navilink-04786332fca0/ctrl
+    - cmd/52/04786332fca0/ctrl
+    - or with colons/hyphens (04:78:63:32:fc:a0 or 04-78-63-32-fc-a0)
+
+    Args:
+        topic: MQTT topic string
+
+    Returns:
+        Topic with MAC addresses redacted
+    """
+    import re
+
+    # Redact navilink-<mac>
+    topic = re.sub(r"(navilink-)[0-9a-fA-F]{12}", r"\1REDACTED", topic)
+    # Redact bare 12-hex MACs (lower/upper)
+    topic = re.sub(r"\b[0-9a-fA-F]{12}\b", "REDACTED", topic)
+    # Redact colon-delimited MAC format (e.g., 04:78:63:32:fc:a0)
+    topic = re.sub(r"\b([0-9a-fA-F]{2}:){5}[0-9a-fA-F]{2}\b", "REDACTED", topic)
+    # Redact hyphen-delimited MAC format (e.g., 04-78-63-32-fc-a0)
+    topic = re.sub(r"\b([0-9a-fA-F]{2}-){5}[0-9a-fA-F]{2}\b", "REDACTED", topic)
+    return topic
 
 
 @dataclass
@@ -224,6 +254,7 @@ class NavienMqttClient(EventEmitter):
         - error_cleared: Error code cleared (error_code)
         - connection_interrupted: Connection lost (error)
         - connection_resumed: Connection restored (return_code, session_present)
+        - reconnection_failed: Reconnection permanently failed after max attempts (attempt_count)
     """
 
     def __init__(
@@ -428,6 +459,10 @@ class NavienMqttClient(EventEmitter):
                 f"Failed to reconnect after {self.config.max_reconnect_attempts} attempts. "
                 "Manual reconnection required."
             )
+            # Stop all periodic tasks to reduce log noise
+            await self._stop_all_periodic_tasks()
+            # Emit event so users can take action
+            self._schedule_coroutine(self.emit("reconnection_failed", self._reconnect_attempts))
 
     async def _send_queued_commands(self):
         """
@@ -461,7 +496,9 @@ class NavienMqttClient(EventEmitter):
                 )
             except Exception as e:
                 failed_count += 1
-                _logger.error(f"Failed to send queued command to '{command.topic}': {e}")
+                _logger.error(
+                    f"Failed to send queued command to '{_redact_topic(command.topic)}': {e}"
+                )
                 # Re-queue if there's room
                 if len(self._command_queue) < self.config.max_queued_commands:
                     self._command_queue.append(command)
@@ -728,7 +765,7 @@ class NavienMqttClient(EventEmitter):
             return packet_id
 
         except Exception as e:
-            _logger.error(f"Failed to subscribe to '{topic}': {e}")
+            _logger.error(f"Failed to subscribe to '{_redact_topic(topic)}': {e}")
             raise
 
     async def unsubscribe(self, topic: str):
@@ -758,7 +795,7 @@ class NavienMqttClient(EventEmitter):
             _logger.info(f"Unsubscribed from '{topic}'")
 
         except Exception as e:
-            _logger.error(f"Failed to unsubscribe from '{topic}': {e}")
+            _logger.error(f"Failed to unsubscribe from '{_redact_topic(topic)}': {e}")
             raise
 
     async def publish(
@@ -813,7 +850,26 @@ class NavienMqttClient(EventEmitter):
             return packet_id
 
         except Exception as e:
-            _logger.error(f"Failed to publish to '{topic}': {e}")
+            # Handle clean session cancellation gracefully
+            # Check exception type and name attribute for proper error identification
+            if (
+                isinstance(e, AwsCrtError)
+                and e.name == "AWS_ERROR_MQTT_CANCELLED_FOR_CLEAN_SESSION"
+            ):
+                _logger.warning(
+                    "Publish cancelled due to clean session. This is expected during reconnection."
+                )
+                # Queue the command if queue is enabled
+                if self.config.enable_command_queue:
+                    _logger.debug("Queuing command due to clean session cancellation")
+                    self._queue_command(topic, payload, qos)
+                    return 0  # Return 0 to indicate command was queued
+                # Otherwise, raise an error so the caller can handle the failure
+                raise RuntimeError(
+                    "Publish cancelled due to clean session and command queue is disabled"
+                )
+
+            _logger.error(f"Failed to publish to '{_redact_topic(topic)}': {e}")
             raise
 
     # Navien-specific convenience methods
@@ -1776,15 +1832,39 @@ class NavienMqttClient(EventEmitter):
                 f"(every {period_seconds}s)"
             )
 
+            # Track consecutive skips for throttled logging
+            consecutive_skips = 0
+
             while True:
                 try:
                     if not self._connected:
-                        _logger.warning(
-                            "Not connected, skipping %s request for %s",
-                            request_type.value,
-                            redacted_device_id,
-                        )
+                        consecutive_skips += 1
+                        # Log warning only on first skip and then every 10th skip to reduce noise
+                        if consecutive_skips == 1 or consecutive_skips % 10 == 0:
+                            _logger.warning(
+                                "Not connected, skipping %s request for %s (skipped %d time%s)",
+                                request_type.value,
+                                redacted_device_id,
+                                consecutive_skips,
+                                "s" if consecutive_skips > 1 else "",
+                            )
+                        else:
+                            _logger.debug(
+                                "Not connected, skipping %s request for %s",
+                                request_type.value,
+                                redacted_device_id,
+                            )
                     else:
+                        # Reset skip counter when connected
+                        if consecutive_skips > 0:
+                            _logger.info(
+                                "Reconnected, resuming %s requests for %s (had skipped %d)",
+                                request_type.value,
+                                redacted_device_id,
+                                consecutive_skips,
+                            )
+                            consecutive_skips = 0
+
                         # Send appropriate request type
                         if request_type == PeriodicRequestType.DEVICE_INFO:
                             await self.request_device_info(device)
@@ -1806,13 +1886,26 @@ class NavienMqttClient(EventEmitter):
                     )
                     break
                 except Exception as e:
-                    _logger.error(
-                        "Error in periodic %s request for %s: %s",
-                        request_type.value,
-                        redacted_device_id,
-                        e,
-                        exc_info=True,
-                    )
+                    # Handle clean session cancellation gracefully (expected during reconnection)
+                    # Check exception type and name attribute for proper error identification
+                    if (
+                        isinstance(e, AwsCrtError)
+                        and e.name == "AWS_ERROR_MQTT_CANCELLED_FOR_CLEAN_SESSION"
+                    ):
+                        _logger.debug(
+                            "Periodic %s request cancelled due to clean session for %s. "
+                            "This is expected during reconnection.",
+                            request_type.value,
+                            redacted_device_id,
+                        )
+                    else:
+                        _logger.error(
+                            "Error in periodic %s request for %s: %s",
+                            request_type.value,
+                            redacted_device_id,
+                            e,
+                            exc_info=True,
+                        )
                     # Continue despite errors
                     await asyncio.sleep(period_seconds)
 
@@ -1880,6 +1973,16 @@ class NavienMqttClient(EventEmitter):
                 + (f" (type={request_type.value})" if request_type else "")
             )
 
+    async def _stop_all_periodic_tasks(self) -> None:
+        """
+        Stop all periodic tasks.
+
+        This is called internally when reconnection fails permanently
+        to reduce log noise from tasks trying to send requests while disconnected.
+        """
+        # Delegate to public method with specific reason
+        await self.stop_all_periodic_tasks(_reason="connection failure")
+
     # Convenience methods
     async def start_periodic_device_info_requests(
         self, device: Device, period_seconds: float = 300.0
@@ -1939,11 +2042,14 @@ class NavienMqttClient(EventEmitter):
         """
         await self.stop_periodic_requests(device, PeriodicRequestType.DEVICE_STATUS)
 
-    async def stop_all_periodic_tasks(self) -> None:
+    async def stop_all_periodic_tasks(self, _reason: Optional[str] = None) -> None:
         """
         Stop all periodic request tasks.
 
         This is automatically called when disconnecting.
+
+        Args:
+            _reason: Internal parameter for logging context (e.g., "connection failure")
 
         Example:
             >>> await mqtt_client.stop_all_periodic_tasks()
@@ -1951,7 +2057,9 @@ class NavienMqttClient(EventEmitter):
         if not self._periodic_tasks:
             return
 
-        _logger.info(f"Stopping {len(self._periodic_tasks)} periodic task(s)")
+        task_count = len(self._periodic_tasks)
+        reason_msg = f" due to {_reason}" if _reason else ""
+        _logger.info(f"Stopping {task_count} periodic task(s){reason_msg}")
 
         # Cancel all tasks
         for task in self._periodic_tasks.values():
@@ -2000,6 +2108,31 @@ class NavienMqttClient(EventEmitter):
         Returns:
             Number of commands that were cleared
         """
+        count = len(self._command_queue)
+        if count > 0:
+            self._command_queue.clear()
+            _logger.info(f"Cleared {count} queued command(s)")
+        return count
+
+    async def reset_reconnect(self) -> None:
+        """
+        Reset reconnection state and trigger a new reconnection attempt.
+
+        This method resets the reconnection attempt counter and initiates
+        a new reconnection cycle. Useful for implementing custom recovery
+        logic after max reconnection attempts have been exhausted.
+
+        Example:
+            >>> # In a reconnection_failed event handler
+            >>> await mqtt_client.reset_reconnect()
+
+        Note:
+            This should typically only be called after a reconnection_failed
+            event, not during normal operation.
+        """
+        self._reconnect_attempts = 0
+        self._manual_disconnect = False
+        await self._start_reconnect_task()
         count = len(self._command_queue)
         if count > 0:
             self._command_queue.clear()
