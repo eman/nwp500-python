@@ -25,16 +25,20 @@ def display_anti_legionella_status(status: dict[str, Any], label: str = "") -> N
     use_value = status.get("antiLegionellaUse")
     enabled = use_value == 2
     busy = status.get("antiLegionellaOperationBusy") == 2
-    
+
     if period is not None and use_value is not None:
         prefix = f"{label}: " if label else ""
         status_str = "ENABLED" if enabled else "DISABLED"
         running_str = " (running now)" if busy else ""
-        
+
         print(f"{prefix}Anti-Legionella is {status_str}")
         print(f"  - Period: every {period} day(s)")
-        print(f"  - Status: {'Running disinfection cycle' if busy else 'Not running'}{running_str}")
-        print(f"  - Raw values: antiLegionellaUse={use_value}, antiLegionellaPeriod={period}, busy={busy}")
+        print(
+            f"  - Status: {'Running disinfection cycle' if busy else 'Not running'}{running_str}"
+        )
+        print(
+            f"  - Raw values: antiLegionellaUse={use_value}, antiLegionellaPeriod={period}, busy={busy}"
+        )
 
 
 async def main() -> None:
@@ -73,7 +77,7 @@ async def main() -> None:
                 status_received.set()
                 print("[DEBUG] Anti-Legionella status captured")
             else:
-                print(f"[DEBUG] Message doesn't contain antiLegionellaPeriod")
+                print("[DEBUG] Message doesn't contain antiLegionellaPeriod")
 
         # Listen for status updates
         device_type = device.device_info.device_type
@@ -82,7 +86,7 @@ async def main() -> None:
         response_topic = f"cmd/{device_type}/{device_topic}/#"
         print(f"[DEBUG] Subscribing to: {response_topic}")
         await mqtt_client.subscribe(response_topic, on_status)
-        print(f"[DEBUG] Subscription successful")
+        print("[DEBUG] Subscription successful")
         await asyncio.sleep(1)  # Give subscription time to settle
 
         # Step 1: Get initial status
@@ -91,14 +95,14 @@ async def main() -> None:
         print("=" * 70)
         status_received.clear()
         await mqtt_client.request_device_status(device)
-        
+
         try:
             await asyncio.wait_for(status_received.wait(), timeout=10)
             display_anti_legionella_status(latest_status, "INITIAL STATE")
         except asyncio.TimeoutError:
             print("Timeout waiting for status response")
             return
-        
+
         print()
         await asyncio.sleep(2)
 
@@ -108,13 +112,13 @@ async def main() -> None:
         print("=" * 70)
         status_received.clear()
         await mqtt_client.enable_anti_legionella(device, period_days=7)
-        
+
         try:
             await asyncio.wait_for(status_received.wait(), timeout=10)
             display_anti_legionella_status(latest_status, "AFTER ENABLE")
         except asyncio.TimeoutError:
             print("Timeout waiting for status response after enable")
-        
+
         print()
         await asyncio.sleep(2)
 
@@ -125,13 +129,13 @@ async def main() -> None:
         print("=" * 70)
         status_received.clear()
         await mqtt_client.disable_anti_legionella(device)
-        
+
         try:
             await asyncio.wait_for(status_received.wait(), timeout=10)
             display_anti_legionella_status(latest_status, "AFTER DISABLE")
         except asyncio.TimeoutError:
             print("Timeout waiting for status response after disable")
-        
+
         print()
         await asyncio.sleep(2)
 
@@ -141,13 +145,13 @@ async def main() -> None:
         print("=" * 70)
         status_received.clear()
         await mqtt_client.enable_anti_legionella(device, period_days=14)
-        
+
         try:
             await asyncio.wait_for(status_received.wait(), timeout=10)
             display_anti_legionella_status(latest_status, "AFTER RE-ENABLE")
         except asyncio.TimeoutError:
             print("Timeout waiting for status response after re-enable")
-        
+
         print()
         await asyncio.sleep(1)
 
