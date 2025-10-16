@@ -864,8 +864,10 @@ class NavienMqttClient(EventEmitter):
                     _logger.debug("Queuing command due to clean session cancellation")
                     self._queue_command(topic, payload, qos)
                     return 0  # Return 0 to indicate command was queued
-                # Otherwise, treat as a non-fatal error for the caller
-                return 0
+                # Otherwise, raise an error so the caller can handle the failure
+                raise RuntimeError(
+                    "Publish cancelled due to clean session and command queue is disabled"
+                )
 
             _logger.error(f"Failed to publish to '{_redact_topic(topic)}': {e}")
             raise
@@ -2106,6 +2108,31 @@ class NavienMqttClient(EventEmitter):
         Returns:
             Number of commands that were cleared
         """
+        count = len(self._command_queue)
+        if count > 0:
+            self._command_queue.clear()
+            _logger.info(f"Cleared {count} queued command(s)")
+        return count
+
+    async def reset_reconnect(self) -> None:
+        """
+        Reset reconnection state and trigger a new reconnection attempt.
+
+        This method resets the reconnection attempt counter and initiates
+        a new reconnection cycle. Useful for implementing custom recovery
+        logic after max reconnection attempts have been exhausted.
+
+        Example:
+            >>> # In a reconnection_failed event handler
+            >>> await mqtt_client.reset_reconnect()
+
+        Note:
+            This should typically only be called after a reconnection_failed
+            event, not during normal operation.
+        """
+        self._reconnect_attempts = 0
+        self._manual_disconnect = False
+        await self._start_reconnect_task()
         count = len(self._command_queue)
         if count > 0:
             self._command_queue.clear()

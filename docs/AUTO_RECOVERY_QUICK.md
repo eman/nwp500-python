@@ -5,12 +5,13 @@
 Copy this class into your project for production-ready automatic recovery:
 
 ```python
+import asyncio
 from nwp500 import NavienMqttClient
 from nwp500.mqtt_client import MqttConnectionConfig
 
 class ResilientMqttClient:
     """MQTT client with automatic recovery from permanent connection failures."""
-    
+
     def __init__(self, auth_client, config=None):
         self.auth_client = auth_client
         self.config = config or MqttConnectionConfig()
@@ -29,28 +30,34 @@ class ResilientMqttClient:
     async def _create_client(self):
         if self.mqtt_client and self.mqtt_client.is_connected:
             await self.mqtt_client.disconnect()
-        
+
         self.mqtt_client = NavienMqttClient(self.auth_client, self.config)
         self.mqtt_client.on("reconnection_failed", self._handle_recovery)
         await self.mqtt_client.connect()
-        
+
         if self.device and self.status_callback:
-            await self.mqtt_client.subscribe_device_status(self.device, self.status_callback)
+            await self.mqtt_client.subscribe_device_status(
+                self.device, self.status_callback
+            )
             await self.mqtt_client.start_periodic_device_status_requests(self.device)
 
     async def _handle_recovery(self, attempts):
         self.recovery_attempt += 1
         if self.recovery_attempt >= self.max_recovery_attempts:
             return  # Give up
-        
+
         await asyncio.sleep(self.recovery_delay)
-        
+
         try:
             await self.auth_client.refresh_token()
             await self._create_client()
             self.recovery_attempt = 0  # Reset on success
-        except Exception:
-            pass  # Will retry on next reconnection_failed
+        except Exception as e:
+            # Log the error instead of silently passing
+            import logging
+
+            logging.getLogger(__name__).warning(f"Recovery attempt failed: {e}")
+            # Will retry on next reconnection_failed
 
     async def disconnect(self):
         if self.mqtt_client:

@@ -51,6 +51,7 @@ class ResilientMqttClient:
         self.max_recovery_attempts = 10
         self.recovery_delay = 60.0  # seconds
         self.recovery_attempt = 0
+        self._recovery_in_progress = False  # Guard against concurrent recovery
 
     async def connect(self, device, status_callback=None):
         """
@@ -105,28 +106,36 @@ class ResilientMqttClient:
         3. Recreate the MQTT client
         4. Restore all subscriptions
         """
-        self.recovery_attempt += 1
-
-        logger.error(
-            f"Reconnection failed after {attempts} attempts. "
-            f"Starting recovery attempt {self.recovery_attempt}/{self.max_recovery_attempts}"
-        )
-
-        if self.recovery_attempt >= self.max_recovery_attempts:
-            logger.error(
-                "Maximum recovery attempts reached. Manual intervention required."
+        # Prevent overlapping recovery attempts
+        if self._recovery_in_progress:
+            logger.debug(
+                "Recovery already in progress, ignoring reconnection_failed event"
             )
-            # In production, you might want to:
-            # - Send alert/notification
-            # - Trigger application restart
-            # - Log to monitoring system
             return
 
-        # Wait before attempting recovery
-        logger.info(f"Waiting {self.recovery_delay} seconds before recovery...")
-        await asyncio.sleep(self.recovery_delay)
+        self._recovery_in_progress = True
+        self.recovery_attempt += 1
 
         try:
+            logger.error(
+                f"Reconnection failed after {attempts} attempts. "
+                f"Starting recovery attempt {self.recovery_attempt}/{self.max_recovery_attempts}"
+            )
+
+            if self.recovery_attempt >= self.max_recovery_attempts:
+                logger.error(
+                    "Maximum recovery attempts reached. Manual intervention required."
+                )
+                # In production, you might want to:
+                # - Send alert/notification
+                # - Trigger application restart
+                # - Log to monitoring system
+                return
+
+            # Wait before attempting recovery
+            logger.info(f"Waiting {self.recovery_delay} seconds before recovery...")
+            await asyncio.sleep(self.recovery_delay)
+
             # Refresh authentication tokens
             logger.info("Refreshing authentication tokens...")
             await self.auth_client.refresh_token()
@@ -143,6 +152,8 @@ class ResilientMqttClient:
         except Exception as e:
             logger.error(f"Recovery attempt failed: {e}")
             # The next reconnection_failed event will trigger another recovery attempt
+        finally:
+            self._recovery_in_progress = False
 
     async def disconnect(self):
         """Disconnect from MQTT."""
