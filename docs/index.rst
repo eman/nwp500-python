@@ -315,6 +315,8 @@ Documentation
    Command Queue <COMMAND_QUEUE>
    Event Emitter <EVENT_EMITTER>
    Energy Monitoring <ENERGY_MONITORING>
+   Auto-Recovery Quick Reference <AUTO_RECOVERY_QUICK>
+   Auto-Recovery Complete Guide <AUTO_RECOVERY>
 
 .. toctree::
    :maxdepth: 2
