@@ -852,8 +852,7 @@ class NavienMqttClient(EventEmitter):
                 and e.name == "AWS_ERROR_MQTT_CANCELLED_FOR_CLEAN_SESSION"
             ):
                 _logger.warning(
-                    f"Publish cancelled due to clean session (topic: {_redact_topic(topic)}). "
-                    "This is expected during reconnection."
+                    "Publish cancelled due to clean session. This is expected during reconnection."
                 )
                 # Queue the command if queue is enabled
                 if self.config.enable_command_queue:
