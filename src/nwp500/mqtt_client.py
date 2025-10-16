@@ -829,8 +829,8 @@ class NavienMqttClient(EventEmitter):
                     _logger.debug("Queuing command due to clean session cancellation")
                     self._queue_command(topic, payload, qos)
                     return 0  # Return 0 to indicate command was queued
-                # Otherwise, treat as a non-fatal error for the caller
-                return 0
+                # Otherwise, raise an error so the caller can handle the failure
+                raise RuntimeError("Publish cancelled due to clean session and command queue is disabled")
 
             _logger.error(f"Failed to publish to '{topic}': {e}")
             raise
