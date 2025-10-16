@@ -1278,10 +1278,26 @@ class NavienMqttClient(EventEmitter):
         return await self.publish(topic, command)
 
     async def enable_anti_legionella(self, device: Device, period_days: int) -> int:
-        """Enable Anti-Legionella disinfection with a 1-30 day cycle."""
-        # See docs/MQTT_MESSAGES.rst "Anti-Legionella Control" for the
-        # authoritative command code (33554472) and expected payload
-        # format: {"mode": "anti-leg-on", "param": [<period_days>], "paramStr": ""}
+        """Enable Anti-Legionella disinfection with a 1-30 day cycle.
+        
+        This command has been confirmed through HAR analysis of the official Navien app.
+        When sent, the device responds with antiLegionellaUse=2 (enabled) and 
+        antiLegionellaPeriod set to the specified value.
+        
+        See docs/MQTT_MESSAGES.rst "Anti-Legionella Control" for the authoritative 
+        command code (33554472) and expected payload format: 
+        {"mode": "anti-leg-on", "param": [<period_days>], "paramStr": ""}
+        
+        Args:
+            device: The device to control
+            period_days: Days between disinfection cycles (1-30)
+            
+        Returns:
+            The message ID of the published command
+            
+        Raises:
+            ValueError: If period_days is not in the valid range [1, 30]
+        """
         if not 1 <= period_days <= 30:
             raise ValueError("period_days must be between 1 and 30")
 
@@ -1305,7 +1321,19 @@ class NavienMqttClient(EventEmitter):
         return await self.publish(topic, command)
 
     async def disable_anti_legionella(self, device: Device) -> int:
-        """Disable the Anti-Legionella disinfection cycle."""
+        """Disable the Anti-Legionella disinfection cycle.
+        
+        This command has been confirmed through HAR analysis of the official Navien app.
+        When sent, the device responds with antiLegionellaUse=1 (disabled) while
+        antiLegionellaPeriod retains its previous value.
+        
+        The correct command code is 33554471 (not 33554473 as previously assumed).
+        
+        See docs/MQTT_MESSAGES.rst "Anti-Legionella Control" section for details.
+        
+        Returns:
+            The message ID of the published command
+        """
         device_id = device.device_info.mac_address
         device_type = device.device_info.device_type
         additional_value = device.device_info.additional_value

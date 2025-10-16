@@ -54,7 +54,7 @@ Control messages are sent to the ``cmd/{deviceType}/{deviceId}/ctrl`` topic. The
 * DHW temperature control: 33554464
 * Reservation management: 16777226
 * TOU (Time of Use) settings: 33554439
-* Anti-Legionella control: 33554472 (enable) or 33554473 (disable)
+* Anti-Legionella control: 33554471 (disable) or 33554472 (enable)
 * TOU enable/disable: 33554475 (disable) or 33554476 (enable)
 
 Power Control
@@ -148,13 +148,13 @@ Anti-Legionella Control
 * **Topic**: ``cmd/{deviceType}/{deviceId}/ctrl``
 * **Command Codes**: 
   
+  * ``33554471`` - Disable Anti-Legionella
   * ``33554472`` - Enable Anti-Legionella (with cycle period)
-  * ``33554473`` - Disable Anti-Legionella
 
-* ``mode``: "anti-leg-on" (for enable)
+* ``mode``: "anti-leg-on" (for enable) or "anti-leg-off" (for disable)
 
   * Enables or configures Anti-Legionella protection
-  * ``param``\ : ``[<period_days>]`` - Days between disinfection cycles (1-30)
+  * ``param``\ : ``[<period_days>]`` for enable (1-30 days), ``[]`` for disable
   * ``paramStr``\ : ``""``
 
 **Enable Anti-Legionella Example:**
@@ -178,6 +178,13 @@ Anti-Legionella Control
      "sessionID": "..."
    }
 
+**Observed Response After Enable:**
+
+After sending the enable command, the device status shows:
+
+* ``antiLegionellaUse`` changes from 1 (disabled) to 2 (enabled)
+* ``antiLegionellaPeriod`` is set to the specified period value
+
 **Disable Anti-Legionella Example:**
 
 .. code-block:: json
@@ -187,7 +194,7 @@ Anti-Legionella Control
      "protocolVersion": 2,
      "request": {
        "additionalValue": "...",
-       "command": 33554473,
+       "command": 33554471,
        "deviceType": 52,
        "macAddress": "...",
        "mode": "anti-leg-off",
@@ -198,6 +205,13 @@ Anti-Legionella Control
      "responseTopic": "...",
      "sessionID": "..."
    }
+
+**Observed Response After Disable:**
+
+After sending the disable command, the device status shows:
+
+* ``antiLegionellaUse`` changes from 2 (enabled) to 1 (disabled)
+* ``antiLegionellaPeriod`` retains its previous value
 
 .. warning::
    Disabling Anti-Legionella protection may increase health risks. Legionella bacteria can grow
@@ -460,14 +474,23 @@ When the device is in vacation mode (``dhwOperationSetting: 5``), the status inc
 
 The device includes Anti-Legionella protection that periodically heats water to 140°F (60°C) to prevent bacterial growth:
 
-* ``antiLegionellaUse``\ : Anti-Legionella enable flag (1 = disabled, 2 = enabled)
-* ``antiLegionellaPeriod``\ : Days between Anti-Legionella cycles (typically 7 days)
-* ``antiLegionellaOperationBusy``\ : Currently performing Anti-Legionella cycle (1 = OFF, 2 = ON)
+* ``antiLegionellaUse``\ : Anti-Legionella enable flag 
+  
+  * **1** = disabled
+  * **2** = enabled
+
+* ``antiLegionellaPeriod``\ : Days between Anti-Legionella cycles (typically 7 days, range 1-30)
+* ``antiLegionellaOperationBusy``\ : Currently performing Anti-Legionella cycle 
+  
+  * **1** = OFF (not currently running)
+  * **2** = ON (currently heating to disinfection temperature)
 
 .. note::
    Anti-Legionella is a safety feature that heats the water tank to 140°F at programmed intervals
    to kill Legionella bacteria. This requires a mixing valve to prevent scalding at taps.
-   The feature can be configured for 1-30 day intervals.
+   The feature can be configured for 1-30 day intervals. When the 
+   enable command (33554472) is sent with a period parameter, ``antiLegionellaUse`` changes 
+   from 1 (disabled) to 2 (enabled), and ``antiLegionellaPeriod`` is updated to the specified value.
 
 Status Request Messages
 -----------------------
@@ -807,12 +830,12 @@ Complete reference of all MQTT command codes:
    * - Code
      - Purpose
      - Mode/Notes
+   * - 33554471
+     - Disable Anti-Legionella
+     - mode: "anti-leg-off", param: []
    * - 33554472
      - Enable Anti-Legionella
      - mode: "anti-leg-on", param: [period_days] (1-30)
-   * - 33554473
-     - Disable Anti-Legionella
-     - mode: "anti-leg-off", WARNING: Health risk
 
 **TOU Control**
 
