@@ -74,12 +74,9 @@ async def strategy_simple_retry(auth_client, device):
         # Wait before retrying
         await asyncio.sleep(30)
 
-        # Reset reconnection counter and try again
-        mqtt_client._reconnect_attempts = 0
-        mqtt_client._manual_disconnect = False
-
+        # Reset reconnection counter and try again using public API
         logger.info("Restarting reconnection process...")
-        await mqtt_client._start_reconnect_task()
+        await mqtt_client.reset_reconnect()
 
     # Register the event handler
     mqtt_client.on("reconnection_failed", on_reconnection_failed)
