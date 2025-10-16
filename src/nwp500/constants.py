@@ -10,6 +10,20 @@ CMD_POWER_OFF = 33554433
 CMD_DHW_MODE = 33554437
 CMD_DHW_TEMPERATURE = 33554464
 CMD_ENERGY_USAGE_QUERY = 16777225
+CMD_RESERVATION_MANAGEMENT = 16777226
+CMD_TOU_SETTINGS = 33554439
+CMD_ANTI_LEGIONELLA_DISABLE = 33554471
+CMD_ANTI_LEGIONELLA_ENABLE = 33554472
+CMD_TOU_DISABLE = 33554475
+CMD_TOU_ENABLE = 33554476
+
+# Note for maintainers:
+# These command codes and the expected payload fields are defined in
+# `docs/MQTT_MESSAGES.rst` under the "Control Messages" section and
+# the subsections for Power Control, DHW Mode, Anti-Legionella,
+# Reservation Management and TOU Settings. When updating constants or
+# payload builders, verify against that document to avoid protocol
+# mismatches.
 
 # Known Firmware Versions and Field Changes
 # Track firmware versions where new fields were introduced to help with debugging

@@ -15,6 +15,7 @@ import json
 import logging
 import uuid
 from collections import deque
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
@@ -26,13 +27,19 @@ from awsiot import mqtt_connection_builder
 from .auth import NavienAuthClient
 from .config import AWS_IOT_ENDPOINT, AWS_REGION
 from .constants import (
+    CMD_ANTI_LEGIONELLA_DISABLE,
+    CMD_ANTI_LEGIONELLA_ENABLE,
     CMD_DEVICE_INFO_REQUEST,
     CMD_DHW_MODE,
     CMD_DHW_TEMPERATURE,
     CMD_ENERGY_USAGE_QUERY,
     CMD_POWER_OFF,
     CMD_POWER_ON,
+    CMD_RESERVATION_MANAGEMENT,
     CMD_STATUS_REQUEST,
+    CMD_TOU_DISABLE,
+    CMD_TOU_ENABLE,
+    CMD_TOU_SETTINGS,
 )
 from .events import EventEmitter
 from .models import (
@@ -40,6 +47,7 @@ from .models import (
     DeviceFeature,
     DeviceStatus,
     EnergyUsageResponse,
+    OperationMode,
 )
 
 __author__ = "Emmanuel Levijarvi"
@@ -47,6 +55,67 @@ __copyright__ = "Emmanuel Levijarvi"
 __license__ = "MIT"
 
 _logger = logging.getLogger(__name__)
+
+
+def _redact(obj, keys_to_redact=None):
+    """Return a redacted copy of obj with sensitive keys masked.
+
+    This is a lightweight sanitizer for log messages to avoid emitting
+    secrets such as access keys, session tokens, passwords, emails,
+    clientIDs and sessionIDs.
+    """
+    if keys_to_redact is None:
+        keys_to_redact = {
+            "access_key_id",
+            "secret_access_key",
+            "secret_key",
+            "session_token",
+            "sessionToken",
+            "sessionID",
+            "clientID",
+            "clientId",
+            "client_id",
+            "password",
+            "pushToken",
+            "push_token",
+            "token",
+            "auth",
+            "macAddress",
+            "mac_address",
+            "email",
+        }
+
+    # Primitive types: return as-is
+    if obj is None or isinstance(obj, (bool, int, float)):
+        return obj
+    if isinstance(obj, str):
+        # avoid printing long secret-like strings fully
+        if len(obj) > 256:
+            return obj[:64] + "...<redacted>..." + obj[-64:]
+        return obj
+
+    # dicts: redact sensitive keys recursively
+    if isinstance(obj, dict):
+        redacted = {}
+        for k, v in obj.items():
+            if str(k) in keys_to_redact:
+                redacted[k] = "<REDACTED>"
+            else:
+                redacted[k] = _redact(v, keys_to_redact)
+        return redacted
+
+    # lists / tuples: redact elements
+    if isinstance(obj, (list, tuple)):
+        return type(obj)(_redact(v, keys_to_redact) for v in obj)
+
+    # fallback: represent object as string but avoid huge dumps
+    try:
+        s = str(obj)
+        if len(s) > 512:
+            return s[:256] + "...<redacted>..."
+        return s
+    except Exception:
+        return "<UNREPRABLE>"
 
 
 @dataclass
@@ -557,7 +626,7 @@ class NavienMqttClient(EventEmitter):
         try:
             # Parse JSON payload
             message = json.loads(payload.decode("utf-8"))
-            _logger.debug(f"Received message on topic '{topic}': {message}")
+            _logger.debug("Received message on topic: %s", topic)
 
             # Call registered handlers that match this topic
             # Need to match against subscription patterns with wildcards
@@ -724,7 +793,6 @@ class NavienMqttClient(EventEmitter):
                 raise RuntimeError("Not connected to MQTT broker")
 
         _logger.debug(f"Publishing to topic: {topic}")
-        _logger.debug(f"Payload: {payload}")
 
         try:
             # Serialize to JSON
@@ -1148,21 +1216,26 @@ class NavienMqttClient(EventEmitter):
 
         return await self.publish(topic, command)
 
-    async def set_dhw_mode(self, device: Device, mode_id: int) -> int:
+    async def set_dhw_mode(
+        self,
+        device: Device,
+        mode_id: int,
+        vacation_days: Optional[int] = None,
+    ) -> int:
         """
         Set DHW (Domestic Hot Water) operation mode.
 
         Args:
             device: Device object
-            mode_id: Mode ID (1=Heat Pump Only, 2=Electric Only, 3=Energy Saver, 4=High Demand)
-            device_type: Device type (52 for NWP500)
-            additional_value: Additional value from device info
+            mode_id: Mode ID (1=Heat Pump Only, 2=Electric Only, 3=Energy Saver,
+                4=High Demand, 5=Vacation)
+            vacation_days: Number of vacation days (required when mode_id == 5)
 
         Returns:
             Publish packet ID
 
         Note:
-            Valid selectable mode IDs are 1, 2, 3, and 4.
+            Valid selectable mode IDs are 1, 2, 3, 4, and 5 (vacation).
             Additional modes may appear in status responses:
             - 0: Standby (device in idle state)
             - 6: Power Off (device is powered off)
@@ -1172,7 +1245,19 @@ class NavienMqttClient(EventEmitter):
             - 2: Electric Only (least efficient, fastest recovery)
             - 3: Energy Saver (balanced, good default)
             - 4: High Demand (maximum heating capacity)
+            - 5: Vacation Mode (requires vacation_days parameter)
         """
+        if mode_id == OperationMode.VACATION.value:
+            if vacation_days is None:
+                raise ValueError("Vacation mode requires vacation_days (1-30)")
+            if not 1 <= vacation_days <= 30:
+                raise ValueError("vacation_days must be between 1 and 30")
+            param = [mode_id, vacation_days]
+        else:
+            if vacation_days is not None:
+                raise ValueError("vacation_days is only valid for vacation mode (mode 5)")
+            param = [mode_id]
+
         device_id = device.device_info.mac_address
         device_type = device.device_info.device_type
         additional_value = device.device_info.additional_value
@@ -1185,7 +1270,83 @@ class NavienMqttClient(EventEmitter):
             command=CMD_DHW_MODE,  # DHW mode control command (different from power commands)
             additional_value=additional_value,
             mode="dhw-mode",
-            param=[mode_id],
+            param=param,
+            paramStr="",
+        )
+        command["requestTopic"] = topic
+
+        return await self.publish(topic, command)
+
+    async def enable_anti_legionella(self, device: Device, period_days: int) -> int:
+        """Enable Anti-Legionella disinfection with a 1-30 day cycle.
+
+        This command has been confirmed through HAR analysis of the official Navien app.
+        When sent, the device responds with antiLegionellaUse=2 (enabled) and
+        antiLegionellaPeriod set to the specified value.
+
+        See docs/MQTT_MESSAGES.rst "Anti-Legionella Control" for the authoritative
+        command code (33554472) and expected payload format:
+        {"mode": "anti-leg-on", "param": [<period_days>], "paramStr": ""}
+
+        Args:
+            device: The device to control
+            period_days: Days between disinfection cycles (1-30)
+
+        Returns:
+            The message ID of the published command
+
+        Raises:
+            ValueError: If period_days is not in the valid range [1, 30]
+        """
+        if not 1 <= period_days <= 30:
+            raise ValueError("period_days must be between 1 and 30")
+
+        device_id = device.device_info.mac_address
+        device_type = device.device_info.device_type
+        additional_value = device.device_info.additional_value
+        device_topic = f"navilink-{device_id}"
+        topic = f"cmd/{device_type}/{device_topic}/ctrl"
+
+        command = self._build_command(
+            device_type=device_type,
+            device_id=device_id,
+            command=CMD_ANTI_LEGIONELLA_ENABLE,
+            additional_value=additional_value,
+            mode="anti-leg-on",
+            param=[period_days],
+            paramStr="",
+        )
+        command["requestTopic"] = topic
+
+        return await self.publish(topic, command)
+
+    async def disable_anti_legionella(self, device: Device) -> int:
+        """Disable the Anti-Legionella disinfection cycle.
+
+        This command has been confirmed through HAR analysis of the official Navien app.
+        When sent, the device responds with antiLegionellaUse=1 (disabled) while
+        antiLegionellaPeriod retains its previous value.
+
+        The correct command code is 33554471 (not 33554473 as previously assumed).
+
+        See docs/MQTT_MESSAGES.rst "Anti-Legionella Control" section for details.
+
+        Returns:
+            The message ID of the published command
+        """
+        device_id = device.device_info.mac_address
+        device_type = device.device_info.device_type
+        additional_value = device.device_info.additional_value
+        device_topic = f"navilink-{device_id}"
+        topic = f"cmd/{device_type}/{device_topic}/ctrl"
+
+        command = self._build_command(
+            device_type=device_type,
+            device_id=device_id,
+            command=CMD_ANTI_LEGIONELLA_DISABLE,
+            additional_value=additional_value,
+            mode="anti-leg-off",
+            param=[],
             paramStr="",
         )
         command["requestTopic"] = topic
@@ -1234,6 +1395,19 @@ class NavienMqttClient(EventEmitter):
 
         return await self.publish(topic, command)
 
+        command = self._build_command(
+            device_type=device_type,
+            device_id=device_id,
+            command=CMD_DHW_TEMPERATURE,  # DHW temperature control command
+            additional_value=additional_value,
+            mode="dhw-temperature",
+            param=[temperature],
+            paramStr="",
+        )
+        command["requestTopic"] = topic
+
+        return await self.publish(topic, command)
+
     async def set_dhw_temperature_display(self, device: Device, display_temperature: int) -> int:
         """
         Set DHW target temperature using the DISPLAY value (what you see on device/app).
@@ -1255,6 +1429,150 @@ class NavienMqttClient(EventEmitter):
         """
         message_temperature = display_temperature - 20
         return await self.set_dhw_temperature(device, message_temperature)
+
+    async def update_reservations(
+        self,
+        device: Device,
+        reservations: Sequence[dict[str, Any]],
+        *,
+        enabled: bool = True,
+    ) -> int:
+        """Update programmed reservations for temperature/mode changes."""
+        # See docs/MQTT_MESSAGES.rst "Reservation Management" for the
+        # command code (16777226) and the reservation object fields
+        # (enable, week, hour, min, mode, param).
+        device_id = device.device_info.mac_address
+        device_type = device.device_info.device_type
+        additional_value = device.device_info.additional_value
+        device_topic = f"navilink-{device_id}"
+        topic = f"cmd/{device_type}/{device_topic}/ctrl/rsv/rd"
+
+        reservation_use = 1 if enabled else 2
+        reservation_payload = [dict(entry) for entry in reservations]
+
+        command = self._build_command(
+            device_type=device_type,
+            device_id=device_id,
+            command=CMD_RESERVATION_MANAGEMENT,
+            additional_value=additional_value,
+            reservationUse=reservation_use,
+            reservation=reservation_payload,
+        )
+        command["requestTopic"] = topic
+        command["responseTopic"] = f"cmd/{device_type}/{self.config.client_id}/res/rsv/rd"
+
+        return await self.publish(topic, command)
+
+    async def request_reservations(self, device: Device) -> int:
+        """Request the current reservation program from the device."""
+        device_id = device.device_info.mac_address
+        device_type = device.device_info.device_type
+        additional_value = device.device_info.additional_value
+        device_topic = f"navilink-{device_id}"
+        topic = f"cmd/{device_type}/{device_topic}/ctrl/rsv/rd"
+
+        command = self._build_command(
+            device_type=device_type,
+            device_id=device_id,
+            command=CMD_RESERVATION_MANAGEMENT,
+            additional_value=additional_value,
+        )
+        command["requestTopic"] = topic
+        command["responseTopic"] = f"cmd/{device_type}/{self.config.client_id}/res/rsv/rd"
+
+        return await self.publish(topic, command)
+
+    async def configure_tou_schedule(
+        self,
+        device: Device,
+        controller_serial_number: str,
+        periods: Sequence[dict[str, Any]],
+        *,
+        enabled: bool = True,
+    ) -> int:
+        """Configure Time-of-Use pricing schedule via MQTT."""
+        # See docs/MQTT_MESSAGES.rst "TOU (Time of Use) Settings" for
+        # the command code (33554439) and TOU period fields
+        # (season, week, startHour, startMinute, endHour, endMinute,
+        #  priceMin, priceMax, decimalPoint).
+        if not controller_serial_number:
+            raise ValueError("controller_serial_number is required")
+        if not periods:
+            raise ValueError("At least one TOU period must be provided")
+
+        device_id = device.device_info.mac_address
+        device_type = device.device_info.device_type
+        additional_value = device.device_info.additional_value
+        device_topic = f"navilink-{device_id}"
+        topic = f"cmd/{device_type}/{device_topic}/ctrl/tou/rd"
+
+        reservation_use = 1 if enabled else 2
+        reservation_payload = [dict(period) for period in periods]
+
+        command = self._build_command(
+            device_type=device_type,
+            device_id=device_id,
+            command=CMD_TOU_SETTINGS,
+            additional_value=additional_value,
+            controllerSerialNumber=controller_serial_number,
+            reservationUse=reservation_use,
+            reservation=reservation_payload,
+        )
+        command["requestTopic"] = topic
+        command["responseTopic"] = f"cmd/{device_type}/{self.config.client_id}/res/tou/rd"
+
+        return await self.publish(topic, command)
+
+    async def request_tou_settings(
+        self,
+        device: Device,
+        controller_serial_number: str,
+    ) -> int:
+        """Request current Time-of-Use schedule from the device."""
+        if not controller_serial_number:
+            raise ValueError("controller_serial_number is required")
+
+        device_id = device.device_info.mac_address
+        device_type = device.device_info.device_type
+        additional_value = device.device_info.additional_value
+        device_topic = f"navilink-{device_id}"
+        topic = f"cmd/{device_type}/{device_topic}/ctrl/tou/rd"
+
+        command = self._build_command(
+            device_type=device_type,
+            device_id=device_id,
+            command=CMD_TOU_SETTINGS,
+            additional_value=additional_value,
+            controllerSerialNumber=controller_serial_number,
+        )
+        command["requestTopic"] = topic
+        command["responseTopic"] = f"cmd/{device_type}/{self.config.client_id}/res/tou/rd"
+
+        return await self.publish(topic, command)
+
+    async def set_tou_enabled(self, device: Device, enabled: bool) -> int:
+        """Quickly toggle Time-of-Use functionality without modifying the schedule."""
+        device_id = device.device_info.mac_address
+        device_type = device.device_info.device_type
+        additional_value = device.device_info.additional_value
+        device_topic = f"navilink-{device_id}"
+        topic = f"cmd/{device_type}/{device_topic}/ctrl"
+
+        command_code = CMD_TOU_ENABLE if enabled else CMD_TOU_DISABLE
+        mode = "tou-on" if enabled else "tou-off"
+
+        command = self._build_command(
+            device_type=device_type,
+            device_id=device_id,
+            command=command_code,
+            additional_value=additional_value,
+            mode=mode,
+            param=[],
+            paramStr="",
+        )
+        command["requestTopic"] = topic
+
+        return await self.publish(topic, command)
 
     async def request_energy_usage(self, device: Device, year: int, months: list[int]) -> int:
         """
