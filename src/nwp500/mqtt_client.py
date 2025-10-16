@@ -119,6 +119,30 @@ def _redact(obj, keys_to_redact=None):
         return "<UNREPRABLE>"
 
 
+def _redact_topic(topic: str) -> str:
+    """
+    Redact sensitive information from MQTT topic strings.
+
+    Topics often contain MAC addresses in formats like:
+    - cmd/52/navilink-04786332fca0/st/did
+    - cmd/52/navilink-04786332fca0/ctrl
+
+    Args:
+        topic: MQTT topic string
+
+    Returns:
+        Topic with MAC addresses redacted
+    """
+    import re
+
+    # Pattern to match MAC address-like strings in topics (12 hex chars)
+    # e.g., navilink-04786332fca0 -> navilink-REDACTED
+    pattern = r"(navilink-)([0-9a-fA-F]{12})"
+    redacted = re.sub(pattern, r"\1REDACTED", topic)
+
+    return redacted
+
+
 @dataclass
 class MqttConnectionConfig:
     """Configuration for MQTT connection."""
@@ -467,7 +491,9 @@ class NavienMqttClient(EventEmitter):
                 )
             except Exception as e:
                 failed_count += 1
-                _logger.error(f"Failed to send queued command to '{command.topic}': {e}")
+                _logger.error(
+                    f"Failed to send queued command to '{_redact_topic(command.topic)}': {e}"
+                )
                 # Re-queue if there's room
                 if len(self._command_queue) < self.config.max_queued_commands:
                     self._command_queue.append(command)
@@ -734,7 +760,7 @@ class NavienMqttClient(EventEmitter):
             return packet_id
 
         except Exception as e:
-            _logger.error(f"Failed to subscribe to '{topic}': {e}")
+            _logger.error(f"Failed to subscribe to '{_redact_topic(topic)}': {e}")
             raise
 
     async def unsubscribe(self, topic: str):
@@ -764,7 +790,7 @@ class NavienMqttClient(EventEmitter):
             _logger.info(f"Unsubscribed from '{topic}'")
 
         except Exception as e:
-            _logger.error(f"Failed to unsubscribe from '{topic}': {e}")
+            _logger.error(f"Failed to unsubscribe from '{_redact_topic(topic)}': {e}")
             raise
 
     async def publish(
@@ -826,7 +852,7 @@ class NavienMqttClient(EventEmitter):
                 and e.name == "AWS_ERROR_MQTT_CANCELLED_FOR_CLEAN_SESSION"
             ):
                 _logger.warning(
-                    f"Publish cancelled due to clean session (topic: {topic}). "
+                    f"Publish cancelled due to clean session (topic: {_redact_topic(topic)}). "
                     "This is expected during reconnection."
                 )
                 # Queue the command if queue is enabled
@@ -837,7 +863,7 @@ class NavienMqttClient(EventEmitter):
                 # Otherwise, treat as a non-fatal error for the caller
                 return 0
 
-            _logger.error(f"Failed to publish to '{topic}': {e}")
+            _logger.error(f"Failed to publish to '{_redact_topic(topic)}': {e}")
             raise
 
     # Navien-specific convenience methods
