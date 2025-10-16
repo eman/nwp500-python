@@ -22,6 +22,7 @@ from enum import Enum
 from typing import Any, Callable, Optional
 
 from awscrt import mqtt
+from awscrt.exceptions import AwsCrtError
 from awsiot import mqtt_connection_builder
 
 from .auth import NavienAuthClient
@@ -819,18 +820,22 @@ class NavienMqttClient(EventEmitter):
 
         except Exception as e:
             # Handle clean session cancellation gracefully
-            error_msg = str(e)
-            if "AWS_ERROR_MQTT_CANCELLED_FOR_CLEAN_SESSION" in error_msg:
+            # Check exception type and name attribute for proper error identification
+            if (
+                isinstance(e, AwsCrtError)
+                and e.name == "AWS_ERROR_MQTT_CANCELLED_FOR_CLEAN_SESSION"
+            ):
                 _logger.warning(
-                    "Publish cancelled due to clean session. This is expected during reconnection."
+                    f"Publish cancelled due to clean session (topic: {topic}). "
+                    "This is expected during reconnection."
                 )
                 # Queue the command if queue is enabled
                 if self.config.enable_command_queue:
                     _logger.debug("Queuing command due to clean session cancellation")
                     self._queue_command(topic, payload, qos)
                     return 0  # Return 0 to indicate command was queued
-                # Otherwise, raise an error so the caller can handle the failure
-                raise RuntimeError("Publish cancelled due to clean session and command queue is disabled")
+                # Otherwise, treat as a non-fatal error for the caller
+                return 0
 
             _logger.error(f"Failed to publish to '{topic}': {e}")
             raise
@@ -1849,9 +1854,12 @@ class NavienMqttClient(EventEmitter):
                     )
                     break
                 except Exception as e:
-                    error_msg = str(e)
                     # Handle clean session cancellation gracefully (expected during reconnection)
-                    if "AWS_ERROR_MQTT_CANCELLED_FOR_CLEAN_SESSION" in error_msg:
+                    # Check exception type and name attribute for proper error identification
+                    if (
+                        isinstance(e, AwsCrtError)
+                        and e.name == "AWS_ERROR_MQTT_CANCELLED_FOR_CLEAN_SESSION"
+                    ):
                         _logger.debug(
                             "Periodic %s request cancelled due to clean session for %s. "
                             "This is expected during reconnection.",
