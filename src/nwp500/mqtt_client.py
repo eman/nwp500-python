@@ -1948,23 +1948,8 @@ class NavienMqttClient(EventEmitter):
         This is called internally when reconnection fails permanently
         to reduce log noise from tasks trying to send requests while disconnected.
         """
-        if not self._periodic_tasks:
-            return
-
-        task_count = len(self._periodic_tasks)
-        _logger.info(f"Stopping {task_count} periodic task(s) due to connection failure")
-
-        # Cancel all tasks
-        for _task_name, task in list(self._periodic_tasks.items()):
-            task.cancel()
-
-        # Wait for all tasks to complete
-        for task_name, task in list(self._periodic_tasks.items()):
-            with contextlib.suppress(asyncio.CancelledError):
-                await task
-            del self._periodic_tasks[task_name]
-
-        _logger.info("All periodic tasks stopped")
+        # Delegate to public method with specific reason
+        await self.stop_all_periodic_tasks(_reason="connection failure")
 
     # Convenience methods
     async def start_periodic_device_info_requests(
@@ -2025,11 +2010,14 @@ class NavienMqttClient(EventEmitter):
         """
         await self.stop_periodic_requests(device, PeriodicRequestType.DEVICE_STATUS)
 
-    async def stop_all_periodic_tasks(self) -> None:
+    async def stop_all_periodic_tasks(self, _reason: Optional[str] = None) -> None:
         """
         Stop all periodic request tasks.
 
         This is automatically called when disconnecting.
+
+        Args:
+            _reason: Internal parameter for logging context (e.g., "connection failure")
 
         Example:
             >>> await mqtt_client.stop_all_periodic_tasks()
@@ -2037,7 +2025,9 @@ class NavienMqttClient(EventEmitter):
         if not self._periodic_tasks:
             return
 
-        _logger.info(f"Stopping {len(self._periodic_tasks)} periodic task(s)")
+        task_count = len(self._periodic_tasks)
+        reason_msg = f" due to {_reason}" if _reason else ""
+        _logger.info(f"Stopping {task_count} periodic task(s){reason_msg}")
 
         # Cancel all tasks
         for task in self._periodic_tasks.values():
