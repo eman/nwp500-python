@@ -123,9 +123,11 @@ def _redact_topic(topic: str) -> str:
     """
     Redact sensitive information from MQTT topic strings.
 
-    Topics often contain MAC addresses in formats like:
+    Topics often contain MAC addresses or device unique identifiers, e.g.:
     - cmd/52/navilink-04786332fca0/st/did
     - cmd/52/navilink-04786332fca0/ctrl
+    - cmd/52/04786332fca0/ctrl
+    - or with colons/hyphens (04:78:63:32:fc:a0 or 04-78-63-32-fc-a0)
 
     Args:
         topic: MQTT topic string
@@ -135,13 +137,15 @@ def _redact_topic(topic: str) -> str:
     """
     import re
 
-    # Pattern to match MAC address-like strings in topics (12 hex chars)
-    # e.g., navilink-04786332fca0 -> navilink-REDACTED
-    pattern = r"(navilink-)([0-9a-fA-F]{12})"
-    redacted = re.sub(pattern, r"\1REDACTED", topic)
-
-    return redacted
-
+    # Redact navilink-<mac>
+    topic = re.sub(r"(navilink-)[0-9a-fA-F]{12}", r"\1REDACTED", topic)
+    # Redact bare 12-hex MACs (lower/upper)
+    topic = re.sub(r"\b[0-9a-fA-F]{12}\b", "REDACTED", topic)
+    # Redact colon-delimited MAC format (e.g., 04:78:63:32:fc:a0)
+    topic = re.sub(r"\b([0-9a-fA-F]{2}:){5}[0-9a-fA-F]{2}\b", "REDACTED", topic)
+    # Redact hyphen-delimited MAC format (e.g., 04-78-63-32-fc-a0)
+    topic = re.sub(r"\b([0-9a-fA-F]{2}-){5}[0-9a-fA-F]{2}\b", "REDACTED", topic)
+    return topic
 
 @dataclass
 class MqttConnectionConfig:
