@@ -147,6 +147,7 @@ def _redact_topic(topic: str) -> str:
     topic = re.sub(r"\b([0-9a-fA-F]{2}-){5}[0-9a-fA-F]{2}\b", "REDACTED", topic)
     return topic
 
+
 @dataclass
 class MqttConnectionConfig:
     """Configuration for MQTT connection."""
