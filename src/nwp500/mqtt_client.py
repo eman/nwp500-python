@@ -224,6 +224,7 @@ class NavienMqttClient(EventEmitter):
         - error_cleared: Error code cleared (error_code)
         - connection_interrupted: Connection lost (error)
         - connection_resumed: Connection restored (return_code, session_present)
+        - reconnection_failed: Reconnection permanently failed after max attempts (attempt_count)
     """
 
     def __init__(
@@ -428,6 +429,10 @@ class NavienMqttClient(EventEmitter):
                 f"Failed to reconnect after {self.config.max_reconnect_attempts} attempts. "
                 "Manual reconnection required."
             )
+            # Stop all periodic tasks to reduce log noise
+            await self._stop_all_periodic_tasks()
+            # Emit event so users can take action
+            self._schedule_coroutine(self.emit("reconnection_failed", self._reconnect_attempts))
 
     async def _send_queued_commands(self):
         """
@@ -813,6 +818,21 @@ class NavienMqttClient(EventEmitter):
             return packet_id
 
         except Exception as e:
+            # Handle clean session cancellation gracefully
+            error_msg = str(e)
+            if "AWS_ERROR_MQTT_CANCELLED_FOR_CLEAN_SESSION" in error_msg:
+                _logger.warning(
+                    f"Publish cancelled due to clean session (topic: {topic}). "
+                    "This is expected during reconnection."
+                )
+                # Queue the command if queue is enabled
+                if self.config.enable_command_queue:
+                    _logger.debug("Queuing command due to clean session cancellation")
+                    self._queue_command(topic, payload, qos)
+                    return 0  # Return 0 to indicate command was queued
+                # Otherwise, treat as a non-fatal error for the caller
+                return 0
+
             _logger.error(f"Failed to publish to '{topic}': {e}")
             raise
 
@@ -1776,15 +1796,39 @@ class NavienMqttClient(EventEmitter):
                 f"(every {period_seconds}s)"
             )
 
+            # Track consecutive skips for throttled logging
+            consecutive_skips = 0
+
             while True:
                 try:
                     if not self._connected:
-                        _logger.warning(
-                            "Not connected, skipping %s request for %s",
-                            request_type.value,
-                            redacted_device_id,
-                        )
+                        consecutive_skips += 1
+                        # Log warning only on first skip and then every 10th skip to reduce noise
+                        if consecutive_skips == 1 or consecutive_skips % 10 == 0:
+                            _logger.warning(
+                                "Not connected, skipping %s request for %s (skipped %d time%s)",
+                                request_type.value,
+                                redacted_device_id,
+                                consecutive_skips,
+                                "s" if consecutive_skips > 1 else "",
+                            )
+                        else:
+                            _logger.debug(
+                                "Not connected, skipping %s request for %s",
+                                request_type.value,
+                                redacted_device_id,
+                            )
                     else:
+                        # Reset skip counter when connected
+                        if consecutive_skips > 0:
+                            _logger.info(
+                                "Reconnected, resuming %s requests for %s (had skipped %d)",
+                                request_type.value,
+                                redacted_device_id,
+                                consecutive_skips,
+                            )
+                            consecutive_skips = 0
+
                         # Send appropriate request type
                         if request_type == PeriodicRequestType.DEVICE_INFO:
                             await self.request_device_info(device)
@@ -1806,13 +1850,23 @@ class NavienMqttClient(EventEmitter):
                     )
                     break
                 except Exception as e:
-                    _logger.error(
-                        "Error in periodic %s request for %s: %s",
-                        request_type.value,
-                        redacted_device_id,
-                        e,
-                        exc_info=True,
-                    )
+                    error_msg = str(e)
+                    # Handle clean session cancellation gracefully (expected during reconnection)
+                    if "AWS_ERROR_MQTT_CANCELLED_FOR_CLEAN_SESSION" in error_msg:
+                        _logger.debug(
+                            "Periodic %s request cancelled due to clean session for %s. "
+                            "This is expected during reconnection.",
+                            request_type.value,
+                            redacted_device_id,
+                        )
+                    else:
+                        _logger.error(
+                            "Error in periodic %s request for %s: %s",
+                            request_type.value,
+                            redacted_device_id,
+                            e,
+                            exc_info=True,
+                        )
                     # Continue despite errors
                     await asyncio.sleep(period_seconds)
 
@@ -1879,6 +1933,31 @@ class NavienMqttClient(EventEmitter):
                 f"No periodic tasks found for {device_id}"
                 + (f" (type={request_type.value})" if request_type else "")
             )
+
+    async def _stop_all_periodic_tasks(self) -> None:
+        """
+        Stop all periodic tasks.
+
+        This is called internally when reconnection fails permanently
+        to reduce log noise from tasks trying to send requests while disconnected.
+        """
+        if not self._periodic_tasks:
+            return
+
+        task_count = len(self._periodic_tasks)
+        _logger.info(f"Stopping {task_count} periodic task(s) due to connection failure")
+
+        # Cancel all tasks
+        for _task_name, task in list(self._periodic_tasks.items()):
+            task.cancel()
+
+        # Wait for all tasks to complete
+        for task_name, task in list(self._periodic_tasks.items()):
+            with contextlib.suppress(asyncio.CancelledError):
+                await task
+            del self._periodic_tasks[task_name]
+
+        _logger.info("All periodic tasks stopped")
 
     # Convenience methods
     async def start_periodic_device_info_requests(
