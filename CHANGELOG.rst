@@ -19,9 +19,10 @@ Added
   - Eliminates "passes locally but fails in CI" issues
   - Cross-platform support (Linux, macOS, Windows, containers)
   
-  - All MQTT operations (connect, disconnect, subscribe, unsubscribe, publish) use ``asyncio.run_in_executor()`` 
+  - All MQTT operations (connect, disconnect, subscribe, unsubscribe, publish) use ``asyncio.wrap_future()`` to convert AWS SDK Futures to asyncio Futures
   - Eliminates "blocking I/O detected" warnings in Home Assistant and other async applications
   - Fully compatible with async event loops without blocking other operations
+  - More efficient than executor-based approaches (no thread pool usage)
   - No API changes required - existing code works without modification
   - Maintains full performance and reliability of the underlying AWS IoT SDK
   - Safe for use in Home Assistant custom integrations and other async applications

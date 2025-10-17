@@ -569,31 +569,23 @@ class NavienMqttClient(EventEmitter):
 
         try:
             # Build WebSocket MQTT connection with AWS credentials
-            # Run the connection building in a thread pool to avoid blocking I/O
-            def _build_connection():
-                return mqtt_connection_builder.websockets_with_default_aws_signing(
-                    endpoint=self.config.endpoint,
-                    region=self.config.region,
-                    credentials_provider=self._create_credentials_provider(),
-                    client_id=self.config.client_id,
-                    clean_session=self.config.clean_session,
-                    keep_alive_secs=self.config.keep_alive_secs,
-                    on_connection_interrupted=self._on_connection_interrupted_internal,
-                    on_connection_resumed=self._on_connection_resumed_internal,
-                )
-
-            # Run connection builder in thread pool to avoid blocking I/O
-            self._connection = await self._loop.run_in_executor(None, _build_connection)
+            self._connection = mqtt_connection_builder.websockets_with_default_aws_signing(
+                endpoint=self.config.endpoint,
+                region=self.config.region,
+                credentials_provider=self._create_credentials_provider(),
+                client_id=self.config.client_id,
+                clean_session=self.config.clean_session,
+                keep_alive_secs=self.config.keep_alive_secs,
+                on_connection_interrupted=self._on_connection_interrupted_internal,
+                on_connection_resumed=self._on_connection_resumed_internal,
+            )
 
             # Connect
             _logger.info("Establishing MQTT connection...")
 
-            # Run the connect operation in a thread pool to avoid blocking I/O
-            def _connect():
-                connect_future = self._connection.connect()
-                return connect_future.result()
-
-            connect_result = await self._loop.run_in_executor(None, _connect)
+            # Convert concurrent.futures.Future to asyncio.Future and await
+            connect_future = self._connection.connect()
+            connect_result = await asyncio.wrap_future(connect_future)
 
             self._connected = True
             self._reconnect_attempts = 0  # Reset on successful connection
@@ -644,12 +636,9 @@ class NavienMqttClient(EventEmitter):
         await self.stop_all_periodic_tasks()
 
         try:
-            # Run disconnect operation in thread pool to avoid blocking I/O
-            def _disconnect():
-                disconnect_future = self._connection.disconnect()
-                return disconnect_future.result()
-
-            await self._loop.run_in_executor(None, _disconnect)
+            # Convert concurrent.futures.Future to asyncio.Future and await
+            disconnect_future = self._connection.disconnect()
+            await asyncio.wrap_future(disconnect_future)
 
             self._connected = False
             self._connection = None
@@ -744,15 +733,11 @@ class NavienMqttClient(EventEmitter):
         _logger.info(f"Subscribing to topic: {topic}")
 
         try:
-            # Run subscribe operation in thread pool to avoid blocking I/O
-            def _subscribe():
-                subscribe_future, packet_id = self._connection.subscribe(
-                    topic=topic, qos=qos, callback=self._on_message_received
-                )
-                subscribe_result = subscribe_future.result()
-                return subscribe_result, packet_id
-
-            subscribe_result, packet_id = await self._loop.run_in_executor(None, _subscribe)
+            # Convert concurrent.futures.Future to asyncio.Future and await
+            subscribe_future, packet_id = self._connection.subscribe(
+                topic=topic, qos=qos, callback=self._on_message_received
+            )
+            subscribe_result = await asyncio.wrap_future(subscribe_future)
 
             _logger.info(f"Subscribed to '{topic}' with QoS {subscribe_result['qos']}")
 
@@ -781,12 +766,9 @@ class NavienMqttClient(EventEmitter):
         _logger.info(f"Unsubscribing from topic: {topic}")
 
         try:
-            # Run unsubscribe operation in thread pool to avoid blocking I/O
-            def _unsubscribe():
-                unsubscribe_future, packet_id = self._connection.unsubscribe(topic)
-                return unsubscribe_future.result()
-
-            await self._loop.run_in_executor(None, _unsubscribe)
+            # Convert concurrent.futures.Future to asyncio.Future and await
+            unsubscribe_future, packet_id = self._connection.unsubscribe(topic)
+            await asyncio.wrap_future(unsubscribe_future)
 
             # Remove from tracking
             self._subscriptions.pop(topic, None)
@@ -835,15 +817,11 @@ class NavienMqttClient(EventEmitter):
             # Serialize to JSON
             payload_json = json.dumps(payload)
 
-            # Run publish operation in thread pool to avoid blocking I/O
-            def _publish():
-                publish_future, packet_id = self._connection.publish(
-                    topic=topic, payload=payload_json, qos=qos
-                )
-                publish_future.result()
-                return packet_id
-
-            packet_id = await self._loop.run_in_executor(None, _publish)
+            # Convert concurrent.futures.Future to asyncio.Future and await
+            publish_future, packet_id = self._connection.publish(
+                topic=topic, payload=payload_json, qos=qos
+            )
+            await asyncio.wrap_future(publish_future)
 
             _logger.debug(f"Published to '{topic}' with packet_id {packet_id}")
 
