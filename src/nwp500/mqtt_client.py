@@ -47,8 +47,8 @@ from .models import (
     Device,
     DeviceFeature,
     DeviceStatus,
+    DhwOperationSetting,
     EnergyUsageResponse,
-    OperationMode,
 )
 
 __author__ = "Emmanuel Levijarvi"
@@ -1293,7 +1293,7 @@ class NavienMqttClient(EventEmitter):
             - 4: High Demand (maximum heating capacity)
             - 5: Vacation Mode (requires vacation_days parameter)
         """
-        if mode_id == OperationMode.VACATION.value:
+        if mode_id == DhwOperationSetting.VACATION.value:
             if vacation_days is None:
                 raise ValueError("Vacation mode requires vacation_days (1-30)")
             if not 1 <= vacation_days <= 30:
