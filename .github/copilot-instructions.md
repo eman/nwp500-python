@@ -12,8 +12,13 @@
 - **Install dependencies**: `pip install -e .` (development mode)
 - **Run tests**: `pytest` (unit tests in `tests/`)
 - **Lint/format**: `ruff format --check src/ tests/ examples/` (use `ruff format ...` to auto-format)
+- **CI-compatible linting**: `make ci-lint` (run before finalizing changes to ensure CI will pass)
+- **CI-compatible formatting**: `make ci-format` (auto-fix formatting issues)
 - **Build docs**: `tox -e docs` (Sphinx docs in `docs/`)
 - **Preview docs**: `python3 -m http.server --directory docs/_build/html`
+
+### Before Committing Changes
+Always run `make ci-lint` before finalizing changes to ensure your code will pass CI checks. This runs the exact same linting configuration as the CI pipeline, preventing "passes locally but fails in CI" issues.
 
 ## Patterns & Conventions
 - **Async context managers** for authentication: `async with NavienAuthClient(email, password) as auth_client:`
