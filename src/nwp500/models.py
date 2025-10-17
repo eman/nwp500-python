@@ -6,6 +6,7 @@ These models are based on the MQTT message formats and API responses.
 """
 
 import logging
+import warnings
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Optional, Union
@@ -13,6 +14,38 @@ from typing import Any, Optional, Union
 from . import constants
 
 _logger = logging.getLogger(__name__)
+
+# Flag to control deprecation warnings (disabled by default for backward compatibility)
+_ENABLE_DEPRECATION_WARNINGS = False
+
+
+def enable_deprecation_warnings(enabled: bool = True):
+    """
+    Enable or disable deprecation warnings for the OperationMode enum.
+
+    Args:
+        enabled: If True, using OperationMode will emit deprecation warnings.
+                If False (default), no warnings are emitted for backward compatibility.
+
+    Example:
+        >>> from nwp500.models import enable_deprecation_warnings
+        >>> enable_deprecation_warnings(True)  # Enable warnings
+        >>> # Now using OperationMode will emit warnings
+    """
+    global _ENABLE_DEPRECATION_WARNINGS
+    _ENABLE_DEPRECATION_WARNINGS = enabled
+
+
+def _warn_deprecated_operation_mode():
+    """Emit deprecation warning for OperationMode usage if enabled."""
+    if _ENABLE_DEPRECATION_WARNINGS:
+        warnings.warn(
+            "OperationMode is deprecated and will be removed in v3.0.0. "
+            "Use DhwOperationSetting for user preferences or CurrentOperationMode for "
+            "real-time states. See MIGRATION.md for migration guidance.",
+            DeprecationWarning,
+            stacklevel=3,
+        )
 
 
 def _decicelsius_to_fahrenheit(raw_value: float) -> float:
@@ -33,8 +66,70 @@ def _decicelsius_to_fahrenheit(raw_value: float) -> float:
     return (celsius * 9 / 5) + 32
 
 
+class DhwOperationSetting(Enum):
+    """Enumeration for DHW operation setting modes (user-configured preferences).
+
+    This enum represents the user's configured mode preference - what heating mode
+    the device should use when it needs to heat water. These values appear in the
+    dhwOperationSetting field and are set via user commands.
+
+    These modes balance energy efficiency and recovery time based on user needs:
+    - Higher efficiency = longer recovery time, lower operating costs
+    - Lower efficiency = faster recovery time, higher operating costs
+
+    Values are based on the MQTT protocol dhw-mode command parameter.
+    """
+
+    HEAT_PUMP = 1  # Heat Pump Only - most efficient, slowest recovery
+    ELECTRIC = 2  # Electric Only - least efficient, fastest recovery
+    ENERGY_SAVER = 3  # Hybrid: Efficiency - balanced, good default
+    HIGH_DEMAND = 4  # Hybrid: Boost - maximum heating capacity
+    VACATION = 5  # Vacation mode - suspends heating to save energy
+    POWER_OFF = 6  # Device powered off - appears when device is turned off
+
+
+class CurrentOperationMode(Enum):
+    """Enumeration for current operation mode (real-time operational state).
+
+    This enum represents the device's current actual operational state - what
+    the device is doing RIGHT NOW. These values appear in the operationMode
+    field and change automatically based on heating demand.
+
+    Unlike DhwOperationSetting (user preference), this reflects real-time
+    operation and changes dynamically as the device starts/stops heating.
+
+    Values are based on device status responses in MQTT messages.
+    """
+
+    STANDBY = 0  # Device is idle, not actively heating
+    HEAT_PUMP_MODE = 32  # Heat pump is actively running to heat water
+    HYBRID_EFFICIENCY_MODE = 64  # Device actively heating in Energy Saver mode
+    HYBRID_BOOST_MODE = 96  # Device actively heating in High Demand mode
+
+
 class OperationMode(Enum):
     """Enumeration for the operation modes of the device.
+
+    .. deprecated::
+        The ``OperationMode`` enum is deprecated and will be removed in a future version.
+        Use ``DhwOperationSetting`` for user-configured mode preferences (values 1-6)
+        or ``CurrentOperationMode`` for real-time operational states (values 0, 32, 64, 96).
+
+        Migration guide:
+        - Replace ``OperationMode`` enum references in dhwOperationSetting contexts with
+          ``DhwOperationSetting``
+        - Replace ``OperationMode`` enum references in operationMode contexts with
+          ``CurrentOperationMode``
+        - Update type hints accordingly
+
+        Example:
+            # Old (deprecated):
+            status.dhwOperationSetting == OperationMode.ENERGY_SAVER
+            status.operationMode == OperationMode.STANDBY
+
+            # New (recommended):
+            status.dhwOperationSetting == DhwOperationSetting.ENERGY_SAVER
+            status.operationMode == CurrentOperationMode.STANDBY
 
     The first set of modes (0-6) are used when commanding the device or appear
     in dhwOperationSetting, while the second set (32, 64, 96) are observed in
@@ -63,6 +158,12 @@ class OperationMode(Enum):
     HEAT_PUMP_MODE = 32
     HYBRID_EFFICIENCY_MODE = 64
     HYBRID_BOOST_MODE = 96
+
+    def __getattribute__(self, name):
+        """Override to emit deprecation warning on value access when enabled."""
+        if name == "value" or name == "name":
+            _warn_deprecated_operation_mode()
+        return super().__getattribute__(name)
 
 
 class TemperatureUnit(Enum):
@@ -228,7 +329,7 @@ class DeviceStatus:
     didReload: bool
     errorCode: int
     subErrorCode: int
-    operationMode: OperationMode
+    operationMode: CurrentOperationMode
     operationBusy: bool
     freezeProtectionUse: bool
     dhwUse: bool
@@ -265,7 +366,7 @@ class DeviceStatus:
     antiLegionellaPeriod: int
     antiLegionellaOperationBusy: bool
     programReservationType: int
-    dhwOperationSetting: OperationMode  # User's configured mode preference (command modes: 1-6)
+    dhwOperationSetting: DhwOperationSetting  # User's configured mode preference
     temperatureType: TemperatureUnit
     tempFormulaType: str
     errorBuzzerUse: bool
@@ -446,18 +547,20 @@ class DeviceStatus:
         # Convert enum fields with error handling for unknown values
         if "operationMode" in converted_data:
             try:
-                converted_data["operationMode"] = OperationMode(converted_data["operationMode"])
+                converted_data["operationMode"] = CurrentOperationMode(
+                    converted_data["operationMode"]
+                )
             except ValueError:
                 _logger.warning(
                     "Unknown operationMode: %s. Defaulting to STANDBY.",
                     converted_data["operationMode"],
                 )
                 # Default to a safe enum value so callers can rely on .name
-                converted_data["operationMode"] = OperationMode.STANDBY
+                converted_data["operationMode"] = CurrentOperationMode.STANDBY
 
         if "dhwOperationSetting" in converted_data:
             try:
-                converted_data["dhwOperationSetting"] = OperationMode(
+                converted_data["dhwOperationSetting"] = DhwOperationSetting(
                     converted_data["dhwOperationSetting"]
                 )
             except ValueError:
@@ -466,7 +569,7 @@ class DeviceStatus:
                     converted_data["dhwOperationSetting"],
                 )
                 # Default to ENERGY_SAVER as a safe default
-                converted_data["dhwOperationSetting"] = OperationMode.ENERGY_SAVER
+                converted_data["dhwOperationSetting"] = DhwOperationSetting.ENERGY_SAVER
 
         if "temperatureType" in converted_data:
             try:

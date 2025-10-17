@@ -2,6 +2,65 @@
 Changelog
 =========
 
+Version 2.0.0 (Unreleased)
+==========================
+
+**Breaking Changes (Planned for v3.0.0)**
+
+- **DEPRECATION**: ``OperationMode`` enum is deprecated and will be removed in v3.0.0
+  
+  - Use ``DhwOperationSetting`` for user-configured mode preferences (values 1-6)
+  - Use ``CurrentOperationMode`` for real-time operational states (values 0, 32, 64, 96)
+  - See ``MIGRATION.md`` for detailed migration guide
+
+Added
+-----
+
+- **Enhanced Type Safety**: Split ``OperationMode`` into semantically distinct enums
+
+  - ``DhwOperationSetting``: User-configured mode preferences (HEAT_PUMP, ELECTRIC, ENERGY_SAVER, HIGH_DEMAND, VACATION, POWER_OFF)
+  - ``CurrentOperationMode``: Real-time operational states (STANDBY, HEAT_PUMP_MODE, HYBRID_EFFICIENCY_MODE, HYBRID_BOOST_MODE)
+  - Prevents accidental comparison of user preferences with real-time states
+  - Better IDE support with more specific enum types
+
+- **Migration Support**: Comprehensive tools for smooth migration
+
+  - ``migrate_operation_mode_usage()`` helper function with programmatic guidance
+  - ``MIGRATION.md`` with step-by-step migration instructions
+  - Value mappings and common usage pattern examples
+  - Backward compatibility preservation during transition
+
+- **Documentation Updates**: Updated all documentation to reflect new enum structure
+
+  - ``DEVICE_STATUS_FIELDS.rst`` updated with new enum types
+  - Code examples use new enums with proper imports
+  - Clear distinction between configuration vs real-time status
+
+Changed
+-------
+
+- **DeviceStatus Model**: Updated to use specific enum types
+
+  - ``operationMode`` field now uses ``CurrentOperationMode`` type
+  - ``dhwOperationSetting`` field now uses ``DhwOperationSetting`` type
+  - Maintains backward compatibility through value preservation
+
+- **Example Scripts**: Updated to demonstrate new enum usage
+
+  - ``event_emitter_demo.py`` updated to use ``CurrentOperationMode``
+  - Fixed incorrect enum references (HEAT_PUMP_ONLY → HEAT_PUMP_MODE)
+  - All examples remain functional with new type system
+
+Deprecated
+----------
+
+- **OperationMode enum**: Will be removed in v3.0.0
+
+  - All functionality preserved for backward compatibility
+  - Migration guide available in ``MIGRATION.md``
+  - Helper function ``migrate_operation_mode_usage()`` provides guidance
+  - Original enum remains available during transition period
+
 Version 1.2.2 (2025-10-17)
 ==========================
 

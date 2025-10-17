@@ -44,7 +44,7 @@ This document lists the fields found in the ``status`` object of device status m
      - Sub error code providing additional error details. See ERROR_CODES.rst for details.
      - None
    * - ``operationMode``
-     - OperationMode
+     - CurrentOperationMode
      - None
      - The current **actual operational state** of the device (what it's doing RIGHT NOW). Reports status values: 0=Standby, 32=Heat Pump active, 64=Energy Saver active, 96=High Demand active. See Operation Modes section below for the critical distinction between this and ``dhwOperationSetting``.
      - None
@@ -229,9 +229,9 @@ This document lists the fields found in the ``status`` object of device status m
      - Type of program reservation.
      - None
    * - ``dhwOperationSetting``
-     - OperationMode
+     - DhwOperationSetting
      - None
-     - User's configured DHW operation mode preference. This field uses the same ``OperationMode`` enum as ``operationMode`` but contains command mode values (1=HEAT_PUMP, 2=ELECTRIC, 3=ENERGY_SAVER, 4=HIGH_DEMAND, 5=VACATION, 6=POWER_OFF). When the device is powered off via the power-off command, this field will show 6 (POWER_OFF). This is how to distinguish between "powered off" vs "on but in standby". See the Operation Modes section below for details.
+     - User's configured DHW operation mode preference. This field uses the ``DhwOperationSetting`` enum (separate from ``CurrentOperationMode``) and contains command mode values (1=HEAT_PUMP, 2=ELECTRIC, 3=ENERGY_SAVER, 4=HIGH_DEMAND, 5=VACATION, 6=POWER_OFF). When the device is powered off via the power-off command, this field will show 6 (POWER_OFF). This is how to distinguish between "powered off" vs "on but in standby". See the Operation Modes section below for details.
      - None
    * - ``temperatureType``
      - integer
@@ -533,10 +533,10 @@ These two fields serve different purposes and it's critical to understand their 
 Field Definitions
 ^^^^^^^^^^^^^^^^^
 
-**dhwOperationSetting** (OperationMode enum with command values 1-5)
+**dhwOperationSetting** (DhwOperationSetting enum with command values 1-6)
   The user's **configured mode preference** - what heating mode the device should use when it needs to heat water. This is set via the ``dhw-mode`` command and persists until changed by the user or device.
   
-  * Type: ``OperationMode`` enum
+  * Type: ``DhwOperationSetting`` enum
   * Values: 
     
     * 1 = ``HEAT_PUMP`` (Heat Pump Only)
@@ -551,10 +551,10 @@ Field Definitions
   * Meaning: "When heating is needed, use this mode" OR "I'm powered off" (if value is 6)
   * Value 6 (``POWER_OFF``) indicates the device was powered off via the power-off command. This is how to distinguish between "powered off" and "on but idle".
 
-**operationMode** (OperationMode enum with status values 0, 32, 64, 96)
+**operationMode** (CurrentOperationMode enum with status values 0, 32, 64, 96)
   The device's **current actual operational state** - what the device is doing RIGHT NOW. This reflects real-time operation and changes automatically based on whether the device is idle or actively heating.
   
-  * Type: ``OperationMode`` enum
+  * Type: ``CurrentOperationMode`` enum
   * Values:
     
     * 0 = ``STANDBY`` (Idle, not heating)
@@ -661,11 +661,13 @@ For user-facing applications, follow these guidelines:
 **Code Example**
   .. code-block:: python
 
+    from nwp500.models import DeviceStatus, DhwOperationSetting, CurrentOperationMode
+
     def format_mode_display(status: DeviceStatus) -> dict:
         """Format mode and status for UI display."""
         
         # Check if device is powered off first
-        if status.dhwOperationSetting == OperationMode.POWER_OFF:
+        if status.dhwOperationSetting == DhwOperationSetting.POWER_OFF:
             return {
                 'configured_mode': 'Off',
                 'operational_state': 'Powered Off',
@@ -678,16 +680,16 @@ For user-facing applications, follow these guidelines:
         configured_mode = status.dhwOperationSetting.name.replace('_', ' ').title()
         
         # Current operational state
-        if status.operationMode == OperationMode.STANDBY:
+        if status.operationMode == CurrentOperationMode.STANDBY:
             operational_state = "Idle"
             is_heating = False
-        elif status.operationMode == OperationMode.HEAT_PUMP_MODE:
+        elif status.operationMode == CurrentOperationMode.HEAT_PUMP_MODE:
             operational_state = "Heating (Heat Pump)"
             is_heating = True
-        elif status.operationMode == OperationMode.HYBRID_EFFICIENCY_MODE:
+        elif status.operationMode == CurrentOperationMode.HYBRID_EFFICIENCY_MODE:
             operational_state = "Heating (Energy Saver)"
             is_heating = True
-        elif status.operationMode == OperationMode.HYBRID_BOOST_MODE:
+        elif status.operationMode == CurrentOperationMode.HYBRID_BOOST_MODE:
             operational_state = "Heating (High Demand)"
             is_heating = True
         else:
@@ -712,9 +714,9 @@ For user-facing applications, follow these guidelines:
 
 4. **operationMode changes automatically** - you cannot directly set this; it changes based on device operation
 
-5. **Both fields use OperationMode enum** - but different value ranges (1-6 for dhwOperationSetting, 0/32/64/96 for operationMode)
+5. **Separate enum types provide clarity** - ``DhwOperationSetting`` (values 1-6) for user preferences, ``CurrentOperationMode`` (values 0/32/64/96) for real-time states
 
-6. **Power off detection** - Check if ``dhwOperationSetting == 6`` (``POWER_OFF``) to determine if device is powered off vs just idle
+6. **Power off detection** - Check if ``dhwOperationSetting == DhwOperationSetting.POWER_OFF`` to determine if device is powered off vs just idle
 
 Technical Notes
 ---------------

@@ -29,7 +29,7 @@ logging.basicConfig(
 )
 
 from nwp500 import NavienAPIClient, NavienAuthClient, NavienMqttClient
-from nwp500.models import DeviceStatus, OperationMode
+from nwp500.models import DeviceStatus, CurrentOperationMode
 
 
 # Example 1: Multiple listeners for the same event
@@ -52,16 +52,18 @@ async def save_temperature_to_db(old_temp: float, new_temp: float):
 
 
 # Example 2: Mode change handlers
-def log_mode_change(old_mode: OperationMode, new_mode: OperationMode):
+def log_mode_change(old_mode: CurrentOperationMode, new_mode: CurrentOperationMode):
     """Log operation mode changes."""
     print(f"🔄 [Mode] Changed from {old_mode.name} to {new_mode.name}")
 
 
-def optimize_on_mode_change(old_mode: OperationMode, new_mode: OperationMode):
+def optimize_on_mode_change(
+    old_mode: CurrentOperationMode, new_mode: CurrentOperationMode
+):
     """Optimization handler."""
-    if new_mode == OperationMode.HEAT_PUMP_ONLY:
+    if new_mode == CurrentOperationMode.HEAT_PUMP_MODE:
         print("♻️  [Optimizer] Heat pump mode - maximum efficiency!")
-    elif new_mode == OperationMode.HIGH_DEMAND:
+    elif new_mode == CurrentOperationMode.HYBRID_BOOST_MODE:
         print("⚡ [Optimizer] High demand mode - fast recovery!")
 
 
