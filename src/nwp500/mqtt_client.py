@@ -569,10 +569,14 @@ class NavienMqttClient(EventEmitter):
 
         try:
             # Build WebSocket MQTT connection with AWS credentials
-            self._connection = mqtt_connection_builder.websockets_with_default_aws_signing(
+            # Run blocking operations in a thread to avoid blocking the event loop
+            # The AWS IoT SDK performs synchronous file I/O operations during connection setup
+            credentials_provider = await asyncio.to_thread(self._create_credentials_provider)
+            self._connection = await asyncio.to_thread(
+                mqtt_connection_builder.websockets_with_default_aws_signing,
                 endpoint=self.config.endpoint,
                 region=self.config.region,
-                credentials_provider=self._create_credentials_provider(),
+                credentials_provider=credentials_provider,
                 client_id=self.config.client_id,
                 clean_session=self.config.clean_session,
                 keep_alive_secs=self.config.keep_alive_secs,
