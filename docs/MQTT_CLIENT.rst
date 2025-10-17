@@ -1015,8 +1015,9 @@ async applications.
 
 **Implementation Details:**
 
-- All AWS IoT SDK operations that could block are wrapped with ``asyncio.run_in_executor()``
-- Connection, disconnection, subscription, and publishing operations are non-blocking
+- AWS IoT SDK operations return ``concurrent.futures.Future`` objects that are converted to asyncio Futures using ``asyncio.wrap_future()``
+- Connection, disconnection, subscription, and publishing operations are fully non-blocking
+- No thread pool resources are used for MQTT operations (more efficient than executor-based approaches)
 - The client maintains full compatibility with the existing API
 - No additional configuration required for non-blocking behavior
 

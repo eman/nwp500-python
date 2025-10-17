@@ -17,6 +17,11 @@ import sys
 from typing import Any
 
 from nwp500 import NavienAPIClient, NavienAuthClient, NavienMqttClient
+from nwp500.constants import (
+    CMD_ANTI_LEGIONELLA_DISABLE,
+    CMD_ANTI_LEGIONELLA_ENABLE,
+    CMD_STATUS_REQUEST,
+)
 
 
 def display_anti_legionella_status(status: dict[str, Any], label: str = "") -> None:
@@ -67,15 +72,35 @@ async def main() -> None:
         latest_status = {}
         status_received = asyncio.Event()
 
+        # Expected command codes for each step
+        expected_command = None
+
         def on_status(topic: str, message: dict[str, Any]) -> None:
             nonlocal latest_status
             # Debug: print what we received
             print(f"[DEBUG] Received message on topic: {topic}")
+
+            # Skip command echoes (messages on /ctrl topic)
+            if topic.endswith("/ctrl"):
+                print("[DEBUG] Skipping command echo")
+                return
+
             status = message.get("response", {}).get("status", {})
+            command = status.get("command")
+
+            # Only capture status if it has Anti-Legionella data
             if status.get("antiLegionellaPeriod") is not None:
-                latest_status = status
-                status_received.set()
-                print("[DEBUG] Anti-Legionella status captured")
+                # If we're expecting a specific command, only accept that
+                if expected_command is None or command == expected_command:
+                    latest_status = status
+                    status_received.set()
+                    print(
+                        f"[DEBUG] Anti-Legionella status captured (command={command})"
+                    )
+                else:
+                    print(
+                        f"[DEBUG] Ignoring status from different command (got {command}, expected {expected_command})"
+                    )
             else:
                 print("[DEBUG] Message doesn't contain antiLegionellaPeriod")
 
@@ -94,6 +119,7 @@ async def main() -> None:
         print("STEP 1: Getting initial Anti-Legionella status...")
         print("=" * 70)
         status_received.clear()
+        expected_command = CMD_STATUS_REQUEST
         await mqtt_client.request_device_status(device)
 
         try:
@@ -111,6 +137,7 @@ async def main() -> None:
         print("STEP 2: Enabling Anti-Legionella cycle every 7 days...")
         print("=" * 70)
         status_received.clear()
+        expected_command = CMD_ANTI_LEGIONELLA_ENABLE
         await mqtt_client.enable_anti_legionella(device, period_days=7)
 
         try:
@@ -128,6 +155,7 @@ async def main() -> None:
         print("WARNING: This reduces protection against Legionella bacteria!")
         print("=" * 70)
         status_received.clear()
+        expected_command = CMD_ANTI_LEGIONELLA_DISABLE
         await mqtt_client.disable_anti_legionella(device)
 
         try:
@@ -144,6 +172,7 @@ async def main() -> None:
         print("STEP 4: Re-enabling Anti-Legionella with 14-day cycle...")
         print("=" * 70)
         status_received.clear()
+        expected_command = CMD_ANTI_LEGIONELLA_ENABLE
         await mqtt_client.enable_anti_legionella(device, period_days=14)
 
         try:
