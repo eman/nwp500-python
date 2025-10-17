@@ -17,8 +17,13 @@ async def _wait_for_controller_serial(mqtt_client: NavienMqttClient, device) -> 
         if not feature_future.done():
             feature_future.set_result(feature)
 
-    mqtt_client.once("feature_received", capture_feature)
+    # Subscribe to device feature messages first
+    await mqtt_client.subscribe_device_feature(device, capture_feature)
+
+    # Then request device info
     await mqtt_client.request_device_info(device)
+
+    # Wait for the response
     feature = await asyncio.wait_for(feature_future, timeout=15)
     return feature.controllerSerialNumber
 
