@@ -2,6 +2,14 @@
 Changelog
 =========
 
+Version 1.2.2 (2025-10-17)
+==========================
+
+Fixed
+-----
+
+- Release version 1.2.2
+
 Version 0.2 (Unreleased)
 ========================
 
