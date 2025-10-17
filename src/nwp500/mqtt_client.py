@@ -569,23 +569,20 @@ class NavienMqttClient(EventEmitter):
 
         try:
             # Build WebSocket MQTT connection with AWS credentials
-            # Run this in an executor to avoid blocking the event loop
+            # Run blocking operations in a thread to avoid blocking the event loop
             # The AWS IoT SDK performs synchronous file I/O operations during connection setup
-            def _build_connection():
-                # Create credentials provider within the executor to avoid any blocking calls
-                credentials_provider = self._create_credentials_provider()
-                return mqtt_connection_builder.websockets_with_default_aws_signing(
-                    endpoint=self.config.endpoint,
-                    region=self.config.region,
-                    credentials_provider=credentials_provider,
-                    client_id=self.config.client_id,
-                    clean_session=self.config.clean_session,
-                    keep_alive_secs=self.config.keep_alive_secs,
-                    on_connection_interrupted=self._on_connection_interrupted_internal,
-                    on_connection_resumed=self._on_connection_resumed_internal,
-                )
-
-            self._connection = await self._loop.run_in_executor(None, _build_connection)
+            credentials_provider = await asyncio.to_thread(self._create_credentials_provider)
+            self._connection = await asyncio.to_thread(
+                mqtt_connection_builder.websockets_with_default_aws_signing,
+                endpoint=self.config.endpoint,
+                region=self.config.region,
+                credentials_provider=credentials_provider,
+                client_id=self.config.client_id,
+                clean_session=self.config.clean_session,
+                keep_alive_secs=self.config.keep_alive_secs,
+                on_connection_interrupted=self._on_connection_interrupted_internal,
+                on_connection_resumed=self._on_connection_resumed_internal,
+            )
 
             # Connect
             _logger.info("Establishing MQTT connection...")
