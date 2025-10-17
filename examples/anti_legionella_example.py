@@ -74,29 +74,33 @@ async def main() -> None:
 
         # Expected command codes for each step
         expected_command = None
-        
+
         def on_status(topic: str, message: dict[str, Any]) -> None:
             nonlocal latest_status
             # Debug: print what we received
             print(f"[DEBUG] Received message on topic: {topic}")
-            
+
             # Skip command echoes (messages on /ctrl topic)
             if topic.endswith("/ctrl"):
                 print("[DEBUG] Skipping command echo")
                 return
-                
+
             status = message.get("response", {}).get("status", {})
             command = status.get("command")
-            
+
             # Only capture status if it has Anti-Legionella data
             if status.get("antiLegionellaPeriod") is not None:
                 # If we're expecting a specific command, only accept that
                 if expected_command is None or command == expected_command:
                     latest_status = status
                     status_received.set()
-                    print(f"[DEBUG] Anti-Legionella status captured (command={command})")
+                    print(
+                        f"[DEBUG] Anti-Legionella status captured (command={command})"
+                    )
                 else:
-                    print(f"[DEBUG] Ignoring status from different command (got {command}, expected {expected_command})")
+                    print(
+                        f"[DEBUG] Ignoring status from different command (got {command}, expected {expected_command})"
+                    )
             else:
                 print("[DEBUG] Message doesn't contain antiLegionellaPeriod")
 
