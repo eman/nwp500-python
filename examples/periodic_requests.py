@@ -75,7 +75,7 @@ async def main():
         print(f"\n--- Status Response #{status_count} ---")
         print(f"  Temperature: {status.dhwTemperature:.1f}°F")
         print(f"  Power: {status.currentInstPower:.1f}W")
-        print(f"  Available Energy: {status.availableEnergyCapacity:.1f}%")
+        print(f"  Available Energy: {status.availableEnergyCapacity:.0f} Wh")
 
     def on_device_feature(feature: DeviceFeature):
         """Callback receives parsed DeviceFeature objects."""
