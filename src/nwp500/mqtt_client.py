@@ -753,12 +753,18 @@ class NavienMqttClient(EventEmitter):
             _logger.error(f"Failed to subscribe to '{_redact_topic(topic)}': {e}")
             raise
 
-    async def unsubscribe(self, topic: str):
+    async def unsubscribe(self, topic: str) -> int:
         """
         Unsubscribe from an MQTT topic.
 
         Args:
             topic: MQTT topic to unsubscribe from
+
+        Returns:
+            Unsubscribe packet ID
+
+        Raises:
+            Exception: If unsubscribe fails
         """
         if not self._connected:
             raise RuntimeError("Not connected to MQTT broker")
@@ -775,6 +781,8 @@ class NavienMqttClient(EventEmitter):
             self._message_handlers.pop(topic, None)
 
             _logger.info(f"Unsubscribed from '{topic}'")
+
+            return packet_id
 
         except Exception as e:
             _logger.error(f"Failed to unsubscribe from '{_redact_topic(topic)}': {e}")
