@@ -44,6 +44,22 @@ Always run `make ci-lint` before finalizing changes to ensure your code will pas
 - If tests hang, check network connectivity and API endpoint status
 - For MQTT, ensure AWS credentials are valid and endpoint is reachable
 
+## Communication Style
+- **Progress updates**: Save summaries for the end of work. Don't provide interim status reports.
+- **Final summaries**: Keep them concise. Example format:
+  ```
+  ## Final Results
+  **Starting point:** X errors
+  **Ending point:** 0 errors ✅
+  **Tests:** All passing ✓
+  
+  ## What Was Fixed
+  - Module 1 - Brief description (N errors)
+  - Module 2 - Brief description (N errors)
+  ```
+- **No markdown files**: Don't create separate summary files. Provide summaries inline when requested.
+- **Focus on execution**: Perform the work, then summarize results at the end.
+
 ---
 
 If any section is unclear or missing important project-specific details, please provide feedback so this guide can be improved for future AI agents.

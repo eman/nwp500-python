@@ -70,6 +70,12 @@ class AuthTokens:
 
     # Calculated fields
     issued_at: datetime = field(default_factory=datetime.now)
+    _expires_at: datetime = field(default=datetime.now(), init=False, repr=False)
+
+    def __post_init__(self) -> None:
+        """Cache the expiration timestamp after initialization."""
+        # Pre-calculate and cache the expiration time
+        self._expires_at = self.issued_at + timedelta(seconds=self.authentication_expires_in)
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "AuthTokens":
@@ -87,19 +93,19 @@ class AuthTokens:
 
     @property
     def expires_at(self) -> datetime:
-        """Calculate when the access token expires."""
-        return self.issued_at + timedelta(seconds=self.authentication_expires_in)
+        """Get the cached expiration timestamp."""
+        return self._expires_at
 
     @property
     def is_expired(self) -> bool:
-        """Check if the access token has expired."""
+        """Check if the access token has expired (cached calculation)."""
         # Consider expired if within 5 minutes of expiration
-        return datetime.now() >= (self.expires_at - timedelta(minutes=5))
+        return datetime.now() >= (self._expires_at - timedelta(minutes=5))
 
     @property
     def time_until_expiry(self) -> timedelta:
-        """Get the time remaining until token expiration."""
-        return self.expires_at - datetime.now()
+        """Get the time remaining until token expiration (uses cached expiration time)."""
+        return self._expires_at - datetime.now()
 
     @property
     def bearer_token(self) -> str:
@@ -143,11 +149,11 @@ class AuthenticationError(Exception):
     def __init__(
         self,
         message: str,
-        code: Optional[int] = None,
-        response: Optional[dict] = None,
+        status_code: Optional[int] = None,
+        response: Optional[dict[str, Any]] = None,
     ):
         self.message = message
-        self.code = code
+        self.status_code = status_code
         self.response = response
         super().__init__(self.message)
 
@@ -230,7 +236,7 @@ class NavienAuthClient:
         self._auth_response: Optional[AuthenticationResponse] = None
         self._user_email: Optional[str] = None
 
-    async def __aenter__(self):
+    async def __aenter__(self) -> "NavienAuthClient":
         """Async context manager entry."""
         if self._owned_session:
             self._session = aiohttp.ClientSession(timeout=self.timeout)
@@ -240,12 +246,12 @@ class NavienAuthClient:
 
         return self
 
-    async def __aexit__(self, exc_type, exc_val, exc_tb):
+    async def __aexit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
         """Async context manager exit."""
         if self._owned_session and self._session:
             await self._session.close()
 
-    async def _ensure_session(self):
+    async def _ensure_session(self) -> None:
         """Ensure we have an active session."""
         if self._session is None:
             self._session = aiohttp.ClientSession(timeout=self.timeout)
@@ -267,6 +273,9 @@ class NavienAuthClient:
             AuthenticationError: If authentication fails for other reasons
         """
         await self._ensure_session()
+        
+        if self._session is None:
+            raise AuthenticationError("Session not initialized")
 
         url = f"{self.base_url}{SIGN_IN_ENDPOINT}"
         payload = {"userId": user_id, "password": password}
@@ -286,12 +295,12 @@ class NavienAuthClient:
                     if code == 401 or "invalid" in msg.lower() or "unauthorized" in msg.lower():
                         raise InvalidCredentialsError(
                             f"Invalid credentials: {msg}",
-                            code=code,
+                            status_code=code,
                             response=response_data,
                         )
                     raise AuthenticationError(
                         f"Authentication failed: {msg}",
-                        code=code,
+                        status_code=code,
                         response=response_data,
                     )
 
@@ -328,6 +337,9 @@ class NavienAuthClient:
             TokenRefreshError: If token refresh fails
         """
         await self._ensure_session()
+        
+        if self._session is None:
+            raise AuthenticationError("Session not initialized")
 
         url = f"{self.base_url}{REFRESH_ENDPOINT}"
         payload = {"refreshToken": refresh_token}
@@ -345,7 +357,7 @@ class NavienAuthClient:
                     _logger.error(f"Token refresh failed: {code} - {msg}")
                     raise TokenRefreshError(
                         f"Failed to refresh token: {msg}",
-                        code=code,
+                        status_code=code,
                         response=response_data,
                     )
 
@@ -409,8 +421,8 @@ class NavienAuthClient:
         """Get the email address of the authenticated user."""
         return self._user_email
 
-    async def close(self):
-        """Close the client session."""
+    async def close(self) -> None:
+        """Close the aiohttp session if we own it."""
         if self._owned_session and self._session:
             await self._session.close()
             self._session = None
@@ -459,6 +471,8 @@ async def authenticate(user_id: str, password: str) -> AuthenticationResponse:
         >>> print(response.tokens.bearer_token)
     """
     async with NavienAuthClient(user_id, password) as client:
+        if client._auth_response is None:
+            raise AuthenticationError("Authentication failed: no response received")
         return client._auth_response
 
 
@@ -494,7 +508,7 @@ async def refresh_access_token(refresh_token: str) -> AuthTokens:
         if code != 200 or not response.ok:
             raise TokenRefreshError(
                 f"Failed to refresh token: {msg}",
-                code=code,
+                status_code=code,
                 response=response_data,
             )
 

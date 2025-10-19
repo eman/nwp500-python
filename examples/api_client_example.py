@@ -57,8 +57,13 @@ async def example_basic_usage():
 
             # List all devices
             print("📱 Retrieving devices...")
-            devices = await client.list_devices()
-            print(f"✅ Found {len(devices)} device(s)\n")
+            try:
+                devices = await asyncio.wait_for(client.list_devices(), timeout=30.0)
+                print(f"✅ Found {len(devices)} device(s)\n")
+            except asyncio.TimeoutError:
+                print("❌ Request timed out while retrieving devices")
+                print("   The API server may be slow or unresponsive.")
+                return 1
 
             # Display device information
             try:
@@ -103,23 +108,41 @@ async def example_basic_usage():
                 additional = device.device_info.additional_value
 
                 print("📊 Getting detailed device information...")
-                detailed_info = await client.get_device_info(mac, additional)
+                try:
+                    # Add explicit timeout for robustness
+                    detailed_info = await asyncio.wait_for(
+                        client.get_device_info(mac, additional), timeout=30.0
+                    )
 
-                print(f"✅ Detailed info for: {detailed_info.device_info.device_name}")
-                if detailed_info.device_info.install_type:
-                    print(f"  Install Type: {detailed_info.device_info.install_type}")
-                if detailed_info.location.latitude:
-                    print("  Coordinates: (available, not shown for privacy)")
-                print()
+                    print(
+                        f"✅ Detailed info for: {detailed_info.device_info.device_name}"
+                    )
+                    if detailed_info.device_info.install_type:
+                        print(
+                            f"  Install Type: {detailed_info.device_info.install_type}"
+                        )
+                    if detailed_info.location.latitude:
+                        print("  Coordinates: (available, not shown for privacy)")
+                    print()
+                except asyncio.TimeoutError:
+                    print("⚠️  Request timed out - API may be slow or unresponsive")
+                    print("   Continuing with other requests...")
+                    print()
 
                 # Get firmware information
                 print("🔧 Getting firmware information...")
-                firmware_list = await client.get_firmware_info(mac, additional)
-                print(f"✅ Found {len(firmware_list)} firmware components")
+                try:
+                    firmware_list = await asyncio.wait_for(
+                        client.get_firmware_info(mac, additional), timeout=30.0
+                    )
+                    print(f"✅ Found {len(firmware_list)} firmware components")
 
-                for fw in firmware_list:
-                    print(f"  SW Code: {fw.cur_sw_code}, Version: {fw.cur_version}")
-                print()
+                    for fw in firmware_list:
+                        print(f"  SW Code: {fw.cur_sw_code}, Version: {fw.cur_version}")
+                    print()
+                except asyncio.TimeoutError:
+                    print("⚠️  Request timed out - API may be slow or unresponsive")
+                    print()
 
         print("=" * 70)
         print("✅ Example completed successfully!")

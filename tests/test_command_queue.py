@@ -5,7 +5,8 @@ from datetime import datetime
 
 from awscrt import mqtt
 
-from nwp500.mqtt_client import MqttConnectionConfig, QueuedCommand
+from nwp500.mqtt_client import MqttConnectionConfig
+from nwp500.mqtt_utils import QueuedCommand
 
 
 def test_queued_command_dataclass():

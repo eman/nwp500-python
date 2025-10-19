@@ -2,12 +2,32 @@
 Changelog
 =========
 
+Version 3.0.0 (Unreleased)
+==========================
+
+**Breaking Changes**
+
+- **REMOVED**: ``OperationMode`` enum has been removed
+  
+  - This enum was deprecated in v2.0.0 and has now been fully removed
+  - Use ``DhwOperationSetting`` for user-configured mode preferences (values 1-6)
+  - Use ``CurrentOperationMode`` for real-time operational states (values 0, 32, 64, 96)
+  - Migration was supported throughout the v2.x series
+
+- **REMOVED**: Migration helper functions and deprecation infrastructure
+  
+  - Removed ``migrate_operation_mode_usage()`` function
+  - Removed ``enable_deprecation_warnings()`` function
+  - Removed migration documentation files (MIGRATION.md, BREAKING_CHANGES_V3.md)
+  - All functionality available through ``DhwOperationSetting`` and ``CurrentOperationMode``
+
 Version 2.0.0 (Unreleased)
 ==========================
 
 **Breaking Changes (Planned for v3.0.0)**
 
 - **DEPRECATION**: ``OperationMode`` enum is deprecated and will be removed in v3.0.0
+
   
   - Use ``DhwOperationSetting`` for user-configured mode preferences (values 1-6)
   - Use ``CurrentOperationMode`` for real-time operational states (values 0, 32, 64, 96)

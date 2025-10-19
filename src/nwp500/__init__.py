@@ -29,6 +29,16 @@ from nwp500.auth import (
     authenticate,
     refresh_access_token,
 )
+from nwp500.encoding import (
+    build_reservation_entry,
+    build_tou_period,
+    decode_price,
+    decode_season_bitfield,
+    decode_week_bitfield,
+    encode_price,
+    encode_season_bitfield,
+    encode_week_bitfield,
+)
 from nwp500.events import (
     EventEmitter,
     EventListener,
@@ -48,16 +58,14 @@ from nwp500.models import (
     MonthlyEnergyData,
     MqttCommand,
     MqttRequest,
-    OperationMode,  # Deprecated - use DhwOperationSetting or CurrentOperationMode
     TemperatureUnit,
     TOUInfo,
     TOUSchedule,
-    enable_deprecation_warnings,
 )
-from nwp500.mqtt_client import (
-    MqttConnectionConfig,
-    NavienMqttClient,
-    PeriodicRequestType,
+from nwp500.mqtt_client import NavienMqttClient
+from nwp500.mqtt_utils import MqttConnectionConfig, PeriodicRequestType
+from nwp500.utils import (
+    log_performance,
 )
 
 __all__ = [
@@ -71,9 +79,8 @@ __all__ = [
     "FirmwareInfo",
     "TOUSchedule",
     "TOUInfo",
-    "OperationMode",  # Deprecated - use DhwOperationSetting or CurrentOperationMode
-    "DhwOperationSetting",  # New: User-configured mode preferences
-    "CurrentOperationMode",  # New: Real-time operational states
+    "DhwOperationSetting",
+    "CurrentOperationMode",
     "TemperatureUnit",
     "MqttRequest",
     "MqttCommand",
@@ -104,57 +111,15 @@ __all__ = [
     # Event Emitter
     "EventEmitter",
     "EventListener",
-    # Migration helpers
-    "migrate_operation_mode_usage",
-    "enable_deprecation_warnings",
+    # Encoding utilities
+    "encode_week_bitfield",
+    "decode_week_bitfield",
+    "encode_season_bitfield",
+    "decode_season_bitfield",
+    "encode_price",
+    "decode_price",
+    "build_reservation_entry",
+    "build_tou_period",
+    # Utilities
+    "log_performance",
 ]
-
-
-# Migration helper for backward compatibility
-def migrate_operation_mode_usage():
-    """
-    Helper function to guide migration from OperationMode to specific enums.
-
-    This function provides guidance on migrating from the deprecated OperationMode
-    enum to the new DhwOperationSetting and CurrentOperationMode enums.
-
-    Returns:
-        dict: Migration guidance with examples
-    """
-    return {
-        "deprecated": "OperationMode",
-        "replacements": {
-            "dhw_operation_setting": "DhwOperationSetting",
-            "operation_mode": "CurrentOperationMode",
-        },
-        "migration_examples": {
-            "dhw_setting_comparison": {
-                "old": "status.dhwOperationSetting == OperationMode.ENERGY_SAVER",
-                "new": "status.dhwOperationSetting == DhwOperationSetting.ENERGY_SAVER",
-            },
-            "operation_mode_comparison": {
-                "old": "status.operationMode == OperationMode.STANDBY",
-                "new": "status.operationMode == CurrentOperationMode.STANDBY",
-            },
-            "imports": {
-                "old": "from nwp500 import OperationMode",
-                "new": "from nwp500 import DhwOperationSetting, CurrentOperationMode",
-            },
-        },
-        "value_mappings": {
-            "DhwOperationSetting": {
-                "HEAT_PUMP": 1,
-                "ELECTRIC": 2,
-                "ENERGY_SAVER": 3,
-                "HIGH_DEMAND": 4,
-                "VACATION": 5,
-                "POWER_OFF": 6,
-            },
-            "CurrentOperationMode": {
-                "STANDBY": 0,
-                "HEAT_PUMP_MODE": 32,
-                "HYBRID_EFFICIENCY_MODE": 64,
-                "HYBRID_BOOST_MODE": 96,
-            },
-        },
-    }
