@@ -252,7 +252,7 @@ class MqttPeriodicRequestManager:
 
         if stopped_count == 0:
             _logger.debug(
-                f"No periodic tasks found for {device_id}"
+                "No periodic tasks found for device"
                 + (f" (type={request_type.value})" if request_type else "")
             )
 
