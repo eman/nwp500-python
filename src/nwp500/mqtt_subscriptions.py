@@ -179,7 +179,7 @@ class MqttSubscriptionManager:
         if not self._connection:
             raise RuntimeError("Not connected to MQTT broker")
 
-        _logger.info(f"Subscribing to topic: {topic}")
+        _logger.info(f"Subscribing to topic: {redact_topic(topic)}")
 
         try:
             # Convert concurrent.futures.Future to asyncio.Future and await
@@ -219,7 +219,7 @@ class MqttSubscriptionManager:
         if not self._connection:
             raise RuntimeError("Not connected to MQTT broker")
 
-        _logger.info(f"Unsubscribing from topic: {topic}")
+        _logger.info(f"Unsubscribing from topic: {redact_topic(topic)}")
 
         try:
             # Convert concurrent.futures.Future to asyncio.Future and await
