@@ -18,7 +18,7 @@ from awscrt import mqtt
 
 from .events import EventEmitter
 from .models import Device, DeviceFeature, DeviceStatus, EnergyUsageResponse
-from .mqtt_utils import redact_topic
+from .mqtt_utils import redact_topic, topic_has_mac
 
 __author__ = "Emmanuel Levijarvi"
 
@@ -179,7 +179,10 @@ class MqttSubscriptionManager:
         if not self._connection:
             raise RuntimeError("Not connected to MQTT broker")
 
-        _logger.info(f"Subscribing to topic: {redact_topic(topic)}")
+        if topic_has_mac(topic):
+            _logger.info("Subscribing to topic: <REDACTED>")
+        else:
+            _logger.info(f"Subscribing to topic: {redact_topic(topic)}")
 
         try:
             # Convert concurrent.futures.Future to asyncio.Future and await
