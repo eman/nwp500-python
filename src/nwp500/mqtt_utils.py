@@ -94,7 +94,7 @@ def redact(obj: Any, keys_to_redact: Optional[set[str]] = None) -> Any:
             return s[:256] + "...<redacted>..."
         return s
     except Exception:
-        return "<UNREPRABLE>"
+        return "<UNREPRESENTABLE>"
 
 
 def redact_topic(topic: str) -> str:
