@@ -18,7 +18,7 @@ from awscrt import mqtt
 
 from .events import EventEmitter
 from .models import Device, DeviceFeature, DeviceStatus, EnergyUsageResponse
-from .mqtt_utils import redact_topic, topic_has_mac
+from .mqtt_utils import redact_topic
 
 __author__ = "Emmanuel Levijarvi"
 
@@ -179,10 +179,7 @@ class MqttSubscriptionManager:
         if not self._connection:
             raise RuntimeError("Not connected to MQTT broker")
 
-        if topic_has_mac(topic):
-            _logger.info("Subscribing to topic: <REDACTED>")
-        else:
-            _logger.info(f"Subscribing to topic: {redact_topic(topic)}")
+        _logger.info(f"Subscribing to topic: {redact_topic(topic)}")
 
         try:
             # Convert concurrent.futures.Future to asyncio.Future and await
@@ -191,7 +188,9 @@ class MqttSubscriptionManager:
             )
             subscribe_result = await asyncio.wrap_future(subscribe_future)
 
-            _logger.info(f"Subscribed to '{redact_topic(topic)}' with QoS {subscribe_result['qos']}")
+            _logger.info(
+                f"Subscribed to '{redact_topic(topic)}' with QoS {subscribe_result['qos']}"
+            )
 
             # Store subscription and handler
             self._subscriptions[topic] = qos
@@ -202,13 +201,7 @@ class MqttSubscriptionManager:
             return int(packet_id)
 
         except Exception as e:
-            # Enhanced protection: verify no MAC in redacted topic
-            from .mqtt_utils import topic_has_mac  # local import to avoid top-level circularity
-            redacted = redact_topic(topic)
-            # Always redact topic string in error logs
-            _logger.error("Failed to subscribe to sensitive topic: <REDACTED> - Exception: %s", e)
-
-
+            _logger.error(f"Failed to subscribe to '{redact_topic(topic)}': {e}")
             raise
 
     async def unsubscribe(self, topic: str) -> int:
@@ -244,13 +237,7 @@ class MqttSubscriptionManager:
             return int(packet_id)
 
         except Exception as e:
-            # Enhanced protection: verify no MAC in redacted topic
-            from .mqtt_utils import topic_has_mac  # local import to avoid top-level circularity
-            redacted = redact_topic(topic)
-            if topic_has_mac(redacted):
-                _logger.error("Failed to unsubscribe from sensitive topic: <REDACTED> - Exception: %s", e)
-            else:
-                _logger.error(f"Failed to unsubscribe from '{redacted}': {e}")
+            _logger.error(f"Failed to unsubscribe from '{redact_topic(topic)}': {e}")
             raise
 
     async def subscribe_device(
