@@ -238,7 +238,9 @@ class MqttSubscriptionManager:
             _logger.error(f"Failed to unsubscribe from '{redact_topic(topic)}': {e}")
             raise
 
-    async def subscribe_device(self, device: Device, callback: Callable[[str, dict[str, Any]], None]) -> int:
+    async def subscribe_device(
+        self, device: Device, callback: Callable[[str, dict[str, Any]], None]
+    ) -> int:
         """
         Subscribe to all messages from a specific device.
 

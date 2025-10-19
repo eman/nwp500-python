@@ -11,7 +11,7 @@ import inspect
 import logging
 from collections import defaultdict
 from dataclasses import dataclass
-from typing import Any, Callable, Optional, Protocol
+from typing import Any, Callable, Optional
 
 __author__ = "Emmanuel Levijarvi"
 __copyright__ = "Emmanuel Levijarvi"
@@ -62,7 +62,9 @@ class EventEmitter:
         """Initialize the event emitter."""
         self._listeners: dict[str, list[EventListener]] = defaultdict(list)
         self._event_counts: dict[str, int] = defaultdict(int)
-        self._once_callbacks: set[tuple[str, Callable[..., Any]]] = set()  # Track (event, callback) for once listeners
+        self._once_callbacks: set[tuple[str, Callable[..., Any]]] = (
+            set()
+        )  # Track (event, callback) for once listeners
 
     def on(
         self,

@@ -247,8 +247,7 @@ class NavienMqttClient(EventEmitter):
             return
 
         await self._command_queue.send_all(
-            self._connection_manager.publish,
-            lambda: self._connected
+            self._connection_manager.publish, lambda: self._connected
         )
 
     async def _start_reconnect_task(self) -> None:
@@ -444,8 +443,7 @@ class NavienMqttClient(EventEmitter):
     def _on_message_received(self, topic: str, payload: bytes, **kwargs: Any) -> None:
         """Internal callback for received messages."""
         try:
-            # Parse JSON payload
-            message = json.loads(payload.decode("utf-8"))
+            # Parse JSON payload and delegate to subscription manager
             _logger.debug("Received message on topic: %s", topic)
 
             # Call registered handlers via subscription manager
@@ -601,7 +599,9 @@ class NavienMqttClient(EventEmitter):
 
     # Navien-specific convenience methods
 
-    async def subscribe_device(self, device: Device, callback: Callable[[str, dict[str, Any]], None]) -> int:
+    async def subscribe_device(
+        self, device: Device, callback: Callable[[str, dict[str, Any]], None]
+    ) -> int:
         """
         Subscribe to all messages from a specific device.
 

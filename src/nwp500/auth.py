@@ -273,7 +273,7 @@ class NavienAuthClient:
             AuthenticationError: If authentication fails for other reasons
         """
         await self._ensure_session()
-        
+
         if self._session is None:
             raise AuthenticationError("Session not initialized")
 
@@ -337,7 +337,7 @@ class NavienAuthClient:
             TokenRefreshError: If token refresh fails
         """
         await self._ensure_session()
-        
+
         if self._session is None:
             raise AuthenticationError("Session not initialized")
 
