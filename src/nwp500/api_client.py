@@ -300,7 +300,7 @@ class NavienAPIClient:
         data = response.get("data", {})
         tou_info = TOUInfo.from_dict(data)
 
-        _logger.info(f"Retrieved TOU info for {mac_address}")
+        _logger.info("Retrieved TOU info for device")
         return tou_info
 
     async def update_push_token(
