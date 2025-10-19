@@ -123,26 +123,6 @@ async def handle_device_info_request(mqtt: NavienMqttClient, device: Device) -> 
         _logger.error("Timed out waiting for device info response.")
 
 
-async def handle_device_feature_request(mqtt: NavienMqttClient, device: Device) -> None:
-    """Request device feature information once and print it."""
-    future = asyncio.get_running_loop().create_future()
-
-    def on_feature(feature: Any) -> None:
-        if not future.done():
-            print(json.dumps(asdict(feature), indent=2, default=_json_default_serializer))
-            future.set_result(None)
-
-    await mqtt.subscribe_device_feature(device, on_feature)
-    _logger.info("Requesting device feature information...")
-    # Note: request_device_feature method does not exist in NavienMqttClient
-    await mqtt.request_device_info(device)
-
-    try:
-        await asyncio.wait_for(future, timeout=10)
-    except asyncio.TimeoutError:
-        _logger.error("Timed out waiting for device feature response.")
-
-
 async def handle_get_controller_serial_request(mqtt: NavienMqttClient, device: Device) -> None:
     """Request and display just the controller serial number."""
     serial_number = await get_controller_serial_number(mqtt, device)
