@@ -205,10 +205,10 @@ class MqttSubscriptionManager:
             # Enhanced protection: verify no MAC in redacted topic
             from .mqtt_utils import topic_has_mac  # local import to avoid top-level circularity
             redacted = redact_topic(topic)
-            if topic_has_mac(redacted):
-                _logger.error("Failed to subscribe to sensitive topic: <REDACTED> - Exception: %s", e)
-            else:
-                _logger.error(f"Failed to subscribe to '{redacted}': {e}")
+            # Always redact topic string in error logs
+            _logger.error("Failed to subscribe to sensitive topic: <REDACTED> - Exception: %s", e)
+
+
             raise
 
     async def unsubscribe(self, topic: str) -> int:
