@@ -439,12 +439,12 @@ class MqttDeviceController:
         device_type = device.device_info.device_type
         additional_value = device.device_info.additional_value
         device_topic = f"navilink-{device_id}"
-        topic = f"cmd/{device_type}/{device_topic}/ctrl/rsv/rd"
+        topic = f"cmd/{device_type}/{device_topic}/st/rsv/rd"
 
         command = self._build_command(
             device_type=device_type,
             device_id=device_id,
-            command=CommandCode.RESERVATION_MANAGEMENT,
+            command=CommandCode.RESERVATION_READ,
             additional_value=additional_value,
         )
         command["requestTopic"] = topic

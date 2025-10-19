@@ -14,11 +14,25 @@
 - **Lint/format**: `ruff format --check src/ tests/ examples/` (use `ruff format ...` to auto-format)
 - **CI-compatible linting**: `make ci-lint` (run before finalizing changes to ensure CI will pass)
 - **CI-compatible formatting**: `make ci-format` (auto-fix formatting issues)
+- **Type checking**: `python3 -m mypy src/nwp500 --config-file pyproject.toml` (static type analysis)
 - **Build docs**: `tox -e docs` (Sphinx docs in `docs/`)
 - **Preview docs**: `python3 -m http.server --directory docs/_build/html`
 
 ### Before Committing Changes
-Always run `make ci-lint` before finalizing changes to ensure your code will pass CI checks. This runs the exact same linting configuration as the CI pipeline, preventing "passes locally but fails in CI" issues.
+Always run these checks before finalizing changes to ensure your code will pass CI:
+1. **Linting**: `make ci-lint` - Ensures code style matches CI requirements
+2. **Type checking**: `python3 -m mypy src/nwp500 --config-file pyproject.toml` - Catches type errors
+3. **Tests**: `pytest` - Ensures functionality isn't broken
+
+This prevents "passes locally but fails in CI" issues.
+
+### After Completing a Task
+Always run these checks after completing a task to validate your changes:
+1. **Type checking**: `python3 -m mypy src/nwp500 --config-file pyproject.toml` - Verify no type errors were introduced
+2. **Linting**: `make ci-lint` - Verify code style compliance
+3. **Tests** (if applicable): `pytest` - Verify functionality works as expected
+
+Report the results of these checks in your final summary.
 
 ## Patterns & Conventions
 - **Async context managers** for authentication: `async with NavienAuthClient(email, password) as auth_client:`

@@ -4,13 +4,46 @@ import asyncio
 import json
 import logging
 from dataclasses import asdict
-from typing import Any
+from typing import Any, Optional
 
-from nwp500 import Device, DeviceStatus, NavienMqttClient
+from nwp500 import Device, DeviceFeature, DeviceStatus, NavienMqttClient
 
 from .output_formatters import _json_default_serializer
 
 _logger = logging.getLogger(__name__)
+
+
+async def get_controller_serial_number(
+    mqtt: NavienMqttClient, device: Device, timeout: float = 10.0
+) -> Optional[str]:
+    """
+    Helper function to retrieve controller serial number from device.
+
+    Args:
+        mqtt: MQTT client instance
+        device: Device object
+        timeout: Timeout in seconds
+
+    Returns:
+        Controller serial number or None if timeout/error
+    """
+    future: asyncio.Future[str] = asyncio.get_running_loop().create_future()
+
+    def on_feature(feature: DeviceFeature) -> None:
+        if not future.done():
+            future.set_result(feature.controllerSerialNumber)
+
+    await mqtt.subscribe_device_feature(device, on_feature)
+    _logger.info("Requesting controller serial number...")
+    await mqtt.request_device_info(device)
+
+    try:
+        serial_number = await asyncio.wait_for(future, timeout=timeout)
+        _logger.info(f"Controller serial number retrieved: {serial_number}")
+        return serial_number
+    except asyncio.TimeoutError:
+        _logger.error("Timed out waiting for controller serial number.")
+        return None
 
 
 async def handle_status_request(mqtt: NavienMqttClient, device: Device) -> None:
@@ -108,6 +141,15 @@ async def handle_device_feature_request(mqtt: NavienMqttClient, device: Device) 
         await asyncio.wait_for(future, timeout=10)
     except asyncio.TimeoutError:
         _logger.error("Timed out waiting for device feature response.")
+
+
+async def handle_get_controller_serial_request(mqtt: NavienMqttClient, device: Device) -> None:
+    """Request and display just the controller serial number."""
+    serial_number = await get_controller_serial_number(mqtt, device)
+    if serial_number:
+        print(serial_number)
+    else:
+        _logger.error("Failed to retrieve controller serial number.")
 
 
 async def handle_set_mode_request(mqtt: NavienMqttClient, device: Device, mode_name: str) -> None:
@@ -298,16 +340,56 @@ async def handle_get_reservations_request(mqtt: NavienMqttClient, device: Device
     future = asyncio.get_running_loop().create_future()
 
     def raw_callback(topic: str, message: dict[str, Any]) -> None:
-        if not future.done():
-            # Print the full reservation response
-            print(json.dumps(message, indent=2, default=_json_default_serializer))
+        # Device responses have "response" field with actual data
+        if not future.done() and "response" in message:
+            # Decode and format the reservation data for human readability
+            from nwp500.encoding import decode_reservation_hex, decode_week_bitfield
+
+            response = message.get("response", {})
+            reservation_use = response.get("reservationUse", 0)
+            reservation_hex = response.get("reservation", "")
+
+            # Decode the hex string into structured entries
+            if isinstance(reservation_hex, str):
+                reservations = decode_reservation_hex(reservation_hex)
+            else:
+                # Already structured (shouldn't happen but handle it)
+                reservations = reservation_hex if isinstance(reservation_hex, list) else []
+
+            # Format for display
+            output = {
+                "reservationUse": reservation_use,
+                "reservationEnabled": reservation_use == 1,
+                "reservations": [],
+            }
+
+            for idx, entry in enumerate(reservations, start=1):
+                week_days = decode_week_bitfield(entry.get("week", 0))
+                param_value = entry.get("param", 0)
+                # Temperature is encoded as (display - 20), so display = param + 20
+                display_temp = param_value + 20
+
+                formatted_entry = {
+                    "number": idx,
+                    "enabled": entry.get("enable") == 1,
+                    "days": week_days,
+                    "time": f"{entry.get('hour', 0):02d}:{entry.get('min', 0):02d}",
+                    "mode": entry.get("mode"),
+                    "temperatureF": display_temp,
+                    "raw": entry,
+                }
+                output["reservations"].append(formatted_entry)
+
+            # Print formatted output
+            print(json.dumps(output, indent=2, default=_json_default_serializer))
             future.set_result(None)
 
-    # Subscribe to reservation response topic
+    # Subscribe to all device-type messages to catch the response
+    # Responses come on various patterns depending on the command
     device_type = device.device_info.device_type
-    response_topic = f"cmd/{device_type}/+/res/rsv/rd"
+    response_pattern = f"cmd/{device_type}/#"
 
-    await mqtt.subscribe(response_topic, raw_callback)
+    await mqtt.subscribe(response_pattern, raw_callback)
     _logger.info("Requesting current reservation schedule...")
     await mqtt.request_reservations(device)
 
@@ -333,13 +415,16 @@ async def handle_update_reservations_request(
     future = asyncio.get_running_loop().create_future()
 
     def raw_callback(topic: str, message: dict[str, Any]) -> None:
-        if not future.done():
+        # Only process response messages, not request echoes
+        if not future.done() and "response" in message:
             print(json.dumps(message, indent=2, default=_json_default_serializer))
             future.set_result(None)
 
-    # Subscribe to reservation response topic
+    # Subscribe to client-specific response topic pattern
+    # Responses come on: cmd/{deviceType}/+/+/{clientId}/res/rsv/rd
     device_type = device.device_info.device_type
-    response_topic = f"cmd/{device_type}/+/res/rsv/rd"
+    client_id = mqtt.client_id
+    response_topic = f"cmd/{device_type}/+/+/{client_id}/res/rsv/rd"
 
     await mqtt.subscribe(response_topic, raw_callback)
     _logger.info(f"Updating reservation schedule (enabled={enabled})...")
@@ -351,33 +436,51 @@ async def handle_update_reservations_request(
         _logger.error("Timed out waiting for reservation update response.")
 
 
-async def handle_get_tou_request(
-    mqtt: NavienMqttClient, device: Device, serial_number: str
-) -> None:
-    """Request Time-of-Use settings from the device."""
-    if not serial_number:
-        _logger.error("Controller serial number is required. Use --tou-serial option.")
-        return
-
-    future = asyncio.get_running_loop().create_future()
-
-    def raw_callback(topic: str, message: dict[str, Any]) -> None:
-        if not future.done():
-            print(json.dumps(message, indent=2, default=_json_default_serializer))
-            future.set_result(None)
-
-    # Subscribe to TOU response topic
-    device_type = device.device_info.device_type
-    response_topic = f"cmd/{device_type}/+/res/tou/rd"
-
-    await mqtt.subscribe(response_topic, raw_callback)
-    _logger.info("Requesting Time-of-Use settings...")
-    await mqtt.request_tou_settings(device, serial_number)
-
+async def handle_get_tou_request(mqtt: NavienMqttClient, device: Device, api_client: Any) -> None:
+    """Request Time-of-Use settings from the REST API."""
     try:
-        await asyncio.wait_for(future, timeout=10)
-    except asyncio.TimeoutError:
-        _logger.error("Timed out waiting for TOU settings response.")
+        # Get controller serial number via MQTT
+        controller_id = await get_controller_serial_number(mqtt, device)
+        if not controller_id:
+            _logger.error("Failed to retrieve controller serial number.")
+            return
+
+        _logger.info(f"Controller ID: {controller_id}")
+        _logger.info("Fetching Time-of-Use settings from REST API...")
+
+        # Get TOU info from REST API
+        mac_address = device.device_info.mac_address
+        additional_value = device.device_info.additional_value
+
+        tou_info = await api_client.get_tou_info(
+            mac_address=mac_address,
+            additional_value=additional_value,
+            controller_id=controller_id,
+            user_type="O",
+        )
+
+        # Print the TOU info
+        print(
+            json.dumps(
+                {
+                    "registerPath": tou_info.register_path,
+                    "sourceType": tou_info.source_type,
+                    "controllerId": tou_info.controller_id,
+                    "manufactureId": tou_info.manufacture_id,
+                    "name": tou_info.name,
+                    "utility": tou_info.utility,
+                    "zipCode": tou_info.zip_code,
+                    "schedule": [
+                        {"season": schedule.season, "interval": schedule.intervals}
+                        for schedule in tou_info.schedule
+                    ],
+                },
+                indent=2,
+            )
+        )
+
+    except Exception as e:
+        _logger.error(f"Error fetching TOU settings: {e}", exc_info=True)
 
 
 async def handle_set_tou_enabled_request(

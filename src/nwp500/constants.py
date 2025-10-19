@@ -35,8 +35,9 @@ class CommandCode(IntEnum):
     # Query Commands (Information Retrieval)
     DEVICE_INFO_REQUEST = 16777217  # Request device feature information
     STATUS_REQUEST = 16777219  # Request current device status
+    RESERVATION_READ = 16777222  # Read current reservation schedule
     ENERGY_USAGE_QUERY = 16777225  # Query energy usage history
-    RESERVATION_MANAGEMENT = 16777226  # Query/manage reservation schedules
+    RESERVATION_MANAGEMENT = 16777226  # Update/manage reservation schedules
 
     # Control Commands - Power
     POWER_OFF = 33554433  # Turn device off

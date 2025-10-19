@@ -130,6 +130,8 @@ Main API client class.
     
     Raises:
         * ``APIError``: If API request fails
+    
+    See :doc:`TIME_OF_USE` for detailed information on TOU pricing and configuration.
 
 ``update_push_token(push_token: str, ...) -> bool``
     Update push notification token.
@@ -246,6 +248,18 @@ Time of Use (TOU) information.
         utility: str
         zip_code: int
         schedule: List[TOUSchedule]
+
+**Fields:**
+    * ``register_path``: Path where TOU data is stored
+    * ``source_type``: Source of rate data (e.g., "openei")
+    * ``controller_id``: Controller serial number
+    * ``manufacture_id``: Manufacturer ID
+    * ``name``: Rate plan name
+    * ``utility``: Utility company name
+    * ``zip_code``: ZIP code
+    * ``schedule``: List of TOU schedule periods
+
+See :doc:`TIME_OF_USE` for detailed information on TOU pricing configuration, OpenEI API integration, and usage examples.
 
 Exceptions
 ----------
@@ -536,6 +550,7 @@ Further Reading
 ---------------
 
 * :doc:`AUTHENTICATION` - Authentication details
+* :doc:`TIME_OF_USE` - Time of Use pricing configuration and OpenEI API integration
 * `OpenAPI Specification <openapi.yaml>`__ - Complete API specification
 
 For questions or issues, please refer to the project repository.

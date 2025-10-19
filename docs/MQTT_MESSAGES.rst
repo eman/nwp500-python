@@ -52,8 +52,9 @@ Control messages are sent to the ``cmd/{deviceType}/{deviceId}/ctrl`` topic. The
 * Power control: 33554433 (power-off) or 33554434 (power-on)
 * DHW mode control: 33554437
 * DHW temperature control: 33554464
-* Reservation management: 16777226
-* TOU (Time of Use) settings: 33554439
+* Reservation read: 16777222 (read current schedule via ``/st/rsv/rd``)
+* Reservation management: 16777226 (write/update schedule via ``/ctrl/rsv/rd``)
+* TOU (Time of Use) settings: 33554439 (write via MQTT; read via REST API)
 * Anti-Legionella control: 33554471 (disable) or 33554472 (enable)
 * TOU enable/disable: 33554475 (disable) or 33554476 (enable)
 
@@ -228,24 +229,71 @@ After sending the disable command, the device status shows:
 Reservation Management
 ^^^^^^^^^^^^^^^^^^^^^^
 
+**Writing Reservations:**
+
 * **Topic**: ``cmd/{deviceType}/{deviceId}/ctrl/rsv/rd``
-* **Command Code**: ``16777226``
+* **Command Code**: ``16777226`` (RESERVATION_MANAGEMENT)
 * ``mode``: Not used for reservations
 
   * Manages programmed reservations for temperature changes
   * ``reservationUse``\ : ``1`` (enable) or ``2`` (disable)
   * ``reservation``\ : Array of reservation objects
 
+**Reading Reservations:**
+
+* **Topic**: ``cmd/{deviceType}/{deviceId}/st/rsv/rd``
+* **Command Code**: ``16777222`` (RESERVATION_READ)
+* Returns current reservation schedule from device
+
+**Important Note on Read/Write Topics:**
+
+* **Write operations** use ``/ctrl/`` path (control)
+* **Read operations** use ``/st/`` path (status)
+* Reading and writing use different command codes
+
 **Reservation Object Fields:**
 
 * ``enable``\ : ``1`` (enabled) or ``2`` (disabled)
-* ``week``\ : Bitfield for days of week (e.g., ``124`` = weekdays, ``3`` = weekend)
+* ``week``\ : Bitfield for days of week (e.g., ``62`` = weekdays, ``65`` = weekend)
 * ``hour``\ : Hour (0-23)
 * ``min``\ : Minute (0-59)
 * ``mode``\ : Operation mode to set (1-5)
 * ``param``\ : Temperature or other parameter (temperature is 20°F less than display value)
 
-**Example Payload:**
+**Response Format:**
+
+When reading reservations, the device returns data in hex-encoded format:
+
+.. code-block:: json
+
+   {
+     "response": {
+       "deviceType": 52,
+       "macAddress": "04786332fca0",
+       "additionalValue": "5322",
+       "reservationUse": 1,
+       "reservation": "013e061e0478..."
+     }
+   }
+
+The ``reservation`` field is a hex string where each 6-byte sequence represents one reservation entry:
+
+* Byte 0: ``enable`` (1=enabled, 2=disabled)
+* Byte 1: ``week`` bitfield
+* Byte 2: ``hour`` (0-23)
+* Byte 3: ``minute`` (0-59)
+* Byte 4: ``mode`` (1-5)
+* Byte 5: ``param`` (temperature or parameter value)
+
+**Example**: ``013e061e0478`` decodes to:
+
+* enable=1 (enabled)
+* week=62 (0x3E = Monday-Friday)
+* hour=6, minute=30 (6:30 AM)
+* mode=4 (High Demand)
+* param=120 → 140°F display temperature (120 + 20)
+
+**Write Example Payload:**
 
 .. code-block:: json
 
@@ -302,13 +350,61 @@ Common combinations:
 TOU (Time of Use) Settings
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-* **Topic**: ``cmd/{deviceType}/{deviceId}/ctrl/tou/rd``
-* **Command Code**: ``33554439``
-* Manages Time of Use energy pricing schedules
+**Important: TOU data retrieval differs from other settings**
 
-  * ``reservationUse``\ : ``1`` (enable) or ``2`` (disable)
-  * ``reservation``\ : Array of TOU period objects
-  * ``controllerSerialNumber``\ : Device controller serial number
+* **Reading TOU settings**: Use REST API, not MQTT
+  
+  * Endpoint: ``GET /api/v2.1/device/tou``
+  * Required parameters: ``controllerId``, ``macAddress``, ``additionalValue``, ``userId``, ``userType``
+  * Returns: Full TOU schedule with utility information
+
+* **Writing TOU settings**: Use MQTT
+  
+  * **Topic**: ``cmd/{deviceType}/{deviceId}/ctrl/tou/rd``
+  * **Command Code**: ``33554439``
+
+**Why REST API for Reading?**
+
+The device does not respond to MQTT TOU read requests. The Navien mobile app retrieves TOU settings 
+from the cloud API, which stores the configured schedule. This allows TOU settings to include 
+utility-specific information (utility name, rate schedule name, zip code) that isn't stored on 
+the device itself.
+
+**REST API TOU Response:**
+
+.. code-block:: json
+
+   {
+     "code": 200,
+     "msg": "SUCCESS",
+     "data": {
+       "registerPath": "wifi",
+       "sourceType": "openei",
+       "touInfo": {
+         "name": "E-TOU-C Residential Time of Use...",
+         "utility": "Pacific Gas & Electric Co",
+         "zipCode": "94903",
+         "controllerId": "56496061BT22230408",
+         "manufactureId": "...",
+         "schedule": [...]
+       }
+     }
+   }
+
+**MQTT Write Settings:**
+
+* Manages Time of Use energy pricing schedules via MQTT
+* ``reservationUse``\ : ``1`` (enable) or ``2`` (disable)
+* ``reservation``\ : Array of TOU period objects
+* ``controllerSerialNumber``\ : Device controller serial number (required)
+
+**Getting Controller Serial Number:**
+
+The controller serial number is required for TOU commands and can be retrieved via MQTT:
+
+* Request device feature information (command ``16777217``)
+* Extract ``controllerSerialNumber`` from the response
+* Or use the CLI: ``nwp-cli --get-controller-serial``
 
 **TOU Period Object Fields:**
 
@@ -644,9 +740,11 @@ Request Software Download Information
 Request Reservation Information
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-* **Topic**: ``cmd/{deviceType}/{deviceId}/ctrl/rsv/rd``
-* **Description**: Request current reservation settings.
-* **Command Code**: ``16777226``
+**Note**: This section describes reading reservations. See "Reservation Management" above for writing reservations.
+
+* **Topic**: ``cmd/{deviceType}/{deviceId}/st/rsv/rd`` (status path, not control)
+* **Description**: Request current reservation settings from device.
+* **Command Code**: ``16777222`` (RESERVATION_READ)
 * **Payload**:
 
 .. code-block:: json
@@ -660,41 +758,25 @@ Request Reservation Information
        "deviceType": 52,
        "macAddress": "..."
      },
-     "requestTopic": "cmd/52/navilink-{macAddress}/ctrl/rsv/rd",
+     "requestTopic": "cmd/52/navilink-{macAddress}/st/rsv/rd",
      "responseTopic": "...",
      "sessionID": "..."
    }
 
 * **Response Topic**: ``cmd/{deviceType}/{...}/res/rsv/rd``
-* **Response Fields**: Contains ``reservationUse`` and ``reservation`` array with current settings
+* **Response**: Contains ``reservationUse`` and hex-encoded ``reservation`` string (see "Reservation Management" section above for hex format details)
 
 Request TOU Information
 ^^^^^^^^^^^^^^^^^^^^^^^
 
-* **Topic**: ``cmd/{deviceType}/{deviceId}/ctrl/tou/rd``
-* **Description**: Request current Time of Use pricing settings.
-* **Command Code**: ``33554439``
-* **Payload**:
+**Note**: TOU information should be retrieved via REST API, not MQTT. See "TOU (Time of Use) Settings" section above.
 
-.. code-block:: json
+The device does not respond to MQTT TOU read requests. Use the REST API endpoint:
 
-   {
-     "clientID": "...",
-     "protocolVersion": 2,
-     "request": {
-       "additionalValue": "...",
-       "command": 33554439,
-       "deviceType": 52,
-       "macAddress": "...",
-       "controllerSerialNumber": "..."
-     },
-     "requestTopic": "cmd/52/navilink-{macAddress}/ctrl/tou/rd",
-     "responseTopic": "...",
-     "sessionID": "..."
-   }
+* **REST API**: ``GET /api/v2.1/device/tou``
+* **Parameters**: ``controllerId``, ``macAddress``, ``additionalValue``, ``userId``, ``userType``
 
-* **Response Topic**: ``cmd/{deviceType}/{...}/res/tou/rd``
-* **Response Fields**: Contains ``reservationUse`` and ``reservation`` array with current TOU schedule
+For quick enable/disable of TOU functionality without retrieving settings, use command codes ``33554475`` (disable) or ``33554476`` (enable).
 
 End Connection
 ^^^^^^^^^^^^^^

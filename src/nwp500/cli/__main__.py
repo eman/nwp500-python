@@ -18,6 +18,7 @@ from nwp500.auth import AuthenticationResponse, InvalidCredentialsError, UserInf
 from .commands import (
     handle_device_feature_request,
     handle_device_info_request,
+    handle_get_controller_serial_request,
     handle_get_energy_request,
     handle_get_reservations_request,
     handle_get_tou_request,
@@ -113,101 +114,106 @@ async def async_main(args: argparse.Namespace) -> int:
     if not auth_client:
         return 1  # Authentication failed
 
-    api_client = NavienAPIClient(auth_client=auth_client)
-    _logger.info("Fetching device information...")
-    device = await api_client.get_first_device()
-
-    if not device:
-        _logger.error("No devices found for this account.")
-        await auth_client.close()
-        return 1
-
-    _logger.info(f"Found device: {device.device_info.device_name}")
-
-    from nwp500 import NavienMqttClient
-
-    mqtt = NavienMqttClient(auth_client)
+    api_client = None
     try:
-        await mqtt.connect()
-        _logger.info("MQTT client connected.")
+        api_client = NavienAPIClient(auth_client=auth_client)
+        _logger.info("Fetching device information...")
+        device = await api_client.get_first_device()
 
-        # Route to appropriate handler based on arguments
-        if args.device_info:
-            await handle_device_info_request(mqtt, device)
-        elif args.device_feature:
-            await handle_device_feature_request(mqtt, device)
-        elif args.power_on:
-            await handle_power_request(mqtt, device, power_on=True)
-            if args.status:
-                _logger.info("Getting updated status after power on...")
-                await asyncio.sleep(2)
-                await handle_status_request(mqtt, device)
-        elif args.power_off:
-            await handle_power_request(mqtt, device, power_on=False)
-            if args.status:
-                _logger.info("Getting updated status after power off...")
-                await asyncio.sleep(2)
-                await handle_status_request(mqtt, device)
-        elif args.set_mode:
-            await handle_set_mode_request(mqtt, device, args.set_mode)
-            if args.status:
-                _logger.info("Getting updated status after mode change...")
-                await asyncio.sleep(2)
-                await handle_status_request(mqtt, device)
-        elif args.set_dhw_temp:
-            await handle_set_dhw_temp_request(mqtt, device, args.set_dhw_temp)
-            if args.status:
-                _logger.info("Getting updated status after temperature change...")
-                await asyncio.sleep(2)
-                await handle_status_request(mqtt, device)
-        elif args.get_reservations:
-            await handle_get_reservations_request(mqtt, device)
-        elif args.set_reservations:
-            await handle_update_reservations_request(
-                mqtt, device, args.set_reservations, args.reservations_enabled
-            )
-        elif args.get_tou:
-            if not args.tou_serial:
-                _logger.error("--tou-serial is required for --get-tou command")
-                return 1
-            await handle_get_tou_request(mqtt, device, args.tou_serial)
-        elif args.set_tou_enabled:
-            enabled = args.set_tou_enabled.lower() == "on"
-            await handle_set_tou_enabled_request(mqtt, device, enabled)
-            if args.status:
-                _logger.info("Getting updated status after TOU change...")
-                await asyncio.sleep(2)
-                await handle_status_request(mqtt, device)
-        elif args.get_energy:
-            if not args.energy_year or not args.energy_months:
-                _logger.error("--energy-year and --energy-months are required for --get-energy")
-                return 1
-            try:
-                months = [int(m.strip()) for m in args.energy_months.split(",")]
-                if not all(1 <= m <= 12 for m in months):
-                    _logger.error("Months must be between 1 and 12")
-                    return 1
-            except ValueError:
-                _logger.error(
-                    "Invalid month format. Use comma-separated numbers (e.g., '9' or '8,9,10')"
+        if not device:
+            _logger.error("No devices found for this account.")
+            return 1
+
+        _logger.info(f"Found device: {device.device_info.device_name}")
+
+        from nwp500 import NavienMqttClient
+
+        mqtt = NavienMqttClient(auth_client)
+        try:
+            await mqtt.connect()
+            _logger.info("MQTT client connected.")
+
+            # Route to appropriate handler based on arguments
+            if args.device_info:
+                await handle_device_info_request(mqtt, device)
+            elif args.device_feature:
+                await handle_device_feature_request(mqtt, device)
+            elif args.get_controller_serial:
+                await handle_get_controller_serial_request(mqtt, device)
+            elif args.power_on:
+                await handle_power_request(mqtt, device, power_on=True)
+                if args.status:
+                    _logger.info("Getting updated status after power on...")
+                    await asyncio.sleep(2)
+                    await handle_status_request(mqtt, device)
+            elif args.power_off:
+                await handle_power_request(mqtt, device, power_on=False)
+                if args.status:
+                    _logger.info("Getting updated status after power off...")
+                    await asyncio.sleep(2)
+                    await handle_status_request(mqtt, device)
+            elif args.set_mode:
+                await handle_set_mode_request(mqtt, device, args.set_mode)
+                if args.status:
+                    _logger.info("Getting updated status after mode change...")
+                    await asyncio.sleep(2)
+                    await handle_status_request(mqtt, device)
+            elif args.set_dhw_temp:
+                await handle_set_dhw_temp_request(mqtt, device, args.set_dhw_temp)
+                if args.status:
+                    _logger.info("Getting updated status after temperature change...")
+                    await asyncio.sleep(2)
+                    await handle_status_request(mqtt, device)
+            elif args.get_reservations:
+                await handle_get_reservations_request(mqtt, device)
+            elif args.set_reservations:
+                await handle_update_reservations_request(
+                    mqtt, device, args.set_reservations, args.reservations_enabled
                 )
-                return 1
-            await handle_get_energy_request(mqtt, device, args.energy_year, months)
-        elif args.status_raw:
-            await handle_status_raw_request(mqtt, device)
-        elif args.status:
-            await handle_status_request(mqtt, device)
-        else:  # Default to monitor
-            await handle_monitoring(mqtt, device, args.output)
+            elif args.get_tou:
+                await handle_get_tou_request(mqtt, device, api_client)
+            elif args.set_tou_enabled:
+                enabled = args.set_tou_enabled.lower() == "on"
+                await handle_set_tou_enabled_request(mqtt, device, enabled)
+                if args.status:
+                    _logger.info("Getting updated status after TOU change...")
+                    await asyncio.sleep(2)
+                    await handle_status_request(mqtt, device)
+            elif args.get_energy:
+                if not args.energy_year or not args.energy_months:
+                    _logger.error("--energy-year and --energy-months are required for --get-energy")
+                    return 1
+                try:
+                    months = [int(m.strip()) for m in args.energy_months.split(",")]
+                    if not all(1 <= m <= 12 for m in months):
+                        _logger.error("Months must be between 1 and 12")
+                        return 1
+                except ValueError:
+                    _logger.error(
+                        "Invalid month format. Use comma-separated numbers (e.g., '9' or '8,9,10')"
+                    )
+                    return 1
+                await handle_get_energy_request(mqtt, device, args.energy_year, months)
+            elif args.status_raw:
+                await handle_status_raw_request(mqtt, device)
+            elif args.status:
+                await handle_status_request(mqtt, device)
+            else:  # Default to monitor
+                await handle_monitoring(mqtt, device, args.output)
 
+        except asyncio.CancelledError:
+            _logger.info("Monitoring stopped by user.")
+        finally:
+            _logger.info("Disconnecting MQTT client...")
+            await mqtt.disconnect()
     except asyncio.CancelledError:
-        _logger.info("Monitoring stopped by user.")
+        _logger.info("Operation cancelled by user.")
+        return 1
     except Exception as e:
         _logger.error(f"An unexpected error occurred: {e}", exc_info=True)
         return 1
     finally:
-        _logger.info("Disconnecting MQTT client...")
-        await mqtt.disconnect()
+        # Auth client close will close the underlying aiohttp session
         await auth_client.close()
         _logger.info("Cleanup complete.")
     return 0
@@ -258,6 +264,12 @@ def parse_args(args: list[str]) -> argparse.Namespace:
         help="Fetch and print device feature and capability information via MQTT, then exit.",
     )
     group.add_argument(
+        "--get-controller-serial",
+        action="store_true",
+        help="Fetch and print controller serial number via MQTT, then exit. "
+        "This is useful for TOU commands that require the serial number.",
+    )
+    group.add_argument(
         "--set-mode",
         type=str,
         metavar="MODE",
@@ -296,8 +308,8 @@ def parse_args(args: list[str]) -> argparse.Namespace:
     group.add_argument(
         "--get-tou",
         action="store_true",
-        help="Fetch and print Time-of-Use settings from device via MQTT, then exit. "
-        "Requires --tou-serial option.",
+        help="Fetch and print Time-of-Use settings from the REST API, then exit. "
+        "Controller serial number is automatically retrieved.",
     )
     group.add_argument(
         "--set-tou-enabled",
@@ -330,7 +342,8 @@ def parse_args(args: list[str]) -> argparse.Namespace:
     parser.add_argument(
         "--tou-serial",
         type=str,
-        help="Controller serial number required for --get-tou command.",
+        help="(Deprecated) Controller serial number. No longer required; "
+        "serial number is now retrieved automatically.",
     )
     parser.add_argument(
         "--energy-year",

@@ -232,6 +232,57 @@ def decode_price(value: int, decimal_point: int) -> float:
 # ============================================================================
 
 
+def decode_reservation_hex(hex_string: str) -> list[dict[str, int]]:
+    """
+    Decode a hex-encoded reservation string into structured reservation entries.
+
+    The reservation data is encoded as 6 bytes per entry:
+    - Byte 0: enable (1=enabled, 2=disabled)
+    - Byte 1: week bitfield (days of week)
+    - Byte 2: hour (0-23)
+    - Byte 3: minute (0-59)
+    - Byte 4: mode (operation mode ID)
+    - Byte 5: param (temperature offset by 20°F)
+
+    Args:
+        hex_string: Hexadecimal string representing reservation data
+
+    Returns:
+        List of reservation entry dictionaries
+
+    Examples:
+        >>> decode_reservation_hex("013e061e0478")
+        [{'enable': 1, 'week': 62, 'hour': 6, 'minute': 30, 'mode': 4, 'param': 120}]
+    """
+    data = bytes.fromhex(hex_string)
+    reservations = []
+
+    # Process 6 bytes at a time
+    for i in range(0, len(data), 6):
+        chunk = data[i : i + 6]
+
+        # Skip empty entries (all zeros)
+        if all(b == 0 for b in chunk):
+            continue
+
+        # Ensure we have a full 6-byte entry
+        if len(chunk) != 6:
+            break
+
+        reservations.append(
+            {
+                "enable": chunk[0],
+                "week": chunk[1],
+                "hour": chunk[2],
+                "min": chunk[3],
+                "mode": chunk[4],
+                "param": chunk[5],
+            }
+        )
+
+    return reservations
+
+
 def build_reservation_entry(
     *,
     enabled: Union[bool, int],
