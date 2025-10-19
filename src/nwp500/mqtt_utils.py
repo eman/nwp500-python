@@ -116,8 +116,15 @@ def redact_topic(topic: str) -> str:
     Note:
         Uses pre-compiled regex patterns for better performance.
     """
+    # Extra safety: catch any remaining hexadecimal sequences of typical MAC/device length
+    # (Handles without delimiters, with colons, with hyphens, uppercase/lowercase, etc.)
     for pattern in _MAC_PATTERNS:
         topic = pattern.sub("REDACTED", topic)
+    # Defensive: Generic cleanup for sequences of 12+ hex digits that look like MACs or IDs
+    topic = re.sub(r'([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})', 'REDACTED', topic)  # 01:23:45:67:89:ab
+    topic = re.sub(r'([0-9A-Fa-f]{2}-){5}[0-9A-Fa-f]{2}', 'REDACTED', topic)       # 01-23-45-67-89-ab
+    topic = re.sub(r'([0-9A-Fa-f]{12})', 'REDACTED', topic)                        # 0123456789ab
+    topic = re.sub(r'(navilink-)[0-9A-Fa-f]{8,}', r'\1REDACTED', topic)            # navilink-xxxxxxx
     return topic
 
 
