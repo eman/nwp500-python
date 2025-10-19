@@ -1259,6 +1259,6 @@ class NavienMqttClient(EventEmitter):
             This should typically only be called after a reconnection_failed
             event, not during normal operation.
         """
-        self._reconnect_attempts = 0
-        self._manual_disconnect = False
+        if self._reconnection_handler:
+            self._reconnection_handler.reset()
         await self._start_reconnect_task()
