@@ -102,7 +102,7 @@ async def handle_device_feature_request(mqtt: NavienMqttClient, device: Device) 
     await mqtt.subscribe_device_feature(device, on_feature)
     _logger.info("Requesting device feature information...")
     # Note: request_device_feature method does not exist in NavienMqttClient
-    # await mqtt.request_device_feature(device)
+    await mqtt.request_device_info(device)
 
     try:
         await asyncio.wait_for(future, timeout=10)
