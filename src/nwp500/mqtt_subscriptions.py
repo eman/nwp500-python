@@ -199,7 +199,13 @@ class MqttSubscriptionManager:
             return int(packet_id)
 
         except Exception as e:
-            _logger.error(f"Failed to subscribe to '{redact_topic(topic)}': {e}")
+            # Enhanced protection: verify no MAC in redacted topic
+            from .mqtt_utils import topic_has_mac  # local import to avoid top-level circularity
+            redacted = redact_topic(topic)
+            if topic_has_mac(redacted):
+                _logger.error("Failed to subscribe to sensitive topic: <REDACTED> - Exception: %s", e)
+            else:
+                _logger.error(f"Failed to subscribe to '{redacted}': {e}")
             raise
 
     async def unsubscribe(self, topic: str) -> int:
@@ -235,7 +241,13 @@ class MqttSubscriptionManager:
             return int(packet_id)
 
         except Exception as e:
-            _logger.error(f"Failed to unsubscribe from '{redact_topic(topic)}': {e}")
+            # Enhanced protection: verify no MAC in redacted topic
+            from .mqtt_utils import topic_has_mac  # local import to avoid top-level circularity
+            redacted = redact_topic(topic)
+            if topic_has_mac(redacted):
+                _logger.error("Failed to unsubscribe from sensitive topic: <REDACTED> - Exception: %s", e)
+            else:
+                _logger.error(f"Failed to unsubscribe from '{redacted}': {e}")
             raise
 
     async def subscribe_device(
