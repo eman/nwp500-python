@@ -1,50 +1,59 @@
-"""Tests for NavienAPIClient helper utilities."""
+"""Tests for encoding helper utilities."""
 
 import math
 
 import pytest  # type: ignore[import]
 
-from nwp500.api_client import NavienAPIClient
+from nwp500.encoding import (
+    build_reservation_entry,
+    build_tou_period,
+    decode_price,
+    decode_season_bitfield,
+    decode_week_bitfield,
+    encode_price,
+    encode_season_bitfield,
+    encode_week_bitfield,
+)
 
 
 def test_encode_decode_week_bitfield():
     days = ["Monday", "Wednesday", "Friday"]
-    bitfield = NavienAPIClient.encode_week_bitfield(days)
+    bitfield = encode_week_bitfield(days)
     assert bitfield == (2 | 8 | 32)
-    decoded = NavienAPIClient.decode_week_bitfield(bitfield)
+    decoded = decode_week_bitfield(bitfield)
     assert decoded == ["Monday", "Wednesday", "Friday"]
 
     # Support integer indices (0=Sunday) and 1-based (1=Monday)
-    assert NavienAPIClient.encode_week_bitfield([0, 6]) == (1 | 64)
-    assert NavienAPIClient.encode_week_bitfield([1, 7]) == (2 | 64)
+    assert encode_week_bitfield([0, 6]) == (1 | 64)
+    assert encode_week_bitfield([1, 7]) == (2 | 64)
 
     with pytest.raises(ValueError):
-        NavienAPIClient.encode_week_bitfield(["Funday"])  # type: ignore[arg-type]
+        encode_week_bitfield(["Funday"])  # type: ignore[arg-type]
 
 
 def test_encode_decode_season_bitfield():
     months = [1, 6, 12]
-    bitfield = NavienAPIClient.encode_season_bitfield(months)
+    bitfield = encode_season_bitfield(months)
     assert bitfield == (1 | 32 | 2048)
-    decoded = NavienAPIClient.decode_season_bitfield(bitfield)
+    decoded = decode_season_bitfield(bitfield)
     assert decoded == months
 
     with pytest.raises(ValueError):
-        NavienAPIClient.encode_season_bitfield([0])
+        encode_season_bitfield([0])
 
 
 def test_price_encoding_round_trip():
-    encoded = NavienAPIClient.encode_price(0.34831, 5)
+    encoded = encode_price(0.34831, 5)
     assert encoded == 34831
-    decoded = NavienAPIClient.decode_price(encoded, 5)
+    decoded = decode_price(encoded, 5)
     assert math.isclose(decoded, 0.34831, rel_tol=1e-9)
 
     with pytest.raises(ValueError):
-        NavienAPIClient.encode_price(1.23, -1)
+        encode_price(1.23, -1)
 
 
 def test_build_reservation_entry():
-    reservation = NavienAPIClient.build_reservation_entry(
+    reservation = build_reservation_entry(
         enabled=True,
         days=["Monday", "Tuesday"],
         hour=6,
@@ -61,7 +70,7 @@ def test_build_reservation_entry():
     assert reservation["param"] == 120
 
     with pytest.raises(ValueError):
-        NavienAPIClient.build_reservation_entry(
+        build_reservation_entry(
             enabled=True,
             days=["Monday"],
             hour=24,
@@ -72,7 +81,7 @@ def test_build_reservation_entry():
 
 
 def test_build_tou_period():
-    period = NavienAPIClient.build_tou_period(
+    period = build_tou_period(
         season_months=range(1, 13),
         week_days=["Monday", "Friday"],
         start_hour=0,
@@ -92,7 +101,7 @@ def test_build_tou_period():
     assert period["priceMax"] == 36217
 
     with pytest.raises(ValueError):
-        NavienAPIClient.build_tou_period(
+        build_tou_period(
             season_months=[1],
             week_days=["Sunday"],
             start_hour=25,

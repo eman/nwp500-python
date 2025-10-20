@@ -93,3 +93,56 @@ skip-magic-trailing-comma = false
 
 # Like Black, automatically detect the appropriate line ending
 line-ending = "auto"
+
+[tool.mypy]
+# Enable strict mode for comprehensive type checking
+strict = true
+
+# Python version target
+python_version = "3.9"
+
+# Module discovery
+files = ["src/nwp500", "tests"]
+mypy_path = "src"
+namespace_packages = true
+explicit_package_bases = true
+
+# Import discovery
+follow_imports = "normal"
+ignore_missing_imports = false
+
+# Platform configuration
+platform = "linux"
+
+# Warnings
+warn_redundant_casts = true
+warn_unused_ignores = true
+warn_return_any = true
+warn_unreachable = true
+
+# Error reporting
+show_error_context = true
+show_column_numbers = true
+show_error_codes = true
+pretty = true
+
+# Incremental mode
+incremental = true
+cache_dir = ".mypy_cache"
+
+# Per-module overrides
+[[tool.mypy.overrides]]
+module = "awscrt.*"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "awsiot.*"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "aiohttp.*"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "pydantic.*"
+ignore_missing_imports = true

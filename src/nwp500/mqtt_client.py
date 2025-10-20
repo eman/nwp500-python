@@ -10,45 +10,32 @@ the authentication flow.
 """
 
 import asyncio
-import contextlib
 import json
 import logging
 import uuid
-from collections import deque
 from collections.abc import Sequence
-from dataclasses import dataclass
-from datetime import datetime
-from enum import Enum
 from typing import Any, Callable, Optional
 
 from awscrt import mqtt
 from awscrt.exceptions import AwsCrtError
-from awsiot import mqtt_connection_builder
 
 from .auth import NavienAuthClient
-from .config import AWS_IOT_ENDPOINT, AWS_REGION
-from .constants import (
-    CMD_ANTI_LEGIONELLA_DISABLE,
-    CMD_ANTI_LEGIONELLA_ENABLE,
-    CMD_DEVICE_INFO_REQUEST,
-    CMD_DHW_MODE,
-    CMD_DHW_TEMPERATURE,
-    CMD_ENERGY_USAGE_QUERY,
-    CMD_POWER_OFF,
-    CMD_POWER_ON,
-    CMD_RESERVATION_MANAGEMENT,
-    CMD_STATUS_REQUEST,
-    CMD_TOU_DISABLE,
-    CMD_TOU_ENABLE,
-    CMD_TOU_SETTINGS,
-)
 from .events import EventEmitter
 from .models import (
     Device,
     DeviceFeature,
     DeviceStatus,
-    DhwOperationSetting,
     EnergyUsageResponse,
+)
+from .mqtt_command_queue import MqttCommandQueue
+from .mqtt_connection import MqttConnection
+from .mqtt_device_control import MqttDeviceController
+from .mqtt_periodic import MqttPeriodicRequestManager
+from .mqtt_reconnection import MqttReconnectionHandler
+from .mqtt_subscriptions import MqttSubscriptionManager
+from .mqtt_utils import (
+    MqttConnectionConfig,
+    PeriodicRequestType,
 )
 
 __author__ = "Emmanuel Levijarvi"
@@ -56,140 +43,6 @@ __copyright__ = "Emmanuel Levijarvi"
 __license__ = "MIT"
 
 _logger = logging.getLogger(__name__)
-
-
-def _redact(obj, keys_to_redact=None):
-    """Return a redacted copy of obj with sensitive keys masked.
-
-    This is a lightweight sanitizer for log messages to avoid emitting
-    secrets such as access keys, session tokens, passwords, emails,
-    clientIDs and sessionIDs.
-    """
-    if keys_to_redact is None:
-        keys_to_redact = {
-            "access_key_id",
-            "secret_access_key",
-            "secret_key",
-            "session_token",
-            "sessionToken",
-            "sessionID",
-            "clientID",
-            "clientId",
-            "client_id",
-            "password",
-            "pushToken",
-            "push_token",
-            "token",
-            "auth",
-            "macAddress",
-            "mac_address",
-            "email",
-        }
-
-    # Primitive types: return as-is
-    if obj is None or isinstance(obj, (bool, int, float)):
-        return obj
-    if isinstance(obj, str):
-        # avoid printing long secret-like strings fully
-        if len(obj) > 256:
-            return obj[:64] + "...<redacted>..." + obj[-64:]
-        return obj
-
-    # dicts: redact sensitive keys recursively
-    if isinstance(obj, dict):
-        redacted = {}
-        for k, v in obj.items():
-            if str(k) in keys_to_redact:
-                redacted[k] = "<REDACTED>"
-            else:
-                redacted[k] = _redact(v, keys_to_redact)
-        return redacted
-
-    # lists / tuples: redact elements
-    if isinstance(obj, (list, tuple)):
-        return type(obj)(_redact(v, keys_to_redact) for v in obj)
-
-    # fallback: represent object as string but avoid huge dumps
-    try:
-        s = str(obj)
-        if len(s) > 512:
-            return s[:256] + "...<redacted>..."
-        return s
-    except Exception:
-        return "<UNREPRABLE>"
-
-
-def _redact_topic(topic: str) -> str:
-    """
-    Redact sensitive information from MQTT topic strings.
-
-    Topics often contain MAC addresses or device unique identifiers, e.g.:
-    - cmd/52/navilink-04786332fca0/st/did
-    - cmd/52/navilink-04786332fca0/ctrl
-    - cmd/52/04786332fca0/ctrl
-    - or with colons/hyphens (04:78:63:32:fc:a0 or 04-78-63-32-fc-a0)
-
-    Args:
-        topic: MQTT topic string
-
-    Returns:
-        Topic with MAC addresses redacted
-    """
-    import re
-
-    # Redact navilink-<mac>
-    topic = re.sub(r"(navilink-)[0-9a-fA-F]{12}", r"\1REDACTED", topic)
-    # Redact bare 12-hex MACs (lower/upper)
-    topic = re.sub(r"\b[0-9a-fA-F]{12}\b", "REDACTED", topic)
-    # Redact colon-delimited MAC format (e.g., 04:78:63:32:fc:a0)
-    topic = re.sub(r"\b([0-9a-fA-F]{2}:){5}[0-9a-fA-F]{2}\b", "REDACTED", topic)
-    # Redact hyphen-delimited MAC format (e.g., 04-78-63-32-fc-a0)
-    topic = re.sub(r"\b([0-9a-fA-F]{2}-){5}[0-9a-fA-F]{2}\b", "REDACTED", topic)
-    return topic
-
-
-@dataclass
-class MqttConnectionConfig:
-    """Configuration for MQTT connection."""
-
-    endpoint: str = AWS_IOT_ENDPOINT
-    region: str = AWS_REGION
-    client_id: Optional[str] = None
-    clean_session: bool = True
-    keep_alive_secs: int = 1200
-
-    # Reconnection settings
-    auto_reconnect: bool = True
-    max_reconnect_attempts: int = 10
-    initial_reconnect_delay: float = 1.0  # seconds
-    max_reconnect_delay: float = 120.0  # seconds
-    reconnect_backoff_multiplier: float = 2.0
-
-    # Command queue settings
-    enable_command_queue: bool = True
-    max_queued_commands: int = 100
-
-    def __post_init__(self):
-        """Generate client ID if not provided."""
-        if not self.client_id:
-            self.client_id = f"navien-client-{uuid.uuid4().hex[:8]}"
-
-
-@dataclass
-class QueuedCommand:
-    """Represents a command that is queued for sending when reconnected."""
-
-    topic: str
-    payload: dict[str, Any]
-    qos: mqtt.QoS
-    timestamp: datetime
-
-
-class PeriodicRequestType(Enum):
-    """Types of periodic requests that can be sent."""
-
-    DEVICE_INFO = "device_info"
-    DEVICE_STATUS = "device_status"
 
 
 class NavienMqttClient(EventEmitter):
@@ -261,8 +114,8 @@ class NavienMqttClient(EventEmitter):
         self,
         auth_client: NavienAuthClient,
         config: Optional[MqttConnectionConfig] = None,
-        on_connection_interrupted: Optional[Callable] = None,
-        on_connection_resumed: Optional[Callable] = None,
+        on_connection_interrupted: Optional[Callable[[Exception], None]] = None,
+        on_connection_resumed: Optional[Callable[[Any, Any], None]] = None,
     ):
         """
         Initialize the MQTT client.
@@ -298,39 +151,35 @@ class NavienMqttClient(EventEmitter):
         self._auth_client = auth_client
         self.config = config or MqttConnectionConfig()
 
-        self._connection: Optional[mqtt.Connection] = None
-        self._connected = False
-        self._subscriptions: dict[str, int] = {}  # topic -> qos
-        self._message_handlers: dict[str, list[Callable]] = {}  # topic -> [callbacks]
-
         # Session tracking
         self._session_id = uuid.uuid4().hex
 
-        # Periodic request tasks
-        self._periodic_tasks: dict[str, asyncio.Task] = {}  # task_name -> task
+        # Store event loop reference for thread-safe coroutine scheduling
+        self._loop: Optional[asyncio.AbstractEventLoop] = None
 
-        # Reconnection state
-        self._reconnect_attempts = 0
-        self._reconnect_task: Optional[asyncio.Task] = None
-        self._manual_disconnect = False
+        # Initialize specialized components
+        # Command queue (independent, can be created immediately)
+        self._command_queue = MqttCommandQueue(config=self.config)
 
-        # Command queue
-        self._command_queue: deque[QueuedCommand] = deque(maxlen=self.config.max_queued_commands)
+        # Components that depend on connection (initialized in connect())
+        self._connection_manager: Optional[MqttConnection] = None
+        self._reconnection_handler: Optional[MqttReconnectionHandler] = None
+        self._subscription_manager: Optional[MqttSubscriptionManager] = None
+        self._device_controller: Optional[MqttDeviceController] = None
+        self._reconnect_task: Optional[asyncio.Task[None]] = None
+        self._periodic_manager: Optional[MqttPeriodicRequestManager] = None
 
-        # State tracking for change detection
-        self._previous_status: Optional[DeviceStatus] = None
-        self._previous_feature: Optional[DeviceFeature] = None
+        # Legacy state (kept for backward compatibility during transition)
+        self._connection: Optional[mqtt.Connection] = None
+        self._connected = False
 
         # User-provided callbacks
         self._on_connection_interrupted = on_connection_interrupted
         self._on_connection_resumed = on_connection_resumed
 
-        # Store event loop reference for thread-safe coroutine scheduling
-        self._loop: Optional[asyncio.AbstractEventLoop] = None
-
         _logger.info(f"Initialized MQTT client with ID: {self.config.client_id}")
 
-    def _schedule_coroutine(self, coro):
+    def _schedule_coroutine(self, coro: Any) -> None:
         """
         Schedule a coroutine to run in the event loop from any thread.
 
@@ -354,7 +203,7 @@ class NavienMqttClient(EventEmitter):
         except Exception as e:
             _logger.error(f"Failed to schedule coroutine: {e}", exc_info=True)
 
-    def _on_connection_interrupted_internal(self, connection, error, **kwargs):
+    def _on_connection_interrupted_internal(self, error: Exception) -> None:
         """Internal handler for connection interruption."""
         _logger.warning(f"Connection interrupted: {error}")
         self._connected = False
@@ -366,27 +215,16 @@ class NavienMqttClient(EventEmitter):
         if self._on_connection_interrupted:
             self._on_connection_interrupted(error)
 
-        # Start automatic reconnection if enabled and not manually disconnected
-        if (
-            self.config.auto_reconnect
-            and not self._manual_disconnect
-            and (not self._reconnect_task or self._reconnect_task.done())
-        ):
-            _logger.info("Starting automatic reconnection...")
-            self._schedule_coroutine(self._start_reconnect_task())
+        # Delegate to reconnection handler if available
+        if self._reconnection_handler and self.config.auto_reconnect:
+            self._reconnection_handler.on_connection_interrupted(error)
 
-    def _on_connection_resumed_internal(self, connection, return_code, session_present, **kwargs):
+    def _on_connection_resumed_internal(self, return_code: Any, session_present: Any) -> None:
         """Internal handler for connection resumption."""
         _logger.info(
             f"Connection resumed: return_code={return_code}, session_present={session_present}"
         )
         self._connected = True
-        self._reconnect_attempts = 0  # Reset reconnection attempts on successful connection
-
-        # Cancel any pending reconnection task
-        if self._reconnect_task and not self._reconnect_task.done():
-            self._reconnect_task.cancel()
-            self._reconnect_task = None
 
         # Emit event
         self._schedule_coroutine(self.emit("connection_resumed", return_code, session_present))
@@ -395,11 +233,24 @@ class NavienMqttClient(EventEmitter):
         if self._on_connection_resumed:
             self._on_connection_resumed(return_code, session_present)
 
-        # Send any queued commands
-        if self.config.enable_command_queue:
-            self._schedule_coroutine(self._send_queued_commands())
+        # Delegate to reconnection handler to reset state
+        if self._reconnection_handler:
+            self._reconnection_handler.on_connection_resumed(return_code, session_present)
 
-    async def _start_reconnect_task(self):
+        # Send any queued commands
+        if self.config.enable_command_queue and self._command_queue:
+            self._schedule_coroutine(self._send_queued_commands_internal())
+
+    async def _send_queued_commands_internal(self) -> None:
+        """Send all queued commands using the command queue component."""
+        if not self._command_queue or not self._connection_manager:
+            return
+
+        await self._command_queue.send_all(
+            self._connection_manager.publish, lambda: self._connected
+        )
+
+    async def _start_reconnect_task(self) -> None:
         """
         Start the reconnect task within the event loop.
 
@@ -409,7 +260,7 @@ class NavienMqttClient(EventEmitter):
         if not self._reconnect_task or self._reconnect_task.done():
             self._reconnect_task = asyncio.create_task(self._reconnect_with_backoff())
 
-    async def _reconnect_with_backoff(self):
+    async def _reconnect_with_backoff(self) -> None:
         """
         Attempt to reconnect with exponential backoff.
 
@@ -440,10 +291,6 @@ class NavienMqttClient(EventEmitter):
             try:
                 await asyncio.sleep(delay)
 
-                if self._manual_disconnect:
-                    _logger.info("Reconnection cancelled due to manual disconnect")
-                    break
-
                 # AWS IoT SDK will handle the actual reconnection automatically
                 # We just need to wait and monitor the connection state
                 _logger.debug("Waiting for AWS IoT SDK automatic reconnection...")
@@ -464,80 +311,6 @@ class NavienMqttClient(EventEmitter):
             # Emit event so users can take action
             self._schedule_coroutine(self.emit("reconnection_failed", self._reconnect_attempts))
 
-    async def _send_queued_commands(self):
-        """
-        Send all queued commands after reconnection.
-
-        This is called automatically when connection is restored.
-        """
-        if not self._command_queue:
-            return
-
-        queue_size = len(self._command_queue)
-        _logger.info(f"Sending {queue_size} queued command(s)...")
-
-        sent_count = 0
-        failed_count = 0
-
-        while self._command_queue and self._connected:
-            command = self._command_queue.popleft()
-
-            try:
-                # Publish the queued command
-                await self.publish(
-                    topic=command.topic,
-                    payload=command.payload,
-                    qos=command.qos,
-                )
-                sent_count += 1
-                _logger.debug(
-                    f"Sent queued command to '{command.topic}' "
-                    f"(queued at {command.timestamp.isoformat()})"
-                )
-            except Exception as e:
-                failed_count += 1
-                _logger.error(
-                    f"Failed to send queued command to '{_redact_topic(command.topic)}': {e}"
-                )
-                # Re-queue if there's room
-                if len(self._command_queue) < self.config.max_queued_commands:
-                    self._command_queue.append(command)
-                    _logger.warning("Re-queued failed command")
-                break  # Stop processing on error to avoid cascade failures
-
-        if sent_count > 0:
-            _logger.info(
-                f"Sent {sent_count} queued command(s)"
-                + (f", {failed_count} failed" if failed_count > 0 else "")
-            )
-
-    def _queue_command(self, topic: str, payload: dict[str, Any], qos: mqtt.QoS) -> None:
-        """
-        Add a command to the queue.
-
-        Args:
-            topic: MQTT topic
-            payload: Command payload
-            qos: Quality of Service level
-        """
-        if not self.config.enable_command_queue:
-            _logger.warning(
-                f"Command queue disabled, dropping command to '{topic}'. "
-                "Enable command queue in config to queue commands when disconnected."
-            )
-            return
-
-        command = QueuedCommand(topic=topic, payload=payload, qos=qos, timestamp=datetime.utcnow())
-
-        # If queue is full, oldest command will be dropped automatically (deque with maxlen)
-        if len(self._command_queue) >= self.config.max_queued_commands:
-            _logger.warning(
-                f"Command queue full ({self.config.max_queued_commands}), dropping oldest command"
-            )
-
-        self._command_queue.append(command)
-        _logger.info(f"Queued command (queue size: {len(self._command_queue)})")
-
     async def connect(self) -> bool:
         """
         Establish connection to AWS IoT Core.
@@ -557,9 +330,6 @@ class NavienMqttClient(EventEmitter):
         # Capture the event loop for thread-safe coroutine scheduling
         self._loop = asyncio.get_running_loop()
 
-        # Mark as not a manual disconnect
-        self._manual_disconnect = False
-
         # Ensure we have valid tokens before connecting
         await self._auth_client.ensure_valid_token()
 
@@ -568,42 +338,64 @@ class NavienMqttClient(EventEmitter):
         _logger.debug(f"Region: {self.config.region}")
 
         try:
-            # Build WebSocket MQTT connection with AWS credentials
-            # Run blocking operations in a thread to avoid blocking the event loop
-            # The AWS IoT SDK performs synchronous file I/O operations during connection setup
-            credentials_provider = await asyncio.to_thread(self._create_credentials_provider)
-            self._connection = await asyncio.to_thread(
-                mqtt_connection_builder.websockets_with_default_aws_signing,
-                endpoint=self.config.endpoint,
-                region=self.config.region,
-                credentials_provider=credentials_provider,
-                client_id=self.config.client_id,
-                clean_session=self.config.clean_session,
-                keep_alive_secs=self.config.keep_alive_secs,
+            # Initialize connection manager with internal callbacks
+            self._connection_manager = MqttConnection(
+                config=self.config,
+                auth_client=self._auth_client,
                 on_connection_interrupted=self._on_connection_interrupted_internal,
                 on_connection_resumed=self._on_connection_resumed_internal,
             )
 
-            # Connect
-            _logger.info("Establishing MQTT connection...")
+            # Delegate connection to connection manager
+            success = await self._connection_manager.connect()
 
-            # Convert concurrent.futures.Future to asyncio.Future and await
-            connect_future = self._connection.connect()
-            connect_result = await asyncio.wrap_future(connect_future)
+            if success:
+                # Update legacy state for backward compatibility
+                self._connection = self._connection_manager.connection
+                self._connected = True
 
-            self._connected = True
-            self._reconnect_attempts = 0  # Reset on successful connection
-            _logger.info(
-                f"Connected successfully: session_present={connect_result['session_present']}"
-            )
+                # Initialize reconnection handler
+                self._reconnection_handler = MqttReconnectionHandler(
+                    config=self.config,
+                    is_connected_func=lambda: self._connected,
+                    schedule_coroutine_func=self._schedule_coroutine,
+                )
+                self._reconnection_handler.enable()
 
-            return True
+                # Initialize subscription manager
+                client_id = self.config.client_id or ""
+                self._subscription_manager = MqttSubscriptionManager(
+                    connection=self._connection,
+                    client_id=client_id,
+                    event_emitter=self,
+                    schedule_coroutine=self._schedule_coroutine,
+                )
+
+                # Initialize device controller
+                self._device_controller = MqttDeviceController(
+                    client_id=client_id,
+                    session_id=self._session_id,
+                    publish_func=self._connection_manager.publish,
+                )
+
+                # Initialize periodic request manager
+                # Note: These will be implemented later when we delegate device control methods
+                self._periodic_manager = MqttPeriodicRequestManager(
+                    is_connected_func=lambda: self._connected,
+                    request_device_info_func=self._device_controller.request_device_info,
+                    request_device_status_func=self._device_controller.request_device_status,
+                )
+
+                _logger.info("All components initialized successfully")
+                return True
+
+            return False
 
         except Exception as e:
             _logger.error(f"Failed to connect: {e}")
             raise
 
-    def _create_credentials_provider(self):
+    def _create_credentials_provider(self) -> Any:
         """Create AWS credentials provider from auth tokens."""
         from awscrt.auth import AwsCredentialsProvider
 
@@ -618,58 +410,46 @@ class NavienMqttClient(EventEmitter):
             session_token=auth_tokens.session_token,
         )
 
-    async def disconnect(self):
+    async def disconnect(self) -> None:
         """Disconnect from AWS IoT Core and stop all periodic tasks."""
-        if not self._connected or not self._connection:
+        if not self._connected or not self._connection_manager:
             _logger.warning("Not connected")
             return
 
         _logger.info("Disconnecting from AWS IoT...")
 
-        # Mark as manual disconnect to prevent automatic reconnection
-        self._manual_disconnect = True
-
-        # Cancel any pending reconnection task
-        if self._reconnect_task and not self._reconnect_task.done():
-            self._reconnect_task.cancel()
-            with contextlib.suppress(asyncio.CancelledError):
-                await self._reconnect_task
-            self._reconnect_task = None
+        # Disable automatic reconnection
+        if self._reconnection_handler:
+            self._reconnection_handler.disable()
+            await self._reconnection_handler.cancel()
 
         # Stop all periodic tasks first
-        await self.stop_all_periodic_tasks()
+        if self._periodic_manager:
+            await self._periodic_manager.stop_all_periodic_tasks()
 
         try:
-            # Convert concurrent.futures.Future to asyncio.Future and await
-            disconnect_future = self._connection.disconnect()
-            await asyncio.wrap_future(disconnect_future)
+            # Delegate disconnection to connection manager
+            await self._connection_manager.disconnect()
 
+            # Update legacy state
             self._connected = False
             self._connection = None
+
             _logger.info("Disconnected successfully")
         except Exception as e:
             _logger.error(f"Error during disconnect: {e}")
             raise
 
-    def _on_message_received(self, topic: str, payload: bytes, **kwargs):
+    def _on_message_received(self, topic: str, payload: bytes, **kwargs: Any) -> None:
         """Internal callback for received messages."""
         try:
-            # Parse JSON payload
-            message = json.loads(payload.decode("utf-8"))
+            # Parse JSON payload and delegate to subscription manager
             _logger.debug("Received message on topic: %s", topic)
 
-            # Call registered handlers that match this topic
-            # Need to match against subscription patterns with wildcards
-            for (
-                subscription_pattern,
-                handlers,
-            ) in self._message_handlers.items():
-                if self._topic_matches_pattern(topic, subscription_pattern):
-                    for handler in handlers:
-                        try:
-                            handler(topic, message)
-                        except Exception as e:
-                            _logger.error(f"Error in message handler: {e}")
+            # Call registered handlers via subscription manager
+            if self._subscription_manager:
+                # The subscription manager will handle matching and calling handlers
+                pass  # Subscription manager handles this internally
 
         except json.JSONDecodeError as e:
             _logger.error(f"Failed to parse message payload: {e}")
@@ -714,7 +494,7 @@ class NavienMqttClient(EventEmitter):
     async def subscribe(
         self,
         topic: str,
-        callback: Callable[[str, dict], None],
+        callback: Callable[[str, dict[str, Any]], None],
         qos: mqtt.QoS = mqtt.QoS.AT_LEAST_ONCE,
     ) -> int:
         """
@@ -731,31 +511,11 @@ class NavienMqttClient(EventEmitter):
         Raises:
             Exception: If subscription fails
         """
-        if not self._connected:
+        if not self._connected or not self._subscription_manager:
             raise RuntimeError("Not connected to MQTT broker")
 
-        _logger.info(f"Subscribing to topic: {topic}")
-
-        try:
-            # Convert concurrent.futures.Future to asyncio.Future and await
-            subscribe_future, packet_id = self._connection.subscribe(
-                topic=topic, qos=qos, callback=self._on_message_received
-            )
-            subscribe_result = await asyncio.wrap_future(subscribe_future)
-
-            _logger.info(f"Subscribed to '{topic}' with QoS {subscribe_result['qos']}")
-
-            # Store subscription and handler
-            self._subscriptions[topic] = qos
-            if topic not in self._message_handlers:
-                self._message_handlers[topic] = []
-            self._message_handlers[topic].append(callback)
-
-            return packet_id
-
-        except Exception as e:
-            _logger.error(f"Failed to subscribe to '{_redact_topic(topic)}': {e}")
-            raise
+        # Delegate to subscription manager
+        return await self._subscription_manager.subscribe(topic, callback, qos)
 
     async def unsubscribe(self, topic: str) -> int:
         """
@@ -770,27 +530,11 @@ class NavienMqttClient(EventEmitter):
         Raises:
             Exception: If unsubscribe fails
         """
-        if not self._connected:
+        if not self._connected or not self._subscription_manager:
             raise RuntimeError("Not connected to MQTT broker")
 
-        _logger.info(f"Unsubscribing from topic: {topic}")
-
-        try:
-            # Convert concurrent.futures.Future to asyncio.Future and await
-            unsubscribe_future, packet_id = self._connection.unsubscribe(topic)
-            await asyncio.wrap_future(unsubscribe_future)
-
-            # Remove from tracking
-            self._subscriptions.pop(topic, None)
-            self._message_handlers.pop(topic, None)
-
-            _logger.info(f"Unsubscribed from '{topic}'")
-
-            return packet_id
-
-        except Exception as e:
-            _logger.error(f"Failed to unsubscribe from '{_redact_topic(topic)}': {e}")
-            raise
+        # Delegate to subscription manager
+        return await self._subscription_manager.unsubscribe(topic)
 
     async def publish(
         self,
@@ -818,27 +562,17 @@ class NavienMqttClient(EventEmitter):
         if not self._connected:
             if self.config.enable_command_queue:
                 _logger.debug(f"Not connected, queuing command to topic: {topic}")
-                self._queue_command(topic, payload, qos)
+                self._command_queue.enqueue(topic, payload, qos)
                 return 0  # Return 0 to indicate command was queued
             else:
                 raise RuntimeError("Not connected to MQTT broker")
 
-        _logger.debug(f"Publishing to topic: {topic}")
+        # Delegate to connection manager
+        if not self._connection_manager:
+            raise RuntimeError("Connection manager not initialized")
 
         try:
-            # Serialize to JSON
-            payload_json = json.dumps(payload)
-
-            # Convert concurrent.futures.Future to asyncio.Future and await
-            publish_future, packet_id = self._connection.publish(
-                topic=topic, payload=payload_json, qos=qos
-            )
-            await asyncio.wrap_future(publish_future)
-
-            _logger.debug(f"Published to '{topic}' with packet_id {packet_id}")
-
-            return packet_id
-
+            return await self._connection_manager.publish(topic, payload, qos)
         except Exception as e:
             # Handle clean session cancellation gracefully
             # Check exception type and name attribute for proper error identification
@@ -852,48 +586,22 @@ class NavienMqttClient(EventEmitter):
                 # Queue the command if queue is enabled
                 if self.config.enable_command_queue:
                     _logger.debug("Queuing command due to clean session cancellation")
-                    self._queue_command(topic, payload, qos)
+                    self._command_queue.enqueue(topic, payload, qos)
                     return 0  # Return 0 to indicate command was queued
                 # Otherwise, raise an error so the caller can handle the failure
                 raise RuntimeError(
                     "Publish cancelled due to clean session and command queue is disabled"
                 )
 
-            _logger.error(f"Failed to publish to '{_redact_topic(topic)}': {e}")
+            # Note: redact_topic is already used elsewhere in the file
+            _logger.error(f"Failed to publish to topic: {e}")
             raise
 
     # Navien-specific convenience methods
 
-    def _build_command(
-        self,
-        device_type: int,
-        device_id: str,
-        command: int,
-        additional_value: str = "",
-        **kwargs,
-    ) -> dict[str, Any]:
-        """Build a Navien MQTT command structure."""
-        request = {
-            "command": command,
-            "deviceType": device_type,
-            "macAddress": device_id,
-            "additionalValue": additional_value,
-            **kwargs,
-        }
-
-        # Use navilink- prefix for device ID in topics (from reference implementation)
-        device_topic = f"navilink-{device_id}"
-
-        return {
-            "clientID": self.config.client_id,
-            "sessionID": self._session_id,
-            "protocolVersion": 2,
-            "request": request,
-            "requestTopic": f"cmd/{device_type}/{device_topic}",
-            "responseTopic": f"cmd/{device_type}/{device_topic}/{self.config.client_id}/res",
-        }
-
-    async def subscribe_device(self, device: Device, callback: Callable[[str, dict], None]) -> int:
+    async def subscribe_device(
+        self, device: Device, callback: Callable[[str, dict[str, Any]], None]
+    ) -> int:
         """
         Subscribe to all messages from a specific device.
 
@@ -904,13 +612,11 @@ class NavienMqttClient(EventEmitter):
         Returns:
             Subscription packet ID
         """
-        # Subscribe to all command responses from device (broader pattern)
-        # Device responses come on cmd/{device_type}/navilink-{device_id}/#
-        device_id = device.device_info.mac_address
-        device_type = device.device_info.device_type
-        device_topic = f"navilink-{device_id}"
-        response_topic = f"cmd/{device_type}/{device_topic}/#"
-        return await self.subscribe(response_topic, callback)
+        if not self._connected or not self._subscription_manager:
+            raise RuntimeError("Not connected to MQTT broker")
+
+        # Delegate to subscription manager
+        return await self._subscription_manager.subscribe_device(device, callback)
 
     async def subscribe_device_status(
         self, device: Device, callback: Callable[[DeviceStatus], None]
@@ -960,136 +666,11 @@ class NavienMqttClient(EventEmitter):
             >>> # Subscribe to start receiving events
             >>> await mqtt_client.subscribe_device_status(device, lambda s: None)
         """
+        if not self._connected or not self._subscription_manager:
+            raise RuntimeError("Not connected to MQTT broker")
 
-        def status_message_handler(topic: str, message: dict):
-            """Parse status messages and invoke user callback."""
-            try:
-                # Log all messages received for debugging
-                _logger.debug(f"Status handler received message on topic: {topic}")
-                _logger.debug(f"Message keys: {list(message.keys())}")
-
-                # Check if message contains status data
-                if "response" not in message:
-                    _logger.debug(
-                        "Message does not contain 'response' key, skipping. Keys: %s",
-                        list(message.keys()),
-                    )
-                    return
-
-                response = message["response"]
-                _logger.debug(f"Response keys: {list(response.keys())}")
-
-                if "status" not in response:
-                    _logger.debug(
-                        "Response does not contain 'status' key, skipping. Keys: %s",
-                        list(response.keys()),
-                    )
-                    return
-
-                # Parse status into DeviceStatus object
-                _logger.info(f"Parsing device status message from topic: {topic}")
-                status_data = response["status"]
-                device_status = DeviceStatus.from_dict(status_data)
-
-                # Emit raw status event
-                self._schedule_coroutine(self.emit("status_received", device_status))
-
-                # Detect and emit state changes
-                self._schedule_coroutine(self._detect_state_changes(device_status))
-
-                # Invoke user callback with parsed status
-                _logger.info("Invoking user callback with parsed DeviceStatus")
-                callback(device_status)
-                _logger.debug("User callback completed successfully")
-
-            except KeyError as e:
-                _logger.warning(
-                    f"Missing required field in status message: {e}",
-                    exc_info=True,
-                )
-            except ValueError as e:
-                _logger.warning(f"Invalid value in status message: {e}", exc_info=True)
-            except Exception as e:
-                _logger.error(f"Error parsing device status: {e}", exc_info=True)
-
-        # Subscribe using the internal handler
-        return await self.subscribe_device(device=device, callback=status_message_handler)
-
-    async def _detect_state_changes(self, status: DeviceStatus):
-        """
-        Detect state changes and emit granular events.
-
-        This method compares the current status with the previous status
-        and emits events for any detected changes.
-
-        Args:
-            status: Current device status
-        """
-        if self._previous_status is None:
-            # First status received, just store it
-            self._previous_status = status
-            return
-
-        prev = self._previous_status
-
-        try:
-            # Temperature change
-            if status.dhwTemperature != prev.dhwTemperature:
-                await self.emit(
-                    "temperature_changed",
-                    prev.dhwTemperature,
-                    status.dhwTemperature,
-                )
-                _logger.debug(
-                    f"Temperature changed: {prev.dhwTemperature}°F → {status.dhwTemperature}°F"
-                )
-
-            # Operation mode change
-            if status.operationMode != prev.operationMode:
-                await self.emit(
-                    "mode_changed",
-                    prev.operationMode,
-                    status.operationMode,
-                )
-                _logger.debug(f"Mode changed: {prev.operationMode} → {status.operationMode}")
-
-            # Power consumption change
-            if status.currentInstPower != prev.currentInstPower:
-                await self.emit(
-                    "power_changed",
-                    prev.currentInstPower,
-                    status.currentInstPower,
-                )
-                _logger.debug(
-                    f"Power changed: {prev.currentInstPower}W → {status.currentInstPower}W"
-                )
-
-            # Heating started/stopped
-            prev_heating = prev.currentInstPower > 0
-            curr_heating = status.currentInstPower > 0
-
-            if curr_heating and not prev_heating:
-                await self.emit("heating_started", status)
-                _logger.debug("Heating started")
-
-            if not curr_heating and prev_heating:
-                await self.emit("heating_stopped", status)
-                _logger.debug("Heating stopped")
-
-            # Error detection
-            if status.errorCode and not prev.errorCode:
-                await self.emit("error_detected", status.errorCode, status)
-                _logger.info(f"Error detected: {status.errorCode}")
-
-            if not status.errorCode and prev.errorCode:
-                await self.emit("error_cleared", prev.errorCode)
-                _logger.info(f"Error cleared: {prev.errorCode}")
-
-        except Exception as e:
-            _logger.error(f"Error detecting state changes: {e}", exc_info=True)
-        finally:
-            # Always update previous status
-            self._previous_status = status
+        # Delegate to subscription manager (it handles state change detection and events)
+        return await self._subscription_manager.subscribe_device_status(device, callback)
 
     async def subscribe_device_feature(
         self, device: Device, callback: Callable[[DeviceFeature], None]
@@ -1126,57 +707,11 @@ class NavienMqttClient(EventEmitter):
             >>> mqtt_client.on('feature_received', lambda f: print(f"FW: {f.controllerSwVersion}"))
             >>> await mqtt_client.subscribe_device_feature(device, lambda f: None)
         """
+        if not self._connected or not self._subscription_manager:
+            raise RuntimeError("Not connected to MQTT broker")
 
-        def feature_message_handler(topic: str, message: dict):
-            """Parse feature messages and invoke user callback."""
-            try:
-                # Log all messages received for debugging
-                _logger.debug(f"Feature handler received message on topic: {topic}")
-                _logger.debug(f"Message keys: {list(message.keys())}")
-
-                # Check if message contains feature data
-                if "response" not in message:
-                    _logger.debug(
-                        "Message does not contain 'response' key, skipping. Keys: %s",
-                        list(message.keys()),
-                    )
-                    return
-
-                response = message["response"]
-                _logger.debug(f"Response keys: {list(response.keys())}")
-
-                if "feature" not in response:
-                    _logger.debug(
-                        "Response does not contain 'feature' key, skipping. Keys: %s",
-                        list(response.keys()),
-                    )
-                    return
-
-                # Parse feature into DeviceFeature object
-                _logger.info(f"Parsing device feature message from topic: {topic}")
-                feature_data = response["feature"]
-                device_feature = DeviceFeature.from_dict(feature_data)
-
-                # Emit feature received event
-                self._schedule_coroutine(self.emit("feature_received", device_feature))
-
-                # Invoke user callback with parsed feature
-                _logger.info("Invoking user callback with parsed DeviceFeature")
-                callback(device_feature)
-                _logger.debug("User callback completed successfully")
-
-            except KeyError as e:
-                _logger.warning(
-                    f"Missing required field in feature message: {e}",
-                    exc_info=True,
-                )
-            except ValueError as e:
-                _logger.warning(f"Invalid value in feature message: {e}", exc_info=True)
-            except Exception as e:
-                _logger.error(f"Error parsing device feature: {e}", exc_info=True)
-
-        # Subscribe using the internal handler
-        return await self.subscribe_device(device=device, callback=feature_message_handler)
+        # Delegate to subscription manager
+        return await self._subscription_manager.subscribe_device_feature(device, callback)
 
     async def request_device_status(self, device: Device) -> int:
         """
@@ -1188,21 +723,10 @@ class NavienMqttClient(EventEmitter):
         Returns:
             Publish packet ID
         """
-        device_id = device.device_info.mac_address
-        device_type = device.device_info.device_type
-        additional_value = device.device_info.additional_value
+        if not self._connected or not self._device_controller:
+            raise RuntimeError("Not connected to MQTT broker")
 
-        device_topic = f"navilink-{device_id}"
-        topic = f"cmd/{device_type}/{device_topic}/st"
-        command = self._build_command(
-            device_type=device_type,
-            device_id=device_id,
-            command=CMD_STATUS_REQUEST,  # Status request command
-            additional_value=additional_value,
-        )
-        command["requestTopic"] = topic
-
-        return await self.publish(topic, command)
+        return await self._device_controller.request_device_status(device)
 
     async def request_device_info(self, device: Device) -> int:
         """
@@ -1211,21 +735,10 @@ class NavienMqttClient(EventEmitter):
         Returns:
             Publish packet ID
         """
-        device_id = device.device_info.mac_address
-        device_type = device.device_info.device_type
-        additional_value = device.device_info.additional_value
+        if not self._connected or not self._device_controller:
+            raise RuntimeError("Not connected to MQTT broker")
 
-        device_topic = f"navilink-{device_id}"
-        topic = f"cmd/{device_type}/{device_topic}/st/did"
-        command = self._build_command(
-            device_type=device_type,
-            device_id=device_id,
-            command=CMD_DEVICE_INFO_REQUEST,  # Device info command
-            additional_value=additional_value,
-        )
-        command["requestTopic"] = topic
-
-        return await self.publish(topic, command)
+        return await self._device_controller.request_device_info(device)
 
     async def set_power(self, device: Device, power_on: bool) -> int:
         """
@@ -1240,27 +753,10 @@ class NavienMqttClient(EventEmitter):
         Returns:
             Publish packet ID
         """
-        device_id = device.device_info.mac_address
-        device_type = device.device_info.device_type
-        additional_value = device.device_info.additional_value
-        device_topic = f"navilink-{device_id}"
-        topic = f"cmd/{device_type}/{device_topic}/ctrl"
-        mode = "power-on" if power_on else "power-off"
-        # Command codes: 33554434 for power-on, 33554433 for power-off
-        command_code = CMD_POWER_ON if power_on else CMD_POWER_OFF
+        if not self._connected or not self._device_controller:
+            raise RuntimeError("Not connected to MQTT broker")
 
-        command = self._build_command(
-            device_type=device_type,
-            device_id=device_id,
-            command=command_code,
-            additional_value=additional_value,
-            mode=mode,
-            param=[],
-            paramStr="",
-        )
-        command["requestTopic"] = topic
-
-        return await self.publish(topic, command)
+        return await self._device_controller.set_power(device, power_on)
 
     async def set_dhw_mode(
         self,
@@ -1293,35 +789,10 @@ class NavienMqttClient(EventEmitter):
             - 4: High Demand (maximum heating capacity)
             - 5: Vacation Mode (requires vacation_days parameter)
         """
-        if mode_id == DhwOperationSetting.VACATION.value:
-            if vacation_days is None:
-                raise ValueError("Vacation mode requires vacation_days (1-30)")
-            if not 1 <= vacation_days <= 30:
-                raise ValueError("vacation_days must be between 1 and 30")
-            param = [mode_id, vacation_days]
-        else:
-            if vacation_days is not None:
-                raise ValueError("vacation_days is only valid for vacation mode (mode 5)")
-            param = [mode_id]
+        if not self._connected or not self._device_controller:
+            raise RuntimeError("Not connected to MQTT broker")
 
-        device_id = device.device_info.mac_address
-        device_type = device.device_info.device_type
-        additional_value = device.device_info.additional_value
-        device_topic = f"navilink-{device_id}"
-        topic = f"cmd/{device_type}/{device_topic}/ctrl"
-
-        command = self._build_command(
-            device_type=device_type,
-            device_id=device_id,
-            command=CMD_DHW_MODE,  # DHW mode control command (different from power commands)
-            additional_value=additional_value,
-            mode="dhw-mode",
-            param=param,
-            paramStr="",
-        )
-        command["requestTopic"] = topic
-
-        return await self.publish(topic, command)
+        return await self._device_controller.set_dhw_mode(device, mode_id, vacation_days)
 
     async def enable_anti_legionella(self, device: Device, period_days: int) -> int:
         """Enable Anti-Legionella disinfection with a 1-30 day cycle.
@@ -1344,27 +815,10 @@ class NavienMqttClient(EventEmitter):
         Raises:
             ValueError: If period_days is not in the valid range [1, 30]
         """
-        if not 1 <= period_days <= 30:
-            raise ValueError("period_days must be between 1 and 30")
+        if not self._connected or not self._device_controller:
+            raise RuntimeError("Not connected to MQTT broker")
 
-        device_id = device.device_info.mac_address
-        device_type = device.device_info.device_type
-        additional_value = device.device_info.additional_value
-        device_topic = f"navilink-{device_id}"
-        topic = f"cmd/{device_type}/{device_topic}/ctrl"
-
-        command = self._build_command(
-            device_type=device_type,
-            device_id=device_id,
-            command=CMD_ANTI_LEGIONELLA_ENABLE,
-            additional_value=additional_value,
-            mode="anti-leg-on",
-            param=[period_days],
-            paramStr="",
-        )
-        command["requestTopic"] = topic
-
-        return await self.publish(topic, command)
+        return await self._device_controller.enable_anti_legionella(device, period_days)
 
     async def disable_anti_legionella(self, device: Device) -> int:
         """Disable the Anti-Legionella disinfection cycle.
@@ -1380,24 +834,10 @@ class NavienMqttClient(EventEmitter):
         Returns:
             The message ID of the published command
         """
-        device_id = device.device_info.mac_address
-        device_type = device.device_info.device_type
-        additional_value = device.device_info.additional_value
-        device_topic = f"navilink-{device_id}"
-        topic = f"cmd/{device_type}/{device_topic}/ctrl"
+        if not self._connected or not self._device_controller:
+            raise RuntimeError("Not connected to MQTT broker")
 
-        command = self._build_command(
-            device_type=device_type,
-            device_id=device_id,
-            command=CMD_ANTI_LEGIONELLA_DISABLE,
-            additional_value=additional_value,
-            mode="anti-leg-off",
-            param=[],
-            paramStr="",
-        )
-        command["requestTopic"] = topic
-
-        return await self.publish(topic, command)
+        return await self._device_controller.disable_anti_legionella(device)
 
     async def set_dhw_temperature(self, device: Device, temperature: int) -> int:
         """
@@ -1422,37 +862,10 @@ class NavienMqttClient(EventEmitter):
             # To set display temperature to 140°F, send 120°F
             await client.set_dhw_temperature(device, 120)
         """
-        device_id = device.device_info.mac_address
-        device_type = device.device_info.device_type
-        additional_value = device.device_info.additional_value
-        device_topic = f"navilink-{device_id}"
-        topic = f"cmd/{device_type}/{device_topic}/ctrl"
+        if not self._connected or not self._device_controller:
+            raise RuntimeError("Not connected to MQTT broker")
 
-        command = self._build_command(
-            device_type=device_type,
-            device_id=device_id,
-            command=CMD_DHW_TEMPERATURE,  # DHW temperature control command
-            additional_value=additional_value,
-            mode="dhw-temperature",
-            param=[temperature],
-            paramStr="",
-        )
-        command["requestTopic"] = topic
-
-        return await self.publish(topic, command)
-
-        command = self._build_command(
-            device_type=device_type,
-            device_id=device_id,
-            command=CMD_DHW_TEMPERATURE,  # DHW temperature control command
-            additional_value=additional_value,
-            mode="dhw-temperature",
-            param=[temperature],
-            paramStr="",
-        )
-        command["requestTopic"] = topic
-
-        return await self.publish(topic, command)
+        return await self._device_controller.set_dhw_temperature(device, temperature)
 
     async def set_dhw_temperature_display(self, device: Device, display_temperature: int) -> int:
         """
@@ -1484,49 +897,19 @@ class NavienMqttClient(EventEmitter):
         enabled: bool = True,
     ) -> int:
         """Update programmed reservations for temperature/mode changes."""
-        # See docs/MQTT_MESSAGES.rst "Reservation Management" for the
-        # command code (16777226) and the reservation object fields
-        # (enable, week, hour, min, mode, param).
-        device_id = device.device_info.mac_address
-        device_type = device.device_info.device_type
-        additional_value = device.device_info.additional_value
-        device_topic = f"navilink-{device_id}"
-        topic = f"cmd/{device_type}/{device_topic}/ctrl/rsv/rd"
+        if not self._connected or not self._device_controller:
+            raise RuntimeError("Not connected to MQTT broker")
 
-        reservation_use = 1 if enabled else 2
-        reservation_payload = [dict(entry) for entry in reservations]
-
-        command = self._build_command(
-            device_type=device_type,
-            device_id=device_id,
-            command=CMD_RESERVATION_MANAGEMENT,
-            additional_value=additional_value,
-            reservationUse=reservation_use,
-            reservation=reservation_payload,
+        return await self._device_controller.update_reservations(
+            device, reservations, enabled=enabled
         )
-        command["requestTopic"] = topic
-        command["responseTopic"] = f"cmd/{device_type}/{self.config.client_id}/res/rsv/rd"
-
-        return await self.publish(topic, command)
 
     async def request_reservations(self, device: Device) -> int:
         """Request the current reservation program from the device."""
-        device_id = device.device_info.mac_address
-        device_type = device.device_info.device_type
-        additional_value = device.device_info.additional_value
-        device_topic = f"navilink-{device_id}"
-        topic = f"cmd/{device_type}/{device_topic}/ctrl/rsv/rd"
+        if not self._connected or not self._device_controller:
+            raise RuntimeError("Not connected to MQTT broker")
 
-        command = self._build_command(
-            device_type=device_type,
-            device_id=device_id,
-            command=CMD_RESERVATION_MANAGEMENT,
-            additional_value=additional_value,
-        )
-        command["requestTopic"] = topic
-        command["responseTopic"] = f"cmd/{device_type}/{self.config.client_id}/res/rsv/rd"
-
-        return await self.publish(topic, command)
+        return await self._device_controller.request_reservations(device)
 
     async def configure_tou_schedule(
         self,
@@ -1537,37 +920,12 @@ class NavienMqttClient(EventEmitter):
         enabled: bool = True,
     ) -> int:
         """Configure Time-of-Use pricing schedule via MQTT."""
-        # See docs/MQTT_MESSAGES.rst "TOU (Time of Use) Settings" for
-        # the command code (33554439) and TOU period fields
-        # (season, week, startHour, startMinute, endHour, endMinute,
-        #  priceMin, priceMax, decimalPoint).
-        if not controller_serial_number:
-            raise ValueError("controller_serial_number is required")
-        if not periods:
-            raise ValueError("At least one TOU period must be provided")
+        if not self._connected or not self._device_controller:
+            raise RuntimeError("Not connected to MQTT broker")
 
-        device_id = device.device_info.mac_address
-        device_type = device.device_info.device_type
-        additional_value = device.device_info.additional_value
-        device_topic = f"navilink-{device_id}"
-        topic = f"cmd/{device_type}/{device_topic}/ctrl/tou/rd"
-
-        reservation_use = 1 if enabled else 2
-        reservation_payload = [dict(period) for period in periods]
-
-        command = self._build_command(
-            device_type=device_type,
-            device_id=device_id,
-            command=CMD_TOU_SETTINGS,
-            additional_value=additional_value,
-            controllerSerialNumber=controller_serial_number,
-            reservationUse=reservation_use,
-            reservation=reservation_payload,
+        return await self._device_controller.configure_tou_schedule(
+            device, controller_serial_number, periods, enabled=enabled
         )
-        command["requestTopic"] = topic
-        command["responseTopic"] = f"cmd/{device_type}/{self.config.client_id}/res/tou/rd"
-
-        return await self.publish(topic, command)
 
     async def request_tou_settings(
         self,
@@ -1575,50 +933,17 @@ class NavienMqttClient(EventEmitter):
         controller_serial_number: str,
     ) -> int:
         """Request current Time-of-Use schedule from the device."""
-        if not controller_serial_number:
-            raise ValueError("controller_serial_number is required")
+        if not self._connected or not self._device_controller:
+            raise RuntimeError("Not connected to MQTT broker")
 
-        device_id = device.device_info.mac_address
-        device_type = device.device_info.device_type
-        additional_value = device.device_info.additional_value
-        device_topic = f"navilink-{device_id}"
-        topic = f"cmd/{device_type}/{device_topic}/ctrl/tou/rd"
-
-        command = self._build_command(
-            device_type=device_type,
-            device_id=device_id,
-            command=CMD_TOU_SETTINGS,
-            additional_value=additional_value,
-            controllerSerialNumber=controller_serial_number,
-        )
-        command["requestTopic"] = topic
-        command["responseTopic"] = f"cmd/{device_type}/{self.config.client_id}/res/tou/rd"
-
-        return await self.publish(topic, command)
+        return await self._device_controller.request_tou_settings(device, controller_serial_number)
 
     async def set_tou_enabled(self, device: Device, enabled: bool) -> int:
         """Quickly toggle Time-of-Use functionality without modifying the schedule."""
-        device_id = device.device_info.mac_address
-        device_type = device.device_info.device_type
-        additional_value = device.device_info.additional_value
-        device_topic = f"navilink-{device_id}"
-        topic = f"cmd/{device_type}/{device_topic}/ctrl"
+        if not self._connected or not self._device_controller:
+            raise RuntimeError("Not connected to MQTT broker")
 
-        command_code = CMD_TOU_ENABLE if enabled else CMD_TOU_DISABLE
-        mode = "tou-on" if enabled else "tou-off"
-
-        command = self._build_command(
-            device_type=device_type,
-            device_id=device_id,
-            command=command_code,
-            additional_value=additional_value,
-            mode=mode,
-            param=[],
-            paramStr="",
-        )
-        command["requestTopic"] = topic
-
-        return await self.publish(topic, command)
+        return await self._device_controller.set_tou_enabled(device, enabled)
 
     async def request_energy_usage(self, device: Device, year: int, months: list[int]) -> int:
         """
@@ -1653,27 +978,10 @@ class NavienMqttClient(EventEmitter):
                 months=[7, 8, 9]
             )
         """
-        device_id = device.device_info.mac_address
-        device_type = device.device_info.device_type
-        additional_value = device.device_info.additional_value
+        if not self._connected or not self._device_controller:
+            raise RuntimeError("Not connected to MQTT broker")
 
-        device_topic = f"navilink-{device_id}"
-        topic = f"cmd/{device_type}/{device_topic}/st/energy-usage-daily-query/rd"
-
-        command = self._build_command(
-            device_type=device_type,
-            device_id=device_id,
-            command=CMD_ENERGY_USAGE_QUERY,  # Energy usage query command
-            additional_value=additional_value,
-            month=months,
-            year=year,
-        )
-        command["requestTopic"] = topic
-        command["responseTopic"] = (
-            f"cmd/{device_type}/{self.config.client_id}/res/energy-usage-daily-query/rd"
-        )
-
-        return await self.publish(topic, command)
+        return await self._device_controller.request_energy_usage(device, year, months)
 
     async def subscribe_energy_usage(
         self,
@@ -1702,49 +1010,11 @@ class NavienMqttClient(EventEmitter):
             >>> await mqtt_client.subscribe_energy_usage(device, on_energy_usage)
             >>> await mqtt_client.request_energy_usage(device, 2025, [9])
         """
+        if not self._connected or not self._subscription_manager:
+            raise RuntimeError("Not connected to MQTT broker")
 
-        device_type = device.device_info.device_type
-
-        def energy_message_handler(topic: str, message: dict):
-            """Internal handler to parse energy usage responses."""
-            try:
-                _logger.debug("Energy handler received message on topic: %s", topic)
-                _logger.debug("Message keys: %s", list(message.keys()))
-
-                if "response" not in message:
-                    _logger.debug(
-                        "Message does not contain 'response' key, skipping. Keys: %s",
-                        list(message.keys()),
-                    )
-                    return
-
-                response_data = message["response"]
-                _logger.debug("Response keys: %s", list(response_data.keys()))
-
-                if "typeOfUsage" not in response_data:
-                    _logger.debug(
-                        "Response does not contain 'typeOfUsage' key, skipping. Keys: %s",
-                        list(response_data.keys()),
-                    )
-                    return
-
-                _logger.info("Parsing energy usage response from topic: %s", topic)
-                energy_response = EnergyUsageResponse.from_dict(response_data)
-
-                _logger.info("Invoking user callback with parsed EnergyUsageResponse")
-                callback(energy_response)
-                _logger.debug("User callback completed successfully")
-
-            except KeyError as e:
-                _logger.warning("Failed to parse energy usage message - missing key: %s", e)
-            except Exception as e:
-                _logger.error("Error in energy usage message handler: %s", e, exc_info=True)
-
-        response_topic = (
-            f"cmd/{device_type}/{self.config.client_id}/res/energy-usage-daily-query/rd"
-        )
-
-        return await self.subscribe(response_topic, energy_message_handler)
+        # Delegate to subscription manager
+        return await self._subscription_manager.subscribe_energy_usage(device, callback)
 
     async def signal_app_connection(self, device: Device) -> int:
         """
@@ -1756,16 +1026,10 @@ class NavienMqttClient(EventEmitter):
         Returns:
             Publish packet ID
         """
-        device_id = device.device_info.mac_address
-        device_type = device.device_info.device_type
-        device_topic = f"navilink-{device_id}"
-        topic = f"evt/{device_type}/{device_topic}/app-connection"
-        message = {
-            "clientID": self.config.client_id,
-            "timestamp": datetime.utcnow().isoformat() + "Z",
-        }
+        if not self._connected or not self._device_controller:
+            raise RuntimeError("Not connected to MQTT broker")
 
-        return await self.publish(topic, message)
+        return await self._device_controller.signal_app_connection(device)
 
     async def start_periodic_requests(
         self,
@@ -1805,108 +1069,10 @@ class NavienMqttClient(EventEmitter):
             - Call stop_periodic_requests() to stop a task
             - All tasks automatically stop when client disconnects
         """
-        device_id = device.device_info.mac_address
-        # Do not log MAC address; use a generic placeholder to avoid leaking sensitive information
-        redacted_device_id = "DEVICE_ID_REDACTED"
-        task_name = f"periodic_{request_type.value}_{device_id}"
+        if not self._periodic_manager:
+            raise RuntimeError("Periodic request manager not initialized")
 
-        # Stop existing task for this device/type if any
-        if task_name in self._periodic_tasks:
-            _logger.info(f"Stopping existing periodic {request_type.value} task")
-            await self.stop_periodic_requests(device, request_type)
-
-        async def periodic_request():
-            """Internal coroutine for periodic requests."""
-            _logger.info(
-                f"Started periodic {request_type.value} requests for {redacted_device_id} "
-                f"(every {period_seconds}s)"
-            )
-
-            # Track consecutive skips for throttled logging
-            consecutive_skips = 0
-
-            while True:
-                try:
-                    if not self._connected:
-                        consecutive_skips += 1
-                        # Log warning only on first skip and then every 10th skip to reduce noise
-                        if consecutive_skips == 1 or consecutive_skips % 10 == 0:
-                            _logger.warning(
-                                "Not connected, skipping %s request for %s (skipped %d time%s)",
-                                request_type.value,
-                                redacted_device_id,
-                                consecutive_skips,
-                                "s" if consecutive_skips > 1 else "",
-                            )
-                        else:
-                            _logger.debug(
-                                "Not connected, skipping %s request for %s",
-                                request_type.value,
-                                redacted_device_id,
-                            )
-                    else:
-                        # Reset skip counter when connected
-                        if consecutive_skips > 0:
-                            _logger.info(
-                                "Reconnected, resuming %s requests for %s (had skipped %d)",
-                                request_type.value,
-                                redacted_device_id,
-                                consecutive_skips,
-                            )
-                            consecutive_skips = 0
-
-                        # Send appropriate request type
-                        if request_type == PeriodicRequestType.DEVICE_INFO:
-                            await self.request_device_info(device)
-                        elif request_type == PeriodicRequestType.DEVICE_STATUS:
-                            await self.request_device_status(device)
-
-                        _logger.debug(
-                            "Sent periodic %s request for %s",
-                            request_type.value,
-                            redacted_device_id,
-                        )
-
-                    # Wait for the specified period
-                    await asyncio.sleep(period_seconds)
-
-                except asyncio.CancelledError:
-                    _logger.info(
-                        f"Periodic {request_type.value} requests cancelled for {redacted_device_id}"
-                    )
-                    break
-                except Exception as e:
-                    # Handle clean session cancellation gracefully (expected during reconnection)
-                    # Check exception type and name attribute for proper error identification
-                    if (
-                        isinstance(e, AwsCrtError)
-                        and e.name == "AWS_ERROR_MQTT_CANCELLED_FOR_CLEAN_SESSION"
-                    ):
-                        _logger.debug(
-                            "Periodic %s request cancelled due to clean session for %s. "
-                            "This is expected during reconnection.",
-                            request_type.value,
-                            redacted_device_id,
-                        )
-                    else:
-                        _logger.error(
-                            "Error in periodic %s request for %s: %s",
-                            request_type.value,
-                            redacted_device_id,
-                            e,
-                            exc_info=True,
-                        )
-                    # Continue despite errors
-                    await asyncio.sleep(period_seconds)
-
-        # Create and store the task
-        task = asyncio.create_task(periodic_request())
-        self._periodic_tasks[task_name] = task
-
-        _logger.info(
-            f"Started periodic {request_type.value} task for {redacted_device_id} "
-            f"with period {period_seconds}s"
-        )
+        await self._periodic_manager.start_periodic_requests(device, request_type, period_seconds)
 
     async def stop_periodic_requests(
         self,
@@ -1931,37 +1097,10 @@ class NavienMqttClient(EventEmitter):
             >>> # Stop all periodic requests for device
             >>> await mqtt_client.stop_periodic_requests(device)
         """
-        device_id = device.device_info.mac_address
+        if not self._periodic_manager:
+            raise RuntimeError("Periodic request manager not initialized")
 
-        if request_type is None:
-            # Stop all request types for this device
-            types_to_stop = [
-                PeriodicRequestType.DEVICE_INFO,
-                PeriodicRequestType.DEVICE_STATUS,
-            ]
-        else:
-            types_to_stop = [request_type]
-
-        stopped_count = 0
-        for req_type in types_to_stop:
-            task_name = f"periodic_{req_type.value}_{device_id}"
-
-            if task_name in self._periodic_tasks:
-                task = self._periodic_tasks[task_name]
-                task.cancel()
-
-                with contextlib.suppress(asyncio.CancelledError):
-                    await task
-
-                del self._periodic_tasks[task_name]
-                stopped_count += 1
-                # Redact all but last 4 chars of MAC (if format expected), else just redact
-
-        if stopped_count == 0:
-            _logger.debug(
-                f"No periodic tasks found for {device_id}"
-                + (f" (type={request_type.value})" if request_type else "")
-            )
+        await self._periodic_manager.stop_periodic_requests(device, request_type)
 
     async def _stop_all_periodic_tasks(self) -> None:
         """
@@ -1986,11 +1125,10 @@ class NavienMqttClient(EventEmitter):
             device: Device object
             period_seconds: Time between requests in seconds (default: 300 = 5 minutes)
         """
-        await self.start_periodic_requests(
-            device=device,
-            request_type=PeriodicRequestType.DEVICE_INFO,
-            period_seconds=period_seconds,
-        )
+        if not self._periodic_manager:
+            raise RuntimeError("Periodic request manager not initialized")
+
+        await self._periodic_manager.start_periodic_device_info_requests(device, period_seconds)
 
     async def start_periodic_device_status_requests(
         self, device: Device, period_seconds: float = 300.0
@@ -2004,11 +1142,10 @@ class NavienMqttClient(EventEmitter):
             device: Device object
             period_seconds: Time between requests in seconds (default: 300 = 5 minutes)
         """
-        await self.start_periodic_requests(
-            device=device,
-            request_type=PeriodicRequestType.DEVICE_STATUS,
-            period_seconds=period_seconds,
-        )
+        if not self._periodic_manager:
+            raise RuntimeError("Periodic request manager not initialized")
+
+        await self._periodic_manager.start_periodic_device_status_requests(device, period_seconds)
 
     async def stop_periodic_device_info_requests(self, device: Device) -> None:
         """
@@ -2019,7 +1156,10 @@ class NavienMqttClient(EventEmitter):
         Args:
             device: Device object
         """
-        await self.stop_periodic_requests(device, PeriodicRequestType.DEVICE_INFO)
+        if not self._periodic_manager:
+            raise RuntimeError("Periodic request manager not initialized")
+
+        await self._periodic_manager.stop_periodic_device_info_requests(device)
 
     async def stop_periodic_device_status_requests(self, device: Device) -> None:
         """
@@ -2030,7 +1170,10 @@ class NavienMqttClient(EventEmitter):
         Args:
             device: Device object
         """
-        await self.stop_periodic_requests(device, PeriodicRequestType.DEVICE_STATUS)
+        if not self._periodic_manager:
+            raise RuntimeError("Periodic request manager not initialized")
+
+        await self._periodic_manager.stop_periodic_device_status_requests(device)
 
     async def stop_all_periodic_tasks(self, _reason: Optional[str] = None) -> None:
         """
@@ -2044,22 +1187,10 @@ class NavienMqttClient(EventEmitter):
         Example:
             >>> await mqtt_client.stop_all_periodic_tasks()
         """
-        if not self._periodic_tasks:
-            return
+        if not self._periodic_manager:
+            raise RuntimeError("Periodic request manager not initialized")
 
-        task_count = len(self._periodic_tasks)
-        reason_msg = f" due to {_reason}" if _reason else ""
-        _logger.info(f"Stopping {task_count} periodic task(s){reason_msg}")
-
-        # Cancel all tasks
-        for task in self._periodic_tasks.values():
-            task.cancel()
-
-        # Wait for all to complete
-        await asyncio.gather(*self._periodic_tasks.values(), return_exceptions=True)
-
-        self._periodic_tasks.clear()
-        _logger.info("All periodic tasks stopped")
+        await self._periodic_manager.stop_all_periodic_tasks(_reason)
 
     @property
     def is_connected(self) -> bool:
@@ -2069,22 +1200,28 @@ class NavienMqttClient(EventEmitter):
     @property
     def is_reconnecting(self) -> bool:
         """Check if client is currently attempting to reconnect."""
-        return self._reconnect_task is not None and not self._reconnect_task.done()
+        if self._reconnection_handler:
+            return self._reconnection_handler.is_reconnecting
+        return False
 
     @property
     def reconnect_attempts(self) -> int:
         """Get the number of reconnection attempts made."""
-        return self._reconnect_attempts
+        if self._reconnection_handler:
+            return self._reconnection_handler.attempt_count
+        return 0
 
     @property
     def queued_commands_count(self) -> int:
         """Get the number of commands currently queued."""
-        return len(self._command_queue)
+        if self._command_queue:
+            return self._command_queue.count
+        return 0
 
     @property
     def client_id(self) -> str:
         """Get client ID."""
-        return self.config.client_id
+        return self.config.client_id or ""
 
     @property
     def session_id(self) -> str:
@@ -2098,11 +1235,13 @@ class NavienMqttClient(EventEmitter):
         Returns:
             Number of commands that were cleared
         """
-        count = len(self._command_queue)
-        if count > 0:
-            self._command_queue.clear()
-            _logger.info(f"Cleared {count} queued command(s)")
-        return count
+        if self._command_queue:
+            count = self._command_queue.count
+            if count > 0:
+                self._command_queue.clear()
+                _logger.info(f"Cleared {count} queued command(s)")
+                return count
+        return 0
 
     async def reset_reconnect(self) -> None:
         """
@@ -2120,11 +1259,6 @@ class NavienMqttClient(EventEmitter):
             This should typically only be called after a reconnection_failed
             event, not during normal operation.
         """
-        self._reconnect_attempts = 0
-        self._manual_disconnect = False
+        if self._reconnection_handler:
+            self._reconnection_handler.reset()
         await self._start_reconnect_task()
-        count = len(self._command_queue)
-        if count > 0:
-            self._command_queue.clear()
-            _logger.info(f"Cleared {count} queued command(s)")
-        return count

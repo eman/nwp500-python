@@ -20,11 +20,11 @@ __license__ = "MIT"
 _logger = logging.getLogger(__name__)
 
 
-@dataclass
+@dataclass(frozen=True)
 class EventListener:
     """Represents a registered event listener."""
 
-    callback: Callable
+    callback: Callable[..., Any]
     once: bool = False
     priority: int = 50  # Default priority
 
@@ -58,15 +58,18 @@ class EventEmitter:
         emitter.off('temperature_changed', log_temperature)
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize the event emitter."""
         self._listeners: dict[str, list[EventListener]] = defaultdict(list)
         self._event_counts: dict[str, int] = defaultdict(int)
+        self._once_callbacks: set[tuple[str, Callable[..., Any]]] = (
+            set()
+        )  # Track (event, callback) for once listeners
 
     def on(
         self,
         event: str,
-        callback: Callable,
+        callback: Callable[..., Any],
         priority: int = 50,
     ) -> None:
         """
@@ -101,7 +104,7 @@ class EventEmitter:
     def once(
         self,
         event: str,
-        callback: Callable,
+        callback: Callable[..., Any],
         priority: int = 50,
     ) -> None:
         """
@@ -121,13 +124,14 @@ class EventEmitter:
         """
         listener = EventListener(callback=callback, once=True, priority=priority)
         self._listeners[event].append(listener)
+        self._once_callbacks.add((event, callback))  # Track (event, callback) for O(1) lookup
 
         # Sort by priority (highest first)
         self._listeners[event].sort(key=lambda listener: listener.priority, reverse=True)
 
         _logger.debug(f"Registered one-time listener for '{event}' event (priority: {priority})")
 
-    def off(self, event: str, callback: Optional[Callable] = None) -> int:
+    def off(self, event: str, callback: Optional[Callable[..., Any]] = None) -> int:
         """
         Remove event listener(s).
 
@@ -152,6 +156,9 @@ class EventEmitter:
         if callback is None:
             # Remove all listeners for this event
             count = len(self._listeners[event])
+            # Clean up from once callbacks set
+            for listener in self._listeners[event]:
+                self._once_callbacks.discard((event, listener.callback))
             del self._listeners[event]
             _logger.debug(f"Removed all {count} listener(s) for '{event}' event")
             return count
@@ -163,6 +170,10 @@ class EventEmitter:
         ]
         removed_count = original_count - len(self._listeners[event])
 
+        # Clean up from once callbacks set
+        if removed_count > 0:
+            self._once_callbacks.discard((event, callback))
+
         # Clean up if no listeners left
         if not self._listeners[event]:
             del self._listeners[event]
@@ -172,7 +183,7 @@ class EventEmitter:
 
         return removed_count
 
-    async def emit(self, event: str, *args, **kwargs) -> int:
+    async def emit(self, event: str, *args: Any, **kwargs: Any) -> int:
         """
         Emit an event to all registered listeners.
 
@@ -212,9 +223,10 @@ class EventEmitter:
 
                 called_count += 1
 
-                # Mark one-time listeners for removal
-                if listener.once:
+                # Check if this is a once listener using O(1) set lookup
+                if (event, listener.callback) in self._once_callbacks:
                     listeners_to_remove.append(listener)
+                    self._once_callbacks.discard((event, listener.callback))
 
             except Exception as e:
                 _logger.error(
@@ -222,9 +234,10 @@ class EventEmitter:
                     exc_info=True,
                 )
 
-        # Remove one-time listeners
+        # Remove one-time listeners after iteration
         for listener in listeners_to_remove:
-            self._listeners[event].remove(listener)
+            if listener in self._listeners[event]:
+                self._listeners[event].remove(listener)
 
         # Clean up if no listeners left
         if not self._listeners[event]:
@@ -286,7 +299,7 @@ class EventEmitter:
 
     def remove_all_listeners(self, event: Optional[str] = None) -> int:
         """
-        Remove all listeners for specific event or all events.
+        Remove all listeners for an event, or all listeners for all events.
 
         Args:
             event: Event name, or None to remove all listeners
@@ -296,20 +309,22 @@ class EventEmitter:
 
         Example::
 
-            # Remove all listeners for one event
+            # Remove all listeners for specific event
             emitter.remove_all_listeners('temperature_changed')
 
-            # Remove ALL listeners
+            # Remove all listeners for all events
             emitter.remove_all_listeners()
         """
-        if event is not None:
-            return self.off(event)
+        if event is None:
+            # Remove all listeners for all events
+            count = sum(len(listeners) for listeners in self._listeners.values())
+            self._listeners.clear()
+            self._once_callbacks.clear()
+            _logger.debug(f"Removed all {count} listener(s) for all events")
+            return count
 
-        # Remove all listeners for all events
-        total_count = sum(len(listeners) for listeners in self._listeners.values())
-        self._listeners.clear()
-        _logger.debug(f"Removed all {total_count} listener(s)")
-        return total_count
+        # Remove all listeners for specific event
+        return self.off(event)
 
     async def wait_for(
         self,
@@ -337,9 +352,9 @@ class EventEmitter:
             # Wait for specific condition
             old_temp, new_temp = await emitter.wait_for('temperature_changed')
         """
-        future = asyncio.Future()
+        future: asyncio.Future[tuple[tuple[Any, ...], dict[str, Any]]] = asyncio.Future()
 
-        def handler(*args, **kwargs):
+        def handler(*args: Any, **kwargs: Any) -> None:
             if not future.done():
                 # Store both args and kwargs
                 future.set_result((args, kwargs))
@@ -349,12 +364,12 @@ class EventEmitter:
 
         try:
             if timeout is not None:
-                args, kwargs = await asyncio.wait_for(future, timeout=timeout)
+                args_tuple, kwargs_dict = await asyncio.wait_for(future, timeout=timeout)
             else:
-                args, kwargs = await future
+                args_tuple, kwargs_dict = await future
 
             # Return just args for simplicity (most common case)
-            return args
+            return args_tuple
 
         except asyncio.TimeoutError:
             # Remove the listener on timeout

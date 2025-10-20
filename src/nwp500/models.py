@@ -6,7 +6,6 @@ These models are based on the MQTT message formats and API responses.
 """
 
 import logging
-import warnings
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Optional, Union
@@ -15,37 +14,98 @@ from . import constants
 
 _logger = logging.getLogger(__name__)
 
-# Flag to control deprecation warnings (disabled by default for backward compatibility)
-_ENABLE_DEPRECATION_WARNINGS = False
+
+# ============================================================================
+# Field Conversion Helpers
+# ============================================================================
 
 
-def enable_deprecation_warnings(enabled: bool = True):
+def meta(**kwargs: Any) -> dict[str, Any]:
     """
-    Enable or disable deprecation warnings for the OperationMode enum.
+    Create metadata for dataclass fields with conversion information.
 
     Args:
-        enabled: If True, using OperationMode will emit deprecation warnings.
-                If False (default), no warnings are emitted for backward compatibility.
+        conversion: Conversion type ('device_bool', 'add_20', 'div_10',
+                   'decicelsius_to_f', 'enum')
+        enum_class: For enum conversions, the enum class to use
+        default_value: For enum conversions, the default value on error
 
-    Example:
-        >>> from nwp500.models import enable_deprecation_warnings
-        >>> enable_deprecation_warnings(True)  # Enable warnings
-        >>> # Now using OperationMode will emit warnings
+    Returns:
+        Metadata dict for use with field(metadata=...)
     """
-    global _ENABLE_DEPRECATION_WARNINGS
-    _ENABLE_DEPRECATION_WARNINGS = enabled
+    return kwargs
 
 
-def _warn_deprecated_operation_mode():
-    """Emit deprecation warning for OperationMode usage if enabled."""
-    if _ENABLE_DEPRECATION_WARNINGS:
-        warnings.warn(
-            "OperationMode is deprecated and will be removed in v3.0.0. "
-            "Use DhwOperationSetting for user preferences or CurrentOperationMode for "
-            "real-time states. See MIGRATION.md for migration guidance.",
-            DeprecationWarning,
-            stacklevel=3,
-        )
+def apply_field_conversions(cls: type[Any], data: dict[str, Any]) -> dict[str, Any]:
+    """
+    Apply conversions to data based on field metadata.
+
+    This function reads conversion metadata from dataclass fields and applies
+    the appropriate transformations. This eliminates duplicate field lists and
+    makes conversion logic self-documenting.
+
+    Args:
+        cls: The dataclass with field metadata
+        data: Raw data dictionary to convert
+
+    Returns:
+        Converted data dictionary
+    """
+    converted_data = data.copy()
+
+    # Iterate through all fields and apply conversions based on metadata
+    for field_info in cls.__dataclass_fields__.values():
+        field_name = field_info.name
+        if field_name not in converted_data:
+            continue
+
+        metadata = field_info.metadata
+        conversion = metadata.get("conversion")
+
+        if not conversion:
+            continue
+
+        value = converted_data[field_name]
+
+        # Apply the appropriate conversion
+        if conversion == "device_bool":
+            # Device encoding: 0 or 1 = false, 2 = true
+            converted_data[field_name] = value == 2
+
+        elif conversion == "add_20":
+            # Temperature offset conversion
+            converted_data[field_name] = value + 20
+
+        elif conversion == "div_10":
+            # Scale down by factor of 10
+            converted_data[field_name] = value / 10.0
+
+        elif conversion == "decicelsius_to_f":
+            # Convert decicelsius (tenths of Celsius) to Fahrenheit
+            converted_data[field_name] = _decicelsius_to_fahrenheit(value)
+
+        elif conversion == "enum":
+            # Convert to enum with error handling
+            enum_class = metadata.get("enum_class")
+            default_value = metadata.get("default_value")
+
+            if enum_class:
+                try:
+                    converted_data[field_name] = enum_class(value)
+                except ValueError:
+                    if default_value is not None:
+                        _logger.warning(
+                            "Unknown %s value: %s. Defaulting to %s.",
+                            field_name,
+                            value,
+                            default_value.name if hasattr(default_value, "name") else default_value,
+                        )
+                        converted_data[field_name] = default_value
+                    else:
+                        # Re-raise if no default provided
+                        raise
+
+    return converted_data
 
 
 def _decicelsius_to_fahrenheit(raw_value: float) -> float:
@@ -105,65 +165,6 @@ class CurrentOperationMode(Enum):
     HEAT_PUMP_MODE = 32  # Heat pump is actively running to heat water
     HYBRID_EFFICIENCY_MODE = 64  # Device actively heating in Energy Saver mode
     HYBRID_BOOST_MODE = 96  # Device actively heating in High Demand mode
-
-
-class OperationMode(Enum):
-    """Enumeration for the operation modes of the device.
-
-    .. deprecated::
-        The ``OperationMode`` enum is deprecated and will be removed in a future version.
-        Use ``DhwOperationSetting`` for user-configured mode preferences (values 1-6)
-        or ``CurrentOperationMode`` for real-time operational states (values 0, 32, 64, 96).
-
-        Migration guide:
-        - Replace ``OperationMode`` enum references in dhwOperationSetting contexts with
-          ``DhwOperationSetting``
-        - Replace ``OperationMode`` enum references in operationMode contexts with
-          ``CurrentOperationMode``
-        - Update type hints accordingly
-
-        Example:
-            # Old (deprecated):
-            status.dhwOperationSetting == OperationMode.ENERGY_SAVER
-            status.operationMode == OperationMode.STANDBY
-
-            # New (recommended):
-            status.dhwOperationSetting == DhwOperationSetting.ENERGY_SAVER
-            status.operationMode == CurrentOperationMode.STANDBY
-
-    The first set of modes (0-6) are used when commanding the device or appear
-    in dhwOperationSetting, while the second set (32, 64, 96) are observed in
-    the operationMode status field.
-
-    Command mode IDs (based on MQTT protocol):
-    - 0: Standby (device in idle state)
-    - 1: Heat Pump Only (most efficient, slowest recovery)
-    - 2: Electric Only (least efficient, fastest recovery)
-    - 3: Energy Saver (balanced, good default)
-    - 4: High Demand (maximum heating capacity)
-    - 5: Vacation mode
-    - 6: Power Off (device is powered off - appears in dhwOperationSetting only)
-    """
-
-    # Commanded modes
-    STANDBY = 0
-    HEAT_PUMP = 1  # Heat Pump Only
-    ELECTRIC = 2  # Electric Only
-    ENERGY_SAVER = 3  # Energy Saver
-    HIGH_DEMAND = 4  # High Demand
-    VACATION = 5
-    POWER_OFF = 6  # Power Off (appears in dhwOperationSetting when device is off)
-
-    # Status modes (operationMode field only)
-    HEAT_PUMP_MODE = 32
-    HYBRID_EFFICIENCY_MODE = 64
-    HYBRID_BOOST_MODE = 96
-
-    def __getattribute__(self, name):
-        """Override to emit deprecation warning on value access when enabled."""
-        if name == "value" or name == "name":
-            _warn_deprecated_operation_mode()
-        return super().__getattribute__(name)
 
 
 class TemperatureUnit(Enum):
@@ -321,113 +322,150 @@ class DeviceStatus:
     messages. This class provides a factory method `from_dict` to
     create an instance from a raw dictionary, applying necessary data
     conversions.
+
+    Field metadata indicates conversion types:
+    - device_bool: Device-specific boolean encoding (0/1=false, 2=true)
+    - add_20: Temperature offset conversion (raw + 20)
+    - div_10: Scale division (raw / 10.0)
+    - decicelsius_to_f: Decicelsius to Fahrenheit conversion
+    - enum: Enum conversion with default fallback
     """
 
+    # Basic status fields (no conversion needed)
     command: int
     outsideTemperature: float
     specialFunctionStatus: int
-    didReload: bool
     errorCode: int
     subErrorCode: int
-    operationMode: CurrentOperationMode
-    operationBusy: bool
-    freezeProtectionUse: bool
-    dhwUse: bool
-    dhwUseSustained: bool
-    dhwTemperature: float
-    dhwTemperatureSetting: float
-    programReservationUse: bool
     smartDiagnostic: int
     faultStatus1: int
     faultStatus2: int
     wifiRssi: int
-    ecoUse: bool
-    dhwTargetTemperatureSetting: float
-    tankUpperTemperature: float
-    tankLowerTemperature: float
-    dischargeTemperature: float
-    suctionTemperature: float
-    evaporatorTemperature: float
-    ambientTemperature: float
-    targetSuperHeat: float
-    compUse: bool
-    eevUse: bool
-    evaFanUse: bool
-    currentInstPower: float
-    shutOffValveUse: bool
-    conOvrSensorUse: bool
-    wtrOvrSensorUse: bool
     dhwChargePer: float
     drEventStatus: int
     vacationDaySetting: int
     vacationDayElapsed: int
-    freezeProtectionTemperature: float
-    antiLegionellaUse: bool
     antiLegionellaPeriod: int
-    antiLegionellaOperationBusy: bool
     programReservationType: int
-    dhwOperationSetting: DhwOperationSetting  # User's configured mode preference
-    temperatureType: TemperatureUnit
     tempFormulaType: str
-    errorBuzzerUse: bool
-    currentHeatUse: bool
-    currentInletTemperature: float
     currentStatenum: int
     targetFanRpm: int
     currentFanRpm: int
     fanPwm: int
-    dhwTemperature2: float
-    currentDhwFlowRate: float
     mixingRate: float
     eevStep: int
-    currentSuperHeat: float
-    heatUpperUse: bool
-    heatLowerUse: bool
-    scaldUse: bool
-    airFilterAlarmUse: bool
     airFilterAlarmPeriod: int
     airFilterAlarmElapsed: int
     cumulatedOpTimeEvaFan: int
     cumulatedDhwFlowRate: float
     touStatus: int
-    hpUpperOnTempSetting: float
-    hpUpperOffTempSetting: float
-    hpLowerOnTempSetting: float
-    hpLowerOffTempSetting: float
-    heUpperOnTempSetting: float
-    heUpperOffTempSetting: float
-    heLowerOnTempSetting: float
-    heLowerOffTempSetting: float
-    hpUpperOnDiffTempSetting: float
-    hpUpperOffDiffTempSetting: float
-    hpLowerOnDiffTempSetting: float
-    hpLowerOffDiffTempSetting: float
-    heUpperOnDiffTempSetting: float
-    heUpperOffDiffTempSetting: float
-    heLowerOnDiffTempSetting: float
-    heLowerOffDiffTempSetting: float
-    heatMinOpTemperature: float
     drOverrideStatus: int
     touOverrideStatus: int
     totalEnergyCapacity: float
     availableEnergyCapacity: float
-    recircOperationBusy: bool
-    recircReservationUse: bool
     recircOperationMode: int
-    recircTempSetting: float
-    recircTemperature: float
     recircPumpOperationStatus: int
-    recircFaucetTemperature: float
     recircHotBtnReady: int
     recircOperationReason: int
-    recircDhwFlowRate: float
     recircErrorStatus: int
+    currentInstPower: float
+
+    # Boolean fields with device-specific encoding (0/1=false, 2=true)
+    didReload: bool = field(metadata=meta(conversion="device_bool"))
+    operationBusy: bool = field(metadata=meta(conversion="device_bool"))
+    freezeProtectionUse: bool = field(metadata=meta(conversion="device_bool"))
+    dhwUse: bool = field(metadata=meta(conversion="device_bool"))
+    dhwUseSustained: bool = field(metadata=meta(conversion="device_bool"))
+    programReservationUse: bool = field(metadata=meta(conversion="device_bool"))
+    ecoUse: bool = field(metadata=meta(conversion="device_bool"))
+    compUse: bool = field(metadata=meta(conversion="device_bool"))
+    eevUse: bool = field(metadata=meta(conversion="device_bool"))
+    evaFanUse: bool = field(metadata=meta(conversion="device_bool"))
+    shutOffValveUse: bool = field(metadata=meta(conversion="device_bool"))
+    conOvrSensorUse: bool = field(metadata=meta(conversion="device_bool"))
+    wtrOvrSensorUse: bool = field(metadata=meta(conversion="device_bool"))
+    antiLegionellaUse: bool = field(metadata=meta(conversion="device_bool"))
+    antiLegionellaOperationBusy: bool = field(metadata=meta(conversion="device_bool"))
+    errorBuzzerUse: bool = field(metadata=meta(conversion="device_bool"))
+    currentHeatUse: bool = field(metadata=meta(conversion="device_bool"))
+    heatUpperUse: bool = field(metadata=meta(conversion="device_bool"))
+    heatLowerUse: bool = field(metadata=meta(conversion="device_bool"))
+    scaldUse: bool = field(metadata=meta(conversion="device_bool"))
+    airFilterAlarmUse: bool = field(metadata=meta(conversion="device_bool"))
+    recircOperationBusy: bool = field(metadata=meta(conversion="device_bool"))
+    recircReservationUse: bool = field(metadata=meta(conversion="device_bool"))
+
+    # Temperature fields with offset (raw + 20)
+    dhwTemperature: float = field(metadata=meta(conversion="add_20"))
+    dhwTemperatureSetting: float = field(metadata=meta(conversion="add_20"))
+    dhwTargetTemperatureSetting: float = field(metadata=meta(conversion="add_20"))
+    freezeProtectionTemperature: float = field(metadata=meta(conversion="add_20"))
+    dhwTemperature2: float = field(metadata=meta(conversion="add_20"))
+    hpUpperOnTempSetting: float = field(metadata=meta(conversion="add_20"))
+    hpUpperOffTempSetting: float = field(metadata=meta(conversion="add_20"))
+    hpLowerOnTempSetting: float = field(metadata=meta(conversion="add_20"))
+    hpLowerOffTempSetting: float = field(metadata=meta(conversion="add_20"))
+    heUpperOnTempSetting: float = field(metadata=meta(conversion="add_20"))
+    heUpperOffTempSetting: float = field(metadata=meta(conversion="add_20"))
+    heLowerOnTempSetting: float = field(metadata=meta(conversion="add_20"))
+    heLowerOffTempSetting: float = field(metadata=meta(conversion="add_20"))
+    heatMinOpTemperature: float = field(metadata=meta(conversion="add_20"))
+    recircTempSetting: float = field(metadata=meta(conversion="add_20"))
+    recircTemperature: float = field(metadata=meta(conversion="add_20"))
+    recircFaucetTemperature: float = field(metadata=meta(conversion="add_20"))
+
+    # Fields with scale division (raw / 10.0)
+    currentInletTemperature: float = field(metadata=meta(conversion="div_10"))
+    currentDhwFlowRate: float = field(metadata=meta(conversion="div_10"))
+    hpUpperOnDiffTempSetting: float = field(metadata=meta(conversion="div_10"))
+    hpUpperOffDiffTempSetting: float = field(metadata=meta(conversion="div_10"))
+    hpLowerOnDiffTempSetting: float = field(metadata=meta(conversion="div_10"))
+    hpLowerOffDiffTempSetting: float = field(metadata=meta(conversion="div_10"))
+    heUpperOnDiffTempSetting: float = field(metadata=meta(conversion="div_10"))
+    heUpperOffDiffTempSetting: float = field(metadata=meta(conversion="div_10"))
+    heLowerOnDiffTempSetting: float = field(metadata=meta(conversion="div_10"))
+    heLowerOffDiffTempSetting: float = field(metadata=meta(conversion="div_10"))
+    recircDhwFlowRate: float = field(metadata=meta(conversion="div_10"))
+
+    # Temperature fields with decicelsius to Fahrenheit conversion
+    tankUpperTemperature: float = field(metadata=meta(conversion="decicelsius_to_f"))
+    tankLowerTemperature: float = field(metadata=meta(conversion="decicelsius_to_f"))
+    dischargeTemperature: float = field(metadata=meta(conversion="decicelsius_to_f"))
+    suctionTemperature: float = field(metadata=meta(conversion="decicelsius_to_f"))
+    evaporatorTemperature: float = field(metadata=meta(conversion="decicelsius_to_f"))
+    ambientTemperature: float = field(metadata=meta(conversion="decicelsius_to_f"))
+    targetSuperHeat: float = field(metadata=meta(conversion="decicelsius_to_f"))
+    currentSuperHeat: float = field(metadata=meta(conversion="decicelsius_to_f"))
+
+    # Enum fields with default fallbacks
+    operationMode: CurrentOperationMode = field(
+        metadata=meta(
+            conversion="enum",
+            enum_class=CurrentOperationMode,
+            default_value=CurrentOperationMode.STANDBY,
+        )
+    )
+    dhwOperationSetting: DhwOperationSetting = field(
+        metadata=meta(
+            conversion="enum",
+            enum_class=DhwOperationSetting,
+            default_value=DhwOperationSetting.ENERGY_SAVER,
+        )
+    )
+    temperatureType: TemperatureUnit = field(
+        metadata=meta(
+            conversion="enum", enum_class=TemperatureUnit, default_value=TemperatureUnit.FAHRENHEIT
+        )
+    )
 
     @classmethod
-    def from_dict(cls, data: dict):
+    def from_dict(cls, data: dict[str, Any]) -> "DeviceStatus":
         """
         Creates a DeviceStatus object from a raw dictionary, applying
-        conversions.
+        conversions based on field metadata.
+
+        The conversion logic is now driven by field metadata, eliminating
+        duplicate field lists and making the code more maintainable.
         """
         # Copy data to avoid modifying the original dictionary
         converted_data = data.copy()
@@ -441,148 +479,8 @@ class DeviceStatus:
                 "heLowerOnTDiffempSetting"
             )
 
-        # Convert integer-based booleans
-        # The device uses a non-standard encoding for boolean values:
-        #   0 = Not applicable/disabled (rarely used)
-        #   1 = OFF/Inactive/False
-        #   2 = ON/Active/True
-        # This applies to ALL boolean fields in the device status
-        bool_fields = [
-            "didReload",
-            "operationBusy",
-            "freezeProtectionUse",
-            "dhwUse",
-            "dhwUseSustained",
-            "programReservationUse",
-            "ecoUse",
-            "compUse",
-            "eevUse",
-            "evaFanUse",
-            "shutOffValveUse",
-            "conOvrSensorUse",
-            "wtrOvrSensorUse",
-            "antiLegionellaUse",
-            "antiLegionellaOperationBusy",
-            "errorBuzzerUse",
-            "currentHeatUse",
-            "heatUpperUse",
-            "heatLowerUse",
-            "scaldUse",
-            "airFilterAlarmUse",
-            "recircOperationBusy",
-            "recircReservationUse",
-        ]
-
-        # Convert using the device's encoding: 0 or 1=false, 2=true
-        for field_name in bool_fields:
-            if field_name in converted_data:
-                converted_data[field_name] = converted_data[field_name] == 2
-
-        # Convert temperatures with 'raw + 20' formula
-        add_20_fields = [
-            "dhwTemperature",
-            "dhwTemperatureSetting",
-            "dhwTargetTemperatureSetting",
-            "freezeProtectionTemperature",
-            "dhwTemperature2",
-            "hpUpperOnTempSetting",
-            "hpUpperOffTempSetting",
-            "hpLowerOnTempSetting",
-            "hpLowerOffTempSetting",
-            "heUpperOnTempSetting",
-            "heUpperOffTempSetting",
-            "heLowerOnTempSetting",
-            "heLowerOffTempSetting",
-            "heatMinOpTemperature",
-            "recircTempSetting",
-            "recircTemperature",
-            "recircFaucetTemperature",
-        ]
-        for field_name in add_20_fields:
-            if field_name in converted_data:
-                converted_data[field_name] += 20
-
-        # Convert fields with 'raw / 10.0' formula (non-temperature fields)
-        div_10_fields = [
-            "currentInletTemperature",
-            "currentDhwFlowRate",
-            "hpUpperOnDiffTempSetting",
-            "hpUpperOffDiffTempSetting",
-            "hpLowerOnDiffTempSetting",
-            "hpLowerOffDiffTempSetting",
-            "heUpperOnDiffTempSetting",
-            "heUpperOffDiffTempSetting",
-            "heLowerOnDiffTempSetting",
-            "heLowerOffDiffTempSetting",
-            "recircDhwFlowRate",
-        ]
-        for field_name in div_10_fields:
-            if field_name in converted_data:
-                converted_data[field_name] /= 10.0
-
-        # Special conversion for tank temperatures (decicelsius to Fahrenheit)
-        tank_temp_fields = ["tankUpperTemperature", "tankLowerTemperature"]
-        for field_name in tank_temp_fields:
-            if field_name in converted_data:
-                converted_data[field_name] = _decicelsius_to_fahrenheit(converted_data[field_name])
-
-        # Special conversion for dischargeTemperature (decicelsius to Fahrenheit)
-        if "dischargeTemperature" in converted_data:
-            converted_data["dischargeTemperature"] = _decicelsius_to_fahrenheit(
-                converted_data["dischargeTemperature"]
-            )
-
-        # Special conversion for heat pump temperatures (decicelsius to Fahrenheit)
-        heat_pump_temp_fields = [
-            "suctionTemperature",
-            "evaporatorTemperature",
-            "ambientTemperature",
-            "currentSuperHeat",
-            "targetSuperHeat",
-        ]
-        for field_name in heat_pump_temp_fields:
-            if field_name in converted_data:
-                converted_data[field_name] = _decicelsius_to_fahrenheit(converted_data[field_name])
-
-        # Convert enum fields with error handling for unknown values
-        if "operationMode" in converted_data:
-            try:
-                converted_data["operationMode"] = CurrentOperationMode(
-                    converted_data["operationMode"]
-                )
-            except ValueError:
-                _logger.warning(
-                    "Unknown operationMode: %s. Defaulting to STANDBY.",
-                    converted_data["operationMode"],
-                )
-                # Default to a safe enum value so callers can rely on .name
-                converted_data["operationMode"] = CurrentOperationMode.STANDBY
-
-        if "dhwOperationSetting" in converted_data:
-            try:
-                converted_data["dhwOperationSetting"] = DhwOperationSetting(
-                    converted_data["dhwOperationSetting"]
-                )
-            except ValueError:
-                _logger.warning(
-                    "Unknown dhwOperationSetting: %s. Defaulting to ENERGY_SAVER.",
-                    converted_data["dhwOperationSetting"],
-                )
-                # Default to ENERGY_SAVER as a safe default
-                converted_data["dhwOperationSetting"] = DhwOperationSetting.ENERGY_SAVER
-
-        if "temperatureType" in converted_data:
-            try:
-                converted_data["temperatureType"] = TemperatureUnit(
-                    converted_data["temperatureType"]
-                )
-            except ValueError:
-                _logger.warning(
-                    "Unknown temperatureType: %s. Defaulting to FAHRENHEIT.",
-                    converted_data["temperatureType"],
-                )
-                # Default to FAHRENHEIT for unknown temperature types
-                converted_data["temperatureType"] = TemperatureUnit.FAHRENHEIT
+        # Apply all conversions based on field metadata
+        converted_data = apply_field_conversions(cls, converted_data)
 
         # Filter out any unknown fields not defined in the dataclass
         # This handles new fields added by firmware updates gracefully
@@ -623,8 +521,11 @@ class DeviceFeature:
     This data is found in the 'feature' object of MQTT response messages,
     typically received in response to device info requests. It contains
     device model information, firmware versions, capabilities, and limits.
+
+    Field metadata indicates conversion types (same as DeviceStatus).
     """
 
+    # Basic feature fields (no conversion needed)
     countryCode: int
     modelTypeCode: int
     controlTypeCode: int
@@ -641,16 +542,11 @@ class DeviceFeature:
     programReservationUse: int
     dhwUse: int
     dhwTemperatureSettingUse: int
-    dhwTemperatureMin: int
-    dhwTemperatureMax: int
     smartDiagnosticUse: int
     wifiRssiUse: int
-    temperatureType: TemperatureUnit
     tempFormulaType: int
     energyUsageUse: int
     freezeProtectionUse: int
-    freezeProtectionTempMin: int
-    freezeProtectionTempMax: int
     mixingValueUse: int
     drSettingUse: int
     antiLegionellaSettingUse: int
@@ -662,13 +558,24 @@ class DeviceFeature:
     energySaverUse: int
     highDemandUse: int
 
-    @classmethod
-    def from_dict(cls, data: dict):
-        """
-        Creates a DeviceFeature object from a raw dictionary.
+    # Temperature limit fields with offset (raw + 20)
+    dhwTemperatureMin: int = field(metadata=meta(conversion="add_20"))
+    dhwTemperatureMax: int = field(metadata=meta(conversion="add_20"))
+    freezeProtectionTempMin: int = field(metadata=meta(conversion="add_20"))
+    freezeProtectionTempMax: int = field(metadata=meta(conversion="add_20"))
 
-        Handles enum conversion for temperatureType field and applies
-        temperature conversions using the same formulas as DeviceStatus.
+    # Enum field with default fallback
+    temperatureType: TemperatureUnit = field(
+        metadata=meta(
+            conversion="enum", enum_class=TemperatureUnit, default_value=TemperatureUnit.FAHRENHEIT
+        )
+    )
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "DeviceFeature":
+        """
+        Creates a DeviceFeature object from a raw dictionary, applying
+        conversions based on field metadata.
         """
         # Copy data to avoid modifying the original dictionary
         converted_data = data.copy()
@@ -676,30 +583,8 @@ class DeviceFeature:
         # Get valid field names for this class
         valid_fields = {f.name for f in cls.__dataclass_fields__.values()}
 
-        # Convert temperature fields with 'raw + 20' formula (same as DeviceStatus)
-        temp_add_20_fields = [
-            "dhwTemperatureMin",
-            "dhwTemperatureMax",
-            "freezeProtectionTempMin",
-            "freezeProtectionTempMax",
-        ]
-        for field_name in temp_add_20_fields:
-            if field_name in converted_data:
-                converted_data[field_name] += 20
-
-        # Convert temperatureType to enum
-        if "temperatureType" in converted_data:
-            try:
-                converted_data["temperatureType"] = TemperatureUnit(
-                    converted_data["temperatureType"]
-                )
-            except ValueError:
-                _logger.warning(
-                    "Unknown temperatureType: %s. Defaulting to FAHRENHEIT.",
-                    converted_data["temperatureType"],
-                )
-                # Default to FAHRENHEIT for unknown temperature types
-                converted_data["temperatureType"] = TemperatureUnit.FAHRENHEIT
+        # Apply all conversions based on field metadata
+        converted_data = apply_field_conversions(cls, converted_data)
 
         # Filter out any unknown fields (similar to DeviceStatus)
         unknown_fields = set(converted_data.keys()) - valid_fields
@@ -803,7 +688,7 @@ class MonthlyEnergyData:
         return None
 
     @classmethod
-    def from_dict(cls, data: dict):
+    def from_dict(cls, data: dict[str, Any]) -> "MonthlyEnergyData":
         """Create MonthlyEnergyData from a raw dictionary."""
         converted_data = data.copy()
 
@@ -885,7 +770,7 @@ class EnergyUsageResponse:
         return None
 
     @classmethod
-    def from_dict(cls, data: dict):
+    def from_dict(cls, data: dict[str, Any]) -> "EnergyUsageResponse":
         """Create EnergyUsageResponse from a raw dictionary."""
         converted_data = data.copy()
 
