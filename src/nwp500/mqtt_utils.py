@@ -121,13 +121,21 @@ def redact_topic(topic: str) -> str:
     for pattern in _MAC_PATTERNS:
         topic = pattern.sub("REDACTED", topic)
     # Defensive: Cleanup for most common MAC and device ID patterns
-    topic = re.sub(r"([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})", "REDACTED", topic)  # 01:23:45:67:89:ab
-    topic = re.sub(r"([0-9A-Fa-f]{2}-){5}[0-9A-Fa-f]{2}", "REDACTED", topic)       # 01-23-45-67-89-ab
-    topic = re.sub(r"([0-9A-Fa-f]{12})", "REDACTED", topic)                        # 0123456789ab
-    topic = re.sub(r"(navilink-)[0-9A-Fa-f]{8,}", r"\1REDACTED", topic)            # navilink-xxxxxxx
-    # Further defensive: catch anything that looks like a device ID (alphanumeric, 8+ chars)
+    topic = re.sub(
+        r"([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})", "REDACTED", topic
+    )  # 01:23:45:67:89:ab
+    topic = re.sub(
+        r"([0-9A-Fa-f]{2}-){5}[0-9A-Fa-f]{2}", "REDACTED", topic
+    )  # 01-23-45-67-89-ab
+    topic = re.sub(r"([0-9A-Fa-f]{12})", "REDACTED", topic)  # 0123456789ab
+    topic = re.sub(
+        r"(navilink-)[0-9A-Fa-f]{8,}", r"\1REDACTED", topic
+    )  # navilink-xxxxxxx
+    # Further defensive: catch anything that looks like a device ID
+    # (alphanumeric, 8+ chars)
     topic = re.sub(r"(device[-_]?)?[0-9A-Fa-f]{8,}", "REDACTED", topic)
-    # Final fallback: catch any continuous hex/alphanumeric string longer than 8 chars (to cover variant IDs)
+    # Final fallback: catch any continuous hex/alphanumeric string
+    # longer than 8 chars (to cover variant IDs)
     topic = re.sub(r"[0-9A-Fa-f]{8,}", "REDACTED", topic)
     return topic
 
