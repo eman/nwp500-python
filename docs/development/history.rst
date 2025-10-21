@@ -87,8 +87,8 @@ compatibility - Automatic credential handling from authentication API -
 Session ID generation for connection tracking
 
 **Key Files:** - ``src/nwp500/mqtt_client.py`` - MQTT client
-implementation - :doc:`MQTT_CLIENT` - Complete documentation -
-:doc:`MQTT_MESSAGES` - Message format reference
+implementation - :doc:`../python_api/mqtt_client` - Complete documentation -
+:doc:`../protocol/mqtt_protocol` - Message format reference
 
 Device Status & Feature Callbacks (October 7, 2025)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -268,7 +268,7 @@ Complete event-driven architecture for device state changes:
 - ``src/nwp500/mqtt_client.py`` - MQTT integration with event emitter
 - ``examples/event_emitter_demo.py`` - Comprehensive demonstration
 - ``tests/test_events.py`` - Unit tests (19 tests)
-- :doc:`EVENT_EMITTER` - Feature documentation
+- :doc:`../python_api/events` - Feature documentation
 
 **Thread Safety Implementation:**
 
@@ -337,8 +337,8 @@ References
 ----------
 
 - `OpenAPI Specification <openapi.yaml>`__ - API specification
-- :doc:`MQTT_MESSAGES` - MQTT message reference
-- :doc:`DEVICE_STATUS_FIELDS` - Device status fields
-- :doc:`AUTHENTICATION` - Authentication guide
-- :doc:`API_CLIENT` - API client guide
-- :doc:`MQTT_CLIENT` - MQTT client guide
+- :doc:`../protocol/mqtt_protocol` - MQTT message reference
+- :doc:`../protocol/device_status` - Device status fields
+- :doc:`../python_api/auth_client` - Authentication guide
+- :doc:`../python_api/api_client` - API client guide
+- :doc:`../python_api/mqtt_client` - MQTT client guide

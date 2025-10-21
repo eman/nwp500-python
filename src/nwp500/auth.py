@@ -70,12 +70,16 @@ class AuthTokens:
 
     # Calculated fields
     issued_at: datetime = field(default_factory=datetime.now)
-    _expires_at: datetime = field(default=datetime.now(), init=False, repr=False)
+    _expires_at: datetime = field(
+        default=datetime.now(), init=False, repr=False
+    )
 
     def __post_init__(self) -> None:
         """Cache the expiration timestamp after initialization."""
         # Pre-calculate and cache the expiration time
-        self._expires_at = self.issued_at + timedelta(seconds=self.authentication_expires_in)
+        self._expires_at = self.issued_at + timedelta(
+            seconds=self.authentication_expires_in
+        )
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "AuthTokens":
@@ -104,7 +108,10 @@ class AuthTokens:
 
     @property
     def time_until_expiry(self) -> timedelta:
-        """Get the time remaining until token expiration (uses cached expiration time)."""
+        """Get time remaining until token expiration.
+
+        Uses cached expiration time for efficiency.
+        """
         return self._expires_at - datetime.now()
 
     @property
@@ -124,7 +131,9 @@ class AuthenticationResponse:
     message: str = "SUCCESS"
 
     @classmethod
-    def from_dict(cls, response_data: dict[str, Any]) -> "AuthenticationResponse":
+    def from_dict(
+        cls, response_data: dict[str, Any]
+    ) -> "AuthenticationResponse":
         """Create AuthenticationResponse from API response."""
         code = response_data.get("code", 200)
         message = response_data.get("msg", "SUCCESS")
@@ -144,7 +153,13 @@ class AuthenticationResponse:
 
 
 class AuthenticationError(Exception):
-    """Base exception for authentication errors."""
+    """Base exception for authentication errors.
+
+    Attributes:
+        message: Error message describing the failure
+        status_code: HTTP status code
+        response: Complete API response dictionary
+    """
 
     def __init__(
         self,
@@ -152,6 +167,13 @@ class AuthenticationError(Exception):
         status_code: Optional[int] = None,
         response: Optional[dict[str, Any]] = None,
     ):
+        """Initialize authentication error.
+
+        Args:
+            message: Error message describing the failure
+            status_code: HTTP status code
+            response: Complete API response dictionary
+        """
         self.message = message
         self.status_code = status_code
         self.response = response
@@ -186,10 +208,12 @@ class NavienAuthClient:
     - Session management
     - AWS credentials (if provided by API)
 
-    Authentication is performed automatically when entering the async context manager.
+    Authentication is performed automatically when entering the async context
+    manager.
 
     Example:
-        >>> async with NavienAuthClient(user_id="user@example.com", password="password") as client:
+        >>> async with NavienAuthClient(user_id="user@example.com",
+        password="password") as client:
         ...     print(f"Welcome {client.current_user.full_name}")
         ...     print(f"Access token: {client.current_tokens.access_token}")
         ...
@@ -198,7 +222,8 @@ class NavienAuthClient:
         ...
         ...     # Refresh when needed
         ...     if client.current_tokens.is_expired:
-        ...         new_tokens = await client.refresh_token(client.current_tokens.refresh_token)
+        ...         new_tokens = await
+        client.refresh_token(client.current_tokens.refresh_token)
     """
 
     def __init__(
@@ -257,7 +282,9 @@ class NavienAuthClient:
             self._session = aiohttp.ClientSession(timeout=self.timeout)
             self._owned_session = True
 
-    async def sign_in(self, user_id: str, password: str) -> AuthenticationResponse:
+    async def sign_in(
+        self, user_id: str, password: str
+    ) -> AuthenticationResponse:
         """
         Authenticate user and obtain tokens.
 
@@ -292,7 +319,11 @@ class NavienAuthClient:
 
                 if code != 200 or not response.ok:
                     _logger.error(f"Sign-in failed: {code} - {msg}")
-                    if code == 401 or "invalid" in msg.lower() or "unauthorized" in msg.lower():
+                    if (
+                        code == 401
+                        or "invalid" in msg.lower()
+                        or "unauthorized" in msg.lower()
+                    ):
                         raise InvalidCredentialsError(
                             f"Invalid credentials: {msg}",
                             status_code=code,
@@ -310,9 +341,13 @@ class NavienAuthClient:
                 self._user_email = user_id  # Store the email for later use
 
                 _logger.info(
-                    f"Successfully authenticated user: {auth_response.user_info.full_name}"
+                    "Successfully authenticated user: %s",
+                    auth_response.user_info.full_name,
                 )
-                _logger.debug(f"Token expires in: {auth_response.tokens.time_until_expiry}")
+                _logger.debug(
+                    "Token expires in: %s",
+                    auth_response.tokens.time_until_expiry,
+                )
 
                 return auth_response
 
@@ -370,7 +405,9 @@ class NavienAuthClient:
                     self._auth_response.tokens = new_tokens
 
                 _logger.info("Successfully refreshed access token")
-                _logger.debug(f"New token expires in: {new_tokens.time_until_expiry}")
+                _logger.debug(
+                    f"New token expires in: {new_tokens.time_until_expiry}"
+                )
 
                 return new_tokens
 
@@ -397,7 +434,9 @@ class NavienAuthClient:
 
         if self._auth_response.tokens.is_expired:
             _logger.info("Token expired, refreshing...")
-            return await self.refresh_token(self._auth_response.tokens.refresh_token)
+            return await self.refresh_token(
+                self._auth_response.tokens.refresh_token
+            )
 
         return self._auth_response.tokens
 
@@ -436,7 +475,8 @@ class NavienAuthClient:
 
         Note:
             Based on HAR analysis of actual API traffic, the authorization
-            header uses the raw token without 'Bearer ' prefix (lowercase 'authorization').
+            header uses the raw token without 'Bearer ' prefix (lowercase
+            'authorization').
             This is different from standard Bearer token authentication.
         """
         headers = {
@@ -444,8 +484,10 @@ class NavienAuthClient:
             "Content-Type": "application/json",
         }
 
-        # IMPORTANT: Use lowercase 'authorization' and raw token (no 'Bearer ' prefix)
-        # This matches the actual API behavior from HAR analysis in working implementation
+        # IMPORTANT: Use lowercase 'authorization' and raw token (no 'Bearer '
+        # prefix)
+        # This matches the actual API behavior from HAR analysis in working
+        # implementation
         if self._auth_response and self._auth_response.tokens.access_token:
             headers["authorization"] = self._auth_response.tokens.access_token
 
@@ -456,8 +498,10 @@ class NavienAuthClient:
 
 
 async def authenticate(user_id: str, password: str) -> AuthenticationResponse:
-    """
-    Convenience function to authenticate and get tokens.
+    """Authenticate user and obtain tokens.
+
+    This is a convenience function that creates a temporary auth client,
+    authenticates, and returns the response.
 
     Args:
         user_id: User email address
@@ -472,13 +516,17 @@ async def authenticate(user_id: str, password: str) -> AuthenticationResponse:
     """
     async with NavienAuthClient(user_id, password) as client:
         if client._auth_response is None:
-            raise AuthenticationError("Authentication failed: no response received")
+            raise AuthenticationError(
+                "Authentication failed: no response received"
+            )
         return client._auth_response
 
 
 async def refresh_access_token(refresh_token: str) -> AuthTokens:
-    """
-    Convenience function to refresh an access token.
+    """Refresh an access token using a refresh token.
+
+    This is a convenience function that creates a temporary session to
+    perform the token refresh operation without requiring full authentication.
 
     Args:
         refresh_token: The refresh token

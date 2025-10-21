@@ -50,7 +50,9 @@ class MqttCommandQueue:
             maxsize=config.max_queued_commands
         )
 
-    def enqueue(self, topic: str, payload: dict[str, Any], qos: mqtt.QoS) -> None:
+    def enqueue(
+        self, topic: str, payload: dict[str, Any], qos: mqtt.QoS
+    ) -> None:
         """
         Add a command to the queue.
 
@@ -64,12 +66,15 @@ class MqttCommandQueue:
         """
         if not self.config.enable_command_queue:
             _logger.warning(
-                f"Command queue disabled, dropping command to '{redact_topic(topic)}'. "
-                "Enable command queue in config to queue commands when disconnected."
+                f"Command queue disabled, dropping command to "
+                f"'{redact_topic(topic)}'. Enable command queue in "
+                f"config to queue commands when disconnected."
             )
             return
 
-        command = QueuedCommand(topic=topic, payload=payload, qos=qos, timestamp=datetime.utcnow())
+        command = QueuedCommand(
+            topic=topic, payload=payload, qos=qos, timestamp=datetime.utcnow()
+        )
 
         # If queue is full, drop oldest command first
         if self._queue.full():
@@ -103,7 +108,8 @@ class MqttCommandQueue:
         This is called automatically when connection is restored.
 
         Args:
-            publish_func: Async function to publish messages (topic, payload, qos)
+            publish_func: Async function to publish messages (topic, payload,
+            qos)
             is_connected_func: Function to check if currently connected
 
         Returns:
@@ -141,7 +147,8 @@ class MqttCommandQueue:
             except Exception as e:
                 failed_count += 1
                 _logger.error(
-                    f"Failed to send queued command to '{redact_topic(command.topic)}': {e}"
+                    f"Failed to send queued command to "
+                    f"'{redact_topic(command.topic)}': {e}"
                 )
                 # Re-queue if there's room
                 if not self._queue.full():
@@ -149,7 +156,9 @@ class MqttCommandQueue:
                         self._queue.put_nowait(command)
                         _logger.warning("Re-queued failed command")
                     except asyncio.QueueFull:
-                        _logger.error("Failed to re-queue command - queue is full")
+                        _logger.error(
+                            "Failed to re-queue command - queue is full"
+                        )
                 break  # Stop processing on error to avoid cascade failures
 
         if sent_count > 0:

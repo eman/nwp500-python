@@ -340,6 +340,6 @@ Contact technical support at 1-800-519-8794 when:
 See Also
 --------
 
-* :doc:`DEVICE_STATUS_FIELDS` - Status field descriptions
-* :doc:`MQTT_MESSAGES` - Error reporting via MQTT
+* :doc:`device_status` - Status field descriptions
+* :doc:`mqtt_protocol` - Error reporting via MQTT
 * Installation Manual - Complete technical specifications

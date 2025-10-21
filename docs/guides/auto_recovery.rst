@@ -1,6 +1,6 @@
-========================================
+===============================================
 Automatic Reconnection After Connection Failure
-========================================
+===============================================
 
 This guide explains how to automatically recover from permanent MQTT connection failures (after max reconnection attempts are exhausted).
 

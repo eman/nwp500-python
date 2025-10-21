@@ -1,5 +1,4 @@
-"""
-Navien Water Heater Control Script - Main Entry Point
+"""Navien Water Heater Control Script - Main Entry Point.
 
 This module provides the command-line interface to monitor and control
 Navien water heaters using the nwp500-python library.
@@ -13,7 +12,11 @@ import sys
 from typing import Optional
 
 from nwp500 import NavienAPIClient, NavienAuthClient, __version__
-from nwp500.auth import AuthenticationResponse, InvalidCredentialsError, UserInfo
+from nwp500.auth import (
+    AuthenticationResponse,
+    InvalidCredentialsError,
+    UserInfo,
+)
 
 from .commands import (
     handle_device_feature_request,
@@ -40,7 +43,9 @@ __license__ = "MIT"
 _logger = logging.getLogger(__name__)
 
 
-async def get_authenticated_client(args: argparse.Namespace) -> Optional[NavienAuthClient]:
+async def get_authenticated_client(
+    args: argparse.Namespace,
+) -> Optional[NavienAuthClient]:
     """
     Get an authenticated NavienAuthClient using cached tokens or credentials.
 
@@ -74,7 +79,10 @@ async def get_authenticated_client(args: argparse.Namespace) -> Optional[NavienA
         )
         return auth_client
 
-    _logger.info("Cached tokens are invalid, expired, or incomplete. Re-authenticating...")
+    _logger.info(
+        "Cached tokens are invalid, expired, or incomplete. "
+        "Re-authenticating..."
+    )
     # Fallback to email/password
     email = args.email or os.getenv("NAVIEN_EMAIL")
     password = args.password or os.getenv("NAVIEN_PASSWORD")
@@ -96,7 +104,9 @@ async def get_authenticated_client(args: argparse.Namespace) -> Optional[NavienA
         _logger.error("Invalid email or password.")
         return None
     except Exception as e:
-        _logger.error(f"An unexpected error occurred during authentication: {e}")
+        _logger.error(
+            f"An unexpected error occurred during authentication: {e}"
+        )
         return None
 
 
@@ -159,16 +169,23 @@ async def async_main(args: argparse.Namespace) -> int:
                     await asyncio.sleep(2)
                     await handle_status_request(mqtt, device)
             elif args.set_dhw_temp:
-                await handle_set_dhw_temp_request(mqtt, device, args.set_dhw_temp)
+                await handle_set_dhw_temp_request(
+                    mqtt, device, args.set_dhw_temp
+                )
                 if args.status:
-                    _logger.info("Getting updated status after temperature change...")
+                    _logger.info(
+                        "Getting updated status after temperature change..."
+                    )
                     await asyncio.sleep(2)
                     await handle_status_request(mqtt, device)
             elif args.get_reservations:
                 await handle_get_reservations_request(mqtt, device)
             elif args.set_reservations:
                 await handle_update_reservations_request(
-                    mqtt, device, args.set_reservations, args.reservations_enabled
+                    mqtt,
+                    device,
+                    args.set_reservations,
+                    args.reservations_enabled,
                 )
             elif args.get_tou:
                 await handle_get_tou_request(mqtt, device, api_client)
@@ -181,19 +198,27 @@ async def async_main(args: argparse.Namespace) -> int:
                     await handle_status_request(mqtt, device)
             elif args.get_energy:
                 if not args.energy_year or not args.energy_months:
-                    _logger.error("--energy-year and --energy-months are required for --get-energy")
+                    _logger.error(
+                        "--energy-year and --energy-months are required "
+                        "for --get-energy"
+                    )
                     return 1
                 try:
-                    months = [int(m.strip()) for m in args.energy_months.split(",")]
+                    months = [
+                        int(m.strip()) for m in args.energy_months.split(",")
+                    ]
                     if not all(1 <= m <= 12 for m in months):
                         _logger.error("Months must be between 1 and 12")
                         return 1
                 except ValueError:
                     _logger.error(
-                        "Invalid month format. Use comma-separated numbers (e.g., '9' or '8,9,10')"
+                        "Invalid month format. Use comma-separated numbers "
+                        "(e.g., '9' or '8,9,10')"
                     )
                     return 1
-                await handle_get_energy_request(mqtt, device, args.energy_year, months)
+                await handle_get_energy_request(
+                    mqtt, device, args.energy_year, months
+                )
             elif args.status_raw:
                 await handle_status_raw_request(mqtt, device)
             elif args.status:
@@ -221,7 +246,9 @@ async def async_main(args: argparse.Namespace) -> int:
 
 def parse_args(args: list[str]) -> argparse.Namespace:
     """Parse command line parameters."""
-    parser = argparse.ArgumentParser(description="Navien Water Heater Control Script")
+    parser = argparse.ArgumentParser(
+        description="Navien Water Heater Control Script"
+    )
     parser.add_argument(
         "--version",
         action="version",
@@ -242,7 +269,8 @@ def parse_args(args: list[str]) -> argparse.Namespace:
     parser.add_argument(
         "--status",
         action="store_true",
-        help="Fetch and print the current device status. Can be combined with control commands.",
+        help="Fetch and print the current device status. "
+        "Can be combined with control commands.",
     )
     parser.add_argument(
         "--status-raw",
@@ -256,12 +284,14 @@ def parse_args(args: list[str]) -> argparse.Namespace:
     group.add_argument(
         "--device-info",
         action="store_true",
-        help="Fetch and print comprehensive device information via MQTT, then exit.",
+        help="Fetch and print comprehensive device information via MQTT, "
+        "then exit.",
     )
     group.add_argument(
         "--device-feature",
         action="store_true",
-        help="Fetch and print device feature and capability information via MQTT, then exit.",
+        help="Fetch and print device feature and capability information "
+        "via MQTT, then exit.",
     )
     group.add_argument(
         "--get-controller-serial",
@@ -274,7 +304,8 @@ def parse_args(args: list[str]) -> argparse.Namespace:
         type=str,
         metavar="MODE",
         help="Set operation mode and display response. "
-        "Options: heat-pump, electric, energy-saver, high-demand, vacation, standby",
+        "Options: heat-pump, electric, energy-saver, high-demand, "
+        "vacation, standby",
     )
     group.add_argument(
         "--set-dhw-temp",
@@ -296,20 +327,22 @@ def parse_args(args: list[str]) -> argparse.Namespace:
     group.add_argument(
         "--get-reservations",
         action="store_true",
-        help="Fetch and print current reservation schedule from device via MQTT, then exit.",
+        help="Fetch and print current reservation schedule from device "
+        "via MQTT, then exit.",
     )
     group.add_argument(
         "--set-reservations",
         type=str,
         metavar="JSON",
-        help="Update reservation schedule with JSON array of reservation objects. "
-        "Use --reservations-enabled to control if schedule is active.",
+        help="Update reservation schedule with JSON array of reservation "
+        "objects. Use --reservations-enabled to control if schedule is "
+        "active.",
     )
     group.add_argument(
         "--get-tou",
         action="store_true",
-        help="Fetch and print Time-of-Use settings from the REST API, then exit. "
-        "Controller serial number is automatically retrieved.",
+        help="Fetch and print Time-of-Use settings from the REST API, "
+        "then exit. Controller serial number is automatically retrieved.",
     )
     group.add_argument(
         "--set-tou-enabled",
@@ -321,15 +354,16 @@ def parse_args(args: list[str]) -> argparse.Namespace:
     group.add_argument(
         "--get-energy",
         action="store_true",
-        help="Request energy usage data for specified year and months via MQTT, then exit. "
-        "Requires --energy-year and --energy-months options.",
+        help="Request energy usage data for specified year and months "
+        "via MQTT, then exit. Requires --energy-year and --energy-months "
+        "options.",
     )
     group.add_argument(
         "--monitor",
         action="store_true",
         default=True,  # Default action
-        help="Run indefinitely, polling for status every 30 seconds and logging to a CSV file. "
-        "(default)",
+        help="Run indefinitely, polling for status every 30 seconds and "
+        "logging to a CSV file. (default)",
     )
 
     # Additional options for new commands
@@ -337,7 +371,8 @@ def parse_args(args: list[str]) -> argparse.Namespace:
         "--reservations-enabled",
         action="store_true",
         default=True,
-        help="When used with --set-reservations, enable the reservation schedule. (default: True)",
+        help="When used with --set-reservations, enable the reservation "
+        "schedule. (default: True)",
     )
     parser.add_argument(
         "--tou-serial",
@@ -348,20 +383,22 @@ def parse_args(args: list[str]) -> argparse.Namespace:
     parser.add_argument(
         "--energy-year",
         type=int,
-        help="Year for energy usage query (e.g., 2025). Required with --get-energy.",
+        help="Year for energy usage query (e.g., 2025). "
+        "Required with --get-energy.",
     )
     parser.add_argument(
         "--energy-months",
         type=str,
-        help="Comma-separated list of months (1-12) for energy usage query "
-        "(e.g., '9' or '8,9,10'). Required with --get-energy.",
+        help="Comma-separated list of months (1-12) for energy usage "
+        "query (e.g., '9' or '8,9,10'). Required with --get-energy.",
     )
     parser.add_argument(
         "-o",
         "--output",
         type=str,
         default="nwp500_status.csv",
-        help="Output CSV file name for monitoring. (default: nwp500_status.csv)",
+        help="Output CSV file name for monitoring. "
+        "(default: nwp500_status.csv)",
     )
 
     # Logging
@@ -385,7 +422,11 @@ def parse_args(args: list[str]) -> argparse.Namespace:
 
 
 def setup_logging(loglevel: int) -> None:
-    """Setup basic logging."""
+    """Configure basic logging for the application.
+
+    Args:
+        loglevel: Logging level (e.g., logging.DEBUG, logging.INFO)
+    """
     logformat = "[%(asctime)s] %(levelname)s:%(name)s:%(message)s"
     logging.basicConfig(
         level=loglevel or logging.WARNING,
@@ -396,12 +437,19 @@ def setup_logging(loglevel: int) -> None:
 
 
 def main(args_list: list[str]) -> None:
-    """Wrapper for the asynchronous main function."""
+    """Run the asynchronous main function with argument parsing.
+
+    Args:
+        args_list: Command-line arguments to parse
+    """
     args = parse_args(args_list)
 
     # Validate that --status and --status-raw are not used together
     if args.status and args.status_raw:
-        print("Error: --status and --status-raw cannot be used together.", file=sys.stderr)
+        print(
+            "Error: --status and --status-raw cannot be used together.",
+            file=sys.stderr,
+        )
         return
 
     # Set default log level for libraries

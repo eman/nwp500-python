@@ -10,7 +10,7 @@ version_scheme = "no-guess-dev"
 
 [tool.ruff]
 # Ruff configuration for code formatting and linting
-line-length = 100
+line-length = 80
 target-version = "py39"
 
 # Exclude directories

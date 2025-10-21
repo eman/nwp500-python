@@ -1,4 +1,5 @@
-"""
+"""Data models for Navien NWP500 water heater communication.
+
 This module defines data classes for representing data structures
 used in the Navien NWP500 water heater communication protocol.
 
@@ -36,7 +37,9 @@ def meta(**kwargs: Any) -> dict[str, Any]:
     return kwargs
 
 
-def apply_field_conversions(cls: type[Any], data: dict[str, Any]) -> dict[str, Any]:
+def apply_field_conversions(
+    cls: type[Any], data: dict[str, Any]
+) -> dict[str, Any]:
     """
     Apply conversions to data based on field metadata.
 
@@ -98,7 +101,9 @@ def apply_field_conversions(cls: type[Any], data: dict[str, Any]) -> dict[str, A
                             "Unknown %s value: %s. Defaulting to %s.",
                             field_name,
                             value,
-                            default_value.name if hasattr(default_value, "name") else default_value,
+                            default_value.name
+                            if hasattr(default_value, "name")
+                            else default_value,
                         )
                         converted_data[field_name] = default_value
                     else:
@@ -127,17 +132,29 @@ def _decicelsius_to_fahrenheit(raw_value: float) -> float:
 
 
 class DhwOperationSetting(Enum):
-    """Enumeration for DHW operation setting modes (user-configured preferences).
+    """DHW operation setting modes (user-configured heating preferences).
 
-    This enum represents the user's configured mode preference - what heating mode
-    the device should use when it needs to heat water. These values appear in the
+    This enum represents the user's configured mode preference - what heating
+    mode
+    the device should use when it needs to heat water. These values appear in
+    the
     dhwOperationSetting field and are set via user commands.
 
     These modes balance energy efficiency and recovery time based on user needs:
     - Higher efficiency = longer recovery time, lower operating costs
     - Lower efficiency = faster recovery time, higher operating costs
 
-    Values are based on the MQTT protocol dhw-mode command parameter.
+    Values are based on the MQTT protocol dhw-mode command parameter as
+    documented
+    in MQTT_MESSAGES.rst.
+
+    Attributes:
+        HEAT_PUMP: Heat Pump Only - most efficient, slowest recovery
+        ELECTRIC: Electric Only - least efficient, fastest recovery
+        ENERGY_SAVER: Hybrid: Efficiency - balanced, good default
+        HIGH_DEMAND: Hybrid: Boost - maximum heating capacity
+        VACATION: Vacation mode - suspends heating to save energy
+        POWER_OFF: Device powered off - appears when device is turned off
     """
 
     HEAT_PUMP = 1  # Heat Pump Only - most efficient, slowest recovery
@@ -149,7 +166,7 @@ class DhwOperationSetting(Enum):
 
 
 class CurrentOperationMode(Enum):
-    """Enumeration for current operation mode (real-time operational state).
+    """Current operation mode (real-time operational state).
 
     This enum represents the device's current actual operational state - what
     the device is doing RIGHT NOW. These values appear in the operationMode
@@ -158,7 +175,14 @@ class CurrentOperationMode(Enum):
     Unlike DhwOperationSetting (user preference), this reflects real-time
     operation and changes dynamically as the device starts/stops heating.
 
-    Values are based on device status responses in MQTT messages.
+    Values are based on device status responses in MQTT messages as documented
+    in DEVICE_STATUS_FIELDS.rst.
+
+    Attributes:
+        STANDBY: Device is idle, not actively heating
+        HEAT_PUMP_MODE: Heat pump is actively running to heat water
+        HYBRID_EFFICIENCY_MODE: Device actively heating in Energy Saver mode
+        HYBRID_BOOST_MODE: Device actively heating in High Demand mode
     """
 
     STANDBY = 0  # Device is idle, not actively heating
@@ -168,7 +192,12 @@ class CurrentOperationMode(Enum):
 
 
 class TemperatureUnit(Enum):
-    """Enumeration for temperature units."""
+    """Temperature unit enumeration.
+
+    Attributes:
+        CELSIUS: Celsius temperature scale (°C)
+        FAHRENHEIT: Fahrenheit temperature scale (°F)
+    """
 
     CELSIUS = 1
     FAHRENHEIT = 2
@@ -176,7 +205,20 @@ class TemperatureUnit(Enum):
 
 @dataclass
 class DeviceInfo:
-    """Device information from API."""
+    """Device information from API.
+
+    Contains basic device identification and network status information
+    retrieved from the Navien Smart Control REST API.
+
+    Attributes:
+        home_seq: Home sequence identifier
+        mac_address: Device MAC address (unique identifier)
+        additional_value: Additional device identifier value
+        device_type: Device type code (52 for NWP500)
+        device_name: User-assigned device name
+        connected: Connection status (1=offline, 2=online)
+        install_type: Installation type (optional)
+    """
 
     home_seq: int
     mac_address: str
@@ -202,7 +244,18 @@ class DeviceInfo:
 
 @dataclass
 class Location:
-    """Location information for a device."""
+    """Location information for a device.
+
+    Contains geographic and address information for a Navien device.
+
+    Attributes:
+        state: State or province
+        city: City name
+        address: Street address
+        latitude: GPS latitude coordinate
+        longitude: GPS longitude coordinate
+        altitude: Altitude/elevation
+    """
 
     state: Optional[str] = None
     city: Optional[str] = None
@@ -226,7 +279,15 @@ class Location:
 
 @dataclass
 class Device:
-    """Complete device information including location."""
+    """Complete device information including location.
+
+    Represents a complete Navien device with both identification/status
+    information and geographic location data.
+
+    Attributes:
+        device_info: Device identification and status
+        location: Geographic location information
+    """
 
     device_info: DeviceInfo
     location: Location
@@ -245,7 +306,20 @@ class Device:
 
 @dataclass
 class FirmwareInfo:
-    """Firmware information for a device."""
+    """Firmware information for a device.
+
+    Contains version and update information for device firmware.
+    See FIRMWARE_TRACKING.rst for details on firmware version tracking.
+
+    Attributes:
+        mac_address: Device MAC address
+        additional_value: Additional device identifier
+        device_type: Device type code
+        cur_sw_code: Current software code
+        cur_version: Current firmware version
+        downloaded_version: Downloaded firmware version (if available)
+        device_group: Device group identifier (optional)
+    """
 
     mac_address: str
     additional_value: str
@@ -271,7 +345,15 @@ class FirmwareInfo:
 
 @dataclass
 class TOUSchedule:
-    """Time of Use schedule information."""
+    """Time of Use schedule information.
+
+    Represents a Time-of-Use (TOU) pricing schedule for energy optimization.
+    See TIME_OF_USE.rst for detailed information about TOU configuration.
+
+    Attributes:
+        season: Season bitfield (months when schedule applies)
+        intervals: List of time intervals with pricing information
+    """
 
     season: int
     intervals: list[dict[str, Any]]
@@ -279,12 +361,29 @@ class TOUSchedule:
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "TOUSchedule":
         """Create TOUSchedule from API response dictionary."""
-        return cls(season=data.get("season", 0), intervals=data.get("interval", []))
+        return cls(
+            season=data.get("season", 0), intervals=data.get("interval", [])
+        )
 
 
 @dataclass
 class TOUInfo:
-    """Time of Use information."""
+    """Time of Use information.
+
+    Contains complete Time-of-Use (TOU) configuration including utility
+    information and pricing schedules. See TIME_OF_USE.rst for details
+    on configuring TOU optimization.
+
+    Attributes:
+        register_path: Registration path
+        source_type: Source type identifier
+        controller_id: Controller identifier
+        manufacture_id: Manufacturer identifier
+        name: TOU schedule name
+        utility: Utility company name
+        zip_code: ZIP code for utility area
+        schedule: List of TOU schedules by season
+    """
 
     register_path: str
     source_type: str
@@ -385,7 +484,9 @@ class DeviceStatus:
     conOvrSensorUse: bool = field(metadata=meta(conversion="device_bool"))
     wtrOvrSensorUse: bool = field(metadata=meta(conversion="device_bool"))
     antiLegionellaUse: bool = field(metadata=meta(conversion="device_bool"))
-    antiLegionellaOperationBusy: bool = field(metadata=meta(conversion="device_bool"))
+    antiLegionellaOperationBusy: bool = field(
+        metadata=meta(conversion="device_bool")
+    )
     errorBuzzerUse: bool = field(metadata=meta(conversion="device_bool"))
     currentHeatUse: bool = field(metadata=meta(conversion="device_bool"))
     heatUpperUse: bool = field(metadata=meta(conversion="device_bool"))
@@ -398,8 +499,12 @@ class DeviceStatus:
     # Temperature fields with offset (raw + 20)
     dhwTemperature: float = field(metadata=meta(conversion="add_20"))
     dhwTemperatureSetting: float = field(metadata=meta(conversion="add_20"))
-    dhwTargetTemperatureSetting: float = field(metadata=meta(conversion="add_20"))
-    freezeProtectionTemperature: float = field(metadata=meta(conversion="add_20"))
+    dhwTargetTemperatureSetting: float = field(
+        metadata=meta(conversion="add_20")
+    )
+    freezeProtectionTemperature: float = field(
+        metadata=meta(conversion="add_20")
+    )
     dhwTemperature2: float = field(metadata=meta(conversion="add_20"))
     hpUpperOnTempSetting: float = field(metadata=meta(conversion="add_20"))
     hpUpperOffTempSetting: float = field(metadata=meta(conversion="add_20"))
@@ -428,14 +533,28 @@ class DeviceStatus:
     recircDhwFlowRate: float = field(metadata=meta(conversion="div_10"))
 
     # Temperature fields with decicelsius to Fahrenheit conversion
-    tankUpperTemperature: float = field(metadata=meta(conversion="decicelsius_to_f"))
-    tankLowerTemperature: float = field(metadata=meta(conversion="decicelsius_to_f"))
-    dischargeTemperature: float = field(metadata=meta(conversion="decicelsius_to_f"))
-    suctionTemperature: float = field(metadata=meta(conversion="decicelsius_to_f"))
-    evaporatorTemperature: float = field(metadata=meta(conversion="decicelsius_to_f"))
-    ambientTemperature: float = field(metadata=meta(conversion="decicelsius_to_f"))
+    tankUpperTemperature: float = field(
+        metadata=meta(conversion="decicelsius_to_f")
+    )
+    tankLowerTemperature: float = field(
+        metadata=meta(conversion="decicelsius_to_f")
+    )
+    dischargeTemperature: float = field(
+        metadata=meta(conversion="decicelsius_to_f")
+    )
+    suctionTemperature: float = field(
+        metadata=meta(conversion="decicelsius_to_f")
+    )
+    evaporatorTemperature: float = field(
+        metadata=meta(conversion="decicelsius_to_f")
+    )
+    ambientTemperature: float = field(
+        metadata=meta(conversion="decicelsius_to_f")
+    )
     targetSuperHeat: float = field(metadata=meta(conversion="decicelsius_to_f"))
-    currentSuperHeat: float = field(metadata=meta(conversion="decicelsius_to_f"))
+    currentSuperHeat: float = field(
+        metadata=meta(conversion="decicelsius_to_f")
+    )
 
     # Enum fields with default fallbacks
     operationMode: CurrentOperationMode = field(
@@ -454,18 +573,24 @@ class DeviceStatus:
     )
     temperatureType: TemperatureUnit = field(
         metadata=meta(
-            conversion="enum", enum_class=TemperatureUnit, default_value=TemperatureUnit.FAHRENHEIT
+            conversion="enum",
+            enum_class=TemperatureUnit,
+            default_value=TemperatureUnit.FAHRENHEIT,
         )
     )
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "DeviceStatus":
-        """
-        Creates a DeviceStatus object from a raw dictionary, applying
-        conversions based on field metadata.
+        """Create a DeviceStatus object from a raw dictionary.
 
-        The conversion logic is now driven by field metadata, eliminating
-        duplicate field lists and making the code more maintainable.
+        Applies conversions based on field metadata, eliminating duplicate
+        field lists and making the code more maintainable.
+
+        Args:
+            data: Raw status dictionary from MQTT or API response
+
+        Returns:
+            DeviceStatus object with all conversions applied
         """
         # Copy data to avoid modifying the original dictionary
         converted_data = data.copy()
@@ -487,28 +612,35 @@ class DeviceStatus:
         unknown_fields = set(converted_data.keys()) - valid_fields
         if unknown_fields:
             # Check if any unknown fields are documented in constants
-            known_firmware_fields = set(constants.KNOWN_FIRMWARE_FIELD_CHANGES.keys())
+            known_firmware_fields = set(
+                constants.KNOWN_FIRMWARE_FIELD_CHANGES.keys()
+            )
             known_new_fields = unknown_fields & known_firmware_fields
             truly_unknown = unknown_fields - known_firmware_fields
 
             if known_new_fields:
                 _logger.info(
                     "Ignoring known new fields from recent firmware: %s. "
-                    "These fields are documented but not yet implemented in DeviceStatus. "
-                    "Please report this with your firmware version to help us track field changes.",
+                    "These fields are documented but not yet implemented "
+                    "in DeviceStatus. Please report this with your "
+                    "firmware version to help us track field changes.",
                     known_new_fields,
                 )
 
             if truly_unknown:
                 _logger.warning(
                     "Discovered new unknown fields from device status: %s. "
-                    "This may indicate a firmware update. Please report this issue with your "
-                    "device firmware version (controllerSwVersion, panelSwVersion, wifiSwVersion) "
-                    "so we can update the library. See constants.KNOWN_FIRMWARE_FIELD_CHANGES.",
+                    "This may indicate a firmware update. Please report "
+                    "this issue with your device firmware version "
+                    "(controllerSwVersion, panelSwVersion, wifiSwVersion) "
+                    "so we can update the library. See "
+                    "constants.KNOWN_FIRMWARE_FIELD_CHANGES.",
                     truly_unknown,
                 )
 
-            converted_data = {k: v for k, v in converted_data.items() if k in valid_fields}
+            converted_data = {
+                k: v for k, v in converted_data.items() if k in valid_fields
+            }
 
         return cls(**converted_data)
 
@@ -567,15 +699,23 @@ class DeviceFeature:
     # Enum field with default fallback
     temperatureType: TemperatureUnit = field(
         metadata=meta(
-            conversion="enum", enum_class=TemperatureUnit, default_value=TemperatureUnit.FAHRENHEIT
+            conversion="enum",
+            enum_class=TemperatureUnit,
+            default_value=TemperatureUnit.FAHRENHEIT,
         )
     )
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "DeviceFeature":
-        """
-        Creates a DeviceFeature object from a raw dictionary, applying
-        conversions based on field metadata.
+        """Create a DeviceFeature object from a raw dictionary.
+
+        Applies conversions based on field metadata.
+
+        Args:
+            data: Raw feature dictionary from MQTT or API response
+
+        Returns:
+            DeviceFeature object with all conversions applied
         """
         # Copy data to avoid modifying the original dictionary
         converted_data = data.copy()
@@ -591,20 +731,38 @@ class DeviceFeature:
         if unknown_fields:
             _logger.info(
                 "Ignoring unknown fields from device feature: %s. "
-                "This may indicate new device capabilities from a firmware update.",
+                "This may indicate new device capabilities from a "
+                "firmware update.",
                 unknown_fields,
             )
-            converted_data = {k: v for k, v in converted_data.items() if k in valid_fields}
+            converted_data = {
+                k: v for k, v in converted_data.items() if k in valid_fields
+            }
 
         return cls(**converted_data)
 
 
 @dataclass
 class MqttRequest:
-    """
-    Represents the 'request' object within an MQTT command payload.
+    """MQTT command request payload.
 
-    This is a flexible structure that can accommodate various commands.
+    Represents the 'request' object within an MQTT command payload. This is a
+    flexible structure that accommodates various command types including status
+    requests, control commands, and queries.
+
+    See MQTT_MESSAGES.rst for detailed documentation of all command types
+    and their required fields.
+
+    Attributes:
+        command: Command code (from CommandCode enum)
+        deviceType: Device type code (52 for NWP500)
+        macAddress: Device MAC address
+        additionalValue: Additional device identifier
+        mode: Operation mode for control commands
+        param: Parameter list for control commands
+        paramStr: Parameter string for control commands
+        month: Month list for energy usage queries
+        year: Year for energy usage queries
     """
 
     command: int
@@ -622,9 +780,18 @@ class MqttRequest:
 
 @dataclass
 class MqttCommand:
-    """
-    Represents the overall structure of an MQTT command message sent to a
-    Navien device.
+    """Represents an MQTT command message sent to a Navien device.
+
+    This class structures the complete MQTT message including routing
+    information (topics), session tracking, and the actual command request.
+
+    Attributes:
+        clientID: MQTT client identifier
+        sessionID: Session identifier for tracking requests/responses
+        requestTopic: MQTT topic to publish the command to
+        responseTopic: MQTT topic to subscribe for responses
+        request: The actual command request payload
+        protocolVersion: MQTT protocol version (default: 2)
     """
 
     clientID: str
@@ -637,11 +804,17 @@ class MqttCommand:
 
 @dataclass
 class EnergyUsageData:
-    """
-    Represents daily or monthly energy usage data for a single day/month.
+    """Daily or monthly energy usage data for a single period.
 
     This data shows the energy consumption and operating time for both
-    the heat pump and electric heating elements.
+    the heat pump and electric heating elements. See ENERGY_MONITORING.rst
+    for details on querying and interpreting energy usage data.
+
+    Attributes:
+        heUsage: Heat Element usage in Watt-hours (Wh)
+        hpUsage: Heat Pump usage in Watt-hours (Wh)
+        heTime: Heat Element operating time in hours
+        hpTime: Heat Pump operating time in hours
     """
 
     heUsage: int  # Heat Element usage in Watt-hours (Wh)
@@ -651,12 +824,20 @@ class EnergyUsageData:
 
     @property
     def total_usage(self) -> int:
-        """Total energy usage (heat element + heat pump) in Wh."""
+        """Calculate total energy usage.
+
+        Returns:
+            Total energy usage (heat element + heat pump) in Watt-hours
+        """
         return self.heUsage + self.hpUsage
 
     @property
     def total_time(self) -> int:
-        """Total operating time (heat element + heat pump) in hours."""
+        """Calculate total operating time.
+
+        Returns:
+            Total operating time (heat element + heat pump) in hours
+        """
         return self.heTime + self.hpTime
 
 
@@ -695,7 +876,8 @@ class MonthlyEnergyData:
         # Convert list of dictionaries to EnergyUsageData objects
         if "data" in converted_data:
             converted_data["data"] = [
-                EnergyUsageData(**day_data) for day_data in converted_data["data"]
+                EnergyUsageData(**day_data)
+                for day_data in converted_data["data"]
             ]
 
         return cls(**converted_data)
@@ -703,8 +885,11 @@ class MonthlyEnergyData:
 
 @dataclass
 class EnergyUsageTotal:
-    """
-    Represents total energy usage across the queried period.
+    """Represents total energy usage across the queried period.
+
+    Attributes:
+        heUsage: Total Heat Element usage in Watt-hours (Wh)
+        hpUsage: Total Heat Pump usage in Watt-hours (Wh)
     """
 
     heUsage: int  # Total Heat Element usage in Watt-hours (Wh)
@@ -753,7 +938,9 @@ class EnergyUsageResponse:
     total: EnergyUsageTotal
     usage: list[MonthlyEnergyData]
 
-    def get_month_data(self, year: int, month: int) -> Optional[MonthlyEnergyData]:
+    def get_month_data(
+        self, year: int, month: int
+    ) -> Optional[MonthlyEnergyData]:
         """
         Get energy usage data for a specific month.
 
@@ -776,12 +963,15 @@ class EnergyUsageResponse:
 
         # Convert total to EnergyUsageTotal
         if "total" in converted_data:
-            converted_data["total"] = EnergyUsageTotal(**converted_data["total"])
+            converted_data["total"] = EnergyUsageTotal(
+                **converted_data["total"]
+            )
 
         # Convert usage list to MonthlyEnergyData objects
         if "usage" in converted_data:
             converted_data["usage"] = [
-                MonthlyEnergyData.from_dict(month_data) for month_data in converted_data["usage"]
+                MonthlyEnergyData.from_dict(month_data)
+                for month_data in converted_data["usage"]
             ]
 
         return cls(**converted_data)

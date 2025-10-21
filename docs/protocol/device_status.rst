@@ -758,6 +758,6 @@ Technical Notes
 See Also
 --------
 
-* :doc:`ERROR_CODES` - Complete error code reference with diagnostics
-* :doc:`ENERGY_MONITORING` - Energy consumption tracking
-* :doc:`MQTT_MESSAGES` - Status message format details
+* :doc:`error_codes` - Complete error code reference with diagnostics
+* :doc:`../guides/energy_monitoring` - Energy consumption tracking
+* :doc:`mqtt_protocol` - Status message format details

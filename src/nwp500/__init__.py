@@ -1,3 +1,9 @@
+"""Navien NWP500 water heater control library.
+
+This package provides Python bindings for Navien Smart Control API and MQTT
+communication for NWP500 heat pump water heaters.
+"""
+
 from importlib.metadata import (
     PackageNotFoundError,
     version,

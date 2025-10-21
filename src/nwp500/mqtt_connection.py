@@ -1,7 +1,8 @@
 """
 MQTT connection management for Navien Smart Control.
 
-This module handles establishing and maintaining the MQTT connection to AWS IoT Core,
+This module handles establishing and maintaining the MQTT connection to AWS IoT
+Core,
 including credential management and connection state tracking.
 """
 
@@ -52,11 +53,13 @@ class MqttConnection:
             on_connection_resumed: Callback for connection resumption
 
         Raises:
-            ValueError: If auth client not authenticated or missing AWS credentials
+            ValueError: If auth client not authenticated or missing AWS
+            credentials
         """
         if not auth_client.is_authenticated:
             raise ValueError(
-                "Authentication client must be authenticated before creating connection manager."
+                "Authentication client must be authenticated before "
+                "creating connection manager."
             )
 
         if not auth_client.current_tokens:
@@ -76,7 +79,9 @@ class MqttConnection:
         self._on_connection_interrupted = on_connection_interrupted
         self._on_connection_resumed = on_connection_resumed
 
-        _logger.info(f"Initialized connection manager with client ID: {config.client_id}")
+        _logger.info(
+            f"Initialized connection manager with client ID: {config.client_id}"
+        )
 
     async def connect(self) -> bool:
         """
@@ -103,9 +108,13 @@ class MqttConnection:
 
         try:
             # Build WebSocket MQTT connection with AWS credentials
-            # Run blocking operations in a thread to avoid blocking the event loop
-            # The AWS IoT SDK performs synchronous file I/O operations during connection setup
-            credentials_provider = await asyncio.to_thread(self._create_credentials_provider)
+            # Run blocking operations in a thread to avoid blocking the event
+            # loop
+            # The AWS IoT SDK performs synchronous file I/O operations during
+            # connection setup
+            credentials_provider = await asyncio.to_thread(
+                self._create_credentials_provider
+            )
             self._connection = await asyncio.to_thread(
                 mqtt_connection_builder.websockets_with_default_aws_signing,
                 endpoint=self.config.endpoint,
@@ -130,7 +139,8 @@ class MqttConnection:
 
             self._connected = True
             _logger.info(
-                f"Connected successfully: session_present={connect_result['session_present']}"
+                f"Connected successfully: "
+                f"session_present={connect_result['session_present']}"
             )
 
             return True
@@ -240,7 +250,9 @@ class MqttConnection:
         _logger.debug(f"Unsubscribing from topic: {topic}")
 
         # Convert concurrent.futures.Future to asyncio.Future and await
-        unsubscribe_future, packet_id = self._connection.unsubscribe(topic=topic)
+        unsubscribe_future, packet_id = self._connection.unsubscribe(
+            topic=topic
+        )
         await asyncio.wrap_future(unsubscribe_future)
 
         _logger.info(f"Unsubscribed from '{topic}' with packet_id {packet_id}")
@@ -298,5 +310,13 @@ class MqttConnection:
 
     @property
     def connection(self) -> Optional[mqtt.Connection]:
-        """Get the underlying MQTT connection (for advanced usage)."""
+        """Get the underlying MQTT connection.
+
+        Returns:
+            The MQTT connection object, or None if not connected
+
+        Note:
+            This property is provided for advanced usage. Most operations
+            should use the higher-level methods provided by this class.
+        """
         return self._connection

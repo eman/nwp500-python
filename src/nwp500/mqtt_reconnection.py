@@ -40,7 +40,8 @@ class MqttReconnectionHandler:
         Args:
             config: MQTT connection configuration
             is_connected_func: Function to check if currently connected
-            schedule_coroutine_func: Function to schedule coroutines from any thread
+            schedule_coroutine_func: Function to schedule coroutines from any
+            thread
         """
         self.config = config
         self._is_connected_func = is_connected_func
@@ -87,7 +88,9 @@ class MqttReconnectionHandler:
             _logger.info("Starting automatic reconnection...")
             self._schedule_coroutine(self._start_reconnect_task())
 
-    def on_connection_resumed(self, return_code: Any, session_present: Any) -> None:
+    def on_connection_resumed(
+        self, return_code: Any, session_present: Any
+    ) -> None:
         """
         Handle connection resumption.
 
@@ -96,9 +99,11 @@ class MqttReconnectionHandler:
             session_present: Whether session was present
         """
         _logger.info(
-            f"Connection resumed: return_code={return_code}, session_present={session_present}"
+            f"Connection resumed: return_code={return_code}, "
+            f"session_present={session_present}"
         )
-        self._reconnect_attempts = 0  # Reset reconnection attempts on successful connection
+        # Reset reconnection attempts on successful connection
+        self._reconnect_attempts = 0
 
         # Cancel any pending reconnection task
         if self._reconnect_task and not self._reconnect_task.done():
@@ -113,7 +118,9 @@ class MqttReconnectionHandler:
         a coroutine that's scheduled via _schedule_coroutine.
         """
         if not self._reconnect_task or self._reconnect_task.done():
-            self._reconnect_task = asyncio.create_task(self._reconnect_with_backoff())
+            self._reconnect_task = asyncio.create_task(
+                self._reconnect_with_backoff()
+            )
 
     async def _reconnect_with_backoff(self) -> None:
         """
@@ -132,7 +139,10 @@ class MqttReconnectionHandler:
             # Calculate delay with exponential backoff
             delay = min(
                 self.config.initial_reconnect_delay
-                * (self.config.reconnect_backoff_multiplier ** (self._reconnect_attempts - 1)),
+                * (
+                    self.config.reconnect_backoff_multiplier
+                    ** (self._reconnect_attempts - 1)
+                ),
                 self.config.max_reconnect_delay,
             )
 
@@ -148,7 +158,9 @@ class MqttReconnectionHandler:
 
                 # AWS IoT SDK will handle the actual reconnection automatically
                 # We just need to wait and monitor the connection state
-                _logger.debug("Waiting for AWS IoT SDK automatic reconnection...")
+                _logger.debug(
+                    "Waiting for AWS IoT SDK automatic reconnection..."
+                )
 
             except asyncio.CancelledError:
                 _logger.info("Reconnection task cancelled")
@@ -158,7 +170,8 @@ class MqttReconnectionHandler:
 
         if self._reconnect_attempts >= self.config.max_reconnect_attempts:
             _logger.error(
-                f"Failed to reconnect after {self.config.max_reconnect_attempts} attempts. "
+                f"Failed to reconnect after "
+                f"{self.config.max_reconnect_attempts} attempts. "
                 "Manual reconnection required."
             )
 
@@ -173,7 +186,9 @@ class MqttReconnectionHandler:
     @property
     def is_reconnecting(self) -> bool:
         """Check if currently attempting to reconnect."""
-        return self._reconnect_task is not None and not self._reconnect_task.done()
+        return (
+            self._reconnect_task is not None and not self._reconnect_task.done()
+        )
 
     @property
     def attempt_count(self) -> int:
@@ -183,3 +198,8 @@ class MqttReconnectionHandler:
     def reset_attempts(self) -> None:
         """Reset the reconnection attempt counter."""
         self._reconnect_attempts = 0
+
+    def reset(self) -> None:
+        """Reset reconnection state and enable reconnection."""
+        self._reconnect_attempts = 0
+        self.enable()

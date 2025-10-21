@@ -81,7 +81,8 @@ class MqttDeviceController:
             **kwargs,
         }
 
-        # Use navilink- prefix for device ID in topics (from reference implementation)
+        # Use navilink- prefix for device ID in topics (from reference
+        # implementation)
         device_topic = f"navilink-{device_id}"
 
         return {
@@ -90,7 +91,9 @@ class MqttDeviceController:
             "protocolVersion": 2,
             "request": request,
             "requestTopic": f"cmd/{device_type}/{device_topic}",
-            "responseTopic": f"cmd/{device_type}/{device_topic}/{self._client_id}/res",
+            "responseTopic": (
+                f"cmd/{device_type}/{device_topic}/{self._client_id}/res"
+            ),
         }
 
     async def request_device_status(self, device: Device) -> int:
@@ -162,7 +165,9 @@ class MqttDeviceController:
         device_topic = f"navilink-{device_id}"
         topic = f"cmd/{device_type}/{device_topic}/ctrl"
         mode = "power-on" if power_on else "power-off"
-        command_code = CommandCode.POWER_ON if power_on else CommandCode.POWER_OFF
+        command_code = (
+            CommandCode.POWER_ON if power_on else CommandCode.POWER_OFF
+        )
 
         command = self._build_command(
             device_type=device_type,
@@ -216,7 +221,9 @@ class MqttDeviceController:
             param = [mode_id, vacation_days]
         else:
             if vacation_days is not None:
-                raise ValueError("vacation_days is only valid for vacation mode (mode 5)")
+                raise ValueError(
+                    "vacation_days is only valid for vacation mode (mode 5)"
+                )
             param = [mode_id]
 
         device_id = device.device_info.mac_address
@@ -238,15 +245,19 @@ class MqttDeviceController:
 
         return await self._publish(topic, command)
 
-    async def enable_anti_legionella(self, device: Device, period_days: int) -> int:
+    async def enable_anti_legionella(
+        self, device: Device, period_days: int
+    ) -> int:
         """
         Enable Anti-Legionella disinfection with a 1-30 day cycle.
 
-        This command has been confirmed through HAR analysis of the official Navien app.
+        This command has been confirmed through HAR analysis of the official
+        Navien app.
         When sent, the device responds with antiLegionellaUse=2 (enabled) and
         antiLegionellaPeriod set to the specified value.
 
-        See docs/MQTT_MESSAGES.rst "Anti-Legionella Control" for the authoritative
+        See docs/MQTT_MESSAGES.rst "Anti-Legionella Control" for the
+        authoritative
         command code (33554472) and expected payload format:
         {"mode": "anti-leg-on", "param": [<period_days>], "paramStr": ""}
 
@@ -286,12 +297,15 @@ class MqttDeviceController:
         """
         Disable the Anti-Legionella disinfection cycle.
 
-        This command has been confirmed through HAR analysis of the official Navien app.
+        This command has been confirmed through HAR analysis of the official
+        Navien app.
         When sent, the device responds with antiLegionellaUse=1 (disabled) while
         antiLegionellaPeriod retains its previous value.
 
-        The correct command code is 33554471 (not 33554473 as previously assumed).
-        See docs/MQTT_MESSAGES.rst "Anti-Legionella Control" section for details.
+        The correct command code is 33554471 (not 33554473 as previously
+        assumed).
+        See docs/MQTT_MESSAGES.rst "Anti-Legionella Control" section for
+        details.
 
         Args:
             device: The device to control
@@ -318,7 +332,9 @@ class MqttDeviceController:
 
         return await self._publish(topic, command)
 
-    async def set_dhw_temperature(self, device: Device, temperature: int) -> int:
+    async def set_dhw_temperature(
+        self, device: Device, temperature: int
+    ) -> int:
         """
         Set DHW target temperature.
 
@@ -332,7 +348,8 @@ class MqttDeviceController:
 
         Args:
             device: Device object
-            temperature: Target temperature in Fahrenheit (message value, NOT display value)
+            temperature: Target temperature in Fahrenheit (message value, NOT
+            display value)
 
         Returns:
             Publish packet ID
@@ -360,16 +377,20 @@ class MqttDeviceController:
 
         return await self._publish(topic, command)
 
-    async def set_dhw_temperature_display(self, device: Device, display_temperature: int) -> int:
-        """
-        Set DHW target temperature using the DISPLAY value (what you see on device/app).
+    async def set_dhw_temperature_display(
+        self, device: Device, display_temperature: int
+    ) -> int:
+        """Set DHW target temperature using the DISPLAY value.
 
-        This is a convenience method that automatically converts display temperature
-        to the message value by subtracting 20 degrees.
+        Uses what you see on device/app.
+
+        This is a convenience method that automatically converts display
+        temperature to the message value by subtracting 20 degrees.
 
         Args:
             device: Device object
-            display_temperature: Target temperature as shown on display/app (Fahrenheit)
+            display_temperature: Target temperature as shown on display/app
+            (Fahrenheit)
 
         Returns:
             Publish packet ID
@@ -421,7 +442,9 @@ class MqttDeviceController:
             reservation=reservation_payload,
         )
         command["requestTopic"] = topic
-        command["responseTopic"] = f"cmd/{device_type}/{self._client_id}/res/rsv/rd"
+        command["responseTopic"] = (
+            f"cmd/{device_type}/{self._client_id}/res/rsv/rd"
+        )
 
         return await self._publish(topic, command)
 
@@ -448,7 +471,9 @@ class MqttDeviceController:
             additional_value=additional_value,
         )
         command["requestTopic"] = topic
-        command["responseTopic"] = f"cmd/{device_type}/{self._client_id}/res/rsv/rd"
+        command["responseTopic"] = (
+            f"cmd/{device_type}/{self._client_id}/res/rsv/rd"
+        )
 
         return await self._publish(topic, command)
 
@@ -503,7 +528,9 @@ class MqttDeviceController:
             reservation=reservation_payload,
         )
         command["requestTopic"] = topic
-        command["responseTopic"] = f"cmd/{device_type}/{self._client_id}/res/tou/rd"
+        command["responseTopic"] = (
+            f"cmd/{device_type}/{self._client_id}/res/tou/rd"
+        )
 
         return await self._publish(topic, command)
 
@@ -542,7 +569,9 @@ class MqttDeviceController:
             controllerSerialNumber=controller_serial_number,
         )
         command["requestTopic"] = topic
-        command["responseTopic"] = f"cmd/{device_type}/{self._client_id}/res/tou/rd"
+        command["responseTopic"] = (
+            f"cmd/{device_type}/{self._client_id}/res/tou/rd"
+        )
 
         return await self._publish(topic, command)
 
@@ -563,7 +592,9 @@ class MqttDeviceController:
         device_topic = f"navilink-{device_id}"
         topic = f"cmd/{device_type}/{device_topic}/ctrl"
 
-        command_code = CommandCode.TOU_ENABLE if enabled else CommandCode.TOU_DISABLE
+        command_code = (
+            CommandCode.TOU_ENABLE if enabled else CommandCode.TOU_DISABLE
+        )
         mode = "tou-on" if enabled else "tou-off"
 
         command = self._build_command(
@@ -579,7 +610,9 @@ class MqttDeviceController:
 
         return await self._publish(topic, command)
 
-    async def request_energy_usage(self, device: Device, year: int, months: list[int]) -> int:
+    async def request_energy_usage(
+        self, device: Device, year: int, months: list[int]
+    ) -> int:
         """
         Request daily energy usage data for specified month(s).
 
@@ -617,7 +650,9 @@ class MqttDeviceController:
         additional_value = device.device_info.additional_value
 
         device_topic = f"navilink-{device_id}"
-        topic = f"cmd/{device_type}/{device_topic}/st/energy-usage-daily-query/rd"
+        topic = (
+            f"cmd/{device_type}/{device_topic}/st/energy-usage-daily-query/rd"
+        )
 
         command = self._build_command(
             device_type=device_type,

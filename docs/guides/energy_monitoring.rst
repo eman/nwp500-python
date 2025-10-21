@@ -334,6 +334,6 @@ Notes
 See Also
 --------
 
-- :doc:`DEVICE_STATUS_FIELDS` - Complete list of all status fields
-- :doc:`MQTT_CLIENT` - How to connect and subscribe to device updates
-- :doc:`MQTT_MESSAGES` - Message format reference
+- :doc:`../protocol/device_status` - Complete list of all status fields
+- :doc:`../python_api/mqtt_client` - How to connect and subscribe to device updates
+- :doc:`../protocol/mqtt_protocol` - Message format reference

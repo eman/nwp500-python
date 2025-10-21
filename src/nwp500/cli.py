@@ -1,5 +1,4 @@
-"""
-Navien Water Heater Control Script - Backward Compatibility Wrapper
+"""Navien Water Heater Control Script - Backward Compatibility Wrapper.
 
 This module maintains backward compatibility by importing from the
 new modular cli package structure.

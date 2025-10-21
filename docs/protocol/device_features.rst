@@ -360,7 +360,7 @@ Usage Example
 See Also
 --------
 
-* :doc:`DEVICE_STATUS_FIELDS` - Real-time device status field reference
-* :doc:`MQTT_CLIENT` - MQTT client usage guide for device communication
-* :doc:`API_CLIENT` - REST API client for device management
-* :doc:`ERROR_CODES` - Complete error code reference for diagnostics
+* :doc:`device_status` - Real-time device status field reference
+* :doc:`../python_api/mqtt_client` - MQTT client usage guide for device communication
+* :doc:`../python_api/api_client` - REST API client for device management
+* :doc:`error_codes` - Complete error code reference for diagnostics

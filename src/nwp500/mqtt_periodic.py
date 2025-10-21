@@ -70,13 +70,15 @@ class MqttPeriodicRequestManager:
         """
         Start sending periodic requests for device information or status.
 
-        This optional helper continuously sends requests at a specified interval.
+        This optional helper continuously sends requests at a specified
+        interval.
         It can be used to keep device information or status up-to-date.
 
         Args:
             device: Device object
             request_type: Type of request (DEVICE_INFO or DEVICE_STATUS)
-            period_seconds: Time between requests in seconds (default: 300 = 5 minutes)
+            period_seconds: Time between requests in seconds (default: 300 = 5
+            minutes)
 
         Example:
             >>> # Start periodic status requests (default)
@@ -100,20 +102,28 @@ class MqttPeriodicRequestManager:
             - All tasks automatically stop when client disconnects
         """
         device_id = device.device_info.mac_address
-        # Do not log MAC address; use a generic placeholder to avoid leaking sensitive information
+        # Do not log MAC address; use a generic placeholder to avoid leaking
+        # sensitive information
         redacted_device_id = "DEVICE_ID_REDACTED"
         task_name = f"periodic_{request_type.value}_{device_id}"
 
         # Stop existing task for this device/type if any
         if task_name in self._periodic_tasks:
-            _logger.info(f"Stopping existing periodic {request_type.value} task")
+            _logger.info(
+                f"Stopping existing periodic {request_type.value} task"
+            )
             await self.stop_periodic_requests(device, request_type)
 
         async def periodic_request() -> None:
-            """Internal coroutine for periodic requests."""
+            """Execute periodic requests for device information or status.
+
+            This coroutine runs continuously, sending requests at the configured
+            interval. It automatically skips requests when disconnected and
+            provides throttled logging to reduce noise.
+            """
             _logger.info(
-                f"Started periodic {request_type.value} requests for {redacted_device_id} "
-                f"(every {period_seconds}s)"
+                f"Started periodic {request_type.value} requests for "
+                f"{redacted_device_id} (every {period_seconds}s)"
             )
 
             # Track consecutive skips for throttled logging
@@ -123,10 +133,15 @@ class MqttPeriodicRequestManager:
                 try:
                     if not self._is_connected():
                         consecutive_skips += 1
-                        # Log warning only on first skip and then every 10th skip to reduce noise
-                        if consecutive_skips == 1 or consecutive_skips % 10 == 0:
+                        # Log warning only on first skip and then every 10th
+                        # skip to reduce noise
+                        if (
+                            consecutive_skips == 1
+                            or consecutive_skips % 10 == 0
+                        ):
                             _logger.warning(
-                                "Not connected, skipping %s request for %s (skipped %d time%s)",
+                                "Not connected, skipping %s request for %s "
+                                "(skipped %d time%s)",
                                 request_type.value,
                                 redacted_device_id,
                                 consecutive_skips,
@@ -142,7 +157,8 @@ class MqttPeriodicRequestManager:
                         # Reset skip counter when connected
                         if consecutive_skips > 0:
                             _logger.info(
-                                "Reconnected, resuming %s requests for %s (had skipped %d)",
+                                "Reconnected, resuming %s requests for %s "
+                                "(had skipped %d)",
                                 request_type.value,
                                 redacted_device_id,
                                 consecutive_skips,
@@ -166,19 +182,24 @@ class MqttPeriodicRequestManager:
 
                 except asyncio.CancelledError:
                     _logger.info(
-                        f"Periodic {request_type.value} requests cancelled for {redacted_device_id}"
+                        f"Periodic {request_type.value} requests cancelled "
+                        f"for {redacted_device_id}"
                     )
                     break
                 except Exception as e:
-                    # Handle clean session cancellation gracefully (expected during reconnection)
-                    # Check exception type and name attribute for proper error identification
+                    # Handle clean session cancellation gracefully (expected
+                    # during reconnection)
+                    # Check exception type and name attribute for proper error
+                    # identification
                     if (
                         isinstance(e, AwsCrtError)
-                        and e.name == "AWS_ERROR_MQTT_CANCELLED_FOR_CLEAN_SESSION"
+                        and e.name
+                        == "AWS_ERROR_MQTT_CANCELLED_FOR_CLEAN_SESSION"
                     ):
                         _logger.debug(
-                            "Periodic %s request cancelled due to clean session for %s. "
-                            "This is expected during reconnection.",
+                            "Periodic %s request cancelled due to clean "
+                            "session for %s. This is expected during "
+                            "reconnection.",
                             request_type.value,
                             redacted_device_id,
                         )
@@ -198,8 +219,8 @@ class MqttPeriodicRequestManager:
         self._periodic_tasks[task_name] = task
 
         _logger.info(
-            f"Started periodic {request_type.value} task for {redacted_device_id} "
-            f"with period {period_seconds}s"
+            f"Started periodic {request_type.value} task for "
+            f"{redacted_device_id} with period {period_seconds}s"
         )
 
     async def stop_periodic_requests(
@@ -256,14 +277,17 @@ class MqttPeriodicRequestManager:
                 + (f" (type={request_type.value})" if request_type else "")
             )
 
-    async def stop_all_periodic_tasks(self, reason: Optional[str] = None) -> None:
+    async def stop_all_periodic_tasks(
+        self, reason: Optional[str] = None
+    ) -> None:
         """
         Stop all periodic request tasks.
 
         This is automatically called when disconnecting.
 
         Args:
-            reason: Optional reason for logging context (e.g., "connection failure")
+            reason: Optional reason for logging context (e.g., "connection
+            failure")
 
         Example:
             >>> await manager.stop_all_periodic_tasks()
@@ -281,7 +305,9 @@ class MqttPeriodicRequestManager:
             task.cancel()
 
         # Wait for all to complete
-        await asyncio.gather(*self._periodic_tasks.values(), return_exceptions=True)
+        await asyncio.gather(
+            *self._periodic_tasks.values(), return_exceptions=True
+        )
 
         self._periodic_tasks.clear()
         _logger.info("All periodic tasks stopped")
@@ -298,7 +324,8 @@ class MqttPeriodicRequestManager:
 
         Args:
             device: Device object
-            period_seconds: Time between requests in seconds (default: 300 = 5 minutes)
+            period_seconds: Time between requests in seconds (default: 300 = 5
+            minutes)
         """
         await self.start_periodic_requests(
             device=device,
@@ -316,7 +343,8 @@ class MqttPeriodicRequestManager:
 
         Args:
             device: Device object
-            period_seconds: Time between requests in seconds (default: 300 = 5 minutes)
+            period_seconds: Time between requests in seconds (default: 300 = 5
+            minutes)
         """
         await self.start_periodic_requests(
             device=device,
@@ -333,9 +361,13 @@ class MqttPeriodicRequestManager:
         Args:
             device: Device object
         """
-        await self.stop_periodic_requests(device, PeriodicRequestType.DEVICE_INFO)
+        await self.stop_periodic_requests(
+            device, PeriodicRequestType.DEVICE_INFO
+        )
 
-    async def stop_periodic_device_status_requests(self, device: Device) -> None:
+    async def stop_periodic_device_status_requests(
+        self, device: Device
+    ) -> None:
         """
         Stop sending periodic device status requests for a device.
 
@@ -344,4 +376,6 @@ class MqttPeriodicRequestManager:
         Args:
             device: Device object
         """
-        await self.stop_periodic_requests(device, PeriodicRequestType.DEVICE_STATUS)
+        await self.stop_periodic_requests(
+            device, PeriodicRequestType.DEVICE_STATUS
+        )

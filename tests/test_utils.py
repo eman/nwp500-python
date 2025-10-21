@@ -111,7 +111,9 @@ async def test_log_performance_timing_accuracy(caplog):
 
 def test_log_performance_rejects_sync_functions():
     """Test that decorator raises TypeError for non-async functions."""
-    with pytest.raises(TypeError, match="can only be applied to async functions"):
+    with pytest.raises(
+        TypeError, match="can only be applied to async functions"
+    ):
 
         @log_performance
         def sync_func():
