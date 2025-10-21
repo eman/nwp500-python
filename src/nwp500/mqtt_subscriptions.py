@@ -200,7 +200,7 @@ class MqttSubscriptionManager:
             subscribe_result = await asyncio.wrap_future(subscribe_future)
 
             _logger.info(
-                f"Subscribed to '{redact_topic(topic)}' with QoS "
+                f"Subscription succeeded (topic redacted) with QoS "
                 f"{subscribe_result['qos']}"
             )
 
