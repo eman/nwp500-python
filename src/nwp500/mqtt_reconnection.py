@@ -102,9 +102,8 @@ class MqttReconnectionHandler:
             f"Connection resumed: return_code={return_code}, "
             f"session_present={session_present}"
         )
-        self._reconnect_attempts = (
-            0  # Reset reconnection attempts on successful connection
-        )
+        # Reset reconnection attempts on successful connection
+        self._reconnect_attempts = 0
 
         # Cancel any pending reconnection task
         if self._reconnect_task and not self._reconnect_task.done():
