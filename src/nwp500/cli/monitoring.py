@@ -10,7 +10,9 @@ from .output_formatters import write_status_to_csv
 _logger = logging.getLogger(__name__)
 
 
-async def handle_monitoring(mqtt: NavienMqttClient, device: Device, output_file: str) -> None:
+async def handle_monitoring(
+    mqtt: NavienMqttClient, device: Device, output_file: str
+) -> None:
     """
     Start periodic monitoring and write status to CSV.
 
@@ -22,7 +24,9 @@ async def handle_monitoring(mqtt: NavienMqttClient, device: Device, output_file:
     This function runs indefinitely, polling the device every 30 seconds
     and writing status updates to a CSV file.
     """
-    _logger.info(f"Starting periodic monitoring. Writing updates to {output_file}")
+    _logger.info(
+        f"Starting periodic monitoring. Writing updates to {output_file}"
+    )
     _logger.info("Press Ctrl+C to stop.")
 
     def on_status_update(status: DeviceStatus) -> None:

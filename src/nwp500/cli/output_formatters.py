@@ -15,8 +15,7 @@ _logger = logging.getLogger(__name__)
 
 
 def _json_default_serializer(obj: Any) -> Any:
-    """
-    Custom JSON serializer for objects not serializable by default json code.
+    """Serialize objects not serializable by default json code.
 
     Args:
         obj: Object to serialize

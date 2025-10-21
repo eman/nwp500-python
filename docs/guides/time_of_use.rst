@@ -1,11 +1,10 @@
-==========================
 Time of Use (TOU) Pricing
 ==========================
 
 The Navien NWP500 supports Time of Use (TOU) pricing schedules, allowing the water heater to optimize heating based on electricity rates that vary throughout the day. The Navien mobile app integrates with the OpenEI (Open Energy Information) API to retrieve utility rate information.
 
 Overview
-========
+--------
 
 Time of Use pricing enables:
 
@@ -18,19 +17,19 @@ Time of Use pricing enables:
 The system uses utility rate data from OpenEI to automatically configure optimal heating schedules based on your location and utility provider.
 
 OpenEI API Integration
-======================
+----------------------
 
 The Navien mobile app queries the OpenEI Utility Rates API to retrieve current electricity rate information for the user's location. This allows the app to present available rate plans and configure TOU schedules automatically.
 
 API Endpoint
------------
+~~~~~~~~~~~~
 
 .. code-block:: text
 
     GET https://api.openei.org/utility_rates
 
 Query Parameters
----------------
+~~~~~~~~~~~~~~~~
 
 The following parameters are used to query utility rates:
 
@@ -70,14 +69,14 @@ The following parameters are used to query utility rates:
      - Maximum number of results (``100``)
 
 Example Request
---------------
+~~~~~~~~~~~~~~~
 
 .. code-block:: text
 
     GET https://api.openei.org/utility_rates?version=7&format=json&api_key=YOUR_API_KEY&detail=full&address=94903&sector=Residential&orderby=startdate&direction=desc&limit=100
 
 Response Format
---------------
+~~~~~~~~~~~~~~~
 
 The API returns a JSON response with an array of utility rate plans:
 
@@ -122,7 +121,7 @@ The API returns a JSON response with an array of utility rate plans:
     }
 
 Key Response Fields
-^^^^^^^^^^^^^^^^^^
+"""""""""""""""""""
 
 .. list-table::
    :widths: 25 15 60
@@ -160,7 +159,7 @@ Key Response Fields
      - Units for fixed charges (e.g., ``$/month``)
 
 Rate Structure
--------------
+~~~~~~~~~~~~~~
 
 The ``energyratestructure`` field contains tiered pricing:
 
@@ -170,7 +169,7 @@ The ``energyratestructure`` field contains tiered pricing:
 * ``max`` field indicates the upper limit for that tier (optional)
 
 Hour-by-Hour Schedules
----------------------
+~~~~~~~~~~~~~~~~~~~~~~
 
 The ``energyweekdayschedule`` and ``energyweekendschedule`` arrays map rate periods:
 
@@ -180,12 +179,12 @@ The ``energyweekdayschedule`` and ``energyweekendschedule`` arrays map rate peri
 * ``0`` typically represents off-peak, ``1`` represents on-peak
 
 TOU API Methods
-==============
+---------------
 
 The library provides methods for working with TOU information through both REST API and MQTT.
 
 REST API: Get TOU Info
----------------------
+~~~~~~~~~~~~~~~~~~~~~~
 
 .. code-block:: python
 
@@ -223,7 +222,7 @@ Retrieves stored TOU configuration from the Navien cloud API.
         schedule: List[TOUSchedule]  # TOU schedule periods
 
 MQTT: Configure TOU Schedule
-----------------------------
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. code-block:: python
 
@@ -244,7 +243,7 @@ Configures the TOU schedule directly on the device via MQTT.
 * ``enabled``: Whether to enable TOU scheduling (default: ``True``)
 
 MQTT: Enable/Disable TOU
-------------------------
+~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. code-block:: python
 
@@ -261,7 +260,7 @@ Enables or disables TOU operation without changing the schedule.
 * ``enabled``: ``True`` to enable TOU, ``False`` to disable
 
 MQTT: Request TOU Settings
---------------------------
+~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. code-block:: python
 
@@ -284,15 +283,15 @@ The device will respond on the topic:
     cmd/{deviceType}/{deviceId}/res/tou/rd
 
 Building TOU Periods
-===================
+--------------------
 
 Helper Methods
--------------
+~~~~~~~~~~~~~~
 
 The ``NavienAPIClient`` class provides helper methods for building TOU period configurations:
 
 build_tou_period()
-^^^^^^^^^^^^^^^^^
+""""""""""""""""""
 
 .. code-block:: python
 
@@ -328,7 +327,7 @@ Creates a TOU period configuration dictionary.
 Dictionary with encoded TOU period data ready for MQTT transmission.
 
 encode_price()
-^^^^^^^^^^^^^
+""""""""""""""
 
 .. code-block:: python
 
@@ -346,7 +345,7 @@ Encodes a floating-point price into an integer for transmission.
     # Returns: 45000
 
 decode_price()
-^^^^^^^^^^^^^
+""""""""""""""
 
 .. code-block:: python
 
@@ -364,7 +363,7 @@ Decodes an integer price back to floating-point.
     # Returns: 0.45
 
 encode_week_bitfield()
-^^^^^^^^^^^^^^^^^^^^^
+""""""""""""""""""""""
 
 .. code-block:: python
 
@@ -394,7 +393,7 @@ Encodes a list of day names into a bitfield.
     # Returns: 0b0111110 = 62
 
 decode_week_bitfield()
-^^^^^^^^^^^^^^^^^^^^^
+""""""""""""""""""""""
 
 .. code-block:: python
 
@@ -412,7 +411,7 @@ Decodes a bitfield back into a list of day names.
     # Returns: ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"]
 
 Usage Examples
-=============
+==============
 
 Example 1: Simple TOU Schedule
 ------------------------------
@@ -486,7 +485,7 @@ Configure two rate periods - off-peak and peak pricing:
     asyncio.run(configure_simple_tou())
 
 Example 2: Complex Seasonal Schedule
-------------------------------------
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Configure different rates for summer and winter:
 
@@ -566,7 +565,7 @@ Configure different rates for summer and winter:
     asyncio.run(configure_seasonal_tou())
 
 Example 3: Retrieve Current TOU Settings
-----------------------------------------
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Query the device for its current TOU configuration:
 
@@ -622,7 +621,7 @@ Query the device for its current TOU configuration:
     asyncio.run(check_tou_settings())
 
 Example 4: Toggle TOU On/Off
-----------------------------
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Enable or disable TOU operation:
 
@@ -648,11 +647,173 @@ Enable or disable TOU operation:
     # Disable TOU
     asyncio.run(toggle_tou(False))
 
+Example 5: Retrieve Schedule from OpenEI API
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+This example demonstrates the complete workflow of retrieving utility rate 
+data from the OpenEI API and configuring it on your device:
+
+.. code-block:: python
+
+    import asyncio
+    import aiohttp
+    from nwp500 import NavienAPIClient, NavienAuthClient, NavienMqttClient
+
+    OPENEI_API_URL = "https://api.openei.org/utility_rates"
+    OPENEI_API_KEY = "DEMO_KEY"  # Get your own key at openei.org
+
+    async def fetch_openei_rates(zip_code: str, api_key: str):
+        """Fetch utility rates from OpenEI API."""
+        params = {
+            "version": 7,
+            "format": "json",
+            "api_key": api_key,
+            "detail": "full",
+            "address": zip_code,
+            "sector": "Residential",
+            "orderby": "startdate",
+            "direction": "desc",
+            "limit": 100,
+        }
+        
+        async with aiohttp.ClientSession() as session:
+            async with session.get(OPENEI_API_URL, params=params) as response:
+                response.raise_for_status()
+                return await response.json()
+
+    def select_tou_rate_plan(rate_data):
+        """Select first approved residential TOU plan."""
+        for plan in rate_data.get("items", []):
+            if (
+                plan.get("approved")
+                and plan.get("sector") == "Residential"
+                and "energyweekdayschedule" in plan
+                and "energyratestructure" in plan
+            ):
+                return plan
+        return None
+
+    def convert_openei_to_tou_periods(rate_plan):
+        """Convert OpenEI rate structure to Navien TOU periods."""
+        weekday_schedule = rate_plan["energyweekdayschedule"][0]
+        rate_structure = rate_plan["energyratestructure"][0]
+        
+        # Map period indices to rates
+        period_rates = {}
+        for idx, tier in enumerate(rate_structure):
+            period_rates[idx] = tier.get("rate", 0.0)
+        
+        # Find continuous time blocks
+        periods = []
+        current_period = None
+        start_hour = 0
+        
+        for hour in range(24):
+            period_idx = weekday_schedule[hour]
+            
+            if period_idx != current_period:
+                if current_period is not None:
+                    # Save previous period
+                    periods.append({
+                        "start_hour": start_hour,
+                        "end_hour": hour - 1,
+                        "end_minute": 59,
+                        "rate": period_rates.get(current_period, 0.0),
+                    })
+                current_period = period_idx
+                start_hour = hour
+        
+        # Last period
+        periods.append({
+            "start_hour": start_hour,
+            "end_hour": 23,
+            "end_minute": 59,
+            "rate": period_rates.get(current_period, 0.0),
+        })
+        
+        # Convert to TOU format
+        weekdays = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"]
+        return [
+            NavienAPIClient.build_tou_period(
+                season_months=range(1, 13),
+                week_days=weekdays,
+                start_hour=p["start_hour"],
+                start_minute=0,
+                end_hour=p["end_hour"],
+                end_minute=p["end_minute"],
+                price_min=p["rate"],
+                price_max=p["rate"],
+                decimal_point=5,
+            )
+            for p in periods
+        ]
+
+    async def configure_openei_schedule():
+        """Main function to retrieve and configure TOU from OpenEI."""
+        zip_code = "94103"  # San Francisco example
+        
+        # Fetch and parse OpenEI data
+        rate_data = await fetch_openei_rates(zip_code, OPENEI_API_KEY)
+        rate_plan = select_tou_rate_plan(rate_data)
+        
+        if not rate_plan:
+            print("No suitable TOU rate plan found")
+            return
+        
+        print(f"Using plan: {rate_plan['name']}")
+        print(f"Utility: {rate_plan['utility']}")
+        
+        tou_periods = convert_openei_to_tou_periods(rate_plan)
+        
+        # Configure on device
+        async with NavienAuthClient("user@example.com", "password") as auth:
+            api_client = NavienAPIClient(auth_client=auth)
+            device = await api_client.get_first_device()
+            
+            mqtt_client = NavienMqttClient(auth)
+            await mqtt_client.connect()
+            
+            # Get controller serial (see Example 1 for full code)
+            # ... obtain controller_serial ...
+            
+            # Configure the schedule
+            await mqtt_client.configure_tou_schedule(
+                device=device,
+                controller_serial_number=controller_serial,
+                periods=tou_periods,
+                enabled=True,
+            )
+            
+            print(f"Configured {len(tou_periods)} TOU periods from OpenEI")
+            await mqtt_client.disconnect()
+
+    asyncio.run(configure_openei_schedule())
+
+**Key Points:**
+
+* The OpenEI API requires a free API key (register at openei.org)
+* The ``DEMO_KEY`` is rate-limited and suitable for testing only
+* Rate structures vary by utility - this example handles simple TOU plans
+* Complex tiered rates may require additional logic to flatten into periods
+* The example uses weekday schedules; extend for weekends as needed
+* Set ``ZIP_CODE`` environment variable to search your location
+
+**Required Dependencies:**
+
+.. code-block:: bash
+
+    pip install aiohttp
+
+**Complete Working Example:**
+
+See ``examples/tou_openei_example.py`` for a fully working implementation 
+with error handling, weekend support, and detailed console output.
+
 MQTT Message Format
-==================
+-------------------
 
 TOU Control Topic
-----------------
+~~~~~~~~~~~~~~~~~
 
 To configure TOU settings, publish to:
 
@@ -688,7 +849,7 @@ Message payload:
     }
 
 Field Descriptions
-^^^^^^^^^^^^^^^^^
+""""""""""""""""""
 
 .. list-table::
    :widths: 25 15 60
@@ -729,7 +890,7 @@ Field Descriptions
      - Number of decimal places in price encoding
 
 TOU Response Topic
------------------
+~~~~~~~~~~~~~~~~~~
 
 The device responds on:
 
@@ -740,7 +901,7 @@ The device responds on:
 Response payload matches the control payload format.
 
 TOU Status in Device State
---------------------------
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 The device status includes TOU-related fields:
 
@@ -754,10 +915,10 @@ The device status includes TOU-related fields:
 * ``touStatus``: ``1`` if TOU scheduling is active, ``0`` if inactive
 * ``touOverrideStatus``: ``1`` if user has temporarily overridden TOU schedule
 
-See :doc:`DEVICE_STATUS_FIELDS` for more details.
+See :doc:`../protocol/device_status` for more details.
 
 Best Practices
-=============
+--------------
 
 1. **Obtain controller serial number first**
 
@@ -788,7 +949,7 @@ Best Practices
    Use ``asyncio.wait_for()`` with appropriate timeouts when waiting for device responses.
 
 Limitations
-==========
+-----------
 
 * Maximum 16 TOU periods per configuration
 * Time resolution limited to minutes (no seconds)
@@ -797,18 +958,19 @@ Limitations
 * No support for variable rate structures (e.g., tiered rates) - only flat rate per period
 
 Further Reading
-==============
+---------------
 
-* :doc:`API_CLIENT` - API client documentation and ``get_tou_info()`` method
-* :doc:`MQTT_CLIENT` - MQTT client and TOU configuration methods
-* :doc:`MQTT_MESSAGES` - MQTT message formats including TOU commands
-* :doc:`DEVICE_STATUS_FIELDS` - Device status fields including ``touStatus``
+* :doc:`../python_api/api_client` - API client documentation and ``get_tou_info()`` method
+* :doc:`../python_api/mqtt_client` - MQTT client and TOU configuration methods
+* :doc:`../protocol/mqtt_protocol` - MQTT message formats including TOU commands
+* :doc:`../protocol/device_status` - Device status fields including ``touStatus``
 * `OpenEI Utility Rates API <https://openei.org/services/doc/rest/util_rates/?version=7>`__ - Official OpenEI API documentation
 * `OpenEI IURDB <https://apps.openei.org/IURDB/>`__ - Interactive Utility Rate Database
 
 Related Examples
-===============
+----------------
 
-* ``examples/tou_schedule_example.py`` - Complete working example of TOU configuration
+* ``examples/tou_schedule_example.py`` - Complete working example of manual TOU configuration
+* ``examples/tou_openei_example.py`` - Retrieve TOU schedules from OpenEI API and configure device
 
 For questions or issues related to TOU functionality, please refer to the project repository.

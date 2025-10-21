@@ -22,7 +22,9 @@ WEEKDAY_ORDER = [
 ]
 
 # Pre-computed lookup tables for performance
-WEEKDAY_NAME_TO_BIT = {name.lower(): 1 << idx for idx, name in enumerate(WEEKDAY_ORDER)}
+WEEKDAY_NAME_TO_BIT = {
+    name.lower(): 1 << idx for idx, name in enumerate(WEEKDAY_ORDER)
+}
 MONTH_TO_BIT = {month: 1 << (month - 1) for month in range(1, 13)}
 
 
@@ -36,10 +38,12 @@ def encode_week_bitfield(days: Iterable[Union[str, int]]) -> int:
     Convert a collection of day names or indices into a reservation bitfield.
 
     Args:
-        days: Collection of weekday names (case-insensitive) or indices (0-6 or 1-7)
+        days: Collection of weekday names (case-insensitive) or indices (0-6 or
+        1-7)
 
     Returns:
-        Integer bitfield where each bit represents a day (Sunday=bit 0, Monday=bit 1, etc.)
+        Integer bitfield where each bit represents a day (Sunday=bit 0,
+        Monday=bit 1, etc.)
 
     Raises:
         ValueError: If day name is invalid or index is out of range
@@ -90,7 +94,8 @@ def decode_week_bitfield(bitfield: int) -> list[str]:
         ['Monday', 'Wednesday', 'Friday']
 
         >>> decode_week_bitfield(127)  # All days
-        ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
+        ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday',
+        'Saturday']
 
         >>> decode_week_bitfield(65)
         ['Sunday', 'Saturday']
@@ -168,7 +173,8 @@ def encode_price(value: Real, decimal_point: int) -> int:
     """
     Encode a price into the integer representation expected by the device.
 
-    The device stores prices as integers with a separate decimal point indicator.
+    The device stores prices as integers with a separate decimal point
+    indicator.
     For example, $12.34 with decimal_point=2 is stored as 1234.
 
     Args:
@@ -252,7 +258,8 @@ def decode_reservation_hex(hex_string: str) -> list[dict[str, int]]:
 
     Examples:
         >>> decode_reservation_hex("013e061e0478")
-        [{'enable': 1, 'week': 62, 'hour': 6, 'minute': 30, 'mode': 4, 'param': 120}]
+        [{'enable': 1, 'week': 62, 'hour': 6, 'minute': 30, 'mode': 4, 'param':
+        120}]
     """
     data = bytes.fromhex(hex_string)
     reservations = []
@@ -358,8 +365,9 @@ def build_tou_period(
     price_max: Union[int, Real],
     decimal_point: int,
 ) -> dict[str, int]:
-    """
-    Build a TOU (Time of Use) period entry consistent with MQTT command requirements.
+    """Build a TOU (Time of Use) period entry.
+
+    Consistent with MQTT command requirements.
 
     Args:
         season_months: Collection of month numbers (1-12) for this period
@@ -381,7 +389,8 @@ def build_tou_period(
     Examples:
         >>> build_tou_period(
         ...     season_months=[6, 7, 8],
-        ...     week_days=["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"],
+        ...     week_days=["Monday", "Tuesday", "Wednesday", "Thursday",
+        "Friday"],
         ...     start_hour=9,
         ...     start_minute=0,
         ...     end_hour=17,
@@ -400,7 +409,10 @@ def build_tou_period(
         if not 0 <= value <= upper:
             raise ValueError(f"{label} must be between 0 and {upper}")
 
-    for label, value in (("start_minute", start_minute), ("end_minute", end_minute)):
+    for label, value in (
+        ("start_minute", start_minute),
+        ("end_minute", end_minute),
+    ):
         if not 0 <= value <= 59:
             raise ValueError(f"{label} must be between 0 and 59")
 
@@ -409,15 +421,16 @@ def build_tou_period(
     season_bitfield = encode_season_bitfield(season_months)
 
     # Encode prices if they're Real numbers (not already encoded)
-    if isinstance(price_min, Real) and not isinstance(price_min, int):
-        encoded_min = encode_price(price_min, decimal_point)
-    else:
+    # Note: int is a subclass of Real, so we check int first
+    if isinstance(price_min, int):
         encoded_min = int(price_min)
+    else:  # isinstance(price_min, Real)
+        encoded_min = encode_price(price_min, decimal_point)
 
-    if isinstance(price_max, Real) and not isinstance(price_max, int):
-        encoded_max = encode_price(price_max, decimal_point)
-    else:
+    if isinstance(price_max, int):
         encoded_max = int(price_max)
+    else:  # isinstance(price_max, Real)
+        encoded_max = encode_price(price_max, decimal_point)
 
     return {
         "season": season_bitfield,

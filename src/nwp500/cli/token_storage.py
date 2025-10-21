@@ -29,7 +29,9 @@ def save_tokens(tokens: AuthTokens, email: str) -> None:
                     "id_token": tokens.id_token,
                     "access_token": tokens.access_token,
                     "refresh_token": tokens.refresh_token,
-                    "authentication_expires_in": tokens.authentication_expires_in,
+                    "authentication_expires_in": (
+                        tokens.authentication_expires_in
+                    ),
                     "issued_at": tokens.issued_at.isoformat(),
                     # AWS Credentials
                     "access_key_id": tokens.access_key_id,
@@ -74,5 +76,7 @@ def load_tokens() -> tuple[Optional[AuthTokens], Optional[str]]:
             _logger.info(f"Tokens loaded from {TOKEN_FILE} for user {email}")
             return tokens, email
     except (OSError, json.JSONDecodeError, KeyError) as e:
-        _logger.error(f"Failed to load or parse tokens, will re-authenticate: {e}")
+        _logger.error(
+            f"Failed to load or parse tokens, will re-authenticate: {e}"
+        )
         return None, None

@@ -1,6 +1,4 @@
-"""
-This module defines constants for the Navien API.
-"""
+"""Constants and command codes for Navien device communication."""
 
 from enum import IntEnum
 
@@ -82,9 +80,11 @@ CMD_TOU_ENABLE = CommandCode.TOU_ENABLE
 # mismatches.
 
 # Known Firmware Versions and Field Changes
-# Track firmware versions where new fields were introduced to help with debugging
+# Track firmware versions where new fields were introduced to help with
+# debugging
 KNOWN_FIRMWARE_FIELD_CHANGES = {
-    # Format: "field_name": {"introduced_in": "version", "description": "what it does"}
+    # Format: "field_name": {"introduced_in": "version", "description": "what it
+    # does"}
     "heatMinOpTemperature": {
         "introduced_in": "Controller: 184614912, WiFi: 34013184",
         "description": "Minimum operating temperature for heating element",

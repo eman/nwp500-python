@@ -1,6 +1,4 @@
-"""
-Configuration for the Navien API client.
-"""
+"""Configuration for the Navien API client."""
 
 API_BASE_URL = "https://nlus.naviensmartcontrol.com/api/v2.1"
 SIGN_IN_ENDPOINT = "/user/sign-in"

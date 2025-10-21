@@ -17,6 +17,8 @@ Or install the required dependencies:
 pip install aiohttp>=3.8.0 awsiotsdk>=1.21.0
 ```
 
+**Note:** The `tou_openei_example.py` requires `aiohttp` which is included in the library's dependencies. If you're running examples without installing the library, make sure to install aiohttp separately.
+
 ## Authentication
 
 All examples use the `NavienAuthClient` which requires credentials passed to the constructor. Authentication happens automatically when entering the async context.
@@ -62,6 +64,52 @@ python authenticate.py
 - `mqtt_client_example.py` - Basic MQTT client usage
 - `test_mqtt_connection.py` - MQTT connection testing
 - `test_mqtt_messaging.py` - MQTT message handling
+
+### Device Control Examples
+
+- `power_control_example.py` - Turn device on/off
+- `set_dhw_temperature_example.py` - Set water temperature
+- `set_mode_example.py` - Change operation mode
+- `anti_legionella_example.py` - Configure anti-legionella settings
+
+### Time of Use (TOU) Examples
+
+- `tou_schedule_example.py` - Manually configure TOU pricing schedule
+- `tou_openei_example.py` - Retrieve TOU schedule from OpenEI API and configure device
+
+**TOU OpenEI Example Usage:**
+
+This example fetches real utility rate data from the OpenEI API and configures it on your device:
+
+```bash
+export NAVIEN_EMAIL='your_email@example.com'
+export NAVIEN_PASSWORD='your_password'
+export ZIP_CODE='94103'  # Your ZIP code
+export OPENEI_API_KEY='your_openei_api_key'  # Optional, defaults to DEMO_KEY
+
+python tou_openei_example.py
+```
+
+**Getting an OpenEI API Key:**
+1. Visit https://openei.org/services/api/signup/
+2. Create a free account
+3. Get your API key from the dashboard
+4. The DEMO_KEY works for testing but has rate limits
+
+**What the OpenEI Example Does:**
+1. Queries the OpenEI Utility Rates API for your location
+2. Finds an approved residential TOU rate plan
+3. Parses the rate structure and time schedules
+4. Converts to Navien TOU period format
+5. Configures the schedule on your device via MQTT
+
+### Scheduling Examples
+
+- `reservation_schedule_example.py` - Configure heating reservations/schedules
+
+### Energy Monitoring Examples
+
+- `energy_usage_example.py` - Monitor real-time energy consumption
 
 ### Common Pattern
 

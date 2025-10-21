@@ -16,7 +16,9 @@ def test_queued_command_dataclass():
     qos = mqtt.QoS.AT_LEAST_ONCE
     timestamp = datetime.utcnow()
 
-    command = QueuedCommand(topic=topic, payload=payload, qos=qos, timestamp=timestamp)
+    command = QueuedCommand(
+        topic=topic, payload=payload, qos=qos, timestamp=timestamp
+    )
 
     assert command.topic == topic
     assert command.payload == payload
@@ -34,7 +36,9 @@ def test_mqtt_config_default_queue_settings():
 
 def test_mqtt_config_custom_queue_settings():
     """Test custom command queue configuration."""
-    config = MqttConnectionConfig(enable_command_queue=False, max_queued_commands=50)
+    config = MqttConnectionConfig(
+        enable_command_queue=False, max_queued_commands=50
+    )
 
     assert config.enable_command_queue is False
     assert config.max_queued_commands == 50

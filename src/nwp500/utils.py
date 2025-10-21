@@ -21,8 +21,7 @@ F = TypeVar("F", bound=Callable[..., Any])
 
 
 def log_performance(func: F) -> F:
-    """
-    Decorator that logs execution time for async functions at DEBUG level.
+    """Log execution time for async functions at DEBUG level.
 
     This decorator measures the execution time of async functions and logs
     the duration when DEBUG logging is enabled. It's useful for identifying
@@ -44,12 +43,16 @@ def log_performance(func: F) -> F:
         # When called, logs: "fetch_device_status completed in 0.234s"
 
     Note:
-        - Only logs when DEBUG level is enabled to minimize overhead in production
+        - Only logs when DEBUG level is enabled to minimize overhead in
+          production
         - Uses time.perf_counter() for high-resolution timing
         - Preserves function metadata (name, docstring, etc.)
     """
     if not asyncio.iscoroutinefunction(func):
-        raise TypeError(f"@log_performance can only be applied to async functions, got {func}")
+        raise TypeError(
+            "@log_performance can only be applied to async "
+            f"functions, got {func}"
+        )
 
     @functools.wraps(func)
     async def wrapper(*args: Any, **kwargs: Any) -> Any:

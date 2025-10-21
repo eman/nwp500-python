@@ -21,7 +21,13 @@ _logger = logging.getLogger(__name__)
 
 
 class APIError(Exception):
-    """Raised when API returns an error response."""
+    """Raised when API returns an error response.
+
+    Attributes:
+        message: Error message describing the failure
+        code: HTTP or API error code
+        response: Complete API response dictionary
+    """
 
     def __init__(
         self,
@@ -29,6 +35,13 @@ class APIError(Exception):
         code: Optional[int] = None,
         response: Optional[dict[str, Any]] = None,
     ):
+        """Initialize API error.
+
+        Args:
+            message: Error message describing the failure
+            code: HTTP or API error code
+            response: Complete API response dictionary
+        """
         self.message = message
         self.code = code
         self.response = response
@@ -61,10 +74,12 @@ class NavienAPIClient:
         Initialize Navien API client.
 
         Args:
-            auth_client: Authenticated NavienAuthClient instance. Must already be
+            auth_client: Authenticated NavienAuthClient instance. Must already
+            be
                         authenticated via sign_in().
             base_url: Base URL for the API
-            session: Optional aiohttp session (uses auth_client's session if not provided)
+            session: Optional aiohttp session (uses auth_client's session if not
+            provided)
 
         Raises:
             ValueError: If auth_client is not authenticated
@@ -80,7 +95,9 @@ class NavienAPIClient:
         self._session: aiohttp.ClientSession = session or auth_client._session  # type: ignore[assignment]
         if self._session is None:
             raise ValueError("auth_client must have an active session")
-        self._owned_session = False  # Never own session when auth_client is provided
+        self._owned_session = (
+            False  # Never own session when auth_client is provided
+        )
         self._owned_auth = False  # Never own auth_client
 
     async def __aenter__(self) -> "NavienAPIClient":
@@ -115,7 +132,9 @@ class NavienAPIClient:
             AuthenticationError: If not authenticated
         """
         if not self._auth_client or not self._auth_client.is_authenticated:
-            raise AuthenticationError("Must authenticate before making API calls")
+            raise AuthenticationError(
+                "Must authenticate before making API calls"
+            )
 
         # Ensure token is valid
         await self._auth_client.ensure_valid_token()
@@ -154,7 +173,9 @@ class NavienAPIClient:
 
     # Device Management Endpoints
 
-    async def list_devices(self, offset: int = 0, count: int = 20) -> list[Device]:
+    async def list_devices(
+        self, offset: int = 0, count: int = 20
+    ) -> list[Device]:
         """
         List all devices associated with the user.
 
@@ -188,7 +209,9 @@ class NavienAPIClient:
         _logger.info(f"Retrieved {len(devices)} device(s)")
         return devices
 
-    async def get_device_info(self, mac_address: str, additional_value: str = "") -> Device:
+    async def get_device_info(
+        self, mac_address: str, additional_value: str = ""
+    ) -> Device:
         """
         Get detailed information about a specific device.
 
@@ -219,7 +242,9 @@ class NavienAPIClient:
         data = response.get("data", {})
         device = Device.from_dict(data)
 
-        _logger.info(f"Retrieved info for device: {device.device_info.device_name}")
+        _logger.info(
+            f"Retrieved info for device: {device.device_info.device_name}"
+        )
         return device
 
     async def get_firmware_info(

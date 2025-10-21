@@ -120,7 +120,7 @@ Clone the repository
 
 #. You should run::
 
-   pip install -U pip setuptools -e .
+       pip install -U pip setuptools -e .
 
 .. note::
 
