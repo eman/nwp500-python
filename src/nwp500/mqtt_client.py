@@ -262,21 +262,6 @@ class NavienMqttClient(EventEmitter):
             self._connection_manager.publish, lambda: self._connected
         )
 
-    async def _start_reconnect_task(self) -> None:
-        """
-        Start the reconnect task within the event loop.
-
-        This is a helper method to create the reconnect task from within
-        a coroutine that's scheduled via _schedule_coroutine.
-        """
-        if not self._reconnect_task or self._reconnect_task.done():
-            # This method is no longer used - reconnection is handled by
-            # MqttReconnectionHandler
-            _logger.warning(
-                "_start_reconnect_task called but reconnection is now "
-                "handled by MqttReconnectionHandler"
-            )
-
     async def connect(self) -> bool:
         """
         Establish connection to AWS IoT Core.
