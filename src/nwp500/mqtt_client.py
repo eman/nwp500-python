@@ -208,17 +208,34 @@ class NavienMqttClient(EventEmitter):
         except Exception as e:
             _logger.error(f"Failed to schedule coroutine: {e}", exc_info=True)
 
-    def _on_connection_interrupted_internal(self, error: Exception) -> None:
-        """Internal handler for connection interruption."""
+    def _on_connection_interrupted_internal(self, **kwargs: Any) -> None:
+        """Internal handler for connection interruption.
+
+        Args:
+            **kwargs: Keyword arguments from AWS CRT, may include:
+                - connection: The MQTT connection (newer AWS CRT versions)
+                - error: The error that caused interruption (older versions)
+        """
+        # Extract error from kwargs for compatibility with both old and new AWS CRT versions
+        error = kwargs.get("error", kwargs.get("connection", "Unknown error"))
         _logger.warning(f"Connection interrupted: {error}")
         self._connected = False
 
         # Emit event
         self._schedule_coroutine(self.emit("connection_interrupted", error))
 
-        # Call user callback
+        # Call user callback if provided
         if self._on_connection_interrupted:
-            self._on_connection_interrupted(error)
+            try:
+                self._on_connection_interrupted(error)
+            except TypeError:
+                # Fallback for callbacks expecting no arguments
+                try:
+                    self._on_connection_interrupted()  # type: ignore
+                except Exception as e:
+                    _logger.error(
+                        f"Error in connection_interrupted callback: {e}"
+                    )
 
         # Delegate to reconnection handler if available
         if self._reconnection_handler and self.config.auto_reconnect:
