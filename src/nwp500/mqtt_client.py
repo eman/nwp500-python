@@ -208,16 +208,16 @@ class NavienMqttClient(EventEmitter):
         except Exception as e:
             _logger.error(f"Failed to schedule coroutine: {e}", exc_info=True)
 
-    def _on_connection_interrupted_internal(self, **kwargs: Any) -> None:
+    def _on_connection_interrupted_internal(
+        self, connection: mqtt.Connection, error: AwsCrtError, **kwargs: Any
+    ) -> None:
         """Internal handler for connection interruption.
 
         Args:
-            **kwargs: Keyword arguments from AWS CRT, may include:
-                - connection: The MQTT connection (newer AWS CRT versions)
-                - error: The error that caused interruption (older versions)
+            connection: MQTT connection that was interrupted
+            error: Error that caused the interruption
+            **kwargs: Forward-compatibility kwargs from AWS SDK
         """
-        # Extract error from kwargs for compatibility with both old and new AWS CRT versions
-        error = kwargs.get("error", kwargs.get("connection", "Unknown error"))
         _logger.warning(f"Connection interrupted: {error}")
         self._connected = False
 

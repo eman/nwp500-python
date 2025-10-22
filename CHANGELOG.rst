@@ -2,6 +2,19 @@
 Changelog
 =========
 
+Version 3.1.1 (2025-01-22)
+==========================
+
+Fixed
+-----
+
+- **MQTT Client**: Fixed connection interrupted callback signature for AWS SDK
+  
+  - Updated callback to match latest AWS IoT SDK signature: ``(connection, error, **kwargs)``
+  - Fixed type annotations in ``MqttConnection`` for proper type checking
+  - Resolves mypy type checking errors and ensures AWS SDK compatibility
+  - Fixed E501 line length linting issue in connection interruption handler
+
 Version 3.0.0 (Unreleased)
 ==========================
 
