@@ -173,9 +173,10 @@ class NavienAPIClient:
                         )
                         try:
                             # Try to refresh the token
-                            if self._auth_client.current_tokens:
+                            tokens = self._auth_client.current_tokens
+                            if tokens and tokens.refresh_token:
                                 await self._auth_client.refresh_token(
-                                    self._auth_client.current_tokens.refresh_token
+                                    tokens.refresh_token
                                 )
                                 # Retry the request once with new token
                                 return await self._make_request(
@@ -184,6 +185,11 @@ class NavienAPIClient:
                                     json_data,
                                     params,
                                     retry_on_auth_failure=False,
+                                )
+                            else:
+                                _logger.error(
+                                    "Cannot refresh token: "
+                                    "refresh_token not available"
                                 )
                         except (
                             TokenRefreshError,
