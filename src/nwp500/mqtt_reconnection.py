@@ -8,6 +8,7 @@ the MQTT connection is interrupted.
 import asyncio
 import contextlib
 import logging
+from collections.abc import Awaitable
 from typing import TYPE_CHECKING, Any, Callable, Optional
 
 if TYPE_CHECKING:
@@ -33,8 +34,8 @@ class MqttReconnectionHandler:
         config: "MqttConnectionConfig",
         is_connected_func: Callable[[], bool],
         schedule_coroutine_func: Callable[[Any], None],
-        reconnect_func: Callable[[], Any],
-        emit_event_func: Optional[Callable[[str, Any], Any]] = None,
+        reconnect_func: Callable[[], Awaitable[None]],
+        emit_event_func: Optional[Callable[..., Awaitable[Any]]] = None,
     ):
         """
         Initialize reconnection handler.
@@ -44,8 +45,9 @@ class MqttReconnectionHandler:
             is_connected_func: Function to check if currently connected
             schedule_coroutine_func: Function to schedule coroutines from any
             thread
-            reconnect_func: Function to trigger active reconnection
-            emit_event_func: Optional function to emit events
+            reconnect_func: Async function to trigger active reconnection
+            emit_event_func: Optional async function to emit events
+                (e.g., EventEmitter.emit)
         """
         self.config = config
         self._is_connected_func = is_connected_func
