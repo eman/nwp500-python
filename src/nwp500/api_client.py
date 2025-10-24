@@ -114,6 +114,7 @@ class NavienAPIClient:
         endpoint: str,
         json_data: Optional[dict[str, Any]] = None,
         params: Optional[dict[str, Any]] = None,
+        retry_on_auth_failure: bool = True,
     ) -> dict[str, Any]:
         """
         Make an authenticated API request.
@@ -123,6 +124,7 @@ class NavienAPIClient:
             endpoint: API endpoint path
             json_data: JSON body data
             params: Query parameters
+            retry_on_auth_failure: Whether to retry once on 401 errors
 
         Returns:
             Response data dictionary
@@ -158,6 +160,33 @@ class NavienAPIClient:
                 msg = response_data.get("msg", "")
 
                 if code != 200 or not response.ok:
+                    # If we get a 401 and haven't retried yet, try refreshing
+                    # token
+                    if code == 401 and retry_on_auth_failure:
+                        _logger.warning(
+                            "Received 401 Unauthorized. "
+                            "Attempting to refresh token..."
+                        )
+                        try:
+                            # Try to refresh the token
+                            if self._auth_client.current_tokens:
+                                await self._auth_client.refresh_token(
+                                    self._auth_client.current_tokens.refresh_token
+                                )
+                                # Retry the request once with new token
+                                return await self._make_request(
+                                    method,
+                                    endpoint,
+                                    json_data,
+                                    params,
+                                    retry_on_auth_failure=False,
+                                )
+                        except Exception as refresh_error:
+                            _logger.error(
+                                f"Token refresh failed: {refresh_error}"
+                            )
+                            # Fall through to raise original error
+
                     _logger.error(f"API error: {code} - {msg}")
                     raise APIError(
                         f"API request failed: {msg}",
