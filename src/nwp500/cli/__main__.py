@@ -130,6 +130,10 @@ async def async_main(args: argparse.Namespace) -> int:
         _logger.info("Fetching device information...")
         device = await api_client.get_first_device()
 
+        # Save tokens if they were refreshed during API call
+        if auth_client.current_tokens and auth_client.user_email:
+            save_tokens(auth_client.current_tokens, auth_client.user_email)
+
         if not device:
             _logger.error("No devices found for this account.")
             return 1

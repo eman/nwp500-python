@@ -9,7 +9,11 @@ from typing import Any, Optional
 
 import aiohttp
 
-from .auth import AuthenticationError, NavienAuthClient
+from .auth import (
+    AuthenticationError,
+    NavienAuthClient,
+    TokenRefreshError,
+)
 from .config import API_BASE_URL
 from .models import Device, FirmwareInfo, TOUInfo
 
@@ -114,6 +118,7 @@ class NavienAPIClient:
         endpoint: str,
         json_data: Optional[dict[str, Any]] = None,
         params: Optional[dict[str, Any]] = None,
+        retry_on_auth_failure: bool = True,
     ) -> dict[str, Any]:
         """
         Make an authenticated API request.
@@ -123,6 +128,7 @@ class NavienAPIClient:
             endpoint: API endpoint path
             json_data: JSON body data
             params: Query parameters
+            retry_on_auth_failure: Whether to retry once on 401 errors
 
         Returns:
             Response data dictionary
@@ -158,6 +164,42 @@ class NavienAPIClient:
                 msg = response_data.get("msg", "")
 
                 if code != 200 or not response.ok:
+                    # If we get a 401 and haven't retried yet, try refreshing
+                    # token
+                    if code == 401 and retry_on_auth_failure:
+                        _logger.warning(
+                            "Received 401 Unauthorized. "
+                            "Attempting to refresh token..."
+                        )
+                        try:
+                            # Try to refresh the token
+                            tokens = self._auth_client.current_tokens
+                            if tokens and tokens.refresh_token:
+                                await self._auth_client.refresh_token(
+                                    tokens.refresh_token
+                                )
+                                # Retry the request once with new token
+                                return await self._make_request(
+                                    method,
+                                    endpoint,
+                                    json_data,
+                                    params,
+                                    retry_on_auth_failure=False,
+                                )
+                            else:
+                                _logger.error(
+                                    "Cannot refresh token: "
+                                    "refresh_token not available"
+                                )
+                        except (
+                            TokenRefreshError,
+                            AuthenticationError,
+                        ) as refresh_error:
+                            _logger.error(
+                                f"Token refresh failed: {refresh_error}"
+                            )
+                            # Fall through to raise original error
+
                     _logger.error(f"API error: {code} - {msg}")
                     raise APIError(
                         f"API request failed: {msg}",

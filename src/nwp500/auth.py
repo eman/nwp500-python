@@ -400,6 +400,30 @@ class NavienAuthClient:
                 data = response_data.get("data", {})
                 new_tokens = AuthTokens.from_dict(data)
 
+                # Preserve AWS credentials from old tokens if not in refresh
+                # response
+                if self._auth_response and self._auth_response.tokens:
+                    old_tokens = self._auth_response.tokens
+                    if (
+                        not new_tokens.access_key_id
+                        and old_tokens.access_key_id
+                    ):
+                        new_tokens.access_key_id = old_tokens.access_key_id
+                    if not new_tokens.secret_key and old_tokens.secret_key:
+                        new_tokens.secret_key = old_tokens.secret_key
+                    if (
+                        not new_tokens.session_token
+                        and old_tokens.session_token
+                    ):
+                        new_tokens.session_token = old_tokens.session_token
+                    if (
+                        not new_tokens.authorization_expires_in
+                        and old_tokens.authorization_expires_in
+                    ):
+                        new_tokens.authorization_expires_in = (
+                            old_tokens.authorization_expires_in
+                        )
+
                 # Update stored auth response if we have one
                 if self._auth_response:
                     self._auth_response.tokens = new_tokens
