@@ -9,7 +9,11 @@ from typing import Any, Optional
 
 import aiohttp
 
-from .auth import AuthenticationError, NavienAuthClient
+from .auth import (
+    AuthenticationError,
+    NavienAuthClient,
+    TokenRefreshError,
+)
 from .config import API_BASE_URL
 from .models import Device, FirmwareInfo, TOUInfo
 
@@ -181,7 +185,10 @@ class NavienAPIClient:
                                     params,
                                     retry_on_auth_failure=False,
                                 )
-                        except Exception as refresh_error:
+                        except (
+                            TokenRefreshError,
+                            AuthenticationError,
+                        ) as refresh_error:
                             _logger.error(
                                 f"Token refresh failed: {refresh_error}"
                             )
