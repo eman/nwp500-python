@@ -324,7 +324,7 @@ class NavienMqttClient(EventEmitter):
 
                     # Update subscription manager with new connection
                     if self._subscription_manager and self._connection:
-                        self._subscription_manager._connection = (
+                        self._subscription_manager.update_connection(
                             self._connection
                         )
 
