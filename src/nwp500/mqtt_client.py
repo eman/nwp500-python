@@ -330,8 +330,9 @@ class NavienMqttClient(EventEmitter):
 
                     _logger.info("Active reconnection successful")
                 else:
-                    # Restore old connection manager
+                    # Restore old connection manager and connection reference
                     self._connection_manager = old_connection_manager
+                    self._connection = old_connection_manager.connection
                     _logger.warning("Active reconnection failed")
             else:
                 _logger.warning(
