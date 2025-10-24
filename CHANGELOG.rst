@@ -2,6 +2,25 @@
 Changelog
 =========
 
+Version 3.1.3 (2025-10-24)
+==========================
+
+Fixed
+-----
+
+- **MQTT Reconnection**: Improved MQTT reconnection reliability with active reconnection
+  
+  - **Breaking Internal Change**: ``MqttReconnectionHandler`` now requires ``reconnect_func`` parameter (not Optional)
+  - Implemented active reconnection that always recreates MQTT connection on interruption
+  - Removed unreliable passive fallback to AWS IoT SDK automatic reconnection
+  - Added automatic connection state checking during reconnection attempts
+  - Now emits ``reconnection_failed`` event when max reconnection attempts are exhausted
+  - Improved error handling and logging during reconnection process
+  - Better recovery from WebSocket connection interruptions (AWS_ERROR_MQTT_UNEXPECTED_HANGUP)
+  - Resolves issues where connection would fail to recover after network interruptions
+  - Note: Public API unchanged - ``NavienMqttClient`` continues to work as before
+  - Compatible with existing auto-recovery examples (``auto_recovery_example.py``, ``simple_auto_recovery.py``)
+
 Version 3.1.2 (2025-01-23)
 ==========================
 

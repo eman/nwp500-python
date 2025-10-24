@@ -279,6 +279,71 @@ class NavienMqttClient(EventEmitter):
             self._connection_manager.publish, lambda: self._connected
         )
 
+    async def _active_reconnect(self) -> None:
+        """
+        Actively trigger a reconnection attempt.
+
+        This method is called by the reconnection handler to actively
+        reconnect instead of passively waiting for AWS IoT SDK.
+
+        Note: This creates a new connection while preserving subscriptions
+        and configuration.
+        """
+        if self._connected:
+            _logger.debug("Already connected, skipping reconnection")
+            return
+
+        _logger.info("Attempting active reconnection...")
+
+        try:
+            # Ensure tokens are still valid
+            await self._auth_client.ensure_valid_token()
+
+            # If we have a connection manager, try to reconnect using it
+            if self._connection_manager:
+                # The connection might be in a bad state, so we need to
+                # recreate the underlying connection
+                _logger.debug("Recreating MQTT connection...")
+
+                # Create a new connection manager with same config
+                old_connection_manager = self._connection_manager
+                self._connection_manager = MqttConnection(
+                    config=self.config,
+                    auth_client=self._auth_client,
+                    on_connection_interrupted=self._on_connection_interrupted_internal,
+                    on_connection_resumed=self._on_connection_resumed_internal,
+                )
+
+                # Try to connect
+                success = await self._connection_manager.connect()
+
+                if success:
+                    # Update connection references
+                    self._connection = self._connection_manager.connection
+                    self._connected = True
+
+                    # Update subscription manager with new connection
+                    if self._subscription_manager and self._connection:
+                        self._subscription_manager._connection = (
+                            self._connection
+                        )
+
+                    _logger.info("Active reconnection successful")
+                else:
+                    # Restore old connection manager
+                    self._connection_manager = old_connection_manager
+                    _logger.warning("Active reconnection failed")
+            else:
+                _logger.warning(
+                    "No connection manager available for reconnection"
+                )
+
+        except Exception as e:
+            _logger.error(
+                f"Error during active reconnection: {e}", exc_info=True
+            )
+            raise
+
     async def connect(self) -> bool:
         """
         Establish connection to AWS IoT Core.
@@ -327,6 +392,8 @@ class NavienMqttClient(EventEmitter):
                     config=self.config,
                     is_connected_func=lambda: self._connected,
                     schedule_coroutine_func=self._schedule_coroutine,
+                    reconnect_func=self._active_reconnect,
+                    emit_event_func=self.emit,
                 )
                 self._reconnection_handler.enable()
 
