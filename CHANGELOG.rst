@@ -2,6 +2,23 @@
 Changelog
 =========
 
+Version 3.1.2 (2025-01-23)
+==========================
+
+Fixed
+-----
+
+- **Authentication**: Fixed 401 authentication errors with automatic token refresh
+  
+  - Add automatic token refresh on 401 Unauthorized responses in API client
+  - Preserve AWS credentials when refreshing tokens (required for MQTT)
+  - Save refreshed tokens to cache after successful API calls
+  - Add retry logic to prevent infinite retry loops
+  - Validate refresh_token exists before attempting refresh
+  - Use specific exception types (TokenRefreshError, AuthenticationError) in error handling
+  - Prevents masking unexpected errors during token refresh
+  - Resolves 'API request failed: 401' error when using cached tokens
+
 Version 3.1.1 (2025-01-22)
 ==========================
 
