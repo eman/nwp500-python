@@ -8,6 +8,7 @@ the MQTT connection is interrupted.
 import asyncio
 import contextlib
 import logging
+from collections.abc import Awaitable
 from typing import TYPE_CHECKING, Any, Callable, Optional
 
 if TYPE_CHECKING:
@@ -33,6 +34,8 @@ class MqttReconnectionHandler:
         config: "MqttConnectionConfig",
         is_connected_func: Callable[[], bool],
         schedule_coroutine_func: Callable[[Any], None],
+        reconnect_func: Callable[[], Awaitable[None]],
+        emit_event_func: Optional[Callable[..., Awaitable[Any]]] = None,
     ):
         """
         Initialize reconnection handler.
@@ -42,10 +45,15 @@ class MqttReconnectionHandler:
             is_connected_func: Function to check if currently connected
             schedule_coroutine_func: Function to schedule coroutines from any
             thread
+            reconnect_func: Async function to trigger active reconnection
+            emit_event_func: Optional async function to emit events
+                (e.g., EventEmitter.emit)
         """
         self.config = config
         self._is_connected_func = is_connected_func
         self._schedule_coroutine = schedule_coroutine_func
+        self._reconnect_func = reconnect_func
+        self._emit_event = emit_event_func
 
         self._reconnect_attempts = 0
         self._reconnect_task: Optional[asyncio.Task[None]] = None
@@ -156,24 +164,54 @@ class MqttReconnectionHandler:
             try:
                 await asyncio.sleep(delay)
 
-                # AWS IoT SDK will handle the actual reconnection automatically
-                # We just need to wait and monitor the connection state
-                _logger.debug(
-                    "Waiting for AWS IoT SDK automatic reconnection..."
-                )
+                # Check if we're already connected (AWS SDK auto-reconnected)
+                if self._is_connected_func():
+                    _logger.info(
+                        "AWS IoT SDK automatically reconnected during delay"
+                    )
+                    break
+
+                # Trigger active reconnection
+                _logger.info("Triggering active reconnection...")
+                try:
+                    await self._reconnect_func()
+                    if self._is_connected_func():
+                        _logger.info("Successfully reconnected")
+                        break
+                except Exception as e:
+                    _logger.warning(
+                        f"Active reconnection failed: {e}. "
+                        "Will retry if attempts remain."
+                    )
 
             except asyncio.CancelledError:
                 _logger.info("Reconnection task cancelled")
                 break
             except Exception as e:
-                _logger.error(f"Error during reconnection attempt: {e}")
+                _logger.error(
+                    f"Error during reconnection attempt: {e}", exc_info=True
+                )
 
-        if self._reconnect_attempts >= self.config.max_reconnect_attempts:
+        # Check final state
+        if (
+            self._reconnect_attempts >= self.config.max_reconnect_attempts
+            and not self._is_connected_func()
+        ):
             _logger.error(
                 f"Failed to reconnect after "
                 f"{self.config.max_reconnect_attempts} attempts. "
                 "Manual reconnection required."
             )
+            # Emit reconnection_failed event if event emitter is available
+            if self._emit_event:
+                try:
+                    await self._emit_event(
+                        "reconnection_failed", self._reconnect_attempts
+                    )
+                except Exception as e:
+                    _logger.error(
+                        f"Error emitting reconnection_failed event: {e}"
+                    )
 
     async def cancel(self) -> None:
         """Cancel any pending reconnection task."""

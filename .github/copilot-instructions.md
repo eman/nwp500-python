@@ -26,6 +26,8 @@ Always run these checks before finalizing changes to ensure your code will pass 
 
 This prevents "passes locally but fails in CI" issues.
 
+**Important**: When updating CHANGELOG.rst or any file with dates, always use `date +"%Y-%m-%d"` to get the correct current date. Never hardcode or guess dates.
+
 ### After Completing a Task
 Always run these checks after completing a task to validate your changes:
 1. **Type checking**: `python3 -m mypy src/nwp500 --config-file pyproject.toml` - Verify no type errors were introduced

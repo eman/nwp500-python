@@ -72,6 +72,24 @@ class MqttSubscriptionManager:
         """Get current subscriptions."""
         return self._subscriptions.copy()
 
+    def update_connection(self, connection: Any) -> None:
+        """
+        Update the MQTT connection reference.
+
+        This is used when the connection is recreated (e.g., after reconnection)
+        to update the internal reference while preserving subscriptions.
+
+        Args:
+            connection: New MQTT connection object
+
+        Note:
+            This does not re-establish subscriptions. Call the appropriate
+            subscribe methods to re-register subscriptions with the new
+            connection if needed.
+        """
+        self._connection = connection
+        _logger.debug("Updated subscription manager connection reference")
+
     def _on_message_received(
         self, topic: str, payload: bytes, **kwargs: Any
     ) -> None:
