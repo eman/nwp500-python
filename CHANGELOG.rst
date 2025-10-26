@@ -2,6 +2,23 @@
 Changelog
 =========
 
+Version 3.1.4 (2025-10-26)
+==========================
+
+Fixed
+-----
+
+- **MQTT Reconnection**: Fixed MQTT reconnection failures due to expired AWS credentials
+  
+  - Added AWS credential expiration tracking (``_aws_expires_at`` field in ``AuthTokens``)
+  - Added ``are_aws_credentials_expired`` property to check AWS credential validity
+  - Modified ``ensure_valid_token()`` to prioritize AWS credential expiration check
+  - Triggers full re-authentication (not just token refresh) when AWS credentials expire
+  - Preserves AWS credential expiration timestamps during token refresh
+  - Prevents reconnection failures when connection interrupts after AWS credentials expire but before JWT tokens expire
+  - Resolves AWS_ERROR_HTTP_WEBSOCKET_UPGRADE_FAILURE errors during reconnection attempts
+  - Improved test coverage for auth module from 31% to 60% with comprehensive test suite
+
 Version 3.1.3 (2025-10-24)
 ==========================
 
