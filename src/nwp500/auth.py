@@ -123,7 +123,8 @@ class AuthTokens:
         since the token refresh endpoint doesn't provide new AWS credentials.
 
         Returns:
-            True if AWS credentials are expired or expiration time is unknown
+            True if AWS credentials are expired, False if expiration time is
+            unknown or credentials are still valid
         """
         if not self._aws_expires_at:
             # If we don't know when AWS credentials expire, consider them valid
