@@ -60,7 +60,7 @@ API Reference
 NavienAuthClient
 ----------------
 
-.. py:class:: NavienAuthClient(email=None, password=None, base_url=API_BASE_URL)
+.. py:class:: NavienAuthClient(email=None, password=None, base_url=API_BASE_URL, stored_tokens=None)
 
    JWT-based authentication client for Navien Smart Control API.
 
@@ -70,6 +70,8 @@ NavienAuthClient
    :type password: str or None
    :param base_url: API base URL
    :type base_url: str
+   :param stored_tokens: Previously saved tokens to restore session
+   :type stored_tokens: AuthTokens or None
 
    **Example:**
 
@@ -81,10 +83,23 @@ NavienAuthClient
       # From environment variables
       auth = NavienAuthClient()
       
+      # With stored tokens (skip re-authentication)
+      stored = AuthTokens.from_dict(saved_data)
+      auth = NavienAuthClient(
+          "email@example.com", 
+          "password",
+          stored_tokens=stored
+      )
+      
       # Always use as context manager
       async with auth:
           # Authenticated
           pass
+
+   .. note::
+      If ``stored_tokens`` are provided and still valid, the initial 
+      sign-in is skipped. If tokens are expired, they're automatically
+      refreshed or re-authenticated as needed.
 
 Authentication Methods
 ----------------------
@@ -318,6 +333,7 @@ AuthTokens
    :param access_key_id: AWS access key (for MQTT)
    :param secret_key: AWS secret key (for MQTT)
    :param session_token: AWS session token (for MQTT)
+   :param issued_at: Token issue timestamp (auto-set if not provided)
 
    **Properties:**
 
@@ -325,6 +341,39 @@ AuthTokens
    * ``is_expired`` - Check if expired
    * ``time_until_expiry`` - Time remaining
    * ``bearer_token`` - Formatted bearer token
+   * ``are_aws_credentials_expired`` - Check if AWS credentials expired
+
+   **Methods:**
+
+   .. py:method:: from_dict(data)
+      :classmethod:
+
+      Create AuthTokens from dictionary (API response or saved data).
+
+      :param data: Token data dictionary
+      :type data: dict[str, Any]
+      :return: AuthTokens instance
+      :rtype: AuthTokens
+
+      Supports both camelCase keys (API response) and snake_case keys (saved data).
+
+   .. py:method:: to_dict()
+
+      Serialize tokens to dictionary for storage.
+
+      :return: Dictionary with all token data including issued_at timestamp
+      :rtype: dict[str, Any]
+
+      **Example:**
+
+      .. code-block:: python
+
+         # Save tokens
+         tokens = auth.current_tokens
+         token_data = tokens.to_dict()
+         
+         # Later, restore tokens
+         restored = AuthTokens.from_dict(token_data)
 
 AuthenticationResponse
 ----------------------
@@ -417,6 +466,61 @@ Example 4: Long-Running Application
                
                # Sleep
                await asyncio.sleep(3600)
+
+Example 5: Token Restoration (Skip Re-authentication)
+------------------------------------------------------
+
+.. code-block:: python
+
+   import json
+   from nwp500 import NavienAuthClient
+   from nwp500.auth import AuthTokens
+
+   async def save_tokens():
+       """Save tokens for later reuse."""
+       async with NavienAuthClient(email, password) as auth:
+           tokens = auth.current_tokens
+           
+           # Serialize tokens to dictionary
+           token_data = tokens.to_dict()
+           
+           # Save to file (or database, cache, etc.)
+           with open('tokens.json', 'w') as f:
+               json.dump(token_data, f)
+           
+           print("Tokens saved for future use")
+
+   async def restore_tokens():
+       """Restore authentication from saved tokens."""
+       # Load saved tokens
+       with open('tokens.json') as f:
+           token_data = json.load(f)
+       
+       # Deserialize tokens
+       stored_tokens = AuthTokens.from_dict(token_data)
+       
+       # Initialize client with stored tokens
+       # This skips initial authentication if tokens are still valid
+       async with NavienAuthClient(
+           email, password,
+           stored_tokens=stored_tokens
+       ) as auth:
+           # If tokens were expired, they're automatically refreshed
+           # If AWS credentials expired, re-authentication occurs
+           print(f"Authenticated (from stored tokens): {auth.user_email}")
+           
+           # Always save updated tokens after refresh
+           new_tokens = auth.current_tokens
+           if new_tokens.issued_at != stored_tokens.issued_at:
+               token_data = new_tokens.to_dict()
+               with open('tokens.json', 'w') as f:
+                   json.dump(token_data, f)
+               print("Tokens were refreshed and re-saved")
+
+.. note::
+   Token restoration is especially useful for applications that restart
+   frequently (like Home Assistant) to avoid unnecessary authentication
+   requests on every restart.
 
 Error Handling
 ==============
