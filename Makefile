@@ -1,4 +1,4 @@
-.PHONY: help install install-dev lint format test clean build release check-release ci-lint ci-format ci-check
+.PHONY: help install install-dev lint format test clean build release check-release ci-lint ci-format ci-check version-bump validate-version
 
 help:  ## Show this help message
 	@echo 'Usage: make [target]'
@@ -50,7 +50,7 @@ clean:  ## Remove build artifacts and cache files
 build: clean  ## Build distribution packages
 	python -m build
 
-check-release: lint format-check test  ## Run all checks before release (lint, format check, tests)
+check-release: lint format-check test validate-version  ## Run all checks before release (lint, format check, tests, version validation)
 	@echo "✓ All checks passed! Ready for release."
 
 release: check-release build  ## Prepare and build a release (run checks, then build)
@@ -80,3 +80,19 @@ docs:  ## Build documentation
 
 docs-clean:  ## Clean documentation build
 	rm -rf docs/_build
+
+version-bump:  ## Bump version (usage: make version-bump BUMP=patch|minor|major|X.Y.Z)
+	@if [ -z "$(BUMP)" ]; then \
+		echo "Error: BUMP parameter required"; \
+		echo "Usage: make version-bump BUMP=patch|minor|major|X.Y.Z"; \
+		echo "Examples:"; \
+		echo "  make version-bump BUMP=patch   # Bump patch version"; \
+		echo "  make version-bump BUMP=minor   # Bump minor version"; \
+		echo "  make version-bump BUMP=major   # Bump major version"; \
+		echo "  make version-bump BUMP=3.1.5   # Set explicit version"; \
+		exit 1; \
+	fi
+	python3 scripts/bump_version.py $(BUMP)
+
+validate-version:  ## Validate version configuration (checks for common mistakes)
+	python3 scripts/validate_version.py

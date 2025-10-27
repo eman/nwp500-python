@@ -95,14 +95,73 @@ This runs:
 
 ### 4. Update Version and Changelog
 
-1. Update version in relevant files (handled by setuptools_scm)
-2. Update `CHANGELOG.rst` with changes for this release
-3. Commit changes:
+#### Understanding Version Management
+
+**IMPORTANT**: This project uses `setuptools_scm` to manage versions from git tags.
+The version is **NOT** stored in any Python files or config files.
+
+**DO NOT** edit the `version` field in `setup.cfg`'s `[pyscaffold]` section!
+That field stores the PyScaffold tool version (4.6), not the package version.
+
+#### Version Bump Process
+
+1. Update `CHANGELOG.rst` with changes for this release:
+
+```bash
+# Get current date
+date +"%Y-%m-%d"
+
+# Edit CHANGELOG.rst and add a new section:
+# Version X.Y.Z (YYYY-MM-DD)
+# ==========================
+```
+
+2. Commit the changelog:
 
 ```bash
 git add CHANGELOG.rst
 git commit -m "Update changelog for vX.Y.Z"
 ```
+
+3. Use the version bump script to create a git tag:
+
+```bash
+# For a patch release (X.Y.Z -> X.Y.Z+1)
+make version-bump BUMP=patch
+
+# For a minor release (X.Y.Z -> X.Y+1.0)
+make version-bump BUMP=minor
+
+# For a major release (X.Y.Z -> X+1.0.0)
+make version-bump BUMP=major
+
+# Or specify an explicit version
+make version-bump BUMP=3.1.5
+```
+
+The script will:
+- Get the current version from git tags
+- Calculate the new version
+- Validate the version progression (prevents large jumps)
+- Create a git tag (e.g., `v3.1.5`)
+- Display next steps
+
+4. Push the tag to trigger the release:
+
+```bash
+git push origin vX.Y.Z
+```
+
+#### Manual Version Tagging (Not Recommended)
+
+If you need to create a tag manually:
+
+```bash
+git tag -a vX.Y.Z -m "Release version X.Y.Z"
+git push origin vX.Y.Z
+```
+
+**Warning**: Manual tagging bypasses validation checks. Use the version bump script instead.
 
 ### 5. Build Distribution
 
@@ -152,12 +211,14 @@ python -m twine upload dist/*
 
 ### 8. Tag the Release
 
-Create and push a git tag:
+**Note**: If you used the version bump script, the tag is already created.
+Just push it:
 
 ```bash
-git tag -a vX.Y.Z -m "Release version X.Y.Z"
 git push origin vX.Y.Z
 ```
+
+If you created a tag manually, push it now.
 
 ## Using Tox
 
@@ -243,8 +304,9 @@ Before releasing, ensure:
 - [ ] All code is formatted: `make format`
 - [ ] Linting passes: `make lint`
 - [ ] All tests pass: `make test`
+- [ ] Version configuration is valid: `make validate-version`
 - [ ] Changelog is updated
-- [ ] Version is bumped appropriately
+- [ ] Version is bumped appropriately using `make version-bump`
 - [ ] Documentation is up to date
 - [ ] Examples work correctly
 - [ ] Build succeeds: `make build`
@@ -310,6 +372,7 @@ Example GitHub Actions workflow could run:
 
 | Command | Description |
 |---------|-------------|
+| `make version-bump` | Bump version (requires BUMP=patch/minor/major/X.Y.Z) |
 | `make help` | Show all available commands |
 | `make install-dev` | Install with dev dependencies |
 | `make format` | Format code with ruff |

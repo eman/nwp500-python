@@ -17,6 +17,33 @@
 - **Type checking**: `python3 -m mypy src/nwp500 --config-file pyproject.toml` (static type analysis)
 - **Build docs**: `tox -e docs` (Sphinx docs in `docs/`)
 - **Preview docs**: `python3 -m http.server --directory docs/_build/html`
+- **Version management**: `make version-bump BUMP=patch|minor|major` (creates git tags, see Version Management section)
+
+### Version Management
+
+**CRITICAL**: This project uses `setuptools_scm` to derive versions from git tags. 
+
+**Never manually edit version numbers!** The `version` field in `setup.cfg`'s `[pyscaffold]` section is the PyScaffold TOOL version (4.6), NOT the package version. Changing it will cause incorrect releases.
+
+#### Creating a New Release
+
+1. **Update CHANGELOG.rst** with the new version and changes
+2. **Commit the changelog**: `git add CHANGELOG.rst && git commit -m "Update changelog for vX.Y.Z"`
+3. **Bump version**: Use the version bump script:
+   ```bash
+   make version-bump BUMP=patch   # For bug fixes (3.1.4 -> 3.1.5)
+   make version-bump BUMP=minor   # For new features (3.1.4 -> 3.2.0)
+   make version-bump BUMP=major   # For breaking changes (3.1.4 -> 4.0.0)
+   ```
+4. **Push the tag**: `git push origin vX.Y.Z`
+
+The version bump script:
+- Gets the current version from git tags
+- Validates the new version progression (prevents large jumps)
+- Prompts for confirmation with checklist
+- Creates a git tag (e.g., `v3.1.5`)
+
+**Validation**: Run `make validate-version` to check for version-related mistakes before committing.
 
 ### Before Committing Changes
 Always run these checks before finalizing changes to ensure your code will pass CI:
