@@ -318,7 +318,6 @@ class MqttSubscriptionManager:
         failed_subscriptions = set()
         for topic, qos in subscriptions_to_restore:
             handlers = handlers_to_restore.get(topic, [])
-            topic_failed = False
             for handler in handlers:
                 try:
                     await self.subscribe(topic, handler, qos)
@@ -327,10 +326,10 @@ class MqttSubscriptionManager:
                         f"Failed to re-subscribe to "
                         f"'{redact_topic(topic)}': {e}"
                     )
-                    topic_failed = True
-
-            if topic_failed:
-                failed_subscriptions.add(topic)
+                    # Mark topic as failed and skip remaining handlers
+                    # since they will fail for the same reason
+                    failed_subscriptions.add(topic)
+                    break  # Exit handler loop, move to next topic
 
         if failed_subscriptions:
             _logger.warning(
