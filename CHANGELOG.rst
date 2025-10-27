@@ -2,6 +2,53 @@
 Changelog
 =========
 
+Version 4.7 (2025-10-27)
+========================
+
+Added
+-----
+
+- **MQTT Reconnection**: Two-tier reconnection strategy with unlimited retries
+  
+  - Implemented quick reconnection (attempts 1-9) for fast recovery from transient network issues
+  - Implemented deep reconnection (every 10th attempt) with full connection rebuild and credential refresh
+  - Changed default ``max_reconnect_attempts`` from 10 to -1 (unlimited retries)
+  - Added ``deep_reconnect_threshold`` configuration parameter (default: 10)
+  - Added ``has_stored_credentials`` property to ``NavienAuthClient``
+  - Added ``re_authenticate()`` method to ``NavienAuthClient`` for credential-based re-authentication
+  - Added ``resubscribe_all()`` method to ``MqttSubscriptionManager`` for subscription recovery
+  - Deep reconnection now performs token refresh and falls back to full re-authentication if needed
+  - Deep reconnection automatically re-establishes all subscriptions after rebuild
+  - Connection now continues retrying indefinitely instead of giving up after 10 attempts
+
+Improved
+--------
+
+- **Exception Handling**: Replaced 25 catch-all exception handlers with specific exception types
+  
+  - ``mqtt_client.py``: Uses ``AwsCrtError``, ``AuthenticationError``, ``TokenRefreshError``, ``RuntimeError``, ``ValueError``, ``TypeError``, ``AttributeError``
+  - ``mqtt_reconnection.py``: Uses ``AwsCrtError``, ``RuntimeError``, ``ValueError``, ``TypeError``
+  - ``mqtt_connection.py``: Uses ``AwsCrtError``, ``RuntimeError``, ``ValueError``
+  - ``mqtt_subscriptions.py``: Uses ``AwsCrtError``, ``RuntimeError``, ``TypeError``, ``AttributeError``, ``KeyError``, ``ValueError``
+  - ``mqtt_periodic.py``: Uses ``AwsCrtError``, ``RuntimeError``
+  - ``events.py``: Retains ``Exception`` for user callbacks (documented as legitimate use case)
+  - Added exception handling guidelines to ``.github/copilot-instructions.md``
+
+- **Code Quality**: Multiple readability and safety improvements
+  
+  - Simplified nested conditions by extracting to local variables
+  - Added ``hasattr()`` checks before accessing ``AwsCrtError.name`` attribute
+  - Optimized ``resubscribe_all()`` to break after first failure per topic (reduces redundant error logs)
+  - Fixed subscription failure tracking to use sets for unique topic counting
+  - Improved code clarity with intermediate variables for complex boolean expressions
+
+Fixed
+-----
+
+- **MQTT Reconnection**: Eliminated duplicate "Connection interrupted" log messages
+  
+  - Removed duplicate logging from ``mqtt_client.py`` (kept in ``mqtt_reconnection.py``)
+
 Version 3.1.4 (2025-10-26)
 ==========================
 
