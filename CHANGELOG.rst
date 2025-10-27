@@ -2,6 +2,14 @@
 Changelog
 =========
 
+Version 4.7.1 (2025-10-27)
+==========================
+
+Changed
+-------
+
+- **Patch Release**: No code changes, updated version format to full semantic versioning
+
 Version 4.7 (2025-10-27)
 ========================
 
