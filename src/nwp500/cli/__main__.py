@@ -9,7 +9,6 @@ import asyncio
 import logging
 import os
 import sys
-from typing import Optional
 
 from nwp500 import NavienAPIClient, NavienAuthClient, __version__
 from nwp500.auth import InvalidCredentialsError
@@ -39,17 +38,15 @@ __license__ = "MIT"
 _logger = logging.getLogger(__name__)
 
 
-async def get_authenticated_client(
-    args: argparse.Namespace,
-) -> Optional[NavienAuthClient]:
+async def async_main(args: argparse.Namespace) -> int:
     """
-    Get an authenticated NavienAuthClient using cached tokens or credentials.
+    Asynchronous main function.
 
     Args:
         args: Parsed command-line arguments
 
     Returns:
-        NavienAuthClient instance or None if authentication fails
+        Exit code (0 for success, 1 for failure)
     """
     # Get credentials
     email = args.email or os.getenv("NAVIEN_EMAIL")
@@ -66,169 +63,146 @@ async def get_authenticated_client(
             "Credentials not found. Please provide --email and --password, "
             "or set NAVIEN_EMAIL and NAVIEN_PASSWORD environment variables."
         )
-        return None
+        return 1
 
     try:
-        # Use the new stored_tokens parameter for token restoration
-        # This will automatically handle token validation and refresh
-        auth_client = NavienAuthClient(email, password, stored_tokens=tokens)
+        # Use async with to properly manage auth client lifecycle
+        async with NavienAuthClient(
+            email, password, stored_tokens=tokens
+        ) as auth_client:
+            # Save refreshed/new tokens after authentication
+            if auth_client.current_tokens and auth_client.user_email:
+                save_tokens(auth_client.current_tokens, auth_client.user_email)
 
-        # Enter the context manager to authenticate/restore session
-        await auth_client.__aenter__()
+            api_client = NavienAPIClient(auth_client=auth_client)
+            _logger.info("Fetching device information...")
+            device = await api_client.get_first_device()
 
-        # Save refreshed/new tokens
-        if auth_client.current_tokens and auth_client.user_email:
-            save_tokens(auth_client.current_tokens, auth_client.user_email)
+            # Save tokens if they were refreshed during API call
+            if auth_client.current_tokens and auth_client.user_email:
+                save_tokens(auth_client.current_tokens, auth_client.user_email)
 
-        return auth_client
+            if not device:
+                _logger.error("No devices found for this account.")
+                return 1
+
+            _logger.info(f"Found device: {device.device_info.device_name}")
+
+            from nwp500 import NavienMqttClient
+
+            mqtt = NavienMqttClient(auth_client)
+            try:
+                await mqtt.connect()
+                _logger.info("MQTT client connected.")
+
+                # Route to appropriate handler based on arguments
+                if args.device_info:
+                    await handle_device_info_request(mqtt, device)
+                elif args.device_feature:
+                    await handle_device_feature_request(mqtt, device)
+                elif args.get_controller_serial:
+                    await handle_get_controller_serial_request(mqtt, device)
+                elif args.power_on:
+                    await handle_power_request(mqtt, device, power_on=True)
+                    if args.status:
+                        _logger.info("Getting updated status after power on...")
+                        await asyncio.sleep(2)
+                        await handle_status_request(mqtt, device)
+                elif args.power_off:
+                    await handle_power_request(mqtt, device, power_on=False)
+                    if args.status:
+                        _logger.info(
+                            "Getting updated status after power off..."
+                        )
+                        await asyncio.sleep(2)
+                        await handle_status_request(mqtt, device)
+                elif args.set_mode:
+                    await handle_set_mode_request(mqtt, device, args.set_mode)
+                    if args.status:
+                        _logger.info(
+                            "Getting updated status after mode change..."
+                        )
+                        await asyncio.sleep(2)
+                        await handle_status_request(mqtt, device)
+                elif args.set_dhw_temp:
+                    await handle_set_dhw_temp_request(
+                        mqtt, device, args.set_dhw_temp
+                    )
+                    if args.status:
+                        _logger.info(
+                            "Getting updated status after temperature change..."
+                        )
+                        await asyncio.sleep(2)
+                        await handle_status_request(mqtt, device)
+                elif args.get_reservations:
+                    await handle_get_reservations_request(mqtt, device)
+                elif args.set_reservations:
+                    await handle_update_reservations_request(
+                        mqtt,
+                        device,
+                        args.set_reservations,
+                        args.reservations_enabled,
+                    )
+                elif args.get_tou:
+                    await handle_get_tou_request(mqtt, device, api_client)
+                elif args.set_tou_enabled:
+                    enabled = args.set_tou_enabled.lower() == "on"
+                    await handle_set_tou_enabled_request(mqtt, device, enabled)
+                    if args.status:
+                        _logger.info(
+                            "Getting updated status after TOU change..."
+                        )
+                        await asyncio.sleep(2)
+                        await handle_status_request(mqtt, device)
+                elif args.get_energy:
+                    if not args.energy_year or not args.energy_months:
+                        _logger.error(
+                            "--energy-year and --energy-months are required "
+                            "for --get-energy"
+                        )
+                        return 1
+                    try:
+                        months = [
+                            int(m.strip())
+                            for m in args.energy_months.split(",")
+                        ]
+                        if not all(1 <= m <= 12 for m in months):
+                            _logger.error("Months must be between 1 and 12")
+                            return 1
+                    except ValueError:
+                        _logger.error(
+                            "Invalid month format. Use comma-separated "
+                            "numbers (e.g., '9' or '8,9,10')"
+                        )
+                        return 1
+                    await handle_get_energy_request(
+                        mqtt, device, args.energy_year, months
+                    )
+                elif args.status_raw:
+                    await handle_status_raw_request(mqtt, device)
+                elif args.status:
+                    await handle_status_request(mqtt, device)
+                else:  # Default to monitor
+                    await handle_monitoring(mqtt, device, args.output)
+
+            except asyncio.CancelledError:
+                _logger.info("Monitoring stopped by user.")
+            finally:
+                _logger.info("Disconnecting MQTT client...")
+                await mqtt.disconnect()
+
+            _logger.info("Cleanup complete.")
+            return 0
 
     except InvalidCredentialsError:
         _logger.error("Invalid email or password.")
-        return None
-    except Exception as e:
-        _logger.error(
-            f"An unexpected error occurred during authentication: {e}"
-        )
-        return None
-
-
-async def async_main(args: argparse.Namespace) -> int:
-    """
-    Asynchronous main function.
-
-    Args:
-        args: Parsed command-line arguments
-
-    Returns:
-        Exit code (0 for success, 1 for failure)
-    """
-    auth_client = await get_authenticated_client(args)
-    if not auth_client:
-        return 1  # Authentication failed
-
-    api_client = None
-    try:
-        api_client = NavienAPIClient(auth_client=auth_client)
-        _logger.info("Fetching device information...")
-        device = await api_client.get_first_device()
-
-        # Save tokens if they were refreshed during API call
-        if auth_client.current_tokens and auth_client.user_email:
-            save_tokens(auth_client.current_tokens, auth_client.user_email)
-
-        if not device:
-            _logger.error("No devices found for this account.")
-            return 1
-
-        _logger.info(f"Found device: {device.device_info.device_name}")
-
-        from nwp500 import NavienMqttClient
-
-        mqtt = NavienMqttClient(auth_client)
-        try:
-            await mqtt.connect()
-            _logger.info("MQTT client connected.")
-
-            # Route to appropriate handler based on arguments
-            if args.device_info:
-                await handle_device_info_request(mqtt, device)
-            elif args.device_feature:
-                await handle_device_feature_request(mqtt, device)
-            elif args.get_controller_serial:
-                await handle_get_controller_serial_request(mqtt, device)
-            elif args.power_on:
-                await handle_power_request(mqtt, device, power_on=True)
-                if args.status:
-                    _logger.info("Getting updated status after power on...")
-                    await asyncio.sleep(2)
-                    await handle_status_request(mqtt, device)
-            elif args.power_off:
-                await handle_power_request(mqtt, device, power_on=False)
-                if args.status:
-                    _logger.info("Getting updated status after power off...")
-                    await asyncio.sleep(2)
-                    await handle_status_request(mqtt, device)
-            elif args.set_mode:
-                await handle_set_mode_request(mqtt, device, args.set_mode)
-                if args.status:
-                    _logger.info("Getting updated status after mode change...")
-                    await asyncio.sleep(2)
-                    await handle_status_request(mqtt, device)
-            elif args.set_dhw_temp:
-                await handle_set_dhw_temp_request(
-                    mqtt, device, args.set_dhw_temp
-                )
-                if args.status:
-                    _logger.info(
-                        "Getting updated status after temperature change..."
-                    )
-                    await asyncio.sleep(2)
-                    await handle_status_request(mqtt, device)
-            elif args.get_reservations:
-                await handle_get_reservations_request(mqtt, device)
-            elif args.set_reservations:
-                await handle_update_reservations_request(
-                    mqtt,
-                    device,
-                    args.set_reservations,
-                    args.reservations_enabled,
-                )
-            elif args.get_tou:
-                await handle_get_tou_request(mqtt, device, api_client)
-            elif args.set_tou_enabled:
-                enabled = args.set_tou_enabled.lower() == "on"
-                await handle_set_tou_enabled_request(mqtt, device, enabled)
-                if args.status:
-                    _logger.info("Getting updated status after TOU change...")
-                    await asyncio.sleep(2)
-                    await handle_status_request(mqtt, device)
-            elif args.get_energy:
-                if not args.energy_year or not args.energy_months:
-                    _logger.error(
-                        "--energy-year and --energy-months are required "
-                        "for --get-energy"
-                    )
-                    return 1
-                try:
-                    months = [
-                        int(m.strip()) for m in args.energy_months.split(",")
-                    ]
-                    if not all(1 <= m <= 12 for m in months):
-                        _logger.error("Months must be between 1 and 12")
-                        return 1
-                except ValueError:
-                    _logger.error(
-                        "Invalid month format. Use comma-separated numbers "
-                        "(e.g., '9' or '8,9,10')"
-                    )
-                    return 1
-                await handle_get_energy_request(
-                    mqtt, device, args.energy_year, months
-                )
-            elif args.status_raw:
-                await handle_status_raw_request(mqtt, device)
-            elif args.status:
-                await handle_status_request(mqtt, device)
-            else:  # Default to monitor
-                await handle_monitoring(mqtt, device, args.output)
-
-        except asyncio.CancelledError:
-            _logger.info("Monitoring stopped by user.")
-        finally:
-            _logger.info("Disconnecting MQTT client...")
-            await mqtt.disconnect()
+        return 1
     except asyncio.CancelledError:
         _logger.info("Operation cancelled by user.")
         return 1
     except Exception as e:
         _logger.error(f"An unexpected error occurred: {e}", exc_info=True)
         return 1
-    finally:
-        # Auth client close will close the underlying aiohttp session
-        # Also call __aexit__ to properly clean up context manager
-        await auth_client.__aexit__(None, None, None)
-        _logger.info("Cleanup complete.")
-    return 0
 
 
 def parse_args(args: list[str]) -> argparse.Namespace:
