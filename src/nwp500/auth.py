@@ -91,17 +91,93 @@ class AuthTokens:
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "AuthTokens":
-        """Create AuthTokens from API response dictionary."""
+        """Create AuthTokens from API response dictionary or stored data.
+
+        Args:
+            data: Dictionary containing token data. Can be from API response
+                 (using camelCase keys) or from stored data (using snake_case
+                 keys from to_dict()).
+
+        Returns:
+            AuthTokens instance
+
+        Example:
+            # From API response
+            >>> tokens = AuthTokens.from_dict({
+            ...     "idToken": "...",
+            ...     "accessToken": "...",
+            ...     "refreshToken": "...",
+            ...     "authenticationExpiresIn": 3600
+            ... })
+
+            # From stored data (after to_dict())
+            >>> stored = tokens.to_dict()
+            >>> restored = AuthTokens.from_dict(stored)
+        """
+
+        # Helper to get value from either camelCase or snake_case key
+        def get_value(
+            camel_key: str, snake_key: str, default: Any = None
+        ) -> Any:
+            """Get value, checking camelCase first, then snake_case."""
+            value = data.get(camel_key)
+            if value is not None and value != "":
+                return value
+            value = data.get(snake_key)
+            if value is not None and value != "":
+                return value
+            return default
+
+        # Support both camelCase (API) and snake_case (stored) keys
         return cls(
-            id_token=data.get("idToken", ""),
-            access_token=data.get("accessToken", ""),
-            refresh_token=data.get("refreshToken", ""),
-            authentication_expires_in=data.get("authenticationExpiresIn", 3600),
-            access_key_id=data.get("accessKeyId"),
-            secret_key=data.get("secretKey"),
-            session_token=data.get("sessionToken"),
-            authorization_expires_in=data.get("authorizationExpiresIn"),
+            id_token=get_value("idToken", "id_token", ""),
+            access_token=get_value("accessToken", "access_token", ""),
+            refresh_token=get_value("refreshToken", "refresh_token", ""),
+            authentication_expires_in=get_value(
+                "authenticationExpiresIn", "authentication_expires_in", 3600
+            ),
+            access_key_id=get_value("accessKeyId", "access_key_id"),
+            secret_key=get_value("secretKey", "secret_key"),
+            session_token=get_value("sessionToken", "session_token"),
+            authorization_expires_in=get_value(
+                "authorizationExpiresIn", "authorization_expires_in"
+            ),
+            issued_at=datetime.fromisoformat(data["issued_at"])
+            if "issued_at" in data
+            else datetime.now(),
         )
+
+    def to_dict(self) -> dict[str, Any]:
+        """Convert AuthTokens to a dictionary for storage.
+
+        Returns a dictionary with all token data including the issued_at
+        timestamp, which is essential for correctly calculating expiration
+        times when restoring tokens.
+
+        Returns:
+            Dictionary with snake_case keys suitable for JSON serialization
+
+        Example:
+            >>> tokens = auth_client.current_tokens
+            >>> stored_data = tokens.to_dict()
+            >>> # Save to file/database
+            >>> import json
+            >>> json.dump(stored_data, file)
+            >>>
+            >>> # Later, restore tokens
+            >>> restored_tokens = AuthTokens.from_dict(json.load(file))
+        """
+        return {
+            "id_token": self.id_token,
+            "access_token": self.access_token,
+            "refresh_token": self.refresh_token,
+            "authentication_expires_in": self.authentication_expires_in,
+            "access_key_id": self.access_key_id,
+            "secret_key": self.secret_key,
+            "session_token": self.session_token,
+            "authorization_expires_in": self.authorization_expires_in,
+            "issued_at": self.issued_at.isoformat(),
+        }
 
     @property
     def expires_at(self) -> datetime:
@@ -236,7 +312,7 @@ class NavienAuthClient:
     - AWS credentials (if provided by API)
 
     Authentication is performed automatically when entering the async context
-    manager.
+    manager, unless valid stored tokens are provided.
 
     Example:
         >>> async with NavienAuthClient(user_id="user@example.com",
@@ -251,6 +327,16 @@ class NavienAuthClient:
         ...     if client.current_tokens.is_expired:
         ...         new_tokens = await
         client.refresh_token(client.current_tokens.refresh_token)
+
+        Restore session from stored tokens:
+        >>> stored_tokens = AuthTokens.from_dict(saved_data)
+        >>> async with NavienAuthClient(
+        ...     user_id="user@example.com",
+        ...     password="password",
+        ...     stored_tokens=stored_tokens
+        ... ) as client:
+        ...     # Authentication skipped if tokens are still valid
+        ...     print(f"Access token: {client.current_tokens.access_token}")
     """
 
     def __init__(
@@ -260,6 +346,7 @@ class NavienAuthClient:
         base_url: str = API_BASE_URL,
         session: Optional[aiohttp.ClientSession] = None,
         timeout: int = 30,
+        stored_tokens: Optional[AuthTokens] = None,
     ):
         """
         Initialize the authentication client.
@@ -270,10 +357,13 @@ class NavienAuthClient:
             base_url: Base URL for the API (default: official Navien API)
             session: Optional aiohttp ClientSession to use
             timeout: Request timeout in seconds
+            stored_tokens: Previously saved tokens to restore session.
+                          If provided and valid, skips initial sign_in.
 
         Note:
             Authentication is performed automatically when entering the
-            async context manager (using async with statement).
+            async context manager (using async with statement), unless
+            valid stored_tokens are provided.
         """
         self.base_url = base_url.rstrip("/")
         self._session = session
@@ -288,13 +378,44 @@ class NavienAuthClient:
         self._auth_response: Optional[AuthenticationResponse] = None
         self._user_email: Optional[str] = None
 
+        # Restore tokens if provided
+        if stored_tokens:
+            # Create a minimal AuthenticationResponse with stored tokens
+            # UserInfo will be populated on first API call if needed
+            self._auth_response = AuthenticationResponse(
+                user_info=UserInfo(
+                    user_type="",
+                    user_first_name="",
+                    user_last_name="",
+                    user_status="",
+                    user_seq=0,
+                ),
+                tokens=stored_tokens,
+            )
+            self._user_email = user_id
+
     async def __aenter__(self) -> "NavienAuthClient":
         """Async context manager entry."""
         if self._owned_session:
             self._session = aiohttp.ClientSession(timeout=self.timeout)
 
-        # Automatically authenticate
-        await self.sign_in(self._user_id, self._password)
+        # Check if we have valid stored tokens
+        if self._auth_response and self._auth_response.tokens:
+            tokens = self._auth_response.tokens
+            # If tokens are expired, refresh or re-authenticate
+            if tokens.are_aws_credentials_expired:
+                _logger.info(
+                    "Stored AWS credentials expired, re-authenticating..."
+                )
+                await self.sign_in(self._user_id, self._password)
+            elif tokens.is_expired:
+                _logger.info("Stored JWT token expired, refreshing...")
+                await self.refresh_token(tokens.refresh_token)
+            else:
+                _logger.info("Using stored tokens, skipping authentication")
+        else:
+            # No stored tokens, perform full authentication
+            await self.sign_in(self._user_id, self._password)
 
         return self
 

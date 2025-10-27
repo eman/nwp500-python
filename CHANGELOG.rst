@@ -2,6 +2,25 @@
 Changelog
 =========
 
+Version 4.8.0 (2025-10-27)
+==========================
+
+Added
+-----
+
+- **Token Restoration Support**: Enable session persistence across application restarts
+
+  - Added ``stored_tokens`` parameter to ``NavienAuthClient.__init__()`` for restoring saved tokens
+  - Added ``AuthTokens.to_dict()`` method for serializing tokens (includes ``issued_at`` timestamp)
+  - Enhanced ``AuthTokens.from_dict()`` to support both API responses (camelCase) and stored data (snake_case)
+  - Modified ``NavienAuthClient.__aenter__()`` to skip authentication when valid stored tokens are provided
+  - Automatically refreshes expired JWT tokens or re-authenticates if AWS credentials expired
+  - Added 7 new tests for token serialization, deserialization, and restoration flows
+  - Added ``examples/token_restoration_example.py`` demonstrating save/restore workflow
+  - Updated authentication documentation with token restoration guide
+
+- **Benefits**: Reduces API load, improves startup time, prevents rate limiting for frequently restarting applications (e.g., Home Assistant)
+
 Version 4.7.1 (2025-10-27)
 ==========================
 

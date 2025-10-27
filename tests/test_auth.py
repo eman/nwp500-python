@@ -835,3 +835,269 @@ def test_aws_credentials_preservation_in_token_refresh():
     assert new_tokens.session_token == "old_session"
     assert new_tokens.authorization_expires_in == 3600
     assert new_tokens._aws_expires_at == old_tokens._aws_expires_at
+
+
+# Test token restoration functionality
+def test_auth_tokens_to_dict():
+    """Test AuthTokens.to_dict serialization."""
+    issued_at = datetime.now()
+    tokens = AuthTokens(
+        id_token="test_id",
+        access_token="test_access",
+        refresh_token="test_refresh",
+        authentication_expires_in=3600,
+        access_key_id="test_key",
+        secret_key="test_secret",
+        session_token="test_session",
+        authorization_expires_in=1800,
+        issued_at=issued_at,
+    )
+
+    result = tokens.to_dict()
+
+    assert result["id_token"] == "test_id"
+    assert result["access_token"] == "test_access"
+    assert result["refresh_token"] == "test_refresh"
+    assert result["authentication_expires_in"] == 3600
+    assert result["access_key_id"] == "test_key"
+    assert result["secret_key"] == "test_secret"
+    assert result["session_token"] == "test_session"
+    assert result["authorization_expires_in"] == 1800
+    assert result["issued_at"] == issued_at.isoformat()
+
+
+def test_auth_tokens_from_dict_with_issued_at():
+    """Test AuthTokens.from_dict with issued_at timestamp."""
+    issued_at = datetime.now() - timedelta(seconds=1800)
+    data = {
+        "id_token": "test_id",
+        "access_token": "test_access",
+        "refresh_token": "test_refresh",
+        "authentication_expires_in": 3600,
+        "access_key_id": "test_key",
+        "secret_key": "test_secret",
+        "session_token": "test_session",
+        "authorization_expires_in": 1800,
+        "issued_at": issued_at.isoformat(),
+    }
+
+    tokens = AuthTokens.from_dict(data)
+
+    assert tokens.id_token == "test_id"
+    assert tokens.access_token == "test_access"
+    assert tokens.refresh_token == "test_refresh"
+    assert tokens.authentication_expires_in == 3600
+    assert tokens.access_key_id == "test_key"
+    assert tokens.secret_key == "test_secret"
+    assert tokens.session_token == "test_session"
+    assert tokens.authorization_expires_in == 1800
+    # Check that issued_at was correctly restored
+    assert abs((tokens.issued_at - issued_at).total_seconds()) < 1
+
+
+def test_auth_tokens_serialization_roundtrip():
+    """Test that tokens can be serialized and deserialized without data loss."""
+    issued_at = datetime.now() - timedelta(seconds=1800)
+    original = AuthTokens(
+        id_token="test_id",
+        access_token="test_access",
+        refresh_token="test_refresh",
+        authentication_expires_in=3600,
+        access_key_id="test_key",
+        secret_key="test_secret",
+        session_token="test_session",
+        authorization_expires_in=1800,
+        issued_at=issued_at,
+    )
+
+    # Serialize and deserialize
+    serialized = original.to_dict()
+    restored = AuthTokens.from_dict(serialized)
+
+    # Verify all fields match
+    assert restored.id_token == original.id_token
+    assert restored.access_token == original.access_token
+    assert restored.refresh_token == original.refresh_token
+    assert (
+        restored.authentication_expires_in == original.authentication_expires_in
+    )
+    assert restored.access_key_id == original.access_key_id
+    assert restored.secret_key == original.secret_key
+    assert restored.session_token == original.session_token
+    assert (
+        restored.authorization_expires_in == original.authorization_expires_in
+    )
+    # Verify issued_at is preserved (critical for expiration calculations)
+    assert abs((restored.issued_at - original.issued_at).total_seconds()) < 1
+    # Verify expiration calculations are the same
+    assert abs((restored.expires_at - original.expires_at).total_seconds()) < 1
+    assert restored.is_expired == original.is_expired
+
+
+def test_auth_tokens_from_dict_with_empty_strings():
+    """Test AuthTokens.from_dict handles empty strings in camelCase."""
+    # Simulate API response with empty optional fields (camelCase)
+    # Should fall back to snake_case alternatives
+    data = {
+        "idToken": "test_id",
+        "accessToken": "",  # Empty string - should check snake_case
+        "refreshToken": "test_refresh",
+        "authenticationExpiresIn": 3600,
+        "accessKeyId": "",  # Empty string - should check snake_case
+        "secretKey": None,  # None - should check snake_case
+        "sessionToken": "test_session",
+        # Provide values in snake_case as fallback
+        "access_token": "fallback_access",
+        "access_key_id": "fallback_key",
+        "secret_key": "fallback_secret",
+    }
+
+    tokens = AuthTokens.from_dict(data)
+
+    assert tokens.id_token == "test_id"
+    assert tokens.access_token == "fallback_access"  # Should use snake_case
+    assert tokens.refresh_token == "test_refresh"
+    assert tokens.authentication_expires_in == 3600
+    assert tokens.access_key_id == "fallback_key"  # Should use snake_case
+    assert tokens.secret_key == "fallback_secret"  # Should use snake_case
+    assert tokens.session_token == "test_session"
+
+
+def test_navien_auth_client_initialization_with_stored_tokens():
+    """Test NavienAuthClient initialization with stored tokens."""
+    stored_tokens = AuthTokens(
+        id_token="stored_id",
+        access_token="stored_access",
+        refresh_token="stored_refresh",
+        authentication_expires_in=3600,
+        access_key_id="stored_key",
+        secret_key="stored_secret",
+        session_token="stored_session",
+        authorization_expires_in=1800,
+    )
+
+    client = NavienAuthClient(
+        user_id="test@example.com",
+        password="test_password",
+        stored_tokens=stored_tokens,
+    )
+
+    # Should have auth response set up with stored tokens
+    assert client.is_authenticated is True
+    assert client.current_tokens == stored_tokens
+    assert client.user_email == "test@example.com"
+
+
+@pytest.mark.asyncio
+async def test_context_manager_with_valid_stored_tokens():
+    """Test async context manager skips auth with valid stored tokens."""
+    stored_tokens = AuthTokens(
+        id_token="stored_id",
+        access_token="stored_access",
+        refresh_token="stored_refresh",
+        authentication_expires_in=3600,  # Valid for 1 hour
+        access_key_id="stored_key",
+        secret_key="stored_secret",
+        session_token="stored_session",
+        authorization_expires_in=3600,  # AWS creds valid for 1 hour
+    )
+
+    with patch.object(
+        NavienAuthClient, "sign_in", new_callable=AsyncMock
+    ) as mock_sign_in:
+        async with NavienAuthClient(
+            user_id="test@example.com",
+            password="test_password",
+            stored_tokens=stored_tokens,
+        ) as client:
+            # Should NOT have called sign_in since tokens are valid
+            mock_sign_in.assert_not_called()
+            assert client.current_tokens == stored_tokens
+            assert client._session is not None
+
+
+@pytest.mark.asyncio
+async def test_context_manager_with_expired_jwt_stored_tokens():
+    """Test async context manager with expired JWT refreshes tokens."""
+    old_time = datetime.now() - timedelta(seconds=3900)  # 65 minutes ago
+    stored_tokens = AuthTokens(
+        id_token="stored_id",
+        access_token="stored_access",
+        refresh_token="stored_refresh",
+        authentication_expires_in=3600,  # Expired 5 minutes ago
+        issued_at=old_time,
+    )
+
+    new_tokens = AuthTokens(
+        id_token="new_id",
+        access_token="new_access",
+        refresh_token="new_refresh",
+        authentication_expires_in=3600,
+    )
+
+    with patch.object(
+        NavienAuthClient, "refresh_token", new_callable=AsyncMock
+    ) as mock_refresh:
+        mock_refresh.return_value = new_tokens
+
+        async with NavienAuthClient(
+            user_id="test@example.com",
+            password="test_password",
+            stored_tokens=stored_tokens,
+        ) as client:
+            # Should have called refresh_token
+            mock_refresh.assert_called_once_with("stored_refresh")
+            assert client._session is not None
+
+
+@pytest.mark.asyncio
+async def test_context_manager_with_expired_aws_credentials():
+    """Test async context manager re-authenticates on AWS creds expiry."""
+    old_time = datetime.now() - timedelta(seconds=3900)  # 65 minutes ago
+    stored_tokens = AuthTokens(
+        id_token="stored_id",
+        access_token="stored_access",
+        refresh_token="stored_refresh",
+        authentication_expires_in=7200,  # JWT still valid for 55 minutes
+        access_key_id="stored_key",
+        secret_key="stored_secret",
+        session_token="stored_session",
+        authorization_expires_in=3600,  # AWS creds expired 5 minutes ago
+        issued_at=old_time,
+    )
+
+    new_tokens = AuthTokens(
+        id_token="new_id",
+        access_token="new_access",
+        refresh_token="new_refresh",
+        authentication_expires_in=3600,
+        access_key_id="new_key",
+        secret_key="new_secret",
+        session_token="new_session",
+        authorization_expires_in=3600,
+    )
+
+    with patch.object(
+        NavienAuthClient, "sign_in", new_callable=AsyncMock
+    ) as mock_sign_in:
+        mock_sign_in.return_value = AuthenticationResponse(
+            user_info=UserInfo(
+                user_type="test",
+                user_first_name="Test",
+                user_last_name="User",
+                user_status="active",
+                user_seq=1,
+            ),
+            tokens=new_tokens,
+        )
+
+        async with NavienAuthClient(
+            user_id="test@example.com",
+            password="test_password",
+            stored_tokens=stored_tokens,
+        ) as client:
+            # Should have called sign_in due to expired AWS credentials
+            mock_sign_in.assert_called_once_with(
+                "test@example.com", "test_password"
+            )
+            assert client._session is not None
