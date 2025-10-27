@@ -186,7 +186,7 @@ class MqttPeriodicRequestManager:
                         f"for {redacted_device_id}"
                     )
                     break
-                except Exception as e:
+                except (AwsCrtError, RuntimeError) as e:
                     # Handle clean session cancellation gracefully (expected
                     # during reconnection)
                     # Check exception type and name attribute for proper error

@@ -43,6 +43,14 @@ Report the results of these checks in your final summary.
 - **MQTT topics**: `cmd/{deviceType}/{deviceId}/ctrl` for control, `cmd/{deviceType}/{deviceId}/st` for status
 - **Command queuing**: Commands sent while disconnected are queued and sent when reconnected
 - **No base64 encoding/decoding** of MQTT payloads; all payloads are JSON-encoded/decoded
+- **Exception handling**: Use specific exception types instead of catch-all `except Exception`. Common types:
+  - `AwsCrtError` - AWS IoT Core/MQTT errors
+  - `AuthenticationError`, `TokenRefreshError` - Authentication errors
+  - `RuntimeError` - Runtime state errors (not connected, etc.)
+  - `ValueError` - Invalid values or parameters
+  - `TypeError`, `AttributeError`, `KeyError` - Data structure errors
+  - `asyncio.CancelledError` - Task cancellation
+  - Only catch exceptions you can handle; let unexpected exceptions propagate
 
 ## Integration Points
 - **AWS IoT Core**: MQTT client uses `awscrt` and `awsiot` libraries for connection and messaging

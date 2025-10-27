@@ -252,7 +252,7 @@ class EventEmitter:
                     listeners_to_remove.append(listener)
                     self._once_callbacks.discard((event, listener.callback))
 
-            except Exception as e:
+            except (TypeError, RuntimeError, AttributeError) as e:
                 _logger.error(
                     f"Error in '{event}' event handler: {e}",
                     exc_info=True,

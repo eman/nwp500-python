@@ -11,6 +11,8 @@ import logging
 from collections.abc import Awaitable
 from typing import TYPE_CHECKING, Any, Callable, Optional
 
+from awscrt.exceptions import AwsCrtError
+
 if TYPE_CHECKING:
     from .mqtt_utils import MqttConnectionConfig
 
@@ -217,7 +219,7 @@ class MqttReconnectionHandler:
                                 "Successfully reconnected via deep reconnection"
                             )
                             break
-                    except Exception as e:
+                    except (AwsCrtError, RuntimeError, ValueError) as e:
                         _logger.warning(
                             f"Deep reconnection failed: {e}. Will retry..."
                         )
@@ -231,7 +233,7 @@ class MqttReconnectionHandler:
                                 "quick reconnection"
                             )
                             break
-                    except Exception as e:
+                    except (AwsCrtError, RuntimeError) as e:
                         _logger.warning(
                             f"Quick reconnection failed: {e}. Will retry..."
                         )
@@ -239,7 +241,7 @@ class MqttReconnectionHandler:
             except asyncio.CancelledError:
                 _logger.info("Reconnection task cancelled")
                 break
-            except Exception as e:
+            except (AwsCrtError, RuntimeError) as e:
                 _logger.error(
                     f"Error during reconnection attempt: {e}", exc_info=True
                 )
@@ -261,7 +263,7 @@ class MqttReconnectionHandler:
                     await self._emit_event(
                         "reconnection_failed", self._reconnect_attempts
                     )
-                except Exception as e:
+                except (TypeError, RuntimeError) as e:
                     _logger.error(
                         f"Error emitting reconnection_failed event: {e}"
                     )

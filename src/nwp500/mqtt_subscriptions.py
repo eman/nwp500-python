@@ -15,6 +15,7 @@ import logging
 from typing import Any, Callable, Optional
 
 from awscrt import mqtt
+from awscrt.exceptions import AwsCrtError
 
 from .events import EventEmitter
 from .models import Device, DeviceFeature, DeviceStatus, EnergyUsageResponse
@@ -117,12 +118,12 @@ class MqttSubscriptionManager:
                     for handler in handlers:
                         try:
                             handler(topic, message)
-                        except Exception as e:
+                        except (TypeError, AttributeError, KeyError) as e:
                             _logger.error(f"Error in message handler: {e}")
 
         except json.JSONDecodeError as e:
             _logger.error(f"Failed to parse message payload: {e}")
-        except Exception as e:
+        except (AttributeError, KeyError, TypeError) as e:
             _logger.error(f"Error processing message: {e}")
 
     def _topic_matches_pattern(self, topic: str, pattern: str) -> bool:
@@ -230,7 +231,7 @@ class MqttSubscriptionManager:
 
             return int(packet_id)
 
-        except Exception as e:
+        except (AwsCrtError, RuntimeError) as e:
             _logger.error(
                 f"Failed to subscribe to '{redact_topic(topic)}': {e}"
             )
@@ -268,7 +269,7 @@ class MqttSubscriptionManager:
 
             return int(packet_id)
 
-        except Exception as e:
+        except (AwsCrtError, RuntimeError) as e:
             _logger.error(
                 f"Failed to unsubscribe from '{redact_topic(topic)}': {e}"
             )
@@ -321,7 +322,7 @@ class MqttSubscriptionManager:
             for handler in handlers:
                 try:
                     await self.subscribe(topic, handler, qos)
-                except Exception as e:
+                except (AwsCrtError, RuntimeError) as e:
                     _logger.error(
                         f"Failed to re-subscribe to "
                         f"'{redact_topic(topic)}': {e}"
@@ -469,7 +470,7 @@ class MqttSubscriptionManager:
                 _logger.warning(
                     f"Invalid value in status message: {e}", exc_info=True
                 )
-            except Exception as e:
+            except (TypeError, AttributeError) as e:
                 _logger.error(
                     f"Error parsing device status: {e}", exc_info=True
                 )
@@ -556,7 +557,7 @@ class MqttSubscriptionManager:
                 await self._event_emitter.emit("error_cleared", prev.errorCode)
                 _logger.info(f"Error cleared: {prev.errorCode}")
 
-        except Exception as e:
+        except (TypeError, AttributeError, RuntimeError) as e:
             _logger.error(f"Error detecting state changes: {e}", exc_info=True)
         finally:
             # Always update previous status
@@ -658,7 +659,7 @@ class MqttSubscriptionManager:
                 _logger.warning(
                     f"Invalid value in feature message: {e}", exc_info=True
                 )
-            except Exception as e:
+            except (TypeError, AttributeError) as e:
                 _logger.error(
                     f"Error parsing device feature: {e}", exc_info=True
                 )
@@ -748,7 +749,7 @@ class MqttSubscriptionManager:
                 _logger.warning(
                     "Failed to parse energy usage message - missing key: %s", e
                 )
-            except Exception as e:
+            except (TypeError, ValueError, AttributeError) as e:
                 _logger.error(
                     "Error in energy usage message handler: %s",
                     e,

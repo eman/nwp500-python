@@ -12,6 +12,7 @@ import logging
 from typing import TYPE_CHECKING, Any, Callable, Optional, Union
 
 from awscrt import mqtt
+from awscrt.exceptions import AwsCrtError
 from awsiot import mqtt_connection_builder
 
 if TYPE_CHECKING:
@@ -147,7 +148,7 @@ class MqttConnection:
 
             return True
 
-        except Exception as e:
+        except (AwsCrtError, RuntimeError, ValueError) as e:
             _logger.error(f"Failed to connect: {e}")
             raise
 
@@ -195,7 +196,7 @@ class MqttConnection:
             self._connected = False
             self._connection = None
             _logger.info("Disconnected successfully")
-        except Exception as e:
+        except (AwsCrtError, RuntimeError) as e:
             _logger.error(f"Error during disconnect: {e}")
             raise
 
