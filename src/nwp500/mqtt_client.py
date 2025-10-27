@@ -19,7 +19,11 @@ from typing import Any, Callable, Optional
 from awscrt import mqtt
 from awscrt.exceptions import AwsCrtError
 
-from .auth import NavienAuthClient
+from .auth import (
+    AuthenticationError,
+    NavienAuthClient,
+    TokenRefreshError,
+)
 from .events import EventEmitter
 from .models import (
     Device,
@@ -205,7 +209,8 @@ class NavienMqttClient(EventEmitter):
         # Schedule the coroutine in the stored loop using thread-safe method
         try:
             asyncio.run_coroutine_threadsafe(coro, self._loop)
-        except Exception as e:
+        except RuntimeError as e:
+            # Event loop is closed or not running
             _logger.error(f"Failed to schedule coroutine: {e}", exc_info=True)
 
     def _on_connection_interrupted_internal(
@@ -218,7 +223,6 @@ class NavienMqttClient(EventEmitter):
             error: Error that caused the interruption
             **kwargs: Forward-compatibility kwargs from AWS SDK
         """
-        _logger.warning(f"Connection interrupted: {error}")
         self._connected = False
 
         # Emit event
@@ -232,7 +236,7 @@ class NavienMqttClient(EventEmitter):
                 # Fallback for callbacks expecting no arguments
                 try:
                     self._on_connection_interrupted()  # type: ignore
-                except Exception as e:
+                except (TypeError, AttributeError) as e:
                     _logger.error(
                         f"Error in connection_interrupted callback: {e}"
                     )
@@ -339,10 +343,111 @@ class NavienMqttClient(EventEmitter):
                     "No connection manager available for reconnection"
                 )
 
-        except Exception as e:
+        except (AwsCrtError, AuthenticationError, RuntimeError) as e:
             _logger.error(
                 f"Error during active reconnection: {e}", exc_info=True
             )
+            raise
+
+    async def _deep_reconnect(self) -> None:
+        """
+        Perform a deep reconnection by completely rebuilding the connection.
+
+        This method is called after multiple quick reconnection failures.
+        It performs a full teardown and rebuild:
+        - Disconnects existing connection
+        - Refreshes authentication tokens
+        - Creates new connection manager
+        - Re-establishes all subscriptions
+
+        This is more expensive but can recover from issues that a simple
+        reconnection cannot fix (e.g., stale credentials, corrupted state).
+        """
+        if self._connected:
+            _logger.debug("Already connected, skipping deep reconnection")
+            return
+
+        _logger.warning(
+            "Performing deep reconnection (full rebuild)... "
+            "This may take longer."
+        )
+
+        try:
+            # Step 1: Clean up existing connection if any
+            if self._connection_manager:
+                _logger.debug("Cleaning up old connection...")
+                try:
+                    if self._connection_manager.is_connected:
+                        await self._connection_manager.disconnect()
+                except (AwsCrtError, RuntimeError) as e:
+                    # Expected: connection already dead or in bad state
+                    _logger.debug(f"Error during cleanup: {e} (expected)")
+
+            # Step 2: Force token refresh to get fresh AWS credentials
+            _logger.debug("Refreshing authentication tokens...")
+            try:
+                # Use the stored refresh token from current tokens
+                current_tokens = self._auth_client.current_tokens
+                if current_tokens and current_tokens.refresh_token:
+                    await self._auth_client.refresh_token(
+                        current_tokens.refresh_token
+                    )
+                else:
+                    _logger.warning("No refresh token available")
+                    raise ValueError("No refresh token available for refresh")
+            except (TokenRefreshError, ValueError, AuthenticationError) as e:
+                # If refresh fails, try full re-authentication with stored
+                # credentials
+                if self._auth_client.has_stored_credentials:
+                    _logger.warning(
+                        f"Token refresh failed: {e}. Attempting full "
+                        "re-authentication..."
+                    )
+                    await self._auth_client.re_authenticate()
+                else:
+                    _logger.error(
+                        "Cannot re-authenticate: no stored credentials"
+                    )
+                    raise
+
+            # Step 3: Create completely new connection manager
+            _logger.debug("Creating new connection manager...")
+            self._connection_manager = MqttConnection(
+                config=self.config,
+                auth_client=self._auth_client,
+                on_connection_interrupted=self._on_connection_interrupted_internal,
+                on_connection_resumed=self._on_connection_resumed_internal,
+            )
+
+            # Step 4: Attempt connection
+            success = await self._connection_manager.connect()
+
+            if success:
+                # Update connection references
+                self._connection = self._connection_manager.connection
+                self._connected = True
+
+                # Step 5: Re-establish subscriptions
+                if self._subscription_manager and self._connection:
+                    _logger.debug("Re-establishing subscriptions...")
+                    self._subscription_manager.update_connection(
+                        self._connection
+                    )
+                    await self._subscription_manager.resubscribe_all()
+
+                _logger.info(
+                    "Deep reconnection successful - fully rebuilt connection"
+                )
+            else:
+                _logger.error("Deep reconnection failed to connect")
+
+        except (
+            AwsCrtError,
+            AuthenticationError,
+            RuntimeError,
+            ValueError,
+        ) as e:
+            _logger.error(f"Error during deep reconnection: {e}", exc_info=True)
             raise
 
     async def connect(self) -> bool:
@@ -394,6 +499,7 @@ class NavienMqttClient(EventEmitter):
                     is_connected_func=lambda: self._connected,
                     schedule_coroutine_func=self._schedule_coroutine,
                     reconnect_func=self._active_reconnect,
+                    deep_reconnect_func=self._deep_reconnect,
                     emit_event_func=self.emit,
                 )
                 self._reconnection_handler.enable()
@@ -428,7 +534,12 @@ class NavienMqttClient(EventEmitter):
 
             return False
 
-        except Exception as e:
+        except (
+            AwsCrtError,
+            AuthenticationError,
+            RuntimeError,
+            ValueError,
+        ) as e:
             _logger.error(f"Failed to connect: {e}")
             raise
 
@@ -473,7 +584,7 @@ class NavienMqttClient(EventEmitter):
             self._connection = None
 
             _logger.info("Disconnected successfully")
-        except Exception as e:
+        except (AwsCrtError, RuntimeError) as e:
             _logger.error(f"Error during disconnect: {e}")
             raise
 
@@ -493,7 +604,7 @@ class NavienMqttClient(EventEmitter):
 
         except json.JSONDecodeError as e:
             _logger.error(f"Failed to parse message payload: {e}")
-        except Exception as e:
+        except (AttributeError, KeyError, TypeError) as e:
             _logger.error(f"Error processing message: {e}")
 
     def _topic_matches_pattern(self, topic: str, pattern: str) -> bool:
@@ -618,12 +729,11 @@ class NavienMqttClient(EventEmitter):
 
         try:
             return await self._connection_manager.publish(topic, payload, qos)
-        except Exception as e:
+        except AwsCrtError as e:
             # Handle clean session cancellation gracefully
-            # Check exception type and name attribute for proper
-            # error identification
+            # Safely check e.name attribute (may not exist or be None)
             if (
-                isinstance(e, AwsCrtError)
+                hasattr(e, "name")
                 and e.name == "AWS_ERROR_MQTT_CANCELLED_FOR_CLEAN_SESSION"
             ):
                 _logger.warning(
@@ -641,9 +751,9 @@ class NavienMqttClient(EventEmitter):
                 raise RuntimeError(
                     "Publish cancelled due to clean session and "
                     "command queue is disabled"
-                )
+                ) from e
 
-            # Note: redact_topic is already used elsewhere in the file
+            # Other AWS CRT errors
             _logger.error(f"Failed to publish to topic: {e}")
             raise
 

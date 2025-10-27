@@ -11,6 +11,8 @@ import logging
 from collections.abc import Awaitable
 from typing import TYPE_CHECKING, Any, Callable, Optional
 
+from awscrt.exceptions import AwsCrtError
+
 if TYPE_CHECKING:
     from .mqtt_utils import MqttConnectionConfig
 
@@ -35,6 +37,7 @@ class MqttReconnectionHandler:
         is_connected_func: Callable[[], bool],
         schedule_coroutine_func: Callable[[Any], None],
         reconnect_func: Callable[[], Awaitable[None]],
+        deep_reconnect_func: Optional[Callable[[], Awaitable[None]]] = None,
         emit_event_func: Optional[Callable[..., Awaitable[Any]]] = None,
     ):
         """
@@ -46,6 +49,8 @@ class MqttReconnectionHandler:
             schedule_coroutine_func: Function to schedule coroutines from any
             thread
             reconnect_func: Async function to trigger active reconnection
+            deep_reconnect_func: Optional async function to trigger deep
+                reconnection (full rebuild)
             emit_event_func: Optional async function to emit events
                 (e.g., EventEmitter.emit)
         """
@@ -53,6 +58,7 @@ class MqttReconnectionHandler:
         self._is_connected_func = is_connected_func
         self._schedule_coroutine = schedule_coroutine_func
         self._reconnect_func = reconnect_func
+        self._deep_reconnect_func = deep_reconnect_func
         self._emit_event = emit_event_func
 
         self._reconnect_attempts = 0
@@ -135,14 +141,37 @@ class MqttReconnectionHandler:
         Attempt to reconnect with exponential backoff.
 
         This method is called automatically when connection is interrupted
-        if auto_reconnect is enabled.
+        if auto_reconnect is enabled. Supports unlimited retries when
+        max_reconnect_attempts is -1.
+
+        Uses a two-tier strategy:
+        - Quick reconnects (attempts 1-N): Fast reconnection with existing setup
+        - Deep reconnects (attempts N+): Full rebuild including token refresh
         """
+        unlimited_retries = self.config.max_reconnect_attempts < 0
+
         while (
             not self._is_connected_func()
             and not self._manual_disconnect
-            and self._reconnect_attempts < self.config.max_reconnect_attempts
+            and (
+                unlimited_retries
+                or self._reconnect_attempts < self.config.max_reconnect_attempts
+            )
         ):
             self._reconnect_attempts += 1
+
+            # Determine if we should do a deep reconnection
+            has_deep_reconnect = self._deep_reconnect_func is not None
+            is_at_threshold = (
+                self._reconnect_attempts >= self.config.deep_reconnect_threshold
+            )
+            is_threshold_multiple = (
+                self._reconnect_attempts % self.config.deep_reconnect_threshold
+                == 0
+            )
+            use_deep_reconnect = (
+                has_deep_reconnect and is_at_threshold and is_threshold_multiple
+            )
 
             # Calculate delay with exponential backoff
             delay = min(
@@ -154,12 +183,21 @@ class MqttReconnectionHandler:
                 self.config.max_reconnect_delay,
             )
 
-            _logger.info(
-                "Reconnection attempt %d/%d in %.1f seconds...",
-                self._reconnect_attempts,
-                self.config.max_reconnect_attempts,
-                delay,
-            )
+            if unlimited_retries:
+                reconnect_type = "deep" if use_deep_reconnect else "quick"
+                _logger.info(
+                    "Reconnection attempt %d (%s) in %.1f seconds...",
+                    self._reconnect_attempts,
+                    reconnect_type,
+                    delay,
+                )
+            else:
+                _logger.info(
+                    "Reconnection attempt %d/%d in %.1f seconds...",
+                    self._reconnect_attempts,
+                    self.config.max_reconnect_attempts,
+                    delay,
+                )
 
             try:
                 await asyncio.sleep(delay)
@@ -171,30 +209,50 @@ class MqttReconnectionHandler:
                     )
                     break
 
-                # Trigger active reconnection
-                _logger.info("Triggering active reconnection...")
-                try:
-                    await self._reconnect_func()
-                    if self._is_connected_func():
-                        _logger.info("Successfully reconnected")
-                        break
-                except Exception as e:
-                    _logger.warning(
-                        f"Active reconnection failed: {e}. "
-                        "Will retry if attempts remain."
+                # Trigger appropriate reconnection type
+                if use_deep_reconnect and self._deep_reconnect_func is not None:
+                    _logger.info(
+                        "Triggering deep reconnection "
+                        "(full rebuild with token refresh)..."
                     )
+                    try:
+                        await self._deep_reconnect_func()
+                        if self._is_connected_func():
+                            _logger.info(
+                                "Successfully reconnected via deep reconnection"
+                            )
+                            break
+                    except (AwsCrtError, RuntimeError, ValueError) as e:
+                        _logger.warning(
+                            f"Deep reconnection failed: {e}. Will retry..."
+                        )
+                else:
+                    _logger.info("Triggering quick reconnection...")
+                    try:
+                        await self._reconnect_func()
+                        if self._is_connected_func():
+                            _logger.info(
+                                "Successfully reconnected via "
+                                "quick reconnection"
+                            )
+                            break
+                    except (AwsCrtError, RuntimeError) as e:
+                        _logger.warning(
+                            f"Quick reconnection failed: {e}. Will retry..."
+                        )
 
             except asyncio.CancelledError:
                 _logger.info("Reconnection task cancelled")
                 break
-            except Exception as e:
+            except (AwsCrtError, RuntimeError) as e:
                 _logger.error(
                     f"Error during reconnection attempt: {e}", exc_info=True
                 )
 
-        # Check final state
+        # Check final state (only if not unlimited retries)
         if (
-            self._reconnect_attempts >= self.config.max_reconnect_attempts
+            not unlimited_retries
+            and self._reconnect_attempts >= self.config.max_reconnect_attempts
             and not self._is_connected_func()
         ):
             _logger.error(
@@ -208,7 +266,7 @@ class MqttReconnectionHandler:
                     await self._emit_event(
                         "reconnection_failed", self._reconnect_attempts
                     )
-                except Exception as e:
+                except (TypeError, RuntimeError) as e:
                     _logger.error(
                         f"Error emitting reconnection_failed event: {e}"
                     )

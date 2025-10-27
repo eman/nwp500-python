@@ -471,6 +471,34 @@ class NavienAuthClient:
             _logger.error(f"Failed to parse refresh response: {e}")
             raise TokenRefreshError(f"Invalid response format: {str(e)}")
 
+    async def re_authenticate(self) -> AuthenticationResponse:
+        """
+        Re-authenticate using stored credentials.
+
+        This is a convenience method that uses the stored user_id and password
+        from initialization to perform a fresh sign-in. Useful for recovering
+        from expired tokens or connection issues.
+
+        Returns:
+            AuthenticationResponse with fresh tokens and user info
+
+        Raises:
+            ValueError: If stored credentials are not available
+            AuthenticationError: If authentication fails
+
+        Example:
+            >>> client = NavienAuthClient(email, password)
+            >>> await client.re_authenticate()  # Uses stored credentials
+        """
+        if not self.has_stored_credentials:
+            raise ValueError(
+                "No stored credentials available for re-authentication. "
+                "Credentials must be provided during initialization."
+            )
+
+        _logger.info("Re-authenticating with stored credentials")
+        return await self.sign_in(self._user_id, self._password)
+
     async def ensure_valid_token(self) -> Optional[AuthTokens]:
         """
         Ensure we have a valid access token, refreshing if necessary.
@@ -525,6 +553,15 @@ class NavienAuthClient:
     def user_email(self) -> Optional[str]:
         """Get the email address of the authenticated user."""
         return self._user_email
+
+    @property
+    def has_stored_credentials(self) -> bool:
+        """Check if user credentials are stored for re-authentication.
+
+        Returns:
+            True if both user_id and password are available for re-auth
+        """
+        return bool(self._user_id and self._password)
 
     async def close(self) -> None:
         """Close the aiohttp session if we own it."""

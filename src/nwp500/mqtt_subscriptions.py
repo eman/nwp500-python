@@ -15,6 +15,7 @@ import logging
 from typing import Any, Callable, Optional
 
 from awscrt import mqtt
+from awscrt.exceptions import AwsCrtError
 
 from .events import EventEmitter
 from .models import Device, DeviceFeature, DeviceStatus, EnergyUsageResponse
@@ -117,12 +118,12 @@ class MqttSubscriptionManager:
                     for handler in handlers:
                         try:
                             handler(topic, message)
-                        except Exception as e:
+                        except (TypeError, AttributeError, KeyError) as e:
                             _logger.error(f"Error in message handler: {e}")
 
         except json.JSONDecodeError as e:
             _logger.error(f"Failed to parse message payload: {e}")
-        except Exception as e:
+        except (AttributeError, KeyError, TypeError) as e:
             _logger.error(f"Error processing message: {e}")
 
     def _topic_matches_pattern(self, topic: str, pattern: str) -> bool:
@@ -230,7 +231,7 @@ class MqttSubscriptionManager:
 
             return int(packet_id)
 
-        except Exception as e:
+        except (AwsCrtError, RuntimeError) as e:
             _logger.error(
                 f"Failed to subscribe to '{redact_topic(topic)}': {e}"
             )
@@ -268,11 +269,74 @@ class MqttSubscriptionManager:
 
             return int(packet_id)
 
-        except Exception as e:
+        except (AwsCrtError, RuntimeError) as e:
             _logger.error(
                 f"Failed to unsubscribe from '{redact_topic(topic)}': {e}"
             )
             raise
+
+    async def resubscribe_all(self) -> None:
+        """
+        Re-establish all subscriptions after a connection rebuild.
+
+        This method is called after a deep reconnection to restore all
+        active subscriptions. It uses the stored subscription information
+        to re-subscribe to all topics with their original QoS settings
+        and handlers.
+
+        Note:
+            This is typically called automatically during deep reconnection
+            and should not need to be called manually.
+
+        Raises:
+            RuntimeError: If not connected to MQTT broker
+            Exception: If any subscription fails
+        """
+        if not self._connection:
+            raise RuntimeError("Not connected to MQTT broker")
+
+        if not self._subscriptions:
+            _logger.debug("No subscriptions to restore")
+            return
+
+        subscription_count = len(self._subscriptions)
+        _logger.info(f"Re-establishing {subscription_count} subscription(s)...")
+
+        # Store subscriptions to re-establish (avoid modifying dict during
+        # iteration)
+        subscriptions_to_restore = list(self._subscriptions.items())
+        handlers_to_restore = {
+            topic: handlers.copy()
+            for topic, handlers in self._message_handlers.items()
+        }
+
+        # Clear current subscriptions (will be re-added by subscribe())
+        self._subscriptions.clear()
+        self._message_handlers.clear()
+
+        # Re-establish each subscription
+        failed_subscriptions = set()
+        for topic, qos in subscriptions_to_restore:
+            handlers = handlers_to_restore.get(topic, [])
+            for handler in handlers:
+                try:
+                    await self.subscribe(topic, handler, qos)
+                except (AwsCrtError, RuntimeError) as e:
+                    _logger.error(
+                        f"Failed to re-subscribe to "
+                        f"'{redact_topic(topic)}': {e}"
+                    )
+                    # Mark topic as failed and skip remaining handlers
+                    # since they will fail for the same reason
+                    failed_subscriptions.add(topic)
+                    break  # Exit handler loop, move to next topic
+
+        if failed_subscriptions:
+            _logger.warning(
+                f"Failed to restore {len(failed_subscriptions)} subscription(s)"
+            )
+        else:
+            _logger.info("All subscriptions re-established successfully")
 
     async def subscribe_device(
         self, device: Device, callback: Callable[[str, dict[str, Any]], None]
@@ -405,7 +469,7 @@ class MqttSubscriptionManager:
                 _logger.warning(
                     f"Invalid value in status message: {e}", exc_info=True
                 )
-            except Exception as e:
+            except (TypeError, AttributeError) as e:
                 _logger.error(
                     f"Error parsing device status: {e}", exc_info=True
                 )
@@ -492,7 +556,7 @@ class MqttSubscriptionManager:
                 await self._event_emitter.emit("error_cleared", prev.errorCode)
                 _logger.info(f"Error cleared: {prev.errorCode}")
 
-        except Exception as e:
+        except (TypeError, AttributeError, RuntimeError) as e:
             _logger.error(f"Error detecting state changes: {e}", exc_info=True)
         finally:
             # Always update previous status
@@ -594,7 +658,7 @@ class MqttSubscriptionManager:
                 _logger.warning(
                     f"Invalid value in feature message: {e}", exc_info=True
                 )
-            except Exception as e:
+            except (TypeError, AttributeError) as e:
                 _logger.error(
                     f"Error parsing device feature: {e}", exc_info=True
                 )
@@ -684,7 +748,7 @@ class MqttSubscriptionManager:
                 _logger.warning(
                     "Failed to parse energy usage message - missing key: %s", e
                 )
-            except Exception as e:
+            except (TypeError, ValueError, AttributeError) as e:
                 _logger.error(
                     "Error in energy usage message handler: %s",
                     e,
