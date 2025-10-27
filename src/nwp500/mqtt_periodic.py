@@ -189,10 +189,10 @@ class MqttPeriodicRequestManager:
                 except (AwsCrtError, RuntimeError) as e:
                     # Handle clean session cancellation gracefully (expected
                     # during reconnection)
-                    # Check exception type and name attribute for proper error
-                    # identification
+                    # Safely check exception name attribute
                     if (
                         isinstance(e, AwsCrtError)
+                        and hasattr(e, "name")
                         and e.name
                         == "AWS_ERROR_MQTT_CANCELLED_FOR_CLEAN_SESSION"
                     ):

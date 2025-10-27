@@ -733,7 +733,11 @@ class NavienMqttClient(EventEmitter):
             return await self._connection_manager.publish(topic, payload, qos)
         except AwsCrtError as e:
             # Handle clean session cancellation gracefully
-            if e.name == "AWS_ERROR_MQTT_CANCELLED_FOR_CLEAN_SESSION":
+            # Safely check e.name attribute (may not exist or be None)
+            if (
+                hasattr(e, "name")
+                and e.name == "AWS_ERROR_MQTT_CANCELLED_FOR_CLEAN_SESSION"
+            ):
                 _logger.warning(
                     "Publish cancelled due to clean session. This is "
                     "expected during reconnection."
