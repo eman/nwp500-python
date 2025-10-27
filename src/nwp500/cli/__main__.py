@@ -12,11 +12,7 @@ import sys
 from typing import Optional
 
 from nwp500 import NavienAPIClient, NavienAuthClient, __version__
-from nwp500.auth import (
-    AuthenticationResponse,
-    InvalidCredentialsError,
-    UserInfo,
-)
+from nwp500.auth import InvalidCredentialsError
 
 from .commands import (
     handle_device_feature_request,
@@ -55,37 +51,15 @@ async def get_authenticated_client(
     Returns:
         NavienAuthClient instance or None if authentication fails
     """
+    # Get credentials
+    email = args.email or os.getenv("NAVIEN_EMAIL")
+    password = args.password or os.getenv("NAVIEN_PASSWORD")
+
     # Try loading cached tokens
     tokens, cached_email = load_tokens()
 
-    # Check if cached tokens are valid and complete
-    if (
-        tokens
-        and cached_email
-        and not tokens.is_expired
-        and tokens.access_key_id
-        and tokens.secret_key
-        and tokens.session_token
-    ):
-        _logger.info("Using valid cached tokens.")
-        # The password argument is unused when cached tokens are present.
-        auth_client = NavienAuthClient(cached_email, "cached_auth")
-        auth_client._user_email = cached_email
-        await auth_client._ensure_session()
-
-        # Manually construct the auth response since we are not signing in
-        auth_client._auth_response = AuthenticationResponse(
-            user_info=UserInfo.from_dict({}), tokens=tokens
-        )
-        return auth_client
-
-    _logger.info(
-        "Cached tokens are invalid, expired, or incomplete. "
-        "Re-authenticating..."
-    )
-    # Fallback to email/password
-    email = args.email or os.getenv("NAVIEN_EMAIL")
-    password = args.password or os.getenv("NAVIEN_PASSWORD")
+    # Use cached email if available, otherwise fall back to provided email
+    email = cached_email or email
 
     if not email or not password:
         _logger.error(
@@ -95,11 +69,19 @@ async def get_authenticated_client(
         return None
 
     try:
-        auth_client = NavienAuthClient(email, password)
-        await auth_client.sign_in(email, password)
+        # Use the new stored_tokens parameter for token restoration
+        # This will automatically handle token validation and refresh
+        auth_client = NavienAuthClient(email, password, stored_tokens=tokens)
+
+        # Enter the context manager to authenticate/restore session
+        await auth_client.__aenter__()
+
+        # Save refreshed/new tokens
         if auth_client.current_tokens and auth_client.user_email:
             save_tokens(auth_client.current_tokens, auth_client.user_email)
+
         return auth_client
+
     except InvalidCredentialsError:
         _logger.error("Invalid email or password.")
         return None
@@ -243,7 +225,8 @@ async def async_main(args: argparse.Namespace) -> int:
         return 1
     finally:
         # Auth client close will close the underlying aiohttp session
-        await auth_client.close()
+        # Also call __aexit__ to properly clean up context manager
+        await auth_client.__aexit__(None, None, None)
         _logger.info("Cleanup complete.")
     return 0
 
