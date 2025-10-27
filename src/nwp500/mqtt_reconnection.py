@@ -161,13 +161,16 @@ class MqttReconnectionHandler:
             self._reconnect_attempts += 1
 
             # Determine if we should do a deep reconnection
-            use_deep_reconnect = (
-                self._deep_reconnect_func is not None
-                and self._reconnect_attempts
-                >= self.config.deep_reconnect_threshold
-                and self._reconnect_attempts
-                % self.config.deep_reconnect_threshold
+            has_deep_reconnect = self._deep_reconnect_func is not None
+            is_at_threshold = (
+                self._reconnect_attempts >= self.config.deep_reconnect_threshold
+            )
+            is_threshold_multiple = (
+                self._reconnect_attempts % self.config.deep_reconnect_threshold
                 == 0
+            )
+            use_deep_reconnect = (
+                has_deep_reconnect and is_at_threshold and is_threshold_multiple
             )
 
             # Calculate delay with exponential backoff
