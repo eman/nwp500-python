@@ -392,17 +392,14 @@ class NavienMqttClient(EventEmitter):
                     _logger.warning("No refresh token available")
                     raise ValueError("No refresh token available for refresh")
             except Exception as e:
-                # If refresh fails, check if we have stored credentials for
-                # full re-authentication
-                if self._auth_client._user_id and self._auth_client._password:
+                # If refresh fails, try full re-authentication with stored
+                # credentials
+                if self._auth_client.has_stored_credentials:
                     _logger.warning(
                         f"Token refresh failed: {e}. Attempting full "
                         "re-authentication..."
                     )
-                    await self._auth_client.sign_in(
-                        self._auth_client._user_id,
-                        self._auth_client._password,
-                    )
+                    await self._auth_client.re_authenticate()
                 else:
                     _logger.error(
                         "Cannot re-authenticate: no stored credentials"
