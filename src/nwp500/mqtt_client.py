@@ -387,12 +387,10 @@ class NavienMqttClient(EventEmitter):
             _logger.debug("Refreshing authentication tokens...")
             try:
                 # Use the stored refresh token from current tokens
-                if (
-                    self._auth_client.current_tokens
-                    and self._auth_client.current_tokens.refresh_token
-                ):
+                current_tokens = self._auth_client.current_tokens
+                if current_tokens and current_tokens.refresh_token:
                     await self._auth_client.refresh_token(
-                        self._auth_client.current_tokens.refresh_token
+                        current_tokens.refresh_token
                     )
                 else:
                     _logger.warning("No refresh token available")
