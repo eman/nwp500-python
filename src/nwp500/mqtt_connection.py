@@ -15,6 +15,12 @@ from awscrt import mqtt
 from awscrt.exceptions import AwsCrtError
 from awsiot import mqtt_connection_builder
 
+from .exceptions import (
+    MqttConnectionError,
+    MqttCredentialsError,
+    MqttNotConnectedError,
+)
+
 if TYPE_CHECKING:
     from .auth import NavienAuthClient
     from .mqtt_utils import MqttConnectionConfig
@@ -66,7 +72,7 @@ class MqttConnection:
             )
 
         if not auth_client.current_tokens:
-            raise ValueError("No tokens available from auth client")
+            raise MqttCredentialsError("No tokens available from auth client")
 
         auth_tokens = auth_client.current_tokens
         if not auth_tokens.access_key_id or not auth_tokens.secret_key:
@@ -138,7 +144,7 @@ class MqttConnection:
                 connect_future = self._connection.connect()
                 connect_result = await asyncio.wrap_future(connect_future)
             else:
-                raise RuntimeError("Connection not initialized")
+                raise MqttConnectionError("Connection not initialized")
 
             self._connected = True
             _logger.info(
@@ -167,7 +173,7 @@ class MqttConnection:
         # Get current tokens from auth client
         auth_tokens = self._auth_client.current_tokens
         if not auth_tokens:
-            raise ValueError("No tokens available from auth client")
+            raise MqttCredentialsError("No tokens available from auth client")
 
         return AwsCredentialsProvider.new_static(
             access_key_id=auth_tokens.access_key_id,
@@ -221,7 +227,7 @@ class MqttConnection:
             RuntimeError: If not connected
         """
         if not self._connected or not self._connection:
-            raise RuntimeError("Not connected to MQTT broker")
+            raise MqttNotConnectedError("Not connected to MQTT broker")
 
         _logger.debug(f"Subscribing to topic: {topic}")
 
@@ -248,7 +254,7 @@ class MqttConnection:
             RuntimeError: If not connected
         """
         if not self._connected or not self._connection:
-            raise RuntimeError("Not connected to MQTT broker")
+            raise MqttNotConnectedError("Not connected to MQTT broker")
 
         _logger.debug(f"Unsubscribing from topic: {topic}")
 
@@ -282,7 +288,7 @@ class MqttConnection:
             RuntimeError: If not connected
         """
         if not self._connected or not self._connection:
-            raise RuntimeError("Not connected to MQTT broker")
+            raise MqttNotConnectedError("Not connected to MQTT broker")
 
         _logger.debug(f"Publishing to topic: {topic}")
 

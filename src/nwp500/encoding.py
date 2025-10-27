@@ -10,6 +10,8 @@ from collections.abc import Iterable
 from numbers import Real
 from typing import Union
 
+from .exceptions import ParameterValidationError, RangeValidationError
+
 # Weekday constants
 WEEKDAY_ORDER = [
     "Sunday",
@@ -46,8 +48,8 @@ def encode_week_bitfield(days: Iterable[Union[str, int]]) -> int:
         Monday=bit 1, etc.)
 
     Raises:
-        ValueError: If day name is invalid or index is out of range
-        TypeError: If day value is neither string nor integer
+        RangeValidationError: If day name is invalid or index is out of range
+        ParameterValidationError: If day value is neither string nor integer
 
     Examples:
         >>> encode_week_bitfield(["Monday", "Wednesday", "Friday"])
@@ -64,7 +66,11 @@ def encode_week_bitfield(days: Iterable[Union[str, int]]) -> int:
         if isinstance(value, str):
             key = value.strip().lower()
             if key not in WEEKDAY_NAME_TO_BIT:
-                raise ValueError(f"Unknown weekday: {value}")
+                raise RangeValidationError(
+                    f"Unknown weekday: {value}",
+                    field="weekday",
+                    value=value,
+                )
             bitfield |= WEEKDAY_NAME_TO_BIT[key]
         elif isinstance(value, int):
             if 0 <= value <= 6:
@@ -135,7 +141,13 @@ def encode_season_bitfield(months: Iterable[int]) -> int:
     bitfield = 0
     for month in months:
         if month not in MONTH_TO_BIT:
-            raise ValueError("Month values must be in the range 1-12")
+            raise RangeValidationError(
+                "Month values must be in the range 1-12",
+                field="month",
+                value=month,
+                min_value=1,
+                max_value=12,
+            )
         bitfield |= MONTH_TO_BIT[month]
     return bitfield
 
@@ -328,18 +340,39 @@ def build_reservation_entry(
         {'enable': 1, 'week': 42, 'hour': 6, 'min': 30, 'mode': 3, 'param': 120}
     """
     if not 0 <= hour <= 23:
-        raise ValueError("hour must be between 0 and 23")
+        raise RangeValidationError(
+            "hour must be between 0 and 23",
+            field="hour",
+            value=hour,
+            min_value=0,
+            max_value=23,
+        )
     if not 0 <= minute <= 59:
-        raise ValueError("minute must be between 0 and 59")
+        raise RangeValidationError(
+            "minute must be between 0 and 59",
+            field="minute",
+            value=minute,
+            min_value=0,
+            max_value=59,
+        )
     if mode_id < 0:
-        raise ValueError("mode_id must be non-negative")
+        raise RangeValidationError(
+            "mode_id must be non-negative",
+            field="mode_id",
+            value=mode_id,
+            min_value=0,
+        )
 
     if isinstance(enabled, bool):
         enable_flag = 1 if enabled else 2
     elif enabled in (1, 2):
         enable_flag = int(enabled)
     else:
-        raise ValueError("enabled must be True/False or 1/2")
+        raise ParameterValidationError(
+            "enabled must be True/False or 1/2",
+            parameter="enabled",
+            value=enabled,
+        )
 
     week_bitfield = encode_week_bitfield(days)
 
@@ -407,14 +440,26 @@ def build_tou_period(
         ("end_hour", end_hour, 23),
     ):
         if not 0 <= value <= upper:
-            raise ValueError(f"{label} must be between 0 and {upper}")
+            raise RangeValidationError(
+                f"{label} must be between 0 and {upper}",
+                field=label,
+                value=value,
+                min_value=0,
+                max_value=upper,
+            )
 
     for label, value in (
         ("start_minute", start_minute),
         ("end_minute", end_minute),
     ):
         if not 0 <= value <= 59:
-            raise ValueError(f"{label} must be between 0 and 59")
+            raise RangeValidationError(
+                f"{label} must be between 0 and 59",
+                field=label,
+                value=value,
+                min_value=0,
+                max_value=59,
+            )
 
     # Encode bitfields
     week_bitfield = encode_week_bitfield(week_days)

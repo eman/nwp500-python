@@ -7,6 +7,7 @@ from dataclasses import asdict
 from typing import Any, Optional
 
 from nwp500 import Device, DeviceFeature, DeviceStatus, NavienMqttClient
+from nwp500.exceptions import MqttError, Nwp500Error, ValidationError
 
 from .output_formatters import _json_default_serializer
 
@@ -241,8 +242,16 @@ async def handle_set_mode_request(
         except asyncio.TimeoutError:
             _logger.error("Timed out waiting for mode change confirmation")
 
-    except Exception as e:
+    except ValidationError as e:
+        _logger.error(f"Invalid mode or parameters: {e}")
+        if hasattr(e, "field"):
+            _logger.info(f"Check the value for: {e.field}")
+    except MqttError as e:
+        _logger.error(f"MQTT error setting mode: {e}")
+    except Nwp500Error as e:
         _logger.error(f"Error setting mode: {e}")
+    except Exception as e:
+        _logger.error(f"Unexpected error setting mode: {e}")
 
 
 async def handle_set_dhw_temp_request(
@@ -311,8 +320,16 @@ async def handle_set_dhw_temp_request(
                 "Timed out waiting for temperature change confirmation"
             )
 
-    except Exception as e:
+    except ValidationError as e:
+        _logger.error(f"Invalid temperature: {e}")
+        if hasattr(e, "min_value") and hasattr(e, "max_value"):
+            _logger.info(f"Valid range: {e.min_value}°F to {e.max_value}°F")
+    except MqttError as e:
+        _logger.error(f"MQTT error setting temperature: {e}")
+    except Nwp500Error as e:
         _logger.error(f"Error setting temperature: {e}")
+    except Exception as e:
+        _logger.error(f"Unexpected error setting temperature: {e}")
 
 
 async def handle_power_request(
@@ -374,8 +391,12 @@ async def handle_power_request(
     except asyncio.TimeoutError:
         _logger.error(f"Timed out waiting for power {action} confirmation")
 
-    except Exception as e:
+    except MqttError as e:
+        _logger.error(f"MQTT error turning device {action}: {e}")
+    except Nwp500Error as e:
         _logger.error(f"Error turning device {action}: {e}")
+    except Exception as e:
+        _logger.error(f"Unexpected error turning device {action}: {e}")
 
 
 async def handle_get_reservations_request(
@@ -544,8 +565,14 @@ async def handle_get_tou_request(
             )
         )
 
+    except MqttError as e:
+        _logger.error(f"MQTT error fetching TOU settings: {e}")
+    except Nwp500Error as e:
+        _logger.error(f"Error fetching TOU settings: {e}")
     except Exception as e:
-        _logger.error(f"Error fetching TOU settings: {e}", exc_info=True)
+        _logger.error(
+            f"Unexpected error fetching TOU settings: {e}", exc_info=True
+        )
 
 
 async def handle_set_tou_enabled_request(
@@ -585,8 +612,12 @@ async def handle_set_tou_enabled_request(
         except asyncio.TimeoutError:
             _logger.error(f"Timed out waiting for TOU {action} confirmation")
 
-    except Exception as e:
+    except MqttError as e:
+        _logger.error(f"MQTT error {action} TOU: {e}")
+    except Nwp500Error as e:
         _logger.error(f"Error {action} TOU: {e}")
+    except Exception as e:
+        _logger.error(f"Unexpected error {action} TOU: {e}")
 
 
 async def handle_get_energy_request(

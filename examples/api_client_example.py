@@ -22,8 +22,11 @@ if __name__ == "__main__":
     sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 from nwp500 import NavienAPIClient
-from nwp500.api_client import APIError
-from nwp500.auth import AuthenticationError, NavienAuthClient
+from nwp500.auth import NavienAuthClient
+from nwp500.exceptions import (
+    APIError,
+    AuthenticationError,
+)
 
 import re
 
