@@ -19,7 +19,11 @@ from typing import Any, Callable, Optional
 from awscrt import mqtt
 from awscrt.exceptions import AwsCrtError
 
-from .auth import NavienAuthClient
+from .auth import (
+    AuthenticationError,
+    NavienAuthClient,
+    TokenRefreshError,
+)
 from .events import EventEmitter
 from .models import (
     Device,
@@ -205,7 +209,8 @@ class NavienMqttClient(EventEmitter):
         # Schedule the coroutine in the stored loop using thread-safe method
         try:
             asyncio.run_coroutine_threadsafe(coro, self._loop)
-        except Exception as e:
+        except RuntimeError as e:
+            # Event loop is closed or not running
             _logger.error(f"Failed to schedule coroutine: {e}", exc_info=True)
 
     def _on_connection_interrupted_internal(
@@ -231,7 +236,7 @@ class NavienMqttClient(EventEmitter):
                 # Fallback for callbacks expecting no arguments
                 try:
                     self._on_connection_interrupted()  # type: ignore
-                except Exception as e:
+                except (TypeError, AttributeError) as e:
                     _logger.error(
                         f"Error in connection_interrupted callback: {e}"
                     )
@@ -338,7 +343,7 @@ class NavienMqttClient(EventEmitter):
                     "No connection manager available for reconnection"
                 )
 
-        except Exception as e:
+        except (AwsCrtError, AuthenticationError, RuntimeError) as e:
             _logger.error(
                 f"Error during active reconnection: {e}", exc_info=True
             )
@@ -374,7 +379,8 @@ class NavienMqttClient(EventEmitter):
                 try:
                     if self._connection_manager.is_connected:
                         await self._connection_manager.disconnect()
-                except Exception as e:
+                except (AwsCrtError, RuntimeError) as e:
+                    # Expected: connection already dead or in bad state
                     _logger.debug(f"Error during cleanup: {e} (expected)")
 
             # Step 2: Force token refresh to get fresh AWS credentials
@@ -391,7 +397,7 @@ class NavienMqttClient(EventEmitter):
                 else:
                     _logger.warning("No refresh token available")
                     raise ValueError("No refresh token available for refresh")
-            except Exception as e:
+            except (TokenRefreshError, ValueError, AuthenticationError) as e:
                 # If refresh fails, try full re-authentication with stored
                 # credentials
                 if self._auth_client.has_stored_credentials:
@@ -437,7 +443,12 @@ class NavienMqttClient(EventEmitter):
             else:
                 _logger.error("Deep reconnection failed to connect")
 
-        except Exception as e:
+        except (
+            AwsCrtError,
+            AuthenticationError,
+            RuntimeError,
+            ValueError,
+        ) as e:
             _logger.error(f"Error during deep reconnection: {e}", exc_info=True)
             raise
 
@@ -525,7 +536,12 @@ class NavienMqttClient(EventEmitter):
 
             return False
 
-        except Exception as e:
+        except (
+            AwsCrtError,
+            AuthenticationError,
+            RuntimeError,
+            ValueError,
+        ) as e:
             _logger.error(f"Failed to connect: {e}")
             raise
 
@@ -570,7 +586,7 @@ class NavienMqttClient(EventEmitter):
             self._connection = None
 
             _logger.info("Disconnected successfully")
-        except Exception as e:
+        except (AwsCrtError, RuntimeError) as e:
             _logger.error(f"Error during disconnect: {e}")
             raise
 
@@ -590,7 +606,7 @@ class NavienMqttClient(EventEmitter):
 
         except json.JSONDecodeError as e:
             _logger.error(f"Failed to parse message payload: {e}")
-        except Exception as e:
+        except (AttributeError, KeyError, TypeError) as e:
             _logger.error(f"Error processing message: {e}")
 
     def _topic_matches_pattern(self, topic: str, pattern: str) -> bool:
@@ -715,14 +731,9 @@ class NavienMqttClient(EventEmitter):
 
         try:
             return await self._connection_manager.publish(topic, payload, qos)
-        except Exception as e:
+        except AwsCrtError as e:
             # Handle clean session cancellation gracefully
-            # Check exception type and name attribute for proper
-            # error identification
-            if (
-                isinstance(e, AwsCrtError)
-                and e.name == "AWS_ERROR_MQTT_CANCELLED_FOR_CLEAN_SESSION"
-            ):
+            if e.name == "AWS_ERROR_MQTT_CANCELLED_FOR_CLEAN_SESSION":
                 _logger.warning(
                     "Publish cancelled due to clean session. This is "
                     "expected during reconnection."
@@ -738,9 +749,9 @@ class NavienMqttClient(EventEmitter):
                 raise RuntimeError(
                     "Publish cancelled due to clean session and "
                     "command queue is disabled"
-                )
+                ) from e
 
-            # Note: redact_topic is already used elsewhere in the file
+            # Other AWS CRT errors
             _logger.error(f"Failed to publish to topic: {e}")
             raise
 
