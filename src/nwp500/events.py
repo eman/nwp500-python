@@ -252,7 +252,12 @@ class EventEmitter:
                     listeners_to_remove.append(listener)
                     self._once_callbacks.discard((event, listener.callback))
 
-            except (TypeError, RuntimeError, AttributeError) as e:
+            except Exception as e:
+                # Catch all exceptions from user callbacks to ensure
+                # resilience. We intentionally catch Exception here because:
+                # 1. User callbacks can raise any exception type
+                # 2. One bad callback shouldn't break other callbacks
+                # 3. This is an event emitter pattern where resilience is key
                 _logger.error(
                     f"Error in '{event}' event handler: {e}",
                     exc_info=True,
