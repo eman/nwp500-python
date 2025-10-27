@@ -153,9 +153,12 @@ class MqttConnectionConfig:
 
         auto_reconnect: Enable automatic reconnection
         max_reconnect_attempts: Maximum reconnection attempts
+            (-1 for unlimited)
         initial_reconnect_delay: Initial delay between reconnect attempts
         max_reconnect_delay: Maximum delay between reconnect attempts
         reconnect_backoff_multiplier: Exponential backoff multiplier
+        deep_reconnect_threshold: Attempt count to trigger full
+            connection rebuild
 
         enable_command_queue: Enable command queueing when disconnected
         max_queued_commands: Maximum number of queued commands
@@ -169,10 +172,13 @@ class MqttConnectionConfig:
 
     # Reconnection settings
     auto_reconnect: bool = True
-    max_reconnect_attempts: int = 10
+    max_reconnect_attempts: int = -1  # -1 = unlimited retries
     initial_reconnect_delay: float = 1.0  # seconds
     max_reconnect_delay: float = 120.0  # seconds
     reconnect_backoff_multiplier: float = 2.0
+    deep_reconnect_threshold: int = (
+        10  # Switch to full rebuild after N attempts
+    )
 
     # Command queue settings
     enable_command_queue: bool = True

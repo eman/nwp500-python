@@ -218,7 +218,6 @@ class NavienMqttClient(EventEmitter):
             error: Error that caused the interruption
             **kwargs: Forward-compatibility kwargs from AWS SDK
         """
-        _logger.warning(f"Connection interrupted: {error}")
         self._connected = False
 
         # Emit event
@@ -345,6 +344,106 @@ class NavienMqttClient(EventEmitter):
             )
             raise
 
+    async def _deep_reconnect(self) -> None:
+        """
+        Perform a deep reconnection by completely rebuilding the connection.
+
+        This method is called after multiple quick reconnection failures.
+        It performs a full teardown and rebuild:
+        - Disconnects existing connection
+        - Refreshes authentication tokens
+        - Creates new connection manager
+        - Re-establishes all subscriptions
+
+        This is more expensive but can recover from issues that a simple
+        reconnection cannot fix (e.g., stale credentials, corrupted state).
+        """
+        if self._connected:
+            _logger.debug("Already connected, skipping deep reconnection")
+            return
+
+        _logger.warning(
+            "Performing deep reconnection (full rebuild)... "
+            "This may take longer."
+        )
+
+        try:
+            # Step 1: Clean up existing connection if any
+            if self._connection_manager:
+                _logger.debug("Cleaning up old connection...")
+                try:
+                    if self._connection_manager.is_connected:
+                        await self._connection_manager.disconnect()
+                except Exception as e:
+                    _logger.debug(f"Error during cleanup: {e} (expected)")
+
+            # Step 2: Force token refresh to get fresh AWS credentials
+            _logger.debug("Refreshing authentication tokens...")
+            try:
+                # Use the stored refresh token from current tokens
+                if (
+                    self._auth_client.current_tokens
+                    and self._auth_client.current_tokens.refresh_token
+                ):
+                    await self._auth_client.refresh_token(
+                        self._auth_client.current_tokens.refresh_token
+                    )
+                else:
+                    _logger.warning("No refresh token available")
+                    raise ValueError("No refresh token available for refresh")
+            except Exception as e:
+                # If refresh fails, check if we have stored credentials for
+                # full re-authentication
+                if self._auth_client._user_id and self._auth_client._password:
+                    _logger.warning(
+                        f"Token refresh failed: {e}. Attempting full "
+                        "re-authentication..."
+                    )
+                    await self._auth_client.sign_in(
+                        self._auth_client._user_id,
+                        self._auth_client._password,
+                    )
+                else:
+                    _logger.error(
+                        "Cannot re-authenticate: no stored credentials"
+                    )
+                    raise
+
+            # Step 3: Create completely new connection manager
+            _logger.debug("Creating new connection manager...")
+            self._connection_manager = MqttConnection(
+                config=self.config,
+                auth_client=self._auth_client,
+                on_connection_interrupted=self._on_connection_interrupted_internal,
+                on_connection_resumed=self._on_connection_resumed_internal,
+            )
+
+            # Step 4: Attempt connection
+            success = await self._connection_manager.connect()
+
+            if success:
+                # Update connection references
+                self._connection = self._connection_manager.connection
+                self._connected = True
+
+                # Step 5: Re-establish subscriptions
+                if self._subscription_manager and self._connection:
+                    _logger.debug("Re-establishing subscriptions...")
+                    self._subscription_manager.update_connection(
+                        self._connection
+                    )
+                    await self._subscription_manager.resubscribe_all()
+
+                _logger.info(
+                    "Deep reconnection successful - fully rebuilt connection"
+                )
+            else:
+                _logger.error("Deep reconnection failed to connect")
+
+        except Exception as e:
+            _logger.error(f"Error during deep reconnection: {e}", exc_info=True)
+            raise
+
     async def connect(self) -> bool:
         """
         Establish connection to AWS IoT Core.
@@ -394,6 +493,7 @@ class NavienMqttClient(EventEmitter):
                     is_connected_func=lambda: self._connected,
                     schedule_coroutine_func=self._schedule_coroutine,
                     reconnect_func=self._active_reconnect,
+                    deep_reconnect_func=self._deep_reconnect,
                     emit_event_func=self.emit,
                 )
                 self._reconnection_handler.enable()

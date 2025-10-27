@@ -274,6 +274,66 @@ class MqttSubscriptionManager:
             )
             raise
 
+    async def resubscribe_all(self) -> None:
+        """
+        Re-establish all subscriptions after a connection rebuild.
+
+        This method is called after a deep reconnection to restore all
+        active subscriptions. It uses the stored subscription information
+        to re-subscribe to all topics with their original QoS settings
+        and handlers.
+
+        Note:
+            This is typically called automatically during deep reconnection
+            and should not need to be called manually.
+
+        Raises:
+            RuntimeError: If not connected to MQTT broker
+            Exception: If any subscription fails
+        """
+        if not self._connection:
+            raise RuntimeError("Not connected to MQTT broker")
+
+        if not self._subscriptions:
+            _logger.debug("No subscriptions to restore")
+            return
+
+        subscription_count = len(self._subscriptions)
+        _logger.info(f"Re-establishing {subscription_count} subscription(s)...")
+
+        # Store subscriptions to re-establish (avoid modifying dict during
+        # iteration)
+        subscriptions_to_restore = list(self._subscriptions.items())
+        handlers_to_restore = {
+            topic: handlers.copy()
+            for topic, handlers in self._message_handlers.items()
+        }
+
+        # Clear current subscriptions (will be re-added by subscribe())
+        self._subscriptions.clear()
+        self._message_handlers.clear()
+
+        # Re-establish each subscription
+        failed_subscriptions = []
+        for topic, qos in subscriptions_to_restore:
+            handlers = handlers_to_restore.get(topic, [])
+            for handler in handlers:
+                try:
+                    await self.subscribe(topic, handler, qos)
+                except Exception as e:
+                    _logger.error(
+                        f"Failed to re-subscribe to "
+                        f"'{redact_topic(topic)}': {e}"
+                    )
+                    failed_subscriptions.append(topic)
+
+        if failed_subscriptions:
+            _logger.warning(
+                f"Failed to restore {len(failed_subscriptions)} subscription(s)"
+            )
+        else:
+            _logger.info("All subscriptions re-established successfully")
+
     async def subscribe_device(
         self, device: Device, callback: Callable[[str, dict[str, Any]], None]
     ) -> int:
