@@ -114,20 +114,34 @@ class AuthTokens:
             >>> stored = tokens.to_dict()
             >>> restored = AuthTokens.from_dict(stored)
         """
+
+        # Helper to get value from either camelCase or snake_case key
+        def get_value(
+            camel_key: str, snake_key: str, default: Any = None
+        ) -> Any:
+            """Get value, checking camelCase first, then snake_case."""
+            value = data.get(camel_key)
+            if value is not None and value != "":
+                return value
+            value = data.get(snake_key)
+            if value is not None and value != "":
+                return value
+            return default
+
         # Support both camelCase (API) and snake_case (stored) keys
         return cls(
-            id_token=data.get("idToken") or data.get("id_token", ""),
-            access_token=data.get("accessToken")
-            or data.get("access_token", ""),
-            refresh_token=data.get("refreshToken")
-            or data.get("refresh_token", ""),
-            authentication_expires_in=data.get("authenticationExpiresIn")
-            or data.get("authentication_expires_in", 3600),
-            access_key_id=data.get("accessKeyId") or data.get("access_key_id"),
-            secret_key=data.get("secretKey") or data.get("secret_key"),
-            session_token=data.get("sessionToken") or data.get("session_token"),
-            authorization_expires_in=data.get("authorizationExpiresIn")
-            or data.get("authorization_expires_in"),
+            id_token=get_value("idToken", "id_token", ""),
+            access_token=get_value("accessToken", "access_token", ""),
+            refresh_token=get_value("refreshToken", "refresh_token", ""),
+            authentication_expires_in=get_value(
+                "authenticationExpiresIn", "authentication_expires_in", 3600
+            ),
+            access_key_id=get_value("accessKeyId", "access_key_id"),
+            secret_key=get_value("secretKey", "secret_key"),
+            session_token=get_value("sessionToken", "session_token"),
+            authorization_expires_in=get_value(
+                "authorizationExpiresIn", "authorization_expires_in"
+            ),
             issued_at=datetime.fromisoformat(data["issued_at"])
             if "issued_at" in data
             else datetime.now(),

@@ -934,6 +934,35 @@ def test_auth_tokens_serialization_roundtrip():
     assert restored.is_expired == original.is_expired
 
 
+def test_auth_tokens_from_dict_with_empty_strings():
+    """Test AuthTokens.from_dict handles empty strings in camelCase."""
+    # Simulate API response with empty optional fields (camelCase)
+    # Should fall back to snake_case alternatives
+    data = {
+        "idToken": "test_id",
+        "accessToken": "",  # Empty string - should check snake_case
+        "refreshToken": "test_refresh",
+        "authenticationExpiresIn": 3600,
+        "accessKeyId": "",  # Empty string - should check snake_case
+        "secretKey": None,  # None - should check snake_case
+        "sessionToken": "test_session",
+        # Provide values in snake_case as fallback
+        "access_token": "fallback_access",
+        "access_key_id": "fallback_key",
+        "secret_key": "fallback_secret",
+    }
+
+    tokens = AuthTokens.from_dict(data)
+
+    assert tokens.id_token == "test_id"
+    assert tokens.access_token == "fallback_access"  # Should use snake_case
+    assert tokens.refresh_token == "test_refresh"
+    assert tokens.authentication_expires_in == 3600
+    assert tokens.access_key_id == "fallback_key"  # Should use snake_case
+    assert tokens.secret_key == "fallback_secret"  # Should use snake_case
+    assert tokens.session_token == "test_session"
+
+
 def test_navien_auth_client_initialization_with_stored_tokens():
     """Test NavienAuthClient initialization with stored tokens."""
     stored_tokens = AuthTokens(
