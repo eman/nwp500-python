@@ -25,6 +25,12 @@ from .auth import (
     TokenRefreshError,
 )
 from .events import EventEmitter
+from .exceptions import (
+    MqttConnectionError,
+    MqttCredentialsError,
+    MqttNotConnectedError,
+    MqttPublishError,
+)
 from .models import (
     Device,
     DeviceFeature,
@@ -137,17 +143,17 @@ class NavienMqttClient(EventEmitter):
                 credentials are not available
         """
         if not auth_client.is_authenticated:
-            raise ValueError(
+            raise MqttCredentialsError(
                 "Authentication client must be authenticated before "
                 "creating MQTT client. Call auth_client.sign_in() first."
             )
 
         if not auth_client.current_tokens:
-            raise ValueError("No tokens available from auth client")
+            raise MqttCredentialsError("No tokens available from auth client")
 
         auth_tokens = auth_client.current_tokens
         if not auth_tokens.access_key_id or not auth_tokens.secret_key:
-            raise ValueError(
+            raise MqttCredentialsError(
                 "AWS credentials not available in auth tokens. "
                 "Ensure authentication provides AWS IoT credentials."
             )
@@ -394,7 +400,9 @@ class NavienMqttClient(EventEmitter):
                     )
                 else:
                     _logger.warning("No refresh token available")
-                    raise ValueError("No refresh token available for refresh")
+                    raise MqttCredentialsError(
+                        "No refresh token available for refresh"
+                    )
             except (TokenRefreshError, ValueError, AuthenticationError) as e:
                 # If refresh fails, try full re-authentication with stored
                 # credentials
@@ -550,7 +558,7 @@ class NavienMqttClient(EventEmitter):
         # Get current tokens from auth client
         auth_tokens = self._auth_client.current_tokens
         if not auth_tokens:
-            raise ValueError("No tokens available from auth client")
+            raise MqttCredentialsError("No tokens available from auth client")
 
         return AwsCredentialsProvider.new_static(
             access_key_id=auth_tokens.access_key_id,
@@ -666,7 +674,7 @@ class NavienMqttClient(EventEmitter):
             Exception: If subscription fails
         """
         if not self._connected or not self._subscription_manager:
-            raise RuntimeError("Not connected to MQTT broker")
+            raise MqttNotConnectedError("Not connected to MQTT broker")
 
         # Delegate to subscription manager
         return await self._subscription_manager.subscribe(topic, callback, qos)
@@ -685,7 +693,7 @@ class NavienMqttClient(EventEmitter):
             Exception: If unsubscribe fails
         """
         if not self._connected or not self._subscription_manager:
-            raise RuntimeError("Not connected to MQTT broker")
+            raise MqttNotConnectedError("Not connected to MQTT broker")
 
         # Delegate to subscription manager
         return await self._subscription_manager.unsubscribe(topic)
@@ -721,11 +729,11 @@ class NavienMqttClient(EventEmitter):
                 self._command_queue.enqueue(topic, payload, qos)
                 return 0  # Return 0 to indicate command was queued
             else:
-                raise RuntimeError("Not connected to MQTT broker")
+                raise MqttNotConnectedError("Not connected to MQTT broker")
 
         # Delegate to connection manager
         if not self._connection_manager:
-            raise RuntimeError("Connection manager not initialized")
+            raise MqttConnectionError("Connection manager not initialized")
 
         try:
             return await self._connection_manager.publish(topic, payload, qos)
@@ -748,9 +756,10 @@ class NavienMqttClient(EventEmitter):
                     self._command_queue.enqueue(topic, payload, qos)
                     return 0  # Return 0 to indicate command was queued
                 # Otherwise, raise an error so the caller can handle the failure
-                raise RuntimeError(
+                raise MqttPublishError(
                     "Publish cancelled due to clean session and "
-                    "command queue is disabled"
+                    "command queue is disabled",
+                    retriable=True,
                 ) from e
 
             # Other AWS CRT errors
@@ -773,7 +782,7 @@ class NavienMqttClient(EventEmitter):
             Subscription packet ID
         """
         if not self._connected or not self._subscription_manager:
-            raise RuntimeError("Not connected to MQTT broker")
+            raise MqttNotConnectedError("Not connected to MQTT broker")
 
         # Delegate to subscription manager
         return await self._subscription_manager.subscribe_device(
@@ -833,7 +842,7 @@ class NavienMqttClient(EventEmitter):
             ... )
         """
         if not self._connected or not self._subscription_manager:
-            raise RuntimeError("Not connected to MQTT broker")
+            raise MqttNotConnectedError("Not connected to MQTT broker")
 
         # Delegate to subscription manager (it handles state change
         # detection and events)
@@ -885,7 +894,7 @@ class NavienMqttClient(EventEmitter):
             ... )
         """
         if not self._connected or not self._subscription_manager:
-            raise RuntimeError("Not connected to MQTT broker")
+            raise MqttNotConnectedError("Not connected to MQTT broker")
 
         # Delegate to subscription manager
         return await self._subscription_manager.subscribe_device_feature(
@@ -903,7 +912,7 @@ class NavienMqttClient(EventEmitter):
             Publish packet ID
         """
         if not self._connected or not self._device_controller:
-            raise RuntimeError("Not connected to MQTT broker")
+            raise MqttNotConnectedError("Not connected to MQTT broker")
 
         return await self._device_controller.request_device_status(device)
 
@@ -915,7 +924,7 @@ class NavienMqttClient(EventEmitter):
             Publish packet ID
         """
         if not self._connected or not self._device_controller:
-            raise RuntimeError("Not connected to MQTT broker")
+            raise MqttNotConnectedError("Not connected to MQTT broker")
 
         return await self._device_controller.request_device_info(device)
 
@@ -933,7 +942,7 @@ class NavienMqttClient(EventEmitter):
             Publish packet ID
         """
         if not self._connected or not self._device_controller:
-            raise RuntimeError("Not connected to MQTT broker")
+            raise MqttNotConnectedError("Not connected to MQTT broker")
 
         return await self._device_controller.set_power(device, power_on)
 
@@ -969,7 +978,7 @@ class NavienMqttClient(EventEmitter):
             - 5: Vacation Mode (requires vacation_days parameter)
         """
         if not self._connected or not self._device_controller:
-            raise RuntimeError("Not connected to MQTT broker")
+            raise MqttNotConnectedError("Not connected to MQTT broker")
 
         return await self._device_controller.set_dhw_mode(
             device, mode_id, vacation_days
@@ -1001,7 +1010,7 @@ class NavienMqttClient(EventEmitter):
             ValueError: If period_days is not in the valid range [1, 30]
         """
         if not self._connected or not self._device_controller:
-            raise RuntimeError("Not connected to MQTT broker")
+            raise MqttNotConnectedError("Not connected to MQTT broker")
 
         return await self._device_controller.enable_anti_legionella(
             device, period_days
@@ -1025,7 +1034,7 @@ class NavienMqttClient(EventEmitter):
             The message ID of the published command
         """
         if not self._connected or not self._device_controller:
-            raise RuntimeError("Not connected to MQTT broker")
+            raise MqttNotConnectedError("Not connected to MQTT broker")
 
         return await self._device_controller.disable_anti_legionella(device)
 
@@ -1056,7 +1065,7 @@ class NavienMqttClient(EventEmitter):
             await client.set_dhw_temperature(device, 120)
         """
         if not self._connected or not self._device_controller:
-            raise RuntimeError("Not connected to MQTT broker")
+            raise MqttNotConnectedError("Not connected to MQTT broker")
 
         return await self._device_controller.set_dhw_temperature(
             device, temperature
@@ -1098,7 +1107,7 @@ class NavienMqttClient(EventEmitter):
     ) -> int:
         """Update programmed reservations for temperature/mode changes."""
         if not self._connected or not self._device_controller:
-            raise RuntimeError("Not connected to MQTT broker")
+            raise MqttNotConnectedError("Not connected to MQTT broker")
 
         return await self._device_controller.update_reservations(
             device, reservations, enabled=enabled
@@ -1107,7 +1116,7 @@ class NavienMqttClient(EventEmitter):
     async def request_reservations(self, device: Device) -> int:
         """Request the current reservation program from the device."""
         if not self._connected or not self._device_controller:
-            raise RuntimeError("Not connected to MQTT broker")
+            raise MqttNotConnectedError("Not connected to MQTT broker")
 
         return await self._device_controller.request_reservations(device)
 
@@ -1121,7 +1130,7 @@ class NavienMqttClient(EventEmitter):
     ) -> int:
         """Configure Time-of-Use pricing schedule via MQTT."""
         if not self._connected or not self._device_controller:
-            raise RuntimeError("Not connected to MQTT broker")
+            raise MqttNotConnectedError("Not connected to MQTT broker")
 
         return await self._device_controller.configure_tou_schedule(
             device, controller_serial_number, periods, enabled=enabled
@@ -1134,7 +1143,7 @@ class NavienMqttClient(EventEmitter):
     ) -> int:
         """Request current Time-of-Use schedule from the device."""
         if not self._connected or not self._device_controller:
-            raise RuntimeError("Not connected to MQTT broker")
+            raise MqttNotConnectedError("Not connected to MQTT broker")
 
         return await self._device_controller.request_tou_settings(
             device, controller_serial_number
@@ -1144,7 +1153,7 @@ class NavienMqttClient(EventEmitter):
         """Quickly toggle Time-of-Use functionality without
         modifying the schedule."""
         if not self._connected or not self._device_controller:
-            raise RuntimeError("Not connected to MQTT broker")
+            raise MqttNotConnectedError("Not connected to MQTT broker")
 
         return await self._device_controller.set_tou_enabled(device, enabled)
 
@@ -1184,7 +1193,7 @@ class NavienMqttClient(EventEmitter):
             )
         """
         if not self._connected or not self._device_controller:
-            raise RuntimeError("Not connected to MQTT broker")
+            raise MqttNotConnectedError("Not connected to MQTT broker")
 
         return await self._device_controller.request_energy_usage(
             device, year, months
@@ -1227,7 +1236,7 @@ class NavienMqttClient(EventEmitter):
             >>> await mqtt_client.request_energy_usage(device, 2025, [9])
         """
         if not self._connected or not self._subscription_manager:
-            raise RuntimeError("Not connected to MQTT broker")
+            raise MqttNotConnectedError("Not connected to MQTT broker")
 
         # Delegate to subscription manager
         return await self._subscription_manager.subscribe_energy_usage(
@@ -1245,7 +1254,7 @@ class NavienMqttClient(EventEmitter):
             Publish packet ID
         """
         if not self._connected or not self._device_controller:
-            raise RuntimeError("Not connected to MQTT broker")
+            raise MqttNotConnectedError("Not connected to MQTT broker")
 
         return await self._device_controller.signal_app_connection(device)
 
@@ -1290,7 +1299,9 @@ class NavienMqttClient(EventEmitter):
             - All tasks automatically stop when client disconnects
         """
         if not self._periodic_manager:
-            raise RuntimeError("Periodic request manager not initialized")
+            raise MqttConnectionError(
+                "Periodic request manager not initialized"
+            )
 
         await self._periodic_manager.start_periodic_requests(
             device, request_type, period_seconds
@@ -1320,7 +1331,9 @@ class NavienMqttClient(EventEmitter):
             >>> await mqtt_client.stop_periodic_requests(device)
         """
         if not self._periodic_manager:
-            raise RuntimeError("Periodic request manager not initialized")
+            raise MqttConnectionError(
+                "Periodic request manager not initialized"
+            )
 
         await self._periodic_manager.stop_periodic_requests(
             device, request_type
@@ -1352,7 +1365,9 @@ class NavienMqttClient(EventEmitter):
                 (default: 300 = 5 minutes)
         """
         if not self._periodic_manager:
-            raise RuntimeError("Periodic request manager not initialized")
+            raise MqttConnectionError(
+                "Periodic request manager not initialized"
+            )
 
         await self._periodic_manager.start_periodic_device_info_requests(
             device, period_seconds
@@ -1372,7 +1387,9 @@ class NavienMqttClient(EventEmitter):
                 (default: 300 = 5 minutes)
         """
         if not self._periodic_manager:
-            raise RuntimeError("Periodic request manager not initialized")
+            raise MqttConnectionError(
+                "Periodic request manager not initialized"
+            )
 
         await self._periodic_manager.start_periodic_device_status_requests(
             device, period_seconds
@@ -1388,7 +1405,9 @@ class NavienMqttClient(EventEmitter):
             device: Device object
         """
         if not self._periodic_manager:
-            raise RuntimeError("Periodic request manager not initialized")
+            raise MqttConnectionError(
+                "Periodic request manager not initialized"
+            )
 
         await self._periodic_manager.stop_periodic_device_info_requests(device)
 
@@ -1404,7 +1423,9 @@ class NavienMqttClient(EventEmitter):
             device: Device object
         """
         if not self._periodic_manager:
-            raise RuntimeError("Periodic request manager not initialized")
+            raise MqttConnectionError(
+                "Periodic request manager not initialized"
+            )
 
         await self._periodic_manager.stop_periodic_device_status_requests(
             device
@@ -1426,7 +1447,9 @@ class NavienMqttClient(EventEmitter):
             >>> await mqtt_client.stop_all_periodic_tasks()
         """
         if not self._periodic_manager:
-            raise RuntimeError("Periodic request manager not initialized")
+            raise MqttConnectionError(
+                "Periodic request manager not initialized"
+            )
 
         await self._periodic_manager.stop_all_periodic_tasks(_reason)
 

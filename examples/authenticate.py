@@ -21,10 +21,10 @@ logging.basicConfig(
 if __name__ == "__main__":
     sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
-from nwp500.auth import (
+from nwp500.auth import NavienAuthClient
+from nwp500.exceptions import (
     AuthenticationError,
     InvalidCredentialsError,
-    NavienAuthClient,
 )
 
 

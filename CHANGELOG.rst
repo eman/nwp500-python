@@ -2,6 +2,186 @@
 Changelog
 =========
 
+Version 5.0.0 (2025-10-27)
+==========================
+
+**BREAKING CHANGES**: This release introduces a comprehensive enterprise exception architecture. 
+See migration guide below for details on updating your code.
+
+Added
+-----
+
+- **Enterprise Exception Architecture**: Complete exception hierarchy for better error handling
+
+  - Created ``exceptions.py`` module with comprehensive exception hierarchy
+  - Added ``Nwp500Error`` as base exception for all library errors
+  - Added MQTT-specific exceptions: ``MqttError``, ``MqttConnectionError``, ``MqttNotConnectedError``, 
+    ``MqttPublishError``, ``MqttSubscriptionError``, ``MqttCredentialsError``
+  - Added validation exceptions: ``ValidationError``, ``ParameterValidationError``, ``RangeValidationError``
+  - Added device exceptions: ``DeviceError``, ``DeviceNotFoundError``, ``DeviceOfflineError``, 
+    ``DeviceOperationError``
+  - All exceptions now include ``error_code``, ``details``, and ``retriable`` attributes
+  - Added ``to_dict()`` method to all exceptions for structured logging
+  - Added comprehensive test suite in ``tests/test_exceptions.py``
+  - **Added comprehensive exception handling example** (``examples/exception_handling_example.py``)
+  - **Updated key examples** to demonstrate new exception handling patterns
+
+Changed
+-------
+
+- **Exception Handling Improvements**:
+
+  - All exception wrapping now uses exception chaining (``raise ... from e``) to preserve stack traces
+  - Replaced 19+ instances of ``RuntimeError("Not connected to MQTT broker")`` with ``MqttNotConnectedError``
+  - Replaced ``ValueError`` in validation code with ``RangeValidationError`` and ``ParameterValidationError``
+  - Replaced ``ValueError`` for credentials with ``MqttCredentialsError``
+  - Replaced ``RuntimeError`` for connection issues with ``MqttConnectionError``
+  - Enhanced ``AwsCrtError`` wrapping in MQTT code with proper exception chaining
+  - Moved authentication exceptions from ``auth.py`` to ``exceptions.py``
+  - Moved ``APIError`` from ``api_client.py`` to ``exceptions.py``
+  - **CLI now handles specific exception types** with better error messages and user guidance
+
+Migration Guide (v4.x to v5.0)
+-------------------------------
+
+**Breaking Changes Summary**:
+
+The library now uses specific exception types instead of generic ``RuntimeError`` and ``ValueError``. 
+This improves error handling but requires updates to exception handling code.
+
+**1. MQTT Connection Errors**
+
+.. code-block:: python
+
+    # OLD CODE (v4.x) - will break
+    try:
+        await mqtt_client.request_device_status(device)
+    except RuntimeError as e:
+        if "Not connected" in str(e):
+            await mqtt_client.connect()
+
+    # NEW CODE (v5.0+)
+    from nwp500 import MqttNotConnectedError, MqttError
+    
+    try:
+        await mqtt_client.request_device_status(device)
+    except MqttNotConnectedError:
+        # Handle not connected - attempt reconnection
+        await mqtt_client.connect()
+        await mqtt_client.request_device_status(device)
+    except MqttError as e:
+        # Handle other MQTT errors
+        logger.error(f"MQTT error: {e}")
+
+**2. Validation Errors**
+
+.. code-block:: python
+
+    # OLD CODE (v4.x) - will break
+    try:
+        set_vacation_mode(device, days=35)
+    except ValueError as e:
+        print(f"Invalid input: {e}")
+
+    # NEW CODE (v5.0+)
+    from nwp500 import RangeValidationError, ValidationError
+    
+    try:
+        set_vacation_mode(device, days=35)
+    except RangeValidationError as e:
+        # Access structured error information
+        print(f"Invalid {e.field}: must be {e.min_value}-{e.max_value}")
+        print(f"You provided: {e.value}")
+    except ValidationError as e:
+        # Handle other validation errors
+        print(f"Validation error: {e}")
+
+**3. AWS Credentials Errors**
+
+.. code-block:: python
+
+    # OLD CODE (v4.x) - will break
+    try:
+        mqtt_client = NavienMqttClient(auth_client)
+    except ValueError as e:
+        if "credentials" in str(e).lower():
+            # handle missing credentials
+
+    # NEW CODE (v5.0+)
+    from nwp500 import MqttCredentialsError
+    
+    try:
+        mqtt_client = NavienMqttClient(auth_client)
+    except MqttCredentialsError as e:
+        # Handle missing or invalid AWS credentials
+        logger.error(f"Credentials error: {e}")
+        await re_authenticate()
+
+**4. Catching All Library Errors**
+
+.. code-block:: python
+
+    # NEW CODE (v5.0+) - catch all library exceptions
+    from nwp500 import Nwp500Error
+    
+    try:
+        # Any library operation
+        await mqtt_client.request_device_status(device)
+    except Nwp500Error as e:
+        # All nwp500 exceptions inherit from Nwp500Error
+        logger.error(f"Library error: {e.to_dict()}")
+        
+        # Check if retriable
+        if e.retriable:
+            await retry_operation()
+
+**5. Enhanced Error Information**
+
+All exceptions now include structured information:
+
+.. code-block:: python
+
+    from nwp500 import MqttPublishError
+    
+    try:
+        await mqtt_client.publish(topic, payload)
+    except MqttPublishError as e:
+        # Access structured error information
+        error_info = e.to_dict()
+        # {
+        #     'error_type': 'MqttPublishError',
+        #     'message': 'Publish failed',
+        #     'error_code': 'AWS_ERROR_...',
+        #     'details': {},
+        #     'retriable': True
+        # }
+        
+        # Log for monitoring/alerting
+        logger.error("Publish failed", extra=error_info)
+        
+        # Implement retry logic
+        if e.retriable:
+            await asyncio.sleep(1)
+            await mqtt_client.publish(topic, payload)
+
+**Quick Migration Strategy**:
+
+1. Import new exception types: ``from nwp500 import MqttNotConnectedError, MqttError, ValidationError``
+2. Replace ``except RuntimeError`` with ``except MqttNotConnectedError`` for connection checks
+3. Replace ``except ValueError`` with ``except ValidationError`` for parameter validation
+4. Use ``except Nwp500Error`` to catch all library errors
+5. Test error handling paths thoroughly
+
+**Benefits of New Architecture**:
+
+- Specific exception types for specific errors (no more string matching)
+- Preserved stack traces with exception chaining (``from e``)
+- Structured error information via ``to_dict()``
+- Retriable flag for implementing retry logic
+- Better integration with monitoring/logging systems
+- Type-safe error handling
+- Clearer API documentation
+
 Version 4.8.0 (2025-10-27)
 ==========================
 

@@ -42,13 +42,17 @@ Then in your code:
 .. code-block:: python
 
    import os
-   from nwp500 import NavienAuthClient
+   from nwp500 import NavienAuthClient, InvalidCredentialsError
 
    email = os.getenv("NAVIEN_EMAIL")
    password = os.getenv("NAVIEN_PASSWORD")
 
-   async with NavienAuthClient(email, password) as auth:
-       # ...
+   try:
+       async with NavienAuthClient(email, password) as auth:
+           # ...
+   except InvalidCredentialsError:
+       print("Invalid email or password")
+       # Check credentials
 
 Configuration File
 ------------------

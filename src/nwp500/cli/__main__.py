@@ -11,7 +11,17 @@ import os
 import sys
 
 from nwp500 import NavienAPIClient, NavienAuthClient, __version__
-from nwp500.auth import InvalidCredentialsError
+from nwp500.exceptions import (
+    AuthenticationError,
+    InvalidCredentialsError,
+    MqttConnectionError,
+    MqttError,
+    MqttNotConnectedError,
+    Nwp500Error,
+    RangeValidationError,
+    TokenRefreshError,
+    ValidationError,
+)
 
 from .commands import (
     handle_device_feature_request,
@@ -197,8 +207,41 @@ async def async_main(args: argparse.Namespace) -> int:
     except InvalidCredentialsError:
         _logger.error("Invalid email or password.")
         return 1
+    except TokenRefreshError as e:
+        _logger.error(f"Token refresh failed: {e}")
+        _logger.info("Try logging in again with fresh credentials.")
+        return 1
+    except AuthenticationError as e:
+        _logger.error(f"Authentication failed: {e}")
+        return 1
+    except MqttNotConnectedError:
+        _logger.error("MQTT connection not established.")
+        _logger.info(
+            "The device may be offline or network connectivity issues exist."
+        )
+        return 1
+    except MqttConnectionError as e:
+        _logger.error(f"MQTT connection error: {e}")
+        _logger.info("Check network connectivity and try again.")
+        return 1
+    except MqttError as e:
+        _logger.error(f"MQTT error: {e}")
+        return 1
+    except ValidationError as e:
+        _logger.error(f"Invalid input: {e}")
+        # RangeValidationError has min_value/max_value attributes
+        if isinstance(e, RangeValidationError):
+            _logger.info(
+                f"Valid range for {e.field}: {e.min_value} to {e.max_value}"
+            )
+        return 1
     except asyncio.CancelledError:
         _logger.info("Operation cancelled by user.")
+        return 1
+    except Nwp500Error as e:
+        _logger.error(f"Library error: {e}")
+        if hasattr(e, "retriable") and e.retriable:
+            _logger.info("This operation may be retried.")
         return 1
     except Exception as e:
         _logger.error(f"An unexpected error occurred: {e}", exc_info=True)

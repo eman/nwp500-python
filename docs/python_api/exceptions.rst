@@ -2,20 +2,89 @@
 Exceptions
 ==========
 
-Exception classes for error handling in the nwp500 library.
+**New in v5.0:** Complete exception architecture with enterprise-grade error handling.
 
-Overview
-========
+The nwp500 library provides a comprehensive exception hierarchy for robust error handling.
+All custom exceptions inherit from a base class and provide structured error information.
 
-The library provides specific exception types for different error
-scenarios:
+Exception Hierarchy
+===================
 
-* **Authentication errors** - Sign-in, token refresh failures
-* **API errors** - REST API request failures
-* **MQTT errors** - Connection and communication issues
+All library exceptions inherit from ``Nwp500Error``::
 
-All exceptions inherit from Python's base ``Exception`` class and
-provide additional context through attributes.
+    Nwp500Error (base)
+    ├── AuthenticationError
+    │   ├── InvalidCredentialsError
+    │   ├── TokenExpiredError
+    │   └── TokenRefreshError
+    ├── APIError
+    ├── MqttError
+    │   ├── MqttConnectionError
+    │   ├── MqttNotConnectedError
+    │   ├── MqttPublishError
+    │   ├── MqttSubscriptionError
+    │   └── MqttCredentialsError
+    ├── ValidationError
+    │   ├── ParameterValidationError
+    │   └── RangeValidationError
+    └── DeviceError
+        ├── DeviceNotFoundError
+        ├── DeviceOfflineError
+        └── DeviceOperationError
+
+Base Exception
+==============
+
+Nwp500Error
+-----------
+
+.. py:class:: Nwp500Error(message, *, error_code=None, details=None, retriable=False)
+
+   Base exception for all nwp500 library errors.
+
+   All custom exceptions in the library inherit from this base class, allowing
+   consumers to catch all library-specific errors with a single handler.
+
+   :param message: Human-readable error message
+   :type message: str
+   :param error_code: Machine-readable error code (optional)
+   :type error_code: str or None
+   :param details: Additional context as dictionary (optional)
+   :type details: dict or None
+   :param retriable: Whether the operation can be retried (optional)
+   :type retriable: bool
+
+   **Attributes:**
+
+   * ``message`` (str) - Human-readable error message
+   * ``error_code`` (str or None) - Machine-readable error code
+   * ``details`` (dict) - Additional context
+   * ``retriable`` (bool) - Whether operation can be retried
+
+   **Methods:**
+
+   * ``to_dict()`` - Serialize exception for logging/monitoring
+
+   **Example - Catching all library errors:**
+
+   .. code-block:: python
+
+      from nwp500 import NavienMqttClient, Nwp500Error
+
+      try:
+          mqtt = NavienMqttClient(auth)
+          await mqtt.connect()
+          await mqtt.request_device_status(device)
+      except Nwp500Error as e:
+          # Catches all library exceptions
+          print(f"Library error: {e}")
+          
+          # Check if retriable
+          if e.retriable:
+              print("This operation can be retried")
+          
+          # Log structured data
+          logger.error("Operation failed", extra=e.to_dict())
 
 Authentication Exceptions
 =========================
@@ -23,17 +92,15 @@ Authentication Exceptions
 AuthenticationError
 -------------------
 
-Base exception for all authentication-related errors.
+.. py:class:: AuthenticationError(message, status_code=None, response=None, **kwargs)
 
-.. py:class:: AuthenticationError(message, status_code=None, response=None)
-
-   Base class for authentication failures.
+   Base exception for authentication-related errors.
 
    :param message: Error description
    :type message: str
-   :param status_code: HTTP status code if available
+   :param status_code: HTTP status code (optional)
    :type status_code: int or None
-   :param response: Complete API response dictionary
+   :param response: Complete API response dictionary (optional)
    :type response: dict or None
 
    **Attributes:**
@@ -42,92 +109,61 @@ Base exception for all authentication-related errors.
    * ``status_code`` (int or None) - HTTP status code
    * ``response`` (dict or None) - Full API response
 
-   **Example:**
-
-   .. code-block:: python
-
-      from nwp500 import AuthenticationError
-
-      try:
-          async with NavienAuthClient(email, password) as auth:
-              # Operations
-              pass
-      except AuthenticationError as e:
-          print(f"Auth failed: {e.message}")
-          if e.status_code:
-              print(f"Status code: {e.status_code}")
-          if e.response:
-              print(f"Response: {e.response}")
-
 InvalidCredentialsError
 -----------------------
 
-Raised when email/password combination is incorrect.
-
 .. py:class:: InvalidCredentialsError
 
-   Subclass of :py:class:`AuthenticationError`.
+   Raised when email/password combination is incorrect.
 
-   Raised during ``sign_in()`` when credentials are rejected.
+   Subclass of :py:class:`AuthenticationError`. Typically indicates a 401
+   Unauthorized response from the API.
 
    **Example:**
 
    .. code-block:: python
 
-      from nwp500 import InvalidCredentialsError
+      from nwp500 import NavienAuthClient, InvalidCredentialsError
 
       try:
-          await auth.sign_in("wrong@email.com", "wrong_password")
-      except InvalidCredentialsError:
-          print("Invalid email or password")
+          async with NavienAuthClient(email, password) as auth:
+              pass
+      except InvalidCredentialsError as e:
+          print(f"Invalid credentials: {e}")
+          print("Please check your email and password")
           # Prompt user to re-enter credentials
 
 TokenExpiredError
 -----------------
 
-Raised when an authentication token has expired.
-
 .. py:class:: TokenExpiredError
 
-   Subclass of :py:class:`AuthenticationError`.
+   Raised when an authentication token has expired.
 
-   Usually raised when token refresh fails and re-authentication is
-   required.
-
-   **Example:**
-
-   .. code-block:: python
-
-      from nwp500 import TokenExpiredError
-
-      try:
-          await api.list_devices()
-      except TokenExpiredError:
-          print("Token expired - please sign in again")
-          # Re-authenticate
+   Subclass of :py:class:`AuthenticationError`. Tokens have a limited lifetime
+   and must be refreshed periodically.
 
 TokenRefreshError
 -----------------
 
-Raised when automatic token refresh fails.
-
 .. py:class:: TokenRefreshError
 
-   Subclass of :py:class:`AuthenticationError`.
+   Raised when token refresh operation fails.
 
-   Occurs when refresh token is invalid or expired, requiring new
-   sign-in.
+   Subclass of :py:class:`AuthenticationError`. Occurs when refresh token is
+   invalid or expired, requiring full re-authentication.
 
    **Example:**
 
    .. code-block:: python
 
-      from nwp500 import TokenRefreshError
+      from nwp500 import NavienAuthClient, TokenRefreshError
 
       try:
           await auth.ensure_valid_token()
-      except TokenRefreshError:
-          print("Cannot refresh token - signing in again")
+      except TokenRefreshError as e:
+          print(f"Token refresh failed: {e}")
+          print("Re-authenticating with fresh credentials")
           await auth.sign_in(email, password)
 
 API Exceptions
@@ -136,24 +172,16 @@ API Exceptions
 APIError
 --------
 
-Raised when REST API returns an error response.
+.. py:class:: APIError(message, code=None, response=None, **kwargs)
 
-.. py:class:: APIError(message, code=None, response=None)
-
-   Exception for REST API failures.
+   Raised when REST API returns an error response.
 
    :param message: Error description
    :type message: str
-   :param code: HTTP or API error code
+   :param code: HTTP or API error code (optional)
    :type code: int or None
-   :param response: Complete API response dictionary
+   :param response: Complete API response dictionary (optional)
    :type response: dict or None
-
-   **Attributes:**
-
-   * ``message`` (str) - Error message
-   * ``code`` (int or None) - HTTP/API error code
-   * ``response`` (dict or None) - Full API response
 
    **Common HTTP codes:**
 
@@ -168,14 +196,13 @@ Raised when REST API returns an error response.
 
    .. code-block:: python
 
-      from nwp500 import APIError
+      from nwp500 import NavienAPIClient, APIError
 
       try:
           device = await api.get_device_info("invalid_mac")
       except APIError as e:
           print(f"API error: {e.message}")
-          print(f"Code: {e.code}")
-
+          
           if e.code == 404:
               print("Device not found")
           elif e.code == 401:
@@ -186,54 +213,232 @@ Raised when REST API returns an error response.
 MQTT Exceptions
 ===============
 
-MQTT-related errors typically manifest as Python exceptions from the
-underlying ``awscrt`` and ``awsiot`` libraries.
+MqttError
+---------
 
-Common MQTT Errors
+.. py:class:: MqttError
+
+   Base exception for MQTT operations.
+
+   All MQTT-related errors inherit from this base class, allowing consumers
+   to handle all MQTT issues with a single exception handler.
+
+MqttConnectionError
+-------------------
+
+.. py:class:: MqttConnectionError
+
+   Connection establishment or maintenance failed.
+
+   Raised when the MQTT connection to AWS IoT Core cannot be established or
+   when an existing connection fails. May be due to network issues, invalid
+   credentials, or AWS service problems.
+
+   **Example:**
+
+   .. code-block:: python
+
+      from nwp500 import NavienMqttClient, MqttConnectionError
+
+      try:
+          mqtt = NavienMqttClient(auth)
+          await mqtt.connect()
+      except MqttConnectionError as e:
+          print(f"Connection failed: {e}")
+          print("Check network connectivity and AWS credentials")
+
+MqttNotConnectedError
+---------------------
+
+.. py:class:: MqttNotConnectedError
+
+   Operation requires active MQTT connection.
+
+   Raised when attempting MQTT operations (publish, subscribe, etc.) without
+   an established connection. Call ``connect()`` before performing operations.
+
+   **Example:**
+
+   .. code-block:: python
+
+      from nwp500 import NavienMqttClient, MqttNotConnectedError
+
+      mqtt = NavienMqttClient(auth)
+      
+      try:
+          await mqtt.request_device_status(device)
+      except MqttNotConnectedError:
+          # Not connected - establish connection first
+          await mqtt.connect()
+          await mqtt.request_device_status(device)
+
+MqttPublishError
+----------------
+
+.. py:class:: MqttPublishError
+
+   Failed to publish message to MQTT broker.
+
+   Raised when a message cannot be published to an MQTT topic. This may occur
+   during connection interruptions or when the broker rejects the message.
+
+   Often includes ``retriable=True`` flag for intelligent retry strategies.
+
+   **Example with retry:**
+
+   .. code-block:: python
+
+      from nwp500 import MqttPublishError
+      import asyncio
+
+      async def publish_with_retry(mqtt, topic, payload, max_retries=3):
+          for attempt in range(max_retries):
+              try:
+                  await mqtt.publish(topic, payload)
+                  return  # Success
+              except MqttPublishError as e:
+                  if e.retriable and attempt < max_retries - 1:
+                      wait_time = 2 ** attempt  # Exponential backoff
+                      print(f"Retry in {wait_time}s...")
+                      await asyncio.sleep(wait_time)
+                  else:
+                      raise  # Not retriable or max retries reached
+
+MqttSubscriptionError
+---------------------
+
+.. py:class:: MqttSubscriptionError
+
+   Failed to subscribe to MQTT topic.
+
+   Raised when subscription to an MQTT topic fails. This may occur if the
+   connection is interrupted or if the client lacks permissions for the topic.
+
+MqttCredentialsError
+--------------------
+
+.. py:class:: MqttCredentialsError
+
+   AWS credentials invalid or expired.
+
+   Raised when AWS IoT credentials are missing, invalid, or expired.
+   Re-authentication may be required to obtain fresh credentials.
+
+   **Example:**
+
+   .. code-block:: python
+
+      from nwp500 import NavienMqttClient, MqttCredentialsError
+
+      try:
+          mqtt = NavienMqttClient(auth)
+      except MqttCredentialsError as e:
+          print(f"Credentials error: {e}")
+          print("Re-authenticating to get fresh AWS credentials")
+          await auth.sign_in(email, password)
+
+Validation Exceptions
+=====================
+
+ValidationError
+---------------
+
+.. py:class:: ValidationError
+
+   Base exception for validation failures.
+
+   Raised when input parameters or data fail validation checks.
+
+ParameterValidationError
+------------------------
+
+.. py:class:: ParameterValidationError(message, parameter=None, value=None, **kwargs)
+
+   Invalid parameter value provided.
+
+   Raised when a parameter value is invalid for reasons other than being
+   out of range (e.g., wrong type, invalid format).
+
+   :param parameter: Name of the invalid parameter
+   :type parameter: str or None
+   :param value: The invalid value provided
+   :type value: Any
+
+RangeValidationError
+--------------------
+
+.. py:class:: RangeValidationError(message, field=None, value=None, min_value=None, max_value=None, **kwargs)
+
+   Value outside acceptable range.
+
+   Raised when a numeric value is outside its valid range.
+
+   :param field: Name of the field
+   :type field: str or None
+   :param value: The invalid value provided
+   :type value: Any
+   :param min_value: Minimum acceptable value
+   :type min_value: Any
+   :param max_value: Maximum acceptable value
+   :type max_value: Any
+
+   **Example:**
+
+   .. code-block:: python
+
+      from nwp500 import NavienMqttClient, RangeValidationError
+
+      try:
+          await mqtt.set_dhw_temperature(device, temperature=200)
+      except RangeValidationError as e:
+          print(f"Invalid {e.field}: {e.value}")
+          print(f"Valid range: {e.min_value} to {e.max_value}")
+          # Output: Invalid temperature: 200
+          #         Valid range: 100 to 140
+
+Device Exceptions
+=================
+
+DeviceError
+-----------
+
+.. py:class:: DeviceError
+
+   Base exception for device operations.
+
+   All device-related errors inherit from this base class.
+
+DeviceNotFoundError
+-------------------
+
+.. py:class:: DeviceNotFoundError
+
+   Requested device not found.
+
+   Raised when a device cannot be found in the user's device list or when
+   attempting to access a non-existent device.
+
+DeviceOfflineError
 ------------------
 
-**Connection Failures:**
+.. py:class:: DeviceOfflineError
 
-* ``ConnectionError`` - Failed to connect to AWS IoT Core
-* ``TimeoutError`` - Connection attempt timed out
-* ``ssl.SSLError`` - TLS/SSL handshake failed
+   Device is offline or unreachable.
 
-**Authentication Failures:**
+   Raised when a device is offline and cannot respond to commands or status
+   requests. The device may be powered off, disconnected from the network,
+   or experiencing connectivity issues.
 
-* ``Exception`` with "unauthorized" - Invalid AWS credentials
-* ``Exception`` with "forbidden" - AWS policy denies access
+DeviceOperationError
+--------------------
 
-**Network Errors:**
+.. py:class:: DeviceOperationError
 
-* ``OSError`` - Network interface issues
-* ``socket.error`` - Socket-level errors
+   Device operation failed.
 
-Example MQTT Error Handling
-----------------------------
-
-.. code-block:: python
-
-   from nwp500 import NavienMqttClient
-   import asyncio
-
-   async def safe_mqtt_connect():
-       mqtt = NavienMqttClient(auth)
-
-       try:
-           await mqtt.connect()
-           print("Connected successfully")
-
-       except ConnectionError as e:
-           print(f"Connection failed: {e}")
-           # Check network, credentials
-
-       except TimeoutError:
-           print("Connection timed out")
-           # Retry with longer timeout
-
-       except Exception as e:
-           print(f"Unexpected error: {e}")
-           # Log for debugging
+   Raised when a device operation (mode change, temperature setting, etc.)
+   fails. This may occur due to invalid commands, device restrictions, or
+   device-side errors.
 
 Error Handling Patterns
 =======================
@@ -241,160 +446,223 @@ Error Handling Patterns
 Pattern 1: Specific Exception Handling
 ---------------------------------------
 
+Handle specific exception types for granular control:
+
 .. code-block:: python
 
    from nwp500 import (
        NavienAuthClient,
+       NavienMqttClient,
        InvalidCredentialsError,
-       TokenExpiredError,
-       APIError
+       MqttNotConnectedError,
+       RangeValidationError,
    )
 
    async def robust_operation():
        try:
            async with NavienAuthClient(email, password) as auth:
-               api = NavienAPIClient(auth)
-               devices = await api.list_devices()
-               return devices
-
+               mqtt = NavienMqttClient(auth)
+               await mqtt.connect()
+               
+               await mqtt.set_dhw_temperature(device, temperature=120)
+               
        except InvalidCredentialsError:
-           print("Invalid credentials")
-           # Re-prompt user
+           print("Invalid credentials - check email/password")
+           
+       except MqttNotConnectedError:
+           print("MQTT not connected - device may be offline")
+           
+       except RangeValidationError as e:
+           print(f"Invalid {e.field}: {e.value}")
+           print(f"Valid range: {e.min_value} to {e.max_value}")
 
-       except TokenExpiredError:
-           print("Token expired")
-           # Force re-authentication
-
-       except APIError as e:
-           if e.code == 429:
-               print("Rate limited - waiting...")
-               await asyncio.sleep(60)
-               # Retry
-           else:
-               print(f"API error: {e.message}")
-
-       except Exception as e:
-           print(f"Unexpected error: {e}")
-           # Log and notify
-
-Pattern 2: Base Exception Handling
+Pattern 2: Category-Based Handling
 -----------------------------------
 
-.. code-block:: python
-
-   from nwp500 import AuthenticationError, APIError
-
-   async def simple_handling():
-       try:
-           async with NavienAuthClient(email, password) as auth:
-               api = NavienAPIClient(auth)
-               return await api.list_devices()
-
-       except AuthenticationError as e:
-           # Handles all auth errors
-           print(f"Authentication failed: {e.message}")
-           return None
-
-       except APIError as e:
-           # Handles all API errors
-           print(f"API request failed: {e.message}")
-           return None
-
-Pattern 3: Retry Logic
------------------------
+Catch exception categories (Auth, MQTT, Validation):
 
 .. code-block:: python
 
-   from nwp500 import APIError
+   from nwp500 import (
+       AuthenticationError,
+       MqttError,
+       ValidationError,
+       Nwp500Error,
+   )
+
+   try:
+       # Operations
+       pass
+       
+   except AuthenticationError as e:
+       print(f"Authentication failed: {e}")
+       # Re-authenticate
+       
+   except MqttError as e:
+       print(f"MQTT error: {e}")
+       # Check connection
+       
+   except ValidationError as e:
+       print(f"Invalid input: {e}")
+       # Fix parameters
+
+Pattern 3: Retry Logic with retriable Flag
+-------------------------------------------
+
+Implement intelligent retry strategies:
+
+.. code-block:: python
+
+   from nwp500 import MqttPublishError
    import asyncio
 
-   async def retry_on_failure(max_retries=3):
+   async def operation_with_retry(max_retries=3):
        for attempt in range(max_retries):
            try:
-               async with NavienAuthClient(email, password) as auth:
-                   api = NavienAPIClient(auth)
-                   return await api.list_devices()
-
-           except APIError as e:
-               if e.code >= 500:
-                   # Server error - retry
-                   print(f"Attempt {attempt + 1} failed: {e.message}")
-                   if attempt < max_retries - 1:
-                       await asyncio.sleep(2 ** attempt)  # Exponential backoff
-                   else:
-                       raise  # Give up after max retries
+               await mqtt.publish(topic, payload)
+               return  # Success
+               
+           except MqttPublishError as e:
+               if e.retriable and attempt < max_retries - 1:
+                   wait_time = 2 ** attempt  # Exponential backoff
+                   print(f"Attempt {attempt + 1} failed, retrying in {wait_time}s")
+                   await asyncio.sleep(wait_time)
                else:
-                   # Client error - don't retry
+                   print(f"Operation failed: {e}")
                    raise
 
-Pattern 4: Graceful Degradation
---------------------------------
+Pattern 4: Structured Logging
+------------------------------
+
+Use ``to_dict()`` for structured error logging:
 
 .. code-block:: python
 
-   from nwp500 import APIError, AuthenticationError
+   import logging
+   from nwp500 import Nwp500Error
 
-   async def with_fallback():
-       try:
-           async with NavienAuthClient(email, password) as auth:
-               api = NavienAPIClient(auth)
-               devices = await api.list_devices()
-               return devices
+   logger = logging.getLogger(__name__)
 
-       except AuthenticationError:
-           print("Cannot authenticate - using cached data")
-           return load_cached_devices()
+   try:
+       await mqtt.request_device_status(device)
+   except Nwp500Error as e:
+       # Log structured error data
+       logger.error("Operation failed", extra=e.to_dict())
+       # Output includes: error_type, message, error_code, details, retriable
 
-       except APIError:
-           print("API unavailable - using cached data")
-           return load_cached_devices()
+Pattern 5: Catch-All with Base Exception
+-----------------------------------------
+
+Catch all library exceptions with ``Nwp500Error``:
+
+.. code-block:: python
+
+   from nwp500 import Nwp500Error
+
+   try:
+       # Any library operation
+       await mqtt.connect()
+       await mqtt.request_device_status(device)
+       
+   except Nwp500Error as e:
+       # All nwp500 exceptions inherit from Nwp500Error
+       print(f"Library error: {e}")
+       
+       # Check if retriable
+       if e.retriable:
+           print("This operation can be retried")
+       
+       # Log for debugging
+       logger.error("Operation failed", extra=e.to_dict())
+
+Exception Chaining
+==================
+
+**New in v5.0:** All exception wrapping preserves the original exception chain.
+
+When the library wraps exceptions (e.g., wrapping ``aiohttp.ClientError`` in
+``AuthenticationError``), the original exception is preserved using Python's
+``raise ... from`` syntax.
+
+**Example - Inspecting exception chains:**
+
+.. code-block:: python
+
+   from nwp500 import AuthenticationError
+   import aiohttp
+
+   try:
+       async with NavienAuthClient(email, password) as auth:
+           pass
+   except AuthenticationError as e:
+       print(f"Authentication error: {e}")
+       
+       # Check for original cause
+       if e.__cause__:
+           print(f"Original error: {e.__cause__}")
+           print(f"Original type: {type(e.__cause__).__name__}")
+           
+           # Was it a network error?
+           if isinstance(e.__cause__, aiohttp.ClientError):
+               print("Network connectivity issue")
+
+This preserves full stack traces for debugging in production.
 
 Best Practices
 ==============
 
-1. **Catch specific exceptions first:**
+1. **Catch specific exceptions first, then general:**
 
    .. code-block:: python
 
       try:
-          await auth.sign_in(email, password)
-      except InvalidCredentialsError:
-          # Handle specifically
+          await mqtt.connect()
+      except MqttNotConnectedError:
+          # Handle specific case
           pass
-      except AuthenticationError:
-          # Handle generally
+      except MqttError:
+          # Handle general MQTT errors
           pass
-      except Exception:
-          # Handle anything else
+      except Nwp500Error:
+          # Handle any library error
           pass
 
-2. **Use exception attributes:**
+2. **Use exception attributes for user-friendly messages:**
 
    .. code-block:: python
 
       try:
-          await api.list_devices()
-      except APIError as e:
-          # Use error details
-          log.error(f"API error: {e.message}")
-          log.error(f"Code: {e.code}")
-          log.debug(f"Response: {e.response}")
+          await mqtt.set_dhw_temperature(device, temperature=200)
+      except RangeValidationError as e:
+          # Show helpful message
+          print(f"Temperature must be between {e.min_value}°F and {e.max_value}°F")
 
-3. **Implement retry logic for transient errors:**
+3. **Check retriable flag before retrying:**
 
    .. code-block:: python
 
-      async def with_retry(func, max_attempts=3):
-          for i in range(max_attempts):
-              try:
-                  return await func()
-              except APIError as e:
-                  if e.code >= 500 and i < max_attempts - 1:
-                      await asyncio.sleep(2 ** i)
-                  else:
-                      raise
+      try:
+          await mqtt.publish(topic, payload)
+      except MqttPublishError as e:
+          if e.retriable:
+              # Safe to retry
+              await asyncio.sleep(1)
+              await mqtt.publish(topic, payload)
+          else:
+              # Don't retry
+              raise
 
-4. **Always cleanup resources:**
+4. **Use to_dict() for monitoring/logging:**
+
+   .. code-block:: python
+
+      try:
+          await operation()
+      except Nwp500Error as e:
+          # Send structured data to monitoring system
+          monitoring.record_exception(e.to_dict())
+
+5. **Always cleanup resources:**
 
    .. code-block:: python
 
@@ -402,24 +670,39 @@ Best Practices
       try:
           await mqtt.connect()
           # Operations
-      except Exception as e:
+      except Nwp500Error as e:
           print(f"Error: {e}")
       finally:
           await mqtt.disconnect()
 
-5. **Log for debugging:**
+Migration from v4.x
+===================
 
-   .. code-block:: python
+If upgrading from v4.x, update your exception handling:
 
-      import logging
+**Before (v4.x):**
 
-      try:
-          await api.list_devices()
-      except APIError as e:
-          logging.error(f"API error: {e.message}", extra={
-              'code': e.code,
-              'response': e.response
-          })
+.. code-block:: python
+
+   try:
+       await mqtt.request_device_status(device)
+   except RuntimeError as e:
+       if "Not connected" in str(e):
+           await mqtt.connect()
+
+**After (v5.0+):**
+
+.. code-block:: python
+
+   from nwp500 import MqttNotConnectedError
+
+   try:
+       await mqtt.request_device_status(device)
+   except MqttNotConnectedError:
+       await mqtt.connect()
+       await mqtt.request_device_status(device)
+
+See the CHANGELOG.rst for complete migration guide with more examples.
 
 Related Documentation
 =====================
@@ -427,3 +710,4 @@ Related Documentation
 * :doc:`auth_client` - Authentication client
 * :doc:`api_client` - REST API client
 * :doc:`mqtt_client` - MQTT client
+* Complete example: ``examples/exception_handling_example.py``

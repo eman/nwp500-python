@@ -20,6 +20,12 @@ from typing import Any, Optional
 import aiohttp
 
 from .config import API_BASE_URL, REFRESH_ENDPOINT, SIGN_IN_ENDPOINT
+from .exceptions import (
+    AuthenticationError,
+    InvalidCredentialsError,
+    TokenExpiredError,
+    TokenRefreshError,
+)
 
 __author__ = "Emmanuel Levijarvi"
 __copyright__ = "Emmanuel Levijarvi"
@@ -255,50 +261,20 @@ class AuthenticationResponse:
         )
 
 
-class AuthenticationError(Exception):
-    """Base exception for authentication errors.
-
-    Attributes:
-        message: Error message describing the failure
-        status_code: HTTP status code
-        response: Complete API response dictionary
-    """
-
-    def __init__(
-        self,
-        message: str,
-        status_code: Optional[int] = None,
-        response: Optional[dict[str, Any]] = None,
-    ):
-        """Initialize authentication error.
-
-        Args:
-            message: Error message describing the failure
-            status_code: HTTP status code
-            response: Complete API response dictionary
-        """
-        self.message = message
-        self.status_code = status_code
-        self.response = response
-        super().__init__(self.message)
-
-
-class InvalidCredentialsError(AuthenticationError):
-    """Raised when credentials are invalid."""
-
-    pass
-
-
-class TokenExpiredError(AuthenticationError):
-    """Raised when a token has expired."""
-
-    pass
-
-
-class TokenRefreshError(AuthenticationError):
-    """Raised when token refresh fails."""
-
-    pass
+# Exception classes moved to exceptions.py module
+# Import them here for backward compatibility
+__all__ = [
+    "UserInfo",
+    "AuthTokens",
+    "AuthenticationResponse",
+    "AuthenticationError",
+    "InvalidCredentialsError",
+    "TokenExpiredError",
+    "TokenRefreshError",
+    "NavienAuthClient",
+    "authenticate",
+    "refresh_access_token",
+]
 
 
 class NavienAuthClient:
@@ -501,10 +477,12 @@ class NavienAuthClient:
 
         except aiohttp.ClientError as e:
             _logger.error(f"Network error during sign-in: {e}")
-            raise AuthenticationError(f"Network error: {str(e)}")
+            raise AuthenticationError(f"Network error: {str(e)}") from e
         except (KeyError, ValueError, json.JSONDecodeError) as e:
             _logger.error(f"Failed to parse authentication response: {e}")
-            raise AuthenticationError(f"Invalid response format: {str(e)}")
+            raise AuthenticationError(
+                f"Invalid response format: {str(e)}"
+            ) from e
 
     async def refresh_token(self, refresh_token: str) -> AuthTokens:
         """
@@ -587,10 +565,10 @@ class NavienAuthClient:
 
         except aiohttp.ClientError as e:
             _logger.error(f"Network error during token refresh: {e}")
-            raise TokenRefreshError(f"Network error: {str(e)}")
+            raise TokenRefreshError(f"Network error: {str(e)}") from e
         except (KeyError, ValueError, json.JSONDecodeError) as e:
             _logger.error(f"Failed to parse refresh response: {e}")
-            raise TokenRefreshError(f"Invalid response format: {str(e)}")
+            raise TokenRefreshError(f"Invalid response format: {str(e)}") from e
 
     async def re_authenticate(self) -> AuthenticationResponse:
         """

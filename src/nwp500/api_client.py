@@ -15,6 +15,7 @@ from .auth import (
     TokenRefreshError,
 )
 from .config import API_BASE_URL
+from .exceptions import APIError
 from .models import Device, FirmwareInfo, TOUInfo
 
 __author__ = "Emmanuel Levijarvi"
@@ -24,32 +25,12 @@ __license__ = "MIT"
 _logger = logging.getLogger(__name__)
 
 
-class APIError(Exception):
-    """Raised when API returns an error response.
-
-    Attributes:
-        message: Error message describing the failure
-        code: HTTP or API error code
-        response: Complete API response dictionary
-    """
-
-    def __init__(
-        self,
-        message: str,
-        code: Optional[int] = None,
-        response: Optional[dict[str, Any]] = None,
-    ):
-        """Initialize API error.
-
-        Args:
-            message: Error message describing the failure
-            code: HTTP or API error code
-            response: Complete API response dictionary
-        """
-        self.message = message
-        self.code = code
-        self.response = response
-        super().__init__(self.message)
+# Exception class moved to exceptions.py module
+# Import it here for backward compatibility
+__all__ = [
+    "NavienAPIClient",
+    "APIError",
+]
 
 
 class NavienAPIClient:
@@ -211,7 +192,7 @@ class NavienAPIClient:
 
         except aiohttp.ClientError as e:
             _logger.error(f"Network error: {e}")
-            raise APIError(f"Network error: {str(e)}")
+            raise APIError(f"Network error: {str(e)}") from e
 
     # Device Management Endpoints
 

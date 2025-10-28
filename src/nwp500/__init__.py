@@ -20,17 +20,12 @@ finally:
 
 # Export main components
 from nwp500.api_client import (
-    APIError,
     NavienAPIClient,
 )
 from nwp500.auth import (
-    AuthenticationError,
     AuthenticationResponse,
     AuthTokens,
-    InvalidCredentialsError,
     NavienAuthClient,
-    TokenExpiredError,
-    TokenRefreshError,
     UserInfo,
     authenticate,
     refresh_access_token,
@@ -48,6 +43,27 @@ from nwp500.encoding import (
 from nwp500.events import (
     EventEmitter,
     EventListener,
+)
+from nwp500.exceptions import (
+    APIError,
+    AuthenticationError,
+    DeviceError,
+    DeviceNotFoundError,
+    DeviceOfflineError,
+    DeviceOperationError,
+    InvalidCredentialsError,
+    MqttConnectionError,
+    MqttCredentialsError,
+    MqttError,
+    MqttNotConnectedError,
+    MqttPublishError,
+    MqttSubscriptionError,
+    Nwp500Error,
+    ParameterValidationError,
+    RangeValidationError,
+    TokenExpiredError,
+    TokenRefreshError,
+    ValidationError,
 )
 from nwp500.models import (
     CurrentOperationMode,
@@ -99,17 +115,32 @@ __all__ = [
     "AuthenticationResponse",
     "AuthTokens",
     "UserInfo",
+    "authenticate",
+    "refresh_access_token",
+    # Exceptions (all in one place)
+    "Nwp500Error",
     "AuthenticationError",
     "InvalidCredentialsError",
     "TokenExpiredError",
     "TokenRefreshError",
-    "authenticate",
-    "refresh_access_token",
+    "APIError",
+    "MqttError",
+    "MqttConnectionError",
+    "MqttNotConnectedError",
+    "MqttPublishError",
+    "MqttSubscriptionError",
+    "MqttCredentialsError",
+    "ValidationError",
+    "ParameterValidationError",
+    "RangeValidationError",
+    "DeviceError",
+    "DeviceNotFoundError",
+    "DeviceOfflineError",
+    "DeviceOperationError",
     # Constants
     "constants",
     # API Client
     "NavienAPIClient",
-    "APIError",
     # MQTT Client
     "NavienMqttClient",
     "MqttConnectionConfig",

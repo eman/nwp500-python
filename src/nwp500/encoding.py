@@ -10,6 +10,8 @@ from collections.abc import Iterable
 from numbers import Real
 from typing import Union
 
+from .exceptions import ParameterValidationError, RangeValidationError
+
 # Weekday constants
 WEEKDAY_ORDER = [
     "Sunday",
@@ -46,7 +48,8 @@ def encode_week_bitfield(days: Iterable[Union[str, int]]) -> int:
         Monday=bit 1, etc.)
 
     Raises:
-        ValueError: If day name is invalid or index is out of range
+        ParameterValidationError: If day name is unknown/invalid
+        RangeValidationError: If day index is out of range (not 0-7)
         TypeError: If day value is neither string nor integer
 
     Examples:
@@ -64,7 +67,11 @@ def encode_week_bitfield(days: Iterable[Union[str, int]]) -> int:
         if isinstance(value, str):
             key = value.strip().lower()
             if key not in WEEKDAY_NAME_TO_BIT:
-                raise ValueError(f"Unknown weekday: {value}")
+                raise ParameterValidationError(
+                    f"Unknown weekday: {value}",
+                    parameter="weekday",
+                    value=value,
+                )
             bitfield |= WEEKDAY_NAME_TO_BIT[key]
         elif isinstance(value, int):
             if 0 <= value <= 6:
@@ -73,7 +80,13 @@ def encode_week_bitfield(days: Iterable[Union[str, int]]) -> int:
                 # Support 1-7 indexing (Monday=1, Sunday=7)
                 bitfield |= 1 << (value - 1)
             else:
-                raise ValueError("Day index must be between 0-6 or 1-7")
+                raise RangeValidationError(
+                    "Day index must be between 0-6 or 1-7",
+                    field="day_index",
+                    value=value,
+                    min_value=0,
+                    max_value=7,
+                )
         else:
             raise TypeError("Weekday values must be strings or integers")
     return bitfield
@@ -135,7 +148,13 @@ def encode_season_bitfield(months: Iterable[int]) -> int:
     bitfield = 0
     for month in months:
         if month not in MONTH_TO_BIT:
-            raise ValueError("Month values must be in the range 1-12")
+            raise RangeValidationError(
+                "Month values must be in the range 1-12",
+                field="month",
+                value=month,
+                min_value=1,
+                max_value=12,
+            )
         bitfield |= MONTH_TO_BIT[month]
     return bitfield
 
@@ -179,13 +198,13 @@ def encode_price(value: Real, decimal_point: int) -> int:
 
     Args:
         value: Price value (float or Decimal)
-        decimal_point: Number of decimal places (0-4 typically)
+        decimal_point: Number of decimal places (0-10, typically 2-5)
 
     Returns:
         Integer representation of the price
 
     Raises:
-        ValueError: If decimal_point is negative
+        RangeValidationError: If decimal_point is not in range 0-10
 
     Examples:
         >>> encode_price(12.34, 2)
@@ -197,8 +216,14 @@ def encode_price(value: Real, decimal_point: int) -> int:
         >>> encode_price(100, 0)
         100
     """
-    if decimal_point < 0:
-        raise ValueError("decimal_point must be >= 0")
+    if not 0 <= decimal_point <= 10:
+        raise RangeValidationError(
+            "decimal_point must be between 0 and 10",
+            field="decimal_point",
+            value=decimal_point,
+            min_value=0,
+            max_value=10,
+        )
     scale = 10**decimal_point
     return int(round(float(value) * scale))
 
@@ -209,13 +234,13 @@ def decode_price(value: int, decimal_point: int) -> float:
 
     Args:
         value: Integer price value from device
-        decimal_point: Number of decimal places
+        decimal_point: Number of decimal places (0-10, typically 2-5)
 
     Returns:
         Floating-point price value
 
     Raises:
-        ValueError: If decimal_point is negative
+        RangeValidationError: If decimal_point is not in range 0-10
 
     Examples:
         >>> decode_price(1234, 2)
@@ -227,8 +252,14 @@ def decode_price(value: int, decimal_point: int) -> float:
         >>> decode_price(100, 0)
         100.0
     """
-    if decimal_point < 0:
-        raise ValueError("decimal_point must be >= 0")
+    if not 0 <= decimal_point <= 10:
+        raise RangeValidationError(
+            "decimal_point must be between 0 and 10",
+            field="decimal_point",
+            value=decimal_point,
+            min_value=0,
+            max_value=10,
+        )
     scale = 10**decimal_point
     return value / scale if scale else float(value)
 
@@ -307,14 +338,15 @@ def build_reservation_entry(
         days: Collection of weekday names or indices
         hour: Hour (0-23)
         minute: Minute (0-59)
-        mode_id: DHW operation mode ID
+        mode_id: DHW operation mode ID (1-6, see DhwOperationSetting)
         param: Additional parameter value
 
     Returns:
         Dictionary with reservation entry fields
 
     Raises:
-        ValueError: If any parameter is out of valid range
+        RangeValidationError: If hour, minute, or mode_id is out of range
+        ParameterValidationError: If enabled type is invalid
 
     Examples:
         >>> build_reservation_entry(
@@ -328,18 +360,40 @@ def build_reservation_entry(
         {'enable': 1, 'week': 42, 'hour': 6, 'min': 30, 'mode': 3, 'param': 120}
     """
     if not 0 <= hour <= 23:
-        raise ValueError("hour must be between 0 and 23")
+        raise RangeValidationError(
+            "hour must be between 0 and 23",
+            field="hour",
+            value=hour,
+            min_value=0,
+            max_value=23,
+        )
     if not 0 <= minute <= 59:
-        raise ValueError("minute must be between 0 and 59")
-    if mode_id < 0:
-        raise ValueError("mode_id must be non-negative")
+        raise RangeValidationError(
+            "minute must be between 0 and 59",
+            field="minute",
+            value=minute,
+            min_value=0,
+            max_value=59,
+        )
+    if not 1 <= mode_id <= 6:
+        raise RangeValidationError(
+            "mode_id must be between 1 and 6 (see DhwOperationSetting)",
+            field="mode_id",
+            value=mode_id,
+            min_value=1,
+            max_value=6,
+        )
 
     if isinstance(enabled, bool):
         enable_flag = 1 if enabled else 2
     elif enabled in (1, 2):
         enable_flag = int(enabled)
     else:
-        raise ValueError("enabled must be True/False or 1/2")
+        raise ParameterValidationError(
+            "enabled must be True/False or 1/2",
+            parameter="enabled",
+            value=enabled,
+        )
 
     week_bitfield = encode_week_bitfield(days)
 
@@ -407,14 +461,26 @@ def build_tou_period(
         ("end_hour", end_hour, 23),
     ):
         if not 0 <= value <= upper:
-            raise ValueError(f"{label} must be between 0 and {upper}")
+            raise RangeValidationError(
+                f"{label} must be between 0 and {upper}",
+                field=label,
+                value=value,
+                min_value=0,
+                max_value=upper,
+            )
 
     for label, value in (
         ("start_minute", start_minute),
         ("end_minute", end_minute),
     ):
         if not 0 <= value <= 59:
-            raise ValueError(f"{label} must be between 0 and 59")
+            raise RangeValidationError(
+                f"{label} must be between 0 and 59",
+                field=label,
+                value=value,
+                min_value=0,
+                max_value=59,
+            )
 
     # Encode bitfields
     week_bitfield = encode_week_bitfield(week_days)

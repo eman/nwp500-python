@@ -18,6 +18,7 @@ from awscrt import mqtt
 from awscrt.exceptions import AwsCrtError
 
 from .events import EventEmitter
+from .exceptions import MqttNotConnectedError
 from .models import Device, DeviceFeature, DeviceStatus, EnergyUsageResponse
 from .mqtt_utils import redact_topic
 
@@ -207,7 +208,7 @@ class MqttSubscriptionManager:
             Exception: If subscription fails
         """
         if not self._connection:
-            raise RuntimeError("Not connected to MQTT broker")
+            raise MqttNotConnectedError("Not connected to MQTT broker")
 
         _logger.info(f"Subscribing to topic: {redact_topic(topic)}")
 
@@ -252,7 +253,7 @@ class MqttSubscriptionManager:
             Exception: If unsubscribe fails
         """
         if not self._connection:
-            raise RuntimeError("Not connected to MQTT broker")
+            raise MqttNotConnectedError("Not connected to MQTT broker")
 
         _logger.info(f"Unsubscribing from topic: {redact_topic(topic)}")
 
@@ -293,7 +294,7 @@ class MqttSubscriptionManager:
             Exception: If any subscription fails
         """
         if not self._connection:
-            raise RuntimeError("Not connected to MQTT broker")
+            raise MqttNotConnectedError("Not connected to MQTT broker")
 
         if not self._subscriptions:
             _logger.debug("No subscriptions to restore")

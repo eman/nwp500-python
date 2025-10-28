@@ -228,7 +228,7 @@ Then in your code:
 .. code-block:: python
 
    import os
-   from nwp500 import NavienAuthClient, NavienAPIClient
+   from nwp500 import NavienAuthClient, InvalidCredentialsError
 
    async def main():
        email = os.getenv("NAVIEN_EMAIL")
@@ -240,10 +240,14 @@ Then in your code:
                "environment variables"
            )
        
-       async with NavienAuthClient(email, password) as auth:
-           api = NavienAPIClient(auth)
-           devices = await api.list_devices()
-           # ...
+       try:
+           async with NavienAuthClient(email, password) as auth:
+               api = NavienAPIClient(auth)
+               devices = await api.list_devices()
+               # ...
+       except InvalidCredentialsError:
+           print("Invalid email or password")
+           # Re-prompt for credentials
 
 Next Steps
 ==========

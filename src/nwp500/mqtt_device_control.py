@@ -19,6 +19,7 @@ from datetime import datetime
 from typing import Any, Callable, Optional
 
 from .constants import CommandCode
+from .exceptions import ParameterValidationError, RangeValidationError
 from .models import Device, DhwOperationSetting
 
 __author__ = "Emmanuel Levijarvi"
@@ -215,14 +216,24 @@ class MqttDeviceController:
         """
         if mode_id == DhwOperationSetting.VACATION.value:
             if vacation_days is None:
-                raise ValueError("Vacation mode requires vacation_days (1-30)")
+                raise ParameterValidationError(
+                    "Vacation mode requires vacation_days (1-30)",
+                    parameter="vacation_days",
+                )
             if not 1 <= vacation_days <= 30:
-                raise ValueError("vacation_days must be between 1 and 30")
+                raise RangeValidationError(
+                    "vacation_days must be between 1 and 30",
+                    field="vacation_days",
+                    value=vacation_days,
+                    min_value=1,
+                    max_value=30,
+                )
             param = [mode_id, vacation_days]
         else:
             if vacation_days is not None:
-                raise ValueError(
-                    "vacation_days is only valid for vacation mode (mode 5)"
+                raise ParameterValidationError(
+                    "vacation_days is only valid for vacation mode (mode 5)",
+                    parameter="vacation_days",
                 )
             param = [mode_id]
 
@@ -272,7 +283,13 @@ class MqttDeviceController:
             ValueError: If period_days is not in the valid range [1, 30]
         """
         if not 1 <= period_days <= 30:
-            raise ValueError("period_days must be between 1 and 30")
+            raise RangeValidationError(
+                "period_days must be between 1 and 30",
+                field="period_days",
+                value=period_days,
+                min_value=1,
+                max_value=30,
+            )
 
         device_id = device.device_info.mac_address
         device_type = device.device_info.device_type
@@ -505,9 +522,14 @@ class MqttDeviceController:
         # (season, week, startHour, startMinute, endHour, endMinute,
         #  priceMin, priceMax, decimalPoint).
         if not controller_serial_number:
-            raise ValueError("controller_serial_number is required")
+            raise ParameterValidationError(
+                "controller_serial_number is required",
+                parameter="controller_serial_number",
+            )
         if not periods:
-            raise ValueError("At least one TOU period must be provided")
+            raise ParameterValidationError(
+                "At least one TOU period must be provided", parameter="periods"
+            )
 
         device_id = device.device_info.mac_address
         device_type = device.device_info.device_type
@@ -553,7 +575,10 @@ class MqttDeviceController:
             ValueError: If controller_serial_number is empty
         """
         if not controller_serial_number:
-            raise ValueError("controller_serial_number is required")
+            raise ParameterValidationError(
+                "controller_serial_number is required",
+                parameter="controller_serial_number",
+            )
 
         device_id = device.device_info.mac_address
         device_type = device.device_info.device_type

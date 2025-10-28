@@ -7,6 +7,7 @@ import sys
 from typing import Any
 
 from nwp500 import NavienAPIClient, NavienAuthClient, NavienMqttClient
+from nwp500.encoding import build_reservation_entry
 
 
 async def main() -> None:
@@ -25,7 +26,7 @@ async def main() -> None:
             return
 
         # Build a weekday morning reservation for High Demand mode at 140°F display (120°F message)
-        weekday_reservation = NavienAPIClient.build_reservation_entry(
+        weekday_reservation = build_reservation_entry(
             enabled=True,
             days=["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"],
             hour=6,
