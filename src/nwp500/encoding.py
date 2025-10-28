@@ -198,13 +198,13 @@ def encode_price(value: Real, decimal_point: int) -> int:
 
     Args:
         value: Price value (float or Decimal)
-        decimal_point: Number of decimal places (0-4 typically)
+        decimal_point: Number of decimal places (0-10, typically 2-5)
 
     Returns:
         Integer representation of the price
 
     Raises:
-        ValueError: If decimal_point is negative
+        RangeValidationError: If decimal_point is not in range 0-10
 
     Examples:
         >>> encode_price(12.34, 2)
@@ -216,12 +216,13 @@ def encode_price(value: Real, decimal_point: int) -> int:
         >>> encode_price(100, 0)
         100
     """
-    if decimal_point < 0:
+    if not 0 <= decimal_point <= 10:
         raise RangeValidationError(
-            "decimal_point must be >= 0",
+            "decimal_point must be between 0 and 10",
             field="decimal_point",
             value=decimal_point,
             min_value=0,
+            max_value=10,
         )
     scale = 10**decimal_point
     return int(round(float(value) * scale))
@@ -233,13 +234,13 @@ def decode_price(value: int, decimal_point: int) -> float:
 
     Args:
         value: Integer price value from device
-        decimal_point: Number of decimal places
+        decimal_point: Number of decimal places (0-10, typically 2-5)
 
     Returns:
         Floating-point price value
 
     Raises:
-        ValueError: If decimal_point is negative
+        RangeValidationError: If decimal_point is not in range 0-10
 
     Examples:
         >>> decode_price(1234, 2)
@@ -251,12 +252,13 @@ def decode_price(value: int, decimal_point: int) -> float:
         >>> decode_price(100, 0)
         100.0
     """
-    if decimal_point < 0:
+    if not 0 <= decimal_point <= 10:
         raise RangeValidationError(
-            "decimal_point must be >= 0",
+            "decimal_point must be between 0 and 10",
             field="decimal_point",
             value=decimal_point,
             min_value=0,
+            max_value=10,
         )
     scale = 10**decimal_point
     return value / scale if scale else float(value)
