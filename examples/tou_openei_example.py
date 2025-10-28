@@ -16,7 +16,14 @@ from typing import Any
 
 import aiohttp
 
-from nwp500 import NavienAPIClient, NavienAuthClient, NavienMqttClient
+from nwp500 import (
+    NavienAPIClient,
+    NavienAuthClient,
+    NavienMqttClient,
+    build_tou_period,
+    decode_price,
+    decode_week_bitfield,
+)
 
 # OpenEI API configuration
 OPENEI_API_URL = "https://api.openei.org/utility_rates"
@@ -179,7 +186,7 @@ def convert_openei_to_tou_periods(
     ]
 
     for period in periods:
-        tou_period = NavienAPIClient.build_tou_period(
+        tou_period = build_tou_period(
             season_months=range(1, 13),  # All months
             week_days=weekdays,
             start_hour=period["start_hour"],
@@ -254,8 +261,8 @@ async def main() -> None:
     print(f"\nConverted to {len(tou_periods)} TOU periods:")
     for i, period in enumerate(tou_periods, 1):
         # Decode for display
-        days = NavienAPIClient.decode_week_bitfield(period["week"])
-        price = NavienAPIClient.decode_price(period["priceMin"], period["decimalPoint"])
+        days = decode_week_bitfield(period["week"])
+        price = decode_price(period["priceMin"], period["decimalPoint"])
         print(
             f"  {i}. {period['startHour']:02d}:{period['startMinute']:02d}"
             f"-{period['endHour']:02d}:{period['endMinute']:02d} "

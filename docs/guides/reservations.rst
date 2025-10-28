@@ -299,6 +299,7 @@ Request the current reservation schedule from the device:
 
    import asyncio
    from typing import Any
+   from nwp500 import decode_week_bitfield
 
    async def read_schedule():
        async with NavienAuthClient(email, password) as auth:
@@ -327,7 +328,7 @@ Request the current reservation schedule from the device:
                print(f"Number of entries: {len(entries)}")
 
                for idx, entry in enumerate(entries, 1):
-                   days = NavienAPIClient.decode_week_bitfield(
+                   days = decode_week_bitfield(
                        entry.get("week", 0)
                    )
                    hour = entry.get("hour", 0)
@@ -633,7 +634,7 @@ Full working example with error handling and response monitoring:
                print(f"Active entries: {len(entries)}\n")
 
                for idx, entry in enumerate(entries, 1):
-                   days = NavienAPIClient.decode_week_bitfield(
+                   days = decode_week_bitfield(
                        entry["week"]
                    )
                    print(f"Entry {idx}: {entry['hour']:02d}:"
