@@ -278,24 +278,6 @@ Checking Command Types
    if is_control_command(CommandCode.POWER_ON):
        print("This is a control command")
 
-Backward Compatibility
-======================
-
-Legacy constant names are supported for backward compatibility:
-
-.. code-block:: python
-
-   # Old names (still work)
-   CMD_STATUS_REQUEST = CommandCode.STATUS_REQUEST
-   CMD_DEVICE_INFO_REQUEST = CommandCode.DEVICE_INFO_REQUEST
-   CMD_POWER_ON = CommandCode.POWER_ON
-   CMD_POWER_OFF = CommandCode.POWER_OFF
-   # ... etc
-
-   # Prefer new enum-based names
-   from nwp500.constants import CommandCode
-   CommandCode.STATUS_REQUEST
-
 Firmware Version Constants
 ===========================
 

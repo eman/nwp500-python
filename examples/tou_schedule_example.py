@@ -6,7 +6,7 @@ import os
 import sys
 from typing import Any
 
-from nwp500 import NavienAPIClient, NavienAuthClient, NavienMqttClient
+from nwp500 import NavienAPIClient, NavienAuthClient, NavienMqttClient, build_tou_period
 
 
 async def _wait_for_controller_serial(mqtt_client: NavienMqttClient, device) -> str:
@@ -57,7 +57,7 @@ async def main() -> None:
         print("Controller serial number acquired.")
 
         # Build two TOU periods as documented in MQTT_MESSAGES.rst
-        off_peak = NavienAPIClient.build_tou_period(
+        off_peak = build_tou_period(
             season_months=range(1, 13),
             week_days=["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"],
             start_hour=0,
@@ -68,7 +68,7 @@ async def main() -> None:
             price_max=0.34831,
             decimal_point=5,
         )
-        peak = NavienAPIClient.build_tou_period(
+        peak = build_tou_period(
             season_months=range(1, 13),
             week_days=["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"],
             start_hour=15,

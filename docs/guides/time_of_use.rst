@@ -288,14 +288,13 @@ Building TOU Periods
 Helper Methods
 ~~~~~~~~~~~~~~
 
-The ``NavienAPIClient`` class provides helper methods for building TOU period configurations:
+The library provides helper functions for building TOU period configurations:
 
 build_tou_period()
 """"""""""""""""""
 
 .. code-block:: python
 
-    @staticmethod
     def build_tou_period(
         season_months: Union[List[int], range],
         week_days: List[str],
@@ -331,7 +330,6 @@ encode_price()
 
 .. code-block:: python
 
-    @staticmethod
     def encode_price(price: float, decimal_point: int = 5) -> int
 
 Encodes a floating-point price into an integer for transmission.
@@ -340,8 +338,10 @@ Encodes a floating-point price into an integer for transmission.
 
 .. code-block:: python
 
+    from nwp500 import encode_price
+    
     # Encode $0.45000 per kWh
-    encoded = NavienAPIClient.encode_price(0.45, decimal_point=5)
+    encoded = encode_price(0.45, decimal_point=5)
     # Returns: 45000
 
 decode_price()
@@ -349,7 +349,6 @@ decode_price()
 
 .. code-block:: python
 
-    @staticmethod
     def decode_price(encoded_price: int, decimal_point: int = 5) -> float
 
 Decodes an integer price back to floating-point.
@@ -358,8 +357,10 @@ Decodes an integer price back to floating-point.
 
 .. code-block:: python
 
+    from nwp500 import decode_price
+    
     # Decode price from device
-    price = NavienAPIClient.decode_price(45000, decimal_point=5)
+    price = decode_price(45000, decimal_point=5)
     # Returns: 0.45
 
 encode_week_bitfield()
@@ -367,7 +368,6 @@ encode_week_bitfield()
 
 .. code-block:: python
 
-    @staticmethod
     def encode_week_bitfield(day_names: List[str]) -> int
 
 Encodes a list of day names into a bitfield.
@@ -386,8 +386,10 @@ Encodes a list of day names into a bitfield.
 
 .. code-block:: python
 
+    from nwp500 import encode_week_bitfield
+    
     # Weekdays only
-    bitfield = NavienAPIClient.encode_week_bitfield([
+    bitfield = encode_week_bitfield([
         "Monday", "Tuesday", "Wednesday", "Thursday", "Friday"
     ])
     # Returns: 0b0111110 = 62
@@ -397,7 +399,6 @@ decode_week_bitfield()
 
 .. code-block:: python
 
-    @staticmethod
     def decode_week_bitfield(bitfield: int) -> List[str]
 
 Decodes a bitfield back into a list of day names.
@@ -406,8 +407,10 @@ Decodes a bitfield back into a list of day names.
 
 .. code-block:: python
 
+    from nwp500 import decode_week_bitfield
+    
     # Decode weekday bitfield
-    days = NavienAPIClient.decode_week_bitfield(62)
+    days = decode_week_bitfield(62)
     # Returns: ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"]
 
 Usage Examples
@@ -421,7 +424,7 @@ Configure two rate periods - off-peak and peak pricing:
 .. code-block:: python
 
     import asyncio
-    from nwp500 import NavienAPIClient, NavienAuthClient, NavienMqttClient
+    from nwp500 import NavienAPIClient, NavienAuthClient, NavienMqttClient, build_tou_period
 
     async def configure_simple_tou():
         async with NavienAuthClient("user@example.com", "password") as auth_client:
@@ -446,7 +449,7 @@ Configure two rate periods - off-peak and peak pricing:
             controller_serial = feature.controllerSerialNumber
             
             # Define off-peak period (midnight to 2 PM, weekdays)
-            off_peak = NavienAPIClient.build_tou_period(
+            off_peak = build_tou_period(
                 season_months=range(1, 13),  # All months
                 week_days=["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"],
                 start_hour=0,
@@ -459,7 +462,7 @@ Configure two rate periods - off-peak and peak pricing:
             )
             
             # Define peak period (3 PM to 8 PM, weekdays)
-            peak = NavienAPIClient.build_tou_period(
+            peak = build_tou_period(
                 season_months=range(1, 13),
                 week_days=["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"],
                 start_hour=15,
@@ -502,7 +505,7 @@ Configure different rates for summer and winter:
             # ... get controller_serial (same as Example 1) ...
             
             # Summer off-peak (June-September, all day except 2-8 PM)
-            summer_off_peak = NavienAPIClient.build_tou_period(
+            summer_off_peak = build_tou_period(
                 season_months=[6, 7, 8, 9],
                 week_days=["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"],
                 start_hour=0,
@@ -515,7 +518,7 @@ Configure different rates for summer and winter:
             )
             
             # Summer peak (June-September, 2-8 PM)
-            summer_peak = NavienAPIClient.build_tou_period(
+            summer_peak = build_tou_period(
                 season_months=[6, 7, 8, 9],
                 week_days=["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"],
                 start_hour=14,
@@ -528,7 +531,7 @@ Configure different rates for summer and winter:
             )
             
             # Winter rates (October-May)
-            winter_off_peak = NavienAPIClient.build_tou_period(
+            winter_off_peak = build_tou_period(
                 season_months=[10, 11, 12, 1, 2, 3, 4, 5],
                 week_days=["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"],
                 start_hour=0,
@@ -540,7 +543,7 @@ Configure different rates for summer and winter:
                 decimal_point=5
             )
             
-            winter_peak = NavienAPIClient.build_tou_period(
+            winter_peak = build_tou_period(
                 season_months=[10, 11, 12, 1, 2, 3, 4, 5],
                 week_days=["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"],
                 start_hour=17,
@@ -571,6 +574,8 @@ Query the device for its current TOU configuration:
 
 .. code-block:: python
 
+    from nwp500 import decode_week_bitfield, decode_price
+
     async def check_tou_settings():
         async with NavienAuthClient("user@example.com", "password") as auth_client:
             api_client = NavienAPIClient(auth_client=auth_client)
@@ -593,12 +598,12 @@ Query the device for its current TOU configuration:
                 print(f"Number of periods: {len(periods)}")
                 
                 for i, period in enumerate(periods, 1):
-                    days = NavienAPIClient.decode_week_bitfield(period.get("week", 0))
-                    price_min = NavienAPIClient.decode_price(
+                    days = decode_week_bitfield(period.get("week", 0))
+                    price_min = decode_price(
                         period.get("priceMin", 0),
                         period.get("decimalPoint", 0)
                     )
-                    price_max = NavienAPIClient.decode_price(
+                    price_max = decode_price(
                         period.get("priceMax", 0),
                         period.get("decimalPoint", 0)
                     )
@@ -657,7 +662,7 @@ data from the OpenEI API and configuring it on your device:
 
     import asyncio
     import aiohttp
-    from nwp500 import NavienAPIClient, NavienAuthClient, NavienMqttClient
+    from nwp500 import NavienAPIClient, NavienAuthClient, NavienMqttClient, build_tou_period
 
     OPENEI_API_URL = "https://api.openei.org/utility_rates"
     OPENEI_API_KEY = "DEMO_KEY"  # Get your own key at openei.org
@@ -734,7 +739,7 @@ data from the OpenEI API and configuring it on your device:
         # Convert to TOU format
         weekdays = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"]
         return [
-            NavienAPIClient.build_tou_period(
+            build_tou_period(
                 season_months=range(1, 13),
                 week_days=weekdays,
                 start_hour=p["start_hour"],

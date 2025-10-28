@@ -17,11 +17,7 @@ import sys
 from typing import Any
 
 from nwp500 import NavienAPIClient, NavienAuthClient, NavienMqttClient
-from nwp500.constants import (
-    CMD_ANTI_LEGIONELLA_DISABLE,
-    CMD_ANTI_LEGIONELLA_ENABLE,
-    CMD_STATUS_REQUEST,
-)
+from nwp500.constants import CommandCode
 
 
 def display_anti_legionella_status(status: dict[str, Any], label: str = "") -> None:
@@ -119,7 +115,7 @@ async def main() -> None:
         print("STEP 1: Getting initial Anti-Legionella status...")
         print("=" * 70)
         status_received.clear()
-        expected_command = CMD_STATUS_REQUEST
+        expected_command = CommandCode.STATUS_REQUEST
         await mqtt_client.request_device_status(device)
 
         try:
@@ -137,7 +133,7 @@ async def main() -> None:
         print("STEP 2: Enabling Anti-Legionella cycle every 7 days...")
         print("=" * 70)
         status_received.clear()
-        expected_command = CMD_ANTI_LEGIONELLA_ENABLE
+        expected_command = CommandCode.ANTI_LEGIONELLA_ENABLE
         await mqtt_client.enable_anti_legionella(device, period_days=7)
 
         try:
@@ -155,7 +151,7 @@ async def main() -> None:
         print("WARNING: This reduces protection against Legionella bacteria!")
         print("=" * 70)
         status_received.clear()
-        expected_command = CMD_ANTI_LEGIONELLA_DISABLE
+        expected_command = CommandCode.ANTI_LEGIONELLA_DISABLE
         await mqtt_client.disable_anti_legionella(device)
 
         try:
@@ -172,7 +168,7 @@ async def main() -> None:
         print("STEP 4: Re-enabling Anti-Legionella with 14-day cycle...")
         print("=" * 70)
         status_received.clear()
-        expected_command = CMD_ANTI_LEGIONELLA_ENABLE
+        expected_command = CommandCode.ANTI_LEGIONELLA_ENABLE
         await mqtt_client.enable_anti_legionella(device, period_days=14)
 
         try:

@@ -55,22 +55,6 @@ class CommandCode(IntEnum):
     TOU_ENABLE = 33554476  # Enable TOU optimization
 
 
-# Backward compatibility aliases
-# These maintain compatibility with code using the old CMD_* naming convention
-CMD_STATUS_REQUEST = CommandCode.STATUS_REQUEST
-CMD_DEVICE_INFO_REQUEST = CommandCode.DEVICE_INFO_REQUEST
-CMD_POWER_ON = CommandCode.POWER_ON
-CMD_POWER_OFF = CommandCode.POWER_OFF
-CMD_DHW_MODE = CommandCode.DHW_MODE
-CMD_DHW_TEMPERATURE = CommandCode.DHW_TEMPERATURE
-CMD_ENERGY_USAGE_QUERY = CommandCode.ENERGY_USAGE_QUERY
-CMD_RESERVATION_MANAGEMENT = CommandCode.RESERVATION_MANAGEMENT
-CMD_TOU_SETTINGS = CommandCode.TOU_SETTINGS
-CMD_ANTI_LEGIONELLA_DISABLE = CommandCode.ANTI_LEGIONELLA_DISABLE
-CMD_ANTI_LEGIONELLA_ENABLE = CommandCode.ANTI_LEGIONELLA_ENABLE
-CMD_TOU_DISABLE = CommandCode.TOU_DISABLE
-CMD_TOU_ENABLE = CommandCode.TOU_ENABLE
-
 # Note for maintainers:
 # Command codes and expected payload fields are defined in
 # `docs/MQTT_MESSAGES.rst` under the "Control Messages" section and

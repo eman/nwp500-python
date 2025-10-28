@@ -156,9 +156,7 @@ async def example_validation_errors():
 
             # Try to set invalid vacation days
             try:
-                await mqtt.set_dhw_operation_setting(
-                    device, mode_id=5, vacation_days=50
-                )
+                await mqtt.set_dhw_mode(device, mode_id=5, vacation_days=50)
             except RangeValidationError as e:
                 print(f"✓ Caught RangeValidationError: {e}")
                 print(f"  Field: {e.field}")
