@@ -15,6 +15,7 @@ from nwp500.encoding import (
     encode_week_bitfield,
 )
 from nwp500.exceptions import (
+    ParameterValidationError,
     RangeValidationError,
 )
 
@@ -30,8 +31,13 @@ def test_encode_decode_week_bitfield():
     assert encode_week_bitfield([0, 6]) == (1 | 64)
     assert encode_week_bitfield([1, 7]) == (2 | 64)
 
-    with pytest.raises(RangeValidationError):
+    # Invalid weekday name raises ParameterValidationError
+    with pytest.raises(ParameterValidationError):
         encode_week_bitfield(["Funday"])  # type: ignore[arg-type]
+
+    # Invalid weekday index raises RangeValidationError
+    with pytest.raises(RangeValidationError):
+        encode_week_bitfield([10])  # type: ignore[arg-type]
 
 
 def test_encode_decode_season_bitfield():

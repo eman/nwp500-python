@@ -48,8 +48,9 @@ def encode_week_bitfield(days: Iterable[Union[str, int]]) -> int:
         Monday=bit 1, etc.)
 
     Raises:
-        RangeValidationError: If day name is invalid or index is out of range
-        ParameterValidationError: If day value is neither string nor integer
+        ParameterValidationError: If day name is unknown/invalid
+        RangeValidationError: If day index is out of range (not 0-7)
+        TypeError: If day value is neither string nor integer
 
     Examples:
         >>> encode_week_bitfield(["Monday", "Wednesday", "Friday"])
@@ -66,9 +67,9 @@ def encode_week_bitfield(days: Iterable[Union[str, int]]) -> int:
         if isinstance(value, str):
             key = value.strip().lower()
             if key not in WEEKDAY_NAME_TO_BIT:
-                raise RangeValidationError(
+                raise ParameterValidationError(
                     f"Unknown weekday: {value}",
-                    field="weekday",
+                    parameter="weekday",
                     value=value,
                 )
             bitfield |= WEEKDAY_NAME_TO_BIT[key]
