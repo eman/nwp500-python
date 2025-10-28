@@ -2,6 +2,24 @@
 Changelog
 =========
 
+Version 5.0.1 (2025-10-27)
+==========================
+
+Changed
+-------
+
+- **Maintenance Release**: Removed deprecated backward compatibility code
+
+  - Removed ``CMD_*`` backward compatibility aliases from ``constants.py``
+  - Removed ``cli.py`` backward compatibility wrapper module
+  - Updated setup.cfg entry point to use ``nwp500.cli.__main__:run`` directly
+  - Updated all examples to use ``CommandCode`` enum instead of ``CMD_*`` aliases
+  - Updated examples to use standalone functions (``build_tou_period``, ``encode_price``, ``decode_price``, ``encode_week_bitfield``, ``decode_week_bitfield``) instead of ``NavienAPIClient.*`` static methods
+  - Updated documentation to reference standalone functions
+  - Fixed deprecated method name (``set_dhw_operation_setting`` → ``set_dhw_mode``)
+  - Removed broken relative links from ``README.rst``
+  - Added Read the Docs and GitHub links to ``README.rst`` header
+
 Version 5.0.0 (2025-10-27)
 ==========================
 
