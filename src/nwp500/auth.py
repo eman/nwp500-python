@@ -23,6 +23,7 @@ from .config import API_BASE_URL, REFRESH_ENDPOINT, SIGN_IN_ENDPOINT
 from .exceptions import (
     AuthenticationError,
     InvalidCredentialsError,
+    TokenExpiredError,
     TokenRefreshError,
 )
 
@@ -268,6 +269,7 @@ __all__ = [
     "AuthenticationResponse",
     "AuthenticationError",
     "InvalidCredentialsError",
+    "TokenExpiredError",
     "TokenRefreshError",
     "NavienAuthClient",
     "authenticate",
