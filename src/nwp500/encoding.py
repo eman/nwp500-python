@@ -79,7 +79,13 @@ def encode_week_bitfield(days: Iterable[Union[str, int]]) -> int:
                 # Support 1-7 indexing (Monday=1, Sunday=7)
                 bitfield |= 1 << (value - 1)
             else:
-                raise ValueError("Day index must be between 0-6 or 1-7")
+                raise RangeValidationError(
+                    "Day index must be between 0-6 or 1-7",
+                    field="day_index",
+                    value=value,
+                    min_value=0,
+                    max_value=7,
+                )
         else:
             raise TypeError("Weekday values must be strings or integers")
     return bitfield
@@ -210,7 +216,12 @@ def encode_price(value: Real, decimal_point: int) -> int:
         100
     """
     if decimal_point < 0:
-        raise ValueError("decimal_point must be >= 0")
+        raise RangeValidationError(
+            "decimal_point must be >= 0",
+            field="decimal_point",
+            value=decimal_point,
+            min_value=0,
+        )
     scale = 10**decimal_point
     return int(round(float(value) * scale))
 
@@ -240,7 +251,12 @@ def decode_price(value: int, decimal_point: int) -> float:
         100.0
     """
     if decimal_point < 0:
-        raise ValueError("decimal_point must be >= 0")
+        raise RangeValidationError(
+            "decimal_point must be >= 0",
+            field="decimal_point",
+            value=decimal_point,
+            min_value=0,
+        )
     scale = 10**decimal_point
     return value / scale if scale else float(value)
 
