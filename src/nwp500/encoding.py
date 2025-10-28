@@ -338,14 +338,15 @@ def build_reservation_entry(
         days: Collection of weekday names or indices
         hour: Hour (0-23)
         minute: Minute (0-59)
-        mode_id: DHW operation mode ID
+        mode_id: DHW operation mode ID (1-6, see DhwOperationSetting)
         param: Additional parameter value
 
     Returns:
         Dictionary with reservation entry fields
 
     Raises:
-        ValueError: If any parameter is out of valid range
+        RangeValidationError: If hour, minute, or mode_id is out of range
+        ParameterValidationError: If enabled type is invalid
 
     Examples:
         >>> build_reservation_entry(
@@ -374,12 +375,13 @@ def build_reservation_entry(
             min_value=0,
             max_value=59,
         )
-    if mode_id < 0:
+    if not 1 <= mode_id <= 6:
         raise RangeValidationError(
-            "mode_id must be non-negative",
+            "mode_id must be between 1 and 6 (see DhwOperationSetting)",
             field="mode_id",
             value=mode_id,
-            min_value=0,
+            min_value=1,
+            max_value=6,
         )
 
     if isinstance(enabled, bool):
