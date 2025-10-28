@@ -14,6 +14,9 @@ from nwp500.encoding import (
     encode_season_bitfield,
     encode_week_bitfield,
 )
+from nwp500.exceptions import (
+    RangeValidationError,
+)
 
 
 def test_encode_decode_week_bitfield():
@@ -27,7 +30,7 @@ def test_encode_decode_week_bitfield():
     assert encode_week_bitfield([0, 6]) == (1 | 64)
     assert encode_week_bitfield([1, 7]) == (2 | 64)
 
-    with pytest.raises(ValueError):
+    with pytest.raises(RangeValidationError):
         encode_week_bitfield(["Funday"])  # type: ignore[arg-type]
 
 
@@ -38,7 +41,7 @@ def test_encode_decode_season_bitfield():
     decoded = decode_season_bitfield(bitfield)
     assert decoded == months
 
-    with pytest.raises(ValueError):
+    with pytest.raises(RangeValidationError):
         encode_season_bitfield([0])
 
 
@@ -48,7 +51,7 @@ def test_price_encoding_round_trip():
     decoded = decode_price(encoded, 5)
     assert math.isclose(decoded, 0.34831, rel_tol=1e-9)
 
-    with pytest.raises(ValueError):
+    with pytest.raises(RangeValidationError):
         encode_price(1.23, -1)
 
 
@@ -69,7 +72,7 @@ def test_build_reservation_entry():
     assert reservation["mode"] == 4
     assert reservation["param"] == 120
 
-    with pytest.raises(ValueError):
+    with pytest.raises(RangeValidationError):
         build_reservation_entry(
             enabled=True,
             days=["Monday"],
@@ -100,7 +103,7 @@ def test_build_tou_period():
     assert period["priceMin"] == 34831
     assert period["priceMax"] == 36217
 
-    with pytest.raises(ValueError):
+    with pytest.raises(RangeValidationError):
         build_tou_period(
             season_months=[1],
             week_days=["Sunday"],
