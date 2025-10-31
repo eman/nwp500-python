@@ -2,6 +2,20 @@
 Changelog
 =========
 
+Version 5.0.2 (2025-10-31)
+==========================
+
+Fixed
+-----
+
+- **MQTT Future Cancellation**: Fixed InvalidStateError exceptions during disconnect
+  
+  - Added asyncio.shield() to protect concurrent.futures.Future objects from cancellation
+  - Applied consistent cancellation handling across all MQTT operations (connect, disconnect, subscribe, unsubscribe, publish)
+  - AWS CRT callbacks can now complete independently without raising InvalidStateError
+  - Added debug logging when operations are cancelled for better diagnostics
+  - Ensures clean shutdown without spurious exception messages
+
 Version 5.0.1 (2025-10-27)
 ==========================
 
