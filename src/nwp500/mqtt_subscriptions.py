@@ -214,10 +214,14 @@ class MqttSubscriptionManager:
 
         try:
             # Convert concurrent.futures.Future to asyncio.Future and await
+            # Use shield to prevent cancellation from propagating to
+            # underlying future
             subscribe_future, packet_id = self._connection.subscribe(
                 topic=topic, qos=qos, callback=self._on_message_received
             )
-            subscribe_result = await asyncio.wrap_future(subscribe_future)
+            subscribe_result = await asyncio.shield(
+                asyncio.wrap_future(subscribe_future)
+            )
 
             _logger.info(
                 f"Subscription succeeded (topic redacted) with QoS "
@@ -259,8 +263,10 @@ class MqttSubscriptionManager:
 
         try:
             # Convert concurrent.futures.Future to asyncio.Future and await
+            # Use shield to prevent cancellation from propagating to
+            # underlying future
             unsubscribe_future, packet_id = self._connection.unsubscribe(topic)
-            await asyncio.wrap_future(unsubscribe_future)
+            await asyncio.shield(asyncio.wrap_future(unsubscribe_future))
 
             # Remove from tracking
             self._subscriptions.pop(topic, None)
