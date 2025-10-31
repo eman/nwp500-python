@@ -144,9 +144,19 @@ class MqttConnection:
             # underlying future
             if self._connection is not None:
                 connect_future = self._connection.connect()
-                connect_result = await asyncio.shield(
-                    asyncio.wrap_future(connect_future)
-                )
+                try:
+                    connect_result = await asyncio.shield(
+                        asyncio.wrap_future(connect_future)
+                    )
+                except asyncio.CancelledError:
+                    # Shield was cancelled - the underlying connect will
+                    # complete independently, preventing InvalidStateError
+                    # in AWS CRT callbacks
+                    _logger.debug(
+                        "Connect operation was cancelled but will complete "
+                        "in background"
+                    )
+                    raise
             else:
                 raise MqttConnectionError("Connection not initialized")
 
@@ -203,7 +213,17 @@ class MqttConnection:
             # Use shield to prevent cancellation from propagating to
             # underlying future
             disconnect_future = self._connection.disconnect()
-            await asyncio.shield(asyncio.wrap_future(disconnect_future))
+            try:
+                await asyncio.shield(asyncio.wrap_future(disconnect_future))
+            except asyncio.CancelledError:
+                # Shield was cancelled - the underlying disconnect will
+                # complete independently, preventing InvalidStateError
+                # in AWS CRT callbacks
+                _logger.debug(
+                    "Disconnect operation was cancelled but will complete "
+                    "in background"
+                )
+                raise
 
             self._connected = False
             self._connection = None
@@ -243,7 +263,17 @@ class MqttConnection:
         subscribe_future, packet_id = self._connection.subscribe(
             topic=topic, qos=qos, callback=callback
         )
-        await asyncio.shield(asyncio.wrap_future(subscribe_future))
+        try:
+            await asyncio.shield(asyncio.wrap_future(subscribe_future))
+        except asyncio.CancelledError:
+            # Shield was cancelled - the underlying subscribe will
+            # complete independently, preventing InvalidStateError
+            # in AWS CRT callbacks
+            _logger.debug(
+                f"Subscribe to '{topic}' was cancelled but will complete "
+                "in background"
+            )
+            raise
 
         _logger.info(f"Subscribed to '{topic}' with packet_id {packet_id}")
         return (subscribe_future, packet_id)
@@ -272,7 +302,17 @@ class MqttConnection:
         unsubscribe_future, packet_id = self._connection.unsubscribe(
             topic=topic
         )
-        await asyncio.shield(asyncio.wrap_future(unsubscribe_future))
+        try:
+            await asyncio.shield(asyncio.wrap_future(unsubscribe_future))
+        except asyncio.CancelledError:
+            # Shield was cancelled - the underlying unsubscribe will
+            # complete independently, preventing InvalidStateError
+            # in AWS CRT callbacks
+            _logger.debug(
+                f"Unsubscribe from '{topic}' was cancelled but will "
+                "complete in background"
+            )
+            raise
 
         _logger.info(f"Unsubscribed from '{topic}' with packet_id {packet_id}")
         return int(packet_id)

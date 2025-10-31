@@ -219,9 +219,19 @@ class MqttSubscriptionManager:
             subscribe_future, packet_id = self._connection.subscribe(
                 topic=topic, qos=qos, callback=self._on_message_received
             )
-            subscribe_result = await asyncio.shield(
-                asyncio.wrap_future(subscribe_future)
-            )
+            try:
+                subscribe_result = await asyncio.shield(
+                    asyncio.wrap_future(subscribe_future)
+                )
+            except asyncio.CancelledError:
+                # Shield was cancelled - the underlying subscribe will
+                # complete independently, preventing InvalidStateError
+                # in AWS CRT callbacks
+                _logger.debug(
+                    f"Subscribe to '{redact_topic(topic)}' was cancelled "
+                    "but will complete in background"
+                )
+                raise
 
             _logger.info(
                 f"Subscription succeeded (topic redacted) with QoS "
@@ -266,7 +276,17 @@ class MqttSubscriptionManager:
             # Use shield to prevent cancellation from propagating to
             # underlying future
             unsubscribe_future, packet_id = self._connection.unsubscribe(topic)
-            await asyncio.shield(asyncio.wrap_future(unsubscribe_future))
+            try:
+                await asyncio.shield(asyncio.wrap_future(unsubscribe_future))
+            except asyncio.CancelledError:
+                # Shield was cancelled - the underlying unsubscribe will
+                # complete independently, preventing InvalidStateError
+                # in AWS CRT callbacks
+                _logger.debug(
+                    f"Unsubscribe from '{redact_topic(topic)}' was "
+                    "cancelled but will complete in background"
+                )
+                raise
 
             # Remove from tracking
             self._subscriptions.pop(topic, None)
