@@ -261,16 +261,10 @@ class AuthenticationResponse:
         )
 
 
-# Exception classes moved to exceptions.py module
-# Import them here for backward compatibility
 __all__ = [
     "UserInfo",
     "AuthTokens",
     "AuthenticationResponse",
-    "AuthenticationError",
-    "InvalidCredentialsError",
-    "TokenExpiredError",
-    "TokenRefreshError",
     "NavienAuthClient",
     "authenticate",
     "refresh_access_token",

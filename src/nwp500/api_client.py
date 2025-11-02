@@ -25,11 +25,8 @@ __license__ = "MIT"
 _logger = logging.getLogger(__name__)
 
 
-# Exception class moved to exceptions.py module
-# Import it here for backward compatibility
 __all__ = [
     "NavienAPIClient",
-    "APIError",
 ]
 
 

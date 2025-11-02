@@ -5,7 +5,7 @@ Changelog
 Version 6.0.0 (2025-11-02)
 ==========================
 
-**BREAKING CHANGES**: Removed constructor callbacks in favor of event emitter pattern
+**BREAKING CHANGES**: Removed constructor callbacks and backward compatibility re-exports
 
 Removed
 -------
@@ -26,6 +26,26 @@ Removed
      mqtt_client.on("connection_interrupted", on_interrupted)
      mqtt_client.on("connection_resumed", on_resumed)
 
+- **Backward Compatibility Re-exports**: Removed exception re-exports from ``api_client`` and ``auth`` modules
+  
+  .. code-block:: python
+  
+     # OLD (removed in v6.0.0)
+     from nwp500.api_client import APIError
+     from nwp500.auth import AuthenticationError, TokenRefreshError
+     
+     # NEW (import from exceptions module)
+     from nwp500.exceptions import APIError, AuthenticationError, TokenRefreshError
+     
+     # OR (import from package root - recommended)
+     from nwp500 import APIError, AuthenticationError, TokenRefreshError
+
+- **Rationale**: Library is young with no external clients. Removing backward compatibility
+  allows for cleaner architecture and prevents accumulation of legacy patterns.
+
+Changed
+-------
+
 - **Migration Benefits**:
   
   - Multiple listeners per event (not just one callback)
@@ -33,12 +53,15 @@ Removed
   - Dynamic listener management (add/remove listeners at runtime)
   - Async handler support
   - Priority-based execution
-
-Changed
--------
+  - Cleaner imports (exceptions from one module)
 
 - Updated ``examples/command_queue_demo.py`` to use event emitter pattern
 - Updated ``examples/reconnection_demo.py`` to use event emitter pattern
+- Updated ``examples/device_status_callback.py`` to import exceptions from correct module
+- Updated ``examples/device_status_callback_debug.py`` to import exceptions from correct module
+- Updated ``examples/device_feature_callback.py`` to import exceptions from correct module
+- Updated ``examples/test_api_client.py`` to import exceptions from correct module
+- Removed misleading "legacy state" comments from connection tracking code
 
 Version 5.0.2 (2025-10-31)
 ==========================
