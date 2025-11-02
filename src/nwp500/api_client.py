@@ -9,13 +9,9 @@ from typing import Any, Optional
 
 import aiohttp
 
-from .auth import (
-    AuthenticationError,
-    NavienAuthClient,
-    TokenRefreshError,
-)
+from .auth import NavienAuthClient
 from .config import API_BASE_URL
-from .exceptions import APIError
+from .exceptions import APIError, AuthenticationError, TokenRefreshError
 from .models import Device, FirmwareInfo, TOUInfo
 
 __author__ = "Emmanuel Levijarvi"
@@ -74,7 +70,7 @@ class NavienAPIClient:
 
         self.base_url = base_url.rstrip("/")
         self._auth_client = auth_client
-        self._session: aiohttp.ClientSession = session or auth_client._session  # type: ignore[assignment]
+        self._session: aiohttp.ClientSession = session or auth_client._session
         if self._session is None:
             raise ValueError("auth_client must have an active session")
         self._owned_session = (

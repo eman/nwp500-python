@@ -19,17 +19,15 @@ from typing import Any, Callable, Optional
 from awscrt import mqtt
 from awscrt.exceptions import AwsCrtError
 
-from .auth import (
-    AuthenticationError,
-    NavienAuthClient,
-    TokenRefreshError,
-)
+from .auth import NavienAuthClient
 from .events import EventEmitter
 from .exceptions import (
+    AuthenticationError,
     MqttConnectionError,
     MqttCredentialsError,
     MqttNotConnectedError,
     MqttPublishError,
+    TokenRefreshError,
 )
 from .models import (
     Device,
@@ -179,8 +177,8 @@ class NavienMqttClient(EventEmitter):
         self._periodic_manager: Optional[MqttPeriodicRequestManager] = None
 
         # Connection state tracking
-        # Note: These track state at the client level and are simpler to check than
-        # self._connection_manager.is_connected (which can be None before connect())
+        # Note: Simpler to check than _connection_manager.is_connected
+        # (which can be None before connect())
         self._connection: Optional[mqtt.Connection] = None
         self._connected = False
 
