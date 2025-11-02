@@ -474,7 +474,7 @@ class NavienMqttClient(EventEmitter):
             success = await self._connection_manager.connect()
 
             if success:
-                # Update legacy state for backward compatibility
+                # Update connection state
                 self._connection = self._connection_manager.connection
                 self._connected = True
 
@@ -564,7 +564,7 @@ class NavienMqttClient(EventEmitter):
             # Delegate disconnection to connection manager
             await self._connection_manager.disconnect()
 
-            # Update legacy state
+            # Clear connection state
             self._connected = False
             self._connection = None
 
