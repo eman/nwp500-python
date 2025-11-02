@@ -55,13 +55,28 @@ This prevents "passes locally but fails in CI" issues.
 
 **Important**: When updating CHANGELOG.rst or any file with dates, always use `date +"%Y-%m-%d"` to get the correct current date. Never hardcode or guess dates.
 
-### After Completing a Task
-Always run these checks after completing a task to validate your changes:
-1. **Type checking**: `python3 -m mypy src/nwp500 --config-file pyproject.toml` - Verify no type errors were introduced
-2. **Linting**: `make ci-lint` - Verify code style compliance
-3. **Tests** (if applicable): `pytest` - Verify functionality works as expected
+### Before Completing a Task - REQUIRED VALIDATION
 
-Report the results of these checks in your final summary.
+**ALWAYS run these checks before considering a task complete:**
+
+1. **Linting**: `make ci-lint` - MUST pass before completion
+2. **Type checking**: `python3 -m mypy src/nwp500 --config-file pyproject.toml` - MUST pass before completion
+3. **Unit tests**: `pytest` - MUST pass before completion (unless tests don't exist for the feature)
+
+**Do not mark a task as complete or create a PR without running all three checks.**
+
+These checks prevent "works locally but fails in CI" issues and catch integration problems early.
+
+Report the results of these checks in your final summary, including:
+- Number of tests passed/failed
+- Any linting errors fixed
+- Any type errors resolved
+
+### After Completing a Task
+Document validation results:
+- ✅ **Linting**: All checks passed
+- ✅ **Type checking**: No errors found  
+- ✅ **Tests**: X/X passed (or "N/A - no existing tests for this feature")
 
 ## Patterns & Conventions
 - **Async context managers** for authentication: `async with NavienAuthClient(email, password) as auth_client:`
