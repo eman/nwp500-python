@@ -178,7 +178,9 @@ class NavienMqttClient(EventEmitter):
         self._reconnect_task: Optional[asyncio.Task[None]] = None
         self._periodic_manager: Optional[MqttPeriodicRequestManager] = None
 
-        # Legacy state (kept for backward compatibility during transition)
+        # Connection state tracking
+        # Note: These track state at the client level and are simpler to check than
+        # self._connection_manager.is_connected (which can be None before connect())
         self._connection: Optional[mqtt.Connection] = None
         self._connected = False
 
