@@ -91,7 +91,7 @@ API Reference
 NavienMqttClient
 ----------------
 
-.. py:class:: NavienMqttClient(auth_client, config=None, on_connection_interrupted=None, on_connection_resumed=None)
+.. py:class:: NavienMqttClient(auth_client, config=None)
 
    MQTT client for real-time device communication via AWS IoT Core.
 
@@ -99,10 +99,6 @@ NavienMqttClient
    :type auth_client: NavienAuthClient
    :param config: Connection configuration (optional)
    :type config: MqttConnectionConfig or None
-   :param on_connection_interrupted: Callback for connection loss
-   :type on_connection_interrupted: Callable or None
-   :param on_connection_resumed: Callback for connection restoration
-   :type on_connection_resumed: Callable or None
    :raises ValueError: If auth_client not authenticated or missing AWS credentials
 
    **Example:**
@@ -124,18 +120,15 @@ NavienMqttClient
       )
       mqtt = NavienMqttClient(auth, config=config)
       
-      # With connection callbacks
+      # Register event handlers
       def on_interrupted(error):
           print(f"Connection lost: {error}")
       
       def on_resumed(return_code, session_present):
           print("Connection restored!")
       
-      mqtt = NavienMqttClient(
-          auth,
-          on_connection_interrupted=on_interrupted,
-          on_connection_resumed=on_resumed
-      )
+      mqtt.on("connection_interrupted", on_interrupted)
+      mqtt.on("connection_resumed", on_resumed)
 
 Connection Methods
 ------------------
@@ -1033,6 +1026,8 @@ Best Practices
 
    .. code-block:: python
 
+      mqtt = NavienMqttClient(auth)
+      
       def on_interrupted(error):
           print(f"Connection lost: {error}")
           # Save state, notify user, etc.
@@ -1041,11 +1036,8 @@ Best Practices
           print("Connection restored")
           # Re-request status, etc.
       
-      mqtt = NavienMqttClient(
-          auth,
-          on_connection_interrupted=on_interrupted,
-          on_connection_resumed=on_resumed
-      )
+      mqtt.on("connection_interrupted", on_interrupted)
+      mqtt.on("connection_resumed", on_resumed)
 
 4. **Use periodic requests for long-running monitoring:**
 

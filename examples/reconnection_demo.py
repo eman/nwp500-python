@@ -36,16 +36,6 @@ async def main():
     print("MQTT Reconnection Demo")
     print("=" * 70)
 
-    # Connection callbacks
-    def on_interrupted(error):
-        print(f"\n⚠️  Connection interrupted: {error}")
-        print("   Automatic reconnection will begin...")
-
-    def on_resumed(return_code, session_present):
-        print("\n✅ Connection resumed!")
-        print(f"   Return code: {return_code}")
-        print(f"   Session present: {session_present}")
-
     # Authenticate
     async with NavienAuthClient(email, password) as auth_client:
         print(f"✅ Authenticated as: {auth_client.current_user.full_name}")
@@ -69,13 +59,24 @@ async def main():
             reconnect_backoff_multiplier=2.0,  # Double the delay each time
         )
 
-        # Create MQTT client with reconnection callbacks
+        # Create MQTT client
         mqtt_client = NavienMqttClient(
             auth_client,
             config=config,
-            on_connection_interrupted=on_interrupted,
-            on_connection_resumed=on_resumed,
         )
+
+        # Register event handlers
+        def on_interrupted(error):
+            print(f"\n⚠️  Connection interrupted: {error}")
+            print("   Automatic reconnection will begin...")
+
+        def on_resumed(return_code, session_present):
+            print("\n✅ Connection resumed!")
+            print(f"   Return code: {return_code}")
+            print(f"   Session present: {session_present}")
+
+        mqtt_client.on("connection_interrupted", on_interrupted)
+        mqtt_client.on("connection_resumed", on_resumed)
 
         # Connect
         await mqtt_client.connect()

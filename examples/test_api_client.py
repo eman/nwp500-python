@@ -13,8 +13,9 @@ import sys
 # Add src to path for testing
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "src"))
 
-from nwp500.api_client import APIError, NavienAPIClient
-from nwp500.auth import AuthenticationError, NavienAuthClient
+from nwp500.api_client import NavienAPIClient
+from nwp500.auth import NavienAuthClient
+from nwp500.exceptions import APIError, AuthenticationError
 
 # Setup logging
 logging.basicConfig(

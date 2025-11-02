@@ -7,14 +7,16 @@ import aiohttp
 import pytest
 
 from nwp500.auth import (
-    AuthenticationError,
     AuthenticationResponse,
     AuthTokens,
-    InvalidCredentialsError,
     NavienAuthClient,
+    UserInfo,
+)
+from nwp500.exceptions import (
+    AuthenticationError,
+    InvalidCredentialsError,
     TokenExpiredError,
     TokenRefreshError,
-    UserInfo,
 )
 
 

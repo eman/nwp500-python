@@ -23,7 +23,6 @@ from .config import API_BASE_URL, REFRESH_ENDPOINT, SIGN_IN_ENDPOINT
 from .exceptions import (
     AuthenticationError,
     InvalidCredentialsError,
-    TokenExpiredError,
     TokenRefreshError,
 )
 
@@ -261,16 +260,10 @@ class AuthenticationResponse:
         )
 
 
-# Exception classes moved to exceptions.py module
-# Import them here for backward compatibility
 __all__ = [
     "UserInfo",
     "AuthTokens",
     "AuthenticationResponse",
-    "AuthenticationError",
-    "InvalidCredentialsError",
-    "TokenExpiredError",
-    "TokenRefreshError",
     "NavienAuthClient",
     "authenticate",
     "refresh_access_token",

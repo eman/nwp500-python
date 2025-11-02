@@ -55,13 +55,28 @@ This prevents "passes locally but fails in CI" issues.
 
 **Important**: When updating CHANGELOG.rst or any file with dates, always use `date +"%Y-%m-%d"` to get the correct current date. Never hardcode or guess dates.
 
-### After Completing a Task
-Always run these checks after completing a task to validate your changes:
-1. **Type checking**: `python3 -m mypy src/nwp500 --config-file pyproject.toml` - Verify no type errors were introduced
-2. **Linting**: `make ci-lint` - Verify code style compliance
-3. **Tests** (if applicable): `pytest` - Verify functionality works as expected
+### Before Completing a Task - REQUIRED VALIDATION
 
-Report the results of these checks in your final summary.
+**ALWAYS run these checks before considering a task complete:**
+
+1. **Linting**: `make ci-lint` - MUST pass before completion
+2. **Type checking**: `python3 -m mypy src/nwp500 --config-file pyproject.toml` - MUST pass before completion
+3. **Unit tests**: `pytest` - MUST pass before completion (unless tests don't exist for the feature)
+
+**Do not mark a task as complete or create a PR without running all three checks.**
+
+These checks prevent "works locally but fails in CI" issues and catch integration problems early.
+
+Report the results of these checks in your final summary, including:
+- Number of tests passed/failed
+- Any linting errors fixed
+- Any type errors resolved
+
+### After Completing a Task
+Document validation results:
+- ✅ **Linting**: All checks passed
+- ✅ **Type checking**: No errors found  
+- ✅ **Tests**: X/X passed (or "N/A - no existing tests for this feature")
 
 ## Patterns & Conventions
 - **Async context managers** for authentication: `async with NavienAuthClient(email, password) as auth_client:`
@@ -78,6 +93,46 @@ Report the results of these checks in your final summary.
   - `TypeError`, `AttributeError`, `KeyError` - Data structure errors
   - `asyncio.CancelledError` - Task cancellation
   - Only catch exceptions you can handle; let unexpected exceptions propagate
+
+## Backward Compatibility Policy
+
+**DO NOT maintain backward compatibility.** This library is young and has no external clients.
+
+- **Breaking changes are acceptable**: Make the best design decisions without worrying about breaking existing code
+- **Remove deprecated code immediately**: Don't add deprecation warnings or transitional code - just remove it
+- **Remove duplicate functionality**: If there are two ways to do the same thing, remove one
+- **Clean up legacy patterns**: Remove old patterns, helper variables, or compatibility shims
+- **Update documentation**: When making breaking changes:
+  1. Document the change in `CHANGELOG.rst` under the appropriate version
+  2. Explain what was removed/changed and why
+  3. Provide clear migration guidance showing the old way vs. new way
+  4. Update affected examples to use the new pattern
+  5. Update relevant documentation files
+- **Version bumping**: Breaking changes require a major version bump (see Version Management section)
+
+**Example changelog entry for breaking changes:**
+```rst
+Version X.0.0 (YYYY-MM-DD)
+==========================
+
+**BREAKING CHANGES**: Description of what broke
+
+Removed
+-------
+- **Old Pattern**: Removed `old_function()` in favor of cleaner `new_function()`
+  
+  .. code-block:: python
+  
+     # OLD (removed)
+     result = client.old_function(arg)
+     
+     # NEW
+     result = client.new_function(arg)
+
+- **Duplicate Functionality**: Removed constructor callbacks in favor of event emitter pattern
+  - Removed `on_connection_interrupted` constructor parameter
+  - Use `client.on('connection_interrupted', handler)` instead
+```
 
 ## Integration Points
 - **AWS IoT Core**: MQTT client uses `awscrt` and `awsiot` libraries for connection and messaging

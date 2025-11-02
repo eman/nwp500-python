@@ -19,17 +19,15 @@ from typing import Any, Callable, Optional
 from awscrt import mqtt
 from awscrt.exceptions import AwsCrtError
 
-from .auth import (
-    AuthenticationError,
-    NavienAuthClient,
-    TokenRefreshError,
-)
+from .auth import NavienAuthClient
 from .events import EventEmitter
 from .exceptions import (
+    AuthenticationError,
     MqttConnectionError,
     MqttCredentialsError,
     MqttNotConnectedError,
     MqttPublishError,
+    TokenRefreshError,
 )
 from .models import (
     Device,
@@ -126,8 +124,6 @@ class NavienMqttClient(EventEmitter):
         self,
         auth_client: NavienAuthClient,
         config: Optional[MqttConnectionConfig] = None,
-        on_connection_interrupted: Optional[Callable[[Exception], None]] = None,
-        on_connection_resumed: Optional[Callable[[Any, Any], None]] = None,
     ):
         """
         Initialize the MQTT client.
@@ -135,8 +131,6 @@ class NavienMqttClient(EventEmitter):
         Args:
             auth_client: Authentication client with valid tokens
             config: Optional connection configuration
-            on_connection_interrupted: Callback for connection interruption
-            on_connection_resumed: Callback for connection resumption
 
         Raises:
             ValueError: If auth client is not authenticated or AWS
@@ -182,13 +176,9 @@ class NavienMqttClient(EventEmitter):
         self._reconnect_task: Optional[asyncio.Task[None]] = None
         self._periodic_manager: Optional[MqttPeriodicRequestManager] = None
 
-        # Legacy state (kept for backward compatibility during transition)
+        # Connection state (simpler than checking _connection_manager)
         self._connection: Optional[mqtt.Connection] = None
         self._connected = False
-
-        # User-provided callbacks
-        self._on_connection_interrupted = on_connection_interrupted
-        self._on_connection_resumed = on_connection_resumed
 
         _logger.info(
             f"Initialized MQTT client with ID: {self.config.client_id}"
@@ -234,19 +224,6 @@ class NavienMqttClient(EventEmitter):
         # Emit event
         self._schedule_coroutine(self.emit("connection_interrupted", error))
 
-        # Call user callback if provided
-        if self._on_connection_interrupted:
-            try:
-                self._on_connection_interrupted(error)
-            except TypeError:
-                # Fallback for callbacks expecting no arguments
-                try:
-                    self._on_connection_interrupted()  # type: ignore
-                except (TypeError, AttributeError) as e:
-                    _logger.error(
-                        f"Error in connection_interrupted callback: {e}"
-                    )
-
         # Delegate to reconnection handler if available
         if self._reconnection_handler and self.config.auto_reconnect:
             self._reconnection_handler.on_connection_interrupted(error)
@@ -265,10 +242,6 @@ class NavienMqttClient(EventEmitter):
         self._schedule_coroutine(
             self.emit("connection_resumed", return_code, session_present)
         )
-
-        # Call user callback
-        if self._on_connection_resumed:
-            self._on_connection_resumed(return_code, session_present)
 
         # Delegate to reconnection handler to reset state
         if self._reconnection_handler:
@@ -497,7 +470,7 @@ class NavienMqttClient(EventEmitter):
             success = await self._connection_manager.connect()
 
             if success:
-                # Update legacy state for backward compatibility
+                # Update connection state
                 self._connection = self._connection_manager.connection
                 self._connected = True
 
@@ -587,7 +560,7 @@ class NavienMqttClient(EventEmitter):
             # Delegate disconnection to connection manager
             await self._connection_manager.disconnect()
 
-            # Update legacy state
+            # Clear connection state
             self._connected = False
             self._connection = None
 
