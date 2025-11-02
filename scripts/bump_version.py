@@ -107,26 +107,14 @@ def validate_version_progression(current: str, new: str) -> None:
     if major_jump > 1:
         print(f"Warning: Large major version jump detected ({current} -> {new})")
         print(f"This will jump from {curr_major}.x.x to {new_major}.x.x")
-        response = input("Are you sure? (yes/no): ")
-        if response.lower() != "yes":
-            print("Version bump cancelled.")
-            sys.exit(1)
     
     if major_jump == 0 and minor_jump > 5:
         print(f"Warning: Large minor version jump detected ({current} -> {new})")
         print(f"This will jump from x.{curr_minor}.x to x.{new_minor}.x")
-        response = input("Are you sure? (yes/no): ")
-        if response.lower() != "yes":
-            print("Version bump cancelled.")
-            sys.exit(1)
     
     if major_jump == 0 and minor_jump == 0 and patch_jump > 10:
         print(f"Warning: Large patch version jump detected ({current} -> {new})")
         print(f"This will jump from x.x.{curr_patch} to x.x.{new_patch}")
-        response = input("Are you sure? (yes/no): ")
-        if response.lower() != "yes":
-            print("Version bump cancelled.")
-            sys.exit(1)
 
 
 def check_working_directory_clean() -> None:
@@ -201,19 +189,8 @@ def main() -> None:
     # Validate version progression
     validate_version_progression(current_version, new_version)
     
-    # Confirm with user
-    print(f"\nThis will create tag v{new_version}")
-    print("Make sure you have:")
-    print("  1. Updated CHANGELOG.rst")
-    print("  2. Committed all changes")
-    print("  3. Run tests and linting")
-    response = input("\nProceed with version bump? (yes/no): ")
-    
-    if response.lower() != "yes":
-        print("Version bump cancelled.")
-        sys.exit(0)
-    
     # Create the tag
+    print(f"\nCreating tag v{new_version}...")
     create_tag(new_version)
     
     print("\n[OK] Version bump complete!")
