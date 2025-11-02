@@ -2,6 +2,44 @@
 Changelog
 =========
 
+Version 6.0.0 (2025-11-02)
+==========================
+
+**BREAKING CHANGES**: Removed constructor callbacks in favor of event emitter pattern
+
+Removed
+-------
+
+- **Constructor Callbacks**: Removed ``on_connection_interrupted`` and ``on_connection_resumed`` constructor parameters from ``NavienMqttClient``
+  
+  .. code-block:: python
+  
+     # OLD (removed in v6.0.0)
+     mqtt_client = NavienMqttClient(
+         auth_client,
+         on_connection_interrupted=on_interrupted,
+         on_connection_resumed=on_resumed,
+     )
+     
+     # NEW (use event emitter pattern)
+     mqtt_client = NavienMqttClient(auth_client)
+     mqtt_client.on("connection_interrupted", on_interrupted)
+     mqtt_client.on("connection_resumed", on_resumed)
+
+- **Migration Benefits**:
+  
+  - Multiple listeners per event (not just one callback)
+  - Consistent API with other events (temperature_changed, mode_changed, etc.)
+  - Dynamic listener management (add/remove listeners at runtime)
+  - Async handler support
+  - Priority-based execution
+
+Changed
+-------
+
+- Updated ``examples/command_queue_demo.py`` to use event emitter pattern
+- Updated ``examples/reconnection_demo.py`` to use event emitter pattern
+
 Version 5.0.2 (2025-10-31)
 ==========================
 

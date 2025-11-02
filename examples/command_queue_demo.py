@@ -70,6 +70,12 @@ async def command_queue_demo():
                 auto_reconnect=True,
             )
 
+            mqtt_client = NavienMqttClient(
+                auth_client,
+                config=config,
+            )
+
+            # Register event handlers
             def on_interrupted(error):
                 print(f"   ⚠️  Connection interrupted: {error}")
                 print(f"   📝 Queued commands: {mqtt_client.queued_commands_count}")
@@ -78,12 +84,8 @@ async def command_queue_demo():
                 print("   ✅ Connection resumed!")
                 print(f"   📝 Queued commands: {mqtt_client.queued_commands_count}")
 
-            mqtt_client = NavienMqttClient(
-                auth_client,
-                config=config,
-                on_connection_interrupted=on_interrupted,
-                on_connection_resumed=on_resumed,
-            )
+            mqtt_client.on("connection_interrupted", on_interrupted)
+            mqtt_client.on("connection_resumed", on_resumed)
 
             # Step 3: Connect
             print("\n3. Connecting to AWS IoT...")
