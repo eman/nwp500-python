@@ -47,7 +47,7 @@ The DeviceFeature data contains comprehensive device capabilities, configuration
    * - ``wifiSwVersion``
      - int
      - None
-     - WiFi module firmware version - handles cloud connectivity and app communication
+     - WiFi module firmware version - handles WiFi app connectivity and cloud communication
      - None
    * - ``controllerSwCode``
      - int
