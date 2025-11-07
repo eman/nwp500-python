@@ -34,7 +34,7 @@ async def test_api_client():
     password = os.getenv("NAVIEN_PASSWORD")
 
     if not email or not password:
-        print("❌ Please set NAVIEN_EMAIL and NAVIEN_PASSWORD environment variables")
+        print("[ERROR] Please set NAVIEN_EMAIL and NAVIEN_PASSWORD environment variables")
         return 1
 
     print("=" * 70)
@@ -47,7 +47,7 @@ async def test_api_client():
             # Test 1: Authentication
             print("Test 1: Authentication")
             print("-" * 70)
-            print(f"✅ Authenticated as: {email}")
+            print(f"[SUCCESS] Authenticated as: {email}")
             print()
 
             # Create API client with authenticated auth_client
@@ -59,7 +59,7 @@ async def test_api_client():
             print("Test 2: List Devices")
             print("-" * 70)
             devices = await client.list_devices()
-            print(f"✅ Found {len(devices)} device(s)")
+            print(f"[SUCCESS] Found {len(devices)} device(s)")
 
             # Helper to mask MAC addresses for safe printing
             def _mask_mac(mac: str) -> str:
@@ -95,7 +95,7 @@ async def test_api_client():
             print()
 
             if not devices:
-                print("⚠️  No devices found. Cannot test device-specific endpoints.")
+                print("[WARNING]  No devices found. Cannot test device-specific endpoints.")
                 return 0
 
             # Use first device for remaining tests
@@ -108,7 +108,7 @@ async def test_api_client():
             print("-" * 70)
             device_info = await client.get_device_info(mac, additional)
             print(
-                f"✅ Retrieved detailed info for: {device_info.device_info.device_name}"
+                f"[SUCCESS] Retrieved detailed info for: {device_info.device_info.device_name}"
             )
             print(f"   MAC: {device_info.device_info.mac_address}")
             print(f"   Type: {device_info.device_info.device_type}")
@@ -123,14 +123,14 @@ async def test_api_client():
             print("-" * 70)
             try:
                 firmware_list = await client.get_firmware_info(mac, additional)
-                print(f"✅ Retrieved firmware info: {len(firmware_list)} firmware(s)")
+                print(f"[SUCCESS] Retrieved firmware info: {len(firmware_list)} firmware(s)")
                 for fw in firmware_list:
                     print(f"   Current SW Code: {fw.cur_sw_code}")
                     print(f"   Current Version: {fw.cur_version}")
                     if fw.downloaded_version:
                         print(f"   Downloaded Version: {fw.downloaded_version}")
             except APIError as e:
-                print(f"⚠️  Firmware info not available: {e.message}")
+                print(f"[WARNING]  Firmware info not available: {e.message}")
             print()
 
             # Test 5: Get TOU Info (if applicable)
@@ -139,10 +139,10 @@ async def test_api_client():
             try:
                 # Note: controller_id may need to be obtained from device data
                 # This might fail if TOU is not configured
-                print("⚠️  TOU info requires controller_id - skipping for now")
+                print("[WARNING]  TOU info requires controller_id - skipping for now")
                 print("   (This endpoint requires device-specific configuration)")
             except Exception as e:
-                print(f"⚠️  TOU info error: {e}")
+                print(f"[WARNING]  TOU info error: {e}")
             print()
 
             # Test 6: Convenience Method
@@ -150,15 +150,15 @@ async def test_api_client():
             print("-" * 70)
             first_device = await client.get_first_device()
             if first_device:
-                print(f"✅ Get first device: {first_device.device_info.device_name}")
+                print(f"[SUCCESS] Get first device: {first_device.device_info.device_name}")
             else:
-                print("⚠️  No devices available")
+                print("[WARNING]  No devices available")
             print()
 
             # Test 7: Data Model Verification
             print("Test 7: Data Model Verification")
             print("-" * 70)
-            print("✅ DeviceInfo model:")
+            print("[SUCCESS] DeviceInfo model:")
             print(f"   - home_seq: {type(test_device.device_info.home_seq).__name__}")
             print(
                 f"   - mac_address: {type(test_device.device_info.mac_address).__name__}"
@@ -168,7 +168,7 @@ async def test_api_client():
             )
             print(f"   - connected: {type(test_device.device_info.connected).__name__}")
 
-            print("✅ Location model:")
+            print("[SUCCESS] Location model:")
             print(f"   - state: {type(test_device.location.state).__name__}")
             print(f"   - city: {type(test_device.location.city).__name__}")
             if test_device.location.latitude:
@@ -182,34 +182,34 @@ async def test_api_client():
                 # Try to get info for non-existent device
                 await client.get_device_info("invalid_mac", "invalid")
             except APIError as e:
-                print(f"✅ APIError caught correctly: {e.message[:50]}...")
+                print(f"[SUCCESS] APIError caught correctly: {e.message[:50]}...")
             except Exception as e:
-                print(f"⚠️  Unexpected error type: {type(e).__name__}")
+                print(f"[WARNING]  Unexpected error type: {type(e).__name__}")
             print()
 
         print("=" * 70)
-        print("✅ All API client tests completed successfully!")
+        print("[SUCCESS] All API client tests completed successfully!")
         print("=" * 70)
         print()
         print("Summary:")
-        print("  ✅ Authentication working")
-        print("  ✅ Device listing working")
-        print("  ✅ Device info retrieval working")
-        print("  ✅ Data models parsing correctly")
-        print("  ✅ Error handling functional")
+        print("  [SUCCESS] Authentication working")
+        print("  [SUCCESS] Device listing working")
+        print("  [SUCCESS] Device info retrieval working")
+        print("  [SUCCESS] Data models parsing correctly")
+        print("  [SUCCESS] Error handling functional")
         print()
         return 0
 
     except AuthenticationError as e:
-        print(f"❌ Authentication error: {e.message}")
+        print(f"[ERROR] Authentication error: {e.message}")
         return 1
     except APIError as e:
-        print(f"❌ API error: {e.message}")
+        print(f"[ERROR] API error: {e.message}")
         if e.code:
             print(f"   Code: {e.code}")
         return 1
     except Exception as e:
-        print(f"❌ Unexpected error: {str(e)}")
+        print(f"[ERROR] Unexpected error: {str(e)}")
         import traceback
 
         traceback.print_exc()
@@ -223,7 +223,7 @@ async def test_convenience_function():
     password = os.getenv("NAVIEN_PASSWORD")
 
     if not email or not password:
-        print("❌ Please set NAVIEN_EMAIL and NAVIEN_PASSWORD environment variables")
+        print("[ERROR] Please set NAVIEN_EMAIL and NAVIEN_PASSWORD environment variables")
         return 1
 
     print()
@@ -239,7 +239,7 @@ async def test_convenience_function():
         async with NavienAuthClient(email, password) as auth_client:
             api_client = NavienAPIClient(auth_client=auth_client)
             devices = await api_client.list_devices()
-            print(f"✅ get_devices() returned {len(devices)} device(s)")
+            print(f"[SUCCESS] get_devices() returned {len(devices)} device(s)")
 
             for idx, _ in enumerate(devices, start=1):
                 # Do not log sensitive data like device name or MAC address
@@ -247,7 +247,7 @@ async def test_convenience_function():
         return 0
 
     except Exception as e:
-        print(f"❌ Error: {str(e)}")
+        print(f"[ERROR] Error: {str(e)}")
         return 1
 
 

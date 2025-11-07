@@ -192,10 +192,10 @@ get_firmware_info()
           print(f"  Current code: {fw.cur_sw_code}")
           
           if fw.downloaded_version:
-              print(f"  ⚠️  Update available: {fw.downloaded_version}")
+              print(f"  [WARNING]  Update available: {fw.downloaded_version}")
               print(f"     Download code: {fw.downloaded_sw_code}")
           else:
-              print(f"  ✓ Up to date")
+              print(f"  [OK] Up to date")
       
       # Get firmware for specific device
       fw_info = await api.get_firmware_info(mac_address="04786332fca0")
@@ -358,12 +358,12 @@ Example 2: Firmware Check
                print(f"  Current: {fw.cur_version} (code: {fw.cur_sw_code})")
                
                if fw.downloaded_version:
-                   print(f"  ⚠️  UPDATE AVAILABLE")
+                   print(f"  [WARNING]  UPDATE AVAILABLE")
                    print(f"     Version: {fw.downloaded_version}")
                    print(f"     Code: {fw.downloaded_sw_code}")
                    updates_available += 1
                else:
-                   print(f"  ✓ Up to date")
+                   print(f"  [OK] Up to date")
            
            if updates_available:
                print(f"\n{updates_available} device(s) have updates available")
@@ -473,7 +473,7 @@ Best Practices
 
    .. code-block:: python
 
-      # ✓ Correct usage
+      # [OK] Correct usage
       async with NavienAuthClient() as auth:
           # API: Discover devices
           api = NavienAPIClient(auth)

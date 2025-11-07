@@ -139,7 +139,7 @@ asyncio.run(main())
 When running any example with valid credentials, you should see output similar to:
 
 ```
-✅ Authenticated as: John Doe
+[SUCCESS] Authenticated as: John Doe
 📧 Email: your_email@example.com
 🔑 Token expires at: 2024-01-15 14:30:00
 ```

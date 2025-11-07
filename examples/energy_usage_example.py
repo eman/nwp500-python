@@ -70,13 +70,13 @@ async def main():
             emoji = "🌟"
         elif hp_pct > 60:
             efficiency_rating = "Good"
-            emoji = "✅"
+            emoji = "[SUCCESS]"
         elif hp_pct > 40:
             efficiency_rating = "Fair"
-            emoji = "⚠️"
+            emoji = "[WARNING]"
         else:
             efficiency_rating = "Poor"
-            emoji = "⚠️"
+            emoji = "[WARNING]"
 
         print(f"⚡ EFFICIENCY RATING: {emoji} {efficiency_rating}")
         print("   (Higher heat pump usage = better efficiency)")
@@ -107,7 +107,7 @@ async def main():
     # Create API client and authenticate
     print("Authenticating...")
     async with NavienAuthClient(email, password) as auth_client:
-        print("✓ Authenticated")
+        print("[OK] Authenticated")
 
         # Create API client with authenticated auth_client
         api_client = NavienAPIClient(auth_client=auth_client)
@@ -121,18 +121,18 @@ async def main():
 
         device = devices[0]
         # Avoid logging sensitive info such as MAC address.
-        print(f"✓ Device detected: {device.device_info.device_name}")
+        print(f"[OK] Device detected: {device.device_info.device_name}")
 
         # Connect to MQTT
         print("\nConnecting to MQTT...")
         mqtt_client = NavienMqttClient(auth_client)
         await mqtt_client.connect()
-        print("✓ Connected to MQTT")
+        print("[OK] Connected to MQTT")
 
         # Subscribe to energy usage responses
         print("\nSubscribing to energy usage data...")
         await mqtt_client.subscribe_energy_usage(device, on_energy_usage)
-        print("✓ Subscribed to energy usage responses")
+        print("[OK] Subscribed to energy usage responses")
 
         # Request energy usage for current month
         now = datetime.now()
@@ -143,7 +143,7 @@ async def main():
         await mqtt_client.request_energy_usage(
             device, year=current_year, months=[current_month]
         )
-        print("✓ Request sent")
+        print("[OK] Request sent")
 
         # Wait for response
         print("\nWaiting for energy data (up to 30 seconds)...")
@@ -152,7 +152,7 @@ async def main():
         # Cleanup
         print("\nDisconnecting...")
         await mqtt_client.disconnect()
-        print("✓ Disconnected")
+        print("[OK] Disconnected")
 
 
 if __name__ == "__main__":

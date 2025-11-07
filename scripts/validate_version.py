@@ -40,7 +40,7 @@ def check_pyscaffold_version() -> bool:
     
     # PyScaffold version should be 4.6 (the version that created this project)
     if version != "4.6":
-        print(f"❌ ERROR: setup.cfg [pyscaffold] version has been modified to {version}", file=sys.stderr)
+        print(f"[ERROR] ERROR: setup.cfg [pyscaffold] version has been modified to {version}", file=sys.stderr)
         print("", file=sys.stderr)
         print("The [pyscaffold] version field should always be 4.6", file=sys.stderr)
         print("This is the PyScaffold TOOL version, NOT the package version!", file=sys.stderr)
@@ -82,7 +82,7 @@ def check_hardcoded_versions() -> bool:
             found_issues.append((py_file, match.group(0)))
     
     if found_issues:
-        print("❌ ERROR: Hardcoded version strings found:", file=sys.stderr)
+        print("[ERROR] ERROR: Hardcoded version strings found:", file=sys.stderr)
         for file_path, version_string in found_issues:
             print(f"  {file_path}: {version_string}", file=sys.stderr)
         print("", file=sys.stderr)
@@ -104,7 +104,7 @@ def check_setup_py() -> bool:
     content = setup_py.read_text()
     
     if "use_scm_version" not in content:
-        print("❌ ERROR: setup.py does not use setuptools_scm", file=sys.stderr)
+        print("[ERROR] ERROR: setup.py does not use setuptools_scm", file=sys.stderr)
         print("", file=sys.stderr)
         print("setup.py should contain: setup(use_scm_version={...})", file=sys.stderr)
         return False
@@ -129,17 +129,17 @@ def main() -> int:
         result = check_func()
         results.append(result)
         if result:
-            print("✓")
+            print("[OK]")
         else:
             print("✗")
     
     print("")
     
     if all(results):
-        print("✓ All version validation checks passed!")
+        print("[OK] All version validation checks passed!")
         return 0
     else:
-        print("❌ Version validation failed!")
+        print("[ERROR] Version validation failed!")
         print("")
         print("Common fixes:")
         print("  - Revert setup.cfg [pyscaffold] version to 4.6")

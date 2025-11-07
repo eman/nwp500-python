@@ -25,7 +25,7 @@ async def main():
     # Authenticate once and use the auth_client everywhere
     async with NavienAuthClient(email, password) as auth_client:
         # Already authenticated!
-        print(f"✅ Authenticated as: {auth_client.user_email}")
+        print(f"[SUCCESS] Authenticated as: {auth_client.user_email}")
 
         # Step 2: Create API client and get device
         api_client = NavienAPIClient(auth_client=auth_client)
@@ -35,12 +35,12 @@ async def main():
             print("No devices found")
             return
 
-        print(f"✅ Found device: {device.device_info.device_name}")
+        print(f"[SUCCESS] Found device: {device.device_info.device_name}")
 
         # Step 3: Create MQTT client using the same auth_client
         mqtt = NavienMqttClient(auth_client)
         await mqtt.connect()
-        print(f"✅ MQTT Connected: {mqtt.client_id}")
+        print(f"[SUCCESS] MQTT Connected: {mqtt.client_id}")
 
         # Step 4: Monitor device status
         def on_status(status):
@@ -57,7 +57,7 @@ async def main():
         await asyncio.sleep(10)
 
         await mqtt.disconnect()
-        print("\n✅ Disconnected")
+        print("\n[SUCCESS] Disconnected")
 
 
 if __name__ == "__main__":

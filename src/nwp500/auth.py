@@ -675,7 +675,7 @@ class NavienAuthClient:
             This is different from standard Bearer token authentication.
         """
         headers = {
-            "User-Agent": "NaviLink-Python/1.0.0",
+            "User-Agent": "nwp500-python/1.0.0",
             "Content-Type": "application/json",
         }
 

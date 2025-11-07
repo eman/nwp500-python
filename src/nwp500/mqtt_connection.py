@@ -378,7 +378,8 @@ class MqttConnection:
             # Handle connection destruction during publish
             # This can happen when AWS IoT Core disconnects (e.g., 24-hour
             # timeout)
-            if hasattr(e, "name") and e.name == "AWS_ERROR_MQTT_CONNECTION_DESTROYED":
+            error_name = getattr(e, "name", None)
+            if error_name == "AWS_ERROR_MQTT_CONNECTION_DESTROYED":
                 _logger.warning(
                     f"MQTT connection destroyed during publish to '{topic}'. "
                     "This can occur during AWS-initiated disconnections. "
