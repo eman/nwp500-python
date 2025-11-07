@@ -54,7 +54,7 @@ async def main():
 
     if not email or not password:
         print(
-            "❌ Error: Please set NAVIEN_EMAIL and NAVIEN_PASSWORD environment variables"
+            "[ERROR] Error: Please set NAVIEN_EMAIL and NAVIEN_PASSWORD environment variables"
         )
         print("\nExample:")
         print("  export NAVIEN_EMAIL='your_email@example.com'")
@@ -70,15 +70,15 @@ async def main():
         # Step 1: Authenticate and get AWS credentials
         print("Step 1: Authenticating with Navien API...")
         async with NavienAuthClient(email, password) as auth_client:
-            print(f"✅ Authenticated as: {auth_client.current_user.full_name}")
+            print(f"[SUCCESS] Authenticated as: {auth_client.current_user.full_name}")
 
             # Check if we have AWS credentials for MQTT
             if not auth_client.current_tokens.access_key_id:
-                print("❌ Error: No AWS credentials in authentication response")
+                print("[ERROR] Error: No AWS credentials in authentication response")
                 print("   MQTT communication requires AWS IoT credentials")
                 return 1
 
-            print("✅ AWS IoT credentials obtained")
+            print("[SUCCESS] AWS IoT credentials obtained")
             print(
                 f"   Access Key ID: {auth_client.current_tokens.access_key_id[:15]}..."
             )
@@ -97,11 +97,11 @@ async def main():
             devices = await api_client.list_devices()
 
             if not devices:
-                print("❌ Error: No devices found in your account")
+                print("[ERROR] Error: No devices found in your account")
                 print("   Please register a device first")
                 return 1
 
-            print(f"✅ Found {len(devices)} device(s):")
+            print(f"[SUCCESS] Found {len(devices)} device(s):")
             for i, device in enumerate(devices):
                 print(f"   {i + 1}. {device.device_info.device_name} (MAC: **MASKED**)")
                 print(
@@ -121,7 +121,7 @@ async def main():
                 def mask_any(_):  # pragma: no cover - fallback
                     return "[REDACTED]"
 
-            print(f"✅ Using device: {device.device_info.device_name}")
+            print(f"[SUCCESS] Using device: {device.device_info.device_name}")
             print(f"   MAC Address: {mask_mac(device_id)}")
             print(f"   Device Type: {mask_any(device_type)}")
             print()
@@ -132,7 +132,7 @@ async def main():
 
             try:
                 await mqtt_client.connect()
-                print("✅ Connected to AWS IoT Core")
+                print("[SUCCESS] Connected to AWS IoT Core")
                 print(f"   Client ID: {mqtt_client.client_id}")
                 print(f"   Session ID: {mqtt_client.session_id}")
                 print()
@@ -172,7 +172,7 @@ async def main():
                 # Subscribe with typed parsing
                 await mqtt_client.subscribe_device_status(device, on_device_status)
                 await mqtt_client.subscribe_device_feature(device, on_device_feature)
-                print("✅ Subscribed to device messages with typed parsing")
+                print("[SUCCESS] Subscribed to device messages with typed parsing")
                 print()
 
                 # Step 5: Send commands and monitor responses
@@ -201,7 +201,7 @@ async def main():
                 try:
                     await asyncio.sleep(15)
                 except KeyboardInterrupt:
-                    print("\n⚠️  Interrupted by user")
+                    print("\n[WARNING]  Interrupted by user")
 
                 print()
                 print(f"📊 Summary: Received {message_count['count']} message(s)")
@@ -210,7 +210,7 @@ async def main():
                 # Step 6: Disconnect
                 print("Step 6: Disconnecting from AWS IoT...")
                 await mqtt_client.disconnect()
-                print("✅ Disconnected successfully")
+                print("[SUCCESS] Disconnected successfully")
 
             except Exception:
                 import logging
@@ -224,12 +224,12 @@ async def main():
 
         print()
         print("=" * 70)
-        print("✅ MQTT Client Example Completed Successfully!")
+        print("[SUCCESS] MQTT Client Example Completed Successfully!")
         print("=" * 70)
         return 0
 
     except AuthenticationError as e:
-        print(f"\n❌ Authentication failed: {e.message}")
+        print(f"\n[ERROR] Authentication failed: {e.message}")
         if e.code:
             print(f"   Error code: {e.code}")
         return 1

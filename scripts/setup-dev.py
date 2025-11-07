@@ -16,19 +16,19 @@ def run_command(cmd, description):
     
     try:
         result = subprocess.run(cmd, check=True, capture_output=True, text=True)
-        print(f"✓ {description} - SUCCESS")
+        print(f"[OK] {description} - SUCCESS")
         if result.stdout.strip():
             print(f"Output: {result.stdout}")
         return True
     except subprocess.CalledProcessError as e:
-        print(f"❌ {description} - FAILED")
+        print(f"[ERROR] {description} - FAILED")
         if e.stdout:
             print(f"STDOUT:\n{e.stdout}")
         if e.stderr:
             print(f"STDERR:\n{e.stderr}")
         return False
     except FileNotFoundError:
-        print(f"❌ {description} - FAILED (command not found)")
+        print(f"[ERROR] {description} - FAILED (command not found)")
         return False
 
 def main():
@@ -38,7 +38,7 @@ def main():
     project_root = Path(__file__).parent.parent
     os.chdir(project_root)
     
-    print("🚀 Setting up development environment")
+    print("[START] Setting up development environment")
     print(f"Working directory: {project_root}")
     
     # Install ruff for linting (matches CI requirement)
@@ -70,7 +70,7 @@ def main():
         print("  python3 scripts/format.py")
         return 0
     else:
-        print("❌ Development environment setup FAILED!")
+        print("[ERROR] Development environment setup FAILED!")
         print("Check the output above for details.")
         return 1
 

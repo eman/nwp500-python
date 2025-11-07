@@ -268,11 +268,11 @@ Example 3: Temperature Alerts
 
            def check_temp(status):
                if status.dhwTemperature < 110:
-                   print("⚠️  WARNING: Temperature below 110°F")
+                   print("WARNING: Temperature below 110°F")
                    send_alert("Low water temperature")
 
                if status.dhwTemperature > 145:
-                   print("⚠️  WARNING: Temperature above 145°F")
+                   print("WARNING: Temperature above 145°F")
                    send_alert("High water temperature")
 
            mqtt.on('status_received', check_temp)
@@ -317,11 +317,11 @@ Best Practices
 
    .. code-block:: python
 
-      # ✓ Register first
+      # GOOD: Register first
       mqtt.on('status_received', handler)
       await mqtt.connect()
 
-      # ✗ May miss early events
+      # BAD: May miss early events
       await mqtt.connect()
       mqtt.on('status_received', handler)
 

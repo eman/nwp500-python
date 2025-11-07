@@ -53,7 +53,7 @@ async def example_basic_usage():
         # Create auth client and authenticate
         async with NavienAuthClient(email, password) as auth_client:
             # Already authenticated!
-            print("✅ Authenticated successfully\n")
+            print("[SUCCESS] Authenticated successfully\n")
 
             # Create API client with authenticated auth_client
             client = NavienAPIClient(auth_client=auth_client)
@@ -62,9 +62,9 @@ async def example_basic_usage():
             print("📱 Retrieving devices...")
             try:
                 devices = await asyncio.wait_for(client.list_devices(), timeout=30.0)
-                print(f"✅ Found {len(devices)} device(s)\n")
+                print(f"[SUCCESS] Found {len(devices)} device(s)\n")
             except asyncio.TimeoutError:
-                print("❌ Request timed out while retrieving devices")
+                print("[ERROR] Request timed out while retrieving devices")
                 print("   The API server may be slow or unresponsive.")
                 return 1
 
@@ -118,7 +118,7 @@ async def example_basic_usage():
                     )
 
                     print(
-                        f"✅ Detailed info for: {detailed_info.device_info.device_name}"
+                        f"[SUCCESS] Detailed info for: {detailed_info.device_info.device_name}"
                     )
                     if detailed_info.device_info.install_type:
                         print(
@@ -128,7 +128,7 @@ async def example_basic_usage():
                         print("  Coordinates: (available, not shown for privacy)")
                     print()
                 except asyncio.TimeoutError:
-                    print("⚠️  Request timed out - API may be slow or unresponsive")
+                    print("[WARNING]  Request timed out - API may be slow or unresponsive")
                     print("   Continuing with other requests...")
                     print()
 
@@ -138,29 +138,29 @@ async def example_basic_usage():
                     firmware_list = await asyncio.wait_for(
                         client.get_firmware_info(mac, additional), timeout=30.0
                     )
-                    print(f"✅ Found {len(firmware_list)} firmware components")
+                    print(f"[SUCCESS] Found {len(firmware_list)} firmware components")
 
                     for fw in firmware_list:
                         print(f"  SW Code: {fw.cur_sw_code}, Version: {fw.cur_version}")
                     print()
                 except asyncio.TimeoutError:
-                    print("⚠️  Request timed out - API may be slow or unresponsive")
+                    print("[WARNING]  Request timed out - API may be slow or unresponsive")
                     print()
 
         print("=" * 70)
-        print("✅ Example completed successfully!")
+        print("[SUCCESS] Example completed successfully!")
         print("=" * 70)
         return 0
 
     except AuthenticationError as e:
-        print(f"\n❌ Authentication failed: {e.message}")
+        print(f"\n[ERROR] Authentication failed: {e.message}")
         print("\nPlease set environment variables:")
         print("  export NAVIEN_EMAIL='your_email@example.com'")
         print("  export NAVIEN_PASSWORD='your_password'")
         return 1
 
     except APIError as e:
-        print(f"\n❌ API error: {e.message}")
+        print(f"\n[ERROR] API error: {e.message}")
         if e.code:
             print(f"   Error code: {e.code}")
         return 1
@@ -190,7 +190,7 @@ async def example_convenience_function():
             api_client = NavienAPIClient(auth_client=auth_client)
             devices = await api_client.list_devices()
 
-            print(f"✅ Found {len(devices)} device(s):\n")
+            print(f"[SUCCESS] Found {len(devices)} device(s):\n")
 
             try:
                 from examples.mask import mask_any, mask_location  # type: ignore
@@ -214,7 +214,7 @@ async def example_convenience_function():
         return 0
 
     except Exception as e:
-        print(f"❌ Error: {str(e)}")
+        print(f"[ERROR] Error: {str(e)}")
         return 1
 
 
@@ -240,7 +240,7 @@ async def example_error_handling():
             # Try to get info for non-existent device
             await client.get_device_info("invalid_mac_address", "invalid")
         except APIError as e:
-            print("✅ Caught APIError as expected:")
+            print("[SUCCESS] Caught APIError as expected:")
             print(f"   Message: {e.message}")
             print(f"   Code: {e.code}")
         print()
@@ -249,10 +249,10 @@ async def example_error_handling():
         print("Example 2: Authentication check")
         print("-" * 70)
         if client.is_authenticated:
-            print("✅ Client is authenticated")
+            print("[SUCCESS] Client is authenticated")
             print(f"   User: {client.user_email}")
         else:
-            print("❌ Client is not authenticated")
+            print("[ERROR] Client is not authenticated")
         print()
 
 

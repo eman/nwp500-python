@@ -16,19 +16,19 @@ def run_command(cmd, description):
     
     try:
         result = subprocess.run(cmd, check=True, capture_output=True, text=True)
-        print(f"✓ {description} - PASSED")
+        print(f"[OK] {description} - PASSED")
         if result.stdout.strip():
             print(f"Output: {result.stdout}")
         return True
     except subprocess.CalledProcessError as e:
-        print(f"❌ {description} - FAILED")
+        print(f"[ERROR] {description} - FAILED")
         if e.stdout:
             print(f"STDOUT:\n{e.stdout}")
         if e.stderr:
             print(f"STDERR:\n{e.stderr}")
         return False
     except FileNotFoundError:
-        print(f"❌ {description} - FAILED (ruff not found)")
+        print(f"[ERROR] {description} - FAILED (ruff not found)")
         print("Install ruff with: python3 -m pip install ruff>=0.1.0")
         return False
 
@@ -39,7 +39,7 @@ def main():
     project_root = Path(__file__).parent.parent
     os.chdir(project_root)
     
-    print("🚀 Running local linting (mirroring CI environment)")
+    print("[START] Running local linting (mirroring CI environment)")
     print(f"Working directory: {project_root}")
     
     # Define the same commands used in tox.ini
@@ -67,7 +67,7 @@ def main():
         print("Your code matches the CI environment requirements.")
         return 0
     else:
-        print("❌ Some linting checks FAILED!")
+        print("[ERROR] Some linting checks FAILED!")
         print("Run the following commands to fix issues:")
         print("  python3 -m ruff check --fix src/ tests/ examples/")
         print("  python3 -m ruff format src/ tests/ examples/")

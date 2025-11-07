@@ -164,18 +164,18 @@ Send control commands to change device settings:
            
            # Turn on the device
            await mqtt.set_power(device, power_on=True)
-           print("✓ Device powered on")
+           print("Device powered on")
            
            # Set to Energy Saver mode
            await mqtt.set_dhw_mode(
                device,
                mode_id=DhwOperationSetting.ENERGY_SAVER.value
            )
-           print("✓ Set to Energy Saver mode")
+           print("Set to Energy Saver mode")
            
            # Set temperature to 120°F
            await mqtt.set_dhw_temperature(device, temperature=120)
-           print("✓ Temperature set to 120°F")
+           print("Temperature set to 120°F")
            
            await asyncio.sleep(2)
            await mqtt.disconnect()

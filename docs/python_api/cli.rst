@@ -119,9 +119,9 @@ Real-time continuous monitoring of device status.
    Energy:           85.5%
    
    Components:
-   ✓ Heat Pump Running
-   ✗ Upper Heater
-   ✗ Lower Heater
+   ENABLED: Heat Pump Running
+   DISABLED: Upper Heater
+   DISABLED: Lower Heater
    
    [12:35:01] Temperature changed: 139.0°F
 
@@ -188,13 +188,13 @@ number.
      Temperature Range: 100°F - 150°F
      
      Supported Features:
-       ✓ Energy Monitoring
-       ✓ Anti-Legionella
-       ✓ Reservations
-       ✓ Heat Pump Mode
-       ✓ Electric Mode
-       ✓ Energy Saver Mode
-       ✓ High Demand Mode
+       ENABLED: Energy Monitoring
+       ENABLED: Anti-Legionella
+       ENABLED: Reservations
+       ENABLED: Heat Pump Mode
+       ENABLED: Electric Mode
+       ENABLED: Energy Saver Mode
+       ENABLED: High Demand Mode
 
 --get-controller-serial
 ^^^^^^^^^^^^^^^^^^^^^^^

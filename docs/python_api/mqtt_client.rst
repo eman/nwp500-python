@@ -1002,11 +1002,11 @@ Best Practices
 
    .. code-block:: python
 
-      # ✓ Correct order
+      # CORRECT order
       await mqtt.subscribe_device_status(device, on_status)
       await mqtt.request_device_status(device)
       
-      # ✗ Wrong - response will be missed
+      # WRONG - response will be missed
       await mqtt.request_device_status(device)
       await mqtt.subscribe_device_status(device, on_status)
 

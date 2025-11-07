@@ -1,7 +1,7 @@
 Advanced Features Explained: Weather-Responsive Heating, Demand Response, and Tank Stratification
 ==================================================================================================
 
-This document provides comprehensive technical documentation for three advanced NWP500 features, confirmed through decompiled application analysis (NaviLink 2.01.02 APK).
+This document provides comprehensive technical documentation for three advanced NWP500 features.
 
 Overview of Advanced Features
 -----------------------------
@@ -29,20 +29,6 @@ Technical Implementation
 - ``outsideTemperature`` (raw integer): Weather data temperature from cloud API/device configuration
 - ``evaporatorTemperature`` (decicelsius_to_f): Evaporator coil temperature during heat pump operation
 
-**Decompiled Application Evidence**:
-
-The NaviLink application includes the ``outsideTemperature`` field in the MGPP Status message structure (confirmed in ``KDResponseMgppStatus$Status.smali`` at line 115):
-
-.. code-block:: text
-
-    .field private outsideTemperature:I
-    
-    // Setter method
-    public setOutsideTemperature(I)V
-    
-    // Getter method returns raw integer value
-
-This field is part of the device status response parsed from MQTT messages, indicating the device receives and uses outdoor temperature for decision-making.
 
 How It Works
 ^^^^^^^^^^^^
@@ -144,24 +130,6 @@ A protocol that allows utilities to send control signals to networked devices (l
 
 Technical Implementation
 ^^^^^^^^^^^^^^^^^^^^^^^^^
-
-**Data Structures - Decompiled Evidence**:
-
-The NaviLink application includes dedicated DR fields in the MGPP Status message (confirmed in ``KDResponseMgppStatus$Status.smali`` at lines 79-81):
-
-.. code-block:: text
-
-    .field private drEventStatus:I       # Current DR event signal status
-    .field private drOverrideStatus:I    # User override of DR commands
-
-Additionally, a UI element displays CTA-2045 status (confirmed in ``MgppStatusFragment.smali``):
-
-.. code-block:: text
-
-    mRow_control_status_cta_2045_value:Landroid/widget/TextView;
-
-This confirms the device has user-visible DR status display in the mobile app.
-
 DR Event Status Field
 ^^^^^^^^^^^^^^^^^^^^^
 
@@ -267,34 +235,6 @@ Utility Integration Requirements
 
 To use demand response with your NWP500:
 
-1. **Enroll in Utility Program**: Contact your local utility about available demand response programs
-2. **Device Registration**: Register device with utility (usually via device serial number in NaviLink app)
-3. **Grant Permissions**: Enable DR control in device settings
-4. **Monitor Status**: Use NaviLink app to see active DR events and override options
-
-Tank Stratification Optimization
-=================================
-
-Feature Overview
-^^^^^^^^^^^^^^^^
-
-The NWP500 includes dual temperature sensors in the tank (upper and lower) to monitor "stratification" - the natural separation of hot and cold water layers. Optimal stratification improves heating efficiency and recovery time.
-
-Technical Implementation
-^^^^^^^^^^^^^^^^^^^^^^^^
-
-**Temperature Sensor Architecture - Decompiled Evidence**:
-
-The NaviLink application includes both tank sensor fields in the MGPP Status message (confirmed in ``KDResponseMgppStatus$Status.smali`` at lines 155-157):
-
-.. code-block:: text
-
-    .field private tankUpperTemperature:I
-    .field private tankLowerTemperature:I
-    
-    // Setter and getter methods for each sensor
-
-This confirms real-time monitoring of both sensors with independent temperature readings.
 
 Tank Temperature Sensors
 ^^^^^^^^^^^^^^^^^^^^^^^^
@@ -457,15 +397,15 @@ Monitoring Stratification from Python
         stratification_delta = upper_temp - lower_temp
         
         if stratification_delta < 5:
-            print(f"⚠️  Poor stratification (Δ={stratification_delta}°F)")
+            print(f"WARNING: Poor stratification (Δ={stratification_delta}°F)")
             print("   → Full tank heating required")
             print("   → Efficiency reduced, recovery slower")
         elif stratification_delta > 25:
-            print(f"✅ Excellent stratification (Δ={stratification_delta}°F)")
+            print(f"GOOD: Excellent stratification (Δ={stratification_delta}°F)")
             print("   → Efficient targeted heating")
             print("   → Quick hot water availability")
         else:
-            print(f"ℹ️  Normal stratification (Δ={stratification_delta}°F)")
+            print(f"INFO: Normal stratification (Δ={stratification_delta}°F)")
             print("   → Balanced efficiency and recovery")
         
         return {
@@ -487,27 +427,6 @@ Factors Affecting Stratification
 5. **Vertical Tank Orientation**: Tall narrow tanks maintain stratification better than squat tanks
 
 **Negative Factors** (Degrade Stratification):
-
-1. **Rapid Water Draws**: High flow rates mix layers turbulently
-2. **Continuous Recirculation**: Pump maintains uniform temperature throughout
-3. **Aggressive Heating**: Full electric element heating creates turbulence
-4. **Pipe Insulation Failure**: Cold inlet water falling through tank
-5. **Tank Age/Sediment**: Accumulation disrupts layering
-6. **Tank Mounting Issues**: Tilted tank can cause mixing
-
-Advanced Feature Interactions
-=============================
-
-These three features work together to optimize efficiency:
-
-**Example: Winter Morning Peak with DR Event**
-
-.. code-block:: text
-
-    Conditions:
-    - 25°F ambient temperature
-    - Demand response "reduce" signal active
-    - Tank stratification poor (5°F delta)
     - Morning peak hour starting (6-7 AM)
     - Reservation calls for 140°F
     
@@ -525,18 +444,18 @@ These three features work together to optimize efficiency:
 Formula Confirmation
 ====================
 
-**Formula Verification**:
+**Formula**:
 
-The documented temperature conversion formula has been confirmed through decompiled application analysis:
+The temperature conversion formula is:
 
 .. code-block:: text
 
     Formula: displayed_value = raw_value + 20
     
     Application Evidence:
-    - Source: NaviLink 2.01.02 APK
-    - Decompiled location: com.kdnavien.navilink.mqttData.KDResponseMgppStatus$Status
-    - Field: dhwTemperature, tankUpperTemperature, tankLowerTemperature, etc.
+    - Application handled by NaviLink
+    - Implementation in device status messages
+    - Fields: dhwTemperature, tankUpperTemperature, tankLowerTemperature, etc.
     - Conversion: Applied uniformly to all add_20 type fields in device status
     - Raw value range: 0-130 (representing -4°F to 150°F)
     - Display range: 20-150°F

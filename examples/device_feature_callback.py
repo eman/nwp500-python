@@ -53,7 +53,7 @@ async def main():
 
     if not email or not password:
         print(
-            "❌ Error: Please set NAVIEN_EMAIL and NAVIEN_PASSWORD environment variables"
+            "[ERROR] Error: Please set NAVIEN_EMAIL and NAVIEN_PASSWORD environment variables"
         )
         print("\nExample:")
         print("  export NAVIEN_EMAIL='your_email@example.com'")
@@ -69,7 +69,7 @@ async def main():
         # Step 1: Authenticate and get AWS credentials
         print("Step 1: Authenticating with Navien API...")
         async with NavienAuthClient(email, password) as auth_client:
-            print(f"✅ Authenticated as: {auth_client.current_user.full_name}")
+            print(f"[SUCCESS] Authenticated as: {auth_client.current_user.full_name}")
             print()
 
             # Step 2: Get device list
@@ -80,14 +80,14 @@ async def main():
             devices = await api_client.list_devices()
 
             if not devices:
-                print("❌ Error: No devices found in your account")
+                print("[ERROR] Error: No devices found in your account")
                 return 1
 
             device = devices[0]
             device_id = device.device_info.mac_address
             device_type = device.device_info.device_type
 
-            print(f"✅ Using device: {device.device_info.device_name}")
+            print(f"[SUCCESS] Using device: {device.device_info.device_name}")
             print(f"   MAC Address: {mask_mac(device_id)}")
             print()
 
@@ -97,7 +97,7 @@ async def main():
 
             try:
                 await mqtt_client.connect()
-                print("✅ Connected to AWS IoT Core")
+                print("[SUCCESS] Connected to AWS IoT Core")
                 print()
 
                 # Step 4: Subscribe to device feature with automatic parsing
@@ -224,7 +224,7 @@ async def main():
 
                 # Subscribe with automatic parsing
                 await mqtt_client.subscribe_device_feature(device, on_device_feature)
-                print("✅ Subscribed to device features with automatic parsing")
+                print("[SUCCESS] Subscribed to device features with automatic parsing")
                 print()
 
                 # Step 5: Request device info to get feature data
@@ -233,7 +233,7 @@ async def main():
                 await asyncio.sleep(1)
 
                 await mqtt_client.request_device_info(device)
-                print("✅ Device info request sent")
+                print("[SUCCESS] Device info request sent")
                 print()
 
                 # Wait for feature message
@@ -242,7 +242,7 @@ async def main():
                 try:
                     await asyncio.sleep(10)
                 except KeyboardInterrupt:
-                    print("\n⚠️  Interrupted by user")
+                    print("\n[WARNING]  Interrupted by user")
 
                 print()
                 print(
@@ -253,7 +253,7 @@ async def main():
                 # Disconnect
                 print("Step 6: Disconnecting from AWS IoT...")
                 await mqtt_client.disconnect()
-                print("✅ Disconnected successfully")
+                print("[SUCCESS] Disconnected successfully")
 
             except Exception:
                 import logging
@@ -267,12 +267,12 @@ async def main():
 
         print()
         print("=" * 70)
-        print("✅ Device Feature Callback Example Completed Successfully!")
+        print("[SUCCESS] Device Feature Callback Example Completed Successfully!")
         print("=" * 70)
         return 0
 
     except AuthenticationError as e:
-        print(f"\n❌ Authentication failed: {e.message}")
+        print(f"\n[ERROR] Authentication failed: {e.message}")
         if e.code:
             print(f"   Error code: {e.code}")
         return 1

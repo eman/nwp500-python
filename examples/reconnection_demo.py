@@ -38,7 +38,7 @@ async def main():
 
     # Authenticate
     async with NavienAuthClient(email, password) as auth_client:
-        print(f"✅ Authenticated as: {auth_client.current_user.full_name}")
+        print(f"[SUCCESS] Authenticated as: {auth_client.current_user.full_name}")
 
         # Get device
         api_client = NavienAPIClient(auth_client=auth_client)
@@ -48,7 +48,7 @@ async def main():
             print("No devices found")
             return
 
-        print(f"✅ Found device: {device.device_info.device_name}")
+        print(f"[SUCCESS] Found device: {device.device_info.device_name}")
 
         # Configure MQTT with custom reconnection settings
         config = MqttConnectionConfig(
@@ -67,11 +67,11 @@ async def main():
 
         # Register event handlers
         def on_interrupted(error):
-            print(f"\n⚠️  Connection interrupted: {error}")
+            print(f"\n[WARNING]  Connection interrupted: {error}")
             print("   Automatic reconnection will begin...")
 
         def on_resumed(return_code, session_present):
-            print("\n✅ Connection resumed!")
+            print("\n[SUCCESS] Connection resumed!")
             print(f"   Return code: {return_code}")
             print(f"   Session present: {session_present}")
 
@@ -80,7 +80,7 @@ async def main():
 
         # Connect
         await mqtt_client.connect()
-        print(f"✅ MQTT Connected: {mqtt_client.client_id}")
+        print(f"[SUCCESS] MQTT Connected: {mqtt_client.client_id}")
 
         # Subscribe to device status
         status_count = 0
@@ -132,16 +132,16 @@ async def main():
 
         # Disconnect
         await mqtt_client.disconnect()
-        print("\n✅ Disconnected")
+        print("\n[SUCCESS] Disconnected")
 
 
 if __name__ == "__main__":
     try:
         asyncio.run(main())
     except KeyboardInterrupt:
-        print("\n\n⚠️  Interrupted by user")
+        print("\n\n[WARNING]  Interrupted by user")
     except Exception as e:
-        print(f"\n❌ Error: {e}")
+        print(f"\n[ERROR] Error: {e}")
         import traceback
 
         traceback.print_exc()

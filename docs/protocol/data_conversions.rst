@@ -633,3 +633,4 @@ See Also
 * :doc:`error_codes` - Error code reference for fault diagnosis
 * :doc:`../guides/energy_monitoring` - Using energy data for optimization
 * :doc:`../guides/time_of_use` - TOU scheduling and rate optimization
+* :doc:`../guides/advanced_features_explained` - Weather-responsive heating, demand response, and tank stratification

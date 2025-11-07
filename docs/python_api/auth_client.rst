@@ -559,7 +559,7 @@ Best Practices
 
    .. code-block:: python
 
-      # ✓ Correct
+      # [OK] Correct
       async with NavienAuthClient(email, password) as auth:
           # operations
       

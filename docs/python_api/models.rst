@@ -207,7 +207,7 @@ Device identification and connection information.
       print(f"Type: {info.device_type}")
 
       if info.connected == 2:
-          print("Status: Online ✓")
+          print("Status: Online [OK]")
       else:
           print("Status: Offline ✗")
 
@@ -267,9 +267,9 @@ Firmware version information.
           print(f"  Current: {fw.cur_version} (code: {fw.cur_sw_code})")
 
           if fw.downloaded_version:
-              print(f"  ⚠️  Update available: {fw.downloaded_version}")
+              print(f"  [WARNING]  Update available: {fw.downloaded_version}")
           else:
-              print(f"  ✓ Up to date")
+              print(f"  [OK] Up to date")
 
 Status Models
 =============
@@ -469,19 +469,19 @@ Device capabilities, features, and firmware information.
 
           print(f"\nSupported Features:")
           if feature.energyUsageUse:
-              print("  ✓ Energy monitoring")
+              print("  [OK] Energy monitoring")
           if feature.antiLegionellaSettingUse:
-              print("  ✓ Anti-Legionella")
+              print("  [OK] Anti-Legionella")
           if feature.programReservationUse:
-              print("  ✓ Reservations")
+              print("  [OK] Reservations")
           if feature.heatpumpUse:
-              print("  ✓ Heat pump mode")
+              print("  [OK] Heat pump mode")
           if feature.electricUse:
-              print("  ✓ Electric mode")
+              print("  [OK] Electric mode")
           if feature.energySaverUse:
-              print("  ✓ Energy Saver mode")
+              print("  [OK] Energy Saver mode")
           if feature.highDemandUse:
-              print("  ✓ High Demand mode")
+              print("  [OK] High Demand mode")
 
 Energy Models
 =============
@@ -668,7 +668,7 @@ Best Practices
 
    .. code-block:: python
 
-      # ✓ Type-safe
+      # [OK] Type-safe
       from nwp500 import DhwOperationSetting
       await mqtt.set_dhw_mode(device, DhwOperationSetting.ENERGY_SAVER.value)
 

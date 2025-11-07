@@ -190,9 +190,9 @@ async def main():
             request_type=PeriodicRequestType.DEVICE_STATUS,
             period_seconds=20,
         )
-        print("✓ Periodic requests started")
+        print("[OK] Periodic requests started")
     else:
-        print("✓ Periodic requests not started (disabled by config)")
+        print("[OK] Periodic requests not started (disabled by config)")
 
     print("Waiting 15 seconds (should see no new automatic requests)...")
     await asyncio.sleep(15)
