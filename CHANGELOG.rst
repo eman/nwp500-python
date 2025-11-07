@@ -2,6 +2,14 @@
 Changelog
 =========
 
+Version 6.0.1 (2025-11-06)
+==========================
+
+Fixed
+-----
+
+- Minor bug fixes and improvements
+
 Version 6.0.0 (2025-11-02)
 ==========================
 
