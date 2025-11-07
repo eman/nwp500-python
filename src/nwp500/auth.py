@@ -19,6 +19,7 @@ from typing import Any, Optional
 
 import aiohttp
 
+from . import __version__
 from .config import API_BASE_URL, REFRESH_ENDPOINT, SIGN_IN_ENDPOINT
 from .exceptions import (
     AuthenticationError,
@@ -675,7 +676,7 @@ class NavienAuthClient:
             This is different from standard Bearer token authentication.
         """
         headers = {
-            "User-Agent": "NaviLink-Python/1.0.0",
+            "User-Agent": f"nwp500-python/{__version__}",
             "Content-Type": "application/json",
         }
 

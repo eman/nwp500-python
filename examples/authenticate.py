@@ -48,7 +48,7 @@ async def main():
             response = client._auth_response
 
             # Display user information
-            print("\n✅ Authentication successful!")
+            print("\n[SUCCESS] Authentication successful!")
             print("\nUser Information:")
             print(f"  Name: {response.user_info.full_name}")
             print(f"  Status: {response.user_info.user_status}")
@@ -68,7 +68,9 @@ async def main():
             print("\nCorrect Authorization Headers:")
             auth_headers = client.get_auth_headers()
             print(f"  authorization: {auth_headers['authorization'][:50]}...")
-            print("\n⚠️  IMPORTANT: Use lowercase 'authorization' with raw token")
+            print(
+                "\n[WARNING]  IMPORTANT: Use lowercase 'authorization' with raw token"
+            )
             print("  (no 'Bearer ' prefix). Standard Bearer format will NOT work!")
             print("\n  Correct:   {'authorization': 'eyJraWQi...'}")
             print("  Wrong:     {'Authorization': 'Bearer eyJraWQi...'}")
@@ -82,20 +84,20 @@ async def main():
                 )
 
     except InvalidCredentialsError as e:
-        print(f"\n❌ Invalid credentials: {e.message}")
+        print(f"\n[ERROR] Invalid credentials: {e.message}")
         print("\nPlease set environment variables:")
         print("  export NAVIEN_EMAIL='your_email@example.com'")
         print("  export NAVIEN_PASSWORD='your_password'")
         return 1
 
     except AuthenticationError as e:
-        print(f"\n❌ Authentication failed: {e.message}")
+        print(f"\n[ERROR] Authentication failed: {e.message}")
         if e.code:
             print(f"Error code: {e.code}")
         return 1
 
     except Exception as e:
-        print(f"\n❌ Unexpected error: {str(e)}")
+        print(f"\n[ERROR] Unexpected error: {str(e)}")
         import traceback
 
         traceback.print_exc()

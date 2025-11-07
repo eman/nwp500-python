@@ -23,7 +23,7 @@ async def main():
     # Pass credentials to constructor - authentication happens automatically
     async with NavienAuthClient(email, password) as auth_client:
         # Already authenticated! No need to call sign_in()
-        print(f"✅ Authenticated as: {auth_client.current_user.full_name}")
+        print(f"[SUCCESS] Authenticated as: {auth_client.current_user.full_name}")
         print(f"📧 Email: {auth_client.user_email}")
         print(f"🔑 Token expires at: {auth_client.current_tokens.expires_at}")
 

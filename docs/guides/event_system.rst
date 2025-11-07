@@ -445,11 +445,11 @@ Best Practices
 
    .. code-block:: python
 
-      # ✓ Fast handler
+      # GOOD: Fast handler
       def on_status(status):
           asyncio.create_task(process_status(status))
 
-      # ✗ Slow handler (blocks event loop)
+      # BAD: Slow handler (blocks event loop)
       def on_status(status):
           time.sleep(5)  # BAD
           process_status(status)

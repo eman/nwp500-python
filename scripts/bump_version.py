@@ -161,7 +161,7 @@ def create_tag(version: str, message: str = None) -> None:
     else:
         run_git_command(["tag", "-a", tag_name, "-m", f"Release version {version}"])
     
-    print(f"✓ Created tag: {tag_name}")
+    print(f"[OK] Created tag: {tag_name}")
 
 
 def main() -> None:
@@ -216,7 +216,7 @@ def main() -> None:
     # Create the tag
     create_tag(new_version)
     
-    print("\n✓ Version bump complete!")
+    print("\n[OK] Version bump complete!")
     print("\nNext steps:")
     print(f"  1. Push the tag:    git push origin v{new_version}")
     print("  2. Build release:   make build")

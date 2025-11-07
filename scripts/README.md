@@ -162,25 +162,25 @@ This project uses `setuptools_scm` which:
 
 ### What NOT to Do
 
-❌ **Never edit the version in `setup.cfg`'s `[pyscaffold]` section!**
+[ERROR] **Never edit the version in `setup.cfg`'s `[pyscaffold]` section!**
    - That field is the PyScaffold tool version (4.6), not the package version
    - Changing it to 4.7 was the bug that caused the version jump from 3.1.4 to 4.7
 
-❌ **Never add `__version__` to source code**
+[ERROR] **Never add `__version__` to source code**
    - Version is derived from git tags, not hardcoded
 
-❌ **Never create tags manually without validation**
+[ERROR] **Never create tags manually without validation**
    - Use `make version-bump` which validates version progression
 
 ### What TO Do
 
-✅ Use `make version-bump BUMP=<type>` to create new versions
+[SUCCESS] Use `make version-bump BUMP=<type>` to create new versions
 
-✅ Run `make validate-version` before releases
+[SUCCESS] Run `make validate-version` before releases
 
-✅ Let `setuptools_scm` derive versions from git tags
+[SUCCESS] Let `setuptools_scm` derive versions from git tags
 
-✅ Follow semantic versioning:
+[SUCCESS] Follow semantic versioning:
    - **Patch** (X.Y.Z+1): Bug fixes, no API changes
    - **Minor** (X.Y+1.0): New features, backward compatible
    - **Major** (X+1.0.0): Breaking changes

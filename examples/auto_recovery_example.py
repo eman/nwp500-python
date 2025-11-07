@@ -278,13 +278,13 @@ async def strategy_token_refresh(auth_client, device):
 
 
 # ============================================================================
-# STRATEGY 4: Exponential Backoff Retry (Production-Ready)
+# STRATEGY 4: Exponential Backoff Retry
 # ============================================================================
 async def strategy_exponential_backoff(auth_client, device):
     """
-    Production-ready strategy: Use exponential backoff for recovery attempts.
+    Robust strategy: Use exponential backoff for recovery attempts.
 
-    This is the most robust strategy for production use. It:
+    This is an effective strategy for production use. It:
     - Uses exponential backoff between recovery attempts
     - Refreshes tokens periodically
     - Recreates the client cleanly
@@ -355,7 +355,7 @@ async def strategy_exponential_backoff(auth_client, device):
             mqtt_client.on("reconnection_failed", on_reconnection_failed)
 
             await mqtt_client.connect()
-            logger.info(f"✅ Recovered! Connected: {mqtt_client.client_id}")
+            logger.info(f"[SUCCESS] Recovered! Connected: {mqtt_client.client_id}")
 
             # Re-subscribe
             await mqtt_client.subscribe_device_status(device, lambda s: None)
@@ -440,9 +440,9 @@ if __name__ == "__main__":
     try:
         asyncio.run(main())
     except KeyboardInterrupt:
-        print("\n\n⚠️  Interrupted by user")
+        print("\n\n[WARNING]  Interrupted by user")
     except Exception as e:
-        print(f"\n❌ Error: {e}")
+        print(f"\n[ERROR] Error: {e}")
         import traceback
 
         traceback.print_exc()

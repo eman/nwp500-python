@@ -131,8 +131,8 @@ Refresh authentication tokens before retrying (handles token expiry).
 
 **Cons:** More complex, need to manage client lifecycle
 
-Strategy 4: Exponential Backoff (Production-Ready) ⭐ RECOMMENDED
-=================================================================
+Strategy 4: Exponential Backoff ⭐ RECOMMENDED
+================================================
 
 Use exponential backoff between recovery attempts with token refresh.
 
@@ -216,7 +216,7 @@ Use exponential backoff between recovery attempts with token refresh.
                
                # Reset on success
                self.recovery_attempt = 0
-               print("✅ Recovery successful!")
+               print("Recovery successful!")
                
            except Exception as e:
                print(f"Recovery failed: {e}")
@@ -332,7 +332,7 @@ See ``examples/simple_auto_recovery.py`` for a complete implementation.
 
    logger.info(f"Recovery attempt {recovery_attempt}/{max_recovery_attempts}")
    logger.info(f"Waiting {delay:.0f} seconds before retry")
-   logger.info("✅ Recovery successful!")
+   logger.info("Recovery successful!")
 
 Examples
 ========
@@ -385,9 +385,9 @@ The logs will show:
    INFO: Waiting 60 seconds before recovery...
    INFO: Refreshing authentication tokens...
    INFO: Recreating MQTT client...
-   INFO: ✅ Connected: navien-client-abc123
+   INFO: Connected: navien-client-abc123
    INFO: Subscriptions restored
-   INFO: ✅ Recovery successful!
+   INFO: Recovery successful!
 
 When to Use Each Strategy
 ==========================
@@ -446,11 +446,11 @@ Conclusion
 
 For production use, **use Strategy 4 (Exponential Backoff)** via the ``ResilientMqttClient`` wrapper provided in ``examples/simple_auto_recovery.py``. It handles:
 
-* ✅ Automatic recovery from permanent failures
-* ✅ Exponential backoff to prevent server overload
-* ✅ Token refresh for long-running connections
-* ✅ Clean client recreation
-* ✅ Subscription restoration
-* ✅ Configurable limits and delays
+* Automatic recovery from permanent failures
+* Exponential backoff to prevent server overload
+* Token refresh for long-running connections
+* Clean client recreation
+* Subscription restoration
+* Configurable limits and delays
 
 This ensures your application stays connected even during extended network outages.

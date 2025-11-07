@@ -67,7 +67,7 @@ class ResilientMqttClient:
         # Create and connect MQTT client
         await self._create_client()
 
-        logger.info(f"✅ Connected: {self.mqtt_client.client_id}")
+        logger.info(f"[SUCCESS] Connected: {self.mqtt_client.client_id}")
 
     async def _create_client(self):
         """Create MQTT client with recovery handler."""
@@ -147,7 +147,7 @@ class ResilientMqttClient:
 
             # Reset recovery counter on success
             self.recovery_attempt = 0
-            logger.info("✅ Recovery successful!")
+            logger.info("[SUCCESS] Recovery successful!")
 
         except Exception as e:
             logger.error(f"Recovery attempt failed: {e}")
@@ -249,9 +249,9 @@ if __name__ == "__main__":
     try:
         asyncio.run(main())
     except KeyboardInterrupt:
-        print("\n\n⚠️  Interrupted by user")
+        print("\n\n[WARNING]  Interrupted by user")
     except Exception as e:
-        print(f"\n❌ Error: {e}")
+        print(f"\n[ERROR] Error: {e}")
         import traceback
 
         traceback.print_exc()

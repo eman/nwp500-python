@@ -45,7 +45,7 @@ async def main():
 
     if not email or not password:
         print(
-            "❌ Error: Please set NAVIEN_EMAIL and NAVIEN_PASSWORD environment variables"
+            "[ERROR] Error: Please set NAVIEN_EMAIL and NAVIEN_PASSWORD environment variables"
         )
         return 1
 
@@ -58,7 +58,7 @@ async def main():
         # Step 1: Authenticate and get AWS credentials
         print("Step 1: Authenticating with Navien API...")
         async with NavienAuthClient(email, password) as auth_client:
-            print(f"✅ Authenticated as: {auth_client.current_user.full_name}")
+            print(f"[SUCCESS] Authenticated as: {auth_client.current_user.full_name}")
             print()
 
             # Step 2: Get device list
@@ -69,7 +69,7 @@ async def main():
             devices = await api_client.list_devices()
 
             if not devices:
-                print("❌ Error: No devices found in your account")
+                print("[ERROR] Error: No devices found in your account")
                 return 1
 
             device = devices[0]
@@ -83,7 +83,7 @@ async def main():
                 def mask_any(_):
                     return "[REDACTED]"
 
-            print(f"✅ Using device: {device.device_info.device_name}")
+            print(f"[SUCCESS] Using device: {device.device_info.device_name}")
             print(f"   MAC Address: {mask_mac(device_id)}")
             print(f"   Device Type: {mask_any(device_type)}")
             print()
@@ -94,7 +94,7 @@ async def main():
 
             try:
                 await mqtt_client.connect()
-                print("✅ Connected to AWS IoT Core")
+                print("[SUCCESS] Connected to AWS IoT Core")
                 print()
 
                 # Step 4: Subscribe with BOTH raw and parsed callbacks
@@ -113,7 +113,7 @@ async def main():
                         print(f"   Response keys: {list(message['response'].keys())}")
 
                         if "status" in message["response"]:
-                            print("   ✅ Contains STATUS data")
+                            print("   [SUCCESS] Contains STATUS data")
                             status_keys = list(message["response"]["status"].keys())[
                                 :10
                             ]
@@ -128,7 +128,9 @@ async def main():
                 def on_device_status(status: DeviceStatus):
                     """Parsed status callback."""
                     message_count["status"] += 1
-                    print(f"\n✅ PARSED Status Update #{message_count['status']}")
+                    print(
+                        f"\n[SUCCESS] PARSED Status Update #{message_count['status']}"
+                    )
                     print(f"   DHW Temperature: {status.dhwTemperature:.1f}°F")
                     print(f"   Operation Mode: {status.operationMode.name}")
                     print(f"   Compressor: {status.compUse}")
@@ -136,12 +138,12 @@ async def main():
                 # Subscribe with raw handler first
                 print("Subscribing to raw messages...")
                 await mqtt_client.subscribe_device(device, raw_message_handler)
-                print("✅ Subscribed to raw messages")
+                print("[SUCCESS] Subscribed to raw messages")
 
                 # Also subscribe with parsed handler
                 print("Subscribing to parsed status...")
                 await mqtt_client.subscribe_device_status(device, on_device_status)
-                print("✅ Subscribed to parsed status")
+                print("[SUCCESS] Subscribed to parsed status")
                 print()
 
                 # Step 5: Request device status
@@ -150,7 +152,7 @@ async def main():
                 await asyncio.sleep(1)
 
                 await mqtt_client.request_device_status(device)
-                print("✅ Status request sent")
+                print("[SUCCESS] Status request sent")
                 print()
 
                 # Wait for status updates
@@ -159,7 +161,7 @@ async def main():
                 try:
                     await asyncio.sleep(20)
                 except KeyboardInterrupt:
-                    print("\n⚠️  Interrupted by user")
+                    print("\n[WARNING]  Interrupted by user")
 
                 print()
                 print("📊 Summary:")
@@ -170,7 +172,7 @@ async def main():
                 # Disconnect
                 print("Step 6: Disconnecting from AWS IoT...")
                 await mqtt_client.disconnect()
-                print("✅ Disconnected successfully")
+                print("[SUCCESS] Disconnected successfully")
 
             except Exception:
                 import logging
@@ -184,12 +186,12 @@ async def main():
 
         print()
         print("=" * 70)
-        print("✅ Debug Example Completed!")
+        print("[SUCCESS] Debug Example Completed!")
         print("=" * 70)
         return 0
 
     except AuthenticationError as e:
-        print(f"\n❌ Authentication failed: {e.message}")
+        print(f"\n[ERROR] Authentication failed: {e.message}")
         if e.code:
             print(f"   Error code: {e.code}")
         return 1

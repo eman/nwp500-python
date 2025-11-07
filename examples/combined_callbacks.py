@@ -42,7 +42,7 @@ async def main():
 
     if not email or not password:
         print(
-            "❌ Error: Please set NAVIEN_EMAIL and NAVIEN_PASSWORD environment variables"
+            "[ERROR] Error: Please set NAVIEN_EMAIL and NAVIEN_PASSWORD environment variables"
         )
         return 1
 
@@ -53,7 +53,7 @@ async def main():
 
     try:
         async with NavienAuthClient(email, password) as auth_client:
-            print(f"✅ Authenticated as: {auth_client.current_user.full_name}")
+            print(f"[SUCCESS] Authenticated as: {auth_client.current_user.full_name}")
             print()
 
             api_client = NavienAPIClient(
@@ -62,7 +62,7 @@ async def main():
             devices = await api_client.list_devices()
 
             if not devices:
-                print("❌ No devices found")
+                print("[ERROR] No devices found")
                 return 1
 
             device = devices[0]
@@ -76,7 +76,7 @@ async def main():
 
             try:
                 await mqtt_client.connect()
-                print("✅ Connected to MQTT")
+                print("[SUCCESS] Connected to MQTT")
                 print()
 
                 counts = {"status": 0, "feature": 0}
@@ -120,7 +120,7 @@ async def main():
                 # Now subscribe to typed callbacks
                 await mqtt_client.subscribe_device_status(device, on_status)
                 await mqtt_client.subscribe_device_feature(device, on_feature)
-                print("✅ Subscribed to both callbacks")
+                print("[SUCCESS] Subscribed to both callbacks")
                 print()
 
                 # Request both types of data
@@ -132,7 +132,7 @@ async def main():
                 await asyncio.sleep(2)
 
                 await mqtt_client.request_device_status(device)
-                print("✅ Requests sent")
+                print("[SUCCESS] Requests sent")
                 print()
 
                 # Wait for responses
@@ -147,10 +147,10 @@ async def main():
                 print("=" * 70)
 
                 await mqtt_client.disconnect()
-                print("\n✅ Disconnected")
+                print("\n[SUCCESS] Disconnected")
 
             except Exception as e:
-                print(f"❌ Error: {e}")
+                print(f"[ERROR] Error: {e}")
                 if mqtt_client.is_connected:
                     await mqtt_client.disconnect()
                 return 1
@@ -158,7 +158,7 @@ async def main():
         return 0
 
     except Exception as e:
-        print(f"❌ Error: {e}")
+        print(f"[ERROR] Error: {e}")
         import traceback
 
         traceback.print_exc()

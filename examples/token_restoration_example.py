@@ -50,7 +50,7 @@ async def save_tokens_example():
         if not tokens:
             raise RuntimeError("Failed to obtain tokens")
 
-        logger.info("✓ Authentication successful")
+        logger.info("[OK] Authentication successful")
         logger.info(f"Token expires at: {tokens.expires_at}")
 
         # Serialize tokens to dictionary
@@ -60,7 +60,7 @@ async def save_tokens_example():
         with open(TOKEN_FILE, "w") as f:
             json.dump(token_data, f, indent=2)
 
-        logger.info(f"✓ Tokens saved to {TOKEN_FILE}")
+        logger.info(f"[OK] Tokens saved to {TOKEN_FILE}")
         logger.info("You can now use --restore to skip authentication on future runs")
 
 
@@ -99,7 +99,7 @@ async def restore_tokens_example():
     elif stored_tokens.are_aws_credentials_expired:
         logger.warning("⚠ AWS credentials expired, will re-authenticate...")
     else:
-        logger.info("✓ Stored tokens are still valid")
+        logger.info("[OK] Stored tokens are still valid")
 
     # Use stored tokens to initialize client
     async with NavienAuthClient(
@@ -109,7 +109,7 @@ async def restore_tokens_example():
         if not tokens:
             raise RuntimeError("Failed to restore authentication")
 
-        logger.info("✓ Successfully authenticated using stored tokens")
+        logger.info("[OK] Successfully authenticated using stored tokens")
         logger.info(f"Current token expires at: {tokens.expires_at}")
 
         # If tokens were refreshed, save them
@@ -118,7 +118,7 @@ async def restore_tokens_example():
             token_data = tokens.to_dict()
             with open(TOKEN_FILE, "w") as f:
                 json.dump(token_data, f, indent=2)
-            logger.info(f"✓ Updated tokens saved to {TOKEN_FILE}")
+            logger.info(f"[OK] Updated tokens saved to {TOKEN_FILE}")
 
 
 async def main():

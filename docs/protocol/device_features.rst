@@ -47,7 +47,7 @@ The DeviceFeature data contains comprehensive device capabilities, configuration
    * - ``wifiSwVersion``
      - int
      - None
-     - WiFi module firmware version - handles NaviLink app connectivity and cloud communication
+     - WiFi module firmware version - handles WiFi app connectivity and cloud communication
      - None
    * - ``controllerSwCode``
      - int
@@ -255,7 +255,7 @@ The device feature data corresponds to these official NWP500 specifications:
    * ECO (Energy Cut Off) high-limit safety switch
 
 **Smart Features & Connectivity**
-   * NaviLink WiFi app connectivity
+   * WiFi app connectivity
    * Self-diagnostic system with error codes
    * CTA-2045 Demand Response module support
    * Anti-Legionella periodic disinfection (1-30 day intervals)
@@ -278,7 +278,7 @@ The device returns three separate firmware components for comprehensive system i
    * Status indicator control and user feedback
 
 **WiFi Module (``wifiSwVersion``, ``wifiSwCode``)**
-   * NaviLink cloud connectivity and app communication
+   * Cloud connectivity and app communication
    * Wireless network management and security
    * Remote monitoring and control capabilities
 

@@ -37,7 +37,9 @@ async def command_queue_demo():
     password = os.getenv("NAVIEN_PASSWORD")
 
     if not email or not password:
-        print("❌ Error: Set NAVIEN_EMAIL and NAVIEN_PASSWORD environment variables")
+        print(
+            "[ERROR] Error: Set NAVIEN_EMAIL and NAVIEN_PASSWORD environment variables"
+        )
         return False
 
     print("Command Queue Demonstration")
@@ -47,7 +49,9 @@ async def command_queue_demo():
         # Step 1: Authenticate
         print("\n1. Authenticating with Navien API...")
         async with NavienAuthClient(email, password) as auth_client:
-            print(f"   ✅ Authenticated as: {auth_client.current_user.full_name}")
+            print(
+                f"   [SUCCESS] Authenticated as: {auth_client.current_user.full_name}"
+            )
 
             # Get devices
             from nwp500.api_client import NavienAPIClient
@@ -56,11 +60,11 @@ async def command_queue_demo():
             devices = await api_client.list_devices()
 
             if not devices:
-                print("   ❌ No devices found")
+                print("   [ERROR] No devices found")
                 return False
 
             device = devices[0]
-            print(f"   ✅ Found device: {device.device_info.device_name}")
+            print(f"   [SUCCESS] Found device: {device.device_info.device_name}")
 
             # Step 2: Create MQTT client with command queue enabled
             print("\n2. Creating MQTT client with command queue...")
@@ -77,12 +81,12 @@ async def command_queue_demo():
 
             # Register event handlers
             def on_interrupted(error):
-                print(f"   ⚠️  Connection interrupted: {error}")
-                print(f"   📝 Queued commands: {mqtt_client.queued_commands_count}")
+                print(f"   [WARNING]  Connection interrupted: {error}")
+                print(f"   [NOTE] Queued commands: {mqtt_client.queued_commands_count}")
 
             def on_resumed(return_code, session_present):
-                print("   ✅ Connection resumed!")
-                print(f"   📝 Queued commands: {mqtt_client.queued_commands_count}")
+                print("   [SUCCESS] Connection resumed!")
+                print(f"   [NOTE] Queued commands: {mqtt_client.queued_commands_count}")
 
             mqtt_client.on("connection_interrupted", on_interrupted)
             mqtt_client.on("connection_resumed", on_resumed)
@@ -90,7 +94,7 @@ async def command_queue_demo():
             # Step 3: Connect
             print("\n3. Connecting to AWS IoT...")
             await mqtt_client.connect()
-            print(f"   ✅ Connected! Client ID: {mqtt_client.client_id}")
+            print(f"   [SUCCESS] Connected! Client ID: {mqtt_client.client_id}")
 
             # Step 4: Subscribe to device
             print("\n4. Subscribing to device messages...")
@@ -102,13 +106,13 @@ async def command_queue_demo():
                 received_messages.append(message)
 
             await mqtt_client.subscribe_device(device, on_message)
-            print("   ✅ Subscribed to device")
+            print("   [SUCCESS] Subscribed to device")
 
             # Step 5: Test normal operation
             print("\n5. Testing normal operation (connected)...")
             print("   Sending status request...")
             await mqtt_client.request_device_status(device)
-            print("   ✅ Command sent successfully")
+            print("   [SUCCESS] Command sent successfully")
             await asyncio.sleep(2)
 
             # Step 6: Simulate disconnection and queue commands
@@ -119,7 +123,7 @@ async def command_queue_demo():
 
             # Manually disconnect
             await mqtt_client.disconnect()
-            print("   ✅ Disconnected")
+            print("   [SUCCESS] Disconnected")
 
             # Try sending commands while disconnected - they should be queued
             print("\n7. Sending commands while disconnected (will be queued)...")
@@ -138,19 +142,19 @@ async def command_queue_demo():
             await mqtt_client.set_dhw_temperature_display(device, 130)
             print(f"   Queue size: {mqtt_client.queued_commands_count}")
 
-            print(f"   ✅ Queued {mqtt_client.queued_commands_count} command(s)")
+            print(f"   [SUCCESS] Queued {mqtt_client.queued_commands_count} command(s)")
 
             # Step 8: Reconnect and watch commands get sent
             print("\n8. Reconnecting...")
             await mqtt_client.connect()
-            print("   ✅ Reconnected!")
+            print("   [SUCCESS] Reconnected!")
 
             # Give time for queued commands to be sent
             print("   Waiting for queued commands to be sent...")
             await asyncio.sleep(3)
 
             print(
-                f"   ✅ Queue processed! Remaining: {mqtt_client.queued_commands_count}"
+                f"   [SUCCESS] Queue processed! Remaining: {mqtt_client.queued_commands_count}"
             )
 
             # Step 9: Test queue limits
@@ -165,7 +169,7 @@ async def command_queue_demo():
             print(
                 f"   Queue size: {mqtt_client.queued_commands_count} (max: {config.max_queued_commands})"
             )
-            print("   ✅ Queue properly limited (oldest commands dropped)")
+            print("   [SUCCESS] Queue properly limited (oldest commands dropped)")
 
             # Clear queue
             cleared = mqtt_client.clear_command_queue()
@@ -180,10 +184,10 @@ async def command_queue_demo():
             # Cleanup
             print("\n11. Disconnecting...")
             await mqtt_client.disconnect()
-            print("   ✅ Disconnected cleanly")
+            print("   [SUCCESS] Disconnected cleanly")
 
         print("\n" + "=" * 60)
-        print("✅ Command Queue Demo Complete!")
+        print("[SUCCESS] Command Queue Demo Complete!")
         print("\nKey Features Demonstrated:")
         print("  • Commands queued when disconnected")
         print("  • Automatic sending on reconnection")
@@ -194,7 +198,7 @@ async def command_queue_demo():
         return True
 
     except Exception as e:
-        print(f"\n❌ Error: {e}")
+        print(f"\n[ERROR] Error: {e}")
         import traceback
 
         traceback.print_exc()

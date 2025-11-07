@@ -322,7 +322,7 @@ Best Practices
 
    .. code-block:: python
 
-      # ✓ Clear and type-safe
+      # [OK] Clear and type-safe
       from nwp500.constants import CommandCode
       request.command = CommandCode.STATUS_REQUEST
 
@@ -333,7 +333,7 @@ Best Practices
 
    .. code-block:: python
 
-      # ✓ Preferred - client handles command codes
+      # [OK] Preferred - client handles command codes
       await mqtt.request_device_status(device)
 
       # ✗ Manual - only for advanced use cases

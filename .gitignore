@@ -55,3 +55,4 @@ venv*/
 .python-version
 .secrets
 reference/*
+resources/*

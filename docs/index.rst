@@ -119,6 +119,7 @@ Documentation Index
    protocol/rest_api
    protocol/mqtt_protocol
    protocol/device_status
+   protocol/data_conversions
    protocol/device_features
    protocol/error_codes
    protocol/firmware_tracking
@@ -128,6 +129,7 @@ Documentation Index
    :caption: User Guides
 
    guides/reservations
+   guides/scheduling_features
    guides/energy_monitoring
    guides/time_of_use
    guides/event_system

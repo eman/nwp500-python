@@ -41,7 +41,7 @@ def log_temperature(old_temp: float, new_temp: float):
 def alert_on_high_temp(old_temp: float, new_temp: float):
     """Alert handler for high temperatures."""
     if new_temp > 145:
-        print(f"⚠️  [Alert] HIGH TEMPERATURE: {new_temp}°F!")
+        print(f"[WARNING]  [Alert] HIGH TEMPERATURE: {new_temp}°F!")
 
 
 async def save_temperature_to_db(old_temp: float, new_temp: float):
@@ -81,14 +81,14 @@ def on_heating_stopped(status: DeviceStatus):
 # Example 4: Error handlers
 def on_error_detected(error_code: str, status: DeviceStatus):
     """Handler for error detection."""
-    print(f"❌ [Error] ERROR DETECTED: {error_code}")
+    print(f"[ERROR] [Error] ERROR DETECTED: {error_code}")
     print(f"   Temperature: {status.dhwTemperature}°F")
     print(f"   Mode: {status.operationMode}")
 
 
 def on_error_cleared(error_code: str):
     """Handler for error cleared."""
-    print(f"✅ [Error] ERROR CLEARED: {error_code}")
+    print(f"[SUCCESS] [Error] ERROR CLEARED: {error_code}")
 
 
 # Example 5: Connection state handlers
@@ -110,7 +110,9 @@ async def main():
     password = os.getenv("NAVIEN_PASSWORD")
 
     if not email or not password:
-        print("❌ Error: Set NAVIEN_EMAIL and NAVIEN_PASSWORD environment variables")
+        print(
+            "[ERROR] Error: Set NAVIEN_EMAIL and NAVIEN_PASSWORD environment variables"
+        )
         return False
 
     print("=" * 70)
@@ -122,7 +124,9 @@ async def main():
         # Step 1: Authenticate
         print("1. Authenticating...")
         async with NavienAuthClient(email, password) as auth_client:
-            print(f"   ✅ Authenticated as: {auth_client.current_user.full_name}")
+            print(
+                f"   [SUCCESS] Authenticated as: {auth_client.current_user.full_name}"
+            )
             print()
 
             # Get devices
@@ -130,17 +134,17 @@ async def main():
             devices = await api_client.list_devices()
 
             if not devices:
-                print("   ❌ No devices found")
+                print("   [ERROR] No devices found")
                 return False
 
             device = devices[0]
-            print(f"   ✅ Device: {device.device_info.device_name}")
+            print(f"   [SUCCESS] Device: {device.device_info.device_name}")
             print()
 
             # Step 2: Create MQTT client (inherits EventEmitter)
             print("2. Creating MQTT client with event emitter...")
             mqtt_client = NavienMqttClient(auth_client)
-            print("   ✅ Client created")
+            print("   [SUCCESS] Client created")
             print()
 
             # Step 3: Register event listeners BEFORE connecting
@@ -150,34 +154,34 @@ async def main():
             mqtt_client.on("temperature_changed", log_temperature)
             mqtt_client.on("temperature_changed", alert_on_high_temp)
             mqtt_client.on("temperature_changed", save_temperature_to_db)
-            print("   ✅ Registered 3 temperature change handlers")
+            print("   [SUCCESS] Registered 3 temperature change handlers")
 
             # Mode change - multiple handlers
             mqtt_client.on("mode_changed", log_mode_change)
             mqtt_client.on("mode_changed", optimize_on_mode_change)
-            print("   ✅ Registered 2 mode change handlers")
+            print("   [SUCCESS] Registered 2 mode change handlers")
 
             # Power state changes
             mqtt_client.on("heating_started", on_heating_started)
             mqtt_client.on("heating_stopped", on_heating_stopped)
-            print("   ✅ Registered heating start/stop handlers")
+            print("   [SUCCESS] Registered heating start/stop handlers")
 
             # Error handling
             mqtt_client.on("error_detected", on_error_detected)
             mqtt_client.on("error_cleared", on_error_cleared)
-            print("   ✅ Registered error handlers")
+            print("   [SUCCESS] Registered error handlers")
 
             # Connection state
             mqtt_client.on("connection_interrupted", on_connection_interrupted)
             mqtt_client.on("connection_resumed", on_connection_resumed)
-            print("   ✅ Registered connection handlers")
+            print("   [SUCCESS] Registered connection handlers")
 
             # One-time listener example
             mqtt_client.once(
                 "status_received",
                 lambda s: print(f"   🎉 First status received: {s.dhwTemperature}°F"),
             )
-            print("   ✅ Registered one-time status handler")
+            print("   [SUCCESS] Registered one-time status handler")
             print()
 
             # Show listener counts
@@ -197,19 +201,19 @@ async def main():
             # Step 4: Connect and subscribe
             print("5. Connecting to MQTT...")
             await mqtt_client.connect()
-            print("   ✅ Connected!")
+            print("   [SUCCESS] Connected!")
             print()
 
             print("6. Subscribing to device status...")
             # We pass a dummy callback since we're using events
             await mqtt_client.subscribe_device_status(device, lambda s: None)
-            print("   ✅ Subscribed - events will now be emitted")
+            print("   [SUCCESS] Subscribed - events will now be emitted")
             print()
 
             # Step 5: Request initial status
             print("7. Requesting initial status...")
             await mqtt_client.request_device_status(device)
-            print("   ✅ Request sent")
+            print("   [SUCCESS] Request sent")
             print()
 
             # Step 6: Monitor for changes
@@ -259,11 +263,11 @@ async def main():
             # Step 9: Cleanup
             print("11. Disconnecting...")
             await mqtt_client.disconnect()
-            print("    ✅ Disconnected cleanly")
+            print("    [SUCCESS] Disconnected cleanly")
             print()
 
         print("=" * 70)
-        print("✅ Event Emitter Demo Complete!")
+        print("[SUCCESS] Event Emitter Demo Complete!")
         print()
         print("Key Features Demonstrated:")
         print("  • Multiple listeners per event")
@@ -277,7 +281,7 @@ async def main():
         return True
 
     except Exception as e:
-        print(f"\n❌ Error: {e}")
+        print(f"\n[ERROR] Error: {e}")
         import traceback
 
         traceback.print_exc()

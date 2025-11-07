@@ -36,7 +36,9 @@ async def test_mqtt_messaging():
     password = os.getenv("NAVIEN_PASSWORD")
 
     if not email or not password:
-        print("❌ Error: Set NAVIEN_EMAIL and NAVIEN_PASSWORD environment variables")
+        print(
+            "[ERROR] Error: Set NAVIEN_EMAIL and NAVIEN_PASSWORD environment variables"
+        )
         return False
 
     print("=" * 80)
@@ -65,13 +67,13 @@ async def test_mqtt_messaging():
         # Step 1: Authenticate
         print("Step 1: Authenticating...")
         async with NavienAuthClient(email, password) as auth_client:
-            print(f"✅ Authenticated as: {auth_client.current_user.full_name}")
+            print(f"[SUCCESS] Authenticated as: {auth_client.current_user.full_name}")
 
             if not auth_client.current_tokens.access_key_id:
-                print("❌ No AWS credentials available")
+                print("[ERROR] No AWS credentials available")
                 return False
 
-            print("✅ AWS credentials obtained")
+            print("[SUCCESS] AWS credentials obtained")
             print()
 
             # Step 2: Get device info
@@ -82,7 +84,7 @@ async def test_mqtt_messaging():
             devices = await api_client.list_devices()
 
             if not devices:
-                print("❌ No devices found")
+                print("[ERROR] No devices found")
                 return False
 
             device = devices[0]
@@ -105,7 +107,7 @@ async def test_mqtt_messaging():
                 # Always redact to avoid leaking sensitive data
                 return "[REDACTED_MAC]"
 
-            print(f"✅ Found device: {device.device_info.device_name}")
+            print(f"[SUCCESS] Found device: {device.device_info.device_name}")
             print(f"   MAC Address: {mask_mac(device_id)}")
             print(f"   Device Type: {mask_any(device_type)}")
             print(f"   Additional Value: {additional_value}")
@@ -117,7 +119,7 @@ async def test_mqtt_messaging():
             mqtt_client = NavienMqttClient(auth_client)
             await mqtt_client.connect()
 
-            print("✅ Connected to AWS IoT")
+            print("[SUCCESS] Connected to AWS IoT")
             print(f"   Client ID: {mqtt_client.client_id}")
             print(f"   Session ID: {mqtt_client.session_id}")
             print()
@@ -147,7 +149,9 @@ async def test_mqtt_messaging():
             for topic in topics:
                 try:
                     await mqtt_client.subscribe(topic, message_handler)
-                    print(f"   ✅ Subscribed to: {mask_mac_in_topic(topic, device_id)}")
+                    print(
+                        f"   [SUCCESS] Subscribed to: {mask_mac_in_topic(topic, device_id)}"
+                    )
                 except Exception:
                     # Avoid printing exception contents which may contain sensitive identifiers
                     try:
@@ -159,7 +163,7 @@ async def test_mqtt_messaging():
                             return "[REDACTED]"
 
                     print(
-                        f"   ⚠️ Failed to subscribe to topic. Device type: {mask_any(device_type)}"
+                        f"   [WARNING] Failed to subscribe to topic. Device type: {mask_any(device_type)}"
                     )
                     logging.debug(
                         "Subscribe failure for device_type=%s; topic name redacted for privacy",
@@ -179,9 +183,9 @@ async def test_mqtt_messaging():
             )
             try:
                 await mqtt_client.signal_app_connection(device)
-                print("   ✅ Sent")
+                print("   [SUCCESS] Sent")
             except Exception as e:
-                print(f"   ❌ Error: {e}")
+                print(f"   [ERROR] Error: {e}")
             await asyncio.sleep(3)
 
             # Command 2: Request device info
@@ -190,9 +194,9 @@ async def test_mqtt_messaging():
             )
             try:
                 await mqtt_client.request_device_info(device)
-                print("   ✅ Sent")
+                print("   [SUCCESS] Sent")
             except Exception as e:
-                print(f"   ❌ Error: {e}")
+                print(f"   [ERROR] Error: {e}")
             await asyncio.sleep(5)
 
             # Command 3: Request device status
@@ -201,9 +205,9 @@ async def test_mqtt_messaging():
             )
             try:
                 await mqtt_client.request_device_status(device)
-                print("   ✅ Sent")
+                print("   [SUCCESS] Sent")
             except Exception as e:
-                print(f"   ❌ Error: {e}")
+                print(f"   [ERROR] Error: {e}")
             await asyncio.sleep(5)
 
             # Step 6: Wait for responses with status updates
@@ -229,7 +233,7 @@ async def test_mqtt_messaging():
             print()
 
             if messages_received:
-                print("✅ SUCCESS: Device responded to commands!")
+                print("[SUCCESS] SUCCESS: Device responded to commands!")
                 print()
                 print("Messages received:")
                 for i, msg_data in enumerate(messages_received, 1):
@@ -255,7 +259,7 @@ async def test_mqtt_messaging():
                             print("   Type: Other Response")
                             print(f"   Keys: {list(response.keys())}")
             else:
-                print("❌ FAILURE: No messages received from device")
+                print("[ERROR] FAILURE: No messages received from device")
                 print()
                 print("Possible causes:")
                 print("1. Device is offline or not connected to network")
@@ -274,12 +278,12 @@ async def test_mqtt_messaging():
 
             # Step 8: Disconnect
             await mqtt_client.disconnect()
-            print("✅ Disconnected from AWS IoT")
+            print("[SUCCESS] Disconnected from AWS IoT")
 
             return len(messages_received) > 0
 
     except Exception as e:
-        print(f"\n❌ Test failed with error: {e}")
+        print(f"\n[ERROR] Test failed with error: {e}")
         import traceback
 
         traceback.print_exc()

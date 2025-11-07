@@ -59,16 +59,16 @@ async def example_authentication_errors():
         async with NavienAuthClient("invalid@example.com", "wrong_password") as _:
             pass
     except InvalidCredentialsError as e:
-        print(f"✓ Caught InvalidCredentialsError: {e}")
+        print(f"[OK] Caught InvalidCredentialsError: {e}")
         print(f"  Status code: {e.status_code}")
         print("  Can check credentials and retry")
 
     except TokenRefreshError as e:
-        print(f"✓ Caught TokenRefreshError: {e}")
+        print(f"[OK] Caught TokenRefreshError: {e}")
         print("  Need to re-authenticate with fresh credentials")
 
     except AuthenticationError as e:
-        print(f"✓ Caught AuthenticationError: {e}")
+        print(f"[OK] Caught AuthenticationError: {e}")
         print("  General authentication failure")
 
     # Show structured error data
@@ -86,7 +86,7 @@ async def example_mqtt_errors():
     password = os.getenv("NAVIEN_PASSWORD", "your_password")
 
     if email == "your_email@example.com":
-        print("⚠️  Set NAVIEN_EMAIL and NAVIEN_PASSWORD to run this example")
+        print("[WARNING]  Set NAVIEN_EMAIL and NAVIEN_PASSWORD to run this example")
         return
 
     try:
@@ -109,22 +109,22 @@ async def example_mqtt_errors():
             try:
                 await mqtt.request_device_status(device)
             except MqttNotConnectedError as e:
-                print(f"✓ Caught MqttNotConnectedError: {e}")
+                print(f"[OK] Caught MqttNotConnectedError: {e}")
                 print("  Can reconnect and retry the operation")
 
     except MqttConnectionError as e:
-        print(f"✓ Caught MqttConnectionError: {e}")
+        print(f"[OK] Caught MqttConnectionError: {e}")
         print(f"  Error code: {e.error_code}")
         print("  Network or AWS IoT connection issue")
 
     except MqttPublishError as e:
-        print(f"✓ Caught MqttPublishError: {e}")
+        print(f"[OK] Caught MqttPublishError: {e}")
         if e.retriable:
-            print("  ✓ This error is retriable!")
+            print("  [OK] This error is retriable!")
             print("  Can implement exponential backoff retry")
 
     except MqttError as e:
-        print(f"✓ Caught MqttError (base class): {e}")
+        print(f"[OK] Caught MqttError (base class): {e}")
         print("  Catches all MQTT-related errors")
 
 
@@ -138,7 +138,7 @@ async def example_validation_errors():
     password = os.getenv("NAVIEN_PASSWORD", "your_password")
 
     if email == "your_email@example.com":
-        print("⚠️  Set NAVIEN_EMAIL and NAVIEN_PASSWORD to run this example")
+        print("[WARNING]  Set NAVIEN_EMAIL and NAVIEN_PASSWORD to run this example")
         return
 
     try:
@@ -158,14 +158,14 @@ async def example_validation_errors():
             try:
                 await mqtt.set_dhw_mode(device, mode_id=5, vacation_days=50)
             except RangeValidationError as e:
-                print(f"✓ Caught RangeValidationError: {e}")
+                print(f"[OK] Caught RangeValidationError: {e}")
                 print(f"  Field: {e.field}")
                 print(f"  Invalid value: {e.value}")
                 print(f"  Valid range: {e.min_value} to {e.max_value}")
                 print("  Can show user-friendly error message!")
 
             except ValidationError as e:
-                print(f"✓ Caught ValidationError (base class): {e}")
+                print(f"[OK] Caught ValidationError (base class): {e}")
 
             await mqtt.disconnect()
 
@@ -197,7 +197,7 @@ async def example_retry_logic():
                 if e.retriable and attempt < max_retries - 1:
                     wait_time = 2**attempt  # Exponential backoff
                     print(
-                        f"  ✓ Retriable error: {e.error_code}, "
+                        f"  [OK] Retriable error: {e.error_code}, "
                         f"retrying in {wait_time}s..."
                     )
                     await asyncio.sleep(wait_time)
@@ -259,17 +259,17 @@ async def example_catch_all_library_errors():
         raise MqttNotConnectedError("Not connected")
 
     except Nwp500Error as e:
-        print(f"✓ Caught Nwp500Error (base for all library errors): {e}")
+        print(f"[OK] Caught Nwp500Error (base for all library errors): {e}")
         print(f"  Error type: {type(e).__name__}")
         print("  Can catch all library exceptions with single handler")
 
         # Check specific error type
         if isinstance(e, MqttError):
-            print("  ✓ This is an MQTT error")
+            print("  [OK] This is an MQTT error")
         elif isinstance(e, AuthenticationError):
-            print("  ✓ This is an authentication error")
+            print("  [OK] This is an authentication error")
         elif isinstance(e, ValidationError):
-            print("  ✓ This is a validation error")
+            print("  [OK] This is a validation error")
 
 
 async def example_exception_chaining():
@@ -288,7 +288,7 @@ async def example_exception_chaining():
             raise AuthenticationError("Network error during sign-in") from e
 
     except AuthenticationError as e:
-        print(f"✓ Caught AuthenticationError: {e}")
+        print(f"[OK] Caught AuthenticationError: {e}")
         print(f"  Original cause: {e.__cause__}")
         print(f"  Original cause type: {type(e.__cause__).__name__}")
         print("\nFull exception chain is preserved for debugging!")
@@ -310,7 +310,7 @@ async def main():
     await example_exception_chaining()
 
     print("\n" + "=" * 70)
-    print("✅ All examples completed!")
+    print("[SUCCESS] All examples completed!")
     print("=" * 70)
     print("\nKey Takeaways:")
     print("  1. Use specific exception types for better error handling")
