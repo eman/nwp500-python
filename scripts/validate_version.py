@@ -44,7 +44,7 @@ def check_pyscaffold_version() -> bool:
     # PyScaffold version should be 4.6 (the version that created this project)
     if version != "4.6":
         print(
-            f"❌ setup.cfg [pyscaffold] version has been modified to {version}",
+            f"setup.cfg [pyscaffold] version has been modified to {version}",
             file=sys.stderr,
         )
         print("", file=sys.stderr)
@@ -103,7 +103,7 @@ def check_hardcoded_versions() -> bool:
             found_issues.append((py_file, match.group(0)))
 
     if found_issues:
-        print("❌ Hardcoded version strings found:", file=sys.stderr)
+        print("Hardcoded version strings found:", file=sys.stderr)
         for file_path, version_string in found_issues:
             print(f"  {file_path}: {version_string}", file=sys.stderr)
         print("", file=sys.stderr)
@@ -131,7 +131,7 @@ def check_setup_py() -> bool:
     content = setup_py.read_text()
 
     if "use_scm_version" not in content:
-        print("❌ setup.py does not use setuptools_scm", file=sys.stderr)
+        print("setup.py does not use setuptools_scm", file=sys.stderr)
         print("", file=sys.stderr)
         print(
             "setup.py should contain: setup(use_scm_version={...})",
