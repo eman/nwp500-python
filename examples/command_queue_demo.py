@@ -37,7 +37,9 @@ async def command_queue_demo():
     password = os.getenv("NAVIEN_PASSWORD")
 
     if not email or not password:
-        print("[ERROR] Error: Set NAVIEN_EMAIL and NAVIEN_PASSWORD environment variables")
+        print(
+            "[ERROR] Error: Set NAVIEN_EMAIL and NAVIEN_PASSWORD environment variables"
+        )
         return False
 
     print("Command Queue Demonstration")
@@ -47,7 +49,9 @@ async def command_queue_demo():
         # Step 1: Authenticate
         print("\n1. Authenticating with Navien API...")
         async with NavienAuthClient(email, password) as auth_client:
-            print(f"   [SUCCESS] Authenticated as: {auth_client.current_user.full_name}")
+            print(
+                f"   [SUCCESS] Authenticated as: {auth_client.current_user.full_name}"
+            )
 
             # Get devices
             from nwp500.api_client import NavienAPIClient

@@ -68,7 +68,9 @@ async def main():
             print("\nCorrect Authorization Headers:")
             auth_headers = client.get_auth_headers()
             print(f"  authorization: {auth_headers['authorization'][:50]}...")
-            print("\n[WARNING]  IMPORTANT: Use lowercase 'authorization' with raw token")
+            print(
+                "\n[WARNING]  IMPORTANT: Use lowercase 'authorization' with raw token"
+            )
             print("  (no 'Bearer ' prefix). Standard Bearer format will NOT work!")
             print("\n  Correct:   {'authorization': 'eyJraWQi...'}")
             print("  Wrong:     {'Authorization': 'Bearer eyJraWQi...'}")

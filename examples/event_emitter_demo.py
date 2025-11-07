@@ -110,7 +110,9 @@ async def main():
     password = os.getenv("NAVIEN_PASSWORD")
 
     if not email or not password:
-        print("[ERROR] Error: Set NAVIEN_EMAIL and NAVIEN_PASSWORD environment variables")
+        print(
+            "[ERROR] Error: Set NAVIEN_EMAIL and NAVIEN_PASSWORD environment variables"
+        )
         return False
 
     print("=" * 70)
@@ -122,7 +124,9 @@ async def main():
         # Step 1: Authenticate
         print("1. Authenticating...")
         async with NavienAuthClient(email, password) as auth_client:
-            print(f"   [SUCCESS] Authenticated as: {auth_client.current_user.full_name}")
+            print(
+                f"   [SUCCESS] Authenticated as: {auth_client.current_user.full_name}"
+            )
             print()
 
             # Get devices

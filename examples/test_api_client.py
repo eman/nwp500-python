@@ -34,7 +34,9 @@ async def test_api_client():
     password = os.getenv("NAVIEN_PASSWORD")
 
     if not email or not password:
-        print("[ERROR] Please set NAVIEN_EMAIL and NAVIEN_PASSWORD environment variables")
+        print(
+            "[ERROR] Please set NAVIEN_EMAIL and NAVIEN_PASSWORD environment variables"
+        )
         return 1
 
     print("=" * 70)
@@ -95,7 +97,9 @@ async def test_api_client():
             print()
 
             if not devices:
-                print("[WARNING]  No devices found. Cannot test device-specific endpoints.")
+                print(
+                    "[WARNING]  No devices found. Cannot test device-specific endpoints."
+                )
                 return 0
 
             # Use first device for remaining tests
@@ -123,7 +127,9 @@ async def test_api_client():
             print("-" * 70)
             try:
                 firmware_list = await client.get_firmware_info(mac, additional)
-                print(f"[SUCCESS] Retrieved firmware info: {len(firmware_list)} firmware(s)")
+                print(
+                    f"[SUCCESS] Retrieved firmware info: {len(firmware_list)} firmware(s)"
+                )
                 for fw in firmware_list:
                     print(f"   Current SW Code: {fw.cur_sw_code}")
                     print(f"   Current Version: {fw.cur_version}")
@@ -150,7 +156,9 @@ async def test_api_client():
             print("-" * 70)
             first_device = await client.get_first_device()
             if first_device:
-                print(f"[SUCCESS] Get first device: {first_device.device_info.device_name}")
+                print(
+                    f"[SUCCESS] Get first device: {first_device.device_info.device_name}"
+                )
             else:
                 print("[WARNING]  No devices available")
             print()
@@ -223,7 +231,9 @@ async def test_convenience_function():
     password = os.getenv("NAVIEN_PASSWORD")
 
     if not email or not password:
-        print("[ERROR] Please set NAVIEN_EMAIL and NAVIEN_PASSWORD environment variables")
+        print(
+            "[ERROR] Please set NAVIEN_EMAIL and NAVIEN_PASSWORD environment variables"
+        )
         return 1
 
     print()

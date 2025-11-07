@@ -128,7 +128,9 @@ async def example_basic_usage():
                         print("  Coordinates: (available, not shown for privacy)")
                     print()
                 except asyncio.TimeoutError:
-                    print("[WARNING]  Request timed out - API may be slow or unresponsive")
+                    print(
+                        "[WARNING]  Request timed out - API may be slow or unresponsive"
+                    )
                     print("   Continuing with other requests...")
                     print()
 
@@ -144,7 +146,9 @@ async def example_basic_usage():
                         print(f"  SW Code: {fw.cur_sw_code}, Version: {fw.cur_version}")
                     print()
                 except asyncio.TimeoutError:
-                    print("[WARNING]  Request timed out - API may be slow or unresponsive")
+                    print(
+                        "[WARNING]  Request timed out - API may be slow or unresponsive"
+                    )
                     print()
 
         print("=" * 70)

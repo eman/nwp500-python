@@ -202,10 +202,7 @@ class MqttPeriodicRequestManager:
                                 request_type.value,
                                 redacted_device_id,
                             )
-                        elif (
-                            e.name
-                            == "AWS_ERROR_MQTT_CONNECTION_DESTROYED"
-                        ):
+                        elif e.name == "AWS_ERROR_MQTT_CONNECTION_DESTROYED":
                             _logger.warning(
                                 "MQTT connection destroyed during %s request "
                                 "for %s. This can occur during AWS-initiated "

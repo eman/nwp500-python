@@ -34,7 +34,9 @@ async def test_mqtt_connection():
     password = os.getenv("NAVIEN_PASSWORD")
 
     if not email or not password:
-        print("[ERROR] Error: Set NAVIEN_EMAIL and NAVIEN_PASSWORD environment variables")
+        print(
+            "[ERROR] Error: Set NAVIEN_EMAIL and NAVIEN_PASSWORD environment variables"
+        )
         return False
 
     print("Testing MQTT Connection to AWS IoT Core")
@@ -44,7 +46,9 @@ async def test_mqtt_connection():
         # Step 1: Authenticate
         print("\n1. Authenticating with Navien API...")
         async with NavienAuthClient(email, password) as auth_client:
-            print(f"   [SUCCESS] Authenticated as: {auth_client.current_user.full_name}")
+            print(
+                f"   [SUCCESS] Authenticated as: {auth_client.current_user.full_name}"
+            )
 
             # Verify AWS credentials
             tokens = auth_client.current_tokens

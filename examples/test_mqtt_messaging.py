@@ -36,7 +36,9 @@ async def test_mqtt_messaging():
     password = os.getenv("NAVIEN_PASSWORD")
 
     if not email or not password:
-        print("[ERROR] Error: Set NAVIEN_EMAIL and NAVIEN_PASSWORD environment variables")
+        print(
+            "[ERROR] Error: Set NAVIEN_EMAIL and NAVIEN_PASSWORD environment variables"
+        )
         return False
 
     print("=" * 80)
@@ -147,7 +149,9 @@ async def test_mqtt_messaging():
             for topic in topics:
                 try:
                     await mqtt_client.subscribe(topic, message_handler)
-                    print(f"   [SUCCESS] Subscribed to: {mask_mac_in_topic(topic, device_id)}")
+                    print(
+                        f"   [SUCCESS] Subscribed to: {mask_mac_in_topic(topic, device_id)}"
+                    )
                 except Exception:
                     # Avoid printing exception contents which may contain sensitive identifiers
                     try:
