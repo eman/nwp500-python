@@ -190,19 +190,38 @@ class MqttPeriodicRequestManager:
                     # Handle clean session cancellation gracefully (expected
                     # during reconnection)
                     # Safely check exception name attribute
-                    if (
-                        isinstance(e, AwsCrtError)
-                        and hasattr(e, "name")
-                        and e.name
-                        == "AWS_ERROR_MQTT_CANCELLED_FOR_CLEAN_SESSION"
-                    ):
-                        _logger.debug(
-                            "Periodic %s request cancelled due to clean "
-                            "session for %s. This is expected during "
-                            "reconnection.",
-                            request_type.value,
-                            redacted_device_id,
-                        )
+                    if isinstance(e, AwsCrtError) and hasattr(e, "name"):
+                        if (
+                            e.name
+                            == "AWS_ERROR_MQTT_CANCELLED_FOR_CLEAN_SESSION"
+                        ):
+                            _logger.debug(
+                                "Periodic %s request cancelled due to clean "
+                                "session for %s. This is expected during "
+                                "reconnection.",
+                                request_type.value,
+                                redacted_device_id,
+                            )
+                        elif (
+                            e.name
+                            == "AWS_ERROR_MQTT_CONNECTION_DESTROYED"
+                        ):
+                            _logger.warning(
+                                "MQTT connection destroyed during %s request "
+                                "for %s. This can occur during AWS-initiated "
+                                "disconnections (e.g., 24-hour timeout). "
+                                "Reconnection will be attempted automatically.",
+                                request_type.value,
+                                redacted_device_id,
+                            )
+                        else:
+                            _logger.error(
+                                "Error in periodic %s request for %s: %s",
+                                request_type.value,
+                                redacted_device_id,
+                                e,
+                                exc_info=True,
+                            )
                     else:
                         _logger.error(
                             "Error in periodic %s request for %s: %s",
