@@ -2,6 +2,21 @@
 Changelog
 =========
 
+Version 6.0.2 (2025-11-15)
+==========================
+
+Fixed
+-----
+
+- DNS resolution in containerized environments using ThreadedResolver
+- Updated AWS IoT library version
+- Device status field conversions
+
+Changed
+-------
+
+- Refactored ThreadedResolver session creation into helper method
+
 Version 6.0.1 (2025-11-06)
 ==========================
 
