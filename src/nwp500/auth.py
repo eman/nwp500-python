@@ -367,11 +367,7 @@ class NavienAuthClient:
     async def __aenter__(self) -> "NavienAuthClient":
         """Async context manager entry."""
         if self._owned_session:
-            resolver = aiohttp.ThreadedResolver()
-            connector = aiohttp.TCPConnector(resolver=resolver)
-            self._session = aiohttp.ClientSession(
-                connector=connector, timeout=self.timeout
-            )
+            self._session = self._create_session()
 
         # Check if we have valid stored tokens
         if self._auth_response and self._auth_response.tokens:
@@ -398,14 +394,24 @@ class NavienAuthClient:
         if self._owned_session and self._session:
             await self._session.close()
 
+    def _create_session(self) -> aiohttp.ClientSession:
+        """Create an aiohttp ClientSession with ThreadedResolver.
+
+        ThreadedResolver uses Python's built-in socket module for DNS
+        resolution, avoiding dependency on c-ares which can fail in
+        containerized environments.
+
+        Returns:
+            aiohttp.ClientSession configured with ThreadedResolver
+        """
+        resolver = aiohttp.ThreadedResolver()
+        connector = aiohttp.TCPConnector(resolver=resolver)
+        return aiohttp.ClientSession(connector=connector, timeout=self.timeout)
+
     async def _ensure_session(self) -> None:
         """Ensure we have an active session."""
         if self._session is None:
-            resolver = aiohttp.ThreadedResolver()
-            connector = aiohttp.TCPConnector(resolver=resolver)
-            self._session = aiohttp.ClientSession(
-                connector=connector, timeout=self.timeout
-            )
+            self._session = self._create_session()
             self._owned_session = True
 
     async def sign_in(
@@ -748,6 +754,7 @@ async def refresh_access_token(refresh_token: str) -> AuthTokens:
     url = f"{API_BASE_URL}{REFRESH_ENDPOINT}"
     payload = {"refreshToken": refresh_token}
 
+    # Use ThreadedResolver for reliable DNS in containerized environments
     resolver = aiohttp.ThreadedResolver()
     connector = aiohttp.TCPConnector(resolver=resolver)
     async with (
