@@ -578,6 +578,12 @@ class DeviceStatus:
             default_value=TemperatureUnit.FAHRENHEIT,
         )
     )
+    freezeProtectionTempMin: float = field(
+        default=43.0, metadata=meta(conversion="add_20")
+    )
+    freezeProtectionTempMax: float = field(
+        default=65.0, metadata=meta(conversion="add_20")
+    )
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "DeviceStatus":
