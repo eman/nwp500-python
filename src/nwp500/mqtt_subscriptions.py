@@ -416,8 +416,8 @@ class MqttSubscriptionManager:
         Example (Traditional Callback)::
 
             >>> def on_status(status: DeviceStatus):
-            ...     print(f"Temperature: {status.dhwTemperature}°F")
-            ...     print(f"Mode: {status.operationMode}")
+            ...     print(f"Temperature: {status.dhw_temperature}°F")
+            ...     print(f"Mode: {status.operation_mode}")
             >>>
             >>> await mqtt_client.subscribe_device_status(device, on_status)
 
@@ -525,44 +525,44 @@ class MqttSubscriptionManager:
 
         try:
             # Temperature change
-            if status.dhwTemperature != prev.dhwTemperature:
+            if status.dhw_temperature != prev.dhw_temperature:
                 await self._event_emitter.emit(
                     "temperature_changed",
-                    prev.dhwTemperature,
-                    status.dhwTemperature,
+                    prev.dhw_temperature,
+                    status.dhw_temperature,
                 )
                 _logger.debug(
-                    f"Temperature changed: {prev.dhwTemperature}°F → "
-                    f"{status.dhwTemperature}°F"
+                    f"Temperature changed: {prev.dhw_temperature}°F → "
+                    f"{status.dhw_temperature}°F"
                 )
 
             # Operation mode change
-            if status.operationMode != prev.operationMode:
+            if status.operation_mode != prev.operation_mode:
                 await self._event_emitter.emit(
                     "mode_changed",
-                    prev.operationMode,
-                    status.operationMode,
+                    prev.operation_mode,
+                    status.operation_mode,
                 )
                 _logger.debug(
-                    f"Mode changed: {prev.operationMode} → "
-                    f"{status.operationMode}"
+                    f"Mode changed: {prev.operation_mode} → "
+                    f"{status.operation_mode}"
                 )
 
             # Power consumption change
-            if status.currentInstPower != prev.currentInstPower:
+            if status.current_inst_power != prev.current_inst_power:
                 await self._event_emitter.emit(
                     "power_changed",
-                    prev.currentInstPower,
-                    status.currentInstPower,
+                    prev.current_inst_power,
+                    status.current_inst_power,
                 )
                 _logger.debug(
-                    f"Power changed: {prev.currentInstPower}W → "
-                    f"{status.currentInstPower}W"
+                    f"Power changed: {prev.current_inst_power}W → "
+                    f"{status.current_inst_power}W"
                 )
 
             # Heating started/stopped
-            prev_heating = prev.currentInstPower > 0
-            curr_heating = status.currentInstPower > 0
+            prev_heating = prev.current_inst_power > 0
+            curr_heating = status.current_inst_power > 0
 
             if curr_heating and not prev_heating:
                 await self._event_emitter.emit("heating_started", status)
@@ -573,15 +573,15 @@ class MqttSubscriptionManager:
                 _logger.debug("Heating stopped")
 
             # Error detection
-            if status.errorCode and not prev.errorCode:
+            if status.error_code and not prev.error_code:
                 await self._event_emitter.emit(
-                    "error_detected", status.errorCode, status
+                    "error_detected", status.error_code, status
                 )
-                _logger.info(f"Error detected: {status.errorCode}")
+                _logger.info(f"Error detected: {status.error_code}")
 
-            if not status.errorCode and prev.errorCode:
-                await self._event_emitter.emit("error_cleared", prev.errorCode)
-                _logger.info(f"Error cleared: {prev.errorCode}")
+            if not status.error_code and prev.error_code:
+                await self._event_emitter.emit("error_cleared", prev.error_code)
+                _logger.info(f"Error cleared: {prev.error_code}")
 
         except (TypeError, AttributeError, RuntimeError) as e:
             _logger.error(f"Error detecting state changes: {e}", exc_info=True)
@@ -614,16 +614,16 @@ class MqttSubscriptionManager:
         Example::
 
             >>> def on_feature(feature: DeviceFeature):
-            ...     print(f"Serial: {feature.controllerSerialNumber}")
-            ...     print(f"FW Version: {feature.controllerSwVersion}")
+            ...     print(f"Serial: {feature.controller_serial_number}")
+            ...     print(f"FW Version: {feature.controller_sw_version}")
             ...     print(f"Temp Range:
-            {feature.dhwTemperatureMin}-{feature.dhwTemperatureMax}°F")
+            {feature.dhw_temperature_min}-{feature.dhw_temperature_max}°F")
             >>>
             >>> await mqtt_client.subscribe_device_feature(device, on_feature)
 
             >>> # Or use event emitter
             >>> mqtt_client.on('feature_received', lambda f: print(f"FW:
-            {f.controllerSwVersion}"))
+            {f.controller_sw_version}"))
             >>> await mqtt_client.subscribe_device_feature(device, lambda f:
             None)
         """

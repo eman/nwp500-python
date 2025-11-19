@@ -792,8 +792,8 @@ class NavienMqttClient(EventEmitter):
         Example (Traditional Callback)::
 
             >>> def on_status(status: DeviceStatus):
-            ...     print(f"Temperature: {status.dhwTemperature}°F")
-            ...     print(f"Mode: {status.operationMode}")
+            ...     print(f"Temperature: {status.dhw_temperature}°F")
+            ...     print(f"Mode: {status.operation_mode}")
             >>>
             >>> await mqtt_client.subscribe_device_status(device, on_status)
 
