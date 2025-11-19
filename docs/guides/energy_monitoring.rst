@@ -26,7 +26,7 @@ The most important metric for energy monitoring:
 
    def on_status(status: DeviceStatus):
        # Total power consumption in Watts
-       power_watts = status.currentInstPower
+       power_watts = status.current_inst_power
        print(f"Current Power: {power_watts} W")
 
 | **Field:** ``currentInstPower``
@@ -43,13 +43,13 @@ Know which heating components are currently active:
 .. code:: python
 
    def on_status(status: DeviceStatus):
-       if status.compUse:
+       if status.comp_use:
            print("Heat pump compressor is running")
        
-       if status.heatUpperUse:
+       if status.heat_upper_use:
            print("Upper electric heater is running")
        
-       if status.heatLowerUse:
+       if status.heat_lower_use:
            print("Lower electric heater is running")
 
 | **Fields:** - ``compUse`` (bool): Heat pump compressor status -
@@ -65,9 +65,9 @@ Track total runtime for each heating component:
 
    def on_status(status: DeviceStatus):
        # Convert minutes to hours
-       comp_hours = status.compRunningMinuteTotal / 60
-       heater1_hours = status.heater1RunningMinuteTotal / 60
-       heater2_hours = status.heater2RunningMinuteTotal / 60
+       comp_hours = status.comp_running_minute_total / 60
+       heater1_hours = status.heater1_running_minute_total / 60
+       heater2_hours = status.heater2_running_minute_total / 60
        
        print(f"Heat Pump Runtime: {comp_hours:.1f} hours")
        print(f"Upper Heater Runtime: {heater1_hours:.1f} hours")
@@ -126,7 +126,7 @@ Monitor available stored energy:
 .. code:: python
 
    def on_status(status: DeviceStatus):
-       capacity = status.availableEnergyCapacity
+       capacity = status.available_energy_capacity
        print(f"Energy Capacity: {capacity}%")
        
        if capacity < 20:
@@ -150,8 +150,8 @@ Water Temperature
 
    def on_status(status: DeviceStatus):
        # Current water temperature
-       current_temp = status.dhwTemperature
-       target_temp = status.dhwTemperatureSetting
+       current_temp = status.dhw_temperature
+       target_temp = status.dhw_temperature_setting
        
        print(f"Water Temperature: {current_temp}°F (Target: {target_temp}°F)")
 
@@ -168,10 +168,10 @@ Monitor individual heating component temperatures:
 .. code:: python
 
    def on_status(status: DeviceStatus):
-       print(f"Compressor Temp: {status.compTemp}°F")
-       print(f"Upper Tank Temp: {status.dhwTankUpperTemp}°F")
-       print(f"Lower Tank Temp: {status.dhwTankLowerTemp}°F")
-       print(f"Heat Exchanger Out: {status.dhwHeatexOutTemp}°F")
+       print(f"Compressor Temp: {status.comp_temp}°F")
+       print(f"Upper Tank Temp: {status.dhw_tank_upper_temp}°F")
+       print(f"Lower Tank Temp: {status.dhw_tank_lower_temp}°F")
+       print(f"Heat Exchanger Out: {status.dhw_heatex_out_temp}°F")
 
 Complete Energy Monitoring Example
 ----------------------------------
@@ -204,15 +204,15 @@ Complete Energy Monitoring Example
            print("="*50)
            
            # Real-time power
-           print(f"\nCurrent Power: {status.currentInstPower} W")
+           print(f"\nCurrent Power: {status.current_inst_power} W")
            
            # Active components
            components = []
-           if status.compUse:
+           if status.comp_use:
                components.append("Heat Pump")
-           if status.heatUpperUse:
+           if status.heat_upper_use:
                components.append("Upper Heater")
-           if status.heatLowerUse:
+           if status.heat_lower_use:
                components.append("Lower Heater")
            
            if components:
@@ -222,18 +222,18 @@ Complete Energy Monitoring Example
            
            # Cumulative runtime
            print(f"\nCumulative Runtime:")
-           print(f"  Heat Pump: {status.compRunningMinuteTotal / 60:.1f} hours")
-           print(f"  Upper Heater: {status.heater1RunningMinuteTotal / 60:.1f} hours")
-           print(f"  Lower Heater: {status.heater2RunningMinuteTotal / 60:.1f} hours")
+           print(f"  Heat Pump: {status.comp_running_minute_total / 60:.1f} hours")
+           print(f"  Upper Heater: {status.heater1_running_minute_total / 60:.1f} hours")
+           print(f"  Lower Heater: {status.heater2_running_minute_total / 60:.1f} hours")
            
            # Energy capacity and temperature
-           print(f"\nEnergy Capacity: {status.availableEnergyCapacity}%")
-           print(f"Water Temp: {status.dhwTemperature}°F "
-                 f"(Target: {status.dhwTemperatureSetting}°F)")
+           print(f"\nEnergy Capacity: {status.available_energy_capacity}%")
+           print(f"Water Temp: {status.dhw_temperature}°F "
+                 f"(Target: {status.dhw_temperature_setting}°F)")
            
            # Estimated hourly cost (if running continuously at current power)
-           if status.currentInstPower > 0:
-               hourly_cost = calculate_power_cost(status.currentInstPower, 1.0)
+           if status.current_inst_power > 0:
+               hourly_cost = calculate_power_cost(status.current_inst_power, 1.0)
                print(f"\nEstimated Cost (if sustained): ${hourly_cost:.3f}/hour")
        
        # Subscribe to device status

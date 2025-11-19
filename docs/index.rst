@@ -67,8 +67,8 @@ Basic Example
            
            # Monitor device status
            def on_status(status):
-               print(f"Temp: {status.dhwTemperature}°F")
-               print(f"Power: {status.currentInstPower}W")
+               print(f"Temp: {status.dhw_temperature}°F")
+               print(f"Power: {status.current_inst_power}W")
            
            await mqtt.subscribe_device_status(device, on_status)
            await mqtt.request_device_status(device)

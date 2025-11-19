@@ -54,8 +54,8 @@ Simple Event Handler
 
            # Define event handler
            def on_status_update(status):
-               print(f"Temperature: {status.dhwTemperature}°F")
-               print(f"Power: {status.currentInstPower}W")
+               print(f"Temperature: {status.dhw_temperature}°F")
+               print(f"Power: {status.current_inst_power}W")
 
            # Subscribe to status updates
            await mqtt.subscribe_device_status(device, on_status_update)
@@ -93,14 +93,14 @@ Track state changes and react only when values change significantly.
 
        def on_status(self, status):
            # Temperature changed by more than 2°F
-           if self.last_temp is None or abs(status.dhwTemperature - self.last_temp) >= 2:
-               print(f"Temperature changed: {self.last_temp}°F → {status.dhwTemperature}°F")
-               self.last_temp = status.dhwTemperature
+           if self.last_temp is None or abs(status.dhw_temperature - self.last_temp) >= 2:
+               print(f"Temperature changed: {self.last_temp}°F → {status.dhw_temperature}°F")
+               self.last_temp = status.dhw_temperature
 
            # Power changed by more than 100W
-           if self.last_power is None or abs(status.currentInstPower - self.last_power) >= 100:
-               print(f"Power changed: {self.last_power}W → {status.currentInstPower}W")
-               self.last_power = status.currentInstPower
+           if self.last_power is None or abs(status.current_inst_power - self.last_power) >= 100:
+               print(f"Power changed: {self.last_power}W → {status.current_inst_power}W")
+               self.last_power = status.current_inst_power
 
    # Usage
    async def main():
@@ -150,8 +150,8 @@ Monitor multiple devices with individual callbacks.
            device_name = device_data['device'].device_info.device_name
 
            print(f"[{device_name}]")
-           print(f"  Temperature: {status.dhwTemperature}°F")
-           print(f"  Power: {status.currentInstPower}W")
+           print(f"  Temperature: {status.dhw_temperature}°F")
+           print(f"  Power: {status.current_inst_power}W")
            print()
 
            device_data['last_status'] = status
@@ -245,26 +245,26 @@ Build an alert system that triggers on specific conditions.
            # Define alert rules
            alerts.add_rule(AlertRule(
                name="Low Temperature",
-               condition=lambda s: s.dhwTemperature < 110,
+               condition=lambda s: s.dhw_temperature < 110,
                action=lambda s: send_email(
                    "Low Water Temperature",
-                   f"Temperature dropped to {s.dhwTemperature}°F"
+                   f"Temperature dropped to {s.dhw_temperature}°F"
                )
            ))
 
            alerts.add_rule(AlertRule(
                name="High Power",
-               condition=lambda s: s.currentInstPower > 2000,
+               condition=lambda s: s.current_inst_power > 2000,
                action=lambda s: log_alert(
-                   f"High power usage: {s.currentInstPower}W"
+                   f"High power usage: {s.current_inst_power}W"
                )
            ))
 
            alerts.add_rule(AlertRule(
                name="Error Detected",
-               condition=lambda s: s.errorCode != 0,
+               condition=lambda s: s.error_code != 0,
                action=lambda s: send_sms(
-                   f"Device error: {s.errorCode}"
+                   f"Device error: {s.error_code}"
                )
            ))
 
@@ -330,12 +330,12 @@ Log device data to a database or file.
            """, (
                timestamp,
                device_mac,
-               status.dhwTemperature,
-               status.dhwTemperatureSetting,
-               status.currentInstPower,
-               status.dhwOperationSetting.name,
-               status.operationMode.name,
-               status.errorCode
+               status.dhw_temperature,
+               status.dhw_temperature_setting,
+               status.current_inst_power,
+               status.dhw_operation_setting.name,
+               status.operation_mode.name,
+               status.error_code
            ))
            conn.commit()
            conn.close()
@@ -390,12 +390,12 @@ Integrate with Home Assistant, OpenHAB, or custom systems.
 
            # Prepare state data
            state_data = {
-               'temperature': status.dhwTemperature,
-               'target_temperature': status.dhwTemperatureSetting,
-               'power': status.currentInstPower,
-               'mode': status.dhwOperationSetting.name,
-               'state': status.operationMode.name,
-               'error': status.errorCode
+               'temperature': status.dhw_temperature,
+               'target_temperature': status.dhw_temperature_setting,
+               'power': status.current_inst_power,
+               'mode': status.dhw_operation_setting.name,
+               'state': status.operation_mode.name,
+               'error': status.error_code
            }
 
            # Publish to HA
@@ -408,7 +408,7 @@ Integrate with Home Assistant, OpenHAB, or custom systems.
                url = f"{self.ha_url}/api/states/sensor.navien_{device_mac}"
 
                async with session.post(url, headers=headers, json={
-                   'state': status.dhwTemperature,
+                   'state': status.dhw_temperature,
                    'attributes': state_data
                }) as resp:
                    if resp.status == 200:
@@ -470,7 +470,7 @@ Best Practices
    .. code-block:: python
 
       # Track callback references
-      callback = lambda s: print(s.dhwTemperature)
+      callback = lambda s: print(s.dhw_temperature)
 
       await mqtt.subscribe_device_status(device, callback)
 

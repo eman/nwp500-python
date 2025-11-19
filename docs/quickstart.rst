@@ -119,10 +119,10 @@ Connect to MQTT for real-time device monitoring:
            # Define status callback
            def on_status(status):
                print(f"\nDevice Status:")
-               print(f"  Water Temp: {status.dhwTemperature}°F")
-               print(f"  Target: {status.dhwTemperatureSetting}°F")
-               print(f"  Power: {status.currentInstPower}W")
-               print(f"  Mode: {status.dhwOperationSetting.name}")
+               print(f"  Water Temp: {status.dhw_temperature}°F")
+               print(f"  Target: {status.dhw_temperature_setting}°F")
+               print(f"  Power: {status.current_inst_power}W")
+               print(f"  Mode: {status.dhw_operation_setting.name}")
            
            # Subscribe and request status
            await mqtt.subscribe_device_status(device, on_status)
