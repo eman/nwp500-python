@@ -396,8 +396,8 @@ class EnergyUsageTotal(NavienBaseModel):
     """Total energy usage data."""
 
     total_usage: int
-    heat_pump_usage: int
-    heat_element_usage: int
+    heat_pump_usage: int = Field(alias="hpUsage")
+    heat_element_usage: int = Field(alias="heUsage")
 
     @property
     def heat_pump_percentage(self) -> float:
