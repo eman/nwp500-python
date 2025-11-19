@@ -85,7 +85,7 @@ preference.
 
       # Check current mode from status
       def on_status(status):
-          if status.dhwOperationSetting == DhwOperationSetting.ENERGY_SAVER:
+          if status.dhw_operation_setting == DhwOperationSetting.ENERGY_SAVER:
               print("Running in Energy Saver mode")
 
 CurrentOperationMode
@@ -112,16 +112,16 @@ Current real-time operational state - what the device is doing **right now**.
       from nwp500 import CurrentOperationMode
 
       def on_status(status):
-          mode = status.operationMode
+          mode = status.operation_mode
 
           if mode == CurrentOperationMode.IDLE:
               print("Device idle")
           elif mode == CurrentOperationMode.HEAT_PUMP:
-              print(f"Heat pump running at {status.currentInstPower}W")
+              print(f"Heat pump running at {status.current_inst_power}W")
           elif mode == CurrentOperationMode.ELECTRIC_HEATER:
-              print(f"Electric heater at {status.currentInstPower}W")
+              print(f"Electric heater at {status.current_inst_power}W")
           elif mode == CurrentOperationMode.HEAT_PUMP_AND_HEATER:
-              print(f"Both running at {status.currentInstPower}W")
+              print(f"Both running at {status.current_inst_power}W")
 
 TemperatureUnit
 ---------------
@@ -141,9 +141,9 @@ Temperature scale enumeration.
 
       def on_status(status):
           if status.temperatureType == TemperatureUnit.FAHRENHEIT:
-              print(f"Temperature: {status.dhwTemperature}°F")
+              print(f"Temperature: {status.dhw_temperature}°F")
           else:
-              print(f"Temperature: {status.dhwTemperature}°C")
+              print(f"Temperature: {status.dhw_temperature}°C")
 
 Device Models
 =============
@@ -365,27 +365,27 @@ Complete real-time device status with 100+ fields.
 
       def on_status(status):
           # Temperature monitoring
-          print(f"Water: {status.dhwTemperature}°F")
-          print(f"Target: {status.dhwTemperatureSetting}°F")
+          print(f"Water: {status.dhw_temperature}°F")
+          print(f"Target: {status.dhw_temperatureSetting}°F")
           print(f"Upper Tank: {status.tankUpperTemperature}°F")
           print(f"Lower Tank: {status.tankLowerTemperature}°F")
 
           # Power consumption
-          print(f"Power: {status.currentInstPower}W")
+          print(f"Power: {status.current_inst_power}W")
           print(f"Energy: {status.availableEnergyCapacity}%")
 
           # Operation mode
-          print(f"Mode: {status.dhwOperationSetting.name}")
-          print(f"State: {status.operationMode.name}")
+          print(f"Mode: {status.dhw_operation_setting.name}")
+          print(f"State: {status.operation_mode.name}")
 
           # Active heating
           if status.operationBusy:
               print("Heating water:")
-              if status.compUse:
+              if status.comp_use:
                   print("  - Heat pump running")
-              if status.heatUpperUse:
+              if status.heat_upper_use:
                   print("  - Upper heater active")
-              if status.heatLowerUse:
+              if status.heat_lower_use:
                   print("  - Lower heater active")
 
           # Water usage detection
@@ -701,10 +701,10 @@ Best Practices
 
       def on_status(status):
           # User's mode preference
-          user_mode = status.dhwOperationSetting
+          user_mode = status.dhw_operation_setting
 
           # Current real-time state
-          current_state = status.operationMode
+          current_state = status.operation_mode
 
           # These can differ!
           # User sets ENERGY_SAVER, device might be in HEAT_PUMP state

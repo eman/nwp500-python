@@ -672,7 +672,7 @@ For user-facing applications, follow these guidelines:
         """Format mode and status for UI display."""
         
         # Check if device is powered off first
-        if status.dhwOperationSetting == DhwOperationSetting.POWER_OFF:
+        if status.dhw_operation_setting == DhwOperationSetting.POWER_OFF:
             return {
                 'configured_mode': 'Off',
                 'operational_state': 'Powered Off',
@@ -682,19 +682,19 @@ For user-facing applications, follow these guidelines:
             }
         
         # User's configured mode (what they selected)
-        configured_mode = status.dhwOperationSetting.name.replace('_', ' ').title()
+        configured_mode = status.dhw_operation_setting.name.replace('_', ' ').title()
         
         # Current operational state
-        if status.operationMode == CurrentOperationMode.STANDBY:
+        if status.operation_mode == CurrentOperationMode.STANDBY:
             operational_state = "Idle"
             is_heating = False
-        elif status.operationMode == CurrentOperationMode.HEAT_PUMP_MODE:
+        elif status.operation_mode == CurrentOperationMode.HEAT_PUMP_MODE:
             operational_state = "Heating (Heat Pump)"
             is_heating = True
-        elif status.operationMode == CurrentOperationMode.HYBRID_EFFICIENCY_MODE:
+        elif status.operation_mode == CurrentOperationMode.HYBRID_EFFICIENCY_MODE:
             operational_state = "Heating (Energy Saver)"
             is_heating = True
-        elif status.operationMode == CurrentOperationMode.HYBRID_BOOST_MODE:
+        elif status.operation_mode == CurrentOperationMode.HYBRID_BOOST_MODE:
             operational_state = "Heating (High Demand)"
             is_heating = True
         else:
