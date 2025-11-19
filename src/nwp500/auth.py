@@ -78,14 +78,14 @@ class AuthTokens(NavienBaseModel):
 
     # Calculated fields
     issued_at: datetime = Field(default_factory=datetime.now)
-    
+
     _expires_at: datetime = PrivateAttr()
     _aws_expires_at: Optional[datetime] = PrivateAttr(default=None)
 
     @model_validator(mode='before')
     @classmethod
     def handle_empty_aliases(cls, data: Any) -> Any:
-        """Handle cases where camelCase alias is empty but snake_case fallback exists."""
+        """Handle empty camelCase aliases with snake_case fallbacks."""
         if isinstance(data, dict):
             # Fields to check for fallback
             fields_to_check = [
@@ -93,7 +93,7 @@ class AuthTokens(NavienBaseModel):
                 ('accessKeyId', 'access_key_id'),
                 ('secretKey', 'secret_key'),
             ]
-            
+
             for camel, snake in fields_to_check:
                 # If camel exists but is empty/None, and snake exists, use snake
                 if camel in data and not data[camel] and snake in data:
@@ -196,11 +196,10 @@ class AuthenticationResponse(NavienBaseModel):
         cls, response_data: dict[str, Any]
     ) -> "AuthenticationResponse":
         """Create AuthenticationResponse from API response."""
-        # Map the nested structure of the API response to the flat model structure
-        # API response: { "code": ..., "msg": ..., "data": { "userInfo": ..., "token": ..., "legal": ... } }
-        
+        # Map nested API response to flat model structure
+        # API response: { "code": ..., "msg": ..., "data": { ... } }
         data = response_data.get("data", {})
-        
+
         # Construct a dict that matches the model structure
         model_data = {
             "code": response_data.get("code", 200),
@@ -209,7 +208,7 @@ class AuthenticationResponse(NavienBaseModel):
             "tokens": data.get("token", {}),
             "legal": data.get("legal", [])
         }
-        
+
         return cls.model_validate(model_data)
 
 

@@ -10,10 +10,8 @@ import logging
 from enum import Enum
 from typing import Annotated, Any, Optional, Union
 
-from pydantic import BaseModel, BeforeValidator, ConfigDict, Field, AliasGenerator
+from pydantic import BaseModel, BeforeValidator, ConfigDict, Field
 from pydantic.alias_generators import to_camel
-
-from . import constants
 
 _logger = logging.getLogger(__name__)
 
@@ -126,7 +124,9 @@ class FirmwareInfo(NavienBaseModel):
 class TOUSchedule(NavienBaseModel):
     """Time of Use schedule information."""
     season: int = 0
-    intervals: list[dict[str, Any]] = Field(default_factory=list, alias="interval")
+    intervals: list[dict[str, Any]] = Field(
+        default_factory=list, alias="interval"
+    )
 
 
 class TOUInfo(NavienBaseModel):
@@ -141,20 +141,38 @@ class TOUInfo(NavienBaseModel):
     schedule: list[TOUSchedule] = Field(default_factory=list)
 
     @classmethod
-    def model_validate(cls, obj: Any, *, strict: Optional[bool] = None, from_attributes: Optional[bool] = None, context: Optional[dict[str, Any]] = None) -> "TOUInfo":
-        # Handle nested structure in API response where some fields are in 'touInfo'
+    @classmethod
+    def model_validate(
+        cls,
+        obj: Any,
+        *,
+        strict: Optional[bool] = None,
+        from_attributes: Optional[bool] = None,
+        context: Optional[dict[str, Any]] = None,
+    ) -> "TOUInfo":
+        # Handle nested structure where fields are in 'touInfo'
         if isinstance(obj, dict):
             data = obj.copy()
             if "touInfo" in data:
                 tou_data = data.pop("touInfo")
                 data.update(tou_data)
-            return super().model_validate(data, strict=strict, from_attributes=from_attributes, context=context)
-        return super().model_validate(obj, strict=strict, from_attributes=from_attributes, context=context)
+            return super().model_validate(
+                data,
+                strict=strict,
+                from_attributes=from_attributes,
+                context=context,
+            )
+        return super().model_validate(
+            obj,
+            strict=strict,
+            from_attributes=from_attributes,
+            context=context,
+        )
 
 
 class DeviceStatus(NavienBaseModel):
     """Represents the status of the Navien water heater device."""
-    
+
     # Basic status fields
     command: int
     outside_temperature: float
@@ -247,7 +265,9 @@ class DeviceStatus(NavienBaseModel):
     hp_lower_off_diff_temp_setting: Div10
     he_upper_on_diff_temp_setting: Div10
     he_upper_off_diff_temp_setting: Div10
-    he_lower_on_diff_temp_setting: Div10 = Field(alias="heLowerOnTDiffempSetting") # Handle typo
+    he_lower_on_diff_temp_setting: Div10 = Field(
+        alias="heLowerOnTDiffempSetting"
+    )  # Handle typo
     he_lower_off_diff_temp_setting: Div10
     recirc_dhw_flow_rate: Div10
 
@@ -262,10 +282,15 @@ class DeviceStatus(NavienBaseModel):
     current_super_heat: DeciCelsiusToF
 
     # Enum fields
-    operation_mode: CurrentOperationMode = Field(default=CurrentOperationMode.STANDBY)
-    dhw_operation_setting: DhwOperationSetting = Field(default=DhwOperationSetting.ENERGY_SAVER)
-    temperature_type: TemperatureUnit = Field(default=TemperatureUnit.FAHRENHEIT)
-    
+    operation_mode: CurrentOperationMode = Field(
+        default=CurrentOperationMode.STANDBY
+    )
+    dhw_operation_setting: DhwOperationSetting = Field(
+        default=DhwOperationSetting.ENERGY_SAVER
+    )
+    temperature_type: TemperatureUnit = Field(
+        default=TemperatureUnit.FAHRENHEIT
+    )
     freeze_protection_temp_min: Add20 = 43.0
     freeze_protection_temp_max: Add20 = 65.0
 
@@ -280,8 +305,8 @@ class DeviceStatus(NavienBaseModel):
 
 
 class DeviceFeature(NavienBaseModel):
-    """Represents device capabilities, configuration, and firmware information."""
-    
+    """Device capabilities, configuration, and firmware info."""
+
     country_code: int
     model_type_code: int
     control_type_code: int
@@ -321,7 +346,9 @@ class DeviceFeature(NavienBaseModel):
     freeze_protection_temp_max: Add20
 
     # Enum field
-    temperature_type: TemperatureUnit = Field(default=TemperatureUnit.FAHRENHEIT)
+    temperature_type: TemperatureUnit = Field(
+        default=TemperatureUnit.FAHRENHEIT
+    )
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "DeviceFeature":
@@ -357,7 +384,7 @@ class EnergyUsageTotal(NavienBaseModel):
     total_usage: int
     heat_pump_usage: int
     heat_element_usage: int
-    
+
     @property
     def heat_pump_percentage(self) -> float:
         if self.total_usage == 0:
