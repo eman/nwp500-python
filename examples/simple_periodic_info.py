@@ -39,7 +39,7 @@ async def main():
     # Typed callback
     def on_feature(feature: DeviceFeature):
         print(
-            f"Device info: Serial {feature.controllerSerialNumber}, FW {feature.controllerSwVersion}"
+            f"Device info: Serial {feature.controller_serial_number}, FW {feature.controller_sw_version}"
         )
 
     # Subscribe with typed parsing

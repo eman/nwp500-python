@@ -73,9 +73,9 @@ async def main():
         status_count += 1
 
         print(f"\n--- Status Response #{status_count} ---")
-        print(f"  Temperature: {status.dhwTemperature:.1f}°F")
-        print(f"  Power: {status.currentInstPower:.1f}W")
-        print(f"  Available Energy: {status.availableEnergyCapacity:.0f} Wh")
+        print(f"  Temperature: {status.dhw_temperature:.1f}°F")
+        print(f"  Power: {status.current_inst_power:.1f}W")
+        print(f"  Available Energy: {status.available_energy_capacity:.0f} Wh")
 
     def on_device_feature(feature: DeviceFeature):
         """Callback receives parsed DeviceFeature objects."""
@@ -83,9 +83,9 @@ async def main():
         info_count += 1
 
         print(f"\n--- Device Info Response #{info_count} ---")
-        print(f"  Serial: {feature.controllerSerialNumber}")
-        print(f"  FW Version: {feature.controllerSwVersion}")
-        print(f"  Heat Pump: {feature.heatpumpUse}")
+        print(f"  Serial: {feature.controller_serial_number}")
+        print(f"  FW Version: {feature.controller_sw_version}")
+        print(f"  Heat Pump: {feature.heatpump_use}")
 
     # Subscribe using typed callbacks
     await mqtt.subscribe_device_status(device, on_device_status)

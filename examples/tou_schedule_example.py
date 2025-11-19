@@ -6,7 +6,8 @@ import os
 import sys
 from typing import Any
 
-from nwp500 import NavienAPIClient, NavienAuthClient, NavienMqttClient, build_tou_period
+from nwp500 import NavienAPIClient, NavienAuthClient, NavienMqttClient
+from nwp500.encoding import decode_week_bitfield, decode_price, build_tou_period
 
 
 async def _wait_for_controller_serial(mqtt_client: NavienMqttClient, device) -> str:
@@ -25,7 +26,7 @@ async def _wait_for_controller_serial(mqtt_client: NavienMqttClient, device) -> 
 
     # Wait for the response
     feature = await asyncio.wait_for(feature_future, timeout=15)
-    return feature.controllerSerialNumber
+    return feature.controller_serial_number
 
 
 async def main() -> None:
@@ -88,11 +89,11 @@ async def main() -> None:
             print("\nTOU response received:")
             print(f"  reservationUse: {response.get('reservationUse')}")
             for idx, entry in enumerate(reservation, start=1):
-                week_days = NavienAPIClient.decode_week_bitfield(entry.get("week", 0))
-                price_min_value = NavienAPIClient.decode_price(
+                week_days = decode_week_bitfield(entry.get("week", 0))
+                price_min_value = decode_price(
                     entry.get("priceMin", 0), entry.get("decimalPoint", 0)
                 )
-                price_max_value = NavienAPIClient.decode_price(
+                price_max_value = decode_price(
                     entry.get("priceMax", 0), entry.get("decimalPoint", 0)
                 )
                 print(

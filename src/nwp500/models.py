@@ -204,7 +204,7 @@ class DeviceStatus(NavienBaseModel):
     vacation_day_elapsed: int
     anti_legionella_period: int
     program_reservation_type: int
-    temp_formula_type: str
+    temp_formula_type: Union[int, str]
     current_statenum: int
     target_fan_rpm: int
     current_fan_rpm: int
@@ -395,9 +395,15 @@ class MqttCommand(NavienBaseModel):
 class EnergyUsageTotal(NavienBaseModel):
     """Total energy usage data."""
 
-    total_usage: int
-    heat_pump_usage: int = Field(alias="hpUsage")
-    heat_element_usage: int = Field(alias="heUsage")
+    heat_pump_usage: int = Field(default=0, alias="hpUsage")
+    heat_element_usage: int = Field(default=0, alias="heUsage")
+    heat_pump_time: int = Field(default=0, alias="hpTime")
+    heat_element_time: int = Field(default=0, alias="heTime")
+    
+    @property
+    def total_usage(self) -> int:
+        """Total energy usage (heat pump + heat element)."""
+        return self.heat_pump_usage + self.heat_element_usage
 
     @property
     def heat_pump_percentage(self) -> float:
@@ -411,23 +417,61 @@ class EnergyUsageTotal(NavienBaseModel):
             return 0.0
         return (self.heat_element_usage / self.total_usage) * 100.0
 
+    @property
+    def total_time(self) -> int:
+        """Total operating time (heat pump + heat element)."""
+        return self.heat_pump_time + self.heat_element_time
+
 
 class EnergyUsageDay(NavienBaseModel):
-    """Daily energy usage data."""
+    """Daily energy usage data.
+    
+    Note: The API returns a fixed-length array (30 elements) for each month,
+    with unused days having all zeros. The day number is implicit from the
+    array index (0-based).
+    """
 
-    day: int
-    total_usage: int
-    heat_pump_usage: int
-    heat_element_usage: int
-    heat_pump_time: int
-    heat_element_time: int
+    heat_pump_usage: int = Field(alias="hpUsage")
+    heat_element_usage: int = Field(alias="heUsage")
+    heat_pump_time: int = Field(alias="hpTime")
+    heat_element_time: int = Field(alias="heTime")
+    
+    @property
+    def total_usage(self) -> int:
+        """Total energy usage (heat pump + heat element)."""
+        return self.heat_pump_usage + self.heat_element_usage
+
+
+class MonthlyEnergyData(NavienBaseModel):
+    """Monthly energy usage data grouping."""
+
+    year: int
+    month: int
+    data: list[EnergyUsageDay]
 
 
 class EnergyUsageResponse(NavienBaseModel):
     """Response for energy usage query."""
 
     total: EnergyUsageTotal
-    daily: list[EnergyUsageDay]
+    usage: list[MonthlyEnergyData]
+
+    def get_month_data(
+        self, year: int, month: int
+    ) -> Optional[MonthlyEnergyData]:
+        """Get energy usage data for a specific month.
+
+        Args:
+            year: Year (e.g., 2025)
+            month: Month (1-12)
+
+        Returns:
+            MonthlyEnergyData for that month, or None if not found
+        """
+        for monthly_data in self.usage:
+            if monthly_data.year == year and monthly_data.month == month:
+                return monthly_data
+        return None
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "EnergyUsageResponse":

@@ -77,11 +77,11 @@ async def main():
         info_count += 1
 
         print(f"\n--- Device Info Response #{info_count} ---")
-        print(f"Controller Serial: {feature.controllerSerialNumber}")
-        print(f"Controller SW Version: {feature.controllerSwVersion}")
-        print(f"Heat Pump Use: {feature.heatpumpUse}")
+        print(f"Controller Serial: {feature.controller_serial_number}")
+        print(f"Controller SW Version: {feature.controller_sw_version}")
+        print(f"Heat Pump Use: {feature.heatpump_use}")
         print(
-            f"DHW Temp Min/Max: {feature.dhwTemperatureMin}/{feature.dhwTemperatureMax}°F"
+            f"DHW Temp Min/Max: {feature.dhw_temperature_min}/{feature.dhw_temperature_max}°F"
         )
 
     # Subscribe with typed parsing

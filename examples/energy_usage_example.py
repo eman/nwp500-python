@@ -50,17 +50,17 @@ async def main():
         # Heat pump details
         print("🔵 HEAT PUMP")
         print(
-            f"   Energy Usage: {energy.total.hpUsage:,} Wh ({energy.total.heat_pump_percentage:.1f}%)"
+            f"   Energy Usage: {energy.total.heat_pump_usage:,} Wh ({energy.total.heat_pump_percentage:.1f}%)"
         )
-        print(f"   Operating Time: {energy.total.hpTime} hours")
+        print(f"   Operating Time: {energy.total.heat_pump_time} hours")
         print()
 
         # Electric heater details
         print("🔴 ELECTRIC HEATER")
         print(
-            f"   Energy Usage: {energy.total.heUsage:,} Wh ({energy.total.heat_element_percentage:.1f}%)"
+            f"   Energy Usage: {energy.total.heat_element_usage:,} Wh ({energy.total.heat_element_percentage:.1f}%)"
         )
-        print(f"   Operating Time: {energy.total.heTime} hours")
+        print(f"   Operating Time: {energy.total.heat_element_time} hours")
         print()
 
         # Efficiency analysis
@@ -91,14 +91,14 @@ async def main():
                 if day_data.total_usage > 0:  # Only show days with usage
                     date_str = f"{month_data.year}-{month_data.month:02d}-{day_num:02d}"
                     hp_pct_day = (
-                        (day_data.hpUsage / day_data.total_usage * 100)
+                        (day_data.heat_pump_usage / day_data.total_usage * 100)
                         if day_data.total_usage > 0
                         else 0
                     )
 
                     print(
                         f"   {date_str}: {day_data.total_usage:5,} Wh "
-                        f"(HP: {day_data.hpUsage:5,} Wh, HE: {day_data.heUsage:4,} Wh, "
+                        f"(HP: {day_data.heat_pump_usage:5,} Wh, HE: {day_data.heat_element_usage:4,} Wh, "
                         f"HP%: {hp_pct_day:4.1f}%)"
                     )
 

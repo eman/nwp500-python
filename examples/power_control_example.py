@@ -47,8 +47,8 @@ async def power_control_example():
             def on_current_status(status):
                 nonlocal current_status
                 current_status = status
-                logger.info(f"Current operation mode: {status.operationMode.name}")
-                logger.info(f"Current DHW temperature: {status.dhwTemperature}°F")
+                logger.info(f"Current operation mode: {status.operation_mode.name}")
+                logger.info(f"Current DHW temperature: {status.dhw_temperature}°F")
 
             await mqtt_client.subscribe_device_status(device, on_current_status)
             await mqtt_client.request_device_status(device)
@@ -62,7 +62,7 @@ async def power_control_example():
             def on_power_off_response(status):
                 nonlocal power_off_complete
                 logger.info("Power OFF response received!")
-                logger.info(f"Operation mode: {status.operationMode.name}")
+                logger.info(f"Operation mode: {status.operation_mode.name}")
                 logger.info(f"DHW Operation Setting: {status.dhwOperationSetting.name}")
                 power_off_complete = True
 
@@ -90,9 +90,9 @@ async def power_control_example():
             def on_power_on_response(status):
                 nonlocal power_on_complete
                 logger.info("Power ON response received!")
-                logger.info(f"Operation mode: {status.operationMode.name}")
+                logger.info(f"Operation mode: {status.operation_mode.name}")
                 logger.info(f"DHW Operation Setting: {status.dhwOperationSetting.name}")
-                logger.info(f"Tank charge: {status.dhwChargePer}%")
+                logger.info(f"Tank charge: {status.dhw_charge_per}%")
                 power_on_complete = True
 
             await mqtt_client.subscribe_device_status(device, on_power_on_response)

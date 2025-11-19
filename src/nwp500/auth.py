@@ -91,6 +91,11 @@ class AuthTokens(NavienBaseModel):
                 ("accessToken", "access_token"),
                 ("accessKeyId", "access_key_id"),
                 ("secretKey", "secret_key"),
+                ("refreshToken", "refresh_token"),
+                ("sessionToken", "session_token"),
+                ("authenticationExpiresIn", "authentication_expires_in"),
+                ("authorizationExpiresIn", "authorization_expires_in"),
+                ("idToken", "id_token"),
             ]
 
             for camel, snake in fields_to_check:
@@ -133,7 +138,9 @@ class AuthTokens(NavienBaseModel):
         """Convert AuthTokens to a dictionary for storage.
 
         Returns:
-            Dictionary with snake_case keys suitable for JSON serialization
+            Dictionary with snake_case keys suitable for JSON serialization.
+            DateTime fields are serialized to ISO 8601 format strings
+            (e.g., "2025-11-19T08:51:00") for backward compatibility.
         """
         return self.model_dump(mode="json")
 

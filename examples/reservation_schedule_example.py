@@ -7,6 +7,7 @@ import sys
 from typing import Any
 
 from nwp500 import NavienAPIClient, NavienAuthClient, NavienMqttClient
+from nwp500.encoding import decode_week_bitfield
 from nwp500.encoding import build_reservation_entry
 
 
@@ -50,7 +51,7 @@ async def main() -> None:
             )
             print(f"  entries: {len(reservations)}")
             for idx, entry in enumerate(reservations, start=1):
-                week_days = NavienAPIClient.decode_week_bitfield(entry.get("week", 0))
+                week_days = decode_week_bitfield(entry.get("week", 0))
                 display_temp = entry.get("param", 0) + 20
                 print(
                     "   - #{idx}: {time:02d}:{minute:02d} mode={mode} display_temp={temp}F days={days}".format(
