@@ -195,7 +195,7 @@ Electric heating elements are controlled via thermostat ranges. Two sensors (upp
    * - ``heatMinOpTemperature``
      - add_20
      - °F
-     - **Minimum operating temperature** for heating elements. Safety threshold - elements won't activate if inlet water is below this (prevents pump cavitation).
+     - **Minimum heat pump operation temperature**. Lowest tank temperature setpoint allowed in the current operating mode. Range: 95-113°F. Default: 95°F. When set, the user can only set the target tank temperature at or above this threshold, ensuring minimum system operating conditions.
 
 Heat Pump Control Temperatures
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -261,15 +261,15 @@ Freeze Protection Temperatures
    * - ``freezeProtectionTemperature``
      - add_20
      - °F
-     - **Freeze protection temperature setpoint**. Default 43°F (6°C). If any tank sensor drops below this, electric heating activates.
+     - **Freeze protection temperature setpoint**. Range: 43-50°F (6-10°C). Default: 43°F (6°C). When tank temperature drops below this, electric heating activates automatically to prevent freezing.
    * - ``freezeProtectionTempMin``
      - add_20
      - °F
-     - **Minimum freeze protection temperature limit**.
+     - **Minimum freeze protection temperature limit** (lower boundary). Fixed at 43°F (6°C).
    * - ``freezeProtectionTempMax``
      - add_20
      - °F
-     - **Maximum freeze protection temperature limit**.
+     - **Maximum freeze protection temperature limit** (upper boundary). Fixed at 50°F (10°C).
 
 Recirculation System Temperatures
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -414,15 +414,15 @@ Safety and Diagnostic Fields
    * - ``airFilterAlarmUse``
      - device_bool
      - Boolean
-     - **Air filter maintenance reminder enabled flag**. True when air filter alarm feature is active.
+     - **Air filter maintenance reminder enabled flag**. When enabled (True), triggers maintenance alert based on operating hours. Default: On.
    * - ``airFilterAlarmPeriod``
      - None (direct value)
      - hours
-     - **Air filter service interval**. Default 1000 hours. Maintenance reminder triggers after this interval.
+     - **Air filter maintenance cycle interval**. Range: Off or 1,000-10,000 hours. Default: 1,000 hours. Maintenance reminder triggers after this operating time elapsed.
    * - ``airFilterAlarmElapsed``
      - None (direct value)
      - hours
-     - **Hours since last air filter service reset**. Resets to 0 when maintenance is performed.
+     - **Hours elapsed since last air filter maintenance reset**. Resets to 0 when maintenance is performed. Track this to schedule preventative replacement.
    * - ``cumulatedOpTimeEvaFan``
      - None (direct value)
      - hours
@@ -442,15 +442,15 @@ Safety and Diagnostic Fields
    * - ``antiLegionellaUse``
      - device_bool
      - Boolean
-     - **Anti-legionella function enabled flag**. True when feature is active.
+     - **Anti-legionella function enabled flag**. When enabled (True), device periodically heats tank to high temperature to prevent Legionella bacteria growth. Default: Off. Enable recommended for systems not regularly flushed.
    * - ``antiLegionellaOperationBusy``
      - device_bool
      - Boolean
-     - **Anti-legionella cycle in progress flag**. True during periodic high-temperature disinfection cycle.
+     - **Anti-legionella cycle in progress flag**. True during active high-temperature disinfection cycle.
    * - ``antiLegionellaPeriod``
      - None (direct value)
      - days
-     - **Anti-legionella execution interval**. Period between automatic disinfection cycles.
+     - **Anti-legionella execution cycle interval**. Range: 1-30 days. Default: 7 days. Sets how often the device performs the disinfection cycle.
 
 Vacation and Scheduling Fields
 ------------------------------

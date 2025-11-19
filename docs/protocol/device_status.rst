@@ -206,22 +206,22 @@ This document lists the fields found in the ``status`` object of device status m
    * - ``freezeProtectionTemperature``
      - integer
      - °F
-     - Freeze protection temperature setting.
+     - Freeze protection temperature setpoint. Range: 43-50°F (6-10°C), Default: 43°F. When tank temperature drops below this, electric heating activates automatically to prevent freezing.
      - ``raw + 20``
    * - ``antiLegionellaUse``
      - bool
      - None
-     - Whether anti-legionella function is enabled.
+     - Whether anti-legionella function is enabled. When enabled, device periodically heats tank to prevent Legionella bacteria growth. Default: Off.
      - Converted from integer (1=OFF, 2=ON) to bool
    * - ``antiLegionellaPeriod``
      - integer
      - days
-     - Anti-legionella function period.
+     - Anti-legionella cycle interval. Range: 1-30 days, Default: 7 days. Sets frequency of automatic high-temperature disinfection cycles.
      - None
    * - ``antiLegionellaOperationBusy``
      - bool
      - None
-     - Whether the anti-legionella function is busy.
+     - Whether the anti-legionella disinfection cycle is currently running.
      - Converted from integer (1=OFF, 2=ON) to bool
    * - ``programReservationType``
      - integer
@@ -321,17 +321,17 @@ This document lists the fields found in the ``status`` object of device status m
    * - ``airFilterAlarmUse``
      - bool
      - None
-     - Air filter alarm usage - indicates if air filter maintenance reminder is enabled.
+     - Air filter maintenance reminder enabled flag. When enabled, triggers alerts based on operating hours. Default: On.
      - Converted from integer (1=OFF, 2=ON) to bool
    * - ``airFilterAlarmPeriod``
      - integer
      - hours
-     - Air filter alarm period setting. Default: 1,000 hours of operation.
+     - Air filter maintenance cycle interval. Range: Off or 1,000-10,000 hours, Default: 1,000 hours. Sets maintenance reminder frequency.
      - None
    * - ``airFilterAlarmElapsed``
      - integer
      - hours
-     - Elapsed operation time since last air filter maintenance reset.
+     - Operating hours elapsed since last air filter maintenance reset. Track this to schedule preventative replacement.
      - None
    * - ``cumulatedOpTimeEvaFan``
      - integer
@@ -431,7 +431,7 @@ This document lists the fields found in the ``status`` object of device status m
    * - ``heatMinOpTemperature``
      - float
      - °F
-     - Minimum operating temperature for the heating element. This sets the lower threshold at which the heating element can operate.
+     - Minimum heat pump operation temperature. Lowest tank temperature setpoint allowed in the current operating mode (95-113°F, default 95°F). When set, users can only set the target tank temperature at or above this threshold.
      - ``raw + 20``
    * - ``drOverrideStatus``
      - integer
