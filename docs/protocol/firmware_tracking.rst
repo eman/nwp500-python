@@ -40,7 +40,7 @@ The following table tracks known fields that have been introduced in firmware up
    * - ``heatMinOpTemperature``
      - Controller: 184614912, WiFi: 34013184
      - ``raw + 20``
-     - Minimum operating temperature for the heating element. Sets the lower threshold at which the heating element can operate.
+     - Minimum heat pump operation temperature. Lowest tank temperature setpoint allowed in the current operating mode (95-113°F, default 95°F).
 
 Reporting New Fields
 --------------------
@@ -127,18 +127,43 @@ Firmware Version History
 
 This section tracks observed firmware versions and their associated changes.
 
-**Latest Known Versions** (as of 2025-10-15):
+**Latest Known Versions** (as of 2025-11-18):
 
-- Controller SW Version: 184614912
-- Panel SW Version: 0 (not used on NWP500 devices)
-- WiFi SW Version: 34013184
+API Firmware Information (from /device/firmware/info endpoint):
+
+- **Software Code 33556241** (Controller):
+  
+  - Current Version: 184614912
+  - Downloaded Version: 0
+
+- **Software Code 268435985** (WiFi Module):
+  
+  - Current Version: 34013184
+  - Downloaded Version: None
+
+- **Software Code 268435761** (Unknown Module 1):
+  
+  - Current Version: 60454
+  - Downloaded Version: None
+
+- **Software Code 268435777** (Unknown Module 2):
+  
+  - Current Version: 60454
+  - Downloaded Version: None
 
 **Observed Features:**
 
-- These versions include support for ``heatMinOpTemperature`` field
+- Controller version 184614912 and WiFi version 34013184 include support for ``heatMinOpTemperature`` field
 - Recirculation pump fields (``recirc*``) are present but not yet documented
+- Additional modules (268435761, 268435777) with unknown purposes - may be related to auxiliary systems
 
-*Note: This tracking system was implemented on 2025-10-15. Historical firmware information is not available.*
+**Firmware Mapping Notes:**
+
+- Software Code 33556241: Appears to be the main controller firmware
+- Software Code 268435985: Likely WiFi/network module firmware
+- Software Codes 268435761, 268435777: Unknown purposes - potentially auxiliary modules or DSP/control chips
+
+*Tracking system updated on 2025-11-18 with current live device firmware versions.*
 
 Contributing
 ------------
