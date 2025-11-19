@@ -174,7 +174,9 @@ async def main():
                         f"  Fan RPM:                {status.current_fan_rpm}/{status.target_fan_rpm}"
                     )
                     print(f"  EEV Step:               {status.eev_step}")
-                    print(f"  Super Heat:             {status.current_super_heat:.1f}°F")
+                    print(
+                        f"  Super Heat:             {status.current_super_heat:.1f}°F"
+                    )
                     print(
                         f"  Flow Rate:              {status.currentDhwFlowRate:.1f} GPM"
                     )

@@ -99,7 +99,9 @@ async def main():
                     print(
                         f"  Temp Range: {feature.dhw_temperature_min}-{feature.dhw_temperature_max}°F"
                     )
-                    print(f"  Heat Pump: {'Yes' if feature.heatpump_use == 2 else 'No'}")
+                    print(
+                        f"  Heat Pump: {'Yes' if feature.heatpump_use == 2 else 'No'}"
+                    )
                     print(f"  Electric: {'Yes' if feature.electric_use == 2 else 'No'}")
 
                 # Subscribe to broader topics to catch all messages

@@ -399,7 +399,7 @@ class EnergyUsageTotal(NavienBaseModel):
     heat_element_usage: int = Field(default=0, alias="heUsage")
     heat_pump_time: int = Field(default=0, alias="hpTime")
     heat_element_time: int = Field(default=0, alias="heTime")
-    
+
     @property
     def total_usage(self) -> int:
         """Total energy usage (heat pump + heat element)."""
@@ -425,7 +425,7 @@ class EnergyUsageTotal(NavienBaseModel):
 
 class EnergyUsageDay(NavienBaseModel):
     """Daily energy usage data.
-    
+
     Note: The API returns a fixed-length array (30 elements) for each month,
     with unused days having all zeros. The day number is implicit from the
     array index (0-based).
@@ -435,7 +435,7 @@ class EnergyUsageDay(NavienBaseModel):
     heat_element_usage: int = Field(alias="heUsage")
     heat_pump_time: int = Field(alias="hpTime")
     heat_element_time: int = Field(alias="heTime")
-    
+
     @property
     def total_usage(self) -> int:
         """Total energy usage (heat pump + heat element)."""
