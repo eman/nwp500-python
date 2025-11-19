@@ -495,10 +495,10 @@ Complete energy usage response with daily breakdown.
 
    **Fields:**
 
-   * ``deviceType`` (int) - Device type
-   * ``macAddress`` (str) - Device MAC
-   * ``additionalValue`` (str) - Additional identifier
-   * ``typeOfUsage`` (int) - Usage type code
+   * ``device_type`` (int) - Device type
+   * ``mac_address`` (str) - Device MAC
+   * ``additional_value`` (str) - Additional identifier
+   * ``type_of_usage`` (int) - Usage type code
    * ``total`` (EnergyUsageTotal) - Total usage summary
    * ``usage`` (list[MonthlyEnergyData]) - Monthly data with daily breakdown
 
@@ -521,8 +521,8 @@ Complete energy usage response with daily breakdown.
               for day_num, day in enumerate(month_data.data, 1):
                   if day.total_usage > 0:
                       print(f"  Day {day_num}: {day.total_usage} Wh")
-                      print(f"    HP: {day.hpUsage} Wh ({day.hpTime}h)")
-                      print(f"    HE: {day.heUsage} Wh ({day.heTime}h)")
+                      print(f"    HP: {day.heat_pump_usage} Wh ({day.heat_pump_time}h)")
+                      print(f"    HE: {day.heat_element_usage} Wh ({day.heat_element_time}h)")
 
 EnergyUsageTotal
 ----------------
@@ -533,10 +533,10 @@ Summary totals for energy usage.
 
    **Fields:**
 
-   * ``heUsage`` (int) - Total heat element usage (Wh)
-   * ``hpUsage`` (int) - Total heat pump usage (Wh)
-   * ``heTime`` (int) - Total heat element time (hours)
-   * ``hpTime`` (int) - Total heat pump time (hours)
+   * ``heat_element_usage`` (int) - Total heat element usage (Wh)
+   * ``heat_pump_usage`` (int) - Total heat pump usage (Wh)
+   * ``heat_element_time`` (int) - Total heat element time (hours)
+   * ``heat_pump_time`` (int) - Total heat pump time (hours)
 
    **Computed Properties:**
 
@@ -566,10 +566,10 @@ Energy data for a single day.
 
    **Fields:**
 
-   * ``heUsage`` (int) - Heat element usage (Wh)
-   * ``hpUsage`` (int) - Heat pump usage (Wh)
-   * ``heTime`` (int) - Heat element time (hours)
-   * ``hpTime`` (int) - Heat pump time (hours)
+   * ``heat_element_usage`` (int) - Heat element usage (Wh)
+   * ``heat_pump_usage`` (int) - Heat pump usage (Wh)
+   * ``heat_element_time`` (int) - Heat element time (hours)
+   * ``heat_pump_time`` (int) - Heat pump time (hours)
 
    **Computed Properties:**
 
@@ -635,12 +635,12 @@ Complete MQTT command message.
 
    **Fields:**
 
-   * ``clientID`` (str) - MQTT client ID
-   * ``sessionID`` (str) - Session ID
-   * ``requestTopic`` (str) - Request topic
-   * ``responseTopic`` (str) - Response topic
+   * ``client_id`` (str) - MQTT client ID
+   * ``session_id`` (str) - Session ID
+   * ``request_topic`` (str) - Request topic
+   * ``response_topic`` (str) - Response topic
    * ``request`` (MqttRequest) - Request payload
-   * ``protocolVersion`` (int) - Protocol version (default: 2)
+   * ``protocol_version`` (int) - Protocol version (default: 2)
 
 MqttRequest
 -----------
@@ -652,12 +652,12 @@ MQTT request payload.
    **Fields:**
 
    * ``command`` (int) - Command code (see CommandCode)
-   * ``deviceType`` (int) - Device type
-   * ``macAddress`` (str) - Device MAC
-   * ``additionalValue`` (str) - Additional identifier
+   * ``device_type`` (int) - Device type
+   * ``mac_address`` (str) - Device MAC
+   * ``additional_value`` (str) - Additional identifier
    * ``mode`` (str, optional) - Mode parameter
    * ``param`` (list[int | float]) - Numeric parameters
-   * ``paramStr`` (str) - String parameters
+   * ``param_str`` (str) - String parameters
    * ``month`` (list[int], optional) - Month list for energy queries
    * ``year`` (int, optional) - Year for energy queries
 
