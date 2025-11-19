@@ -4,6 +4,11 @@ Device Status Fields
 
 This document lists the fields found in the ``status`` object of device status messages.
 
+.. warning::
+   This document describes the underlying protocol details. Most users should use the
+   Python client library (:doc:`../python_api/models`) instead of implementing
+   the protocol directly.
+
 .. list-table::
    :header-rows: 1
    :widths: 10 10 10 36 35

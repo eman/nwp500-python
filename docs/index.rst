@@ -112,17 +112,7 @@ Documentation Index
 
    api/modules
 
-.. toctree::
-   :maxdepth: 2
-   :caption: Protocol Reference
 
-   protocol/rest_api
-   protocol/mqtt_protocol
-   protocol/device_status
-   protocol/data_conversions
-   protocol/device_features
-   protocol/error_codes
-   protocol/firmware_tracking
 
 .. toctree::
    :maxdepth: 1
@@ -135,6 +125,18 @@ Documentation Index
    guides/event_system
    guides/command_queue
    guides/auto_recovery
+
+.. toctree::
+   :maxdepth: 2
+   :caption: Advanced: Protocol Reference
+
+   protocol/rest_api
+   protocol/mqtt_protocol
+   protocol/device_status
+   protocol/data_conversions
+   protocol/device_features
+   protocol/error_codes
+   protocol/firmware_tracking
 
 .. toctree::
    :maxdepth: 1

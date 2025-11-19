@@ -1,7 +1,12 @@
 Device Feature Fields
 =====================
 
-This document lists the fields found in the ``DeviceFeature`` object returned by MQTT device info requests.
+This document lists the fields found in the ``feature`` object (also known as
+
+.. warning::
+   This document describes the underlying protocol details. Most users should use the
+   Python client library (:doc:`../python_api/mqtt_client`) instead of implementing
+   the protocol directly.by MQTT device info requests.
 
 The DeviceFeature data contains comprehensive device capabilities, configuration, and firmware information received via MQTT when calling ``request_device_info()``. This data is much more detailed than the basic device information available through the REST API and corresponds to the actual device specifications and capabilities as documented in the official Navien NWP500 Installation and User manuals.
 

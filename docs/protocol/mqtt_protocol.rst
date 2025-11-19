@@ -5,11 +5,10 @@ MQTT Protocol
 This document describes the MQTT protocol used for real-time communication
 with Navien NWP500 devices via AWS IoT Core.
 
-.. note::
-   Most users should use the Python :doc:`../python_api/mqtt_client` rather than
-   implementing the protocol directly. This documentation is for
-   understanding the underlying protocol or implementing clients in other
-   languages.
+.. warning::
+   This document describes the underlying MQTT protocol. Most users should use the
+   Python client library (:doc:`../python_api/mqtt_client`) instead of implementing
+   the protocol directly.
 
 Overview
 ========
