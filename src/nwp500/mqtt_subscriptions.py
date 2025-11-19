@@ -127,8 +127,6 @@ class MqttSubscriptionManager:
         except (AttributeError, KeyError, TypeError) as e:
             _logger.error(f"Error processing message: {e}")
 
-
-
     async def subscribe(
         self,
         topic: str,
