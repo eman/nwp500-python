@@ -31,7 +31,7 @@ async def get_controller_serial_number(
 
     def on_feature(feature: DeviceFeature) -> None:
         if not future.done():
-            future.set_result(feature.controllerSerialNumber)
+            future.set_result(feature.controller_serial_number)
 
     await mqtt.subscribe_device_feature(device, on_feature)
     _logger.info("Requesting controller serial number...")
@@ -232,7 +232,7 @@ async def handle_set_mode_request(
                 )
                 _logger.info(
                     f"Mode change successful. New mode: "
-                    f"{status.operationMode.name}"
+                    f"{status.operation_mode.name}"
                 )
             else:
                 _logger.warning(
@@ -308,7 +308,7 @@ async def handle_set_dhw_temp_request(
                 )
                 _logger.info(
                     f"Temperature change successful. New target: "
-                    f"{status.dhwTargetTemperatureSetting}°F"
+                    f"{status.dhw_target_temperature_setting}°F"
                 )
             else:
                 _logger.warning(

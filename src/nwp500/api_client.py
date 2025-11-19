@@ -70,9 +70,11 @@ class NavienAPIClient:
 
         self.base_url = base_url.rstrip("/")
         self._auth_client = auth_client
-        self._session: aiohttp.ClientSession = session or auth_client._session
-        if self._session is None:
+        self._auth_client = auth_client
+        _session = session or auth_client._session
+        if _session is None:
             raise ValueError("auth_client must have an active session")
+        self._session = _session
         self._owned_session = (
             False  # Never own session when auth_client is provided
         )

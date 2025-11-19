@@ -23,7 +23,7 @@ _logger = logging.getLogger(__name__)
 
 def _device_bool_validator(v: Any) -> bool:
     """Convert device boolean (2=True, 0/1=False)."""
-    return v == 2
+    return bool(v == 2)
 
 
 def _add_20_validator(v: Any) -> float:
@@ -164,6 +164,7 @@ class TOUInfo(NavienBaseModel):
         strict: Optional[bool] = None,
         from_attributes: Optional[bool] = None,
         context: Optional[dict[str, Any]] = None,
+        **kwargs: Any,
     ) -> "TOUInfo":
         # Handle nested structure where fields are in 'touInfo'
         if isinstance(obj, dict):

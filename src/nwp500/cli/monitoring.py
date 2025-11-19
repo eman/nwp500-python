@@ -31,8 +31,8 @@ async def handle_monitoring(
 
     def on_status_update(status: DeviceStatus) -> None:
         _logger.info(
-            f"Received status update: Temp={status.dhwTemperature}°F, "
-            f"Power={'ON' if status.dhwUse else 'OFF'}"
+            f"Received status update: Temp={status.dhw_temperature}°F, "
+            f"Power={'ON' if status.dhw_use else 'OFF'}"
         )
         write_status_to_csv(output_file, status)
 
