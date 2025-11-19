@@ -125,6 +125,7 @@ Documentation Index
    guides/event_system
    guides/command_queue
    guides/auto_recovery
+   guides/advanced_features_explained
 
 .. toctree::
    :maxdepth: 2
