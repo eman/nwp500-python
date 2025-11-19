@@ -282,7 +282,7 @@ class DeviceStatus(NavienBaseModel):
     he_upper_off_diff_temp_setting: Div10
     he_lower_on_diff_temp_setting: Div10 = Field(
         alias="heLowerOnTDiffempSetting"
-    )  # Handle typo
+    )  # Handle API typo: heLowerOnTDiffempSetting -> heLowerOnDiffTempSetting
     he_lower_off_diff_temp_setting: Div10
     recirc_dhw_flow_rate: Div10
 
