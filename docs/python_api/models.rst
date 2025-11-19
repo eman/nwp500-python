@@ -283,14 +283,14 @@ Complete real-time device status with 100+ fields.
 
    **Key Temperature Fields:**
 
-   * ``dhwTemperature`` (float) - Current water temperature (°F or °C)
-   * ``dhwTemperatureSetting`` (float) - Target temperature setting
-   * ``dhwTargetTemperatureSetting`` (float) - Target with offsets applied
-   * ``tankUpperTemperature`` (float) - Upper tank sensor
-   * ``tankLowerTemperature`` (float) - Lower tank sensor
-   * ``currentInletTemperature`` (float) - Cold water inlet temperature
-   * ``outsideTemperature`` (float) - Outdoor temperature
-   * ``ambientTemperature`` (float) - Ambient air temperature
+   * ``dhw_temperature`` (float) - Current water temperature (°F or °C)
+   * ``dhw_temperature_setting`` (float) - Target temperature setting
+   * ``dhw_target_temperature_setting`` (float) - Target with offsets applied
+   * ``tank_upper_temperature`` (float) - Upper tank sensor
+   * ``tank_lower_temperature`` (float) - Lower tank sensor
+   * ``current_inlet_temperature`` (float) - Cold water inlet temperature
+   * ``outside_temperature`` (float) - Outdoor temperature
+   * ``ambient_temperature`` (float) - Ambient air temperature
 
    .. note::
       Temperature display values are 20°F higher than message values.
@@ -298,66 +298,66 @@ Complete real-time device status with 100+ fields.
 
    **Key Power/Energy Fields:**
 
-   * ``currentInstPower`` (float) - Current power consumption (Watts)
-   * ``totalEnergyCapacity`` (float) - Total energy capacity (%)
-   * ``availableEnergyCapacity`` (float) - Available energy (%)
-   * ``dhwChargePer`` (float) - DHW charge percentage
+   * ``current_inst_power`` (float) - Current power consumption (Watts)
+   * ``total_energy_capacity`` (float) - Total energy capacity (%)
+   * ``available_energy_capacity`` (float) - Available energy (%)
+   * ``dhw_charge_per`` (float) - DHW charge percentage
 
    **Operation Mode Fields:**
 
-   * ``operationMode`` (CurrentOperationMode) - Current operational state
-   * ``dhwOperationSetting`` (DhwOperationSetting) - User's mode preference
-   * ``temperatureType`` (TemperatureUnit) - Temperature unit
+   * ``operation_mode`` (CurrentOperationMode) - Current operational state
+   * ``dhw_operation_setting`` (DhwOperationSetting) - User's mode preference
+   * ``temperature_type`` (TemperatureUnit) - Temperature unit
 
    **Boolean Status Fields:**
 
-   * ``operationBusy`` (bool) - Device actively heating water
-   * ``dhwUse`` (bool) - Water being used (short-term detection)
-   * ``dhwUseSustained`` (bool) - Water being used (sustained)
-   * ``compUse`` (bool) - Compressor/heat pump running
-   * ``heatUpperUse`` (bool) - Upper electric heater active
-   * ``heatLowerUse`` (bool) - Lower electric heater active
-   * ``evaFanUse`` (bool) - Evaporator fan running
-   * ``antiLegionellaUse`` (bool) - Anti-Legionella enabled
-   * ``antiLegionellaOperationBusy`` (bool) - Anti-Legionella cycle active
-   * ``programReservationUse`` (bool) - Reservation schedule enabled
-   * ``freezeProtectionUse`` (bool) - Freeze protection enabled
+   * ``operation_busy`` (bool) - Device actively heating water
+   * ``dhw_use`` (bool) - Water being used (short-term detection)
+   * ``dhw_use_sustained`` (bool) - Water being used (sustained)
+   * ``comp_use`` (bool) - Compressor/heat pump running
+   * ``heat_upper_use`` (bool) - Upper electric heater active
+   * ``heat_lower_use`` (bool) - Lower electric heater active
+   * ``eva_fan_use`` (bool) - Evaporator fan running
+   * ``anti_legionella_use`` (bool) - Anti-Legionella enabled
+   * ``anti_legionella_operation_busy`` (bool) - Anti-Legionella cycle active
+   * ``program_reservation_use`` (bool) - Reservation schedule enabled
+   * ``freeze_protection_use`` (bool) - Freeze protection enabled
 
    **Error/Diagnostic Fields:**
 
-   * ``errorCode`` (int) - Error code (0 = no error)
-   * ``subErrorCode`` (int) - Sub-error code
-   * ``smartDiagnostic`` (int) - Smart diagnostic status
-   * ``faultStatus1`` (int) - Fault status flags
-   * ``faultStatus2`` (int) - Additional fault flags
+   * ``error_code`` (int) - Error code (0 = no error)
+   * ``sub_error_code`` (int) - Sub-error code
+   * ``smart_diagnostic`` (int) - Smart diagnostic status
+   * ``fault_status1`` (int) - Fault status flags
+   * ``fault_status2`` (int) - Additional fault flags
 
    **Network/Communication:**
 
-   * ``wifiRssi`` (int) - WiFi signal strength (dBm)
+   * ``wifi_rssi`` (int) - WiFi signal strength (dBm)
 
    **Vacation/Schedule:**
 
-   * ``vacationDaySetting`` (int) - Vacation days configured
-   * ``vacationDayElapsed`` (int) - Vacation days elapsed
-   * ``antiLegionellaPeriod`` (int) - Anti-Legionella cycle period
+   * ``vacation_day_setting`` (int) - Vacation days configured
+   * ``vacation_day_elapsed`` (int) - Vacation days elapsed
+   * ``anti_legionella_period`` (int) - Anti-Legionella cycle period
 
    **Time-of-Use (TOU):**
 
-   * ``touStatus`` (int) - TOU status
-   * ``touOverrideStatus`` (int) - TOU override status
+   * ``tou_status`` (int) - TOU status
+   * ``tou_override_status`` (int) - TOU override status
 
    **Heat Pump Detailed Status:**
 
-   * ``targetFanRpm`` (int) - Target fan RPM
-   * ``currentFanRpm`` (int) - Current fan RPM
-   * ``fanPwm`` (int) - Fan PWM duty cycle
-   * ``mixingRate`` (float) - Mixing valve rate
-   * ``eevStep`` (int) - Electronic expansion valve position
-   * ``dischargeTemperature`` (float) - Compressor discharge temp
-   * ``suctionTemperature`` (float) - Compressor suction temp
-   * ``evaporatorTemperature`` (float) - Evaporator temperature
-   * ``targetSuperHeat`` (float) - Target superheat
-   * ``currentSuperHeat`` (float) - Current superheat
+   * ``target_fan_rpm`` (int) - Target fan RPM
+   * ``current_fan_rpm`` (int) - Current fan RPM
+   * ``fan_pwm`` (int) - Fan PWM duty cycle
+   * ``mixing_rate`` (float) - Mixing valve rate
+   * ``eev_step`` (int) - Electronic expansion valve position
+   * ``discharge_temperature`` (float) - Compressor discharge temp
+   * ``suction_temperature`` (float) - Compressor suction temp
+   * ``evaporator_temperature`` (float) - Evaporator temperature
+   * ``target_super_heat`` (float) - Target superheat
+   * ``current_super_heat`` (float) - Current superheat
 
    **Example:**
 
@@ -409,50 +409,50 @@ Device capabilities, features, and firmware information.
 
    **Firmware Version Fields:**
 
-   * ``controllerSwVersion`` (int) - Controller firmware version
-   * ``panelSwVersion`` (int) - Panel firmware version
-   * ``wifiSwVersion`` (int) - WiFi module firmware version
-   * ``controllerSwCode`` (int) - Controller software code
-   * ``panelSwCode`` (int) - Panel software code
-   * ``wifiSwCode`` (int) - WiFi software code
-   * ``controllerSerialNumber`` (str) - Controller serial number
+   * ``controller_sw_version`` (int) - Controller firmware version
+   * ``panel_sw_version`` (int) - Panel firmware version
+   * ``wifi_sw_version`` (int) - WiFi module firmware version
+   * ``controller_sw_code`` (int) - Controller software code
+   * ``panel_sw_code`` (int) - Panel software code
+   * ``wifi_sw_code`` (int) - WiFi software code
+   * ``controller_serial_number`` (str) - Controller serial number
 
    **Device Configuration:**
 
-   * ``countryCode`` (int) - Country code
-   * ``modelTypeCode`` (int) - Model type
-   * ``controlTypeCode`` (int) - Control type
-   * ``volumeCode`` (int) - Tank volume code
-   * ``tempFormulaType`` (int) - Temperature formula type
-   * ``temperatureType`` (TemperatureUnit) - Temperature unit
+   * ``country_code`` (int) - Country code
+   * ``model_type_code`` (int) - Model type
+   * ``control_type_code`` (int) - Control type
+   * ``volume_code`` (int) - Tank volume code
+   * ``temp_formula_type`` (int) - Temperature formula type
+   * ``temperature_type`` (TemperatureUnit) - Temperature unit
 
    **Temperature Limits:**
 
-   * ``dhwTemperatureMin`` (int) - Minimum DHW temperature
-   * ``dhwTemperatureMax`` (int) - Maximum DHW temperature
-   * ``freezeProtectionTempMin`` (int) - Min freeze protection temp
-   * ``freezeProtectionTempMax`` (int) - Max freeze protection temp
+   * ``dhw_temperature_min`` (int) - Minimum DHW temperature
+   * ``dhw_temperature_max`` (int) - Maximum DHW temperature
+   * ``freeze_protection_temp_min`` (int) - Min freeze protection temp
+   * ``freeze_protection_temp_max`` (int) - Max freeze protection temp
 
    **Feature Flags (all int, 0=disabled, 1=enabled):**
 
-   * ``powerUse`` - Power control supported
-   * ``dhwUse`` - DHW functionality
-   * ``dhwTemperatureSettingUse`` - Temperature control
-   * ``energyUsageUse`` - Energy monitoring supported
-   * ``antiLegionellaSettingUse`` - Anti-Legionella supported
-   * ``programReservationUse`` - Reservation scheduling supported
-   * ``freezeProtectionUse`` - Freeze protection available
-   * ``heatpumpUse`` - Heat pump mode available
-   * ``electricUse`` - Electric mode available
-   * ``energySaverUse`` - Energy Saver mode available
-   * ``highDemandUse`` - High Demand mode available
-   * ``smartDiagnosticUse`` - Smart diagnostics available
-   * ``wifiRssiUse`` - WiFi signal strength available
-   * ``holidayUse`` - Holiday/vacation mode
-   * ``mixingValueUse`` - Mixing valve
-   * ``drSettingUse`` - Demand response
-   * ``dhwRefillUse`` - DHW refill
-   * ``ecoUse`` - Eco mode
+   * ``power_use`` - Power control supported
+   * ``dhw_use`` - DHW functionality
+   * ``dhw_temperature_setting_use`` - Temperature control
+   * ``energy_usage_use`` - Energy monitoring supported
+   * ``anti_legionella_setting_use`` - Anti-Legionella supported
+   * ``program_reservation_use`` - Reservation scheduling supported
+   * ``freeze_protection_use`` - Freeze protection available
+   * ``heatpump_use`` - Heat pump mode available
+   * ``electric_use`` - Electric mode available
+   * ``energy_saver_use`` - Energy Saver mode available
+   * ``high_demand_use`` - High Demand mode available
+   * ``smart_diagnostic_use`` - Smart diagnostics available
+   * ``wifi_rssi_use`` - WiFi signal strength available
+   * ``holiday_use`` - Holiday/vacation mode
+   * ``mixing_value_use`` - Mixing valve
+   * ``dr_setting_use`` - Demand response
+   * ``dhw_refill_use`` - DHW refill
+   * ``eco_use`` - Eco mode
 
    **Example:**
 
