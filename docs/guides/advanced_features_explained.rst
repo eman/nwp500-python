@@ -16,12 +16,12 @@ Weather-Responsive Heating
 ==========================
 
 Feature Overview
-^^^^^^^^^^^^^^^^
+----------------
 
 The device continuously monitors ambient air temperature to optimize heat pump performance and adjust heating strategies. This enables the system to maintain comfort while adapting to seasonal conditions automatically.
 
 Technical Implementation
-^^^^^^^^^^^^^^^^^^^^^^^^^
+------------------------
 
 **Data Sources**:
 
@@ -31,7 +31,7 @@ Technical Implementation
 
 
 How It Works
-^^^^^^^^^^^^
+------------
 
 **Temperature Thresholds and Heating Adjustments**:
 
@@ -78,7 +78,7 @@ The device maintains internal target superheat values that adjust based on ambie
 - **Recovery Override**: Pre-charging during known demand periods (morning peak)
 
 Practical Applications
-^^^^^^^^^^^^^^^^^^^^^^^
+----------------------
 
 **Morning Peak Scenario (40°F Ambient)**:
 
@@ -102,7 +102,7 @@ Practical Applications
 4. Achieves 3.5+ COP (for every 1 kW electrical, 3.5 kW of heat)
 
 Integration with MQTT Status Message
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+------------------------------------
 
 The ``outsideTemperature`` field is transmitted in the device status update. Python clients can monitor this field:
 
@@ -120,7 +120,7 @@ Demand Response Integration (CTA-2045)
 ======================================
 
 Feature Overview
-^^^^^^^^^^^^^^^^
+----------------
 
 The NWP500 supports demand response signals per the CTA-2045 (Consumer Technology Association) standard, enabling integration with smart grid programs and demand response events.
 
@@ -129,9 +129,9 @@ The NWP500 supports demand response signals per the CTA-2045 (Consumer Technolog
 A protocol that allows utilities to send control signals to networked devices (like water heaters) to manage demand during peak periods or grid stress conditions.
 
 Technical Implementation
-^^^^^^^^^^^^^^^^^^^^^^^^^
+------------------------
 DR Event Status Field
-^^^^^^^^^^^^^^^^^^^^^
+~~~~~~~~~~~~~~~~~~~~~
 
 **Field**: ``drEventStatus`` (bitfield)
 
@@ -186,7 +186,7 @@ DR Event Status Field
     4:30 PM Normal operation restored      0b00000000       Resume standard schedule
 
 DR Override Status Field
-^^^^^^^^^^^^^^^^^^^^^^^^
+~~~~~~~~~~~~~~~~~~~~~~~~
 
 **Field**: ``drOverrideStatus`` (integer flag)
 
@@ -207,7 +207,7 @@ DR Override Status Field
 7. After override period expires, device returns to DR command compliance
 
 Implementation in Device Firmware
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 **Decision Tree** (inferred from status fields):
 
@@ -231,13 +231,13 @@ Implementation in Device Firmware
 4. **Cost Reduction**: Shift heating to low-price periods automatically
 
 Utility Integration Requirements
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 To use demand response with your NWP500:
 
 
 Tank Temperature Sensors
-^^^^^^^^^^^^^^^^^^^^^^^^
+------------------------
 
 **Upper Tank Sensor** (``tankUpperTemperature``)
 
@@ -256,7 +256,7 @@ Tank Temperature Sensors
 - **Control Target**: Used to trigger lower electric heating element and lower heat pump stage
 
 Tank Stratification Explained
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 **What Is Stratification?**
 
@@ -282,7 +282,7 @@ In a vertical tank, naturally occurring density differences create layers:
 4. **User Comfort**: Upper zone always available at target temperature for draw
 
 Practical Stratification Scenarios
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 **Scenario 1: Excellent Stratification (Efficient)**
 
@@ -325,7 +325,7 @@ Practical Stratification Scenarios
     → Device may alert or switch to safety mode
 
 Device Control Strategy Based on Stratification
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 **Two-Stage Heating with Stratification**:
 
@@ -365,7 +365,7 @@ Device Control Strategy Based on Stratification
 - **Optimal**: ~25-30°F differential maximizes recovery time vs. efficiency tradeoff
 
 Heat Pump Integration with Stratification
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 The two-stage control extends to heat pump operation:
 
@@ -379,7 +379,7 @@ Modern control systems may use "superheat modulation" where:
 - Looser superheat (safer operation) when stratification poor
 
 Monitoring Stratification from Python
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. code-block:: python
 
@@ -416,7 +416,7 @@ Monitoring Stratification from Python
         }
 
 Factors Affecting Stratification
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 **Positive Factors** (Preserve Stratification):
 
