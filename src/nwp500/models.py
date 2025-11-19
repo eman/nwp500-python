@@ -20,9 +20,11 @@ _logger = logging.getLogger(__name__)
 # Conversion Helpers & Validators
 # ============================================================================
 
+
 def _device_bool_validator(v: Any) -> bool:
     """Convert device boolean (2=True, 0/1=False)."""
     return v == 2
+
 
 def _add_20_validator(v: Any) -> float:
     """Add 20 to the value (temperature offset)."""
@@ -30,11 +32,13 @@ def _add_20_validator(v: Any) -> float:
         return float(v) + 20.0
     return float(v)
 
+
 def _div_10_validator(v: Any) -> float:
     """Divide by 10."""
     if isinstance(v, (int, float)):
         return float(v) / 10.0
     return float(v)
+
 
 def _decicelsius_to_fahrenheit(v: Any) -> float:
     """Convert decicelsius (tenths of Celsius) to Fahrenheit."""
@@ -42,6 +46,7 @@ def _decicelsius_to_fahrenheit(v: Any) -> float:
         celsius = float(v) / 10.0
         return (celsius * 9 / 5) + 32
     return float(v)
+
 
 # Reusable Annotated types for conversions
 DeviceBool = Annotated[bool, BeforeValidator(_device_bool_validator)]
@@ -52,15 +57,17 @@ DeciCelsiusToF = Annotated[float, BeforeValidator(_decicelsius_to_fahrenheit)]
 
 class NavienBaseModel(BaseModel):
     """Base model for all Navien models."""
+
     model_config = ConfigDict(
         alias_generator=to_camel,
         populate_by_name=True,
-        extra='ignore'  # Ignore unknown fields by default
+        extra="ignore",  # Ignore unknown fields by default
     )
 
 
 class DhwOperationSetting(Enum):
     """DHW operation setting modes (user-configured heating preferences)."""
+
     HEAT_PUMP = 1
     ELECTRIC = 2
     ENERGY_SAVER = 3
@@ -71,6 +78,7 @@ class DhwOperationSetting(Enum):
 
 class CurrentOperationMode(Enum):
     """Current operation mode (real-time operational state)."""
+
     STANDBY = 0
     HEAT_PUMP_MODE = 32
     HYBRID_EFFICIENCY_MODE = 64
@@ -79,12 +87,14 @@ class CurrentOperationMode(Enum):
 
 class TemperatureUnit(Enum):
     """Temperature unit enumeration."""
+
     CELSIUS = 1
     FAHRENHEIT = 2
 
 
 class DeviceInfo(NavienBaseModel):
     """Device information from API."""
+
     home_seq: int = 0
     mac_address: str = ""
     additional_value: str = ""
@@ -96,6 +106,7 @@ class DeviceInfo(NavienBaseModel):
 
 class Location(NavienBaseModel):
     """Location information for a device."""
+
     state: Optional[str] = None
     city: Optional[str] = None
     address: Optional[str] = None
@@ -106,12 +117,14 @@ class Location(NavienBaseModel):
 
 class Device(NavienBaseModel):
     """Complete device information including location."""
+
     device_info: DeviceInfo
     location: Location
 
 
 class FirmwareInfo(NavienBaseModel):
     """Firmware information for a device."""
+
     mac_address: str = ""
     additional_value: str = ""
     device_type: int = 52
@@ -123,6 +136,7 @@ class FirmwareInfo(NavienBaseModel):
 
 class TOUSchedule(NavienBaseModel):
     """Time of Use schedule information."""
+
     season: int = 0
     intervals: list[dict[str, Any]] = Field(
         default_factory=list, alias="interval"
@@ -131,6 +145,7 @@ class TOUSchedule(NavienBaseModel):
 
 class TOUInfo(NavienBaseModel):
     """Time of Use information."""
+
     register_path: str = ""
     source_type: str = ""
     controller_id: str = ""
@@ -358,6 +373,7 @@ class DeviceFeature(NavienBaseModel):
 
 class MqttRequest(NavienBaseModel):
     """MQTT command request payload."""
+
     command: int
     device_type: int
     mac_address: str
@@ -371,6 +387,7 @@ class MqttRequest(NavienBaseModel):
 
 class MqttCommand(NavienBaseModel):
     """Represents an MQTT command message."""
+
     client_id: str = Field(alias="clientID")
     session_id: str = Field(alias="sessionID")
     request_topic: str
@@ -381,6 +398,7 @@ class MqttCommand(NavienBaseModel):
 
 class EnergyUsageTotal(NavienBaseModel):
     """Total energy usage data."""
+
     total_usage: int
     heat_pump_usage: int
     heat_element_usage: int
@@ -400,6 +418,7 @@ class EnergyUsageTotal(NavienBaseModel):
 
 class EnergyUsageDay(NavienBaseModel):
     """Daily energy usage data."""
+
     day: int
     total_usage: int
     heat_pump_usage: int
@@ -410,6 +429,7 @@ class EnergyUsageDay(NavienBaseModel):
 
 class EnergyUsageResponse(NavienBaseModel):
     """Response for energy usage query."""
+
     total: EnergyUsageTotal
     daily: list[EnergyUsageDay]
 

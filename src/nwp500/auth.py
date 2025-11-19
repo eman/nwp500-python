@@ -37,10 +37,9 @@ _logger = logging.getLogger(__name__)
 
 class NavienBaseModel(BaseModel):
     """Base model for Navien authentication models."""
+
     model_config = ConfigDict(
-        alias_generator=to_camel,
-        populate_by_name=True,
-        extra='ignore'
+        alias_generator=to_camel, populate_by_name=True, extra="ignore"
     )
 
 
@@ -82,16 +81,16 @@ class AuthTokens(NavienBaseModel):
     _expires_at: datetime = PrivateAttr()
     _aws_expires_at: Optional[datetime] = PrivateAttr(default=None)
 
-    @model_validator(mode='before')
+    @model_validator(mode="before")
     @classmethod
     def handle_empty_aliases(cls, data: Any) -> Any:
         """Handle empty camelCase aliases with snake_case fallbacks."""
         if isinstance(data, dict):
             # Fields to check for fallback
             fields_to_check = [
-                ('accessToken', 'access_token'),
-                ('accessKeyId', 'access_key_id'),
-                ('secretKey', 'secret_key'),
+                ("accessToken", "access_token"),
+                ("accessKeyId", "access_key_id"),
+                ("secretKey", "secret_key"),
             ]
 
             for camel, snake in fields_to_check:
@@ -136,7 +135,7 @@ class AuthTokens(NavienBaseModel):
         Returns:
             Dictionary with snake_case keys suitable for JSON serialization
         """
-        return self.model_dump(mode='json')
+        return self.model_dump(mode="json")
 
     @property
     def expires_at(self) -> datetime:
@@ -206,7 +205,7 @@ class AuthenticationResponse(NavienBaseModel):
             "msg": response_data.get("msg", "SUCCESS"),
             "userInfo": data.get("userInfo", {}),
             "tokens": data.get("token", {}),
-            "legal": data.get("legal", [])
+            "legal": data.get("legal", []),
         }
 
         return cls.model_validate(model_data)
