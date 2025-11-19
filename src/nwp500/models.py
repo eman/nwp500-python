@@ -312,10 +312,6 @@ class DeviceStatus(NavienBaseModel):
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "DeviceStatus":
         """Compatibility method for existing code."""
-        # Handle the typo field explicitly if needed, though alias handles it
-        if "heLowerOnTDiffempSetting" in data:
-            # Pydantic alias will handle this, but if we want to be safe
-            pass
         return cls.model_validate(data)
 
 
