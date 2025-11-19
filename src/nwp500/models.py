@@ -156,7 +156,6 @@ class TOUInfo(NavienBaseModel):
     schedule: list[TOUSchedule] = Field(default_factory=list)
 
     @classmethod
-    @classmethod
     def model_validate(
         cls,
         obj: Any,
