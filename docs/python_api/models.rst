@@ -140,7 +140,7 @@ Temperature scale enumeration.
    .. code-block:: python
 
       def on_status(status):
-          if status.temperatureType == TemperatureUnit.FAHRENHEIT:
+          if status.temperature_type == TemperatureUnit.FAHRENHEIT:
               print(f"Temperature: {status.dhw_temperature}°F")
           else:
               print(f"Temperature: {status.dhw_temperature}°C")
@@ -367,19 +367,19 @@ Complete real-time device status with 100+ fields.
           # Temperature monitoring
           print(f"Water: {status.dhw_temperature}°F")
           print(f"Target: {status.dhw_temperatureSetting}°F")
-          print(f"Upper Tank: {status.tankUpperTemperature}°F")
-          print(f"Lower Tank: {status.tankLowerTemperature}°F")
+          print(f"Upper Tank: {status.tank_upper_temperature}°F")
+          print(f"Lower Tank: {status.tank_lower_temperature}°F")
 
           # Power consumption
           print(f"Power: {status.current_inst_power}W")
-          print(f"Energy: {status.availableEnergyCapacity}%")
+          print(f"Energy: {status.available_energy_capacity}%")
 
           # Operation mode
           print(f"Mode: {status.dhw_operation_setting.name}")
           print(f"State: {status.operation_mode.name}")
 
           # Active heating
-          if status.operationBusy:
+          if status.operation_busy:
               print("Heating water:")
               if status.comp_use:
                   print("  - Heat pump running")
@@ -389,16 +389,16 @@ Complete real-time device status with 100+ fields.
                   print("  - Lower heater active")
 
           # Water usage detection
-          if status.dhwUse:
+          if status.dhw_use:
               print("Water usage detected (short-term)")
-          if status.dhwUseSustained:
+          if status.dhw_useSustained:
               print("Water usage detected (sustained)")
 
           # Errors
-          if status.errorCode != 0:
-              print(f"ERROR: {status.errorCode}")
-              if status.subErrorCode != 0:
-                  print(f"  Sub-error: {status.subErrorCode}")
+          if status.error_code != 0:
+              print(f"ERROR: {status.error_code}")
+              if status.sub_error_code != 0:
+                  print(f"  Sub-error: {status.sub_error_code}")
 
 DeviceFeature
 -------------
@@ -459,28 +459,28 @@ Device capabilities, features, and firmware information.
    .. code-block:: python
 
       def on_feature(feature):
-          print(f"Serial: {feature.controllerSerialNumber}")
-          print(f"Firmware: {feature.controllerSwVersion}")
-          print(f"WiFi: {feature.wifiSwVersion}")
+          print(f"Serial: {feature.controller_serial_number}")
+          print(f"Firmware: {feature.controller_sw_version}")
+          print(f"WiFi: {feature.wifi_sw_version}")
 
           print(f"\nTemperature Range:")
-          print(f"  Min: {feature.dhwTemperatureMin}°F")
-          print(f"  Max: {feature.dhwTemperatureMax}°F")
+          print(f"  Min: {feature.dhw_temperature_min}°F")
+          print(f"  Max: {feature.dhw_temperature_max}°F")
 
           print(f"\nSupported Features:")
-          if feature.energyUsageUse:
+          if feature.energy_usage_use:
               print("  [OK] Energy monitoring")
-          if feature.antiLegionellaSettingUse:
+          if feature.anti_legionella_setting_use:
               print("  [OK] Anti-Legionella")
-          if feature.programReservationUse:
+          if feature.program_reservation_use:
               print("  [OK] Reservations")
-          if feature.heatpumpUse:
+          if feature.heatpump_use:
               print("  [OK] Heat pump mode")
-          if feature.electricUse:
+          if feature.electric_use:
               print("  [OK] Electric mode")
-          if feature.energySaverUse:
+          if feature.energy_saver_use:
               print("  [OK] Energy Saver mode")
-          if feature.highDemandUse:
+          if feature.high_demand_use:
               print("  [OK] High Demand mode")
 
 Energy Models
@@ -680,7 +680,7 @@ Best Practices
    .. code-block:: python
 
       def on_feature(feature):
-          if feature.energyUsageUse:
+          if feature.energy_usage_use:
               # Device supports energy monitoring
               await mqtt.request_energy_usage(device, year, months)
 
