@@ -20,7 +20,7 @@ from awscrt.exceptions import AwsCrtError
 from .events import EventEmitter
 from .exceptions import MqttNotConnectedError
 from .models import Device, DeviceFeature, DeviceStatus, EnergyUsageResponse
-from .mqtt_utils import redact_topic
+from .mqtt_utils import redact_topic, topic_matches_pattern
 
 __author__ = "Emmanuel Levijarvi"
 
@@ -115,7 +115,7 @@ class MqttSubscriptionManager:
                 subscription_pattern,
                 handlers,
             ) in self._message_handlers.items():
-                if self._topic_matches_pattern(topic, subscription_pattern):
+                if topic_matches_pattern(topic, subscription_pattern):
                     for handler in handlers:
                         try:
                             handler(topic, message)
@@ -127,64 +127,7 @@ class MqttSubscriptionManager:
         except (AttributeError, KeyError, TypeError) as e:
             _logger.error(f"Error processing message: {e}")
 
-    def _topic_matches_pattern(self, topic: str, pattern: str) -> bool:
-        """
-        Check if a topic matches a subscription pattern with wildcards.
 
-        Supports MQTT wildcards:
-        - '+' matches a single level
-        - '#' matches multiple levels (must be at end)
-
-        Args:
-            topic: Actual topic (e.g., "cmd/52/navilink-ABC/status")
-            pattern: Pattern with wildcards (e.g., "cmd/52/+/#")
-
-        Returns:
-            True if topic matches pattern
-
-        Examples:
-            >>> _topic_matches_pattern("cmd/52/device1/status",
-            "cmd/52/+/status")
-            True
-            >>> _topic_matches_pattern("cmd/52/device1/status/extra",
-            "cmd/52/device1/#")
-            True
-        """
-        # Handle exact match
-        if topic == pattern:
-            return True
-
-        # Handle wildcards
-        topic_parts = topic.split("/")
-        pattern_parts = pattern.split("/")
-
-        # Multi-level wildcard # matches everything after
-        if "#" in pattern_parts:
-            hash_idx = pattern_parts.index("#")
-            # Must be at the end
-            if hash_idx != len(pattern_parts) - 1:
-                return False
-            # Topic must have at least as many parts as before the #
-            if len(topic_parts) < hash_idx:
-                return False
-            # Check parts before # with + wildcard support
-            for i in range(hash_idx):
-                if (
-                    pattern_parts[i] != "+"
-                    and topic_parts[i] != pattern_parts[i]
-                ):
-                    return False
-            return True
-
-        # Single-level wildcard + matches one level
-        if len(topic_parts) != len(pattern_parts):
-            return False
-
-        for topic_part, pattern_part in zip(topic_parts, pattern_parts):
-            if pattern_part != "+" and topic_part != pattern_part:
-                return False
-
-        return True
 
     async def subscribe(
         self,

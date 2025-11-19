@@ -126,11 +126,11 @@ async def main():
     parser = argparse.ArgumentParser(
         description="Token restoration example for nwp500-python"
     )
-    group = parser.add_mutually_exclusive_group(required=True)
+    group = parser.add_mutually_exclusive_group(required=False)
     group.add_argument(
         "--save",
         action="store_true",
-        help="Authenticate and save tokens for future use",
+        help="Authenticate and save tokens for future use (default)",
     )
     group.add_argument(
         "--restore",
@@ -141,10 +141,11 @@ async def main():
     args = parser.parse_args()
 
     try:
-        if args.save:
-            await save_tokens_example()
-        else:
+        if args.restore:
             await restore_tokens_example()
+        else:
+            # Default to save mode if --save is specified or no args provided
+            await save_tokens_example()
     except Exception as e:
         logger.error(f"Error: {e}")
         raise
