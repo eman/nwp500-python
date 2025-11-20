@@ -2,6 +2,89 @@
 Changelog
 =========
 
+Version 6.0.3 (2025-11-20)
+==========================
+
+**BREAKING CHANGES**: Migration from custom dataclass-based models to Pydantic BaseModel implementations with automatic field validation and alias handling.
+
+Removed
+-------
+
+- Removed legacy dataclass implementations for models (DeviceInfo, Location, Device, FirmwareInfo, DeviceStatus, DeviceFeature, EnergyUsage*). All models now inherit from ``NavienBaseModel`` (Pydantic).
+- Removed manual ``from_dict`` constructors relying on camelCase key mapping logic.
+- Removed field metadata conversion system (``meta()`` + ``apply_field_conversions()``) in favor of Pydantic ``BeforeValidator`` pipeline.
+
+Changed
+-------
+
+- Models now use snake_case attribute names consistently; camelCase keys from API/MQTT are mapped automatically via Pydantic ``alias_generator=to_camel``.
+- Boolean device fields now validated via ``DeviceBool`` Annotated type (device value 2 -> True, 0/1 -> False) replacing manual conversion code.
+- Temperature offset (+20), scale division (/10) and decicelsius-to-Fahrenheit conversions implemented with lightweight ``BeforeValidator`` functions (``Add20``, ``Div10``, ``DeciCelsiusToF``) instead of post-processing.
+- Enum parsing now handled directly by Pydantic; unknown values default safely via explicit Field defaults instead of try/except conversion loops.
+- Field names updated (examples & docs) to snake_case: e.g. ``operationMode`` -> ``operation_mode``, ``dhwTemperatureSetting`` -> ``dhw_temperature_setting``.
+- API typo handled using Field alias (``heLowerOnTDiffempSetting`` -> ``he_lower_on_diff_temp_setting``) rather than custom dictionary mutation.
+- DeviceStatus conversion now performed on parse instead of separate transformation step, improving performance and reducing memory copies.
+- Improved validation error messages from Pydantic on malformed payloads.
+- Simplified energy usage model accessors; removed manual percentage methods duplication.
+
+Added
+-----
+
+- Introduced ``NavienBaseModel`` configuring alias generation, population by name, and ignoring unknown fields for forward compatibility.
+- Added structured Annotated types: ``DeviceBool``, ``Add20``, ``Div10``, ``DeciCelsiusToF`` for declarative conversion definitions.
+- Added consistent default enum values directly in field declarations (e.g. ``operation_mode=STANDBY``).
+
+Migration Guide (v6.0.2 -> v6.0.3)
+----------------------------------
+
+1. Replace any imports of dataclass models with Pydantic versions (paths unchanged). No code change required if you only accessed attributes.
+2. Remove calls to ``Model.from_dict(data)``: Either use ``Model.model_validate(data)`` or continue calling ``from_dict`` where still provided (thin wrapper for backward compatibility on some classes). Preferred: ``DeviceStatus.model_validate(raw_payload)``.
+3. Update attribute access to snake_case. Common mappings:
+   - ``deviceInfo.macAddress`` -> ``device.device_info.mac_address``
+   - ``deviceStatus.operationMode`` -> ``status.operation_mode``
+   - ``deviceStatus.dhwTemperatureSetting`` -> ``status.dhw_temperature_setting``
+   - ``deviceStatus.currentInletTemperature`` -> ``status.current_inlet_temperature``
+4. Remove manual conversion code. Raw numeric values are converted automatically; stop adding +20 or dividing by 10 in user code.
+5. Stop performing boolean normalization (``value == 2``) manually; attributes already return proper bools.
+6. For enum handling, remove try/except wrappers; rely on defaulted fields (e.g. ``operation_mode`` defaults to ``STANDBY``).
+7. If you previously mutated raw payload keys to snake_case, eliminate that transformation step.
+8. If you logged intermediate converted dictionaries, you can access ``model.model_dump()`` for a fully converted representation.
+9. Replace any custom validation logic with Pydantic validators or continue using existing patterns; most prior validation code is now unnecessary.
+10. Energy usage: Access percentages via properties unchanged; object types now Pydantic models.
+
+Quick Example
+~~~~~~~~~~~~~
+
+.. code-block:: python
+
+   # OLD (v6.0.2)
+   raw = mqtt_payload["deviceStatus"]
+   converted = apply_field_conversions(DeviceStatus, raw)
+   status = DeviceStatus(**converted)
+   print(converted["dhwTemperatureSetting"] + 20)  # manual offset
+
+   # NEW (v6.0.3)
+   status = DeviceStatus.model_validate(mqtt_payload["deviceStatus"])
+   print(status.dhw_temperature_setting)  # already includes +20 offset
+
+   # OLD boolean and enum handling
+   is_heating = converted["currentHeatUse"] == 2
+   mode = CurrentOperationMode(converted["operationMode"]) if converted["operationMode"] in (0,32,64,96) else CurrentOperationMode.STANDBY
+
+   # NEW simplified
+   is_heating = status.current_heat_use
+   mode = status.operation_mode
+
+Benefits
+~~~~~~~~
+
+- Declarative conversions reduce 400+ lines of imperative transformation logic.
+- Improved performance (single parse vs copy + transform).
+- Automatic camelCase key mapping; less brittle than manual dict key copying.
+- Rich validation errors for debugging malformed device messages.
+- Cleaner, shorter model definitions with clearer intent.
+- Easier extension: add new fields with conversion by combining Annotated + validator.
+
 Version 6.0.2 (2025-11-15)
 ==========================
 
