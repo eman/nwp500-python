@@ -39,7 +39,9 @@ async def main():
 
     # Typed callback
     def on_status(status: DeviceStatus):
-        print(f"Status: {status.dhwTemperature:.1f}°F, {status.currentInstPower:.1f}W")
+        print(
+            f"Status: {status.dhw_temperature:.1f}°F, {status.current_inst_power:.1f}W"
+        )
 
     # Subscribe with typed parsing
     await mqtt.subscribe_device_status(device, on_status)

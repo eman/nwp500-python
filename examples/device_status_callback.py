@@ -137,44 +137,46 @@ async def main():
 
                     # Access typed status fields directly
                     print("Temperatures:")
-                    print(f"  DHW Temperature:        {status.dhwTemperature:.1f}°F")
+                    print(f"  DHW Temperature:        {status.dhw_temperature:.1f}°F")
                     print(
-                        f"  DHW Target Setting:     {status.dhwTargetTemperatureSetting:.1f}°F"
+                        f"  DHW Target Setting:     {status.dhw_target_temperature_setting:.1f}°F"
                     )
                     print(
-                        f"  Tank Upper:             {status.tankUpperTemperature:.1f}°F"
+                        f"  Tank Upper:             {status.tank_upper_temperature:.1f}°F"
                     )
                     print(
-                        f"  Tank Lower:             {status.tankLowerTemperature:.1f}°F"
+                        f"  Tank Lower:             {status.tank_lower_temperature:.1f}°F"
                     )
                     print(
-                        f"  Discharge:              {status.dischargeTemperature:.1f}°F"
+                        f"  Discharge:              {status.discharge_temperature:.1f}°F"
                     )
                     print(
-                        f"  Ambient:                {status.ambientTemperature:.1f}°F"
+                        f"  Ambient:                {status.ambient_temperature:.1f}°F"
                     )
 
                     print("\nOperation:")
-                    print(f"  Mode:                   {status.operationMode.name}")
-                    print(f"  Operation Busy:         {status.operationBusy}")
-                    print(f"  DHW Active:             {status.dhwUse}")
-                    print(f"  Compressor Active:      {status.compUse}")
-                    print(f"  Evaporator Fan Active:  {status.evaFanUse}")
-                    print(f"  Current Power:          {status.currentInstPower:.1f}W")
+                    print(f"  Mode:                   {status.operation_mode.name}")
+                    print(f"  Operation Busy:         {status.operation_busy}")
+                    print(f"  DHW Active:             {status.dhw_use}")
+                    print(f"  Compressor Active:      {status.comp_use}")
+                    print(f"  Evaporator Fan Active:  {status.eva_fan_use}")
+                    print(f"  Current Power:          {status.current_inst_power:.1f}W")
 
                     print("\nSystem Status:")
-                    print(f"  Error Code:             {status.errorCode}")
-                    print(f"  WiFi RSSI:              {status.wifiRssi} dBm")
-                    print(f"  DHW Charge:             {status.dhwChargePer:.1f}%")
-                    print(f"  Eco Mode:               {status.ecoUse}")
-                    print(f"  Freeze Protection:      {status.freezeProtectionUse}")
+                    print(f"  Error Code:             {status.error_code}")
+                    print(f"  WiFi RSSI:              {status.wifi_rssi} dBm")
+                    print(f"  DHW Charge:             {status.dhw_charge_per:.1f}%")
+                    print(f"  Eco Mode:               {status.eco_use}")
+                    print(f"  Freeze Protection:      {status.freeze_protection_use}")
 
                     print("\nAdvanced:")
                     print(
-                        f"  Fan RPM:                {status.currentFanRpm}/{status.targetFanRpm}"
+                        f"  Fan RPM:                {status.current_fan_rpm}/{status.target_fan_rpm}"
                     )
-                    print(f"  EEV Step:               {status.eevStep}")
-                    print(f"  Super Heat:             {status.currentSuperHeat:.1f}°F")
+                    print(f"  EEV Step:               {status.eev_step}")
+                    print(
+                        f"  Super Heat:             {status.current_super_heat:.1f}°F"
+                    )
                     print(
                         f"  Flow Rate:              {status.currentDhwFlowRate:.1f} GPM"
                     )

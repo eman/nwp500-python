@@ -149,12 +149,12 @@ async def main():
                     print(
                         f"\n📊 Status Update #{message_count['status']} (Message #{message_count['count']})"
                     )
-                    print(f"   - DHW Temperature: {status.dhwTemperature:.1f}°F")
-                    print(f"   - Tank Upper: {status.tankUpperTemperature:.1f}°F")
-                    print(f"   - Tank Lower: {status.tankLowerTemperature:.1f}°F")
-                    print(f"   - Operation Mode: {status.operationMode}")
-                    print(f"   - DHW Active: {status.dhwUse}")
-                    print(f"   - Compressor: {status.compUse}")
+                    print(f"   - DHW Temperature: {status.dhw_temperature:.1f}°F")
+                    print(f"   - Tank Upper: {status.tank_upper_temperature:.1f}°F")
+                    print(f"   - Tank Lower: {status.tank_lower_temperature:.1f}°F")
+                    print(f"   - Operation Mode: {status.operation_mode}")
+                    print(f"   - DHW Active: {status.dhw_use}")
+                    print(f"   - Compressor: {status.comp_use}")
 
                 def on_device_feature(feature: DeviceFeature):
                     """Typed callback for device features."""
@@ -163,9 +163,9 @@ async def main():
                     print(
                         f"\n📋 Device Info #{message_count['feature']} (Message #{message_count['count']})"
                     )
-                    print(f"   - Serial: {feature.controllerSerialNumber}")
-                    print(f"   - SW Version: {feature.controllerSwVersion}")
-                    print(f"   - Heat Pump: {feature.heatpumpUse}")
+                    print(f"   - Serial: {feature.controller_serial_number}")
+                    print(f"   - SW Version: {feature.controller_sw_version}")
+                    print(f"   - Heat Pump: {feature.heatpump_use}")
 
                 # Subscribe with typed parsing wrappers
 

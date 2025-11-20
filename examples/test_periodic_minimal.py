@@ -54,8 +54,8 @@ async def main():
         message_count += 1
         timestamp = datetime.now().strftime("%H:%M:%S")
         print(f"[{timestamp}] Status #{message_count}")
-        print(f"  Temperature: {status.dhwTemperature:.1f}°F")
-        print(f"  Power: {status.currentInstPower:.1f}W")
+        print(f"  Temperature: {status.dhw_temperature:.1f}°F")
+        print(f"  Power: {status.current_inst_power:.1f}W")
 
     # Subscribe with typed parsing
     print("Subscribing...")

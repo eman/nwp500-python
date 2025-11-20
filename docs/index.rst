@@ -67,8 +67,8 @@ Basic Example
            
            # Monitor device status
            def on_status(status):
-               print(f"Temp: {status.dhwTemperature}°F")
-               print(f"Power: {status.currentInstPower}W")
+               print(f"Temp: {status.dhw_temperature}°F")
+               print(f"Power: {status.current_inst_power}W")
            
            await mqtt.subscribe_device_status(device, on_status)
            await mqtt.request_device_status(device)
@@ -112,17 +112,7 @@ Documentation Index
 
    api/modules
 
-.. toctree::
-   :maxdepth: 2
-   :caption: Protocol Reference
 
-   protocol/rest_api
-   protocol/mqtt_protocol
-   protocol/device_status
-   protocol/data_conversions
-   protocol/device_features
-   protocol/error_codes
-   protocol/firmware_tracking
 
 .. toctree::
    :maxdepth: 1
@@ -135,6 +125,19 @@ Documentation Index
    guides/event_system
    guides/command_queue
    guides/auto_recovery
+   guides/advanced_features_explained
+
+.. toctree::
+   :maxdepth: 2
+   :caption: Advanced: Protocol Reference
+
+   protocol/rest_api
+   protocol/mqtt_protocol
+   protocol/device_status
+   protocol/data_conversions
+   protocol/device_features
+   protocol/error_codes
+   protocol/firmware_tracking
 
 .. toctree::
    :maxdepth: 1

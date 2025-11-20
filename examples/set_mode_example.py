@@ -47,7 +47,7 @@ async def set_mode_example():
             def on_current_status(status):
                 nonlocal current_status
                 current_status = status
-                logger.info(f"Current mode: {status.operationMode.name}")
+                logger.info(f"Current mode: {status.operation_mode.name}")
 
             await mqtt_client.subscribe_device_status(device, on_current_status)
             await mqtt_client.request_device_status(device)
@@ -62,9 +62,9 @@ async def set_mode_example():
             def on_mode_change_response(status):
                 nonlocal mode_changed
                 logger.info("Mode change response received!")
-                logger.info(f"New mode: {status.operationMode.name}")
-                logger.info(f"DHW Temperature: {status.dhwTemperature}°F")
-                logger.info(f"Tank Charge: {status.dhwChargePer}%")
+                logger.info(f"New mode: {status.operation_mode.name}")
+                logger.info(f"DHW Temperature: {status.dhw_temperature}°F")
+                logger.info(f"Tank Charge: {status.dhw_charge_per}%")
                 mode_changed = True
 
             await mqtt_client.subscribe_device_status(device, on_mode_change_response)

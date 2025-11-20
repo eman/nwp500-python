@@ -85,7 +85,7 @@ preference.
 
       # Check current mode from status
       def on_status(status):
-          if status.dhwOperationSetting == DhwOperationSetting.ENERGY_SAVER:
+          if status.dhw_operation_setting == DhwOperationSetting.ENERGY_SAVER:
               print("Running in Energy Saver mode")
 
 CurrentOperationMode
@@ -112,16 +112,16 @@ Current real-time operational state - what the device is doing **right now**.
       from nwp500 import CurrentOperationMode
 
       def on_status(status):
-          mode = status.operationMode
+          mode = status.operation_mode
 
           if mode == CurrentOperationMode.IDLE:
               print("Device idle")
           elif mode == CurrentOperationMode.HEAT_PUMP:
-              print(f"Heat pump running at {status.currentInstPower}W")
+              print(f"Heat pump running at {status.current_inst_power}W")
           elif mode == CurrentOperationMode.ELECTRIC_HEATER:
-              print(f"Electric heater at {status.currentInstPower}W")
+              print(f"Electric heater at {status.current_inst_power}W")
           elif mode == CurrentOperationMode.HEAT_PUMP_AND_HEATER:
-              print(f"Both running at {status.currentInstPower}W")
+              print(f"Both running at {status.current_inst_power}W")
 
 TemperatureUnit
 ---------------
@@ -140,10 +140,10 @@ Temperature scale enumeration.
    .. code-block:: python
 
       def on_status(status):
-          if status.temperatureType == TemperatureUnit.FAHRENHEIT:
-              print(f"Temperature: {status.dhwTemperature}°F")
+          if status.temperature_type == TemperatureUnit.FAHRENHEIT:
+              print(f"Temperature: {status.dhw_temperature}°F")
           else:
-              print(f"Temperature: {status.dhwTemperature}°C")
+              print(f"Temperature: {status.dhw_temperature}°C")
 
 Device Models
 =============
@@ -283,14 +283,14 @@ Complete real-time device status with 100+ fields.
 
    **Key Temperature Fields:**
 
-   * ``dhwTemperature`` (float) - Current water temperature (°F or °C)
-   * ``dhwTemperatureSetting`` (float) - Target temperature setting
-   * ``dhwTargetTemperatureSetting`` (float) - Target with offsets applied
-   * ``tankUpperTemperature`` (float) - Upper tank sensor
-   * ``tankLowerTemperature`` (float) - Lower tank sensor
-   * ``currentInletTemperature`` (float) - Cold water inlet temperature
-   * ``outsideTemperature`` (float) - Outdoor temperature
-   * ``ambientTemperature`` (float) - Ambient air temperature
+   * ``dhw_temperature`` (float) - Current water temperature (°F or °C)
+   * ``dhw_temperature_setting`` (float) - Target temperature setting
+   * ``dhw_target_temperature_setting`` (float) - Target with offsets applied
+   * ``tank_upper_temperature`` (float) - Upper tank sensor
+   * ``tank_lower_temperature`` (float) - Lower tank sensor
+   * ``current_inlet_temperature`` (float) - Cold water inlet temperature
+   * ``outside_temperature`` (float) - Outdoor temperature
+   * ``ambient_temperature`` (float) - Ambient air temperature
 
    .. note::
       Temperature display values are 20°F higher than message values.
@@ -298,66 +298,66 @@ Complete real-time device status with 100+ fields.
 
    **Key Power/Energy Fields:**
 
-   * ``currentInstPower`` (float) - Current power consumption (Watts)
-   * ``totalEnergyCapacity`` (float) - Total energy capacity (%)
-   * ``availableEnergyCapacity`` (float) - Available energy (%)
-   * ``dhwChargePer`` (float) - DHW charge percentage
+   * ``current_inst_power`` (float) - Current power consumption (Watts)
+   * ``total_energy_capacity`` (float) - Total energy capacity (%)
+   * ``available_energy_capacity`` (float) - Available energy (%)
+   * ``dhw_charge_per`` (float) - DHW charge percentage
 
    **Operation Mode Fields:**
 
-   * ``operationMode`` (CurrentOperationMode) - Current operational state
-   * ``dhwOperationSetting`` (DhwOperationSetting) - User's mode preference
-   * ``temperatureType`` (TemperatureUnit) - Temperature unit
+   * ``operation_mode`` (CurrentOperationMode) - Current operational state
+   * ``dhw_operation_setting`` (DhwOperationSetting) - User's mode preference
+   * ``temperature_type`` (TemperatureUnit) - Temperature unit
 
    **Boolean Status Fields:**
 
-   * ``operationBusy`` (bool) - Device actively heating water
-   * ``dhwUse`` (bool) - Water being used (short-term detection)
-   * ``dhwUseSustained`` (bool) - Water being used (sustained)
-   * ``compUse`` (bool) - Compressor/heat pump running
-   * ``heatUpperUse`` (bool) - Upper electric heater active
-   * ``heatLowerUse`` (bool) - Lower electric heater active
-   * ``evaFanUse`` (bool) - Evaporator fan running
-   * ``antiLegionellaUse`` (bool) - Anti-Legionella enabled
-   * ``antiLegionellaOperationBusy`` (bool) - Anti-Legionella cycle active
-   * ``programReservationUse`` (bool) - Reservation schedule enabled
-   * ``freezeProtectionUse`` (bool) - Freeze protection enabled
+   * ``operation_busy`` (bool) - Device actively heating water
+   * ``dhw_use`` (bool) - Water being used (short-term detection)
+   * ``dhw_use_sustained`` (bool) - Water being used (sustained)
+   * ``comp_use`` (bool) - Compressor/heat pump running
+   * ``heat_upper_use`` (bool) - Upper electric heater active
+   * ``heat_lower_use`` (bool) - Lower electric heater active
+   * ``eva_fan_use`` (bool) - Evaporator fan running
+   * ``anti_legionella_use`` (bool) - Anti-Legionella enabled
+   * ``anti_legionella_operation_busy`` (bool) - Anti-Legionella cycle active
+   * ``program_reservation_use`` (bool) - Reservation schedule enabled
+   * ``freeze_protection_use`` (bool) - Freeze protection enabled
 
    **Error/Diagnostic Fields:**
 
-   * ``errorCode`` (int) - Error code (0 = no error)
-   * ``subErrorCode`` (int) - Sub-error code
-   * ``smartDiagnostic`` (int) - Smart diagnostic status
-   * ``faultStatus1`` (int) - Fault status flags
-   * ``faultStatus2`` (int) - Additional fault flags
+   * ``error_code`` (int) - Error code (0 = no error)
+   * ``sub_error_code`` (int) - Sub-error code
+   * ``smart_diagnostic`` (int) - Smart diagnostic status
+   * ``fault_status1`` (int) - Fault status flags
+   * ``fault_status2`` (int) - Additional fault flags
 
    **Network/Communication:**
 
-   * ``wifiRssi`` (int) - WiFi signal strength (dBm)
+   * ``wifi_rssi`` (int) - WiFi signal strength (dBm)
 
    **Vacation/Schedule:**
 
-   * ``vacationDaySetting`` (int) - Vacation days configured
-   * ``vacationDayElapsed`` (int) - Vacation days elapsed
-   * ``antiLegionellaPeriod`` (int) - Anti-Legionella cycle period
+   * ``vacation_day_setting`` (int) - Vacation days configured
+   * ``vacation_day_elapsed`` (int) - Vacation days elapsed
+   * ``anti_legionella_period`` (int) - Anti-Legionella cycle period
 
    **Time-of-Use (TOU):**
 
-   * ``touStatus`` (int) - TOU status
-   * ``touOverrideStatus`` (int) - TOU override status
+   * ``tou_status`` (int) - TOU status
+   * ``tou_override_status`` (int) - TOU override status
 
    **Heat Pump Detailed Status:**
 
-   * ``targetFanRpm`` (int) - Target fan RPM
-   * ``currentFanRpm`` (int) - Current fan RPM
-   * ``fanPwm`` (int) - Fan PWM duty cycle
-   * ``mixingRate`` (float) - Mixing valve rate
-   * ``eevStep`` (int) - Electronic expansion valve position
-   * ``dischargeTemperature`` (float) - Compressor discharge temp
-   * ``suctionTemperature`` (float) - Compressor suction temp
-   * ``evaporatorTemperature`` (float) - Evaporator temperature
-   * ``targetSuperHeat`` (float) - Target superheat
-   * ``currentSuperHeat`` (float) - Current superheat
+   * ``target_fan_rpm`` (int) - Target fan RPM
+   * ``current_fan_rpm`` (int) - Current fan RPM
+   * ``fan_pwm`` (int) - Fan PWM duty cycle
+   * ``mixing_rate`` (float) - Mixing valve rate
+   * ``eev_step`` (int) - Electronic expansion valve position
+   * ``discharge_temperature`` (float) - Compressor discharge temp
+   * ``suction_temperature`` (float) - Compressor suction temp
+   * ``evaporator_temperature`` (float) - Evaporator temperature
+   * ``target_super_heat`` (float) - Target superheat
+   * ``current_super_heat`` (float) - Current superheat
 
    **Example:**
 
@@ -365,40 +365,40 @@ Complete real-time device status with 100+ fields.
 
       def on_status(status):
           # Temperature monitoring
-          print(f"Water: {status.dhwTemperature}°F")
-          print(f"Target: {status.dhwTemperatureSetting}°F")
-          print(f"Upper Tank: {status.tankUpperTemperature}°F")
-          print(f"Lower Tank: {status.tankLowerTemperature}°F")
+          print(f"Water: {status.dhw_temperature}°F")
+          print(f"Target: {status.dhw_temperature_setting}°F")
+          print(f"Upper Tank: {status.tank_upper_temperature}°F")
+          print(f"Lower Tank: {status.tank_lower_temperature}°F")
 
           # Power consumption
-          print(f"Power: {status.currentInstPower}W")
-          print(f"Energy: {status.availableEnergyCapacity}%")
+          print(f"Power: {status.current_inst_power}W")
+          print(f"Energy: {status.available_energy_capacity}%")
 
           # Operation mode
-          print(f"Mode: {status.dhwOperationSetting.name}")
-          print(f"State: {status.operationMode.name}")
+          print(f"Mode: {status.dhw_operation_setting.name}")
+          print(f"State: {status.operation_mode.name}")
 
           # Active heating
-          if status.operationBusy:
+          if status.operation_busy:
               print("Heating water:")
-              if status.compUse:
+              if status.comp_use:
                   print("  - Heat pump running")
-              if status.heatUpperUse:
+              if status.heat_upper_use:
                   print("  - Upper heater active")
-              if status.heatLowerUse:
+              if status.heat_lower_use:
                   print("  - Lower heater active")
 
           # Water usage detection
-          if status.dhwUse:
+          if status.dhw_use:
               print("Water usage detected (short-term)")
-          if status.dhwUseSustained:
+          if status.dhw_useSustained:
               print("Water usage detected (sustained)")
 
           # Errors
-          if status.errorCode != 0:
-              print(f"ERROR: {status.errorCode}")
-              if status.subErrorCode != 0:
-                  print(f"  Sub-error: {status.subErrorCode}")
+          if status.error_code != 0:
+              print(f"ERROR: {status.error_code}")
+              if status.sub_error_code != 0:
+                  print(f"  Sub-error: {status.sub_error_code}")
 
 DeviceFeature
 -------------
@@ -409,78 +409,78 @@ Device capabilities, features, and firmware information.
 
    **Firmware Version Fields:**
 
-   * ``controllerSwVersion`` (int) - Controller firmware version
-   * ``panelSwVersion`` (int) - Panel firmware version
-   * ``wifiSwVersion`` (int) - WiFi module firmware version
-   * ``controllerSwCode`` (int) - Controller software code
-   * ``panelSwCode`` (int) - Panel software code
-   * ``wifiSwCode`` (int) - WiFi software code
-   * ``controllerSerialNumber`` (str) - Controller serial number
+   * ``controller_sw_version`` (int) - Controller firmware version
+   * ``panel_sw_version`` (int) - Panel firmware version
+   * ``wifi_sw_version`` (int) - WiFi module firmware version
+   * ``controller_sw_code`` (int) - Controller software code
+   * ``panel_sw_code`` (int) - Panel software code
+   * ``wifi_sw_code`` (int) - WiFi software code
+   * ``controller_serial_number`` (str) - Controller serial number
 
    **Device Configuration:**
 
-   * ``countryCode`` (int) - Country code
-   * ``modelTypeCode`` (int) - Model type
-   * ``controlTypeCode`` (int) - Control type
-   * ``volumeCode`` (int) - Tank volume code
-   * ``tempFormulaType`` (int) - Temperature formula type
-   * ``temperatureType`` (TemperatureUnit) - Temperature unit
+   * ``country_code`` (int) - Country code
+   * ``model_type_code`` (int) - Model type
+   * ``control_type_code`` (int) - Control type
+   * ``volume_code`` (int) - Tank volume code
+   * ``temp_formula_type`` (int) - Temperature formula type
+   * ``temperature_type`` (TemperatureUnit) - Temperature unit
 
    **Temperature Limits:**
 
-   * ``dhwTemperatureMin`` (int) - Minimum DHW temperature
-   * ``dhwTemperatureMax`` (int) - Maximum DHW temperature
-   * ``freezeProtectionTempMin`` (int) - Min freeze protection temp
-   * ``freezeProtectionTempMax`` (int) - Max freeze protection temp
+   * ``dhw_temperature_min`` (int) - Minimum DHW temperature
+   * ``dhw_temperature_max`` (int) - Maximum DHW temperature
+   * ``freeze_protection_temp_min`` (int) - Min freeze protection temp
+   * ``freeze_protection_temp_max`` (int) - Max freeze protection temp
 
    **Feature Flags (all int, 0=disabled, 1=enabled):**
 
-   * ``powerUse`` - Power control supported
-   * ``dhwUse`` - DHW functionality
-   * ``dhwTemperatureSettingUse`` - Temperature control
-   * ``energyUsageUse`` - Energy monitoring supported
-   * ``antiLegionellaSettingUse`` - Anti-Legionella supported
-   * ``programReservationUse`` - Reservation scheduling supported
-   * ``freezeProtectionUse`` - Freeze protection available
-   * ``heatpumpUse`` - Heat pump mode available
-   * ``electricUse`` - Electric mode available
-   * ``energySaverUse`` - Energy Saver mode available
-   * ``highDemandUse`` - High Demand mode available
-   * ``smartDiagnosticUse`` - Smart diagnostics available
-   * ``wifiRssiUse`` - WiFi signal strength available
-   * ``holidayUse`` - Holiday/vacation mode
-   * ``mixingValueUse`` - Mixing valve
-   * ``drSettingUse`` - Demand response
-   * ``dhwRefillUse`` - DHW refill
-   * ``ecoUse`` - Eco mode
+   * ``power_use`` - Power control supported
+   * ``dhw_use`` - DHW functionality
+   * ``dhw_temperature_setting_use`` - Temperature control
+   * ``energy_usage_use`` - Energy monitoring supported
+   * ``anti_legionella_setting_use`` - Anti-Legionella supported
+   * ``program_reservation_use`` - Reservation scheduling supported
+   * ``freeze_protection_use`` - Freeze protection available
+   * ``heatpump_use`` - Heat pump mode available
+   * ``electric_use`` - Electric mode available
+   * ``energy_saver_use`` - Energy Saver mode available
+   * ``high_demand_use`` - High Demand mode available
+   * ``smart_diagnostic_use`` - Smart diagnostics available
+   * ``wifi_rssi_use`` - WiFi signal strength available
+   * ``holiday_use`` - Holiday/vacation mode
+   * ``mixing_value_use`` - Mixing valve
+   * ``dr_setting_use`` - Demand response
+   * ``dhw_refill_use`` - DHW refill
+   * ``eco_use`` - Eco mode
 
    **Example:**
 
    .. code-block:: python
 
       def on_feature(feature):
-          print(f"Serial: {feature.controllerSerialNumber}")
-          print(f"Firmware: {feature.controllerSwVersion}")
-          print(f"WiFi: {feature.wifiSwVersion}")
+          print(f"Serial: {feature.controller_serial_number}")
+          print(f"Firmware: {feature.controller_sw_version}")
+          print(f"WiFi: {feature.wifi_sw_version}")
 
           print(f"\nTemperature Range:")
-          print(f"  Min: {feature.dhwTemperatureMin}°F")
-          print(f"  Max: {feature.dhwTemperatureMax}°F")
+          print(f"  Min: {feature.dhw_temperature_min}°F")
+          print(f"  Max: {feature.dhw_temperature_max}°F")
 
           print(f"\nSupported Features:")
-          if feature.energyUsageUse:
+          if feature.energy_usage_use:
               print("  [OK] Energy monitoring")
-          if feature.antiLegionellaSettingUse:
+          if feature.anti_legionella_setting_use:
               print("  [OK] Anti-Legionella")
-          if feature.programReservationUse:
+          if feature.program_reservation_use:
               print("  [OK] Reservations")
-          if feature.heatpumpUse:
+          if feature.heatpump_use:
               print("  [OK] Heat pump mode")
-          if feature.electricUse:
+          if feature.electric_use:
               print("  [OK] Electric mode")
-          if feature.energySaverUse:
+          if feature.energy_saver_use:
               print("  [OK] Energy Saver mode")
-          if feature.highDemandUse:
+          if feature.high_demand_use:
               print("  [OK] High Demand mode")
 
 Energy Models
@@ -495,10 +495,10 @@ Complete energy usage response with daily breakdown.
 
    **Fields:**
 
-   * ``deviceType`` (int) - Device type
-   * ``macAddress`` (str) - Device MAC
-   * ``additionalValue`` (str) - Additional identifier
-   * ``typeOfUsage`` (int) - Usage type code
+   * ``device_type`` (int) - Device type
+   * ``mac_address`` (str) - Device MAC
+   * ``additional_value`` (str) - Additional identifier
+   * ``type_of_usage`` (int) - Usage type code
    * ``total`` (EnergyUsageTotal) - Total usage summary
    * ``usage`` (list[MonthlyEnergyData]) - Monthly data with daily breakdown
 
@@ -521,8 +521,8 @@ Complete energy usage response with daily breakdown.
               for day_num, day in enumerate(month_data.data, 1):
                   if day.total_usage > 0:
                       print(f"  Day {day_num}: {day.total_usage} Wh")
-                      print(f"    HP: {day.hpUsage} Wh ({day.hpTime}h)")
-                      print(f"    HE: {day.heUsage} Wh ({day.heTime}h)")
+                      print(f"    HP: {day.heat_pump_usage} Wh ({day.heat_pump_time}h)")
+                      print(f"    HE: {day.heat_element_usage} Wh ({day.heat_element_time}h)")
 
 EnergyUsageTotal
 ----------------
@@ -533,16 +533,16 @@ Summary totals for energy usage.
 
    **Fields:**
 
-   * ``heUsage`` (int) - Total heat element usage (Wh)
-   * ``hpUsage`` (int) - Total heat pump usage (Wh)
-   * ``heTime`` (int) - Total heat element time (hours)
-   * ``hpTime`` (int) - Total heat pump time (hours)
+   * ``heat_element_usage`` (int) - Total heat element usage (Wh)
+   * ``heat_pump_usage`` (int) - Total heat pump usage (Wh)
+   * ``heat_element_time`` (int) - Total heat element time (hours)
+   * ``heat_pump_time`` (int) - Total heat pump time (hours)
 
    **Computed Properties:**
 
-   * ``total_usage`` (int) - heUsage + hpUsage
-   * ``heat_pump_percentage`` (float) - (hpUsage / total) × 100
-   * ``heat_element_percentage`` (float) - (heUsage / total) × 100
+   * ``total_usage`` (int) - heat_element_usage + heat_pump_usage
+   * ``heat_pump_percentage`` (float) - (heat_pump_usage / total) × 100
+   * ``heat_element_percentage`` (float) - (heat_element_usage / total) × 100
 
 MonthlyEnergyData
 -----------------
@@ -566,14 +566,14 @@ Energy data for a single day.
 
    **Fields:**
 
-   * ``heUsage`` (int) - Heat element usage (Wh)
-   * ``hpUsage`` (int) - Heat pump usage (Wh)
-   * ``heTime`` (int) - Heat element time (hours)
-   * ``hpTime`` (int) - Heat pump time (hours)
+   * ``heat_element_usage`` (int) - Heat element usage (Wh)
+   * ``heat_pump_usage`` (int) - Heat pump usage (Wh)
+   * ``heat_element_time`` (int) - Heat element time (hours)
+   * ``heat_pump_time`` (int) - Heat pump time (hours)
 
    **Computed Properties:**
 
-   * ``total_usage`` (int) - heUsage + hpUsage
+   * ``total_usage`` (int) - heat_element_usage + heat_pump_usage
 
 Time-of-Use Models
 ==================
@@ -635,12 +635,12 @@ Complete MQTT command message.
 
    **Fields:**
 
-   * ``clientID`` (str) - MQTT client ID
-   * ``sessionID`` (str) - Session ID
-   * ``requestTopic`` (str) - Request topic
-   * ``responseTopic`` (str) - Response topic
+   * ``client_id`` (str) - MQTT client ID
+   * ``session_id`` (str) - Session ID
+   * ``request_topic`` (str) - Request topic
+   * ``response_topic`` (str) - Response topic
    * ``request`` (MqttRequest) - Request payload
-   * ``protocolVersion`` (int) - Protocol version (default: 2)
+   * ``protocol_version`` (int) - Protocol version (default: 2)
 
 MqttRequest
 -----------
@@ -652,12 +652,12 @@ MQTT request payload.
    **Fields:**
 
    * ``command`` (int) - Command code (see CommandCode)
-   * ``deviceType`` (int) - Device type
-   * ``macAddress`` (str) - Device MAC
-   * ``additionalValue`` (str) - Additional identifier
+   * ``device_type`` (int) - Device type
+   * ``mac_address`` (str) - Device MAC
+   * ``additional_value`` (str) - Additional identifier
    * ``mode`` (str, optional) - Mode parameter
    * ``param`` (list[int | float]) - Numeric parameters
-   * ``paramStr`` (str) - String parameters
+   * ``param_str`` (str) - String parameters
    * ``month`` (list[int], optional) - Month list for energy queries
    * ``year`` (int, optional) - Year for energy queries
 
@@ -680,7 +680,7 @@ Best Practices
    .. code-block:: python
 
       def on_feature(feature):
-          if feature.energyUsageUse:
+          if feature.energy_usage_use:
               # Device supports energy monitoring
               await mqtt.request_energy_usage(device, year, months)
 
@@ -701,10 +701,10 @@ Best Practices
 
       def on_status(status):
           # User's mode preference
-          user_mode = status.dhwOperationSetting
+          user_mode = status.dhw_operation_setting
 
           # Current real-time state
-          current_state = status.operationMode
+          current_state = status.operation_mode
 
           # These can differ!
           # User sets ENERGY_SAVER, device might be in HEAT_PUMP state

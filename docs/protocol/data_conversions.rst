@@ -3,6 +3,11 @@ Data Conversions and Units Reference
 
 This document provides comprehensive details on all data conversions applied to device status messages, field units, and the meaning of various data structures.
 
+.. warning::
+   This document describes the underlying protocol details. Most users should use the
+   Python client library (:doc:`../python_api/models`) instead of implementing
+   conversions manually.
+
 Overview of Conversion Types
 ----------------------------
 

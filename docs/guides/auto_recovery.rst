@@ -236,7 +236,7 @@ Use exponential backoff between recovery attempts with token refresh.
        device = await api_client.get_first_device()
        
        def on_status(status):
-           print(f"Temperature: {status.dhwTemperature}°F")
+           print(f"Temperature: {status.dhw_temperature}°F")
        
        # Create resilient client
        mqtt_config = MqttConnectionConfig(

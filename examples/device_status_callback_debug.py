@@ -131,9 +131,9 @@ async def main():
                     print(
                         f"\n[SUCCESS] PARSED Status Update #{message_count['status']}"
                     )
-                    print(f"   DHW Temperature: {status.dhwTemperature:.1f}°F")
-                    print(f"   Operation Mode: {status.operationMode.name}")
-                    print(f"   Compressor: {status.compUse}")
+                    print(f"   DHW Temperature: {status.dhw_temperature:.1f}°F")
+                    print(f"   Operation Mode: {status.operation_mode.name}")
+                    print(f"   Compressor: {status.comp_use}")
 
                 # Subscribe with raw handler first
                 print("Subscribing to raw messages...")

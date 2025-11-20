@@ -119,31 +119,31 @@ async def main():
 
                     # Access typed feature fields directly
                     print("Device Identity:")
-                    print(f"  Serial Number:      {feature.controllerSerialNumber}")
-                    print(f"  Country Code:       {feature.countryCode}")
-                    print(f"  Model Type:         {feature.modelTypeCode}")
-                    print(f"  Control Type:       {feature.controlTypeCode}")
-                    print(f"  Volume Code:        {feature.volumeCode}")
+                    print(f"  Serial Number:      {feature.controller_serial_number}")
+                    print(f"  Country Code:       {feature.country_code}")
+                    print(f"  Model Type:         {feature.model_type_code}")
+                    print(f"  Control Type:       {feature.control_type_code}")
+                    print(f"  Volume Code:        {feature.volume_code}")
 
                     print("\nFirmware Versions:")
                     print(
-                        f"  Controller SW:      {feature.controllerSwVersion} (code: {feature.controllerSwCode})"
+                        f"  Controller SW:      {feature.controller_sw_version} (code: {feature.controller_sw_code})"
                     )
                     print(
-                        f"  Panel SW:           {feature.panelSwVersion} (code: {feature.panelSwCode})"
+                        f"  Panel SW:           {feature.panel_sw_version} (code: {feature.panel_sw_code})"
                     )
                     print(
-                        f"  WiFi SW:            {feature.wifiSwVersion} (code: {feature.wifiSwCode})"
+                        f"  WiFi SW:            {feature.wifi_sw_version} (code: {feature.wifi_sw_code})"
                     )
 
                     print("\nConfiguration:")
                     print(f"  Temperature Unit:   {feature.temperatureType.name}")
                     print(f"  Temp Formula Type:  {feature.tempFormulaType}")
                     print(
-                        f"  DHW Temp Range:     {feature.dhwTemperatureMin}°F - {feature.dhwTemperatureMax}°F"
+                        f"  DHW Temp Range:     {feature.dhw_temperature_min}°F - {feature.dhw_temperature_max}°F"
                     )
                     print(
-                        f"  Freeze Prot Range:  {feature.freezeProtectionTempMin}°F - {feature.freezeProtectionTempMax}°F"
+                        f"  Freeze Prot Range:  {feature.freeze_protection_temp_min}°F - {feature.freeze_protection_temp_max}°F"
                     )
 
                     print("\nFeature Support:")
@@ -151,16 +151,16 @@ async def main():
                         f"  Power Control:      {'Supported' if feature.powerUse == 2 else 'Not Available'}"
                     )
                     print(
-                        f"  DHW Control:        {'Supported' if feature.dhwUse == 2 else 'Not Available'}"
+                        f"  DHW Control:        {'Supported' if feature.dhw_use == 2 else 'Not Available'}"
                     )
                     print(
-                        f"  DHW Temp Setting:   Level {feature.dhwTemperatureSettingUse}"
+                        f"  DHW Temp Setting:   Level {feature.dhw_temperature_settingUse}"
                     )
                     print(
-                        f"  Heat Pump Mode:     {'Supported' if feature.heatpumpUse == 2 else 'Not Available'}"
+                        f"  Heat Pump Mode:     {'Supported' if feature.heatpump_use == 2 else 'Not Available'}"
                     )
                     print(
-                        f"  Electric Mode:      {'Supported' if feature.electricUse == 2 else 'Not Available'}"
+                        f"  Electric Mode:      {'Supported' if feature.electric_use == 2 else 'Not Available'}"
                     )
                     print(
                         f"  Energy Saver:       {'Supported' if feature.energySaverUse == 2 else 'Not Available'}"
@@ -169,7 +169,7 @@ async def main():
                         f"  High Demand:        {'Supported' if feature.highDemandUse == 2 else 'Not Available'}"
                     )
                     print(
-                        f"  Eco Mode:           {'Supported' if feature.ecoUse == 2 else 'Not Available'}"
+                        f"  Eco Mode:           {'Supported' if feature.eco_use == 2 else 'Not Available'}"
                     )
 
                     print("\nAdvanced Features:")
@@ -177,19 +177,19 @@ async def main():
                         f"  Holiday Mode:       {'Supported' if feature.holidayUse == 2 else 'Not Available'}"
                     )
                     print(
-                        f"  Program Schedule:   {'Supported' if feature.programReservationUse == 2 else 'Not Available'}"
+                        f"  Program Schedule:   {'Supported' if feature.program_reservation_use == 2 else 'Not Available'}"
                     )
                     print(
-                        f"  Smart Diagnostic:   {'Supported' if feature.smartDiagnosticUse == 1 else 'Not Available'}"
+                        f"  Smart Diagnostic:   {'Supported' if feature.smart_diagnosticUse == 1 else 'Not Available'}"
                     )
                     print(
-                        f"  WiFi RSSI:          {'Supported' if feature.wifiRssiUse == 2 else 'Not Available'}"
+                        f"  WiFi RSSI:          {'Supported' if feature.wifi_rssiUse == 2 else 'Not Available'}"
                     )
                     print(
                         f"  Energy Usage:       {'Supported' if feature.energyUsageUse == 2 else 'Not Available'}"
                     )
                     print(
-                        f"  Freeze Protection:  {'Supported' if feature.freezeProtectionUse == 2 else 'Not Available'}"
+                        f"  Freeze Protection:  {'Supported' if feature.freeze_protection_use == 2 else 'Not Available'}"
                     )
                     print(
                         f"  Mixing Valve:       {'Supported' if feature.mixingValueUse == 1 else 'Not Available'}"

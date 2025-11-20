@@ -141,8 +141,8 @@ Emitted when device status update is received.
 .. code-block:: python
 
    def handle_status(status):
-       print(f"Temperature: {status.dhwTemperature}°F")
-       print(f"Power: {status.currentInstPower}W")
+       print(f"Temperature: {status.dhw_temperature}°F")
+       print(f"Power: {status.current_inst_power}W")
 
    mqtt.on('status_received', handle_status)
 
@@ -267,11 +267,11 @@ Example 3: Temperature Alerts
            mqtt = NavienMqttClient(auth)
 
            def check_temp(status):
-               if status.dhwTemperature < 110:
+               if status.dhw_temperature < 110:
                    print("WARNING: Temperature below 110°F")
                    send_alert("Low water temperature")
 
-               if status.dhwTemperature > 145:
+               if status.dhw_temperature > 145:
                    print("WARNING: Temperature above 145°F")
                    send_alert("High water temperature")
 

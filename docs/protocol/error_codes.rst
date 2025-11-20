@@ -1,7 +1,11 @@
 Error Codes
 ===========
 
-This document provides a comprehensive reference for NWP500 heat pump water heater error codes. When an error occurs, the front panel display flashes red and shows the error code. For Level 1 errors, operation continues while displaying the error.
+This document provides a comprehensive reference for NWP500 heat pump water heater error codes.
+
+.. warning::
+   This document describes the underlying protocol details. Most users should use the
+   Python client library (:doc:`../python_api/models`) which handles error parsing automatically. When an error occurs, the front panel display flashes red and shows the error code. For Level 1 errors, operation continues while displaying the error.
 
 Error Code Reference
 --------------------

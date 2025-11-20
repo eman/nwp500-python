@@ -5,6 +5,10 @@ REST API Protocol
 This document describes the Navien Smart Control REST API protocol based
 on the OpenAPI 3.1 specification.
 
+.. warning::
+   This document describes the underlying REST API protocol. Most users should use the
+   Python client library (:doc:`../python_api/api_client`) instead of using the API directly.
+
 Base URL
 ========
 
@@ -339,8 +343,8 @@ All error responses follow this format:
 .. code-block:: json
 
    {
-     "code": <error_code>,
-     "msg": "<error_message>",
+     "code": 404,
+     "msg": "NOT_FOUND",
      "data": null
    }
 

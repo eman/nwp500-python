@@ -85,22 +85,24 @@ async def main():
                 def on_status(status: DeviceStatus):
                     counts["status"] += 1
                     print(f"\n📊 Status Update #{counts['status']}")
-                    print(f"  Mode: {status.operationMode.name}")
-                    print(f"  DHW Temp: {status.dhwTemperature:.1f}°F")
-                    print(f"  DHW Charge: {status.dhwChargePer:.1f}%")
-                    print(f"  Compressor: {'On' if status.compUse else 'Off'}")
+                    print(f"  Mode: {status.operation_mode.name}")
+                    print(f"  DHW Temp: {status.dhw_temperature:.1f}°F")
+                    print(f"  DHW Charge: {status.dhw_charge_per:.1f}%")
+                    print(f"  Compressor: {'On' if status.comp_use else 'Off'}")
 
                 # Callback for feature/capability info
                 def on_feature(feature: DeviceFeature):
                     counts["feature"] += 1
                     print(f"\n📋 Feature Info #{counts['feature']}")
-                    print(f"  Serial: {feature.controllerSerialNumber}")
-                    print(f"  FW Version: {feature.controllerSwVersion}")
+                    print(f"  Serial: {feature.controller_serial_number}")
+                    print(f"  FW Version: {feature.controller_sw_version}")
                     print(
-                        f"  Temp Range: {feature.dhwTemperatureMin}-{feature.dhwTemperatureMax}°F"
+                        f"  Temp Range: {feature.dhw_temperature_min}-{feature.dhw_temperature_max}°F"
                     )
-                    print(f"  Heat Pump: {'Yes' if feature.heatpumpUse == 2 else 'No'}")
-                    print(f"  Electric: {'Yes' if feature.electricUse == 2 else 'No'}")
+                    print(
+                        f"  Heat Pump: {'Yes' if feature.heatpump_use == 2 else 'No'}"
+                    )
+                    print(f"  Electric: {'Yes' if feature.electric_use == 2 else 'No'}")
 
                 # Subscribe to broader topics to catch all messages
                 print("Subscribing to status and feature callbacks...")

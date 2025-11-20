@@ -13,11 +13,12 @@ The API uses JWT (JSON Web Tokens) for authentication with the following flow:
 
 import json
 import logging
-from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from typing import Any, Optional
 
 import aiohttp
+from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, model_validator
+from pydantic.alias_generators import to_camel
 
 from . import __version__
 from .config import API_BASE_URL, REFRESH_ENDPOINT, SIGN_IN_ENDPOINT
@@ -34,26 +35,27 @@ __license__ = "MIT"
 _logger = logging.getLogger(__name__)
 
 
-@dataclass
-class UserInfo:
+class NavienBaseModel(BaseModel):
+    """Base model for Navien authentication models."""
+
+    model_config = ConfigDict(
+        alias_generator=to_camel, populate_by_name=True, extra="ignore"
+    )
+
+
+class UserInfo(NavienBaseModel):
     """User information returned from authentication."""
 
-    user_type: str
-    user_first_name: str
-    user_last_name: str
-    user_status: str
-    user_seq: int
+    user_type: str = ""
+    user_first_name: str = ""
+    user_last_name: str = ""
+    user_status: str = ""
+    user_seq: int = 0
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "UserInfo":
-        """Create UserInfo from API response dictionary."""
-        return cls(
-            user_type=data.get("userType", ""),
-            user_first_name=data.get("userFirstName", ""),
-            user_last_name=data.get("userLastName", ""),
-            user_status=data.get("userStatus", ""),
-            user_seq=data.get("userSeq", 0),
-        )
+        """Create UserInfo from API response dictionary (compatibility)."""
+        return cls.model_validate(data)
 
     @property
     def full_name(self) -> str:
@@ -61,29 +63,48 @@ class UserInfo:
         return f"{self.user_first_name} {self.user_last_name}".strip()
 
 
-@dataclass
-class AuthTokens:
+class AuthTokens(NavienBaseModel):
     """Authentication tokens and AWS credentials returned from the API."""
 
-    id_token: str
-    access_token: str
-    refresh_token: str
-    authentication_expires_in: int
+    id_token: str = ""
+    access_token: str = ""
+    refresh_token: str = ""
+    authentication_expires_in: int = 3600
     access_key_id: Optional[str] = None
     secret_key: Optional[str] = None
     session_token: Optional[str] = None
     authorization_expires_in: Optional[int] = None
 
     # Calculated fields
-    issued_at: datetime = field(default_factory=datetime.now)
-    _expires_at: datetime = field(
-        default=datetime.now(), init=False, repr=False
-    )
-    _aws_expires_at: Optional[datetime] = field(
-        default=None, init=False, repr=False
-    )
+    issued_at: datetime = Field(default_factory=datetime.now)
 
-    def __post_init__(self) -> None:
+    _expires_at: datetime = PrivateAttr()
+    _aws_expires_at: Optional[datetime] = PrivateAttr(default=None)
+
+    @model_validator(mode="before")
+    @classmethod
+    def handle_empty_aliases(cls, data: Any) -> Any:
+        """Handle empty camelCase aliases with snake_case fallbacks."""
+        if isinstance(data, dict):
+            # Fields to check for fallback
+            fields_to_check = [
+                ("accessToken", "access_token"),
+                ("accessKeyId", "access_key_id"),
+                ("secretKey", "secret_key"),
+                ("refreshToken", "refresh_token"),
+                ("sessionToken", "session_token"),
+                ("authenticationExpiresIn", "authentication_expires_in"),
+                ("authorizationExpiresIn", "authorization_expires_in"),
+                ("idToken", "id_token"),
+            ]
+
+            for camel, snake in fields_to_check:
+                # If camel exists but is empty/None, and snake exists, use snake
+                if camel in data and not data[camel] and snake in data:
+                    data[camel] = data[snake]
+        return data
+
+    def model_post_init(self, __context: Any) -> None:
         """Cache the expiration timestamp after initialization."""
         # Pre-calculate and cache the expiration time
         self._expires_at = self.issued_at + timedelta(
@@ -94,6 +115,8 @@ class AuthTokens:
             self._aws_expires_at = self.issued_at + timedelta(
                 seconds=self.authorization_expires_in
             )
+        else:
+            self._aws_expires_at = None
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "AuthTokens":
@@ -106,84 +129,20 @@ class AuthTokens:
 
         Returns:
             AuthTokens instance
-
-        Example:
-            # From API response
-            >>> tokens = AuthTokens.from_dict({
-            ...     "idToken": "...",
-            ...     "accessToken": "...",
-            ...     "refreshToken": "...",
-            ...     "authenticationExpiresIn": 3600
-            ... })
-
-            # From stored data (after to_dict())
-            >>> stored = tokens.to_dict()
-            >>> restored = AuthTokens.from_dict(stored)
         """
-
-        # Helper to get value from either camelCase or snake_case key
-        def get_value(
-            camel_key: str, snake_key: str, default: Any = None
-        ) -> Any:
-            """Get value, checking camelCase first, then snake_case."""
-            value = data.get(camel_key)
-            if value is not None and value != "":
-                return value
-            value = data.get(snake_key)
-            if value is not None and value != "":
-                return value
-            return default
-
-        # Support both camelCase (API) and snake_case (stored) keys
-        return cls(
-            id_token=get_value("idToken", "id_token", ""),
-            access_token=get_value("accessToken", "access_token", ""),
-            refresh_token=get_value("refreshToken", "refresh_token", ""),
-            authentication_expires_in=get_value(
-                "authenticationExpiresIn", "authentication_expires_in", 3600
-            ),
-            access_key_id=get_value("accessKeyId", "access_key_id"),
-            secret_key=get_value("secretKey", "secret_key"),
-            session_token=get_value("sessionToken", "session_token"),
-            authorization_expires_in=get_value(
-                "authorizationExpiresIn", "authorization_expires_in"
-            ),
-            issued_at=datetime.fromisoformat(data["issued_at"])
-            if "issued_at" in data
-            else datetime.now(),
-        )
+        # Pydantic with populate_by_name=True handles both snake_case (stored)
+        # and camelCase (API alias) automatically.
+        return cls.model_validate(data)
 
     def to_dict(self) -> dict[str, Any]:
         """Convert AuthTokens to a dictionary for storage.
 
-        Returns a dictionary with all token data including the issued_at
-        timestamp, which is essential for correctly calculating expiration
-        times when restoring tokens.
-
         Returns:
-            Dictionary with snake_case keys suitable for JSON serialization
-
-        Example:
-            >>> tokens = auth_client.current_tokens
-            >>> stored_data = tokens.to_dict()
-            >>> # Save to file/database
-            >>> import json
-            >>> json.dump(stored_data, file)
-            >>>
-            >>> # Later, restore tokens
-            >>> restored_tokens = AuthTokens.from_dict(json.load(file))
+            Dictionary with snake_case keys suitable for JSON serialization.
+            DateTime fields are serialized to ISO 8601 format strings
+            (e.g., "2025-11-19T08:51:00") for backward compatibility.
         """
-        return {
-            "id_token": self.id_token,
-            "access_token": self.access_token,
-            "refresh_token": self.refresh_token,
-            "authentication_expires_in": self.authentication_expires_in,
-            "access_key_id": self.access_key_id,
-            "secret_key": self.secret_key,
-            "session_token": self.session_token,
-            "authorization_expires_in": self.authorization_expires_in,
-            "issued_at": self.issued_at.isoformat(),
-        }
+        return self.model_dump(mode="json")
 
     @property
     def expires_at(self) -> datetime:
@@ -229,36 +188,34 @@ class AuthTokens:
         return f"Bearer {self.access_token}"
 
 
-@dataclass
-class AuthenticationResponse:
+class AuthenticationResponse(NavienBaseModel):
     """Complete authentication response including user info and tokens."""
 
     user_info: UserInfo
     tokens: AuthTokens
-    legal: list[dict[str, Any]] = field(default_factory=list)
+    legal: list[dict[str, Any]] = Field(default_factory=list)
     code: int = 200
-    message: str = "SUCCESS"
+    message: str = Field(default="SUCCESS", alias="msg")
 
     @classmethod
     def from_dict(
         cls, response_data: dict[str, Any]
     ) -> "AuthenticationResponse":
         """Create AuthenticationResponse from API response."""
-        code = response_data.get("code", 200)
-        message = response_data.get("msg", "SUCCESS")
+        # Map nested API response to flat model structure
+        # API response: { "code": ..., "msg": ..., "data": { ... } }
         data = response_data.get("data", {})
 
-        user_info = UserInfo.from_dict(data.get("userInfo", {}))
-        tokens = AuthTokens.from_dict(data.get("token", {}))
-        legal = data.get("legal", [])
+        # Construct a dict that matches the model structure
+        model_data = {
+            "code": response_data.get("code", 200),
+            "msg": response_data.get("msg", "SUCCESS"),
+            "userInfo": data.get("userInfo", {}),
+            "tokens": data.get("token", {}),
+            "legal": data.get("legal", []),
+        }
 
-        return cls(
-            user_info=user_info,
-            tokens=tokens,
-            legal=legal,
-            code=code,
-            message=message,
-        )
+        return cls.model_validate(model_data)
 
 
 __all__ = [
@@ -353,13 +310,7 @@ class NavienAuthClient:
             # Create a minimal AuthenticationResponse with stored tokens
             # UserInfo will be populated on first API call if needed
             self._auth_response = AuthenticationResponse(
-                user_info=UserInfo(
-                    user_type="",
-                    user_first_name="",
-                    user_last_name="",
-                    user_status="",
-                    user_seq=0,
-                ),
+                user_info=UserInfo(),
                 tokens=stored_tokens,
             )
             self._user_email = user_id

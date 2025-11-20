@@ -4,6 +4,11 @@ Firmware Version Tracking
 
 This document tracks firmware versions and the device status fields they introduce or modify.
 
+.. warning::
+   This document describes the underlying protocol details. Most users should use the
+   Python client library (:doc:`../python_api/mqtt_client`) instead of implementing
+   the protocol directly.
+
 Purpose
 -------
 

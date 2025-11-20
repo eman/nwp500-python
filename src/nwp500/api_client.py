@@ -70,9 +70,11 @@ class NavienAPIClient:
 
         self.base_url = base_url.rstrip("/")
         self._auth_client = auth_client
-        self._session: aiohttp.ClientSession = session or auth_client._session
-        if self._session is None:
+        self._auth_client = auth_client
+        _session = session or auth_client._session
+        if _session is None:
             raise ValueError("auth_client must have an active session")
+        self._session = _session
         self._owned_session = (
             False  # Never own session when auth_client is provided
         )
@@ -220,7 +222,7 @@ class NavienAPIClient:
         )
 
         devices_data = response.get("data", [])
-        devices = [Device.from_dict(d) for d in devices_data]
+        devices = [Device.model_validate(d) for d in devices_data]
 
         _logger.info(f"Retrieved {len(devices)} device(s)")
         return devices
@@ -256,7 +258,7 @@ class NavienAPIClient:
         )
 
         data = response.get("data", {})
-        device = Device.from_dict(data)
+        device = Device.model_validate(data)
 
         _logger.info(
             f"Retrieved info for device: {device.device_info.device_name}"
@@ -295,7 +297,7 @@ class NavienAPIClient:
 
         data = response.get("data", {})
         firmwares_data = data.get("firmwares", [])
-        firmwares = [FirmwareInfo.from_dict(f) for f in firmwares_data]
+        firmwares = [FirmwareInfo.model_validate(f) for f in firmwares_data]
 
         _logger.info(f"Retrieved firmware info: {len(firmwares)} firmware(s)")
         return firmwares
@@ -339,7 +341,7 @@ class NavienAPIClient:
         )
 
         data = response.get("data", {})
-        tou_info = TOUInfo.from_dict(data)
+        tou_info = TOUInfo.model_validate(data)
 
         _logger.info("Retrieved TOU info for device")
         return tou_info

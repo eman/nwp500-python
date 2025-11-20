@@ -20,7 +20,7 @@ from awscrt.exceptions import AwsCrtError
 from .events import EventEmitter
 from .exceptions import MqttNotConnectedError
 from .models import Device, DeviceFeature, DeviceStatus, EnergyUsageResponse
-from .mqtt_utils import redact_topic
+from .mqtt_utils import redact_topic, topic_matches_pattern
 
 __author__ = "Emmanuel Levijarvi"
 
@@ -115,7 +115,7 @@ class MqttSubscriptionManager:
                 subscription_pattern,
                 handlers,
             ) in self._message_handlers.items():
-                if self._topic_matches_pattern(topic, subscription_pattern):
+                if topic_matches_pattern(topic, subscription_pattern):
                     for handler in handlers:
                         try:
                             handler(topic, message)
@@ -126,65 +126,6 @@ class MqttSubscriptionManager:
             _logger.error(f"Failed to parse message payload: {e}")
         except (AttributeError, KeyError, TypeError) as e:
             _logger.error(f"Error processing message: {e}")
-
-    def _topic_matches_pattern(self, topic: str, pattern: str) -> bool:
-        """
-        Check if a topic matches a subscription pattern with wildcards.
-
-        Supports MQTT wildcards:
-        - '+' matches a single level
-        - '#' matches multiple levels (must be at end)
-
-        Args:
-            topic: Actual topic (e.g., "cmd/52/navilink-ABC/status")
-            pattern: Pattern with wildcards (e.g., "cmd/52/+/#")
-
-        Returns:
-            True if topic matches pattern
-
-        Examples:
-            >>> _topic_matches_pattern("cmd/52/device1/status",
-            "cmd/52/+/status")
-            True
-            >>> _topic_matches_pattern("cmd/52/device1/status/extra",
-            "cmd/52/device1/#")
-            True
-        """
-        # Handle exact match
-        if topic == pattern:
-            return True
-
-        # Handle wildcards
-        topic_parts = topic.split("/")
-        pattern_parts = pattern.split("/")
-
-        # Multi-level wildcard # matches everything after
-        if "#" in pattern_parts:
-            hash_idx = pattern_parts.index("#")
-            # Must be at the end
-            if hash_idx != len(pattern_parts) - 1:
-                return False
-            # Topic must have at least as many parts as before the #
-            if len(topic_parts) < hash_idx:
-                return False
-            # Check parts before # with + wildcard support
-            for i in range(hash_idx):
-                if (
-                    pattern_parts[i] != "+"
-                    and topic_parts[i] != pattern_parts[i]
-                ):
-                    return False
-            return True
-
-        # Single-level wildcard + matches one level
-        if len(topic_parts) != len(pattern_parts):
-            return False
-
-        for topic_part, pattern_part in zip(topic_parts, pattern_parts):
-            if pattern_part != "+" and topic_part != pattern_part:
-                return False
-
-        return True
 
     async def subscribe(
         self,
@@ -416,8 +357,8 @@ class MqttSubscriptionManager:
         Example (Traditional Callback)::
 
             >>> def on_status(status: DeviceStatus):
-            ...     print(f"Temperature: {status.dhwTemperature}°F")
-            ...     print(f"Mode: {status.operationMode}")
+            ...     print(f"Temperature: {status.dhw_temperature}°F")
+            ...     print(f"Mode: {status.operation_mode}")
             >>>
             >>> await mqtt_client.subscribe_device_status(device, on_status)
 
@@ -525,44 +466,44 @@ class MqttSubscriptionManager:
 
         try:
             # Temperature change
-            if status.dhwTemperature != prev.dhwTemperature:
+            if status.dhw_temperature != prev.dhw_temperature:
                 await self._event_emitter.emit(
                     "temperature_changed",
-                    prev.dhwTemperature,
-                    status.dhwTemperature,
+                    prev.dhw_temperature,
+                    status.dhw_temperature,
                 )
                 _logger.debug(
-                    f"Temperature changed: {prev.dhwTemperature}°F → "
-                    f"{status.dhwTemperature}°F"
+                    f"Temperature changed: {prev.dhw_temperature}°F → "
+                    f"{status.dhw_temperature}°F"
                 )
 
             # Operation mode change
-            if status.operationMode != prev.operationMode:
+            if status.operation_mode != prev.operation_mode:
                 await self._event_emitter.emit(
                     "mode_changed",
-                    prev.operationMode,
-                    status.operationMode,
+                    prev.operation_mode,
+                    status.operation_mode,
                 )
                 _logger.debug(
-                    f"Mode changed: {prev.operationMode} → "
-                    f"{status.operationMode}"
+                    f"Mode changed: {prev.operation_mode} → "
+                    f"{status.operation_mode}"
                 )
 
             # Power consumption change
-            if status.currentInstPower != prev.currentInstPower:
+            if status.current_inst_power != prev.current_inst_power:
                 await self._event_emitter.emit(
                     "power_changed",
-                    prev.currentInstPower,
-                    status.currentInstPower,
+                    prev.current_inst_power,
+                    status.current_inst_power,
                 )
                 _logger.debug(
-                    f"Power changed: {prev.currentInstPower}W → "
-                    f"{status.currentInstPower}W"
+                    f"Power changed: {prev.current_inst_power}W → "
+                    f"{status.current_inst_power}W"
                 )
 
             # Heating started/stopped
-            prev_heating = prev.currentInstPower > 0
-            curr_heating = status.currentInstPower > 0
+            prev_heating = prev.current_inst_power > 0
+            curr_heating = status.current_inst_power > 0
 
             if curr_heating and not prev_heating:
                 await self._event_emitter.emit("heating_started", status)
@@ -573,15 +514,15 @@ class MqttSubscriptionManager:
                 _logger.debug("Heating stopped")
 
             # Error detection
-            if status.errorCode and not prev.errorCode:
+            if status.error_code and not prev.error_code:
                 await self._event_emitter.emit(
-                    "error_detected", status.errorCode, status
+                    "error_detected", status.error_code, status
                 )
-                _logger.info(f"Error detected: {status.errorCode}")
+                _logger.info(f"Error detected: {status.error_code}")
 
-            if not status.errorCode and prev.errorCode:
-                await self._event_emitter.emit("error_cleared", prev.errorCode)
-                _logger.info(f"Error cleared: {prev.errorCode}")
+            if not status.error_code and prev.error_code:
+                await self._event_emitter.emit("error_cleared", prev.error_code)
+                _logger.info(f"Error cleared: {prev.error_code}")
 
         except (TypeError, AttributeError, RuntimeError) as e:
             _logger.error(f"Error detecting state changes: {e}", exc_info=True)
@@ -614,16 +555,16 @@ class MqttSubscriptionManager:
         Example::
 
             >>> def on_feature(feature: DeviceFeature):
-            ...     print(f"Serial: {feature.controllerSerialNumber}")
-            ...     print(f"FW Version: {feature.controllerSwVersion}")
+            ...     print(f"Serial: {feature.controller_serial_number}")
+            ...     print(f"FW Version: {feature.controller_sw_version}")
             ...     print(f"Temp Range:
-            {feature.dhwTemperatureMin}-{feature.dhwTemperatureMax}°F")
+            {feature.dhw_temperature_min}-{feature.dhw_temperature_max}°F")
             >>>
             >>> await mqtt_client.subscribe_device_feature(device, on_feature)
 
             >>> # Or use event emitter
             >>> mqtt_client.on('feature_received', lambda f: print(f"FW:
-            {f.controllerSwVersion}"))
+            {f.controller_sw_version}"))
             >>> await mqtt_client.subscribe_device_feature(device, lambda f:
             None)
         """

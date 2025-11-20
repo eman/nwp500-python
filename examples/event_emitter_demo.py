@@ -70,7 +70,7 @@ def optimize_on_mode_change(
 # Example 3: Power state handlers
 def on_heating_started(status: DeviceStatus):
     """Handler for when heating starts."""
-    print(f"🔥 [Power] Heating STARTED - Power: {status.currentInstPower}W")
+    print(f"🔥 [Power] Heating STARTED - Power: {status.current_inst_power}W")
 
 
 def on_heating_stopped(status: DeviceStatus):
@@ -82,8 +82,8 @@ def on_heating_stopped(status: DeviceStatus):
 def on_error_detected(error_code: str, status: DeviceStatus):
     """Handler for error detection."""
     print(f"[ERROR] [Error] ERROR DETECTED: {error_code}")
-    print(f"   Temperature: {status.dhwTemperature}°F")
-    print(f"   Mode: {status.operationMode}")
+    print(f"   Temperature: {status.dhw_temperature}°F")
+    print(f"   Mode: {status.operation_mode}")
 
 
 def on_error_cleared(error_code: str):
@@ -179,7 +179,7 @@ async def main():
             # One-time listener example
             mqtt_client.once(
                 "status_received",
-                lambda s: print(f"   🎉 First status received: {s.dhwTemperature}°F"),
+                lambda s: print(f"   🎉 First status received: {s.dhw_temperature}°F"),
             )
             print("   [SUCCESS] Registered one-time status handler")
             print()

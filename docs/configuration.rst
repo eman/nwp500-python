@@ -140,53 +140,15 @@ MQTT Configuration
 ==================
 
 The MQTT client supports various configuration options through
-``MqttConnectionConfig``:
+``MqttConnectionConfig``.
 
-Basic Configuration
--------------------
+For detailed configuration guides, see:
 
-.. code-block:: python
+* :doc:`guides/auto_recovery` - Connection recovery settings
+* :doc:`guides/command_queue` - Offline command queuing
 
-   from nwp500 import NavienMqttClient, MqttConnectionConfig
-   from nwp500.mqtt_utils import MqttConnectionConfig
-
-   config = MqttConnectionConfig(
-       client_id="my-custom-client",  # or None for auto-generated
-       clean_session=True,
-       keep_alive_secs=1200
-   )
-
-   mqtt = NavienMqttClient(auth, config=config)
-
-Reconnection Settings
----------------------
-
-Configure automatic reconnection behavior:
-
-.. code-block:: python
-
-   config = MqttConnectionConfig(
-       auto_reconnect=True,
-       max_reconnect_attempts=15,
-       initial_reconnect_delay=1.0,  # seconds
-       max_reconnect_delay=120.0,    # seconds
-       reconnect_backoff_multiplier=2.0
-   )
-
-Command Queue Settings
-----------------------
-
-Configure command queueing when disconnected:
-
-.. code-block:: python
-
-   config = MqttConnectionConfig(
-       enable_command_queue=True,
-       max_queued_commands=100
-   )
-
-Complete Example
-----------------
+Basic Example
+-------------
 
 .. code-block:: python
 
@@ -194,23 +156,13 @@ Complete Example
    from nwp500.mqtt_utils import MqttConnectionConfig
 
    config = MqttConnectionConfig(
-       # Connection
-       endpoint="a1t30mldyslmuq-ats.iot.us-east-1.amazonaws.com",
-       region="us-east-1",
-       client_id="my-app-client",
-       clean_session=True,
+       # Connection settings
+       client_id="my-custom-client",
        keep_alive_secs=1200,
        
-       # Reconnection
+       # Enable features (see guides for details)
        auto_reconnect=True,
-       max_reconnect_attempts=10,
-       initial_reconnect_delay=1.0,
-       max_reconnect_delay=120.0,
-       reconnect_backoff_multiplier=2.0,
-       
-       # Command queue
-       enable_command_queue=True,
-       max_queued_commands=100
+       enable_command_queue=True
    )
 
    mqtt = NavienMqttClient(auth, config=config)

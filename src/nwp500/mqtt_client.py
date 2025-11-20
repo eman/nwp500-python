@@ -9,12 +9,14 @@ The client uses WebSocket connections with AWS credentials obtained from
 the authentication flow.
 """
 
+from __future__ import annotations
+
 import asyncio
 import json
 import logging
 import uuid
 from collections.abc import Sequence
-from typing import Any, Callable, Optional
+from typing import TYPE_CHECKING, Any, Callable
 
 from awscrt import mqtt
 from awscrt.exceptions import AwsCrtError
@@ -29,12 +31,14 @@ from .exceptions import (
     MqttPublishError,
     TokenRefreshError,
 )
-from .models import (
-    Device,
-    DeviceFeature,
-    DeviceStatus,
-    EnergyUsageResponse,
-)
+
+if TYPE_CHECKING:
+    from .models import (
+        Device,
+        DeviceFeature,
+        DeviceStatus,
+        EnergyUsageResponse,
+    )
 from .mqtt_command_queue import MqttCommandQueue
 from .mqtt_connection import MqttConnection
 from .mqtt_device_control import MqttDeviceController
@@ -123,7 +127,7 @@ class NavienMqttClient(EventEmitter):
     def __init__(
         self,
         auth_client: NavienAuthClient,
-        config: Optional[MqttConnectionConfig] = None,
+        config: MqttConnectionConfig | None = None,
     ):
         """
         Initialize the MQTT client.
@@ -162,22 +166,22 @@ class NavienMqttClient(EventEmitter):
         self._session_id = uuid.uuid4().hex
 
         # Store event loop reference for thread-safe coroutine scheduling
-        self._loop: Optional[asyncio.AbstractEventLoop] = None
+        self._loop: asyncio.AbstractEventLoop | None = None
 
         # Initialize specialized components
         # Command queue (independent, can be created immediately)
         self._command_queue = MqttCommandQueue(config=self.config)
 
         # Components that depend on connection (initialized in connect())
-        self._connection_manager: Optional[MqttConnection] = None
-        self._reconnection_handler: Optional[MqttReconnectionHandler] = None
-        self._subscription_manager: Optional[MqttSubscriptionManager] = None
-        self._device_controller: Optional[MqttDeviceController] = None
-        self._reconnect_task: Optional[asyncio.Task[None]] = None
-        self._periodic_manager: Optional[MqttPeriodicRequestManager] = None
+        self._connection_manager: MqttConnection | None = None
+        self._reconnection_handler: MqttReconnectionHandler | None = None
+        self._subscription_manager: MqttSubscriptionManager | None = None
+        self._device_controller: MqttDeviceController | None = None
+        self._reconnect_task: asyncio.Task[None] | None = None
+        self._periodic_manager: MqttPeriodicRequestManager | None = None
 
         # Connection state (simpler than checking _connection_manager)
-        self._connection: Optional[mqtt.Connection] = None
+        self._connection: mqtt.Connection | None = None
         self._connected = False
 
         _logger.info(
@@ -588,44 +592,6 @@ class NavienMqttClient(EventEmitter):
         except (AttributeError, KeyError, TypeError) as e:
             _logger.error(f"Error processing message: {e}")
 
-    def _topic_matches_pattern(self, topic: str, pattern: str) -> bool:
-        """Check if a topic matches a subscription pattern with wildcards."""
-        # Handle exact match
-        if topic == pattern:
-            return True
-
-        # Handle wildcards
-        topic_parts = topic.split("/")
-        pattern_parts = pattern.split("/")
-
-        # Multi-level wildcard # matches everything after
-        if "#" in pattern_parts:
-            hash_idx = pattern_parts.index("#")
-            # Must be at the end
-            if hash_idx != len(pattern_parts) - 1:
-                return False
-            # Topic must have at least as many parts as before the #
-            if len(topic_parts) < hash_idx:
-                return False
-            # Check parts before # with + wildcard support
-            for i in range(hash_idx):
-                if (
-                    pattern_parts[i] != "+"
-                    and topic_parts[i] != pattern_parts[i]
-                ):
-                    return False
-            return True
-
-        # Single-level wildcard + matches one level
-        if len(topic_parts) != len(pattern_parts):
-            return False
-
-        for topic_part, pattern_part in zip(topic_parts, pattern_parts):
-            if pattern_part != "+" and topic_part != pattern_part:
-                return False
-
-        return True
-
     async def subscribe(
         self,
         topic: str,
@@ -792,8 +758,8 @@ class NavienMqttClient(EventEmitter):
         Example (Traditional Callback)::
 
             >>> def on_status(status: DeviceStatus):
-            ...     print(f"Temperature: {status.dhwTemperature}°F")
-            ...     print(f"Mode: {status.operationMode}")
+            ...     print(f"Temperature: {status.dhw_temperature}°F")
+            ...     print(f"Mode: {status.operation_mode}")
             >>>
             >>> await mqtt_client.subscribe_device_status(device, on_status)
 
@@ -923,7 +889,7 @@ class NavienMqttClient(EventEmitter):
         self,
         device: Device,
         mode_id: int,
-        vacation_days: Optional[int] = None,
+        vacation_days: int | None = None,
     ) -> int:
         """
         Set DHW (Domestic Hot Water) operation mode.
@@ -1283,7 +1249,7 @@ class NavienMqttClient(EventEmitter):
     async def stop_periodic_requests(
         self,
         device: Device,
-        request_type: Optional[PeriodicRequestType] = None,
+        request_type: PeriodicRequestType | None = None,
     ) -> None:
         """
         Stop sending periodic requests for a device.
@@ -1404,9 +1370,7 @@ class NavienMqttClient(EventEmitter):
             device
         )
 
-    async def stop_all_periodic_tasks(
-        self, _reason: Optional[str] = None
-    ) -> None:
+    async def stop_all_periodic_tasks(self, _reason: str | None = None) -> None:
         """
         Stop all periodic request tasks.
 
