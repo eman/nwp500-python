@@ -366,7 +366,7 @@ Complete real-time device status with 100+ fields.
       def on_status(status):
           # Temperature monitoring
           print(f"Water: {status.dhw_temperature}°F")
-          print(f"Target: {status.dhw_temperatureSetting}°F")
+          print(f"Target: {status.dhw_temperature_setting}°F")
           print(f"Upper Tank: {status.tank_upper_temperature}°F")
           print(f"Lower Tank: {status.tank_lower_temperature}°F")
 
