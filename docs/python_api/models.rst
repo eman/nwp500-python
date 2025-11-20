@@ -540,9 +540,9 @@ Summary totals for energy usage.
 
    **Computed Properties:**
 
-   * ``total_usage`` (int) - heUsage + hpUsage
-   * ``heat_pump_percentage`` (float) - (hpUsage / total) × 100
-   * ``heat_element_percentage`` (float) - (heUsage / total) × 100
+   * ``total_usage`` (int) - heat_element_usage + heat_pump_usage
+   * ``heat_pump_percentage`` (float) - (heat_pump_usage / total) × 100
+   * ``heat_element_percentage`` (float) - (heat_element_usage / total) × 100
 
 MonthlyEnergyData
 -----------------
@@ -573,7 +573,7 @@ Energy data for a single day.
 
    **Computed Properties:**
 
-   * ``total_usage`` (int) - heUsage + hpUsage
+   * ``total_usage`` (int) - heat_element_usage + heat_pump_usage
 
 Time-of-Use Models
 ==================
