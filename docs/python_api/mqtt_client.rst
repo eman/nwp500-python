@@ -50,7 +50,7 @@ Basic Monitoring
            # Subscribe to status updates
            def on_status(status):
                print(f"Water Temp: {status.dhw_temperature}°F")
-               print(f"Target: {status.dhw_temperatureSetting}°F")
+               print(f"Target: {status.dhw_temperature_setting}°F")
                print(f"Power: {status.current_inst_power}W")
                print(f"Mode: {status.dhw_operation_setting.name}")
            

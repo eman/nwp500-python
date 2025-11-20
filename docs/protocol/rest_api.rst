@@ -343,8 +343,8 @@ All error responses follow this format:
 .. code-block:: json
 
    {
-     "code": <error_code>,
-     "msg": "<error_message>",
+     "code": 404,
+     "msg": "NOT_FOUND",
      "data": null
    }
 
