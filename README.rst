@@ -13,19 +13,15 @@ A Python library for monitoring and controlling the Navien NWP500 Heat Pump Wate
 
 Features
 ========
+* Monitor status (temperature, power, charge %)
+* Set target water temperature
+* Change operation mode
+* Optional scheduling (reservations)
+* Optional time-of-use settings
+* Periodic high-temp cycle info
+* Access detailed status fields
 
-* **Device Monitoring**: Access real-time status information including temperatures, power consumption, and tank charge level
-* **Temperature Control**: Set target water temperature (90-151°F)
-* **Operation Mode Control**: Switch between Heat Pump, Energy Saver, High Demand, Electric, and Vacation modes
-* **Reservation Management**: Schedule automatic temperature and mode changes
-* **Time of Use (TOU)**: Configure energy pricing schedules for demand response
-* **Anti-Legionella Protection**: Monitor periodic disinfection cycles (140°F heating)
-* **Comprehensive Status Data**: Access to 70+ device status fields including compressor status, heater status, flow rates, and more
-* **MQTT Protocol Support**: Low-level MQTT communication with Navien devices
-* **Non-Blocking Async Operations**: Fully compatible with async event loops (Home Assistant safe)
-* **Automatic Reconnection**: Reconnects automatically with exponential backoff during network interruptions
-* **Command Queuing**: Commands sent while disconnected are queued and sent automatically when reconnected
-* **Data Models**: Type-safe data classes with automatic unit conversions
+* Async friendly
 
 Quick Start
 ===========
@@ -119,8 +115,8 @@ The library includes a command line interface for quick monitoring and device in
 **Available CLI Options:**
 
 * ``--status``: Print current device status as JSON. Can be combined with control commands to see updated status.
-* ``--device-info``: Print comprehensive device information (firmware, model, capabilities) via MQTT as JSON and exit  
-* ``--device-feature``: Print device capabilities and feature settings via MQTT as JSON and exit
+* ``--device-info``: Print comprehensive device information (firmware, model, capabilities) as JSON and exit  
+* ``--device-feature``: Print device capabilities and feature settings as JSON and exit
 * ``--power-on``: Turn the device on and display response
 * ``--power-off``: Turn the device off and display response
 * ``--set-mode MODE``: Set operation mode and display response. Valid modes: heat-pump, energy-saver, high-demand, electric, vacation, standby
@@ -161,63 +157,10 @@ The library provides access to comprehensive device status information:
     * Cumulative operation time
     * Flow rates
 
-Operation Modes
-===============
-
-.. list-table:: Operation Modes
-    :header-rows: 1
-    :widths: 25 10 65
-
-    * - Mode
-      - ID
-      - Description
-    * - Heat Pump Mode
-      - 1
-      - Most energy-efficient mode using only the heat pump. Longest recovery time.
-    * - Electric Mode
-      - 2
-      - Fastest recovery using only electric heaters. Least energy-efficient.
-    * - Energy Saver Mode
-      - 3
-      - Default mode. Balances efficiency and recovery time using both heat pump and electric heater.
-    * - High Demand Mode
-      - 4
-      - Uses electric heater more frequently for faster recovery time.
-    * - Vacation Mode
-      - 5
-      - Suspends heating to save energy during extended absences.
-
-**Important:** When you set a mode, you're configuring the ``dhwOperationSetting`` (what mode to use when heating). The device's current operational state is reported in ``operationMode`` (0=Standby, 32=Heat Pump active, 64=Energy Saver active, 96=High Demand active).
-
-MQTT Protocol
-=============
-
-The library supports low-level MQTT communication with Navien devices:
-
-**Control Topics**
-    * ``cmd/{deviceType}/{deviceId}/ctrl`` - Send control commands
-    * ``cmd/{deviceType}/{deviceId}/ctrl/rsv/rd`` - Manage reservations
-    * ``cmd/{deviceType}/{deviceId}/ctrl/tou/rd`` - Time of Use settings
-    * ``cmd/{deviceType}/{deviceId}/st`` - Request status updates
-
-**Control Commands**
-    * Power control (on/off)
-    * DHW mode changes (including vacation mode)
-    * Temperature settings
-    * Reservation management (scheduled mode/temperature changes)
-    * Time of Use (TOU) pricing schedules
-
-**Status Requests**
-    * Device information
-    * General device status
-    * Energy usage queries
-    * Reservation information
-    * TOU settings
-
 Documentation
 =============
 
-For detailed information on device status fields, MQTT protocol, authentication, and more, see the complete documentation at https://nwp500-python.readthedocs.io/
+Full docs: https://nwp500-python.readthedocs.io/
 
 Data Models
 ===========
@@ -228,12 +171,6 @@ The library includes type-safe data models with automatic unit conversions:
 * **DeviceFeature**: Device capabilities, firmware versions, and configuration limits
 * **OperationMode**: Enumeration of available operation modes
 * **TemperatureUnit**: Celsius/Fahrenheit handling
-* **MqttRequest/MqttCommand**: MQTT message structures
-
-Temperature conversions are handled automatically:
-    * DHW temperatures: ``raw_value + 20`` (°F)
-    * Heat pump temperatures: ``raw_value / 10.0`` (°F)
-    * Ambient temperature: ``(raw_value * 9/5) + 32`` (°F)
 
 Requirements
 ============
@@ -244,37 +181,6 @@ Requirements
 * cryptography >= 3.4.0
 * pydantic >= 2.0.0
 * awsiotsdk >= 1.21.0
-
-Development
-===========
-To set up a development environment:
-
-.. code-block:: bash
-
-    # Clone the repository
-    git clone https://github.com/eman/nwp500-python.git
-    cd nwp500-python
-
-    # Install in development mode
-    pip install -e .
-
-    # Run tests
-    pytest
-
-**Linting and CI Consistency**
-
-To ensure your local linting matches CI exactly:
-
-.. code-block:: bash
-
-    # Install tox (recommended)
-    pip install tox
-
-    # Run linting exactly as CI does
-    tox -e lint
-
-    # Auto-fix and format
-    tox -e format
 
 License
 =======
