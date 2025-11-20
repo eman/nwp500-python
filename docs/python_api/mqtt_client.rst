@@ -890,7 +890,7 @@ Example 1: Complete Monitoring Application
                    last_power = status.current_inst_power
                
                # Heating state
-               if status.operationBusy:
+               if status.operation_busy:
                    components = []
                    if status.comp_use:
                        components.append("HP")
@@ -935,7 +935,7 @@ Example 2: Automatic Temperature Control
                nonlocal last_use_time
                
                # Water is being used
-               if status.dhwUse or status.dhwUseSustained:
+               if status.dhw_use or status.dhw_use_sustained:
                    last_use_time = datetime.now()
                    
                    # If temp dropped below 130°F, boost to high demand

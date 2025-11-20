@@ -305,9 +305,9 @@ Status Response
        "deviceType": 52,
        "macAddress": "...",
        "status": {
-         "dhwTemperature": 120,
-         "dhwTemperatureSetting": 120,
-         "currentInstPower": 450,
+         "dhw_temperature": 120,
+         "dhw_temperature_setting": 120,
+         "current_inst_power": 450,
          "operationMode": 64,
          "dhwOperationSetting": 3,
          "operationBusy": 2,
@@ -335,11 +335,11 @@ Feature/Info Response
    {
      "response": {
        "feature": {
-         "controllerSerialNumber": "ABC123",
-         "controllerSwVersion": 184614912,
-         "dhwTemperatureMin": 75,
-         "dhwTemperatureMax": 130,
-         "energyUsageUse": 1,
+         "controller_serial_number": "ABC123",
+         "controller_sw_version": 184614912,
+         "dhw_temperature_min": 75,
+         "dhw_temperature_max": 130,
+         "energy_usage_use": 1,
          ...
        }
      }
