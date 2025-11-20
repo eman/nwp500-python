@@ -204,13 +204,13 @@ subscribe_device_status()
       def on_status(status):
           """Called every time device status updates."""
           print(f"Temperature: {status.dhw_temperature}°F")
-          print(f"Target: {status.dhw_temperatureSetting}°F")
+          print(f"Target: {status.dhw_temperature_setting}°F")
           print(f"Mode: {status.dhw_operation_setting.name}")
           print(f"Power: {status.current_inst_power}W")
-          print(f"Energy: {status.availableEnergyCapacity}%")
+          print(f"Energy: {status.available_energy_capacity}%")
           
           # Check if actively heating
-          if status.operationBusy:
+          if status.operation_busy:
               print("Device is heating water")
               if status.comp_use:
                   print("  - Heat pump running")
@@ -220,14 +220,14 @@ subscribe_device_status()
                   print("  - Lower heater active")
           
           # Check water usage
-          if status.dhwUse:
+          if status.dhw_use:
               print("Water is being used (short-term)")
-          if status.dhwUseSustained:
+          if status.dhw_use_sustained:
               print("Water is being used (sustained)")
           
           # Check for errors
-          if status.errorCode != 0:
-              print(f"ERROR: {status.errorCode}")
+          if status.error_code != 0:
+              print(f"ERROR: {status.error_code}")
       
       await mqtt.subscribe_device_status(device, on_status)
       await mqtt.request_device_status(device)
@@ -282,17 +282,17 @@ subscribe_device_feature()
 
       def on_feature(feature):
           """Called when device features/info received."""
-          print(f"Serial: {feature.controllerSerialNumber}")
-          print(f"Firmware: {feature.controllerSwVersion}")
-          print(f"Temp Range: {feature.dhwTemperatureMin}°F - "
-                f"{feature.dhwTemperatureMax}°F")
+          print(f"Serial: {feature.controller_serial_number}")
+          print(f"Firmware: {feature.controller_sw_version}")
+          print(f"Temp Range: {feature.dhw_temperature_min}°F - "
+                f"{feature.dhw_temperature_max}°F")
           
           # Check capabilities
-          if feature.energyUsageUse:
+          if feature.energy_usage_use:
               print("Energy monitoring: Supported")
-          if feature.antiLegionellaSettingUse:
+          if feature.anti_legionella_setting_use:
               print("Anti-Legionella: Supported")
-          if feature.reservationUse:
+          if feature.reservation_use:
               print("Reservations: Supported")
       
       await mqtt.subscribe_device_feature(device, on_feature)
