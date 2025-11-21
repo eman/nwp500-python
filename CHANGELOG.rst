@@ -2,6 +2,30 @@
 Changelog
 =========
 
+Version 6.0.4 (2025-11-21)
+==========================
+
+Fixed
+-----
+
+- **Temperature Conversion Accuracy**: Corrected temperature conversion logic based on analysis of the decompiled mobile application. Previous conversions used approximations; new logic uses exact formulas from the app:
+  
+  - Replaced ``Add20`` validator with ``HalfCelsiusToF`` for fields transmitted as half-degrees Celsius
+  - Replaced ``DeciCelsiusToF`` with ``PentaCelsiusToF`` for fields scaled by factor of 5
+  - Affects multiple temperature sensor readings for improved accuracy
+
+- **CLI Output Formatting**: Fixed formatting issues in command-line interface output
+
+Changed
+-------
+
+- **Documentation**: Updated temperature conversion documentation to use precise 9/5 fraction instead of 1.8 approximation for clarity
+
+Added
+-----
+
+- **Test Coverage**: Added ``tests/test_models.py`` to verify temperature conversion correctness
+
 Version 6.0.3 (2025-11-20)
 ==========================
 
