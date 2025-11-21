@@ -18,25 +18,24 @@ Raw Encoding Strategies
 
 The device uses several encoding schemes to minimize transmission overhead:
 
-1. **Offset Encoding** (add_20)
-   - Applied to most temperature fields
-   - Formula: ``displayed_value = raw_value + 20``
-   - Purpose: Negative temperatures stored as positive integers
-   - Range: Typically -4°F (-20°C) to 149°F (65°C)
-   - Example: Raw 100 → 120°F display value
+1. **Half-degree Celsius to Fahrenheit** (HalfCelsiusToF)
+   - Applied to most temperature fields that are not scaled by other factors.
+   - Formula: ``displayed_value = (raw_value / 2.0) * 1.8 + 32``
+   - Purpose: Converts raw values, which are in half-degrees Celsius, to Fahrenheit.
+   - Example: Raw 122 -> (122 / 2) * 1.8 + 32 = 141.8°F
 
-2. **Tenths Encoding** (div_10)
+2. **Scaled Celsius to Fahrenheit** (PentaCelsiusToF)
+   - Applied to refrigerant and evaporator temperatures.
+   - Formula: ``displayed_value = (raw_value / 5.0) * 1.8 + 32``
+   - Purpose: Converts raw values, which are scaled by a factor of 5, to Fahrenheit.
+   - Example: Raw 250 -> (250 / 5) * 1.8 + 32 = 122°F
+
+3. **Tenths Encoding** (div_10)
    - Applied to decimal precision values
    - Formula: ``displayed_value = raw_value / 10.0``
    - Purpose: Preserve decimal precision in integer storage
    - Common for flow rates and differential temperatures
    - Example: Raw 125 → 12.5 GPM
-
-3. **Decicelsius to Fahrenheit** (decicelsius_to_f)
-   - Applied to refrigerant and evaporator temperatures
-   - Formula: ``displayed_value = (raw_value / 10) * 9/5 + 32``
-   - Purpose: Convert Celsius tenths to Fahrenheit
-   - Example: Raw 250 (25°C) → 77°F
 
 4. **Boolean Encoding** (device_bool)
    - Applied to all status flags
@@ -66,15 +65,15 @@ DHW (Domestic Hot Water) Temperatures
      - Display Unit
      - Description
    * - ``dhwTemperature``
-     - add_20
+     - HalfCelsiusToF
      - °F
      - **Current outlet temperature** of hot water being delivered to fixtures. Real-time measurement. Typically 90-150°F.
    * - ``dhwTemperature2``
-     - add_20
+     - HalfCelsiusToF
      - °F
      - **Secondary DHW temperature sensor** reading (redundancy/averaging). May differ slightly from primary sensor during temperature transitions.
    * - ``dhwTemperatureSetting``
-     - add_20
+     - HalfCelsiusToF
      - °F
      - **User-configured target temperature** for DHW delivery. Adjustable range: 95-150°F. Default: 120°F. This is the setpoint users configure in the app.
    * - ``currentInletTemperature``
@@ -82,7 +81,7 @@ DHW (Domestic Hot Water) Temperatures
      - °F
      - **Cold water inlet temperature** to the water heater. Affects heating performance and recovery time. Typically 40-80°F depending on season and location.
    * - ``dhwTargetTemperatureSetting``
-     - add_20
+     - HalfCelsiusToF
      - °F
      - **Duplicate of dhwTemperatureSetting** for legacy API compatibility.
 
@@ -98,11 +97,11 @@ Tank Temperature Sensors
      - Display Unit
      - Description
    * - ``tankUpperTemperature``
-     - decicelsius_to_f
+     - PentaCelsiusToF
      - °F
      - **Upper tank sensor temperature**. Indicates stratification - hot water at top for quick delivery. Typically hottest point in tank.
    * - ``tankLowerTemperature``
-     - decicelsius_to_f
+     - PentaCelsiusToF
      - °F
      - **Lower tank sensor temperature**. Indicates bulk tank temperature and heating progress. Typically cooler than upper sensor.
 
@@ -122,27 +121,27 @@ These temperatures monitor the heat pump refrigerant circuit health and performa
      - Display Unit
      - Description
    * - ``dischargeTemperature``
-     - decicelsius_to_f
+     - PentaCelsiusToF
      - °F
      - **Compressor discharge temperature**. Temperature of refrigerant exiting the compressor. Typically 120-180°F. High values indicate high system pressure; low values indicate efficiency issues.
    * - ``suctionTemperature``
-     - decicelsius_to_f
+     - PentaCelsiusToF
      - °F
      - **Compressor suction temperature**. Temperature of refrigerant entering the compressor. Typically 40-60°F. Affects superheat calculation.
    * - ``evaporatorTemperature``
-     - decicelsius_to_f
+     - PentaCelsiusToF
      - °F
      - **Evaporator coil temperature**. Where heat is extracted from ambient air. Typically 20-50°F. Lower outdoor air temperature reduces evaporator efficiency.
    * - ``ambientTemperature``
-     - decicelsius_to_f
+     - PentaCelsiusToF
      - °F
      - **Ambient air temperature** measured at heat pump inlet. Directly affects system performance. At freezing (32°F), heat pump efficiency drops significantly.
    * - ``targetSuperHeat``
-     - decicelsius_to_f
+     - PentaCelsiusToF
      - °F
      - **Target superheat setpoint**. Desired temperature difference between suction and evaporator ensuring complete refrigerant vaporization. Typically 10-20°F.
    * - ``currentSuperHeat``
-     - decicelsius_to_f
+     - PentaCelsiusToF
      - °F
      - **Measured superheat value**. Actual temperature difference. Deviation from target indicates EEV (Electronic Expansion Valve) control issues.
 
@@ -166,19 +165,19 @@ Electric heating elements are controlled via thermostat ranges. Two sensors (upp
      - Display Unit
      - Description
    * - ``heUpperOnTempSetting``
-     - add_20
+     - HalfCelsiusToF
      - °F
      - **Upper element ON threshold**. Upper tank temp must fall below this to activate upper heating element.
    * - ``heUpperOffTempSetting``
-     - add_20
+     - HalfCelsiusToF
      - °F
      - **Upper element OFF threshold**. Upper tank temp rises above this to deactivate upper element (hysteresis).
    * - ``heLowerOnTempSetting``
-     - add_20
+     - HalfCelsiusToF
      - °F
      - **Lower element ON threshold**. Lower tank temp must fall below this to activate lower element.
    * - ``heLowerOffTempSetting``
-     - add_20
+     - HalfCelsiusToF
      - °F
      - **Lower element OFF threshold**. Lower tank temp rises above this to deactivate lower element.
    * - ``heUpperOnDiffTempSetting``
@@ -198,7 +197,7 @@ Electric heating elements are controlled via thermostat ranges. Two sensors (upp
      - °F
      - **Lower element differential** variation.
    * - ``heatMinOpTemperature``
-     - add_20
+     - HalfCelsiusToF
      - °F
      - **Minimum heat pump operation temperature**. Lowest tank temperature setpoint allowed in the current operating mode. Range: 95-113°F. Default: 95°F. When set, the user can only set the target tank temperature at or above this threshold, ensuring minimum system operating conditions.
 
@@ -216,19 +215,19 @@ Heat pump stages are similarly controlled via thermostat ranges:
      - Display Unit
      - Description
    * - ``hpUpperOnTempSetting``
-     - add_20
+     - HalfCelsiusToF
      - °F
      - **Upper heat pump ON**. Upper tank falls below this to activate heat pump for upper tank heating.
    * - ``hpUpperOffTempSetting``
-     - add_20
+     - HalfCelsiusToF
      - °F
      - **Upper heat pump OFF**. Upper tank rises above this to stop upper tank heat pump operation.
    * - ``hpLowerOnTempSetting``
-     - add_20
+     - HalfCelsiusToF
      - °F
      - **Lower heat pump ON**. Lower tank falls below this to activate heat pump for lower tank heating.
    * - ``hpLowerOffTempSetting``
-     - add_20
+     - HalfCelsiusToF
      - °F
      - **Lower heat pump OFF**. Lower tank rises above this to stop lower tank heat pump operation.
    * - ``hpUpperOnDiffTempSetting``
@@ -264,15 +263,15 @@ Freeze Protection Temperatures
      - Boolean
      - **Freeze protection enabled flag**. When True, triggers anti-freeze operation below threshold.
    * - ``freezeProtectionTemperature``
-     - add_20
+     - HalfCelsiusToF
      - °F
      - **Freeze protection temperature setpoint**. Range: 43-50°F (6-10°C). Default: 43°F (6°C). When tank temperature drops below this, electric heating activates automatically to prevent freezing.
    * - ``freezeProtectionTempMin``
-     - add_20
+     - HalfCelsiusToF
      - °F
      - **Minimum freeze protection temperature limit** (lower boundary). Fixed at 43°F (6°C).
    * - ``freezeProtectionTempMax``
-     - add_20
+     - HalfCelsiusToF
      - °F
      - **Maximum freeze protection temperature limit** (upper boundary). Fixed at 50°F (10°C).
 
@@ -290,17 +289,18 @@ For systems with recirculation pumps (optional feature):
      - Display Unit
      - Description
    * - ``recircTemperature``
-     - add_20
+     - HalfCelsiusToF
      - °F
      - **Recirculation loop current temperature**. Temperature of water being circulated back to tank.
    * - ``recircFaucetTemperature``
-     - add_20
+     - HalfCelsiusToF
      - °F
      - **Recirculation faucet outlet temperature**. How hot water is at the furthest fixture during recirculation.
    * - ``recircTempSetting``
-     - add_20
+     - HalfCelsiusToF
      - °F
      - **Recirculation target temperature**. What temperature to maintain in the recirculation line.
+
 
 Flow Rate Fields
 ----------------
@@ -613,8 +613,8 @@ Temperature Unit Notes
 * **Fahrenheit** conversions assume target display is °F as configured in the device
 * **Celsius calculations** can be derived by reversing the conversions:
   
-  - From ``add_20`` fields: ``celsius = (fahrenheit - 20) * 5/9``
-  - From ``decicelsius_to_f`` fields: ``celsius = (fahrenheit - 32) * 5/9``
+  - From ``HalfCelsiusToF`` fields: ``celsius = (fahrenheit - 32) * 5/9 * 2``
+  - From ``PentaCelsiusToF`` fields: ``celsius = (fahrenheit - 32) * 5/9 * 5``
   - From ``div_10`` fields: ``celsius = value_celsius / 10.0``
 
 * **Sensor Accuracy**: Typically ±2°F for tank sensors, ±3°F for refrigerant sensors

@@ -293,8 +293,7 @@ Complete real-time device status with 100+ fields.
    * ``ambient_temperature`` (float) - Ambient air temperature
 
    .. note::
-      Temperature display values are 20°F higher than message values.
-      Display: 140°F = Message: 120°F
+      Temperature values from the device are automatically converted from their raw (scaled Celsius) representation to Fahrenheit or Celsius based on the device's settings. The library handles these conversions transparently.
 
    **Key Power/Energy Fields:**
 
@@ -684,18 +683,7 @@ Best Practices
               # Device supports energy monitoring
               await mqtt.request_energy_usage(device, year, months)
 
-3. **Handle temperature conversions:**
-
-   .. code-block:: python
-
-      # Display temperature is 20°F higher than message value
-      display_temp = 140
-      message_value = display_temp - 20  # 120
-
-      # Or use convenience method
-      await mqtt.set_dhw_temperature_display(device, 140)
-
-4. **Monitor operation state:**
+3. **Monitor operation state:**
 
    .. code-block:: python
 
