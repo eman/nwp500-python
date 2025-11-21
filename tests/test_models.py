@@ -3,7 +3,9 @@ import pytest
 from nwp500.models import DeviceStatus
 
 
-def get_default_status_data():
+@pytest.fixture
+def default_status_data():
+    """Provides a default dictionary for DeviceStatus model."""
     return {
         "command": 0,
         "outsideTemperature": 0.0,
@@ -109,23 +111,22 @@ def get_default_status_data():
     }
 
 
-def test_device_status_half_celsius_to_fahrenheit():
+def test_device_status_half_celsius_to_fahrenheit(default_status_data):
     """Test HalfCelsiusToF conversion."""
-    raw_data = get_default_status_data()
-    raw_data["dhwTemperature"] = 122
-    status = DeviceStatus.model_validate(raw_data)
+    default_status_data["dhwTemperature"] = 122
+    status = DeviceStatus.model_validate(default_status_data)
     assert status.dhw_temperature == pytest.approx(141.8)
 
-def test_device_status_penta_celsius_to_fahrenheit():
+
+def test_device_status_penta_celsius_to_fahrenheit(default_status_data):
     """Test PentaCelsiusToF conversion."""
-    raw_data = get_default_status_data()
-    raw_data["tankUpperTemperature"] = 250
-    status = DeviceStatus.model_validate(raw_data)
+    default_status_data["tankUpperTemperature"] = 250
+    status = DeviceStatus.model_validate(default_status_data)
     assert status.tank_upper_temperature == pytest.approx(122.0)
 
-def test_device_status_div10():
+
+def test_device_status_div10(default_status_data):
     """Test Div10 conversion."""
-    raw_data = get_default_status_data()
-    raw_data["currentInletTemperature"] = 500
-    status = DeviceStatus.model_validate(raw_data)
+    default_status_data["currentInletTemperature"] = 500
+    status = DeviceStatus.model_validate(default_status_data)
     assert status.current_inlet_temperature == 50.0
