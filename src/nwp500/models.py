@@ -53,7 +53,9 @@ def _penta_celsius_to_fahrenheit(v: Any) -> float:
 DeviceBool = Annotated[bool, BeforeValidator(_device_bool_validator)]
 Div10 = Annotated[float, BeforeValidator(_div_10_validator)]
 HalfCelsiusToF = Annotated[float, BeforeValidator(_half_celsius_to_fahrenheit)]
-PentaCelsiusToF = Annotated[float, BeforeValidator(_penta_celsius_to_fahrenheit)]
+PentaCelsiusToF = Annotated[
+    float, BeforeValidator(_penta_celsius_to_fahrenheit)
+]
 
 
 class NavienBaseModel(BaseModel):

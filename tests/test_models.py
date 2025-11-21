@@ -1,5 +1,7 @@
 import pytest
+
 from nwp500.models import DeviceStatus
+
 
 def get_default_status_data():
     return {
