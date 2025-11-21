@@ -22,13 +22,13 @@ The device uses several encoding schemes to minimize transmission overhead:
    - Applied to most temperature fields that are not scaled by other factors.
    - Formula: ``displayed_value = (raw_value / 2.0) * 9/5 + 32``
    - Purpose: Converts raw values, which are in half-degrees Celsius, to Fahrenheit.
-   - Example: Raw 122 -> (122 / 2) * 1.8 + 32 = 141.8°F
+   - Example: Raw 122 -> (122 / 2) * 9/5 + 32 = 141.8°F
 
 2. **Scaled Celsius to Fahrenheit** (PentaCelsiusToF)
    - Applied to refrigerant and evaporator temperatures.
    - Formula: ``displayed_value = (raw_value / 5.0) * 9/5 + 32``
    - Purpose: Converts raw values, which are scaled by a factor of 5, to Fahrenheit.
-   - Example: Raw 250 -> (250 / 5) * 1.8 + 32 = 122°F
+   - Example: Raw 250 -> (250 / 5) * 9/5 + 32 = 122°F
 
 3. **Tenths Encoding** (div_10)
    - Applied to decimal precision values
