@@ -41,10 +41,10 @@ def _half_celsius_to_fahrenheit(v: Any) -> float:
     return float(v)
 
 
-def _penta_celsius_to_fahrenheit(v: Any) -> float:
-    """Convert value scaled by 5 to Fahrenheit."""
+def _deci_celsius_to_fahrenheit(v: Any) -> float:
+    """Convert decicelsius (tenths of Celsius) to Fahrenheit."""
     if isinstance(v, (int, float)):
-        celsius = float(v) / 5.0
+        celsius = float(v) / 10.0
         return (celsius * 9 / 5) + 32
     return float(v)
 
@@ -53,9 +53,7 @@ def _penta_celsius_to_fahrenheit(v: Any) -> float:
 DeviceBool = Annotated[bool, BeforeValidator(_device_bool_validator)]
 Div10 = Annotated[float, BeforeValidator(_div_10_validator)]
 HalfCelsiusToF = Annotated[float, BeforeValidator(_half_celsius_to_fahrenheit)]
-PentaCelsiusToF = Annotated[
-    float, BeforeValidator(_penta_celsius_to_fahrenheit)
-]
+DeciCelsiusToF = Annotated[float, BeforeValidator(_deci_celsius_to_fahrenheit)]
 
 
 class NavienBaseModel(BaseModel):
@@ -289,15 +287,15 @@ class DeviceStatus(NavienBaseModel):
     he_lower_off_diff_temp_setting: Div10
     recirc_dhw_flow_rate: Div10
 
-    # Temperature fields with 1/5 scaling
-    tank_upper_temperature: PentaCelsiusToF
-    tank_lower_temperature: PentaCelsiusToF
-    discharge_temperature: PentaCelsiusToF
-    suction_temperature: PentaCelsiusToF
-    evaporator_temperature: PentaCelsiusToF
-    ambient_temperature: PentaCelsiusToF
-    target_super_heat: PentaCelsiusToF
-    current_super_heat: PentaCelsiusToF
+    # Temperature fields with decicelsius (÷10) to Fahrenheit conversion
+    tank_upper_temperature: DeciCelsiusToF
+    tank_lower_temperature: DeciCelsiusToF
+    discharge_temperature: DeciCelsiusToF
+    suction_temperature: DeciCelsiusToF
+    evaporator_temperature: DeciCelsiusToF
+    ambient_temperature: DeciCelsiusToF
+    target_super_heat: DeciCelsiusToF
+    current_super_heat: DeciCelsiusToF
 
     # Enum fields
     operation_mode: CurrentOperationMode = Field(

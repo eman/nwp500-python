@@ -2,6 +2,36 @@
 Changelog
 =========
 
+Version 6.0.5 (2025-11-21)
+==========================
+
+Fixed
+-----
+
+- **CRITICAL Temperature Conversion Bug**: Corrected temperature conversion formula for 8 sensor fields that were displaying values ~100°F higher than expected. The v6.0.4 change incorrectly used division by 5 (pentacelsius) instead of division by 10 (decicelsius) for these fields:
+  
+  - ``tank_upper_temperature`` - Water tank upper sensor
+  - ``tank_lower_temperature`` - Water tank lower sensor
+  - ``discharge_temperature`` - Compressor discharge temperature (refrigerant)
+  - ``suction_temperature`` - Compressor suction temperature (refrigerant)
+  - ``evaporator_temperature`` - Evaporator coil temperature (refrigerant)
+  - ``ambient_temperature`` - Ambient air temperature at heat pump
+  - ``target_super_heat`` - Target superheat setpoint
+  - ``current_super_heat`` - Measured superheat value
+  
+  **Impact**: These fields now correctly display temperatures in expected ranges:
+  
+  - Tank temperatures: ~120°F (close to DHW temperature, not ~220°F)
+  - Discharge temperature: 120-180°F (not 220-280°F)
+  - Suction, evaporator, ambient: Now showing physically realistic values
+  
+  **Technical details**: Changed from ``PentaCelsiusToF`` (÷5) back to ``DeciCelsiusToF`` (÷10). The correct formula is ``(raw_value / 10.0) * 9/5 + 32``.
+
+Changed
+-------
+
+- **Documentation**: Updated ``data_conversions.rst`` and ``device_status.rst`` to reflect correct ``DeciCelsiusToF`` conversion for refrigerant circuit and tank temperature sensors
+
 Version 6.0.4 (2025-11-21)
 ==========================
 

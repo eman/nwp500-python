@@ -118,11 +118,11 @@ def test_device_status_half_celsius_to_fahrenheit(default_status_data):
     assert status.dhw_temperature == pytest.approx(141.8)
 
 
-def test_device_status_penta_celsius_to_fahrenheit(default_status_data):
-    """Test PentaCelsiusToF conversion."""
-    default_status_data["tankUpperTemperature"] = 250
+def test_device_status_deci_celsius_to_fahrenheit(default_status_data):
+    """Test DeciCelsiusToF conversion."""
+    default_status_data["tankUpperTemperature"] = 489
     status = DeviceStatus.model_validate(default_status_data)
-    assert status.tank_upper_temperature == pytest.approx(122.0)
+    assert status.tank_upper_temperature == pytest.approx(120.0, abs=0.1)
 
 
 def test_device_status_div10(default_status_data):

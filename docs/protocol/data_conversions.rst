@@ -24,11 +24,11 @@ The device uses several encoding schemes to minimize transmission overhead:
    - Purpose: Converts raw values, which are in half-degrees Celsius, to Fahrenheit.
    - Example: Raw 122 -> (122 / 2) * 9/5 + 32 = 141.8°F
 
-2. **Scaled Celsius to Fahrenheit** (PentaCelsiusToF)
-   - Applied to refrigerant and evaporator temperatures.
-   - Formula: ``displayed_value = (raw_value / 5.0) * 9/5 + 32``
-   - Purpose: Converts raw values, which are scaled by a factor of 5, to Fahrenheit.
-   - Example: Raw 250 -> (250 / 5) * 9/5 + 32 = 122°F
+2. **Decicelsius to Fahrenheit** (DeciCelsiusToF)
+   - Applied to refrigerant circuit and tank temperature sensors.
+   - Formula: ``displayed_value = (raw_value / 10.0) * 9/5 + 32``
+   - Purpose: Converts raw values, which are in tenths of degrees Celsius, to Fahrenheit.
+   - Example: Raw 489 -> (489 / 10) * 9/5 + 32 = 120.0°F
 
 3. **Tenths Encoding** (div_10)
    - Applied to decimal precision values
@@ -97,11 +97,11 @@ Tank Temperature Sensors
      - Display Unit
      - Description
    * - ``tankUpperTemperature``
-     - PentaCelsiusToF
+     - DeciCelsiusToF
      - °F
      - **Upper tank sensor temperature**. Indicates stratification - hot water at top for quick delivery. Typically hottest point in tank.
    * - ``tankLowerTemperature``
-     - PentaCelsiusToF
+     - DeciCelsiusToF
      - °F
      - **Lower tank sensor temperature**. Indicates bulk tank temperature and heating progress. Typically cooler than upper sensor.
 
@@ -121,27 +121,27 @@ These temperatures monitor the heat pump refrigerant circuit health and performa
      - Display Unit
      - Description
    * - ``dischargeTemperature``
-     - PentaCelsiusToF
+     - DeciCelsiusToF
      - °F
      - **Compressor discharge temperature**. Temperature of refrigerant exiting the compressor. Typically 120-180°F. High values indicate high system pressure; low values indicate efficiency issues.
    * - ``suctionTemperature``
-     - PentaCelsiusToF
+     - DeciCelsiusToF
      - °F
      - **Compressor suction temperature**. Temperature of refrigerant entering the compressor. Typically 40-60°F. Affects superheat calculation.
    * - ``evaporatorTemperature``
-     - PentaCelsiusToF
+     - DeciCelsiusToF
      - °F
      - **Evaporator coil temperature**. Where heat is extracted from ambient air. Typically 20-50°F. Lower outdoor air temperature reduces evaporator efficiency.
    * - ``ambientTemperature``
-     - PentaCelsiusToF
+     - DeciCelsiusToF
      - °F
      - **Ambient air temperature** measured at heat pump inlet. Directly affects system performance. At freezing (32°F), heat pump efficiency drops significantly.
    * - ``targetSuperHeat``
-     - PentaCelsiusToF
+     - DeciCelsiusToF
      - °F
      - **Target superheat setpoint**. Desired temperature difference between suction and evaporator ensuring complete refrigerant vaporization. Typically 10-20°F.
    * - ``currentSuperHeat``
-     - PentaCelsiusToF
+     - DeciCelsiusToF
      - °F
      - **Measured superheat value**. Actual temperature difference. Deviation from target indicates EEV (Electronic Expansion Valve) control issues.
 

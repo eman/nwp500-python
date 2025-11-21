@@ -122,37 +122,37 @@ This document lists the fields found in the ``status`` object of device status m
      - integer
      - °F
      - Temperature of the upper part of the tank.
-     - PentaCelsiusToF
+     - DeciCelsiusToF
    * - ``tankLowerTemperature``
      - integer
      - °F
      - Temperature of the lower part of the tank.
-     - PentaCelsiusToF
+     - DeciCelsiusToF
    * - ``dischargeTemperature``
      - integer
      - °F
      - Compressor discharge temperature - temperature of refrigerant leaving the compressor.
-     - PentaCelsiusToF
+     - DeciCelsiusToF
    * - ``suctionTemperature``
      - integer
      - °F
      - Compressor suction temperature - temperature of refrigerant entering the compressor.
-     - PentaCelsiusToF
+     - DeciCelsiusToF
    * - ``evaporatorTemperature``
      - integer
      - °F
      - Evaporator temperature - temperature where heat is absorbed from ambient air.
-     - PentaCelsiusToF
+     - DeciCelsiusToF
    * - ``ambientTemperature``
      - integer
      - °F
      - Ambient air temperature measured at the heat pump air intake.
-     - PentaCelsiusToF
+     - DeciCelsiusToF
    * - ``targetSuperHeat``
      - integer
      - °F
      - Target superheat value - the desired temperature difference ensuring complete refrigerant vaporization.
-     - PentaCelsiusToF
+     - DeciCelsiusToF
    * - ``compUse``
      - bool
      - None
@@ -307,7 +307,7 @@ This document lists the fields found in the ``status`` object of device status m
      - integer
      - °F
      - Current superheat value - actual temperature difference between suction and evaporator temperatures.
-     - PentaCelsiusToF
+     - DeciCelsiusToF
    * - ``heatUpperUse``
      - bool
      - None
