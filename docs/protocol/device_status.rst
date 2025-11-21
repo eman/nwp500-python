@@ -77,12 +77,12 @@ This document lists the fields found in the ``status`` object of device status m
      - integer
      - °F
      - Current Domestic Hot Water (DHW) outlet temperature.
-     - ``raw + 20``
+     - HalfCelsiusToF
    * - ``dhwTemperatureSetting``
      - integer
      - °F
      - Target DHW temperature setting. Range: 95°F (35°C) to 150°F (65.5°C). Default: 120°F (49°C).
-     - ``raw + 20``
+     - HalfCelsiusToF
    * - ``programReservationUse``
      - bool
      - None
@@ -117,42 +117,42 @@ This document lists the fields found in the ``status`` object of device status m
      - integer
      - °F
      - The target DHW temperature setting (same as dhwTemperatureSetting).
-     - ``raw + 20``
+     - HalfCelsiusToF
    * - ``tankUpperTemperature``
      - integer
      - °F
      - Temperature of the upper part of the tank.
-     - ``(raw / 10) * 9/5 + 32`` (decicelsius to Fahrenheit)
+     - PentaCelsiusToF
    * - ``tankLowerTemperature``
      - integer
      - °F
      - Temperature of the lower part of the tank.
-     - ``(raw / 10) * 9/5 + 32`` (decicelsius to Fahrenheit)
+     - PentaCelsiusToF
    * - ``dischargeTemperature``
      - integer
      - °F
      - Compressor discharge temperature - temperature of refrigerant leaving the compressor.
-     - ``(raw / 10) * 9/5 + 32`` (decicelsius to Fahrenheit)
+     - PentaCelsiusToF
    * - ``suctionTemperature``
      - integer
      - °F
      - Compressor suction temperature - temperature of refrigerant entering the compressor.
-     - ``(raw / 10) * 9/5 + 32`` (decicelsius to Fahrenheit)
+     - PentaCelsiusToF
    * - ``evaporatorTemperature``
      - integer
      - °F
      - Evaporator temperature - temperature where heat is absorbed from ambient air.
-     - ``(raw / 10) * 9/5 + 32`` (decicelsius to Fahrenheit)
+     - PentaCelsiusToF
    * - ``ambientTemperature``
      - integer
      - °F
      - Ambient air temperature measured at the heat pump air intake.
-     - ``(raw / 10) * 9/5 + 32`` (decicelsius to Fahrenheit)
+     - PentaCelsiusToF
    * - ``targetSuperHeat``
      - integer
      - °F
      - Target superheat value - the desired temperature difference ensuring complete refrigerant vaporization.
-     - ``(raw / 10) * 9/5 + 32`` (decicelsius to Fahrenheit)
+     - PentaCelsiusToF
    * - ``compUse``
      - bool
      - None
@@ -212,7 +212,7 @@ This document lists the fields found in the ``status`` object of device status m
      - integer
      - °F
      - Freeze protection temperature setpoint. Range: 43-50°F (6-10°C), Default: 43°F. When tank temperature drops below this, electric heating activates automatically to prevent freezing.
-     - ``raw + 20``
+     - HalfCelsiusToF
    * - ``antiLegionellaUse``
      - bool
      - None
@@ -287,7 +287,7 @@ This document lists the fields found in the ``status`` object of device status m
      - integer
      - °F
      - Second DHW temperature reading.
-     - ``raw + 20``
+     - HalfCelsiusToF
    * - ``currentDhwFlowRate``
      - float
      - GPM
@@ -307,7 +307,7 @@ This document lists the fields found in the ``status`` object of device status m
      - integer
      - °F
      - Current superheat value - actual temperature difference between suction and evaporator temperatures.
-     - ``(raw / 10) * 9/5 + 32`` (decicelsius to Fahrenheit)
+     - PentaCelsiusToF
    * - ``heatUpperUse``
      - bool
      - None
@@ -357,42 +357,42 @@ This document lists the fields found in the ``status`` object of device status m
      - integer
      - °F
      - Heat pump upper on temperature setting.
-     - ``raw + 20``
+     - HalfCelsiusToF
    * - ``hpUpperOffTempSetting``
      - integer
      - °F
      - Heat pump upper off temperature setting.
-     - ``raw + 20``
+     - HalfCelsiusToF
    * - ``hpLowerOnTempSetting``
      - integer
      - °F
      - Heat pump lower on temperature setting.
-     - ``raw + 20``
+     - HalfCelsiusToF
    * - ``hpLowerOffTempSetting``
      - integer
      - °F
      - Heat pump lower off temperature setting.
-     - ``raw + 20``
+     - HalfCelsiusToF
    * - ``heUpperOnTempSetting``
      - integer
      - °F
      - Heater element upper on temperature setting.
-     - ``raw + 20``
+     - HalfCelsiusToF
    * - ``heUpperOffTempSetting``
      - integer
      - °F
      - Heater element upper off temperature setting.
-     - ``raw + 20``
+     - HalfCelsiusToF
    * - ``heLowerOnTempSetting``
      - integer
      - °F
      - Heater element lower on temperature setting.
-     - ``raw + 20``
+     - HalfCelsiusToF
    * - ``heLowerOffTempSetting``
      - integer
      - °F
      - Heater element lower off temperature setting.
-     - ``raw + 20``
+     - HalfCelsiusToF
    * - ``hpUpperOnDiffTempSetting``
      - float
      - °F
@@ -437,7 +437,7 @@ This document lists the fields found in the ``status`` object of device status m
      - float
      - °F
      - Minimum heat pump operation temperature. Lowest tank temperature setpoint allowed in the current operating mode (95-113°F, default 95°F). When set, users can only set the target tank temperature at or above this threshold.
-     - ``raw + 20``
+     - HalfCelsiusToF
    * - ``drOverrideStatus``
      - integer
      - None
@@ -730,7 +730,7 @@ Technical Notes
 
 * Tank temperature sensors operate within -4°F to 149°F (-20°C to 65°C)
 * Outside normal range, system may operate with reduced capacity using opposite heating element
-* All tank temperature readings use conversion formula: ``display_temp = raw + 20``
+
 
 **Heating Elements:**
 
