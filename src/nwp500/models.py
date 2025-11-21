@@ -26,13 +26,6 @@ def _device_bool_validator(v: Any) -> bool:
     return bool(v == 2)
 
 
-def _add_20_validator(v: Any) -> float:
-    """Add 20 to the value (temperature offset)."""
-    if isinstance(v, (int, float)):
-        return float(v) + 20.0
-    return float(v)
-
-
 def _div_10_validator(v: Any) -> float:
     """Divide by 10."""
     if isinstance(v, (int, float)):
@@ -40,19 +33,27 @@ def _div_10_validator(v: Any) -> float:
     return float(v)
 
 
-def _decicelsius_to_fahrenheit(v: Any) -> float:
-    """Convert decicelsius (tenths of Celsius) to Fahrenheit."""
+def _half_celsius_to_fahrenheit(v: Any) -> float:
+    """Convert half-degrees Celsius to Fahrenheit."""
     if isinstance(v, (int, float)):
-        celsius = float(v) / 10.0
+        celsius = float(v) / 2.0
+        return (celsius * 9 / 5) + 32
+    return float(v)
+
+
+def _penta_celsius_to_fahrenheit(v: Any) -> float:
+    """Convert value scaled by 5 to Fahrenheit."""
+    if isinstance(v, (int, float)):
+        celsius = float(v) / 5.0
         return (celsius * 9 / 5) + 32
     return float(v)
 
 
 # Reusable Annotated types for conversions
 DeviceBool = Annotated[bool, BeforeValidator(_device_bool_validator)]
-Add20 = Annotated[float, BeforeValidator(_add_20_validator)]
 Div10 = Annotated[float, BeforeValidator(_div_10_validator)]
-DeciCelsiusToF = Annotated[float, BeforeValidator(_decicelsius_to_fahrenheit)]
+HalfCelsiusToF = Annotated[float, BeforeValidator(_half_celsius_to_fahrenheit)]
+PentaCelsiusToF = Annotated[float, BeforeValidator(_penta_celsius_to_fahrenheit)]
 
 
 class NavienBaseModel(BaseModel):
@@ -252,24 +253,24 @@ class DeviceStatus(NavienBaseModel):
     recirc_operation_busy: DeviceBool
     recirc_reservation_use: DeviceBool
 
-    # Temperature fields with offset (raw + 20)
-    dhw_temperature: Add20
-    dhw_temperature_setting: Add20
-    dhw_target_temperature_setting: Add20
-    freeze_protection_temperature: Add20
-    dhw_temperature2: Add20
-    hp_upper_on_temp_setting: Add20
-    hp_upper_off_temp_setting: Add20
-    hp_lower_on_temp_setting: Add20
-    hp_lower_off_temp_setting: Add20
-    he_upper_on_temp_setting: Add20
-    he_upper_off_temp_setting: Add20
-    he_lower_on_temp_setting: Add20
-    he_lower_off_temp_setting: Add20
-    heat_min_op_temperature: Add20
-    recirc_temp_setting: Add20
-    recirc_temperature: Add20
-    recirc_faucet_temperature: Add20
+    # Temperature fields that are likely half-degrees Celsius
+    dhw_temperature: HalfCelsiusToF
+    dhw_temperature_setting: HalfCelsiusToF
+    dhw_target_temperature_setting: HalfCelsiusToF
+    freeze_protection_temperature: HalfCelsiusToF
+    dhw_temperature2: HalfCelsiusToF
+    hp_upper_on_temp_setting: HalfCelsiusToF
+    hp_upper_off_temp_setting: HalfCelsiusToF
+    hp_lower_on_temp_setting: HalfCelsiusToF
+    hp_lower_off_temp_setting: HalfCelsiusToF
+    he_upper_on_temp_setting: HalfCelsiusToF
+    he_upper_off_temp_setting: HalfCelsiusToF
+    he_lower_on_temp_setting: HalfCelsiusToF
+    he_lower_off_temp_setting: HalfCelsiusToF
+    heat_min_op_temperature: HalfCelsiusToF
+    recirc_temp_setting: HalfCelsiusToF
+    recirc_temperature: HalfCelsiusToF
+    recirc_faucet_temperature: HalfCelsiusToF
 
     # Fields with scale division (raw / 10.0)
     current_inlet_temperature: Div10
@@ -286,15 +287,15 @@ class DeviceStatus(NavienBaseModel):
     he_lower_off_diff_temp_setting: Div10
     recirc_dhw_flow_rate: Div10
 
-    # Temperature fields with decicelsius to Fahrenheit conversion
-    tank_upper_temperature: DeciCelsiusToF
-    tank_lower_temperature: DeciCelsiusToF
-    discharge_temperature: DeciCelsiusToF
-    suction_temperature: DeciCelsiusToF
-    evaporator_temperature: DeciCelsiusToF
-    ambient_temperature: DeciCelsiusToF
-    target_super_heat: DeciCelsiusToF
-    current_super_heat: DeciCelsiusToF
+    # Temperature fields with 1/5 scaling
+    tank_upper_temperature: PentaCelsiusToF
+    tank_lower_temperature: PentaCelsiusToF
+    discharge_temperature: PentaCelsiusToF
+    suction_temperature: PentaCelsiusToF
+    evaporator_temperature: PentaCelsiusToF
+    ambient_temperature: PentaCelsiusToF
+    target_super_heat: PentaCelsiusToF
+    current_super_heat: PentaCelsiusToF
 
     # Enum fields
     operation_mode: CurrentOperationMode = Field(
@@ -306,8 +307,8 @@ class DeviceStatus(NavienBaseModel):
     temperature_type: TemperatureUnit = Field(
         default=TemperatureUnit.FAHRENHEIT
     )
-    freeze_protection_temp_min: Add20 = 43.0
-    freeze_protection_temp_max: Add20 = 65.0
+    freeze_protection_temp_min: HalfCelsiusToF = 43.0
+    freeze_protection_temp_max: HalfCelsiusToF = 65.0
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "DeviceStatus":
@@ -350,11 +351,11 @@ class DeviceFeature(NavienBaseModel):
     energy_saver_use: int
     high_demand_use: int
 
-    # Temperature limit fields with offset (raw + 20)
-    dhw_temperature_min: Add20
-    dhw_temperature_max: Add20
-    freeze_protection_temp_min: Add20
-    freeze_protection_temp_max: Add20
+    # Temperature limit fields with half-degree Celsius scaling
+    dhw_temperature_min: HalfCelsiusToF
+    dhw_temperature_max: HalfCelsiusToF
+    freeze_protection_temp_min: HalfCelsiusToF
+    freeze_protection_temp_max: HalfCelsiusToF
 
     # Enum field
     temperature_type: TemperatureUnit = Field(
