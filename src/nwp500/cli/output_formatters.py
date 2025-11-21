@@ -3,7 +3,6 @@
 import csv
 import json
 import logging
-from dataclasses import asdict
 from datetime import datetime
 from enum import Enum
 from pathlib import Path
@@ -43,7 +42,7 @@ def write_status_to_csv(file_path: str, status: DeviceStatus) -> None:
     """
     try:
         # Convert the entire dataclass to a dictionary to capture all fields
-        status_dict = asdict(status)
+        status_dict = status.model_dump()
 
         # Add a timestamp to the beginning of the data
         status_dict["timestamp"] = datetime.now().isoformat()
