@@ -3,7 +3,6 @@
 import asyncio
 import json
 import logging
-from dataclasses import asdict
 from typing import Any, Optional
 
 from nwp500 import Device, DeviceFeature, DeviceStatus, NavienMqttClient
@@ -54,7 +53,9 @@ async def handle_status_request(mqtt: NavienMqttClient, device: Device) -> None:
         if not future.done():
             print(
                 json.dumps(
-                    asdict(status), indent=2, default=_json_default_serializer
+                    status.model_dump(),
+                    indent=2,
+                    default=_json_default_serializer,
                 )
             )
             future.set_result(None)
@@ -126,7 +127,9 @@ async def handle_device_info_request(
         if not future.done():
             print(
                 json.dumps(
-                    asdict(info), indent=2, default=_json_default_serializer
+                    info.model_dump(),
+                    indent=2,
+                    default=_json_default_serializer,
                 )
             )
             future.set_result(None)
@@ -225,7 +228,7 @@ async def handle_set_mode_request(
                 status = responses[0]
                 print(
                     json.dumps(
-                        asdict(status),
+                        status.model_dump(),
                         indent=2,
                         default=_json_default_serializer,
                     )
@@ -301,7 +304,7 @@ async def handle_set_dhw_temp_request(
                 status = responses[0]
                 print(
                     json.dumps(
-                        asdict(status),
+                        status.model_dump(),
                         indent=2,
                         default=_json_default_serializer,
                     )
@@ -601,7 +604,7 @@ async def handle_set_tou_enabled_request(
                 status = responses[0]
                 print(
                     json.dumps(
-                        asdict(status),
+                        status.model_dump(),
                         indent=2,
                         default=_json_default_serializer,
                     )
