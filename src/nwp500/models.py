@@ -190,125 +190,609 @@ class DeviceStatus(NavienBaseModel):
     """Represents the status of the Navien water heater device."""
 
     # Basic status fields
-    command: int
-    outside_temperature: float
-    special_function_status: int
-    error_code: int
-    sub_error_code: int
-    smart_diagnostic: int
-    fault_status1: int
-    fault_status2: int
-    wifi_rssi: int
-    dhw_charge_per: float
-    dr_event_status: int
-    vacation_day_setting: int
-    vacation_day_elapsed: int
-    anti_legionella_period: int
-    program_reservation_type: int
-    temp_formula_type: Union[int, str]
-    current_statenum: int
-    target_fan_rpm: int
-    current_fan_rpm: int
-    fan_pwm: int
-    mixing_rate: float
-    eev_step: int
-    air_filter_alarm_period: int
-    air_filter_alarm_elapsed: int
-    cumulated_op_time_eva_fan: int
-    cumulated_dhw_flow_rate: float
-    tou_status: int
-    dr_override_status: int
-    tou_override_status: int
-    total_energy_capacity: float
-    available_energy_capacity: float
-    recirc_operation_mode: int
-    recirc_pump_operation_status: int
-    recirc_hot_btn_ready: int
-    recirc_operation_reason: int
-    recirc_error_status: int
-    current_inst_power: float
+    command: int = Field(
+        description="The command that triggered this status update"
+    )
+    outside_temperature: float = Field(
+        description="The outdoor/ambient temperature measured by the heat pump",
+        json_schema_extra={
+            "unit_of_measurement": "°F",
+            "device_class": "temperature",
+        },
+    )
+    special_function_status: int = Field(
+        description=(
+            "Status of special functions "
+            "(e.g., freeze protection, anti-seize operations)"
+        )
+    )
+    error_code: int = Field(description="Error code if any fault is detected")
+    sub_error_code: int = Field(
+        description="Sub error code providing additional error details"
+    )
+    smart_diagnostic: int = Field(
+        description="Smart diagnostic status for system health monitoring"
+    )
+    fault_status1: int = Field(description="Fault status register 1")
+    fault_status2: int = Field(description="Fault status register 2")
+    wifi_rssi: int = Field(
+        description=(
+            "WiFi signal strength in dBm. "
+            "Typical values: -30 (excellent) to -90 (poor)"
+        ),
+        json_schema_extra={
+            "unit_of_measurement": "dBm",
+            "device_class": "signal_strength",
+        },
+    )
+    dhw_charge_per: float = Field(
+        description=(
+            "DHW charge percentage - "
+            "estimated percentage of hot water capacity available"
+        ),
+        json_schema_extra={"unit_of_measurement": "%"},
+    )
+    dr_event_status: int = Field(
+        description=(
+            "Demand Response (DR) event status. "
+            "Indicates if utility DR commands are active (CTA-2045)"
+        )
+    )
+    vacation_day_setting: int = Field(
+        description="Vacation day setting",
+        json_schema_extra={"unit_of_measurement": "days"},
+    )
+    vacation_day_elapsed: int = Field(
+        description="Elapsed vacation days",
+        json_schema_extra={"unit_of_measurement": "days"},
+    )
+    anti_legionella_period: int = Field(
+        description=(
+            "Anti-legionella cycle interval. Range: 1-30 days, Default: 7 days"
+        ),
+        json_schema_extra={"unit_of_measurement": "days"},
+    )
+    program_reservation_type: int = Field(
+        description="Type of program reservation"
+    )
+    temp_formula_type: Union[int, str] = Field(
+        description="Temperature formula type"
+    )
+    current_statenum: int = Field(description="Current state number")
+    target_fan_rpm: int = Field(
+        description="Target fan RPM",
+        json_schema_extra={"unit_of_measurement": "RPM"},
+    )
+    current_fan_rpm: int = Field(
+        description="Current fan RPM",
+        json_schema_extra={"unit_of_measurement": "RPM"},
+    )
+    fan_pwm: int = Field(description="Fan PWM value")
+    mixing_rate: float = Field(
+        description=(
+            "Mixing valve rate percentage (0-100%). "
+            "Controls mixing of hot tank water with cold inlet water"
+        ),
+        json_schema_extra={"unit_of_measurement": "%"},
+    )
+    eev_step: int = Field(
+        description=(
+            "Electronic Expansion Valve (EEV) step position. "
+            "Valve opening rate expressed as step count"
+        )
+    )
+    air_filter_alarm_period: int = Field(
+        description=(
+            "Air filter maintenance cycle interval. "
+            "Range: Off or 1,000-10,000 hours, Default: 1,000 hours"
+        ),
+        json_schema_extra={"unit_of_measurement": "h"},
+    )
+    air_filter_alarm_elapsed: int = Field(
+        description=(
+            "Operating hours elapsed since last air filter maintenance reset. "
+            "Track this to schedule preventative replacement"
+        ),
+        json_schema_extra={"unit_of_measurement": "h"},
+    )
+    cumulated_op_time_eva_fan: int = Field(
+        description=(
+            "Cumulative operation time of the evaporator fan since installation"
+        ),
+        json_schema_extra={"unit_of_measurement": "h"},
+    )
+    cumulated_dhw_flow_rate: float = Field(
+        description=(
+            "Cumulative DHW flow - "
+            "total gallons of hot water delivered since installation"
+        ),
+        json_schema_extra={"unit_of_measurement": "gal"},
+    )
+    tou_status: int = Field(
+        description=(
+            "Time of Use (TOU) status - "
+            "indicates if TOU scheduled operation is active"
+        )
+    )
+    dr_override_status: int = Field(
+        description=(
+            "Demand Response override status. "
+            "User can override DR commands for up to 72 hours"
+        )
+    )
+    tou_override_status: int = Field(
+        description=(
+            "Time of Use override status. "
+            "User can temporarily override TOU schedule"
+        )
+    )
+    total_energy_capacity: float = Field(
+        description="Total energy capacity of the tank in Watt-hours",
+        json_schema_extra={
+            "unit_of_measurement": "Wh",
+            "device_class": "energy",
+        },
+    )
+    available_energy_capacity: float = Field(
+        description=(
+            "Available energy capacity - "
+            "remaining hot water energy available in Watt-hours"
+        ),
+        json_schema_extra={
+            "unit_of_measurement": "Wh",
+            "device_class": "energy",
+        },
+    )
+    recirc_operation_mode: int = Field(
+        description="Recirculation operation mode"
+    )
+    recirc_pump_operation_status: int = Field(
+        description="Recirculation pump operation status"
+    )
+    recirc_hot_btn_ready: int = Field(
+        description="Recirculation HotButton ready status"
+    )
+    recirc_operation_reason: int = Field(
+        description="Recirculation operation reason"
+    )
+    recirc_error_status: int = Field(description="Recirculation error status")
+    current_inst_power: float = Field(
+        description=(
+            "Current instantaneous power consumption in Watts. "
+            "Does not include heating element power when active"
+        ),
+        json_schema_extra={
+            "unit_of_measurement": "W",
+            "device_class": "power",
+        },
+    )
 
     # Boolean fields with device-specific encoding
-    did_reload: DeviceBool
-    operation_busy: DeviceBool
-    freeze_protection_use: DeviceBool
-    dhw_use: DeviceBool
-    dhw_use_sustained: DeviceBool
-    program_reservation_use: DeviceBool
-    eco_use: DeviceBool
-    comp_use: DeviceBool
-    eev_use: DeviceBool
-    eva_fan_use: DeviceBool
-    shut_off_valve_use: DeviceBool
-    con_ovr_sensor_use: DeviceBool
-    wtr_ovr_sensor_use: DeviceBool
-    anti_legionella_use: DeviceBool
-    anti_legionella_operation_busy: DeviceBool
-    error_buzzer_use: DeviceBool
-    current_heat_use: DeviceBool
-    heat_upper_use: DeviceBool
-    heat_lower_use: DeviceBool
-    scald_use: DeviceBool
-    air_filter_alarm_use: DeviceBool
-    recirc_operation_busy: DeviceBool
-    recirc_reservation_use: DeviceBool
+    did_reload: DeviceBool = Field(
+        description="Indicates if the device has recently reloaded or restarted"
+    )
+    operation_busy: DeviceBool = Field(
+        description=(
+            "Indicates if the device is currently performing heating operations"
+        )
+    )
+    freeze_protection_use: DeviceBool = Field(
+        description=(
+            "Whether freeze protection is active. "
+            "Electric heater activates when tank water falls below 43°F (6°C)"
+        )
+    )
+    dhw_use: DeviceBool = Field(
+        description=(
+            "Domestic Hot Water (DHW) usage status - "
+            "indicates if hot water is currently being drawn from the tank"
+        )
+    )
+    dhw_use_sustained: DeviceBool = Field(
+        description=(
+            "Sustained DHW usage status - indicates prolonged hot water usage"
+        )
+    )
+    program_reservation_use: DeviceBool = Field(
+        description=(
+            "Whether a program reservation (scheduled operation) is in use"
+        )
+    )
+    eco_use: DeviceBool = Field(
+        description=(
+            "Whether ECO (Energy Cut Off) high-temp safety limit is triggered"
+        )
+    )
+    comp_use: DeviceBool = Field(
+        description=(
+            "Compressor usage status (True=On, False=Off). "
+            "The compressor is the main component of the heat pump"
+        )
+    )
+    eev_use: DeviceBool = Field(
+        description=(
+            "Electronic Expansion Valve (EEV) usage status. "
+            "The EEV controls refrigerant flow"
+        )
+    )
+    eva_fan_use: DeviceBool = Field(
+        description=(
+            "Evaporator fan usage status. "
+            "The fan pulls ambient air through the evaporator coil"
+        )
+    )
+    shut_off_valve_use: DeviceBool = Field(
+        description=(
+            "Shut-off valve usage status. "
+            "The valve controls refrigerant flow in the system"
+        )
+    )
+    con_ovr_sensor_use: DeviceBool = Field(
+        description="Condensate overflow sensor usage status"
+    )
+    wtr_ovr_sensor_use: DeviceBool = Field(
+        description=(
+            "Water overflow/leak sensor usage status. "
+            "Triggers error E799 if leak detected"
+        )
+    )
+    anti_legionella_use: DeviceBool = Field(
+        description=(
+            "Whether anti-legionella function is enabled. "
+            "Device periodically heats tank to prevent Legionella bacteria"
+        )
+    )
+    anti_legionella_operation_busy: DeviceBool = Field(
+        description=(
+            "Whether the anti-legionella disinfection cycle "
+            "is currently running"
+        )
+    )
+    error_buzzer_use: DeviceBool = Field(
+        description="Whether the error buzzer is enabled"
+    )
+    current_heat_use: DeviceBool = Field(description="Current heat usage")
+    heat_upper_use: DeviceBool = Field(
+        description=(
+            "Upper electric heating element usage status. "
+            "Power: 3,755W @ 208V or 5,000W @ 240V"
+        )
+    )
+    heat_lower_use: DeviceBool = Field(
+        description=(
+            "Lower electric heating element usage status. "
+            "Power: 3,755W @ 208V or 5,000W @ 240V"
+        )
+    )
+    scald_use: DeviceBool = Field(
+        description=(
+            "Scald protection active status. "
+            "Warning when water reaches potentially hazardous levels"
+        )
+    )
+    air_filter_alarm_use: DeviceBool = Field(
+        description=(
+            "Air filter maintenance reminder enabled flag. "
+            "Triggers alerts based on operating hours. Default: On"
+        )
+    )
+    recirc_operation_busy: DeviceBool = Field(
+        description="Recirculation operation busy status"
+    )
+    recirc_reservation_use: DeviceBool = Field(
+        description="Recirculation reservation usage status"
+    )
 
-    # Temperature fields that are likely half-degrees Celsius
-    dhw_temperature: HalfCelsiusToF
-    dhw_temperature_setting: HalfCelsiusToF
-    dhw_target_temperature_setting: HalfCelsiusToF
-    freeze_protection_temperature: HalfCelsiusToF
-    dhw_temperature2: HalfCelsiusToF
-    hp_upper_on_temp_setting: HalfCelsiusToF
-    hp_upper_off_temp_setting: HalfCelsiusToF
-    hp_lower_on_temp_setting: HalfCelsiusToF
-    hp_lower_off_temp_setting: HalfCelsiusToF
-    he_upper_on_temp_setting: HalfCelsiusToF
-    he_upper_off_temp_setting: HalfCelsiusToF
-    he_lower_on_temp_setting: HalfCelsiusToF
-    he_lower_off_temp_setting: HalfCelsiusToF
-    heat_min_op_temperature: HalfCelsiusToF
-    recirc_temp_setting: HalfCelsiusToF
-    recirc_temperature: HalfCelsiusToF
-    recirc_faucet_temperature: HalfCelsiusToF
+    # Temperature fields with offset (raw + 20)
+    dhw_temperature: HalfCelsiusToF = Field(
+        description="Current Domestic Hot Water (DHW) outlet temperature",
+        json_schema_extra={
+            "unit_of_measurement": "°F",
+            "device_class": "temperature",
+        },
+    )
+    dhw_temperature_setting: HalfCelsiusToF = Field(
+        description=(
+            "User-configured target DHW temperature. "
+            "Range: 95°F (35°C) to 150°F (65.5°C). Default: 120°F (49°C)"
+        ),
+        json_schema_extra={
+            "unit_of_measurement": "°F",
+            "device_class": "temperature",
+        },
+    )
+    dhw_target_temperature_setting: HalfCelsiusToF = Field(
+        description=(
+            "Duplicate of dhw_temperature_setting for legacy API compatibility"
+        ),
+        json_schema_extra={
+            "unit_of_measurement": "°F",
+            "device_class": "temperature",
+        },
+    )
+    freeze_protection_temperature: HalfCelsiusToF = Field(
+        description=(
+            "Freeze protection temperature setpoint. "
+            "Range: 43-50°F (6-10°C), Default: 43°F"
+        ),
+        json_schema_extra={
+            "unit_of_measurement": "°F",
+            "device_class": "temperature",
+        },
+    )
+    dhw_temperature2: HalfCelsiusToF = Field(
+        description="Second DHW temperature reading",
+        json_schema_extra={
+            "unit_of_measurement": "°F",
+            "device_class": "temperature",
+        },
+    )
+    hp_upper_on_temp_setting: HalfCelsiusToF = Field(
+        description="Heat pump upper on temperature setting",
+        json_schema_extra={
+            "unit_of_measurement": "°F",
+            "device_class": "temperature",
+        },
+    )
+    hp_upper_off_temp_setting: HalfCelsiusToF = Field(
+        description="Heat pump upper off temperature setting",
+        json_schema_extra={
+            "unit_of_measurement": "°F",
+            "device_class": "temperature",
+        },
+    )
+    hp_lower_on_temp_setting: HalfCelsiusToF = Field(
+        description="Heat pump lower on temperature setting",
+        json_schema_extra={
+            "unit_of_measurement": "°F",
+            "device_class": "temperature",
+        },
+    )
+    hp_lower_off_temp_setting: HalfCelsiusToF = Field(
+        description="Heat pump lower off temperature setting",
+        json_schema_extra={
+            "unit_of_measurement": "°F",
+            "device_class": "temperature",
+        },
+    )
+    he_upper_on_temp_setting: HalfCelsiusToF = Field(
+        description="Heater element upper on temperature setting",
+        json_schema_extra={
+            "unit_of_measurement": "°F",
+            "device_class": "temperature",
+        },
+    )
+    he_upper_off_temp_setting: HalfCelsiusToF = Field(
+        description="Heater element upper off temperature setting",
+        json_schema_extra={
+            "unit_of_measurement": "°F",
+            "device_class": "temperature",
+        },
+    )
+    he_lower_on_temp_setting: HalfCelsiusToF = Field(
+        description="Heater element lower on temperature setting",
+        json_schema_extra={
+            "unit_of_measurement": "°F",
+            "device_class": "temperature",
+        },
+    )
+    he_lower_off_temp_setting: HalfCelsiusToF = Field(
+        description="Heater element lower off temperature setting",
+        json_schema_extra={
+            "unit_of_measurement": "°F",
+            "device_class": "temperature",
+        },
+    )
+    heat_min_op_temperature: HalfCelsiusToF = Field(
+        description=(
+            "Minimum heat pump operation temperature. "
+            "Lowest tank setpoint allowed (95-113°F, default 95°F)"
+        ),
+        json_schema_extra={
+            "unit_of_measurement": "°F",
+            "device_class": "temperature",
+        },
+    )
+    recirc_temp_setting: HalfCelsiusToF = Field(
+        description="Recirculation temperature setting",
+        json_schema_extra={
+            "unit_of_measurement": "°F",
+            "device_class": "temperature",
+        },
+    )
+    recirc_temperature: HalfCelsiusToF = Field(
+        description="Recirculation temperature",
+        json_schema_extra={
+            "unit_of_measurement": "°F",
+            "device_class": "temperature",
+        },
+    )
+    recirc_faucet_temperature: HalfCelsiusToF = Field(
+        description="Recirculation faucet temperature",
+        json_schema_extra={
+            "unit_of_measurement": "°F",
+            "device_class": "temperature",
+        },
+    )
 
     # Fields with scale division (raw / 10.0)
-    current_inlet_temperature: Div10
-    current_dhw_flow_rate: Div10
-    hp_upper_on_diff_temp_setting: Div10
-    hp_upper_off_diff_temp_setting: Div10
-    hp_lower_on_diff_temp_setting: Div10
-    hp_lower_off_diff_temp_setting: Div10
-    he_upper_on_diff_temp_setting: Div10
-    he_upper_off_diff_temp_setting: Div10
+    current_inlet_temperature: Div10 = Field(
+        description="Current inlet temperature",
+        json_schema_extra={
+            "unit_of_measurement": "°F",
+            "device_class": "temperature",
+        },
+    )
+    current_dhw_flow_rate: Div10 = Field(
+        description="Current DHW flow rate in Gallons Per Minute",
+        json_schema_extra={"unit_of_measurement": "GPM"},
+    )
+    hp_upper_on_diff_temp_setting: Div10 = Field(
+        description="Heat pump upper on differential temperature setting",
+        json_schema_extra={
+            "unit_of_measurement": "°F",
+            "device_class": "temperature",
+        },
+    )
+    hp_upper_off_diff_temp_setting: Div10 = Field(
+        description="Heat pump upper off differential temperature setting",
+        json_schema_extra={
+            "unit_of_measurement": "°F",
+            "device_class": "temperature",
+        },
+    )
+    hp_lower_on_diff_temp_setting: Div10 = Field(
+        description="Heat pump lower on differential temperature setting",
+        json_schema_extra={
+            "unit_of_measurement": "°F",
+            "device_class": "temperature",
+        },
+    )
+    hp_lower_off_diff_temp_setting: Div10 = Field(
+        description="Heat pump lower off differential temperature setting",
+        json_schema_extra={
+            "unit_of_measurement": "°F",
+            "device_class": "temperature",
+        },
+    )
+    he_upper_on_diff_temp_setting: Div10 = Field(
+        description="Heater element upper on differential temperature setting",
+        json_schema_extra={
+            "unit_of_measurement": "°F",
+            "device_class": "temperature",
+        },
+    )
+    he_upper_off_diff_temp_setting: Div10 = Field(
+        description="Heater element upper off differential temperature setting",
+        json_schema_extra={
+            "unit_of_measurement": "°F",
+            "device_class": "temperature",
+        },
+    )
     he_lower_on_diff_temp_setting: Div10 = Field(
-        alias="heLowerOnTDiffempSetting"
+        alias="heLowerOnTDiffempSetting",
+        description="Heater element lower on differential temperature setting",
+        json_schema_extra={
+            "unit_of_measurement": "°F",
+            "device_class": "temperature",
+        },
     )  # Handle API typo: heLowerOnTDiffempSetting -> heLowerOnDiffTempSetting
-    he_lower_off_diff_temp_setting: Div10
-    recirc_dhw_flow_rate: Div10
+    he_lower_off_diff_temp_setting: Div10 = Field(
+        description="Heater element lower off differential temperature setting",
+        json_schema_extra={
+            "unit_of_measurement": "°F",
+            "device_class": "temperature",
+        },
+    )
+    recirc_dhw_flow_rate: Div10 = Field(
+        description="Recirculation DHW flow rate",
+        json_schema_extra={"unit_of_measurement": "GPM"},
+    )
 
-    # Temperature fields with decicelsius (÷10) to Fahrenheit conversion
-    tank_upper_temperature: DeciCelsiusToF
-    tank_lower_temperature: DeciCelsiusToF
-    discharge_temperature: DeciCelsiusToF
-    suction_temperature: DeciCelsiusToF
-    evaporator_temperature: DeciCelsiusToF
-    ambient_temperature: DeciCelsiusToF
-    target_super_heat: DeciCelsiusToF
-    current_super_heat: DeciCelsiusToF
+    # Temperature fields with decicelsius to Fahrenheit conversion
+    tank_upper_temperature: DeciCelsiusToF = Field(
+        description="Temperature of the upper part of the tank",
+        json_schema_extra={
+            "unit_of_measurement": "°F",
+            "device_class": "temperature",
+        },
+    )
+    tank_lower_temperature: DeciCelsiusToF = Field(
+        description="Temperature of the lower part of the tank",
+        json_schema_extra={
+            "unit_of_measurement": "°F",
+            "device_class": "temperature",
+        },
+    )
+    discharge_temperature: DeciCelsiusToF = Field(
+        description=(
+            "Compressor discharge temperature - "
+            "temperature of refrigerant leaving the compressor"
+        ),
+        json_schema_extra={
+            "unit_of_measurement": "°F",
+            "device_class": "temperature",
+        },
+    )
+    suction_temperature: DeciCelsiusToF = Field(
+        description=(
+            "Compressor suction temperature - "
+            "temperature of refrigerant entering the compressor"
+        ),
+        json_schema_extra={
+            "unit_of_measurement": "°F",
+            "device_class": "temperature",
+        },
+    )
+    evaporator_temperature: DeciCelsiusToF = Field(
+        description=(
+            "Evaporator temperature - "
+            "temperature where heat is absorbed from ambient air"
+        ),
+        json_schema_extra={
+            "unit_of_measurement": "°F",
+            "device_class": "temperature",
+        },
+    )
+    ambient_temperature: DeciCelsiusToF = Field(
+        description=(
+            "Ambient air temperature measured at the heat pump air intake"
+        ),
+        json_schema_extra={
+            "unit_of_measurement": "°F",
+            "device_class": "temperature",
+        },
+    )
+    target_super_heat: DeciCelsiusToF = Field(
+        description=(
+            "Target superheat value - desired temperature difference "
+            "ensuring complete refrigerant vaporization"
+        ),
+        json_schema_extra={
+            "unit_of_measurement": "°F",
+            "device_class": "temperature",
+        },
+    )
+    current_super_heat: DeciCelsiusToF = Field(
+        description=(
+            "Current superheat value - actual temperature difference "
+            "between suction and evaporator temperatures"
+        ),
+        json_schema_extra={
+            "unit_of_measurement": "°F",
+            "device_class": "temperature",
+        },
+    )
 
     # Enum fields
     operation_mode: CurrentOperationMode = Field(
-        default=CurrentOperationMode.STANDBY
+        default=CurrentOperationMode.STANDBY,
+        description="The current actual operational state of the device",
     )
     dhw_operation_setting: DhwOperationSetting = Field(
-        default=DhwOperationSetting.ENERGY_SAVER
+        default=DhwOperationSetting.ENERGY_SAVER,
+        description="User's configured DHW operation mode preference",
     )
     temperature_type: TemperatureUnit = Field(
-        default=TemperatureUnit.FAHRENHEIT
+        default=TemperatureUnit.FAHRENHEIT,
+        description="Type of temperature unit",
     )
-    freeze_protection_temp_min: HalfCelsiusToF = 43.0
-    freeze_protection_temp_max: HalfCelsiusToF = 65.0
+    freeze_protection_temp_min: HalfCelsiusToF = Field(
+        default=43.0,
+        description="Active freeze protection lower limit. Default: 43°F (6°C)",
+        json_schema_extra={
+            "unit_of_measurement": "°F",
+            "device_class": "temperature",
+        },
+    )
+    freeze_protection_temp_max: HalfCelsiusToF = Field(
+        default=65.0,
+        description="Active freeze protection upper limit. Default: 65°F",
+        json_schema_extra={
+            "unit_of_measurement": "°F",
+            "device_class": "temperature",
+        },
+    )
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "DeviceStatus":
@@ -319,47 +803,235 @@ class DeviceStatus(NavienBaseModel):
 class DeviceFeature(NavienBaseModel):
     """Device capabilities, configuration, and firmware info."""
 
-    country_code: int
-    model_type_code: int
-    control_type_code: int
-    volume_code: int
-    controller_sw_version: int
-    panel_sw_version: int
-    wifi_sw_version: int
-    controller_sw_code: int
-    panel_sw_code: int
-    wifi_sw_code: int
-    controller_serial_number: str
-    power_use: int
-    holiday_use: int
-    program_reservation_use: int
-    dhw_use: int
-    dhw_temperature_setting_use: int
-    smart_diagnostic_use: int
-    wifi_rssi_use: int
-    temp_formula_type: int
-    energy_usage_use: int
-    freeze_protection_use: int
-    mixing_value_use: int
-    dr_setting_use: int
-    anti_legionella_setting_use: int
-    hpwh_use: int
-    dhw_refill_use: int
-    eco_use: int
-    electric_use: int
-    heatpump_use: int
-    energy_saver_use: int
-    high_demand_use: int
+    country_code: int = Field(
+        description=(
+            "Country/region code where device is certified for operation "
+            "(1=USA, complies with FCC Part 15 Class B)"
+        )
+    )
+    model_type_code: int = Field(
+        description="Model type identifier: NWP500 series model variant"
+    )
+    control_type_code: int = Field(
+        description=(
+            "Control system type: "
+            "Advanced digital control with LCD display and WiFi"
+        )
+    )
+    volume_code: int = Field(
+        description="Tank nominal capacity: 50, 65, or 80 gallons",
+        json_schema_extra={"unit_of_measurement": "gal"},
+    )
+    controller_sw_version: int = Field(
+        description=(
+            "Main controller firmware version - "
+            "controls heat pump, heating elements, and system logic"
+        )
+    )
+    panel_sw_version: int = Field(
+        description=(
+            "Front panel display firmware version - "
+            "manages LCD display and user interface"
+        )
+    )
+    wifi_sw_version: int = Field(
+        description=(
+            "WiFi module firmware version - "
+            "handles app connectivity and cloud communication"
+        )
+    )
+    controller_sw_code: int = Field(
+        description=(
+            "Controller firmware variant/branch identifier "
+            "for support and compatibility"
+        )
+    )
+    panel_sw_code: int = Field(
+        description=(
+            "Panel firmware variant/branch identifier "
+            "for display features and UI capabilities"
+        )
+    )
+    wifi_sw_code: int = Field(
+        description=(
+            "WiFi firmware variant/branch identifier "
+            "for communication protocol version"
+        )
+    )
+    controller_serial_number: str = Field(
+        description=(
+            "Unique serial number of the main controller board "
+            "for warranty and service identification"
+        )
+    )
+    power_use: int = Field(
+        description=(
+            "Power control capability (1=can be turned on/off via controls)"
+        )
+    )
+    holiday_use: int = Field(
+        description=(
+            "Vacation mode support (1=supported) - "
+            "energy-saving mode for 0-99 days"
+        )
+    )
+    program_reservation_use: int = Field(
+        description=(
+            "Scheduled operation support (1=supported) - "
+            "programmable heating schedules"
+        )
+    )
+    dhw_use: int = Field(
+        description=(
+            "Domestic hot water functionality (1=available) - "
+            "primary function of water heater"
+        )
+    )
+    dhw_temperature_setting_use: int = Field(
+        description=(
+            "Temperature adjustment capability (1=supported) - "
+            "user can modify target temperature"
+        )
+    )
+    smart_diagnostic_use: int = Field(
+        description=(
+            "Self-diagnostic capability (1=available) - "
+            "10-minute startup diagnostic, error code system"
+        )
+    )
+    wifi_rssi_use: int = Field(
+        description=(
+            "WiFi signal monitoring (1=supported) - "
+            "reports signal strength in dBm"
+        )
+    )
+    temp_formula_type: int = Field(
+        description=(
+            "Temperature calculation method identifier "
+            "for internal sensor calibration"
+        )
+    )
+    energy_usage_use: int = Field(
+        description=(
+            "Energy monitoring support (1=available) - tracks kWh consumption"
+        )
+    )
+    freeze_protection_use: int = Field(
+        description=(
+            "Freeze protection capability (1=available) - "
+            "automatic heating when tank drops below threshold"
+        )
+    )
+    mixing_value_use: int = Field(
+        description=(
+            "Thermostatic mixing valve support (1=available) - "
+            "for temperature limiting at point of use"
+        )
+    )
+    dr_setting_use: int = Field(
+        description=(
+            "Demand Response support (1=available) - "
+            "CTA-2045 compliance for utility load management"
+        )
+    )
+    anti_legionella_setting_use: int = Field(
+        description=(
+            "Anti-Legionella function (1=available) - "
+            "periodic heating to 140°F (60°C) to prevent bacteria"
+        )
+    )
+    hpwh_use: int = Field(
+        description=(
+            "Heat Pump Water Heater mode (1=supported) - "
+            "primary efficient heating using refrigeration cycle"
+        )
+    )
+    dhw_refill_use: int = Field(
+        description=(
+            "Tank refill detection (1=supported) - "
+            "monitors for dry fire conditions during refill"
+        )
+    )
+    eco_use: int = Field(
+        description=(
+            "ECO safety switch capability (1=available) - "
+            "Energy Cut Off high-temperature limit protection"
+        )
+    )
+    electric_use: int = Field(
+        description=(
+            "Electric-only mode (1=supported) - "
+            "heating element only for maximum recovery speed"
+        )
+    )
+    heatpump_use: int = Field(
+        description=(
+            "Heat pump only mode (1=supported) - "
+            "most efficient operation using only refrigeration cycle"
+        )
+    )
+    energy_saver_use: int = Field(
+        description=(
+            "Energy Saver mode (1=supported) - "
+            "hybrid efficiency mode balancing speed and efficiency (default)"
+        )
+    )
+    high_demand_use: int = Field(
+        description=(
+            "High Demand mode (1=supported) - "
+            "hybrid boost mode prioritizing fast recovery"
+        )
+    )
 
     # Temperature limit fields with half-degree Celsius scaling
-    dhw_temperature_min: HalfCelsiusToF
-    dhw_temperature_max: HalfCelsiusToF
-    freeze_protection_temp_min: HalfCelsiusToF
-    freeze_protection_temp_max: HalfCelsiusToF
+    dhw_temperature_min: HalfCelsiusToF = Field(
+        description=(
+            "Minimum DHW temperature setting: 95°F (35°C) - "
+            "safety and efficiency lower limit"
+        ),
+        json_schema_extra={
+            "unit_of_measurement": "°F",
+            "device_class": "temperature",
+        },
+    )
+    dhw_temperature_max: HalfCelsiusToF = Field(
+        description=(
+            "Maximum DHW temperature setting: 150°F (65.5°C) - "
+            "scald protection upper limit"
+        ),
+        json_schema_extra={
+            "unit_of_measurement": "°F",
+            "device_class": "temperature",
+        },
+    )
+    freeze_protection_temp_min: HalfCelsiusToF = Field(
+        description=(
+            "Minimum freeze protection threshold: 43°F (6°C) - "
+            "factory default activation temperature"
+        ),
+        json_schema_extra={
+            "unit_of_measurement": "°F",
+            "device_class": "temperature",
+        },
+    )
+    freeze_protection_temp_max: HalfCelsiusToF = Field(
+        description=(
+            "Maximum freeze protection threshold: 65°F - "
+            "user-adjustable upper limit"
+        ),
+        json_schema_extra={
+            "unit_of_measurement": "°F",
+            "device_class": "temperature",
+        },
+    )
 
     # Enum field
     temperature_type: TemperatureUnit = Field(
-        default=TemperatureUnit.FAHRENHEIT
+        default=TemperatureUnit.FAHRENHEIT,
+        description=(
+            "Default temperature unit preference - "
+            "factory set to Fahrenheit for USA"
+        ),
     )
 
     @classmethod
