@@ -216,7 +216,10 @@ class DeviceStatus(NavienBaseModel):
     fault_status1: int = Field(description="Fault status register 1")
     fault_status2: int = Field(description="Fault status register 2")
     wifi_rssi: int = Field(
-        description="WiFi signal strength",
+        description=(
+            "WiFi signal strength in dBm. "
+            "Typical values: -30 (excellent) to -90 (poor)"
+        ),
         json_schema_extra={
             "unit_of_measurement": "dBm",
             "device_class": "signal_strength",
@@ -230,7 +233,10 @@ class DeviceStatus(NavienBaseModel):
         json_schema_extra={"unit_of_measurement": "%"},
     )
     dr_event_status: int = Field(
-        description="Demand Response (DR) event status"
+        description=(
+            "Demand Response (DR) event status. "
+            "Indicates if utility DR commands are active (CTA-2045)"
+        )
     )
     vacation_day_setting: int = Field(
         description="Vacation day setting",
@@ -241,7 +247,9 @@ class DeviceStatus(NavienBaseModel):
         json_schema_extra={"unit_of_measurement": "days"},
     )
     anti_legionella_period: int = Field(
-        description="Anti-legionella cycle interval",
+        description=(
+            "Anti-legionella cycle interval. Range: 1-30 days, Default: 7 days"
+        ),
         json_schema_extra={"unit_of_measurement": "days"},
     )
     program_reservation_type: int = Field(
@@ -261,18 +269,30 @@ class DeviceStatus(NavienBaseModel):
     )
     fan_pwm: int = Field(description="Fan PWM value")
     mixing_rate: float = Field(
-        description="Mixing valve rate percentage",
+        description=(
+            "Mixing valve rate percentage (0-100%). "
+            "Controls mixing of hot tank water with cold inlet water"
+        ),
         json_schema_extra={"unit_of_measurement": "%"},
     )
     eev_step: int = Field(
-        description="Electronic Expansion Valve (EEV) step position"
+        description=(
+            "Electronic Expansion Valve (EEV) step position. "
+            "Valve opening rate expressed as step count"
+        )
     )
     air_filter_alarm_period: int = Field(
-        description="Air filter maintenance cycle interval",
+        description=(
+            "Air filter maintenance cycle interval. "
+            "Range: Off or 1,000-10,000 hours, Default: 1,000 hours"
+        ),
         json_schema_extra={"unit_of_measurement": "h"},
     )
     air_filter_alarm_elapsed: int = Field(
-        description="Hours elapsed since last air filter maintenance reset",
+        description=(
+            "Operating hours elapsed since last air filter maintenance reset. "
+            "Track this to schedule preventative replacement"
+        ),
         json_schema_extra={"unit_of_measurement": "h"},
     )
     cumulated_op_time_eva_fan: int = Field(
@@ -288,13 +308,26 @@ class DeviceStatus(NavienBaseModel):
         ),
         json_schema_extra={"unit_of_measurement": "gal"},
     )
-    tou_status: int = Field(description="Time of Use (TOU) status")
-    dr_override_status: int = Field(
-        description="Demand Response override status"
+    tou_status: int = Field(
+        description=(
+            "Time of Use (TOU) status - "
+            "indicates if TOU scheduled operation is active"
+        )
     )
-    tou_override_status: int = Field(description="Time of Use override status")
+    dr_override_status: int = Field(
+        description=(
+            "Demand Response override status. "
+            "User can override DR commands for up to 72 hours"
+        )
+    )
+    tou_override_status: int = Field(
+        description=(
+            "Time of Use override status. "
+            "User can temporarily override TOU schedule"
+        )
+    )
     total_energy_capacity: float = Field(
-        description="Total energy capacity of the tank",
+        description="Total energy capacity of the tank in Watt-hours",
         json_schema_extra={
             "unit_of_measurement": "Wh",
             "device_class": "energy",
@@ -302,7 +335,8 @@ class DeviceStatus(NavienBaseModel):
     )
     available_energy_capacity: float = Field(
         description=(
-            "Available energy capacity - remaining hot water energy available"
+            "Available energy capacity - "
+            "remaining hot water energy available in Watt-hours"
         ),
         json_schema_extra={
             "unit_of_measurement": "Wh",
@@ -323,7 +357,10 @@ class DeviceStatus(NavienBaseModel):
     )
     recirc_error_status: int = Field(description="Recirculation error status")
     current_inst_power: float = Field(
-        description="Current instantaneous power consumption",
+        description=(
+            "Current instantaneous power consumption in Watts. "
+            "Does not include heating element power when active"
+        ),
         json_schema_extra={
             "unit_of_measurement": "W",
             "device_class": "power",
@@ -340,38 +377,70 @@ class DeviceStatus(NavienBaseModel):
         )
     )
     freeze_protection_use: DeviceBool = Field(
-        description="Whether freeze protection is active"
+        description=(
+            "Whether freeze protection is active. "
+            "Electric heater activates when tank water falls below 43°F (6°C)"
+        )
     )
     dhw_use: DeviceBool = Field(
-        description="Domestic Hot Water (DHW) usage status"
+        description=(
+            "Domestic Hot Water (DHW) usage status - "
+            "indicates if hot water is currently being drawn from the tank"
+        )
     )
     dhw_use_sustained: DeviceBool = Field(
-        description="Sustained DHW usage status"
+        description=(
+            "Sustained DHW usage status - indicates prolonged hot water usage"
+        )
     )
     program_reservation_use: DeviceBool = Field(
-        description="Whether a program reservation is in use"
+        description=(
+            "Whether a program reservation (scheduled operation) is in use"
+        )
     )
     eco_use: DeviceBool = Field(
         description=(
             "Whether ECO (Energy Cut Off) high-temp safety limit is triggered"
         )
     )
-    comp_use: DeviceBool = Field(description="Compressor usage status")
-    eev_use: DeviceBool = Field(
-        description="Electronic Expansion Valve (EEV) usage status"
+    comp_use: DeviceBool = Field(
+        description=(
+            "Compressor usage status (True=On, False=Off). "
+            "The compressor is the main component of the heat pump"
+        )
     )
-    eva_fan_use: DeviceBool = Field(description="Evaporator fan usage status")
+    eev_use: DeviceBool = Field(
+        description=(
+            "Electronic Expansion Valve (EEV) usage status. "
+            "The EEV controls refrigerant flow"
+        )
+    )
+    eva_fan_use: DeviceBool = Field(
+        description=(
+            "Evaporator fan usage status. "
+            "The fan pulls ambient air through the evaporator coil"
+        )
+    )
     shut_off_valve_use: DeviceBool = Field(
-        description="Shut-off valve usage status"
+        description=(
+            "Shut-off valve usage status. "
+            "The valve controls refrigerant flow in the system"
+        )
     )
     con_ovr_sensor_use: DeviceBool = Field(
         description="Condensate overflow sensor usage status"
     )
     wtr_ovr_sensor_use: DeviceBool = Field(
-        description="Water overflow/leak sensor usage status"
+        description=(
+            "Water overflow/leak sensor usage status. "
+            "Triggers error E799 if leak detected"
+        )
     )
     anti_legionella_use: DeviceBool = Field(
-        description="Whether anti-legionella function is enabled"
+        description=(
+            "Whether anti-legionella function is enabled. "
+            "Device periodically heats tank to prevent Legionella bacteria"
+        )
     )
     anti_legionella_operation_busy: DeviceBool = Field(
         description=(
@@ -384,14 +453,28 @@ class DeviceStatus(NavienBaseModel):
     )
     current_heat_use: DeviceBool = Field(description="Current heat usage")
     heat_upper_use: DeviceBool = Field(
-        description="Upper electric heating element usage status"
+        description=(
+            "Upper electric heating element usage status. "
+            "Power: 3,755W @ 208V or 5,000W @ 240V"
+        )
     )
     heat_lower_use: DeviceBool = Field(
-        description="Lower electric heating element usage status"
+        description=(
+            "Lower electric heating element usage status. "
+            "Power: 3,755W @ 208V or 5,000W @ 240V"
+        )
     )
-    scald_use: DeviceBool = Field(description="Scald protection active status")
+    scald_use: DeviceBool = Field(
+        description=(
+            "Scald protection active status. "
+            "Warning when water reaches potentially hazardous levels"
+        )
+    )
     air_filter_alarm_use: DeviceBool = Field(
-        description="Air filter maintenance reminder enabled flag"
+        description=(
+            "Air filter maintenance reminder enabled flag. "
+            "Triggers alerts based on operating hours. Default: On"
+        )
     )
     recirc_operation_busy: DeviceBool = Field(
         description="Recirculation operation busy status"
@@ -428,7 +511,10 @@ class DeviceStatus(NavienBaseModel):
         },
     )
     freeze_protection_temperature: HalfCelsiusToF = Field(
-        description="Freeze protection temperature setpoint",
+        description=(
+            "Freeze protection temperature setpoint. "
+            "Range: 43-50°F (6-10°C), Default: 43°F"
+        ),
         json_schema_extra={
             "unit_of_measurement": "°F",
             "device_class": "temperature",
@@ -498,7 +584,10 @@ class DeviceStatus(NavienBaseModel):
         },
     )
     heat_min_op_temperature: HalfCelsiusToF = Field(
-        description="Minimum heat pump operation temperature",
+        description=(
+            "Minimum heat pump operation temperature. "
+            "Lowest tank setpoint allowed (95-113°F, default 95°F)"
+        ),
         json_schema_extra={
             "unit_of_measurement": "°F",
             "device_class": "temperature",
@@ -535,7 +624,7 @@ class DeviceStatus(NavienBaseModel):
         },
     )
     current_dhw_flow_rate: Div10 = Field(
-        description="Current DHW flow rate",
+        description="Current DHW flow rate in Gallons Per Minute",
         json_schema_extra={"unit_of_measurement": "GPM"},
     )
     hp_upper_on_diff_temp_setting: Div10 = Field(
@@ -616,21 +705,30 @@ class DeviceStatus(NavienBaseModel):
         },
     )
     discharge_temperature: DeciCelsiusToF = Field(
-        description="Compressor discharge temperature",
+        description=(
+            "Compressor discharge temperature - "
+            "temperature of refrigerant leaving the compressor"
+        ),
         json_schema_extra={
             "unit_of_measurement": "°F",
             "device_class": "temperature",
         },
     )
     suction_temperature: DeciCelsiusToF = Field(
-        description="Compressor suction temperature",
+        description=(
+            "Compressor suction temperature - "
+            "temperature of refrigerant entering the compressor"
+        ),
         json_schema_extra={
             "unit_of_measurement": "°F",
             "device_class": "temperature",
         },
     )
     evaporator_temperature: DeciCelsiusToF = Field(
-        description="Evaporator temperature",
+        description=(
+            "Evaporator temperature - "
+            "temperature where heat is absorbed from ambient air"
+        ),
         json_schema_extra={
             "unit_of_measurement": "°F",
             "device_class": "temperature",
@@ -646,14 +744,20 @@ class DeviceStatus(NavienBaseModel):
         },
     )
     target_super_heat: DeciCelsiusToF = Field(
-        description="Target superheat value",
+        description=(
+            "Target superheat value - desired temperature difference "
+            "ensuring complete refrigerant vaporization"
+        ),
         json_schema_extra={
             "unit_of_measurement": "°F",
             "device_class": "temperature",
         },
     )
     current_super_heat: DeciCelsiusToF = Field(
-        description="Current superheat value",
+        description=(
+            "Current superheat value - actual temperature difference "
+            "between suction and evaporator temperatures"
+        ),
         json_schema_extra={
             "unit_of_measurement": "°F",
             "device_class": "temperature",
@@ -701,91 +805,220 @@ class DeviceFeature(NavienBaseModel):
 
     country_code: int = Field(
         description=(
-            "Country/region code where device is certified for operation"
+            "Country/region code where device is certified for operation "
+            "(1=USA, complies with FCC Part 15 Class B)"
         )
     )
-    model_type_code: int = Field(description="Model type identifier")
-    control_type_code: int = Field(description="Control system type")
+    model_type_code: int = Field(
+        description="Model type identifier: NWP500 series model variant"
+    )
+    control_type_code: int = Field(
+        description=(
+            "Control system type: "
+            "Advanced digital control with LCD display and WiFi"
+        )
+    )
     volume_code: int = Field(
-        description="Tank nominal capacity",
+        description="Tank nominal capacity: 50, 65, or 80 gallons",
         json_schema_extra={"unit_of_measurement": "gal"},
     )
     controller_sw_version: int = Field(
-        description="Main controller firmware version"
+        description=(
+            "Main controller firmware version - "
+            "controls heat pump, heating elements, and system logic"
+        )
     )
     panel_sw_version: int = Field(
-        description="Front panel display firmware version"
+        description=(
+            "Front panel display firmware version - "
+            "manages LCD display and user interface"
+        )
     )
-    wifi_sw_version: int = Field(description="WiFi module firmware version")
+    wifi_sw_version: int = Field(
+        description=(
+            "WiFi module firmware version - "
+            "handles app connectivity and cloud communication"
+        )
+    )
     controller_sw_code: int = Field(
-        description="Controller firmware variant/branch identifier"
+        description=(
+            "Controller firmware variant/branch identifier "
+            "for support and compatibility"
+        )
     )
     panel_sw_code: int = Field(
-        description="Panel firmware variant/branch identifier"
+        description=(
+            "Panel firmware variant/branch identifier "
+            "for display features and UI capabilities"
+        )
     )
     wifi_sw_code: int = Field(
-        description="WiFi firmware variant/branch identifier"
+        description=(
+            "WiFi firmware variant/branch identifier "
+            "for communication protocol version"
+        )
     )
     controller_serial_number: str = Field(
-        description="Unique serial number of the main controller board"
+        description=(
+            "Unique serial number of the main controller board "
+            "for warranty and service identification"
+        )
     )
-    power_use: int = Field(description="Power control capability")
-    holiday_use: int = Field(description="Vacation mode support")
+    power_use: int = Field(
+        description=(
+            "Power control capability (1=can be turned on/off via controls)"
+        )
+    )
+    holiday_use: int = Field(
+        description=(
+            "Vacation mode support (1=supported) - "
+            "energy-saving mode for 0-99 days"
+        )
+    )
     program_reservation_use: int = Field(
-        description="Scheduled operation support"
+        description=(
+            "Scheduled operation support (1=supported) - "
+            "programmable heating schedules"
+        )
     )
-    dhw_use: int = Field(description="Domestic hot water functionality")
+    dhw_use: int = Field(
+        description=(
+            "Domestic hot water functionality (1=available) - "
+            "primary function of water heater"
+        )
+    )
     dhw_temperature_setting_use: int = Field(
-        description="Temperature adjustment capability"
+        description=(
+            "Temperature adjustment capability (1=supported) - "
+            "user can modify target temperature"
+        )
     )
-    smart_diagnostic_use: int = Field(description="Self-diagnostic capability")
-    wifi_rssi_use: int = Field(description="WiFi signal monitoring")
+    smart_diagnostic_use: int = Field(
+        description=(
+            "Self-diagnostic capability (1=available) - "
+            "10-minute startup diagnostic, error code system"
+        )
+    )
+    wifi_rssi_use: int = Field(
+        description=(
+            "WiFi signal monitoring (1=supported) - "
+            "reports signal strength in dBm"
+        )
+    )
     temp_formula_type: int = Field(
-        description="Temperature calculation method identifier"
+        description=(
+            "Temperature calculation method identifier "
+            "for internal sensor calibration"
+        )
     )
-    energy_usage_use: int = Field(description="Energy monitoring support")
+    energy_usage_use: int = Field(
+        description=(
+            "Energy monitoring support (1=available) - tracks kWh consumption"
+        )
+    )
     freeze_protection_use: int = Field(
-        description="Freeze protection capability"
+        description=(
+            "Freeze protection capability (1=available) - "
+            "automatic heating when tank drops below threshold"
+        )
     )
     mixing_value_use: int = Field(
-        description="Thermostatic mixing valve support"
+        description=(
+            "Thermostatic mixing valve support (1=available) - "
+            "for temperature limiting at point of use"
+        )
     )
-    dr_setting_use: int = Field(description="Demand Response support")
+    dr_setting_use: int = Field(
+        description=(
+            "Demand Response support (1=available) - "
+            "CTA-2045 compliance for utility load management"
+        )
+    )
     anti_legionella_setting_use: int = Field(
-        description="Anti-Legionella function"
+        description=(
+            "Anti-Legionella function (1=available) - "
+            "periodic heating to 140°F (60°C) to prevent bacteria"
+        )
     )
-    hpwh_use: int = Field(description="Heat Pump Water Heater mode")
-    dhw_refill_use: int = Field(description="Tank refill detection")
-    eco_use: int = Field(description="ECO safety switch capability")
-    electric_use: int = Field(description="Electric-only mode")
-    heatpump_use: int = Field(description="Heat pump only mode")
-    energy_saver_use: int = Field(description="Energy Saver mode")
-    high_demand_use: int = Field(description="High Demand mode")
+    hpwh_use: int = Field(
+        description=(
+            "Heat Pump Water Heater mode (1=supported) - "
+            "primary efficient heating using refrigeration cycle"
+        )
+    )
+    dhw_refill_use: int = Field(
+        description=(
+            "Tank refill detection (1=supported) - "
+            "monitors for dry fire conditions during refill"
+        )
+    )
+    eco_use: int = Field(
+        description=(
+            "ECO safety switch capability (1=available) - "
+            "Energy Cut Off high-temperature limit protection"
+        )
+    )
+    electric_use: int = Field(
+        description=(
+            "Electric-only mode (1=supported) - "
+            "heating element only for maximum recovery speed"
+        )
+    )
+    heatpump_use: int = Field(
+        description=(
+            "Heat pump only mode (1=supported) - "
+            "most efficient operation using only refrigeration cycle"
+        )
+    )
+    energy_saver_use: int = Field(
+        description=(
+            "Energy Saver mode (1=supported) - "
+            "hybrid efficiency mode balancing speed and efficiency (default)"
+        )
+    )
+    high_demand_use: int = Field(
+        description=(
+            "High Demand mode (1=supported) - "
+            "hybrid boost mode prioritizing fast recovery"
+        )
+    )
 
     # Temperature limit fields with half-degree Celsius scaling
     dhw_temperature_min: HalfCelsiusToF = Field(
-        description="Minimum DHW temperature setting",
+        description=(
+            "Minimum DHW temperature setting: 95°F (35°C) - "
+            "safety and efficiency lower limit"
+        ),
         json_schema_extra={
             "unit_of_measurement": "°F",
             "device_class": "temperature",
         },
     )
     dhw_temperature_max: HalfCelsiusToF = Field(
-        description="Maximum DHW temperature setting",
+        description=(
+            "Maximum DHW temperature setting: 150°F (65.5°C) - "
+            "scald protection upper limit"
+        ),
         json_schema_extra={
             "unit_of_measurement": "°F",
             "device_class": "temperature",
         },
     )
     freeze_protection_temp_min: HalfCelsiusToF = Field(
-        description="Minimum configurable freeze protection limit (43°F)",
+        description=(
+            "Minimum freeze protection threshold: 43°F (6°C) - "
+            "factory default activation temperature"
+        ),
         json_schema_extra={
             "unit_of_measurement": "°F",
             "device_class": "temperature",
         },
     )
     freeze_protection_temp_max: HalfCelsiusToF = Field(
-        description="Maximum configurable freeze protection limit (65°F)",
+        description=(
+            "Maximum freeze protection threshold: 65°F - "
+            "user-adjustable upper limit"
+        ),
         json_schema_extra={
             "unit_of_measurement": "°F",
             "device_class": "temperature",
@@ -795,7 +1028,10 @@ class DeviceFeature(NavienBaseModel):
     # Enum field
     temperature_type: TemperatureUnit = Field(
         default=TemperatureUnit.FAHRENHEIT,
-        description="Default temperature unit preference",
+        description=(
+            "Default temperature unit preference - "
+            "factory set to Fahrenheit for USA"
+        ),
     )
 
     @classmethod
