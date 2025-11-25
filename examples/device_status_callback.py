@@ -178,9 +178,9 @@ async def main():
                         f"  Super Heat:             {status.current_super_heat:.1f}°F"
                     )
                     print(
-                        f"  Flow Rate:              {status.currentDhwFlowRate:.1f} GPM"
+                        f"  Flow Rate:              {status.current_dhw_flow_rate:.1f} GPM"
                     )
-                    print(f"  Temperature Unit:       {status.temperatureType.name}")
+                    print(f"  Temperature Unit:       {status.temperature_type.name}")
 
                     print("=" * 60)
 
