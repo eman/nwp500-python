@@ -353,7 +353,7 @@ class DeviceStatus(NavienBaseModel):
     )
     eco_use: DeviceBool = Field(
         description=(
-            "Whether ECO (Energy Cut Off) safety feature has been triggered"
+            "Whether ECO (Energy Cut Off) high-temp safety limit is triggered"
         )
     )
     comp_use: DeviceBool = Field(description="Compressor usage status")
@@ -756,7 +756,7 @@ class DeviceFeature(NavienBaseModel):
     )
     hpwh_use: int = Field(description="Heat Pump Water Heater mode")
     dhw_refill_use: int = Field(description="Tank refill detection")
-    eco_use: int = Field(description="ECO safety switch")
+    eco_use: int = Field(description="ECO safety switch capability")
     electric_use: int = Field(description="Electric-only mode")
     heatpump_use: int = Field(description="Heat pump only mode")
     energy_saver_use: int = Field(description="Energy Saver mode")
