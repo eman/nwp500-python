@@ -409,14 +409,19 @@ class DeviceStatus(NavienBaseModel):
         },
     )
     dhw_temperature_setting: HalfCelsiusToF = Field(
-        description="Target DHW temperature setting",
+        description=(
+            "User-configured target DHW temperature. "
+            "Range: 95°F (35°C) to 150°F (65.5°C). Default: 120°F (49°C)"
+        ),
         json_schema_extra={
             "unit_of_measurement": "°F",
             "device_class": "temperature",
         },
     )
     dhw_target_temperature_setting: HalfCelsiusToF = Field(
-        description="The target DHW temperature setting",
+        description=(
+            "Duplicate of dhw_temperature_setting for legacy API compatibility"
+        ),
         json_schema_extra={
             "unit_of_measurement": "°F",
             "device_class": "temperature",
