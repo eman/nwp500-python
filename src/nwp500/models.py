@@ -675,7 +675,7 @@ class DeviceStatus(NavienBaseModel):
     )
     freeze_protection_temp_min: HalfCelsiusToF = Field(
         default=43.0,
-        description="Minimum freeze protection threshold",
+        description="Active freeze protection lower limit. Default: 43°F (6°C)",
         json_schema_extra={
             "unit_of_measurement": "°F",
             "device_class": "temperature",
@@ -683,7 +683,7 @@ class DeviceStatus(NavienBaseModel):
     )
     freeze_protection_temp_max: HalfCelsiusToF = Field(
         default=65.0,
-        description="Maximum freeze protection threshold",
+        description="Active freeze protection upper limit. Default: 65°F",
         json_schema_extra={
             "unit_of_measurement": "°F",
             "device_class": "temperature",
@@ -778,14 +778,14 @@ class DeviceFeature(NavienBaseModel):
         },
     )
     freeze_protection_temp_min: HalfCelsiusToF = Field(
-        description="Minimum freeze protection threshold",
+        description="Minimum configurable freeze protection limit (43°F)",
         json_schema_extra={
             "unit_of_measurement": "°F",
             "device_class": "temperature",
         },
     )
     freeze_protection_temp_max: HalfCelsiusToF = Field(
-        description="Maximum freeze protection threshold",
+        description="Maximum configurable freeze protection limit (65°F)",
         json_schema_extra={
             "unit_of_measurement": "°F",
             "device_class": "temperature",
