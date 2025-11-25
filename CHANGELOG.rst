@@ -2,6 +2,24 @@
 Changelog
 =========
 
+Version 6.0.6 (2025-11-24)
+==========================
+
+Added
+-----
+
+- **Field Descriptions**: Added comprehensive Field descriptions to ``DeviceStatus`` and ``DeviceFeature`` models with full documentation details including units, ranges, and usage context
+
+Fixed
+-----
+
+- **Example Code**: Fixed ``device_status_callback.py`` example to use snake_case attribute names consistently
+- **Field Descriptions**: Clarified distinctions between similar fields:
+  
+  - ``dhw_temperature_setting`` vs ``dhw_target_temperature_setting`` descriptions
+  - ``freeze_protection_temp`` descriptions differ between DeviceStatus and DeviceFeature
+  - ``eco_use`` descriptions differ between DeviceStatus (current state) and DeviceFeature (capability)
+
 Version 6.0.5 (2025-11-21)
 ==========================
 
