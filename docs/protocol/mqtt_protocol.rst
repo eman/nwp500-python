@@ -273,6 +273,33 @@ Anti-Legionella
      "paramStr": ""
    }
 
+TOU Enable/Disable
+------------------
+
+Enable or disable Time-of-Use optimization without changing the configured schedule.
+
+**Enable TOU (command 33554476):**
+
+.. code-block:: json
+
+   {
+     "command": 33554476,
+     "mode": "tou-on",
+     "param": [],
+     "paramStr": ""
+   }
+
+**Disable TOU (command 33554475):**
+
+.. code-block:: json
+
+   {
+     "command": 33554475,
+     "mode": "tou-off",
+     "param": [],
+     "paramStr": ""
+   }
+
 Energy Usage Query
 ------------------
 
