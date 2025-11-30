@@ -2,6 +2,14 @@
 Changelog
 =========
 
+Version 6.0.7 (2025-11-30)
+==========================
+
+Added
+-----
+
+- **Documentation**: Added TOU (Time-of-Use) enable/disable command payload formats to protocol documentation
+
 Version 6.0.6 (2025-11-24)
 ==========================
 
