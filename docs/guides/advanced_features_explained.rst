@@ -441,24 +441,32 @@ Factors Affecting Stratification
     - Target: Warm tank from bottom, allow sufficient top recovery
     - Result: 140°F achieved in 45 min (slower due to DR, but cold ambient expected)
 
-Formula Confirmation
-====================
+Temperature Conversion Reference
+================================
 
-**Formula**:
+The NWP500 uses **half-degrees Celsius** encoding for temperature fields.
 
-The temperature conversion formula is:
+**Conversion Formulas**:
 
 .. code-block:: text
 
-    Formula: displayed_value = raw_value + 20
+    Half-degrees Celsius to Fahrenheit:
+    fahrenheit = (raw_value / 2.0) * 9/5 + 32
     
-    Application Evidence:
-    - Application handled by NaviLink
-    - Implementation in device status messages
-    - Fields: dhwTemperature, tankUpperTemperature, tankLowerTemperature, etc.
-    - Conversion: Applied uniformly to all add_20 type fields in device status
-    - Raw value range: 0-130 (representing -4°F to 150°F)
-    - Display range: 20-150°F
+    Examples:
+    - Raw 70 → (70 / 2.0) * 9/5 + 32 = 95°F
+    - Raw 98 → (98 / 2.0) * 9/5 + 32 ≈ 120°F
+    - Raw 120 → (120 / 2.0) * 9/5 + 32 = 140°F
+    - Raw 132 → (132 / 2.0) * 9/5 + 32 ≈ 150°F
+    
+    Inverse (Fahrenheit to raw):
+    raw_value = (fahrenheit - 32) * 5/9 * 2
+
+**Field Types**:
+
+- **HalfCelsiusToF**: Most temperature fields (DHW, setpoints, freeze protection)
+- **DeciCelsiusToF**: Sensor readings (tank sensors, refrigerant circuit)
+  - Formula: ``fahrenheit = (raw_value / 10.0) * 9/5 + 32``
 
 **Related Documentation**:
 
@@ -489,7 +497,7 @@ Summary and Recommendations
 See Also
 --------
 
-* :doc:`../protocol/data_conversions` - Temperature field conversions (add_20, decicelsius_to_f)
+* :doc:`../protocol/data_conversions` - Temperature field conversions (HalfCelsiusToF, DeciCelsiusToF)
 * :doc:`../protocol/device_status` - Complete device status field reference
 * :doc:`scheduling_features` - Reservation and TOU integration points
 * :doc:`../python_api/models` - DeviceStatus model field definitions

@@ -44,7 +44,7 @@ The following table tracks known fields that have been introduced in firmware up
      - Description
    * - ``heatMinOpTemperature``
      - Controller: 184614912, WiFi: 34013184
-     - ``raw + 20``
+     - HalfCelsiusToF
      - Minimum heat pump operation temperature. Lowest tank temperature setpoint allowed in the current operating mode (95-113°F, default 95°F).
 
 Reporting New Fields
@@ -123,7 +123,7 @@ Example entry in ``constants.py``:
        "newFieldName": {
            "introduced_in": "controller: 123, panel: 456, wifi: 789",
            "description": "What this field represents",
-           "conversion": "raw + 20",  # or "raw / 10.0", "bool (1=OFF, 2=ON)", etc.
+           "conversion": "HalfCelsiusToF",  # or "DeciCelsiusToF", "bool (1=OFF, 2=ON)", etc.
        },
    }
 

@@ -85,8 +85,9 @@ Each reservation entry controls one scheduled action:
         "hour": 6,              # 0-23 (24-hour format)
         "min": 30,              # 0-59
         "mode": 3,              # 1=Heat Pump, 2=Electric, 3=Energy Saver, 4=High Demand
-        "param": 120            # Temperature offset (raw value, add 20 to display)
-                                # 120 raw = 140°F display
+        "param": 120            # Temperature in half-degrees Celsius
+                                # Formula: fahrenheit = (param / 2.0) * 9/5 + 32
+                                # 120 = 60°C × 2 = 140°F
     }
 
 **Week Bitfield Encoding**:
@@ -107,15 +108,19 @@ The ``week`` field uses 7 bits for days of week:
 
 **Temperature Parameter Encoding**:
 
-The ``param`` field stores temperature with an offset of 20°F:
+The ``param`` field stores temperature in **half-degrees Celsius**:
 
 .. code-block:: text
 
-    Display Temperature → Raw Parameter Value
-    95°F → 75 (95-20)
-    120°F → 100 (120-20)
-    140°F → 120 (140-20)
-    150°F → 130 (150-20)
+    Conversion: fahrenheit = (param / 2.0) * 9/5 + 32
+    Inverse:    param = (fahrenheit - 32) * 5/9 * 2
+    
+    Temperature Examples:
+    95°F → 70 (35°C × 2)
+    120°F → 98 (48.9°C × 2)
+    130°F → 110 (54.4°C × 2)
+    140°F → 120 (60°C × 2)
+    150°F → 132 (65.6°C × 2)
 
 **Mode Selection Strategy**:
 
