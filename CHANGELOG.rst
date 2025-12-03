@@ -2,6 +2,69 @@
 Changelog
 =========
 
+Version 6.1.0 (2025-12-03)
+==========================
+
+**BREAKING CHANGES**: Temperature API simplified with Fahrenheit input
+
+This release fixes incorrect temperature conversions and provides a cleaner API
+where users pass temperatures in Fahrenheit directly, with automatic conversion
+to the device's internal format.
+
+Changed
+-------
+
+- **``build_reservation_entry()``**: Now accepts ``temperature_f`` (Fahrenheit)
+  instead of raw ``param`` value. The conversion to half-degrees Celsius is
+  handled automatically.
+
+  .. code-block:: python
+
+     # OLD (removed)
+     build_reservation_entry(..., param=120)
+     
+     # NEW
+     build_reservation_entry(..., temperature_f=140.0)
+
+- **``set_dhw_temperature()``**: Now accepts ``temperature_f: float`` (Fahrenheit)
+  instead of raw integer. Valid range: 95-150°F.
+
+  .. code-block:: python
+
+     # OLD (removed)
+     await mqtt.set_dhw_temperature(device, 120)
+     
+     # NEW
+     await mqtt.set_dhw_temperature(device, 140.0)
+
+Removed
+-------
+
+- **``set_dhw_temperature_display()``**: Removed. This method used an incorrect
+  conversion formula (subtracting 20 instead of proper half-degrees Celsius
+  encoding). Use ``set_dhw_temperature()`` with Fahrenheit directly.
+
+Added
+-----
+
+- **``fahrenheit_to_half_celsius()``**: New utility function for converting
+  Fahrenheit to the device's half-degrees Celsius format. Exported from the
+  main package for advanced use cases.
+
+  .. code-block:: python
+
+     from nwp500 import fahrenheit_to_half_celsius
+     
+     param = fahrenheit_to_half_celsius(140.0)  # Returns 120
+
+Fixed
+-----
+
+- **Temperature Encoding Bug**: Fixed ``set_dhw_temperature()`` which was using
+  an incorrect "subtract 20" conversion instead of proper half-degrees Celsius
+  encoding. This caused temperatures to be set incorrectly for values other
+  than 140°F (where both formulas happened to give the same result).
+
 Version 6.0.8 (2025-12-02)
 ==========================
 

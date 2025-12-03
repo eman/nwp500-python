@@ -978,64 +978,32 @@ class NavienMqttClient(EventEmitter):
         return await self._device_controller.disable_anti_legionella(device)
 
     async def set_dhw_temperature(
-        self, device: Device, temperature: int
+        self, device: Device, temperature_f: float
     ) -> int:
         """
         Set DHW target temperature.
 
-        IMPORTANT: The temperature value sent in the message is 20 degrees LOWER
-        than what displays on the device/app. For example:
-        - Send 121°F → Device displays 141°F
-        - Send 131°F → Device displays 151°F (capped at 150°F max)
-
-        Valid range: approximately 95-131°F (message value)
-        Display range: approximately 115-151°F (display value, max 150°F)
-
         Args:
             device: Device object
-            temperature: Target temperature in Fahrenheit (message
-                value, NOT display value)
+            temperature_f: Target temperature in Fahrenheit (95-150°F).
+                Automatically converted to the device's internal format.
 
         Returns:
             Publish packet ID
 
+        Raises:
+            MqttNotConnectedError: If not connected to broker
+            RangeValidationError: If temperature is outside 95-150°F range
+
         Example:
-            # To set display temperature to 140°F, send 120°F
-            await client.set_dhw_temperature(device, 120)
+            await client.set_dhw_temperature(device, 140.0)
         """
         if not self._connected or not self._device_controller:
             raise MqttNotConnectedError("Not connected to MQTT broker")
 
         return await self._device_controller.set_dhw_temperature(
-            device, temperature
+            device, temperature_f
         )
-
-    async def set_dhw_temperature_display(
-        self, device: Device, display_temperature: int
-    ) -> int:
-        """
-        Set DHW target temperature using the DISPLAY value (what you
-        see on device/app).
-
-        This is a convenience method that automatically converts
-        display temperature
-        to the message value by subtracting 20 degrees.
-
-        Args:
-            device: Device object
-            display_temperature: Target temperature as shown on
-                display/app (Fahrenheit)
-
-        Returns:
-            Publish packet ID
-
-        Example:
-            # To set display temperature to 140°F
-            await client.set_dhw_temperature_display(device, 140)
-            # This sends 120°F in the message
-        """
-        message_temperature = display_temperature - 20
-        return await self.set_dhw_temperature(device, message_temperature)
 
     async def update_reservations(
         self,

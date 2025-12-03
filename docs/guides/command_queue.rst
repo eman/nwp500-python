@@ -258,7 +258,7 @@ Reliable Device Control
 .. code-block:: python
 
     # Even during network issues, commands are preserved
-    await mqtt_client.set_dhw_temperature_display(device, 140)
+    await mqtt_client.set_dhw_temperature(device, 140.0)
     await mqtt_client.set_dhw_mode(device, 2)  # Energy Saver mode
 
     # Commands queued if disconnected, sent when reconnected

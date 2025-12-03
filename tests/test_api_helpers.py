@@ -68,7 +68,7 @@ def test_build_reservation_entry():
         hour=6,
         minute=30,
         mode_id=4,
-        param=120,
+        temperature_f=140.0,
     )
 
     assert reservation["enable"] == 1
@@ -76,7 +76,18 @@ def test_build_reservation_entry():
     assert reservation["hour"] == 6
     assert reservation["min"] == 30
     assert reservation["mode"] == 4
-    assert reservation["param"] == 120
+    assert reservation["param"] == 120  # 140°F = 60°C = 120 half-degrees
+
+    # Test 120°F conversion
+    reservation2 = build_reservation_entry(
+        enabled=True,
+        days=["Monday"],
+        hour=8,
+        minute=0,
+        mode_id=3,
+        temperature_f=120.0,
+    )
+    assert reservation2["param"] == 98  # 120°F ≈ 48.9°C ≈ 98 half-degrees
 
     with pytest.raises(RangeValidationError):
         build_reservation_entry(
@@ -85,7 +96,18 @@ def test_build_reservation_entry():
             hour=24,
             minute=0,
             mode_id=1,
-            param=100,
+            temperature_f=120.0,
+        )
+
+    # Test temperature out of range
+    with pytest.raises(RangeValidationError):
+        build_reservation_entry(
+            enabled=True,
+            days=["Monday"],
+            hour=6,
+            minute=0,
+            mode_id=1,
+            temperature_f=200.0,  # Too high
         )
 
 

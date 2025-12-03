@@ -79,7 +79,7 @@ Device Control
            # Control operations
            await mqtt.set_power(device, power_on=True)
            await mqtt.set_dhw_mode(device, mode_id=3)  # Energy Saver
-           await mqtt.set_dhw_temperature_display(device, 140)
+           await mqtt.set_dhw_temperature(device, 140.0)
            
            await mqtt.disconnect()
 
@@ -434,58 +434,33 @@ set_dhw_mode()
 set_dhw_temperature()
 ^^^^^^^^^^^^^^^^^^^^^
 
-.. py:method:: set_dhw_temperature(device, temperature)
+.. py:method:: set_dhw_temperature(device, temperature_f)
 
-   Set target DHW temperature using MESSAGE value (20°F less than display).
+   Set target DHW temperature.
 
    :param device: Device object
    :type device: Device
-   :param temperature: Temperature in °F (message value, NOT display value)
-   :type temperature: int
+   :param temperature_f: Temperature in Fahrenheit (95-150°F)
+   :type temperature_f: float
    :return: Publish packet ID
    :rtype: int
+   :raises RangeValidationError: If temperature is outside 95-150°F range
 
-   .. important::
-      The message value is 20°F LESS than the display value.
-      For a target display temperature of 140°F, send 120°F.
-      Use ``set_dhw_temperature_display()`` to use display values directly.
+   The temperature is automatically converted to the device's internal
+   format (half-degrees Celsius).
 
    **Example:**
 
    .. code-block:: python
 
-      # For 140°F display, send 120°F message value
-      await mqtt.set_dhw_temperature(device, temperature=120)
-
-set_dhw_temperature_display()
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-
-.. py:method:: set_dhw_temperature_display(device, display_temperature)
-
-   Set target DHW temperature using DISPLAY value (convenience method).
-
-   Automatically converts display value to message value by subtracting 20°F.
-
-   :param device: Device object
-   :type device: Device
-   :param display_temperature: Temperature as shown on display/app (°F)
-   :type display_temperature: int
-   :return: Publish packet ID
-   :rtype: int
-
-   **Example:**
-
-   .. code-block:: python
-
-      # Set display temperature to 140°F
-      # (automatically sends 120°F message value)
-      await mqtt.set_dhw_temperature_display(device, 140)
+      # Set temperature to 140°F
+      await mqtt.set_dhw_temperature(device, 140.0)
       
       # Common temperatures
-      await mqtt.set_dhw_temperature_display(device, 120)  # Standard
-      await mqtt.set_dhw_temperature_display(device, 130)  # Medium
-      await mqtt.set_dhw_temperature_display(device, 140)  # Hot
-      await mqtt.set_dhw_temperature_display(device, 150)  # Maximum
+      await mqtt.set_dhw_temperature(device, 120.0)  # Standard
+      await mqtt.set_dhw_temperature(device, 130.0)  # Medium
+      await mqtt.set_dhw_temperature(device, 140.0)  # Hot
+      await mqtt.set_dhw_temperature(device, 150.0)  # Maximum
 
 enable_anti_legionella()
 ^^^^^^^^^^^^^^^^^^^^^^^^
