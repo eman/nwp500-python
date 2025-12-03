@@ -103,12 +103,12 @@ The DeviceFeature data contains comprehensive device capabilities, configuration
      - int
      - °F
      - Minimum DHW temperature setting: 95°F (35°C) - safety and efficiency lower limit
-     - ``raw + 20``
+     - HalfCelsiusToF
    * - ``dhwTemperatureMax``
      - int
      - °F
      - Maximum DHW temperature setting: 150°F (65.5°C) - scald protection upper limit
-     - ``raw + 20``
+     - HalfCelsiusToF
    * - ``smartDiagnosticUse``
      - int
      - Boolean
@@ -143,12 +143,12 @@ The DeviceFeature data contains comprehensive device capabilities, configuration
      - int
      - °F
      - Minimum freeze protection threshold: 43°F (6°C) - factory default activation temperature
-     - ``raw + 20``
+     - HalfCelsiusToF
    * - ``freezeProtectionTempMax``
      - int
      - °F
      - Maximum freeze protection threshold: typically 65°F - user-adjustable upper limit
-     - ``raw + 20``
+     - HalfCelsiusToF
    * - ``mixingValueUse``
      - int
      - Boolean
@@ -292,14 +292,16 @@ Temperature Range Validation
 
 The reported temperature ranges align with official specifications and use the same conversion patterns as DeviceStatus fields:
 
-* **DHW Range**: 95°F to 150°F (factory default: 120°F for safety) - uses ``raw + 20`` conversion
-* **Freeze Protection**: Activates at 43°F, prevents tank freezing - uses ``raw + 20`` conversion
+* **DHW Range**: 95°F to 150°F (factory default: 120°F for safety) - uses HalfCelsiusToF conversion
+* **Freeze Protection**: Activates at 43°F, prevents tank freezing - uses HalfCelsiusToF conversion
 * **Anti-Legionella**: Heats to 140°F at programmed intervals (requires mixing valve)
 * **Scald Protection**: Built-in limits with recommendation for thermostatic mixing valves
 
-**Conversion Pattern Consistency**: Temperature fields in DeviceFeature use the same ``raw + 20`` 
+**Conversion Pattern Consistency**: Temperature fields in DeviceFeature use the same HalfCelsiusToF
 conversion formula as corresponding fields in DeviceStatus, ensuring consistent temperature 
 handling across all device data structures.
+
+**HalfCelsiusToF Formula**: ``fahrenheit = (raw_value / 2.0) * 9/5 + 32``
 
 Usage Example
 -------------

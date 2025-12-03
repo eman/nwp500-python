@@ -311,7 +311,7 @@ Some fields were introduced in specific firmware versions:
        "heatMinOpTemperature": {
            "introduced_in": "Controller: 184614912, WiFi: 34013184",
            "description": "Minimum heat pump operation temperature",
-           "conversion": "raw + 20"
+           "conversion": "HalfCelsiusToF"
        }
    }
 

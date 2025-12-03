@@ -245,8 +245,9 @@ DHW Temperature
    }
 
 .. important::
-   Temperature is 20°F less than display value. For 140°F display,
-   send 120°F.
+   Temperature values are encoded in **half-degrees Celsius**. 
+   Use formula: ``fahrenheit = (param / 2.0) * 9/5 + 32``
+   For 140°F, send ``param=120`` (which is 60°C × 2).
 
 Anti-Legionella
 ---------------
@@ -349,7 +350,7 @@ Status Response
 **Field Conversions:**
 
 * Boolean fields: 1=false, 2=true
-* Temperature fields: Add 20 to get display value
+* Temperature fields: Use HalfCelsiusToF formula: ``fahrenheit = (raw / 2.0) * 9/5 + 32``
 * Enum fields: Map integers to enum values
 
 See :doc:`device_status` for complete field reference.

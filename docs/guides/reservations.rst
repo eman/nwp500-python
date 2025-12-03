@@ -51,7 +51,7 @@ Here's a simple example that sets up a weekday morning reservation:
                hour=6,
                minute=30,
                mode_id=4,  # High Demand
-               param=120   # 140°F display (120 + 20)
+               param=120   # 140°F (half-degrees Celsius: 60°C × 2)
            )
 
            # Send to device
@@ -131,21 +131,22 @@ Field Descriptions
 
 ``param`` (integer, required)
    Mode-specific parameter value. For temperature modes (1-4), this is the
-   target water temperature with a **20°F offset**:
+   target water temperature encoded in **half-degrees Celsius**:
    
-   * Display temperature = ``param + 20``
-   * Message value = Display temperature - 20
+   * Conversion formula: ``fahrenheit = (param / 2.0) * 9/5 + 32``
+   * Inverse formula: ``param = (fahrenheit - 32) * 5/9 * 2``
    
    **Temperature Examples:**
    
-   * 120°F display → ``param = 100``
-   * 130°F display → ``param = 110``
-   * 140°F display → ``param = 120``
-   * 150°F display → ``param = 130``
+   * 95°F display → ``param = 70`` (35°C × 2)
+   * 120°F display → ``param = 98`` (48.9°C × 2)
+   * 130°F display → ``param = 110`` (54.4°C × 2)
+   * 140°F display → ``param = 120`` (60°C × 2)
+   * 150°F display → ``param = 132`` (65.6°C × 2)
    
    For non-temperature modes (Vacation, Power Off), the param value is
-   typically ignored but should be set to a valid temperature offset
-   (e.g., ``100``) for consistency.
+   typically ignored but should be set to a valid temperature value
+   (e.g., ``98`` for 120°F) for consistency.
 
 Helper Functions
 ================
@@ -168,7 +169,7 @@ Use ``build_reservation_entry()`` to create properly formatted entries:
        hour=6,
        minute=30,
        mode_id=4,  # High Demand
-       param=120   # 140°F (120 + 20)
+       param=120   # 140°F (half-degrees Celsius: 60°C × 2)
    )
    # Returns: {'enable': 1, 'week': 62, 'hour': 6, 'min': 30,
    #           'mode': 4, 'param': 120}
@@ -180,7 +181,7 @@ Use ``build_reservation_entry()`` to create properly formatted entries:
        hour=8,
        minute=0,
        mode_id=3,  # Energy Saver
-       param=100   # 120°F (100 + 20)
+       param=98    # ~120°F (half-degrees Celsius: 48.9°C × 2)
    )
 
    # You can also use day indices (0=Sunday, 6=Saturday)
@@ -190,7 +191,7 @@ Use ``build_reservation_entry()`` to create properly formatted entries:
        hour=18,
        minute=0,
        mode_id=1,  # Heat Pump Only
-       param=110   # 130°F (110 + 20)
+       param=110   # ~130°F (half-degrees Celsius: 54.4°C × 2)
    )
 
 Encoding Week Bitfields
@@ -334,13 +335,15 @@ Request the current reservation schedule from the device:
                    hour = entry.get("hour", 0)
                    minute = entry.get("min", 0)
                    mode = entry.get("mode", 0)
-                   display_temp = entry.get("param", 0) + 20
+                   # Convert from half-degrees Celsius to Fahrenheit
+                   raw_param = entry.get("param", 0)
+                   display_temp = (raw_param / 2.0) * 9/5 + 32
 
                    print(f"\nEntry {idx}:")
                    print(f"  Time: {hour:02d}:{minute:02d}")
                    print(f"  Days: {', '.join(days)}")
                    print(f"  Mode: {mode}")
-                   print(f"  Temp: {display_temp}°F")
+                   print(f"  Temp: {display_temp:.1f}°F")
 
            await mqtt.subscribe(response_topic, on_reservation_response)
 
@@ -508,14 +511,15 @@ Automatically enable vacation mode during a trip:
 Important Notes
 ===============
 
-Temperature Offset
-------------------
+Temperature Encoding
+--------------------
 
-The ``param`` field uses a **20°F offset** from the display temperature:
+The ``param`` field uses **half-degrees Celsius** encoding:
 
-* If you want the display to show 140°F, use ``param=120``
-* If you see ``param=100`` in a response, it means 120°F display
-* This offset applies to all temperature-based modes (Heat Pump, Electric,
+* Formula: ``fahrenheit = (param / 2.0) * 9/5 + 32``
+* If you want the display to show 140°F, use ``param=120`` (which is 60°C × 2)
+* If you see ``param=98`` in a response, it means ~120°F display
+* This encoding applies to all temperature-based modes (Heat Pump, Electric,
   Energy Saver, High Demand)
 
 Device Limits
@@ -589,7 +593,7 @@ Full working example with error handling and response monitoring:
                    hour=6,
                    minute=30,
                    mode_id=4,  # High Demand
-                   param=120   # 140°F
+                   param=120   # 140°F (half-degrees Celsius: 60°C × 2)
                ),
                # Weekday day
                NavienAPIClient.build_reservation_entry(
@@ -599,7 +603,7 @@ Full working example with error handling and response monitoring:
                    hour=9,
                    minute=0,
                    mode_id=3,  # Energy Saver
-                   param=100   # 120°F
+                   param=98    # ~120°F (half-degrees Celsius: 48.9°C × 2)
                ),
                # Weekend morning
                NavienAPIClient.build_reservation_entry(
@@ -608,7 +612,7 @@ Full working example with error handling and response monitoring:
                    hour=8,
                    minute=0,
                    mode_id=3,  # Energy Saver
-                   param=110   # 130°F
+                   param=110   # ~130°F (half-degrees Celsius: 54.4°C × 2)
                ),
            ]
 
@@ -637,9 +641,11 @@ Full working example with error handling and response monitoring:
                    days = decode_week_bitfield(
                        entry["week"]
                    )
+                   # Convert from half-degrees Celsius to Fahrenheit
+                   temp_f = (entry['param'] / 2.0) * 9/5 + 32
                    print(f"Entry {idx}: {entry['hour']:02d}:"
                          f"{entry['min']:02d} - Mode {entry['mode']} - "
-                         f"{entry['param'] + 20}°F - "
+                         f"{temp_f:.1f}°F - "
                          f"{', '.join(days)}")
 
                response_received.set()

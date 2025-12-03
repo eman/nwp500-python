@@ -483,7 +483,7 @@ class DeviceStatus(NavienBaseModel):
         description="Recirculation reservation usage status"
     )
 
-    # Temperature fields with offset (raw + 20)
+    # Temperature fields - encoded in half-degrees Celsius
     dhw_temperature: HalfCelsiusToF = Field(
         description="Current Domestic Hot Water (DHW) outlet temperature",
         json_schema_extra={
