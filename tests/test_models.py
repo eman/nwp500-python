@@ -1,6 +1,6 @@
 import pytest
 
-from nwp500.models import DeviceStatus
+from nwp500.models import DeviceStatus, fahrenheit_to_half_celsius
 
 
 @pytest.fixture
@@ -130,3 +130,13 @@ def test_device_status_div10(default_status_data):
     default_status_data["currentInletTemperature"] = 500
     status = DeviceStatus.model_validate(default_status_data)
     assert status.current_inlet_temperature == 50.0
+
+
+def test_fahrenheit_to_half_celsius():
+    """Test fahrenheit_to_half_celsius conversion for device commands."""
+    # Standard temperature conversions
+    assert fahrenheit_to_half_celsius(140.0) == 120  # 60°C × 2
+    assert fahrenheit_to_half_celsius(120.0) == 98  # ~48.9°C × 2
+    assert fahrenheit_to_half_celsius(95.0) == 70  # 35°C × 2
+    assert fahrenheit_to_half_celsius(150.0) == 131  # ~65.6°C × 2
+    assert fahrenheit_to_half_celsius(130.0) == 109  # ~54.4°C × 2

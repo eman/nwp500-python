@@ -328,7 +328,7 @@ def build_reservation_entry(
     hour: int,
     minute: int,
     mode_id: int,
-    param: int,
+    temperature_f: float,
 ) -> dict[str, int]:
     """
     Build a reservation payload entry matching the documented MQTT format.
@@ -339,13 +339,15 @@ def build_reservation_entry(
         hour: Hour (0-23)
         minute: Minute (0-59)
         mode_id: DHW operation mode ID (1-6, see DhwOperationSetting)
-        param: Additional parameter value
+        temperature_f: Target temperature in Fahrenheit (95-150°F).
+            Automatically converted to half-degrees Celsius for the device.
 
     Returns:
         Dictionary with reservation entry fields
 
     Raises:
-        RangeValidationError: If hour, minute, or mode_id is out of range
+        RangeValidationError: If hour, minute, mode_id, or temperature is out
+            of range
         ParameterValidationError: If enabled type is invalid
 
     Examples:
@@ -355,10 +357,13 @@ def build_reservation_entry(
         ...     hour=6,
         ...     minute=30,
         ...     mode_id=3,
-        ...     param=120
+        ...     temperature_f=140.0
         ... )
         {'enable': 1, 'week': 42, 'hour': 6, 'min': 30, 'mode': 3, 'param': 120}
     """
+    # Import here to avoid circular import
+    from .models import fahrenheit_to_half_celsius
+
     if not 0 <= hour <= 23:
         raise RangeValidationError(
             "hour must be between 0 and 23",
@@ -383,6 +388,14 @@ def build_reservation_entry(
             min_value=1,
             max_value=6,
         )
+    if not 95 <= temperature_f <= 150:
+        raise RangeValidationError(
+            "temperature_f must be between 95 and 150°F",
+            field="temperature_f",
+            value=temperature_f,
+            min_value=95,
+            max_value=150,
+        )
 
     if isinstance(enabled, bool):
         enable_flag = 1 if enabled else 2
@@ -396,6 +409,7 @@ def build_reservation_entry(
         )
 
     week_bitfield = encode_week_bitfield(days)
+    param = fahrenheit_to_half_celsius(temperature_f)
 
     return {
         "enable": enable_flag,

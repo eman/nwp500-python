@@ -51,7 +51,7 @@ Here's a simple example that sets up a weekday morning reservation:
                hour=6,
                minute=30,
                mode_id=4,  # High Demand
-               param=120   # 140°F (half-degrees Celsius: 60°C × 2)
+               temperature_f=140.0  # Temperature in Fahrenheit
            )
 
            # Send to device
@@ -140,13 +140,17 @@ Field Descriptions
    
    * 95°F display → ``param = 70`` (35°C × 2)
    * 120°F display → ``param = 98`` (48.9°C × 2)
-   * 130°F display → ``param = 110`` (54.4°C × 2)
+   * 130°F display → ``param = 109`` (54.4°C × 2)
    * 140°F display → ``param = 120`` (60°C × 2)
-   * 150°F display → ``param = 132`` (65.6°C × 2)
+   * 150°F display → ``param = 131`` (65.6°C × 2)
    
    For non-temperature modes (Vacation, Power Off), the param value is
    typically ignored but should be set to a valid temperature value
    (e.g., ``98`` for 120°F) for consistency.
+
+   **Note:** When using ``build_reservation_entry()``, you don't need to
+   calculate the param value manually - just pass ``temperature_f`` in
+   Fahrenheit and the conversion is handled automatically.
 
 Helper Functions
 ================
@@ -156,43 +160,58 @@ The library provides helper functions to make building reservations easier.
 Building Reservation Entries
 -----------------------------
 
-Use ``build_reservation_entry()`` to create properly formatted entries:
+Use ``build_reservation_entry()`` to create properly formatted entries.
+The function accepts temperature in Fahrenheit and handles the conversion
+to the device's internal format automatically:
 
 .. code-block:: python
 
-   from nwp500 import NavienAPIClient
+   from nwp500 import build_reservation_entry
 
    # Weekday morning - High Demand mode at 140°F
-   entry = NavienAPIClient.build_reservation_entry(
+   entry = build_reservation_entry(
        enabled=True,
        days=["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"],
        hour=6,
        minute=30,
        mode_id=4,  # High Demand
-       param=120   # 140°F (half-degrees Celsius: 60°C × 2)
+       temperature_f=140.0  # Temperature in Fahrenheit
    )
    # Returns: {'enable': 1, 'week': 62, 'hour': 6, 'min': 30,
    #           'mode': 4, 'param': 120}
 
    # Weekend - Energy Saver mode at 120°F
-   entry2 = NavienAPIClient.build_reservation_entry(
+   entry2 = build_reservation_entry(
        enabled=True,
        days=["Saturday", "Sunday"],
        hour=8,
        minute=0,
        mode_id=3,  # Energy Saver
-       param=98    # ~120°F (half-degrees Celsius: 48.9°C × 2)
+       temperature_f=120.0
    )
 
    # You can also use day indices (0=Sunday, 6=Saturday)
-   entry3 = NavienAPIClient.build_reservation_entry(
+   entry3 = build_reservation_entry(
        enabled=True,
        days=[1, 2, 3, 4, 5],  # Monday-Friday
        hour=18,
        minute=0,
        mode_id=1,  # Heat Pump Only
-       param=110   # ~130°F (half-degrees Celsius: 54.4°C × 2)
+       temperature_f=130.0
    )
+
+Temperature Conversion Utility
+-------------------------------
+
+For advanced use cases, you can use ``fahrenheit_to_half_celsius()`` directly:
+
+.. code-block:: python
+
+   from nwp500 import fahrenheit_to_half_celsius
+
+   param = fahrenheit_to_half_celsius(140.0)  # Returns 120
+   param = fahrenheit_to_half_celsius(120.0)  # Returns 98
+   param = fahrenheit_to_half_celsius(95.0)   # Returns 70
 
 Encoding Week Bitfields
 ------------------------
@@ -251,33 +270,33 @@ Send a new reservation schedule to the device:
            # Build multiple reservation entries
            reservations = [
                # Weekday morning: High Demand at 140°F
-               NavienAPIClient.build_reservation_entry(
+               build_reservation_entry(
                    enabled=True,
                    days=["Monday", "Tuesday", "Wednesday", "Thursday",
                          "Friday"],
                    hour=6,
                    minute=30,
                    mode_id=4,
-                   param=120
+                   temperature_f=140.0
                ),
                # Weekday evening: Energy Saver at 130°F
-               NavienAPIClient.build_reservation_entry(
+               build_reservation_entry(
                    enabled=True,
                    days=["Monday", "Tuesday", "Wednesday", "Thursday",
                          "Friday"],
                    hour=18,
                    minute=0,
                    mode_id=3,
-                   param=110
+                   temperature_f=130.0
                ),
                # Weekend: Heat Pump Only at 120°F
-               NavienAPIClient.build_reservation_entry(
+               build_reservation_entry(
                    enabled=True,
                    days=["Saturday", "Sunday"],
                    hour=8,
                    minute=0,
                    mode_id=1,
-                   param=100
+                   temperature_f=120.0
                ),
            ]
 
@@ -414,22 +433,22 @@ Different settings for work days and weekends:
 
    reservations = [
        # Weekday morning: early start, high demand
-       NavienAPIClient.build_reservation_entry(
+       build_reservation_entry(
            enabled=True,
            days=[1, 2, 3, 4, 5],  # Mon-Fri
            hour=5,
            minute=30,
            mode_id=4,  # High Demand
-           param=120   # 140°F
+           temperature_f=140.0
        ),
        # Weekend morning: later start, energy saver
-       NavienAPIClient.build_reservation_entry(
+       build_reservation_entry(
            enabled=True,
            days=[0, 6],  # Sun, Sat
            hour=8,
            minute=0,
            mode_id=3,  # Energy Saver
-           param=110   # 130°F
+           temperature_f=130.0
        ),
    ]
 
@@ -442,40 +461,40 @@ Minimize energy use during peak hours:
 
    reservations = [
        # Morning prep: 6:00 AM - High Demand for showers
-       NavienAPIClient.build_reservation_entry(
+       build_reservation_entry(
            enabled=True,
            days=[1, 2, 3, 4, 5],
            hour=6,
            minute=0,
            mode_id=4,
-           param=120
+           temperature_f=140.0
        ),
        # Day: 9:00 AM - Switch to Energy Saver
-       NavienAPIClient.build_reservation_entry(
+       build_reservation_entry(
            enabled=True,
            days=[1, 2, 3, 4, 5],
            hour=9,
            minute=0,
            mode_id=3,
-           param=100
+           temperature_f=120.0
        ),
        # Evening: 5:00 PM - Heat Pump Only (before peak pricing)
-       NavienAPIClient.build_reservation_entry(
+       build_reservation_entry(
            enabled=True,
            days=[1, 2, 3, 4, 5],
            hour=17,
            minute=0,
            mode_id=1,
-           param=110
+           temperature_f=130.0
        ),
        # Night: 10:00 PM - Back to Energy Saver
-       NavienAPIClient.build_reservation_entry(
+       build_reservation_entry(
            enabled=True,
            days=[1, 2, 3, 4, 5],
            hour=22,
            minute=0,
            mode_id=3,
-           param=100
+           temperature_f=120.0
        ),
    ]
 
@@ -487,23 +506,23 @@ Automatically enable vacation mode during a trip:
 .. code-block:: python
 
    # Enable vacation mode at start of trip
-   start_vacation = NavienAPIClient.build_reservation_entry(
+   start_vacation = build_reservation_entry(
        enabled=True,
        days=["Friday"],  # Leaving Friday evening
        hour=20,
        minute=0,
        mode_id=5,  # Vacation Mode
-       param=100   # Temperature doesn't matter for vacation mode
+       temperature_f=120.0  # Temperature doesn't matter for vacation mode
    )
 
    # Return to normal operation when you get back
-   end_vacation = NavienAPIClient.build_reservation_entry(
+   end_vacation = build_reservation_entry(
        enabled=True,
        days=["Sunday"],  # Returning Sunday afternoon
        hour=14,
        minute=0,
        mode_id=3,  # Energy Saver
-       param=110   # 130°F
+       temperature_f=130.0
    )
 
    reservations = [start_vacation, end_vacation]
@@ -511,16 +530,21 @@ Automatically enable vacation mode during a trip:
 Important Notes
 ===============
 
-Temperature Encoding
---------------------
+Temperature Conversion
+-----------------------
 
-The ``param`` field uses **half-degrees Celsius** encoding:
+When using ``build_reservation_entry()``, pass temperatures in Fahrenheit
+using the ``temperature_f`` parameter. The function automatically converts
+to the device's internal format (half-degrees Celsius).
 
-* Formula: ``fahrenheit = (param / 2.0) * 9/5 + 32``
-* If you want the display to show 140°F, use ``param=120`` (which is 60°C × 2)
-* If you see ``param=98`` in a response, it means ~120°F display
-* This encoding applies to all temperature-based modes (Heat Pump, Electric,
-  Energy Saver, High Demand)
+The valid temperature range is 95°F to 150°F.
+
+For reading reservation responses from the device, the ``param`` field
+contains the raw half-degrees Celsius value. Convert to Fahrenheit with:
+
+.. code-block:: python
+
+   fahrenheit = (param / 2.0) * 9/5 + 32
 
 Device Limits
 -------------
@@ -559,7 +583,9 @@ Full working example with error handling and response monitoring:
    from nwp500 import (
        NavienAPIClient,
        NavienAuthClient,
-       NavienMqttClient
+       NavienMqttClient,
+       build_reservation_entry,
+       decode_week_bitfield,
    )
 
 
@@ -586,33 +612,33 @@ Full working example with error handling and response monitoring:
            # Build comprehensive schedule
            reservations = [
                # Weekday morning
-               NavienAPIClient.build_reservation_entry(
+               build_reservation_entry(
                    enabled=True,
                    days=["Monday", "Tuesday", "Wednesday", "Thursday",
                          "Friday"],
                    hour=6,
                    minute=30,
                    mode_id=4,  # High Demand
-                   param=120   # 140°F (half-degrees Celsius: 60°C × 2)
+                   temperature_f=140.0
                ),
                # Weekday day
-               NavienAPIClient.build_reservation_entry(
+               build_reservation_entry(
                    enabled=True,
                    days=["Monday", "Tuesday", "Wednesday", "Thursday",
                          "Friday"],
                    hour=9,
                    minute=0,
                    mode_id=3,  # Energy Saver
-                   param=98    # ~120°F (half-degrees Celsius: 48.9°C × 2)
+                   temperature_f=120.0
                ),
                # Weekend morning
-               NavienAPIClient.build_reservation_entry(
+               build_reservation_entry(
                    enabled=True,
                    days=["Saturday", "Sunday"],
                    hour=8,
                    minute=0,
                    mode_id=3,  # Energy Saver
-                   param=110   # ~130°F (half-degrees Celsius: 54.4°C × 2)
+                   temperature_f=130.0
                ),
            ]
 

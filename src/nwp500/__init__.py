@@ -83,6 +83,7 @@ from nwp500.models import (
     TemperatureUnit,
     TOUInfo,
     TOUSchedule,
+    fahrenheit_to_half_celsius,
 )
 from nwp500.mqtt_client import NavienMqttClient
 from nwp500.mqtt_utils import MqttConnectionConfig, PeriodicRequestType
@@ -110,6 +111,8 @@ __all__ = [
     "EnergyUsageDay",
     "MonthlyEnergyData",
     "EnergyUsageResponse",
+    # Conversion utilities
+    "fahrenheit_to_half_celsius",
     # Authentication
     "NavienAuthClient",
     "AuthenticationResponse",

@@ -258,7 +258,7 @@ async def handle_set_mode_request(
 
 
 async def handle_set_dhw_temp_request(
-    mqtt: NavienMqttClient, device: Device, temperature: int
+    mqtt: NavienMqttClient, device: Device, temperature: float
 ) -> None:
     """
     Set DHW target temperature and display the response.
@@ -266,14 +266,13 @@ async def handle_set_dhw_temp_request(
     Args:
         mqtt: MQTT client instance
         device: Device to control
-        temperature: Target temperature in Fahrenheit (display value)
+        temperature: Target temperature in Fahrenheit (95-150°F)
     """
     # Validate temperature range
-    # Based on MQTT client documentation: display range approximately 115-150°F
-    if temperature < 115 or temperature > 150:
+    if temperature < 95 or temperature > 150:
         _logger.error(
             f"Temperature {temperature}°F is out of range. "
-            f"Valid range: 115-150°F"
+            f"Valid range: 95-150°F"
         )
         return
 
@@ -293,8 +292,8 @@ async def handle_set_dhw_temp_request(
     try:
         _logger.info(f"Setting DHW target temperature to {temperature}°F...")
 
-        # Send the temperature change command using display temperature
-        await mqtt.set_dhw_temperature_display(device, temperature)
+        # Send the temperature change command
+        await mqtt.set_dhw_temperature(device, temperature)
 
         # Wait for status response (temperature change confirmation)
         try:

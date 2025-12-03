@@ -7,8 +7,7 @@ import sys
 from typing import Any
 
 from nwp500 import NavienAPIClient, NavienAuthClient, NavienMqttClient
-from nwp500.encoding import decode_week_bitfield
-from nwp500.encoding import build_reservation_entry
+from nwp500.encoding import build_reservation_entry, decode_week_bitfield
 
 
 async def main() -> None:
@@ -26,14 +25,14 @@ async def main() -> None:
             print("No devices found for this account")
             return
 
-        # Build a weekday morning reservation for High Demand mode at 140°F display (120°F message)
+        # Build a weekday morning reservation for High Demand mode at 140°F
         weekday_reservation = build_reservation_entry(
             enabled=True,
             days=["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"],
             hour=6,
             minute=30,
             mode_id=4,  # High Demand
-            param=120,  # Remember: message value is 20°F lower than display value
+            temperature_f=140.0,  # Temperature in Fahrenheit
         )
 
         mqtt_client = NavienMqttClient(auth_client)
@@ -52,14 +51,16 @@ async def main() -> None:
             print(f"  entries: {len(reservations)}")
             for idx, entry in enumerate(reservations, start=1):
                 week_days = decode_week_bitfield(entry.get("week", 0))
-                display_temp = entry.get("param", 0) + 20
+                # Convert half-degrees Celsius param back to Fahrenheit for display
+                param = entry.get("param", 0)
+                temp_f = (param / 2.0) * 9 / 5 + 32
                 print(
-                    "   - #{idx}: {time:02d}:{minute:02d} mode={mode} display_temp={temp}F days={days}".format(
+                    "   - #{idx}: {time:02d}:{minute:02d} mode={mode} temp={temp:.1f}°F days={days}".format(
                         idx=idx,
                         time=entry.get("hour", 0),
                         minute=entry.get("min", 0),
                         mode=entry.get("mode"),
-                        temp=display_temp,
+                        temp=temp_f,
                         days=", ".join(week_days) or "<none>",
                     )
                 )

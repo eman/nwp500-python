@@ -20,7 +20,7 @@ from typing import Any, Callable, Optional
 
 from .constants import CommandCode
 from .exceptions import ParameterValidationError, RangeValidationError
-from .models import Device, DhwOperationSetting
+from .models import Device, DhwOperationSetting, fahrenheit_to_half_celsius
 
 __author__ = "Emmanuel Levijarvi"
 
@@ -350,31 +350,36 @@ class MqttDeviceController:
         return await self._publish(topic, command)
 
     async def set_dhw_temperature(
-        self, device: Device, temperature: int
+        self, device: Device, temperature_f: float
     ) -> int:
         """
         Set DHW target temperature.
 
-        IMPORTANT: The temperature value sent in the message is 20 degrees LOWER
-        than what displays on the device/app. For example:
-        - Send 121°F → Device displays 141°F
-        - Send 131°F → Device displays 151°F (capped at 150°F max)
-
-        Valid range: approximately 95-131°F (message value)
-        Display range: approximately 115-151°F (display value, max 150°F)
-
         Args:
             device: Device object
-            temperature: Target temperature in Fahrenheit (message value, NOT
-            display value)
+            temperature_f: Target temperature in Fahrenheit (95-150°F).
+                Automatically converted to the device's internal format.
 
         Returns:
             Publish packet ID
 
+        Raises:
+            RangeValidationError: If temperature is outside 95-150°F range
+
         Example:
-            # To set display temperature to 140°F, send 120°F
-            await controller.set_dhw_temperature(device, 120)
+            await controller.set_dhw_temperature(device, 140.0)
         """
+        if not 95 <= temperature_f <= 150:
+            raise RangeValidationError(
+                "temperature_f must be between 95 and 150°F",
+                field="temperature_f",
+                value=temperature_f,
+                min_value=95,
+                max_value=150,
+            )
+
+        param = fahrenheit_to_half_celsius(temperature_f)
+
         device_id = device.device_info.mac_address
         device_type = device.device_info.device_type
         additional_value = device.device_info.additional_value
@@ -387,38 +392,12 @@ class MqttDeviceController:
             command=CommandCode.DHW_TEMPERATURE,
             additional_value=additional_value,
             mode="dhw-temperature",
-            param=[temperature],
+            param=[param],
             paramStr="",
         )
         command["requestTopic"] = topic
 
         return await self._publish(topic, command)
-
-    async def set_dhw_temperature_display(
-        self, device: Device, display_temperature: int
-    ) -> int:
-        """Set DHW target temperature using the DISPLAY value.
-
-        Uses what you see on device/app.
-
-        This is a convenience method that automatically converts display
-        temperature to the message value by subtracting 20 degrees.
-
-        Args:
-            device: Device object
-            display_temperature: Target temperature as shown on display/app
-            (Fahrenheit)
-
-        Returns:
-            Publish packet ID
-
-        Example:
-            # To set display temperature to 140°F
-            await controller.set_dhw_temperature_display(device, 140)
-            # This sends 120°F in the message
-        """
-        message_temperature = display_temperature - 20
-        return await self.set_dhw_temperature(device, message_temperature)
 
     async def update_reservations(
         self,

@@ -41,6 +41,30 @@ def _half_celsius_to_fahrenheit(v: Any) -> float:
     return float(v)
 
 
+def fahrenheit_to_half_celsius(fahrenheit: float) -> int:
+    """Convert Fahrenheit to half-degrees Celsius (for device commands).
+
+    This is the inverse of the HalfCelsiusToF conversion used for reading.
+    Use this when sending temperature values to the device (e.g., reservations).
+
+    Args:
+        fahrenheit: Temperature in Fahrenheit (e.g., 140.0)
+
+    Returns:
+        Integer value in half-degrees Celsius for device param field
+
+    Examples:
+        >>> fahrenheit_to_half_celsius(140.0)
+        120
+        >>> fahrenheit_to_half_celsius(120.0)
+        98
+        >>> fahrenheit_to_half_celsius(95.0)
+        70
+    """
+    celsius = (fahrenheit - 32) * 5 / 9
+    return round(celsius * 2)
+
+
 def _deci_celsius_to_fahrenheit(v: Any) -> float:
     """Convert decicelsius (tenths of Celsius) to Fahrenheit."""
     if isinstance(v, (int, float)):

@@ -313,10 +313,10 @@ def parse_args(args: list[str]) -> argparse.Namespace:
     )
     group.add_argument(
         "--set-dhw-temp",
-        type=int,
+        type=float,
         metavar="TEMP",
         help="Set DHW (Domestic Hot Water) target temperature in Fahrenheit "
-        "(115-150°F) and display response.",
+        "(95-150°F) and display response.",
     )
     group.add_argument(
         "--power-on",

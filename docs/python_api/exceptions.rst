@@ -389,12 +389,12 @@ RangeValidationError
       from nwp500 import NavienMqttClient, RangeValidationError
 
       try:
-          await mqtt.set_dhw_temperature(device, temperature=200)
+          await mqtt.set_dhw_temperature(device, 200.0)
       except RangeValidationError as e:
           print(f"Invalid {e.field}: {e.value}")
           print(f"Valid range: {e.min_value} to {e.max_value}")
-          # Output: Invalid temperature: 200
-          #         Valid range: 100 to 140
+          # Output: Invalid temperature_f: 200.0
+          #         Valid range: 95 to 150
 
 Device Exceptions
 =================
@@ -464,7 +464,7 @@ Handle specific exception types for granular control:
                mqtt = NavienMqttClient(auth)
                await mqtt.connect()
                
-               await mqtt.set_dhw_temperature(device, temperature=120)
+               await mqtt.set_dhw_temperature(device, 120.0)
                
        except InvalidCredentialsError:
            print("Invalid credentials - check email/password")
@@ -632,7 +632,7 @@ Best Practices
    .. code-block:: python
 
       try:
-          await mqtt.set_dhw_temperature(device, temperature=200)
+          await mqtt.set_dhw_temperature(device, 200.0)
       except RangeValidationError as e:
           # Show helpful message
           print(f"Temperature must be between {e.min_value}°F and {e.max_value}°F")

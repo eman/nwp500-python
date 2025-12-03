@@ -157,11 +157,8 @@ DHW Control Commands
 
    .. code-block:: python
 
-      # For 140°F display, send 120°F message
-      await mqtt.set_dhw_temperature(device, 120)
-
-      # Or use convenience method
-      await mqtt.set_dhw_temperature_display(device, 140)
+      # Set temperature to 140°F
+      await mqtt.set_dhw_temperature(device, 140.0)
 
 Anti-Legionella Commands
 ^^^^^^^^^^^^^^^^^^^^^^^^^
