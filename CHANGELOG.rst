@@ -2,6 +2,14 @@
 Changelog
 =========
 
+Version 6.0.8 (2025-12-02)
+==========================
+
+Changed
+-------
+
+- **Maintenance Release**: Version bump for PyPI release
+
 Version 6.0.7 (2025-11-30)
 ==========================
 
