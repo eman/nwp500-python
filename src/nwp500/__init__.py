@@ -86,6 +86,12 @@ from nwp500.models import (
     fahrenheit_to_half_celsius,
 )
 from nwp500.mqtt_client import NavienMqttClient
+from nwp500.mqtt_diagnostics import (
+    ConnectionDropEvent,
+    ConnectionEvent,
+    MqttDiagnosticsCollector,
+    MqttMetrics,
+)
 from nwp500.mqtt_utils import MqttConnectionConfig, PeriodicRequestType
 from nwp500.utils import (
     log_performance,
@@ -148,6 +154,10 @@ __all__ = [
     "NavienMqttClient",
     "MqttConnectionConfig",
     "PeriodicRequestType",
+    "MqttDiagnosticsCollector",
+    "MqttMetrics",
+    "ConnectionDropEvent",
+    "ConnectionEvent",
     # Event Emitter
     "EventEmitter",
     "EventListener",
