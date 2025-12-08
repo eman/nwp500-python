@@ -2,6 +2,24 @@
 Changelog
 =========
 
+Version 6.1.1 (2025-12-08)
+==========================
+
+Added
+-----
+
+- **MQTT Diagnostics Module**: New ``MqttDiagnosticsCollector`` for capturing MQTT message traffic for debugging
+
+  - Captures all MQTT publish/subscribe activity with timestamps and payloads
+  - Configurable message filtering by topic pattern
+  - Message deduplication to reduce storage
+  - Automatic cleanup of old diagnostics (configurable retention)
+  - Export diagnostics to JSON for analysis and debugging
+  - Home Assistant integration support for custom components
+  - ``examples/mqtt_diagnostics_example.py`` demonstrating usage patterns
+  - Comprehensive documentation in ``docs/MQTT_DIAGNOSTICS.rst``
+  - Exported from main package: ``from nwp500 import MqttDiagnosticsCollector``
+
 Version 6.1.0 (2025-12-03)
 ==========================
 
