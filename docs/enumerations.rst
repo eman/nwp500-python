@@ -227,7 +227,7 @@ Navien device/unit model types. Common values:
 - **NCB**: Condensing boiler
 - **NPN**: Condensing water heater
 
-Values with "CAS\_" prefix indicate cascading systems where multiple units
+Values with ``CAS_`` prefix indicate cascading systems where multiple units
 work together.
 
 DeviceType
