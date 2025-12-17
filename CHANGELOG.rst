@@ -71,6 +71,7 @@ Fixed
 -----
 
 - **Temperature Conversion Test**: Corrected ``test_device_status_div10`` to use ``HalfCelsiusToF`` conversion (100 → 122°F, not 50.0)
+- **Documentation**: Fixed references to non-existent ``OperationMode`` enum - replaced with correct ``DhwOperationSetting`` and ``CurrentOperationMode`` enums
 
 Version 6.1.1 (2025-12-08)
 ==========================
