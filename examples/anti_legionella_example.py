@@ -18,14 +18,15 @@ from typing import Any
 
 from nwp500 import NavienAPIClient, NavienAuthClient, NavienMqttClient
 from nwp500.constants import CommandCode
+from nwp500.enums import OnOffFlag
 
 
 def display_anti_legionella_status(status: dict[str, Any], label: str = "") -> None:
     """Display Anti-Legionella status in a formatted way."""
     period = status.get("antiLegionellaPeriod")
     use_value = status.get("antiLegionellaUse")
-    enabled = use_value == 2
-    busy = status.get("antiLegionellaOperationBusy") == 2
+    enabled = use_value == OnOffFlag.ON
+    busy = status.get("antiLegionellaOperationBusy") == OnOffFlag.ON
 
     if period is not None and use_value is not None:
         prefix = f"{label}: " if label else ""

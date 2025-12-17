@@ -898,7 +898,7 @@ class NavienMqttClient(EventEmitter):
             device: Device object
             mode_id: Mode ID (1=Heat Pump Only, 2=Electric Only, 3=Energy Saver,
                 4=High Demand, 5=Vacation)
-            vacation_days: Number of vacation days (required when mode_id == 5)
+            vacation_days: Number of vacation days (required for Vacation mode)
 
         Returns:
             Publish packet ID

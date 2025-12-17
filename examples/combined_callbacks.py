@@ -30,6 +30,7 @@ if __name__ == "__main__":
 
 from nwp500.api_client import NavienAPIClient
 from nwp500.auth import NavienAuthClient
+from nwp500.enums import OnOffFlag
 from nwp500.models import DeviceFeature, DeviceStatus
 from nwp500.mqtt_client import NavienMqttClient
 
@@ -100,9 +101,11 @@ async def main():
                         f"  Temp Range: {feature.dhw_temperature_min}-{feature.dhw_temperature_max}°F"
                     )
                     print(
-                        f"  Heat Pump: {'Yes' if feature.heatpump_use == 2 else 'No'}"
+                        f"  Heat Pump: {'Yes' if feature.heatpump_use == OnOffFlag.ON else 'No'}"
                     )
-                    print(f"  Electric: {'Yes' if feature.electric_use == 2 else 'No'}")
+                    print(
+                        f"  Electric: {'Yes' if feature.electric_use == OnOffFlag.ON else 'No'}"
+                    )
 
                 # Subscribe to broader topics to catch all messages
                 print("Subscribing to status and feature callbacks...")
