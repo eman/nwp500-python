@@ -5,6 +5,8 @@ This module handles automatic reconnection with exponential backoff when
 the MQTT connection is interrupted.
 """
 
+from __future__ import annotations
+
 import asyncio
 import contextlib
 import logging

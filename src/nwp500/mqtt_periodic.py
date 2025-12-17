@@ -9,6 +9,8 @@ and status up-to-date. Features include:
 - Per-device, per-type task management
 """
 
+from __future__ import annotations
+
 import asyncio
 import contextlib
 import logging

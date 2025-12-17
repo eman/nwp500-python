@@ -5,6 +5,8 @@ This module handles queueing of commands when the MQTT connection is lost,
 and automatically sends them when the connection is restored.
 """
 
+from __future__ import annotations
+
 import asyncio
 import logging
 from datetime import datetime
