@@ -102,16 +102,7 @@ async def test_handle_set_mode_request_success(mock_mqtt, mock_device):
     status.model_dump.return_value = {"mode": "HEAT_PUMP"}
 
     async def side_effect_subscribe(device, callback):
-        # We don't call it immediately here effectively, but the handler
-        # waits for it AFTER sending command.
-        # So we can just set it up to be called when we want.
-        # However, for simplicity in this mock, we can just invoke it.
-        # But wait, the handler subscribes, then sends command, then waits.
-        # If we invoke it immediately during subscribe, the future is set
-        # result.
-        # The handler then sends command. Then waits on future.
-        # If future is already done, wait_for returns immediately.
-        # This is acceptable for this test.
+        # Invoke callback immediately; handler will wait on already-completed future
         callback(status)
         return None
 
