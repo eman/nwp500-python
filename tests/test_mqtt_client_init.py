@@ -731,18 +731,20 @@ class TestRecoverConnectionIntegration:
         assert "recover" in mqtt_client.recover_connection.__doc__.lower()
         assert "connection" in mqtt_client.recover_connection.__doc__.lower()
 
-    def test_recover_connection_error_handling_docstring(
-        self, auth_client_with_valid_tokens
-    ):
+    def test_recover_connection_error_handling_docstring(self):
         """Test that recover_connection docstring documents error handling."""
-        mqtt_client = NavienMqttClient(auth_client_with_valid_tokens)
-
-        doc = mqtt_client.recover_connection.__doc__
+        # Check class attribute directly to avoid bound method issues
+        doc = NavienMqttClient.recover_connection.__doc__
         assert doc is not None
 
         # Should mention it can raise exceptions
-        assert "TokenRefreshError" in doc or "raise" in doc.lower(), (
-            "Docstring should document error handling"
+        # Case insensitive check for 'raises' or specific errors
+        doc_lower = doc.lower()
+        has_raises = "raises" in doc_lower
+        has_token_error = "tokenrefresherror" in doc_lower
+        
+        assert has_raises or has_token_error, (
+            f"Docstring should document error handling. Got: {doc[:100]}..."
         )
 
     @pytest.mark.asyncio
