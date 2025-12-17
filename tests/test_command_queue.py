@@ -14,7 +14,7 @@ def test_queued_command_dataclass():
     topic = "test/topic"
     payload = {"key": "value"}
     qos = mqtt.QoS.AT_LEAST_ONCE
-    timestamp = datetime.utcnow()
+    timestamp = datetime.now(datetime.UTC)
 
     command = QueuedCommand(
         topic=topic, payload=payload, qos=qos, timestamp=timestamp
@@ -69,7 +69,7 @@ def test_queued_command_fifo_order():
 
     # Add commands
     for i in range(5):
-        timestamp = datetime.utcnow()
+        timestamp = datetime.now(datetime.UTC)
         timestamps.append(timestamp)
         command = QueuedCommand(
             topic=f"test/topic/{i}",

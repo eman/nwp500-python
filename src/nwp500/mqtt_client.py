@@ -42,6 +42,7 @@ if TYPE_CHECKING:
 from .mqtt_command_queue import MqttCommandQueue
 from .mqtt_connection import MqttConnection
 from .mqtt_device_control import MqttDeviceController
+from .mqtt_diagnostics import MqttDiagnosticsCollector
 from .mqtt_periodic import MqttPeriodicRequestManager
 from .mqtt_reconnection import MqttReconnectionHandler
 from .mqtt_subscriptions import MqttSubscriptionManager
@@ -186,6 +187,9 @@ class NavienMqttClient(EventEmitter):
         self._reconnect_task: asyncio.Task[None] | None = None
         self._periodic_manager: MqttPeriodicRequestManager | None = None
 
+        # Diagnostics collector
+        self._diagnostics = MqttDiagnosticsCollector()
+
         # Connection state (simpler than checking _connection_manager)
         self._connection: mqtt.Connection | None = None
         self._connected = False
@@ -238,6 +242,29 @@ class NavienMqttClient(EventEmitter):
         if self._reconnection_handler and self.config.auto_reconnect:
             self._reconnection_handler.on_connection_interrupted(error)
 
+        # Record diagnostic event
+        active_subs = 0
+        if self._subscription_manager:
+            # Access protected subscriber count for diagnostics
+            # pylint: disable=protected-access
+            active_subs = len(self._subscription_manager._subscriptions)
+
+        # Record drop asynchronously
+        self._schedule_coroutine(
+            self._diagnostics.record_connection_drop(
+                error=error,
+                reconnect_attempt=(
+                    self._reconnection_handler.attempt_count
+                    if self._reconnection_handler
+                    else 0
+                ),
+                active_subscriptions=active_subs,
+                queued_commands=(
+                    self._command_queue.count if self._command_queue else 0
+                ),
+            )
+        )
+
     def _on_connection_resumed_internal(
         self, return_code: Any, session_present: Any
     ) -> None:
@@ -258,6 +285,16 @@ class NavienMqttClient(EventEmitter):
             self._reconnection_handler.on_connection_resumed(
                 return_code, session_present
             )
+
+        # Record diagnostic event
+        self._schedule_coroutine(
+            self._diagnostics.record_connection_success(
+                event_type="resumed",
+                session_present=session_present,
+                return_code=return_code,
+                attempt_number=0,  # Reset on success
+            )
+        )
 
         # Send any queued commands
         if self.config.enable_command_queue and self._command_queue:
@@ -521,6 +558,16 @@ class NavienMqttClient(EventEmitter):
                 )
 
                 _logger.info("All components initialized successfully")
+
+                # Record diagnostic event
+                self._schedule_coroutine(
+                    self._diagnostics.record_connection_success(
+                        event_type="connected",
+                        session_present=False,  # Initial connect
+                        attempt_number=0,
+                    )
+                )
+
                 return True
 
             return False
@@ -1486,3 +1533,8 @@ class NavienMqttClient(EventEmitter):
         """
         if self._reconnection_handler:
             self._reconnection_handler.reset()
+
+    @property
+    def diagnostics(self) -> MqttDiagnosticsCollector:
+        """Get the diagnostics collector instance."""
+        return self._diagnostics
