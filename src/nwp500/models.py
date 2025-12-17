@@ -124,7 +124,7 @@ class NavienBaseModel(BaseModel):
         alias_generator=to_camel,
         populate_by_name=True,
         extra="ignore",  # Ignore unknown fields by default
-        use_enum_values=False,  # Serialize enums as enum objects, not values
+        use_enum_values=False,  # Keep enums as objects during validation (model_dump() converts to names)
     )
 
     def model_dump(self, **kwargs: Any) -> dict[str, Any]:
