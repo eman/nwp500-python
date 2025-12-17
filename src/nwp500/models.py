@@ -183,9 +183,8 @@ class NavienBaseModel(BaseModel):
                 NavienBaseModel._convert_enums_to_names(item, visited)
                 for item in data
             ]
-            result_val: Any = type(data)(converted)
             visited.discard(data_id)
-            return result_val
+            return type(data)(converted)
         return data
 
 
