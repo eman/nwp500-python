@@ -7,11 +7,21 @@ These models are based on the MQTT message formats and API responses.
 """
 
 import logging
-from enum import Enum
 from typing import Annotated, Any, Optional, Union
 
 from pydantic import BaseModel, BeforeValidator, ConfigDict, Field
 from pydantic.alias_generators import to_camel
+
+from .enums import (
+    CurrentOperationMode,
+    DeviceType,
+    DhwOperationSetting,
+    ErrorCode,
+    HeatSource,
+    TemperatureType,
+    TempFormulaType,
+    UnitType,
+)
 
 _logger = logging.getLogger(__name__)
 
@@ -23,6 +33,14 @@ _logger = logging.getLogger(__name__)
 
 def _device_bool_validator(v: Any) -> bool:
     """Convert device boolean (2=True, 0/1=False)."""
+    return bool(v == 2)
+
+
+def _capability_flag_validator(v: Any) -> bool:
+    """Convert capability flag (2=True/supported, 1=False/not supported).
+
+    Uses same pattern as OnOffFlag: 1=OFF/not supported, 2=ON/supported.
+    """
     return bool(v == 2)
 
 
@@ -73,11 +91,30 @@ def _deci_celsius_to_fahrenheit(v: Any) -> float:
     return float(v)
 
 
+def _tou_status_validator(v: Any) -> bool:
+    """Convert TOU status (0=False/disabled, 1=True/enabled)."""
+    return bool(v == 1)
+
+
+def _tou_override_validator(v: Any) -> bool:
+    """Convert TOU override status (1=True/override active, 2=False/normal).
+
+    Note: This field uses OnOffFlag pattern (1=OFF, 2=ON) but represents
+    whether TOU schedule operation is enabled, not whether override is active.
+    So: 2 (ON) = TOU operating normally = override NOT active = False
+        1 (OFF) = TOU not operating = override IS active = True
+    """
+    return bool(v == 1)
+
+
 # Reusable Annotated types for conversions
 DeviceBool = Annotated[bool, BeforeValidator(_device_bool_validator)]
+CapabilityFlag = Annotated[bool, BeforeValidator(_capability_flag_validator)]
 Div10 = Annotated[float, BeforeValidator(_div_10_validator)]
 HalfCelsiusToF = Annotated[float, BeforeValidator(_half_celsius_to_fahrenheit)]
 DeciCelsiusToF = Annotated[float, BeforeValidator(_deci_celsius_to_fahrenheit)]
+TouStatus = Annotated[bool, BeforeValidator(_tou_status_validator)]
+TouOverride = Annotated[bool, BeforeValidator(_tou_override_validator)]
 
 
 class NavienBaseModel(BaseModel):
@@ -87,34 +124,36 @@ class NavienBaseModel(BaseModel):
         alias_generator=to_camel,
         populate_by_name=True,
         extra="ignore",  # Ignore unknown fields by default
+        use_enum_values=False,  # Serialize enums as enum objects, not values
     )
 
+    def model_dump(self, **kwargs: Any) -> dict[str, Any]:
+        """Dump model to dict with enums as names by default."""
+        # Default to 'name' mode for enums unless explicitly overridden
+        if "mode" not in kwargs:
+            kwargs["mode"] = "python"
+        result = super().model_dump(**kwargs)
+        # Convert enums to their names
+        converted: dict[str, Any] = self._convert_enums_to_names(result)
+        return converted
 
-class DhwOperationSetting(Enum):
-    """DHW operation setting modes (user-configured heating preferences)."""
+    @staticmethod
+    def _convert_enums_to_names(data: Any) -> Any:
+        """Recursively convert Enum values to their names."""
+        from enum import Enum
 
-    HEAT_PUMP = 1
-    ELECTRIC = 2
-    ENERGY_SAVER = 3
-    HIGH_DEMAND = 4
-    VACATION = 5
-    POWER_OFF = 6
-
-
-class CurrentOperationMode(Enum):
-    """Current operation mode (real-time operational state)."""
-
-    STANDBY = 0
-    HEAT_PUMP_MODE = 32
-    HYBRID_EFFICIENCY_MODE = 64
-    HYBRID_BOOST_MODE = 96
-
-
-class TemperatureUnit(Enum):
-    """Temperature unit enumeration."""
-
-    CELSIUS = 1
-    FAHRENHEIT = 2
+        if isinstance(data, Enum):
+            return data.name
+        elif isinstance(data, dict):
+            return {
+                key: NavienBaseModel._convert_enums_to_names(value)
+                for key, value in data.items()
+            }
+        elif isinstance(data, (list, tuple)):
+            return type(data)(
+                NavienBaseModel._convert_enums_to_names(item) for item in data
+            )
+        return data
 
 
 class DeviceInfo(NavienBaseModel):
@@ -123,7 +162,7 @@ class DeviceInfo(NavienBaseModel):
     home_seq: int = 0
     mac_address: str = ""
     additional_value: str = ""
-    device_type: int = 52
+    device_type: Union[DeviceType, int] = DeviceType.NPF700_WIFI
     device_name: str = "Unknown"
     connected: int = 0
     install_type: Optional[str] = None
@@ -152,7 +191,7 @@ class FirmwareInfo(NavienBaseModel):
 
     mac_address: str = ""
     additional_value: str = ""
-    device_type: int = 52
+    device_type: Union[DeviceType, int] = DeviceType.NPF700_WIFI
     cur_sw_code: int = 0
     cur_version: int = 0
     downloaded_version: Optional[int] = None
@@ -230,7 +269,10 @@ class DeviceStatus(NavienBaseModel):
             "(e.g., freeze protection, anti-seize operations)"
         )
     )
-    error_code: int = Field(description="Error code if any fault is detected")
+    error_code: ErrorCode = Field(
+        default=ErrorCode.NO_ERROR,
+        description="Error code if any fault is detected",
+    )
     sub_error_code: int = Field(
         description="Sub error code providing additional error details"
     )
@@ -279,7 +321,7 @@ class DeviceStatus(NavienBaseModel):
     program_reservation_type: int = Field(
         description="Type of program reservation"
     )
-    temp_formula_type: Union[int, str] = Field(
+    temp_formula_type: TempFormulaType = Field(
         description="Temperature formula type"
     )
     current_statenum: int = Field(description="Current state number")
@@ -332,10 +374,10 @@ class DeviceStatus(NavienBaseModel):
         ),
         json_schema_extra={"unit_of_measurement": "gal"},
     )
-    tou_status: int = Field(
+    tou_status: TouStatus = Field(
         description=(
-            "Time of Use (TOU) status - "
-            "indicates if TOU scheduled operation is active"
+            "Time of Use (TOU) scheduling enabled. "
+            "True = TOU is active/enabled, False = TOU is disabled"
         )
     )
     dr_override_status: int = Field(
@@ -344,10 +386,11 @@ class DeviceStatus(NavienBaseModel):
             "User can override DR commands for up to 72 hours"
         )
     )
-    tou_override_status: int = Field(
+    tou_override_status: TouOverride = Field(
         description=(
-            "Time of Use override status. "
-            "User can temporarily override TOU schedule"
+            "TOU override status. "
+            "True = user has overridden TOU to force immediate heating, "
+            "False = device follows TOU schedule normally"
         )
     )
     total_energy_capacity: float = Field(
@@ -475,7 +518,13 @@ class DeviceStatus(NavienBaseModel):
     error_buzzer_use: DeviceBool = Field(
         description="Whether the error buzzer is enabled"
     )
-    current_heat_use: DeviceBool = Field(description="Current heat usage")
+    current_heat_use: HeatSource = Field(
+        description=(
+            "Currently active heat source. Indicates which heating "
+            "component(s) are actively running: 0=Unknown/not heating, "
+            "1=Heat Pump, 2=Electric Element, 3=Both simultaneously"
+        )
+    )
     heat_upper_use: DeviceBool = Field(
         description=(
             "Upper electric heating element usage status. "
@@ -640,8 +689,8 @@ class DeviceStatus(NavienBaseModel):
     )
 
     # Fields with scale division (raw / 10.0)
-    current_inlet_temperature: Div10 = Field(
-        description="Current inlet temperature",
+    current_inlet_temperature: HalfCelsiusToF = Field(
+        description="Cold water inlet temperature",
         json_schema_extra={
             "unit_of_measurement": "°F",
             "device_class": "temperature",
@@ -797,8 +846,8 @@ class DeviceStatus(NavienBaseModel):
         default=DhwOperationSetting.ENERGY_SAVER,
         description="User's configured DHW operation mode preference",
     )
-    temperature_type: TemperatureUnit = Field(
-        default=TemperatureUnit.FAHRENHEIT,
+    temperature_type: TemperatureType = Field(
+        default=TemperatureType.FAHRENHEIT,
         description="Type of temperature unit",
     )
     freeze_protection_temp_min: HalfCelsiusToF = Field(
@@ -833,7 +882,7 @@ class DeviceFeature(NavienBaseModel):
             "(1=USA, complies with FCC Part 15 Class B)"
         )
     )
-    model_type_code: int = Field(
+    model_type_code: Union[UnitType, int] = Field(
         description="Model type identifier: NWP500 series model variant"
     )
     control_type_code: int = Field(
@@ -888,119 +937,118 @@ class DeviceFeature(NavienBaseModel):
             "for warranty and service identification"
         )
     )
-    power_use: int = Field(
-        description=(
-            "Power control capability (1=can be turned on/off via controls)"
-        )
+    power_use: CapabilityFlag = Field(
+        description=("Power control capability (2=supported, 1=not supported)")
     )
-    holiday_use: int = Field(
+    holiday_use: CapabilityFlag = Field(
         description=(
-            "Vacation mode support (1=supported) - "
+            "Vacation mode support (2=supported, 1=not supported) - "
             "energy-saving mode for 0-99 days"
         )
     )
-    program_reservation_use: int = Field(
+    program_reservation_use: CapabilityFlag = Field(
         description=(
-            "Scheduled operation support (1=supported) - "
+            "Scheduled operation support (2=supported, 1=not supported) - "
             "programmable heating schedules"
         )
     )
-    dhw_use: int = Field(
+    dhw_use: CapabilityFlag = Field(
         description=(
-            "Domestic hot water functionality (1=available) - "
+            "Domestic hot water functionality (2=supported, 1=not supported) - "
             "primary function of water heater"
         )
     )
-    dhw_temperature_setting_use: int = Field(
+    dhw_temperature_setting_use: CapabilityFlag = Field(
         description=(
-            "Temperature adjustment capability (1=supported) - "
+            "Temperature adjustment capability "
+            "(2=supported, 1=not supported) - "
             "user can modify target temperature"
         )
     )
-    smart_diagnostic_use: int = Field(
+    smart_diagnostic_use: CapabilityFlag = Field(
         description=(
-            "Self-diagnostic capability (1=available) - "
+            "Self-diagnostic capability (2=supported, 1=not supported) - "
             "10-minute startup diagnostic, error code system"
         )
     )
-    wifi_rssi_use: int = Field(
+    wifi_rssi_use: CapabilityFlag = Field(
         description=(
-            "WiFi signal monitoring (1=supported) - "
+            "WiFi signal monitoring (2=supported, 1=not supported) - "
             "reports signal strength in dBm"
         )
     )
-    temp_formula_type: int = Field(
+    temp_formula_type: TempFormulaType = Field(
         description=(
             "Temperature calculation method identifier "
             "for internal sensor calibration"
         )
     )
-    energy_usage_use: int = Field(
+    energy_usage_use: CapabilityFlag = Field(
         description=(
             "Energy monitoring support (1=available) - tracks kWh consumption"
         )
     )
-    freeze_protection_use: int = Field(
+    freeze_protection_use: CapabilityFlag = Field(
         description=(
             "Freeze protection capability (1=available) - "
             "automatic heating when tank drops below threshold"
         )
     )
-    mixing_value_use: int = Field(
+    mixing_value_use: CapabilityFlag = Field(
         description=(
             "Thermostatic mixing valve support (1=available) - "
             "for temperature limiting at point of use"
         )
     )
-    dr_setting_use: int = Field(
+    dr_setting_use: CapabilityFlag = Field(
         description=(
             "Demand Response support (1=available) - "
             "CTA-2045 compliance for utility load management"
         )
     )
-    anti_legionella_setting_use: int = Field(
+    anti_legionella_setting_use: CapabilityFlag = Field(
         description=(
             "Anti-Legionella function (1=available) - "
             "periodic heating to 140°F (60°C) to prevent bacteria"
         )
     )
-    hpwh_use: int = Field(
+    hpwh_use: CapabilityFlag = Field(
         description=(
             "Heat Pump Water Heater mode (1=supported) - "
             "primary efficient heating using refrigeration cycle"
         )
     )
-    dhw_refill_use: int = Field(
+    dhw_refill_use: CapabilityFlag = Field(
         description=(
             "Tank refill detection (1=supported) - "
             "monitors for dry fire conditions during refill"
         )
     )
-    eco_use: int = Field(
+    eco_use: CapabilityFlag = Field(
         description=(
             "ECO safety switch capability (1=available) - "
             "Energy Cut Off high-temperature limit protection"
         )
     )
-    electric_use: int = Field(
+    electric_use: CapabilityFlag = Field(
         description=(
             "Electric-only mode (1=supported) - "
             "heating element only for maximum recovery speed"
         )
     )
-    heatpump_use: int = Field(
+    heatpump_use: CapabilityFlag = Field(
         description=(
             "Heat pump only mode (1=supported) - "
             "most efficient operation using only refrigeration cycle"
         )
     )
-    energy_saver_use: int = Field(
+    energy_saver_use: CapabilityFlag = Field(
         description=(
             "Energy Saver mode (1=supported) - "
             "hybrid efficiency mode balancing speed and efficiency (default)"
         )
     )
-    high_demand_use: int = Field(
+    high_demand_use: CapabilityFlag = Field(
         description=(
             "High Demand mode (1=supported) - "
             "hybrid boost mode prioritizing fast recovery"
@@ -1050,8 +1098,8 @@ class DeviceFeature(NavienBaseModel):
     )
 
     # Enum field
-    temperature_type: TemperatureUnit = Field(
-        default=TemperatureUnit.FAHRENHEIT,
+    temperature_type: TemperatureType = Field(
+        default=TemperatureType.FAHRENHEIT,
         description=(
             "Default temperature unit preference - "
             "factory set to Fahrenheit for USA"
@@ -1068,7 +1116,7 @@ class MqttRequest(NavienBaseModel):
     """MQTT command request payload."""
 
     command: int
-    device_type: int
+    device_type: Union[DeviceType, int]
     mac_address: str
     additional_value: str = "..."
     mode: Optional[str] = None

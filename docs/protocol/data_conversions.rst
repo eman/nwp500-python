@@ -487,7 +487,7 @@ Vacation and Scheduling Fields
    * - ``touStatus``
      - None (direct value)
      - See values below
-     - **Time-of-Use (TOU) schedule status**. 0=inactive, 1=active. Controls heating based on electricity rate periods.
+     - **Time-of-Use (TOU) schedule status**. 0 = inactive/disabled, 1 = active/enabled. Controls heating based on electricity rate periods.
    * - ``drEventStatus``
      - None (direct value)
      - Bitfield
@@ -499,7 +499,7 @@ Vacation and Scheduling Fields
    * - ``touOverrideStatus``
      - None (direct value)
      - See explanation
-     - **User temporary override of TOU schedule**. Similar to DR override - user can override schedule temporarily.
+     - **TOU schedule operation status**. 1 (OFF) = user has overridden TOU to force immediate heating (override lasts up to 72 hours), 2 (ON) = TOU schedule is operating normally.
 
 Network and Diagnostic Fields
 -----------------------------

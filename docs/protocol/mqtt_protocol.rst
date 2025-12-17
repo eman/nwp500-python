@@ -135,6 +135,11 @@ Status and Info Requests
 Control Commands
 ----------------
 
+These commands control device operation, settings, and special functions.
+
+Power Control
+~~~~~~~~~~~~~
+
 .. list-table::
    :header-rows: 1
    :widths: 40 20 40
@@ -142,36 +147,197 @@ Control Commands
    * - Command
      - Code
      - Description
-   * - Power On
-     - 33554434
-     - Turn device on
    * - Power Off
      - 33554433
      - Turn device off
-   * - Set DHW Mode
+   * - Power On
+     - 33554434
+     - Turn device on
+
+Operation Mode Control
+~~~~~~~~~~~~~~~~~~~~~~
+
+.. list-table::
+   :header-rows: 1
+   :widths: 40 20 40
+
+   * - Command
+     - Code
+     - Description
+   * - Set DHW Operation Mode
      - 33554437
-     - Change operation mode
+     - Change DHW heating mode (Heat Pump/Electric/Hybrid)
    * - Set DHW Temperature
+     - 33554464
+     - Set target water temperature
+
+Scheduling and Reservations
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. list-table::
+   :header-rows: 1
+   :widths: 40 20 40
+
+   * - Command
+     - Code
+     - Description
+   * - Update Weekly Reservations
      - 33554438
-     - Set target temperature
-   * - Enable Anti-Legionella
-     - 33554472
-     - Enable anti-Legionella cycle
-   * - Disable Anti-Legionella
-     - 33554471
-     - Disable anti-Legionella
-   * - Update Reservations
-     - 16777226
-     - Update reservation schedule
-   * - Configure TOU
+     - Configure weekly temperature schedule
+   * - Configure TOU Schedule
      - 33554439
-     - Configure TOU schedule
-   * - Enable TOU
-     - 33554476
-     - Enable TOU optimization
+     - Configure Time-of-Use pricing schedule
+   * - Configure Recirculation Schedule
+     - 33554440
+     - Configure recirculation pump schedule
+   * - Configure Water Program (Reservation Mode)
+     - 33554441
+     - Enable/configure water program reservation mode
+
+Time-of-Use (TOU) Control
+~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. list-table::
+   :header-rows: 1
+   :widths: 40 20 40
+
+   * - Command
+     - Code
+     - Description
    * - Disable TOU
      - 33554475
      - Disable TOU optimization
+   * - Enable TOU
+     - 33554476
+     - Enable TOU optimization
+
+Recirculation Pump Control
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. list-table::
+   :header-rows: 1
+   :widths: 40 20 40
+
+   * - Command
+     - Code
+     - Description
+   * - Trigger Recirculation Hot Button
+     - 33554444
+     - Manually activate recirculation pump
+   * - Set Recirculation Mode
+     - 33554445
+     - Set recirculation operation mode
+
+Special Functions
+~~~~~~~~~~~~~~~~~
+
+.. list-table::
+   :header-rows: 1
+   :widths: 40 20 40
+
+   * - Command
+     - Code
+     - Description
+   * - Set Freeze Protection Temperature
+     - 33554451
+     - Configure freeze protection activation temperature
+   * - Trigger Smart Diagnostic
+     - 33554455
+     - Run smart diagnostic routine
+   * - Set Vacation Days
+     - 33554466
+     - Configure vacation mode duration
+   * - Disable Intelligent Mode
+     - 33554467
+     - Turn off intelligent/adaptive heating
+   * - Enable Intelligent Mode
+     - 33554468
+     - Turn on intelligent/adaptive heating
+
+Demand Response Control
+~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. list-table::
+   :header-rows: 1
+   :widths: 40 20 40
+
+   * - Command
+     - Code
+     - Description
+   * - Disable Demand Response
+     - 33554469
+     - Disable utility demand response
+   * - Enable Demand Response
+     - 33554470
+     - Enable utility demand response
+
+Anti-Legionella Control
+~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. list-table::
+   :header-rows: 1
+   :widths: 40 20 40
+
+   * - Command
+     - Code
+     - Description
+   * - Disable Anti-Legionella
+     - 33554471
+     - Disable anti-Legionella cycle
+   * - Enable Anti-Legionella
+     - 33554472
+     - Enable anti-Legionella cycle
+
+Maintenance
+~~~~~~~~~~~
+
+.. list-table::
+   :header-rows: 1
+   :widths: 40 20 40
+
+   * - Command
+     - Code
+     - Description
+   * - Reset Air Filter
+     - 33554473
+     - Reset air filter maintenance timer
+   * - Set Air Filter Life
+     - 33554474
+     - Configure air filter replacement interval
+
+Firmware Updates
+~~~~~~~~~~~~~~~~
+
+.. list-table::
+   :header-rows: 1
+   :widths: 40 20 40
+
+   * - Command
+     - Code
+     - Description
+   * - Commit OTA Update
+     - 33554442
+     - Commit pending firmware update
+   * - Check for OTA Updates
+     - 33554443
+     - Check for available firmware updates
+
+WiFi Management
+~~~~~~~~~~~~~~~
+
+.. list-table::
+   :header-rows: 1
+   :widths: 40 20 40
+
+   * - Command
+     - Code
+     - Description
+   * - Reconnect WiFi
+     - 33554446
+     - Trigger WiFi reconnection
+   * - Reset WiFi
+     - 33554447
+     - Reset WiFi settings
 
 Control Command Details
 =======================
@@ -217,11 +383,13 @@ DHW Mode
 
 * 1 = Heat Pump Only
 * 2 = Electric Only
-* 3 = Energy Saver
+* 3 = Energy Saver (Hybrid mode)
 * 4 = High Demand
 * 5 = Vacation (requires second param: days)
 
-**Vacation Example:**
+**Vacation Mode Example:**
+
+When mode is 5 (VACATION), a second parameter specifies number of days:
 
 .. code-block:: json
 
@@ -232,13 +400,16 @@ DHW Mode
      "paramStr": ""
    }
 
+.. note::
+   Vacation mode is the only DHW mode that requires two parameters.
+
 DHW Temperature
 ---------------
 
 .. code-block:: json
 
    {
-     "command": 33554438,
+     "command": 33554464,
      "mode": "dhw-temperature",
      "param": [120],
      "paramStr": ""
@@ -248,6 +419,7 @@ DHW Temperature
    Temperature values are encoded in **half-degrees Celsius**. 
    Use formula: ``fahrenheit = (param / 2.0) * 9/5 + 32``
    For 140°F, send ``param=120`` (which is 60°C × 2).
+   Valid range: 95-150°F (70-150 raw value).
 
 Anti-Legionella
 ---------------
@@ -300,6 +472,260 @@ Enable or disable Time-of-Use optimization without changing the configured sched
      "param": [],
      "paramStr": ""
    }
+
+Reservation Water Program
+--------------------------
+
+Enable/configure water program reservation mode.
+
+**Configure Reservation Mode (command 33554441):**
+
+.. code-block:: json
+
+   {
+     "command": 33554441,
+     "mode": "reservation-mode",
+     "param": [],
+     "paramStr": ""
+   }
+
+.. note::
+   This command enables or configures the water program reservation system.
+
+Vacation Mode
+-------------
+
+Set vacation/away mode for extended periods.
+
+**Set Vacation Days (command 33554466):**
+
+.. code-block:: json
+
+   {
+     "command": 33554466,
+     "mode": "goout-day",
+     "param": [7]
+   }
+
+.. note::
+   Vacation days parameter: Number of days (e.g., 7). Device will operate in 
+   energy-saving mode to minimize consumption during absence.
+
+Intelligent/Adaptive Mode
+--------------------------
+
+Control intelligent heating that learns usage patterns.
+
+**Enable Intelligent Mode (command 33554468):**
+
+.. code-block:: json
+
+   {
+     "command": 33554468,
+     "mode": "intelligent-on",
+     "param": [],
+     "paramStr": ""
+   }
+
+**Disable Intelligent Mode (command 33554467):**
+
+.. code-block:: json
+
+   {
+     "command": 33554467,
+     "mode": "intelligent-off",
+     "param": [],
+     "paramStr": ""
+   }
+
+Demand Response
+---------------
+
+Control utility demand response participation.
+
+**Enable Demand Response (command 33554470):**
+
+.. code-block:: json
+
+   {
+     "command": 33554470,
+     "mode": "dr-on",
+     "param": [],
+     "paramStr": ""
+   }
+
+**Disable Demand Response (command 33554469):**
+
+.. code-block:: json
+
+   {
+     "command": 33554469,
+     "mode": "dr-off",
+     "param": [],
+     "paramStr": ""
+   }
+
+.. note::
+   Demand response allows utilities to manage grid load by signaling water heaters
+   to reduce consumption (shed) or pre-heat (load up) before peak periods.
+
+Recirculation Control
+---------------------
+
+Control recirculation pump operation.
+
+**Hot Button (command 33554444):**
+
+.. code-block:: json
+
+   {
+     "command": 33554444,
+     "mode": "recirc-hotbtn",
+     "param": [1],
+     "paramStr": ""
+   }
+
+.. note::
+   The param array contains a parameter (typically 1 to activate).
+
+**Set Recirculation Mode (command 33554445):**
+
+.. code-block:: json
+
+   {
+     "command": 33554445,
+     "mode": "recirc-mode",
+     "param": [3],
+     "paramStr": ""
+   }
+
+**Recirculation Mode Values:**
+
+* 1 = Always On
+* 2 = Button Only (manual activation)
+* 3 = Schedule (follow configured schedule)
+* 4 = Temperature (activate when pipe temp drops)
+
+**Note:** The param array contains a single integer parameter passed to the function.
+
+Air Filter Maintenance
+----------------------
+
+Manage air filter maintenance for heat pump models.
+
+**Reset Air Filter Timer (command 33554473):**
+
+.. code-block:: json
+
+   {
+     "command": 33554473,
+     "mode": "air-filter-reset",
+     "param": [],
+     "paramStr": ""
+   }
+
+**Set Air Filter Life (command 33554474):**
+
+.. code-block:: json
+
+   {
+     "command": 33554474,
+     "mode": "air-filter-life",
+     "param": [180],
+     "paramStr": ""
+   }
+
+.. note::
+   Air filter life parameter: days between cleanings/replacements (typically 90-180 days)
+
+Freeze Protection
+-----------------
+
+Configure freeze protection settings.
+
+**Set Freeze Protection Temperature (command 33554451):**
+
+.. code-block:: json
+
+   {
+     "command": 33554451
+   }
+
+.. note::
+   This command is defined in the enum but payload structure not found in 
+   decompiled code. May require additional parameters or use default payload.
+
+Smart Diagnostics
+-----------------
+
+Run smart diagnostic routine.
+
+**Trigger Smart Diagnostic (command 33554455):**
+
+.. code-block:: json
+
+   {
+     "command": 33554455
+   }
+
+.. note::
+   This command is defined in the enum but payload structure not found in 
+   decompiled code. May require additional parameters or use default payload.
+
+WiFi Management
+---------------
+
+Control WiFi connectivity.
+
+**Reconnect WiFi (command 33554446):**
+
+.. code-block:: json
+
+   {
+     "command": 33554446
+   }
+
+**Reset WiFi Settings (command 33554447):**
+
+.. code-block:: json
+
+   {
+     "command": 33554447
+   }
+
+.. warning::
+   WiFi reset will clear stored credentials and require re-provisioning.
+
+.. note::
+   These commands are defined in the enum but payload structures not found in 
+   decompiled code. They likely use minimal/default payloads.
+
+Firmware Updates
+----------------
+
+Manage over-the-air firmware updates.
+
+**Commit Update (command 33554442):**
+
+This command uses a special RequestControlOta structure:
+
+.. code-block:: json
+
+   {
+     "command": 33554442,
+     "deviceType": 52,
+     "macAddress": "...",
+     "additionalValue": "...",
+     "commitOta": {
+       "swCode": 1,
+       "swVersion": 184614912
+     }
+   }
+
+.. note::
+   - swCode: Software component code (1=Controller, 2=Panel, 4=WiFi module)
+   - swVersion: Version number to commit
+   - This command does not use the standard mode/param/paramStr structure
 
 Energy Usage Query
 ------------------

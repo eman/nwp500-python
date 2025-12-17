@@ -133,7 +133,7 @@ async def main() -> None:
         print("STEP 2: Enabling Anti-Legionella cycle every 7 days...")
         print("=" * 70)
         status_received.clear()
-        expected_command = CommandCode.ANTI_LEGIONELLA_ENABLE
+        expected_command = CommandCode.ANTI_LEGIONELLA_ON
         await mqtt_client.enable_anti_legionella(device, period_days=7)
 
         try:
@@ -151,7 +151,7 @@ async def main() -> None:
         print("WARNING: This reduces protection against Legionella bacteria!")
         print("=" * 70)
         status_received.clear()
-        expected_command = CommandCode.ANTI_LEGIONELLA_DISABLE
+        expected_command = CommandCode.ANTI_LEGIONELLA_OFF
         await mqtt_client.disable_anti_legionella(device)
 
         try:
@@ -168,7 +168,7 @@ async def main() -> None:
         print("STEP 4: Re-enabling Anti-Legionella with 14-day cycle...")
         print("=" * 70)
         status_received.clear()
-        expected_command = CommandCode.ANTI_LEGIONELLA_ENABLE
+        expected_command = CommandCode.ANTI_LEGIONELLA_ON
         await mqtt_client.enable_anti_legionella(device, period_days=14)
 
         try:

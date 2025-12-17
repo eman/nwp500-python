@@ -56,15 +56,10 @@ class MqttDiagnosticsExample:
         self.output_dir = Path("mqtt_diagnostics_output")
         self.output_dir.mkdir(exist_ok=True)
 
-    def setup_signal_handlers(self) -> None:
-        """Setup signal handlers for graceful shutdown."""
-
-        def handle_signal(signum, frame):
-            _logger.info(f"Received signal {signum}, shutting down...")
-            self.running = False
-
-        signal.signal(signal.SIGINT, handle_signal)
-        signal.signal(signal.SIGTERM, handle_signal)
+    def handle_shutdown(self) -> None:
+        """Handle shutdown signal."""
+        _logger.info("Shutting down gracefully...")
+        self.running = False
 
     async def export_diagnostics(self, interval: float = 300.0) -> None:
         """
@@ -179,7 +174,10 @@ class MqttDiagnosticsExample:
             password: Navien account password
             duration_seconds: How long to run (default: 1 hour)
         """
-        self.setup_signal_handlers()
+        # Setup signal handler for graceful shutdown
+        loop = asyncio.get_event_loop()
+        for sig in (signal.SIGINT, signal.SIGTERM):
+            loop.add_signal_handler(sig, self.handle_shutdown)
 
         _logger.info("=" * 70)
         _logger.info("MQTT DIAGNOSTICS COLLECTION EXAMPLE")
@@ -244,7 +242,12 @@ class MqttDiagnosticsExample:
                         "Press Ctrl+C to stop early."
                     )
 
-                    await asyncio.sleep(duration_seconds)
+                    # Sleep in small intervals to check running flag
+                    elapsed = 0.0
+                    interval = 1.0
+                    while self.running and elapsed < duration_seconds:
+                        await asyncio.sleep(min(interval, duration_seconds - elapsed))
+                        elapsed += interval
 
                 except asyncio.CancelledError:
                     _logger.info("Example cancelled")

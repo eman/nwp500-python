@@ -30,6 +30,9 @@ from nwp500.auth import (
     authenticate,
     refresh_access_token,
 )
+from nwp500.constants import (
+    CommandCode,
+)
 from nwp500.encoding import (
     build_reservation_entry,
     build_tou_period,
@@ -39,6 +42,22 @@ from nwp500.encoding import (
     encode_price,
     encode_season_bitfield,
     encode_week_bitfield,
+)
+from nwp500.enums import (
+    CurrentOperationMode,
+    DhwOperationSetting,
+    DREvent,
+    ErrorCode,
+    FilterChange,
+    HeatSource,
+    OnOffFlag,
+    Operation,
+    RecirculationMode,
+    TemperatureType,
+    TempFormulaType,
+    TouRateType,
+    TouWeekType,
+    UnitType,
 )
 from nwp500.events import (
     EventEmitter,
@@ -66,12 +85,10 @@ from nwp500.exceptions import (
     ValidationError,
 )
 from nwp500.models import (
-    CurrentOperationMode,
     Device,
     DeviceFeature,
     DeviceInfo,
     DeviceStatus,
-    DhwOperationSetting,
     EnergyUsageDay,
     EnergyUsageResponse,
     EnergyUsageTotal,
@@ -80,7 +97,6 @@ from nwp500.models import (
     MonthlyEnergyData,
     MqttCommand,
     MqttRequest,
-    TemperatureUnit,
     TOUInfo,
     TOUSchedule,
     fahrenheit_to_half_celsius,
@@ -108,15 +124,28 @@ __all__ = [
     "FirmwareInfo",
     "TOUSchedule",
     "TOUInfo",
-    "DhwOperationSetting",
-    "CurrentOperationMode",
-    "TemperatureUnit",
     "MqttRequest",
     "MqttCommand",
     "EnergyUsageTotal",
     "EnergyUsageDay",
     "MonthlyEnergyData",
     "EnergyUsageResponse",
+    # Enumerations
+    "CommandCode",
+    "CurrentOperationMode",
+    "DhwOperationSetting",
+    "DREvent",
+    "ErrorCode",
+    "FilterChange",
+    "HeatSource",
+    "OnOffFlag",
+    "Operation",
+    "RecirculationMode",
+    "TemperatureType",
+    "TempFormulaType",
+    "TouRateType",
+    "TouWeekType",
+    "UnitType",
     # Conversion utilities
     "fahrenheit_to_half_celsius",
     # Authentication

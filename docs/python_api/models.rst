@@ -19,131 +19,31 @@ All models are **immutable dataclasses** with:
 Enumerations
 ============
 
-DhwOperationSetting
--------------------
+See :doc:`../enumerations` for the complete enumeration reference including:
 
-DHW (Domestic Hot Water) operation modes - the user's configured heating
-preference.
+* **OperationMode** - DHW heating modes (Heat Pump/Hybrid/Electric)
+* **HeatSource** - Currently active heat source
+* **TemperatureType** - Temperature unit (Celsius/Fahrenheit)
+* **DeviceControl** - All control command IDs
+* **TouRateType** - Time-of-Use rate periods
+* And many more protocol enumerations
 
-.. py:class:: DhwOperationSetting(Enum)
+**Quick Reference:**
 
-   **Values:**
+.. code-block:: python
 
-   * ``HEAT_PUMP = 1`` - Heat Pump Only
-      - Most efficient mode
-      - Uses only heat pump (no electric heaters)
-      - Slowest recovery time
-      - Lowest operating cost
-      - Best for normal daily use
-
-   * ``ELECTRIC = 2`` - Electric Only
-      - Fast recovery mode
-      - Uses only electric resistance heaters
-      - Fastest recovery time
-      - Highest operating cost
-      - Use for high-demand situations
-
-   * ``ENERGY_SAVER = 3`` - Energy Saver (Hybrid)
-      - **Recommended for most users**
-      - Balanced efficiency and performance
-      - Uses heat pump primarily, electric when needed
-      - Good recovery time
-      - Moderate operating cost
-
-   * ``HIGH_DEMAND = 4`` - High Demand
-      - Maximum heating capacity
-      - Uses both heat pump and electric heaters
-      - Fast recovery with continuous demand
-      - Higher operating cost
-      - Best for large families or frequent use
-
-   * ``VACATION = 5`` - Vacation Mode
-      - Low-power standby mode
-      - Maintains minimum temperature
-      - Prevents freezing
-      - Lowest energy consumption
-      - Requires vacation_days parameter
-
-   **Example:**
-
-   .. code-block:: python
-
-      from nwp500 import DhwOperationSetting, NavienMqttClient
-
-      # Set to Energy Saver (recommended)
-      await mqtt.set_dhw_mode(device, DhwOperationSetting.ENERGY_SAVER.value)
-
-      # Set to Heat Pump Only (most efficient)
-      await mqtt.set_dhw_mode(device, DhwOperationSetting.HEAT_PUMP.value)
-
-      # Set vacation mode for 7 days
-      await mqtt.set_dhw_mode(
-          device,
-          DhwOperationSetting.VACATION.value,
-          vacation_days=7
-      )
-
-      # Check current mode from status
-      def on_status(status):
-          if status.dhw_operation_setting == DhwOperationSetting.ENERGY_SAVER:
-              print("Running in Energy Saver mode")
-
-CurrentOperationMode
---------------------
-
-Current real-time operational state - what the device is doing **right now**.
-
-.. py:class:: CurrentOperationMode(Enum)
-
-   Unlike ``DhwOperationSetting`` (user preference), this reflects the actual
-   real-time operation and changes dynamically.
-
-   **Values:**
-
-   * ``IDLE = 0`` - Device is idle, not heating
-   * ``HEAT_PUMP = 1`` - Heat pump actively running
-   * ``ELECTRIC_HEATER = 2`` - Electric heater actively running
-   * ``HEAT_PUMP_AND_HEATER = 3`` - Both heat pump and electric running
-
-   **Example:**
-
-   .. code-block:: python
-
-      from nwp500 import CurrentOperationMode
-
-      def on_status(status):
-          mode = status.operation_mode
-
-          if mode == CurrentOperationMode.IDLE:
-              print("Device idle")
-          elif mode == CurrentOperationMode.HEAT_PUMP:
-              print(f"Heat pump running at {status.current_inst_power}W")
-          elif mode == CurrentOperationMode.ELECTRIC_HEATER:
-              print(f"Electric heater at {status.current_inst_power}W")
-          elif mode == CurrentOperationMode.HEAT_PUMP_AND_HEATER:
-              print(f"Both running at {status.current_inst_power}W")
-
-TemperatureUnit
----------------
-
-Temperature scale enumeration.
-
-.. py:class:: TemperatureUnit(Enum)
-
-   **Values:**
-
-   * ``CELSIUS = 1`` - Celsius (°C)
-   * ``FAHRENHEIT = 2`` - Fahrenheit (°F)
-
-   **Example:**
-
-   .. code-block:: python
-
-      def on_status(status):
-          if status.temperature_type == TemperatureUnit.FAHRENHEIT:
-              print(f"Temperature: {status.dhw_temperature}°F")
-          else:
-              print(f"Temperature: {status.dhw_temperature}°C")
+   from nwp500 import OperationMode, HeatSource, TemperatureType
+   
+   # Set operation mode
+   await mqtt.set_dhw_mode(device, OperationMode.HYBRID.value)
+   
+   # Check current heat source
+   if status.current_heat_use == HeatSource.HEATPUMP:
+       print("Heat pump is active")
+   
+   # Check temperature unit
+   if status.temperature_type == TemperatureType.FAHRENHEIT:
+       print(f"Temperature: {status.dhw_temperature}°F")
 
 Device Models
 =============
@@ -304,9 +204,10 @@ Complete real-time device status with 100+ fields.
 
    **Operation Mode Fields:**
 
-   * ``operation_mode`` (CurrentOperationMode) - Current operational state
-   * ``dhw_operation_setting`` (DhwOperationSetting) - User's mode preference
-   * ``temperature_type`` (TemperatureUnit) - Temperature unit
+   * ``operation_mode`` (OperationMode) - Current operational state
+   * ``dhw_operation_setting`` (OperationMode) - User's mode preference
+   * ``current_heat_use`` (HeatSource) - Currently active heat source
+   * ``temperature_type`` (TemperatureType) - Temperature unit
 
    **Boolean Status Fields:**
 
@@ -422,8 +323,8 @@ Device capabilities, features, and firmware information.
    * ``model_type_code`` (int) - Model type
    * ``control_type_code`` (int) - Control type
    * ``volume_code`` (int) - Tank volume code
-   * ``temp_formula_type`` (int) - Temperature formula type
-   * ``temperature_type`` (TemperatureUnit) - Temperature unit
+   * ``temp_formula_type`` (TempFormulaType) - Temperature formula type
+   * ``temperature_type`` (TemperatureType) - Temperature unit
 
    **Temperature Limits:**
 
@@ -668,11 +569,11 @@ Best Practices
    .. code-block:: python
 
       # [OK] Type-safe
-      from nwp500 import DhwOperationSetting
-      await mqtt.set_dhw_mode(device, DhwOperationSetting.ENERGY_SAVER.value)
+      from nwp500 import OperationMode
+      await mqtt.set_dhw_mode(device, OperationMode.HYBRID.value)
 
       # ✗ Magic numbers
-      await mqtt.set_dhw_mode(device, 3)
+      await mqtt.set_dhw_mode(device, 2)
 
 2. **Check feature support:**
 
@@ -690,12 +591,12 @@ Best Practices
       def on_status(status):
           # User's mode preference
           user_mode = status.dhw_operation_setting
-
-          # Current real-time state
-          current_state = status.operation_mode
+          
+          # Currently active heat source
+          active_source = status.current_heat_use
 
           # These can differ!
-          # User sets ENERGY_SAVER, device might be in HEAT_PUMP state
+          # User sets HYBRID, but device might only be using heat pump at the moment
 
 Related Documentation
 =====================
