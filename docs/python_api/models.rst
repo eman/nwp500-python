@@ -25,7 +25,7 @@ See :doc:`../enumerations` for the complete enumeration reference including:
 * **CurrentOperationMode** - Real-time operational state (Standby/Heat Pump/Hybrid modes)
 * **HeatSource** - Currently active heat source
 * **TemperatureType** - Temperature unit (Celsius/Fahrenheit)
-* **DeviceControl** - All control command IDs
+* **CommandCode** - All control command IDs
 * **TouRateType** - Time-of-Use rate periods
 * And many more protocol enumerations
 

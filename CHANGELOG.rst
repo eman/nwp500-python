@@ -27,25 +27,24 @@ Added
   - Status value enums: ``OnOffFlag``, ``Operation``, ``DhwOperationSetting``, ``CurrentOperationMode``, ``HeatSource``, ``DREvent``, ``WaterLevel``, ``FilterChange``, ``RecirculationMode``
   - Time of Use enums: ``TouWeekType``, ``TouRateType``
   - Device capability enums: ``CapabilityFlag``, ``TemperatureType``, ``DeviceType``
-  - Device control command enum: ``DeviceControl`` (replaces individual constants)
+  - Device control command enum: ``CommandCode`` (all MQTT command codes)
   - Error code enum: ``ErrorCode`` with complete error code mappings
-  - Human-readable text mappings for all enums (e.g., ``DHW_OPERATION_TEXT``, ``ERROR_CODE_TEXT``)
-  - Exported from main package: ``from nwp500 import OnOffFlag, ErrorCode, DeviceControl``
+  - Human-readable text mappings for all enums (e.g., ``DHW_OPERATION_SETTING_TEXT``, ``ERROR_CODE_TEXT``)
+  - Exported from main package: ``from nwp500 import OnOffFlag, ErrorCode, CommandCode``
   - Comprehensive documentation in ``docs/enumerations.rst``
   - Example usage in ``examples/error_code_demo.py``
 
 Changed
 -------
 
-- **Command Code Constants**: Migrated from ``constants.py`` to ``DeviceControl`` enum in ``enums.py``
+- **Command Code Constants**: Migrated from ``constants.py`` to ``CommandCode`` enum in ``enums.py``
   
-  - ``CommandCode.ANTI_LEGIONELLA_ENABLE`` → ``DeviceControl.ANTI_LEGIONELLA_ON``
-  - ``CommandCode.ANTI_LEGIONELLA_DISABLE`` → ``DeviceControl.ANTI_LEGIONELLA_OFF``
-  - ``CommandCode.TOU_ENABLE`` → ``DeviceControl.TOU_ON``
-  - ``CommandCode.TOU_DISABLE`` → ``DeviceControl.TOU_OFF``
-  - ``CommandCode.TOU_SETTINGS`` → ``DeviceControl.TOU_RESERVATION``
-  - All command constants now use consistent naming in ``DeviceControl`` enum
-  - Legacy ``CommandCode`` class retained in ``constants.py`` for backward compatibility
+  - ``ANTI_LEGIONELLA_ENABLE`` → ``CommandCode.ANTI_LEGIONELLA_ON``
+  - ``ANTI_LEGIONELLA_DISABLE`` → ``CommandCode.ANTI_LEGIONELLA_OFF``
+  - ``TOU_ENABLE`` → ``CommandCode.TOU_ON``
+  - ``TOU_DISABLE`` → ``CommandCode.TOU_OFF``
+  - ``TOU_SETTINGS`` → ``CommandCode.TOU_RESERVATION``
+  - All command constants now use consistent naming in ``CommandCode`` enum
 
 - **Model Enumerations**: Updated type annotations for clarity and type safety
   
@@ -69,7 +68,7 @@ Changed
 
 - **Examples**: Updated to use new enums for type-safe device control
   
-  - ``examples/anti_legionella_example.py``: Uses ``DeviceControl`` enum
+  - ``examples/anti_legionella_example.py``: Uses ``CommandCode`` enum
   - ``examples/device_feature_callback.py``: Uses capability enums
   - ``examples/event_emitter_demo.py``: Uses status enums
   - ``examples/mqtt_diagnostics_example.py``: Uses command enums

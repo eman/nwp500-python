@@ -7,7 +7,7 @@ the Navien NWP500 protocol.
 Device Control Commands
 -----------------------
 
-.. autoclass:: nwp500.enums.DeviceControl
+.. autoclass:: nwp500.enums.CommandCode
    :members:
    :undoc-members:
 
@@ -16,16 +16,16 @@ and trigger actions. The most commonly used commands include:
 
 - **Power Control**: ``POWER_ON``, ``POWER_OFF``
 - **Temperature**: ``DHW_TEMPERATURE``
-- **Operation Mode**: ``DHW_OPERATION_MODE``
+- **Operation Mode**: ``DHW_MODE``
 - **TOU**: ``TOU_ON``, ``TOU_OFF``
 - **Maintenance**: ``AIR_FILTER_RESET``, ``ANTI_LEGIONELLA_ON``
 
 Example usage::
 
-    from nwp500 import DeviceControl
+    from nwp500 import CommandCode
     
     # Send temperature command
-    command = DeviceControl.DHW_TEMPERATURE
+    command = CommandCode.DHW_TEMPERATURE
     params = [120]  # 60°C in half-degree units
 
 Status Value Enumerations
