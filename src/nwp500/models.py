@@ -142,21 +142,50 @@ class NavienBaseModel(BaseModel):
         return converted
 
     @staticmethod
-    def _convert_enums_to_names(data: Any) -> Any:
-        """Recursively convert Enum values to their names."""
+    def _convert_enums_to_names(
+        data: Any, visited: Optional[set[int]] = None
+    ) -> Any:
+        """Recursively convert Enum values to their names.
+
+        Args:
+            data: Data to convert
+            visited: Set of visited object ids to detect cycles
+
+        Returns:
+            Data with enums converted to their names
+        """
         from enum import Enum
+
+        if visited is None:
+            visited = set()
 
         if isinstance(data, Enum):
             return data.name
         elif isinstance(data, dict):
-            return {
-                key: NavienBaseModel._convert_enums_to_names(value)
+            # Check for circular reference
+            data_id = id(data)
+            if data_id in visited:
+                return data
+            visited.add(data_id)
+            result: dict[Any, Any] = {
+                key: NavienBaseModel._convert_enums_to_names(value, visited)
                 for key, value in data.items()
             }
+            visited.discard(data_id)
+            return result
         elif isinstance(data, (list, tuple)):
-            return type(data)(
-                NavienBaseModel._convert_enums_to_names(item) for item in data
-            )
+            # Check for circular reference
+            data_id = id(data)
+            if data_id in visited:
+                return data
+            visited.add(data_id)
+            converted = [
+                NavienBaseModel._convert_enums_to_names(item, visited)
+                for item in data
+            ]
+            result_val: Any = type(data)(converted)
+            visited.discard(data_id)
+            return result_val
         return data
 
 
