@@ -48,7 +48,7 @@ def main():
     lint_commands = [
         (
             [
-                "python3",
+                sys.executable,
                 "-m",
                 "ruff",
                 "check",
@@ -60,7 +60,7 @@ def main():
         ),
         (
             [
-                "python3",
+                sys.executable,
                 "-m",
                 "ruff",
                 "format",
