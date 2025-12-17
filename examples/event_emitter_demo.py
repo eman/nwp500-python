@@ -69,7 +69,9 @@ def optimize_on_mode_change(
     if new_mode == CurrentOperationMode.HEAT_PUMP_MODE:
         print("♻️  [Optimizer] Heat pump mode - maximum efficiency!")
     elif new_mode == CurrentOperationMode.HYBRID_EFFICIENCY_MODE:
-        print("⚡ [Optimizer] Hybrid mode - balanced performance!")
+        print("⚡ [Optimizer] Energy Saver mode - balanced performance!")
+    elif new_mode == CurrentOperationMode.HYBRID_BOOST_MODE:
+        print("⚡ [Optimizer] High Demand mode - fast recovery!")
 
 
 # Example 3: Power state handlers
