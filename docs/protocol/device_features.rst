@@ -6,7 +6,16 @@ This document lists the fields found in the ``feature`` object (also known as
 .. warning::
    This document describes the underlying protocol details. Most users should use the
    Python client library (:doc:`../python_api/mqtt_client`) instead of implementing
-   the protocol directly.by MQTT device info requests.
+   the protocol directly.
+
+.. note::
+   **Capability Flag Pattern**: All capability flags (fields ending in ``Use``) follow the same pattern as :class:`~nwp500.enums.OnOffFlag`:
+   
+   - **2 = Supported/Available** (feature is present on this device)
+   - **1 = Not Supported/Unavailable** (feature is not present on this device)
+   
+   This is the standard Navien protocol pattern for boolean-like values, not traditional 0/1 booleans.
+   The Python library automatically converts these to Python ``bool`` (True/False).
 
 The DeviceFeature data contains comprehensive device capabilities, configuration, and firmware information received via MQTT when calling ``request_device_info()``. This data is much more detailed than the basic device information available through the REST API and corresponds to the actual device specifications and capabilities as documented in the official Navien NWP500 Installation and User manuals.
 
@@ -77,27 +86,27 @@ The DeviceFeature data contains comprehensive device capabilities, configuration
    * - ``powerUse``
      - int
      - Boolean
-     - Power control capability (1=supported) - can be turned on/off via controls (always 1 for NWP500)
+     - Power control capability (2=supported, 1=not supported) - can be turned on/off via controls (always 2=supported for NWP500)
      - None
    * - ``holidayUse``
      - int
      - Boolean
-     - Vacation mode support (1=supported) - energy-saving mode for 0-99 days with minimal operations
+     - Vacation mode support (2=supported, 1=not supported) - energy-saving mode for 0-99 days with minimal operations
      - None
    * - ``programReservationUse``
      - int
      - Boolean
-     - Scheduled operation support (1=supported) - programmable heating schedules and timers
+     - Scheduled operation support (2=supported, 1=not supported) - programmable heating schedules and timers
      - None
    * - ``dhwUse``
      - int
      - Boolean
-     - Domestic hot water functionality (1=available) - primary function of water heater (always 1)
+     - Domestic hot water functionality (2=supported, 1=not supported) - primary function of water heater (always 2=supported)
      - None
    * - ``dhwTemperatureSettingUse``
      - int
      - Boolean
-     - Temperature adjustment capability (1=supported) - user can modify target temperature
+     - Temperature adjustment capability (2=supported, 1=not supported) - user can modify target temperature
      - None
    * - ``dhwTemperatureMin``
      - int
@@ -112,12 +121,12 @@ The DeviceFeature data contains comprehensive device capabilities, configuration
    * - ``smartDiagnosticUse``
      - int
      - Boolean
-     - Self-diagnostic capability (1=available) - 10-minute startup diagnostic, error code system
+     - Self-diagnostic capability (2=supported, 1=not supported) - 10-minute startup diagnostic, error code system
      - None
    * - ``wifiRssiUse``
      - int
      - Boolean
-     - WiFi signal monitoring (1=supported) - reports signal strength in dBm for connectivity diagnostics
+     - WiFi signal monitoring (2=supported, 1=not supported) - reports signal strength in dBm for connectivity diagnostics
      - None
    * - ``temperatureType``
      - TemperatureUnit
@@ -132,12 +141,12 @@ The DeviceFeature data contains comprehensive device capabilities, configuration
    * - ``energyUsageUse``
      - int
      - Boolean
-     - Energy monitoring support (1=available) - tracks kWh consumption for heat pump and electric elements
+     - Energy monitoring support (2=supported, 1=not supported) - tracks kWh consumption for heat pump and electric elements
      - None
    * - ``freezeProtectionUse``
      - int
      - Boolean
-     - Freeze protection capability (1=available) - automatic heating when tank drops below threshold
+     - Freeze protection capability (2=supported, 1=not supported) - automatic heating when tank drops below threshold
      - None
    * - ``freezeProtectionTempMin``
      - int
@@ -152,52 +161,52 @@ The DeviceFeature data contains comprehensive device capabilities, configuration
    * - ``mixingValueUse``
      - int
      - Boolean
-     - Thermostatic mixing valve support (1=available) - for temperature limiting at point of use
+     - Thermostatic mixing valve support (2=supported, 1=not supported) - for temperature limiting at point of use
      - None
    * - ``drSettingUse``
      - int
      - Boolean
-     - Demand Response support (1=available) - CTA-2045 compliance for utility load management
+     - Demand Response support (2=supported, 1=not supported) - CTA-2045 compliance for utility load management
      - None
    * - ``antiLegionellaSettingUse``
      - int
      - Boolean
-     - Anti-Legionella function (1=available) - periodic heating to 140°F (60°C) to prevent bacteria
+     - Anti-Legionella function (2=supported, 1=not supported) - periodic heating to 140°F (60°C) to prevent bacteria
      - None
    * - ``hpwhUse``
      - int
      - Boolean
-     - Heat Pump Water Heater mode (1=supported) - primary efficient heating method using refrigeration cycle
+     - Heat Pump Water Heater mode (2=supported, 1=not supported) - primary efficient heating method using refrigeration cycle
      - None
    * - ``dhwRefillUse``
      - int
      - Boolean
-     - Tank refill detection (1=supported) - monitors for "dry fire" conditions during refill
+     - Tank refill detection (2=supported, 1=not supported) - monitors for "dry fire" conditions during refill
      - None
    * - ``ecoUse``
      - int
      - Boolean
-     - ECO safety switch (1=available) - Energy Cut Off high-temperature limit protection
+     - ECO safety switch (2=supported, 1=not supported) - Energy Cut Off high-temperature limit protection
      - None
    * - ``electricUse``
      - int
      - Boolean
-     - Electric-only mode (1=supported) - heating element only operation for maximum recovery speed
+     - Electric-only mode (2=supported, 1=not supported) - heating element only operation for maximum recovery speed
      - None
    * - ``heatpumpUse``
      - int
      - Boolean
-     - Heat pump only mode (1=supported) - most efficient operation using only refrigeration cycle
+     - Heat pump only mode (2=supported, 1=not supported) - most efficient operation using only refrigeration cycle
      - None
    * - ``energySaverUse``
      - int
      - Boolean
-     - Energy Saver mode (1=supported) - hybrid efficiency mode balancing speed and efficiency (default)
+     - Energy Saver mode (2=supported, 1=not supported) - hybrid efficiency mode balancing speed and efficiency (default)
      - None
    * - ``highDemandUse``
      - int
      - Boolean
-     - High Demand mode (1=supported) - hybrid boost mode prioritizing fast recovery over efficiency
+     - High Demand mode (2=supported, 1=not supported) - hybrid boost mode prioritizing fast recovery over efficiency
      - None
 
 Operation Mode Support Matrix

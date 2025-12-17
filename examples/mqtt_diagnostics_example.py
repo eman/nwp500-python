@@ -52,19 +52,19 @@ class MqttDiagnosticsExample:
         self.diagnostics = MqttDiagnosticsCollector(
             max_events_retained=1000, enable_verbose_logging=True
         )
-        self.running = True
+        self.shutdown_event = asyncio.Event()
         self.output_dir = Path("mqtt_diagnostics_output")
         self.output_dir.mkdir(exist_ok=True)
 
-    def setup_signal_handlers(self) -> None:
-        """Setup signal handlers for graceful shutdown."""
+    def handle_shutdown(self) -> None:
+        """Handle shutdown signal safely."""
+        _logger.info("Shutting down gracefully...")
+        # Schedule the shutdown event to be set (thread-safe)
+        asyncio.create_task(self._set_shutdown())
 
-        def handle_signal(signum, frame):
-            _logger.info(f"Received signal {signum}, shutting down...")
-            self.running = False
-
-        signal.signal(signal.SIGINT, handle_signal)
-        signal.signal(signal.SIGTERM, handle_signal)
+    async def _set_shutdown(self) -> None:
+        """Set shutdown event (must be called from async context)."""
+        self.shutdown_event.set()
 
     async def export_diagnostics(self, interval: float = 300.0) -> None:
         """
@@ -73,11 +73,11 @@ class MqttDiagnosticsExample:
         Args:
             interval: Export interval in seconds (default: 5 minutes)
         """
-        while self.running:
+        while not self.shutdown_event.is_set():
             try:
                 await asyncio.sleep(interval)
 
-                if not self.running:
+                if self.shutdown_event.is_set():
                     break
 
                 # Export JSON
@@ -105,7 +105,7 @@ class MqttDiagnosticsExample:
         Args:
             interval: Update interval in seconds
         """
-        while self.running:
+        while not self.shutdown_event.is_set():
             try:
                 await asyncio.sleep(interval)
 
@@ -179,7 +179,10 @@ class MqttDiagnosticsExample:
             password: Navien account password
             duration_seconds: How long to run (default: 1 hour)
         """
-        self.setup_signal_handlers()
+        # Setup signal handler for graceful shutdown
+        loop = asyncio.get_event_loop()
+        for sig in (signal.SIGINT, signal.SIGTERM):
+            loop.add_signal_handler(sig, self.handle_shutdown)
 
         _logger.info("=" * 70)
         _logger.info("MQTT DIAGNOSTICS COLLECTION EXAMPLE")
@@ -244,14 +247,21 @@ class MqttDiagnosticsExample:
                         "Press Ctrl+C to stop early."
                     )
 
-                    await asyncio.sleep(duration_seconds)
+                    # Sleep in small intervals to check shutdown flag
+                    elapsed = 0.0
+                    interval = 1.0
+                    while (
+                        not self.shutdown_event.is_set() and elapsed < duration_seconds
+                    ):
+                        await asyncio.sleep(min(interval, duration_seconds - elapsed))
+                        elapsed += interval
 
                 except asyncio.CancelledError:
                     _logger.info("Example cancelled")
 
                 finally:
                     # Cleanup
-                    self.running = False
+                    self.shutdown_event.set()
                     export_task.cancel()
                     monitor_task.cancel()
 

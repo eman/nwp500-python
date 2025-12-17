@@ -51,13 +51,9 @@ async def handle_status_request(mqtt: NavienMqttClient, device: Device) -> None:
 
     def on_status(status: DeviceStatus) -> None:
         if not future.done():
-            print(
-                json.dumps(
-                    status.model_dump(),
-                    indent=2,
-                    default=_json_default_serializer,
-                )
-            )
+            from .output_formatters import format_json_output
+
+            print(format_json_output(status.model_dump()))
             future.set_result(None)
 
     await mqtt.subscribe_device_status(device, on_status)
@@ -125,13 +121,9 @@ async def handle_device_info_request(
 
     def on_device_info(info: Any) -> None:
         if not future.done():
-            print(
-                json.dumps(
-                    info.model_dump(),
-                    indent=2,
-                    default=_json_default_serializer,
-                )
-            )
+            from .output_formatters import format_json_output
+
+            print(format_json_output(info.model_dump()))
             future.set_result(None)
 
     await mqtt.subscribe_device_feature(device, on_device_info)
@@ -226,13 +218,9 @@ async def handle_set_mode_request(
 
             if responses:
                 status = responses[0]
-                print(
-                    json.dumps(
-                        status.model_dump(),
-                        indent=2,
-                        default=_json_default_serializer,
-                    )
-                )
+                from .output_formatters import format_json_output
+
+                print(format_json_output(status.model_dump()))
                 _logger.info(
                     f"Mode change successful. New mode: "
                     f"{status.operation_mode.name}"
@@ -301,13 +289,9 @@ async def handle_set_dhw_temp_request(
 
             if responses:
                 status = responses[0]
-                print(
-                    json.dumps(
-                        status.model_dump(),
-                        indent=2,
-                        default=_json_default_serializer,
-                    )
-                )
+                from .output_formatters import format_json_output
+
+                print(format_json_output(status.model_dump()))
                 _logger.info(
                     f"Temperature change successful. New target: "
                     f"{status.dhw_target_temperature_setting}°F"
@@ -601,13 +585,9 @@ async def handle_set_tou_enabled_request(
             await asyncio.wait_for(future, timeout=10)
             if responses:
                 status = responses[0]
-                print(
-                    json.dumps(
-                        status.model_dump(),
-                        indent=2,
-                        default=_json_default_serializer,
-                    )
-                )
+                from .output_formatters import format_json_output
+
+                print(format_json_output(status.model_dump()))
                 _logger.info(f"TOU {action} successful.")
             else:
                 _logger.warning("TOU command sent but no response received")

@@ -101,6 +101,7 @@ Documentation Index
    python_api/api_client
    python_api/mqtt_client
    python_api/models
+   enumerations
    python_api/constants
    python_api/events
    python_api/exceptions

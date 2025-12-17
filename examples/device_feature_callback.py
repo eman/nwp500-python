@@ -32,6 +32,7 @@ if __name__ == "__main__":
 
 from nwp500.api_client import NavienAPIClient
 from nwp500.auth import NavienAuthClient
+from nwp500.enums import OnOffFlag
 from nwp500.exceptions import AuthenticationError
 from nwp500.models import DeviceFeature
 from nwp500.mqtt_client import NavienMqttClient
@@ -137,8 +138,8 @@ async def main():
                     )
 
                     print("\nConfiguration:")
-                    print(f"  Temperature Unit:   {feature.temperatureType.name}")
-                    print(f"  Temp Formula Type:  {feature.tempFormulaType}")
+                    print(f"  Temperature Unit:   {feature.temperature_type.name}")
+                    print(f"  Temp Formula Type:  {feature.temp_formula_type}")
                     print(
                         f"  DHW Temp Range:     {feature.dhw_temperature_min}°F - {feature.dhw_temperature_max}°F"
                     )
@@ -148,63 +149,63 @@ async def main():
 
                     print("\nFeature Support:")
                     print(
-                        f"  Power Control:      {'Supported' if feature.powerUse == 2 else 'Not Available'}"
+                        f"  Power Control:      {'Yes' if feature.power_use == OnOffFlag.ON else 'No'}"
                     )
                     print(
-                        f"  DHW Control:        {'Supported' if feature.dhw_use == 2 else 'Not Available'}"
+                        f"  DHW Control:        {'Yes' if feature.dhw_use == OnOffFlag.ON else 'No'}"
                     )
                     print(
-                        f"  DHW Temp Setting:   Level {feature.dhw_temperature_settingUse}"
+                        f"  DHW Temp Setting:   Level {feature.dhw_temperature_setting_use}"
                     )
                     print(
-                        f"  Heat Pump Mode:     {'Supported' if feature.heatpump_use == 2 else 'Not Available'}"
+                        f"  Heat Pump Mode:     {'Yes' if feature.heatpump_use == OnOffFlag.ON else 'No'}"
                     )
                     print(
-                        f"  Electric Mode:      {'Supported' if feature.electric_use == 2 else 'Not Available'}"
+                        f"  Electric Mode:      {'Yes' if feature.electric_use == OnOffFlag.ON else 'No'}"
                     )
                     print(
-                        f"  Energy Saver:       {'Supported' if feature.energySaverUse == 2 else 'Not Available'}"
+                        f"  Energy Saver:       {'Yes' if feature.energy_saver_use == OnOffFlag.ON else 'No'}"
                     )
                     print(
-                        f"  High Demand:        {'Supported' if feature.highDemandUse == 2 else 'Not Available'}"
+                        f"  High Demand:        {'Yes' if feature.high_demand_use == OnOffFlag.ON else 'No'}"
                     )
                     print(
-                        f"  Eco Mode:           {'Supported' if feature.eco_use == 2 else 'Not Available'}"
+                        f"  Eco Mode:           {'Yes' if feature.eco_use == OnOffFlag.ON else 'No'}"
                     )
 
                     print("\nAdvanced Features:")
                     print(
-                        f"  Holiday Mode:       {'Supported' if feature.holidayUse == 2 else 'Not Available'}"
+                        f"  Holiday Mode:       {'Yes' if feature.holiday_use == OnOffFlag.ON else 'No'}"
                     )
                     print(
-                        f"  Program Schedule:   {'Supported' if feature.program_reservation_use == 2 else 'Not Available'}"
+                        f"  Program Schedule:   {'Yes' if feature.program_reservation_use == OnOffFlag.ON else 'No'}"
                     )
                     print(
-                        f"  Smart Diagnostic:   {'Supported' if feature.smart_diagnosticUse == 1 else 'Not Available'}"
+                        f"  Smart Diagnostic:   {'Yes' if feature.smart_diagnostic_use == OnOffFlag.ON else 'No'}"
                     )
                     print(
-                        f"  WiFi RSSI:          {'Supported' if feature.wifi_rssiUse == 2 else 'Not Available'}"
+                        f"  WiFi RSSI:          {'Yes' if feature.wifi_rssi_use == OnOffFlag.ON else 'No'}"
                     )
                     print(
-                        f"  Energy Usage:       {'Supported' if feature.energyUsageUse == 2 else 'Not Available'}"
+                        f"  Energy Usage:       {'Yes' if feature.energy_usage_use == OnOffFlag.ON else 'No'}"
                     )
                     print(
-                        f"  Freeze Protection:  {'Supported' if feature.freeze_protection_use == 2 else 'Not Available'}"
+                        f"  Freeze Protection:  {'Yes' if feature.freeze_protection_use == OnOffFlag.ON else 'No'}"
                     )
                     print(
-                        f"  Mixing Valve:       {'Supported' if feature.mixingValueUse == 1 else 'Not Available'}"
+                        f"  Mixing Valve:       {'Yes' if feature.mixing_value_use == OnOffFlag.ON else 'No'}"
                     )
                     print(
-                        f"  DR Settings:        {'Supported' if feature.drSettingUse == 2 else 'Not Available'}"
+                        f"  DR Settings:        {'Yes' if feature.dr_setting_use == OnOffFlag.ON else 'No'}"
                     )
                     print(
-                        f"  Anti-Legionella:    {'Supported' if feature.antiLegionellaSettingUse == 2 else 'Not Available'}"
+                        f"  Anti-Legionella:    {'Yes' if feature.anti_legionella_setting_use == OnOffFlag.ON else 'No'}"
                     )
                     print(
-                        f"  HPWH:               {'Supported' if feature.hpwhUse == 2 else 'Not Available'}"
+                        f"  HPWH:               {'Yes' if feature.hpwh_use == OnOffFlag.ON else 'No'}"
                     )
                     print(
-                        f"  DHW Refill:         {'Supported' if feature.dhwRefillUse == 2 else 'Not Available'}"
+                        f"  DHW Refill:         {'Yes' if feature.dhw_refill_use == OnOffFlag.ON else 'No'}"
                     )
 
                     print("=" * 60)

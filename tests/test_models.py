@@ -126,10 +126,11 @@ def test_device_status_deci_celsius_to_fahrenheit(default_status_data):
 
 
 def test_device_status_div10(default_status_data):
-    """Test Div10 conversion."""
-    default_status_data["currentInletTemperature"] = 500
+    """Test currentInletTemperature HalfCelsiusToF conversion."""
+    # Raw value 100 = 50°C = (50 * 1.8) + 32 = 122°F
+    default_status_data["currentInletTemperature"] = 100
     status = DeviceStatus.model_validate(default_status_data)
-    assert status.current_inlet_temperature == 50.0
+    assert status.current_inlet_temperature == 122.0
 
 
 def test_fahrenheit_to_half_celsius():

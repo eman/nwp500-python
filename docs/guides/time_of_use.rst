@@ -914,11 +914,11 @@ The device status includes TOU-related fields:
 
     {
       "touStatus": 1,
-      "touOverrideStatus": 0
+      "touOverrideStatus": 2
     }
 
-* ``touStatus``: ``1`` if TOU scheduling is active, ``0`` if inactive
-* ``touOverrideStatus``: ``1`` if user has temporarily overridden TOU schedule
+* ``touStatus``: ``1`` if TOU scheduling is enabled/active, ``0`` if disabled/inactive
+* ``touOverrideStatus``: ``2`` (ON) = TOU schedule is operating normally, ``1`` (OFF) = user has overridden TOU to force immediate heating
 
 See :doc:`../protocol/device_status` for more details.
 

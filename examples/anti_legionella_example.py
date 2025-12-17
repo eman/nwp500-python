@@ -17,15 +17,15 @@ import sys
 from typing import Any
 
 from nwp500 import NavienAPIClient, NavienAuthClient, NavienMqttClient
-from nwp500.constants import CommandCode
+from nwp500.enums import CommandCode, OnOffFlag
 
 
 def display_anti_legionella_status(status: dict[str, Any], label: str = "") -> None:
     """Display Anti-Legionella status in a formatted way."""
     period = status.get("antiLegionellaPeriod")
     use_value = status.get("antiLegionellaUse")
-    enabled = use_value == 2
-    busy = status.get("antiLegionellaOperationBusy") == 2
+    enabled = use_value == OnOffFlag.ON
+    busy = status.get("antiLegionellaOperationBusy") == OnOffFlag.ON
 
     if period is not None and use_value is not None:
         prefix = f"{label}: " if label else ""
@@ -133,7 +133,7 @@ async def main() -> None:
         print("STEP 2: Enabling Anti-Legionella cycle every 7 days...")
         print("=" * 70)
         status_received.clear()
-        expected_command = CommandCode.ANTI_LEGIONELLA_ENABLE
+        expected_command = CommandCode.ANTI_LEGIONELLA_ON
         await mqtt_client.enable_anti_legionella(device, period_days=7)
 
         try:
@@ -151,7 +151,7 @@ async def main() -> None:
         print("WARNING: This reduces protection against Legionella bacteria!")
         print("=" * 70)
         status_received.clear()
-        expected_command = CommandCode.ANTI_LEGIONELLA_DISABLE
+        expected_command = CommandCode.ANTI_LEGIONELLA_OFF
         await mqtt_client.disable_anti_legionella(device)
 
         try:
@@ -168,7 +168,7 @@ async def main() -> None:
         print("STEP 4: Re-enabling Anti-Legionella with 14-day cycle...")
         print("=" * 70)
         status_received.clear()
-        expected_command = CommandCode.ANTI_LEGIONELLA_ENABLE
+        expected_command = CommandCode.ANTI_LEGIONELLA_ON
         await mqtt_client.enable_anti_legionella(device, period_days=14)
 
         try:

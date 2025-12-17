@@ -16,6 +16,10 @@ _logger = logging.getLogger(__name__)
 def _json_default_serializer(obj: Any) -> Any:
     """Serialize objects not serializable by default json code.
 
+    Note: Enums are handled by model.model_dump() which converts them to names.
+    This function handles any remaining non-JSON-serializable types that might
+    appear in raw MQTT messages.
+
     Args:
         obj: Object to serialize
 
@@ -25,10 +29,10 @@ def _json_default_serializer(obj: Any) -> Any:
     Raises:
         TypeError: If object cannot be serialized
     """
-    if isinstance(obj, Enum):
-        return obj.name
     if isinstance(obj, datetime):
         return obj.isoformat()
+    if isinstance(obj, Enum):
+        return obj.name  # Fallback for any enums not in model output
     raise TypeError(f"Type {type(obj)} not serializable")
 
 
@@ -41,16 +45,11 @@ def write_status_to_csv(file_path: str, status: DeviceStatus) -> None:
         status: DeviceStatus object to write
     """
     try:
-        # Convert the entire dataclass to a dictionary to capture all fields
+        # Convert status to dict (enums are already converted to names)
         status_dict = status.model_dump()
 
         # Add a timestamp to the beginning of the data
         status_dict["timestamp"] = datetime.now().isoformat()
-
-        # Convert Enum values to their names
-        for key, value in status_dict.items():
-            if isinstance(value, Enum):
-                status_dict[key] = value.name
 
         # Check if file exists to determine if we need to write the header
         file_exists = Path(file_path).exists()

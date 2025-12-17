@@ -18,9 +18,9 @@ from collections.abc import Awaitable, Sequence
 from datetime import datetime
 from typing import Any, Callable, Optional
 
-from .constants import CommandCode
+from .enums import CommandCode, DhwOperationSetting
 from .exceptions import ParameterValidationError, RangeValidationError
-from .models import Device, DhwOperationSetting, fahrenheit_to_half_celsius
+from .models import Device, fahrenheit_to_half_celsius
 
 __author__ = "Emmanuel Levijarvi"
 
@@ -196,7 +196,7 @@ class MqttDeviceController:
             device: Device object
             mode_id: Mode ID (1=Heat Pump Only, 2=Electric Only, 3=Energy Saver,
                 4=High Demand, 5=Vacation)
-            vacation_days: Number of vacation days (required when mode_id == 5)
+            vacation_days: Number of vacation days (required for Vacation mode)
 
         Returns:
             Publish packet ID
@@ -300,7 +300,7 @@ class MqttDeviceController:
         command = self._build_command(
             device_type=device_type,
             device_id=device_id,
-            command=CommandCode.ANTI_LEGIONELLA_ENABLE,
+            command=CommandCode.ANTI_LEGIONELLA_ON,
             additional_value=additional_value,
             mode="anti-leg-on",
             param=[period_days],
@@ -339,7 +339,7 @@ class MqttDeviceController:
         command = self._build_command(
             device_type=device_type,
             device_id=device_id,
-            command=CommandCode.ANTI_LEGIONELLA_DISABLE,
+            command=CommandCode.ANTI_LEGIONELLA_OFF,
             additional_value=additional_value,
             mode="anti-leg-off",
             param=[],
@@ -522,7 +522,7 @@ class MqttDeviceController:
         command = self._build_command(
             device_type=device_type,
             device_id=device_id,
-            command=CommandCode.TOU_SETTINGS,
+            command=CommandCode.TOU_RESERVATION,
             additional_value=additional_value,
             controllerSerialNumber=controller_serial_number,
             reservationUse=reservation_use,
@@ -568,7 +568,7 @@ class MqttDeviceController:
         command = self._build_command(
             device_type=device_type,
             device_id=device_id,
-            command=CommandCode.TOU_SETTINGS,
+            command=CommandCode.TOU_RESERVATION,
             additional_value=additional_value,
             controllerSerialNumber=controller_serial_number,
         )
@@ -596,9 +596,7 @@ class MqttDeviceController:
         device_topic = f"navilink-{device_id}"
         topic = f"cmd/{device_type}/{device_topic}/ctrl"
 
-        command_code = (
-            CommandCode.TOU_ENABLE if enabled else CommandCode.TOU_DISABLE
-        )
+        command_code = CommandCode.TOU_ON if enabled else CommandCode.TOU_OFF
         mode = "tou-on" if enabled else "tou-off"
 
         command = self._build_command(

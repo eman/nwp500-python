@@ -2,6 +2,88 @@
 Changelog
 =========
 
+Version 6.2.0 (2025-12-17)
+==========================
+
+**BREAKING CHANGES**: Enumerations refactored for type safety and consistency
+
+- **CommandCode moved**: Import from ``nwp500.enums`` instead of ``nwp500.constants``
+  
+  .. code-block:: python
+  
+     # OLD (removed)
+     from nwp500.constants import CommandCode
+     
+     # NEW
+     from nwp500.enums import CommandCode
+     # OR
+     from nwp500 import CommandCode  # Still works
+
+Added
+-----
+
+- **Enumerations Module (``src/nwp500/enums.py``)**: Comprehensive type-safe enums for device control and status
+  
+  - Status value enums: ``OnOffFlag``, ``Operation``, ``DhwOperationSetting``, ``CurrentOperationMode``, ``HeatSource``, ``DREvent``, ``WaterLevel``, ``FilterChange``, ``RecirculationMode``
+  - Time of Use enums: ``TouWeekType``, ``TouRateType``
+  - Device capability enums: ``CapabilityFlag``, ``TemperatureType``, ``DeviceType``
+  - Device control command enum: ``CommandCode`` (all MQTT command codes)
+  - Error code enum: ``ErrorCode`` with complete error code mappings
+  - Human-readable text mappings for all enums (e.g., ``DHW_OPERATION_SETTING_TEXT``, ``ERROR_CODE_TEXT``)
+  - Exported from main package: ``from nwp500 import OnOffFlag, ErrorCode, CommandCode``
+  - Comprehensive documentation in ``docs/enumerations.rst``
+  - Example usage in ``examples/error_code_demo.py``
+
+Changed
+-------
+
+- **Command Code Constants**: Migrated from ``constants.py`` to ``CommandCode`` enum in ``enums.py``
+  
+  - ``ANTI_LEGIONELLA_ENABLE`` → ``CommandCode.ANTI_LEGIONELLA_ON``
+  - ``ANTI_LEGIONELLA_DISABLE`` → ``CommandCode.ANTI_LEGIONELLA_OFF``
+  - ``TOU_ENABLE`` → ``CommandCode.TOU_ON``
+  - ``TOU_DISABLE`` → ``CommandCode.TOU_OFF``
+  - ``TOU_SETTINGS`` → ``CommandCode.TOU_RESERVATION``
+  - All command constants now use consistent naming in ``CommandCode`` enum
+
+- **Model Enumerations**: Updated type annotations for clarity and type safety
+  
+  - ``TemperatureUnit`` → ``TemperatureType`` (matches device protocol field names)
+  - All capability flags (e.g., ``power_use``, ``dhw_use``) now use ``CapabilityFlag`` type
+  - ``MqttRequest.device_type`` now accepts ``Union[DeviceType, int]`` for flexibility
+
+- **Model Serialization**: Enums automatically serialize to human-readable names
+  
+  - `model_dump()` converts enums to names (e.g., `DhwOperationSetting.HEAT_PUMP` → `"HEAT_PUMP"`)
+  - CLI and other consumers benefit from automatic enum name serialization
+  - Text mappings available for custom formatting (e.g., `DHW_OPERATION_TEXT[enum]` → "Heat Pump Only")
+
+- **Documentation**: Comprehensive updates across protocol and API documentation
+  
+  - ``docs/guides/time_of_use.rst``: Clarified TOU override status behavior (1=OFF/override active, 2=ON/normal operation)
+  - ``docs/protocol/data_conversions.rst``: Updated TOU field descriptions with correct enum values
+  - ``docs/protocol/device_features.rst``: Added capability flag pattern explanation (2=supported, 1=not supported)
+  - ``docs/protocol/mqtt_protocol.rst``: Updated command code references to use new enum names
+  - ``docs/python_api/models.rst``: Updated model field type annotations
+
+- **Examples**: Updated to use new enums for type-safe device control
+  
+  - ``examples/anti_legionella_example.py``: Uses ``CommandCode`` enum
+  - ``examples/device_feature_callback.py``: Uses capability enums
+  - ``examples/event_emitter_demo.py``: Uses status enums
+  - ``examples/mqtt_diagnostics_example.py``: Uses command enums
+
+- **CLI Code Cleanup**: Refactored JSON formatting to use shared utility function
+  
+  - Extracted repeated `json.dumps()` calls to `format_json_output()` helper
+  - Cleaner code with consistent formatting across all commands
+
+Fixed
+-----
+
+- **Temperature Conversion Test**: Corrected ``test_device_status_div10`` to use ``HalfCelsiusToF`` conversion (100 → 122°F, not 50.0)
+- **Documentation**: Fixed references to non-existent ``OperationMode`` enum - replaced with correct ``DhwOperationSetting`` and ``CurrentOperationMode`` enums
+
 Version 6.1.1 (2025-12-08)
 ==========================
 
@@ -238,7 +320,7 @@ Quick Example
 
    # OLD boolean and enum handling
    is_heating = converted["currentHeatUse"] == 2
-   mode = CurrentOperationMode(converted["operationMode"]) if converted["operationMode"] in (0,32,64,96) else CurrentOperationMode.STANDBY
+   mode = OperationMode(converted["operationMode"]) if converted["operationMode"] in (0,32,64,96) else OperationMode.STANDBY
 
    # NEW simplified
    is_heating = status.current_heat_use

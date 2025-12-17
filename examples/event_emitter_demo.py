@@ -28,8 +28,13 @@ logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
 )
 
-from nwp500 import NavienAPIClient, NavienAuthClient, NavienMqttClient
-from nwp500.models import DeviceStatus, CurrentOperationMode
+from nwp500 import (
+    NavienAPIClient,
+    NavienAuthClient,
+    NavienMqttClient,
+    CurrentOperationMode,
+)
+from nwp500.models import DeviceStatus
 
 
 # Example 1: Multiple listeners for the same event
@@ -63,8 +68,10 @@ def optimize_on_mode_change(
     """Optimization handler."""
     if new_mode == CurrentOperationMode.HEAT_PUMP_MODE:
         print("♻️  [Optimizer] Heat pump mode - maximum efficiency!")
+    elif new_mode == CurrentOperationMode.HYBRID_EFFICIENCY_MODE:
+        print("⚡ [Optimizer] Energy Saver mode - balanced performance!")
     elif new_mode == CurrentOperationMode.HYBRID_BOOST_MODE:
-        print("⚡ [Optimizer] High demand mode - fast recovery!")
+        print("⚡ [Optimizer] High Demand mode - fast recovery!")
 
 
 # Example 3: Power state handlers
