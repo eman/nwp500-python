@@ -52,14 +52,19 @@ class MqttDiagnosticsExample:
         self.diagnostics = MqttDiagnosticsCollector(
             max_events_retained=1000, enable_verbose_logging=True
         )
-        self.running = True
+        self.shutdown_event = asyncio.Event()
         self.output_dir = Path("mqtt_diagnostics_output")
         self.output_dir.mkdir(exist_ok=True)
 
     def handle_shutdown(self) -> None:
-        """Handle shutdown signal."""
+        """Handle shutdown signal safely."""
         _logger.info("Shutting down gracefully...")
-        self.running = False
+        # Schedule the shutdown event to be set (thread-safe)
+        asyncio.create_task(self._set_shutdown())
+
+    async def _set_shutdown(self) -> None:
+        """Set shutdown event (must be called from async context)."""
+        self.shutdown_event.set()
 
     async def export_diagnostics(self, interval: float = 300.0) -> None:
         """
@@ -68,11 +73,11 @@ class MqttDiagnosticsExample:
         Args:
             interval: Export interval in seconds (default: 5 minutes)
         """
-        while self.running:
+        while not self.shutdown_event.is_set():
             try:
                 await asyncio.sleep(interval)
 
-                if not self.running:
+                if self.shutdown_event.is_set():
                     break
 
                 # Export JSON
@@ -100,7 +105,7 @@ class MqttDiagnosticsExample:
         Args:
             interval: Update interval in seconds
         """
-        while self.running:
+        while not self.shutdown_event.is_set():
             try:
                 await asyncio.sleep(interval)
 
