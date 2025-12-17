@@ -41,10 +41,11 @@ Changed
   - All capability flags (e.g., ``power_use``, ``dhw_use``) now use ``CapabilityFlag`` type
   - ``MqttRequest.device_type`` now accepts ``Union[DeviceType, int]`` for flexibility
 
-- **CLI Output**: Enhanced status display with enum-based text mappings
+- **Model Serialization**: Enums automatically serialize to human-readable names
   
-  - Operation mode, heat source, DR event, and recirculation mode now use human-readable text
-  - Consistent formatting across all status fields
+  - `model_dump()` converts enums to names (e.g., `DhwOperationSetting.HEAT_PUMP` → `"HEAT_PUMP"`)
+  - CLI and other consumers benefit from automatic enum name serialization
+  - Text mappings available for custom formatting (e.g., `DHW_OPERATION_TEXT[enum]` → "Heat Pump Only")
 
 - **Documentation**: Comprehensive updates across protocol and API documentation
   
@@ -60,6 +61,11 @@ Changed
   - ``examples/device_feature_callback.py``: Uses capability enums
   - ``examples/event_emitter_demo.py``: Uses status enums
   - ``examples/mqtt_diagnostics_example.py``: Uses command enums
+
+- **CLI Code Cleanup**: Refactored JSON formatting to use shared utility function
+  
+  - Extracted repeated `json.dumps()` calls to `format_json_output()` helper
+  - Cleaner code with consistent formatting across all commands
 
 Fixed
 -----
