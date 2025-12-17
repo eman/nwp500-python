@@ -75,7 +75,10 @@ class MqttCommandQueue:
             return
 
         command = QueuedCommand(
-            topic=topic, payload=payload, qos=qos, timestamp=datetime.now(timezone.utc)
+            topic=topic,
+            payload=payload,
+            qos=qos,
+            timestamp=datetime.now(timezone.utc),
         )
 
         # Check if adding will cause overflow (deque auto-removes oldest)

@@ -102,7 +102,7 @@ async def test_handle_set_mode_request_success(mock_mqtt, mock_device):
     status.model_dump.return_value = {"mode": "HEAT_PUMP"}
 
     async def side_effect_subscribe(device, callback):
-        # Invoke callback immediately; handler will wait on already-completed future
+        # Invoke callback immediately; handler waits on completed future
         callback(status)
         return None
 
