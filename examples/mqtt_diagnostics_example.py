@@ -247,10 +247,12 @@ class MqttDiagnosticsExample:
                         "Press Ctrl+C to stop early."
                     )
 
-                    # Sleep in small intervals to check running flag
+                    # Sleep in small intervals to check shutdown flag
                     elapsed = 0.0
                     interval = 1.0
-                    while self.running and elapsed < duration_seconds:
+                    while (
+                        not self.shutdown_event.is_set() and elapsed < duration_seconds
+                    ):
                         await asyncio.sleep(min(interval, duration_seconds - elapsed))
                         elapsed += interval
 
@@ -259,7 +261,7 @@ class MqttDiagnosticsExample:
 
                 finally:
                     # Cleanup
-                    self.running = False
+                    self.shutdown_event.set()
                     export_task.cancel()
                     monitor_task.cancel()
 
