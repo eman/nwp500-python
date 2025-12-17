@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import logging
 from collections import deque
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any, Callable
 
 from awscrt import mqtt
@@ -75,7 +75,7 @@ class MqttCommandQueue:
             return
 
         command = QueuedCommand(
-            topic=topic, payload=payload, qos=qos, timestamp=datetime.utcnow()
+            topic=topic, payload=payload, qos=qos, timestamp=datetime.now(timezone.utc)
         )
 
         # Check if adding will cause overflow (deque auto-removes oldest)
