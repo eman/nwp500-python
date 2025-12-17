@@ -17,8 +17,7 @@ import sys
 from typing import Any
 
 from nwp500 import NavienAPIClient, NavienAuthClient, NavienMqttClient
-from nwp500.constants import CommandCode
-from nwp500.enums import OnOffFlag
+from nwp500.enums import CommandCode, OnOffFlag
 
 
 def display_anti_legionella_status(status: dict[str, Any], label: str = "") -> None:
