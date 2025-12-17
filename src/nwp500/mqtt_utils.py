@@ -12,7 +12,7 @@ import uuid
 from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
-from typing import Any, Optional
+from typing import Any
 
 from awscrt import mqtt
 
@@ -31,7 +31,7 @@ _MAC_PATTERNS = [
 ]
 
 
-def redact(obj: Any, keys_to_redact: Optional[set[str]] = None) -> Any:
+def redact(obj: Any, keys_to_redact: set[str] | None = None) -> Any:
     """Return a redacted copy of obj with sensitive keys masked.
 
     This is a lightweight sanitizer for log messages to avoid emitting
@@ -168,7 +168,7 @@ class MqttConnectionConfig:
 
     endpoint: str = AWS_IOT_ENDPOINT
     region: str = AWS_REGION
-    client_id: Optional[str] = None
+    client_id: str | None = None
     clean_session: bool = True
     keep_alive_secs: int = 1200
 

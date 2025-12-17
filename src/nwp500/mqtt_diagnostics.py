@@ -16,7 +16,7 @@ import time
 from collections import defaultdict
 from dataclasses import asdict, dataclass, field
 from datetime import datetime
-from typing import Any, Callable, Optional
+from typing import Any, Callable
 
 from awscrt.exceptions import AwsCrtError
 
@@ -32,11 +32,11 @@ class ConnectionDropEvent:
     """Record of a single connection drop event."""
 
     timestamp: str  # ISO 8601 timestamp
-    error_name: Optional[str] = None
-    error_message: Optional[str] = None
-    error_code: Optional[int] = None
+    error_name: str | None = None
+    error_message: str | None = None
+    error_code: int | None = None
     reconnect_attempt: int = 0
-    duration_connected_seconds: Optional[float] = None
+    duration_connected_seconds: float | None = None
     active_subscriptions: int = 0
     queued_commands: int = 0
 
@@ -52,9 +52,9 @@ class ConnectionEvent:
     timestamp: str  # ISO 8601 timestamp
     event_type: str  # "connected", "resumed", "deep_reconnected"
     session_present: bool = False
-    return_code: Optional[int] = None
+    return_code: int | None = None
     attempt_number: int = 0
-    time_to_reconnect_seconds: Optional[float] = None
+    time_to_reconnect_seconds: float | None = None
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary."""
@@ -84,8 +84,8 @@ class MqttMetrics:
     )  # Bucketed by attempt count
 
     # Recent activity
-    last_drop_timestamp: Optional[str] = None
-    last_successful_connect_timestamp: Optional[str] = None
+    last_drop_timestamp: str | None = None
+    last_successful_connect_timestamp: str | None = None
     connection_recovered: int = 0  # Number of successful reconnections
 
     # QoS tracking
@@ -137,10 +137,10 @@ class MqttDiagnosticsCollector:
         self._metrics = MqttMetrics()
 
         # Session tracking
-        self._session_start_time: Optional[float] = None
+        self._session_start_time: float | None = None
         self._session_duration_history: list[float] = []
-        self._last_connection_timestamp: Optional[str] = None
-        self._last_drop_timestamp: Optional[float] = None
+        self._last_connection_timestamp: str | None = None
+        self._last_drop_timestamp: float | None = None
 
         # Error categorization
         self._aws_error_name_counts: dict[str, int] = defaultdict(int)
@@ -164,7 +164,7 @@ class MqttDiagnosticsCollector:
 
     async def record_connection_drop(
         self,
-        error: Optional[Exception] = None,
+        error: Exception | None = None,
         reconnect_attempt: int = 0,
         active_subscriptions: int = 0,
         queued_commands: int = 0,
@@ -256,7 +256,7 @@ class MqttDiagnosticsCollector:
         self,
         event_type: str = "connected",
         session_present: bool = False,
-        return_code: Optional[int] = None,
+        return_code: int | None = None,
         attempt_number: int = 0,
     ) -> None:
         """

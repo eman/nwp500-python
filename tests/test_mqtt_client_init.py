@@ -742,7 +742,7 @@ class TestRecoverConnectionIntegration:
         doc_lower = doc.lower()
         has_raises = "raises" in doc_lower
         has_token_error = "tokenrefresherror" in doc_lower
-        
+
         assert has_raises or has_token_error, (
             f"Docstring should document error handling. Got: {doc[:100]}..."
         )
