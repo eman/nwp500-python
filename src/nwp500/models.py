@@ -118,13 +118,17 @@ TouOverride = Annotated[bool, BeforeValidator(_tou_override_validator)]
 
 
 class NavienBaseModel(BaseModel):
-    """Base model for all Navien models."""
+    """Base model for all Navien models.
+
+    Note: use_enum_values=False keeps enums as objects during validation.
+    Serialization to names happens in model_dump() method.
+    """
 
     model_config = ConfigDict(
         alias_generator=to_camel,
         populate_by_name=True,
         extra="ignore",  # Ignore unknown fields by default
-        use_enum_values=False,  # Keep enums as objects during validation (model_dump() converts to names)
+        use_enum_values=False,  # Keep enums as objects during validation
     )
 
     def model_dump(self, **kwargs: Any) -> dict[str, Any]:
