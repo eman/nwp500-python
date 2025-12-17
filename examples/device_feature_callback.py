@@ -181,7 +181,7 @@ async def main():
                         f"  Program Schedule:   {'Yes' if feature.program_reservation_use == OnOffFlag.ON else 'No'}"
                     )
                     print(
-                        f"  Smart Diagnostic:   {'Yes' if feature.smart_diagnostic_use == OnOffFlag.OFF else 'No'}"
+                        f"  Smart Diagnostic:   {'Yes' if feature.smart_diagnostic_use == OnOffFlag.ON else 'No'}"
                     )
                     print(
                         f"  WiFi RSSI:          {'Yes' if feature.wifi_rssi_use == OnOffFlag.ON else 'No'}"
@@ -193,7 +193,7 @@ async def main():
                         f"  Freeze Protection:  {'Yes' if feature.freeze_protection_use == OnOffFlag.ON else 'No'}"
                     )
                     print(
-                        f"  Mixing Valve:       {'Yes' if feature.mixing_value_use == OnOffFlag.OFF else 'No'}"
+                        f"  Mixing Valve:       {'Yes' if feature.mixing_value_use == OnOffFlag.ON else 'No'}"
                     )
                     print(
                         f"  DR Settings:        {'Yes' if feature.dr_setting_use == OnOffFlag.ON else 'No'}"
