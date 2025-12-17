@@ -19,6 +19,7 @@ from datetime import datetime
 from typing import Any, Callable, Optional
 
 from .constants import CommandCode
+from .enums import DhwOperationSetting
 from .exceptions import ParameterValidationError, RangeValidationError
 from .models import Device, fahrenheit_to_half_celsius
 
@@ -196,7 +197,8 @@ class MqttDeviceController:
             device: Device object
             mode_id: Mode ID (1=Heat Pump Only, 2=Electric Only, 3=Energy Saver,
                 4=High Demand, 5=Vacation)
-            vacation_days: Number of vacation days (required when mode_id == 5)
+            vacation_days: Number of vacation days (required when
+                mode_id == DhwOperationSetting.VACATION)
 
         Returns:
             Publish packet ID
@@ -214,7 +216,7 @@ class MqttDeviceController:
             - 4: High Demand (maximum heating capacity)
             - 5: Vacation Mode (requires vacation_days parameter)
         """
-        if mode_id == 5:  # Vacation mode
+        if mode_id == DhwOperationSetting.VACATION:
             if vacation_days is None:
                 raise ParameterValidationError(
                     "Vacation mode requires vacation_days (1-30)",
@@ -232,7 +234,8 @@ class MqttDeviceController:
         else:
             if vacation_days is not None:
                 raise ParameterValidationError(
-                    "vacation_days is only valid for vacation mode (mode 5)",
+                    f"vacation_days is only valid for vacation mode "
+                    f"(mode {DhwOperationSetting.VACATION})",
                     parameter="vacation_days",
                 )
             param = [mode_id]
