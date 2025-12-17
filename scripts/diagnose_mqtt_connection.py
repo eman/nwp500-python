@@ -15,6 +15,7 @@ Usage:
 
 import argparse
 import asyncio
+import contextlib
 import logging
 import os
 import signal
@@ -28,7 +29,10 @@ try:
     from nwp500 import NavienAuthClient, NavienMqttClient
     from nwp500.mqtt_utils import MqttConnectionConfig
 except ImportError:
-    print("Error: Could not import nwp500 library. Run from project root with installed dependencies.")
+    print(
+        "Error: Could not import nwp500 library. "
+        "Run from project root with installed dependencies."
+    )
     sys.exit(1)
 
 # Configure logging
@@ -127,8 +131,13 @@ async def main():
                     drops = metrics.total_connection_drops
                     reconnects = metrics.connection_recovered
 
+                    status = (
+                        "Connected"
+                        if mqtt_client.is_connected
+                        else "Disconnected"
+                    )
                     print(
-                        f"Status: {'Connected' if mqtt_client.is_connected else 'Disconnected'} | "
+                        f"Status: {status} | "
                         f"Uptime: {uptime:.1f}s | "
                         f"Drops: {drops} | "
                         f"Reconnects: {reconnects}"
@@ -145,7 +154,9 @@ async def main():
 
             # Export JSON
             json_report = mqtt_client.diagnostics.export_json()
-            report_file = f"mqtt_diag_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+            report_file = (
+                f"mqtt_diag_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+            )
             with open(report_file, "w") as f:
                 f.write(json_report)
             print(f"\nDetailed JSON report saved to: {report_file}")
@@ -159,7 +170,5 @@ async def main():
 
 
 if __name__ == "__main__":
-    try:
+    with contextlib.suppress(KeyboardInterrupt):
         asyncio.run(main())
-    except KeyboardInterrupt:
-        pass

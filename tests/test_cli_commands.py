@@ -1,14 +1,17 @@
 """Tests for CLI command handlers."""
+
+from unittest.mock import AsyncMock, MagicMock
+
 import pytest
-from unittest.mock import MagicMock, AsyncMock, call, patch
+
 from nwp500.cli.commands import (
     get_controller_serial_number,
-    handle_status_request,
+    handle_set_dhw_temp_request,
     handle_set_mode_request,
-    handle_set_dhw_temp_request
+    handle_status_request,
 )
 from nwp500.models import Device, DeviceFeature, DeviceStatus
-from nwp500.enums import DhwOperationSetting, CurrentOperationMode
+
 
 @pytest.fixture
 def mock_device():
@@ -16,6 +19,7 @@ def mock_device():
     device.device_info = MagicMock()
     device.device_info.device_type = 123
     return device
+
 
 @pytest.fixture
 def mock_mqtt():
@@ -28,6 +32,7 @@ def mock_mqtt():
     mqtt.set_dhw_mode = AsyncMock()
     mqtt.set_dhw_temperature = AsyncMock()
     return mqtt
+
 
 @pytest.mark.asyncio
 async def test_get_controller_serial_number_success(mock_mqtt, mock_device):
@@ -43,10 +48,13 @@ async def test_get_controller_serial_number_success(mock_mqtt, mock_device):
 
     mock_mqtt.subscribe_device_feature.side_effect = side_effect_subscribe
 
-    serial = await get_controller_serial_number(mock_mqtt, mock_device, timeout=1.0)
+    serial = await get_controller_serial_number(
+        mock_mqtt, mock_device, timeout=1.0
+    )
 
     assert serial == "TEST_SERIAL_123"
     mock_mqtt.request_device_info.assert_called_once_with(mock_device)
+
 
 @pytest.mark.asyncio
 async def test_get_controller_serial_number_timeout(mock_mqtt, mock_device):
@@ -55,10 +63,13 @@ async def test_get_controller_serial_number_timeout(mock_mqtt, mock_device):
     mock_mqtt.subscribe_device_feature.return_value = None
 
     # Reduce timeout for test speed
-    serial = await get_controller_serial_number(mock_mqtt, mock_device, timeout=0.1)
+    serial = await get_controller_serial_number(
+        mock_mqtt, mock_device, timeout=0.1
+    )
 
     assert serial is None
     mock_mqtt.request_device_info.assert_called_once_with(mock_device)
+
 
 @pytest.mark.asyncio
 async def test_handle_status_request(mock_mqtt, mock_device, capsys):
@@ -79,6 +90,7 @@ async def test_handle_status_request(mock_mqtt, mock_device, capsys):
     assert "some" in captured.out
     assert "data" in captured.out
 
+
 @pytest.mark.asyncio
 async def test_handle_set_mode_request_success(mock_mqtt, mock_device):
     """Test successful mode setting."""
@@ -90,13 +102,16 @@ async def test_handle_set_mode_request_success(mock_mqtt, mock_device):
     status.model_dump.return_value = {"mode": "HEAT_PUMP"}
 
     async def side_effect_subscribe(device, callback):
-        # We don't call it immediately here effectively, but the handler waits for it AFTER sending command.
+        # We don't call it immediately here effectively, but the handler
+        # waits for it AFTER sending command.
         # So we can just set it up to be called when we want.
         # However, for simplicity in this mock, we can just invoke it.
         # But wait, the handler subscribes, then sends command, then waits.
-        # If we invoke it immediately during subscribe, the future is set result.
+        # If we invoke it immediately during subscribe, the future is set
+        # result.
         # The handler then sends command. Then waits on future.
-        # If future is already done, wait_for returns immediately. This is acceptable for this test.
+        # If future is already done, wait_for returns immediately.
+        # This is acceptable for this test.
         callback(status)
         return None
 
@@ -104,7 +119,10 @@ async def test_handle_set_mode_request_success(mock_mqtt, mock_device):
 
     await handle_set_mode_request(mock_mqtt, mock_device, "heat-pump")
 
-    mock_mqtt.set_dhw_mode.assert_called_once_with(mock_device, 1) # 1 = Heat Pump
+    mock_mqtt.set_dhw_mode.assert_called_once_with(
+        mock_device, 1
+    )  # 1 = Heat Pump
+
 
 @pytest.mark.asyncio
 async def test_handle_set_mode_request_invalid_mode(mock_mqtt, mock_device):
@@ -112,6 +130,7 @@ async def test_handle_set_mode_request_invalid_mode(mock_mqtt, mock_device):
     await handle_set_mode_request(mock_mqtt, mock_device, "invalid-mode")
 
     mock_mqtt.set_dhw_mode.assert_not_called()
+
 
 @pytest.mark.asyncio
 async def test_handle_set_dhw_temp_request_success(mock_mqtt, mock_device):
@@ -130,11 +149,12 @@ async def test_handle_set_dhw_temp_request_success(mock_mqtt, mock_device):
 
     mock_mqtt.set_dhw_temperature.assert_called_once_with(mock_device, 120.0)
 
+
 @pytest.mark.asyncio
 async def test_handle_set_dhw_temp_request_out_of_range(mock_mqtt, mock_device):
     """Test setting temperature out of range."""
-    await handle_set_dhw_temp_request(mock_mqtt, mock_device, 160.0) # > 150
+    await handle_set_dhw_temp_request(mock_mqtt, mock_device, 160.0)  # > 150
     mock_mqtt.set_dhw_temperature.assert_not_called()
 
-    await handle_set_dhw_temp_request(mock_mqtt, mock_device, 90.0) # < 95
+    await handle_set_dhw_temp_request(mock_mqtt, mock_device, 90.0)  # < 95
     mock_mqtt.set_dhw_temperature.assert_not_called()
