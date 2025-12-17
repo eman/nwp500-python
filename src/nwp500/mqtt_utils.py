@@ -5,6 +5,8 @@ This module provides utility functions for redacting sensitive information,
 configuration classes, and common data structures used across MQTT modules.
 """
 
+from __future__ import annotations
+
 import re
 import uuid
 from dataclasses import dataclass
