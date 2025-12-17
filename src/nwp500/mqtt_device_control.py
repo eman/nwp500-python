@@ -18,8 +18,7 @@ from collections.abc import Awaitable, Sequence
 from datetime import datetime
 from typing import Any, Callable, Optional
 
-from .constants import CommandCode
-from .enums import DhwOperationSetting
+from .enums import CommandCode, DhwOperationSetting
 from .exceptions import ParameterValidationError, RangeValidationError
 from .models import Device, fahrenheit_to_half_celsius
 

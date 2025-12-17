@@ -30,9 +30,6 @@ from nwp500.auth import (
     authenticate,
     refresh_access_token,
 )
-from nwp500.constants import (
-    CommandCode,
-)
 from nwp500.encoding import (
     build_reservation_entry,
     build_tou_period,
@@ -44,6 +41,7 @@ from nwp500.encoding import (
     encode_week_bitfield,
 )
 from nwp500.enums import (
+    CommandCode,
     CurrentOperationMode,
     DhwOperationSetting,
     DREvent,
