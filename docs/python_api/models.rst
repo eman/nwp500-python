@@ -597,7 +597,7 @@ Best Practices
           active_source = status.current_heat_use
 
           # These can differ!
-          # User sets HYBRID, but device might only be using heat pump at the moment
+          # User sets ENERGY_SAVER (hybrid mode), but device might only be using heat pump at the moment
 
 Related Documentation
 =====================
