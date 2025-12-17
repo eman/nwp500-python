@@ -1,10 +1,8 @@
 """Constants for Navien device communication.
 
 Note: CommandCode has been moved to enums.py module.
-For backward compatibility, CommandCode is re-exported from this module.
+Import from nwp500.enums instead of nwp500.constants.
 """
-
-from .enums import CommandCode  # noqa: F401
 
 # Note for maintainers:
 # Command codes and expected payload fields are defined in

@@ -7,6 +7,18 @@ Version 6.2.0 (2025-12-17)
 
 **BREAKING CHANGES**: Enumerations refactored for type safety and consistency
 
+- **CommandCode moved**: Import from ``nwp500.enums`` instead of ``nwp500.constants``
+  
+  .. code-block:: python
+  
+     # OLD (removed)
+     from nwp500.constants import CommandCode
+     
+     # NEW
+     from nwp500.enums import CommandCode
+     # OR
+     from nwp500 import CommandCode  # Still works
+
 Added
 -----
 
