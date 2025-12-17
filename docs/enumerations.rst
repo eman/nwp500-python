@@ -52,26 +52,53 @@ Operation
 
 Device operation state indicating overall device activity.
 
-OperationMode
-~~~~~~~~~~~~~
+DhwOperationSetting
+~~~~~~~~~~~~~~~~~~~
 
-.. autoclass:: nwp500.enums.OperationMode
+.. autoclass:: nwp500.enums.DhwOperationSetting
    :members:
    :undoc-members:
 
-DHW heating mode for heat pump water heaters. This determines which heat source(s)
-the device will use:
+User-configured DHW heating mode preference. This determines which heat source(s)
+the device will use when heating is needed:
 
-- **HEATPUMP**: Most efficient but slower heating
-- **HYBRID**: Balance of efficiency and speed
+- **HEAT_PUMP**: Most efficient but slower heating
 - **ELECTRIC**: Fastest but uses most energy
+- **ENERGY_SAVER**: Hybrid mode - balanced efficiency
+- **HIGH_DEMAND**: Hybrid mode - maximum heating capacity
+- **VACATION**: Energy-saving mode for extended absences
+- **POWER_OFF**: Device powered off
 
 Example::
 
-    from nwp500 import OperationMode, OPERATION_MODE_TEXT
+    from nwp500 import DhwOperationSetting
+    from nwp500.enums import DHW_OPERATION_SETTING_TEXT
     
-    mode = OperationMode.HYBRID
-    print(f"Current mode: {OPERATION_MODE_TEXT[mode]}")  # "Hybrid"
+    mode = DhwOperationSetting.ENERGY_SAVER
+    print(f"Current mode: {DHW_OPERATION_SETTING_TEXT[mode]}")  # "Hybrid: Efficiency"
+
+CurrentOperationMode
+~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: nwp500.enums.CurrentOperationMode
+   :members:
+   :undoc-members:
+
+Real-time operational state (read-only). This reflects what the device is actually
+doing right now, which may differ from the configured mode setting:
+
+- **STANDBY**: Device idle, not actively heating
+- **HEAT_PUMP_MODE**: Heat pump actively running
+- **HYBRID_EFFICIENCY_MODE**: Actively heating in Energy Saver mode
+- **HYBRID_BOOST_MODE**: Actively heating in High Demand mode
+
+Example::
+
+    from nwp500 import CurrentOperationMode
+    from nwp500.enums import CURRENT_OPERATION_MODE_TEXT
+    
+    mode = CurrentOperationMode.HEAT_PUMP_MODE
+    print(f"Device state: {CURRENT_OPERATION_MODE_TEXT[mode]}")  # "Heat Pump"
 
 HeatSource
 ~~~~~~~~~~
@@ -231,17 +258,30 @@ user-friendly display text:
 .. code-block:: python
 
    from nwp500.enums import (
-       OPERATION_MODE_TEXT,
+       DHW_OPERATION_SETTING_TEXT,
+       CURRENT_OPERATION_MODE_TEXT,
        HEAT_SOURCE_TEXT,
        DR_EVENT_TEXT,
        RECIRC_MODE_TEXT,
        TOU_RATE_TEXT,
        FILTER_STATUS_TEXT,
+       ERROR_CODE_TEXT,
    )
    
-   # Usage
-   mode = OperationMode.HYBRID
-   print(OPERATION_MODE_TEXT[mode])  # "Hybrid"
+   # Usage examples
+   from nwp500 import DhwOperationSetting, CurrentOperationMode, ErrorCode
+   
+   # User-configured mode
+   mode = DhwOperationSetting.ENERGY_SAVER
+   print(DHW_OPERATION_SETTING_TEXT[mode])  # "Hybrid: Efficiency"
+   
+   # Current operational state
+   state = CurrentOperationMode.HEAT_PUMP_MODE
+   print(CURRENT_OPERATION_MODE_TEXT[state])  # "Heat Pump"
+   
+   # Error codes
+   error = ErrorCode.E407_DHW_TEMP_SENSOR
+   print(ERROR_CODE_TEXT[error])  # "Abnormal DHW Temperature Sensor"
 
 Related Documentation
 ---------------------

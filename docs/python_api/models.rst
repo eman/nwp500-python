@@ -21,7 +21,8 @@ Enumerations
 
 See :doc:`../enumerations` for the complete enumeration reference including:
 
-* **OperationMode** - DHW heating modes (Heat Pump/Hybrid/Electric)
+* **DhwOperationSetting** - User-configured DHW heating modes (Heat Pump/Hybrid/Electric)
+* **CurrentOperationMode** - Real-time operational state (Standby/Heat Pump/Hybrid modes)
 * **HeatSource** - Currently active heat source
 * **TemperatureType** - Temperature unit (Celsius/Fahrenheit)
 * **DeviceControl** - All control command IDs
@@ -32,10 +33,10 @@ See :doc:`../enumerations` for the complete enumeration reference including:
 
 .. code-block:: python
 
-   from nwp500 import OperationMode, HeatSource, TemperatureType
+   from nwp500 import DhwOperationSetting, CurrentOperationMode, HeatSource, TemperatureType
    
-   # Set operation mode
-   await mqtt.set_dhw_mode(device, OperationMode.HYBRID.value)
+   # Set operation mode (user preference)
+   await mqtt.set_dhw_mode(device, DhwOperationSetting.ENERGY_SAVER.value)
    
    # Check current heat source
    if status.current_heat_use == HeatSource.HEATPUMP:
@@ -204,8 +205,8 @@ Complete real-time device status with 100+ fields.
 
    **Operation Mode Fields:**
 
-   * ``operation_mode`` (OperationMode) - Current operational state
-   * ``dhw_operation_setting`` (OperationMode) - User's mode preference
+   * ``operation_mode`` (CurrentOperationMode) - Current operational state (read-only)
+   * ``dhw_operation_setting`` (DhwOperationSetting) - User's configured mode preference
    * ``current_heat_use`` (HeatSource) - Currently active heat source
    * ``temperature_type`` (TemperatureType) - Temperature unit
 
@@ -568,12 +569,12 @@ Best Practices
 
    .. code-block:: python
 
-      # [OK] Type-safe
-      from nwp500 import OperationMode
-      await mqtt.set_dhw_mode(device, OperationMode.HYBRID.value)
+      # ✓ Type-safe
+      from nwp500 import DhwOperationSetting
+      await mqtt.set_dhw_mode(device, DhwOperationSetting.ENERGY_SAVER.value)
 
       # ✗ Magic numbers
-      await mqtt.set_dhw_mode(device, 2)
+      await mqtt.set_dhw_mode(device, 3)
 
 2. **Check feature support:**
 
