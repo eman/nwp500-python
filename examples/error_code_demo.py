@@ -18,7 +18,7 @@ def diagnose_error(error_code: ErrorCode, sub_code: int = 0) -> None:
 
     # Type-safe error code comparison
     print(f"⚠ Error detected: {error_code.name}")
-    print(f"   Code: E{error_code:03d} (Sub-code: {sub_code:02d})")
+    print(f"   Code: E{error_code.value:03d} (Sub-code: {sub_code:02d})")
     print(f"   Description: {ERROR_CODE_TEXT.get(error_code, 'Unknown error')}")
 
     # Provide specific guidance based on error type
@@ -97,7 +97,7 @@ def main():
     ]
 
     for error_code in temp_sensor_errors:
-        print(f"  • E{error_code:03d} - {ERROR_CODE_TEXT[error_code]}")
+        print(f"  • E{error_code.value:03d} - {ERROR_CODE_TEXT[error_code]}")
 
     # Example 6: Demonstrate enum value comparison
     print("\n\n6. Type-Safe Error Code Comparison")
