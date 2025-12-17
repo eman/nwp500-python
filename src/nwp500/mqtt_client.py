@@ -137,13 +137,19 @@ class NavienMqttClient(EventEmitter):
             config: Optional connection configuration
 
         Raises:
-            ValueError: If auth client is not authenticated or AWS
-                credentials are not available
+            MqttCredentialsError: If auth client is not authenticated, tokens
+                are stale/expired, or AWS credentials are not available
         """
         if not auth_client.is_authenticated:
             raise MqttCredentialsError(
                 "Authentication client must be authenticated before "
                 "creating MQTT client. Call auth_client.sign_in() first."
+            )
+
+        if not auth_client.has_valid_tokens:
+            raise MqttCredentialsError(
+                "Tokens are stale/expired. "
+                "Call ensure_valid_token() or re_authenticate() first."
             )
 
         if not auth_client.current_tokens:
@@ -526,6 +532,59 @@ class NavienMqttClient(EventEmitter):
             ValueError,
         ) as e:
             _logger.error(f"Failed to connect: {e}")
+            raise
+
+    async def recover_connection(self) -> bool:
+        """Recover from authentication-related connection failures.
+
+        This method is useful when MQTT connection fails due to stale/expired
+        authentication tokens. It refreshes the tokens and attempts to reconnect
+        the MQTT client.
+
+        Returns:
+            True if recovery was successful and MQTT is reconnected, False
+            otherwise
+
+        Raises:
+            TokenRefreshError: If token refresh fails
+            AuthenticationError: If re-authentication fails
+
+        Example:
+            >>> mqtt_client = NavienMqttClient(auth_client)
+            >>> try:
+            ...     await mqtt_client.connect()
+            ... except MqttConnectionError:
+            ...     # Connection may have failed due to stale tokens
+            ...     if await mqtt_client.recover_connection():
+            ...         print("Successfully recovered connection")
+            ...     else:
+            ...         print("Recovery failed, check logs")
+        """
+        _logger.info(
+            "Attempting to recover MQTT connection by refreshing tokens"
+        )
+
+        try:
+            # Step 1: Refresh authentication tokens
+            await self._auth_client.ensure_valid_token()
+            _logger.debug("Authentication tokens refreshed")
+
+            # Step 2: Attempt to reconnect
+            if self._connected:
+                _logger.info("Already connected after token refresh")
+                return True
+
+            # If not connected, try to reconnect
+            success = await self.connect()
+            if success:
+                _logger.info("MQTT connection successfully recovered")
+                return True
+            else:
+                _logger.error("MQTT reconnection failed despite valid tokens")
+                return False
+
+        except (TokenRefreshError, AuthenticationError) as e:
+            _logger.error(f"Failed to recover connection: {e}")
             raise
 
     def _create_credentials_provider(self) -> Any:

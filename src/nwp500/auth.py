@@ -621,6 +621,23 @@ class NavienAuthClient:
         """
         return bool(self._user_id and self._password)
 
+    @property
+    def has_valid_tokens(self) -> bool:
+        """Check if both JWT and AWS credentials are valid and not expired.
+
+        Returns True only if tokens exist AND neither JWT tokens nor AWS
+        credentials have expired. This is useful for pre-flight checks before
+        operations that require valid credentials (e.g., MQTT connection).
+
+        Returns:
+            True if tokens exist AND not expired (JWT + AWS creds), False
+            otherwise
+        """
+        if not self._auth_response:
+            return False
+        tokens = self._auth_response.tokens
+        return not tokens.is_expired and not tokens.are_aws_credentials_expired
+
     async def close(self) -> None:
         """Close the aiohttp session if we own it."""
         if self._owned_session and self._session:
