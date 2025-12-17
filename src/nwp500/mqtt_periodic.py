@@ -14,7 +14,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import logging
-from typing import Any, Callable, Optional
+from typing import Any, Callable
 
 from awscrt.exceptions import AwsCrtError
 
@@ -239,7 +239,7 @@ class MqttPeriodicRequestManager:
     async def stop_periodic_requests(
         self,
         device: Device,
-        request_type: Optional[PeriodicRequestType] = None,
+        request_type: PeriodicRequestType | None = None,
     ) -> None:
         """
         Stop sending periodic requests for a device.
@@ -290,9 +290,7 @@ class MqttPeriodicRequestManager:
                 + (f" (type={request_type.value})" if request_type else "")
             )
 
-    async def stop_all_periodic_tasks(
-        self, reason: Optional[str] = None
-    ) -> None:
+    async def stop_all_periodic_tasks(self, reason: str | None = None) -> None:
         """
         Stop all periodic request tasks.
 

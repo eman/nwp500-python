@@ -14,7 +14,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-from typing import Any, Callable, Optional
+from typing import Any, Callable
 
 from awscrt import mqtt
 from awscrt.exceptions import AwsCrtError
@@ -69,7 +69,7 @@ class MqttSubscriptionManager:
         ] = {}
 
         # Track previous state for change detection
-        self._previous_status: Optional[DeviceStatus] = None
+        self._previous_status: DeviceStatus | None = None
 
     @property
     def subscriptions(self) -> dict[str, mqtt.QoS]:

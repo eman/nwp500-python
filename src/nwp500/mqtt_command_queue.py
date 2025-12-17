@@ -39,7 +39,7 @@ class MqttCommandQueue:
     new commands (FIFO with overflow dropping).
     """
 
-    def __init__(self, config: "MqttConnectionConfig"):
+    def __init__(self, config: MqttConnectionConfig):
         """
         Initialize the command queue.
 
