@@ -16,7 +16,7 @@ import time
 from collections import defaultdict
 from collections.abc import Callable
 from dataclasses import asdict, dataclass, field
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
 from awscrt.exceptions import AwsCrtError
@@ -179,7 +179,7 @@ class MqttDiagnosticsCollector:
             active_subscriptions: Number of active subscriptions at time of drop
             queued_commands: Number of commands in the queue
         """
-        now = datetime.utcnow().isoformat() + "Z"
+        now = datetime.now(UTC).isoformat()
         duration = None
 
         if self._session_start_time is not None:
@@ -269,7 +269,7 @@ class MqttDiagnosticsCollector:
             return_code: MQTT return code
             attempt_number: Reconnection attempt number (0 = initial connect)
         """
-        now = datetime.utcnow().isoformat() + "Z"
+        now = datetime.now(UTC).isoformat()
         time_to_reconnect = None
 
         # Update metrics
@@ -370,7 +370,7 @@ class MqttDiagnosticsCollector:
             JSON string suitable for storing or sending to monitoring systems
         """
         export_data = {
-            "timestamp": datetime.utcnow().isoformat() + "Z",
+            "timestamp": datetime.now(UTC).isoformat(),
             "metrics": self.get_metrics().to_dict(),
             "recent_drops": [
                 event.to_dict() for event in self.get_recent_drops(50)

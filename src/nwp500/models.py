@@ -1154,7 +1154,7 @@ class MqttRequest(NavienBaseModel):
     mode: str | None = None
     param: list[int | float] = Field(default_factory=list)
     param_str: str = ""
-    month: list[int | None] = None
+    month: list[int] | None = None
     year: int | None = None
 
 
