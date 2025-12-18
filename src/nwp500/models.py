@@ -1233,9 +1233,7 @@ class EnergyUsageResponse(NavienBaseModel):
     total: EnergyUsageTotal
     usage: list[MonthlyEnergyData]
 
-    def get_month_data(
-        self, year: int, month: int
-    ) -> MonthlyEnergyData | None:
+    def get_month_data(self, year: int, month: int) -> MonthlyEnergyData | None:
         """Get energy usage data for a specific month.
 
         Args:
