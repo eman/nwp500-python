@@ -6,22 +6,27 @@ Version 6.2.0 (2025-12-17)
 ==========================
 
 **BREAKING CHANGES**: 
-- Minimum Python version raised to 3.12
+- Minimum Python version raised to 3.13
 - Enumerations refactored for type safety and consistency
 
 Removed
 -------
-- **Python 3.9, 3.10, and 3.11 Support**: Minimum Python version is now 3.12
+- **Python 3.9-3.12 Support**: Minimum Python version is now 3.13
   
-  Python 3.12 introduced significant performance improvements and new features:
+  Home Assistant has deprecated Python 3.12 support, making Python 3.13 the de facto minimum for this ecosystem.
   
-  - Per-interpreter GIL for better multi-threaded performance  
-  - Improved error messages with better tracebacks
+  Python 3.13 features and improvements:
+  
+  - **Experimental free-threaded mode** (PEP 703): Optional GIL removal for true parallelism
+  - **JIT compiler** (PEP 744): Just-in-time compilation for performance improvements
+  - **Better error messages**: Enhanced suggestions for NameError, AttributeError, and import errors
+  - **Type system enhancements**: TypeVars with defaults (PEP 696), @deprecated decorator (PEP 702), ReadOnly TypedDict (PEP 705)
+  - **Performance**: ~5-10% faster overall, optimized dictionary/set operations, better function calls
   - PEP 695: New type parameter syntax for generics
   - PEP 701: f-string improvements
   - Built-in ``datetime.UTC`` constant
   
-  Python 3.9 reached end-of-life in October 2025. If you need Python 3.9-3.11 support, use version 6.1.x of this library.
+  If you need Python 3.12 support, use version 6.1.x of this library.
 
 - **CommandCode moved**: Import from ``nwp500.enums`` instead of ``nwp500.constants``
   
