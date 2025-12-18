@@ -177,10 +177,8 @@ Requirements
 
 * Python 3.13+
 * aiohttp >= 3.8.0
-* websockets >= 10.0
-* cryptography >= 3.4.0
 * pydantic >= 2.0.0
-* awsiotsdk >= 1.21.0
+* awsiotsdk >= 1.27.0
 
 License
 =======
