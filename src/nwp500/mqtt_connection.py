@@ -237,7 +237,7 @@ class MqttConnection:
         self,
         topic: str,
         qos: mqtt.QoS,
-        callback: Callable[..., None | None] = None,
+        callback: Callable[..., None] | None = None,
     ) -> tuple[Any, int]:
         """
         Subscribe to an MQTT topic.
