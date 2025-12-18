@@ -5,7 +5,7 @@ Installation
 Requirements
 ============
 
-* Python 3.9 or higher
+* Python 3.13 or higher
 * pip (Python package installer)
 * Navien Smart Control account
 

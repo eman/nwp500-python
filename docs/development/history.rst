@@ -18,7 +18,7 @@ providing:
 - Automatic reconnection with exponential backoff
 - Command queuing for reliable communication
 - Historical energy usage data (EMS API)
-- Modern Python 3.9+ codebase with native type hints
+- Modern Python 3.13+ codebase with native type hints
 
 Current Status
 --------------
@@ -38,7 +38,7 @@ The library is feature-complete with:
 - Comprehensive documentation
 - Working examples for all features
 - Unit tests with good coverage
-- Python 3.9+ with modern type hints
+- Python 3.13+ with modern type hints
 
 Implementation Milestones
 -------------------------
