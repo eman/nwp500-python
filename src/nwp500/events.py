@@ -10,8 +10,8 @@ import asyncio
 import inspect
 import logging
 from collections import defaultdict
-from dataclasses import dataclass
 from collections.abc import Callable
+from dataclasses import dataclass
 from typing import Any
 
 __author__ = "Emmanuel Levijarvi"

@@ -273,7 +273,9 @@ def topic_matches_pattern(topic: str, pattern: str) -> bool:
     if len(topic_parts) != len(pattern_parts):
         return False
 
-    for topic_part, pattern_part in zip(topic_parts, pattern_parts, strict=True):
+    for topic_part, pattern_part in zip(
+        topic_parts, pattern_parts, strict=True
+    ):
         if pattern_part != "+" and topic_part != pattern_part:
             return False
 

@@ -14,9 +14,8 @@ This module handles all device control operations including:
 """
 
 import logging
-from collections.abc import Awaitable, Sequence
+from collections.abc import Awaitable, Callable, Sequence
 from datetime import datetime
-from collections.abc import Callable
 from typing import Any
 
 from .enums import CommandCode, DhwOperationSetting

@@ -48,9 +48,9 @@ class MqttConnection:
         self,
         config: "MqttConnectionConfig",
         auth_client: "NavienAuthClient",
-        on_connection_interrupted: Optional[
-            Callable[[mqtt.Connection, Exception], None]
-        ] = None,
+        on_connection_interrupted: (
+            Callable[[mqtt.Connection, Exception], None] | None
+        ) = None,
         on_connection_resumed: Callable[[Any, Any | None, None]] = None,
     ):
         """

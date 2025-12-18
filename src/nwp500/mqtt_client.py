@@ -15,8 +15,7 @@ import asyncio
 import json
 import logging
 import uuid
-from collections.abc import Sequence
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from typing import TYPE_CHECKING, Any
 
 from awscrt import mqtt
