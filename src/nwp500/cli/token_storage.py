@@ -3,7 +3,6 @@
 import json
 import logging
 from pathlib import Path
-from typing import Optional
 
 from nwp500.auth import AuthTokens
 
@@ -31,7 +30,7 @@ def save_tokens(tokens: AuthTokens, email: str) -> None:
         _logger.error(f"Failed to save tokens: {e}")
 
 
-def load_tokens() -> tuple[Optional[AuthTokens], Optional[str]]:
+def load_tokens() -> tuple[AuthTokens | None, str | None]:
     """
     Load authentication tokens and user email from a file.
 

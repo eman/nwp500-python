@@ -5,10 +5,13 @@ This module handles queueing of commands when the MQTT connection is lost,
 and automatically sends them when the connection is restored.
 """
 
+from __future__ import annotations
+
 import asyncio
 import logging
-from datetime import datetime
-from typing import TYPE_CHECKING, Any, Callable
+from collections.abc import Callable
+from datetime import UTC, datetime
+from typing import TYPE_CHECKING, Any
 
 from awscrt import mqtt
 
@@ -37,7 +40,7 @@ class MqttCommandQueue:
     new commands (FIFO with overflow dropping).
     """
 
-    def __init__(self, config: "MqttConnectionConfig"):
+    def __init__(self, config: MqttConnectionConfig):
         """
         Initialize the command queue.
 
@@ -45,7 +48,7 @@ class MqttCommandQueue:
             config: MQTT connection configuration with queue settings
         """
         self.config = config
-        # Use asyncio.Queue instead of deque for better async support
+        # Python 3.10+ handles asyncio.Queue initialization without running loop
         self._queue: asyncio.Queue[QueuedCommand] = asyncio.Queue(
             maxsize=config.max_queued_commands
         )
@@ -73,7 +76,10 @@ class MqttCommandQueue:
             return
 
         command = QueuedCommand(
-            topic=topic, payload=payload, qos=qos, timestamp=datetime.utcnow()
+            topic=topic,
+            payload=payload,
+            qos=qos,
+            timestamp=datetime.now(UTC),
         )
 
         # If queue is full, drop oldest command first

@@ -5,11 +5,13 @@ This module handles automatic reconnection with exponential backoff when
 the MQTT connection is interrupted.
 """
 
+from __future__ import annotations
+
 import asyncio
 import contextlib
 import logging
-from collections.abc import Awaitable
-from typing import TYPE_CHECKING, Any, Callable, Optional
+from collections.abc import Awaitable, Callable
+from typing import TYPE_CHECKING, Any
 
 from awscrt.exceptions import AwsCrtError
 
@@ -33,12 +35,12 @@ class MqttReconnectionHandler:
 
     def __init__(
         self,
-        config: "MqttConnectionConfig",
+        config: MqttConnectionConfig,
         is_connected_func: Callable[[], bool],
         schedule_coroutine_func: Callable[[Any], None],
         reconnect_func: Callable[[], Awaitable[None]],
-        deep_reconnect_func: Optional[Callable[[], Awaitable[None]]] = None,
-        emit_event_func: Optional[Callable[..., Awaitable[Any]]] = None,
+        deep_reconnect_func: Callable[[], Awaitable[None]] | None = None,
+        emit_event_func: Callable[..., Awaitable[Any]] | None = None,
     ):
         """
         Initialize reconnection handler.
@@ -62,7 +64,7 @@ class MqttReconnectionHandler:
         self._emit_event = emit_event_func
 
         self._reconnect_attempts = 0
-        self._reconnect_task: Optional[asyncio.Task[None]] = None
+        self._reconnect_task: asyncio.Task[None] | None = None
         self._manual_disconnect = False
         self._enabled = False
 

@@ -14,7 +14,7 @@ The API uses JWT (JSON Web Tokens) for authentication with the following flow:
 import json
 import logging
 from datetime import datetime, timedelta
-from typing import Any, Optional
+from typing import Any, Self
 
 import aiohttp
 from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, model_validator
@@ -70,16 +70,16 @@ class AuthTokens(NavienBaseModel):
     access_token: str = ""
     refresh_token: str = ""
     authentication_expires_in: int = 3600
-    access_key_id: Optional[str] = None
-    secret_key: Optional[str] = None
-    session_token: Optional[str] = None
-    authorization_expires_in: Optional[int] = None
+    access_key_id: str | None = None
+    secret_key: str | None = None
+    session_token: str | None = None
+    authorization_expires_in: int | None = None
 
     # Calculated fields
     issued_at: datetime = Field(default_factory=datetime.now)
 
     _expires_at: datetime = PrivateAttr()
-    _aws_expires_at: Optional[datetime] = PrivateAttr(default=None)
+    _aws_expires_at: datetime | None = PrivateAttr(default=None)
 
     @model_validator(mode="before")
     @classmethod
@@ -271,9 +271,9 @@ class NavienAuthClient:
         user_id: str,
         password: str,
         base_url: str = API_BASE_URL,
-        session: Optional[aiohttp.ClientSession] = None,
+        session: aiohttp.ClientSession | None = None,
         timeout: int = 30,
-        stored_tokens: Optional[AuthTokens] = None,
+        stored_tokens: AuthTokens | None = None,
     ):
         """
         Initialize the authentication client.
@@ -302,8 +302,8 @@ class NavienAuthClient:
         self._password = password
 
         # Current authentication state
-        self._auth_response: Optional[AuthenticationResponse] = None
-        self._user_email: Optional[str] = None
+        self._auth_response: AuthenticationResponse | None = None
+        self._user_email: str | None = None
 
         # Restore tokens if provided
         if stored_tokens:
@@ -315,7 +315,7 @@ class NavienAuthClient:
             )
             self._user_email = user_id
 
-    async def __aenter__(self) -> "NavienAuthClient":
+    async def __aenter__(self) -> Self:
         """Async context manager entry."""
         if self._owned_session:
             self._session = self._create_session()
@@ -557,7 +557,7 @@ class NavienAuthClient:
         _logger.info("Re-authenticating with stored credentials")
         return await self.sign_in(self._user_id, self._password)
 
-    async def ensure_valid_token(self) -> Optional[AuthTokens]:
+    async def ensure_valid_token(self) -> AuthTokens | None:
         """
         Ensure we have a valid access token, refreshing if necessary.
 
@@ -598,17 +598,17 @@ class NavienAuthClient:
         return self._auth_response is not None
 
     @property
-    def current_user(self) -> Optional[UserInfo]:
+    def current_user(self) -> UserInfo | None:
         """Get current authenticated user info."""
         return self._auth_response.user_info if self._auth_response else None
 
     @property
-    def current_tokens(self) -> Optional[AuthTokens]:
+    def current_tokens(self) -> AuthTokens | None:
         """Get current authentication tokens."""
         return self._auth_response.tokens if self._auth_response else None
 
     @property
-    def user_email(self) -> Optional[str]:
+    def user_email(self) -> str | None:
         """Get the email address of the authenticated user."""
         return self._user_email
 

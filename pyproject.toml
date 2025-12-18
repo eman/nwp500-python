@@ -11,7 +11,7 @@ version_scheme = "no-guess-dev"
 [tool.ruff]
 # Ruff configuration for code formatting and linting
 line-length = 80
-target-version = "py39"
+target-version = "py313"
 
 # Exclude directories
 exclude = [
@@ -99,7 +99,7 @@ line-ending = "auto"
 strict = true
 
 # Python version target
-python_version = "3.9"
+python_version = "3.13"
 
 # Module discovery
 files = ["src/nwp500", "tests"]

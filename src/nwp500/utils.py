@@ -5,11 +5,12 @@ This module provides utilities that are used across multiple components,
 including performance monitoring decorators and helper functions.
 """
 
-import asyncio
 import functools
+import inspect
 import logging
 import time
-from typing import Any, Callable, TypeVar, cast
+from collections.abc import Callable
+from typing import Any, cast
 
 __author__ = "Emmanuel Levijarvi"
 __copyright__ = "Emmanuel Levijarvi"
@@ -17,10 +18,8 @@ __license__ = "MIT"
 
 _logger = logging.getLogger(__name__)
 
-F = TypeVar("F", bound=Callable[..., Any])
 
-
-def log_performance(func: F) -> F:
+def log_performance[F: Callable[..., Any]](func: F) -> F:
     """Log execution time for async functions at DEBUG level.
 
     This decorator measures the execution time of async functions and logs
@@ -48,7 +47,7 @@ def log_performance(func: F) -> F:
         - Uses time.perf_counter() for high-resolution timing
         - Preserves function metadata (name, docstring, etc.)
     """
-    if not asyncio.iscoroutinefunction(func):
+    if not inspect.iscoroutinefunction(func):
         raise TypeError(
             "@log_performance can only be applied to async "
             f"functions, got {func}"

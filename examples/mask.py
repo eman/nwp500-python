@@ -7,15 +7,14 @@ these helpers; if that import fails we leave a small fallback in each script.
 from __future__ import annotations
 
 import re
-from typing import Optional
 
 
-def mask_mac(mac: Optional[str]) -> str:
+def mask_mac(mac: str | None) -> str:
     """Always return fully redacted MAC address label, never expose partial values."""
     return "[REDACTED_MAC]"
 
 
-def mask_mac_in_topic(topic: str, mac_addr: Optional[str] = None) -> str:
+def mask_mac_in_topic(topic: str, mac_addr: str | None = None) -> str:
     """Return topic with any MAC-like substrings replaced.
 
     Also ensures a direct literal match of mac_addr is redacted.
@@ -33,7 +32,7 @@ def mask_mac_in_topic(topic: str, mac_addr: Optional[str] = None) -> str:
 __all__ = ["mask_mac", "mask_mac_in_topic"]
 
 
-def mask_any(value: Optional[str]) -> str:
+def mask_any(value: str | None) -> str:
     """Generic redaction for strings considered sensitive in examples.
 
     Always returns a short redaction tag; keep implementation simple so examples
@@ -51,7 +50,7 @@ def mask_any(value: Optional[str]) -> str:
         return "[REDACTED]"
 
 
-def mask_location(city: Optional[str], state: Optional[str]) -> str:
+def mask_location(city: str | None, state: str | None) -> str:
     """Redact location fields for examples.
 
     Returns a single redaction tag if either city or state are present.

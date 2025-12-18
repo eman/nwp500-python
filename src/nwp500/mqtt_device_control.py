@@ -14,9 +14,9 @@ This module handles all device control operations including:
 """
 
 import logging
-from collections.abc import Awaitable, Sequence
+from collections.abc import Awaitable, Callable, Sequence
 from datetime import datetime
-from typing import Any, Callable, Optional
+from typing import Any
 
 from .enums import CommandCode, DhwOperationSetting
 from .exceptions import ParameterValidationError, RangeValidationError
@@ -187,7 +187,7 @@ class MqttDeviceController:
         self,
         device: Device,
         mode_id: int,
-        vacation_days: Optional[int] = None,
+        vacation_days: int | None = None,
     ) -> int:
         """
         Set DHW (Domestic Hot Water) operation mode.

@@ -9,10 +9,13 @@ This module handles all subscription-related operations including:
 - State change detection and event emission
 """
 
+from __future__ import annotations
+
 import asyncio
 import json
 import logging
-from typing import Any, Callable, Optional
+from collections.abc import Callable
+from typing import Any
 
 from awscrt import mqtt
 from awscrt.exceptions import AwsCrtError
@@ -67,7 +70,7 @@ class MqttSubscriptionManager:
         ] = {}
 
         # Track previous state for change detection
-        self._previous_status: Optional[DeviceStatus] = None
+        self._previous_status: DeviceStatus | None = None
 
     @property
     def subscriptions(self) -> dict[str, mqtt.QoS]:

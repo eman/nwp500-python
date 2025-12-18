@@ -207,7 +207,7 @@ subscribe_device_status()
           print(f"Target: {status.dhw_temperature_setting}°F")
           print(f"Mode: {status.dhw_operation_setting.name}")
           print(f"Power: {status.current_inst_power}W")
-          print(f"Energy: {status.available_energy_capacity}%")
+          print(f"Energy: {status.dhw_charge_per}%")
           
           # Check if actively heating
           if status.operation_busy:
@@ -566,11 +566,15 @@ subscribe_energy_usage()
           print(f"Electric: {energy.total.heat_element_percentage:.1f}%")
           
           print("\nDaily Breakdown:")
-          for day_data in energy.data:
-              print(f"  Date: Day {len(energy.data)}")
-              print(f"    Total: {day_data.total_usage} Wh")
-              print(f"    HP: {day_data.hpUsage} Wh ({day_data.hpTime}h)")
-              print(f"    HE: {day_data.heUsage} Wh ({day_data.heTime}h)")
+          for monthly_data in energy.usage:
+              print(f"  Month: {monthly_data.year}-{monthly_data.month}")
+              for day_data in monthly_data.data:
+                  # Skip empty days (all zeros)
+                  if day_data.total_usage > 0:
+                      print(f"    Day {monthly_data.data.index(day_data) + 1}:")
+                      print(f"      Total: {day_data.total_usage} Wh")
+                      print(f"      HP: {day_data.heat_pump_usage} Wh ({day_data.heat_pump_time}h)")
+                      print(f"      HE: {day_data.heat_element_usage} Wh ({day_data.heat_element_time}h)")
       
       await mqtt.subscribe_energy_usage(device, on_energy)
       await mqtt.request_energy_usage(device, year=2024, months=[10])

@@ -292,7 +292,7 @@ Complete real-time device status with 100+ fields.
           # Water usage detection
           if status.dhw_use:
               print("Water usage detected (short-term)")
-          if status.dhw_useSustained:
+          if status.dhw_use_sustained:
               print("Water usage detected (sustained)")
 
           # Errors

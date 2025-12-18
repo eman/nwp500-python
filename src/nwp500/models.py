@@ -7,7 +7,7 @@ These models are based on the MQTT message formats and API responses.
 """
 
 import logging
-from typing import Annotated, Any, Optional, Union
+from typing import Annotated, Any
 
 from pydantic import BaseModel, BeforeValidator, ConfigDict, Field
 from pydantic.alias_generators import to_camel
@@ -143,7 +143,7 @@ class NavienBaseModel(BaseModel):
 
     @staticmethod
     def _convert_enums_to_names(
-        data: Any, visited: Optional[set[int]] = None
+        data: Any, visited: set[int | None] = None
     ) -> Any:
         """Recursively convert Enum values to their names.
 
@@ -194,21 +194,21 @@ class DeviceInfo(NavienBaseModel):
     home_seq: int = 0
     mac_address: str = ""
     additional_value: str = ""
-    device_type: Union[DeviceType, int] = DeviceType.NPF700_WIFI
+    device_type: DeviceType | int = DeviceType.NPF700_WIFI
     device_name: str = "Unknown"
     connected: int = 0
-    install_type: Optional[str] = None
+    install_type: str | None = None
 
 
 class Location(NavienBaseModel):
     """Location information for a device."""
 
-    state: Optional[str] = None
-    city: Optional[str] = None
-    address: Optional[str] = None
-    latitude: Optional[float] = None
-    longitude: Optional[float] = None
-    altitude: Optional[float] = None
+    state: str | None = None
+    city: str | None = None
+    address: str | None = None
+    latitude: float | None = None
+    longitude: float | None = None
+    altitude: float | None = None
 
 
 class Device(NavienBaseModel):
@@ -223,11 +223,11 @@ class FirmwareInfo(NavienBaseModel):
 
     mac_address: str = ""
     additional_value: str = ""
-    device_type: Union[DeviceType, int] = DeviceType.NPF700_WIFI
+    device_type: DeviceType | int = DeviceType.NPF700_WIFI
     cur_sw_code: int = 0
     cur_version: int = 0
-    downloaded_version: Optional[int] = None
-    device_group: Optional[str] = None
+    downloaded_version: int | None = None
+    device_group: str | None = None
 
 
 class TOUSchedule(NavienBaseModel):
@@ -256,9 +256,9 @@ class TOUInfo(NavienBaseModel):
         cls,
         obj: Any,
         *,
-        strict: Optional[bool] = None,
-        from_attributes: Optional[bool] = None,
-        context: Optional[dict[str, Any]] = None,
+        strict: bool | None = None,
+        from_attributes: bool | None = None,
+        context: dict[str, Any | None] = None,
         **kwargs: Any,
     ) -> "TOUInfo":
         # Handle nested structure where fields are in 'touInfo'
@@ -914,7 +914,7 @@ class DeviceFeature(NavienBaseModel):
             "(1=USA, complies with FCC Part 15 Class B)"
         )
     )
-    model_type_code: Union[UnitType, int] = Field(
+    model_type_code: UnitType | int = Field(
         description="Model type identifier: NWP500 series model variant"
     )
     control_type_code: int = Field(
@@ -1148,14 +1148,14 @@ class MqttRequest(NavienBaseModel):
     """MQTT command request payload."""
 
     command: int
-    device_type: Union[DeviceType, int]
+    device_type: DeviceType | int
     mac_address: str
     additional_value: str = "..."
-    mode: Optional[str] = None
-    param: list[Union[int, float]] = Field(default_factory=list)
+    mode: str | None = None
+    param: list[int | float] = Field(default_factory=list)
     param_str: str = ""
-    month: Optional[list[int]] = None
-    year: Optional[int] = None
+    month: list[int] | None = None
+    year: int | None = None
 
 
 class MqttCommand(NavienBaseModel):
@@ -1165,7 +1165,7 @@ class MqttCommand(NavienBaseModel):
     session_id: str = Field(alias="sessionID")
     request_topic: str
     response_topic: str
-    request: Union[MqttRequest, dict[str, Any]]
+    request: MqttRequest | dict[str, Any]
     protocol_version: int = 2
 
 
@@ -1233,9 +1233,7 @@ class EnergyUsageResponse(NavienBaseModel):
     total: EnergyUsageTotal
     usage: list[MonthlyEnergyData]
 
-    def get_month_data(
-        self, year: int, month: int
-    ) -> Optional[MonthlyEnergyData]:
+    def get_month_data(self, year: int, month: int) -> MonthlyEnergyData | None:
         """Get energy usage data for a specific month.
 
         Args:

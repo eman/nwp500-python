@@ -8,7 +8,6 @@ These utilities are used by both the API client and MQTT client.
 
 from collections.abc import Iterable
 from numbers import Real
-from typing import Union
 
 from .exceptions import ParameterValidationError, RangeValidationError
 
@@ -35,7 +34,7 @@ MONTH_TO_BIT = {month: 1 << (month - 1) for month in range(1, 13)}
 # ============================================================================
 
 
-def encode_week_bitfield(days: Iterable[Union[str, int]]) -> int:
+def encode_week_bitfield(days: Iterable[str | int]) -> int:
     """
     Convert a collection of day names or indices into a reservation bitfield.
 
@@ -323,8 +322,8 @@ def decode_reservation_hex(hex_string: str) -> list[dict[str, int]]:
 
 def build_reservation_entry(
     *,
-    enabled: Union[bool, int],
-    days: Iterable[Union[str, int]],
+    enabled: bool | int,
+    days: Iterable[str | int],
     hour: int,
     minute: int,
     mode_id: int,
@@ -424,13 +423,13 @@ def build_reservation_entry(
 def build_tou_period(
     *,
     season_months: Iterable[int],
-    week_days: Iterable[Union[str, int]],
+    week_days: Iterable[str | int],
     start_hour: int,
     start_minute: int,
     end_hour: int,
     end_minute: int,
-    price_min: Union[int, Real],
-    price_max: Union[int, Real],
+    price_min: int | Real,
+    price_max: int | Real,
     decimal_point: int,
 ) -> dict[str, int]:
     """Build a TOU (Time of Use) period entry.
