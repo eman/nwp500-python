@@ -175,7 +175,7 @@ The library includes type-safe data models with automatic unit conversions:
 Requirements
 ============
 
-* Python 3.10+
+* Python 3.12+
 * aiohttp >= 3.8.0
 * websockets >= 10.0
 * cryptography >= 3.4.0

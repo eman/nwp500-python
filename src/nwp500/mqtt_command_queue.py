@@ -10,7 +10,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from collections.abc import Callable
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
 from awscrt import mqtt
@@ -79,7 +79,7 @@ class MqttCommandQueue:
             topic=topic,
             payload=payload,
             qos=qos,
-            timestamp=datetime.now(timezone.utc),
+            timestamp=datetime.now(UTC),
         )
 
         # If queue is full, drop oldest command first

@@ -10,7 +10,7 @@ import inspect
 import logging
 import time
 from collections.abc import Callable
-from typing import Any, TypeVar, cast
+from typing import Any, cast
 
 __author__ = "Emmanuel Levijarvi"
 __copyright__ = "Emmanuel Levijarvi"
@@ -18,10 +18,8 @@ __license__ = "MIT"
 
 _logger = logging.getLogger(__name__)
 
-F = TypeVar("F", bound=Callable[..., Any])
 
-
-def log_performance(func: F) -> F:
+def log_performance[F: Callable[..., Any]](func: F) -> F:
     """Log execution time for async functions at DEBUG level.
 
     This decorator measures the execution time of async functions and logs

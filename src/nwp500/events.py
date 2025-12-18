@@ -407,7 +407,7 @@ class EventEmitter:
             # Return just args for simplicity (most common case)
             return args_tuple
 
-        except asyncio.TimeoutError:
+        except TimeoutError:
             # Remove the listener on timeout
             self.off(event, handler)
             raise

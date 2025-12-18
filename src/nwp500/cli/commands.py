@@ -40,7 +40,7 @@ async def get_controller_serial_number(
         serial_number = await asyncio.wait_for(future, timeout=timeout)
         _logger.info(f"Controller serial number retrieved: {serial_number}")
         return serial_number
-    except asyncio.TimeoutError:
+    except TimeoutError:
         _logger.error("Timed out waiting for controller serial number.")
         return None
 
@@ -62,7 +62,7 @@ async def handle_status_request(mqtt: NavienMqttClient, device: Device) -> None:
 
     try:
         await asyncio.wait_for(future, timeout=10)
-    except asyncio.TimeoutError:
+    except TimeoutError:
         _logger.error("Timed out waiting for device status response.")
 
 
@@ -103,7 +103,7 @@ async def handle_status_raw_request(
 
     try:
         await asyncio.wait_for(future, timeout=10)
-    except asyncio.TimeoutError:
+    except TimeoutError:
         _logger.error("Timed out waiting for device status response.")
 
 
@@ -132,7 +132,7 @@ async def handle_device_info_request(
 
     try:
         await asyncio.wait_for(future, timeout=10)
-    except asyncio.TimeoutError:
+    except TimeoutError:
         _logger.error("Timed out waiting for device info response.")
 
 
@@ -230,7 +230,7 @@ async def handle_set_mode_request(
                     "Mode command sent but no status response received"
                 )
 
-        except asyncio.TimeoutError:
+        except TimeoutError:
             _logger.error("Timed out waiting for mode change confirmation")
 
     except ValidationError as e:
@@ -301,7 +301,7 @@ async def handle_set_dhw_temp_request(
                     "Temperature command sent but no status response received"
                 )
 
-        except asyncio.TimeoutError:
+        except TimeoutError:
             _logger.error(
                 "Timed out waiting for temperature change confirmation"
             )
@@ -374,7 +374,7 @@ async def handle_power_request(
             )
         )
 
-    except asyncio.TimeoutError:
+    except TimeoutError:
         _logger.error(f"Timed out waiting for power {action} confirmation")
 
     except MqttError as e:
@@ -457,7 +457,7 @@ async def handle_get_reservations_request(
 
     try:
         await asyncio.wait_for(future, timeout=10)
-    except asyncio.TimeoutError:
+    except TimeoutError:
         _logger.error("Timed out waiting for reservation response.")
 
 
@@ -499,7 +499,7 @@ async def handle_update_reservations_request(
 
     try:
         await asyncio.wait_for(future, timeout=10)
-    except asyncio.TimeoutError:
+    except TimeoutError:
         _logger.error("Timed out waiting for reservation update response.")
 
 
@@ -591,7 +591,7 @@ async def handle_set_tou_enabled_request(
                 _logger.info(f"TOU {action} successful.")
             else:
                 _logger.warning("TOU command sent but no response received")
-        except asyncio.TimeoutError:
+        except TimeoutError:
             _logger.error(f"Timed out waiting for TOU {action} confirmation")
 
     except MqttError as e:
@@ -622,5 +622,5 @@ async def handle_get_energy_request(
 
     try:
         await asyncio.wait_for(future, timeout=15)
-    except asyncio.TimeoutError:
+    except TimeoutError:
         _logger.error("Timed out waiting for energy usage response.")

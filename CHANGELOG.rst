@@ -2,6 +2,25 @@
 Changelog
 =========
 
+Version 8.0.0 (2025-12-17)
+==========================
+
+**BREAKING CHANGES**: Minimum Python version raised to 3.12
+
+Removed
+-------
+- **Python 3.10 and 3.11 Support**: Minimum Python version is now 3.12
+  
+  Python 3.12 introduced significant performance improvements and new features:
+  
+  - Per-interpreter GIL for better multi-threaded performance
+  - Improved error messages with better tracebacks
+  - PEP 701: f-string improvements
+  - PEP 688: Type annotations can use buffer protocol
+  - Built-in tomllib for TOML parsing
+  
+  If you need Python 3.10 or 3.11 support, use version 7.x of this library.
+
 Version 7.0.0 (2025-12-17)
 ==========================
 
