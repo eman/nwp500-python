@@ -2,6 +2,30 @@
 Changelog
 =========
 
+Version 7.0.0 (2025-12-17)
+==========================
+
+**BREAKING CHANGES**: Minimum Python version raised to 3.10
+
+Removed
+-------
+- **Python 3.9 Support**: Minimum Python version is now 3.10
+  
+  Python 3.9 reached end-of-life in October 2025. Dropping support allows us to:
+  
+  - Use native union syntax (``X | Y`` instead of ``Union[X, Y]``)
+  - Leverage improved asyncio event loop handling
+  - Remove Python 3.9 compatibility workarounds
+  
+  If you need Python 3.9 support, use version 6.x of this library.
+
+Changed
+-------
+- **asyncio.Queue Restored**: Command queue now uses ``asyncio.Queue`` instead of ``deque``
+  
+  Python 3.10+ handles asyncio.Queue initialization without requiring a running event loop,
+  allowing us to revert the Python 3.9 compatibility workaround and use proper async queue semantics.
+
 Version 6.2.0 (2025-12-17)
 ==========================
 
