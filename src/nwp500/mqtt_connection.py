@@ -51,7 +51,7 @@ class MqttConnection:
         on_connection_interrupted: (
             Callable[[mqtt.Connection, Exception], None] | None
         ) = None,
-        on_connection_resumed: Callable[[Any, Any | None, None]] = None,
+        on_connection_resumed: Callable[[Any, Any | None], None] | None = None,
     ):
         """
         Initialize connection manager.
