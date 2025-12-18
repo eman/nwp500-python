@@ -64,7 +64,7 @@ If you were catching generic exceptions in your code, update as follows:
         # handle other validation errors
 """
 
-from typing import Any, Optional
+from typing import Any
 
 __author__ = "Emmanuel Levijarvi"
 __copyright__ = "Emmanuel Levijarvi"
@@ -89,8 +89,8 @@ class Nwp500Error(Exception):
         self,
         message: str,
         *,
-        error_code: Optional[str] = None,
-        details: Optional[dict[str, Any]] = None,
+        error_code: str | None = None,
+        details: dict[str, Any | None] = None,
         retriable: bool = False,
     ):
         """Initialize base exception.
@@ -151,8 +151,8 @@ class AuthenticationError(Nwp500Error):
     def __init__(
         self,
         message: str,
-        status_code: Optional[int] = None,
-        response: Optional[dict[str, Any]] = None,
+        status_code: int | None = None,
+        response: dict[str, Any | None] = None,
         **kwargs: Any,
     ):
         """Initialize authentication error.
@@ -218,8 +218,8 @@ class APIError(Nwp500Error):
     def __init__(
         self,
         message: str,
-        code: Optional[int] = None,
-        response: Optional[dict[str, Any]] = None,
+        code: int | None = None,
+        response: dict[str, Any | None] = None,
         **kwargs: Any,
     ):
         """Initialize API error.
@@ -337,7 +337,7 @@ class ParameterValidationError(ValidationError):
     def __init__(
         self,
         message: str,
-        parameter: Optional[str] = None,
+        parameter: str | None = None,
         value: Any = None,
         **kwargs: Any,
     ):
@@ -376,7 +376,7 @@ class RangeValidationError(ValidationError):
     def __init__(
         self,
         message: str,
-        field: Optional[str] = None,
+        field: str | None = None,
         value: Any = None,
         min_value: Any = None,
         max_value: Any = None,

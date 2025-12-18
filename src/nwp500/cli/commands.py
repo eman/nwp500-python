@@ -3,7 +3,7 @@
 import asyncio
 import json
 import logging
-from typing import Any, Optional
+from typing import Any
 
 from nwp500 import Device, DeviceFeature, DeviceStatus, NavienMqttClient
 from nwp500.exceptions import MqttError, Nwp500Error, ValidationError
@@ -15,7 +15,7 @@ _logger = logging.getLogger(__name__)
 
 async def get_controller_serial_number(
     mqtt: NavienMqttClient, device: Device, timeout: float = 10.0
-) -> Optional[str]:
+) -> str | None:
     """Retrieve controller serial number from device.
 
     Args:

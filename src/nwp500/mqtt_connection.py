@@ -9,7 +9,8 @@ including credential management and connection state tracking.
 import asyncio
 import json
 import logging
-from typing import TYPE_CHECKING, Any, Callable, Optional, Union
+from collections.abc import Callable
+from typing import TYPE_CHECKING, Any
 
 from awscrt import mqtt
 from awscrt.exceptions import AwsCrtError
@@ -50,7 +51,7 @@ class MqttConnection:
         on_connection_interrupted: Optional[
             Callable[[mqtt.Connection, Exception], None]
         ] = None,
-        on_connection_resumed: Optional[Callable[[Any, Any], None]] = None,
+        on_connection_resumed: Callable[[Any, Any | None, None]] = None,
     ):
         """
         Initialize connection manager.
@@ -83,7 +84,7 @@ class MqttConnection:
 
         self.config = config
         self._auth_client = auth_client
-        self._connection: Optional[mqtt.Connection] = None
+        self._connection: mqtt.Connection | None = None
         self._connected = False
         self._on_connection_interrupted = on_connection_interrupted
         self._on_connection_resumed = on_connection_resumed
@@ -236,7 +237,7 @@ class MqttConnection:
         self,
         topic: str,
         qos: mqtt.QoS,
-        callback: Optional[Callable[..., None]] = None,
+        callback: Callable[..., None | None] = None,
     ) -> tuple[Any, int]:
         """
         Subscribe to an MQTT topic.
@@ -320,7 +321,7 @@ class MqttConnection:
     async def publish(
         self,
         topic: str,
-        payload: Union[str, dict[str, Any], Any],
+        payload: str | dict[str, Any, Any],
         qos: mqtt.QoS = mqtt.QoS.AT_LEAST_ONCE,
     ) -> int:
         """
@@ -398,7 +399,7 @@ class MqttConnection:
         return self._connected
 
     @property
-    def connection(self) -> Optional[mqtt.Connection]:
+    def connection(self) -> mqtt.Connection | None:
         """Get the underlying MQTT connection.
 
         Returns:

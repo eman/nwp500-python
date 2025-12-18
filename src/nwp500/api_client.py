@@ -5,7 +5,7 @@ This module provides an async HTTP client for device management and control.
 """
 
 import logging
-from typing import Any, Optional
+from typing import Any
 
 import aiohttp
 
@@ -46,7 +46,7 @@ class NavienAPIClient:
         self,
         auth_client: NavienAuthClient,
         base_url: str = API_BASE_URL,
-        session: Optional[aiohttp.ClientSession] = None,
+        session: aiohttp.ClientSession | None = None,
     ):
         """
         Initialize Navien API client.
@@ -92,8 +92,8 @@ class NavienAPIClient:
         self,
         method: str,
         endpoint: str,
-        json_data: Optional[dict[str, Any]] = None,
-        params: Optional[dict[str, Any]] = None,
+        json_data: dict[str, Any | None] = None,
+        params: dict[str, Any | None] = None,
         retry_on_auth_failure: bool = True,
     ) -> dict[str, Any]:
         """
@@ -392,7 +392,7 @@ class NavienAPIClient:
 
     # Convenience methods
 
-    async def get_first_device(self) -> Optional[Device]:
+    async def get_first_device(self) -> Device | None:
         """
         Get the first device associated with the user.
 
@@ -408,6 +408,6 @@ class NavienAPIClient:
         return self._auth_client.is_authenticated
 
     @property
-    def user_email(self) -> Optional[str]:
+    def user_email(self) -> str | None:
         """Get current user email."""
         return self._auth_client.user_email

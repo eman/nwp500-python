@@ -16,7 +16,8 @@ import time
 from collections import defaultdict
 from dataclasses import asdict, dataclass, field
 from datetime import datetime
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
 from awscrt.exceptions import AwsCrtError
 

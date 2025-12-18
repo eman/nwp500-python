@@ -11,7 +11,8 @@ import inspect
 import logging
 from collections import defaultdict
 from dataclasses import dataclass
-from typing import Any, Callable, Optional
+from collections.abc import Callable
+from typing import Any
 
 __author__ = "Emmanuel Levijarvi"
 __copyright__ = "Emmanuel Levijarvi"
@@ -147,7 +148,7 @@ class EventEmitter:
         )
 
     def off(
-        self, event: str, callback: Optional[Callable[..., Any]] = None
+        self, event: str, callback: Callable[..., Any | None] = None
     ) -> int:
         """
         Remove event listener(s).
@@ -326,7 +327,7 @@ class EventEmitter:
         """
         return list(self._listeners.keys())
 
-    def remove_all_listeners(self, event: Optional[str] = None) -> int:
+    def remove_all_listeners(self, event: str | None = None) -> int:
         """
         Remove all listeners for an event, or all listeners for all events.
 
@@ -360,7 +361,7 @@ class EventEmitter:
     async def wait_for(
         self,
         event: str,
-        timeout: Optional[float] = None,
+        timeout: float | None = None,
     ) -> tuple[Any, ...]:
         """
         Wait for an event to be emitted.

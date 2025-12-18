@@ -11,7 +11,8 @@ import asyncio
 import contextlib
 import logging
 from collections.abc import Awaitable
-from typing import TYPE_CHECKING, Any, Callable
+from collections.abc import Callable
+from typing import TYPE_CHECKING, Any
 
 from awscrt.exceptions import AwsCrtError
 
