@@ -5,7 +5,7 @@ This module provides an async HTTP client for device management and control.
 """
 
 import logging
-from typing import Any
+from typing import Any, Self
 
 import aiohttp
 
@@ -80,7 +80,7 @@ class NavienAPIClient:
         )
         self._owned_auth = False  # Never own auth_client
 
-    async def __aenter__(self) -> "NavienAPIClient":
+    async def __aenter__(self) -> Self:
         """Enter async context manager."""
         return self
 

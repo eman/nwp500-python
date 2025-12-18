@@ -14,7 +14,7 @@ The API uses JWT (JSON Web Tokens) for authentication with the following flow:
 import json
 import logging
 from datetime import datetime, timedelta
-from typing import Any
+from typing import Any, Self
 
 import aiohttp
 from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, model_validator
@@ -315,7 +315,7 @@ class NavienAuthClient:
             )
             self._user_email = user_id
 
-    async def __aenter__(self) -> "NavienAuthClient":
+    async def __aenter__(self) -> Self:
         """Async context manager entry."""
         if self._owned_session:
             self._session = self._create_session()
