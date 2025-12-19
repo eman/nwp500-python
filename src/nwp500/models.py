@@ -16,6 +16,7 @@ from .enums import (
     CurrentOperationMode,
     DeviceType,
     DhwOperationSetting,
+    DREvent,
     ErrorCode,
     HeatSource,
     TemperatureType,
@@ -309,7 +310,12 @@ class DeviceStatus(NavienBaseModel):
         description="Sub error code providing additional error details"
     )
     smart_diagnostic: int = Field(
-        description="Smart diagnostic status for system health monitoring"
+        description=(
+            "Smart diagnostic status code for system health monitoring. "
+            "0 = no diagnostic conditions. "
+            "Non-zero = diagnostic condition detected. "
+            "Specific diagnostic codes are device firmware dependent."
+        )
     )
     fault_status1: int = Field(description="Fault status register 1")
     fault_status2: int = Field(description="Fault status register 2")
@@ -330,11 +336,14 @@ class DeviceStatus(NavienBaseModel):
         ),
         json_schema_extra={"unit_of_measurement": "%"},
     )
-    dr_event_status: int = Field(
+    dr_event_status: DREvent = Field(
+        default=DREvent.UNKNOWN,
         description=(
-            "Demand Response (DR) event status. "
-            "Indicates if utility DR commands are active (CTA-2045)"
-        )
+            "Demand Response (DR) event status from utility (CTA-2045). "
+            "0=UNKNOWN (No event), 1=RUN_NORMAL, 2=SHED (reduce power), "
+            "3=LOADUP (pre-heat), 4=LOADUP_ADV (advanced pre-heat), "
+            "5=CPE (customer peak event/grid emergency)"
+        ),
     )
     vacation_day_setting: int = Field(
         description="Vacation day setting",
@@ -414,9 +423,12 @@ class DeviceStatus(NavienBaseModel):
     )
     dr_override_status: int = Field(
         description=(
-            "Demand Response override status. "
-            "User can override DR commands for up to 72 hours"
-        )
+            "Demand Response override status in hours. "
+            "0 = no override active. "
+            "Non-zero (1-72) = override active with specified remaining hours. "
+            "User can override DR commands for up to 72 hours."
+        ),
+        json_schema_extra={"unit_of_measurement": "hours"},
     )
     tou_override_status: TouOverride = Field(
         description=(
