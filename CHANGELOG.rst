@@ -2,6 +2,13 @@
 Changelog
 =========
 
+Version 7.0.1 (2025-12-18)
+==========================
+
+Fixed
+-----
+- Minor bug fixes and improvements
+
 Version 7.0.0 (2025-12-17)
 ==========================
 
