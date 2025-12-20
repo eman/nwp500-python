@@ -25,6 +25,10 @@ from .enums import (
     TempFormulaType,
     UnitType,
 )
+from .field_factory import (
+    signal_strength_field,
+    temperature_field,
+)
 
 _logger = logging.getLogger(__name__)
 
@@ -246,12 +250,8 @@ class DeviceStatus(NavienBaseModel):
     command: int = Field(
         description="The command that triggered this status update"
     )
-    outside_temperature: float = Field(
-        description="The outdoor/ambient temperature measured by the heat pump",
-        json_schema_extra={
-            "unit_of_measurement": "°F",
-            "device_class": "temperature",
-        },
+    outside_temperature: float = temperature_field(
+        "The outdoor/ambient temperature measured by the heat pump"
     )
     special_function_status: int = Field(
         description=(
@@ -276,15 +276,9 @@ class DeviceStatus(NavienBaseModel):
     )
     fault_status1: int = Field(description="Fault status register 1")
     fault_status2: int = Field(description="Fault status register 2")
-    wifi_rssi: int = Field(
-        description=(
-            "WiFi signal strength in dBm. "
-            "Typical values: -30 (excellent) to -90 (poor)"
-        ),
-        json_schema_extra={
-            "unit_of_measurement": "dBm",
-            "device_class": "signal_strength",
-        },
+    wifi_rssi: int = signal_strength_field(
+        "WiFi signal strength in dBm. "
+        "Typical values: -30 (excellent) to -90 (poor)"
     )
     dhw_charge_per: float = Field(
         description=(
@@ -565,144 +559,64 @@ class DeviceStatus(NavienBaseModel):
     )
 
     # Temperature fields - encoded in half-degrees Celsius
-    dhw_temperature: HalfCelsiusToF = Field(
-        description="Current Domestic Hot Water (DHW) outlet temperature",
-        json_schema_extra={
-            "unit_of_measurement": "°F",
-            "device_class": "temperature",
-        },
+    dhw_temperature: HalfCelsiusToF = temperature_field(
+        "Current Domestic Hot Water (DHW) outlet temperature"
     )
-    dhw_temperature_setting: HalfCelsiusToF = Field(
-        description=(
-            "User-configured target DHW temperature. "
-            "Range: 95°F (35°C) to 150°F (65.5°C). Default: 120°F (49°C)"
-        ),
-        json_schema_extra={
-            "unit_of_measurement": "°F",
-            "device_class": "temperature",
-        },
+    dhw_temperature_setting: HalfCelsiusToF = temperature_field(
+        "User-configured target DHW temperature. "
+        "Range: 95°F (35°C) to 150°F (65.5°C). Default: 120°F (49°C)"
     )
-    dhw_target_temperature_setting: HalfCelsiusToF = Field(
-        description=(
-            "Duplicate of dhw_temperature_setting for legacy API compatibility"
-        ),
-        json_schema_extra={
-            "unit_of_measurement": "°F",
-            "device_class": "temperature",
-        },
+    dhw_target_temperature_setting: HalfCelsiusToF = temperature_field(
+        "Duplicate of dhw_temperature_setting for legacy API compatibility"
     )
-    freeze_protection_temperature: HalfCelsiusToF = Field(
-        description=(
-            "Freeze protection temperature setpoint. "
-            "Range: 43-50°F (6-10°C), Default: 43°F"
-        ),
-        json_schema_extra={
-            "unit_of_measurement": "°F",
-            "device_class": "temperature",
-        },
+    freeze_protection_temperature: HalfCelsiusToF = temperature_field(
+        "Freeze protection temperature setpoint. "
+        "Range: 43-50°F (6-10°C), Default: 43°F"
     )
-    dhw_temperature2: HalfCelsiusToF = Field(
-        description="Second DHW temperature reading",
-        json_schema_extra={
-            "unit_of_measurement": "°F",
-            "device_class": "temperature",
-        },
+    dhw_temperature2: HalfCelsiusToF = temperature_field(
+        "Second DHW temperature reading"
     )
-    hp_upper_on_temp_setting: HalfCelsiusToF = Field(
-        description="Heat pump upper on temperature setting",
-        json_schema_extra={
-            "unit_of_measurement": "°F",
-            "device_class": "temperature",
-        },
+    hp_upper_on_temp_setting: HalfCelsiusToF = temperature_field(
+        "Heat pump upper on temperature setting"
     )
-    hp_upper_off_temp_setting: HalfCelsiusToF = Field(
-        description="Heat pump upper off temperature setting",
-        json_schema_extra={
-            "unit_of_measurement": "°F",
-            "device_class": "temperature",
-        },
+    hp_upper_off_temp_setting: HalfCelsiusToF = temperature_field(
+        "Heat pump upper off temperature setting"
     )
-    hp_lower_on_temp_setting: HalfCelsiusToF = Field(
-        description="Heat pump lower on temperature setting",
-        json_schema_extra={
-            "unit_of_measurement": "°F",
-            "device_class": "temperature",
-        },
+    hp_lower_on_temp_setting: HalfCelsiusToF = temperature_field(
+        "Heat pump lower on temperature setting"
     )
-    hp_lower_off_temp_setting: HalfCelsiusToF = Field(
-        description="Heat pump lower off temperature setting",
-        json_schema_extra={
-            "unit_of_measurement": "°F",
-            "device_class": "temperature",
-        },
+    hp_lower_off_temp_setting: HalfCelsiusToF = temperature_field(
+        "Heat pump lower off temperature setting"
     )
-    he_upper_on_temp_setting: HalfCelsiusToF = Field(
-        description="Heater element upper on temperature setting",
-        json_schema_extra={
-            "unit_of_measurement": "°F",
-            "device_class": "temperature",
-        },
+    he_upper_on_temp_setting: HalfCelsiusToF = temperature_field(
+        "Heater element upper on temperature setting"
     )
-    he_upper_off_temp_setting: HalfCelsiusToF = Field(
-        description="Heater element upper off temperature setting",
-        json_schema_extra={
-            "unit_of_measurement": "°F",
-            "device_class": "temperature",
-        },
+    he_upper_off_temp_setting: HalfCelsiusToF = temperature_field(
+        "Heater element upper off temperature setting"
     )
-    he_lower_on_temp_setting: HalfCelsiusToF = Field(
-        description="Heater element lower on temperature setting",
-        json_schema_extra={
-            "unit_of_measurement": "°F",
-            "device_class": "temperature",
-        },
+    he_lower_on_temp_setting: HalfCelsiusToF = temperature_field(
+        "Heater element lower on temperature setting"
     )
-    he_lower_off_temp_setting: HalfCelsiusToF = Field(
-        description="Heater element lower off temperature setting",
-        json_schema_extra={
-            "unit_of_measurement": "°F",
-            "device_class": "temperature",
-        },
+    he_lower_off_temp_setting: HalfCelsiusToF = temperature_field(
+        "Heater element lower off temperature setting"
     )
-    heat_min_op_temperature: HalfCelsiusToF = Field(
-        description=(
-            "Minimum heat pump operation temperature. "
-            "Lowest tank setpoint allowed (95-113°F, default 95°F)"
-        ),
-        json_schema_extra={
-            "unit_of_measurement": "°F",
-            "device_class": "temperature",
-        },
+    heat_min_op_temperature: HalfCelsiusToF = temperature_field(
+        "Minimum heat pump operation temperature. "
+        "Lowest tank setpoint allowed (95-113°F, default 95°F)"
     )
-    recirc_temp_setting: HalfCelsiusToF = Field(
-        description="Recirculation temperature setting",
-        json_schema_extra={
-            "unit_of_measurement": "°F",
-            "device_class": "temperature",
-        },
+    recirc_temp_setting: HalfCelsiusToF = temperature_field(
+        "Recirculation temperature setting"
     )
-    recirc_temperature: HalfCelsiusToF = Field(
-        description="Recirculation temperature",
-        json_schema_extra={
-            "unit_of_measurement": "°F",
-            "device_class": "temperature",
-        },
+    recirc_temperature: HalfCelsiusToF = temperature_field(
+        "Recirculation temperature"
     )
-    recirc_faucet_temperature: HalfCelsiusToF = Field(
-        description="Recirculation faucet temperature",
-        json_schema_extra={
-            "unit_of_measurement": "°F",
-            "device_class": "temperature",
-        },
+    recirc_faucet_temperature: HalfCelsiusToF = temperature_field(
+        "Recirculation faucet temperature"
     )
 
     # Fields with scale division (raw / 10.0)
-    current_inlet_temperature: HalfCelsiusToF = Field(
-        description="Cold water inlet temperature",
-        json_schema_extra={
-            "unit_of_measurement": "°F",
-            "device_class": "temperature",
-        },
+    current_inlet_temperature: HalfCelsiusToF = temperature_field(
+        "Cold water inlet temperature"
     )
     current_dhw_flow_rate: Div10 = Field(
         description="Current DHW flow rate in Gallons Per Minute",
@@ -771,78 +685,34 @@ class DeviceStatus(NavienBaseModel):
     )
 
     # Temperature fields with decicelsius to Fahrenheit conversion
-    tank_upper_temperature: DeciCelsiusToF = Field(
-        description="Temperature of the upper part of the tank",
-        json_schema_extra={
-            "unit_of_measurement": "°F",
-            "device_class": "temperature",
-        },
+    tank_upper_temperature: DeciCelsiusToF = temperature_field(
+        "Temperature of the upper part of the tank"
     )
-    tank_lower_temperature: DeciCelsiusToF = Field(
-        description="Temperature of the lower part of the tank",
-        json_schema_extra={
-            "unit_of_measurement": "°F",
-            "device_class": "temperature",
-        },
+    tank_lower_temperature: DeciCelsiusToF = temperature_field(
+        "Temperature of the lower part of the tank"
     )
-    discharge_temperature: DeciCelsiusToF = Field(
-        description=(
-            "Compressor discharge temperature - "
-            "temperature of refrigerant leaving the compressor"
-        ),
-        json_schema_extra={
-            "unit_of_measurement": "°F",
-            "device_class": "temperature",
-        },
+    discharge_temperature: DeciCelsiusToF = temperature_field(
+        "Compressor discharge temperature - "
+        "temperature of refrigerant leaving the compressor"
     )
-    suction_temperature: DeciCelsiusToF = Field(
-        description=(
-            "Compressor suction temperature - "
-            "temperature of refrigerant entering the compressor"
-        ),
-        json_schema_extra={
-            "unit_of_measurement": "°F",
-            "device_class": "temperature",
-        },
+    suction_temperature: DeciCelsiusToF = temperature_field(
+        "Compressor suction temperature - "
+        "temperature of refrigerant entering the compressor"
     )
-    evaporator_temperature: DeciCelsiusToF = Field(
-        description=(
-            "Evaporator temperature - "
-            "temperature where heat is absorbed from ambient air"
-        ),
-        json_schema_extra={
-            "unit_of_measurement": "°F",
-            "device_class": "temperature",
-        },
+    evaporator_temperature: DeciCelsiusToF = temperature_field(
+        "Evaporator temperature - "
+        "temperature where heat is absorbed from ambient air"
     )
-    ambient_temperature: DeciCelsiusToF = Field(
-        description=(
-            "Ambient air temperature measured at the heat pump air intake"
-        ),
-        json_schema_extra={
-            "unit_of_measurement": "°F",
-            "device_class": "temperature",
-        },
+    ambient_temperature: DeciCelsiusToF = temperature_field(
+        "Ambient air temperature measured at the heat pump air intake"
     )
-    target_super_heat: DeciCelsiusToF = Field(
-        description=(
-            "Target superheat value - desired temperature difference "
-            "ensuring complete refrigerant vaporization"
-        ),
-        json_schema_extra={
-            "unit_of_measurement": "°F",
-            "device_class": "temperature",
-        },
+    target_super_heat: DeciCelsiusToF = temperature_field(
+        "Target superheat value - desired temperature difference "
+        "ensuring complete refrigerant vaporization"
     )
-    current_super_heat: DeciCelsiusToF = Field(
-        description=(
-            "Current superheat value - actual temperature difference "
-            "between suction and evaporator temperatures"
-        ),
-        json_schema_extra={
-            "unit_of_measurement": "°F",
-            "device_class": "temperature",
-        },
+    current_super_heat: DeciCelsiusToF = temperature_field(
+        "Current superheat value - actual temperature difference "
+        "between suction and evaporator temperatures"
     )
 
     # Enum fields
@@ -858,21 +728,12 @@ class DeviceStatus(NavienBaseModel):
         default=TemperatureType.FAHRENHEIT,
         description="Type of temperature unit",
     )
-    freeze_protection_temp_min: HalfCelsiusToF = Field(
+    freeze_protection_temp_min: HalfCelsiusToF = temperature_field(
+        "Active freeze protection lower limit. Default: 43°F (6°C)",
         default=43.0,
-        description="Active freeze protection lower limit. Default: 43°F (6°C)",
-        json_schema_extra={
-            "unit_of_measurement": "°F",
-            "device_class": "temperature",
-        },
     )
-    freeze_protection_temp_max: HalfCelsiusToF = Field(
-        default=65.0,
-        description="Active freeze protection upper limit. Default: 65°F",
-        json_schema_extra={
-            "unit_of_measurement": "°F",
-            "device_class": "temperature",
-        },
+    freeze_protection_temp_max: HalfCelsiusToF = temperature_field(
+        "Active freeze protection upper limit. Default: 65°F", default=65.0
     )
 
     @classmethod
@@ -1111,65 +972,29 @@ class DeviceFeature(NavienBaseModel):
     )
 
     # Temperature limit fields with half-degree Celsius scaling
-    dhw_temperature_min: HalfCelsiusToF = Field(
-        description=(
-            "Minimum DHW temperature setting: 95°F (35°C) - "
-            "safety and efficiency lower limit"
-        ),
-        json_schema_extra={
-            "unit_of_measurement": "°F",
-            "device_class": "temperature",
-        },
+    dhw_temperature_min: HalfCelsiusToF = temperature_field(
+        "Minimum DHW temperature setting: 95°F (35°C) - "
+        "safety and efficiency lower limit"
     )
-    dhw_temperature_max: HalfCelsiusToF = Field(
-        description=(
-            "Maximum DHW temperature setting: 150°F (65.5°C) - "
-            "scald protection upper limit"
-        ),
-        json_schema_extra={
-            "unit_of_measurement": "°F",
-            "device_class": "temperature",
-        },
+    dhw_temperature_max: HalfCelsiusToF = temperature_field(
+        "Maximum DHW temperature setting: 150°F (65.5°C) - "
+        "scald protection upper limit"
     )
-    freeze_protection_temp_min: HalfCelsiusToF = Field(
-        description=(
-            "Minimum freeze protection threshold: 43°F (6°C) - "
-            "factory default activation temperature"
-        ),
-        json_schema_extra={
-            "unit_of_measurement": "°F",
-            "device_class": "temperature",
-        },
+    freeze_protection_temp_min: HalfCelsiusToF = temperature_field(
+        "Minimum freeze protection threshold: 43°F (6°C) - "
+        "factory default activation temperature"
     )
-    freeze_protection_temp_max: HalfCelsiusToF = Field(
-        description=(
-            "Maximum freeze protection threshold: 65°F - "
-            "user-adjustable upper limit"
-        ),
-        json_schema_extra={
-            "unit_of_measurement": "°F",
-            "device_class": "temperature",
-        },
+    freeze_protection_temp_max: HalfCelsiusToF = temperature_field(
+        "Maximum freeze protection threshold: 65°F - "
+        "user-adjustable upper limit"
     )
-    recirc_temperature_min: HalfCelsiusToF = Field(
-        description=(
-            "Minimum recirculation temperature setting - "
-            "lower limit for recirculation loop temperature control"
-        ),
-        json_schema_extra={
-            "unit_of_measurement": "°F",
-            "device_class": "temperature",
-        },
+    recirc_temperature_min: HalfCelsiusToF = temperature_field(
+        "Minimum recirculation temperature setting - "
+        "lower limit for recirculation loop temperature control"
     )
-    recirc_temperature_max: HalfCelsiusToF = Field(
-        description=(
-            "Maximum recirculation temperature setting - "
-            "upper limit for recirculation loop temperature control"
-        ),
-        json_schema_extra={
-            "unit_of_measurement": "°F",
-            "device_class": "temperature",
-        },
+    recirc_temperature_max: HalfCelsiusToF = temperature_field(
+        "Maximum recirculation temperature setting - "
+        "upper limit for recirculation loop temperature control"
     )
 
     # Enum field
