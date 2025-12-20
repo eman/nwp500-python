@@ -935,9 +935,9 @@ class MqttDeviceController:
         Raises:
             ValueError: If days is not positive
         """
-        if days <= 0:
+        if days <= 0 or days > 365:
             raise RangeValidationError(
-                "days must be positive",
+                "days must be between 1 and 365",
                 field="days",
                 value=days,
                 min_value=1,
