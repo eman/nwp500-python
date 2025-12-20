@@ -15,7 +15,7 @@ import asyncio
 import json
 import logging
 import uuid
-from collections.abc import Callable, Sequence
+from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
 
 from awscrt import mqtt
@@ -938,7 +938,8 @@ class NavienMqttClient(EventEmitter):
 
         Args:
             device: Device object
-            callback: Callback function that receives EnergyUsageResponse objects
+            callback: Callback function that receives EnergyUsageResponse
+                objects
 
         Returns:
             Subscription packet ID
@@ -986,11 +987,11 @@ class NavienMqttClient(EventEmitter):
             if not future.done():
                 future.set_result(True)
 
-        token = await self.subscribe_device_feature(device, on_feature)
+        await self.subscribe_device_feature(device, on_feature)
         try:
             await self.control.request_device_info(device)
             return await asyncio.wait_for(future, timeout=timeout)
-        except (TimeoutError, asyncio.TimeoutError):
+        except TimeoutError:
             _logger.warning(
                 f"Timed out waiting for device info for {redact_mac(mac)}"
             )

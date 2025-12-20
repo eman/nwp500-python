@@ -32,7 +32,6 @@ if __name__ == "__main__":
 
 from nwp500.api_client import NavienAPIClient
 from nwp500.auth import NavienAuthClient
-from nwp500.enums import OnOffFlag
 from nwp500.exceptions import AuthenticationError
 from nwp500.models import DeviceFeature
 from nwp500.mqtt_client import NavienMqttClient
@@ -151,9 +150,7 @@ async def main():
                     print(
                         f"  Power Control:      {'Yes' if feature.power_use else 'No'}"
                     )
-                    print(
-                        f"  DHW Control:        {'Yes' if feature.dhw_use else 'No'}"
-                    )
+                    print(f"  DHW Control:        {'Yes' if feature.dhw_use else 'No'}")
                     print(
                         f"  DHW Temp Setting:   Level {feature.dhw_temperature_setting_use}"
                     )
@@ -169,9 +166,7 @@ async def main():
                     print(
                         f"  High Demand:        {'Yes' if feature.high_demand_use else 'No'}"
                     )
-                    print(
-                        f"  Eco Mode:           {'Yes' if feature.eco_use else 'No'}"
-                    )
+                    print(f"  Eco Mode:           {'Yes' if feature.eco_use else 'No'}")
 
                     print("\nAdvanced Features:")
                     print(

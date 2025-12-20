@@ -22,6 +22,8 @@ from collections.abc import Awaitable, Callable, Sequence
 from datetime import datetime
 from typing import Any
 
+from nwp500.topic_builder import MqttTopicBuilder
+
 from .command_decorators import requires_capability
 from .device_capabilities import DeviceCapabilityChecker
 from .device_info_cache import DeviceInfoCache
@@ -31,9 +33,8 @@ from .exceptions import (
     ParameterValidationError,
     RangeValidationError,
 )
-from .mqtt_utils import redact_mac
-from nwp500.topic_builder import MqttTopicBuilder
 from .models import Device, DeviceFeature, fahrenheit_to_half_celsius
+from .mqtt_utils import redact_mac
 
 __author__ = "Emmanuel Levijarvi"
 
@@ -223,7 +224,8 @@ class MqttDeviceController:
 
         if cached_features is None:
             _logger.info(
-                f"Device info for {redact_mac(mac)} not cached, auto-requesting..."
+                f"Device info for {redact_mac(mac)} not cached, "
+                "auto-requesting..."
             )
             try:
                 await self._auto_request_device_info(device)

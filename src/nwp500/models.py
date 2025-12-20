@@ -7,7 +7,7 @@ These models are based on the MQTT message formats and API responses.
 """
 
 import logging
-from typing import Annotated, Any, Optional, Self, Sequence, Union
+from typing import Annotated, Any, Self
 
 from pydantic import BaseModel, BeforeValidator, ConfigDict, Field
 from pydantic.alias_generators import to_camel
@@ -123,7 +123,9 @@ def _tou_override_validator(v: Any) -> bool:
 # Reusable Annotated types for conversions
 DeviceBool = Annotated[bool, BeforeValidator(_device_bool_validator)]
 CapabilityFlag = Annotated[bool, BeforeValidator(_capability_flag_validator)]
-AvailabilityFlag = Annotated[bool, BeforeValidator(_availability_flag_validator)]
+AvailabilityFlag = Annotated[
+    bool, BeforeValidator(_availability_flag_validator)
+]
 Div10 = Annotated[float, BeforeValidator(_div_10_validator)]
 HalfCelsiusToF = Annotated[float, BeforeValidator(_half_celsius_to_fahrenheit)]
 DeciCelsiusToF = Annotated[float, BeforeValidator(_deci_celsius_to_fahrenheit)]
@@ -1078,7 +1080,7 @@ class DeviceFeature(NavienBaseModel):
         description=(
             "Thermostatic mixing valve support (1=available) - "
             "for temperature limiting at point of use"
-        )
+        ),
     )
     dr_setting_use: AvailabilityFlag = Field(
         description=(

@@ -68,7 +68,7 @@ def requires_capability(feature: str) -> Callable[[F], F]:
                 self: Any, device: Any, *args: Any, **kwargs: Any
             ) -> Any:
                 mac = device.device_info.mac_address
-                
+
                 # Get cached features, auto-requesting if necessary
                 cached_features = await self._get_device_features(device)
 

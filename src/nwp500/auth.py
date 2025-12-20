@@ -14,7 +14,7 @@ The API uses JWT (JSON Web Tokens) for authentication with the following flow:
 import json
 import logging
 from datetime import datetime, timedelta
-from typing import Any, Optional, Self, Union
+from typing import Any, Self
 
 import aiohttp
 from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, model_validator
@@ -675,7 +675,7 @@ class NavienAuthClient:
         # This matches the actual API behavior from HAR analysis in working
         # implementation
         if self._auth_response and self._auth_response.tokens.access_token:
-            headers["Authorization"] = self._auth_response.tokens.access_token
+            headers["authorization"] = self._auth_response.tokens.access_token
 
         return headers
 

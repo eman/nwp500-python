@@ -3,10 +3,33 @@
 from unittest.mock import Mock, patch
 
 import pytest
+from typing import Any
 
 from nwp500.command_decorators import requires_capability
 from nwp500.device_info_cache import DeviceInfoCache
 from nwp500.exceptions import DeviceCapabilityError
+
+
+class BaseMockController:
+    """Base class for mock controllers to avoid duplication."""
+
+    def __init__(self, cache: DeviceInfoCache) -> None:
+        self._device_info_cache = cache
+
+    async def _get_device_features(self, device: Any) -> Any:
+        """Get device features, helper for the decorator."""
+        features = await self._device_info_cache.get(
+            device.device_info.mac_address
+        )
+        if features is None and hasattr(self, "_auto_request_device_info"):
+            try:
+                await self._auto_request_device_info(device)
+                features = await self._device_info_cache.get(
+                    device.device_info.mac_address
+                )
+            except Exception:
+                pass
+        return features
 
 
 class TestRequiresCapabilityDecorator:
@@ -25,9 +48,9 @@ class TestRequiresCapabilityDecorator:
 
         await cache.set(mock_device.device_info.mac_address, mock_features)
 
-        class MockController:
+        class MockController(BaseMockController):
             def __init__(self) -> None:
-                self._device_info_cache = cache
+                super().__init__(cache)
                 self.command_called = False
 
             @requires_capability("power_use")
@@ -51,9 +74,9 @@ class TestRequiresCapabilityDecorator:
 
         await cache.set(mock_device.device_info.mac_address, mock_features)
 
-        class MockController:
+        class MockController(BaseMockController):
             def __init__(self) -> None:
-                self._device_info_cache = cache
+                super().__init__(cache)
                 self.command_called = False
 
             @requires_capability("power_use")
@@ -76,9 +99,9 @@ class TestRequiresCapabilityDecorator:
         mock_features = Mock()
         mock_features.power_use = True
 
-        class MockController:
+        class MockController(BaseMockController):
             def __init__(self) -> None:
-                self._device_info_cache = cache
+                super().__init__(cache)
                 self.command_called = False
                 self.auto_request_called = False
 
@@ -104,9 +127,9 @@ class TestRequiresCapabilityDecorator:
         mock_device = Mock()
         mock_device.device_info.mac_address = "AA:BB:CC:DD:EE:FF"
 
-        class MockController:
+        class MockController(BaseMockController):
             def __init__(self) -> None:
-                self._device_info_cache = cache
+                super().__init__(cache)
 
             @requires_capability("power_use")
             async def set_power(self, device: Mock, power_on: bool) -> None:
@@ -132,9 +155,9 @@ class TestRequiresCapabilityDecorator:
 
         await cache.set(mock_device.device_info.mac_address, mock_features)
 
-        class MockController:
+        class MockController(BaseMockController):
             def __init__(self) -> None:
-                self._device_info_cache = cache
+                super().__init__(cache)
                 self.received_args = None
 
             @requires_capability("power_use")
@@ -163,9 +186,9 @@ class TestRequiresCapabilityDecorator:
 
         await cache.set(mock_device.device_info.mac_address, mock_features)
 
-        class MockController:
+        class MockController(BaseMockController):
             def __init__(self) -> None:
-                self._device_info_cache = cache
+                super().__init__(cache)
 
             @requires_capability("power_use")
             async def my_special_command(self, device: Mock) -> None:
@@ -188,9 +211,9 @@ class TestRequiresCapabilityDecorator:
 
         await cache.set(mock_device.device_info.mac_address, mock_features)
 
-        class MockController:
+        class MockController(BaseMockController):
             def __init__(self) -> None:
-                self._device_info_cache = cache
+                super().__init__(cache)
                 self.power_called = False
                 self.dhw_called = False
 
@@ -219,9 +242,9 @@ class TestRequiresCapabilityDecorator:
         cache = DeviceInfoCache()
         mock_device = Mock()
 
-        class MockController:
+        class MockController(BaseMockController):
             def __init__(self) -> None:
-                self._device_info_cache = cache
+                super().__init__(cache)
                 self.command_called = False
 
             @requires_capability("power_use")
@@ -242,9 +265,9 @@ class TestRequiresCapabilityDecorator:
         mock_device = Mock()
         mock_device.device_info.mac_address = "AA:BB:CC:DD:EE:FF"
 
-        class MockController:
+        class MockController(BaseMockController):
             def __init__(self) -> None:
-                self._device_info_cache = cache
+                super().__init__(cache)
 
             @requires_capability("power_use")
             async def set_power(self, device: Mock, power_on: bool) -> None:
@@ -271,9 +294,9 @@ class TestRequiresCapabilityDecorator:
 
         await cache.set(mock_device.device_info.mac_address, mock_features)
 
-        class MockController:
+        class MockController(BaseMockController):
             def __init__(self) -> None:
-                self._device_info_cache = cache
+                super().__init__(cache)
 
             @requires_capability("power_use")
             async def get_status(self, device: Mock) -> str:
@@ -295,9 +318,9 @@ class TestRequiresCapabilityDecorator:
 
         await cache.set(mock_device.device_info.mac_address, mock_features)
 
-        class MockController:
+        class MockController(BaseMockController):
             def __init__(self) -> None:
-                self._device_info_cache = cache
+                super().__init__(cache)
 
             @requires_capability("power_use")
             async def failing_command(self, device: Mock) -> None:

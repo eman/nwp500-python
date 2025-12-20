@@ -2,6 +2,7 @@
 MQTT topic building utilities for Navien devices.
 """
 
+
 class MqttTopicBuilder:
     """Helper to construct standard MQTT topics for Navien devices."""
 

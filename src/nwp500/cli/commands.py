@@ -47,7 +47,8 @@ async def get_controller_serial_number(
     try:
         serial_number = await asyncio.wait_for(future, timeout=timeout)
         _logger.info(
-            f"Controller serial number retrieved: {redact_serial(serial_number)}"
+            "Controller serial number retrieved: "
+            f"{redact_serial(serial_number)}"
         )
         return serial_number
     except TimeoutError:
@@ -567,15 +568,17 @@ async def handle_update_reservations_request(
         device_type, client_id, "rsv/rd"
     ).replace(f"navilink-{device.device_info.mac_address}", "+")
     # Note: The original pattern wascmd/{deviceType}/+/+/{clientId}/res/rsv/rd
-    # which is slightly different from our standard builder. 
+    # which is slightly different from our standard builder.
     # But cmd/{device_type}/+/+/... is very permissive.
-    # I'll use a more standard pattern if possible, but I'll stick to 
+    # I'll use a more standard pattern if possible, but I'll stick to
     # something close to the original for now if it's meant to be a wildcard.
     response_topic = f"cmd/{device_type}/+/+/{client_id}/res/rsv/rd"
 
     await mqtt.subscribe(response_topic, raw_callback)
     _logger.info(f"Updating reservation schedule (enabled={enabled})...")
-    await mqtt.control.update_reservations(device, reservations, enabled=enabled)
+    await mqtt.control.update_reservations(
+        device, reservations, enabled=enabled
+    )
 
     try:
         await asyncio.wait_for(future, timeout=10)

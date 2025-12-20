@@ -73,7 +73,8 @@ class NavienAPIClient:
         self._session = session or getattr(auth_client, "_session", None)
         if self._session is None:
             raise ValueError(
-                "auth_client must have an active session or a session must be provided"
+                "auth_client must have an active session or a session "
+                "must be provided"
             )
         self._owned_session = False
         self._owned_auth = False

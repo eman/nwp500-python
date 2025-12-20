@@ -146,7 +146,8 @@ def redact_mac(mac: str | None) -> str:
     """Mask a MAC address or device ID for safe logging.
 
     Args:
-        mac: The MAC address or device ID to redact (e.g., 'navilink-0123456789ab')
+        mac: The MAC address or device ID to redact
+            (e.g., 'navilink-0123456789ab')
 
     Returns:
         A redacted string like 'navilink-01...89ab' or '<REDACTED>'

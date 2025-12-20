@@ -23,7 +23,7 @@ from awscrt.exceptions import AwsCrtError
 from .events import EventEmitter
 from .exceptions import MqttNotConnectedError
 from .models import Device, DeviceFeature, DeviceStatus, EnergyUsageResponse
-from .mqtt_utils import redact_mac, redact_topic, topic_matches_pattern
+from .mqtt_utils import redact_topic, topic_matches_pattern
 from .topic_builder import MqttTopicBuilder
 
 if TYPE_CHECKING:
@@ -334,7 +334,6 @@ class MqttSubscriptionManager:
         # Device responses come on cmd/{device_type}/navilink-{device_id}/#
         device_id = device.device_info.mac_address
         device_type = device.device_info.device_type
-        device_topic = f"navilink-{device_id}"
         response_topic = MqttTopicBuilder.command_topic(
             device_type, device_id, "#"
         )
@@ -615,7 +614,8 @@ class MqttSubscriptionManager:
 
                 # Parse feature into DeviceFeature object
                 _logger.info(
-                    f"Parsing device feature message from topic: {redact_topic(topic)}"
+                    "Parsing device feature message from topic: "
+                    f"{redact_topic(topic)}"
                 )
                 feature_data = response["feature"]
                 device_feature = DeviceFeature.from_dict(feature_data)
@@ -686,7 +686,9 @@ class MqttSubscriptionManager:
             >>>
             >>> await mqtt_client.subscribe_energy_usage(device,
             on_energy_usage)
-            >>> await mqtt_client.control.request_energy_usage(device, 2025, [9])
+            >>> await mqtt_client.control.request_energy_usage(
+            ...     device, 2025, [9]
+            ... )
         """
         device_type = device.device_info.device_type
 

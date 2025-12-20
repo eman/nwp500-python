@@ -119,7 +119,9 @@ async def recirculation_example():
                 button_only_set = True
 
             await mqtt_client.subscribe_device_status(device, on_button_only_set)
-            await mqtt_client.control.set_recirculation_mode(device, 2)  # 2 = Button Only
+            await mqtt_client.control.set_recirculation_mode(
+                device, 2
+            )  # 2 = Button Only
 
             # Wait for confirmation
             for i in range(10):  # Wait up to 10 seconds
