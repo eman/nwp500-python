@@ -12,7 +12,6 @@ from typing import Any, TypeVar
 
 from .device_capabilities import DeviceCapabilityChecker
 from .exceptions import DeviceCapabilityError
-from .mqtt_utils import redact_mac
 
 __author__ = "Emmanuel Levijarvi"
 
@@ -67,8 +66,6 @@ def requires_capability(feature: str) -> Callable[[F], F]:
             async def async_wrapper(
                 self: Any, device: Any, *args: Any, **kwargs: Any
             ) -> Any:
-                mac = device.device_info.mac_address
-
                 # Get cached features, auto-requesting if necessary
                 cached_features = await self._get_device_features(device)
 
@@ -86,8 +83,7 @@ def requires_capability(feature: str) -> Callable[[F], F]:
                     )
                 else:
                     _logger.warning(
-                        f"Feature '{feature}' not found in device info for "
-                        f"{redact_mac(mac)}"
+                        f"Feature '{feature}' not found in device capabilities"
                     )
 
                 # Execute command
