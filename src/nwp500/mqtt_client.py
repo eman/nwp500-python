@@ -556,9 +556,9 @@ class NavienMqttClient(EventEmitter):
                 )
 
                 # Set the auto-request callback on the controller
-                # Wrap _ensure_device_info_cached to match callback signature
+                # Wrap ensure_device_info_cached to match callback signature
                 async def _auto_request_wrapper(device: Device) -> None:
-                    await self._ensure_device_info_cached(device, timeout=15.0)
+                    await self.ensure_device_info_cached(device, timeout=15.0)
 
                 self._device_controller._ensure_device_info_callback = (
                     _auto_request_wrapper
@@ -987,13 +987,13 @@ class NavienMqttClient(EventEmitter):
 
         return await self._device_controller.request_device_info(device)
 
-    async def _ensure_device_info_cached(
+    async def ensure_device_info_cached(
         self, device: Device, timeout: float = 15.0
     ) -> bool:
         """
         Ensure device info is cached, requesting if necessary.
 
-        Internal method called by control commands to ensure device
+        Called by control commands and CLI to ensure device
         capabilities are available before execution.
 
         Args:

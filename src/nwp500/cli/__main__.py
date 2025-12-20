@@ -116,7 +116,7 @@ async def async_main(args: argparse.Namespace) -> int:
                 # checking. This ensures commands have device capability info
                 # available without relying on decorator auto-requests.
                 _logger.debug("Requesting device capabilities...")
-                success = await mqtt._ensure_device_info_cached(
+                success = await mqtt.ensure_device_info_cached(
                     device, timeout=15.0
                 )
                 if not success:
