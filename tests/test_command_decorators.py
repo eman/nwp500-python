@@ -1,9 +1,9 @@
 """Tests for command decorators."""
 
+from typing import Any
 from unittest.mock import Mock, patch
 
 import pytest
-from typing import Any
 
 from nwp500.command_decorators import requires_capability
 from nwp500.device_info_cache import DeviceInfoCache

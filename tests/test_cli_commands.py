@@ -113,7 +113,8 @@ async def test_handle_set_mode_request_success(mock_mqtt, mock_device):
 
     await handle_set_mode_request(mock_mqtt, mock_device, "heat-pump")
 
-    mock_mqtt.control.set_dhw_mode.assert_called_once_with(mock_device, 1)  # 1 = Heat Pump
+    # 1 = Heat Pump
+    mock_mqtt.control.set_dhw_mode.assert_called_once_with(mock_device, 1)
 
 
 @pytest.mark.asyncio
