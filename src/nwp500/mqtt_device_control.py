@@ -34,7 +34,6 @@ from .exceptions import (
     RangeValidationError,
 )
 from .models import Device, DeviceFeature, fahrenheit_to_half_celsius
-from .mqtt_utils import redact_mac
 
 __author__ = "Emmanuel Levijarvi"
 
@@ -223,10 +222,7 @@ class MqttDeviceController:
         cached_features = await self._device_info_cache.get(mac)
 
         if cached_features is None:
-            _logger.info(
-                f"Device info for {redact_mac(mac)} not cached, "
-                "auto-requesting..."
-            )
+            _logger.info("Device info not cached, auto-requesting...")
             try:
                 await self._auto_request_device_info(device)
                 cached_features = await self._device_info_cache.get(mac)
