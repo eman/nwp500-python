@@ -41,6 +41,7 @@ coverage.xml
 
 # Diagnostics output
 diagnostics_output/
+examples/mqtt_diagnostics_output/
 
 # Build and docs folder/files
 build/*
