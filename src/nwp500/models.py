@@ -104,11 +104,6 @@ def _availability_flag_validator(v: Any) -> bool:
     return bool(v >= 1)
 
 
-def _tou_status_validator(v: Any) -> bool:
-    """Convert TOU status (0=False/disabled, 1=True/enabled)."""
-    return bool(v == 1)
-
-
 def _tou_override_validator(v: Any) -> bool:
     """Convert TOU override status (1=True/override active, 2=False/normal).
 
@@ -1076,7 +1071,7 @@ class DeviceFeature(NavienBaseModel):
         )
     )
     mixing_valve_use: AvailabilityFlag = Field(
-        alias="mixingValueUse",
+        alias="mixingValveUse",
         description=(
             "Thermostatic mixing valve support (1=available) - "
             "for temperature limiting at point of use"

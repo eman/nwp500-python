@@ -567,7 +567,7 @@ async def handle_update_reservations_request(
     response_topic = MqttTopicBuilder.response_topic(
         device_type, client_id, "rsv/rd"
     ).replace(f"navilink-{device.device_info.mac_address}", "+")
-    # Note: The original pattern wascmd/{deviceType}/+/+/{clientId}/res/rsv/rd
+    # Note: The original pattern was cmd/{deviceType}/+/+/{clientId}/res/rsv/rd
     # which is slightly different from our standard builder.
     # But cmd/{device_type}/+/+/... is very permissive.
     # I'll use a more standard pattern if possible, but I'll stick to
