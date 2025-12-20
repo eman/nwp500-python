@@ -30,6 +30,15 @@ from nwp500.auth import (
     authenticate,
     refresh_access_token,
 )
+from nwp500.command_decorators import (
+    requires_capability,
+)
+from nwp500.device_capabilities import (
+    DeviceCapabilityChecker,
+)
+from nwp500.device_info_cache import (
+    DeviceInfoCache,
+)
 from nwp500.encoding import (
     build_reservation_entry,
     build_tou_period,
@@ -64,6 +73,7 @@ from nwp500.events import (
 from nwp500.exceptions import (
     APIError,
     AuthenticationError,
+    DeviceCapabilityError,
     DeviceError,
     DeviceNotFoundError,
     DeviceOfflineError,
@@ -113,6 +123,11 @@ from nwp500.utils import (
 
 __all__ = [
     "__version__",
+    # Device Capabilities & Caching
+    "DeviceCapabilityChecker",
+    "DeviceCapabilityError",
+    "DeviceInfoCache",
+    "requires_capability",
     # Models
     "DeviceStatus",
     "DeviceFeature",

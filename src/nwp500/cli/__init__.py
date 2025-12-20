@@ -2,7 +2,6 @@
 
 from .__main__ import run
 from .commands import (
-    handle_device_feature_request,
     handle_device_info_request,
     handle_get_controller_serial_request,
     handle_get_energy_request,
@@ -28,7 +27,6 @@ __all__ = [
     # Main entry point
     "run",
     # Command handlers
-    "handle_device_feature_request",
     "handle_device_info_request",
     "handle_get_controller_serial_request",
     "handle_get_energy_request",

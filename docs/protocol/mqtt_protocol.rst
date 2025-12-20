@@ -119,17 +119,17 @@ Status and Info Requests
    * - Command
      - Code
      - Description
-   * - Device Status Request
-     - 16777221
-     - Request current device status
    * - Device Info Request
-     - 16777222
+     - 16777217
      - Request device features/capabilities
+   * - Device Status Request
+     - 16777219
+     - Request current device status
    * - Reservation Read
      - 16777222
      - Read reservation schedule
    * - Energy Usage Query
-     - 33554435
+     - 16777225
      - Query energy usage data
 
 Control Commands
@@ -733,7 +733,7 @@ Energy Usage Query
 .. code-block:: json
 
    {
-     "command": 33554435,
+     "command": 16777225,
      "mode": "energy-usage-daily-query",
      "param": [],
      "paramStr": "",
@@ -755,7 +755,7 @@ Status Response
      "requestTopic": "...",
      "responseTopic": "...",
      "response": {
-       "command": 16777221,
+       "command": 16777219,
        "deviceType": 52,
        "macAddress": "...",
        "status": {
@@ -887,7 +887,7 @@ Example: Request Status
      "responseTopic": "cmd/52/my-client-id/res/status/rd",
      "protocolVersion": 2,
      "request": {
-       "command": 16777221,
+       "command": 16777219,
        "deviceType": 52,
        "macAddress": "04786332fca0",
        "additionalValue": "...",

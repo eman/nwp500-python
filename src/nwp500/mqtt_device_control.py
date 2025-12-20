@@ -11,6 +11,10 @@ This module handles all device control operations including:
 - Time-of-Use (TOU) configuration
 - Energy usage queries
 - App connection signaling
+- Demand response control
+- Air filter maintenance
+- Vacation mode configuration
+- Recirculation pump control and scheduling
 """
 
 import logging
@@ -18,9 +22,16 @@ from collections.abc import Awaitable, Callable, Sequence
 from datetime import datetime
 from typing import Any
 
+from .command_decorators import requires_capability
+from .device_capabilities import DeviceCapabilityChecker
+from .device_info_cache import DeviceInfoCache
 from .enums import CommandCode, DhwOperationSetting
-from .exceptions import ParameterValidationError, RangeValidationError
-from .models import Device, fahrenheit_to_half_celsius
+from .exceptions import (
+    DeviceCapabilityError,
+    ParameterValidationError,
+    RangeValidationError,
+)
+from .models import Device, DeviceFeature, fahrenheit_to_half_celsius
 
 __author__ = "Emmanuel Levijarvi"
 
@@ -33,6 +44,16 @@ class MqttDeviceController:
 
     Handles all device control operations including status requests,
     mode changes, temperature control, scheduling, and energy queries.
+
+    This controller integrates with DeviceCapabilityChecker to validate
+    device capabilities before executing commands. Use check_support()
+    or assert_support() methods to verify feature availability based on
+    device capabilities before attempting to execute commands:
+
+    Example:
+        >>> controller.assert_support("recirculation_mode", device_features)
+        >>> # Will raise DeviceCapabilityError if not supported
+        >>> msg_id = await controller.set_recirculation_mode(device, mode)
     """
 
     def __init__(
@@ -40,6 +61,7 @@ class MqttDeviceController:
         client_id: str,
         session_id: str,
         publish_func: Callable[..., Awaitable[int]],
+        device_info_cache: DeviceInfoCache | None = None,
     ) -> None:
         """
         Initialize device controller.
@@ -48,10 +70,101 @@ class MqttDeviceController:
             client_id: MQTT client ID
             session_id: Session ID for commands
             publish_func: Function to publish MQTT messages (async callable)
+            device_info_cache: Optional device info cache. If not provided,
+                a new cache with 30-minute update interval is created.
         """
         self._client_id = client_id
         self._session_id = session_id
         self._publish: Callable[..., Awaitable[int]] = publish_func
+        self._device_info_cache = device_info_cache or DeviceInfoCache(
+            update_interval_minutes=30
+        )
+        # Callback for auto-requesting device info when needed
+        self._ensure_device_info_callback: (
+            Callable[[Device], Awaitable[None]] | None
+        ) = None
+
+    async def _ensure_device_info_cached(
+        self, device: Device, timeout: float = 5.0
+    ) -> None:
+        """
+        Ensure device info is cached, requesting if necessary.
+
+        Automatically requests device info if not already cached.
+        Used internally by control commands.
+
+        Args:
+            device: Device to ensure info for
+            timeout: Timeout for waiting for device info response
+
+        Raises:
+            DeviceCapabilityError: If device info cannot be obtained
+        """
+        mac = device.device_info.mac_address
+
+        # Check if already cached
+        cached = await self._device_info_cache.get(mac)
+        if cached is not None:
+            return  # Already cached
+
+        raise DeviceCapabilityError(
+            "device_info",
+            (
+                f"Device info not cached for {mac}. "
+                "Ensure device info request has been made."
+            ),
+        )
+
+    async def _auto_request_device_info(self, device: Device) -> None:
+        """
+        Auto-request device info and wait for response.
+
+        Called by decorator when device info is not cached.
+
+        Args:
+            device: Device to request info for
+
+        Raises:
+            RuntimeError: If auto-request callback not set
+        """
+        if self._ensure_device_info_callback is None:
+            raise RuntimeError(
+                "Auto-request not available. "
+                "Ensure MQTT client has set the callback."
+            )
+        await self._ensure_device_info_callback(device)
+
+    def check_support(
+        self, feature: str, device_features: DeviceFeature
+    ) -> bool:
+        """Check if device supports a controllable feature.
+
+        Args:
+            feature: Name of the controllable feature
+            device_features: Device feature information
+
+        Returns:
+            True if feature is supported, False otherwise
+
+        Raises:
+            ValueError: If feature is not recognized
+        """
+        return DeviceCapabilityChecker.supports(feature, device_features)
+
+    def assert_support(
+        self, feature: str, device_features: DeviceFeature
+    ) -> None:
+        """Assert that device supports a controllable feature.
+
+        Args:
+            feature: Name of the controllable feature
+            device_features: Device feature information
+
+        Raises:
+            DeviceCapabilityError: If feature is not supported
+            ValueError: If feature is not recognized
+        """
+        DeviceCapabilityChecker.assert_supported(feature, device_features)
 
     def _build_command(
         self,
@@ -149,6 +262,7 @@ class MqttDeviceController:
 
         return await self._publish(topic, command)
 
+    @requires_capability("power_use")
     async def set_power(self, device: Device, power_on: bool) -> int:
         """
         Turn device on or off.
@@ -183,6 +297,7 @@ class MqttDeviceController:
 
         return await self._publish(topic, command)
 
+    @requires_capability("dhw_use")
     async def set_dhw_mode(
         self,
         device: Device,
@@ -349,6 +464,7 @@ class MqttDeviceController:
 
         return await self._publish(topic, command)
 
+    @requires_capability("dhw_temperature_setting_use")
     async def set_dhw_temperature(
         self, device: Device, temperature_f: float
     ) -> int:
@@ -473,6 +589,7 @@ class MqttDeviceController:
 
         return await self._publish(topic, command)
 
+    @requires_capability("program_reservation_use")
     async def configure_tou_schedule(
         self,
         device: Device,
@@ -579,6 +696,7 @@ class MqttDeviceController:
 
         return await self._publish(topic, command)
 
+    @requires_capability("program_reservation_use")
     async def set_tou_enabled(self, device: Device, enabled: bool) -> int:
         """
         Quickly toggle Time-of-Use functionality without modifying the schedule.
@@ -691,3 +809,319 @@ class MqttDeviceController:
         }
 
         return await self._publish(topic, message)
+
+    async def enable_demand_response(self, device: Device) -> int:
+        """
+        Enable utility demand response participation.
+
+        Allows the device to respond to utility demand response signals
+        to reduce consumption (shed) or pre-heat (load up) before peak periods.
+
+        See docs/protocol/mqtt_protocol.rst "Demand Response Control"
+        for command code (33554470) and payload format.
+
+        Args:
+            device: The device to control
+
+        Returns:
+            The message ID of the published command
+        """
+        device_id = device.device_info.mac_address
+        device_type = device.device_info.device_type
+        additional_value = device.device_info.additional_value
+        device_topic = f"navilink-{device_id}"
+        topic = f"cmd/{device_type}/{device_topic}/ctrl"
+
+        command = self._build_command(
+            device_type=device_type,
+            device_id=device_id,
+            command=CommandCode.DR_ON,
+            additional_value=additional_value,
+            mode="dr-on",
+            param=[],
+            paramStr="",
+        )
+        command["requestTopic"] = topic
+
+        return await self._publish(topic, command)
+
+    async def disable_demand_response(self, device: Device) -> int:
+        """
+        Disable utility demand response participation.
+
+        Prevents the device from responding to utility demand response signals.
+
+        See docs/protocol/mqtt_protocol.rst "Demand Response Control"
+        for command code (33554469) and payload format.
+
+        Args:
+            device: The device to control
+
+        Returns:
+            The message ID of the published command
+        """
+        device_id = device.device_info.mac_address
+        device_type = device.device_info.device_type
+        additional_value = device.device_info.additional_value
+        device_topic = f"navilink-{device_id}"
+        topic = f"cmd/{device_type}/{device_topic}/ctrl"
+
+        command = self._build_command(
+            device_type=device_type,
+            device_id=device_id,
+            command=CommandCode.DR_OFF,
+            additional_value=additional_value,
+            mode="dr-off",
+            param=[],
+            paramStr="",
+        )
+        command["requestTopic"] = topic
+
+        return await self._publish(topic, command)
+
+    async def reset_air_filter(self, device: Device) -> int:
+        """
+        Reset air filter maintenance timer.
+
+        Used for heat pump models to reset the maintenance timer after
+        filter cleaning or replacement.
+
+        See docs/protocol/mqtt_protocol.rst "Air Filter Maintenance"
+        for command code (33554473) and payload format.
+
+        Args:
+            device: The device to control
+
+        Returns:
+            The message ID of the published command
+        """
+        device_id = device.device_info.mac_address
+        device_type = device.device_info.device_type
+        additional_value = device.device_info.additional_value
+        device_topic = f"navilink-{device_id}"
+        topic = f"cmd/{device_type}/{device_topic}/ctrl"
+
+        command = self._build_command(
+            device_type=device_type,
+            device_id=device_id,
+            command=CommandCode.AIR_FILTER_RESET,
+            additional_value=additional_value,
+            mode="air-filter-reset",
+            param=[],
+            paramStr="",
+        )
+        command["requestTopic"] = topic
+
+        return await self._publish(topic, command)
+
+    @requires_capability("holiday_use")
+    async def set_vacation_days(self, device: Device, days: int) -> int:
+        """
+        Set vacation/away mode duration in days.
+
+        Configures the device to operate in energy-saving mode for the
+        specified number of days during absence.
+
+        See docs/protocol/mqtt_protocol.rst "Vacation Mode"
+        for command code (33554466) and payload format.
+
+        Args:
+            device: The device to control
+            days: Number of vacation days (1-365 recommended)
+
+        Returns:
+            The message ID of the published command
+
+        Raises:
+            ValueError: If days is not positive
+        """
+        if days <= 0:
+            raise RangeValidationError(
+                "days must be positive",
+                field="days",
+                value=days,
+                min_value=1,
+            )
+
+        device_id = device.device_info.mac_address
+        device_type = device.device_info.device_type
+        additional_value = device.device_info.additional_value
+        device_topic = f"navilink-{device_id}"
+        topic = f"cmd/{device_type}/{device_topic}/ctrl"
+
+        command = self._build_command(
+            device_type=device_type,
+            device_id=device_id,
+            command=CommandCode.GOOUT_DAY,
+            additional_value=additional_value,
+            mode="goout-day",
+            param=[days],
+            paramStr="",
+        )
+        command["requestTopic"] = topic
+
+        return await self._publish(topic, command)
+
+    @requires_capability("program_reservation_use")
+    async def configure_reservation_water_program(self, device: Device) -> int:
+        """
+        Enable/configure water program reservation mode.
+
+        Enables the water program reservation system for scheduling.
+
+        See docs/protocol/mqtt_protocol.rst "Reservation Water Program"
+        for command code (33554441) and payload format.
+
+        Args:
+            device: The device to control
+
+        Returns:
+            The message ID of the published command
+        """
+        device_id = device.device_info.mac_address
+        device_type = device.device_info.device_type
+        additional_value = device.device_info.additional_value
+        device_topic = f"navilink-{device_id}"
+        topic = f"cmd/{device_type}/{device_topic}/ctrl"
+
+        command = self._build_command(
+            device_type=device_type,
+            device_id=device_id,
+            command=CommandCode.RESERVATION_WATER_PROGRAM,
+            additional_value=additional_value,
+            mode="reservation-mode",
+            param=[],
+            paramStr="",
+        )
+        command["requestTopic"] = topic
+
+        return await self._publish(topic, command)
+
+    @requires_capability("recirc_reservation_use")
+    async def configure_recirculation_schedule(
+        self,
+        device: Device,
+        schedule: dict[str, Any],
+    ) -> int:
+        """
+        Configure recirculation pump schedule.
+
+        Sets up the recirculation pump operating schedule with specified
+        periods and settings.
+
+        See docs/protocol/mqtt_protocol.rst "Configure Recirculation Schedule"
+        for command code (33554440) and payload format.
+
+        Args:
+            device: The device to control
+            schedule: Recirculation schedule configuration
+
+        Returns:
+            The message ID of the published command
+
+        Raises:
+            DeviceCapabilityError: If recirculation scheduling not supported
+        """
+        device_id = device.device_info.mac_address
+        device_type = device.device_info.device_type
+        additional_value = device.device_info.additional_value
+        device_topic = f"navilink-{device_id}"
+        topic = f"cmd/{device_type}/{device_topic}/ctrl"
+
+        command = self._build_command(
+            device_type=device_type,
+            device_id=device_id,
+            command=CommandCode.RECIR_RESERVATION,
+            additional_value=additional_value,
+        )
+        command["requestTopic"] = topic
+        command["schedule"] = schedule
+
+        return await self._publish(topic, command)
+
+    @requires_capability("recirculation_use")
+    async def set_recirculation_mode(self, device: Device, mode: int) -> int:
+        """
+        Set recirculation pump operation mode.
+
+        Configures how the recirculation pump operates.
+
+        See docs/protocol/mqtt_protocol.rst "Recirculation Control"
+        for command code (33554445) and mode values.
+
+        Args:
+            device: The device to control
+            mode: Recirculation mode (1=Always On, 2=Button Only,
+                  3=Schedule, 4=Temperature)
+
+        Returns:
+            The message ID of the published command
+
+        Raises:
+            RangeValidationError: If mode is not in valid range [1, 4]
+        """
+        if not 1 <= mode <= 4:
+            raise RangeValidationError(
+                "mode must be between 1 and 4",
+                field="mode",
+                value=mode,
+                min_value=1,
+                max_value=4,
+            )
+
+        device_id = device.device_info.mac_address
+        device_type = device.device_info.device_type
+        additional_value = device.device_info.additional_value
+        device_topic = f"navilink-{device_id}"
+        topic = f"cmd/{device_type}/{device_topic}/ctrl"
+
+        command = self._build_command(
+            device_type=device_type,
+            device_id=device_id,
+            command=CommandCode.RECIR_MODE,
+            additional_value=additional_value,
+            mode="recirc-mode",
+            param=[mode],
+            paramStr="",
+        )
+        command["requestTopic"] = topic
+
+        return await self._publish(topic, command)
+
+    @requires_capability("recirculation_use")
+    async def trigger_recirculation_hot_button(self, device: Device) -> int:
+        """
+        Manually trigger the recirculation pump hot button.
+
+        Activates the recirculation pump for immediate hot water delivery.
+
+        See docs/protocol/mqtt_protocol.rst "Recirculation Control"
+        for command code (33554444) and payload format.
+
+        Args:
+            device: The device to control
+
+        Returns:
+            The message ID of the published command
+
+        Raises:
+            DeviceCapabilityError: If device doesn't support recirculation
+        """
+        device_id = device.device_info.mac_address
+        device_type = device.device_info.device_type
+        additional_value = device.device_info.additional_value
+        device_topic = f"navilink-{device_id}"
+        topic = f"cmd/{device_type}/{device_topic}/ctrl"
+
+        command = self._build_command(
+            device_type=device_type,
+            device_id=device_id,
+            command=CommandCode.RECIR_HOT_BTN,
+            additional_value=additional_value,
+            mode="recirc-hotbtn",
+            param=[1],
+            paramStr="",
+        )
+        command["requestTopic"] = topic
+
+        return await self._publish(topic, command)

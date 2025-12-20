@@ -100,6 +100,7 @@ Documentation Index
    python_api/auth_client
    python_api/api_client
    python_api/mqtt_client
+   python_api/device_control
    python_api/models
    enumerations
    python_api/constants

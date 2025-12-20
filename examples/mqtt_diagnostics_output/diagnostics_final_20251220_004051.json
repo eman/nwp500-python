@@ -1,0 +1,36 @@
+{
+  "timestamp": "2025-12-20T00:40:51.538194+00:00",
+  "metrics": {
+    "total_connections": 1,
+    "total_disconnects": 0,
+    "total_connection_drops": 0,
+    "total_reconnect_attempts": 0,
+    "longest_session_seconds": 0.0,
+    "shortest_session_seconds": Infinity,
+    "average_session_seconds": 0.0,
+    "current_session_uptime_seconds": 167.1901934146881,
+    "connection_drops_by_error": {},
+    "reconnection_attempts_distribution": {},
+    "last_drop_timestamp": null,
+    "last_successful_connect_timestamp": "2025-12-20T00:38:04.348014+00:00",
+    "connection_recovered": 0,
+    "messages_published": 0,
+    "messages_queued": 0
+  },
+  "recent_drops": [],
+  "recent_connections": [
+    {
+      "timestamp": "2025-12-20T00:38:04.348014+00:00",
+      "event_type": "connected",
+      "session_present": false,
+      "return_code": null,
+      "attempt_number": 0,
+      "time_to_reconnect_seconds": null
+    }
+  ],
+  "aws_error_counts": {},
+  "session_history_summary": {
+    "total_sessions": 0,
+    "sample_durations": []
+  }
+}

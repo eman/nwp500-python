@@ -24,7 +24,8 @@ Exception Hierarchy::
     └── DeviceError
         ├── DeviceNotFoundError
         ├── DeviceOfflineError
-        └── DeviceOperationError
+        ├── DeviceOperationError
+        └── DeviceCapabilityError
 
 Migration from v4.x
 -------------------
@@ -90,7 +91,7 @@ class Nwp500Error(Exception):
         message: str,
         *,
         error_code: str | None = None,
-        details: dict[str, Any | None] = None,
+        details: dict[str, Any | None] | None = None,
         retriable: bool = False,
     ):
         """Initialize base exception.
@@ -152,7 +153,7 @@ class AuthenticationError(Nwp500Error):
         self,
         message: str,
         status_code: int | None = None,
-        response: dict[str, Any | None] = None,
+        response: dict[str, Any | None] | None = None,
         **kwargs: Any,
     ):
         """Initialize authentication error.
@@ -219,7 +220,7 @@ class APIError(Nwp500Error):
         self,
         message: str,
         code: int | None = None,
-        response: dict[str, Any | None] = None,
+        response: dict[str, Any | None] | None = None,
         **kwargs: Any,
     ):
         """Initialize API error.
@@ -443,3 +444,27 @@ class DeviceOperationError(DeviceError):
     """
 
     pass
+
+
+class DeviceCapabilityError(DeviceError):
+    """Device does not support a requested capability.
+
+    Raised when an MQTT command requires a device capability that the device
+    does not support. This may occur when trying to use features that are not
+    available on specific device models or hardware revisions.
+
+    Attributes:
+        feature_name: Name of the unsupported feature
+    """
+
+    def __init__(self, feature_name: str, message: str | None = None) -> None:
+        """Initialize capability error.
+
+        Args:
+            feature_name: Name of the missing/unsupported feature
+            message: Optional custom error message
+        """
+        self.feature_name = feature_name
+        if message is None:
+            message = f"Device does not support {feature_name} capability"
+        super().__init__(message)

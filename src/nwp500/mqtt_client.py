@@ -532,23 +532,37 @@ class NavienMqttClient(EventEmitter):
                 )
                 self._reconnection_handler.enable()
 
-                # Initialize subscription manager
+                # Initialize shared device info cache and client_id
+                from .device_info_cache import DeviceInfoCache
+
                 client_id = self.config.client_id or ""
+                device_info_cache = DeviceInfoCache(update_interval_minutes=30)
+
+                # Initialize subscription manager with cache
                 self._subscription_manager = MqttSubscriptionManager(
                     connection=self._connection,
                     client_id=client_id,
                     event_emitter=self,
                     schedule_coroutine=self._schedule_coroutine,
+                    device_info_cache=device_info_cache,
                 )
 
-                # Initialize device controller
+                # Initialize device controller with cache
                 self._device_controller = MqttDeviceController(
                     client_id=client_id,
                     session_id=self._session_id,
                     publish_func=self._connection_manager.publish,
+                    device_info_cache=device_info_cache,
                 )
 
-                # Initialize periodic request manager
+                # Set the auto-request callback on the controller
+                # Wrap _ensure_device_info_cached to match callback signature
+                async def _auto_request_wrapper(device: Device) -> None:
+                    await self._ensure_device_info_cached(device, timeout=15.0)
+
+                self._device_controller._ensure_device_info_callback = (
+                    _auto_request_wrapper
+                )
                 # Note: These will be implemented later when we
                 # delegate device control methods
                 self._periodic_manager = MqttPeriodicRequestManager(
@@ -973,6 +987,59 @@ class NavienMqttClient(EventEmitter):
 
         return await self._device_controller.request_device_info(device)
 
+    async def _ensure_device_info_cached(
+        self, device: Device, timeout: float = 15.0
+    ) -> bool:
+        """
+        Ensure device info is cached, requesting if necessary.
+
+        Internal method called by control commands to ensure device
+        capabilities are available before execution.
+
+        Args:
+            device: Device to ensure info for
+            timeout: Timeout for waiting for device info response
+
+        Returns:
+            True if device info was successfully cached, False on timeout
+
+        Raises:
+            MqttNotConnectedError: If not connected
+        """
+        if not self._device_controller:
+            raise MqttNotConnectedError("Not connected to MQTT broker")
+
+        mac = device.device_info.mac_address
+
+        # Check if already cached
+        cached = await self._device_controller._device_info_cache.get(mac)
+        if cached is not None:
+            return True  # Already cached
+
+        # Not cached, request it
+        _logger.debug(f"Requesting device info for {mac}")
+        future: asyncio.Future[DeviceFeature] = (
+            asyncio.get_running_loop().create_future()
+        )
+
+        def on_feature(feature: DeviceFeature) -> None:
+            if not future.done():
+                future.set_result(feature)
+
+        await self.subscribe_device_feature(device, on_feature)
+        await self.request_device_info(device)
+
+        try:
+            await asyncio.wait_for(future, timeout=timeout)
+            _logger.debug(f"Device info cached for {mac}")
+            return True
+        except TimeoutError:
+            _logger.error(
+                f"Timeout waiting for device info for {mac}. "
+                "Device may not support all control features."
+            )
+            return False
+
     async def set_power(self, device: Device, power_on: bool) -> int:
         """
         Turn device on or off.
@@ -1270,6 +1337,190 @@ class NavienMqttClient(EventEmitter):
             raise MqttNotConnectedError("Not connected to MQTT broker")
 
         return await self._device_controller.signal_app_connection(device)
+
+    async def enable_demand_response(self, device: Device) -> int:
+        """
+        Enable utility demand response participation.
+
+        Allows the device to respond to utility demand response signals
+        to reduce consumption (shed) or pre-heat (load up) before peak periods.
+
+        Args:
+            device: The device to control
+
+        Returns:
+            The message ID of the published command
+
+        Raises:
+            MqttNotConnectedError: If client is not connected
+        """
+        if not self._connected or not self._device_controller:
+            raise MqttNotConnectedError("Not connected to MQTT broker")
+
+        return await self._device_controller.enable_demand_response(device)
+
+    async def disable_demand_response(self, device: Device) -> int:
+        """
+        Disable utility demand response participation.
+
+        Prevents the device from responding to utility demand response signals.
+
+        Args:
+            device: The device to control
+
+        Returns:
+            The message ID of the published command
+
+        Raises:
+            MqttNotConnectedError: If client is not connected
+        """
+        if not self._connected or not self._device_controller:
+            raise MqttNotConnectedError("Not connected to MQTT broker")
+
+        return await self._device_controller.disable_demand_response(device)
+
+    async def reset_air_filter(self, device: Device) -> int:
+        """
+        Reset air filter maintenance timer.
+
+        Used for heat pump models to reset the maintenance timer after
+        filter cleaning or replacement.
+
+        Args:
+            device: The device to control
+
+        Returns:
+            The message ID of the published command
+
+        Raises:
+            MqttNotConnectedError: If client is not connected
+        """
+        if not self._connected or not self._device_controller:
+            raise MqttNotConnectedError("Not connected to MQTT broker")
+
+        return await self._device_controller.reset_air_filter(device)
+
+    async def set_vacation_days(self, device: Device, days: int) -> int:
+        """
+        Set vacation/away mode duration in days.
+
+        Configures the device to operate in energy-saving mode for the
+        specified number of days during absence.
+
+        Args:
+            device: The device to control
+            days: Number of vacation days (1-365 recommended)
+
+        Returns:
+            The message ID of the published command
+
+        Raises:
+            MqttNotConnectedError: If client is not connected
+            RangeValidationError: If days is not positive
+        """
+        if not self._connected or not self._device_controller:
+            raise MqttNotConnectedError("Not connected to MQTT broker")
+
+        return await self._device_controller.set_vacation_days(device, days)
+
+    async def configure_reservation_water_program(self, device: Device) -> int:
+        """
+        Enable/configure water program reservation mode.
+
+        Enables the water program reservation system for scheduling.
+
+        Args:
+            device: The device to control
+
+        Returns:
+            The message ID of the published command
+
+        Raises:
+            MqttNotConnectedError: If client is not connected
+        """
+        if not self._connected or not self._device_controller:
+            raise MqttNotConnectedError("Not connected to MQTT broker")
+
+        return (
+            await self._device_controller.configure_reservation_water_program(
+                device
+            )
+        )
+
+    async def configure_recirculation_schedule(
+        self,
+        device: Device,
+        schedule: dict[str, Any],
+    ) -> int:
+        """
+        Configure recirculation pump schedule.
+
+        Sets up the recirculation pump operating schedule with specified
+        periods and settings.
+
+        Args:
+            device: The device to control
+            schedule: Recirculation schedule configuration dictionary
+
+        Returns:
+            The message ID of the published command
+
+        Raises:
+            MqttNotConnectedError: If client is not connected
+        """
+        if not self._connected or not self._device_controller:
+            raise MqttNotConnectedError("Not connected to MQTT broker")
+
+        return await self._device_controller.configure_recirculation_schedule(
+            device, schedule
+        )
+
+    async def set_recirculation_mode(self, device: Device, mode: int) -> int:
+        """
+        Set recirculation pump operation mode.
+
+        Configures how the recirculation pump operates.
+
+        Args:
+            device: The device to control
+            mode: Recirculation mode (1=Always On, 2=Button Only,
+                  3=Schedule, 4=Temperature)
+
+        Returns:
+            The message ID of the published command
+
+        Raises:
+            MqttNotConnectedError: If client is not connected
+            RangeValidationError: If mode is not in valid range [1, 4]
+        """
+        if not self._connected or not self._device_controller:
+            raise MqttNotConnectedError("Not connected to MQTT broker")
+
+        return await self._device_controller.set_recirculation_mode(
+            device, mode
+        )
+
+    async def trigger_recirculation_hot_button(self, device: Device) -> int:
+        """
+        Manually trigger the recirculation pump hot button.
+
+        Activates the recirculation pump for immediate hot water delivery.
+
+        Args:
+            device: The device to control
+
+        Returns:
+            The message ID of the published command
+
+        Raises:
+            MqttNotConnectedError: If client is not connected
+        """
+        if not self._connected or not self._device_controller:
+            raise MqttNotConnectedError("Not connected to MQTT broker")
+
+        return await self._device_controller.trigger_recirculation_hot_button(
+            device
+        )
 
     async def start_periodic_requests(
         self,

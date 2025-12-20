@@ -30,7 +30,8 @@ All library exceptions inherit from ``Nwp500Error``::
     └── DeviceError
         ├── DeviceNotFoundError
         ├── DeviceOfflineError
-        └── DeviceOperationError
+        ├── DeviceOperationError
+        └── DeviceCapabilityError
 
 Base Exception
 ==============
@@ -440,6 +441,80 @@ DeviceOperationError
    fails. This may occur due to invalid commands, device restrictions, or
    device-side errors.
 
+DeviceCapabilityError
+---------------------
+
+.. py:class:: DeviceCapabilityError(feature, message=None, **kwargs)
+
+   Device doesn't support a required controllable feature.
+
+   Raised when attempting to execute a command on a device that doesn't support
+   the feature. This is raised by control commands decorated with
+   ``@requires_capability`` when the device doesn't have the necessary capability.
+
+   :param feature: Name of the unsupported feature (e.g., "recirculation_use")
+   :type feature: str
+   :param message: Detailed error message (optional)
+   :type message: str or None
+
+   **Attributes:**
+
+   * ``feature`` (str) - Name of the unsupported feature
+   * ``message`` (str) - Human-readable error message
+
+   **Example:**
+
+   .. code-block:: python
+
+      from nwp500 import NavienMqttClient, DeviceCapabilityError
+
+      mqtt = NavienMqttClient(auth)
+      await mqtt.connect()
+      
+      # Request device info first
+      await mqtt.subscribe_device_feature(device, lambda f: None)
+      await mqtt.request_device_info(device)
+      
+      try:
+          # This raises DeviceCapabilityError if device doesn't support recirculation
+          await mqtt.set_recirculation_mode(device, 1)
+      except DeviceCapabilityError as e:
+          print(f"Feature not supported: {e.feature}")
+          print(f"Error: {e}")
+
+   **Supported Controllable Features:**
+
+   * ``power_use`` - Device power on/off control
+   * ``dhw_use`` - DHW mode changes
+   * ``dhw_temperature_setting_use`` - DHW temperature control
+   * ``holiday_use`` - Vacation/away mode
+   * ``program_reservation_use`` - Reservations and TOU scheduling
+   * ``recirculation_use`` - Recirculation pump control
+   * ``recirc_reservation_use`` - Recirculation scheduling
+
+   **Checking Capabilities Before Control:**
+
+   .. code-block:: python
+
+      from nwp500.device_capabilities import DeviceCapabilityChecker
+
+      # Check if device supports a feature
+      if DeviceCapabilityChecker.supports("recirculation_use", device_features):
+          await mqtt.set_recirculation_mode(device, 1)
+      else:
+          print("Device doesn't support recirculation")
+
+   **Viewing All Available Controls:**
+
+   .. code-block:: python
+
+      from nwp500.device_capabilities import DeviceCapabilityChecker
+
+      controls = DeviceCapabilityChecker.get_available_controls(device_features)
+      for feature, supported in controls.items():
+          status = "✓" if supported else "✗"
+          print(f"{status} {feature}")
+
 Error Handling Patterns
 =======================
 
@@ -531,7 +606,44 @@ Implement intelligent retry strategies:
                    print(f"Operation failed: {e}")
                    raise
 
-Pattern 4: Structured Logging
+Pattern 4: Device Capability Checking
+--------------------------------------
+
+Handle capability errors for device control commands:
+
+.. code-block:: python
+
+   from nwp500 import NavienMqttClient, DeviceCapabilityError
+   from nwp500.device_capabilities import DeviceCapabilityChecker
+
+   async def control_with_capability_check():
+       mqtt = NavienMqttClient(auth)
+       await mqtt.connect()
+       
+       # Request device info first
+       await mqtt.subscribe_device_feature(device, lambda f: None)
+       await mqtt.request_device_info(device)
+       
+       # Option 1: Try control and catch capability error
+       try:
+           await mqtt.set_recirculation_mode(device, 1)
+       except DeviceCapabilityError as e:
+           print(f"Device doesn't support: {e.feature}")
+           # Fallback to alternative command
+       
+       # Option 2: Check capability before attempting
+       if DeviceCapabilityChecker.supports("recirculation_use", device_features):
+           await mqtt.set_recirculation_mode(device, 1)
+       else:
+           print("Recirculation not supported")
+       
+       # Option 3: View all available controls
+       controls = DeviceCapabilityChecker.get_available_controls(device_features)
+       for feature, supported in controls.items():
+           if supported:
+               print(f"✓ {feature} supported")
+
+Pattern 5: Structured Logging
 ------------------------------
 
 Use ``to_dict()`` for structured error logging:

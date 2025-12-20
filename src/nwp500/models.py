@@ -15,10 +15,12 @@ from pydantic.alias_generators import to_camel
 from .enums import (
     CurrentOperationMode,
     DeviceType,
+    DHWControlTypeFlag,
     DhwOperationSetting,
     DREvent,
     ErrorCode,
     HeatSource,
+    RecirculationMode,
     TemperatureType,
     TempFormulaType,
     UnitType,
@@ -144,7 +146,7 @@ class NavienBaseModel(BaseModel):
 
     @staticmethod
     def _convert_enums_to_names(
-        data: Any, visited: set[int | None] = None
+        data: Any, visited: set[int | None] | None = None
     ) -> Any:
         """Recursively convert Enum values to their names.
 
@@ -259,7 +261,7 @@ class TOUInfo(NavienBaseModel):
         *,
         strict: bool | None = None,
         from_attributes: bool | None = None,
-        context: dict[str, Any | None] = None,
+        context: dict[str, Any | None] | None = None,
         **kwargs: Any,
     ) -> "TOUInfo":
         # Handle nested structure where fields are in 'touInfo'
@@ -454,7 +456,7 @@ class DeviceStatus(NavienBaseModel):
             "device_class": "energy",
         },
     )
-    recirc_operation_mode: int = Field(
+    recirc_operation_mode: RecirculationMode = Field(
         description="Recirculation operation mode"
     )
     recirc_pump_operation_status: int = Field(
@@ -503,6 +505,13 @@ class DeviceStatus(NavienBaseModel):
         description=(
             "Sustained DHW usage status - indicates prolonged hot water usage"
         )
+    )
+    dhw_operation_busy: DeviceBool = Field(
+        default=False,
+        description=(
+            "DHW operation busy status - "
+            "indicates if the device is currently heating water to meet demand"
+        ),
     )
     program_reservation_use: DeviceBool = Field(
         description=(
@@ -975,6 +984,18 @@ class DeviceFeature(NavienBaseModel):
             "for communication protocol version"
         )
     )
+    recirc_sw_version: int = Field(
+        description=(
+            "Recirculation module firmware version - "
+            "controls recirculation pump operation and temperature loop"
+        )
+    )
+    recirc_model_type_code: int = Field(
+        description=(
+            "Recirculation module model identifier - "
+            "specifies installed recirculation system variant"
+        )
+    )
     controller_serial_number: str = Field(
         description=(
             "Unique serial number of the main controller board "
@@ -1002,11 +1023,10 @@ class DeviceFeature(NavienBaseModel):
             "primary function of water heater"
         )
     )
-    dhw_temperature_setting_use: CapabilityFlag = Field(
+    dhw_temperature_setting_use: DHWControlTypeFlag = Field(
         description=(
-            "Temperature adjustment capability "
-            "(2=supported, 1=not supported) - "
-            "user can modify target temperature"
+            "DHW temperature control precision setting: "
+            "granularity of temperature adjustments available for DHW control"
         )
     )
     smart_diagnostic_use: CapabilityFlag = Field(
@@ -1098,6 +1118,24 @@ class DeviceFeature(NavienBaseModel):
             "hybrid boost mode prioritizing fast recovery"
         )
     )
+    recirculation_use: CapabilityFlag = Field(
+        description=(
+            "Recirculation pump support (1=available) - "
+            "instant hot water delivery via dedicated loop"
+        )
+    )
+    recirc_reservation_use: CapabilityFlag = Field(
+        description=(
+            "Recirculation schedule support (1=available) - "
+            "programmable recirculation on specified schedule"
+        )
+    )
+    title24_use: CapabilityFlag = Field(
+        description=(
+            "Title 24 compliance (1=available) - "
+            "California energy code compliance for recirculation systems"
+        )
+    )
 
     # Temperature limit fields with half-degree Celsius scaling
     dhw_temperature_min: HalfCelsiusToF = Field(
@@ -1134,6 +1172,26 @@ class DeviceFeature(NavienBaseModel):
         description=(
             "Maximum freeze protection threshold: 65°F - "
             "user-adjustable upper limit"
+        ),
+        json_schema_extra={
+            "unit_of_measurement": "°F",
+            "device_class": "temperature",
+        },
+    )
+    recirc_temperature_min: HalfCelsiusToF = Field(
+        description=(
+            "Minimum recirculation temperature setting - "
+            "lower limit for recirculation loop temperature control"
+        ),
+        json_schema_extra={
+            "unit_of_measurement": "°F",
+            "device_class": "temperature",
+        },
+    )
+    recirc_temperature_max: HalfCelsiusToF = Field(
+        description=(
+            "Maximum recirculation temperature setting - "
+            "upper limit for recirculation loop temperature control"
         ),
         json_schema_extra={
             "unit_of_measurement": "°F",

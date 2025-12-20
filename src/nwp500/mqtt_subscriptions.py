@@ -48,6 +48,7 @@ class MqttSubscriptionManager:
         client_id: str,
         event_emitter: EventEmitter,
         schedule_coroutine: Callable[[Any], None],
+        device_info_cache: Any | None = None,  # DeviceInfoCache
     ):
         """
         Initialize subscription manager.
@@ -57,11 +58,14 @@ class MqttSubscriptionManager:
             client_id: Client ID for response topics
             event_emitter: Event emitter for state changes
             schedule_coroutine: Function to schedule async tasks
+            device_info_cache: Optional DeviceInfoCache for caching device
+                features
         """
         self._connection = connection
         self._client_id = client_id
         self._event_emitter = event_emitter
         self._schedule_coroutine = schedule_coroutine
+        self._device_info_cache = device_info_cache
 
         # Track subscriptions and handlers
         self._subscriptions: dict[str, mqtt.QoS] = {}
@@ -609,6 +613,14 @@ class MqttSubscriptionManager:
                 )
                 feature_data = response["feature"]
                 device_feature = DeviceFeature.from_dict(feature_data)
+
+                # Cache device features if cache is available
+                if self._device_info_cache is not None:
+                    mac_address = device.device_info.mac_address
+                    self._schedule_coroutine(
+                        self._device_info_cache.set(mac_address, device_feature)
+                    )
+                    _logger.debug(f"Cached device features for {mac_address}")
 
                 # Emit feature received event
                 self._schedule_coroutine(

@@ -66,6 +66,10 @@ Basic Monitoring
 Device Control
 --------------
 
+Control operations require device capability information to be cached. Always request
+device info before using control commands. See :doc:`device_control` for complete
+control method reference, capability checking, and advanced features.
+
 .. code-block:: python
 
    async def control_device():
@@ -76,7 +80,11 @@ Device Control
            mqtt = NavienMqttClient(auth)
            await mqtt.connect()
            
-           # Control operations
+           # Request device info first (populates capability cache)
+           await mqtt.subscribe_device_feature(device, lambda f: None)
+           await mqtt.request_device_info(device)
+           
+           # Control operations (with automatic capability checking)
            await mqtt.set_power(device, power_on=True)
            await mqtt.set_dhw_mode(device, mode_id=3)  # Energy Saver
            await mqtt.set_dhw_temperature(device, 140.0)
@@ -1046,6 +1054,7 @@ Related Documentation
 
 * :doc:`auth_client` - Authentication client
 * :doc:`api_client` - REST API client
+* :doc:`device_control` - Device control commands and capability checking
 * :doc:`models` - Data models (DeviceStatus, DeviceFeature, etc.)
 * :doc:`events` - Event system
 * :doc:`exceptions` - Exception handling

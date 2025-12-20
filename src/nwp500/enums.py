@@ -122,6 +122,21 @@ class RecirculationMode(IntEnum):
     TEMPERATURE = 4  # Activates when pipe temp drops
 
 
+class DHWControlTypeFlag(IntEnum):
+    """DHW temperature control precision setting.
+
+    Controls the granularity of temperature adjustments available for DHW
+    (Domestic Hot Water) control. Different models support different precision
+    levels.
+    """
+
+    UNKNOWN = 0
+    DISABLE = 1  # Temperature control disabled (OFF)
+    ENABLE_DOT_5_DEGREE = 2  # 0.5°C precision
+    ENABLE_1_DEGREE = 3  # 1°C precision
+    ENABLE_3_STAGE = 4  # 3-stage discrete levels
+
+
 # ============================================================================
 # Time of Use (TOU) Enumerations
 # ============================================================================
@@ -378,6 +393,14 @@ FILTER_STATUS_TEXT = {
     FilterChange.NORMAL: "Normal Operation",
     FilterChange.REPLACE_NEED: "Replacement Needed",
     FilterChange.UNKNOWN: "Unknown",
+}
+
+DHW_CONTROL_TYPE_FLAG_TEXT = {
+    DHWControlTypeFlag.UNKNOWN: "Unknown",
+    DHWControlTypeFlag.DISABLE: "OFF",
+    DHWControlTypeFlag.ENABLE_DOT_5_DEGREE: "0.5°C",
+    DHWControlTypeFlag.ENABLE_1_DEGREE: "1°C",
+    DHWControlTypeFlag.ENABLE_3_STAGE: "3 Stage",
 }
 
 

@@ -24,18 +24,25 @@ from nwp500.exceptions import (
 )
 
 from .commands import (
-    handle_device_feature_request,
+    handle_configure_reservation_water_program_request,
+    handle_device_info_raw_request,
     handle_device_info_request,
+    handle_disable_demand_response_request,
+    handle_enable_demand_response_request,
     handle_get_controller_serial_request,
     handle_get_energy_request,
     handle_get_reservations_request,
     handle_get_tou_request,
     handle_power_request,
+    handle_reset_air_filter_request,
     handle_set_dhw_temp_request,
     handle_set_mode_request,
+    handle_set_recirculation_mode_request,
     handle_set_tou_enabled_request,
+    handle_set_vacation_days_request,
     handle_status_raw_request,
     handle_status_request,
+    handle_trigger_recirculation_hot_button_request,
     handle_update_reservations_request,
 )
 from .monitoring import handle_monitoring
@@ -105,11 +112,24 @@ async def async_main(args: argparse.Namespace) -> int:
                 await mqtt.connect()
                 _logger.info("MQTT client connected.")
 
+                # Request device info early to populate cache for capability
+                # checking. This ensures commands have device capability info
+                # available without relying on decorator auto-requests.
+                _logger.debug("Requesting device capabilities...")
+                success = await mqtt._ensure_device_info_cached(
+                    device, timeout=15.0
+                )
+                if not success:
+                    _logger.warning(
+                        "Device capabilities not available. "
+                        "Some commands may fail if unsupported."
+                    )
+
                 # Route to appropriate handler based on arguments
                 if args.device_info:
                     await handle_device_info_request(mqtt, device)
-                elif args.device_feature:
-                    await handle_device_feature_request(mqtt, device)
+                elif args.device_info_raw:
+                    await handle_device_info_raw_request(mqtt, device)
                 elif args.get_controller_serial:
                     await handle_get_controller_serial_request(mqtt, device)
                 elif args.power_on:
@@ -188,12 +208,97 @@ async def async_main(args: argparse.Namespace) -> int:
                     await handle_get_energy_request(
                         mqtt, device, args.energy_year, months
                     )
+                elif args.enable_demand_response:
+                    await handle_enable_demand_response_request(mqtt, device)
+                    if args.status:
+                        _logger.info(
+                            "Getting updated status after enabling "
+                            "demand response..."
+                        )
+                        await asyncio.sleep(2)
+                        await handle_status_request(mqtt, device)
+                elif args.disable_demand_response:
+                    await handle_disable_demand_response_request(mqtt, device)
+                    if args.status:
+                        _logger.info(
+                            "Getting updated status after disabling "
+                            "demand response..."
+                        )
+                        await asyncio.sleep(2)
+                        await handle_status_request(mqtt, device)
+                elif args.reset_air_filter:
+                    await handle_reset_air_filter_request(mqtt, device)
+                    if args.status:
+                        _logger.info(
+                            "Getting updated status after resetting "
+                            "air filter..."
+                        )
+                        await asyncio.sleep(2)
+                        await handle_status_request(mqtt, device)
+                elif args.set_vacation_days:
+                    if args.set_vacation_days <= 0:
+                        _logger.error("Vacation days must be greater than 0")
+                        return 1
+                    await handle_set_vacation_days_request(
+                        mqtt, device, args.set_vacation_days
+                    )
+                    if args.status:
+                        _logger.info(
+                            "Getting updated status after setting "
+                            "vacation days..."
+                        )
+                        await asyncio.sleep(2)
+                        await handle_status_request(mqtt, device)
+                elif args.set_recirculation_mode:
+                    if not 1 <= args.set_recirculation_mode <= 4:
+                        _logger.error(
+                            "Recirculation mode must be between 1 and 4"
+                        )
+                        return 1
+                    await handle_set_recirculation_mode_request(
+                        mqtt, device, args.set_recirculation_mode
+                    )
+                    if args.status:
+                        _logger.info(
+                            "Getting updated status after setting "
+                            "recirculation mode..."
+                        )
+                        await asyncio.sleep(2)
+                        await handle_status_request(mqtt, device)
+                elif args.recirculation_hot_button:
+                    await handle_trigger_recirculation_hot_button_request(
+                        mqtt, device
+                    )
+                    if args.status:
+                        _logger.info(
+                            "Getting updated status after triggering "
+                            "hot button..."
+                        )
+                        await asyncio.sleep(2)
+                        await handle_status_request(mqtt, device)
+                elif args.configure_water_program:
+                    await handle_configure_reservation_water_program_request(
+                        mqtt, device
+                    )
+                    if args.status:
+                        _logger.info(
+                            "Getting updated status after configuring "
+                            "water program..."
+                        )
+                        await asyncio.sleep(2)
+                        await handle_status_request(mqtt, device)
                 elif args.status_raw:
                     await handle_status_raw_request(mqtt, device)
                 elif args.status:
                     await handle_status_request(mqtt, device)
-                else:  # Default to monitor
+                elif args.monitor:
                     await handle_monitoring(mqtt, device, args.output)
+                else:
+                    _logger.error(
+                        "No action specified. Use --help to see available "
+                        "options."
+                    )
+                    return 1
 
             except asyncio.CancelledError:
                 _logger.info("Monitoring stopped by user.")
@@ -292,10 +397,10 @@ def parse_args(args: list[str]) -> argparse.Namespace:
         "then exit.",
     )
     group.add_argument(
-        "--device-feature",
+        "--device-info-raw",
         action="store_true",
-        help="Fetch and print device feature and capability information "
-        "via MQTT, then exit.",
+        help="Fetch and print raw device information as received from MQTT "
+        "(no conversions applied), then exit.",
     )
     group.add_argument(
         "--get-controller-serial",
@@ -363,11 +468,48 @@ def parse_args(args: list[str]) -> argparse.Namespace:
         "options.",
     )
     group.add_argument(
+        "--enable-demand-response",
+        action="store_true",
+        help="Enable utility demand response participation.",
+    )
+    group.add_argument(
+        "--disable-demand-response",
+        action="store_true",
+        help="Disable utility demand response participation.",
+    )
+    group.add_argument(
+        "--reset-air-filter",
+        action="store_true",
+        help="Reset air filter maintenance timer.",
+    )
+    group.add_argument(
+        "--set-vacation-days",
+        type=int,
+        metavar="DAYS",
+        help="Set vacation/away mode duration in days (1-365+).",
+    )
+    group.add_argument(
+        "--set-recirculation-mode",
+        type=int,
+        metavar="MODE",
+        help="Set recirculation pump operation mode. "
+        "Options: 1=Always On, 2=Button Only, 3=Schedule, 4=Temperature",
+    )
+    group.add_argument(
+        "--recirculation-hot-button",
+        action="store_true",
+        help="Trigger the recirculation pump hot button.",
+    )
+    group.add_argument(
+        "--configure-water-program",
+        action="store_true",
+        help="Enable/configure water program reservation mode.",
+    )
+    group.add_argument(
         "--monitor",
         action="store_true",
-        default=True,  # Default action
         help="Run indefinitely, polling for status every 30 seconds and "
-        "logging to a CSV file. (default)",
+        "logging to a CSV file.",
     )
 
     # Additional options for new commands

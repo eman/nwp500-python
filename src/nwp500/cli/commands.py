@@ -6,7 +6,13 @@ import logging
 from typing import Any
 
 from nwp500 import Device, DeviceFeature, DeviceStatus, NavienMqttClient
-from nwp500.exceptions import MqttError, Nwp500Error, ValidationError
+from nwp500.exceptions import (
+    DeviceCapabilityError,
+    DeviceError,
+    MqttError,
+    Nwp500Error,
+    ValidationError,
+)
 
 from .output_formatters import _json_default_serializer
 
@@ -136,14 +142,48 @@ async def handle_device_info_request(
         _logger.error("Timed out waiting for device info response.")
 
 
-async def handle_device_feature_request(
+async def handle_device_info_raw_request(
     mqtt: NavienMqttClient, device: Device
 ) -> None:
-    """Request device feature and capability information via MQTT.
+    """Request raw device information via MQTT and print it exactly as received.
 
-    Alias for handle_device_info_request. Both fetch the same data.
+    This is similar to handle_device_info_request but prints the raw MQTT
+    message without Pydantic model conversions.
     """
-    await handle_device_info_request(mqtt, device)
+    future = asyncio.get_running_loop().create_future()
+
+    def raw_callback(topic: str, message: dict[str, Any]) -> None:
+        if not future.done():
+            # Extract and print the raw feature/info portion
+            if "response" in message and "feature" in message["response"]:
+                print(
+                    json.dumps(
+                        message["response"]["feature"],
+                        indent=2,
+                        default=_json_default_serializer,
+                    )
+                )
+                future.set_result(None)
+            elif "feature" in message:
+                print(
+                    json.dumps(
+                        message["feature"],
+                        indent=2,
+                        default=_json_default_serializer,
+                    )
+                )
+                future.set_result(None)
+
+    # Subscribe to all device messages
+    await mqtt.subscribe_device(device, raw_callback)
+
+    _logger.info("Requesting device information (raw)...")
+    await mqtt.request_device_info(device)
+
+    try:
+        await asyncio.wait_for(future, timeout=10)
+    except TimeoutError:
+        _logger.error("Timed out waiting for device info response.")
 
 
 async def handle_get_controller_serial_request(
@@ -624,3 +664,244 @@ async def handle_get_energy_request(
         await asyncio.wait_for(future, timeout=15)
     except TimeoutError:
         _logger.error("Timed out waiting for energy usage response.")
+
+
+async def handle_enable_demand_response_request(
+    mqtt: NavienMqttClient, device: Device
+) -> None:
+    """Enable utility demand response participation."""
+    _logger.info("Enabling demand response...")
+
+    future = asyncio.get_running_loop().create_future()
+
+    def on_status_response(status: DeviceStatus) -> None:
+        if not future.done():
+            future.set_result(status)
+
+    await mqtt.subscribe_device_status(device, on_status_response)
+
+    try:
+        await mqtt.enable_demand_response(device)
+
+        try:
+            await asyncio.wait_for(future, timeout=10)
+            _logger.info("Demand response enabled successfully!")
+        except TimeoutError:
+            _logger.error("Timed out waiting for response confirmation")
+
+    except MqttError as e:
+        _logger.error(f"MQTT error enabling demand response: {e}")
+    except Nwp500Error as e:
+        _logger.error(f"Error enabling demand response: {e}")
+    except Exception as e:
+        _logger.error(f"Unexpected error enabling demand response: {e}")
+
+
+async def handle_disable_demand_response_request(
+    mqtt: NavienMqttClient, device: Device
+) -> None:
+    """Disable utility demand response participation."""
+    _logger.info("Disabling demand response...")
+
+    future = asyncio.get_running_loop().create_future()
+
+    def on_status_response(status: DeviceStatus) -> None:
+        if not future.done():
+            future.set_result(status)
+
+    await mqtt.subscribe_device_status(device, on_status_response)
+
+    try:
+        await mqtt.disable_demand_response(device)
+
+        try:
+            await asyncio.wait_for(future, timeout=10)
+            _logger.info("Demand response disabled successfully!")
+        except TimeoutError:
+            _logger.error("Timed out waiting for response confirmation")
+
+    except MqttError as e:
+        _logger.error(f"MQTT error disabling demand response: {e}")
+    except Nwp500Error as e:
+        _logger.error(f"Error disabling demand response: {e}")
+    except Exception as e:
+        _logger.error(f"Unexpected error disabling demand response: {e}")
+
+
+async def handle_reset_air_filter_request(
+    mqtt: NavienMqttClient, device: Device
+) -> None:
+    """Reset air filter maintenance timer."""
+    _logger.info("Resetting air filter timer...")
+
+    future = asyncio.get_running_loop().create_future()
+
+    def on_status_response(status: DeviceStatus) -> None:
+        if not future.done():
+            future.set_result(status)
+
+    await mqtt.subscribe_device_status(device, on_status_response)
+
+    try:
+        await mqtt.reset_air_filter(device)
+
+        try:
+            await asyncio.wait_for(future, timeout=10)
+            _logger.info("Air filter timer reset successfully!")
+        except TimeoutError:
+            _logger.error("Timed out waiting for response confirmation")
+
+    except MqttError as e:
+        _logger.error(f"MQTT error resetting air filter: {e}")
+    except Nwp500Error as e:
+        _logger.error(f"Error resetting air filter: {e}")
+    except Exception as e:
+        _logger.error(f"Unexpected error resetting air filter: {e}")
+
+
+async def handle_set_vacation_days_request(
+    mqtt: NavienMqttClient, device: Device, days: int
+) -> None:
+    """Set vacation mode duration in days."""
+    _logger.info(f"Setting vacation mode to {days} days...")
+
+    future = asyncio.get_running_loop().create_future()
+
+    def on_status_response(status: DeviceStatus) -> None:
+        if not future.done():
+            future.set_result(status)
+
+    await mqtt.subscribe_device_status(device, on_status_response)
+
+    try:
+        await mqtt.set_vacation_days(device, days)
+
+        try:
+            await asyncio.wait_for(future, timeout=10)
+            _logger.info(f"Vacation mode set to {days} days successfully!")
+        except TimeoutError:
+            _logger.error("Timed out waiting for response confirmation")
+
+    except ValidationError as e:
+        _logger.error(f"Invalid vacation days: {e}")
+        if hasattr(e, "min_value"):
+            _logger.info(f"Valid range: {e.min_value}+ days")
+    except MqttError as e:
+        _logger.error(f"MQTT error setting vacation days: {e}")
+    except Nwp500Error as e:
+        _logger.error(f"Error setting vacation days: {e}")
+    except Exception as e:
+        _logger.error(f"Unexpected error setting vacation days: {e}")
+
+
+async def handle_set_recirculation_mode_request(
+    mqtt: NavienMqttClient, device: Device, mode: int
+) -> None:
+    """Set recirculation pump operation mode."""
+    mode_names = {
+        1: "Always On",
+        2: "Button Only",
+        3: "Schedule",
+        4: "Temperature",
+    }
+    mode_name = mode_names.get(mode, "Unknown")
+    _logger.info(f"Setting recirculation mode to {mode_name} (mode {mode})...")
+
+    future = asyncio.get_running_loop().create_future()
+
+    def on_status_response(status: DeviceStatus) -> None:
+        if not future.done():
+            future.set_result(status)
+
+    await mqtt.subscribe_device_status(device, on_status_response)
+
+    try:
+        await mqtt.set_recirculation_mode(device, mode)
+
+        try:
+            await asyncio.wait_for(future, timeout=10)
+            _logger.info(f"Recirculation mode set to {mode_name} successfully!")
+        except TimeoutError:
+            _logger.error("Timed out waiting for response confirmation")
+
+    except ValidationError as e:
+        _logger.error(f"Invalid recirculation mode: {e}")
+        _logger.info(
+            "Valid modes: 1=Always On, 2=Button Only, 3=Schedule, 4=Temperature"
+        )
+    except MqttError as e:
+        _logger.error(f"MQTT error setting recirculation mode: {e}")
+    except Nwp500Error as e:
+        _logger.error(f"Error setting recirculation mode: {e}")
+    except Exception as e:
+        _logger.error(f"Unexpected error setting recirculation mode: {e}")
+
+
+async def handle_trigger_recirculation_hot_button_request(
+    mqtt: NavienMqttClient, device: Device
+) -> None:
+    """Trigger the recirculation pump hot button."""
+    _logger.info("Triggering recirculation pump hot button...")
+
+    future = asyncio.get_running_loop().create_future()
+
+    def on_status_response(status: DeviceStatus) -> None:
+        if not future.done():
+            future.set_result(status)
+
+    await mqtt.subscribe_device_status(device, on_status_response)
+
+    try:
+        await mqtt.trigger_recirculation_hot_button(device)
+
+        try:
+            await asyncio.wait_for(future, timeout=10)
+            _logger.info(
+                "Recirculation pump hot button triggered successfully!"
+            )
+        except TimeoutError:
+            _logger.error("Timed out waiting for response confirmation")
+
+    except DeviceCapabilityError as e:
+        _logger.error(f"Device does not support recirculation: {e}")
+    except MqttError as e:
+        _logger.error(f"MQTT error triggering hot button: {e}")
+    except DeviceError as e:
+        _logger.error(f"Device error triggering hot button: {e}")
+    except Nwp500Error as e:
+        _logger.error(f"Error triggering hot button: {e}")
+    except Exception as e:
+        _logger.error(f"Unexpected error triggering hot button: {e}")
+
+
+async def handle_configure_reservation_water_program_request(
+    mqtt: NavienMqttClient, device: Device
+) -> None:
+    """Enable/configure water program reservation mode."""
+    _logger.info("Configuring water program reservation mode...")
+
+    future = asyncio.get_running_loop().create_future()
+
+    def on_status_response(status: DeviceStatus) -> None:
+        if not future.done():
+            future.set_result(status)
+
+    await mqtt.subscribe_device_status(device, on_status_response)
+
+    try:
+        await mqtt.configure_reservation_water_program(device)
+
+        try:
+            await asyncio.wait_for(future, timeout=10)
+            _logger.info(
+                "Water program reservation mode configured successfully!"
+            )
+        except TimeoutError:
+            _logger.error("Timed out waiting for response confirmation")
+
+    except MqttError as e:
+        _logger.error(f"MQTT error configuring water program: {e}")
+    except Nwp500Error as e:
+        _logger.error(f"Error configuring water program: {e}")
+    except Exception as e:
+        _logger.error(f"Unexpected error configuring water program: {e}")
