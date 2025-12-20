@@ -941,6 +941,7 @@ class MqttDeviceController:
                 field="days",
                 value=days,
                 min_value=1,
+                max_value=365,
             )
 
         device_id = device.device_info.mac_address

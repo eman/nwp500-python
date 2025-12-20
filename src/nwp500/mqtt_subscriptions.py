@@ -15,7 +15,7 @@ import asyncio
 import json
 import logging
 from collections.abc import Callable
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from awscrt import mqtt
 from awscrt.exceptions import AwsCrtError
@@ -24,6 +24,9 @@ from .events import EventEmitter
 from .exceptions import MqttNotConnectedError
 from .models import Device, DeviceFeature, DeviceStatus, EnergyUsageResponse
 from .mqtt_utils import redact_topic, topic_matches_pattern
+
+if TYPE_CHECKING:
+    from .device_info_cache import DeviceInfoCache
 
 __author__ = "Emmanuel Levijarvi"
 
@@ -48,7 +51,7 @@ class MqttSubscriptionManager:
         client_id: str,
         event_emitter: EventEmitter,
         schedule_coroutine: Callable[[Any], None],
-        device_info_cache: Any | None = None,  # DeviceInfoCache
+        device_info_cache: DeviceInfoCache | None = None,
     ):
         """
         Initialize subscription manager.

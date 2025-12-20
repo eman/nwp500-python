@@ -7,7 +7,7 @@ with automatic periodic updates to keep data synchronized with the device.
 import asyncio
 import logging
 from datetime import UTC, datetime, timedelta
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, TypedDict
 
 if TYPE_CHECKING:
     from .models import DeviceFeature
@@ -15,6 +15,23 @@ if TYPE_CHECKING:
 __author__ = "Emmanuel Levijarvi"
 
 _logger = logging.getLogger(__name__)
+
+
+class CachedDeviceInfo(TypedDict):
+    """Cached device information metadata."""
+
+    mac: str
+    cached_at: str
+    expires_at: str | None
+    is_expired: bool
+
+
+class CacheInfoResult(TypedDict):
+    """Result of get_cache_info() call."""
+
+    device_count: int
+    update_interval_minutes: float
+    devices: list[CachedDeviceInfo]
 
 
 class DeviceInfoCache:
@@ -71,12 +88,7 @@ class DeviceInfoCache:
         """
         async with self._lock:
             self._cache[device_mac] = (features, datetime.now(UTC))
-            field_names = (
-                features.model_fields.keys()
-                if hasattr(features, "model_fields")
-                else "N/A"
-            )
-            _logger.debug(f"Cached device info for {device_mac}: {field_names}")
+            _logger.debug("Device info cached")
 
     async def invalidate(self, device_mac: str) -> None:
         """Invalidate cache entry for a device.
@@ -129,34 +141,34 @@ class DeviceInfoCache:
 
     async def get_cache_info(
         self,
-    ) -> dict[str, int | float | list[dict[str, str | bool | None]]]:
+    ) -> CacheInfoResult:
         """Get cache statistics and metadata.
 
         Returns:
             Dictionary with cache info including:
             - device_count: Number of cached devices
-            - devices: List of dicts with mac, cached_at, expires_at
+            - update_interval_minutes: Cache update interval in minutes
+            - devices: List of device cache metadata
         """
         async with self._lock:
-            devices = []
+            devices: list[CachedDeviceInfo] = []
             for mac, (_features, timestamp) in self._cache.items():
                 expires_at = (
                     timestamp + self.update_interval
                     if self.update_interval.total_seconds() > 0
                     else None
                 )
-                devices.append(
-                    {
-                        "mac": mac,
-                        "cached_at": timestamp.isoformat(),
-                        "expires_at": expires_at.isoformat()
-                        if expires_at
-                        else None,
-                        "is_expired": self.is_expired(timestamp),
-                    }
-                )
+                device_info: CachedDeviceInfo = {
+                    "mac": mac,
+                    "cached_at": timestamp.isoformat(),
+                    "expires_at": expires_at.isoformat()
+                    if expires_at
+                    else None,
+                    "is_expired": self.is_expired(timestamp),
+                }
+                devices.append(device_info)
 
-            return {
+            result: CacheInfoResult = {
                 "device_count": len(devices),
                 "update_interval_minutes": (
                     self.update_interval.total_seconds() / 60
@@ -165,3 +177,4 @@ class DeviceInfoCache:
                 ),
                 "devices": devices,
             }
+            return result

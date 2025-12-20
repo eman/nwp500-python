@@ -119,12 +119,12 @@ Status and Info Requests
    * - Command
      - Code
      - Description
-   * - Device Info Request
-     - 16777217
-     - Request device features/capabilities
    * - Device Status Request
      - 16777219
      - Request current device status
+   * - Device Info Request
+     - 16777217
+     - Request device features/capabilities
    * - Reservation Read
      - 16777222
      - Read reservation schedule

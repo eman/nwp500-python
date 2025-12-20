@@ -638,13 +638,18 @@ Temperature Formula Types
 The ``temp_formula_type`` field indicates which temperature conversion formula the device uses. The library automatically applies the correct formula.
 
 **Type 0: ASYMMETRIC**
-- Raw value remainder == 9: floor(fahrenheit)
-- Otherwise: ceil(fahrenheit)
+
+- If the raw encoded temperature value satisfies ``raw_value % 10 == 9`` (i.e., the
+  remainder of ``raw_value`` divided by 10 is 9, indicating a half-degree step):
+  ``floor(fahrenheit)``
+- Otherwise: ``ceil(fahrenheit)``
 
 **Type 1: STANDARD** (most devices)
-- Standard rounding: round(fahrenheit)
 
-Both formulas convert from half-degrees Celsius to Fahrenheit. This ensures temperature display matches the device's built-in LCD.
+- Standard rounding: ``round(fahrenheit)``
+
+Both formulas convert from half-degrees Celsius to Fahrenheit based on the raw encoded
+temperature value. This ensures temperature display matches the device's built-in LCD.
 
 See Also
 --------

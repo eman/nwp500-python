@@ -5,7 +5,7 @@ This module provides an async HTTP client for device management and control.
 """
 
 import logging
-from typing import Any, Self, cast
+from typing import Any, Self
 
 import aiohttp
 
@@ -135,15 +135,17 @@ class NavienAPIClient:
         clean_json_data: dict[str, Any] | None = None
 
         if params:
-            clean_params = cast(
-                dict[str, Any],
-                {k: v for k, v in params.items() if v is not None},
-            )
+            filtered_params: dict[str, Any] = {}
+            for k, v in params.items():
+                if v is not None:
+                    filtered_params[k] = v
+            clean_params = filtered_params
         if json_data:
-            clean_json_data = cast(
-                dict[str, Any],
-                {k: v for k, v in json_data.items() if v is not None},
-            )
+            filtered_json: dict[str, Any] = {}
+            for k, v in json_data.items():
+                if v is not None:
+                    filtered_json[k] = v
+            clean_json_data = filtered_json
 
         try:
             async with self._session.request(
