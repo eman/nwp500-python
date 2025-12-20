@@ -245,15 +245,14 @@ class NavienAuthClient:
         >>> async with NavienAuthClient(user_id="user@example.com",
         password="password") as client:
         ...     print(f"Welcome {client.current_user.full_name}")
-        ...     print(f"Access token: {client.current_tokens.access_token}")
+        ...     # Token is securely stored and not printed in production
         ...
         ...     # Use the token in API requests
         ...     headers = client.get_auth_headers()
         ...
         ...     # Refresh when needed
         ...     if client.current_tokens.is_expired:
-        ...         new_tokens = await
-        client.refresh_token(client.current_tokens.refresh_token)
+        ...         await client.refresh_token()
 
         Restore session from stored tokens:
         >>> stored_tokens = AuthTokens.from_dict(saved_data)
@@ -263,7 +262,7 @@ class NavienAuthClient:
         ...     stored_tokens=stored_tokens
         ... ) as client:
         ...     # Authentication skipped if tokens are still valid
-        ...     print(f"Access token: {client.current_tokens.access_token}")
+        ...     print(f"Welcome {client.current_user.full_name}")
     """
 
     def __init__(
@@ -698,7 +697,9 @@ async def authenticate(user_id: str, password: str) -> AuthenticationResponse:
 
     Example:
         >>> response = await authenticate("user@example.com", "password")
-        >>> print(response.tokens.bearer_token)
+        >>> print(f"Welcome {response.user.full_name}")
+        >>> # Use the bearer token for API requests
+        >>> # Do not print tokens in production code
     """
     async with NavienAuthClient(user_id, password) as client:
         if client._auth_response is None:
