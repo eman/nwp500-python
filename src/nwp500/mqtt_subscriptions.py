@@ -620,7 +620,7 @@ class MqttSubscriptionManager:
                     self._schedule_coroutine(
                         self._device_info_cache.set(mac_address, device_feature)
                     )
-                    _logger.debug(f"Cached device features for {mac_address}")
+                    _logger.debug("Device features cached")
 
                 # Emit feature received event
                 self._schedule_coroutine(

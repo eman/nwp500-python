@@ -1017,7 +1017,7 @@ class NavienMqttClient(EventEmitter):
             return True  # Already cached
 
         # Not cached, request it
-        _logger.debug(f"Requesting device info for {mac}")
+        _logger.debug("Requesting device info")
         future: asyncio.Future[DeviceFeature] = (
             asyncio.get_running_loop().create_future()
         )
@@ -1031,11 +1031,11 @@ class NavienMqttClient(EventEmitter):
 
         try:
             await asyncio.wait_for(future, timeout=timeout)
-            _logger.debug(f"Device info cached for {mac}")
+            _logger.debug("Device info cached")
             return True
         except TimeoutError:
             _logger.error(
-                f"Timeout waiting for device info for {mac}. "
+                "Timeout waiting for device info. "
                 "Device may not support all control features."
             )
             return False

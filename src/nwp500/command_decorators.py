@@ -72,8 +72,7 @@ def requires_capability(feature: str) -> Callable[[F], F]:
                 # If not cached, auto-request from device
                 if cached_features is None:
                     _logger.info(
-                        f"Device info not cached for {mac}, "
-                        "auto-requesting from device..."
+                        "Device info not cached, auto-requesting from device..."
                     )
                     try:
                         # Call controller method to auto-request
@@ -82,7 +81,7 @@ def requires_capability(feature: str) -> Callable[[F], F]:
                         cached_features = await self._device_info_cache.get(mac)
                     except Exception as e:
                         _logger.warning(
-                            f"Failed to auto-request device info for {mac}: {e}"
+                            f"Failed to auto-request device info: {e}"
                         )
 
                     # Check if we got features after auto-request
@@ -90,7 +89,7 @@ def requires_capability(feature: str) -> Callable[[F], F]:
                         raise DeviceCapabilityError(
                             feature,
                             f"Cannot execute {func.__name__}: "
-                            f"Device info could not be obtained for {mac}.",
+                            f"Device info could not be obtained.",
                         )
 
                 # Validate capability
@@ -100,8 +99,7 @@ def requires_capability(feature: str) -> Callable[[F], F]:
 
                 # Capability validated, execute command
                 _logger.debug(
-                    f"Device {mac} supports {feature}, "
-                    f"executing {func.__name__}"
+                    f"Device supports {feature}, executing {func.__name__}"
                 )
                 return await func(self, device, *args, **kwargs)
 
