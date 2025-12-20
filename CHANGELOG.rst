@@ -2,6 +2,38 @@
 Changelog
 =========
 
+Version 7.1.0 (2025-12-19)
+==========================
+
+Added
+-----
+- **Device Capability System**: New device capability detection and validation framework:
+  - ``DeviceCapabilityChecker``: Validates device feature support based on device models
+  - ``DeviceInfoCache``: Efficient caching of device information with configurable update intervals
+  - ``@requires_capability`` decorator: Automatic capability validation for MQTT commands
+  - ``DeviceCapabilityError``: New exception for unsupported device features
+
+- **Advanced Control Commands**: New MQTT commands for advanced device features:
+  - ``enable_demand_response()`` / ``disable_demand_response()``: Demand response participation control
+  - ``reset_air_filter()``: Air filter maintenance tracking reset
+  - ``set_vacation_days()``: Configure vacation mode duration
+  - ``configure_reservation_water_program()``: Water program reservation management
+  - ``set_recirculation_mode()`` / ``configure_recirculation_schedule()`` / ``trigger_recirculation_hot_button()``: Recirculation pump control and scheduling
+
+- **CLI Enhancements**: Extended command-line interface with new subcommands and diagnostics
+- **New Examples**: Example scripts for demand response, air filter reset, vacation mode, recirculation control, and water program reservations
+- **Documentation**: Enhanced device control documentation with capability matrix
+
+Changed
+-------
+- ``MqttDeviceController`` now integrates device capability checking with auto-caching of device info
+- Exception type hints improved with proper None handling in optional parameters
+- CLI diagnostics output now available in structured format
+
+Fixed
+-----
+- Type annotation consistency: Optional parameters now properly annotated as ``type | None`` instead of ``type``
+
 Version 7.0.1 (2025-12-18)
 ==========================
 
