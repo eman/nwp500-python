@@ -142,6 +142,50 @@ def redact_topic(topic: str) -> str:
     return topic
 
 
+def redact_mac(mac: str | None) -> str:
+    """Mask a MAC address or device ID for safe logging.
+
+    Args:
+        mac: The MAC address or device ID to redact (e.g., 'navilink-0123456789ab')
+
+    Returns:
+        A redacted string like 'navilink-01...89ab' or '<REDACTED>'
+    """
+    if not mac:
+        return "<REDACTED>"
+
+    # Handle navilink- prefix
+    prefix = ""
+    if mac.startswith("navilink-"):
+        prefix = "navilink-"
+        mac = mac[len("navilink-") :]
+
+    if len(mac) <= 4:
+        return f"{prefix}<REDACTED>"
+
+    # Mask central part, keeping first 2 and last 4
+    return f"{prefix}{mac[:2]}...{mac[-4:]}"
+
+
+def redact_serial(serial: str | None) -> str:
+    """Mask a serial number for safe logging.
+
+    Args:
+        serial: Serial number to redact
+
+    Returns:
+        Redacted serial like 'AB...1234'
+    """
+    if not serial:
+        return "<REDACTED>"
+
+    if len(serial) <= 6:
+        return "<REDACTED>"
+
+    # Mask central part, keeping first 2 and last 4
+    return f"{serial[:2]}...{serial[-4:]}"
+
+
 @dataclass
 class MqttConnectionConfig:
     """Configuration for MQTT connection.

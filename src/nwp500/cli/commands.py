@@ -13,6 +13,7 @@ from nwp500.exceptions import (
     Nwp500Error,
     ValidationError,
 )
+from nwp500.mqtt_utils import redact_serial
 from nwp500.topic_builder import MqttTopicBuilder
 
 from .output_formatters import _json_default_serializer
@@ -45,7 +46,9 @@ async def get_controller_serial_number(
 
     try:
         serial_number = await asyncio.wait_for(future, timeout=timeout)
-        _logger.info(f"Controller serial number retrieved: {serial_number}")
+        _logger.info(
+            f"Controller serial number retrieved: {redact_serial(serial_number)}"
+        )
         return serial_number
     except TimeoutError:
         _logger.error("Timed out waiting for controller serial number.")
@@ -54,64 +57,76 @@ async def get_controller_serial_number(
 
 async def handle_status_request(mqtt: NavienMqttClient, device: Device) -> None:
     """Request device status once and print it."""
-    future = asyncio.get_running_loop().create_future()
-
-    def on_status(status: DeviceStatus) -> None:
-        if not future.done():
-            from .output_formatters import format_json_output
-
-            print(format_json_output(status.model_dump()))
-            future.set_result(None)
-
-    await mqtt.subscribe_device_status(device, on_status)
-    _logger.info("Requesting device status...")
-    await mqtt.control.request_device_status(device)
-
-    try:
-        await asyncio.wait_for(future, timeout=10)
-    except TimeoutError:
-        _logger.error("Timed out waiting for device status response.")
+    await _request_device_status_common(mqtt, device, parse_pydantic=True)
 
 
 async def handle_status_raw_request(
     mqtt: NavienMqttClient, device: Device
 ) -> None:
     """Request device status once and print raw MQTT data (no conversions)."""
+    await _request_device_status_common(mqtt, device, parse_pydantic=False)
+
+
+async def _request_device_status_common(
+    mqtt: NavienMqttClient,
+    device: Device,
+    parse_pydantic: bool = True,
+) -> None:
+    """Common logic for device status requests.
+
+    Args:
+        mqtt: MQTT client
+        device: Device to request status for
+        parse_pydantic: If True, parse with Pydantic and format output.
+                       If False, print raw MQTT status portion.
+    """
     future = asyncio.get_running_loop().create_future()
 
-    # Subscribe to the raw MQTT topic to capture data before conversion
-    def raw_callback(topic: str, message: dict[str, Any]) -> None:
-        if not future.done():
-            # Extract and print the raw status portion
-            if "response" in message and "status" in message["response"]:
-                print(
-                    json.dumps(
-                        message["response"]["status"],
-                        indent=2,
-                        default=_json_default_serializer,
-                    )
-                )
-                future.set_result(None)
-            elif "status" in message:
-                print(
-                    json.dumps(
-                        message["status"],
-                        indent=2,
-                        default=_json_default_serializer,
-                    )
-                )
+    if parse_pydantic:
+
+        def on_status(status: DeviceStatus) -> None:
+            if not future.done():
+                from .output_formatters import format_json_output
+
+                print(format_json_output(status.model_dump()))
                 future.set_result(None)
 
-    # Subscribe to all device messages
-    await mqtt.subscribe_device(device, raw_callback)
+        await mqtt.subscribe_device_status(device, on_status)
+    else:
 
-    _logger.info("Requesting device status (raw)...")
+        def raw_callback(topic: str, message: dict[str, Any]) -> None:
+            if not future.done():
+                # Extract and print the raw status portion
+                if "response" in message and "status" in message["response"]:
+                    print(
+                        json.dumps(
+                            message["response"]["status"],
+                            indent=2,
+                            default=_json_default_serializer,
+                        )
+                    )
+                    future.set_result(None)
+                elif "status" in message:
+                    print(
+                        json.dumps(
+                            message["status"],
+                            indent=2,
+                            default=_json_default_serializer,
+                        )
+                    )
+                    future.set_result(None)
+
+        # Subscribe to all device messages
+        await mqtt.subscribe_device(device, raw_callback)
+
+    action_name = "device status" if parse_pydantic else "device status (raw)"
+    _logger.info(f"Requesting {action_name}...")
     await mqtt.control.request_device_status(device)
 
     try:
         await asyncio.wait_for(future, timeout=10)
     except TimeoutError:
-        _logger.error("Timed out waiting for device status response.")
+        _logger.error(f"Timed out waiting for {action_name} response.")
 
 
 async def _request_device_info_common(

@@ -12,6 +12,7 @@ from typing import Any, TypeVar
 
 from .device_capabilities import DeviceCapabilityChecker
 from .exceptions import DeviceCapabilityError
+from .mqtt_utils import redact_mac
 
 __author__ = "Emmanuel Levijarvi"
 
@@ -85,7 +86,8 @@ def requires_capability(feature: str) -> Callable[[F], F]:
                     )
                 else:
                     _logger.warning(
-                        f"Feature '{feature}' not found in device info for {mac}"
+                        f"Feature '{feature}' not found in device info for "
+                        f"{redact_mac(mac)}"
                     )
 
                 # Execute command

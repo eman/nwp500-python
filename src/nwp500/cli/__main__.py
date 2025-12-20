@@ -295,8 +295,7 @@ async def async_main(args: argparse.Namespace) -> int:
                     await handle_monitoring(mqtt, device, args.output)
                 else:
                     _logger.error(
-                        "No action specified. Use --help to see "
-                        "available options."
+                        "No action specified. Use --help to see available options."
                     )
                     return 1
 

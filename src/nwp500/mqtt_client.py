@@ -49,6 +49,7 @@ from .mqtt_subscriptions import MqttSubscriptionManager
 from .mqtt_utils import (
     MqttConnectionConfig,
     PeriodicRequestType,
+    redact_mac,
 )
 
 __author__ = "Emmanuel Levijarvi"
@@ -990,7 +991,9 @@ class NavienMqttClient(EventEmitter):
             await self.control.request_device_info(device)
             return await asyncio.wait_for(future, timeout=timeout)
         except (TimeoutError, asyncio.TimeoutError):
-            _logger.warning(f"Timed out waiting for device info for {mac}")
+            _logger.warning(
+                f"Timed out waiting for device info for {redact_mac(mac)}"
+            )
             return False
         finally:
             # Note: We don't unsubscribe token here because it might

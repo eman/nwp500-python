@@ -23,7 +23,7 @@ from awscrt.exceptions import AwsCrtError
 from .events import EventEmitter
 from .exceptions import MqttNotConnectedError
 from .models import Device, DeviceFeature, DeviceStatus, EnergyUsageResponse
-from .mqtt_utils import redact_topic, topic_matches_pattern
+from .mqtt_utils import redact_mac, redact_topic, topic_matches_pattern
 from .topic_builder import MqttTopicBuilder
 
 if TYPE_CHECKING:
@@ -615,7 +615,7 @@ class MqttSubscriptionManager:
 
                 # Parse feature into DeviceFeature object
                 _logger.info(
-                    f"Parsing device feature message from topic: {topic}"
+                    f"Parsing device feature message from topic: {redact_topic(topic)}"
                 )
                 feature_data = response["feature"]
                 device_feature = DeviceFeature.from_dict(feature_data)

@@ -9,6 +9,8 @@ import logging
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, TypedDict
 
+from .mqtt_utils import redact_mac
+
 if TYPE_CHECKING:
     from .models import DeviceFeature
 
@@ -101,7 +103,7 @@ class DeviceInfoCache:
         async with self._lock:
             if device_mac in self._cache:
                 del self._cache[device_mac]
-                _logger.debug(f"Invalidated cache for {device_mac}")
+                _logger.debug(f"Invalidated cache for {redact_mac(device_mac)}")
 
     async def clear(self) -> None:
         """Clear all cached device information."""

@@ -31,6 +31,7 @@ from .exceptions import (
     ParameterValidationError,
     RangeValidationError,
 )
+from .mqtt_utils import redact_mac
 from nwp500.topic_builder import MqttTopicBuilder
 from .models import Device, DeviceFeature, fahrenheit_to_half_celsius
 
@@ -222,7 +223,7 @@ class MqttDeviceController:
 
         if cached_features is None:
             _logger.info(
-                f"Device info for {mac} not cached, auto-requesting..."
+                f"Device info for {redact_mac(mac)} not cached, auto-requesting..."
             )
             try:
                 await self._auto_request_device_info(device)
