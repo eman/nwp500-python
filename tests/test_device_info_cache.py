@@ -203,7 +203,9 @@ class TestDeviceInfoCache:
         assert mac2 not in all_cached
 
     @pytest.mark.asyncio
-    async def test_get_cache_info(self, cache_with_updates: DeviceInfoCache) -> None:
+    async def test_get_cache_info(
+        self, cache_with_updates: DeviceInfoCache
+    ) -> None:
         """Test get_cache_info returns correct information."""
         mac = "AA:BB:CC:DD:EE:FF"
         feature = {"data": "test"}
@@ -243,10 +245,14 @@ class TestDeviceInfoCache:
         feature = {"data": "test"}
 
         # Concurrent sets
-        await asyncio.gather(*[cache_with_updates.set(mac, feature) for mac in macs])
+        await asyncio.gather(
+            *[cache_with_updates.set(mac, feature) for mac in macs]
+        )
 
         # Concurrent gets
-        results = await asyncio.gather(*[cache_with_updates.get(mac) for mac in macs])
+        results = await asyncio.gather(
+            *[cache_with_updates.get(mac) for mac in macs]
+        )
 
         assert all(r is not None for r in results)
         assert len([r for r in results if r is not None]) == 10

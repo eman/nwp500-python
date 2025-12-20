@@ -1,7 +1,8 @@
 """Tests for device capability checking."""
 
-import pytest
 from unittest.mock import Mock
+
+import pytest
 
 from nwp500.device_capabilities import DeviceCapabilityChecker
 from nwp500.enums import DHWControlTypeFlag
@@ -46,7 +47,9 @@ class TestDeviceCapabilityChecker:
     def test_dhw_temperature_control_enabled(self) -> None:
         """Test DHW temperature control detection when enabled."""
         mock_feature = Mock()
-        mock_feature.dhw_temperature_setting_use = DHWControlTypeFlag.ENABLE_1_DEGREE
+        mock_feature.dhw_temperature_setting_use = (
+            DHWControlTypeFlag.ENABLE_1_DEGREE
+        )
         assert DeviceCapabilityChecker.supports(
             "dhw_temperature_setting_use", mock_feature
         )
@@ -63,14 +66,18 @@ class TestDeviceCapabilityChecker:
         """Test DHW temperature control detection when UNKNOWN."""
         mock_feature = Mock()
         mock_feature.dhw_temperature_setting_use = DHWControlTypeFlag.UNKNOWN
-        assert not DeviceCapabilityChecker.supports("dhw_temperature_setting_use", mock_feature)
+        assert not DeviceCapabilityChecker.supports(
+            "dhw_temperature_setting_use", mock_feature
+        )
 
     def test_get_available_controls(self) -> None:
         """Test get_available_controls returns all feature statuses."""
         mock_feature = Mock()
         mock_feature.power_use = True
         mock_feature.dhw_use = False
-        mock_feature.dhw_temperature_setting_use = DHWControlTypeFlag.ENABLE_1_DEGREE
+        mock_feature.dhw_temperature_setting_use = (
+            DHWControlTypeFlag.ENABLE_1_DEGREE
+        )
         mock_feature.holiday_use = True
         mock_feature.program_reservation_use = False
         mock_feature.recirculation_use = True
@@ -92,10 +99,14 @@ class TestDeviceCapabilityChecker:
         mock_feature = Mock()
         custom_check = lambda f: True  # noqa: E731
 
-        DeviceCapabilityChecker.register_capability("custom_feature", custom_check)
+        DeviceCapabilityChecker.register_capability(
+            "custom_feature", custom_check
+        )
 
         try:
-            assert DeviceCapabilityChecker.supports("custom_feature", mock_feature)
+            assert DeviceCapabilityChecker.supports(
+                "custom_feature", mock_feature
+            )
         finally:
             # Clean up
             del DeviceCapabilityChecker._CAPABILITY_MAP["custom_feature"]
@@ -107,9 +118,13 @@ class TestDeviceCapabilityChecker:
 
         try:
             # Override to always return False
-            DeviceCapabilityChecker.register_capability("power_use", lambda f: False)
+            DeviceCapabilityChecker.register_capability(
+                "power_use", lambda f: False
+            )
             mock_feature.power_use = True
-            assert not DeviceCapabilityChecker.supports("power_use", mock_feature)
+            assert not DeviceCapabilityChecker.supports(
+                "power_use", mock_feature
+            )
         finally:
             # Restore original
             DeviceCapabilityChecker._CAPABILITY_MAP["power_use"] = original

@@ -5,7 +5,6 @@ from unittest.mock import Mock, patch
 import pytest
 
 from nwp500.command_decorators import requires_capability
-from nwp500.device_capabilities import DeviceCapabilityChecker
 from nwp500.device_info_cache import DeviceInfoCache
 from nwp500.exceptions import DeviceCapabilityError
 
@@ -140,7 +139,11 @@ class TestRequiresCapabilityDecorator:
 
             @requires_capability("power_use")
             async def command(
-                self, device: Mock, arg1: str, arg2: int, kwarg1: str = "default"
+                self,
+                device: Mock,
+                arg1: str,
+                arg2: int,
+                kwarg1: str = "default",
             ) -> None:
                 self.received_args = (arg1, arg2, kwarg1)
 
