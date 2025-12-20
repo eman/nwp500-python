@@ -24,6 +24,7 @@ from .events import EventEmitter
 from .exceptions import MqttNotConnectedError
 from .models import Device, DeviceFeature, DeviceStatus, EnergyUsageResponse
 from .mqtt_utils import redact_topic, topic_matches_pattern
+from .topic_builder import MqttTopicBuilder
 
 if TYPE_CHECKING:
     from .device_info_cache import DeviceInfoCache
@@ -334,7 +335,9 @@ class MqttSubscriptionManager:
         device_id = device.device_info.mac_address
         device_type = device.device_info.device_type
         device_topic = f"navilink-{device_id}"
-        response_topic = f"cmd/{device_type}/{device_topic}/#"
+        response_topic = MqttTopicBuilder.command_topic(
+            device_type, device_id, "#"
+        )
         return await self.subscribe(response_topic, callback)
 
     async def subscribe_device_status(
@@ -683,7 +686,7 @@ class MqttSubscriptionManager:
             >>>
             >>> await mqtt_client.subscribe_energy_usage(device,
             on_energy_usage)
-            >>> await mqtt_client.request_energy_usage(device, 2025, [9])
+            >>> await mqtt_client.control.request_energy_usage(device, 2025, [9])
         """
         device_type = device.device_info.device_type
 
@@ -741,9 +744,8 @@ class MqttSubscriptionManager:
                     exc_info=True,
                 )
 
-        response_topic = (
-            f"cmd/{device_type}/{self._client_id}/res/"
-            f"energy-usage-daily-query/rd"
+        response_topic = MqttTopicBuilder.response_topic(
+            device_type, self._client_id, "energy-usage-daily-query/rd"
         )
 
         return await self.subscribe(response_topic, energy_message_handler)

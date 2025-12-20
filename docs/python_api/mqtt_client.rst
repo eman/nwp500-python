@@ -55,7 +55,7 @@ Basic Monitoring
                print(f"Mode: {status.dhw_operation_setting.name}")
            
            await mqtt.subscribe_device_status(device, on_status)
-           await mqtt.request_device_status(device)
+           await mqtt.control.request_device_status(device)
            
            # Monitor for 60 seconds
            await asyncio.sleep(60)
@@ -82,12 +82,12 @@ control method reference, capability checking, and advanced features.
            
            # Request device info first (populates capability cache)
            await mqtt.subscribe_device_feature(device, lambda f: None)
-           await mqtt.request_device_info(device)
+           await mqtt.control.request_device_info(device)
            
            # Control operations (with automatic capability checking)
-           await mqtt.set_power(device, power_on=True)
-           await mqtt.set_dhw_mode(device, mode_id=3)  # Energy Saver
-           await mqtt.set_dhw_temperature(device, 140.0)
+           await mqtt.control.set_power(device, power_on=True)
+           await mqtt.control.set_dhw_mode(device, mode_id=3)  # Energy Saver
+           await mqtt.control.set_dhw_temperature(device, 140.0)
            
            await mqtt.disconnect()
 
@@ -238,7 +238,7 @@ subscribe_device_status()
               print(f"ERROR: {status.error_code}")
       
       await mqtt.subscribe_device_status(device, on_status)
-      await mqtt.request_device_status(device)
+      await mqtt.control.request_device_status(device)
 
 request_device_status()
 ^^^^^^^^^^^^^^^^^^^^^^^
@@ -260,11 +260,11 @@ request_device_status()
       await mqtt.subscribe_device_status(device, on_status)
       
       # Then request
-      await mqtt.request_device_status(device)
+      await mqtt.control.request_device_status(device)
       
       # Can request periodically
       while monitoring:
-          await mqtt.request_device_status(device)
+          await mqtt.control.request_device_status(device)
           await asyncio.sleep(30)  # Every 30 seconds
 
 subscribe_device_feature()
@@ -304,7 +304,7 @@ subscribe_device_feature()
               print("Reservations: Supported")
       
       await mqtt.subscribe_device_feature(device, on_feature)
-      await mqtt.request_device_info(device)
+      await mqtt.control.request_device_info(device)
 
 request_device_info()
 ^^^^^^^^^^^^^^^^^^^^^
@@ -323,7 +323,7 @@ request_device_info()
    .. code-block:: python
 
       await mqtt.subscribe_device_feature(device, on_feature)
-      await mqtt.request_device_info(device)
+      await mqtt.control.request_device_info(device)
 
 subscribe_device()
 ^^^^^^^^^^^^^^^^^^
@@ -384,11 +384,11 @@ set_power()
    .. code-block:: python
 
       # Turn on
-      await mqtt.set_power(device, power_on=True)
+      await mqtt.control.set_power(device, power_on=True)
       print("Device powered ON")
       
       # Turn off
-      await mqtt.set_power(device, power_on=False)
+      await mqtt.control.set_power(device, power_on=False)
       print("Device powered OFF")
 
 set_dhw_mode()
@@ -422,18 +422,18 @@ set_dhw_mode()
       from nwp500 import DhwOperationSetting
       
       # Set to Heat Pump Only (most efficient)
-      await mqtt.set_dhw_mode(device, DhwOperationSetting.HEAT_PUMP.value)
+      await mqtt.control.set_dhw_mode(device, DhwOperationSetting.HEAT_PUMP.value)
       
       # Set to Energy Saver (balanced, recommended)
-      await mqtt.set_dhw_mode(device, DhwOperationSetting.ENERGY_SAVER.value)
+      await mqtt.control.set_dhw_mode(device, DhwOperationSetting.ENERGY_SAVER.value)
       # or just:
-      await mqtt.set_dhw_mode(device, 3)
+      await mqtt.control.set_dhw_mode(device, 3)
       
       # Set to High Demand (maximum heating)
-      await mqtt.set_dhw_mode(device, DhwOperationSetting.HIGH_DEMAND.value)
+      await mqtt.control.set_dhw_mode(device, DhwOperationSetting.HIGH_DEMAND.value)
       
       # Set vacation mode for 7 days
-      await mqtt.set_dhw_mode(
+      await mqtt.control.set_dhw_mode(
           device,
           DhwOperationSetting.VACATION.value,
           vacation_days=7
@@ -462,13 +462,13 @@ set_dhw_temperature()
    .. code-block:: python
 
       # Set temperature to 140°F
-      await mqtt.set_dhw_temperature(device, 140.0)
+      await mqtt.control.set_dhw_temperature(device, 140.0)
       
       # Common temperatures
-      await mqtt.set_dhw_temperature(device, 120.0)  # Standard
-      await mqtt.set_dhw_temperature(device, 130.0)  # Medium
-      await mqtt.set_dhw_temperature(device, 140.0)  # Hot
-      await mqtt.set_dhw_temperature(device, 150.0)  # Maximum
+      await mqtt.control.set_dhw_temperature(device, 120.0)  # Standard
+      await mqtt.control.set_dhw_temperature(device, 130.0)  # Medium
+      await mqtt.control.set_dhw_temperature(device, 140.0)  # Hot
+      await mqtt.control.set_dhw_temperature(device, 150.0)  # Maximum
 
 enable_anti_legionella()
 ^^^^^^^^^^^^^^^^^^^^^^^^
@@ -489,10 +489,10 @@ enable_anti_legionella()
    .. code-block:: python
 
       # Enable weekly anti-Legionella cycle
-      await mqtt.enable_anti_legionella(device, period_days=7)
+      await mqtt.control.enable_anti_legionella(device, period_days=7)
       
       # Enable bi-weekly cycle
-      await mqtt.enable_anti_legionella(device, period_days=14)
+      await mqtt.control.enable_anti_legionella(device, period_days=14)
 
 disable_anti_legionella()
 ^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -510,7 +510,7 @@ disable_anti_legionella()
 
    .. code-block:: python
 
-      await mqtt.disable_anti_legionella(device)
+      await mqtt.control.disable_anti_legionella(device)
 
 Energy Monitoring Methods
 --------------------------
@@ -541,13 +541,13 @@ request_energy_usage()
       # Request current month
       from datetime import datetime
       now = datetime.now()
-      await mqtt.request_energy_usage(device, now.year, [now.month])
+      await mqtt.control.request_energy_usage(device, now.year, [now.month])
       
       # Request multiple months
-      await mqtt.request_energy_usage(device, 2024, [8, 9, 10])
+      await mqtt.control.request_energy_usage(device, 2024, [8, 9, 10])
       
       # Request full year
-      await mqtt.request_energy_usage(device, 2024, list(range(1, 13)))
+      await mqtt.control.request_energy_usage(device, 2024, list(range(1, 13)))
 
 subscribe_energy_usage()
 ^^^^^^^^^^^^^^^^^^^^^^^^
@@ -585,7 +585,7 @@ subscribe_energy_usage()
                       print(f"      HE: {day_data.heat_element_usage} Wh ({day_data.heat_element_time}h)")
       
       await mqtt.subscribe_energy_usage(device, on_energy)
-      await mqtt.request_energy_usage(device, year=2024, months=[10])
+      await mqtt.control.request_energy_usage(device, year=2024, months=[10])
 
 Reservation Methods
 -------------------
@@ -631,7 +631,7 @@ update_reservations()
       ]
       
       # Update schedule
-      await mqtt.update_reservations(device, True, reservations)
+      await mqtt.control.update_reservations(device, True, reservations)
 
 request_reservations()
 ^^^^^^^^^^^^^^^^^^^^^^
@@ -667,10 +667,10 @@ set_tou_enabled()
    .. code-block:: python
 
       # Enable TOU
-      await mqtt.set_tou_enabled(device, True)
+      await mqtt.control.set_tou_enabled(device, True)
       
       # Disable TOU
-      await mqtt.set_tou_enabled(device, False)
+      await mqtt.control.set_tou_enabled(device, False)
 
 Periodic Request Methods
 ------------------------
@@ -756,7 +756,7 @@ signal_app_connection()
    .. code-block:: python
 
       await mqtt.connect()
-      await mqtt.signal_app_connection(device)
+      await mqtt.control.signal_app_connection(device)
 
 subscribe(), unsubscribe(), publish()
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -780,7 +780,7 @@ is_connected
    .. code-block:: python
 
       if mqtt.is_connected:
-          await mqtt.set_power(device, True)
+          await mqtt.control.set_power(device, True)
       else:
           print("Not connected")
 
@@ -888,7 +888,7 @@ Example 1: Complete Monitoring Application
                    print(f"[{now}] Heating: {', '.join(components)}")
            
            await mqtt.subscribe_device_status(device, on_status)
-           await mqtt.request_device_status(device)
+           await mqtt.control.request_device_status(device)
            
            # Monitor indefinitely
            try:
@@ -974,7 +974,7 @@ Example 3: Multi-Device Monitoring
            for device in devices:
                callback = create_callback(device.device_info.device_name)
                await mqtt.subscribe_device_status(device, callback)
-               await mqtt.request_device_status(device)
+               await mqtt.control.request_device_status(device)
            
            # Monitor
            await asyncio.sleep(3600)
@@ -991,10 +991,10 @@ Best Practices
 
       # CORRECT order
       await mqtt.subscribe_device_status(device, on_status)
-      await mqtt.request_device_status(device)
+      await mqtt.control.request_device_status(device)
       
       # WRONG - response will be missed
-      await mqtt.request_device_status(device)
+      await mqtt.control.request_device_status(device)
       await mqtt.subscribe_device_status(device, on_status)
 
 2. **Use context managers:**
@@ -1044,7 +1044,7 @@ Best Practices
    .. code-block:: python
 
       if mqtt.is_connected:
-          await mqtt.set_power(device, True)
+          await mqtt.control.set_power(device, True)
       else:
           print("Not connected - reconnecting...")
           await mqtt.connect()

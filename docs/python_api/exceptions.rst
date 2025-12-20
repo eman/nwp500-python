@@ -75,7 +75,7 @@ Nwp500Error
       try:
           mqtt = NavienMqttClient(auth)
           await mqtt.connect()
-          await mqtt.request_device_status(device)
+          await mqtt.control.request_device_status(device)
       except Nwp500Error as e:
           # Catches all library exceptions
           print(f"Library error: {e}")
@@ -267,11 +267,11 @@ MqttNotConnectedError
       mqtt = NavienMqttClient(auth)
       
       try:
-          await mqtt.request_device_status(device)
+          await mqtt.control.request_device_status(device)
       except MqttNotConnectedError:
           # Not connected - establish connection first
           await mqtt.connect()
-          await mqtt.request_device_status(device)
+          await mqtt.control.request_device_status(device)
 
 MqttPublishError
 ----------------
@@ -390,7 +390,7 @@ RangeValidationError
       from nwp500 import NavienMqttClient, RangeValidationError
 
       try:
-          await mqtt.set_dhw_temperature(device, 200.0)
+          await mqtt.control.set_dhw_temperature(device, 200.0)
       except RangeValidationError as e:
           print(f"Invalid {e.field}: {e.value}")
           print(f"Valid range: {e.min_value} to {e.max_value}")
@@ -473,11 +473,11 @@ DeviceCapabilityError
       
       # Request device info first
       await mqtt.subscribe_device_feature(device, lambda f: None)
-      await mqtt.request_device_info(device)
+      await mqtt.control.request_device_info(device)
       
       try:
           # This raises DeviceCapabilityError if device doesn't support recirculation
-          await mqtt.set_recirculation_mode(device, 1)
+          await mqtt.control.set_recirculation_mode(device, 1)
       except DeviceCapabilityError as e:
           print(f"Feature not supported: {e.feature}")
           print(f"Error: {e}")
@@ -500,7 +500,7 @@ DeviceCapabilityError
 
       # Check if device supports a feature
       if DeviceCapabilityChecker.supports("recirculation_use", device_features):
-          await mqtt.set_recirculation_mode(device, 1)
+          await mqtt.control.set_recirculation_mode(device, 1)
       else:
           print("Device doesn't support recirculation")
 
@@ -539,7 +539,7 @@ Handle specific exception types for granular control:
                mqtt = NavienMqttClient(auth)
                await mqtt.connect()
                
-               await mqtt.set_dhw_temperature(device, 120.0)
+               await mqtt.control.set_dhw_temperature(device, 120.0)
                
        except InvalidCredentialsError:
            print("Invalid credentials - check email/password")
@@ -622,18 +622,18 @@ Handle capability errors for device control commands:
        
        # Request device info first
        await mqtt.subscribe_device_feature(device, lambda f: None)
-       await mqtt.request_device_info(device)
+       await mqtt.control.request_device_info(device)
        
        # Option 1: Try control and catch capability error
        try:
-           await mqtt.set_recirculation_mode(device, 1)
+           await mqtt.control.set_recirculation_mode(device, 1)
        except DeviceCapabilityError as e:
            print(f"Device doesn't support: {e.feature}")
            # Fallback to alternative command
        
        # Option 2: Check capability before attempting
        if DeviceCapabilityChecker.supports("recirculation_use", device_features):
-           await mqtt.set_recirculation_mode(device, 1)
+           await mqtt.control.set_recirculation_mode(device, 1)
        else:
            print("Recirculation not supported")
        
@@ -656,7 +656,7 @@ Use ``to_dict()`` for structured error logging:
    logger = logging.getLogger(__name__)
 
    try:
-       await mqtt.request_device_status(device)
+       await mqtt.control.request_device_status(device)
    except Nwp500Error as e:
        # Log structured error data
        logger.error("Operation failed", extra=e.to_dict())
@@ -674,7 +674,7 @@ Catch all library exceptions with ``Nwp500Error``:
    try:
        # Any library operation
        await mqtt.connect()
-       await mqtt.request_device_status(device)
+       await mqtt.control.request_device_status(device)
        
    except Nwp500Error as e:
        # All nwp500 exceptions inherit from Nwp500Error
@@ -744,7 +744,7 @@ Best Practices
    .. code-block:: python
 
       try:
-          await mqtt.set_dhw_temperature(device, 200.0)
+          await mqtt.control.set_dhw_temperature(device, 200.0)
       except RangeValidationError as e:
           # Show helpful message
           print(f"Temperature must be between {e.min_value}°F and {e.max_value}°F")
@@ -797,7 +797,7 @@ If upgrading from v4.x, update your exception handling:
 .. code-block:: python
 
    try:
-       await mqtt.request_device_status(device)
+       await mqtt.control.request_device_status(device)
    except RuntimeError as e:
        if "Not connected" in str(e):
            await mqtt.connect()
@@ -809,10 +809,10 @@ If upgrading from v4.x, update your exception handling:
    from nwp500 import MqttNotConnectedError
 
    try:
-       await mqtt.request_device_status(device)
+       await mqtt.control.request_device_status(device)
    except MqttNotConnectedError:
        await mqtt.connect()
-       await mqtt.request_device_status(device)
+       await mqtt.control.request_device_status(device)
 
 See the CHANGELOG.rst for complete migration guide with more examples.
 

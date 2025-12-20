@@ -14,7 +14,7 @@ The API uses JWT (JSON Web Tokens) for authentication with the following flow:
 import json
 import logging
 from datetime import datetime, timedelta
-from typing import Any, Self
+from typing import Any, Optional, Self, Union
 
 import aiohttp
 from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, model_validator
@@ -443,19 +443,27 @@ class NavienAuthClient:
                 f"Invalid response format: {str(e)}"
             ) from e
 
-    async def refresh_token(self, refresh_token: str) -> AuthTokens:
+    async def refresh_token(
+        self, refresh_token: str | None = None
+    ) -> AuthTokens:
         """
         Refresh access token using refresh token.
 
         Args:
-            refresh_token: The refresh token obtained from sign-in
+            refresh_token: The refresh token obtained from sign-in.
+                If not provided, uses the stored refresh token.
 
         Returns:
             New AuthTokens with refreshed access token
 
         Raises:
-            TokenRefreshError: If token refresh fails
+            TokenRefreshError: If token refresh fails or no token available
         """
+        if refresh_token is None:
+            if self._auth_response and self._auth_response.tokens.refresh_token:
+                refresh_token = self._auth_response.tokens.refresh_token
+            else:
+                raise TokenRefreshError("No refresh token available")
         await self._ensure_session()
 
         if self._session is None:
@@ -667,7 +675,7 @@ class NavienAuthClient:
         # This matches the actual API behavior from HAR analysis in working
         # implementation
         if self._auth_response and self._auth_response.tokens.access_token:
-            headers["authorization"] = self._auth_response.tokens.access_token
+            headers["Authorization"] = self._auth_response.tokens.access_token
 
         return headers
 

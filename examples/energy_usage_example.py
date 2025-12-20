@@ -140,7 +140,7 @@ async def main():
         current_month = now.month
 
         print(f"\nRequesting energy usage for {current_year}-{current_month:02d}...")
-        await mqtt_client.request_energy_usage(
+        await mqtt_client.control.request_energy_usage(
             device, year=current_year, months=[current_month]
         )
         print("[OK] Request sent")

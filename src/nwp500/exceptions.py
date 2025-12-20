@@ -36,14 +36,14 @@ If you were catching generic exceptions in your code, update as follows:
 
     # Old code (v4.x)
     try:
-        await mqtt_client.request_device_status(device)
+        await mqtt_client.control.request_device_status(device)
     except RuntimeError as e:
         if "Not connected" in str(e):
             # handle connection error
 
     # New code (v5.0+)
     try:
-        await mqtt_client.request_device_status(device)
+        await mqtt_client.control.request_device_status(device)
     except MqttNotConnectedError:
         # handle connection error
     except MqttError:
@@ -273,7 +273,7 @@ class MqttNotConnectedError(MqttError):
         mqtt_client = NavienMqttClient(auth_client)
         # Must connect first
         await mqtt_client.connect()
-        await mqtt_client.request_device_status(device)
+        await mqtt_client.control.request_device_status(device)
     """
 
     pass

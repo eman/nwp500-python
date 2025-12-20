@@ -46,12 +46,12 @@ Basic Control
            
            # Request device info to populate capability cache
            await mqtt.subscribe_device_feature(device, lambda f: None)
-           await mqtt.request_device_info(device)
+           await mqtt.control.request_device_info(device)
            
            # Now control operations work with automatic capability checking
-           await mqtt.set_power(device, power_on=True)
-           await mqtt.set_dhw_mode(device, mode_id=3)  # Energy Saver
-           await mqtt.set_dhw_temperature(device, 140.0)
+           await mqtt.control.set_power(device, power_on=True)
+           await mqtt.control.set_dhw_mode(device, mode_id=3)  # Energy Saver
+           await mqtt.control.set_dhw_temperature(device, 140.0)
            
            await mqtt.disconnect()
 
@@ -72,12 +72,12 @@ Before executing control commands, check device capabilities:
        
        # Request device info first
        await mqtt.subscribe_device_feature(device, on_feature)
-       await mqtt.request_device_info(device)
+       await mqtt.control.request_device_info(device)
        
        # Wait for device info to be cached, then control
        try:
            # Control commands automatically check capabilities via decorator
-           msg_id = await mqtt.set_recirculation_mode(device, 1)
+           msg_id = await mqtt.control.set_recirculation_mode(device, 1)
            print(f"Command sent with ID {msg_id}")
        except DeviceCapabilityError as e:
            print(f"Device doesn't support: {e}")
@@ -110,7 +110,7 @@ request_device_status()
    .. code-block:: python
 
       await mqtt.subscribe_device_status(device, on_status)
-      await mqtt.request_device_status(device)
+      await mqtt.control.request_device_status(device)
 
 request_device_info()
 ^^^^^^^^^^^^^^^^^^^^^
@@ -132,7 +132,7 @@ request_device_info()
    .. code-block:: python
 
       await mqtt.subscribe_device_feature(device, on_feature)
-      await mqtt.request_device_info(device)
+      await mqtt.control.request_device_info(device)
 
 Power Control
 --------------
@@ -159,10 +159,10 @@ set_power()
    .. code-block:: python
 
       # Turn on
-      await mqtt.set_power(device, power_on=True)
+      await mqtt.control.set_power(device, power_on=True)
       
       # Turn off
-      await mqtt.set_power(device, power_on=False)
+      await mqtt.control.set_power(device, power_on=False)
 
 DHW Mode Control
 -----------------
@@ -203,12 +203,12 @@ set_dhw_mode()
       from nwp500 import DhwOperationSetting
       
       # Set to Energy Saver (balanced, recommended)
-      await mqtt.set_dhw_mode(device, DhwOperationSetting.ENERGY_SAVER.value)
+      await mqtt.control.set_dhw_mode(device, DhwOperationSetting.ENERGY_SAVER.value)
       # or just:
-      await mqtt.set_dhw_mode(device, 3)
+      await mqtt.control.set_dhw_mode(device, 3)
       
       # Set vacation mode for 7 days
-      await mqtt.set_dhw_mode(
+      await mqtt.control.set_dhw_mode(
           device,
           DhwOperationSetting.VACATION.value,
           vacation_days=7
@@ -243,13 +243,13 @@ set_dhw_temperature()
    .. code-block:: python
 
       # Set temperature to 140°F
-      await mqtt.set_dhw_temperature(device, 140.0)
+      await mqtt.control.set_dhw_temperature(device, 140.0)
       
       # Common temperatures
-      await mqtt.set_dhw_temperature(device, 120.0)  # Standard
-      await mqtt.set_dhw_temperature(device, 130.0)  # Medium
-      await mqtt.set_dhw_temperature(device, 140.0)  # Hot
-      await mqtt.set_dhw_temperature(device, 150.0)  # Maximum
+      await mqtt.control.set_dhw_temperature(device, 120.0)  # Standard
+      await mqtt.control.set_dhw_temperature(device, 130.0)  # Medium
+      await mqtt.control.set_dhw_temperature(device, 140.0)  # Hot
+      await mqtt.control.set_dhw_temperature(device, 150.0)  # Maximum
 
 Anti-Legionella Control
 ------------------------
@@ -274,10 +274,10 @@ enable_anti_legionella()
    .. code-block:: python
 
       # Enable weekly anti-Legionella cycle
-      await mqtt.enable_anti_legionella(device, period_days=7)
+      await mqtt.control.enable_anti_legionella(device, period_days=7)
       
       # Enable bi-weekly cycle
-      await mqtt.enable_anti_legionella(device, period_days=14)
+      await mqtt.control.enable_anti_legionella(device, period_days=14)
 
 disable_anti_legionella()
 ^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -295,7 +295,7 @@ disable_anti_legionella()
 
    .. code-block:: python
 
-      await mqtt.disable_anti_legionella(device)
+      await mqtt.control.disable_anti_legionella(device)
 
 Vacation Mode
 --------------
@@ -326,10 +326,10 @@ set_vacation_days()
    .. code-block:: python
 
       # Set vacation for 14 days
-      await mqtt.set_vacation_days(device, 14)
+      await mqtt.control.set_vacation_days(device, 14)
       
       # Set for full month
-      await mqtt.set_vacation_days(device, 30)
+      await mqtt.control.set_vacation_days(device, 30)
 
 Recirculation Control
 ---------------------
@@ -364,10 +364,10 @@ set_recirculation_mode()
    .. code-block:: python
 
       # Enable always-on recirculation
-      await mqtt.set_recirculation_mode(device, 1)
+      await mqtt.control.set_recirculation_mode(device, 1)
       
       # Set to temperature-based control
-      await mqtt.set_recirculation_mode(device, 4)
+      await mqtt.control.set_recirculation_mode(device, 4)
 
 trigger_recirculation_hot_button()
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -391,7 +391,7 @@ trigger_recirculation_hot_button()
    .. code-block:: python
 
       # Manually activate recirculation for immediate hot water
-      await mqtt.trigger_recirculation_hot_button(device)
+      await mqtt.control.trigger_recirculation_hot_button(device)
 
 configure_recirculation_schedule()
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -429,7 +429,7 @@ configure_recirculation_schedule()
           ]
       }
       
-      await mqtt.configure_recirculation_schedule(device, schedule)
+      await mqtt.control.configure_recirculation_schedule(device, schedule)
 
 Time-of-Use Control
 --------------------
@@ -456,10 +456,10 @@ set_tou_enabled()
    .. code-block:: python
 
       # Enable TOU
-      await mqtt.set_tou_enabled(device, True)
+      await mqtt.control.set_tou_enabled(device, True)
       
       # Disable TOU
-      await mqtt.set_tou_enabled(device, False)
+      await mqtt.control.set_tou_enabled(device, False)
 
 configure_tou_schedule()
 ^^^^^^^^^^^^^^^^^^^^^^^^
@@ -501,7 +501,7 @@ configure_tou_schedule()
           }
       ]
       
-      await mqtt.configure_tou_schedule(
+      await mqtt.control.configure_tou_schedule(
           device,
           controller_serial_number="ABC123",
           periods=periods
@@ -567,7 +567,7 @@ update_reservations()
           }
       ]
       
-      await mqtt.update_reservations(device, reservations, enabled=True)
+      await mqtt.control.update_reservations(device, reservations, enabled=True)
 
 request_reservations()
 ^^^^^^^^^^^^^^^^^^^^^^
@@ -630,10 +630,10 @@ request_energy_usage()
       # Request current month
       from datetime import datetime
       now = datetime.now()
-      await mqtt.request_energy_usage(device, now.year, [now.month])
+      await mqtt.control.request_energy_usage(device, now.year, [now.month])
       
       # Request multiple months
-      await mqtt.request_energy_usage(device, 2024, [8, 9, 10])
+      await mqtt.control.request_energy_usage(device, 2024, [8, 9, 10])
 
 Demand Response
 ----------------
@@ -658,7 +658,7 @@ enable_demand_response()
    .. code-block:: python
 
       # Enable demand response
-      await mqtt.enable_demand_response(device)
+      await mqtt.control.enable_demand_response(device)
 
 disable_demand_response()
 ^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -679,7 +679,7 @@ disable_demand_response()
    .. code-block:: python
 
       # Disable demand response
-      await mqtt.disable_demand_response(device)
+      await mqtt.control.disable_demand_response(device)
 
 Air Filter Maintenance
 -----------------------
@@ -704,7 +704,7 @@ reset_air_filter()
    .. code-block:: python
 
       # Reset air filter timer after maintenance
-      await mqtt.reset_air_filter(device)
+      await mqtt.control.reset_air_filter(device)
 
 Utility Methods
 ---------------
@@ -728,7 +728,7 @@ signal_app_connection()
    .. code-block:: python
 
       await mqtt.connect()
-      await mqtt.signal_app_connection(device)
+      await mqtt.control.signal_app_connection(device)
 
 Device Capabilities Module
 ==========================
@@ -802,7 +802,7 @@ assert_supported()
 
       try:
           DeviceCapabilityChecker.assert_supported("recirculation_use", features)
-          await mqtt.set_recirculation_mode(device, 1)
+          await mqtt.control.set_recirculation_mode(device, 1)
       except DeviceCapabilityError as e:
           print(f"Cannot set recirculation: {e}")
 
@@ -886,7 +886,7 @@ check_support()
    .. code-block:: python
 
       if mqtt.check_support("recirculation_use", device_features):
-          await mqtt.set_recirculation_mode(device, 1)
+          await mqtt.control.set_recirculation_mode(device, 1)
 
 assert_support()
 ^^^^^^^^^^^^^^^^
@@ -908,7 +908,7 @@ assert_support()
 
       try:
           mqtt.assert_support("recirculation_use", device_features)
-          await mqtt.set_recirculation_mode(device, 1)
+          await mqtt.control.set_recirculation_mode(device, 1)
       except DeviceCapabilityError as e:
           print(f"Device doesn't support: {e}")
 
@@ -976,7 +976,7 @@ before command execution.
    .. code-block:: python
 
       # Device info is automatically requested if not cached
-      await mqtt.set_recirculation_mode(device, 1)
+      await mqtt.control.set_recirculation_mode(device, 1)
       
       # This triggers:
       # 1. Check cache (not found)
@@ -999,7 +999,7 @@ Error Handling
    from nwp500 import DeviceCapabilityError
 
    try:
-       await mqtt.set_recirculation_mode(device, 1)
+       await mqtt.control.set_recirculation_mode(device, 1)
    except DeviceCapabilityError as e:
        print(f"Cannot execute command: {e}")
        print(f"Missing capability: {e.feature}")
@@ -1013,10 +1013,10 @@ Best Practices
 
       # Request device info before control commands
       await mqtt.subscribe_device_feature(device, on_feature)
-      await mqtt.request_device_info(device)
+      await mqtt.control.request_device_info(device)
       
       # Now control commands can proceed
-      await mqtt.set_power(device, True)
+      await mqtt.control.set_power(device, True)
 
 2. **Check capabilities manually for custom logic:**
 
@@ -1027,7 +1027,7 @@ Best Practices
       controls = DeviceCapabilityChecker.get_available_controls(features)
       
       if controls.get("recirculation_use"):
-          await mqtt.set_recirculation_mode(device, 1)
+          await mqtt.control.set_recirculation_mode(device, 1)
       else:
           print("Recirculation not supported")
 
@@ -1038,7 +1038,7 @@ Best Practices
       from nwp500 import DeviceCapabilityError
 
       try:
-          await mqtt.set_recirculation_mode(device, 1)
+          await mqtt.control.set_recirculation_mode(device, 1)
       except DeviceCapabilityError as e:
           logger.warning(f"Feature not supported: {e.feature}")
           # Fallback to alternative command
@@ -1050,7 +1050,7 @@ Best Practices
       from nwp500 import DeviceCapabilityError, RangeValidationError
 
       try:
-          await mqtt.set_dhw_temperature(device, 140.0)
+          await mqtt.control.set_dhw_temperature(device, 140.0)
       except DeviceCapabilityError as e:
           print(f"Device doesn't support temperature control: {e}")
       except RangeValidationError as e:
@@ -1102,7 +1102,7 @@ Example 1: Safe Device Control with Capability Checking
            
            # Request device info
            await mqtt.subscribe_device_feature(device, on_feature)
-           await mqtt.request_device_info(device)
+           await mqtt.control.request_device_info(device)
            
            # Wait a bit for response
            await asyncio.sleep(2)
@@ -1114,7 +1114,7 @@ Example 1: Safe Device Control with Capability Checking
                # Power control
                if controls.get("power_use"):
                    try:
-                       await mqtt.set_power(device, True)
+                       await mqtt.control.set_power(device, True)
                        print("✓ Device powered ON")
                    except DeviceCapabilityError as e:
                        print(f"✗ Power control failed: {e}")
@@ -1122,7 +1122,7 @@ Example 1: Safe Device Control with Capability Checking
                # Recirculation control
                if controls.get("recirculation_use"):
                    try:
-                       await mqtt.set_recirculation_mode(device, 1)
+                       await mqtt.control.set_recirculation_mode(device, 1)
                        print("✓ Recirculation enabled")
                    except DeviceCapabilityError as e:
                        print(f"✗ Recirculation failed: {e}")
@@ -1130,7 +1130,7 @@ Example 1: Safe Device Control with Capability Checking
                # Temperature control
                if controls.get("dhw_temperature_setting_use"):
                    try:
-                       await mqtt.set_dhw_temperature(device, 140.0)
+                       await mqtt.control.set_dhw_temperature(device, 140.0)
                        print("✓ Temperature set to 140°F")
                    except DeviceCapabilityError as e:
                        print(f"✗ Temperature control failed: {e}")
@@ -1161,13 +1161,13 @@ Example 2: Automatic Capability Checking with Decorator
            
            # Request device info once
            await mqtt.subscribe_device_feature(device, lambda f: None)
-           await mqtt.request_device_info(device)
+           await mqtt.control.request_device_info(device)
            
            # All control methods now have automatic capability checking
            try:
-               await mqtt.set_power(device, True)
-               await mqtt.set_dhw_mode(device, 3)
-               await mqtt.set_recirculation_mode(device, 1)
+               await mqtt.control.set_power(device, True)
+               await mqtt.control.set_dhw_mode(device, 3)
+               await mqtt.control.set_recirculation_mode(device, 1)
            except DeviceCapabilityError as e:
                print(f"Device doesn't support: {e}")
            

@@ -57,7 +57,7 @@ Here's a simple example that sets up a weekday morning reservation:
            # Send to device
            mqtt = NavienMqttClient(auth)
            await mqtt.connect()
-           await mqtt.update_reservations(
+           await mqtt.control.update_reservations(
                device,
                [weekday_morning],
                enabled=True
@@ -303,7 +303,7 @@ Send a new reservation schedule to the device:
            # Send to device
            mqtt = NavienMqttClient(auth)
            await mqtt.connect()
-           await mqtt.update_reservations(
+           await mqtt.control.update_reservations(
                device,
                reservations,
                enabled=True  # Enable reservation system
@@ -367,7 +367,7 @@ Request the current reservation schedule from the device:
            await mqtt.subscribe(response_topic, on_reservation_response)
 
            # Request current schedule
-           await mqtt.request_reservations(device)
+           await mqtt.control.request_reservations(device)
 
            # Wait for response
            await asyncio.sleep(5)
@@ -389,7 +389,7 @@ To disable the reservation system while keeping entries stored:
            await mqtt.connect()
 
            # Keep existing entries but disable execution
-           await mqtt.update_reservations(
+           await mqtt.control.update_reservations(
                device,
                [],  # Empty list keeps existing entries
                enabled=False  # Disable reservation system
@@ -413,7 +413,7 @@ To completely clear the reservation schedule:
            await mqtt.connect()
 
            # Send empty list with disabled flag
-           await mqtt.update_reservations(
+           await mqtt.control.update_reservations(
                device,
                [],
                enabled=False
@@ -680,7 +680,7 @@ Full working example with error handling and response monitoring:
 
            # Send new schedule
            print("\nUpdating reservation schedule...")
-           await mqtt.update_reservations(
+           await mqtt.control.update_reservations(
                device,
                reservations,
                enabled=True
@@ -689,7 +689,7 @@ Full working example with error handling and response monitoring:
 
            # Request confirmation
            print("\nRequesting current schedule...")
-           await mqtt.request_reservations(device)
+           await mqtt.control.request_reservations(device)
 
            # Wait for response
            try:

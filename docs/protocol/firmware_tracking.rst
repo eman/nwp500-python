@@ -89,7 +89,7 @@ You can get your firmware versions by running:
                print(f"Panel SW: {feature.panelSwVersion}")
                print(f"WiFi SW: {feature.wifiSwVersion}")
            
-           await mqtt.request_device_info(feature_callback)
+           await mqtt.control.request_device_info(feature_callback)
            await asyncio.sleep(2)
            await mqtt.disconnect()
 

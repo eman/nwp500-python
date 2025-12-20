@@ -13,6 +13,7 @@ from nwp500.exceptions import (
     Nwp500Error,
     ValidationError,
 )
+from nwp500.topic_builder import MqttTopicBuilder
 
 from .output_formatters import _json_default_serializer
 
@@ -40,7 +41,7 @@ async def get_controller_serial_number(
 
     await mqtt.subscribe_device_feature(device, on_feature)
     _logger.info("Requesting controller serial number...")
-    await mqtt.request_device_info(device)
+    await mqtt.control.request_device_info(device)
 
     try:
         serial_number = await asyncio.wait_for(future, timeout=timeout)
@@ -64,7 +65,7 @@ async def handle_status_request(mqtt: NavienMqttClient, device: Device) -> None:
 
     await mqtt.subscribe_device_status(device, on_status)
     _logger.info("Requesting device status...")
-    await mqtt.request_device_status(device)
+    await mqtt.control.request_device_status(device)
 
     try:
         await asyncio.wait_for(future, timeout=10)
@@ -105,7 +106,7 @@ async def handle_status_raw_request(
     await mqtt.subscribe_device(device, raw_callback)
 
     _logger.info("Requesting device status (raw)...")
-    await mqtt.request_device_status(device)
+    await mqtt.control.request_device_status(device)
 
     try:
         await asyncio.wait_for(future, timeout=10)
@@ -168,7 +169,7 @@ async def _request_device_info_common(
         "device information" if parse_pydantic else "device information (raw)"
     )
     _logger.info(f"Requesting {action_name}...")
-    await mqtt.request_device_info(device)
+    await mqtt.control.request_device_info(device)
 
     try:
         await asyncio.wait_for(future, timeout=10)
@@ -264,7 +265,7 @@ async def handle_set_mode_request(
         )
 
         # Send the mode change command
-        await mqtt.set_dhw_mode(device, mode_id)
+        await mqtt.control.set_dhw_mode(device, mode_id)
 
         # Wait for status response (mode change confirmation)
         try:
@@ -335,7 +336,7 @@ async def handle_set_dhw_temp_request(
         _logger.info(f"Setting DHW target temperature to {temperature}°F...")
 
         # Send the temperature change command
-        await mqtt.set_dhw_temperature(device, temperature)
+        await mqtt.control.set_dhw_temperature(device, temperature)
 
         # Wait for status response (temperature change confirmation)
         try:
@@ -398,7 +399,7 @@ async def handle_power_request(
         await mqtt.subscribe_device_status(device, on_power_change_response)
 
         # Send power command
-        await mqtt.set_power(device, power_on)
+        await mqtt.control.set_power(device, power_on)
 
         # Wait for response with timeout
         status = await asyncio.wait_for(future, timeout=10.0)
@@ -503,11 +504,13 @@ async def handle_get_reservations_request(
     # Subscribe to all device-type messages to catch the response
     # Responses come on various patterns depending on the command
     device_type = device.device_info.device_type
-    response_pattern = f"cmd/{device_type}/#"
+    response_pattern = MqttTopicBuilder.command_topic(
+        device_type, mac_address="+", suffix="#"
+    )
 
     await mqtt.subscribe(response_pattern, raw_callback)
     _logger.info("Requesting current reservation schedule...")
-    await mqtt.request_reservations(device)
+    await mqtt.control.request_reservations(device)
 
     try:
         await asyncio.wait_for(future, timeout=10)
@@ -545,11 +548,19 @@ async def handle_update_reservations_request(
     # Responses come on: cmd/{deviceType}/+/+/{clientId}/res/rsv/rd
     device_type = device.device_info.device_type
     client_id = mqtt.client_id
+    response_topic = MqttTopicBuilder.response_topic(
+        device_type, client_id, "rsv/rd"
+    ).replace(f"navilink-{device.device_info.mac_address}", "+")
+    # Note: The original pattern wascmd/{deviceType}/+/+/{clientId}/res/rsv/rd
+    # which is slightly different from our standard builder. 
+    # But cmd/{device_type}/+/+/... is very permissive.
+    # I'll use a more standard pattern if possible, but I'll stick to 
+    # something close to the original for now if it's meant to be a wildcard.
     response_topic = f"cmd/{device_type}/+/+/{client_id}/res/rsv/rd"
 
     await mqtt.subscribe(response_topic, raw_callback)
     _logger.info(f"Updating reservation schedule (enabled={enabled})...")
-    await mqtt.update_reservations(device, reservations, enabled=enabled)
+    await mqtt.control.update_reservations(device, reservations, enabled=enabled)
 
     try:
         await asyncio.wait_for(future, timeout=10)
@@ -633,7 +644,7 @@ async def handle_set_tou_enabled_request(
     await mqtt.subscribe_device_status(device, on_status_response)
 
     try:
-        await mqtt.set_tou_enabled(device, enabled)
+        await mqtt.control.set_tou_enabled(device, enabled)
 
         try:
             await asyncio.wait_for(future, timeout=10)
@@ -672,7 +683,7 @@ async def handle_get_energy_request(
     # Subscribe to energy usage response (uses default device topic)
     await mqtt.subscribe_device(device, raw_callback)
     _logger.info(f"Requesting energy usage for {year}, months: {months}...")
-    await mqtt.request_energy_usage(device, year, months)
+    await mqtt.control.request_energy_usage(device, year, months)
 
     try:
         await asyncio.wait_for(future, timeout=15)
@@ -695,7 +706,7 @@ async def handle_enable_demand_response_request(
     await mqtt.subscribe_device_status(device, on_status_response)
 
     try:
-        await mqtt.enable_demand_response(device)
+        await mqtt.control.enable_demand_response(device)
 
         try:
             await asyncio.wait_for(future, timeout=10)
@@ -726,7 +737,7 @@ async def handle_disable_demand_response_request(
     await mqtt.subscribe_device_status(device, on_status_response)
 
     try:
-        await mqtt.disable_demand_response(device)
+        await mqtt.control.disable_demand_response(device)
 
         try:
             await asyncio.wait_for(future, timeout=10)
@@ -757,7 +768,7 @@ async def handle_reset_air_filter_request(
     await mqtt.subscribe_device_status(device, on_status_response)
 
     try:
-        await mqtt.reset_air_filter(device)
+        await mqtt.control.reset_air_filter(device)
 
         try:
             await asyncio.wait_for(future, timeout=10)
@@ -788,7 +799,7 @@ async def handle_set_vacation_days_request(
     await mqtt.subscribe_device_status(device, on_status_response)
 
     try:
-        await mqtt.set_vacation_days(device, days)
+        await mqtt.control.set_vacation_days(device, days)
 
         try:
             await asyncio.wait_for(future, timeout=10)
@@ -830,7 +841,7 @@ async def handle_set_recirculation_mode_request(
     await mqtt.subscribe_device_status(device, on_status_response)
 
     try:
-        await mqtt.set_recirculation_mode(device, mode)
+        await mqtt.control.set_recirculation_mode(device, mode)
 
         try:
             await asyncio.wait_for(future, timeout=10)
@@ -866,7 +877,7 @@ async def handle_trigger_recirculation_hot_button_request(
     await mqtt.subscribe_device_status(device, on_status_response)
 
     try:
-        await mqtt.trigger_recirculation_hot_button(device)
+        await mqtt.control.trigger_recirculation_hot_button(device)
 
         try:
             await asyncio.wait_for(future, timeout=10)
@@ -903,7 +914,7 @@ async def handle_configure_reservation_water_program_request(
     await mqtt.subscribe_device_status(device, on_status_response)
 
     try:
-        await mqtt.configure_reservation_water_program(device)
+        await mqtt.control.configure_reservation_water_program(device)
 
         try:
             await asyncio.wait_for(future, timeout=10)

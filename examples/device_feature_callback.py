@@ -149,63 +149,63 @@ async def main():
 
                     print("\nFeature Support:")
                     print(
-                        f"  Power Control:      {'Yes' if feature.power_use == OnOffFlag.ON else 'No'}"
+                        f"  Power Control:      {'Yes' if feature.power_use else 'No'}"
                     )
                     print(
-                        f"  DHW Control:        {'Yes' if feature.dhw_use == OnOffFlag.ON else 'No'}"
+                        f"  DHW Control:        {'Yes' if feature.dhw_use else 'No'}"
                     )
                     print(
                         f"  DHW Temp Setting:   Level {feature.dhw_temperature_setting_use}"
                     )
                     print(
-                        f"  Heat Pump Mode:     {'Yes' if feature.heatpump_use == OnOffFlag.ON else 'No'}"
+                        f"  Heat Pump Mode:     {'Yes' if feature.heatpump_use else 'No'}"
                     )
                     print(
-                        f"  Electric Mode:      {'Yes' if feature.electric_use == OnOffFlag.ON else 'No'}"
+                        f"  Electric Mode:      {'Yes' if feature.electric_use else 'No'}"
                     )
                     print(
-                        f"  Energy Saver:       {'Yes' if feature.energy_saver_use == OnOffFlag.ON else 'No'}"
+                        f"  Energy Saver:       {'Yes' if feature.energy_saver_use else 'No'}"
                     )
                     print(
-                        f"  High Demand:        {'Yes' if feature.high_demand_use == OnOffFlag.ON else 'No'}"
+                        f"  High Demand:        {'Yes' if feature.high_demand_use else 'No'}"
                     )
                     print(
-                        f"  Eco Mode:           {'Yes' if feature.eco_use == OnOffFlag.ON else 'No'}"
+                        f"  Eco Mode:           {'Yes' if feature.eco_use else 'No'}"
                     )
 
                     print("\nAdvanced Features:")
                     print(
-                        f"  Holiday Mode:       {'Yes' if feature.holiday_use == OnOffFlag.ON else 'No'}"
+                        f"  Holiday Mode:       {'Yes' if feature.holiday_use else 'No'}"
                     )
                     print(
-                        f"  Program Schedule:   {'Yes' if feature.program_reservation_use == OnOffFlag.ON else 'No'}"
+                        f"  Program Schedule:   {'Yes' if feature.program_reservation_use else 'No'}"
                     )
                     print(
-                        f"  Smart Diagnostic:   {'Yes' if feature.smart_diagnostic_use == OnOffFlag.ON else 'No'}"
+                        f"  Smart Diagnostic:   {'Yes' if feature.smart_diagnostic_use else 'No'}"
                     )
                     print(
-                        f"  WiFi RSSI:          {'Yes' if feature.wifi_rssi_use == OnOffFlag.ON else 'No'}"
+                        f"  WiFi RSSI:          {'Yes' if feature.wifi_rssi_use else 'No'}"
                     )
                     print(
-                        f"  Energy Usage:       {'Yes' if feature.energy_usage_use == OnOffFlag.ON else 'No'}"
+                        f"  Energy Usage:       {'Yes' if feature.energy_usage_use else 'No'}"
                     )
                     print(
-                        f"  Freeze Protection:  {'Yes' if feature.freeze_protection_use == OnOffFlag.ON else 'No'}"
+                        f"  Freeze Protection:  {'Yes' if feature.freeze_protection_use else 'No'}"
                     )
                     print(
-                        f"  Mixing Valve:       {'Yes' if feature.mixing_value_use == OnOffFlag.ON else 'No'}"
+                        f"  Mixing Valve:       {'Yes' if feature.mixing_valve_use else 'No'}"
                     )
                     print(
-                        f"  DR Settings:        {'Yes' if feature.dr_setting_use == OnOffFlag.ON else 'No'}"
+                        f"  DR Settings:        {'Yes' if feature.dr_setting_use else 'No'}"
                     )
                     print(
-                        f"  Anti-Legionella:    {'Yes' if feature.anti_legionella_setting_use == OnOffFlag.ON else 'No'}"
+                        f"  Anti-Legionella:    {'Yes' if feature.anti_legionella_setting_use else 'No'}"
                     )
                     print(
-                        f"  HPWH:               {'Yes' if feature.hpwh_use == OnOffFlag.ON else 'No'}"
+                        f"  HPWH:               {'Yes' if feature.hpwh_use else 'No'}"
                     )
                     print(
-                        f"  DHW Refill:         {'Yes' if feature.dhw_refill_use == OnOffFlag.ON else 'No'}"
+                        f"  DHW Refill:         {'Yes' if feature.dhw_refill_use else 'No'}"
                     )
 
                     print("=" * 60)
@@ -230,10 +230,10 @@ async def main():
 
                 # Step 5: Request device info to get feature data
                 print("Step 5: Requesting device information...")
-                await mqtt_client.signal_app_connection(device)
+                await mqtt_client.control.signal_app_connection(device)
                 await asyncio.sleep(1)
 
-                await mqtt_client.request_device_info(device)
+                await mqtt_client.control.request_device_info(device)
                 print("[SUCCESS] Device info request sent")
                 print()
 

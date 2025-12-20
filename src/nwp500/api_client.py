@@ -70,15 +70,13 @@ class NavienAPIClient:
 
         self.base_url = base_url.rstrip("/")
         self._auth_client = auth_client
-        self._auth_client = auth_client
-        _session = session or auth_client._session
-        if _session is None:
-            raise ValueError("auth_client must have an active session")
-        self._session = _session
-        self._owned_session = (
-            False  # Never own session when auth_client is provided
-        )
-        self._owned_auth = False  # Never own auth_client
+        self._session = session or getattr(auth_client, "_session", None)
+        if self._session is None:
+            raise ValueError(
+                "auth_client must have an active session or a session must be provided"
+            )
+        self._owned_session = False
+        self._owned_auth = False
 
     async def __aenter__(self) -> Self:
         """Enter async context manager."""
@@ -148,6 +146,7 @@ class NavienAPIClient:
             clean_json_data = filtered_json
 
         try:
+            _logger.debug(f"Starting {method} request to {url}")
             async with self._session.request(
                 method,
                 url,
@@ -155,6 +154,9 @@ class NavienAPIClient:
                 json=clean_json_data,
                 params=clean_params,
             ) as response:
+                _logger.debug(
+                    f"Response received from {url}: {response.status}"
+                )
                 response_data: dict[str, Any] = await response.json()
 
                 # Check for API errors
@@ -165,7 +167,7 @@ class NavienAPIClient:
                     # If we get a 401 and haven't retried yet, try refreshing
                     # token
                     if code == 401 and retry_on_auth_failure:
-                        _logger.warning(
+                        _logger.info(
                             "Received 401 Unauthorized. "
                             "Attempting to refresh token..."
                         )

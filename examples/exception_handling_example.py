@@ -107,7 +107,7 @@ async def example_mqtt_errors():
             await mqtt.disconnect()
 
             try:
-                await mqtt.request_device_status(device)
+                await mqtt.control.request_device_status(device)
             except MqttNotConnectedError as e:
                 print(f"[OK] Caught MqttNotConnectedError: {e}")
                 print("  Can reconnect and retry the operation")
@@ -156,7 +156,7 @@ async def example_validation_errors():
 
             # Try to set invalid vacation days
             try:
-                await mqtt.set_dhw_mode(device, mode_id=5, vacation_days=50)
+                await mqtt.control.set_dhw_mode(device, mode_id=5, vacation_days=50)
             except RangeValidationError as e:
                 print(f"[OK] Caught RangeValidationError: {e}")
                 print(f"  Field: {e.field}")

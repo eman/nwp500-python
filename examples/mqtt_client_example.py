@@ -181,17 +181,17 @@ async def main():
 
                 # Signal app connection
                 print("📤 Signaling app connection...")
-                await mqtt_client.signal_app_connection(device)
+                await mqtt_client.control.signal_app_connection(device)
                 await asyncio.sleep(1)
 
                 # Request device info
                 print("📤 Requesting device information...")
-                await mqtt_client.request_device_info(device)
+                await mqtt_client.control.request_device_info(device)
                 await asyncio.sleep(2)
 
                 # Request device status
                 print("📤 Requesting device status...")
-                await mqtt_client.request_device_status(device)
+                await mqtt_client.control.request_device_status(device)
                 await asyncio.sleep(2)
 
                 # Wait for messages

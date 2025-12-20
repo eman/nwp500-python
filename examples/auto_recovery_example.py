@@ -87,7 +87,7 @@ async def strategy_simple_retry(auth_client, device):
 
         # Subscribe and monitor
         await mqtt_client.subscribe_device_status(device, lambda s: None)
-        await mqtt_client.start_periodic_device_status_requests(device)
+        await mqtt_client.start_periodic_requests(device)
 
         # Monitor for 120 seconds
         for i in range(120):
@@ -141,7 +141,7 @@ async def strategy_full_recreation(auth_client, device):
 
         # Re-subscribe
         await mqtt_client.subscribe_device_status(device, lambda s: None)
-        await mqtt_client.start_periodic_device_status_requests(device)
+        await mqtt_client.start_periodic_requests(device)
 
         return mqtt_client
 
@@ -245,7 +245,7 @@ async def strategy_token_refresh(auth_client, device):
 
             # Re-subscribe
             await mqtt_client.subscribe_device_status(device, lambda s: None)
-            await mqtt_client.start_periodic_device_status_requests(device)
+            await mqtt_client.start_periodic_requests(device)
 
             recovery_attempt = 0  # Reset on success
 
@@ -261,7 +261,7 @@ async def strategy_token_refresh(auth_client, device):
 
         # Subscribe and monitor
         await mqtt_client.subscribe_device_status(device, lambda s: None)
-        await mqtt_client.start_periodic_device_status_requests(device)
+        await mqtt_client.start_periodic_requests(device)
 
         # Monitor for 120 seconds
         for i in range(120):
@@ -359,7 +359,7 @@ async def strategy_exponential_backoff(auth_client, device):
 
             # Re-subscribe
             await mqtt_client.subscribe_device_status(device, lambda s: None)
-            await mqtt_client.start_periodic_device_status_requests(device)
+            await mqtt_client.start_periodic_requests(device)
 
             recovery_attempt = 0  # Reset on success
             logger.info("All subscriptions restored")
@@ -376,7 +376,7 @@ async def strategy_exponential_backoff(auth_client, device):
 
         # Subscribe and monitor
         await mqtt_client.subscribe_device_status(device, lambda s: None)
-        await mqtt_client.start_periodic_device_status_requests(device)
+        await mqtt_client.start_periodic_requests(device)
 
         # Monitor for 120 seconds
         for i in range(120):

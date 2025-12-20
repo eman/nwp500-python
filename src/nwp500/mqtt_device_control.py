@@ -31,6 +31,7 @@ from .exceptions import (
     ParameterValidationError,
     RangeValidationError,
 )
+from nwp500.topic_builder import MqttTopicBuilder
 from .models import Device, DeviceFeature, fahrenheit_to_half_celsius
 
 __author__ = "Emmanuel Levijarvi"
@@ -210,6 +211,72 @@ class MqttDeviceController:
             ),
         }
 
+    async def _get_device_features(self, device: Device) -> Any | None:
+        """
+        Get cached device features, auto-requesting if necessary.
+
+        Internal helper used by decorators and status requests.
+        """
+        mac = device.device_info.mac_address
+        cached_features = await self._device_info_cache.get(mac)
+
+        if cached_features is None:
+            _logger.info(
+                f"Device info for {mac} not cached, auto-requesting..."
+            )
+            try:
+                await self._auto_request_device_info(device)
+                cached_features = await self._device_info_cache.get(mac)
+            except Exception as e:
+                _logger.warning(f"Failed to auto-request device info: {e}")
+
+        return cached_features
+
+    async def _send_command(
+        self,
+        device: Device,
+        command_code: int,
+        topic_suffix: str = "ctrl",
+        response_topic_suffix: str | None = None,
+        **payload_kwargs: Any,
+    ) -> int:
+        """
+        Internal helper to build and send a device command.
+
+        Args:
+            device: Device to send command to
+            command_code: Command code to use
+            topic_suffix: Suffix for the command topic
+            response_topic_suffix: Optional suffix for custom response topic
+            **payload_kwargs: Additional fields for the request payload
+
+        Returns:
+            Publish packet ID
+        """
+        device_id = device.device_info.mac_address
+        device_type = device.device_info.device_type
+        additional_value = device.device_info.additional_value
+
+        topic = MqttTopicBuilder.command_topic(
+            device_type, device_id, topic_suffix
+        )
+
+        command = self._build_command(
+            device_type=device_type,
+            device_id=device_id,
+            command=command_code,
+            additional_value=additional_value,
+            **payload_kwargs,
+        )
+        command["requestTopic"] = topic
+
+        if response_topic_suffix:
+            command["responseTopic"] = MqttTopicBuilder.response_topic(
+                device_type, self._client_id, response_topic_suffix
+            )
+
+        return await self._publish(topic, command)
+
     async def request_device_status(self, device: Device) -> int:
         """
         Request general device status.
@@ -220,21 +287,11 @@ class MqttDeviceController:
         Returns:
             Publish packet ID
         """
-        device_id = device.device_info.mac_address
-        device_type = device.device_info.device_type
-        additional_value = device.device_info.additional_value
-
-        device_topic = f"navilink-{device_id}"
-        topic = f"cmd/{device_type}/{device_topic}/st"
-        command = self._build_command(
-            device_type=device_type,
-            device_id=device_id,
-            command=CommandCode.STATUS_REQUEST,
-            additional_value=additional_value,
+        return await self._send_command(
+            device=device,
+            command_code=CommandCode.STATUS_REQUEST,
+            topic_suffix="st",
         )
-        command["requestTopic"] = topic
-
-        return await self._publish(topic, command)
 
     async def request_device_info(self, device: Device) -> int:
         """
@@ -246,21 +303,11 @@ class MqttDeviceController:
         Returns:
             Publish packet ID
         """
-        device_id = device.device_info.mac_address
-        device_type = device.device_info.device_type
-        additional_value = device.device_info.additional_value
-
-        device_topic = f"navilink-{device_id}"
-        topic = f"cmd/{device_type}/{device_topic}/st/did"
-        command = self._build_command(
-            device_type=device_type,
-            device_id=device_id,
-            command=CommandCode.DEVICE_INFO_REQUEST,
-            additional_value=additional_value,
+        return await self._send_command(
+            device=device,
+            command_code=CommandCode.DEVICE_INFO_REQUEST,
+            topic_suffix="st/did",
         )
-        command["requestTopic"] = topic
-
-        return await self._publish(topic, command)
 
     @requires_capability("power_use")
     async def set_power(self, device: Device, power_on: bool) -> int:
@@ -274,28 +321,18 @@ class MqttDeviceController:
         Returns:
             Publish packet ID
         """
-        device_id = device.device_info.mac_address
-        device_type = device.device_info.device_type
-        additional_value = device.device_info.additional_value
-        device_topic = f"navilink-{device_id}"
-        topic = f"cmd/{device_type}/{device_topic}/ctrl"
         mode = "power-on" if power_on else "power-off"
         command_code = (
             CommandCode.POWER_ON if power_on else CommandCode.POWER_OFF
         )
 
-        command = self._build_command(
-            device_type=device_type,
-            device_id=device_id,
-            command=command_code,
-            additional_value=additional_value,
+        return await self._send_command(
+            device=device,
+            command_code=command_code,
             mode=mode,
             param=[],
             paramStr="",
         )
-        command["requestTopic"] = topic
-
-        return await self._publish(topic, command)
 
     @requires_capability("dhw_use")
     async def set_dhw_mode(
@@ -352,50 +389,20 @@ class MqttDeviceController:
                 )
             param = [mode_id]
 
-        device_id = device.device_info.mac_address
-        device_type = device.device_info.device_type
-        additional_value = device.device_info.additional_value
-        device_topic = f"navilink-{device_id}"
-        topic = f"cmd/{device_type}/{device_topic}/ctrl"
-
-        command = self._build_command(
-            device_type=device_type,
-            device_id=device_id,
-            command=CommandCode.DHW_MODE,
-            additional_value=additional_value,
+        return await self._send_command(
+            device=device,
+            command_code=CommandCode.DHW_MODE,
             mode="dhw-mode",
             param=param,
             paramStr="",
         )
-        command["requestTopic"] = topic
-
-        return await self._publish(topic, command)
 
     async def enable_anti_legionella(
         self, device: Device, period_days: int
     ) -> int:
         """
         Enable Anti-Legionella disinfection with a 1-30 day cycle.
-
-        This command has been confirmed through HAR analysis of the official
-        Navien app.
-        When sent, the device responds with antiLegionellaUse=2 (enabled) and
-        antiLegionellaPeriod set to the specified value.
-
-        See docs/MQTT_MESSAGES.rst "Anti-Legionella Control" for the
-        authoritative
-        command code (33554472) and expected payload format:
-        {"mode": "anti-leg-on", "param": [<period_days>], "paramStr": ""}
-
-        Args:
-            device: The device to control
-            period_days: Days between disinfection cycles (1-30)
-
-        Returns:
-            The message ID of the published command
-
-        Raises:
-            ValueError: If period_days is not in the valid range [1, 30]
+        ...
         """
         if not 1 <= period_days <= 30:
             raise RangeValidationError(
@@ -406,63 +413,26 @@ class MqttDeviceController:
                 max_value=30,
             )
 
-        device_id = device.device_info.mac_address
-        device_type = device.device_info.device_type
-        additional_value = device.device_info.additional_value
-        device_topic = f"navilink-{device_id}"
-        topic = f"cmd/{device_type}/{device_topic}/ctrl"
-
-        command = self._build_command(
-            device_type=device_type,
-            device_id=device_id,
-            command=CommandCode.ANTI_LEGIONELLA_ON,
-            additional_value=additional_value,
+        return await self._send_command(
+            device=device,
+            command_code=CommandCode.ANTI_LEGIONELLA_ON,
             mode="anti-leg-on",
             param=[period_days],
             paramStr="",
         )
-        command["requestTopic"] = topic
-
-        return await self._publish(topic, command)
 
     async def disable_anti_legionella(self, device: Device) -> int:
         """
         Disable the Anti-Legionella disinfection cycle.
-
-        This command has been confirmed through HAR analysis of the official
-        Navien app.
-        When sent, the device responds with antiLegionellaUse=1 (disabled) while
-        antiLegionellaPeriod retains its previous value.
-
-        The correct command code is 33554471 (not 33554473 as previously
-        assumed).
-        See docs/MQTT_MESSAGES.rst "Anti-Legionella Control" section for
-        details.
-
-        Args:
-            device: The device to control
-
-        Returns:
-            The message ID of the published command
+        ...
         """
-        device_id = device.device_info.mac_address
-        device_type = device.device_info.device_type
-        additional_value = device.device_info.additional_value
-        device_topic = f"navilink-{device_id}"
-        topic = f"cmd/{device_type}/{device_topic}/ctrl"
-
-        command = self._build_command(
-            device_type=device_type,
-            device_id=device_id,
-            command=CommandCode.ANTI_LEGIONELLA_OFF,
-            additional_value=additional_value,
+        return await self._send_command(
+            device=device,
+            command_code=CommandCode.ANTI_LEGIONELLA_OFF,
             mode="anti-leg-off",
             param=[],
             paramStr="",
         )
-        command["requestTopic"] = topic
-
-        return await self._publish(topic, command)
 
     @requires_capability("dhw_temperature_setting_use")
     async def set_dhw_temperature(
@@ -496,24 +466,13 @@ class MqttDeviceController:
 
         param = fahrenheit_to_half_celsius(temperature_f)
 
-        device_id = device.device_info.mac_address
-        device_type = device.device_info.device_type
-        additional_value = device.device_info.additional_value
-        device_topic = f"navilink-{device_id}"
-        topic = f"cmd/{device_type}/{device_topic}/ctrl"
-
-        command = self._build_command(
-            device_type=device_type,
-            device_id=device_id,
-            command=CommandCode.DHW_TEMPERATURE,
-            additional_value=additional_value,
+        return await self._send_command(
+            device=device,
+            command_code=CommandCode.DHW_TEMPERATURE,
             mode="dhw-temperature",
             param=[param],
             paramStr="",
         )
-        command["requestTopic"] = topic
-
-        return await self._publish(topic, command)
 
     async def update_reservations(
         self,
@@ -536,29 +495,17 @@ class MqttDeviceController:
         # See docs/MQTT_MESSAGES.rst "Reservation Management" for the
         # command code (16777226) and the reservation object fields
         # (enable, week, hour, min, mode, param).
-        device_id = device.device_info.mac_address
-        device_type = device.device_info.device_type
-        additional_value = device.device_info.additional_value
-        device_topic = f"navilink-{device_id}"
-        topic = f"cmd/{device_type}/{device_topic}/ctrl/rsv/rd"
-
         reservation_use = 1 if enabled else 2
         reservation_payload = [dict(entry) for entry in reservations]
 
-        command = self._build_command(
-            device_type=device_type,
-            device_id=device_id,
-            command=CommandCode.RESERVATION_MANAGEMENT,
-            additional_value=additional_value,
+        return await self._send_command(
+            device=device,
+            command_code=CommandCode.RESERVATION_MANAGEMENT,
+            topic_suffix="ctrl/rsv/rd",
+            response_topic_suffix="rsv/rd",
             reservationUse=reservation_use,
             reservation=reservation_payload,
         )
-        command["requestTopic"] = topic
-        command["responseTopic"] = (
-            f"cmd/{device_type}/{self._client_id}/res/rsv/rd"
-        )
-
-        return await self._publish(topic, command)
 
     async def request_reservations(self, device: Device) -> int:
         """
@@ -570,24 +517,12 @@ class MqttDeviceController:
         Returns:
             Publish packet ID
         """
-        device_id = device.device_info.mac_address
-        device_type = device.device_info.device_type
-        additional_value = device.device_info.additional_value
-        device_topic = f"navilink-{device_id}"
-        topic = f"cmd/{device_type}/{device_topic}/st/rsv/rd"
-
-        command = self._build_command(
-            device_type=device_type,
-            device_id=device_id,
-            command=CommandCode.RESERVATION_READ,
-            additional_value=additional_value,
+        return await self._send_command(
+            device=device,
+            command_code=CommandCode.RESERVATION_READ,
+            topic_suffix="st/rsv/rd",
+            response_topic_suffix="rsv/rd",
         )
-        command["requestTopic"] = topic
-        command["responseTopic"] = (
-            f"cmd/{device_type}/{self._client_id}/res/rsv/rd"
-        )
-
-        return await self._publish(topic, command)
 
     @requires_capability("program_reservation_use")
     async def configure_tou_schedule(
@@ -627,30 +562,18 @@ class MqttDeviceController:
                 "At least one TOU period must be provided", parameter="periods"
             )
 
-        device_id = device.device_info.mac_address
-        device_type = device.device_info.device_type
-        additional_value = device.device_info.additional_value
-        device_topic = f"navilink-{device_id}"
-        topic = f"cmd/{device_type}/{device_topic}/ctrl/tou/rd"
-
         reservation_use = 1 if enabled else 2
         reservation_payload = [dict(period) for period in periods]
 
-        command = self._build_command(
-            device_type=device_type,
-            device_id=device_id,
-            command=CommandCode.TOU_RESERVATION,
-            additional_value=additional_value,
+        return await self._send_command(
+            device=device,
+            command_code=CommandCode.TOU_RESERVATION,
+            topic_suffix="ctrl/tou/rd",
+            response_topic_suffix="tou/rd",
             controllerSerialNumber=controller_serial_number,
             reservationUse=reservation_use,
             reservation=reservation_payload,
         )
-        command["requestTopic"] = topic
-        command["responseTopic"] = (
-            f"cmd/{device_type}/{self._client_id}/res/tou/rd"
-        )
-
-        return await self._publish(topic, command)
 
     async def request_tou_settings(
         self,
@@ -676,25 +599,13 @@ class MqttDeviceController:
                 parameter="controller_serial_number",
             )
 
-        device_id = device.device_info.mac_address
-        device_type = device.device_info.device_type
-        additional_value = device.device_info.additional_value
-        device_topic = f"navilink-{device_id}"
-        topic = f"cmd/{device_type}/{device_topic}/ctrl/tou/rd"
-
-        command = self._build_command(
-            device_type=device_type,
-            device_id=device_id,
-            command=CommandCode.TOU_RESERVATION,
-            additional_value=additional_value,
+        return await self._send_command(
+            device=device,
+            command_code=CommandCode.TOU_RESERVATION,
+            topic_suffix="ctrl/tou/rd",
+            response_topic_suffix="tou/rd",
             controllerSerialNumber=controller_serial_number,
         )
-        command["requestTopic"] = topic
-        command["responseTopic"] = (
-            f"cmd/{device_type}/{self._client_id}/res/tou/rd"
-        )
-
-        return await self._publish(topic, command)
 
     @requires_capability("program_reservation_use")
     async def set_tou_enabled(self, device: Device, enabled: bool) -> int:
@@ -708,27 +619,16 @@ class MqttDeviceController:
         Returns:
             Publish packet ID
         """
-        device_id = device.device_info.mac_address
-        device_type = device.device_info.device_type
-        additional_value = device.device_info.additional_value
-        device_topic = f"navilink-{device_id}"
-        topic = f"cmd/{device_type}/{device_topic}/ctrl"
-
-        command_code = CommandCode.TOU_ON if enabled else CommandCode.TOU_OFF
         mode = "tou-on" if enabled else "tou-off"
+        command_code = CommandCode.TOU_ON if enabled else CommandCode.TOU_OFF
 
-        command = self._build_command(
-            device_type=device_type,
-            device_id=device_id,
-            command=command_code,
-            additional_value=additional_value,
+        return await self._send_command(
+            device=device,
+            command_code=command_code,
             mode=mode,
             param=[],
             paramStr="",
         )
-        command["requestTopic"] = topic
-
-        return await self._publish(topic, command)
 
     async def request_energy_usage(
         self, device: Device, year: int, months: list[int]
@@ -765,44 +665,25 @@ class MqttDeviceController:
                 months=[7, 8, 9]
             )
         """
-        device_id = device.device_info.mac_address
-        device_type = device.device_info.device_type
-        additional_value = device.device_info.additional_value
-
-        device_topic = f"navilink-{device_id}"
-        topic = (
-            f"cmd/{device_type}/{device_topic}/st/energy-usage-daily-query/rd"
-        )
-
-        command = self._build_command(
-            device_type=device_type,
-            device_id=device_id,
-            command=CommandCode.ENERGY_USAGE_QUERY,
-            additional_value=additional_value,
+        return await self._send_command(
+            device=device,
+            command_code=CommandCode.ENERGY_USAGE_QUERY,
+            topic_suffix="st/energy-usage-daily-query/rd",
+            response_topic_suffix="energy-usage-daily-query/rd",
             month=months,
             year=year,
         )
-        command["requestTopic"] = topic
-        command["responseTopic"] = (
-            f"cmd/{device_type}/{self._client_id}/res/energy-usage-daily-query/rd"
-        )
-
-        return await self._publish(topic, command)
 
     async def signal_app_connection(self, device: Device) -> int:
         """
         Signal that the app has connected.
-
-        Args:
-            device: Device object
-
-        Returns:
-            Publish packet ID
+        ...
         """
         device_id = device.device_info.mac_address
         device_type = device.device_info.device_type
-        device_topic = f"navilink-{device_id}"
-        topic = f"evt/{device_type}/{device_topic}/app-connection"
+        topic = MqttTopicBuilder.event_topic(
+            device_type, device_id, "app-connection"
+        )
         message = {
             "clientID": self._client_id,
             "timestamp": datetime.utcnow().isoformat() + "Z",
@@ -813,127 +694,47 @@ class MqttDeviceController:
     async def enable_demand_response(self, device: Device) -> int:
         """
         Enable utility demand response participation.
-
-        Allows the device to respond to utility demand response signals
-        to reduce consumption (shed) or pre-heat (load up) before peak periods.
-
-        See docs/protocol/mqtt_protocol.rst "Demand Response Control"
-        for command code (33554470) and payload format.
-
-        Args:
-            device: The device to control
-
-        Returns:
-            The message ID of the published command
+        ...
         """
-        device_id = device.device_info.mac_address
-        device_type = device.device_info.device_type
-        additional_value = device.device_info.additional_value
-        device_topic = f"navilink-{device_id}"
-        topic = f"cmd/{device_type}/{device_topic}/ctrl"
-
-        command = self._build_command(
-            device_type=device_type,
-            device_id=device_id,
-            command=CommandCode.DR_ON,
-            additional_value=additional_value,
+        return await self._send_command(
+            device=device,
+            command_code=CommandCode.DR_ON,
             mode="dr-on",
             param=[],
             paramStr="",
         )
-        command["requestTopic"] = topic
-
-        return await self._publish(topic, command)
 
     async def disable_demand_response(self, device: Device) -> int:
         """
         Disable utility demand response participation.
-
-        Prevents the device from responding to utility demand response signals.
-
-        See docs/protocol/mqtt_protocol.rst "Demand Response Control"
-        for command code (33554469) and payload format.
-
-        Args:
-            device: The device to control
-
-        Returns:
-            The message ID of the published command
+        ...
         """
-        device_id = device.device_info.mac_address
-        device_type = device.device_info.device_type
-        additional_value = device.device_info.additional_value
-        device_topic = f"navilink-{device_id}"
-        topic = f"cmd/{device_type}/{device_topic}/ctrl"
-
-        command = self._build_command(
-            device_type=device_type,
-            device_id=device_id,
-            command=CommandCode.DR_OFF,
-            additional_value=additional_value,
+        return await self._send_command(
+            device=device,
+            command_code=CommandCode.DR_OFF,
             mode="dr-off",
             param=[],
             paramStr="",
         )
-        command["requestTopic"] = topic
-
-        return await self._publish(topic, command)
 
     async def reset_air_filter(self, device: Device) -> int:
         """
         Reset air filter maintenance timer.
-
-        Used for heat pump models to reset the maintenance timer after
-        filter cleaning or replacement.
-
-        See docs/protocol/mqtt_protocol.rst "Air Filter Maintenance"
-        for command code (33554473) and payload format.
-
-        Args:
-            device: The device to control
-
-        Returns:
-            The message ID of the published command
+        ...
         """
-        device_id = device.device_info.mac_address
-        device_type = device.device_info.device_type
-        additional_value = device.device_info.additional_value
-        device_topic = f"navilink-{device_id}"
-        topic = f"cmd/{device_type}/{device_topic}/ctrl"
-
-        command = self._build_command(
-            device_type=device_type,
-            device_id=device_id,
-            command=CommandCode.AIR_FILTER_RESET,
-            additional_value=additional_value,
+        return await self._send_command(
+            device=device,
+            command_code=CommandCode.AIR_FILTER_RESET,
             mode="air-filter-reset",
             param=[],
             paramStr="",
         )
-        command["requestTopic"] = topic
-
-        return await self._publish(topic, command)
 
     @requires_capability("holiday_use")
     async def set_vacation_days(self, device: Device, days: int) -> int:
         """
         Set vacation/away mode duration in days.
-
-        Configures the device to operate in energy-saving mode for the
-        specified number of days during absence.
-
-        See docs/protocol/mqtt_protocol.rst "Vacation Mode"
-        for command code (33554466) and payload format.
-
-        Args:
-            device: The device to control
-            days: Number of vacation days (1-365 recommended)
-
-        Returns:
-            The message ID of the published command
-
-        Raises:
-            ValueError: If days is not positive
+        ...
         """
         if days <= 0 or days > 365:
             raise RangeValidationError(
@@ -944,59 +745,27 @@ class MqttDeviceController:
                 max_value=365,
             )
 
-        device_id = device.device_info.mac_address
-        device_type = device.device_info.device_type
-        additional_value = device.device_info.additional_value
-        device_topic = f"navilink-{device_id}"
-        topic = f"cmd/{device_type}/{device_topic}/ctrl"
-
-        command = self._build_command(
-            device_type=device_type,
-            device_id=device_id,
-            command=CommandCode.GOOUT_DAY,
-            additional_value=additional_value,
+        return await self._send_command(
+            device=device,
+            command_code=CommandCode.GOOUT_DAY,
             mode="goout-day",
             param=[days],
             paramStr="",
         )
-        command["requestTopic"] = topic
-
-        return await self._publish(topic, command)
 
     @requires_capability("program_reservation_use")
     async def configure_reservation_water_program(self, device: Device) -> int:
         """
         Enable/configure water program reservation mode.
-
-        Enables the water program reservation system for scheduling.
-
-        See docs/protocol/mqtt_protocol.rst "Reservation Water Program"
-        for command code (33554441) and payload format.
-
-        Args:
-            device: The device to control
-
-        Returns:
-            The message ID of the published command
+        ...
         """
-        device_id = device.device_info.mac_address
-        device_type = device.device_info.device_type
-        additional_value = device.device_info.additional_value
-        device_topic = f"navilink-{device_id}"
-        topic = f"cmd/{device_type}/{device_topic}/ctrl"
-
-        command = self._build_command(
-            device_type=device_type,
-            device_id=device_id,
-            command=CommandCode.RESERVATION_WATER_PROGRAM,
-            additional_value=additional_value,
+        return await self._send_command(
+            device=device,
+            command_code=CommandCode.RESERVATION_WATER_PROGRAM,
             mode="reservation-mode",
             param=[],
             paramStr="",
         )
-        command["requestTopic"] = topic
-
-        return await self._publish(topic, command)
 
     @requires_capability("recirc_reservation_use")
     async def configure_recirculation_schedule(
@@ -1006,60 +775,19 @@ class MqttDeviceController:
     ) -> int:
         """
         Configure recirculation pump schedule.
-
-        Sets up the recirculation pump operating schedule with specified
-        periods and settings.
-
-        See docs/protocol/mqtt_protocol.rst "Configure Recirculation Schedule"
-        for command code (33554440) and payload format.
-
-        Args:
-            device: The device to control
-            schedule: Recirculation schedule configuration
-
-        Returns:
-            The message ID of the published command
-
-        Raises:
-            DeviceCapabilityError: If recirculation scheduling not supported
+        ...
         """
-        device_id = device.device_info.mac_address
-        device_type = device.device_info.device_type
-        additional_value = device.device_info.additional_value
-        device_topic = f"navilink-{device_id}"
-        topic = f"cmd/{device_type}/{device_topic}/ctrl"
-
-        command = self._build_command(
-            device_type=device_type,
-            device_id=device_id,
-            command=CommandCode.RECIR_RESERVATION,
-            additional_value=additional_value,
+        return await self._send_command(
+            device=device,
+            command_code=CommandCode.RECIR_RESERVATION,
+            schedule=schedule,
         )
-        command["requestTopic"] = topic
-        command["schedule"] = schedule
-
-        return await self._publish(topic, command)
 
     @requires_capability("recirculation_use")
     async def set_recirculation_mode(self, device: Device, mode: int) -> int:
         """
         Set recirculation pump operation mode.
-
-        Configures how the recirculation pump operates.
-
-        See docs/protocol/mqtt_protocol.rst "Recirculation Control"
-        for command code (33554445) and mode values.
-
-        Args:
-            device: The device to control
-            mode: Recirculation mode (1=Always On, 2=Button Only,
-                  3=Schedule, 4=Temperature)
-
-        Returns:
-            The message ID of the published command
-
-        Raises:
-            RangeValidationError: If mode is not in valid range [1, 4]
+        ...
         """
         if not 1 <= mode <= 4:
             raise RangeValidationError(
@@ -1070,59 +798,24 @@ class MqttDeviceController:
                 max_value=4,
             )
 
-        device_id = device.device_info.mac_address
-        device_type = device.device_info.device_type
-        additional_value = device.device_info.additional_value
-        device_topic = f"navilink-{device_id}"
-        topic = f"cmd/{device_type}/{device_topic}/ctrl"
-
-        command = self._build_command(
-            device_type=device_type,
-            device_id=device_id,
-            command=CommandCode.RECIR_MODE,
-            additional_value=additional_value,
+        return await self._send_command(
+            device=device,
+            command_code=CommandCode.RECIR_MODE,
             mode="recirc-mode",
             param=[mode],
             paramStr="",
         )
-        command["requestTopic"] = topic
-
-        return await self._publish(topic, command)
 
     @requires_capability("recirculation_use")
     async def trigger_recirculation_hot_button(self, device: Device) -> int:
         """
         Manually trigger the recirculation pump hot button.
-
-        Activates the recirculation pump for immediate hot water delivery.
-
-        See docs/protocol/mqtt_protocol.rst "Recirculation Control"
-        for command code (33554444) and payload format.
-
-        Args:
-            device: The device to control
-
-        Returns:
-            The message ID of the published command
-
-        Raises:
-            DeviceCapabilityError: If device doesn't support recirculation
+        ...
         """
-        device_id = device.device_info.mac_address
-        device_type = device.device_info.device_type
-        additional_value = device.device_info.additional_value
-        device_topic = f"navilink-{device_id}"
-        topic = f"cmd/{device_type}/{device_topic}/ctrl"
-
-        command = self._build_command(
-            device_type=device_type,
-            device_id=device_id,
-            command=CommandCode.RECIR_HOT_BTN,
-            additional_value=additional_value,
+        return await self._send_command(
+            device=device,
+            command_code=CommandCode.RECIR_HOT_BTN,
             mode="recirc-hotbtn",
             param=[1],
             paramStr="",
         )
-        command["requestTopic"] = topic
-
-        return await self._publish(topic, command)

@@ -126,7 +126,7 @@ Connect to MQTT for real-time device monitoring:
            
            # Subscribe and request status
            await mqtt.subscribe_device_status(device, on_status)
-           await mqtt.request_device_status(device)
+           await mqtt.control.request_device_status(device)
            
            # Monitor for 60 seconds
            print("Monitoring device...")
@@ -163,18 +163,18 @@ Send control commands to change device settings:
            await mqtt.connect()
            
            # Turn on the device
-           await mqtt.set_power(device, power_on=True)
+           await mqtt.control.set_power(device, power_on=True)
            print("Device powered on")
            
            # Set to Energy Saver mode
-           await mqtt.set_dhw_mode(
+           await mqtt.control.set_dhw_mode(
                device,
                mode_id=DhwOperationSetting.ENERGY_SAVER.value
            )
            print("Set to Energy Saver mode")
            
            # Set temperature to 120°F
-           await mqtt.set_dhw_temperature(device, 120.0)
+           await mqtt.control.set_dhw_temperature(device, 120.0)
            print("Temperature set to 120°F")
            
            await asyncio.sleep(2)

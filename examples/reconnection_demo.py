@@ -95,7 +95,7 @@ async def main():
                 print(f"   Reconnecting: attempt {mqtt_client.reconnect_attempts}...")
 
         await mqtt_client.subscribe_device_status(device, on_status)
-        await mqtt_client.request_device_status(device)
+        await mqtt_client.control.request_device_status(device)
 
         # Monitor connection status
         print("\n" + "=" * 70)
@@ -124,7 +124,7 @@ async def main():
 
                 # Request status update if connected
                 if mqtt_client.is_connected:
-                    await mqtt_client.request_device_status(device)
+                    await mqtt_client.control.request_device_status(device)
 
         print("\n" + "=" * 70)
         print(f"Monitoring complete. Received {status_count} status updates.")

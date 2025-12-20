@@ -50,7 +50,7 @@ async def main():
             print(f"   Power: {status.current_inst_power}W")
 
         await mqtt.subscribe_device_status(device, on_status)
-        await mqtt.request_device_status(device)
+        await mqtt.control.request_device_status(device)
 
         # Keep alive for a few seconds to receive status
         print("\nMonitoring for 10 seconds...")

@@ -71,11 +71,11 @@ Basic Example
                print(f"Power: {status.current_inst_power}W")
            
            await mqtt.subscribe_device_status(device, on_status)
-           await mqtt.request_device_status(device)
+           await mqtt.control.request_device_status(device)
            
            # Control device
-           await mqtt.set_power(device, power_on=True)
-           await mqtt.set_dhw_temperature(device, 120.0)
+           await mqtt.control.set_power(device, power_on=True)
+           await mqtt.control.set_dhw_temperature(device, 120.0)
            
            await asyncio.sleep(30)
            await mqtt.disconnect()

@@ -917,7 +917,7 @@ this protocol.
    mqtt = NavienMqttClient(auth)
    await mqtt.connect()
    await mqtt.subscribe_device_status(device, callback)
-   await mqtt.request_device_status(device)
+   await mqtt.control.request_device_status(device)
 
 Related Documentation
 =====================

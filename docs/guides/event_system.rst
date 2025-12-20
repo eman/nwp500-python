@@ -59,7 +59,7 @@ Simple Event Handler
 
            # Subscribe to status updates
            await mqtt.subscribe_device_status(device, on_status_update)
-           await mqtt.request_device_status(device)
+           await mqtt.control.request_device_status(device)
 
            # Monitor for 5 minutes
            await asyncio.sleep(300)

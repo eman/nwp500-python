@@ -67,40 +67,28 @@ def requires_capability(feature: str) -> Callable[[F], F]:
                 self: Any, device: Any, *args: Any, **kwargs: Any
             ) -> Any:
                 mac = device.device_info.mac_address
-                cached_features = await self._device_info_cache.get(mac)
+                
+                # Get cached features, auto-requesting if necessary
+                cached_features = await self._get_device_features(device)
 
-                # If not cached, auto-request from device
                 if cached_features is None:
-                    _logger.info(
-                        "Device info not cached, auto-requesting from device..."
+                    raise DeviceCapabilityError(
+                        feature,
+                        f"Cannot execute {func.__name__}: "
+                        f"Device info could not be obtained.",
                     )
-                    try:
-                        # Call controller method to auto-request
-                        await self._auto_request_device_info(device)
-                        # Try again after requesting
-                        cached_features = await self._device_info_cache.get(mac)
-                    except Exception as e:
-                        _logger.warning(
-                            f"Failed to auto-request device info: {e}"
-                        )
 
-                    # Check if we got features after auto-request
-                    if cached_features is None:
-                        raise DeviceCapabilityError(
-                            feature,
-                            f"Cannot execute {func.__name__}: "
-                            f"Device info could not be obtained.",
-                        )
+                # Validate capability if feature is defined in DeviceFeature
+                if hasattr(cached_features, feature):
+                    DeviceCapabilityChecker.assert_supported(
+                        feature, cached_features
+                    )
+                else:
+                    _logger.warning(
+                        f"Feature '{feature}' not found in device info for {mac}"
+                    )
 
-                # Validate capability
-                DeviceCapabilityChecker.assert_supported(
-                    feature, cached_features
-                )
-
-                # Capability validated, execute command
-                _logger.debug(
-                    f"Device supports {feature}, executing {func.__name__}"
-                )
+                # Execute command
                 return await func(self, device, *args, **kwargs)
 
             return async_wrapper  # type: ignore

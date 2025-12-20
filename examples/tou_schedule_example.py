@@ -22,7 +22,7 @@ async def _wait_for_controller_serial(mqtt_client: NavienMqttClient, device) -> 
     await mqtt_client.subscribe_device_feature(device, capture_feature)
 
     # Then request device info
-    await mqtt_client.request_device_info(device)
+    await mqtt_client.control.request_device_info(device)
 
     # Wait for the response
     feature = await asyncio.wait_for(feature_future, timeout=15)
@@ -112,7 +112,7 @@ async def main() -> None:
         await mqtt_client.subscribe(response_topic, on_tou_response)
 
         print("Uploading TOU schedule (enabling reservation)...")
-        await mqtt_client.configure_tou_schedule(
+        await mqtt_client.control.configure_tou_schedule(
             device=device,
             controller_serial_number=controller_serial,
             periods=[off_peak, peak],
@@ -120,17 +120,17 @@ async def main() -> None:
         )
 
         print("Requesting current TOU settings for confirmation...")
-        await mqtt_client.request_tou_settings(device, controller_serial)
+        await mqtt_client.control.request_tou_settings(device, controller_serial)
 
         print("Waiting up to 15 seconds for TOU responses...")
         await asyncio.sleep(15)
 
         print("Toggling TOU off for quick test...")
-        await mqtt_client.set_tou_enabled(device, enabled=False)
+        await mqtt_client.control.set_tou_enabled(device, enabled=False)
         await asyncio.sleep(3)
 
         print("Re-enabling TOU...")
-        await mqtt_client.set_tou_enabled(device, enabled=True)
+        await mqtt_client.control.set_tou_enabled(device, enabled=True)
         await asyncio.sleep(3)
 
         await mqtt_client.disconnect()

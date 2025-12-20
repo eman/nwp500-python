@@ -130,13 +130,13 @@ async def main():
 
                 # Request both types of data
                 print("Requesting device info and status...")
-                await mqtt_client.signal_app_connection(device)
+                await mqtt_client.control.signal_app_connection(device)
                 await asyncio.sleep(1)
 
-                await mqtt_client.request_device_info(device)
+                await mqtt_client.control.request_device_info(device)
                 await asyncio.sleep(2)
 
-                await mqtt_client.request_device_status(device)
+                await mqtt_client.control.request_device_status(device)
                 print("[SUCCESS] Requests sent")
                 print()
 

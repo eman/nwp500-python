@@ -53,7 +53,7 @@ async def water_program_example():
                 )
 
             await mqtt_client.subscribe_device_status(device, on_current_status)
-            await mqtt_client.request_device_status(device)
+            await mqtt_client.control.request_device_status(device)
             await asyncio.sleep(3)  # Wait for current status
 
             # Enable water program reservation mode
@@ -74,7 +74,7 @@ async def water_program_example():
             await mqtt_client.subscribe_device_status(
                 device, on_water_program_configured
             )
-            await mqtt_client.configure_reservation_water_program(device)
+            await mqtt_client.control.configure_reservation_water_program(device)
 
             # Wait for confirmation
             for i in range(10):  # Wait up to 10 seconds

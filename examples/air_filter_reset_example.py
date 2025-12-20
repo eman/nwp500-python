@@ -54,7 +54,7 @@ async def air_filter_example():
                     )
 
             await mqtt_client.subscribe_device_feature(device, on_device_info)
-            await mqtt_client.request_device_info(device)
+            await mqtt_client.control.request_device_info(device)
             await asyncio.sleep(3)  # Wait for device info
 
             # Reset air filter maintenance timer
@@ -69,7 +69,7 @@ async def air_filter_example():
                 filter_reset_complete = True
 
             await mqtt_client.subscribe_device_status(device, on_filter_reset)
-            await mqtt_client.reset_air_filter(device)
+            await mqtt_client.control.reset_air_filter(device)
 
             # Wait for confirmation
             for i in range(10):  # Wait up to 10 seconds
@@ -93,7 +93,7 @@ async def air_filter_example():
                     logger.info("Filter reset appears to have been successful!")
 
             await mqtt_client.subscribe_device_feature(device, on_updated_device_info)
-            await mqtt_client.request_device_info(device)
+            await mqtt_client.control.request_device_info(device)
             await asyncio.sleep(3)
 
         finally:

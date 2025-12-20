@@ -101,10 +101,10 @@ Request detailed daily energy usage data for specific months:
    await mqtt_client.subscribe_energy_usage(device, on_energy_usage)
    
    # Request energy usage for September 2025
-   await mqtt_client.request_energy_usage(device, year=2025, months=[9])
+   await mqtt_client.control.request_energy_usage(device, year=2025, months=[9])
    
    # Request multiple months
-   await mqtt_client.request_energy_usage(device, year=2025, months=[7, 8, 9])
+   await mqtt_client.control.request_energy_usage(device, year=2025, months=[7, 8, 9])
 
 **Key Methods:**
 
@@ -243,7 +243,7 @@ Complete Energy Monitoring Example
        )
        
        # Request initial status
-       await mqtt_client.request_device_status(
+       await mqtt_client.control.request_device_status(
            device.device_info.mac_address,
            device.device_info.device_type,
            device.device_info.additional_value

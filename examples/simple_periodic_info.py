@@ -46,7 +46,7 @@ async def main():
     await mqtt.subscribe_device_feature(device, on_feature)
 
     # Start periodic requests (every 5 minutes by default)
-    await mqtt.start_periodic_device_info_requests(device=device)
+    await mqtt.start_periodic_requests(device=device)
 
     print("Periodic device info requests started (every 5 minutes)")
     print("Press Ctrl+C to stop...")

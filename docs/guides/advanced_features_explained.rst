@@ -109,7 +109,7 @@ The ``outsideTemperature`` field is transmitted in the device status update. Pyt
 .. code-block:: python
 
     # From device status updates
-    status = await mqtt_client.get_status()
+    status = await mqtt_client.control.request_device_status()
     
     # Access ambient temperature data
     outdoor_temp = status.outside_temperature  # Raw integer value
@@ -389,7 +389,7 @@ Monitoring Stratification from Python
     async def monitor_stratification(mqtt_client: NavienMQTTClient, device_id: str):
         """Monitor tank stratification quality"""
         
-        status = await mqtt_client.get_status(device_id)
+        status = await mqtt_client.control.request_device_status(device_id)
         
         upper_temp = status.tank_upper_temperature  # float in °F
         lower_temp = status.tank_lower_temperature  # float in °F

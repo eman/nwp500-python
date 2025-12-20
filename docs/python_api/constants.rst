@@ -33,7 +33,7 @@ Query Commands
 
    .. code-block:: python
 
-      await mqtt.request_device_info(device)
+      await mqtt.control.request_device_info(device)
 
 .. py:attribute:: STATUS_REQUEST = 16777219
 
@@ -46,7 +46,7 @@ Query Commands
 
    .. code-block:: python
 
-      await mqtt.request_device_status(device)
+      await mqtt.control.request_device_status(device)
 
 .. py:attribute:: RESERVATION_READ = 16777222
 
@@ -58,7 +58,7 @@ Query Commands
 
    .. code-block:: python
 
-      await mqtt.request_reservations(device)
+      await mqtt.control.request_reservations(device)
 
 .. py:attribute:: ENERGY_USAGE_QUERY = 16777225
 
@@ -75,7 +75,7 @@ Query Commands
 
    .. code-block:: python
 
-      await mqtt.request_energy_usage(device, 2024, [10, 11])
+      await mqtt.control.request_energy_usage(device, 2024, [10, 11])
 
 .. py:attribute:: RESERVATION_MANAGEMENT = 16777226
 
@@ -89,7 +89,7 @@ Query Commands
 
    .. code-block:: python
 
-      await mqtt.update_reservations(device, True, reservations)
+      await mqtt.control.update_reservations(device, True, reservations)
 
 Power Control Commands
 ^^^^^^^^^^^^^^^^^^^^^^
@@ -102,7 +102,7 @@ Power Control Commands
 
    .. code-block:: python
 
-      await mqtt.set_power(device, power_on=False)
+      await mqtt.control.set_power(device, power_on=False)
 
 .. py:attribute:: POWER_ON = 33554434
 
@@ -112,7 +112,7 @@ Power Control Commands
 
    .. code-block:: python
 
-      await mqtt.set_power(device, power_on=True)
+      await mqtt.control.set_power(device, power_on=True)
 
 DHW Control Commands
 ^^^^^^^^^^^^^^^^^^^^
@@ -133,10 +133,10 @@ DHW Control Commands
       from nwp500 import DhwOperationSetting
 
       # Energy Saver mode
-      await mqtt.set_dhw_mode(device, DhwOperationSetting.ENERGY_SAVER.value)
+      await mqtt.control.set_dhw_mode(device, DhwOperationSetting.ENERGY_SAVER.value)
 
       # Vacation mode for 7 days
-      await mqtt.set_dhw_mode(
+      await mqtt.control.set_dhw_mode(
           device,
           DhwOperationSetting.VACATION.value,
           vacation_days=7
@@ -158,7 +158,7 @@ DHW Control Commands
    .. code-block:: python
 
       # Set temperature to 140°F
-      await mqtt.set_dhw_temperature(device, 140.0)
+      await mqtt.control.set_dhw_temperature(device, 140.0)
 
 Anti-Legionella Commands
 ^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -171,7 +171,7 @@ Anti-Legionella Commands
 
    .. code-block:: python
 
-      await mqtt.disable_anti_legionella(device)
+      await mqtt.control.disable_anti_legionella(device)
 
 .. py:attribute:: ANTI_LEGIONELLA_ENABLE = 33554472
 
@@ -185,7 +185,7 @@ Anti-Legionella Commands
    .. code-block:: python
 
       # Enable weekly cycle
-      await mqtt.enable_anti_legionella(device, period_days=7)
+      await mqtt.control.enable_anti_legionella(device, period_days=7)
 
 Time-of-Use Commands
 ^^^^^^^^^^^^^^^^^^^^
@@ -198,7 +198,7 @@ Time-of-Use Commands
 
    .. code-block:: python
 
-      await mqtt.configure_tou_schedule(device, schedule_data)
+      await mqtt.control.configure_tou_schedule(device, schedule_data)
 
 .. py:attribute:: TOU_DISABLE = 33554475
 
@@ -208,7 +208,7 @@ Time-of-Use Commands
 
    .. code-block:: python
 
-      await mqtt.set_tou_enabled(device, False)
+      await mqtt.control.set_tou_enabled(device, False)
 
 .. py:attribute:: TOU_ENABLE = 33554476
 
@@ -218,7 +218,7 @@ Time-of-Use Commands
 
    .. code-block:: python
 
-      await mqtt.set_tou_enabled(device, True)
+      await mqtt.control.set_tou_enabled(device, True)
 
 Usage Examples
 ==============
@@ -331,7 +331,7 @@ Best Practices
    .. code-block:: python
 
       # [OK] Preferred - client handles command codes
-      await mqtt.request_device_status(device)
+      await mqtt.control.request_device_status(device)
 
       # ✗ Manual - only for advanced use cases
       await mqtt.publish(topic, build_command(CommandCode.STATUS_REQUEST))

@@ -53,7 +53,7 @@ async def demand_response_example():
                 )
 
             await mqtt_client.subscribe_device_status(device, on_current_status)
-            await mqtt_client.request_device_status(device)
+            await mqtt_client.control.request_device_status(device)
             await asyncio.sleep(3)  # Wait for current status
 
             # Enable demand response
@@ -68,7 +68,7 @@ async def demand_response_example():
                 dr_enabled = True
 
             await mqtt_client.subscribe_device_status(device, on_dr_enabled)
-            await mqtt_client.enable_demand_response(device)
+            await mqtt_client.control.enable_demand_response(device)
 
             # Wait for confirmation
             for i in range(10):  # Wait up to 10 seconds
@@ -97,7 +97,7 @@ async def demand_response_example():
                 dr_disabled = True
 
             await mqtt_client.subscribe_device_status(device, on_dr_disabled)
-            await mqtt_client.disable_demand_response(device)
+            await mqtt_client.control.disable_demand_response(device)
 
             # Wait for confirmation
             for i in range(10):  # Wait up to 10 seconds

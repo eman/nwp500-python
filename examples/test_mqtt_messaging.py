@@ -182,7 +182,7 @@ async def test_mqtt_messaging():
                 f"📤 [{datetime.now().strftime('%H:%M:%S')}] Signaling app connection..."
             )
             try:
-                await mqtt_client.signal_app_connection(device)
+                await mqtt_client.control.signal_app_connection(device)
                 print("   [SUCCESS] Sent")
             except Exception as e:
                 print(f"   [ERROR] Error: {e}")
@@ -193,7 +193,7 @@ async def test_mqtt_messaging():
                 f"📤 [{datetime.now().strftime('%H:%M:%S')}] Requesting device info..."
             )
             try:
-                await mqtt_client.request_device_info(device)
+                await mqtt_client.control.request_device_info(device)
                 print("   [SUCCESS] Sent")
             except Exception as e:
                 print(f"   [ERROR] Error: {e}")
@@ -204,7 +204,7 @@ async def test_mqtt_messaging():
                 f"📤 [{datetime.now().strftime('%H:%M:%S')}] Requesting device status..."
             )
             try:
-                await mqtt_client.request_device_status(device)
+                await mqtt_client.control.request_device_status(device)
                 print("   [SUCCESS] Sent")
             except Exception as e:
                 print(f"   [ERROR] Error: {e}")

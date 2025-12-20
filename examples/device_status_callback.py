@@ -202,10 +202,10 @@ async def main():
 
                 # Step 5: Request device status
                 print("Step 5: Requesting device status...")
-                await mqtt_client.signal_app_connection(device)
+                await mqtt_client.control.signal_app_connection(device)
                 await asyncio.sleep(1)
 
-                await mqtt_client.request_device_status(device)
+                await mqtt_client.control.request_device_status(device)
                 print("[SUCCESS] Status request sent")
                 print()
 

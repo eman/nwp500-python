@@ -56,7 +56,7 @@ async def vacation_mode_example():
                 )
 
             await mqtt_client.subscribe_device_status(device, on_current_status)
-            await mqtt_client.request_device_status(device)
+            await mqtt_client.control.request_device_status(device)
             await asyncio.sleep(3)  # Wait for current status
 
             # Set vacation mode
@@ -72,7 +72,7 @@ async def vacation_mode_example():
                 vacation_set = True
 
             await mqtt_client.subscribe_device_status(device, on_vacation_set)
-            await mqtt_client.set_vacation_days(device, vacation_days)
+            await mqtt_client.control.set_vacation_days(device, vacation_days)
 
             # Wait for confirmation
             for i in range(10):  # Wait up to 10 seconds

@@ -50,7 +50,7 @@ async def set_mode_example():
                 logger.info(f"Current mode: {status.operation_mode.name}")
 
             await mqtt_client.subscribe_device_status(device, on_current_status)
-            await mqtt_client.request_device_status(device)
+            await mqtt_client.control.request_device_status(device)
             await asyncio.sleep(3)  # Wait for current status
 
             # Change to Energy Saver mode
@@ -70,7 +70,7 @@ async def set_mode_example():
             await mqtt_client.subscribe_device_status(device, on_mode_change_response)
 
             # Send mode change command (3 = Energy Saver, per MQTT protocol)
-            await mqtt_client.set_dhw_mode(device, 3)
+            await mqtt_client.control.set_dhw_mode(device, 3)
 
             # Wait for confirmation
             for i in range(15):  # Wait up to 15 seconds

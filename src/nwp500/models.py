@@ -7,7 +7,7 @@ These models are based on the MQTT message formats and API responses.
 """
 
 import logging
-from typing import Annotated, Any
+from typing import Annotated, Any, Optional, Self, Sequence, Union
 
 from pydantic import BaseModel, BeforeValidator, ConfigDict, Field
 from pydantic.alias_generators import to_camel
@@ -99,6 +99,16 @@ def _tou_status_validator(v: Any) -> bool:
     return bool(v == 1)
 
 
+def _availability_flag_validator(v: Any) -> bool:
+    """Convert availability flag (1=True/available, 0=False/not available)."""
+    return bool(v >= 1)
+
+
+def _tou_status_validator(v: Any) -> bool:
+    """Convert TOU status (0=False/disabled, 1=True/enabled)."""
+    return bool(v == 1)
+
+
 def _tou_override_validator(v: Any) -> bool:
     """Convert TOU override status (1=True/override active, 2=False/normal).
 
@@ -113,6 +123,7 @@ def _tou_override_validator(v: Any) -> bool:
 # Reusable Annotated types for conversions
 DeviceBool = Annotated[bool, BeforeValidator(_device_bool_validator)]
 CapabilityFlag = Annotated[bool, BeforeValidator(_capability_flag_validator)]
+AvailabilityFlag = Annotated[bool, BeforeValidator(_availability_flag_validator)]
 Div10 = Annotated[float, BeforeValidator(_div_10_validator)]
 HalfCelsiusToF = Annotated[float, BeforeValidator(_half_celsius_to_fahrenheit)]
 DeciCelsiusToF = Annotated[float, BeforeValidator(_deci_celsius_to_fahrenheit)]
@@ -219,6 +230,10 @@ class Device(NavienBaseModel):
 
     device_info: DeviceInfo
     location: Location
+
+    def with_info(self, info: DeviceInfo) -> Self:
+        """Return a new Device instance with updated DeviceInfo."""
+        return self.model_copy(update={"device_info": info})
 
 
 class FirmwareInfo(NavienBaseModel):
@@ -1047,90 +1062,91 @@ class DeviceFeature(NavienBaseModel):
             "for internal sensor calibration"
         )
     )
-    energy_usage_use: CapabilityFlag = Field(
+    energy_usage_use: AvailabilityFlag = Field(
         description=(
             "Energy monitoring support (1=available) - tracks kWh consumption"
         )
     )
-    freeze_protection_use: CapabilityFlag = Field(
+    freeze_protection_use: AvailabilityFlag = Field(
         description=(
             "Freeze protection capability (1=available) - "
             "automatic heating when tank drops below threshold"
         )
     )
-    mixing_value_use: CapabilityFlag = Field(
+    mixing_valve_use: AvailabilityFlag = Field(
+        alias="mixingValueUse",
         description=(
             "Thermostatic mixing valve support (1=available) - "
             "for temperature limiting at point of use"
         )
     )
-    dr_setting_use: CapabilityFlag = Field(
+    dr_setting_use: AvailabilityFlag = Field(
         description=(
             "Demand Response support (1=available) - "
             "CTA-2045 compliance for utility load management"
         )
     )
-    anti_legionella_setting_use: CapabilityFlag = Field(
+    anti_legionella_setting_use: AvailabilityFlag = Field(
         description=(
             "Anti-Legionella function (1=available) - "
             "periodic heating to 140°F (60°C) to prevent bacteria"
         )
     )
-    hpwh_use: CapabilityFlag = Field(
+    hpwh_use: AvailabilityFlag = Field(
         description=(
             "Heat Pump Water Heater mode (1=supported) - "
             "primary efficient heating using refrigeration cycle"
         )
     )
-    dhw_refill_use: CapabilityFlag = Field(
+    dhw_refill_use: AvailabilityFlag = Field(
         description=(
             "Tank refill detection (1=supported) - "
             "monitors for dry fire conditions during refill"
         )
     )
-    eco_use: CapabilityFlag = Field(
+    eco_use: AvailabilityFlag = Field(
         description=(
             "ECO safety switch capability (1=available) - "
             "Energy Cut Off high-temperature limit protection"
         )
     )
-    electric_use: CapabilityFlag = Field(
+    electric_use: AvailabilityFlag = Field(
         description=(
             "Electric-only mode (1=supported) - "
             "heating element only for maximum recovery speed"
         )
     )
-    heatpump_use: CapabilityFlag = Field(
+    heatpump_use: AvailabilityFlag = Field(
         description=(
             "Heat pump only mode (1=supported) - "
             "most efficient operation using only refrigeration cycle"
         )
     )
-    energy_saver_use: CapabilityFlag = Field(
+    energy_saver_use: AvailabilityFlag = Field(
         description=(
             "Energy Saver mode (1=supported) - "
             "hybrid efficiency mode balancing speed and efficiency (default)"
         )
     )
-    high_demand_use: CapabilityFlag = Field(
+    high_demand_use: AvailabilityFlag = Field(
         description=(
             "High Demand mode (1=supported) - "
             "hybrid boost mode prioritizing fast recovery"
         )
     )
-    recirculation_use: CapabilityFlag = Field(
+    recirculation_use: AvailabilityFlag = Field(
         description=(
             "Recirculation pump support (1=available) - "
             "instant hot water delivery via dedicated loop"
         )
     )
-    recirc_reservation_use: CapabilityFlag = Field(
+    recirc_reservation_use: AvailabilityFlag = Field(
         description=(
             "Recirculation schedule support (1=available) - "
             "programmable recirculation on specified schedule"
         )
     )
-    title24_use: CapabilityFlag = Field(
+    title24_use: AvailabilityFlag = Field(
         description=(
             "Title 24 compliance (1=available) - "
             "California energy code compliance for recirculation systems"
