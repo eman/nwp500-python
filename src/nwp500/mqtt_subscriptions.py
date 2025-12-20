@@ -19,6 +19,7 @@ from typing import TYPE_CHECKING, Any
 
 from awscrt import mqtt
 from awscrt.exceptions import AwsCrtError
+from pydantic import ValidationError
 
 from .events import EventEmitter
 from .exceptions import MqttNotConnectedError
@@ -333,7 +334,7 @@ class MqttSubscriptionManager:
         # Subscribe to all command responses from device (broader pattern)
         # Device responses come on cmd/{device_type}/navilink-{device_id}/#
         device_id = device.device_info.mac_address
-        device_type = device.device_info.device_type
+        device_type = str(device.device_info.device_type)
         response_topic = MqttTopicBuilder.command_topic(
             device_type, device_id, "#"
         )
@@ -342,122 +343,51 @@ class MqttSubscriptionManager:
     async def subscribe_device_status(
         self, device: Device, callback: Callable[[DeviceStatus], None]
     ) -> int:
-        """
-        Subscribe to device status messages with automatic parsing.
+        """Subscribe to device status messages with automatic parsing."""
 
-        This method wraps the standard subscription with automatic parsing
-        of status messages into DeviceStatus objects. The callback will only
-        be invoked when a status message is received and successfully parsed.
+        def post_parse(status: DeviceStatus) -> None:
+            self._schedule_coroutine(
+                self._event_emitter.emit("status_received", status)
+            )
+            self._schedule_coroutine(self._detect_state_changes(status))
 
-        Additionally, the client emits granular events for state changes:
-        - 'status_received': Every status update (DeviceStatus)
-        - 'temperature_changed': Temperature changed (old_temp, new_temp)
-        - 'mode_changed': Operation mode changed (old_mode, new_mode)
-        - 'power_changed': Power consumption changed (old_power, new_power)
-        - 'heating_started': Device started heating (status)
-        - 'heating_stopped': Device stopped heating (status)
-        - 'error_detected': Error code detected (error_code, status)
-        - 'error_cleared': Error code cleared (error_code)
-
-        Args:
-            device: Device object
-            callback: Callback function that receives DeviceStatus objects
-
-        Returns:
-            Subscription packet ID
-
-        Example (Traditional Callback)::
-
-            >>> def on_status(status: DeviceStatus):
-            ...     print(f"Temperature: {status.dhw_temperature}°F")
-            ...     print(f"Mode: {status.operation_mode}")
-            >>>
-            >>> await mqtt_client.subscribe_device_status(device, on_status)
-
-        Example (Event Emitter)::
-
-            >>> # Multiple handlers for same event
-            >>> mqtt_client.on('temperature_changed', log_temperature)
-            >>> mqtt_client.on('temperature_changed', update_ui)
-            >>>
-            >>> # State change events
-            >>> mqtt_client.on('heating_started', lambda s: print("Heating ON"))
-            >>> mqtt_client.on('heating_stopped', lambda s: print("Heating
-            OFF"))
-            >>>
-            >>> # Subscribe to start receiving events
-            >>> await mqtt_client.subscribe_device_status(device, lambda s:
-            None)
-        """
-
-        def status_message_handler(topic: str, message: dict[str, Any]) -> None:
-            """Parse status messages and invoke user callback."""
-            try:
-                # Log all messages received for debugging
-                _logger.debug(
-                    f"Status handler received message on topic: {topic}"
-                )
-                _logger.debug(f"Message keys: {list(message.keys())}")
-
-                if "response" not in message:
-                    _logger.debug(
-                        "Message does not contain 'response' key, skipping. "
-                        "Keys: %s",
-                        list(message.keys()),
-                    )
-                    return
-
-                response = message["response"]
-                _logger.debug(f"Response keys: {list(response.keys())}")
-
-                if "status" not in response:
-                    _logger.debug(
-                        "Response does not contain 'status' key, skipping. "
-                        "Keys: %s",
-                        list(response.keys()),
-                    )
-                    return
-
-                # Parse status into DeviceStatus object
-                _logger.info(
-                    f"Parsing device status message from topic: {topic}"
-                )
-                status_data = response["status"]
-                device_status = DeviceStatus.from_dict(status_data)
-
-                # Emit raw status event
-                self._schedule_coroutine(
-                    self._event_emitter.emit("status_received", device_status)
-                )
-
-                # Detect and emit state changes
-                self._schedule_coroutine(
-                    self._detect_state_changes(device_status)
-                )
-
-                # Invoke user callback with parsed status
-                _logger.info("Invoking user callback with parsed DeviceStatus")
-                callback(device_status)
-                _logger.debug("User callback completed successfully")
-
-            except KeyError as e:
-                _logger.warning(
-                    f"Missing required field in status message: {e}",
-                    exc_info=True,
-                )
-            except ValueError as e:
-                _logger.warning(
-                    f"Invalid value in status message: {e}", exc_info=True
-                )
-            except (TypeError, AttributeError) as e:
-                _logger.error(
-                    f"Error parsing device status: {e}", exc_info=True
-                )
-
-        # Subscribe using the internal handler
-        return await self.subscribe_device(
-            device=device, callback=status_message_handler
+        handler = self._make_handler(
+            DeviceStatus, callback, "status", post_parse
         )
+        return await self.subscribe_device(device=device, callback=handler)
+
+    def _make_handler(
+        self,
+        model: Any,
+        callback: Callable[[Any], None],
+        key: str | None = None,
+        post_parse: Callable[[Any], None] | None = None,
+    ) -> Callable[[str, dict[str, Any]], None]:
+        """Generic factory for MQTT message handlers."""
+
+        def handler(topic: str, message: dict[str, Any]) -> None:
+            try:
+                res = message.get("response", {})
+                data = res.get(key) if key else res
+                if not data or (key and key not in res):
+                    return
+
+                parsed = model.from_dict(data)
+                if post_parse:
+                    post_parse(parsed)
+                callback(parsed)
+            except (
+                ValidationError,
+                KeyError,
+                ValueError,
+                TypeError,
+                AttributeError,
+            ) as e:
+                _logger.warning(
+                    f"Error parsing {model.__name__} on {topic}: {e}"
+                )
+
+        return handler
 
     async def _detect_state_changes(self, status: DeviceStatus) -> None:
         """
@@ -545,212 +475,37 @@ class MqttSubscriptionManager:
     async def subscribe_device_feature(
         self, device: Device, callback: Callable[[DeviceFeature], None]
     ) -> int:
-        """
-        Subscribe to device feature/info messages with automatic parsing.
+        """Subscribe to device feature/info messages with automatic parsing."""
 
-        This method wraps the standard subscription with automatic parsing
-        of feature messages into DeviceFeature objects. The callback will only
-        be invoked when a feature message is received and successfully parsed.
-
-        Feature messages contain device capabilities, firmware versions,
-        serial numbers, and configuration limits.
-
-        Additionally emits: 'feature_received' event with DeviceFeature object.
-
-        Args:
-            device: Device object
-            callback: Callback function that receives DeviceFeature objects
-
-        Returns:
-            Subscription packet ID
-
-        Example::
-
-            >>> def on_feature(feature: DeviceFeature):
-            ...     print(f"Serial: {feature.controller_serial_number}")
-            ...     print(f"FW Version: {feature.controller_sw_version}")
-            ...     print(f"Temp Range:
-            {feature.dhw_temperature_min}-{feature.dhw_temperature_max}°F")
-            >>>
-            >>> await mqtt_client.subscribe_device_feature(device, on_feature)
-
-            >>> # Or use event emitter
-            >>> mqtt_client.on('feature_received', lambda f: print(f"FW:
-            {f.controller_sw_version}"))
-            >>> await mqtt_client.subscribe_device_feature(device, lambda f:
-            None)
-        """
-
-        def feature_message_handler(
-            topic: str, message: dict[str, Any]
-        ) -> None:
-            """Parse feature messages and invoke user callback."""
-            try:
-                # Log all messages received for debugging
-                _logger.debug(
-                    f"Feature handler received message on topic: {topic}"
-                )
-                _logger.debug(f"Message keys: {list(message.keys())}")
-
-                # Check if message contains feature data
-                if "response" not in message:
-                    _logger.debug(
-                        "Message does not contain 'response' key, "
-                        "skipping. Keys: %s",
-                        list(message.keys()),
-                    )
-                    return
-
-                response = message["response"]
-                _logger.debug(f"Response keys: {list(response.keys())}")
-
-                if "feature" not in response:
-                    _logger.debug(
-                        "Response does not contain 'feature' key, "
-                        "skipping. Keys: %s",
-                        list(response.keys()),
-                    )
-                    return
-
-                # Parse feature into DeviceFeature object
-                _logger.info(
-                    "Parsing device feature message from topic: "
-                    f"{redact_topic(topic)}"
-                )
-                feature_data = response["feature"]
-                device_feature = DeviceFeature.from_dict(feature_data)
-
-                # Cache device features if cache is available
-                if self._device_info_cache is not None:
-                    mac_address = device.device_info.mac_address
-                    self._schedule_coroutine(
-                        self._device_info_cache.set(mac_address, device_feature)
-                    )
-                    _logger.debug("Device features cached")
-
-                # Emit feature received event
+        def post_parse(feature: DeviceFeature) -> None:
+            if self._device_info_cache:
                 self._schedule_coroutine(
-                    self._event_emitter.emit("feature_received", device_feature)
+                    self._device_info_cache.set(
+                        device.device_info.mac_address, feature
+                    )
                 )
+            self._schedule_coroutine(
+                self._event_emitter.emit("feature_received", feature)
+            )
 
-                # Invoke user callback with parsed feature
-                _logger.info("Invoking user callback with parsed DeviceFeature")
-                callback(device_feature)
-                _logger.debug("User callback completed successfully")
-
-            except KeyError as e:
-                _logger.warning(
-                    f"Missing required field in feature message: {e}",
-                    exc_info=True,
-                )
-            except ValueError as e:
-                _logger.warning(
-                    f"Invalid value in feature message: {e}", exc_info=True
-                )
-            except (TypeError, AttributeError) as e:
-                _logger.error(
-                    f"Error parsing device feature: {e}", exc_info=True
-                )
-
-        # Subscribe using the internal handler
-        return await self.subscribe_device(
-            device=device, callback=feature_message_handler
+        handler = self._make_handler(
+            DeviceFeature, callback, "feature", post_parse
         )
+        return await self.subscribe_device(device=device, callback=handler)
 
     async def subscribe_energy_usage(
         self,
         device: Device,
         callback: Callable[[EnergyUsageResponse], None],
     ) -> int:
-        """
-        Subscribe to energy usage query responses with automatic parsing.
-
-        This method wraps the standard subscription with automatic parsing
-        of energy usage responses into EnergyUsageResponse objects.
-
-        Args:
-            device: Device object
-            callback: Callback function that receives EnergyUsageResponse
-            objects
-
-        Returns:
-            Subscription packet ID
-
-        Example:
-            >>> def on_energy_usage(energy: EnergyUsageResponse):
-            ...     print(f"Total Usage: {energy.total.total_usage} Wh")
-            ...     print(f"Heat Pump:
-            {energy.total.heat_pump_percentage:.1f}%")
-            ...     print(f"Electric:
-            {energy.total.heat_element_percentage:.1f}%")
-            >>>
-            >>> await mqtt_client.subscribe_energy_usage(device,
-            on_energy_usage)
-            >>> await mqtt_client.control.request_energy_usage(
-            ...     device, 2025, [9]
-            ... )
-        """
-        device_type = device.device_info.device_type
-
-        def energy_message_handler(topic: str, message: dict[str, Any]) -> None:
-            """Parse and route energy usage responses to user callback.
-
-            Args:
-                topic: MQTT topic the message was received on
-                message: Parsed message dictionary
-            """
-            try:
-                _logger.debug(
-                    "Energy handler received message on topic: %s", topic
-                )
-                _logger.debug("Message keys: %s", list(message.keys()))
-
-                if "response" not in message:
-                    _logger.debug(
-                        "Message does not contain 'response' key, "
-                        "skipping. Keys: %s",
-                        list(message.keys()),
-                    )
-                    return
-
-                response_data = message["response"]
-                _logger.debug("Response keys: %s", list(response_data.keys()))
-
-                if "typeOfUsage" not in response_data:
-                    _logger.debug(
-                        "Response does not contain 'typeOfUsage' key, "
-                        "skipping. Keys: %s",
-                        list(response_data.keys()),
-                    )
-                    return
-
-                _logger.info(
-                    "Parsing energy usage response from topic: %s", topic
-                )
-                energy_response = EnergyUsageResponse.from_dict(response_data)
-
-                _logger.info(
-                    "Invoking user callback with parsed EnergyUsageResponse"
-                )
-                callback(energy_response)
-                _logger.debug("User callback completed successfully")
-
-            except KeyError as e:
-                _logger.warning(
-                    "Failed to parse energy usage message - missing key: %s", e
-                )
-            except (TypeError, ValueError, AttributeError) as e:
-                _logger.error(
-                    "Error in energy usage message handler: %s",
-                    e,
-                    exc_info=True,
-                )
-
-        response_topic = MqttTopicBuilder.response_topic(
-            device_type, self._client_id, "energy-usage-daily-query/rd"
+        """Subscribe to energy usage responses with automatic parsing."""
+        handler = self._make_handler(EnergyUsageResponse, callback)
+        topic = MqttTopicBuilder.response_topic(
+            str(device.device_info.device_type),
+            self._client_id,
+            "energy-usage-daily-query/rd",
         )
-
-        return await self.subscribe(response_topic, energy_message_handler)
+        return await self.subscribe(topic, handler)
 
     def clear_subscriptions(self) -> None:
         """Clear all subscription tracking (called on disconnect)."""

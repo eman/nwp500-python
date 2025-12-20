@@ -78,12 +78,18 @@ def requires_capability(feature: str) -> Callable[[F], F]:
 
                 # Validate capability if feature is defined in DeviceFeature
                 if hasattr(cached_features, feature):
+                    supported = DeviceCapabilityChecker.supports(
+                        feature, cached_features
+                    )
+                    _logger.debug(
+                        f"Cap '{feature}': {'OK' if supported else 'FAIL'}"
+                    )
                     DeviceCapabilityChecker.assert_supported(
                         feature, cached_features
                     )
                 else:
-                    _logger.warning(
-                        f"Feature '{feature}' not found in device capabilities"
+                    raise DeviceCapabilityError(
+                        feature, f"Feature '{feature}' missing. Prevented."
                     )
 
                 # Execute command

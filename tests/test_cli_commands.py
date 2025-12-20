@@ -143,13 +143,3 @@ async def test_handle_set_dhw_temp_request_success(mock_mqtt, mock_device):
     mock_mqtt.control.set_dhw_temperature.assert_called_once_with(
         mock_device, 120.0
     )
-
-
-@pytest.mark.asyncio
-async def test_handle_set_dhw_temp_request_out_of_range(mock_mqtt, mock_device):
-    """Test setting temperature out of range."""
-    await handle_set_dhw_temp_request(mock_mqtt, mock_device, 160.0)  # > 150
-    mock_mqtt.control.set_dhw_temperature.assert_not_called()
-
-    await handle_set_dhw_temp_request(mock_mqtt, mock_device, 90.0)  # < 95
-    mock_mqtt.control.set_dhw_temperature.assert_not_called()

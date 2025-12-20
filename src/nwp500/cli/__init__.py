@@ -11,7 +11,6 @@ from .commands import (
     handle_set_dhw_temp_request,
     handle_set_mode_request,
     handle_set_tou_enabled_request,
-    handle_status_raw_request,
     handle_status_request,
     handle_update_reservations_request,
 )
@@ -37,7 +36,6 @@ __all__ = [
     "handle_set_dhw_temp_request",
     "handle_set_mode_request",
     "handle_set_tou_enabled_request",
-    "handle_status_raw_request",
     "handle_status_request",
     "handle_update_reservations_request",
     # Output formatters

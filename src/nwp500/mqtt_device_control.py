@@ -212,6 +212,31 @@ class MqttDeviceController:
             ),
         }
 
+    async def _mode_command(
+        self,
+        device: Device,
+        code: int,
+        mode: str,
+        param: list[Any] | None = None,
+    ) -> int:
+        """Helper for standard mode-based commands."""
+        return await self._send_command(
+            device, code, mode=mode, param=param or [], paramStr=""
+        )
+
+    def _validate_range(
+        self, field: str, val: float, min_val: float, max_val: float
+    ) -> None:
+        """Helper to validate parameter ranges."""
+        if not min_val <= val <= max_val:
+            raise RangeValidationError(
+                f"{field} must be between {min_val} and {max_val}",
+                field,
+                val,
+                min_val,
+                max_val,
+            )
+
     async def _get_device_features(self, device: Device) -> Any | None:
         """
         Get cached device features, auto-requesting if necessary.
@@ -253,15 +278,16 @@ class MqttDeviceController:
             Publish packet ID
         """
         device_id = device.device_info.mac_address
-        device_type = device.device_info.device_type
+        device_type_int = device.device_info.device_type
+        device_type_str = str(device_type_int)
         additional_value = device.device_info.additional_value
 
         topic = MqttTopicBuilder.command_topic(
-            device_type, device_id, topic_suffix
+            device_type_str, device_id, topic_suffix
         )
 
         command = self._build_command(
-            device_type=device_type,
+            device_type=device_type_int,
             device_id=device_id,
             command=command_code,
             additional_value=additional_value,
@@ -271,7 +297,7 @@ class MqttDeviceController:
 
         if response_topic_suffix:
             command["responseTopic"] = MqttTopicBuilder.response_topic(
-                device_type, self._client_id, response_topic_suffix
+                device_type_str, self._client_id, response_topic_suffix
             )
 
         return await self._publish(topic, command)
@@ -310,167 +336,58 @@ class MqttDeviceController:
 
     @requires_capability("power_use")
     async def set_power(self, device: Device, power_on: bool) -> int:
-        """
-        Turn device on or off.
-
-        Args:
-            device: Device object
-            power_on: True to turn on, False to turn off
-
-        Returns:
-            Publish packet ID
-        """
-        mode = "power-on" if power_on else "power-off"
-        command_code = (
-            CommandCode.POWER_ON if power_on else CommandCode.POWER_OFF
-        )
-
-        return await self._send_command(
-            device=device,
-            command_code=command_code,
-            mode=mode,
-            param=[],
-            paramStr="",
+        """Turn device on or off."""
+        return await self._mode_command(
+            device,
+            CommandCode.POWER_ON if power_on else CommandCode.POWER_OFF,
+            "power-on" if power_on else "power-off",
         )
 
     @requires_capability("dhw_use")
     async def set_dhw_mode(
-        self,
-        device: Device,
-        mode_id: int,
-        vacation_days: int | None = None,
+        self, device: Device, mode_id: int, vacation_days: int | None = None
     ) -> int:
-        """
-        Set DHW (Domestic Hot Water) operation mode.
-
-        Args:
-            device: Device object
-            mode_id: Mode ID (1=Heat Pump Only, 2=Electric Only, 3=Energy Saver,
-                4=High Demand, 5=Vacation)
-            vacation_days: Number of vacation days (required for Vacation mode)
-
-        Returns:
-            Publish packet ID
-
-        Note:
-            Valid selectable mode IDs are 1, 2, 3, 4, and 5 (vacation).
-            Additional modes may appear in status responses:
-            - 0: Standby (device in idle state)
-            - 6: Power Off (device is powered off)
-
-            Mode descriptions:
-            - 1: Heat Pump Only (most efficient, slowest recovery)
-            - 2: Electric Only (least efficient, fastest recovery)
-            - 3: Energy Saver (balanced, good default)
-            - 4: High Demand (maximum heating capacity)
-            - 5: Vacation Mode (requires vacation_days parameter)
-        """
+        """Set DHW operation mode."""
         if mode_id == DhwOperationSetting.VACATION.value:
             if vacation_days is None:
                 raise ParameterValidationError(
-                    "Vacation mode requires vacation_days (1-30)",
+                    "Vacation mode requires vacation_days",
                     parameter="vacation_days",
                 )
-            if not 1 <= vacation_days <= 30:
-                raise RangeValidationError(
-                    "vacation_days must be between 1 and 30",
-                    field="vacation_days",
-                    value=vacation_days,
-                    min_value=1,
-                    max_value=30,
-                )
+            self._validate_range("vacation_days", vacation_days, 1, 30)
             param = [mode_id, vacation_days]
         else:
-            if vacation_days is not None:
-                raise ParameterValidationError(
-                    "vacation_days is only valid for vacation mode (mode 5)",
-                    parameter="vacation_days",
-                )
             param = [mode_id]
-
-        return await self._send_command(
-            device=device,
-            command_code=CommandCode.DHW_MODE,
-            mode="dhw-mode",
-            param=param,
-            paramStr="",
+        return await self._mode_command(
+            device, CommandCode.DHW_MODE, "dhw-mode", param
         )
 
     async def enable_anti_legionella(
         self, device: Device, period_days: int
     ) -> int:
-        """
-        Enable Anti-Legionella disinfection with a 1-30 day cycle.
-        ...
-        """
-        if not 1 <= period_days <= 30:
-            raise RangeValidationError(
-                "period_days must be between 1 and 30",
-                field="period_days",
-                value=period_days,
-                min_value=1,
-                max_value=30,
-            )
-
-        return await self._send_command(
-            device=device,
-            command_code=CommandCode.ANTI_LEGIONELLA_ON,
-            mode="anti-leg-on",
-            param=[period_days],
-            paramStr="",
+        """Enable Anti-Legionella disinfection."""
+        self._validate_range("period_days", period_days, 1, 30)
+        return await self._mode_command(
+            device, CommandCode.ANTI_LEGIONELLA_ON, "anti-leg-on", [period_days]
         )
 
     async def disable_anti_legionella(self, device: Device) -> int:
-        """
-        Disable the Anti-Legionella disinfection cycle.
-        ...
-        """
-        return await self._send_command(
-            device=device,
-            command_code=CommandCode.ANTI_LEGIONELLA_OFF,
-            mode="anti-leg-off",
-            param=[],
-            paramStr="",
+        """Disable the Anti-Legionella disinfection cycle."""
+        return await self._mode_command(
+            device, CommandCode.ANTI_LEGIONELLA_OFF, "anti-leg-off"
         )
 
     @requires_capability("dhw_temperature_setting_use")
     async def set_dhw_temperature(
         self, device: Device, temperature_f: float
     ) -> int:
-        """
-        Set DHW target temperature.
-
-        Args:
-            device: Device object
-            temperature_f: Target temperature in Fahrenheit (95-150°F).
-                Automatically converted to the device's internal format.
-
-        Returns:
-            Publish packet ID
-
-        Raises:
-            RangeValidationError: If temperature is outside 95-150°F range
-
-        Example:
-            await controller.set_dhw_temperature(device, 140.0)
-        """
-        if not 95 <= temperature_f <= 150:
-            raise RangeValidationError(
-                "temperature_f must be between 95 and 150°F",
-                field="temperature_f",
-                value=temperature_f,
-                min_value=95,
-                max_value=150,
-            )
-
-        param = fahrenheit_to_half_celsius(temperature_f)
-
-        return await self._send_command(
-            device=device,
-            command_code=CommandCode.DHW_TEMPERATURE,
-            mode="dhw-temperature",
-            param=[param],
-            paramStr="",
+        """Set DHW target temperature (95-150°F)."""
+        self._validate_range("temperature_f", temperature_f, 95, 150)
+        return await self._mode_command(
+            device,
+            CommandCode.DHW_TEMPERATURE,
+            "dhw-temperature",
+            [fahrenheit_to_half_celsius(temperature_f)],
         )
 
     async def update_reservations(
@@ -608,25 +525,11 @@ class MqttDeviceController:
 
     @requires_capability("program_reservation_use")
     async def set_tou_enabled(self, device: Device, enabled: bool) -> int:
-        """
-        Quickly toggle Time-of-Use functionality without modifying the schedule.
-
-        Args:
-            device: Device object
-            enabled: True to enable TOU, False to disable
-
-        Returns:
-            Publish packet ID
-        """
-        mode = "tou-on" if enabled else "tou-off"
-        command_code = CommandCode.TOU_ON if enabled else CommandCode.TOU_OFF
-
-        return await self._send_command(
-            device=device,
-            command_code=command_code,
-            mode=mode,
-            param=[],
-            paramStr="",
+        """Toggle Time-of-Use functionality."""
+        return await self._mode_command(
+            device,
+            CommandCode.TOU_ON if enabled else CommandCode.TOU_OFF,
+            "tou-on" if enabled else "tou-off",
         )
 
     async def request_energy_usage(
@@ -679,7 +582,7 @@ class MqttDeviceController:
         ...
         """
         device_id = device.device_info.mac_address
-        device_type = device.device_info.device_type
+        device_type = str(device.device_info.device_type)
         topic = MqttTopicBuilder.event_topic(
             device_type, device_id, "app-connection"
         )
@@ -691,79 +594,32 @@ class MqttDeviceController:
         return await self._publish(topic, message)
 
     async def enable_demand_response(self, device: Device) -> int:
-        """
-        Enable utility demand response participation.
-        ...
-        """
-        return await self._send_command(
-            device=device,
-            command_code=CommandCode.DR_ON,
-            mode="dr-on",
-            param=[],
-            paramStr="",
-        )
+        """Enable utility demand response participation."""
+        return await self._mode_command(device, CommandCode.DR_ON, "dr-on")
 
     async def disable_demand_response(self, device: Device) -> int:
-        """
-        Disable utility demand response participation.
-        ...
-        """
-        return await self._send_command(
-            device=device,
-            command_code=CommandCode.DR_OFF,
-            mode="dr-off",
-            param=[],
-            paramStr="",
-        )
+        """Disable utility demand response participation."""
+        return await self._mode_command(device, CommandCode.DR_OFF, "dr-off")
 
     async def reset_air_filter(self, device: Device) -> int:
-        """
-        Reset air filter maintenance timer.
-        ...
-        """
-        return await self._send_command(
-            device=device,
-            command_code=CommandCode.AIR_FILTER_RESET,
-            mode="air-filter-reset",
-            param=[],
-            paramStr="",
+        """Reset air filter maintenance timer."""
+        return await self._mode_command(
+            device, CommandCode.AIR_FILTER_RESET, "air-filter-reset"
         )
 
     @requires_capability("holiday_use")
     async def set_vacation_days(self, device: Device, days: int) -> int:
-        """
-        Set vacation/away mode duration in days.
-        ...
-        """
-        if days <= 0 or days > 365:
-            raise RangeValidationError(
-                "days must be between 1 and 365",
-                field="days",
-                value=days,
-                min_value=1,
-                max_value=365,
-            )
-
-        return await self._send_command(
-            device=device,
-            command_code=CommandCode.GOOUT_DAY,
-            mode="goout-day",
-            param=[days],
-            paramStr="",
+        """Set vacation/away mode duration (1-365 days)."""
+        self._validate_range("days", days, 1, 365)
+        return await self._mode_command(
+            device, CommandCode.GOOUT_DAY, "goout-day", [days]
         )
 
     @requires_capability("program_reservation_use")
     async def configure_reservation_water_program(self, device: Device) -> int:
-        """
-        Enable/configure water program reservation mode.
-        ...
-        """
-        return await self._send_command(
-            device=device,
-            command_code=CommandCode.RESERVATION_WATER_PROGRAM,
-            mode="reservation-mode",
-            param=[],
-            paramStr="",
+        """Enable/configure water program reservation mode."""
+        return await self._mode_command(
+            device, CommandCode.RESERVATION_WATER_PROGRAM, "reservation-mode"
         )
 
     @requires_capability("recirc_reservation_use")
@@ -784,37 +640,15 @@ class MqttDeviceController:
 
     @requires_capability("recirculation_use")
     async def set_recirculation_mode(self, device: Device, mode: int) -> int:
-        """
-        Set recirculation pump operation mode.
-        ...
-        """
-        if not 1 <= mode <= 4:
-            raise RangeValidationError(
-                "mode must be between 1 and 4",
-                field="mode",
-                value=mode,
-                min_value=1,
-                max_value=4,
-            )
-
-        return await self._send_command(
-            device=device,
-            command_code=CommandCode.RECIR_MODE,
-            mode="recirc-mode",
-            param=[mode],
-            paramStr="",
+        """Set recirculation pump operation mode (1-4)."""
+        self._validate_range("mode", mode, 1, 4)
+        return await self._mode_command(
+            device, CommandCode.RECIR_MODE, "recirc-mode", [mode]
         )
 
     @requires_capability("recirculation_use")
     async def trigger_recirculation_hot_button(self, device: Device) -> int:
-        """
-        Manually trigger the recirculation pump hot button.
-        ...
-        """
-        return await self._send_command(
-            device=device,
-            command_code=CommandCode.RECIR_HOT_BTN,
-            mode="recirc-hotbtn",
-            param=[1],
-            paramStr="",
+        """Manually trigger the recirculation pump hot button."""
+        return await self._mode_command(
+            device, CommandCode.RECIR_HOT_BTN, "recirc-hotbtn", [1]
         )

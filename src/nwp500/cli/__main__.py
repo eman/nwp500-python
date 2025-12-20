@@ -1,8 +1,4 @@
-"""Navien Water Heater Control Script - Main Entry Point.
-
-This module provides the command-line interface to monitor and control
-Navien water heaters using the nwp500-python library.
-"""
+"""Navien Water Heater Control Script - Main Entry Point."""
 
 import argparse
 import asyncio
@@ -10,7 +6,12 @@ import logging
 import os
 import sys
 
-from nwp500 import NavienAPIClient, NavienAuthClient, __version__
+from nwp500 import (
+    NavienAPIClient,
+    NavienAuthClient,
+    NavienMqttClient,
+    __version__,
+)
 from nwp500.exceptions import (
     AuthenticationError,
     InvalidCredentialsError,
@@ -18,541 +19,155 @@ from nwp500.exceptions import (
     MqttError,
     MqttNotConnectedError,
     Nwp500Error,
-    RangeValidationError,
     TokenRefreshError,
     ValidationError,
 )
 
+from . import commands as cmds
 from .commands import (
-    handle_configure_reservation_water_program_request,
-    handle_device_info_raw_request,
-    handle_device_info_request,
-    handle_disable_demand_response_request,
-    handle_enable_demand_response_request,
-    handle_get_controller_serial_request,
-    handle_get_energy_request,
-    handle_get_reservations_request,
-    handle_get_tou_request,
-    handle_power_request,
-    handle_reset_air_filter_request,
-    handle_set_dhw_temp_request,
-    handle_set_mode_request,
-    handle_set_recirculation_mode_request,
-    handle_set_tou_enabled_request,
-    handle_set_vacation_days_request,
-    handle_status_raw_request,
-    handle_status_request,
-    handle_trigger_recirculation_hot_button_request,
-    handle_update_reservations_request,
+    handle_configure_reservation_water_program_request as handle_water_prog,
+)
+from .commands import (
+    handle_trigger_recirculation_hot_button_request as handle_hot_btn,
 )
 from .monitoring import handle_monitoring
 from .token_storage import load_tokens, save_tokens
-
-__author__ = "Emmanuel Levijarvi"
-__copyright__ = "Emmanuel Levijarvi"
-__license__ = "MIT"
 
 _logger = logging.getLogger(__name__)
 
 
 async def async_main(args: argparse.Namespace) -> int:
-    """
-    Asynchronous main function.
-
-    Args:
-        args: Parsed command-line arguments
-
-    Returns:
-        Exit code (0 for success, 1 for failure)
-    """
-    # Get credentials
+    """Asynchronous main function."""
     email = args.email or os.getenv("NAVIEN_EMAIL")
     password = args.password or os.getenv("NAVIEN_PASSWORD")
-
-    # Try loading cached tokens
     tokens, cached_email = load_tokens()
-
-    # Use cached email if available, otherwise fall back to provided email
     email = cached_email or email
 
     if not email or not password:
         _logger.error(
-            "Credentials not found. Please provide --email and --password, "
-            "or set NAVIEN_EMAIL and NAVIEN_PASSWORD environment variables."
+            "Credentials missing. Use --email/--password or env vars."
         )
         return 1
 
     try:
-        # Use async with to properly manage auth client lifecycle
         async with NavienAuthClient(
             email, password, stored_tokens=tokens
-        ) as auth_client:
-            # Save refreshed/new tokens after authentication
-            if auth_client.current_tokens and auth_client.user_email:
-                save_tokens(auth_client.current_tokens, auth_client.user_email)
+        ) as auth:
+            if auth.current_tokens and auth.user_email:
+                save_tokens(auth.current_tokens, auth.user_email)
 
-            api_client = NavienAPIClient(auth_client=auth_client)
-            _logger.info("Fetching device information...")
-            device = await api_client.get_first_device()
-
-            # Save tokens if they were refreshed during API call
-            if auth_client.current_tokens and auth_client.user_email:
-                save_tokens(auth_client.current_tokens, auth_client.user_email)
-
+            api = NavienAPIClient(auth_client=auth)
+            device = await api.get_first_device()
             if not device:
-                _logger.error("No devices found for this account.")
+                _logger.error("No devices found.")
                 return 1
 
-            _logger.info(f"Found device: {device.device_info.device_name}")
+            _logger.info(f"Using device: {device.device_info.device_name}")
 
-            from nwp500 import NavienMqttClient
-
-            mqtt = NavienMqttClient(auth_client)
+            mqtt = NavienMqttClient(auth)
+            await mqtt.connect()
             try:
-                await mqtt.connect()
-                _logger.info("MQTT client connected.")
+                await mqtt.ensure_device_info_cached(device)
 
-                # Request device info early to populate cache for capability
-                # checking. This ensures commands have device capability info
-                # available without relying on decorator auto-requests.
-                _logger.debug("Requesting device capabilities...")
-                success = await mqtt.ensure_device_info_cached(
-                    device, timeout=15.0
-                )
-                if not success:
-                    _logger.warning(
-                        "Device capabilities not available. "
-                        "Some commands may fail if unsupported."
+                # Command Dispatching
+                cmd = args.command
+                if cmd == "info":
+                    await cmds.handle_device_info_request(
+                        mqtt, device, args.raw
                     )
-
-                # Route to appropriate handler based on arguments
-                if args.device_info:
-                    await handle_device_info_request(mqtt, device)
-                elif args.device_info_raw:
-                    await handle_device_info_raw_request(mqtt, device)
-                elif args.get_controller_serial:
-                    await handle_get_controller_serial_request(mqtt, device)
-                elif args.power_on:
-                    await handle_power_request(mqtt, device, power_on=True)
-                    if args.status:
-                        _logger.info("Getting updated status after power on...")
-                        await asyncio.sleep(2)
-                        await handle_status_request(mqtt, device)
-                elif args.power_off:
-                    await handle_power_request(mqtt, device, power_on=False)
-                    if args.status:
-                        _logger.info(
-                            "Getting updated status after power off..."
-                        )
-                        await asyncio.sleep(2)
-                        await handle_status_request(mqtt, device)
-                elif args.set_mode:
-                    await handle_set_mode_request(mqtt, device, args.set_mode)
-                    if args.status:
-                        _logger.info(
-                            "Getting updated status after mode change..."
-                        )
-                        await asyncio.sleep(2)
-                        await handle_status_request(mqtt, device)
-                elif args.set_dhw_temp:
-                    await handle_set_dhw_temp_request(
-                        mqtt, device, args.set_dhw_temp
-                    )
-                    if args.status:
-                        _logger.info(
-                            "Getting updated status after temperature change..."
-                        )
-                        await asyncio.sleep(2)
-                        await handle_status_request(mqtt, device)
-                elif args.get_reservations:
-                    await handle_get_reservations_request(mqtt, device)
-                elif args.set_reservations:
-                    await handle_update_reservations_request(
-                        mqtt,
-                        device,
-                        args.set_reservations,
-                        args.reservations_enabled,
-                    )
-                elif args.get_tou:
-                    await handle_get_tou_request(mqtt, device, api_client)
-                elif args.set_tou_enabled:
-                    enabled = args.set_tou_enabled.lower() == "on"
-                    await handle_set_tou_enabled_request(mqtt, device, enabled)
-                    if args.status:
-                        _logger.info(
-                            "Getting updated status after TOU change..."
-                        )
-                        await asyncio.sleep(2)
-                        await handle_status_request(mqtt, device)
-                elif args.get_energy:
-                    if not args.energy_year or not args.energy_months:
-                        _logger.error(
-                            "--energy-year and --energy-months are required "
-                            "for --get-energy"
-                        )
-                        return 1
-                    try:
-                        months = [
-                            int(m.strip())
-                            for m in args.energy_months.split(",")
-                        ]
-                        if not all(1 <= m <= 12 for m in months):
-                            _logger.error("Months must be between 1 and 12")
-                            return 1
-                    except ValueError:
-                        _logger.error(
-                            "Invalid month format. Use comma-separated "
-                            "numbers (e.g., '9' or '8,9,10')"
-                        )
-                        return 1
-                    await handle_get_energy_request(
-                        mqtt, device, args.energy_year, months
-                    )
-                elif args.enable_demand_response:
-                    await handle_enable_demand_response_request(mqtt, device)
-                    if args.status:
-                        _logger.info(
-                            "Getting updated status after enabling "
-                            "demand response..."
-                        )
-                        await asyncio.sleep(2)
-                        await handle_status_request(mqtt, device)
-                elif args.disable_demand_response:
-                    await handle_disable_demand_response_request(mqtt, device)
-                    if args.status:
-                        _logger.info(
-                            "Getting updated status after disabling "
-                            "demand response..."
-                        )
-                        await asyncio.sleep(2)
-                        await handle_status_request(mqtt, device)
-                elif args.reset_air_filter:
-                    await handle_reset_air_filter_request(mqtt, device)
-                    if args.status:
-                        _logger.info(
-                            "Getting updated status after resetting "
-                            "air filter..."
-                        )
-                        await asyncio.sleep(2)
-                        await handle_status_request(mqtt, device)
-                elif args.set_vacation_days:
-                    if args.set_vacation_days <= 0:
-                        _logger.error("Vacation days must be greater than 0")
-                        return 1
-                    await handle_set_vacation_days_request(
-                        mqtt, device, args.set_vacation_days
-                    )
-                    if args.status:
-                        _logger.info(
-                            "Getting updated status after setting "
-                            "vacation days..."
-                        )
-                        await asyncio.sleep(2)
-                        await handle_status_request(mqtt, device)
-                elif args.set_recirculation_mode:
-                    if not 1 <= args.set_recirculation_mode <= 4:
-                        _logger.error(
-                            "Recirculation mode must be between 1 and 4"
-                        )
-                        return 1
-                    await handle_set_recirculation_mode_request(
-                        mqtt, device, args.set_recirculation_mode
-                    )
-                    if args.status:
-                        _logger.info(
-                            "Getting updated status after setting "
-                            "recirculation mode..."
-                        )
-                        await asyncio.sleep(2)
-                        await handle_status_request(mqtt, device)
-                elif args.recirculation_hot_button:
-                    await handle_trigger_recirculation_hot_button_request(
+                elif cmd == "status":
+                    await cmds.handle_status_request(mqtt, device, args.raw)
+                elif cmd == "serial":
+                    await cmds.handle_get_controller_serial_request(
                         mqtt, device
                     )
-                    if args.status:
-                        _logger.info(
-                            "Getting updated status after triggering "
-                            "hot button..."
-                        )
-                        await asyncio.sleep(2)
-                        await handle_status_request(mqtt, device)
-                elif args.configure_water_program:
-                    await handle_configure_reservation_water_program_request(
-                        mqtt, device
+                elif cmd == "power":
+                    await cmds.handle_power_request(
+                        mqtt, device, args.state == "on"
                     )
-                    if args.status:
-                        _logger.info(
-                            "Getting updated status after configuring "
-                            "water program..."
+                elif cmd == "mode":
+                    await cmds.handle_set_mode_request(mqtt, device, args.name)
+                elif cmd == "temp":
+                    await cmds.handle_set_dhw_temp_request(
+                        mqtt, device, args.value
+                    )
+                elif cmd == "vacation":
+                    await cmds.handle_set_vacation_days_request(
+                        mqtt, device, args.days
+                    )
+                elif cmd == "recirc":
+                    await cmds.handle_set_recirculation_mode_request(
+                        mqtt, device, args.mode
+                    )
+                elif cmd == "reservations":
+                    if args.action == "get":
+                        await cmds.handle_get_reservations_request(mqtt, device)
+                    else:
+                        await cmds.handle_update_reservations_request(
+                            mqtt, device, args.json, not args.disabled
                         )
-                        await asyncio.sleep(2)
-                        await handle_status_request(mqtt, device)
-                elif args.status_raw:
-                    await handle_status_raw_request(mqtt, device)
-                elif args.status:
-                    await handle_status_request(mqtt, device)
-                elif args.monitor:
+                elif cmd == "tou":
+                    if args.action == "get":
+                        await cmds.handle_get_tou_request(mqtt, device, api)
+                    else:
+                        await cmds.handle_set_tou_enabled_request(
+                            mqtt, device, args.state == "on"
+                        )
+                elif cmd == "energy":
+                    months = [int(m.strip()) for m in args.months.split(",")]
+                    await cmds.handle_get_energy_request(
+                        mqtt, device, args.year, months
+                    )
+                elif cmd == "dr":
+                    if args.action == "enable":
+                        await cmds.handle_enable_demand_response_request(
+                            mqtt, device
+                        )
+                    else:
+                        await cmds.handle_disable_demand_response_request(
+                            mqtt, device
+                        )
+                elif cmd == "hot-button":
+                    await handle_hot_btn(mqtt, device)
+                elif cmd == "reset-filter":
+                    await cmds.handle_reset_air_filter_request(mqtt, device)
+                elif cmd == "water-program":
+                    await handle_water_prog(mqtt, device)
+                elif cmd == "monitor":
                     await handle_monitoring(mqtt, device, args.output)
-                else:
-                    _logger.error(
-                        "No action specified. Use --help to see "
-                        "available options."
-                    )
-                    return 1
 
-            except asyncio.CancelledError:
-                _logger.info("Monitoring stopped by user.")
             finally:
-                _logger.info("Disconnecting MQTT client...")
                 await mqtt.disconnect()
-
-            _logger.info("Cleanup complete.")
             return 0
 
-    except InvalidCredentialsError:
-        _logger.error("Invalid email or password.")
-        return 1
-    except TokenRefreshError as e:
-        _logger.error(f"Token refresh failed: {e}")
-        _logger.info("Try logging in again with fresh credentials.")
-        return 1
-    except AuthenticationError as e:
-        _logger.error(f"Authentication failed: {e}")
-        return 1
-    except MqttNotConnectedError:
-        _logger.error("MQTT connection not established.")
-        _logger.info(
-            "The device may be offline or network connectivity issues exist."
-        )
-        return 1
-    except MqttConnectionError as e:
-        _logger.error(f"MQTT connection error: {e}")
-        _logger.info("Check network connectivity and try again.")
-        return 1
-    except MqttError as e:
+    except (
+        InvalidCredentialsError,
+        AuthenticationError,
+        TokenRefreshError,
+    ) as e:
+        _logger.error(f"Auth failed: {e}")
+    except (MqttNotConnectedError, MqttConnectionError, MqttError) as e:
         _logger.error(f"MQTT error: {e}")
-        return 1
     except ValidationError as e:
-        _logger.error(f"Invalid input: {e}")
-        # RangeValidationError has min_value/max_value attributes
-        if isinstance(e, RangeValidationError):
-            _logger.info(
-                f"Valid range for {e.field}: {e.min_value} to {e.max_value}"
-            )
-        return 1
-    except asyncio.CancelledError:
-        _logger.info("Operation cancelled by user.")
-        return 1
+        _logger.error(f"Validation error: {e}")
     except Nwp500Error as e:
         _logger.error(f"Library error: {e}")
-        if hasattr(e, "retriable") and e.retriable:
-            _logger.info("This operation may be retried.")
-        return 1
     except Exception as e:
-        _logger.error(f"An unexpected error occurred: {e}", exc_info=True)
-        return 1
+        _logger.error(f"Unexpected error: {e}", exc_info=True)
+    return 1
 
 
 def parse_args(args: list[str]) -> argparse.Namespace:
-    """Parse command line parameters."""
-    parser = argparse.ArgumentParser(
-        description="Navien Water Heater Control Script"
-    )
+    parser = argparse.ArgumentParser(description="Navien NWP500 CLI")
     parser.add_argument(
-        "--version",
-        action="version",
-        version=f"nwp500-python {__version__}",
+        "--version", action="version", version=f"nwp500-python {__version__}"
     )
-    parser.add_argument(
-        "--email",
-        type=str,
-        help="Navien account email. Overrides NAVIEN_EMAIL env var.",
-    )
-    parser.add_argument(
-        "--password",
-        type=str,
-        help="Navien account password. Overrides NAVIEN_PASSWORD env var.",
-    )
-
-    # Status check (can be combined with other actions)
-    parser.add_argument(
-        "--status",
-        action="store_true",
-        help="Fetch and print the current device status. "
-        "Can be combined with control commands.",
-    )
-    parser.add_argument(
-        "--status-raw",
-        action="store_true",
-        help="Fetch and print the raw device status as received from MQTT "
-        "(no conversions applied).",
-    )
-
-    # Primary action modes (mutually exclusive)
-    group = parser.add_mutually_exclusive_group()
-    group.add_argument(
-        "--device-info",
-        action="store_true",
-        help="Fetch and print comprehensive device information via MQTT, "
-        "then exit.",
-    )
-    group.add_argument(
-        "--device-info-raw",
-        action="store_true",
-        help="Fetch and print raw device information as received from MQTT "
-        "(no conversions applied), then exit.",
-    )
-    group.add_argument(
-        "--get-controller-serial",
-        action="store_true",
-        help="Fetch and print controller serial number via MQTT, then exit. "
-        "This is useful for TOU commands that require the serial number.",
-    )
-    group.add_argument(
-        "--set-mode",
-        type=str,
-        metavar="MODE",
-        help="Set operation mode and display response. "
-        "Options: heat-pump, electric, energy-saver, high-demand, "
-        "vacation, standby",
-    )
-    group.add_argument(
-        "--set-dhw-temp",
-        type=float,
-        metavar="TEMP",
-        help="Set DHW (Domestic Hot Water) target temperature in Fahrenheit "
-        "(95-150°F) and display response.",
-    )
-    group.add_argument(
-        "--power-on",
-        action="store_true",
-        help="Turn the device on and display response.",
-    )
-    group.add_argument(
-        "--power-off",
-        action="store_true",
-        help="Turn the device off and display response.",
-    )
-    group.add_argument(
-        "--get-reservations",
-        action="store_true",
-        help="Fetch and print current reservation schedule from device "
-        "via MQTT, then exit.",
-    )
-    group.add_argument(
-        "--set-reservations",
-        type=str,
-        metavar="JSON",
-        help="Update reservation schedule with JSON array of reservation "
-        "objects. Use --reservations-enabled to control if schedule is "
-        "active.",
-    )
-    group.add_argument(
-        "--get-tou",
-        action="store_true",
-        help="Fetch and print Time-of-Use settings from the REST API, "
-        "then exit. Controller serial number is automatically retrieved.",
-    )
-    group.add_argument(
-        "--set-tou-enabled",
-        type=str,
-        choices=["on", "off"],
-        metavar="ON|OFF",
-        help="Enable or disable Time-of-Use functionality. Options: on, off",
-    )
-    group.add_argument(
-        "--get-energy",
-        action="store_true",
-        help="Request energy usage data for specified year and months "
-        "via MQTT, then exit. Requires --energy-year and --energy-months "
-        "options.",
-    )
-    group.add_argument(
-        "--enable-demand-response",
-        action="store_true",
-        help="Enable utility demand response participation.",
-    )
-    group.add_argument(
-        "--disable-demand-response",
-        action="store_true",
-        help="Disable utility demand response participation.",
-    )
-    group.add_argument(
-        "--reset-air-filter",
-        action="store_true",
-        help="Reset air filter maintenance timer.",
-    )
-    group.add_argument(
-        "--set-vacation-days",
-        type=int,
-        metavar="DAYS",
-        help="Set vacation/away mode duration in days (1-365+).",
-    )
-    group.add_argument(
-        "--set-recirculation-mode",
-        type=int,
-        metavar="MODE",
-        help="Set recirculation pump operation mode. "
-        "Options: 1=Always On, 2=Button Only, 3=Schedule, 4=Temperature",
-    )
-    group.add_argument(
-        "--recirculation-hot-button",
-        action="store_true",
-        help="Trigger the recirculation pump hot button.",
-    )
-    group.add_argument(
-        "--configure-water-program",
-        action="store_true",
-        help="Enable/configure water program reservation mode.",
-    )
-    group.add_argument(
-        "--monitor",
-        action="store_true",
-        help="Run indefinitely, polling for status every 30 seconds and "
-        "logging to a CSV file.",
-    )
-
-    # Additional options for new commands
-    parser.add_argument(
-        "--reservations-enabled",
-        action="store_true",
-        default=True,
-        help="When used with --set-reservations, enable the reservation "
-        "schedule. (default: True)",
-    )
-    parser.add_argument(
-        "--tou-serial",
-        type=str,
-        help="(Deprecated) Controller serial number. No longer required; "
-        "serial number is now retrieved automatically.",
-    )
-    parser.add_argument(
-        "--energy-year",
-        type=int,
-        help="Year for energy usage query (e.g., 2025). "
-        "Required with --get-energy.",
-    )
-    parser.add_argument(
-        "--energy-months",
-        type=str,
-        help="Comma-separated list of months (1-12) for energy usage "
-        "query (e.g., '9' or '8,9,10'). Required with --get-energy.",
-    )
-    parser.add_argument(
-        "-o",
-        "--output",
-        type=str,
-        default="nwp500_status.csv",
-        help="Output CSV file name for monitoring. "
-        "(default: nwp500_status.csv)",
-    )
-
-    # Logging
+    parser.add_argument("--email", help="Navien email")
+    parser.add_argument("--password", help="Navien password")
     parser.add_argument(
         "-v",
         "--verbose",
         dest="loglevel",
-        help="Set loglevel to INFO",
         action="store_const",
         const=logging.INFO,
     )
@@ -560,60 +175,86 @@ def parse_args(args: list[str]) -> argparse.Namespace:
         "-vv",
         "--very-verbose",
         dest="loglevel",
-        help="Set loglevel to DEBUG",
         action="store_const",
         const=logging.DEBUG,
     )
+
+    subparsers = parser.add_subparsers(dest="command", required=True)
+
+    # Simple commands
+    subparsers.add_parser("info", help="Device information").add_argument(
+        "--raw", action="store_true"
+    )
+    subparsers.add_parser("status", help="Device status").add_argument(
+        "--raw", action="store_true"
+    )
+    subparsers.add_parser("serial", help="Get controller serial")
+    subparsers.add_parser("hot-button", help="Trigger hot button")
+    subparsers.add_parser("reset-filter", help="Reset air filter")
+    subparsers.add_parser("water-program", help="Configure water program")
+
+    # Command with args
+    subparsers.add_parser("power", help="Control power").add_argument(
+        "state", choices=["on", "off"]
+    )
+    subparsers.add_parser("mode", help="Set mode").add_argument(
+        "name", help="Mode name"
+    )
+    subparsers.add_parser("temp", help="Set temp").add_argument(
+        "value", type=float, help="Temp °F"
+    )
+    subparsers.add_parser("vacation", help="Set vacation").add_argument(
+        "days", type=int
+    )
+    subparsers.add_parser("recirc", help="Set recirc mode").add_argument(
+        "mode", type=int, choices=[1, 2, 3, 4]
+    )
+
+    # Sub-sub commands
+    res = subparsers.add_parser("reservations", help="Manage reservations")
+    res_sub = res.add_subparsers(dest="action", required=True)
+    res_sub.add_parser("get")
+    res_set = res_sub.add_parser("set")
+    res_set.add_argument("json", help="Reservation JSON")
+    res_set.add_argument("--disabled", action="store_true")
+
+    tou = subparsers.add_parser("tou", help="Manage TOU")
+    tou_sub = tou.add_subparsers(dest="action", required=True)
+    tou_sub.add_parser("get")
+    tou_set = tou_sub.add_parser("set")
+    tou_set.add_argument("state", choices=["on", "off"])
+
+    energy = subparsers.add_parser("energy", help="Energy data")
+    energy.add_argument("--year", type=int, required=True)
+    energy.add_argument(
+        "--months", required=True, help="Comma-separated months"
+    )
+
+    dr = subparsers.add_parser("dr", help="Demand Response")
+    dr.add_argument("action", choices=["enable", "disable"])
+
+    monitor = subparsers.add_parser("monitor", help="Monitoring")
+    monitor.add_argument("-o", "--output", default="nwp500_status.csv")
+
     return parser.parse_args(args)
 
 
-def setup_logging(loglevel: int) -> None:
-    """Configure basic logging for the application.
-
-    Args:
-        loglevel: Logging level (e.g., logging.DEBUG, logging.INFO)
-    """
-    logformat = "[%(asctime)s] %(levelname)s:%(name)s:%(message)s"
-    logging.basicConfig(
-        level=loglevel or logging.WARNING,
-        stream=sys.stdout,
-        format=logformat,
-        datefmt="%Y-%m-%d %H:%M:%S",
-    )
-
-
 def main(args_list: list[str]) -> None:
-    """Run the asynchronous main function with argument parsing.
-
-    Args:
-        args_list: Command-line arguments to parse
-    """
     args = parse_args(args_list)
-
-    # Validate that --status and --status-raw are not used together
-    if args.status and args.status_raw:
-        print(
-            "Error: --status and --status-raw cannot be used together.",
-            file=sys.stderr,
-        )
-        return
-
-    # Set default log level for libraries
-    setup_logging(logging.WARNING)
-    # Set user-defined log level for this script
+    logging.basicConfig(
+        level=logging.WARNING,
+        stream=sys.stdout,
+        format="[%(asctime)s] %(levelname)s:%(name)s:%(message)s",
+    )
     _logger.setLevel(args.loglevel or logging.INFO)
-    # aiohttp is very noisy at INFO level
     logging.getLogger("aiohttp").setLevel(logging.WARNING)
-
     try:
-        result = asyncio.run(async_main(args))
-        sys.exit(result)
+        sys.exit(asyncio.run(async_main(args)))
     except KeyboardInterrupt:
-        _logger.info("Script interrupted by user.")
+        _logger.info("Interrupted.")
 
 
 def run() -> None:
-    """Entry point for the CLI application."""
     main(sys.argv[1:])
 
 

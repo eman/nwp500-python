@@ -16,7 +16,7 @@ import json
 import logging
 import uuid
 from collections.abc import Callable
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 from awscrt import mqtt
 from awscrt.exceptions import AwsCrtError
@@ -557,8 +557,11 @@ class NavienMqttClient(EventEmitter):
 
                 # Set the auto-request callback on the controller
                 # Wrap ensure_device_info_cached to match callback signature
+                async def ensure_callback(device: Device) -> None:
+                    await self.ensure_device_info_cached(device)
+
                 self._device_controller._ensure_device_info_callback = (
-                    self.ensure_device_info_cached
+                    ensure_callback
                 )
                 # Note: These will be implemented later when we
                 # delegate device control methods
@@ -845,86 +848,27 @@ class NavienMqttClient(EventEmitter):
             device, callback
         )
 
+    async def _delegate_subscription(self, method_name: str, *args: Any) -> int:
+        """Helper to delegate subscription to subscription manager."""
+        if not self._connected or not self._subscription_manager:
+            raise MqttNotConnectedError("Not connected to MQTT broker")
+        method = getattr(self._subscription_manager, method_name)
+        return cast(int, await method(*args))
+
     async def subscribe_device_status(
         self, device: Device, callback: Callable[[DeviceStatus], None]
     ) -> int:
-        """
-        Subscribe to device status messages with automatic parsing.
-
-        This method wraps the standard subscription with automatic parsing
-        of status messages into DeviceStatus objects. The callback will only
-        be invoked when a status message is received and successfully parsed.
-
-        Additionally, the client emits granular events for state changes:
-        - 'status_received': Every status update (DeviceStatus)
-        - 'temperature_changed': Temperature changed (old_temp, new_temp)
-        - 'mode_changed': Operation mode changed (old_mode, new_mode)
-        - 'power_changed': Power consumption changed (old_power, new_power)
-        - 'heating_started': Device started heating (status)
-        - 'heating_stopped': Device stopped heating (status)
-        - 'error_detected': Error code detected (error_code, status)
-        - 'error_cleared': Error code cleared (error_code)
-
-        Args:
-            device: Device object
-            callback: Callback function that receives DeviceStatus objects
-
-        Returns:
-            Subscription packet ID
-
-        Example (Traditional Callback)::
-
-            >>> def on_status(status: DeviceStatus):
-            ...     print(f"Temperature: {status.dhw_temperature}°F")
-            ...     print(f"Mode: {status.operation_mode}")
-            >>>
-            >>> await mqtt_client.subscribe_device_status(device, on_status)
-
-        Example (Event Emitter)::
-
-            >>> # Multiple handlers for same event
-            >>> mqtt_client.on('temperature_changed', log_temperature)
-            >>> mqtt_client.on('temperature_changed', update_ui)
-            >>>
-            >>> # State change events
-            >>> mqtt_client.on('heating_started', lambda s: print("Heating ON"))
-            >>> mqtt_client.on(
-            ...     'heating_stopped', lambda s: print("Heating OFF")
-            ... )
-            >>>
-            >>> # Subscribe to start receiving events
-            >>> await mqtt_client.subscribe_device_status(
-            ...     device, lambda s: None
-            ... )
-        """
-        if not self._connected or not self._subscription_manager:
-            raise MqttNotConnectedError("Not connected to MQTT broker")
-
-        # Delegate to subscription manager (it handles state change
-        # detection and events)
-        return await self._subscription_manager.subscribe_device_status(
-            device, callback
+        """Subscribe to device status messages with automatic parsing."""
+        return await self._delegate_subscription(
+            "subscribe_device_status", device, callback
         )
 
     async def subscribe_device_feature(
         self, device: Device, callback: Callable[[DeviceFeature], None]
     ) -> int:
-        """
-        Subscribe to device feature/info messages with automatic parsing.
-
-        Args:
-            device: Device object
-            callback: Callback function that receives DeviceFeature objects
-
-        Returns:
-            Subscription packet ID
-        """
-        if not self._connected or not self._subscription_manager:
-            raise MqttNotConnectedError("Not connected to MQTT broker")
-
-        # Delegate to subscription manager
-        return await self._subscription_manager.subscribe_device_feature(
-            device, callback
+        """Subscribe to device feature/info messages with automatic parsing."""
+        return await self._delegate_subscription(
+            "subscribe_device_feature", device, callback
         )
 
     async def subscribe_energy_usage(
@@ -932,22 +876,9 @@ class NavienMqttClient(EventEmitter):
         device: Device,
         callback: Callable[[EnergyUsageResponse], None],
     ) -> int:
-        """
-        Subscribe to energy usage query responses with automatic parsing.
-
-        Args:
-            device: Device object
-            callback: Callback function that receives EnergyUsageResponse
-                objects
-
-        Returns:
-            Subscription packet ID
-        """
-        if not self._connected or not self._subscription_manager:
-            raise MqttNotConnectedError("Not connected to MQTT broker")
-
-        return await self._subscription_manager.subscribe_energy_usage(
-            device, callback
+        """Subscribe to energy usage query responses with automatic parsing."""
+        return await self._delegate_subscription(
+            "subscribe_energy_usage", device, callback
         )
 
     async def ensure_device_info_cached(

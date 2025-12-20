@@ -5,7 +5,7 @@ This module provides an async HTTP client for device management and control.
 """
 
 import logging
-from typing import Any, Self
+from typing import Any, Self, cast
 
 import aiohttp
 
@@ -148,7 +148,8 @@ class NavienAPIClient:
 
         try:
             _logger.debug(f"Starting {method} request to {url}")
-            async with self._session.request(
+            session = cast(aiohttp.ClientSession, self._session)
+            async with session.request(
                 method,
                 url,
                 headers=headers,
