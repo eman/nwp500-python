@@ -14,6 +14,13 @@ from nwp500 import DeviceStatus
 _logger = logging.getLogger(__name__)
 
 
+def _format_number(value: Any) -> str:
+    """Format number to one decimal place if float, otherwise return as-is."""
+    if isinstance(value, float):
+        return f"{value:.1f}"
+    return str(value)
+
+
 def _json_default_serializer(obj: Any) -> Any:
     """Serialize objects not serializable by default json code.
 
@@ -213,7 +220,7 @@ def print_device_status(device_status: Any) -> None:
             (
                 "OPERATION STATUS",
                 "Current Power",
-                f"{device_status.current_inst_power}W",
+                f"{_format_number(device_status.current_inst_power)}W",
             )
         )
 
@@ -223,7 +230,7 @@ def print_device_status(device_status: Any) -> None:
             (
                 "WATER TEMPERATURES",
                 "DHW Current",
-                f"{device_status.dhw_temperature}°F",
+                f"{_format_number(device_status.dhw_temperature)}°F",
             )
         )
     if hasattr(device_status, "dhw_target_temperature_setting"):
@@ -231,7 +238,7 @@ def print_device_status(device_status: Any) -> None:
             (
                 "WATER TEMPERATURES",
                 "DHW Target",
-                f"{device_status.dhw_target_temperature_setting}°F",
+                f"{_format_number(device_status.dhw_target_temperature_setting)}°F",
             )
         )
     if hasattr(device_status, "tank_upper_temperature"):
@@ -239,7 +246,7 @@ def print_device_status(device_status: Any) -> None:
             (
                 "WATER TEMPERATURES",
                 "Tank Upper",
-                f"{device_status.tank_upper_temperature}°F",
+                f"{_format_number(device_status.tank_upper_temperature)}°F",
             )
         )
     if hasattr(device_status, "tank_lower_temperature"):
@@ -247,7 +254,7 @@ def print_device_status(device_status: Any) -> None:
             (
                 "WATER TEMPERATURES",
                 "Tank Lower",
-                f"{device_status.tank_lower_temperature}°F",
+                f"{_format_number(device_status.tank_lower_temperature)}°F",
             )
         )
     if hasattr(device_status, "current_inlet_temperature"):
@@ -255,7 +262,7 @@ def print_device_status(device_status: Any) -> None:
             (
                 "WATER TEMPERATURES",
                 "Inlet Temp",
-                f"{device_status.current_inlet_temperature}°F",
+                f"{_format_number(device_status.current_inlet_temperature)}°F",
             )
         )
     if hasattr(device_status, "current_dhw_flow_rate"):
@@ -263,7 +270,7 @@ def print_device_status(device_status: Any) -> None:
             (
                 "WATER TEMPERATURES",
                 "DHW Flow Rate",
-                device_status.current_dhw_flow_rate,
+                _format_number(device_status.current_dhw_flow_rate),
             )
         )
 
@@ -273,7 +280,7 @@ def print_device_status(device_status: Any) -> None:
             (
                 "AMBIENT TEMPERATURES",
                 "Outside",
-                f"{device_status.outside_temperature}°F",
+                f"{_format_number(device_status.outside_temperature)}°F",
             )
         )
     if hasattr(device_status, "ambient_temperature"):
@@ -281,7 +288,7 @@ def print_device_status(device_status: Any) -> None:
             (
                 "AMBIENT TEMPERATURES",
                 "Ambient",
-                f"{device_status.ambient_temperature}°F",
+                f"{_format_number(device_status.ambient_temperature)}°F",
             )
         )
 
@@ -291,7 +298,7 @@ def print_device_status(device_status: Any) -> None:
             (
                 "SYSTEM TEMPERATURES",
                 "Discharge",
-                f"{device_status.discharge_temperature}°F",
+                f"{_format_number(device_status.discharge_temperature)}°F",
             )
         )
     if hasattr(device_status, "suction_temperature"):
@@ -299,7 +306,7 @@ def print_device_status(device_status: Any) -> None:
             (
                 "SYSTEM TEMPERATURES",
                 "Suction",
-                f"{device_status.suction_temperature}°F",
+                f"{_format_number(device_status.suction_temperature)}°F",
             )
         )
     if hasattr(device_status, "evaporator_temperature"):
@@ -307,7 +314,7 @@ def print_device_status(device_status: Any) -> None:
             (
                 "SYSTEM TEMPERATURES",
                 "Evaporator",
-                f"{device_status.evaporator_temperature}°F",
+                f"{_format_number(device_status.evaporator_temperature)}°F",
             )
         )
     if hasattr(device_status, "target_super_heat"):
@@ -315,7 +322,7 @@ def print_device_status(device_status: Any) -> None:
             (
                 "SYSTEM TEMPERATURES",
                 "Target SuperHeat",
-                device_status.target_super_heat,
+                _format_number(device_status.target_super_heat),
             )
         )
     if hasattr(device_status, "current_super_heat"):
@@ -323,7 +330,7 @@ def print_device_status(device_status: Any) -> None:
             (
                 "SYSTEM TEMPERATURES",
                 "Current SuperHeat",
-                device_status.current_super_heat,
+                _format_number(device_status.current_super_heat),
             )
         )
 
@@ -333,7 +340,7 @@ def print_device_status(device_status: Any) -> None:
             (
                 "HEAT PUMP SETTINGS",
                 "Upper On",
-                f"{device_status.hp_upper_on_temp_setting}°F",
+                f"{_format_number(device_status.hp_upper_on_temp_setting)}°F",
             )
         )
     if hasattr(device_status, "hp_upper_off_temp_setting"):
@@ -341,7 +348,7 @@ def print_device_status(device_status: Any) -> None:
             (
                 "HEAT PUMP SETTINGS",
                 "Upper Off",
-                f"{device_status.hp_upper_off_temp_setting}°F",
+                f"{_format_number(device_status.hp_upper_off_temp_setting)}°F",
             )
         )
     if hasattr(device_status, "hp_lower_on_temp_setting"):
@@ -349,7 +356,7 @@ def print_device_status(device_status: Any) -> None:
             (
                 "HEAT PUMP SETTINGS",
                 "Lower On",
-                f"{device_status.hp_lower_on_temp_setting}°F",
+                f"{_format_number(device_status.hp_lower_on_temp_setting)}°F",
             )
         )
     if hasattr(device_status, "hp_lower_off_temp_setting"):
@@ -357,7 +364,7 @@ def print_device_status(device_status: Any) -> None:
             (
                 "HEAT PUMP SETTINGS",
                 "Lower Off",
-                f"{device_status.hp_lower_off_temp_setting}°F",
+                f"{_format_number(device_status.hp_lower_off_temp_setting)}°F",
             )
         )
 
@@ -367,7 +374,7 @@ def print_device_status(device_status: Any) -> None:
             (
                 "HEAT ELEMENT SETTINGS",
                 "Upper On",
-                f"{device_status.he_upper_on_temp_setting}°F",
+                f"{_format_number(device_status.he_upper_on_temp_setting)}°F",
             )
         )
     if hasattr(device_status, "he_upper_off_temp_setting"):
@@ -375,7 +382,7 @@ def print_device_status(device_status: Any) -> None:
             (
                 "HEAT ELEMENT SETTINGS",
                 "Upper Off",
-                f"{device_status.he_upper_off_temp_setting}°F",
+                f"{_format_number(device_status.he_upper_off_temp_setting)}°F",
             )
         )
     if hasattr(device_status, "he_lower_on_temp_setting"):
@@ -383,7 +390,7 @@ def print_device_status(device_status: Any) -> None:
             (
                 "HEAT ELEMENT SETTINGS",
                 "Lower On",
-                f"{device_status.he_lower_on_temp_setting}°F",
+                f"{_format_number(device_status.he_lower_on_temp_setting)}°F",
             )
         )
     if hasattr(device_status, "he_lower_off_temp_setting"):
@@ -391,7 +398,7 @@ def print_device_status(device_status: Any) -> None:
             (
                 "HEAT ELEMENT SETTINGS",
                 "Lower Off",
-                f"{device_status.he_lower_off_temp_setting}°F",
+                f"{_format_number(device_status.he_lower_off_temp_setting)}°F",
             )
         )
 
@@ -401,7 +408,7 @@ def print_device_status(device_status: Any) -> None:
             (
                 "POWER & ENERGY",
                 "Total Consumption",
-                f"{device_status.wh_total_power_consumption}Wh",
+                f"{_format_number(device_status.wh_total_power_consumption)}Wh",
             )
         )
     if hasattr(device_status, "wh_heat_pump_power"):
@@ -409,7 +416,7 @@ def print_device_status(device_status: Any) -> None:
             (
                 "POWER & ENERGY",
                 "Heat Pump Power",
-                f"{device_status.wh_heat_pump_power}Wh",
+                f"{_format_number(device_status.wh_heat_pump_power)}Wh",
             )
         )
     if hasattr(device_status, "wh_electric_heater_power"):
@@ -417,7 +424,7 @@ def print_device_status(device_status: Any) -> None:
             (
                 "POWER & ENERGY",
                 "Electric Heater Power",
-                f"{device_status.wh_electric_heater_power}Wh",
+                f"{_format_number(device_status.wh_electric_heater_power)}Wh",
             )
         )
     if hasattr(device_status, "total_energy_capacity"):
@@ -425,7 +432,7 @@ def print_device_status(device_status: Any) -> None:
             (
                 "POWER & ENERGY",
                 "Total Capacity",
-                device_status.total_energy_capacity,
+                _format_number(device_status.total_energy_capacity),
             )
         )
     if hasattr(device_status, "available_energy_capacity"):
@@ -433,45 +440,51 @@ def print_device_status(device_status: Any) -> None:
             (
                 "POWER & ENERGY",
                 "Available Capacity",
-                device_status.available_energy_capacity,
+                _format_number(device_status.available_energy_capacity),
             )
         )
 
     # Fan Control
     if hasattr(device_status, "target_fan_rpm"):
+        target_rpm = _format_number(device_status.target_fan_rpm)
         all_items.append(
-            ("FAN CONTROL", "Target RPM", device_status.target_fan_rpm)
+            ("FAN CONTROL", "Target RPM", target_rpm)
         )
     if hasattr(device_status, "current_fan_rpm"):
+        current_rpm = _format_number(device_status.current_fan_rpm)
         all_items.append(
-            ("FAN CONTROL", "Current RPM", device_status.current_fan_rpm)
+            ("FAN CONTROL", "Current RPM", current_rpm)
         )
     if hasattr(device_status, "fan_pwm"):
-        all_items.append(("FAN CONTROL", "PWM", f"{device_status.fan_pwm}%"))
+        pwm_pct = f"{_format_number(device_status.fan_pwm)}%"
+        all_items.append(("FAN CONTROL", "PWM", pwm_pct))
     if hasattr(device_status, "cumulated_op_time_eva_fan"):
+        eva_fan_time = _format_number(device_status.cumulated_op_time_eva_fan)
         all_items.append(
             (
                 "FAN CONTROL",
                 "Eva Fan Time",
-                device_status.cumulated_op_time_eva_fan,
+                eva_fan_time,
             )
         )
 
     # Compressor & Valve
     if hasattr(device_status, "mixing_rate"):
+        mixing = _format_number(device_status.mixing_rate)
         all_items.append(
-            ("COMPRESSOR & VALVE", "Mixing Rate", device_status.mixing_rate)
+            ("COMPRESSOR & VALVE", "Mixing Rate", mixing)
         )
     if hasattr(device_status, "eev_step"):
+        eev = _format_number(device_status.eev_step)
         all_items.append(
-            ("COMPRESSOR & VALVE", "EEV Step", device_status.eev_step)
+            ("COMPRESSOR & VALVE", "EEV Step", eev)
         )
     if hasattr(device_status, "target_super_heat"):
         all_items.append(
             (
                 "COMPRESSOR & VALVE",
                 "Target SuperHeat",
-                device_status.target_super_heat,
+                _format_number(device_status.target_super_heat),
             )
         )
     if hasattr(device_status, "current_super_heat"):
@@ -479,7 +492,7 @@ def print_device_status(device_status: Any) -> None:
             (
                 "COMPRESSOR & VALVE",
                 "Current SuperHeat",
-                device_status.current_super_heat,
+                _format_number(device_status.current_super_heat),
             )
         )
 
@@ -505,7 +518,7 @@ def print_device_status(device_status: Any) -> None:
             (
                 "RECIRCULATION",
                 "Temperature",
-                f"{device_status.recirc_temperature}°F",
+                f"{_format_number(device_status.recirc_temperature)}°F",
             )
         )
     if hasattr(device_status, "recirc_faucet_temperature"):
@@ -513,7 +526,7 @@ def print_device_status(device_status: Any) -> None:
             (
                 "RECIRCULATION",
                 "Faucet Temp",
-                f"{device_status.recirc_faucet_temperature}°F",
+                f"{_format_number(device_status.recirc_faucet_temperature)}°F",
             )
         )
 
@@ -577,8 +590,9 @@ def print_device_status(device_status: Any) -> None:
 
     # WiFi & Network
     if hasattr(device_status, "wifi_rssi"):
+        rssi_dbm = f"{_format_number(device_status.wifi_rssi)} dBm"
         all_items.append(
-            ("WiFi & NETWORK", "RSSI", f"{device_status.wifi_rssi} dBm")
+            ("WiFi & NETWORK", "RSSI", rssi_dbm)
         )
 
     # Demand Response & TOU
