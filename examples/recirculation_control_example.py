@@ -158,9 +158,9 @@ if __name__ == "__main__":
     # asyncio.run(recirculation_example())
 
     print("CLI equivalent commands:")
-    print("  python -m nwp500.cli --set-recirculation-mode 1")
-    print("  python -m nwp500.cli --recirculation-hot-button")
-    print("  python -m nwp500.cli --set-recirculation-mode 2 --status")
+    print("  python -m nwp500.cli recirc 1")
+    print("  python -m nwp500.cli hot-button")
+    print("  python -m nwp500.cli recirc 2")
     print()
     print("Valid recirculation modes:")
     print("  1 = Always On (pump continuously circulates hot water)")

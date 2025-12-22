@@ -116,8 +116,7 @@ if __name__ == "__main__":
     # asyncio.run(water_program_example())
 
     print("CLI equivalent commands:")
-    print("  python -m nwp500.cli --configure-water-program")
-    print("  python -m nwp500.cli --configure-water-program --status")
+    print("  python -m nwp500.cli water-program")
     print()
     print("Once enabled, you can set up specific heating schedules through:")
     print("- The official Navien mobile app")

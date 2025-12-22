@@ -134,17 +134,11 @@ class NavienAPIClient:
         clean_json_data: dict[str, Any] | None = None
 
         if params:
-            filtered_params: dict[str, Any] = {}
-            for k, v in params.items():
-                if v is not None:
-                    filtered_params[k] = v
-            clean_params = filtered_params
+            clean_params = {k: v for k, v in params.items() if v is not None}
         if json_data:
-            filtered_json: dict[str, Any] = {}
-            for k, v in json_data.items():
-                if v is not None:
-                    filtered_json[k] = v
-            clean_json_data = filtered_json
+            clean_json_data = {
+                k: v for k, v in json_data.items() if v is not None
+            }
 
         try:
             _logger.debug(f"Starting {method} request to {url}")

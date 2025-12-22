@@ -903,7 +903,10 @@ class NavienMqttClient(EventEmitter):
         if not self._connected or not self._device_controller:
             raise MqttNotConnectedError("Not connected to MQTT broker")
 
+        from .mqtt_utils import redact_mac
+
         mac = device.device_info.mac_address
+        redacted_mac = redact_mac(mac)
         cached = await self._device_controller._device_info_cache.get(mac)
         if cached is not None:
             return True
@@ -912,11 +915,6 @@ class NavienMqttClient(EventEmitter):
         future: asyncio.Future[DeviceFeature] = (
             asyncio.get_running_loop().create_future()
         )
-
-        from .mqtt_utils import redact_mac
-
-        mac = device.device_info.mac_address
-        redacted_mac = redact_mac(mac)
 
         def on_feature(feature: DeviceFeature) -> None:
             if not future.done():

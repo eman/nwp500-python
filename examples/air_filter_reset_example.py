@@ -120,7 +120,6 @@ if __name__ == "__main__":
     # asyncio.run(air_filter_example())
 
     print("CLI equivalent commands:")
-    print("  python -m nwp500.cli --reset-air-filter")
-    print("  python -m nwp500.cli --reset-air-filter --status")
+    print("  python -m nwp500.cli reset-filter")
     print()
     print("Note: This feature is primarily for heat pump models.")

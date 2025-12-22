@@ -116,8 +116,8 @@ if __name__ == "__main__":
     # asyncio.run(vacation_mode_example())
 
     print("CLI equivalent commands:")
-    print("  python -m nwp500.cli --set-vacation-days 7")
-    print("  python -m nwp500.cli --set-vacation-days 14 --status")
-    print("  python -m nwp500.cli --set-vacation-days 21 --status")
+    print("  python -m nwp500.cli vacation 7")
+    print("  python -m nwp500.cli vacation 14")
+    print("  python -m nwp500.cli vacation 21")
     print()
     print("Valid range: 1-365+ days")

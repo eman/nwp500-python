@@ -98,7 +98,7 @@ def format_energy_usage(energy_response: Any) -> str:
         for month_data in energy_response.usage:
             month_name_str = (
                 f"{month_name[month_data.month]} {month_data.year}"
-                if month_data.month <= 12
+                if 1 <= month_data.month <= 12
                 else f"Month {month_data.month} {month_data.year}"
             )
             total_wh = sum(

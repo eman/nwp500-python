@@ -135,6 +135,5 @@ if __name__ == "__main__":
     # asyncio.run(demand_response_example())
 
     print("CLI equivalent commands:")
-    print("  python -m nwp500.cli --enable-demand-response")
-    print("  python -m nwp500.cli --disable-demand-response")
-    print("  python -m nwp500.cli --enable-demand-response --status")
+    print("  python -m nwp500.cli dr enable")
+    print("  python -m nwp500.cli dr disable")

@@ -121,8 +121,7 @@ class NavienBaseModel(BaseModel):
         Args:
             data: The data structure to convert.
             visited: Set of object IDs already visited to prevent infinite
-                     recursion. Object IDs are never None, so None means
-                     uninitialized set.
+                     recursion. None indicates uninitialized/first call.
         """
         from enum import Enum
 
