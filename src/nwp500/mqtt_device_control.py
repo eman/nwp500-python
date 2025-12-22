@@ -83,7 +83,7 @@ class MqttDeviceController:
         )
         # Callback for auto-requesting device info when needed
         self._ensure_device_info_callback: (
-            Callable[[Device], Awaitable[None]] | None
+            Callable[[Device], Awaitable[bool]] | None
         ) = None
 
     async def _ensure_device_info_cached(
@@ -127,14 +127,19 @@ class MqttDeviceController:
             device: Device to request info for
 
         Raises:
-            RuntimeError: If auto-request callback not set
+            RuntimeError: If auto-request callback not set or request fails
         """
         if self._ensure_device_info_callback is None:
             raise RuntimeError(
                 "Auto-request not available. "
                 "Ensure MQTT client has set the callback."
             )
-        await self._ensure_device_info_callback(device)
+        success = await self._ensure_device_info_callback(device)
+        if not success:
+            raise RuntimeError(
+                "Failed to obtain device info: "
+                "Device did not respond with feature data within timeout"
+            )
 
     def check_support(
         self, feature: str, device_features: DeviceFeature
@@ -237,7 +242,9 @@ class MqttDeviceController:
                 max_val,
             )
 
-    async def _get_device_features(self, device: Device) -> Any | None:
+    async def _get_device_features(
+        self, device: Device
+    ) -> DeviceFeature | None:
         """
         Get cached device features, auto-requesting if necessary.
 
@@ -248,11 +255,8 @@ class MqttDeviceController:
 
         if cached_features is None:
             _logger.info("Device info not cached, auto-requesting...")
-            try:
-                await self._auto_request_device_info(device)
-                cached_features = await self._device_info_cache.get(mac)
-            except Exception as e:
-                _logger.warning(f"Failed to auto-request device info: {e}")
+            await self._auto_request_device_info(device)
+            cached_features = await self._device_info_cache.get(mac)
 
         return cached_features
 

@@ -90,8 +90,9 @@ async def test_handle_status_request(mock_mqtt, mock_device, capsys):
 
     mock_mqtt.control.request_device_status.assert_called_once_with(mock_device)
     captured = capsys.readouterr()
-    assert "some" in captured.out
-    assert "data" in captured.out
+    # Check for human-readable format output
+    assert "DEVICE STATUS" in captured.out
+    assert "STATUS" in captured.out
 
 
 @pytest.mark.asyncio

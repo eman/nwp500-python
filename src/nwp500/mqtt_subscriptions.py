@@ -368,8 +368,11 @@ class MqttSubscriptionManager:
         def handler(topic: str, message: dict[str, Any]) -> None:
             try:
                 res = message.get("response", {})
-                data = res.get(key) if key else res
-                if not data or (key and key not in res):
+                # Try nested response field, then fallback to top-level
+                data = (res.get(key) if key else res) or (
+                    message.get(key) if key else None
+                )
+                if not data:
                     return
 
                 parsed = model.from_dict(data)

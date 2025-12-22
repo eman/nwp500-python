@@ -23,7 +23,12 @@ from nwp500.exceptions import (
 from nwp500.mqtt_utils import redact_serial
 from nwp500.topic_builder import MqttTopicBuilder
 
-from .output_formatters import print_json
+from .output_formatters import (
+    print_device_info,
+    print_device_status,
+    print_energy_usage,
+    print_json,
+)
 
 _logger = logging.getLogger(__name__)
 
@@ -129,6 +134,7 @@ async def _handle_info_request(
     data_key: str,
     action_name: str,
     raw: bool = False,
+    formatter: Callable[[Any], None] | None = None,
 ) -> None:
     """Generic helper for requesting and displaying device information."""
     try:
@@ -139,7 +145,10 @@ async def _handle_info_request(
                 lambda: request_method(device),
                 action_name=action_name,
             )
-            print_json(res.model_dump())
+            if formatter:
+                formatter(res)
+            else:
+                print_json(res.model_dump())
         else:
             future = asyncio.get_running_loop().create_future()
 
@@ -171,6 +180,7 @@ async def handle_status_request(
         "status",
         "device status",
         raw,
+        formatter=print_device_status if not raw else None,
     )
 
 
@@ -186,6 +196,7 @@ async def handle_device_info_request(
         "feature",
         "device information",
         raw,
+        formatter=print_device_info if not raw else None,
     )
 
 
@@ -386,7 +397,7 @@ async def handle_get_energy_request(
             action_name="energy usage",
             timeout=15,
         )
-        print_json(cast(EnergyUsageResponse, res))
+        print_energy_usage(cast(EnergyUsageResponse, res))
     except Exception as e:
         _logger.error(f"Error getting energy data: {e}")
 

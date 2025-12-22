@@ -116,7 +116,14 @@ class NavienBaseModel(BaseModel):
     def _convert_enums_to_names(
         data: Any, visited: set[int] | None = None
     ) -> Any:
-        """Recursively convert Enum values to their names."""
+        """Recursively convert Enum values to their names.
+
+        Args:
+            data: The data structure to convert.
+            visited: Set of object IDs already visited to prevent infinite
+                     recursion. Object IDs are never None, so None means
+                     uninitialized set.
+        """
         from enum import Enum
 
         if isinstance(data, Enum):

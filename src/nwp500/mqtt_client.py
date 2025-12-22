@@ -557,8 +557,8 @@ class NavienMqttClient(EventEmitter):
 
                 # Set the auto-request callback on the controller
                 # Wrap ensure_device_info_cached to match callback signature
-                async def ensure_callback(device: Device) -> None:
-                    await self.ensure_device_info_cached(device)
+                async def ensure_callback(device: Device) -> bool:
+                    return await self.ensure_device_info_cached(device)
 
                 self._device_controller._ensure_device_info_callback = (
                     ensure_callback
@@ -882,7 +882,7 @@ class NavienMqttClient(EventEmitter):
         )
 
     async def ensure_device_info_cached(
-        self, device: Device, timeout: float = 15.0
+        self, device: Device, timeout: float = 30.0
     ) -> bool:
         """
         Ensure device info is cached, requesting if necessary.
@@ -892,7 +892,7 @@ class NavienMqttClient(EventEmitter):
 
         Args:
             device: Device to ensure info for
-            timeout: Maximum time to wait for response
+            timeout: Maximum time to wait for response (default: 30 seconds)
 
         Returns:
             True if device info was successfully cached, False on timeout
@@ -909,20 +909,31 @@ class NavienMqttClient(EventEmitter):
             return True
 
         # Not cached, request and wait
-        future: asyncio.Future[bool] = (
+        future: asyncio.Future[DeviceFeature] = (
             asyncio.get_running_loop().create_future()
         )
 
+        mac = device.device_info.mac_address
+
         def on_feature(feature: DeviceFeature) -> None:
             if not future.done():
-                future.set_result(True)
+                _logger.info(f"Device feature received for {mac}")
+                future.set_result(feature)
 
+        _logger.info(f"Ensuring device info cached for {mac}")
         await self.subscribe_device_feature(device, on_feature)
         try:
+            _logger.info(f"Requesting device info from {mac}")
             await self.control.request_device_info(device)
-            return await asyncio.wait_for(future, timeout=timeout)
+            _logger.info(f"Waiting for device feature (timeout={timeout}s)")
+            feature = await asyncio.wait_for(future, timeout=timeout)
+            # Cache the feature immediately
+            await self._device_controller._device_info_cache.set(mac, feature)
+            return True
         except TimeoutError:
-            _logger.warning("Timed out waiting for device info")
+            _logger.error(
+                f"Timed out waiting for device info after {timeout}s for {mac}"
+            )
             return False
         finally:
             # Note: We don't unsubscribe token here because it might
@@ -934,6 +945,13 @@ class NavienMqttClient(EventEmitter):
     def control(self) -> MqttDeviceController:
         """
         Get the device controller for sending commands.
+
+        The control property enforces that the client must be connected before
+        accessing any control methods. This is by design to ensure device
+        commands are only sent when MQTT connection is established and active.
+        Commands like request_device_info that populate the cache are not
+        accessible through this property and must be called separately if
+        needed before connection is fully established.
 
         Raises:
             MqttNotConnectedError: If client is not connected

@@ -28,12 +28,14 @@ def requires_capability(feature: str) -> Callable[[F], F]:
     controllable feature before allowing the command to execute. If the
     device doesn't support the feature, a DeviceCapabilityError is raised.
 
+    The decorator automatically caches device info on first call using
+    _get_device_features(), which internally calls ensure_device_info_cached().
+    This means capability validation is transparent to the caller - no manual
+    caching is required.
+
     The decorator expects the command method to:
     1. Have 'self' (controller instance with _device_info_cache)
     2. Have 'device' parameter (Device object with mac_address)
-
-    The device info must be cached (via request_device_info) before calling
-    the command, otherwise a DeviceCapabilityError is raised.
 
     Args:
         feature: Name of the required capability (e.g., "recirculation_mode")
@@ -52,7 +54,8 @@ def requires_capability(feature: str) -> Callable[[F], F]:
         ...
         ...     @requires_capability("recirculation_mode")
         ...     async def set_recirculation_mode(self, device, mode):
-        ...         # Command automatically checked before execution
+        ...         # Device info automatically cached on first call
+        ...         # Capability automatically validated before execution
         ...         return await self._publish(...)
     """
 
@@ -67,7 +70,20 @@ def requires_capability(feature: str) -> Callable[[F], F]:
                 self: Any, device: Any, *args: Any, **kwargs: Any
             ) -> Any:
                 # Get cached features, auto-requesting if necessary
-                cached_features = await self._get_device_features(device)
+                _logger.info(
+                    f"Checking capability '{feature}' for {func.__name__}"
+                )
+                try:
+                    cached_features = await self._get_device_features(device)
+                except DeviceCapabilityError:
+                    # Re-raise capability errors as-is (don't mask them)
+                    raise
+                except Exception as e:
+                    # Wrap other errors (timeouts, connection issues, etc)
+                    raise DeviceCapabilityError(
+                        feature,
+                        f"Cannot execute {func.__name__}: {str(e)}",
+                    ) from e
 
                 if cached_features is None:
                     raise DeviceCapabilityError(
@@ -103,13 +119,13 @@ def requires_capability(feature: str) -> Callable[[F], F]:
             def sync_wrapper(
                 self: Any, device: Any, *args: Any, **kwargs: Any
             ) -> Any:
-                # For sync functions, we can't await the cache
-                # Log a warning and proceed (backward compatibility)
-                _logger.warning(
-                    f"{func.__name__} should be async to support "
-                    f"capability checking with requires_capability"
+                # Sync functions cannot support capability checking
+                # as it requires async device info lookup
+                raise TypeError(
+                    f"{func.__name__} must be async to use "
+                    f"@requires_capability decorator. Capability checking "
+                    f"requires async device info cache access."
                 )
-                return func(self, device, *args, **kwargs)
 
             return sync_wrapper  # type: ignore
 

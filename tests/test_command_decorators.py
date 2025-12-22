@@ -1,7 +1,7 @@
 """Tests for command decorators."""
 
 from typing import Any
-from unittest.mock import Mock, patch
+from unittest.mock import Mock
 
 import pytest
 
@@ -238,7 +238,7 @@ class TestRequiresCapabilityDecorator:
 
     @pytest.mark.asyncio
     async def test_decorator_with_sync_function_logs_warning(self) -> None:
-        """Test decorator with sync function logs warning."""
+        """Test decorator with sync function raises TypeError."""
         cache = DeviceInfoCache()
         mock_device = Mock()
 
@@ -253,10 +253,11 @@ class TestRequiresCapabilityDecorator:
 
         controller = MockController()
 
-        with patch("nwp500.command_decorators._logger") as mock_logger:
+        with pytest.raises(
+            TypeError,
+            match="must be async to use @requires_capability decorator",
+        ):
             controller.set_power_sync(mock_device, True)
-            mock_logger.warning.assert_called_once()
-            assert controller.command_called
 
     @pytest.mark.asyncio
     async def test_decorator_handles_auto_request_exception(self) -> None:

@@ -67,8 +67,6 @@ async def async_main(args: argparse.Namespace) -> int:
             mqtt = NavienMqttClient(auth)
             await mqtt.connect()
             try:
-                await mqtt.ensure_device_info_cached(device)
-
                 # Command Dispatching
                 cmd = args.command
                 if cmd == "info":
@@ -182,58 +180,88 @@ def parse_args(args: list[str]) -> argparse.Namespace:
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     # Simple commands
-    subparsers.add_parser("info", help="Device information").add_argument(
-        "--raw", action="store_true"
+    subparsers.add_parser(
+        "info",
+        help="Show device information (firmware, capabilities, serial number)",
+    ).add_argument("--raw", action="store_true")
+    subparsers.add_parser(
+        "status",
+        help="Show current device status (temperature, mode, power usage)",
+    ).add_argument("--raw", action="store_true")
+    subparsers.add_parser("serial", help="Get controller serial number")
+    subparsers.add_parser(
+        "hot-button", help="Trigger hot button (instant hot water)"
     )
-    subparsers.add_parser("status", help="Device status").add_argument(
-        "--raw", action="store_true"
+    subparsers.add_parser(
+        "reset-filter", help="Reset air filter maintenance timer"
     )
-    subparsers.add_parser("serial", help="Get controller serial")
-    subparsers.add_parser("hot-button", help="Trigger hot button")
-    subparsers.add_parser("reset-filter", help="Reset air filter")
-    subparsers.add_parser("water-program", help="Configure water program")
+    subparsers.add_parser(
+        "water-program", help="Enable water program reservation scheduling mode"
+    )
 
     # Command with args
-    subparsers.add_parser("power", help="Control power").add_argument(
+    subparsers.add_parser("power", help="Turn device on or off").add_argument(
         "state", choices=["on", "off"]
     )
-    subparsers.add_parser("mode", help="Set mode").add_argument(
-        "name", help="Mode name"
+    subparsers.add_parser("mode", help="Set operation mode").add_argument(
+        "name",
+        help="Mode name",
+        choices=[
+            "standby",
+            "heat-pump",
+            "electric",
+            "energy-saver",
+            "high-demand",
+            "vacation",
+        ],
     )
-    subparsers.add_parser("temp", help="Set temp").add_argument(
-        "value", type=float, help="Temp °F"
-    )
-    subparsers.add_parser("vacation", help="Set vacation").add_argument(
-        "days", type=int
-    )
-    subparsers.add_parser("recirc", help="Set recirc mode").add_argument(
-        "mode", type=int, choices=[1, 2, 3, 4]
-    )
+    subparsers.add_parser(
+        "temp", help="Set target hot water temperature"
+    ).add_argument("value", type=float, help="Temp °F")
+    subparsers.add_parser(
+        "vacation", help="Enable vacation mode for N days"
+    ).add_argument("days", type=int)
+    subparsers.add_parser(
+        "recirc", help="Set recirculation pump mode (1-4)"
+    ).add_argument("mode", type=int, choices=[1, 2, 3, 4])
 
     # Sub-sub commands
-    res = subparsers.add_parser("reservations", help="Manage reservations")
+    res = subparsers.add_parser(
+        "reservations",
+        help="Schedule mode and temperature changes at specific times",
+    )
     res_sub = res.add_subparsers(dest="action", required=True)
-    res_sub.add_parser("get")
-    res_set = res_sub.add_parser("set")
+    res_sub.add_parser("get", help="Get current reservation schedule")
+    res_set = res_sub.add_parser(
+        "set", help="Set reservation schedule from JSON"
+    )
     res_set.add_argument("json", help="Reservation JSON")
     res_set.add_argument("--disabled", action="store_true")
 
-    tou = subparsers.add_parser("tou", help="Manage TOU")
+    tou = subparsers.add_parser(
+        "tou", help="Configure time-of-use pricing schedule"
+    )
     tou_sub = tou.add_subparsers(dest="action", required=True)
-    tou_sub.add_parser("get")
-    tou_set = tou_sub.add_parser("set")
+    tou_sub.add_parser("get", help="Get current TOU schedule")
+    tou_set = tou_sub.add_parser("set", help="Enable or disable TOU pricing")
     tou_set.add_argument("state", choices=["on", "off"])
 
-    energy = subparsers.add_parser("energy", help="Energy data")
+    energy = subparsers.add_parser(
+        "energy", help="Query historical energy usage by month"
+    )
     energy.add_argument("--year", type=int, required=True)
     energy.add_argument(
         "--months", required=True, help="Comma-separated months"
     )
 
-    dr = subparsers.add_parser("dr", help="Demand Response")
+    dr = subparsers.add_parser(
+        "dr", help="Enable or disable utility demand response"
+    )
     dr.add_argument("action", choices=["enable", "disable"])
 
-    monitor = subparsers.add_parser("monitor", help="Monitoring")
+    monitor = subparsers.add_parser(
+        "monitor", help="Monitor device status in real-time (logs to CSV)"
+    )
     monitor.add_argument("-o", "--output", default="nwp500_status.csv")
 
     return parser.parse_args(args)

@@ -3,6 +3,20 @@
 This module provides convenience functions for creating Pydantic fields with
 standard metadata (device_class, unit_of_measurement, etc.) pre-configured,
 reducing boilerplate in models while maintaining type safety.
+
+Each factory function creates a Pydantic Field with metadata for Home Assistant
+integration:
+- temperature_field: Adds unit_of_measurement, device_class='temperature',
+  suggested_display_precision
+- signal_strength_field: Adds unit_of_measurement,
+  device_class='signal_strength'
+- energy_field: Adds unit_of_measurement, device_class='energy'
+- power_field: Adds unit_of_measurement, device_class='power'
+
+Example:
+    >>> from nwp500.field_factory import temperature_field
+    >>> class MyModel(BaseModel):
+    ...     temp: float = temperature_field("DHW Temperature", unit="°F")
 """
 
 from typing import Any, cast
