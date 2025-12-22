@@ -917,13 +917,17 @@ class NavienMqttClient(EventEmitter):
 
         def on_feature(feature: DeviceFeature) -> None:
             if not future.done():
-                _logger.info(f"Device feature received for {mac}")
+                from .mqtt_utils import redact_mac
+
+                _logger.info(f"Device feature received for {redact_mac(mac)}")
                 future.set_result(feature)
 
-        _logger.info(f"Ensuring device info cached for {mac}")
+        from .mqtt_utils import redact_mac
+
+        _logger.info(f"Ensuring device info cached for {redact_mac(mac)}")
         await self.subscribe_device_feature(device, on_feature)
         try:
-            _logger.info(f"Requesting device info from {mac}")
+            _logger.info(f"Requesting device info from {redact_mac(mac)}")
             await self.control.request_device_info(device)
             _logger.info(f"Waiting for device feature (timeout={timeout}s)")
             feature = await asyncio.wait_for(future, timeout=timeout)
@@ -932,7 +936,8 @@ class NavienMqttClient(EventEmitter):
             return True
         except TimeoutError:
             _logger.error(
-                f"Timed out waiting for device info after {timeout}s for {mac}"
+                f"Timed out waiting for device info after {timeout}s for "
+                f"{redact_mac(mac)}"
             )
             return False
         finally:

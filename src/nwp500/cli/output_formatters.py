@@ -447,14 +447,10 @@ def print_device_status(device_status: Any) -> None:
     # Fan Control
     if hasattr(device_status, "target_fan_rpm"):
         target_rpm = _format_number(device_status.target_fan_rpm)
-        all_items.append(
-            ("FAN CONTROL", "Target RPM", target_rpm)
-        )
+        all_items.append(("FAN CONTROL", "Target RPM", target_rpm))
     if hasattr(device_status, "current_fan_rpm"):
         current_rpm = _format_number(device_status.current_fan_rpm)
-        all_items.append(
-            ("FAN CONTROL", "Current RPM", current_rpm)
-        )
+        all_items.append(("FAN CONTROL", "Current RPM", current_rpm))
     if hasattr(device_status, "fan_pwm"):
         pwm_pct = f"{_format_number(device_status.fan_pwm)}%"
         all_items.append(("FAN CONTROL", "PWM", pwm_pct))
@@ -471,14 +467,10 @@ def print_device_status(device_status: Any) -> None:
     # Compressor & Valve
     if hasattr(device_status, "mixing_rate"):
         mixing = _format_number(device_status.mixing_rate)
-        all_items.append(
-            ("COMPRESSOR & VALVE", "Mixing Rate", mixing)
-        )
+        all_items.append(("COMPRESSOR & VALVE", "Mixing Rate", mixing))
     if hasattr(device_status, "eev_step"):
         eev = _format_number(device_status.eev_step)
-        all_items.append(
-            ("COMPRESSOR & VALVE", "EEV Step", eev)
-        )
+        all_items.append(("COMPRESSOR & VALVE", "EEV Step", eev))
     if hasattr(device_status, "target_super_heat"):
         all_items.append(
             (
@@ -591,9 +583,7 @@ def print_device_status(device_status: Any) -> None:
     # WiFi & Network
     if hasattr(device_status, "wifi_rssi"):
         rssi_dbm = f"{_format_number(device_status.wifi_rssi)} dBm"
-        all_items.append(
-            ("WiFi & NETWORK", "RSSI", rssi_dbm)
-        )
+        all_items.append(("WiFi & NETWORK", "RSSI", rssi_dbm))
 
     # Demand Response & TOU
     if hasattr(device_status, "dr_event_status"):
