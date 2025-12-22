@@ -103,7 +103,8 @@ class DeviceInfoCache:
         async with self._lock:
             if device_mac in self._cache:
                 del self._cache[device_mac]
-                _logger.debug(f"Invalidated cache for {redact_mac(device_mac)}")
+                redacted = redact_mac(device_mac)
+                _logger.debug(f"Invalidated cache for {redacted}")
 
     async def clear(self) -> None:
         """Clear all cached device information."""
