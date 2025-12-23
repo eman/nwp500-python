@@ -52,9 +52,9 @@ Basic Usage
         if device:
             # Access status information
             status = device.status
-            print(f"Water Temperature: {status.dhwTemperature}°F")
-            print(f"Tank Charge: {status.dhwChargePer}%")
-            print(f"Power Consumption: {status.currentInstPower}W")
+            print(f"Water Temperature: {status.dhw_temperature}°F")
+            print(f"Tank Charge: {status.dhw_charge_per}%")
+            print(f"Power Consumption: {status.current_inst_power}W")
             
             # Set temperature
             await api_client.set_device_temperature(device, 130)

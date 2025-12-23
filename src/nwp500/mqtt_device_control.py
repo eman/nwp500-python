@@ -366,6 +366,7 @@ class MqttDeviceController:
             device, CommandCode.DHW_MODE, "dhw-mode", param
         )
 
+    @requires_capability("anti_legionella_setting_use")
     async def enable_anti_legionella(
         self, device: Device, period_days: int
     ) -> int:
@@ -375,6 +376,7 @@ class MqttDeviceController:
             device, CommandCode.ANTI_LEGIONELLA_ON, "anti-leg-on", [period_days]
         )
 
+    @requires_capability("anti_legionella_setting_use")
     async def disable_anti_legionella(self, device: Device) -> int:
         """Disable the Anti-Legionella disinfection cycle."""
         return await self._mode_command(

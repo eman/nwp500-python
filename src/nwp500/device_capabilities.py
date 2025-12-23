@@ -42,6 +42,9 @@ class DeviceCapabilityChecker:
         "program_reservation_use": lambda f: bool(f.program_reservation_use),
         "recirculation_use": lambda f: bool(f.recirculation_use),
         "recirc_reservation_use": lambda f: bool(f.recirc_reservation_use),
+        "anti_legionella_setting_use": lambda f: bool(
+            f.anti_legionella_setting_use
+        ),
     }
 
     @classmethod

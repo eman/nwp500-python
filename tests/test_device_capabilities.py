@@ -82,6 +82,7 @@ class TestDeviceCapabilityChecker:
         mock_feature.program_reservation_use = False
         mock_feature.recirculation_use = True
         mock_feature.recirc_reservation_use = False
+        mock_feature.anti_legionella_setting_use = True
 
         controls = DeviceCapabilityChecker.get_available_controls(mock_feature)
 
@@ -92,7 +93,8 @@ class TestDeviceCapabilityChecker:
         assert controls["program_reservation_use"] is False
         assert controls["recirculation_use"] is True
         assert controls["recirc_reservation_use"] is False
-        assert len(controls) == 7
+        assert controls["anti_legionella_setting_use"] is True
+        assert len(controls) == 8
 
     def test_register_capability(self) -> None:
         """Test custom capability registration."""
