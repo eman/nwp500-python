@@ -53,6 +53,12 @@ Always run these checks before finalizing changes to ensure your code will pass 
 
 This prevents "passes locally but fails in CI" issues.
 
+**IMPORTANT - Error Fixing Policy**: 
+- **Fix ALL linting and type errors**, even if they're in files you didn't modify or weren't introduced by your changes
+- Pre-existing errors must be fixed as part of the task
+- It's acceptable to fix unrelated errors in the codebase while completing a task
+- Do not leave type errors or linting issues unfixed
+
 **Important**: When updating CHANGELOG.rst or any file with dates, always use `date +"%Y-%m-%d"` to get the correct current date. Never hardcode or guess dates.
 
 ### Before Completing a Task - REQUIRED VALIDATION
@@ -64,6 +70,8 @@ This prevents "passes locally but fails in CI" issues.
 3. **Unit tests**: `pytest` - MUST pass before completion (unless tests don't exist for the feature)
 
 **Do not mark a task as complete or create a PR without running all three checks.**
+
+**CRITICAL - Fix ALL Errors**: Fix all linting and type errors reported by these tools, regardless of whether they exist in files you modified or were introduced by your changes. Pre-existing errors must be fixed as part of completing any task. This ensures a clean, passing test suite.
 
 These checks prevent "works locally but fails in CI" issues and catch integration problems early.
 

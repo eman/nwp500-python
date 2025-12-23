@@ -51,7 +51,7 @@ async def power_control_example():
                 logger.info(f"Current DHW temperature: {status.dhw_temperature}°F")
 
             await mqtt_client.subscribe_device_status(device, on_current_status)
-            await mqtt_client.request_device_status(device)
+            await mqtt_client.control.request_device_status(device)
             await asyncio.sleep(3)  # Wait for current status
 
             # Turn device off
@@ -67,7 +67,7 @@ async def power_control_example():
                 power_off_complete = True
 
             await mqtt_client.subscribe_device_status(device, on_power_off_response)
-            await mqtt_client.set_power(device, power_on=False)
+            await mqtt_client.control.set_power(device, power_on=False)
 
             # Wait for confirmation
             for i in range(15):  # Wait up to 15 seconds
@@ -96,7 +96,7 @@ async def power_control_example():
                 power_on_complete = True
 
             await mqtt_client.subscribe_device_status(device, on_power_on_response)
-            await mqtt_client.set_power(device, power_on=True)
+            await mqtt_client.control.set_power(device, power_on=True)
 
             # Wait for confirmation
             for i in range(15):  # Wait up to 15 seconds
@@ -132,6 +132,6 @@ if __name__ == "__main__":
     # asyncio.run(power_control_example())
 
     print("CLI equivalent commands:")
-    print("  python -m nwp500.cli --power-off")
-    print("  python -m nwp500.cli --power-on")
-    print("  python -m nwp500.cli --power-on --status")
+    print("  python -m nwp500.cli power off")
+    print("  python -m nwp500.cli power on")
+    print("  python -m nwp500.cli power on && python -m nwp500.cli status")

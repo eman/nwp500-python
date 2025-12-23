@@ -92,7 +92,7 @@ class ResilientMqttClient:
             await self.mqtt_client.subscribe_device_status(
                 self.device, self.status_callback
             )
-            await self.mqtt_client.start_periodic_device_status_requests(self.device)
+            await self.mqtt_client.start_periodic_requests(self.device)
             logger.info("Subscriptions restored")
 
     async def _handle_reconnection_failed(self, attempts):

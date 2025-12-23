@@ -68,12 +68,12 @@ async def main() -> None:
         await mqtt_client.subscribe(response_topic, on_reservation_update)
 
         print("Sending reservation program update...")
-        await mqtt_client.update_reservations(
+        await mqtt_client.control.update_reservations(
             device, [weekday_reservation], enabled=True
         )
 
         print("Requesting current reservation program...")
-        await mqtt_client.request_reservations(device)
+        await mqtt_client.control.request_reservations(device)
 
         print("Waiting up to 15 seconds for reservation responses...")
         await asyncio.sleep(15)

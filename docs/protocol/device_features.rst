@@ -365,7 +365,7 @@ Usage Example
                print(f"Available: {', '.join(features)}")
            
            await mqtt_client.subscribe_device_feature(device, analyze_features)
-           await mqtt_client.request_device_info(device)
+           await mqtt_client.control.request_device_info(device)
            
            # Wait for response
            await asyncio.sleep(5)

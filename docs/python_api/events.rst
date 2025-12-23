@@ -114,7 +114,7 @@ Emitted when MQTT connection is restored.
    def handle_reconnect(return_code, session_present):
        print("Connection restored")
        # Re-request status, resume operations
-       await mqtt.request_device_status(device)
+       await mqtt.control.request_device_status(device)
 
    mqtt.on('connection_resumed', handle_reconnect)
 

@@ -715,7 +715,7 @@ Device Control Integration
            diagnostics.record_publish(queued=not mqtt_client.is_connected)
            
            # Set temperature
-           await mqtt_client.set_dhw_temperature(device, 140.0)
+           await mqtt_client.control.set_dhw_temperature(device, 140.0)
            
            if not mqtt_client.is_connected:
                _logger.info(

@@ -15,8 +15,8 @@ import asyncio
 import json
 import logging
 import uuid
-from collections.abc import Callable, Sequence
-from typing import TYPE_CHECKING, Any
+from collections.abc import Callable
+from typing import TYPE_CHECKING, Any, cast
 
 from awscrt import mqtt
 from awscrt.exceptions import AwsCrtError
@@ -532,23 +532,37 @@ class NavienMqttClient(EventEmitter):
                 )
                 self._reconnection_handler.enable()
 
-                # Initialize subscription manager
+                # Initialize shared device info cache and client_id
+                from .device_info_cache import DeviceInfoCache
+
                 client_id = self.config.client_id or ""
+                device_info_cache = DeviceInfoCache(update_interval_minutes=30)
+
+                # Initialize subscription manager with cache
                 self._subscription_manager = MqttSubscriptionManager(
                     connection=self._connection,
                     client_id=client_id,
                     event_emitter=self,
                     schedule_coroutine=self._schedule_coroutine,
+                    device_info_cache=device_info_cache,
                 )
 
-                # Initialize device controller
+                # Initialize device controller with cache
                 self._device_controller = MqttDeviceController(
                     client_id=client_id,
                     session_id=self._session_id,
                     publish_func=self._connection_manager.publish,
+                    device_info_cache=device_info_cache,
                 )
 
-                # Initialize periodic request manager
+                # Set the auto-request callback on the controller
+                # Wrap ensure_device_info_cached to match callback signature
+                async def ensure_callback(device: Device) -> bool:
+                    return await self.ensure_device_info_cached(device)
+
+                self._device_controller._ensure_device_info_callback = (
+                    ensure_callback
+                )
                 # Note: These will be implemented later when we
                 # delegate device control methods
                 self._periodic_manager = MqttPeriodicRequestManager(
@@ -834,382 +848,27 @@ class NavienMqttClient(EventEmitter):
             device, callback
         )
 
+    async def _delegate_subscription(self, method_name: str, *args: Any) -> int:
+        """Helper to delegate subscription to subscription manager."""
+        if not self._connected or not self._subscription_manager:
+            raise MqttNotConnectedError("Not connected to MQTT broker")
+        method = getattr(self._subscription_manager, method_name)
+        return cast(int, await method(*args))
+
     async def subscribe_device_status(
         self, device: Device, callback: Callable[[DeviceStatus], None]
     ) -> int:
-        """
-        Subscribe to device status messages with automatic parsing.
-
-        This method wraps the standard subscription with automatic parsing
-        of status messages into DeviceStatus objects. The callback will only
-        be invoked when a status message is received and successfully parsed.
-
-        Additionally, the client emits granular events for state changes:
-        - 'status_received': Every status update (DeviceStatus)
-        - 'temperature_changed': Temperature changed (old_temp, new_temp)
-        - 'mode_changed': Operation mode changed (old_mode, new_mode)
-        - 'power_changed': Power consumption changed (old_power, new_power)
-        - 'heating_started': Device started heating (status)
-        - 'heating_stopped': Device stopped heating (status)
-        - 'error_detected': Error code detected (error_code, status)
-        - 'error_cleared': Error code cleared (error_code)
-
-        Args:
-            device: Device object
-            callback: Callback function that receives DeviceStatus objects
-
-        Returns:
-            Subscription packet ID
-
-        Example (Traditional Callback)::
-
-            >>> def on_status(status: DeviceStatus):
-            ...     print(f"Temperature: {status.dhw_temperature}°F")
-            ...     print(f"Mode: {status.operation_mode}")
-            >>>
-            >>> await mqtt_client.subscribe_device_status(device, on_status)
-
-        Example (Event Emitter)::
-
-            >>> # Multiple handlers for same event
-            >>> mqtt_client.on('temperature_changed', log_temperature)
-            >>> mqtt_client.on('temperature_changed', update_ui)
-            >>>
-            >>> # State change events
-            >>> mqtt_client.on('heating_started', lambda s: print("Heating ON"))
-            >>> mqtt_client.on(
-            ...     'heating_stopped', lambda s: print("Heating OFF")
-            ... )
-            >>>
-            >>> # Subscribe to start receiving events
-            >>> await mqtt_client.subscribe_device_status(
-            ...     device, lambda s: None
-            ... )
-        """
-        if not self._connected or not self._subscription_manager:
-            raise MqttNotConnectedError("Not connected to MQTT broker")
-
-        # Delegate to subscription manager (it handles state change
-        # detection and events)
-        return await self._subscription_manager.subscribe_device_status(
-            device, callback
+        """Subscribe to device status messages with automatic parsing."""
+        return await self._delegate_subscription(
+            "subscribe_device_status", device, callback
         )
 
     async def subscribe_device_feature(
         self, device: Device, callback: Callable[[DeviceFeature], None]
     ) -> int:
-        """
-        Subscribe to device feature/info messages with automatic parsing.
-
-        This method wraps the standard subscription with automatic parsing
-        of feature messages into DeviceFeature objects. The callback will only
-        be invoked when a feature message is received and successfully parsed.
-
-        Feature messages contain device capabilities, firmware versions,
-        serial numbers, and configuration limits.
-
-        Additionally emits: 'feature_received' event with DeviceFeature object.
-
-        Args:
-            device: Device object
-            callback: Callback function that receives DeviceFeature objects
-
-        Returns:
-            Subscription packet ID
-
-        Example::
-
-            >>> def on_feature(feature: DeviceFeature):
-            ...     print(f"Serial: {feature.controllerSerialNumber}")
-            ...     print(f"FW Version: {feature.controllerSwVersion}")
-            ...     print(
-            ...         f"Temp Range: {feature.dhwTemperatureMin}-"
-            ...         f"{feature.dhwTemperatureMax}°F"
-            ...     )
-            >>>
-            >>> await mqtt_client.subscribe_device_feature(device, on_feature)
-
-            >>> # Or use event emitter
-            >>> mqtt_client.on(
-            ...     'feature_received',
-            ...     lambda f: print(f"FW: {f.controllerSwVersion}")
-            ... )
-            >>> await mqtt_client.subscribe_device_feature(
-            ...     device, lambda f: None
-            ... )
-        """
-        if not self._connected or not self._subscription_manager:
-            raise MqttNotConnectedError("Not connected to MQTT broker")
-
-        # Delegate to subscription manager
-        return await self._subscription_manager.subscribe_device_feature(
-            device, callback
-        )
-
-    async def request_device_status(self, device: Device) -> int:
-        """
-        Request general device status.
-
-        Args:
-            device: Device object
-
-        Returns:
-            Publish packet ID
-        """
-        if not self._connected or not self._device_controller:
-            raise MqttNotConnectedError("Not connected to MQTT broker")
-
-        return await self._device_controller.request_device_status(device)
-
-    async def request_device_info(self, device: Device) -> int:
-        """
-        Request device information.
-
-        Returns:
-            Publish packet ID
-        """
-        if not self._connected or not self._device_controller:
-            raise MqttNotConnectedError("Not connected to MQTT broker")
-
-        return await self._device_controller.request_device_info(device)
-
-    async def set_power(self, device: Device, power_on: bool) -> int:
-        """
-        Turn device on or off.
-
-        Args:
-            device: Device object
-            power_on: True to turn on, False to turn off
-            device_type: Device type (52 for NWP500)
-            additional_value: Additional value from device info
-
-        Returns:
-            Publish packet ID
-        """
-        if not self._connected or not self._device_controller:
-            raise MqttNotConnectedError("Not connected to MQTT broker")
-
-        return await self._device_controller.set_power(device, power_on)
-
-    async def set_dhw_mode(
-        self,
-        device: Device,
-        mode_id: int,
-        vacation_days: int | None = None,
-    ) -> int:
-        """
-        Set DHW (Domestic Hot Water) operation mode.
-
-        Args:
-            device: Device object
-            mode_id: Mode ID (1=Heat Pump Only, 2=Electric Only, 3=Energy Saver,
-                4=High Demand, 5=Vacation)
-            vacation_days: Number of vacation days (required for Vacation mode)
-
-        Returns:
-            Publish packet ID
-
-        Note:
-            Valid selectable mode IDs are 1, 2, 3, 4, and 5 (vacation).
-            Additional modes may appear in status responses:
-            - 0: Standby (device in idle state)
-            - 6: Power Off (device is powered off)
-
-            Mode descriptions:
-            - 1: Heat Pump Only (most efficient, slowest recovery)
-            - 2: Electric Only (least efficient, fastest recovery)
-            - 3: Energy Saver (balanced, good default)
-            - 4: High Demand (maximum heating capacity)
-            - 5: Vacation Mode (requires vacation_days parameter)
-        """
-        if not self._connected or not self._device_controller:
-            raise MqttNotConnectedError("Not connected to MQTT broker")
-
-        return await self._device_controller.set_dhw_mode(
-            device, mode_id, vacation_days
-        )
-
-    async def enable_anti_legionella(
-        self, device: Device, period_days: int
-    ) -> int:
-        """Enable Anti-Legionella disinfection with a 1-30 day cycle.
-
-        This command has been confirmed through HAR analysis of the
-        official Navien app.
-        When sent, the device responds with antiLegionellaUse=2 (enabled) and
-        antiLegionellaPeriod set to the specified value.
-
-        See docs/MQTT_MESSAGES.rst "Anti-Legionella Control" for the
-        authoritative
-        command code (33554472) and expected payload format:
-        {"mode": "anti-leg-on", "param": [<period_days>], "paramStr": ""}
-
-        Args:
-            device: The device to control
-            period_days: Days between disinfection cycles (1-30)
-
-        Returns:
-            The message ID of the published command
-
-        Raises:
-            ValueError: If period_days is not in the valid range [1, 30]
-        """
-        if not self._connected or not self._device_controller:
-            raise MqttNotConnectedError("Not connected to MQTT broker")
-
-        return await self._device_controller.enable_anti_legionella(
-            device, period_days
-        )
-
-    async def disable_anti_legionella(self, device: Device) -> int:
-        """Disable the Anti-Legionella disinfection cycle.
-
-        This command has been confirmed through HAR analysis of the
-        official Navien app.
-        When sent, the device responds with antiLegionellaUse=1 (disabled) while
-        antiLegionellaPeriod retains its previous value.
-
-        The correct command code is 33554471 (not 33554473 as
-        previously assumed).
-
-        See docs/MQTT_MESSAGES.rst "Anti-Legionella Control" section
-        for details.
-
-        Returns:
-            The message ID of the published command
-        """
-        if not self._connected or not self._device_controller:
-            raise MqttNotConnectedError("Not connected to MQTT broker")
-
-        return await self._device_controller.disable_anti_legionella(device)
-
-    async def set_dhw_temperature(
-        self, device: Device, temperature_f: float
-    ) -> int:
-        """
-        Set DHW target temperature.
-
-        Args:
-            device: Device object
-            temperature_f: Target temperature in Fahrenheit (95-150°F).
-                Automatically converted to the device's internal format.
-
-        Returns:
-            Publish packet ID
-
-        Raises:
-            MqttNotConnectedError: If not connected to broker
-            RangeValidationError: If temperature is outside 95-150°F range
-
-        Example:
-            await client.set_dhw_temperature(device, 140.0)
-        """
-        if not self._connected or not self._device_controller:
-            raise MqttNotConnectedError("Not connected to MQTT broker")
-
-        return await self._device_controller.set_dhw_temperature(
-            device, temperature_f
-        )
-
-    async def update_reservations(
-        self,
-        device: Device,
-        reservations: Sequence[dict[str, Any]],
-        *,
-        enabled: bool = True,
-    ) -> int:
-        """Update programmed reservations for temperature/mode changes."""
-        if not self._connected or not self._device_controller:
-            raise MqttNotConnectedError("Not connected to MQTT broker")
-
-        return await self._device_controller.update_reservations(
-            device, reservations, enabled=enabled
-        )
-
-    async def request_reservations(self, device: Device) -> int:
-        """Request the current reservation program from the device."""
-        if not self._connected or not self._device_controller:
-            raise MqttNotConnectedError("Not connected to MQTT broker")
-
-        return await self._device_controller.request_reservations(device)
-
-    async def configure_tou_schedule(
-        self,
-        device: Device,
-        controller_serial_number: str,
-        periods: Sequence[dict[str, Any]],
-        *,
-        enabled: bool = True,
-    ) -> int:
-        """Configure Time-of-Use pricing schedule via MQTT."""
-        if not self._connected or not self._device_controller:
-            raise MqttNotConnectedError("Not connected to MQTT broker")
-
-        return await self._device_controller.configure_tou_schedule(
-            device, controller_serial_number, periods, enabled=enabled
-        )
-
-    async def request_tou_settings(
-        self,
-        device: Device,
-        controller_serial_number: str,
-    ) -> int:
-        """Request current Time-of-Use schedule from the device."""
-        if not self._connected or not self._device_controller:
-            raise MqttNotConnectedError("Not connected to MQTT broker")
-
-        return await self._device_controller.request_tou_settings(
-            device, controller_serial_number
-        )
-
-    async def set_tou_enabled(self, device: Device, enabled: bool) -> int:
-        """Quickly toggle Time-of-Use functionality without
-        modifying the schedule."""
-        if not self._connected or not self._device_controller:
-            raise MqttNotConnectedError("Not connected to MQTT broker")
-
-        return await self._device_controller.set_tou_enabled(device, enabled)
-
-    async def request_energy_usage(
-        self, device: Device, year: int, months: list[int]
-    ) -> int:
-        """
-        Request daily energy usage data for specified month(s).
-
-        This retrieves historical energy usage data showing heat pump and
-        electric heating element consumption broken down by day. The response
-        includes both energy usage (Wh) and operating time (hours) for each
-        component.
-
-        Args:
-            device: Device object
-            year: Year to query (e.g., 2025)
-            months: List of months to query (1-12). Can request multiple months.
-
-        Returns:
-            Publish packet ID
-
-        Example::
-
-            # Request energy usage for September 2025
-            await mqtt_client.request_energy_usage(
-                device,
-                year=2025,
-                months=[9]
-            )
-
-            # Request multiple months
-            await mqtt_client.request_energy_usage(
-                device,
-                year=2025,
-                months=[7, 8, 9]
-            )
-        """
-        if not self._connected or not self._device_controller:
-            raise MqttNotConnectedError("Not connected to MQTT broker")
-
-        return await self._device_controller.request_energy_usage(
-            device, year, months
+        """Subscribe to device feature/info messages with automatic parsing."""
+        return await self._delegate_subscription(
+            "subscribe_device_feature", device, callback
         )
 
     async def subscribe_energy_usage(
@@ -1217,59 +876,91 @@ class NavienMqttClient(EventEmitter):
         device: Device,
         callback: Callable[[EnergyUsageResponse], None],
     ) -> int:
-        """
-        Subscribe to energy usage query responses with automatic parsing.
-
-        This method wraps the standard subscription with automatic parsing
-        of energy usage responses into EnergyUsageResponse objects.
-
-        Args:
-            device: Device object
-            callback: Callback function that receives
-                EnergyUsageResponse objects
-
-        Returns:
-            Subscription packet ID
-
-        Example:
-            >>> def on_energy_usage(energy: EnergyUsageResponse):
-            ...     print(f"Total Usage: {energy.total.total_usage} Wh")
-            ...     print(
-            ...         f"Heat Pump: "
-            ...         f"{energy.total.heat_pump_percentage:.1f}%"
-            ...     )
-            ...     print(
-            ...         f"Electric: "
-            ...         f"{energy.total.heat_element_percentage:.1f}%"
-            ...     )
-            >>>
-            >>> await mqtt_client.subscribe_energy_usage(
-            ...     device, on_energy_usage
-            ... )
-            >>> await mqtt_client.request_energy_usage(device, 2025, [9])
-        """
-        if not self._connected or not self._subscription_manager:
-            raise MqttNotConnectedError("Not connected to MQTT broker")
-
-        # Delegate to subscription manager
-        return await self._subscription_manager.subscribe_energy_usage(
-            device, callback
+        """Subscribe to energy usage query responses with automatic parsing."""
+        return await self._delegate_subscription(
+            "subscribe_energy_usage", device, callback
         )
 
-    async def signal_app_connection(self, device: Device) -> int:
+    async def ensure_device_info_cached(
+        self, device: Device, timeout: float = 30.0
+    ) -> bool:
         """
-        Signal that the app has connected.
+        Ensure device info is cached, requesting if necessary.
+
+        Called by control commands and CLI to ensure device
+        capabilities are available before execution.
 
         Args:
-            device: Device object
+            device: Device to ensure info for
+            timeout: Maximum time to wait for response (default: 30 seconds)
 
         Returns:
-            Publish packet ID
+            True if device info was successfully cached, False on timeout
+
+        Raises:
+            MqttNotConnectedError: If not connected
         """
         if not self._connected or not self._device_controller:
             raise MqttNotConnectedError("Not connected to MQTT broker")
 
-        return await self._device_controller.signal_app_connection(device)
+        from .mqtt_utils import redact_mac
+
+        mac = device.device_info.mac_address
+        redacted_mac = redact_mac(mac)
+        cached = await self._device_controller._device_info_cache.get(mac)
+        if cached is not None:
+            return True
+
+        # Not cached, request and wait
+        future: asyncio.Future[DeviceFeature] = (
+            asyncio.get_running_loop().create_future()
+        )
+
+        def on_feature(feature: DeviceFeature) -> None:
+            if not future.done():
+                _logger.info(f"Device feature received for {redacted_mac}")
+                future.set_result(feature)
+
+        _logger.info(f"Ensuring device info cached for {redacted_mac}")
+        await self.subscribe_device_feature(device, on_feature)
+        try:
+            _logger.info(f"Requesting device info from {redacted_mac}")
+            await self.control.request_device_info(device)
+            _logger.info(f"Waiting for device feature (timeout={timeout}s)")
+            feature = await asyncio.wait_for(future, timeout=timeout)
+            # Cache the feature immediately
+            await self._device_controller._device_info_cache.set(mac, feature)
+            return True
+        except TimeoutError:
+            _logger.error(
+                f"Timed out waiting for device info after {timeout}s for "
+                f"{redacted_mac}"
+            )
+            return False
+        finally:
+            # Note: We don't unsubscribe token here because it might
+            # interfere with other subscribers if we're not careful.
+            # But the subscription manager handles multiple callbacks.
+            pass
+
+    @property
+    def control(self) -> MqttDeviceController:
+        """
+        Get the device controller for sending commands.
+
+        The control property enforces that the client must be connected before
+        accessing any control methods. This is by design to ensure device
+        commands are only sent when MQTT connection is established and active.
+        Commands like request_device_info that populate the cache are not
+        accessible through this property and must be called separately if
+        needed before connection is fully established.
+
+        Raises:
+            MqttNotConnectedError: If client is not connected
+        """
+        if not self._connected or not self._device_controller:
+            raise MqttNotConnectedError("Not connected to MQTT broker")
+        return self._device_controller
 
     async def start_periodic_requests(
         self,
@@ -1279,37 +970,7 @@ class NavienMqttClient(EventEmitter):
     ) -> None:
         """
         Start sending periodic requests for device information or status.
-
-        This optional helper continuously sends requests at a
-        specified interval.
-        It can be used to keep device information or status up-to-date.
-
-        Args:
-            device: Device object
-            request_type: Type of request (DEVICE_INFO or DEVICE_STATUS)
-            period_seconds: Time between requests in seconds
-                (default: 300 = 5 minutes)
-
-        Example:
-            >>> # Start periodic status requests (default)
-            >>> await mqtt_client.start_periodic_requests(device)
-            >>>
-            >>> # Start periodic device info requests
-            >>> await mqtt_client.start_periodic_requests(
-            ...     device,
-            ...     request_type=PeriodicRequestType.DEVICE_INFO
-            ... )
-            >>>
-            >>> # Custom period: request every 60 seconds
-            >>> await mqtt_client.start_periodic_requests(
-            ...     device,
-            ...     period_seconds=60
-            ... )
-
-        Note:
-            - Only one periodic task per request type per device
-            - Call stop_periodic_requests() to stop a task
-            - All tasks automatically stop when client disconnects
+        ...
         """
         if not self._periodic_manager:
             raise MqttConnectionError(
@@ -1327,21 +988,7 @@ class NavienMqttClient(EventEmitter):
     ) -> None:
         """
         Stop sending periodic requests for a device.
-
-        Args:
-            device: Device object
-            request_type: Type of request to stop. If None, stops all types
-                          for this device.
-
-        Example:
-            >>> # Stop specific request type
-            >>> await mqtt_client.stop_periodic_requests(
-            ...     device,
-            ...     PeriodicRequestType.DEVICE_STATUS
-            ... )
-            >>>
-            >>> # Stop all periodic requests for device
-            >>> await mqtt_client.stop_periodic_requests(device)
+        ...
         """
         if not self._periodic_manager:
             raise MqttConnectionError(
@@ -1355,107 +1002,15 @@ class NavienMqttClient(EventEmitter):
     async def _stop_all_periodic_tasks(self) -> None:
         """
         Stop all periodic tasks.
-
-        This is called internally when reconnection fails permanently
-        to reduce log noise from tasks trying to send requests while
-        disconnected.
+        ...
         """
         # Delegate to public method with specific reason
         await self.stop_all_periodic_tasks(_reason="connection failure")
 
-    # Convenience methods
-    async def start_periodic_device_info_requests(
-        self, device: Device, period_seconds: float = 300.0
-    ) -> None:
-        """
-        Start sending periodic device info requests.
-
-        This is a convenience wrapper around start_periodic_requests().
-
-        Args:
-            device: Device object
-            period_seconds: Time between requests in seconds
-                (default: 300 = 5 minutes)
-        """
-        if not self._periodic_manager:
-            raise MqttConnectionError(
-                "Periodic request manager not initialized"
-            )
-
-        await self._periodic_manager.start_periodic_device_info_requests(
-            device, period_seconds
-        )
-
-    async def start_periodic_device_status_requests(
-        self, device: Device, period_seconds: float = 300.0
-    ) -> None:
-        """
-        Start sending periodic device status requests.
-
-        This is a convenience wrapper around start_periodic_requests().
-
-        Args:
-            device: Device object
-            period_seconds: Time between requests in seconds
-                (default: 300 = 5 minutes)
-        """
-        if not self._periodic_manager:
-            raise MqttConnectionError(
-                "Periodic request manager not initialized"
-            )
-
-        await self._periodic_manager.start_periodic_device_status_requests(
-            device, period_seconds
-        )
-
-    async def stop_periodic_device_info_requests(self, device: Device) -> None:
-        """
-        Stop sending periodic device info requests for a device.
-
-        This is a convenience wrapper around stop_periodic_requests().
-
-        Args:
-            device: Device object
-        """
-        if not self._periodic_manager:
-            raise MqttConnectionError(
-                "Periodic request manager not initialized"
-            )
-
-        await self._periodic_manager.stop_periodic_device_info_requests(device)
-
-    async def stop_periodic_device_status_requests(
-        self, device: Device
-    ) -> None:
-        """
-        Stop sending periodic device status requests for a device.
-
-        This is a convenience wrapper around stop_periodic_requests().
-
-        Args:
-            device: Device object
-        """
-        if not self._periodic_manager:
-            raise MqttConnectionError(
-                "Periodic request manager not initialized"
-            )
-
-        await self._periodic_manager.stop_periodic_device_status_requests(
-            device
-        )
-
     async def stop_all_periodic_tasks(self, _reason: str | None = None) -> None:
         """
         Stop all periodic request tasks.
-
-        This is automatically called when disconnecting.
-
-        Args:
-            _reason: Internal parameter for logging context
-                (e.g., "connection failure")
-
-        Example:
-            >>> await mqtt_client.stop_all_periodic_tasks()
+        ...
         """
         if not self._periodic_manager:
             raise MqttConnectionError(
@@ -1503,9 +1058,7 @@ class NavienMqttClient(EventEmitter):
     def clear_command_queue(self) -> int:
         """
         Clear all queued commands.
-
-        Returns:
-            Number of commands that were cleared
+        ...
         """
         if self._command_queue:
             count = self._command_queue.count
@@ -1518,18 +1071,7 @@ class NavienMqttClient(EventEmitter):
     async def reset_reconnect(self) -> None:
         """
         Reset reconnection state and trigger a new reconnection attempt.
-
-        This method resets the reconnection attempt counter and initiates
-        a new reconnection cycle. Useful for implementing custom recovery
-        logic after max reconnection attempts have been exhausted.
-
-        Example:
-            >>> # In a reconnection_failed event handler
-            >>> await mqtt_client.reset_reconnect()
-
-        Note:
-            This should typically only be called after a reconnection_failed
-            event, not during normal operation.
+        ...
         """
         if self._reconnection_handler:
             self._reconnection_handler.reset()

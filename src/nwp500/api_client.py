@@ -5,7 +5,7 @@ This module provides an async HTTP client for device management and control.
 """
 
 import logging
-from typing import Any, Self
+from typing import Any, Self, cast
 
 import aiohttp
 
@@ -70,15 +70,14 @@ class NavienAPIClient:
 
         self.base_url = base_url.rstrip("/")
         self._auth_client = auth_client
-        self._auth_client = auth_client
-        _session = session or auth_client._session
-        if _session is None:
-            raise ValueError("auth_client must have an active session")
-        self._session = _session
-        self._owned_session = (
-            False  # Never own session when auth_client is provided
-        )
-        self._owned_auth = False  # Never own auth_client
+        self._session = session or getattr(auth_client, "_session", None)
+        if self._session is None:
+            raise ValueError(
+                "auth_client must have an active session or a session "
+                "must be provided"
+            )
+        self._owned_session = False
+        self._owned_auth = False
 
     async def __aenter__(self) -> Self:
         """Enter async context manager."""
@@ -92,8 +91,8 @@ class NavienAPIClient:
         self,
         method: str,
         endpoint: str,
-        json_data: dict[str, Any | None] = None,
-        params: dict[str, Any | None] = None,
+        json_data: dict[str, Any | None] | None = None,
+        params: dict[str, Any | None] | None = None,
         retry_on_auth_failure: bool = True,
     ) -> dict[str, Any]:
         """
@@ -129,10 +128,31 @@ class NavienAPIClient:
 
         _logger.debug(f"{method} {url}")
 
+        # Filter out None values from params/json_data for aiohttp
+        # compatibility
+        clean_params: dict[str, Any] | None = None
+        clean_json_data: dict[str, Any] | None = None
+
+        if params:
+            clean_params = {k: v for k, v in params.items() if v is not None}
+        if json_data:
+            clean_json_data = {
+                k: v for k, v in json_data.items() if v is not None
+            }
+
         try:
-            async with self._session.request(
-                method, url, headers=headers, json=json_data, params=params
+            _logger.debug(f"Starting {method} request to {url}")
+            session = cast(aiohttp.ClientSession, self._session)
+            async with session.request(
+                method,
+                url,
+                headers=headers,
+                json=clean_json_data,
+                params=clean_params,
             ) as response:
+                _logger.debug(
+                    f"Response received from {url}: {response.status}"
+                )
                 response_data: dict[str, Any] = await response.json()
 
                 # Check for API errors
@@ -143,7 +163,7 @@ class NavienAPIClient:
                     # If we get a 401 and haven't retried yet, try refreshing
                     # token
                     if code == 401 and retry_on_auth_failure:
-                        _logger.warning(
+                        _logger.info(
                             "Received 401 Unauthorized. "
                             "Attempting to refresh token..."
                         )

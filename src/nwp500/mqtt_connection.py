@@ -321,7 +321,7 @@ class MqttConnection:
     async def publish(
         self,
         topic: str,
-        payload: str | dict[str, Any, Any],
+        payload: str | dict[str, Any],
         qos: mqtt.QoS = mqtt.QoS.AT_LEAST_ONCE,
     ) -> int:
         """
@@ -347,13 +347,9 @@ class MqttConnection:
         # Convert payload to bytes if needed
         if isinstance(payload, dict):
             payload_bytes = json.dumps(payload).encode("utf-8")
-        elif isinstance(payload, str):
-            payload_bytes = payload.encode("utf-8")
-        elif isinstance(payload, bytes):
-            payload_bytes = payload
         else:
-            # Try to JSON encode other types
-            payload_bytes = json.dumps(payload).encode("utf-8")
+            # payload is str
+            payload_bytes = payload.encode("utf-8")
 
         # Publish and get the concurrent.futures.Future
         publish_future, packet_id = self._connection.publish(

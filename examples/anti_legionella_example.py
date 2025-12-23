@@ -116,7 +116,7 @@ async def main() -> None:
         print("=" * 70)
         status_received.clear()
         expected_command = CommandCode.STATUS_REQUEST
-        await mqtt_client.request_device_status(device)
+        await mqtt_client.control.request_device_status(device)
 
         try:
             await asyncio.wait_for(status_received.wait(), timeout=10)
@@ -134,7 +134,7 @@ async def main() -> None:
         print("=" * 70)
         status_received.clear()
         expected_command = CommandCode.ANTI_LEGIONELLA_ON
-        await mqtt_client.enable_anti_legionella(device, period_days=7)
+        await mqtt_client.control.enable_anti_legionella(device, period_days=7)
 
         try:
             await asyncio.wait_for(status_received.wait(), timeout=10)
@@ -152,7 +152,7 @@ async def main() -> None:
         print("=" * 70)
         status_received.clear()
         expected_command = CommandCode.ANTI_LEGIONELLA_OFF
-        await mqtt_client.disable_anti_legionella(device)
+        await mqtt_client.control.disable_anti_legionella(device)
 
         try:
             await asyncio.wait_for(status_received.wait(), timeout=10)
@@ -169,7 +169,7 @@ async def main() -> None:
         print("=" * 70)
         status_received.clear()
         expected_command = CommandCode.ANTI_LEGIONELLA_ON
-        await mqtt_client.enable_anti_legionella(device, period_days=14)
+        await mqtt_client.control.enable_anti_legionella(device, period_days=14)
 
         try:
             await asyncio.wait_for(status_received.wait(), timeout=10)

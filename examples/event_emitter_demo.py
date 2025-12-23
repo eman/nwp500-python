@@ -219,7 +219,7 @@ async def main():
 
             # Step 5: Request initial status
             print("7. Requesting initial status...")
-            await mqtt_client.request_device_status(device)
+            await mqtt_client.control.request_device_status(device)
             print("   [SUCCESS] Request sent")
             print()
 

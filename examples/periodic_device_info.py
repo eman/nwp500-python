@@ -89,13 +89,13 @@ async def main():
 
     # Example 1: Default period (300 seconds = 5 minutes)
     print("\n3. Starting periodic device info requests (every 5 minutes)...")
-    await mqtt.start_periodic_device_info_requests(
+    await mqtt.start_periodic_requests(
         device=device  # period_seconds defaults to 300
     )
 
     # Send initial request to get immediate response
     print("   Sending initial request...")
-    await mqtt.request_device_info(device)
+    await mqtt.control.request_device_info(device)
 
     # Wait for a few updates with the default period
     print("   Waiting 15 seconds for response...")
@@ -103,14 +103,14 @@ async def main():
 
     # Example 2: Custom period (20 seconds for demonstration)
     print("\n4. Changing to faster period (every 20 seconds)...")
-    await mqtt.start_periodic_device_info_requests(
+    await mqtt.start_periodic_requests(
         device=device,
         period_seconds=20,  # Request every 20 seconds
     )
 
     # Send initial request for immediate feedback
     print("   Sending initial request...")
-    await mqtt.request_device_info(device)
+    await mqtt.control.request_device_info(device)
 
     # Monitor for 2 minutes
     print("\n   Monitoring for 2 minutes...")
@@ -122,7 +122,7 @@ async def main():
 
     # Example 3: Stop periodic requests
     print("\n5. Stopping periodic requests...")
-    await mqtt.stop_periodic_device_info_requests(device)
+    await mqtt.stop_periodic_requests(device)
 
     print("\n   Waiting 25 seconds (no new requests should be sent)...")
     for i in range(5):  # 5 x 5 seconds = 25 seconds

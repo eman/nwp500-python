@@ -148,7 +148,7 @@ class EventEmitter:
         )
 
     def off(
-        self, event: str, callback: Callable[..., Any | None] = None
+        self, event: str, callback: Callable[..., Any | None] | None = None
     ) -> int:
         """
         Remove event listener(s).

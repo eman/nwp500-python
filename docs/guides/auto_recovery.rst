@@ -89,7 +89,7 @@ Create a new MQTT client instance when reconnection fails.
        
        # Restore subscriptions
        await mqtt_client.subscribe_device_status(device, on_status)
-       await mqtt_client.start_periodic_device_status_requests(device)
+       await mqtt_client.start_periodic_requests(device)
        
        return mqtt_client
 
@@ -125,7 +125,7 @@ Refresh authentication tokens before retrying (handles token expiry).
        
        # Restore subscriptions
        await mqtt_client.subscribe_device_status(device, on_status)
-       await mqtt_client.start_periodic_device_status_requests(device)
+       await mqtt_client.start_periodic_requests(device)
 
 **Pros:** Handles token expiry, more robust
 
@@ -183,7 +183,7 @@ Use exponential backoff between recovery attempts with token refresh.
                await self.mqtt_client.subscribe_device_status(
                    self.device, self.callbacks['status']
                )
-               await self.mqtt_client.start_periodic_device_status_requests(
+               await self.mqtt_client.start_periodic_requests(
                    self.device
                )
        

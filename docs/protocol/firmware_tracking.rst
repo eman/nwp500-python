@@ -89,17 +89,17 @@ You can get your firmware versions by running:
                print(f"Panel SW: {feature.panelSwVersion}")
                print(f"WiFi SW: {feature.wifiSwVersion}")
            
-           await mqtt.request_device_info(feature_callback)
+           await mqtt.control.request_device_info(feature_callback)
            await asyncio.sleep(2)
            await mqtt.disconnect()
 
    asyncio.run(get_firmware())
 
-Or using the CLI (if implemented):
+Or using the CLI:
 
 .. code-block:: bash
 
-   nwp-cli --device-info
+   python3 -m nwp500.cli info
 
 Please report issues at: https://github.com/eman/nwp500-python/issues
 

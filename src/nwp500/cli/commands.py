@@ -3,462 +3,308 @@
 import asyncio
 import json
 import logging
-from typing import Any
+from collections.abc import Callable, Coroutine
+from typing import Any, TypeVar, cast
 
-from nwp500 import Device, DeviceFeature, DeviceStatus, NavienMqttClient
-from nwp500.exceptions import MqttError, Nwp500Error, ValidationError
+from nwp500 import (
+    Device,
+    DeviceFeature,
+    DeviceStatus,
+    EnergyUsageResponse,
+    NavienMqttClient,
+)
+from nwp500.exceptions import (
+    DeviceError,
+    MqttError,
+    Nwp500Error,
+    RangeValidationError,
+    ValidationError,
+)
+from nwp500.mqtt_utils import redact_serial
+from nwp500.topic_builder import MqttTopicBuilder
 
-from .output_formatters import _json_default_serializer
+from .output_formatters import (
+    print_device_info,
+    print_device_status,
+    print_energy_usage,
+    print_json,
+)
 
 _logger = logging.getLogger(__name__)
+
+T = TypeVar("T")
+
+
+async def _wait_for_response(
+    subscribe_func: Callable[
+        [Device, Callable[[Any], None]], Coroutine[Any, Any, Any]
+    ],
+    device: Device,
+    action_func: Callable[[], Coroutine[Any, Any, Any]],
+    timeout: float = 10.0,
+    action_name: str = "operation",
+) -> Any:
+    """Generic helper to wait for a specific MQTT response."""
+    future = asyncio.get_running_loop().create_future()
+
+    def callback(res: Any) -> None:
+        if not future.done():
+            future.set_result(res)
+
+    await subscribe_func(device, callback)
+    _logger.info(f"Requesting {action_name}...")
+    await action_func()
+
+    try:
+        return await asyncio.wait_for(future, timeout=timeout)
+    except TimeoutError:
+        _logger.error(f"Timed out waiting for {action_name} response.")
+        raise
+
+
+async def _handle_command_with_status_feedback(
+    mqtt: NavienMqttClient,
+    device: Device,
+    action_func: Callable[[], Coroutine[Any, Any, Any]],
+    action_name: str,
+    success_msg: str,
+    print_status: bool = False,
+) -> DeviceStatus | None:
+    """Helper for commands that wait for a DeviceStatus response."""
+    try:
+        status: Any = await _wait_for_response(
+            mqtt.subscribe_device_status,
+            device,
+            action_func,
+            action_name=action_name,
+        )
+        if print_status:
+            print_json(status.model_dump())
+        _logger.info(success_msg)
+        print(success_msg)
+        return cast(DeviceStatus, status)
+    except (ValidationError, RangeValidationError) as e:
+        _logger.error(f"Invalid parameters: {e}")
+    except (MqttError, DeviceError, Nwp500Error) as e:
+        _logger.error(f"Error {action_name}: {e}")
+    except Exception as e:
+        _logger.error(f"Unexpected error {action_name}: {e}")
+    return None
 
 
 async def get_controller_serial_number(
     mqtt: NavienMqttClient, device: Device, timeout: float = 10.0
 ) -> str | None:
-    """Retrieve controller serial number from device.
-
-    Args:
-        mqtt: MQTT client instance
-        device: Device object
-        timeout: Timeout in seconds
-
-    Returns:
-        Controller serial number or None if timeout/error
-    """
-    future: asyncio.Future[str] = asyncio.get_running_loop().create_future()
-
-    def on_feature(feature: DeviceFeature) -> None:
-        if not future.done():
-            future.set_result(feature.controller_serial_number)
-
-    await mqtt.subscribe_device_feature(device, on_feature)
-    _logger.info("Requesting controller serial number...")
-    await mqtt.request_device_info(device)
-
+    """Retrieve controller serial number from device."""
     try:
-        serial_number = await asyncio.wait_for(future, timeout=timeout)
-        _logger.info(f"Controller serial number retrieved: {serial_number}")
-        return serial_number
-    except TimeoutError:
-        _logger.error("Timed out waiting for controller serial number.")
+        feature: Any = await _wait_for_response(
+            mqtt.subscribe_device_feature,
+            device,
+            lambda: mqtt.control.request_device_info(device),
+            timeout=timeout,
+            action_name="controller serial",
+        )
+        serial = cast(DeviceFeature, feature).controller_serial_number
+        _logger.info(
+            f"Controller serial number retrieved: {redact_serial(serial)}"
+        )
+        return serial
+    except Exception:
         return None
-
-
-async def handle_status_request(mqtt: NavienMqttClient, device: Device) -> None:
-    """Request device status once and print it."""
-    future = asyncio.get_running_loop().create_future()
-
-    def on_status(status: DeviceStatus) -> None:
-        if not future.done():
-            from .output_formatters import format_json_output
-
-            print(format_json_output(status.model_dump()))
-            future.set_result(None)
-
-    await mqtt.subscribe_device_status(device, on_status)
-    _logger.info("Requesting device status...")
-    await mqtt.request_device_status(device)
-
-    try:
-        await asyncio.wait_for(future, timeout=10)
-    except TimeoutError:
-        _logger.error("Timed out waiting for device status response.")
-
-
-async def handle_status_raw_request(
-    mqtt: NavienMqttClient, device: Device
-) -> None:
-    """Request device status once and print raw MQTT data (no conversions)."""
-    future = asyncio.get_running_loop().create_future()
-
-    # Subscribe to the raw MQTT topic to capture data before conversion
-    def raw_callback(topic: str, message: dict[str, Any]) -> None:
-        if not future.done():
-            # Extract and print the raw status portion
-            if "response" in message and "status" in message["response"]:
-                print(
-                    json.dumps(
-                        message["response"]["status"],
-                        indent=2,
-                        default=_json_default_serializer,
-                    )
-                )
-                future.set_result(None)
-            elif "status" in message:
-                print(
-                    json.dumps(
-                        message["status"],
-                        indent=2,
-                        default=_json_default_serializer,
-                    )
-                )
-                future.set_result(None)
-
-    # Subscribe to all device messages
-    await mqtt.subscribe_device(device, raw_callback)
-
-    _logger.info("Requesting device status (raw)...")
-    await mqtt.request_device_status(device)
-
-    try:
-        await asyncio.wait_for(future, timeout=10)
-    except TimeoutError:
-        _logger.error("Timed out waiting for device status response.")
-
-
-async def handle_device_info_request(
-    mqtt: NavienMqttClient, device: Device
-) -> None:
-    """
-    Request comprehensive device information via MQTT and print it.
-
-    This fetches detailed device information including firmware versions,
-    capabilities, temperature ranges, and feature availability - much more
-    comprehensive than basic API device data.
-    """
-    future = asyncio.get_running_loop().create_future()
-
-    def on_device_info(info: Any) -> None:
-        if not future.done():
-            from .output_formatters import format_json_output
-
-            print(format_json_output(info.model_dump()))
-            future.set_result(None)
-
-    await mqtt.subscribe_device_feature(device, on_device_info)
-    _logger.info("Requesting device information...")
-    await mqtt.request_device_info(device)
-
-    try:
-        await asyncio.wait_for(future, timeout=10)
-    except TimeoutError:
-        _logger.error("Timed out waiting for device info response.")
-
-
-async def handle_device_feature_request(
-    mqtt: NavienMqttClient, device: Device
-) -> None:
-    """Request device feature and capability information via MQTT.
-
-    Alias for handle_device_info_request. Both fetch the same data.
-    """
-    await handle_device_info_request(mqtt, device)
 
 
 async def handle_get_controller_serial_request(
     mqtt: NavienMqttClient, device: Device
 ) -> None:
     """Request and display just the controller serial number."""
-    serial_number = await get_controller_serial_number(mqtt, device)
-    if serial_number:
-        print(serial_number)
+    serial = await get_controller_serial_number(mqtt, device)
+    if serial:
+        print(serial)
     else:
         _logger.error("Failed to retrieve controller serial number.")
+
+
+async def _handle_info_request(
+    mqtt: NavienMqttClient,
+    device: Device,
+    subscribe_method: Callable[
+        [Device, Callable[[Any], None]], Coroutine[Any, Any, Any]
+    ],
+    request_method: Callable[[Device], Coroutine[Any, Any, Any]],
+    data_key: str,
+    action_name: str,
+    raw: bool = False,
+    formatter: Callable[[Any], None] | None = None,
+) -> None:
+    """Generic helper for requesting and displaying device information."""
+    try:
+        if not raw:
+            res = await _wait_for_response(
+                subscribe_method,
+                device,
+                lambda: request_method(device),
+                action_name=action_name,
+            )
+            if formatter:
+                formatter(res)
+            else:
+                print_json(res.model_dump())
+        else:
+            future = asyncio.get_running_loop().create_future()
+
+            def raw_cb(topic: str, message: dict[str, Any]) -> None:
+                if not future.done():
+                    res = message.get("response", {}).get(
+                        data_key
+                    ) or message.get(data_key)
+                    if res:
+                        print_json(res)
+                        future.set_result(None)
+
+            await mqtt.subscribe_device(device, raw_cb)
+            await request_method(device)
+            await asyncio.wait_for(future, timeout=10)
+    except Exception as e:
+        _logger.error(f"Failed to get {action_name}: {e}")
+
+
+async def handle_status_request(
+    mqtt: NavienMqttClient, device: Device, raw: bool = False
+) -> None:
+    """Request device status and print it."""
+    await _handle_info_request(
+        mqtt,
+        device,
+        mqtt.subscribe_device_status,
+        mqtt.control.request_device_status,
+        "status",
+        "device status",
+        raw,
+        formatter=print_device_status if not raw else None,
+    )
+
+
+async def handle_device_info_request(
+    mqtt: NavienMqttClient, device: Device, raw: bool = False
+) -> None:
+    """Request comprehensive device information."""
+    await _handle_info_request(
+        mqtt,
+        device,
+        mqtt.subscribe_device_feature,
+        mqtt.control.request_device_info,
+        "feature",
+        "device information",
+        raw,
+        formatter=print_device_info if not raw else None,
+    )
 
 
 async def handle_set_mode_request(
     mqtt: NavienMqttClient, device: Device, mode_name: str
 ) -> None:
-    """
-    Set device operation mode and display the response.
-
-    Args:
-        mqtt: MQTT client instance
-        device: Device to control
-        mode_name: Mode name (heat-pump, energy-saver, etc.)
-    """
-    # Map mode names to mode IDs
-    # Based on MQTT client documentation in set_dhw_mode method:
-    # - 1: Heat Pump Only (most efficient, slowest recovery)
-    # - 2: Electric Only (least efficient, fastest recovery)
-    # - 3: Energy Saver (balanced, good default)
-    # - 4: High Demand (maximum heating capacity)
+    """Set device operation mode."""
     mode_mapping = {
         "standby": 0,
-        "heat-pump": 1,  # Heat Pump Only
-        "electric": 2,  # Electric Only
-        "energy-saver": 3,  # Energy Saver
-        "high-demand": 4,  # High Demand
+        "heat-pump": 1,
+        "electric": 2,
+        "energy-saver": 3,
+        "high-demand": 4,
         "vacation": 5,
     }
-
-    mode_name_lower = mode_name.lower()
-    if mode_name_lower not in mode_mapping:
-        valid_modes = ", ".join(mode_mapping.keys())
-        _logger.error(f"Invalid mode '{mode_name}'. Valid modes: {valid_modes}")
+    mode_id = mode_mapping.get(mode_name.lower())
+    if mode_id is None:
+        _logger.error(
+            f"Invalid mode '{mode_name}'. Valid: {list(mode_mapping.keys())}"
+        )
         return
 
-    mode_id = mode_mapping[mode_name_lower]
-
-    # Set up callback to capture status response after mode change
-    future = asyncio.get_running_loop().create_future()
-    responses = []
-
-    def on_status_response(status: DeviceStatus) -> None:
-        if not future.done():
-            responses.append(status)
-            # Complete after receiving response
-            future.set_result(None)
-
-    # Subscribe to status updates to see the mode change result
-    await mqtt.subscribe_device_status(device, on_status_response)
-
-    try:
-        _logger.info(
-            f"Setting operation mode to '{mode_name}' (mode ID: {mode_id})..."
-        )
-
-        # Send the mode change command
-        await mqtt.set_dhw_mode(device, mode_id)
-
-        # Wait for status response (mode change confirmation)
-        try:
-            await asyncio.wait_for(future, timeout=15)
-
-            if responses:
-                status = responses[0]
-                from .output_formatters import format_json_output
-
-                print(format_json_output(status.model_dump()))
-                _logger.info(
-                    f"Mode change successful. New mode: "
-                    f"{status.operation_mode.name}"
-                )
-            else:
-                _logger.warning(
-                    "Mode command sent but no status response received"
-                )
-
-        except TimeoutError:
-            _logger.error("Timed out waiting for mode change confirmation")
-
-    except ValidationError as e:
-        _logger.error(f"Invalid mode or parameters: {e}")
-        if hasattr(e, "field"):
-            _logger.info(f"Check the value for: {e.field}")
-    except MqttError as e:
-        _logger.error(f"MQTT error setting mode: {e}")
-    except Nwp500Error as e:
-        _logger.error(f"Error setting mode: {e}")
-    except Exception as e:
-        _logger.error(f"Unexpected error setting mode: {e}")
+    await _handle_command_with_status_feedback(
+        mqtt,
+        device,
+        lambda: mqtt.control.set_dhw_mode(device, mode_id),
+        "setting mode",
+        f"Mode changed to {mode_name}",
+    )
 
 
 async def handle_set_dhw_temp_request(
     mqtt: NavienMqttClient, device: Device, temperature: float
 ) -> None:
-    """
-    Set DHW target temperature and display the response.
-
-    Args:
-        mqtt: MQTT client instance
-        device: Device to control
-        temperature: Target temperature in Fahrenheit (95-150°F)
-    """
-    # Validate temperature range
-    if temperature < 95 or temperature > 150:
-        _logger.error(
-            f"Temperature {temperature}°F is out of range. "
-            f"Valid range: 95-150°F"
-        )
-        return
-
-    # Set up callback to capture status response after temperature change
-    future = asyncio.get_running_loop().create_future()
-    responses = []
-
-    def on_status_response(status: DeviceStatus) -> None:
-        if not future.done():
-            responses.append(status)
-            # Complete after receiving response
-            future.set_result(None)
-
-    # Subscribe to status updates to see the temperature change result
-    await mqtt.subscribe_device_status(device, on_status_response)
-
-    try:
-        _logger.info(f"Setting DHW target temperature to {temperature}°F...")
-
-        # Send the temperature change command
-        await mqtt.set_dhw_temperature(device, temperature)
-
-        # Wait for status response (temperature change confirmation)
-        try:
-            await asyncio.wait_for(future, timeout=15)
-
-            if responses:
-                status = responses[0]
-                from .output_formatters import format_json_output
-
-                print(format_json_output(status.model_dump()))
-                _logger.info(
-                    f"Temperature change successful. New target: "
-                    f"{status.dhw_target_temperature_setting}°F"
-                )
-            else:
-                _logger.warning(
-                    "Temperature command sent but no status response received"
-                )
-
-        except TimeoutError:
-            _logger.error(
-                "Timed out waiting for temperature change confirmation"
-            )
-
-    except ValidationError as e:
-        _logger.error(f"Invalid temperature: {e}")
-        if hasattr(e, "min_value") and hasattr(e, "max_value"):
-            _logger.info(f"Valid range: {e.min_value}°F to {e.max_value}°F")
-    except MqttError as e:
-        _logger.error(f"MQTT error setting temperature: {e}")
-    except Nwp500Error as e:
-        _logger.error(f"Error setting temperature: {e}")
-    except Exception as e:
-        _logger.error(f"Unexpected error setting temperature: {e}")
+    """Set DHW target temperature."""
+    await _handle_command_with_status_feedback(
+        mqtt,
+        device,
+        lambda: mqtt.control.set_dhw_temperature(device, temperature),
+        "setting temperature",
+        f"Temperature set to {temperature}°F",
+    )
 
 
 async def handle_power_request(
     mqtt: NavienMqttClient, device: Device, power_on: bool
 ) -> None:
-    """
-    Set device power state and display the response.
-
-    Args:
-        mqtt: MQTT client instance
-        device: Device to control
-        power_on: True to turn on, False to turn off
-    """
-    action = "on" if power_on else "off"
-    _logger.info(f"Turning device {action}...")
-
-    # Set up callback to capture status response after power change
-    future = asyncio.get_running_loop().create_future()
-
-    def on_power_change_response(status: DeviceStatus) -> None:
-        if not future.done():
-            future.set_result(status)
-
-    try:
-        # Subscribe to status updates
-        await mqtt.subscribe_device_status(device, on_power_change_response)
-
-        # Send power command
-        await mqtt.set_power(device, power_on)
-
-        # Wait for response with timeout
-        status = await asyncio.wait_for(future, timeout=10.0)
-
-        _logger.info(f"Device turned {action} successfully!")
-
-        # Display relevant status information
-        print(
-            json.dumps(
-                {
-                    "result": "success",
-                    "action": action,
-                    "status": {
-                        "operationMode": status.operationMode.name,
-                        "dhwOperationSetting": status.dhwOperationSetting.name,
-                        "dhwTemperature": f"{status.dhwTemperature}°F",
-                        "dhwChargePer": f"{status.dhwChargePer}%",
-                        "tankUpperTemperature": (
-                            f"{status.tankUpperTemperature:.1f}°F"
-                        ),
-                        "tankLowerTemperature": (
-                            f"{status.tankLowerTemperature:.1f}°F"
-                        ),
-                    },
-                },
-                indent=2,
-            )
-        )
-
-    except TimeoutError:
-        _logger.error(f"Timed out waiting for power {action} confirmation")
-
-    except MqttError as e:
-        _logger.error(f"MQTT error turning device {action}: {e}")
-    except Nwp500Error as e:
-        _logger.error(f"Error turning device {action}: {e}")
-    except Exception as e:
-        _logger.error(f"Unexpected error turning device {action}: {e}")
+    """Set device power state."""
+    state = "on" if power_on else "off"
+    await _handle_command_with_status_feedback(
+        mqtt,
+        device,
+        lambda: mqtt.control.set_power(device, power_on),
+        f"turning {state}",
+        f"Device turned {state}",
+    )
 
 
 async def handle_get_reservations_request(
     mqtt: NavienMqttClient, device: Device
 ) -> None:
-    """Request current reservation schedule from the device."""
+    """Request current reservation schedule."""
     future = asyncio.get_running_loop().create_future()
 
     def raw_callback(topic: str, message: dict[str, Any]) -> None:
-        # Device responses have "response" field with actual data
         if not future.done() and "response" in message:
-            # Decode and format the reservation data for human readability
             from nwp500.encoding import (
                 decode_reservation_hex,
                 decode_week_bitfield,
             )
 
             response = message.get("response", {})
-            reservation_use = response.get("reservationUse", 0)
             reservation_hex = response.get("reservation", "")
-
-            # Decode the hex string into structured entries
-            if isinstance(reservation_hex, str):
-                reservations = decode_reservation_hex(reservation_hex)
-            else:
-                # Already structured (shouldn't happen but handle it)
-                reservations = (
-                    reservation_hex if isinstance(reservation_hex, list) else []
-                )
-
-            # Format for display
-            output = {
-                "reservationUse": reservation_use,
-                "reservationEnabled": reservation_use == 1,
-                "reservations": [],
-            }
-
-            for idx, entry in enumerate(reservations, start=1):
-                week_days = decode_week_bitfield(entry.get("week", 0))
-                param_value = entry.get("param", 0)
-                # Temperature is encoded as (display - 20), so display = param +
-                # 20
-                display_temp = param_value + 20
-
-                formatted_entry = {
-                    "number": idx,
-                    "enabled": entry.get("enable") == 1,
-                    "days": week_days,
-                    "time": (
-                        f"{entry.get('hour', 0):02d}:{entry.get('min', 0):02d}"
-                    ),
-                    "mode": entry.get("mode"),
-                    "temperatureF": display_temp,
-                    "raw": entry,
-                }
-                output["reservations"].append(formatted_entry)
-
-            # Print formatted output
-            print(
-                json.dumps(output, indent=2, default=_json_default_serializer)
+            reservations = (
+                decode_reservation_hex(reservation_hex)
+                if isinstance(reservation_hex, str)
+                else []
             )
+
+            output = {
+                "reservationUse": response.get("reservationUse", 0),
+                "reservationEnabled": response.get("reservationUse") == 1,
+                "reservations": [
+                    {
+                        "number": i + 1,
+                        "enabled": e.get("enable") == 1,
+                        "days": decode_week_bitfield(e.get("week", 0)),
+                        "time": f"{e.get('hour', 0):02d}:{e.get('min', 0):02d}",
+                        "mode": e.get("mode"),
+                        "temperatureF": e.get("param", 0) + 20,
+                        "raw": e,
+                    }
+                    for i, e in enumerate(reservations)
+                ],
+            }
+            print_json(output)
             future.set_result(None)
 
-    # Subscribe to all device-type messages to catch the response
-    # Responses come on various patterns depending on the command
-    device_type = device.device_info.device_type
-    response_pattern = f"cmd/{device_type}/#"
-
+    device_type = str(device.device_info.device_type)
+    response_pattern = MqttTopicBuilder.command_topic(
+        device_type, mac_address="+", suffix="#"
+    )
     await mqtt.subscribe(response_pattern, raw_callback)
-    _logger.info("Requesting current reservation schedule...")
-    await mqtt.request_reservations(device)
-
+    await mqtt.control.request_reservations(device)
     try:
         await asyncio.wait_for(future, timeout=10)
     except TimeoutError:
-        _logger.error("Timed out waiting for reservation response.")
+        _logger.error("Timed out waiting for reservations.")
 
 
 async def handle_update_reservations_request(
@@ -467,160 +313,190 @@ async def handle_update_reservations_request(
     reservations_json: str,
     enabled: bool,
 ) -> None:
-    """Update reservation schedule on the device."""
+    """Update reservation schedule."""
     try:
         reservations = json.loads(reservations_json)
         if not isinstance(reservations, list):
-            _logger.error("Reservations must be a JSON array.")
-            return
-    except json.JSONDecodeError as e:
-        _logger.error(f"Invalid JSON for reservations: {e}")
+            raise ValueError("Must be a JSON array")
+    except (json.JSONDecodeError, ValueError) as e:
+        _logger.error(f"Invalid reservations JSON: {e}")
         return
 
     future = asyncio.get_running_loop().create_future()
 
     def raw_callback(topic: str, message: dict[str, Any]) -> None:
-        # Only process response messages, not request echoes
         if not future.done() and "response" in message:
-            print(
-                json.dumps(message, indent=2, default=_json_default_serializer)
-            )
+            print_json(message)
             future.set_result(None)
 
-    # Subscribe to client-specific response topic pattern
-    # Responses come on: cmd/{deviceType}/+/+/{clientId}/res/rsv/rd
     device_type = device.device_info.device_type
-    client_id = mqtt.client_id
-    response_topic = f"cmd/{device_type}/+/+/{client_id}/res/rsv/rd"
-
+    response_topic = f"cmd/{device_type}/+/+/{mqtt.client_id}/res/rsv/rd"
     await mqtt.subscribe(response_topic, raw_callback)
-    _logger.info(f"Updating reservation schedule (enabled={enabled})...")
-    await mqtt.update_reservations(device, reservations, enabled=enabled)
-
+    await mqtt.control.update_reservations(
+        device, reservations, enabled=enabled
+    )
     try:
         await asyncio.wait_for(future, timeout=10)
     except TimeoutError:
-        _logger.error("Timed out waiting for reservation update response.")
+        _logger.error("Timed out updating reservations.")
 
 
 async def handle_get_tou_request(
     mqtt: NavienMqttClient, device: Device, api_client: Any
 ) -> None:
-    """Request Time-of-Use settings from the REST API."""
+    """Request Time-of-Use settings from REST API."""
     try:
-        # Get controller serial number via MQTT
-        controller_id = await get_controller_serial_number(mqtt, device)
-        if not controller_id:
-            _logger.error("Failed to retrieve controller serial number.")
+        serial = await get_controller_serial_number(mqtt, device)
+        if not serial:
+            _logger.error("Failed to get controller serial.")
             return
 
-        _logger.info(f"Controller ID: {controller_id}")
-        _logger.info("Fetching Time-of-Use settings from REST API...")
-
-        # Get TOU info from REST API
-        mac_address = device.device_info.mac_address
-        additional_value = device.device_info.additional_value
-
         tou_info = await api_client.get_tou_info(
-            mac_address=mac_address,
-            additional_value=additional_value,
-            controller_id=controller_id,
+            mac_address=device.device_info.mac_address,
+            additional_value=device.device_info.additional_value,
+            controller_id=serial,
             user_type="O",
         )
-
-        # Print the TOU info
-        print(
-            json.dumps(
-                {
-                    "registerPath": tou_info.register_path,
-                    "sourceType": tou_info.source_type,
-                    "controllerId": tou_info.controller_id,
-                    "manufactureId": tou_info.manufacture_id,
-                    "name": tou_info.name,
-                    "utility": tou_info.utility,
-                    "zipCode": tou_info.zip_code,
-                    "schedule": [
-                        {
-                            "season": schedule.season,
-                            "interval": schedule.intervals,
-                        }
-                        for schedule in tou_info.schedule
-                    ],
-                },
-                indent=2,
-            )
+        print_json(
+            {
+                "name": tou_info.name,
+                "utility": tou_info.utility,
+                "zipCode": tou_info.zip_code,
+                "schedule": [
+                    {"season": s.season, "intervals": s.intervals}
+                    for s in tou_info.schedule
+                ],
+            }
         )
-
-    except MqttError as e:
-        _logger.error(f"MQTT error fetching TOU settings: {e}")
-    except Nwp500Error as e:
-        _logger.error(f"Error fetching TOU settings: {e}")
     except Exception as e:
-        _logger.error(
-            f"Unexpected error fetching TOU settings: {e}", exc_info=True
-        )
+        _logger.error(f"Error fetching TOU: {e}")
 
 
 async def handle_set_tou_enabled_request(
     mqtt: NavienMqttClient, device: Device, enabled: bool
 ) -> None:
-    """Enable or disable Time-of-Use functionality."""
-    action = "enabling" if enabled else "disabling"
-    _logger.info(f"Time-of-Use {action}...")
-
-    future = asyncio.get_running_loop().create_future()
-    responses = []
-
-    def on_status_response(status: DeviceStatus) -> None:
-        if not future.done():
-            responses.append(status)
-            future.set_result(None)
-
-    await mqtt.subscribe_device_status(device, on_status_response)
-
-    try:
-        await mqtt.set_tou_enabled(device, enabled)
-
-        try:
-            await asyncio.wait_for(future, timeout=10)
-            if responses:
-                status = responses[0]
-                from .output_formatters import format_json_output
-
-                print(format_json_output(status.model_dump()))
-                _logger.info(f"TOU {action} successful.")
-            else:
-                _logger.warning("TOU command sent but no response received")
-        except TimeoutError:
-            _logger.error(f"Timed out waiting for TOU {action} confirmation")
-
-    except MqttError as e:
-        _logger.error(f"MQTT error {action} TOU: {e}")
-    except Nwp500Error as e:
-        _logger.error(f"Error {action} TOU: {e}")
-    except Exception as e:
-        _logger.error(f"Unexpected error {action} TOU: {e}")
+    """Enable or disable Time-of-Use."""
+    await _handle_command_with_status_feedback(
+        mqtt,
+        device,
+        lambda: mqtt.control.set_tou_enabled(device, enabled),
+        f"{'enabling' if enabled else 'disabling'} TOU",
+        f"TOU {'enabled' if enabled else 'disabled'}",
+    )
 
 
 async def handle_get_energy_request(
     mqtt: NavienMqttClient, device: Device, year: int, months: list[int]
 ) -> None:
-    """Request energy usage data for specified months."""
-    future = asyncio.get_running_loop().create_future()
-
-    def raw_callback(topic: str, message: dict[str, Any]) -> None:
-        if not future.done():
-            print(
-                json.dumps(message, indent=2, default=_json_default_serializer)
-            )
-            future.set_result(None)
-
-    # Subscribe to energy usage response (uses default device topic)
-    await mqtt.subscribe_device(device, raw_callback)
-    _logger.info(f"Requesting energy usage for {year}, months: {months}...")
-    await mqtt.request_energy_usage(device, year, months)
-
+    """Request energy usage data."""
     try:
-        await asyncio.wait_for(future, timeout=15)
-    except TimeoutError:
-        _logger.error("Timed out waiting for energy usage response.")
+        res: Any = await _wait_for_response(
+            mqtt.subscribe_energy_usage,
+            device,
+            lambda: mqtt.control.request_energy_usage(device, year, months),
+            action_name="energy usage",
+            timeout=15,
+        )
+        print_energy_usage(cast(EnergyUsageResponse, res))
+    except Exception as e:
+        _logger.error(f"Error getting energy data: {e}")
+
+
+async def handle_reset_air_filter_request(
+    mqtt: NavienMqttClient, device: Device
+) -> None:
+    """Reset air filter timer."""
+    await _handle_command_with_status_feedback(
+        mqtt,
+        device,
+        lambda: mqtt.control.reset_air_filter(device),
+        "resetting air filter",
+        "Air filter timer reset",
+    )
+
+
+async def handle_set_vacation_days_request(
+    mqtt: NavienMqttClient, device: Device, days: int
+) -> None:
+    """Set vacation mode duration."""
+    await _handle_command_with_status_feedback(
+        mqtt,
+        device,
+        lambda: mqtt.control.set_vacation_days(device, days),
+        "setting vacation days",
+        f"Vacation days set to {days}",
+    )
+
+
+async def handle_set_recirculation_mode_request(
+    mqtt: NavienMqttClient, device: Device, mode: int
+) -> None:
+    """Set recirculation pump mode."""
+    mode_map = {1: "ALWAYS", 2: "BUTTON", 3: "SCHEDULE", 4: "TEMPERATURE"}
+    mode_name = mode_map.get(mode, str(mode))
+    status = await _handle_command_with_status_feedback(
+        mqtt,
+        device,
+        lambda: mqtt.control.set_recirculation_mode(device, mode),
+        "setting recirculation mode",
+        f"Recirculation mode set to {mode_name}",
+    )
+
+    if status and status.recirc_operation_mode.value != mode:
+        _logger.warning(
+            f"Device reported mode {status.recirc_operation_mode.name} "
+            f"instead of expected {mode_name}. External factor or "
+            "device state may have prevented the change."
+        )
+
+
+async def handle_trigger_recirculation_hot_button_request(
+    mqtt: NavienMqttClient, device: Device
+) -> None:
+    """Trigger hot button."""
+    await _handle_command_with_status_feedback(
+        mqtt,
+        device,
+        lambda: mqtt.control.trigger_recirculation_hot_button(device),
+        "triggering hot button",
+        "Hot button triggered",
+    )
+
+
+async def handle_enable_demand_response_request(
+    mqtt: NavienMqttClient, device: Device
+) -> None:
+    """Enable demand response."""
+    await _handle_command_with_status_feedback(
+        mqtt,
+        device,
+        lambda: mqtt.control.enable_demand_response(device),
+        "enabling DR",
+        "Demand response enabled",
+    )
+
+
+async def handle_disable_demand_response_request(
+    mqtt: NavienMqttClient, device: Device
+) -> None:
+    """Disable demand response."""
+    await _handle_command_with_status_feedback(
+        mqtt,
+        device,
+        lambda: mqtt.control.disable_demand_response(device),
+        "disabling DR",
+        "Demand response disabled",
+    )
+
+
+async def handle_configure_reservation_water_program_request(
+    mqtt: NavienMqttClient, device: Device
+) -> None:
+    """Configure water program."""
+    await _handle_command_with_status_feedback(
+        mqtt,
+        device,
+        lambda: mqtt.control.configure_reservation_water_program(device),
+        "configuring water program",
+        "Water program configured",
+    )

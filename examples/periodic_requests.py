@@ -118,7 +118,7 @@ async def main():
 
     # Send initial request immediately to get first response
     print("Sending initial status request...")
-    await mqtt.request_device_status(device)
+    await mqtt.control.request_device_status(device)
 
     print("Monitoring for 60 seconds...")
     print("(First automatic request in ~20 seconds)")
@@ -138,7 +138,7 @@ async def main():
 
     # Send initial request immediately
     print("Sending initial device info request...")
-    await mqtt.request_device_info(device)
+    await mqtt.control.request_device_info(device)
 
     print("Monitoring for 60 seconds...")
     print("(First automatic request in ~20 seconds)")
@@ -167,9 +167,9 @@ async def main():
 
     # Send initial requests for both types
     print("\nSending initial requests for both types...")
-    await mqtt.request_device_status(device)
+    await mqtt.control.request_device_status(device)
     await asyncio.sleep(1)  # Small delay between requests
-    await mqtt.request_device_info(device)
+    await mqtt.control.request_device_info(device)
 
     print("\nMonitoring for 2 minutes...")
     print("(Status requests: ~20s, ~40s, ~60s, ~80s, ~100s, ~120s)")

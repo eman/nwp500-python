@@ -53,7 +53,7 @@ async def set_dhw_temperature_example():
                 logger.info(f"Current DHW temperature: {status.dhw_temperature}°F")
 
             await mqtt_client.subscribe_device_status(device, on_current_status)
-            await mqtt_client.request_device_status(device)
+            await mqtt_client.control.request_device_status(device)
             await asyncio.sleep(3)  # Wait for current status
 
             # Set new target temperature to 140°F
@@ -77,7 +77,7 @@ async def set_dhw_temperature_example():
             await mqtt_client.subscribe_device_status(device, on_temp_change_response)
 
             # Send temperature change command using display temperature value
-            await mqtt_client.set_dhw_temperature_display(device, target_temperature)
+            await mqtt_client.control.set_dhw_temperature(device, target_temperature)
 
             # Wait for confirmation
             for i in range(15):  # Wait up to 15 seconds
@@ -112,9 +112,9 @@ if __name__ == "__main__":
     # asyncio.run(set_dhw_temperature_example())
 
     print("CLI equivalent commands:")
-    print("  python -m nwp500.cli --set-dhw-temp 140")
-    print("  python -m nwp500.cli --set-dhw-temp 130")
-    print("  python -m nwp500.cli --set-dhw-temp 150")
+    print("  python -m nwp500.cli temp 140")
+    print("  python -m nwp500.cli temp 130")
+    print("  python -m nwp500.cli temp 150")
     print()
     print("Valid temperature range: 115-150°F")
     print("Note: The device may cap temperatures at 150°F maximum")

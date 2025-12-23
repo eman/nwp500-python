@@ -36,7 +36,7 @@ See :doc:`../enumerations` for the complete enumeration reference including:
    from nwp500 import DhwOperationSetting, CurrentOperationMode, HeatSource, TemperatureType
    
    # Set operation mode (user preference)
-   await mqtt.set_dhw_mode(device, DhwOperationSetting.ENERGY_SAVER.value)
+   await mqtt.control.set_dhw_mode(device, DhwOperationSetting.ENERGY_SAVER.value)
    
    # Check current heat source
    if status.current_heat_use == HeatSource.HEATPUMP:
@@ -350,7 +350,7 @@ Device capabilities, features, and firmware information.
    * ``smart_diagnostic_use`` - Smart diagnostics available
    * ``wifi_rssi_use`` - WiFi signal strength available
    * ``holiday_use`` - Holiday/vacation mode
-   * ``mixing_value_use`` - Mixing valve
+   * ``mixing_valve_use`` - Mixing valve
    * ``dr_setting_use`` - Demand response
    * ``dhw_refill_use`` - DHW refill
    * ``eco_use`` - Eco mode
@@ -571,10 +571,10 @@ Best Practices
 
       # ✓ Type-safe
       from nwp500 import DhwOperationSetting
-      await mqtt.set_dhw_mode(device, DhwOperationSetting.ENERGY_SAVER.value)
+      await mqtt.control.set_dhw_mode(device, DhwOperationSetting.ENERGY_SAVER.value)
 
       # ✗ Magic numbers
-      await mqtt.set_dhw_mode(device, 3)
+      await mqtt.control.set_dhw_mode(device, 3)
 
 2. **Check feature support:**
 
@@ -583,7 +583,7 @@ Best Practices
       def on_feature(feature):
           if feature.energy_usage_use:
               # Device supports energy monitoring
-              await mqtt.request_energy_usage(device, year, months)
+              await mqtt.control.request_energy_usage(device, year, months)
 
 3. **Monitor operation state:**
 
