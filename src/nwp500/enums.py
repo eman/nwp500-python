@@ -214,6 +214,18 @@ class HeatControl(IntEnum):
 # ============================================================================
 
 
+class VolumeCode(IntEnum):
+    """Tank volume capacity codes for NWP500 heat pump water heater models.
+
+    Represents the nominal tank capacity in gallons for NWP500 series devices.
+    These correspond to the different model variants available.
+    """
+
+    VOLUME_50 = 1  # NWP500-50: 50-gallon (189.2 liter) tank capacity
+    VOLUME_65 = 2  # NWP500-65: 65-gallon (246.0 liter) tank capacity
+    VOLUME_80 = 3  # NWP500-80: 80-gallon (302.8 liter) tank capacity
+
+
 class UnitType(IntEnum):
     """Navien device/unit model types."""
 

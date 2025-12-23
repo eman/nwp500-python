@@ -65,6 +65,7 @@ from nwp500.enums import (
     TouRateType,
     TouWeekType,
     UnitType,
+    VolumeCode,
 )
 from nwp500.events import (
     EventEmitter,
@@ -159,6 +160,7 @@ __all__ = [
     "TouRateType",
     "TouWeekType",
     "UnitType",
+    "VolumeCode",
     # Conversion utilities
     "fahrenheit_to_half_celsius",
     # Authentication

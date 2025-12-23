@@ -24,6 +24,7 @@ from .enums import (
     TemperatureType,
     TempFormulaType,
     UnitType,
+    VolumeCode,
 )
 from .field_factory import (
     signal_strength_field,
@@ -78,6 +79,15 @@ def _tou_override_validator(v: Any) -> bool:
     return bool(v == 1)
 
 
+def _volume_code_validator(v: Any) -> VolumeCode:
+    """Convert int to VolumeCode enum if it's a valid code."""
+    if isinstance(v, VolumeCode):
+        return v
+    if isinstance(v, int):
+        return VolumeCode(v)
+    return VolumeCode(int(v))
+
+
 # Reusable Annotated types for conversions
 DeviceBool = Annotated[bool, BeforeValidator(_device_bool_validator)]
 CapabilityFlag = Annotated[bool, BeforeValidator(_device_bool_validator)]
@@ -86,6 +96,7 @@ HalfCelsiusToF = Annotated[float, BeforeValidator(_half_celsius_to_fahrenheit)]
 DeciCelsiusToF = Annotated[float, BeforeValidator(_deci_celsius_to_fahrenheit)]
 TouStatus = Annotated[bool, BeforeValidator(_tou_status_validator)]
 TouOverride = Annotated[bool, BeforeValidator(_tou_override_validator)]
+VolumeCodeField = Annotated[VolumeCode, BeforeValidator(_volume_code_validator)]
 
 
 class NavienBaseModel(BaseModel):
@@ -753,21 +764,30 @@ class DeviceFeature(NavienBaseModel):
 
     country_code: int = Field(
         description=(
-            "Country/region code where device is certified for operation "
-            "(1=USA, complies with FCC Part 15 Class B)"
+            "Country/region code where device is certified for operation. "
+            "Device-specific code without public specification. "
+            "Example: USA devices report code 3 (previously documented as 1)"
         )
     )
     model_type_code: UnitType | int = Field(
-        description="Model type identifier: NWP500 series model variant"
+        description=(
+            "Model type identifier: Maps to UnitType enum "
+            "(e.g., NPF=513 for heat pump water heater). "
+            "Identifies the device family and available capabilities"
+        )
     )
     control_type_code: int = Field(
         description=(
-            "Control system type: "
-            "Advanced digital control with LCD display and WiFi"
+            "Control system type identifier: Specifies the version of the "
+            "digital control system (LCD display, WiFi, firmware variant). "
+            "Device-specific numeric code"
         )
     )
-    volume_code: int = Field(
-        description="Tank nominal capacity: 50, 65, or 80 gallons",
+    volume_code: VolumeCodeField = Field(
+        description=(
+            "Tank nominal capacity: 50 gallons (code 1), 65 gallons (code 2), "
+            "or 80 gallons (code 3)"
+        ),
         json_schema_extra={"unit_of_measurement": "gal"},
     )
     controller_sw_version: int = Field(
@@ -814,8 +834,9 @@ class DeviceFeature(NavienBaseModel):
     )
     recirc_model_type_code: int = Field(
         description=(
-            "Recirculation module model identifier - "
-            "specifies installed recirculation system variant"
+            "Recirculation module model identifier: Specifies the type and "
+            "capabilities of the installed recirculation system. "
+            "Device-specific numeric code (0 if recirculation not installed)"
         )
     )
     controller_serial_number: str = Field(
