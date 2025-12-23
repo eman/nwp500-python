@@ -132,6 +132,6 @@ if __name__ == "__main__":
     # asyncio.run(power_control_example())
 
     print("CLI equivalent commands:")
-    print("  python -m nwp500.cli --power-off")
-    print("  python -m nwp500.cli --power-on")
-    print("  python -m nwp500.cli --power-on --status")
+    print("  python -m nwp500.cli power off")
+    print("  python -m nwp500.cli power on")
+    print("  python -m nwp500.cli power on && python -m nwp500.cli status")

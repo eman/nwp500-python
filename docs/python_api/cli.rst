@@ -3,30 +3,28 @@ Command Line Interface
 ======================
 
 The ``nwp500`` CLI provides a command-line interface for monitoring and
-controlling Navien water heaters without writing Python code.
+controlling Navien NWP500 water heaters without writing Python code.
 
 .. code-block:: bash
 
    # Python module
-   python3 -m nwp500.cli [options]
+   python3 -m nwp500.cli [global-options] <command> [command-options]
 
    # Or if installed
-   navien-cli [options]
+   nwp-cli [global-options] <command> [command-options]
 
 Overview
 ========
 
 The CLI supports:
 
-* **Real-time monitoring** - Continuous device status updates
-* **Device status** - One-time status queries
-* **Power control** - Turn device on/off
-* **Mode control** - Change operation mode (Heat Pump, Electric, etc.)
-* **Temperature control** - Set target temperature
-* **Energy queries** - Get historical energy usage
-* **Reservations** - View and update schedule
-* **Time-of-Use** - Configure TOU settings
-* **Device information** - Firmware, features, capabilities
+* **Real-time monitoring** - Continuous device status updates (logs to CSV)
+* **Device control** - Power, mode, temperature, vacation mode
+* **Device information** - Status, firmware, features, serial number
+* **Instant hot water** - Trigger hot button for immediate hot water
+* **Energy management** - Historical usage data, demand response, TOU settings
+* **Scheduling** - Reservations and time-of-use configuration
+* **Maintenance** - Air filter reset, recirculation control, water program mode
 
 Authentication
 ==============
@@ -41,7 +39,7 @@ Environment Variables (Recommended)
    export NAVIEN_EMAIL="your@email.com"
    export NAVIEN_PASSWORD="your_password"
 
-   python3 -m nwp500.cli --status
+   python3 -m nwp500.cli status
 
 Command Line Arguments
 ----------------------
@@ -51,7 +49,7 @@ Command Line Arguments
    python3 -m nwp500.cli \
        --email "your@email.com" \
        --password "your_password" \
-       --status
+       status
 
 Token Caching
 -------------
@@ -76,389 +74,471 @@ Global Options
 
 .. option:: -v, --verbose
 
-   Enable debug logging output.
+   Enable verbose logging output (log level: INFO).
+
+.. option:: -vv, --very-verbose
+
+   Enable very verbose logging output (log level: DEBUG).
 
 Commands
 ========
 
-Monitoring Commands
--------------------
+Status & Information Commands
+-----------------------------
 
-monitor (default)
-^^^^^^^^^^^^^^^^^
-
-Real-time continuous monitoring of device status.
-
-.. code-block:: bash
-
-   # Monitor with JSON output (default)
-   python3 -m nwp500.cli
-
-   # Monitor with formatted text output
-   python3 -m nwp500.cli --output text
-
-   # Monitor with compact output
-   python3 -m nwp500.cli --output compact
-
-**Options:**
-
-.. option:: --output FORMAT
-
-   Output format: ``json``, ``text``, or ``compact`` (default: ``json``)
-
-**Example Output (text format):**
-
-.. code-block:: text
-
-   [12:34:56] Navien Water Heater Status
-   ═══════════════════════════════════════
-   Temperature:      138.0°F (Target: 140.0°F)
-   Power:            1250W
-   Mode:             ENERGY_SAVER
-   State:            HEAT_PUMP
-   Energy:           85.5%
-   
-   Components:
-   ENABLED: Heat Pump Running
-   DISABLED: Upper Heater
-   DISABLED: Lower Heater
-   
-   [12:35:01] Temperature changed: 139.0°F
-
---status
-^^^^^^^^
+status
+^^^^^^
 
 Get current device status (one-time query).
 
 .. code-block:: bash
 
-   python3 -m nwp500.cli --status
+   python3 -m nwp500.cli status
 
-**Output:** Complete device status with temperatures, power, mode, and
-component states.
+**Output:** Device status including water temperature, target temperature, mode,
+power consumption, tank charge percentage, and component states.
 
---status-raw
-^^^^^^^^^^^^
+**Example:**
 
-Get raw device status without conversions.
+.. code-block:: json
 
-.. code-block:: bash
+   {
+     "dhwTemperature": 138.5,
+     "dhwTargetTemp": 140,
+     "dhwChargePer": 85,
+     "currentInstPower": 1250,
+     "operationMode": "energy-saver",
+     "compressorStatus": 1,
+     "heatPumpStatus": 1,
+     "upperHeaterStatus": 0,
+     "lowerHeaterStatus": 0
+   }
 
-   python3 -m nwp500.cli --status-raw
+info
+^^^^
 
-**Output:** Raw JSON status data as received from device (no temperature
-conversions or formatting).
-
-Device Information Commands
----------------------------
-
---device-info
-^^^^^^^^^^^^^
-
-Get comprehensive device information.
-
-.. code-block:: bash
-
-   python3 -m nwp500.cli --device-info
-
-**Output:** Device name, MAC address, connection status, firmware versions,
-and location.
-
---device-feature
-^^^^^^^^^^^^^^^^
-
-Get device features and capabilities.
+Show comprehensive device information (firmware, model, capabilities, serial).
 
 .. code-block:: bash
 
-   python3 -m nwp500.cli --device-feature
+   python3 -m nwp500.cli info
 
-**Output:** Supported features, temperature limits, firmware versions, serial
-number.
+**Output:** Device name, MAC address, firmware versions, features supported,
+temperature ranges, and capabilities.
 
-**Example Output:**
+serial
+^^^^^^
+
+Get controller serial number (useful for troubleshooting and TOU configuration).
+
+.. code-block:: bash
+
+   python3 -m nwp500.cli serial
+
+**Output:** Controller serial number (plain text).
+
+**Example:**
 
 .. code-block:: text
 
-   Device Features:
-     Serial Number: ABC123456789
-     Controller FW: 184614912
-     WiFi FW: 34013184
-     
-     Temperature Range: 100°F - 150°F
-     
-     Supported Features:
-       ENABLED: Energy Monitoring
-       ENABLED: Anti-Legionella
-       ENABLED: Reservations
-       ENABLED: Heat Pump Mode
-       ENABLED: Electric Mode
-       ENABLED: Energy Saver Mode
-       ENABLED: High Demand Mode
+   NV123ABC456789
 
---get-controller-serial
-^^^^^^^^^^^^^^^^^^^^^^^
+Power Control Commands
+----------------------
 
-Get controller serial number (required for TOU commands).
+power
+^^^^^
+
+Turn device on or off.
 
 .. code-block:: bash
 
-   python3 -m nwp500.cli --get-controller-serial
+   # Turn on
+   python3 -m nwp500.cli power on
 
-**Output:** Controller serial number.
+   # Turn off
+   python3 -m nwp500.cli power off
 
-Control Commands
-----------------
-
---power-on
-^^^^^^^^^^
-
-Turn device on.
+**Syntax:**
 
 .. code-block:: bash
 
-   python3 -m nwp500.cli --power-on
+   python3 -m nwp500.cli power <on|off>
 
-   # Get status after power on
-   python3 -m nwp500.cli --power-on --status
+**Output:** Confirmation message and updated device status.
 
---power-off
-^^^^^^^^^^^
+Temperature & Mode Commands
+----------------------------
 
-Turn device off.
+mode
+^^^^
 
-.. code-block:: bash
-
-   python3 -m nwp500.cli --power-off
-
-   # Get status after power off
-   python3 -m nwp500.cli --power-off --status
-
---set-mode MODE
-^^^^^^^^^^^^^^^
-
-Change operation mode.
+Set operation mode.
 
 .. code-block:: bash
 
    # Heat Pump Only (most efficient)
-   python3 -m nwp500.cli --set-mode heat-pump
+   python3 -m nwp500.cli mode heat-pump
 
    # Electric Only (fastest recovery)
-   python3 -m nwp500.cli --set-mode electric
+   python3 -m nwp500.cli mode electric
 
    # Energy Saver (recommended, balanced)
-   python3 -m nwp500.cli --set-mode energy-saver
+   python3 -m nwp500.cli mode energy-saver
 
    # High Demand (maximum capacity)
-   python3 -m nwp500.cli --set-mode high-demand
+   python3 -m nwp500.cli mode high-demand
 
-   # Vacation mode for 7 days
-   python3 -m nwp500.cli --set-mode vacation --vacation-days 7
+   # Vacation Mode
+   python3 -m nwp500.cli mode vacation
 
-   # Get status after mode change
-   python3 -m nwp500.cli --set-mode energy-saver --status
+   # Standby
+   python3 -m nwp500.cli mode standby
+
+**Syntax:**
+
+.. code-block:: bash
+
+   python3 -m nwp500.cli mode <mode>
 
 **Available Modes:**
 
-* ``heat-pump`` - Heat pump only (1)
-* ``electric`` - Electric only (2)
-* ``energy-saver`` - Energy Saver/Hybrid (3) **recommended**
-* ``high-demand`` - High Demand (4)
-* ``vacation`` - Vacation mode (5) - requires ``--vacation-days``
+* ``standby`` - Device off but ready
+* ``heat-pump`` - Heat pump only (0)
+* ``electric`` - Electric heating only (2)
+* ``energy-saver`` - Hybrid/balanced mode (3) **recommended**
+* ``high-demand`` - Maximum heating capacity (4)
+* ``vacation`` - Extended vacancy mode (5)
 
-**Options:**
+**Output:** Confirmation message and updated device status.
 
-.. option:: --vacation-days DAYS
+temp
+^^^^
 
-   Number of vacation days (required when ``--set-mode vacation``).
-
---set-dhw-temp TEMPERATURE
-^^^^^^^^^^^^^^^^^^^^^^^^^^
-
-Set target DHW temperature.
+Set target DHW (Domestic Hot Water) temperature.
 
 .. code-block:: bash
 
    # Set to 140°F
-   python3 -m nwp500.cli --set-dhw-temp 140
+   python3 -m nwp500.cli temp 140
 
-   # Set to 130°F and get status
-   python3 -m nwp500.cli --set-dhw-temp 130 --status
+   # Set to 130°F
+   python3 -m nwp500.cli temp 130
 
-.. important::
-   Temperature is specified as **display value** (what you see on the device).
-   The CLI automatically converts to message value (display - 20°F).
-
-Energy Commands
----------------
-
---get-energy
-^^^^^^^^^^^^
-
-Query historical energy usage data.
+**Syntax:**
 
 .. code-block:: bash
 
-   # Get current month
-   python3 -m nwp500.cli --get-energy \
-       --energy-year 2024 \
-       --energy-months "10"
+   python3 -m nwp500.cli temp <temperature>
 
-   # Get multiple months
-   python3 -m nwp500.cli --get-energy \
-       --energy-year 2024 \
-       --energy-months "8,9,10"
+**Notes:**
 
-   # Get full year
-   python3 -m nwp500.cli --get-energy \
-       --energy-year 2024 \
-       --energy-months "1,2,3,4,5,6,7,8,9,10,11,12"
+* Temperature specified in Fahrenheit (typically 115-150°F)
+* Check device capabilities with ``info`` command for valid range
+* CLI automatically converts to device message format
+
+**Output:** Confirmation message and updated device status.
+
+Vacation & Maintenance Commands
+--------------------------------
+
+vacation
+^^^^^^^^
+
+Enable vacation mode for N days (reduces water heating to minimize energy use).
+
+.. code-block:: bash
+
+   # Set vacation for 7 days
+   python3 -m nwp500.cli vacation 7
+
+   # Set vacation for 30 days
+   python3 -m nwp500.cli vacation 30
+
+**Syntax:**
+
+.. code-block:: bash
+
+   python3 -m nwp500.cli vacation <days>
+
+**Output:** Confirmation message and updated device status.
+
+hot-button
+^^^^^^^^^^
+
+Trigger hot button for instant hot water (recirculation pump).
+
+.. code-block:: bash
+
+   python3 -m nwp500.cli hot-button
+
+**Output:** Confirmation message.
+
+recirc
+^^^^^^
+
+Set recirculation pump mode.
+
+.. code-block:: bash
+
+   # Always on
+   python3 -m nwp500.cli recirc 1
+
+   # Button triggered
+   python3 -m nwp500.cli recirc 2
+
+   # Scheduled
+   python3 -m nwp500.cli recirc 3
+
+   # Temperature triggered
+   python3 -m nwp500.cli recirc 4
+
+**Syntax:**
+
+.. code-block:: bash
+
+   python3 -m nwp500.cli recirc <mode>
+
+**Available Modes:**
+
+* ``1`` - ALWAYS (always running)
+* ``2`` - BUTTON (manual trigger only)
+* ``3`` - SCHEDULE (based on schedule)
+* ``4`` - TEMPERATURE (based on temperature)
+
+**Output:** Confirmation message and updated device status.
+
+reset-filter
+^^^^^^^^^^^^
+
+Reset air filter maintenance timer.
+
+.. code-block:: bash
+
+   python3 -m nwp500.cli reset-filter
+
+**Output:** Confirmation message.
+
+water-program
+^^^^^^^^^^^^^^
+
+Enable water program reservation scheduling mode.
+
+.. code-block:: bash
+
+   python3 -m nwp500.cli water-program
+
+**Output:** Confirmation message.
+
+Scheduling Commands
+-------------------
+
+reservations
+^^^^^^^^^^^^
+
+View and update reservation schedule.
+
+.. code-block:: bash
+
+   # Get current reservations
+   python3 -m nwp500.cli reservations get
+
+   # Set reservations from JSON
+   python3 -m nwp500.cli reservations set '[{"hour": 6, "min": 0, ...}]'
+
+**Syntax:**
+
+.. code-block:: bash
+
+   python3 -m nwp500.cli reservations get
+   python3 -m nwp500.cli reservations set <json> [--disabled]
 
 **Options:**
 
-.. option:: --energy-year YEAR
+.. option:: --disabled
 
-   Year to query (e.g., 2024).
+   Create reservation in disabled state.
 
-.. option:: --energy-months MONTHS
-
-   Comma-separated list of months (1-12).
+**Output (get):** Current reservation schedule configuration.
 
 **Example Output:**
 
-.. code-block:: text
+.. code-block:: json
 
-   Energy Usage Report
-   ═══════════════════
-   
-   Total Usage: 1,234,567 Wh (1,234.6 kWh)
-   Heat Pump: 75.5% (932,098 Wh, 245 hours)
-   Electric:  24.5% (302,469 Wh, 67 hours)
-   
-   Daily Breakdown - October 2024:
-     Day 1:  42,345 Wh (HP: 32,100 Wh, HE: 10,245 Wh)
-     Day 2:  38,921 Wh (HP: 30,450 Wh, HE: 8,471 Wh)
-     Day 3:  45,678 Wh (HP: 35,200 Wh, HE: 10,478 Wh)
-     ...
+   {
+     "reservationUse": 1,
+     "reservationEnabled": true,
+     "reservations": [
+       {
+         "number": 1,
+         "enabled": true,
+         "days": [1, 1, 1, 1, 1, 0, 0],
+         "time": "06:00",
+         "mode": 3,
+         "temperatureF": 140
+       }
+     ]
+   }
 
-Reservation Commands
---------------------
+Energy & Utility Commands
+--------------------------
 
---get-reservations
-^^^^^^^^^^^^^^^^^^
+energy
+^^^^^^
 
-Get current reservation schedule.
-
-.. code-block:: bash
-
-   python3 -m nwp500.cli --get-reservations
-
-**Output:** Current reservation schedule configuration.
-
---set-reservations FILE
-^^^^^^^^^^^^^^^^^^^^^^^
-
-Update reservation schedule from JSON file.
+Query historical energy usage data by month.
 
 .. code-block:: bash
 
-   python3 -m nwp500.cli --set-reservations schedule.json \
-       --reservations-enabled
+   # Get October 2024
+   python3 -m nwp500.cli energy --year 2024 --months 10
+
+   # Get multiple months
+   python3 -m nwp500.cli energy --year 2024 --months 8,9,10
+
+   # Get full year
+   python3 -m nwp500.cli energy --year 2024 --months 1,2,3,4,5,6,7,8,9,10,11,12
+
+**Syntax:**
+
+.. code-block:: bash
+
+   python3 -m nwp500.cli energy --year <year> --months <month-list>
 
 **Options:**
 
-.. option:: --reservations-enabled
+.. option:: --year YEAR
 
-   Enable reservation schedule (use ``--reservations-disabled`` to disable).
+   Year to query (e.g., 2024). **Required.**
 
-.. option:: --reservations-disabled
+.. option:: --months MONTHS
 
-   Disable reservation schedule.
+   Comma-separated list of months (1-12). **Required.**
 
-**JSON Format:**
+**Output:** Energy usage breakdown by heat pump vs. electric heating.
+
+**Example Output:**
 
 .. code-block:: json
 
-   [
-       {
-           "startHour": 6,
-           "startMinute": 0,
-           "endHour": 22,
-           "endMinute": 0,
-           "weekDays": [1, 1, 1, 1, 1, 0, 0],
-           "temperature": 120
-       },
-       {
-           "startHour": 8,
-           "startMinute": 0,
-           "endHour": 20,
-           "endMinute": 0,
-           "weekDays": [0, 0, 0, 0, 0, 1, 1],
-           "temperature": 130
-       }
-   ]
+   {
+     "total_wh": 1234567,
+     "heat_pump_wh": 932098,
+     "heat_pump_hours": 245,
+     "electric_wh": 302469,
+     "electric_hours": 67,
+     "by_day": [...]
+   }
 
-Time-of-Use Commands
---------------------
+tou
+^^^
 
---get-tou
-^^^^^^^^^
-
-Get Time-of-Use configuration (requires controller serial).
+Configure time-of-use (TOU) pricing schedule.
 
 .. code-block:: bash
 
-   # First get controller serial
-   python3 -m nwp500.cli --get-controller-serial
-   # Output: ABC123456789
+   # Get current TOU configuration
+   python3 -m nwp500.cli tou get
 
-   # Then query TOU (done automatically by CLI)
-   python3 -m nwp500.cli --get-tou
+   # Enable TOU optimization
+   python3 -m nwp500.cli tou set on
 
-**Output:** TOU utility, schedule name, ZIP code, and pricing intervals.
+   # Disable TOU optimization
+   python3 -m nwp500.cli tou set off
 
---set-tou-enabled STATE
-^^^^^^^^^^^^^^^^^^^^^^^
-
-Enable or disable TOU optimization.
+**Syntax:**
 
 .. code-block:: bash
 
-   # Enable TOU
-   python3 -m nwp500.cli --set-tou-enabled on
+   python3 -m nwp500.cli tou get
+   python3 -m nwp500.cli tou set <on|off>
 
-   # Disable TOU
-   python3 -m nwp500.cli --set-tou-enabled off
+**Output (get):** Utility name, schedule name, ZIP code, and pricing intervals.
 
-   # Get status after change
-   python3 -m nwp500.cli --set-tou-enabled on --status
+**Output (set):** Confirmation message and updated device status.
+
+dr
+^^
+
+Enable or disable utility demand response.
+
+.. code-block:: bash
+
+   # Enable demand response
+   python3 -m nwp500.cli dr enable
+
+   # Disable demand response
+   python3 -m nwp500.cli dr disable
+
+**Syntax:**
+
+.. code-block:: bash
+
+   python3 -m nwp500.cli dr <enable|disable>
+
+**Output:** Confirmation message and updated device status.
+
+Monitoring Commands
+-------------------
+
+monitor
+^^^^^^^
+
+Monitor device status in real-time and log to CSV file.
+
+.. code-block:: bash
+
+   # Monitor with default output file (nwp500_status.csv)
+   python3 -m nwp500.cli monitor
+
+   # Monitor with custom output file
+   python3 -m nwp500.cli monitor -o my_data.csv
+
+   # Monitor with verbose logging
+   python3 -m nwp500.cli -v monitor
+
+**Syntax:**
+
+.. code-block:: bash
+
+   python3 -m nwp500.cli monitor [-o OUTPUT_FILE]
+
+**Options:**
+
+.. option:: -o OUTPUT_FILE, --output OUTPUT_FILE
+
+   Output CSV filename (default: ``nwp500_status.csv``).
+
+**Output:** CSV file with timestamp, temperature, mode, power, and other metrics.
+
+**Example CSV:**
+
+.. code-block:: text
+
+   timestamp,water_temp,target_temp,mode,power_w,tank_charge_pct
+   2024-12-23 12:34:56,138.5,140,energy-saver,1250,85
+   2024-12-23 12:35:26,138.7,140,energy-saver,1240,85
+   2024-12-23 12:35:56,138.9,140,energy-saver,1230,86
 
 Complete Examples
 =================
 
-Example 1: Quick Status Check
-------------------------------
+Example 1: Check Status
+-----------------------
 
 .. code-block:: bash
 
-   #!/bin/bash
    export NAVIEN_EMAIL="your@email.com"
    export NAVIEN_PASSWORD="your_password"
 
-   python3 -m nwp500.cli --status
+   python3 -m nwp500.cli status
 
 Example 2: Change Mode and Verify
 ----------------------------------
 
 .. code-block:: bash
 
-   #!/bin/bash
-   
-   # Set to Energy Saver and check status
-   python3 -m nwp500.cli \
-       --set-mode energy-saver \
-       --status
+   python3 -m nwp500.cli mode energy-saver
 
 Example 3: Morning Boost Script
 --------------------------------
@@ -467,48 +547,32 @@ Example 3: Morning Boost Script
 
    #!/bin/bash
    # Boost temperature in the morning
-   
-   python3 -m nwp500.cli \
-       --set-mode high-demand \
-       --set-dhw-temp 150 \
-       --status
-   
-   echo "Morning boost activated!"
 
-Example 4: Energy Report
--------------------------
+   python3 -m nwp500.cli mode high-demand
+   python3 -m nwp500.cli temp 150
+
+Example 4: Get Last 3 Months Energy
+------------------------------------
 
 .. code-block:: bash
 
    #!/bin/bash
-   # Get last 3 months energy usage
-   
    YEAR=$(date +%Y)
-   M1=$(date +%-m)
-   M2=$((M1 - 1))
-   M3=$((M1 - 2))
-   
-   python3 -m nwp500.cli --get-energy \
-       --energy-year $YEAR \
-       --energy-months "$M3,$M2,$M1" \
-       > energy_report.txt
-   
-   echo "Energy report saved to energy_report.txt"
+   MONTH=$(date +%-m)
+   PREV1=$((MONTH - 1))
+   PREV2=$((MONTH - 2))
 
-Example 5: Vacation Mode Setup
--------------------------------
+   python3 -m nwp500.cli energy --year $YEAR --months "$PREV2,$PREV1,$MONTH"
+
+Example 5: Vacation Setup
+---------------------------
 
 .. code-block:: bash
 
    #!/bin/bash
    # Set vacation mode for 14 days
-   
-   python3 -m nwp500.cli \
-       --set-mode vacation \
-       --vacation-days 14 \
-       --status
-   
-   echo "Vacation mode set for 14 days"
+
+   python3 -m nwp500.cli vacation 14
 
 Example 6: Continuous Monitoring
 ---------------------------------
@@ -516,9 +580,9 @@ Example 6: Continuous Monitoring
 .. code-block:: bash
 
    #!/bin/bash
-   # Monitor device with formatted output
-   
-   python3 -m nwp500.cli --output text
+   # Monitor with custom output file
+
+   python3 -m nwp500.cli monitor -o ~/navien_logs/daily_$(date +%Y%m%d).csv
 
 Example 7: Cron Job for Daily Status
 -------------------------------------
@@ -527,23 +591,18 @@ Example 7: Cron Job for Daily Status
 
    # Add to crontab: crontab -e
    # Run daily at 6 AM
-   0 6 * * * /usr/bin/python3 -m nwp500.cli --status >> /var/log/navien_daily.log 2>&1
+   0 6 * * * /usr/bin/python3 -m nwp500.cli status >> /var/log/navien_daily.log 2>&1
 
-Example 8: Temperature Alert Script
-------------------------------------
+Example 8: Smart Scheduling with Reservations
+-----------------------------------------------
 
 .. code-block:: bash
 
    #!/bin/bash
-   # Check temperature and alert if too low
-   
-   STATUS=$(python3 -m nwp500.cli --status 2>&1)
-   TEMP=$(echo "$STATUS" | grep -oP 'dhwTemperature.*?\K\d+')
-   
-   if [ "$TEMP" -lt 120 ]; then
-       echo "WARNING: Water temperature is $TEMP°F (below 120°F)"
-       # Send notification, email, etc.
-   fi
+   # Set reservation schedule: 6 AM - 10 PM at 140°F on weekdays
+
+   python3 -m nwp500.cli reservations set \
+     '[{"hour": 6, "min": 0, "mode": 3, "temp": 140, "days": [1,1,1,1,1,0,0]}]'
 
 Troubleshooting
 ===============
@@ -561,7 +620,7 @@ Authentication Errors
    python3 -m nwp500.cli \
        --email "your@email.com" \
        --password "your_password" \
-       --status
+       status
 
    # Clear cached tokens
    rm ~/.navien_tokens.json
@@ -571,8 +630,11 @@ Connection Issues
 
 .. code-block:: bash
 
-   # Enable debug logging
-   python3 -m nwp500.cli --verbose --status
+   # Enable verbose debug logging
+   python3 -m nwp500.cli -vv status
+
+   # Check network connectivity
+   ping api.navienlink.com
 
 No Devices Found
 ----------------
@@ -580,7 +642,9 @@ No Devices Found
 .. code-block:: bash
 
    # Verify account has devices registered
-   python3 -m nwp500.cli --device-info
+   python3 -m nwp500.cli info
+
+   # If no output, check Navienlink app for registered devices
 
 Command Not Found
 -----------------
@@ -590,7 +654,7 @@ Command Not Found
    # Use full Python module path
    python3 -m nwp500.cli --help
 
-   # Or install package
+   # Or install package in development mode
    pip install -e .
 
 Best Practices
@@ -610,8 +674,8 @@ Best Practices
 
       # In ~/.bashrc or ~/.zshrc
       alias navien='python3 -m nwp500.cli'
-      alias navien-status='navien --status'
-      alias navien-monitor='navien --output text'
+      alias navien-status='navien status'
+      alias navien-monitor='navien monitor'
 
 3. **Use scripts for common operations:**
 
@@ -619,31 +683,33 @@ Best Practices
 
       # morning_boost.sh
       #!/bin/bash
-      python3 -m nwp500.cli --set-mode high-demand --set-dhw-temp 150
+      python3 -m nwp500.cli mode high-demand
+      python3 -m nwp500.cli temp 150
 
-      # vacation.sh
+      # evening_saver.sh
       #!/bin/bash
-      python3 -m nwp500.cli --set-mode vacation --vacation-days ${1:-7}
+      python3 -m nwp500.cli mode heat-pump
+      python3 -m nwp500.cli temp 120
 
-4. **Combine commands efficiently:**
+4. **Log output for analysis:**
 
    .. code-block:: bash
 
-      # Make change and verify in one command
-      python3 -m nwp500.cli --set-mode energy-saver --status
+      # Append to log with timestamp
+      python3 -m nwp500.cli status >> ~/navien_$(date +%Y%m%d).log
 
 5. **Use cron for automation:**
 
    .. code-block:: bash
 
       # Morning boost: 6 AM
-      0 6 * * * python3 -m nwp500.cli --set-mode high-demand
-      
+      0 6 * * * python3 -m nwp500.cli mode high-demand
+
       # Night economy: 10 PM
-      0 22 * * * python3 -m nwp500.cli --set-mode heat-pump
-      
-      # Daily status report: 6 PM
-      0 18 * * * python3 -m nwp500.cli --status >> ~/navien_log.txt
+      0 22 * * * python3 -m nwp500.cli mode heat-pump
+
+      # Daily status: 6 PM
+      0 18 * * * python3 -m nwp500.cli status >> ~/navien_log.txt
 
 Related Documentation
 =====================
@@ -651,4 +717,4 @@ Related Documentation
 * :doc:`auth_client` - Python authentication API
 * :doc:`api_client` - Python REST API
 * :doc:`mqtt_client` - Python MQTT API
-* :doc:`models` - Data models
+* :doc:`../guides/mqtt_basics` - MQTT protocol guide

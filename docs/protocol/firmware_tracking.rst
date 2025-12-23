@@ -95,11 +95,11 @@ You can get your firmware versions by running:
 
    asyncio.run(get_firmware())
 
-Or using the CLI (if implemented):
+Or using the CLI:
 
 .. code-block:: bash
 
-   nwp-cli --device-info
+   python3 -m nwp500.cli info
 
 Please report issues at: https://github.com/eman/nwp500-python/issues
 

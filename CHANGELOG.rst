@@ -2,11 +2,12 @@
 Changelog
 =========
 
-Version 7.1.0 (2025-12-19)
+Version 7.1.0 (2025-12-22)
 ==========================
 
 Added
 -----
+
 - **Device Capability System**: New device capability detection and validation framework:
   - ``DeviceCapabilityChecker``: Validates device feature support based on device models
   - ``DeviceInfoCache``: Efficient caching of device information with configurable update intervals
@@ -20,19 +21,40 @@ Added
   - ``configure_reservation_water_program()``: Water program reservation management
   - ``set_recirculation_mode()`` / ``configure_recirculation_schedule()`` / ``trigger_recirculation_hot_button()``: Recirculation pump control and scheduling
 
-- **CLI Enhancements**: Extended command-line interface with new subcommands and diagnostics
-- **New Examples**: Example scripts for demand response, air filter reset, vacation mode, recirculation control, and water program reservations
-- **Documentation**: Enhanced device control documentation with capability matrix
+- **CLI Documentation Updates**: Comprehensive documentation updates for subcommand-based CLI
+  - Complete rewrite of ``docs/python_api/cli.rst`` with full command reference
+  - Updated README.rst with new subcommand syntax and examples
+  - Added 8+ practical usage examples (cron jobs, automation, monitoring)
+  - Added troubleshooting guide and best practices section
+
+- **Model Field Factory Pattern**: New field factory to reduce boilerplate in model definitions
+  - Automatic field conversion and validation
+  - Cleaner model architecture
 
 Changed
 -------
+
+- **CLI Output**: Numeric values in status output now rounded to one decimal place for better readability
 - ``MqttDeviceController`` now integrates device capability checking with auto-caching of device info
 - Exception type hints improved with proper None handling in optional parameters
-- CLI diagnostics output now available in structured format
+- **MQTT Control Refactoring**: Centralized device control via ``.control`` namespace
+  - Standardized periodic request patterns
+  - Public API method ``ensure_device_info_cached()`` for better cache management
+- **Logging Security**: Enhanced sensitive data redaction
+  - MAC addresses consistently redacted across all logging output
+  - Token logging removed from docstrings and examples
+  - Intermediate variables used for redacted data
 
 Fixed
 -----
+
 - Type annotation consistency: Optional parameters now properly annotated as ``type | None`` instead of ``type``
+- **Type System Fixes**: Resolved multiple type annotation issues for CI compatibility
+- **Mixing Valve Field**: Corrected alias field name and removed unused TOU status validator
+- **Vacation Days Validation**: Enforced maximum value validation for vacation mode days
+- **CI Linting**: Fixed line length violations and import sorting issues
+- **Security Scanning**: Resolved intermediate variable issues in redacted MAC address handling
+- **Parser Regressions**: Fixed data parsing issues introduced in MQTT refactoring
 
 Version 7.0.1 (2025-12-18)
 ==========================

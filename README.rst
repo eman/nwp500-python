@@ -65,7 +65,7 @@ Basic Usage
 Command Line Interface
 ======================
 
-The library includes a command line interface for quick monitoring and device information retrieval:
+The library includes a command line interface for monitoring and controlling your Navien water heater:
 
 .. code-block:: bash
 
@@ -73,58 +73,89 @@ The library includes a command line interface for quick monitoring and device in
     export NAVIEN_EMAIL="your_email@example.com"
     export NAVIEN_PASSWORD="your_password"
 
-    # Get current device status (one-time)
-    python -m nwp500.cli --status
+    # Get current device status
+    python3 -m nwp500.cli status
 
-    # Get device information
-    python -m nwp500.cli --device-info
+    # Get device information and firmware
+    python3 -m nwp500.cli info
 
-    # Get device feature/capability information  
-    python -m nwp500.cli --device-feature
+    # Get controller serial number
+    python3 -m nwp500.cli serial
 
-    # Turn device on
-    python -m nwp500.cli --power-on
+    # Turn device on/off
+    python3 -m nwp500.cli power on
+    python3 -m nwp500.cli power off
 
-    # Turn device off
-    python -m nwp500.cli --power-off
+    # Set operation mode
+    python3 -m nwp500.cli mode heat-pump
+    python3 -m nwp500.cli mode energy-saver
+    python3 -m nwp500.cli mode high-demand
+    python3 -m nwp500.cli mode electric
+    python3 -m nwp500.cli mode vacation
+    python3 -m nwp500.cli mode standby
 
-    # Turn device on and see updated status
-    python -m nwp500.cli --power-on --status
+    # Set target temperature
+    python3 -m nwp500.cli temp 140
 
-    # Set operation mode and see response
-    python -m nwp500.cli --set-mode energy-saver
+    # Set vacation days
+    python3 -m nwp500.cli vacation 7
 
-    # Set DHW target temperature and see response
-    python -m nwp500.cli --set-dhw-temp 140
+    # Trigger instant hot water
+    python3 -m nwp500.cli hot-button
 
-    # Set temperature and then get updated status
-    python -m nwp500.cli --set-dhw-temp 140 --status
+    # Set recirculation pump mode (1-4)
+    python3 -m nwp500.cli recirc 2
 
-    # Set mode and then get updated status
-    python -m nwp500.cli --set-mode energy-saver --status
+    # Reset air filter timer
+    python3 -m nwp500.cli reset-filter
 
-    # Just get current status (one-time)
-    python -m nwp500.cli --status
+    # Enable water program mode
+    python3 -m nwp500.cli water-program
 
-    # Monitor continuously (default - writes to CSV)
-    python -m nwp500.cli --monitor
+    # View and update schedules
+    python3 -m nwp500.cli reservations get
+    python3 -m nwp500.cli reservations set '[{"hour": 6, "min": 0, ...}]'
 
-    # Monitor with custom output file
-    python -m nwp500.cli --monitor --output my_data.csv
+    # Time-of-use settings
+    python3 -m nwp500.cli tou get
+    python3 -m nwp500.cli tou set on
 
-**Available CLI Options:**
+    # Energy usage data
+    python3 -m nwp500.cli energy --year 2024 --months 10,11,12
 
-* ``--status``: Print current device status as JSON. Can be combined with control commands to see updated status.
-* ``--device-info``: Print comprehensive device information (firmware, model, capabilities) as JSON and exit  
-* ``--device-feature``: Print device capabilities and feature settings as JSON and exit
-* ``--power-on``: Turn the device on and display response
-* ``--power-off``: Turn the device off and display response
-* ``--set-mode MODE``: Set operation mode and display response. Valid modes: heat-pump, energy-saver, high-demand, electric, vacation, standby
-* ``--set-dhw-temp TEMP``: Set DHW (Domestic Hot Water) target temperature in Fahrenheit (115-150°F) and display response
-* ``--monitor``: Continuously monitor status every 30 seconds and log to CSV (default)
-* ``-o, --output``: Specify CSV output filename for monitoring mode
-* ``--email``: Override email (alternative to environment variable)
-* ``--password``: Override password (alternative to environment variable)
+    # Demand response
+    python3 -m nwp500.cli dr enable
+    python3 -m nwp500.cli dr disable
+
+    # Real-time monitoring (logs to CSV)
+    python3 -m nwp500.cli monitor
+    python3 -m nwp500.cli monitor -o my_data.csv
+
+**Global Options:**
+
+* ``--email EMAIL``: Navien account email (or use ``NAVIEN_EMAIL`` env var)
+* ``--password PASSWORD``: Navien account password (or use ``NAVIEN_PASSWORD`` env var)
+* ``-v, --verbose``: Enable debug logging
+* ``--version``: Show version and exit
+
+**Available Commands:**
+
+* ``status``: Show current device status (temperature, mode, power)
+* ``info``: Show device information (firmware, capabilities)
+* ``serial``: Get controller serial number
+* ``power on|off``: Turn device on or off
+* ``mode MODE``: Set operation mode (heat-pump, electric, energy-saver, high-demand, vacation, standby)
+* ``temp TEMPERATURE``: Set target water temperature in °F
+* ``vacation DAYS``: Enable vacation mode for N days
+* ``recirc MODE``: Set recirculation pump (1=always, 2=button, 3=schedule, 4=temperature)
+* ``hot-button``: Trigger instant hot water
+* ``reset-filter``: Reset air filter maintenance timer
+* ``water-program``: Enable water program reservation mode
+* ``reservations get|set``: View or update schedule
+* ``tou get|set STATE``: View or configure time-of-use settings
+* ``energy``: Query historical energy usage (requires ``--year`` and ``--months``)
+* ``dr enable|disable``: Enable or disable demand response
+* ``monitor``: Monitor device status in real-time (logs to CSV with ``-o`` option)
 
 Device Status Fields
 ====================
