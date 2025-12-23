@@ -415,6 +415,12 @@ DHW_CONTROL_TYPE_FLAG_TEXT = {
     DHWControlTypeFlag.ENABLE_3_STAGE: "3 Stage",
 }
 
+VOLUME_CODE_TEXT = {
+    VolumeCode.VOLUME_50: "50 gallons",
+    VolumeCode.VOLUME_65: "65 gallons",
+    VolumeCode.VOLUME_80: "80 gallons",
+}
+
 
 # ============================================================================
 # Error Code Enumerations
