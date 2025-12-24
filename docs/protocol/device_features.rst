@@ -31,7 +31,7 @@ The DeviceFeature data contains comprehensive device capabilities, configuration
    * - ``countryCode``
      - int
      - None
-     - Country/region code where device is certified for operation (1=USA, complies with FCC Part 15 Class B, NSF/ANSI 372)
+     - Country/region code where device is certified for operation. Device-specific code defined by Navien; earlier documentation referenced code 1, but current USA devices report code 3
      - None
    * - ``modelTypeCode``
      - int

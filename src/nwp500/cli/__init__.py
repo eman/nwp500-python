@@ -1,7 +1,7 @@
 """CLI package for nwp500-python."""
 
 from .__main__ import run
-from .commands import (
+from .handlers import (
     handle_device_info_request,
     handle_get_controller_serial_request,
     handle_get_energy_request,

@@ -146,3 +146,42 @@ ignore_missing_imports = true
 [[tool.mypy.overrides]]
 module = "pydantic.*"
 ignore_missing_imports = true
+
+[tool.pyright]
+# Pyright configuration for strict type checking
+pythonVersion = "3.13"
+typeCheckingMode = "strict"
+include = ["src/nwp500", "tests"]
+exclude = [".venv", "build", "dist", ".tox"]
+
+# Strict error reporting
+reportGeneralTypeIssues = "error"
+reportUnboundVariable = "error"
+reportUnusedImport = "error"
+reportUnsupportedDunderAll = "error"
+reportPrivateUsage = "error"
+reportConstantRedefinition = "error"
+reportOptionalCall = "error"
+reportUnnecessaryComparison = "error"
+reportPossiblyUnboundVariable = "error"
+reportUnnecessaryIsInstance = "error"
+reportUnusedVariable = "error"
+reportIncompatibleMethodOverride = "error"
+reportIncompatibleVariableOverride = "error"
+
+# Type stub warnings
+reportMissingTypeStubs = "warning"
+reportUnknownParameterType = "warning"
+reportUnknownMemberType = "warning"
+reportUnknownVariableType = "warning"
+reportUnknownArgumentType = "warning"
+reportMissingParameterType = "warning"
+reportPrivateImportUsage = "warning"
+
+# Untyped decorators and base classes from third-party libraries (Click, Pydantic)
+# These libraries don't have complete type stubs, so we report these as warnings
+reportUntypedFunctionDecorator = "warning"
+reportUntypedBaseClass = "warning"
+
+# Ignore missing imports for external libraries without stubs
+reportMissingImports = false

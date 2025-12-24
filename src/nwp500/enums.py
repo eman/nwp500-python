@@ -3,6 +3,8 @@
 This module contains enumerations for the Navien device protocol. These
 enums define valid values for device control commands, status fields, and
 capabilities.
+
+See docs/protocol/quick_reference.rst for comprehensive protocol details.
 """
 
 from enum import IntEnum
@@ -214,6 +216,18 @@ class HeatControl(IntEnum):
 # ============================================================================
 
 
+class VolumeCode(IntEnum):
+    """Tank volume capacity codes for NWP500 heat pump water heater models.
+
+    Represents the nominal tank capacity in gallons for NWP500 series devices.
+    These correspond to the different model variants available.
+    """
+
+    VOLUME_50 = 1  # NWP500-50: 50-gallon (189.2 liters) tank capacity
+    VOLUME_65 = 2  # NWP500-65: 65-gallon (246.0 liters) tank capacity
+    VOLUME_80 = 3  # NWP500-80: 80-gallon (302.8 liters) tank capacity
+
+
 class UnitType(IntEnum):
     """Navien device/unit model types."""
 
@@ -261,7 +275,7 @@ class CommandCode(IntEnum):
     - Control commands (33554xxx): Change device settings
 
     All commands and their expected payloads are documented in
-    docs/MQTT_MESSAGES.rst under the "Control Messages" section.
+    docs/protocol/mqtt_protocol.rst under the "Control Messages" section.
     """
 
     # Query Commands (Information Retrieval)
@@ -401,6 +415,12 @@ DHW_CONTROL_TYPE_FLAG_TEXT = {
     DHWControlTypeFlag.ENABLE_DOT_5_DEGREE: "0.5°C",
     DHWControlTypeFlag.ENABLE_1_DEGREE: "1°C",
     DHWControlTypeFlag.ENABLE_3_STAGE: "3 Stage",
+}
+
+VOLUME_CODE_TEXT = {
+    VolumeCode.VOLUME_50: "50 gallons",
+    VolumeCode.VOLUME_65: "65 gallons",
+    VolumeCode.VOLUME_80: "80 gallons",
 }
 
 

@@ -4,7 +4,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from nwp500.cli.commands import (
+from nwp500.cli.handlers import (
     get_controller_serial_number,
     handle_set_dhw_temp_request,
     handle_set_mode_request,

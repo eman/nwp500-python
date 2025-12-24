@@ -1,158 +1,96 @@
-# Examples
+# Examples Guide
 
-This directory contains example scripts demonstrating how to use the nwp500-python library.
+This directory contains categorized examples to help you get started with `nwp500-python`.
 
-## Prerequisites
+## Setup
 
-Install the library in development mode:
-
-```bash
-cd ..
-pip install -e .
-```
-
-Or install the required dependencies:
-
-```bash
-pip install aiohttp>=3.8.0 awsiotsdk>=1.21.0
-```
-
-**Note:** The `tou_openei_example.py` requires `aiohttp` which is included in the library's dependencies. If you're running examples without installing the library, make sure to install aiohttp separately.
-
-## Authentication
-
-All examples use the `NavienAuthClient` which requires credentials passed to the constructor. Authentication happens automatically when entering the async context.
-
-### Setting Credentials
-
-Set your credentials as environment variables:
+Before running any example, ensure you have set your credentials:
 
 ```bash
 export NAVIEN_EMAIL='your_email@example.com'
 export NAVIEN_PASSWORD='your_password'
 ```
 
-## Example Files
+If using the `nwp500` library from the source code (this repository), most examples are configured to find the `src` package automatically.
 
-### Authentication Example
+## Directory Structure
 
-`authenticate.py` - Demonstrates basic authentication with the Navien Smart Control API.
+*   `beginner/`: Essential scripts for basic operations. Start here.
+*   `intermediate/`: Common use-cases like real-time monitoring and event handling.
+*   `advanced/`: Specialized features like schedules, energy analytics, and deep diagnostics.
+*   `testing/`: Scripts for testing connections and API behavior.
 
-**Usage:**
-```bash
-python authenticate.py
-```
+## Beginner Examples
 
-**What It Does:**
-1. Authenticates with the Navien Smart Control API (automatically)
-2. Displays user information (name, status, type)
-3. Shows token information (access token, refresh token, expiration)
-4. Demonstrates how to use tokens in API requests
-5. Shows AWS credentials if available for IoT/MQTT connections
+Run these first to understand basic concepts.
 
-### API Client Examples
+### 01 - Authentication
+`beginner/01_authentication.py`
 
-- `auth_constructor_example.py` - Shows the simplified authentication pattern
-- `improved_auth_pattern.py` - Demonstrates the clean pattern for API and MQTT usage
-- `test_api_client.py` - Comprehensive API client testing
+Learn how to authenticate with Navien cloud and inspect tokens.
 
-### MQTT Examples
+**Requirements:** NAVIEN_EMAIL, NAVIEN_PASSWORD env vars
+**Time:** 5 minutes
+**Next:** `02_list_devices.py`
 
-- `combined_callbacks.py` - Device status and feature monitoring
-- `device_status_callback.py` - Real-time device status updates
-- `device_feature_callback.py` - Device feature monitoring
-- `mqtt_client_example.py` - Basic MQTT client usage
-- `test_mqtt_connection.py` - MQTT connection testing
-- `test_mqtt_messaging.py` - MQTT message handling
+### 02 - List Devices
+`beginner/02_list_devices.py`
 
-### Device Control Examples
+Connect to the API and list your registered devices with their basic info.
 
-- `power_control_example.py` - Turn device on/off
-- `set_dhw_temperature_example.py` - Set water temperature
-- `set_mode_example.py` - Change operation mode
-- `anti_legionella_example.py` - Configure anti-legionella settings
+**Requirements:** Authenticated account
+**Time:** 3 minutes
+**Next:** `03_get_status.py`
 
-### Time of Use (TOU) Examples
+### 03 - Get Status
+`beginner/03_get_status.py`
 
-- `tou_schedule_example.py` - Manually configure TOU pricing schedule
-- `tou_openei_example.py` - Retrieve TOU schedule from OpenEI API and configure device
+Retrieve the real-time status (temperatures, flow rates) of a device.
 
-**TOU OpenEI Example Usage:**
+**Next:** `04_set_temperature.py`
 
-This example fetches real utility rate data from the OpenEI API and configures it on your device:
+### 04 - Set Temperature
+`beginner/04_set_temperature.py`
 
-```bash
-export NAVIEN_EMAIL='your_email@example.com'
-export NAVIEN_PASSWORD='your_password'
-export ZIP_CODE='94103'  # Your ZIP code
-export OPENEI_API_KEY='your_openei_api_key'  # Optional, defaults to DEMO_KEY
+Simple control example: Setting the DHW target temperature.
 
-python tou_openei_example.py
-```
+## Intermediate Examples
 
-**Getting an OpenEI API Key:**
-1. Visit https://openei.org/services/api/signup/
-2. Create a free account
-3. Get your API key from the dashboard
-4. The DEMO_KEY works for testing but has rate limits
+Explore more complex interactions.
 
-**What the OpenEI Example Does:**
-1. Queries the OpenEI Utility Rates API for your location
-2. Finds an approved residential TOU rate plan
-3. Parses the rate structure and time schedules
-4. Converts to Navien TOU period format
-5. Configures the schedule on your device via MQTT
+*   **`mqtt_realtime_monitoring.py`**: Subscribe to MQTT topics for real-time updates.
+*   **`event_driven_control.py`**: React to events (like water usage) to trigger actions.
+*   **`error_handling.py`**: Robust error handling patterns for production code.
+*   **`periodic_requests.py`**: How to poll for data without overwhelming the API.
+*   **`set_mode.py`**: Change device operation modes.
+*   **`vacation_mode.py`**: Enable/Disable vacation mode programmatically.
+*   **`command_queue.py`**: Using the command queue for reliable control.
+*   **`improved_auth.py`**: Advanced authentication patterns.
 
-### Scheduling Examples
+## Advanced Examples
 
-- `reservation_schedule_example.py` - Configure heating reservations/schedules
+Deep dive into specific features.
 
-### Energy Monitoring Examples
+*   **`device_capabilities.py`**: Inspect detailed device capabilities and flags.
+*   **`mqtt_diagnostics.py`**: Low-level MQTT diagnostic tools.
+*   **`auto_recovery.py`**: Implementing auto-reconnection and state recovery.
+*   **`energy_analytics.py`**: Analyze energy usage reports.
+*   **`tou_schedule.py`**: Configure Time-of-Use schedules.
+*   **`tou_openei.py`**: Integrate with OpenEI for utility rates.
+*   **`reservation_schedule.py`**: Manage heating reservation schedules.
+*   **`power_control.py`**: Turn device on/off.
+*   **`recirculation_control.py`**: Manage recirculation pump settings.
+*   **`demand_response.py`**: Handling utility demand response signals.
+*   **`token_restoration.py`**: Recovering sessions from saved tokens.
 
-- `energy_usage_example.py` - Monitor real-time energy consumption
+## Testing
 
-### Common Pattern
+Utilities for verifying your environment and library function.
 
-All examples follow this pattern:
+*   **`test_api_client.py`**: Verify API connectivity and response parsing.
+*   **`test_mqtt_connection.py`**: Verify MQTT broker connectivity.
+*   **`test_mqtt_messaging.py`**: Test messaging reliability.
+*   **`periodic_device_info.py`**: Debug tool for periodic polling.
 
-```python
-import asyncio
-import os
-from nwp500 import NavienAuthClient, NavienAPIClient
-
-async def main():
-    email = os.getenv("NAVIEN_EMAIL")
-    password = os.getenv("NAVIEN_PASSWORD")
-    
-    # Authentication happens automatically
-    async with NavienAuthClient(email, password) as auth_client:
-        # Use the authenticated client
-        api_client = NavienAPIClient(auth_client=auth_client)
-        devices = await api_client.list_devices()
-        print(f"Found {len(devices)} device(s)")
-
-asyncio.run(main())
-```
-
-## Expected Output
-
-When running any example with valid credentials, you should see output similar to:
-
-```
-[SUCCESS] Authenticated as: John Doe
-📧 Email: your_email@example.com
-🔑 Token expires at: 2024-01-15 14:30:00
-```
-
-## Troubleshooting
-
-**Error: name 'auth_response' is not defined**
-- This means an example file hasn't been updated. Use `auth_client.current_user` and `auth_client.current_tokens` instead.
-
-**Error: NavienAuthClient() missing 2 required positional arguments**
-- Credentials are now required. Pass email and password to the constructor.
-
-**Authentication fails**
-- Verify your NAVIEN_EMAIL and NAVIEN_PASSWORD environment variables are set correctly
-- Check that your credentials are valid
-- Ensure internet connectivity
+---
+**Note:** Some examples might require specific device models to function fully (e.g., recirculation control).

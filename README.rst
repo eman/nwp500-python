@@ -62,6 +62,34 @@ Basic Usage
             # Change operation mode
             await api_client.set_device_mode(device, "heat_pump")
 
+For more detailed authentication information, see the `Authentication & Session Management <https://nwp500-python.readthedocs.io/en/latest/guides/authentication.html>`_ guide.
+
+MQTT Real-Time Monitoring
+--------------------------
+
+Monitor your device in real-time using MQTT:
+
+.. code-block:: python
+
+    from nwp500 import NavienAuthClient, NavienMqttClient
+
+    async with NavienAuthClient("your_email@example.com", "your_password") as auth_client:
+        # Create MQTT client
+        mqtt_client = NavienMqttClient(auth_client=auth_client)
+        await mqtt_client.connect()
+        
+        # Subscribe to device status updates
+        def on_status(status):
+            print(f"Temperature: {status.dhw_temperature}°F")
+            print(f"Mode: {status.operation_mode}")
+        
+        device = (await api_client.list_devices())[0]
+        await mqtt_client.subscribe_device_status(device, on_status)
+        
+        # Keep the connection alive
+        await mqtt_client.wait()
+
+
 Command Line Interface
 ======================
 

@@ -45,6 +45,15 @@ The version bump script:
 
 **Validation**: Run `make validate-version` to check for version-related mistakes before committing.
 
+### Review Comments
+
+When working on pull requests, use the GitHub CLI to access review comments:
+- **List review comments**: `gh pr review-comment list --repo=<owner>/<repo>`
+- **Get PR details with reviews**: `gh pr view <number> --repo=<owner>/<repo>`
+- **Apply review feedback** before final submission
+
+This ensures you can address all feedback from code reviewers systematically.
+
 ### Before Committing Changes
 Always run these checks before finalizing changes to ensure your code will pass CI:
 1. **Linting**: `make ci-lint` - Ensures code style matches CI requirements

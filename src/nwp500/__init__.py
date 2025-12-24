@@ -34,10 +34,10 @@ from nwp500.command_decorators import (
     requires_capability,
 )
 from nwp500.device_capabilities import (
-    DeviceCapabilityChecker,
+    MqttDeviceCapabilityChecker,
 )
 from nwp500.device_info_cache import (
-    DeviceInfoCache,
+    MqttDeviceInfoCache,
 )
 from nwp500.encoding import (
     build_reservation_entry,
@@ -65,6 +65,7 @@ from nwp500.enums import (
     TouRateType,
     TouWeekType,
     UnitType,
+    VolumeCode,
 )
 from nwp500.events import (
     EventEmitter,
@@ -92,6 +93,9 @@ from nwp500.exceptions import (
     TokenRefreshError,
     ValidationError,
 )
+from nwp500.factory import (
+    create_navien_clients,
+)
 from nwp500.models import (
     Device,
     DeviceFeature,
@@ -109,14 +113,18 @@ from nwp500.models import (
     TOUSchedule,
     fahrenheit_to_half_celsius,
 )
-from nwp500.mqtt_client import NavienMqttClient
-from nwp500.mqtt_diagnostics import (
+from nwp500.mqtt import (
     ConnectionDropEvent,
     ConnectionEvent,
+    MqttConnectionConfig,
     MqttDiagnosticsCollector,
     MqttMetrics,
+    NavienMqttClient,
+    PeriodicRequestType,
 )
-from nwp500.mqtt_utils import MqttConnectionConfig, PeriodicRequestType
+from nwp500.mqtt_events import (
+    MqttClientEvents,
+)
 from nwp500.utils import (
     log_performance,
 )
@@ -124,10 +132,12 @@ from nwp500.utils import (
 __all__ = [
     "__version__",
     # Device Capabilities & Caching
-    "DeviceCapabilityChecker",
+    "MqttDeviceCapabilityChecker",
     "DeviceCapabilityError",
-    "DeviceInfoCache",
+    "MqttDeviceInfoCache",
     "requires_capability",
+    # Factory functions
+    "create_navien_clients",
     # Models
     "DeviceStatus",
     "DeviceFeature",
@@ -159,6 +169,7 @@ __all__ = [
     "TouRateType",
     "TouWeekType",
     "UnitType",
+    "VolumeCode",
     # Conversion utilities
     "fahrenheit_to_half_celsius",
     # Authentication
@@ -188,8 +199,6 @@ __all__ = [
     "DeviceNotFoundError",
     "DeviceOfflineError",
     "DeviceOperationError",
-    # Constants
-    "constants",
     # API Client
     "NavienAPIClient",
     # MQTT Client
@@ -203,6 +212,7 @@ __all__ = [
     # Event Emitter
     "EventEmitter",
     "EventListener",
+    "MqttClientEvents",
     # Encoding utilities
     "encode_week_bitfield",
     "decode_week_bitfield",

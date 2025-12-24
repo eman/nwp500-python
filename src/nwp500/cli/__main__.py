@@ -1,10 +1,12 @@
-"""Navien Water Heater Control Script - Main Entry Point."""
+"""Navien Water Heater Control CLI - Main Entry Point."""
 
-import argparse
 import asyncio
+import functools
 import logging
-import os
 import sys
+from typing import Any
+
+import click
 
 from nwp500 import (
     NavienAPIClient,
@@ -23,190 +25,181 @@ from nwp500.exceptions import (
     ValidationError,
 )
 
-from . import commands as cmds
-from .commands import (
-    handle_configure_reservation_water_program_request as handle_water_prog,
-)
-from .commands import (
-    handle_trigger_recirculation_hot_button_request as handle_hot_btn,
-)
-from .monitoring import handle_monitoring
+from . import handlers
+from .rich_output import get_formatter
 from .token_storage import load_tokens, save_tokens
 
 _logger = logging.getLogger(__name__)
+_formatter = get_formatter()
 
 
-async def async_main(args: argparse.Namespace) -> int:
-    """Asynchronous main function."""
-    email = args.email or os.getenv("NAVIEN_EMAIL")
-    password = args.password or os.getenv("NAVIEN_PASSWORD")
-    tokens, cached_email = load_tokens()
-    email = cached_email or email
+def async_command(f: Any) -> Any:
+    """Decorator to run click commands asynchronously with device connection."""
 
-    if not email or not password:
-        _logger.error(
-            "Credentials missing. Use --email/--password or env vars."
-        )
-        return 1
+    @click.pass_context
+    @functools.wraps(f)
+    def wrapper(ctx: click.Context, *args: Any, **kwargs: Any) -> Any:
+        async def runner() -> int:
+            email = ctx.obj.get("email")
+            password = ctx.obj.get("password")
 
-    try:
-        async with NavienAuthClient(
-            email, password, stored_tokens=tokens
-        ) as auth:
-            if auth.current_tokens and auth.user_email:
-                save_tokens(auth.current_tokens, auth.user_email)
+            # Load cached tokens if available
+            tokens, cached_email = load_tokens()
+            # If email not provided in args, try cached email
+            email = email or cached_email
 
-            api = NavienAPIClient(auth_client=auth)
-            device = await api.get_first_device()
-            if not device:
-                _logger.error("No devices found.")
+            if not email or not password:
+                _logger.error(
+                    "Credentials missing. Use --email/--password or env vars."
+                )
                 return 1
 
-            _logger.info(f"Using device: {device.device_info.device_name}")
-
-            mqtt = NavienMqttClient(auth)
-            await mqtt.connect()
             try:
-                # Command Dispatching
-                cmd = args.command
-                if cmd == "info":
-                    await cmds.handle_device_info_request(
-                        mqtt, device, args.raw
-                    )
-                elif cmd == "status":
-                    await cmds.handle_status_request(mqtt, device, args.raw)
-                elif cmd == "serial":
-                    await cmds.handle_get_controller_serial_request(
-                        mqtt, device
-                    )
-                elif cmd == "power":
-                    await cmds.handle_power_request(
-                        mqtt, device, args.state == "on"
-                    )
-                elif cmd == "mode":
-                    await cmds.handle_set_mode_request(mqtt, device, args.name)
-                elif cmd == "temp":
-                    await cmds.handle_set_dhw_temp_request(
-                        mqtt, device, args.value
-                    )
-                elif cmd == "vacation":
-                    await cmds.handle_set_vacation_days_request(
-                        mqtt, device, args.days
-                    )
-                elif cmd == "recirc":
-                    await cmds.handle_set_recirculation_mode_request(
-                        mqtt, device, args.mode
-                    )
-                elif cmd == "reservations":
-                    if args.action == "get":
-                        await cmds.handle_get_reservations_request(mqtt, device)
-                    else:
-                        await cmds.handle_update_reservations_request(
-                            mqtt, device, args.json, not args.disabled
-                        )
-                elif cmd == "tou":
-                    if args.action == "get":
-                        await cmds.handle_get_tou_request(mqtt, device, api)
-                    else:
-                        await cmds.handle_set_tou_enabled_request(
-                            mqtt, device, args.state == "on"
-                        )
-                elif cmd == "energy":
-                    months = [int(m.strip()) for m in args.months.split(",")]
-                    await cmds.handle_get_energy_request(
-                        mqtt, device, args.year, months
-                    )
-                elif cmd == "dr":
-                    if args.action == "enable":
-                        await cmds.handle_enable_demand_response_request(
-                            mqtt, device
-                        )
-                    else:
-                        await cmds.handle_disable_demand_response_request(
-                            mqtt, device
-                        )
-                elif cmd == "hot-button":
-                    await handle_hot_btn(mqtt, device)
-                elif cmd == "reset-filter":
-                    await cmds.handle_reset_air_filter_request(mqtt, device)
-                elif cmd == "water-program":
-                    await handle_water_prog(mqtt, device)
-                elif cmd == "monitor":
-                    await handle_monitoring(mqtt, device, args.output)
+                async with NavienAuthClient(
+                    email, password, stored_tokens=tokens
+                ) as auth:
+                    if auth.current_tokens and auth.user_email:
+                        save_tokens(auth.current_tokens, auth.user_email)
 
-            finally:
-                await mqtt.disconnect()
-            return 0
+                    api = NavienAPIClient(auth_client=auth)
+                    device = await api.get_first_device()
+                    if not device:
+                        _logger.error("No devices found.")
+                        return 1
 
-    except (
-        InvalidCredentialsError,
-        AuthenticationError,
-        TokenRefreshError,
-    ) as e:
-        _logger.error(f"Auth failed: {e}")
-    except (MqttNotConnectedError, MqttConnectionError, MqttError) as e:
-        _logger.error(f"MQTT error: {e}")
-    except ValidationError as e:
-        _logger.error(f"Validation error: {e}")
-    except Nwp500Error as e:
-        _logger.error(f"Library error: {e}")
-    except Exception as e:
-        _logger.error(f"Unexpected error: {e}", exc_info=True)
-    return 1
+                    _logger.info(
+                        f"Using device: {device.device_info.device_name}"
+                    )
+
+                    mqtt = NavienMqttClient(auth)
+                    await mqtt.connect()
+                    try:
+                        # Attach api to context for commands that need it
+                        ctx.obj["api"] = api
+
+                        await f(mqtt, device, *args, **kwargs)
+                    finally:
+                        await mqtt.disconnect()
+                    return 0
+
+            except (
+                InvalidCredentialsError,
+                AuthenticationError,
+                TokenRefreshError,
+            ) as e:
+                _logger.error(f"Auth failed: {e}")
+                _formatter.print_error(str(e), title="Authentication Failed")
+            except (MqttNotConnectedError, MqttConnectionError, MqttError) as e:
+                _logger.error(f"MQTT error: {e}")
+                _formatter.print_error(str(e), title="MQTT Connection Error")
+            except ValidationError as e:
+                _logger.error(f"Validation error: {e}")
+                _formatter.print_error(str(e), title="Validation Error")
+            except Nwp500Error as e:
+                _logger.error(f"Library error: {e}")
+                _formatter.print_error(str(e), title="Library Error")
+            except Exception as e:
+                _logger.error(f"Unexpected error: {e}", exc_info=True)
+                _formatter.print_error(str(e), title="Unexpected Error")
+            return 1
+
+        return asyncio.run(runner())
+
+    return wrapper
 
 
-def parse_args(args: list[str]) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Navien NWP500 CLI")
-    parser.add_argument(
-        "--version", action="version", version=f"nwp500-python {__version__}"
+@click.group()
+@click.option("--email", envvar="NAVIEN_EMAIL", help="Navien account email")
+@click.option(
+    "--password", envvar="NAVIEN_PASSWORD", help="Navien account password"
+)
+@click.option("-v", "--verbose", count=True, help="Increase verbosity")
+@click.version_option(version=__version__)
+@click.pass_context
+def cli(
+    ctx: click.Context, email: str | None, password: str | None, verbose: int
+) -> None:
+    """Navien NWP500 Control CLI."""
+    ctx.ensure_object(dict)
+    ctx.obj["email"] = email
+    ctx.obj["password"] = password
+
+    log_level = logging.WARNING
+    if verbose == 1:
+        log_level = logging.INFO
+    elif verbose >= 2:
+        log_level = logging.DEBUG
+
+    logging.basicConfig(
+        level=logging.WARNING,  # Default for other libraries
+        stream=sys.stdout,
+        format="[%(asctime)s] %(levelname)s:%(name)s:%(message)s",
     )
-    parser.add_argument("--email", help="Navien email")
-    parser.add_argument("--password", help="Navien password")
-    parser.add_argument(
-        "-v",
-        "--verbose",
-        dest="loglevel",
-        action="store_const",
-        const=logging.INFO,
-    )
-    parser.add_argument(
-        "-vv",
-        "--very-verbose",
-        dest="loglevel",
-        action="store_const",
-        const=logging.DEBUG,
+    logging.getLogger("nwp500").setLevel(log_level)
+    # Ensure this module's logger respects the level
+    _logger.setLevel(log_level)
+    logging.getLogger("aiohttp").setLevel(logging.WARNING)
+
+
+@cli.command()  # type: ignore[attr-defined]
+@click.option("--raw", is_flag=True, help="Output raw JSON response")
+@async_command
+async def info(mqtt: NavienMqttClient, device: Any, raw: bool) -> None:
+    """Show device information (firmware, capabilities)."""
+    await handlers.handle_device_info_request(mqtt, device, raw)
+
+
+@cli.command()  # type: ignore[attr-defined]
+@click.option("--raw", is_flag=True, help="Output raw JSON response")
+@async_command
+async def status(mqtt: NavienMqttClient, device: Any, raw: bool) -> None:
+    """Show current device status (temps, mode, etc)."""
+    await handlers.handle_status_request(mqtt, device, raw)
+
+
+@cli.command()  # type: ignore[attr-defined]
+@async_command
+async def serial(mqtt: NavienMqttClient, device: Any) -> None:
+    """Get controller serial number."""
+    await handlers.handle_get_controller_serial_request(mqtt, device)
+
+
+@cli.command()  # type: ignore[attr-defined]
+@async_command
+async def hot_button(mqtt: NavienMqttClient, device: Any) -> None:
+    """Trigger hot button (instant hot water)."""
+    await handlers.handle_trigger_recirculation_hot_button_request(mqtt, device)
+
+
+@cli.command()  # type: ignore[attr-defined]
+@async_command
+async def reset_filter(mqtt: NavienMqttClient, device: Any) -> None:
+    """Reset air filter maintenance timer."""
+    await handlers.handle_reset_air_filter_request(mqtt, device)
+
+
+@cli.command()  # type: ignore[attr-defined]
+@async_command
+async def water_program(mqtt: NavienMqttClient, device: Any) -> None:
+    """Enable water program reservation scheduling mode."""
+    await handlers.handle_configure_reservation_water_program_request(
+        mqtt, device
     )
 
-    subparsers = parser.add_subparsers(dest="command", required=True)
 
-    # Simple commands
-    subparsers.add_parser(
-        "info",
-        help="Show device information (firmware, capabilities, serial number)",
-    ).add_argument("--raw", action="store_true")
-    subparsers.add_parser(
-        "status",
-        help="Show current device status (temperature, mode, power usage)",
-    ).add_argument("--raw", action="store_true")
-    subparsers.add_parser("serial", help="Get controller serial number")
-    subparsers.add_parser(
-        "hot-button", help="Trigger hot button (instant hot water)"
-    )
-    subparsers.add_parser(
-        "reset-filter", help="Reset air filter maintenance timer"
-    )
-    subparsers.add_parser(
-        "water-program", help="Enable water program reservation scheduling mode"
-    )
+@cli.command()  # type: ignore[attr-defined]
+@click.argument("state", type=click.Choice(["on", "off"], case_sensitive=False))
+@async_command
+async def power(mqtt: NavienMqttClient, device: Any, state: str) -> None:
+    """Turn device on or off."""
+    await handlers.handle_power_request(mqtt, device, state.lower() == "on")
 
-    # Command with args
-    subparsers.add_parser("power", help="Turn device on or off").add_argument(
-        "state", choices=["on", "off"]
-    )
-    subparsers.add_parser("mode", help="Set operation mode").add_argument(
-        "name",
-        help="Mode name",
-        choices=[
+
+@cli.command()  # type: ignore[attr-defined]
+@click.argument(
+    "mode_name",
+    type=click.Choice(
+        [
             "standby",
             "heat-pump",
             "electric",
@@ -214,77 +207,142 @@ def parse_args(args: list[str]) -> argparse.Namespace:
             "high-demand",
             "vacation",
         ],
-    )
-    subparsers.add_parser(
-        "temp", help="Set target hot water temperature"
-    ).add_argument("value", type=float, help="Temp °F")
-    subparsers.add_parser(
-        "vacation", help="Enable vacation mode for N days"
-    ).add_argument("days", type=int)
-    subparsers.add_parser(
-        "recirc", help="Set recirculation pump mode (1-4)"
-    ).add_argument("mode", type=int, choices=[1, 2, 3, 4])
+        case_sensitive=False,
+    ),
+)
+@async_command
+async def mode(mqtt: NavienMqttClient, device: Any, mode_name: str) -> None:
+    """Set operation mode."""
+    await handlers.handle_set_mode_request(mqtt, device, mode_name)
 
-    # Sub-sub commands
-    res = subparsers.add_parser(
-        "reservations",
-        help="Schedule mode and temperature changes at specific times",
-    )
-    res_sub = res.add_subparsers(dest="action", required=True)
-    res_sub.add_parser("get", help="Get current reservation schedule")
-    res_set = res_sub.add_parser(
-        "set", help="Set reservation schedule from JSON"
-    )
-    res_set.add_argument("json", help="Reservation JSON")
-    res_set.add_argument("--disabled", action="store_true")
 
-    tou = subparsers.add_parser(
-        "tou", help="Configure time-of-use pricing schedule"
-    )
-    tou_sub = tou.add_subparsers(dest="action", required=True)
-    tou_sub.add_parser("get", help="Get current TOU schedule")
-    tou_set = tou_sub.add_parser("set", help="Enable or disable TOU pricing")
-    tou_set.add_argument("state", choices=["on", "off"])
+@cli.command()  # type: ignore[attr-defined]
+@click.argument("value", type=float)
+@async_command
+async def temp(mqtt: NavienMqttClient, device: Any, value: float) -> None:
+    """Set target hot water temperature (deg F)."""
+    await handlers.handle_set_dhw_temp_request(mqtt, device, value)
 
-    energy = subparsers.add_parser(
-        "energy", help="Query historical energy usage by month"
-    )
-    energy.add_argument("--year", type=int, required=True)
-    energy.add_argument(
-        "--months", required=True, help="Comma-separated months"
+
+@cli.command()  # type: ignore[attr-defined]
+@click.argument("days", type=int)
+@async_command
+async def vacation(mqtt: NavienMqttClient, device: Any, days: int) -> None:
+    """Enable vacation mode for N days."""
+    await handlers.handle_set_vacation_days_request(mqtt, device, days)
+
+
+@cli.command()  # type: ignore[attr-defined]
+@click.argument(
+    "mode_val", type=click.Choice(["1", "2", "3", "4"]), metavar="MODE"
+)
+@async_command
+async def recirc(mqtt: NavienMqttClient, device: Any, mode_val: str) -> None:
+    """Set recirculation pump mode (1-4)."""
+    await handlers.handle_set_recirculation_mode_request(
+        mqtt, device, int(mode_val)
     )
 
-    dr = subparsers.add_parser(
-        "dr", help="Enable or disable utility demand response"
+
+@cli.group()  # type: ignore[attr-defined]
+def reservations() -> None:
+    """Manage reservations."""
+    pass
+
+
+@reservations.command("get")  # type: ignore[attr-defined]
+@async_command
+async def reservations_get(mqtt: NavienMqttClient, device: Any) -> None:
+    """Get current reservation schedule."""
+    await handlers.handle_get_reservations_request(mqtt, device)
+
+
+@reservations.command("set")  # type: ignore[attr-defined]
+@click.argument("json_str", metavar="JSON")
+@click.option("--disabled", is_flag=True, help="Disable reservations")
+@async_command
+async def reservations_set(
+    mqtt: NavienMqttClient, device: Any, json_str: str, disabled: bool
+) -> None:
+    """Set reservation schedule from JSON."""
+    await handlers.handle_update_reservations_request(
+        mqtt, device, json_str, not disabled
     )
-    dr.add_argument("action", choices=["enable", "disable"])
 
-    monitor = subparsers.add_parser(
-        "monitor", help="Monitor device status in real-time (logs to CSV)"
+
+@cli.group()  # type: ignore[attr-defined]
+def tou() -> None:
+    """Manage Time-of-Use settings."""
+    pass
+
+
+@tou.command("get")  # type: ignore[attr-defined]
+@click.pass_context  # We need context to access api
+@async_command
+async def tou_get(
+    mqtt: NavienMqttClient, device: Any, ctx: click.Context | None = None
+) -> None:
+    """Get current TOU schedule."""
+    ctx = click.get_current_context()
+    api = None
+    if ctx and hasattr(ctx, "obj") and ctx.obj is not None:
+        api = ctx.obj.get("api")
+    if api:
+        await handlers.handle_get_tou_request(mqtt, device, api)
+    else:
+        _logger.error("API client not available")
+
+
+@tou.command("set")  # type: ignore[attr-defined]
+@click.argument("state", type=click.Choice(["on", "off"], case_sensitive=False))
+@async_command
+async def tou_set(mqtt: NavienMqttClient, device: Any, state: str) -> None:
+    """Enable or disable TOU pricing."""
+    await handlers.handle_set_tou_enabled_request(
+        mqtt, device, state.lower() == "on"
     )
-    monitor.add_argument("-o", "--output", default="nwp500_status.csv")
-
-    return parser.parse_args(args)
 
 
-def main(args_list: list[str]) -> None:
-    args = parse_args(args_list)
-    logging.basicConfig(
-        level=logging.WARNING,
-        stream=sys.stdout,
-        format="[%(asctime)s] %(levelname)s:%(name)s:%(message)s",
-    )
-    _logger.setLevel(args.loglevel or logging.INFO)
-    logging.getLogger("aiohttp").setLevel(logging.WARNING)
-    try:
-        sys.exit(asyncio.run(async_main(args)))
-    except KeyboardInterrupt:
-        _logger.info("Interrupted.")
+@cli.command()  # type: ignore[attr-defined]
+@click.option("--year", type=int, required=True)
+@click.option(
+    "--months", required=True, help="Comma-separated months (e.g. 1,2,3)"
+)
+@async_command
+async def energy(
+    mqtt: NavienMqttClient, device: Any, year: int, months: str
+) -> None:
+    """Query historical energy usage."""
+    month_list = [int(m.strip()) for m in months.split(",")]
+    await handlers.handle_get_energy_request(mqtt, device, year, month_list)
 
 
-def run() -> None:
-    main(sys.argv[1:])
+@cli.command()  # type: ignore[attr-defined]
+@click.argument(
+    "action", type=click.Choice(["enable", "disable"], case_sensitive=False)
+)
+@async_command
+async def dr(mqtt: NavienMqttClient, device: Any, action: str) -> None:
+    """Enable or disable Demand Response."""
+    if action.lower() == "enable":
+        await handlers.handle_enable_demand_response_request(mqtt, device)
+    else:
+        await handlers.handle_disable_demand_response_request(mqtt, device)
+
+
+@cli.command()  # type: ignore[attr-defined]
+@click.option(
+    "-o", "--output", default="nwp500_status.csv", help="Output CSV file"
+)
+@async_command
+async def monitor(mqtt: NavienMqttClient, device: Any, output: str) -> None:
+    """Monitor device status in real-time."""
+    from .monitoring import handle_monitoring
+
+    await handle_monitoring(mqtt, device, output)
 
 
 if __name__ == "__main__":
-    run()
+    cli()  # type: ignore[call-arg]
+
+run = cli

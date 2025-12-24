@@ -14,7 +14,7 @@ The API uses JWT (JSON Web Tokens) for authentication with the following flow:
 import json
 import logging
 from datetime import datetime, timedelta
-from typing import Any, Self
+from typing import Any, Self, cast
 
 import aiohttp
 from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, model_validator
@@ -235,11 +235,22 @@ class NavienAuthClient:
     This client handles:
     - User authentication with email/password
     - Token management and automatic refresh
-    - Session management
+    - Session management via aiohttp ClientSession
     - AWS credentials (if provided by API)
+
+    Session and Context Manager
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+    The auth client manages an aiohttp session that is shared with other
+    clients (API, MQTT). The session is created when entering the context
+    manager and closed when exiting.
 
     Authentication is performed automatically when entering the async context
     manager, unless valid stored tokens are provided.
+
+    **Important:** All API and MQTT clients must be created and used within
+    the context manager. Once the context manager exits, the session is closed
+    and clients can no longer be used.
 
     Example:
         >>> async with NavienAuthClient(user_id="user@example.com",
@@ -247,12 +258,13 @@ class NavienAuthClient:
         ...     print(f"Welcome {client.current_user.full_name}")
         ...     # Token is securely stored and not printed in production
         ...
-        ...     # Use the token in API requests
-        ...     headers = client.get_auth_headers()
+        ...     # Create other clients within the context
+        ...     api_client = NavienAPIClient(auth_client=client)
+        ...     mqtt_client = NavienMqttClient(auth_client=client)
         ...
-        ...     # Refresh when needed
-        ...     if client.current_tokens.is_expired:
-        ...         await client.refresh_token()
+        ...     # Use the clients
+        ...     devices = await api_client.list_devices()
+        ...     await mqtt_client.connect()
 
         Restore session from stored tokens:
         >>> stored_tokens = AuthTokens.from_dict(saved_data)
@@ -516,7 +528,9 @@ class NavienAuthClient:
                             old_tokens.authorization_expires_in
                         )
                         # Also preserve the AWS expiration timestamp
-                        new_tokens._aws_expires_at = old_tokens._aws_expires_at
+                        cast(Any, new_tokens)._aws_expires_at = cast(
+                            Any, old_tokens
+                        )._aws_expires_at
 
                 # Update stored auth response if we have one
                 if self._auth_response:
@@ -702,11 +716,12 @@ async def authenticate(user_id: str, password: str) -> AuthenticationResponse:
         >>> # Do not print tokens in production code
     """
     async with NavienAuthClient(user_id, password) as client:
-        if client._auth_response is None:
+        auth_response = cast(Any, client)._auth_response
+        if auth_response is None:
             raise AuthenticationError(
                 "Authentication failed: no response received"
             )
-        return client._auth_response
+        return auth_response
 
 
 async def refresh_access_token(refresh_token: str) -> AuthTokens:

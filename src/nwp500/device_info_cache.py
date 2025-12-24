@@ -9,8 +9,6 @@ import logging
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, TypedDict
 
-from .mqtt_utils import redact_mac
-
 if TYPE_CHECKING:
     from .models import DeviceFeature
 
@@ -36,7 +34,7 @@ class CacheInfoResult(TypedDict):
     devices: list[CachedDeviceInfo]
 
 
-class DeviceInfoCache:
+class MqttDeviceInfoCache:
     """Manages caching of device information with periodic updates.
 
     This cache stores device features (capabilities, firmware info, etc.)
@@ -103,6 +101,8 @@ class DeviceInfoCache:
         async with self._lock:
             if device_mac in self._cache:
                 del self._cache[device_mac]
+                from .mqtt.utils import redact_mac
+
                 redacted = redact_mac(device_mac)
                 _logger.debug(f"Invalidated cache for {redacted}")
 

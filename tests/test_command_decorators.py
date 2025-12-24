@@ -6,14 +6,14 @@ from unittest.mock import Mock
 import pytest
 
 from nwp500.command_decorators import requires_capability
-from nwp500.device_info_cache import DeviceInfoCache
+from nwp500.device_info_cache import MqttDeviceInfoCache
 from nwp500.exceptions import DeviceCapabilityError
 
 
 class BaseMockController:
     """Base class for mock controllers to avoid duplication."""
 
-    def __init__(self, cache: DeviceInfoCache) -> None:
+    def __init__(self, cache: MqttDeviceInfoCache) -> None:
         self._device_info_cache = cache
 
     async def _get_device_features(self, device: Any) -> Any:
@@ -38,7 +38,7 @@ class TestRequiresCapabilityDecorator:
     @pytest.mark.asyncio
     async def test_decorator_allows_supported_capability(self) -> None:
         """Test decorator allows execution when capability is supported."""
-        cache = DeviceInfoCache()
+        cache = MqttDeviceInfoCache()
         mock_device = Mock()
         mock_device.device_info.mac_address = "AA:BB:CC:DD:EE:FF"
 
@@ -64,7 +64,7 @@ class TestRequiresCapabilityDecorator:
     @pytest.mark.asyncio
     async def test_decorator_blocks_unsupported_capability(self) -> None:
         """Test decorator blocks execution when capability is not supported."""
-        cache = DeviceInfoCache()
+        cache = MqttDeviceInfoCache()
         mock_device = Mock()
         mock_device.device_info.mac_address = "AA:BB:CC:DD:EE:FF"
 
@@ -91,7 +91,7 @@ class TestRequiresCapabilityDecorator:
     @pytest.mark.asyncio
     async def test_decorator_auto_requests_device_info(self) -> None:
         """Test decorator auto-requests device info when not cached."""
-        cache = DeviceInfoCache()
+        cache = MqttDeviceInfoCache()
         mock_device = Mock()
         mock_device.device_info.mac_address = "AA:BB:CC:DD:EE:FF"
 
@@ -123,7 +123,7 @@ class TestRequiresCapabilityDecorator:
     @pytest.mark.asyncio
     async def test_decorator_fails_when_info_not_available(self) -> None:
         """Test decorator fails when device info cannot be obtained."""
-        cache = DeviceInfoCache()
+        cache = MqttDeviceInfoCache()
         mock_device = Mock()
         mock_device.device_info.mac_address = "AA:BB:CC:DD:EE:FF"
 
@@ -146,7 +146,7 @@ class TestRequiresCapabilityDecorator:
     @pytest.mark.asyncio
     async def test_decorator_with_multiple_arguments(self) -> None:
         """Test decorator works with multiple function arguments."""
-        cache = DeviceInfoCache()
+        cache = MqttDeviceInfoCache()
         mock_device = Mock()
         mock_device.device_info.mac_address = "AA:BB:CC:DD:EE:FF"
 
@@ -177,7 +177,7 @@ class TestRequiresCapabilityDecorator:
     @pytest.mark.asyncio
     async def test_decorator_preserves_function_name(self) -> None:
         """Test decorator preserves function name."""
-        cache = DeviceInfoCache()
+        cache = MqttDeviceInfoCache()
         mock_device = Mock()
         mock_device.device_info.mac_address = "AA:BB:CC:DD:EE:FF"
 
@@ -200,7 +200,7 @@ class TestRequiresCapabilityDecorator:
     @pytest.mark.asyncio
     async def test_decorator_with_different_capabilities(self) -> None:
         """Test decorator works with different capability requirements."""
-        cache = DeviceInfoCache()
+        cache = MqttDeviceInfoCache()
         mock_device = Mock()
         mock_device.device_info.mac_address = "AA:BB:CC:DD:EE:FF"
 
@@ -239,7 +239,7 @@ class TestRequiresCapabilityDecorator:
     @pytest.mark.asyncio
     async def test_decorator_with_sync_function_logs_warning(self) -> None:
         """Test decorator with sync function raises TypeError."""
-        cache = DeviceInfoCache()
+        cache = MqttDeviceInfoCache()
         mock_device = Mock()
 
         class MockController(BaseMockController):
@@ -262,7 +262,7 @@ class TestRequiresCapabilityDecorator:
     @pytest.mark.asyncio
     async def test_decorator_handles_auto_request_exception(self) -> None:
         """Test decorator handles exception during auto-request."""
-        cache = DeviceInfoCache()
+        cache = MqttDeviceInfoCache()
         mock_device = Mock()
         mock_device.device_info.mac_address = "AA:BB:CC:DD:EE:FF"
 
@@ -286,7 +286,7 @@ class TestRequiresCapabilityDecorator:
     @pytest.mark.asyncio
     async def test_decorator_returns_function_result(self) -> None:
         """Test decorator properly returns function result."""
-        cache = DeviceInfoCache()
+        cache = MqttDeviceInfoCache()
         mock_device = Mock()
         mock_device.device_info.mac_address = "AA:BB:CC:DD:EE:FF"
 
@@ -310,7 +310,7 @@ class TestRequiresCapabilityDecorator:
     @pytest.mark.asyncio
     async def test_decorator_with_exception_in_decorated_function(self) -> None:
         """Test decorator propagates exceptions from decorated function."""
-        cache = DeviceInfoCache()
+        cache = MqttDeviceInfoCache()
         mock_device = Mock()
         mock_device.device_info.mac_address = "AA:BB:CC:DD:EE:FF"
 

@@ -398,11 +398,9 @@ class EventEmitter:
 
         try:
             if timeout is not None:
-                args_tuple, kwargs_dict = await asyncio.wait_for(
-                    future, timeout=timeout
-                )
+                args_tuple, _ = await asyncio.wait_for(future, timeout=timeout)
             else:
-                args_tuple, kwargs_dict = await future
+                args_tuple, _ = await future
 
             # Return just args for simplicity (most common case)
             return args_tuple
