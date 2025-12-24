@@ -120,6 +120,7 @@ Documentation Index
    :maxdepth: 1
    :caption: User Guides
 
+   guides/authentication
    guides/reservations
    guides/scheduling_features
    guides/energy_monitoring
