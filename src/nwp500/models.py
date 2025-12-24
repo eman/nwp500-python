@@ -12,6 +12,13 @@ from typing import Annotated, Any, Self
 from pydantic import BaseModel, BeforeValidator, ConfigDict, Field
 from pydantic.alias_generators import to_camel
 
+from .converters import (
+    device_bool_to_python,
+    div_10,
+    enum_validator,
+    tou_override_to_python,
+    tou_status_to_python,
+)
 from .enums import (
     CurrentOperationMode,
     DeviceType,
@@ -30,6 +37,11 @@ from .field_factory import (
     signal_strength_field,
     temperature_field,
 )
+from .temperature import (
+    HalfCelsius,
+    deci_celsius_to_fahrenheit,
+    half_celsius_to_fahrenheit,
+)
 
 _logger = logging.getLogger(__name__)
 
@@ -38,65 +50,33 @@ _logger = logging.getLogger(__name__)
 # Conversion Helpers & Validators
 # ============================================================================
 
-
-def _device_bool_validator(v: Any) -> bool:
-    """Convert device boolean flag (2=True, 1=False)."""
-    return bool(v == 2)
-
-
-def _div_10_validator(v: Any) -> float:
-    """Divide by 10."""
-    return float(v) / 10.0 if isinstance(v, (int, float)) else float(v)
-
-
-def _half_celsius_to_fahrenheit(v: Any) -> float:
-    """Convert half-degrees Celsius to Fahrenheit."""
-    if isinstance(v, (int, float)):
-        return (float(v) / 2.0 * 9 / 5) + 32
-    return float(v)
+# Reusable Annotated types for conversions
+DeviceBool = Annotated[bool, BeforeValidator(device_bool_to_python)]
+CapabilityFlag = Annotated[bool, BeforeValidator(device_bool_to_python)]
+Div10 = Annotated[float, BeforeValidator(div_10)]
+HalfCelsiusToF = Annotated[float, BeforeValidator(half_celsius_to_fahrenheit)]
+DeciCelsiusToF = Annotated[float, BeforeValidator(deci_celsius_to_fahrenheit)]
+TouStatus = Annotated[bool, BeforeValidator(tou_status_to_python)]
+TouOverride = Annotated[bool, BeforeValidator(tou_override_to_python)]
+VolumeCodeField = Annotated[
+    VolumeCode, BeforeValidator(enum_validator(VolumeCode))
+]
 
 
 def fahrenheit_to_half_celsius(fahrenheit: float) -> int:
-    """Convert Fahrenheit to half-degrees Celsius (for device commands)."""
-    celsius = (fahrenheit - 32) * 5 / 9
-    return round(celsius * 2)
+    """Convert Fahrenheit to half-degrees Celsius (for device commands).
 
+    Args:
+        fahrenheit: Temperature in Fahrenheit.
 
-def _deci_celsius_to_fahrenheit(v: Any) -> float:
-    """Convert decicelsius (tenths of Celsius) to Fahrenheit."""
-    if isinstance(v, (int, float)):
-        return (float(v) / 10.0 * 9 / 5) + 32
-    return float(v)
+    Returns:
+        Raw device value in half-Celsius format.
 
-
-def _tou_status_validator(v: Any) -> bool:
-    """Convert TOU status (0=False, 1=True)."""
-    return bool(v == 1)
-
-
-def _tou_override_validator(v: Any) -> bool:
-    """Convert TOU override status (1=True, 2=False)."""
-    return bool(v == 1)
-
-
-def _volume_code_validator(v: Any) -> VolumeCode:
-    """Convert int to VolumeCode enum if it's a valid code."""
-    if isinstance(v, VolumeCode):
-        return v
-    if isinstance(v, int):
-        return VolumeCode(v)
-    return VolumeCode(int(v))
-
-
-# Reusable Annotated types for conversions
-DeviceBool = Annotated[bool, BeforeValidator(_device_bool_validator)]
-CapabilityFlag = Annotated[bool, BeforeValidator(_device_bool_validator)]
-Div10 = Annotated[float, BeforeValidator(_div_10_validator)]
-HalfCelsiusToF = Annotated[float, BeforeValidator(_half_celsius_to_fahrenheit)]
-DeciCelsiusToF = Annotated[float, BeforeValidator(_deci_celsius_to_fahrenheit)]
-TouStatus = Annotated[bool, BeforeValidator(_tou_status_validator)]
-TouOverride = Annotated[bool, BeforeValidator(_tou_override_validator)]
-VolumeCodeField = Annotated[VolumeCode, BeforeValidator(_volume_code_validator)]
+    Example:
+        >>> fahrenheit_to_half_celsius(140.0)
+        120
+    """
+    return int(HalfCelsius.from_fahrenheit(fahrenheit).raw_value)
 
 
 class NavienBaseModel(BaseModel):
