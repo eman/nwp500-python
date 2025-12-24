@@ -5,22 +5,212 @@ Changelog
 Version 7.2.0 (2025-12-23)
 ==========================
 
+**BREAKING CHANGES**: Class names renamed for consistency with MQTT-specific functionality
+
+Removed
+-------
+
+- **Renamed Classes**: Updated class names to clarify MQTT-specific implementations
+
+  .. code-block:: python
+
+     # OLD (removed)
+     from nwp500 import DeviceCapabilityChecker, DeviceInfoCache
+     
+     # NEW
+     from nwp500 import MqttDeviceCapabilityChecker, MqttDeviceInfoCache
+
+  **Rationale**: The original names were too generic. These classes are specifically designed 
+  for MQTT client functionality (auto-fetching device info, caching, capability checking). 
+  The new names make it clear they're MQTT-specific implementations, leaving room for future 
+  REST API versions if needed.
+
+  **Migration**: Simple find-and-replace:
+  
+  - ``DeviceCapabilityChecker`` → ``MqttDeviceCapabilityChecker``
+  - ``DeviceInfoCache`` → ``MqttDeviceInfoCache``
+  
+  All functionality remains identical - only the class names changed.
+
 Added
 -----
 
+- **Factory Function**: New ``create_navien_clients()`` factory for streamlined client initialization
+
+  .. code-block:: python
+
+     # Create both API and MQTT clients in one call
+     from nwp500 import create_navien_clients
+     
+     async with create_navien_clients(email, password) as (api_client, mqtt_client):
+         devices = await api_client.get_devices()
+         await mqtt_client.connect()
+         # Both clients ready to use
+
+  - Automatic auth client management (created internally, shared by both clients)
+  - Simplified initialization for common use case (API + MQTT)
+  - Proper async context manager support
+  - Reduces boilerplate in application code
+  - Comprehensive documentation in ``docs/guides/authentication.rst``
+  - Example: ``examples/intermediate/advanced_auth_patterns.py``
+
+- **VolumeCode Enum**: Tank capacity identification with gallon values
+
+  .. code-block:: python
+
+     from nwp500 import VolumeCode
+     
+     # Enum values: VOLUME_50GAL = 65, VOLUME_65GAL = 66, VOLUME_80GAL = 67
+     # Human-readable text available in VOLUME_CODE_TEXT dict
+     
+  - Maps device codes to actual tank capacities (50, 65, 80 gallons)
+  - Used in ``DeviceFeature.volume_code`` field with automatic validation
+  - Exported from main package for convenience
+  - Includes ``VOLUME_CODE_TEXT`` mapping for display purposes
+
+- **Temperature Conversion Classes**: Type-safe temperature handling with clear precision
+
+  - ``HalfCelsius`` class: 0.5°C precision (value / 2.0)
+  - ``DeciCelsius`` class: 0.1°C precision (value / 10.0)
+  - Base ``Temperature`` ABC with ``to_celsius()`` and ``to_fahrenheit()`` methods
+  - ``from_fahrenheit()`` class methods for reverse conversions
+  - Validator functions for Pydantic integration
+  - Centralized in new ``temperature.py`` module
+  - Better type safety and clearer intent than raw number conversions
+
+- **Protocol Converters Module**: Centralized device protocol conversion logic
+
+  - ``device_bool_to_python()``: Convert device boolean (1=False, 2=True)
+  - ``device_bool_from_python()``: Reverse conversion
+  - ``tou_status_to_python()``: Time of Use status conversion
+  - ``tou_override_to_python()``: TOU override status conversion
+  - ``div_10()``: Divide by 10.0 utility
+  - ``enum_validator()``: Generic enum factory
+  - Comprehensive documentation explaining device protocol quirks
+  - New ``converters.py`` module replacing scattered validators
+
+- **MQTT Event System**: Structured event handling for MQTT operations
+
+  - ``MqttClientEvents`` class with type-safe event definitions
+  - Feature monitoring and capability detection events
+  - Enhanced device capability monitoring in MQTT control module
+  - New ``mqtt_events.py`` module for event infrastructure
+  - Improved separation of concerns for event-driven architectures
+
+- **Pyright Type Checking**: Static type analysis integrated into CI/CD
+
+  - Added pyright>=1.1.0 to dev dependencies
+  - Configured in ``pyproject.toml`` with strict mode for ``src/nwp500``
+  - Integrated into tox lint environment and CI workflows
+  - Runs automatically with ``make ci-lint`` or ``python3 scripts/lint.py``
+  - All source code now passes strict type checking (0 errors)
+  - Improved type annotations across codebase
+
 - **Dynamic Unit Extraction in CLI**: CLI output now dynamically extracts units from DeviceStatus model metadata
+
   - New helper functions: ``_get_unit_suffix()`` and ``_add_numeric_item()``
   - Eliminates hardcoded units in output formatter
   - Single source of truth: model metadata drives CLI display
+
+- **Comprehensive Protocol Documentation**: Complete protocol reference documentation
+
+  - New ``docs/protocol/quick_reference.rst`` with command codes, field formats, and conversions
+  - Converted protocol documentation to RST format for Sphinx integration
+  - Added protocol reference links in source code comments
+  - Improved cross-referencing between code and documentation
+
+Changed
+-------
+
+- **MQTT Module Reorganization**: Consolidated 9 separate modules into cohesive ``mqtt`` package
+
+  .. code-block:: python
+
+     # OLD imports (still work via compatibility layer)
+     from nwp500.mqtt_client import NavienMqttClient
+     from nwp500.mqtt_diagnostics import MqttDiagnosticsCollector
+     from nwp500.mqtt_utils import MqttConnectionConfig
+     
+     # NEW imports (preferred)
+     from nwp500.mqtt import NavienMqttClient, MqttDiagnosticsCollector, MqttConnectionConfig
+     # OR import from main package (recommended)
+     from nwp500 import NavienMqttClient, MqttDiagnosticsCollector, MqttConnectionConfig
+
+  - Created ``src/nwp500/mqtt/`` package with organized submodules
+  - Better package organization and structure
+  - Clearer public vs internal APIs
+  - New ``mqtt/__init__.py`` with clean public API exports
+  - Backward compatibility maintained via main package exports
+  - All 209 tests pass with zero type checking errors
+
+- **CLI Framework Migration**: Migrated from argparse to Click framework
+
+  - Implemented ``async_command`` decorator for automatic loop and connection management
+  - Added support for command groups (reservations, tou)
+  - Improved argument and option parsing with built-in validation
+  - Enhanced help text and version reporting
+  - Centralized command registry in ``src/nwp500/cli/commands.py``
+  - Reorganized CLI handlers into ``src/nwp500/cli/handlers.py``
+  - Better separation of concerns between CLI framework and business logic
+  - Industry-standard CLI framework with better maintainability
+  - Added click>=8.0.0 dependency
+
+- **Examples Reorganization**: Restructured examples into beginner/intermediate/advanced/testing categories
+
+  - Created structured hierarchy in ``examples/`` directory
+  - Renamed and moved 35+ example scripts for better discoverability
+  - Updated ``examples/README.md`` with 'Getting Started' guide and categorized index
+  - Added 01-04 beginner series for smooth onboarding:
+    
+    - ``beginner/01_authentication.py`` - Basic authentication patterns
+    - ``beginner/02_list_devices.py`` - Retrieving device information
+    - ``beginner/03_get_status.py`` - Getting device status
+    - ``beginner/04_set_temperature.py`` - Basic device control
+    
+  - Intermediate examples: event-driven control, error handling, MQTT monitoring
+  - Advanced examples: demand response, recirculation, TOU schedules, diagnostics
+  - Testing examples: connection testing, periodic updates, minimal examples
+  - All examples updated with correct imports for new package structure
+
+- **Authentication Documentation**: Major improvements to authentication guide
+
+  - Complete rewrite of ``docs/guides/authentication.rst``
+  - Added factory function patterns and examples
+  - Improved context manager documentation
+  - Added best practices and common patterns
+  - More comprehensive code examples
+
+- **Model Refactoring**: Updated to use new converter modules
+
+  - Replaced 53 lines of scattered validators with imports
+  - Updated ``fahrenheit_to_half_celsius()`` to use ``HalfCelsius`` class
+  - Cleaner model definitions with centralized conversion logic
+  - No breaking changes to public API
+
+- **CLI Output Formatter Refactoring**: Restructured ``print_device_status()`` to use dynamic unit extraction
+
+  - Reduced code duplication by ~400 lines
+  - Improved maintainability: field additions automatically get correct units
+  - No breaking changes to CLI output format or behavior
+
+- **Type Annotations**: Improved type safety across entire codebase
+
+  - Fixed datetime imports to use ``datetime.UTC`` (Python 3.13)
+  - Fixed type annotations in ``rich_output.py`` for optional dependencies
+  - Fixed type narrowing issues in ``encoding.py``
+  - Updated ``MqttConnection`` callback signature to use ``AwsCrtError``
+  - Added public properties and setters where needed for type checking
 
 Fixed
 -----
 
 - **Superheat Temperature Units**: Target and Current SuperHeat now correctly display in °F instead of °C
+
   - Both fields use ``DeciCelsiusToF`` conversion, now properly reflected in CLI output
   - Fields were displaying inconsistent units compared to all other temperature readings
 
 - **Missing CLI Output Units**: Multiple fields now display with proper units from model metadata
+
   - ``current_dhw_flow_rate``: Now shows GPM unit
   - ``total_energy_capacity``: Now shows Wh unit
   - ``available_energy_capacity``: Now shows Wh unit
@@ -31,17 +221,23 @@ Fixed
   - ``wifi_rssi``: Now shows dBm unit
 
 - **Invalid MQTT Topic Filter**: Fixed ``reservations get`` command subscription topic
+
   - Changed invalid topic pattern ``cmd/52/navilink-+/#`` to valid ``cmd/52/+/#``
   - AWS IoT Core MQTT does not support wildcards within topic segments
   - Affected: ``handle_get_reservations_request()`` in commands.py
 
-Changed
--------
+- **DeviceFeature Documentation**: Clarified field descriptions and fixed documentation errors
 
-- **CLI Output Formatter Refactoring**: Restructured ``print_device_status()`` to use dynamic unit extraction
-  - Reduced code duplication by ~400 lines
-  - Improved maintainability: field additions automatically get correct units
-  - No breaking changes to CLI output format or behavior
+  - Fixed ``country_code`` documentation (actual value is 3, not 1 as previously noted)
+  - Clarified ``model_type_code``, ``control_type_code``, ``recirc_model_type_code`` field purposes
+  - Updated ``volume_code`` to use new ``VolumeCode`` enum with validation
+
+- **Type Checking Errors**: Resolved all pyright type checking errors in source code
+
+  - Fixed datetime imports and type annotations
+  - Added missing public properties and setters
+  - Removed unused imports and variables
+  - All source code now passes strict type checking
 
 Version 7.1.0 (2025-12-22)
 ==========================
