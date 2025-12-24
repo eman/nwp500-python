@@ -14,7 +14,7 @@ The API uses JWT (JSON Web Tokens) for authentication with the following flow:
 import json
 import logging
 from datetime import datetime, timedelta
-from typing import Any, Self
+from typing import Any, Self, cast
 
 import aiohttp
 from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, model_validator
@@ -516,9 +516,9 @@ class NavienAuthClient:
                             old_tokens.authorization_expires_in
                         )
                         # Also preserve the AWS expiration timestamp
-                        new_tokens._aws_expires_at = (  # type: ignore[attr-defined]
-                            old_tokens._aws_expires_at  # type: ignore[attr-defined]
-                        )
+                        cast(Any, new_tokens)._aws_expires_at = cast(
+                            Any, old_tokens
+                        )._aws_expires_at
 
                 # Update stored auth response if we have one
                 if self._auth_response:
@@ -704,11 +704,12 @@ async def authenticate(user_id: str, password: str) -> AuthenticationResponse:
         >>> # Do not print tokens in production code
     """
     async with NavienAuthClient(user_id, password) as client:
-        if client._auth_response is None:  # type: ignore[attr-defined]
+        auth_response = cast(Any, client)._auth_response
+        if auth_response is None:
             raise AuthenticationError(
                 "Authentication failed: no response received"
             )
-        return client._auth_response  # type: ignore[attr-defined]
+        return auth_response
 
 
 async def refresh_access_token(refresh_token: str) -> AuthTokens:

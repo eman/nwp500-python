@@ -34,10 +34,10 @@ from nwp500.command_decorators import (
     requires_capability,
 )
 from nwp500.device_capabilities import (
-    DeviceCapabilityChecker,
+    MqttDeviceCapabilityChecker,
 )
 from nwp500.device_info_cache import (
-    DeviceInfoCache,
+    MqttDeviceInfoCache,
 )
 from nwp500.encoding import (
     build_reservation_entry,
@@ -126,9 +126,9 @@ from nwp500.utils import (
 __all__ = [
     "__version__",
     # Device Capabilities & Caching
-    "DeviceCapabilityChecker",
+    "MqttDeviceCapabilityChecker",
     "DeviceCapabilityError",
-    "DeviceInfoCache",
+    "MqttDeviceInfoCache",
     "requires_capability",
     # Models
     "DeviceStatus",

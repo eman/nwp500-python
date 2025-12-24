@@ -24,11 +24,11 @@ from pydantic import ValidationError
 from ..events import EventEmitter
 from ..exceptions import MqttNotConnectedError
 from ..models import Device, DeviceFeature, DeviceStatus, EnergyUsageResponse
-from .utils import redact_topic, topic_matches_pattern
 from ..topic_builder import MqttTopicBuilder
+from .utils import redact_topic, topic_matches_pattern
 
 if TYPE_CHECKING:
-    from ..device_info_cache import DeviceInfoCache
+    from ..device_info_cache import MqttDeviceInfoCache
 
 __author__ = "Emmanuel Levijarvi"
 
@@ -53,7 +53,7 @@ class MqttSubscriptionManager:
         client_id: str,
         event_emitter: EventEmitter,
         schedule_coroutine: Callable[[Any], None],
-        device_info_cache: DeviceInfoCache | None = None,
+        device_info_cache: MqttDeviceInfoCache | None = None,
     ):
         """
         Initialize subscription manager.
@@ -63,7 +63,7 @@ class MqttSubscriptionManager:
             client_id: Client ID for response topics
             event_emitter: Event emitter for state changes
             schedule_coroutine: Function to schedule async tasks
-            device_info_cache: Optional DeviceInfoCache for caching device
+            device_info_cache: Optional MqttDeviceInfoCache for caching device
                 features
         """
         self._connection = connection

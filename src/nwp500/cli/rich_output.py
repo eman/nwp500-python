@@ -3,7 +3,7 @@
 import json
 import logging
 import os
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 if TYPE_CHECKING:
     from rich.console import Console
@@ -63,9 +63,9 @@ class OutputFormatter:
         self.use_rich = _should_use_rich()
         if self.use_rich:
             assert Console is not None
-            self.console = Console()
+            self.console: Any = Console()
         else:
-            self.console = None
+            self.console: Any = None
 
     def print_status_table(self, items: list[tuple[str, str, str]]) -> None:
         """Print status items as a formatted table.
@@ -208,7 +208,7 @@ class OutputFormatter:
         """Rich-enhanced success output."""
         assert self.console is not None
         assert _rich_available
-        panel = Panel(  # type: ignore[call-arg]
+        panel = cast(Any, Panel)(
             f"[green]✓ {message}[/green]",
             border_style="green",
             padding=(0, 2),
@@ -219,7 +219,7 @@ class OutputFormatter:
         """Rich-enhanced info output."""
         assert self.console is not None
         assert _rich_available
-        panel = Panel(  # type: ignore[call-arg]
+        panel = cast(Any, Panel)(
             f"[blue]ℹ {message}[/blue]",
             border_style="blue",
             padding=(0, 2),
@@ -232,11 +232,11 @@ class OutputFormatter:
         assert _rich_available
 
         if not devices:
-            panel = Panel("No devices found", border_style="yellow")  # type: ignore[call-arg]
+            panel = cast(Any, Panel)("No devices found", border_style="yellow")
             self.console.print(panel)
             return
 
-        table = Table(title="🏘️ Devices", show_header=True)  # type: ignore[call-arg]
+        table = cast(Any, Table)(title="🏘️ Devices", show_header=True)
         table.add_column("Device Name", style="cyan", width=20)
         table.add_column("Status", width=15)
         table.add_column("Temperature", style="magenta", width=15)
@@ -273,7 +273,7 @@ class OutputFormatter:
         assert self.console is not None
         assert _rich_available
 
-        table = Table(title="DEVICE STATUS", show_header=False)  # type: ignore[call-arg]
+        table = cast(Any, Table)(title="DEVICE STATUS", show_header=False)
 
         if not items:
             # If no items, just print the header using plain text
@@ -288,14 +288,14 @@ class OutputFormatter:
                 if current_category is not None:
                     table.add_row()
                 table.add_row(
-                    Text(category, style="bold cyan"),  # type: ignore[call-arg]
+                    cast(Any, Text)(category, style="bold cyan"),
                 )
                 current_category = category
 
             # Add data row with styling
             table.add_row(
-                Text(f"  {label}", style="magenta"),  # type: ignore[call-arg]
-                Text(str(value), style="green"),  # type: ignore[call-arg]
+                cast(Any, Text)(f"  {label}", style="magenta"),
+                cast(Any, Text)(str(value), style="green"),
             )
 
         self.console.print(table)
@@ -305,7 +305,7 @@ class OutputFormatter:
         assert self.console is not None
         assert _rich_available
 
-        table = Table(title="ENERGY USAGE REPORT", show_header=True)  # type: ignore[call-arg]
+        table = cast(Any, Table)(title="ENERGY USAGE REPORT", show_header=True)
         table.add_column("Month", style="cyan", width=15)
         table.add_column(
             "Total kWh", style="magenta", justify="right", width=12
@@ -380,7 +380,7 @@ class OutputFormatter:
             for detail in details:
                 content += f"\n  • {detail}"
 
-        panel = Panel(  # type: ignore[call-arg]
+        panel = cast(Any, Panel)(
             content,
             border_style="red",
             padding=(1, 2),
@@ -447,7 +447,9 @@ class OutputFormatter:
         assert _rich_available
 
         json_str = json.dumps(data, indent=2, default=str)
-        syntax = Syntax(json_str, "json", theme="monokai", line_numbers=False)  # type: ignore[call-arg]
+        syntax = cast(Any, Syntax)(
+            json_str, "json", theme="monokai", line_numbers=False
+        )
         self.console.print(syntax)
 
     def _print_device_tree_rich(
@@ -457,7 +459,7 @@ class OutputFormatter:
         assert self.console is not None
         assert _rich_available
 
-        tree = Tree(f"📱 {device_name}", guide_style="bold cyan")  # type: ignore[call-arg]
+        tree = cast(Any, Tree)(f"📱 {device_name}", guide_style="bold cyan")
 
         # Organize info into categories
         categories = {
@@ -500,7 +502,7 @@ class OutputFormatter:
         assert self.console is not None
         assert _rich_available
 
-        markdown = Markdown(content)  # type: ignore[call-arg]
+        markdown = cast(Any, Markdown)(content)
         self.console.print(markdown)
 
 

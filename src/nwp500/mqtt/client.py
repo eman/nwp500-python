@@ -532,10 +532,12 @@ class NavienMqttClient(EventEmitter):
                 self._reconnection_handler.enable()
 
                 # Initialize shared device info cache and client_id
-                from ..device_info_cache import DeviceInfoCache
+                from ..device_info_cache import MqttDeviceInfoCache
 
                 client_id = self.config.client_id or ""
-                device_info_cache = DeviceInfoCache(update_interval_minutes=30)
+                device_info_cache = MqttDeviceInfoCache(
+                    update_interval_minutes=30
+                )
 
                 # Initialize subscription manager with cache
                 self._subscription_manager = MqttSubscriptionManager(

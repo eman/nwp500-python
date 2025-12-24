@@ -22,11 +22,9 @@ from collections.abc import Awaitable, Callable, Sequence
 from datetime import UTC, datetime
 from typing import Any
 
-from ..topic_builder import MqttTopicBuilder
-
 from ..command_decorators import requires_capability
-from ..device_capabilities import DeviceCapabilityChecker
-from ..device_info_cache import DeviceInfoCache
+from ..device_capabilities import MqttDeviceCapabilityChecker
+from ..device_info_cache import MqttDeviceInfoCache
 from ..enums import CommandCode, DhwOperationSetting
 from ..exceptions import (
     DeviceCapabilityError,
@@ -34,6 +32,7 @@ from ..exceptions import (
     RangeValidationError,
 )
 from ..models import Device, DeviceFeature, fahrenheit_to_half_celsius
+from ..topic_builder import MqttTopicBuilder
 
 __author__ = "Emmanuel Levijarvi"
 
@@ -47,7 +46,7 @@ class MqttDeviceController:
     Handles all device control operations including status requests,
     mode changes, temperature control, scheduling, and energy queries.
 
-    This controller integrates with DeviceCapabilityChecker to validate
+    This controller integrates with MqttDeviceCapabilityChecker to validate
     device capabilities before executing commands. Use check_support()
     or assert_support() methods to verify feature availability based on
     device capabilities before attempting to execute commands:
@@ -63,7 +62,7 @@ class MqttDeviceController:
         client_id: str,
         session_id: str,
         publish_func: Callable[..., Awaitable[int]],
-        device_info_cache: DeviceInfoCache | None = None,
+        device_info_cache: MqttDeviceInfoCache | None = None,
     ) -> None:
         """
         Initialize device controller.
@@ -78,7 +77,7 @@ class MqttDeviceController:
         self._client_id = client_id
         self._session_id = session_id
         self._publish: Callable[..., Awaitable[int]] = publish_func
-        self._device_info_cache = device_info_cache or DeviceInfoCache(
+        self._device_info_cache = device_info_cache or MqttDeviceInfoCache(
             update_interval_minutes=30
         )
         # Callback for auto-requesting device info when needed
@@ -93,7 +92,7 @@ class MqttDeviceController:
         self._ensure_device_info_callback = callback
 
     @property
-    def device_info_cache(self) -> "DeviceInfoCache":
+    def device_info_cache(self) -> "MqttDeviceInfoCache":
         """Get the device info cache."""
         return self._device_info_cache
 
@@ -167,7 +166,7 @@ class MqttDeviceController:
         Raises:
             ValueError: If feature is not recognized
         """
-        return DeviceCapabilityChecker.supports(feature, device_features)
+        return MqttDeviceCapabilityChecker.supports(feature, device_features)
 
     def assert_support(
         self, feature: str, device_features: DeviceFeature
@@ -182,7 +181,7 @@ class MqttDeviceController:
             DeviceCapabilityError: If feature is not supported
             ValueError: If feature is not recognized
         """
-        DeviceCapabilityChecker.assert_supported(feature, device_features)
+        MqttDeviceCapabilityChecker.assert_supported(feature, device_features)
 
     def _build_command(
         self,

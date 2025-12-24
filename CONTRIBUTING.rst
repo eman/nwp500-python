@@ -85,6 +85,69 @@ The project is organized around a modular architecture:
 
 Design principles include separation of concerns, clear public APIs, and extensibility for new device features. Contributors should review the `src/nwp500/` directory for module structure and refer to the documentation for details on each component.
 
+Naming Conventions
+------------------
+
+Consistent naming conventions improve code readability and maintainability. Follow these patterns when adding new classes, methods, and exceptions.
+
+**Classes**
+
+- **Client classes**: Use ``Navien<Component>Client`` format for main client classes (e.g., ``NavienAuthClient``, ``NavienAPIClient``, ``NavienMqttClient``). This prefix clearly indicates these are the primary library clients.
+- **Manager/Controller classes**: Use ``<Domain><Responsibility>`` format for classes managing specific functionality (e.g., ``MqttConnectionManager``, ``DeviceInfoCache``). Avoid Navien prefix for utility/internal classes.
+- **Utility classes**: Use ``<Domain><Feature>`` or ``<Domain>Utilities`` format for helper classes (e.g., ``MqttDiagnostics``, ``DeviceCapabilityChecker``).
+
+**Methods**
+
+Follow these patterns for consistent method naming:
+
+- **Getters**: Use ``get_<resource>()`` for single item retrieval (e.g., ``get_device_info()``, ``get_firmware_info()``)
+- **Listers**: Use ``list_<resources>()`` for collection retrieval (e.g., ``list_devices()``)
+- **Setters**: Use ``set_<field>(value)`` for direct assignment or ``configure_<feature>()`` for complex configuration (e.g., ``set_power()``, ``set_dhw_temperature()``)
+- **Actions**: Use ``<action>_<resource>()`` format for operations that modify state (e.g., ``reset_filter()``, ``enable_anti_legionella()``)
+- **Requesters**: Use ``request_<data>()`` for async data fetching from devices (e.g., ``request_device_status()``, ``request_device_info()``)
+
+**Enums**
+
+- **Enum names**: Use descriptive names that indicate the device state or protocol value (e.g., ``OnOffFlag``, ``CurrentOperationMode``, ``HeatSource``). These names should reflect the Navien protocol directly.
+- **Enum values**: Document device protocol mappings in code comments. For example:
+
+  .. code-block:: python
+
+      class OnOffFlag(IntEnum):
+          """Device on/off state per Navien protocol."""
+          OFF = 0  # 0 = False per Navien protocol
+          ON = 1   # 1 = True per Navien protocol
+
+**Exceptions**
+
+Follow a clear exception hierarchy with consistent naming:
+
+- **Pattern**: ``<Domain><Situation>Error`` (e.g., ``MqttConnectionError``, ``AuthenticationError``, ``DeviceCapabilityError``)
+- **Grouping**: Group related errors under a base class that consumers can catch for broad error handling:
+
+  - ``AuthenticationError`` - Base for all authentication failures (covers ``InvalidCredentialsError``, ``TokenExpiredError``, ``TokenRefreshError``)
+  - ``MqttError`` - Base for all MQTT operations (covers ``MqttConnectionError``, ``MqttNotConnectedError``, ``MqttPublishError``, etc.)
+  - ``ValidationError`` - Base for all validation failures (covers ``ParameterValidationError``, ``RangeValidationError``)
+  - ``DeviceError`` - Base for all device operations (covers ``DeviceNotFoundError``, ``DeviceOfflineError``, ``DeviceCapabilityError``, etc.)
+
+- **Example usage**:
+
+  .. code-block:: python
+
+      try:
+          await mqtt_client.control.set_temperature(device, 150)
+      except MqttNotConnectedError:
+          # Handle specific case: not connected
+          print("Connect to device first")
+      except MqttError:
+          # Handle other MQTT errors
+          print("MQTT operation failed")
+      except RangeValidationError as e:
+          print(f"Invalid {e.field}: must be {e.min_value}-{e.max_value}")
+      except ValidationError:
+          # Handle other validation errors
+          print("Invalid parameter")
+
 Submit an issue
 ---------------
 

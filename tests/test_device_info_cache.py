@@ -5,7 +5,7 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from nwp500.device_info_cache import DeviceInfoCache
+from nwp500.device_info_cache import MqttDeviceInfoCache
 
 
 @pytest.fixture
@@ -15,23 +15,23 @@ def device_feature() -> dict:
 
 
 @pytest.fixture
-def cache_with_updates() -> DeviceInfoCache:
+def cache_with_updates() -> MqttDeviceInfoCache:
     """Create a cache with 30-minute update interval."""
-    return DeviceInfoCache(update_interval_minutes=30)
+    return MqttDeviceInfoCache(update_interval_minutes=30)
 
 
 @pytest.fixture
-def cache_no_updates() -> DeviceInfoCache:
+def cache_no_updates() -> MqttDeviceInfoCache:
     """Create a cache with auto-updates disabled."""
-    return DeviceInfoCache(update_interval_minutes=0)
+    return MqttDeviceInfoCache(update_interval_minutes=0)
 
 
-class TestDeviceInfoCache:
-    """Tests for DeviceInfoCache."""
+class TestMqttDeviceInfoCache:
+    """Tests for MqttDeviceInfoCache."""
 
     @pytest.mark.asyncio
     async def test_cache_get_returns_none_when_empty(
-        self, cache_with_updates: DeviceInfoCache
+        self, cache_with_updates: MqttDeviceInfoCache
     ) -> None:
         """Test that get returns None for uncached device."""
         result = await cache_with_updates.get("AA:BB:CC:DD:EE:FF")
@@ -39,7 +39,7 @@ class TestDeviceInfoCache:
 
     @pytest.mark.asyncio
     async def test_cache_set_and_get(
-        self, cache_with_updates: DeviceInfoCache, device_feature: dict
+        self, cache_with_updates: MqttDeviceInfoCache, device_feature: dict
     ) -> None:
         """Test basic set and get operations."""
         mac = "AA:BB:CC:DD:EE:FF"
@@ -49,7 +49,7 @@ class TestDeviceInfoCache:
 
     @pytest.mark.asyncio
     async def test_cache_set_overwrites_previous(
-        self, cache_with_updates: DeviceInfoCache
+        self, cache_with_updates: MqttDeviceInfoCache
     ) -> None:
         """Test that set overwrites previous cache entry."""
         mac = "AA:BB:CC:DD:EE:FF"
@@ -66,7 +66,7 @@ class TestDeviceInfoCache:
 
     @pytest.mark.asyncio
     async def test_cache_multiple_devices(
-        self, cache_with_updates: DeviceInfoCache
+        self, cache_with_updates: MqttDeviceInfoCache
     ) -> None:
         """Test caching multiple devices."""
         mac1 = "AA:BB:CC:DD:EE:FF"
@@ -87,7 +87,7 @@ class TestDeviceInfoCache:
     @pytest.mark.asyncio
     async def test_cache_expiration(self) -> None:
         """Test that cache entries expire."""
-        cache_exp = DeviceInfoCache(update_interval_minutes=1)
+        cache_exp = MqttDeviceInfoCache(update_interval_minutes=1)
         mac = "AA:BB:CC:DD:EE:FF"
         feature = {"data": "test"}
         old_time = datetime.now(UTC) - timedelta(minutes=2)
@@ -99,7 +99,7 @@ class TestDeviceInfoCache:
 
     @pytest.mark.asyncio
     async def test_is_expired_with_zero_interval(
-        self, cache_no_updates: DeviceInfoCache
+        self, cache_no_updates: MqttDeviceInfoCache
     ) -> None:
         """Test is_expired returns False when interval is 0 (no updates)."""
         old_time = datetime.now(UTC) - timedelta(hours=1)
@@ -107,7 +107,7 @@ class TestDeviceInfoCache:
 
     @pytest.mark.asyncio
     async def test_is_expired_with_fresh_entry(
-        self, cache_with_updates: DeviceInfoCache
+        self, cache_with_updates: MqttDeviceInfoCache
     ) -> None:
         """Test is_expired returns False for fresh entries."""
         recent_time = datetime.now(UTC) - timedelta(minutes=5)
@@ -115,7 +115,7 @@ class TestDeviceInfoCache:
 
     @pytest.mark.asyncio
     async def test_is_expired_with_old_entry(
-        self, cache_with_updates: DeviceInfoCache
+        self, cache_with_updates: MqttDeviceInfoCache
     ) -> None:
         """Test is_expired returns True for old entries."""
         old_time = datetime.now(UTC) - timedelta(minutes=60)
@@ -123,7 +123,7 @@ class TestDeviceInfoCache:
 
     @pytest.mark.asyncio
     async def test_cache_invalidate(
-        self, cache_with_updates: DeviceInfoCache
+        self, cache_with_updates: MqttDeviceInfoCache
     ) -> None:
         """Test cache invalidation."""
         mac = "AA:BB:CC:DD:EE:FF"
@@ -136,7 +136,7 @@ class TestDeviceInfoCache:
 
     @pytest.mark.asyncio
     async def test_cache_invalidate_nonexistent(
-        self, cache_with_updates: DeviceInfoCache
+        self, cache_with_updates: MqttDeviceInfoCache
     ) -> None:
         """Test invalidating nonexistent entry doesn't raise."""
         # Should not raise
@@ -144,7 +144,7 @@ class TestDeviceInfoCache:
 
     @pytest.mark.asyncio
     async def test_cache_clear(
-        self, cache_with_updates: DeviceInfoCache
+        self, cache_with_updates: MqttDeviceInfoCache
     ) -> None:
         """Test clearing entire cache."""
         mac1 = "AA:BB:CC:DD:EE:FF"
@@ -164,7 +164,7 @@ class TestDeviceInfoCache:
 
     @pytest.mark.asyncio
     async def test_get_all_cached(
-        self, cache_with_updates: DeviceInfoCache
+        self, cache_with_updates: MqttDeviceInfoCache
     ) -> None:
         """Test get_all_cached returns all cached devices."""
         mac1 = "AA:BB:CC:DD:EE:FF"
@@ -185,7 +185,7 @@ class TestDeviceInfoCache:
     @pytest.mark.asyncio
     async def test_get_all_cached_excludes_expired(self) -> None:
         """Test get_all_cached excludes expired entries."""
-        cache = DeviceInfoCache(update_interval_minutes=1)
+        cache = MqttDeviceInfoCache(update_interval_minutes=1)
         mac1 = "AA:BB:CC:DD:EE:FF"
         mac2 = "11:22:33:44:55:66"
         feature = {"data": "test"}
@@ -204,7 +204,7 @@ class TestDeviceInfoCache:
 
     @pytest.mark.asyncio
     async def test_get_cache_info(
-        self, cache_with_updates: DeviceInfoCache
+        self, cache_with_updates: MqttDeviceInfoCache
     ) -> None:
         """Test get_cache_info returns correct information."""
         mac = "AA:BB:CC:DD:EE:FF"
@@ -223,7 +223,7 @@ class TestDeviceInfoCache:
 
     @pytest.mark.asyncio
     async def test_get_cache_info_with_no_updates(
-        self, cache_no_updates: DeviceInfoCache
+        self, cache_no_updates: MqttDeviceInfoCache
     ) -> None:
         """Test get_cache_info with auto-updates disabled."""
         mac = "AA:BB:CC:DD:EE:FF"
@@ -238,7 +238,7 @@ class TestDeviceInfoCache:
 
     @pytest.mark.asyncio
     async def test_cache_thread_safety(
-        self, cache_with_updates: DeviceInfoCache
+        self, cache_with_updates: MqttDeviceInfoCache
     ) -> None:
         """Test concurrent cache operations."""
         macs = [f"AA:BB:CC:DD:EE:{i:02X}" for i in range(10)]
@@ -260,9 +260,9 @@ class TestDeviceInfoCache:
     @pytest.mark.asyncio
     async def test_initialization_with_different_intervals(self) -> None:
         """Test cache initialization with different intervals."""
-        cache_60 = DeviceInfoCache(update_interval_minutes=60)
-        cache_5 = DeviceInfoCache(update_interval_minutes=5)
-        cache_0 = DeviceInfoCache(update_interval_minutes=0)
+        cache_60 = MqttDeviceInfoCache(update_interval_minutes=60)
+        cache_5 = MqttDeviceInfoCache(update_interval_minutes=5)
+        cache_0 = MqttDeviceInfoCache(update_interval_minutes=0)
 
         assert cache_60.update_interval == timedelta(minutes=60)
         assert cache_5.update_interval == timedelta(minutes=5)

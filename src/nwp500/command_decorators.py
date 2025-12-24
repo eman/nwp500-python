@@ -10,7 +10,7 @@ import logging
 from collections.abc import Callable
 from typing import Any, TypeVar
 
-from .device_capabilities import DeviceCapabilityChecker
+from .device_capabilities import MqttDeviceCapabilityChecker
 from .exceptions import DeviceCapabilityError
 
 __author__ = "Emmanuel Levijarvi"
@@ -94,13 +94,13 @@ def requires_capability(feature: str) -> Callable[[F], F]:
 
                 # Validate capability if feature is defined in DeviceFeature
                 if hasattr(cached_features, feature):
-                    supported = DeviceCapabilityChecker.supports(
+                    supported = MqttDeviceCapabilityChecker.supports(
                         feature, cached_features
                     )
                     _logger.debug(
                         f"Cap '{feature}': {'OK' if supported else 'FAIL'}"
                     )
-                    DeviceCapabilityChecker.assert_supported(
+                    MqttDeviceCapabilityChecker.assert_supported(
                         feature, cached_features
                     )
                 else:

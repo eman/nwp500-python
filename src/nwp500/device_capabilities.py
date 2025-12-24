@@ -21,8 +21,8 @@ __author__ = "Emmanuel Levijarvi"
 CapabilityCheckFn = Callable[["DeviceFeature"], bool]
 
 
-class DeviceCapabilityChecker:
-    """Generalized device capability checker using a capability map.
+class MqttDeviceCapabilityChecker:
+    """Generalized MQTT device capability checker using a capability map.
 
     This class uses a mapping of controllable feature names to their check
     functions, allowing capabilities to be validated in a centralized,
