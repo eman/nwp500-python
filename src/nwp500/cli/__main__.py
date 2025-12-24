@@ -285,7 +285,7 @@ async def tou_get(
     """Get current TOU schedule."""
     ctx = click.get_current_context()
     api = None
-    if hasattr(ctx, "obj") and ctx.obj is not None:
+    if ctx and hasattr(ctx, "obj") and ctx.obj is not None:
         api = ctx.obj.get("api")
     if api:
         await handlers.handle_get_tou_request(mqtt, device, api)
