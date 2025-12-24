@@ -27,7 +27,8 @@ logging.basicConfig(
 
 # If running from examples directory, add parent to path
 if __name__ == "__main__":
-    sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
+    sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "src"))
+    sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from nwp500.api_client import NavienAPIClient
 from nwp500.auth import NavienAuthClient
@@ -38,7 +39,7 @@ from nwp500.models import DeviceFeature, DeviceStatus
 from nwp500.mqtt import NavienMqttClient
 
 try:
-    from examples.mask import mask_mac  # type: ignore
+    from mask import mask_mac  # type: ignore
 except Exception:
 
     def mask_mac(mac):  # pragma: no cover - fallback for examples
@@ -115,7 +116,7 @@ async def main():
             device_type = device.device_info.device_type
 
             try:
-                from examples.mask import mask_any  # type: ignore
+                from mask import mask_any  # type: ignore
             except Exception:
 
                 def mask_any(_):  # pragma: no cover - fallback

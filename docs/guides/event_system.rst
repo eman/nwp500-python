@@ -36,12 +36,39 @@ Benefits
 Basic Usage
 ===========
 
+Discovering Available Events
+-----------------------------
+
+The :class:`nwp500.mqtt_events.MqttClientEvents` class provides a complete registry
+of all events with type-safe constants and full documentation:
+
+.. code-block:: python
+
+   from nwp500 import MqttClientEvents
+
+   # List all available events
+   for event_name in MqttClientEvents.get_all_events():
+       print(f"- {event_name}")
+
+   # Output:
+   # - CONNECTION_INTERRUPTED
+   # - CONNECTION_RESUMED
+   # - STATUS_RECEIVED
+   # - TEMPERATURE_CHANGED
+   # - MODE_CHANGED
+   # - POWER_CHANGED
+   # - HEATING_STARTED
+   # - HEATING_STOPPED
+   # - ERROR_DETECTED
+   # - ERROR_CLEARED
+   # - FEATURE_RECEIVED
+
 Simple Event Handler
 --------------------
 
 .. code-block:: python
 
-   from nwp500 import NavienAuthClient, NavienAPIClient, NavienMqttClient
+   from nwp500 import NavienAuthClient, NavienAPIClient, NavienMqttClient, MqttClientEvents
    import asyncio
 
    async def main():
@@ -52,13 +79,13 @@ Simple Event Handler
            mqtt = NavienMqttClient(auth)
            await mqtt.connect()
 
-           # Define event handler
+           # Use type-safe event constants with IDE autocomplete
            def on_status_update(status):
                print(f"Temperature: {status.dhw_temperature}°F")
                print(f"Power: {status.current_inst_power}W")
 
-           # Subscribe to status updates
-           await mqtt.subscribe_device_status(device, on_status_update)
+           # Subscribe using event constants
+           mqtt.on(MqttClientEvents.STATUS_RECEIVED, on_status_update)
            await mqtt.control.request_device_status(device)
 
            # Monitor for 5 minutes
@@ -66,6 +93,37 @@ Simple Event Handler
            await mqtt.disconnect()
 
    asyncio.run(main())
+
+Event Registry
+--------------
+
+The :class:`nwp500.mqtt_events.MqttClientEvents` class provides type-safe event
+constants and programmatic discovery. This ensures your callbacks use valid event
+names and enables IDE autocomplete:
+
+.. code-block:: python
+
+   from nwp500 import MqttClientEvents, NavienMqttClient
+
+   mqtt_client = NavienMqttClient(auth)
+
+   # Type-safe constants with IDE autocomplete
+   mqtt_client.on(MqttClientEvents.TEMPERATURE_CHANGED, on_temp_change)
+   mqtt_client.on(MqttClientEvents.HEATING_STARTED, on_heating_start)
+   mqtt_client.on(MqttClientEvents.ERROR_DETECTED, on_error)
+
+   # Programmatically discover all events
+   print("Available events:")
+   for event_name in MqttClientEvents.get_all_events():
+       print(f"  - {event_name}")
+
+   # Get event string value if needed
+   event_value = MqttClientEvents.get_event_value("TEMPERATURE_CHANGED")
+   print(f"Event value: {event_value}")  # Output: "temperature_changed"
+
+Each event has full type documentation. See
+:class:`nwp500.mqtt_events` for complete details on event data types and
+their arguments.
 
 Advanced Patterns
 =================

@@ -424,7 +424,7 @@ class MqttDeviceController:
         Returns:
             Publish packet ID
         """
-        # See docs/MQTT_MESSAGES.rst "Reservation Management" for the
+        # See docs/protocol/mqtt_protocol.rst "Reservation Management" for the
         # command code (16777226) and the reservation object fields
         # (enable, week, hour, min, mode, param).
         reservation_use = 1 if enabled else 2
@@ -480,7 +480,7 @@ class MqttDeviceController:
         Raises:
             ValueError: If controller_serial_number is empty or periods is empty
         """
-        # See docs/MQTT_MESSAGES.rst "TOU (Time of Use) Settings" for
+        # See docs/protocol/mqtt_protocol.rst "TOU (Time of Use) Settings" for
         # the command code (33554439) and TOU period fields
         # (season, week, startHour, startMinute, endHour, endMinute,
         #  priceMin, priceMax, decimalPoint).

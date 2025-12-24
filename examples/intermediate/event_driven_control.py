@@ -32,6 +32,7 @@ from nwp500 import (
     NavienAPIClient,
     NavienAuthClient,
     NavienMqttClient,
+    MqttClientEvents,
     CurrentOperationMode,
 )
 from nwp500.models import DeviceStatus
@@ -156,36 +157,39 @@ async def main():
 
             # Step 3: Register event listeners BEFORE connecting
             print("3. Registering event listeners...")
+            print("   (Using MqttClientEvents for type-safe event constants)")
 
             # Temperature change - multiple handlers
-            mqtt_client.on("temperature_changed", log_temperature)
-            mqtt_client.on("temperature_changed", alert_on_high_temp)
-            mqtt_client.on("temperature_changed", save_temperature_to_db)
+            mqtt_client.on(MqttClientEvents.TEMPERATURE_CHANGED, log_temperature)
+            mqtt_client.on(MqttClientEvents.TEMPERATURE_CHANGED, alert_on_high_temp)
+            mqtt_client.on(MqttClientEvents.TEMPERATURE_CHANGED, save_temperature_to_db)
             print("   [SUCCESS] Registered 3 temperature change handlers")
 
             # Mode change - multiple handlers
-            mqtt_client.on("mode_changed", log_mode_change)
-            mqtt_client.on("mode_changed", optimize_on_mode_change)
+            mqtt_client.on(MqttClientEvents.MODE_CHANGED, log_mode_change)
+            mqtt_client.on(MqttClientEvents.MODE_CHANGED, optimize_on_mode_change)
             print("   [SUCCESS] Registered 2 mode change handlers")
 
             # Power state changes
-            mqtt_client.on("heating_started", on_heating_started)
-            mqtt_client.on("heating_stopped", on_heating_stopped)
+            mqtt_client.on(MqttClientEvents.HEATING_STARTED, on_heating_started)
+            mqtt_client.on(MqttClientEvents.HEATING_STOPPED, on_heating_stopped)
             print("   [SUCCESS] Registered heating start/stop handlers")
 
             # Error handling
-            mqtt_client.on("error_detected", on_error_detected)
-            mqtt_client.on("error_cleared", on_error_cleared)
+            mqtt_client.on(MqttClientEvents.ERROR_DETECTED, on_error_detected)
+            mqtt_client.on(MqttClientEvents.ERROR_CLEARED, on_error_cleared)
             print("   [SUCCESS] Registered error handlers")
 
             # Connection state
-            mqtt_client.on("connection_interrupted", on_connection_interrupted)
-            mqtt_client.on("connection_resumed", on_connection_resumed)
+            mqtt_client.on(
+                MqttClientEvents.CONNECTION_INTERRUPTED, on_connection_interrupted
+            )
+            mqtt_client.on(MqttClientEvents.CONNECTION_RESUMED, on_connection_resumed)
             print("   [SUCCESS] Registered connection handlers")
 
             # One-time listener example
             mqtt_client.once(
-                "status_received",
+                MqttClientEvents.STATUS_RECEIVED,
                 lambda s: print(f"   🎉 First status received: {s.dhw_temperature}°F"),
             )
             print("   [SUCCESS] Registered one-time status handler")
@@ -194,15 +198,19 @@ async def main():
             # Show listener counts
             print("4. Listener statistics:")
             print(
-                f"   temperature_changed: {mqtt_client.listener_count('temperature_changed')} listeners"
+                f"   {MqttClientEvents.TEMPERATURE_CHANGED}: {mqtt_client.listener_count(MqttClientEvents.TEMPERATURE_CHANGED)} listeners"
             )
             print(
-                f"   mode_changed: {mqtt_client.listener_count('mode_changed')} listeners"
+                f"   {MqttClientEvents.MODE_CHANGED}: {mqtt_client.listener_count(MqttClientEvents.MODE_CHANGED)} listeners"
             )
             print(
-                f"   heating_started: {mqtt_client.listener_count('heating_started')} listeners"
+                f"   {MqttClientEvents.HEATING_STARTED}: {mqtt_client.listener_count(MqttClientEvents.HEATING_STARTED)} listeners"
             )
             print(f"   Total events registered: {len(mqtt_client.event_names())}")
+            print()
+            print(
+                f"   Available events: {', '.join(MqttClientEvents.get_all_events())}"
+            )
             print()
 
             # Step 4: Connect and subscribe
@@ -238,32 +246,32 @@ async def main():
             # Step 7: Show event statistics
             print("9. Event statistics:")
             print(
-                f"   temperature_changed: emitted {mqtt_client.event_count('temperature_changed')} times"
+                f"   {MqttClientEvents.TEMPERATURE_CHANGED}: emitted {mqtt_client.event_count(MqttClientEvents.TEMPERATURE_CHANGED)} times"
             )
             print(
-                f"   mode_changed: emitted {mqtt_client.event_count('mode_changed')} times"
+                f"   {MqttClientEvents.MODE_CHANGED}: emitted {mqtt_client.event_count(MqttClientEvents.MODE_CHANGED)} times"
             )
             print(
-                f"   status_received: emitted {mqtt_client.event_count('status_received')} times"
+                f"   {MqttClientEvents.STATUS_RECEIVED}: emitted {mqtt_client.event_count(MqttClientEvents.STATUS_RECEIVED)} times"
             )
             print()
 
             # Step 8: Dynamic listener management
             print("10. Demonstrating dynamic listener removal...")
             print(
-                f"    Before: {mqtt_client.listener_count('temperature_changed')} listeners"
+                f"    Before: {mqtt_client.listener_count(MqttClientEvents.TEMPERATURE_CHANGED)} listeners"
             )
 
             # Remove one listener
-            mqtt_client.off("temperature_changed", alert_on_high_temp)
+            mqtt_client.off(MqttClientEvents.TEMPERATURE_CHANGED, alert_on_high_temp)
             print(
-                f"    After removing alert: {mqtt_client.listener_count('temperature_changed')} listeners"
+                f"    After removing alert: {mqtt_client.listener_count(MqttClientEvents.TEMPERATURE_CHANGED)} listeners"
             )
 
             # Add it back
-            mqtt_client.on("temperature_changed", alert_on_high_temp)
+            mqtt_client.on(MqttClientEvents.TEMPERATURE_CHANGED, alert_on_high_temp)
             print(
-                f"    After adding back: {mqtt_client.listener_count('temperature_changed')} listeners"
+                f"    After adding back: {mqtt_client.listener_count(MqttClientEvents.TEMPERATURE_CHANGED)} listeners"
             )
             print()
 

@@ -1,21 +1,23 @@
 #!/usr/bin/env python3
 """
-Simple Example: Periodic Device Info Requests
+Simple Example: Periodic Status Requests
 
-A minimal example showing how to use periodic device info requests.
+A minimal example showing periodic device status requests.
 """
 
 import asyncio
 import os
 import sys
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "src"))
+    sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from nwp500 import (
-    DeviceFeature,
+    DeviceStatus,
     NavienAPIClient,
     NavienAuthClient,
     NavienMqttClient,
+    PeriodicRequestType,
 )
 
 
@@ -37,22 +39,23 @@ async def main():
     await mqtt.connect()
 
     # Typed callback
-    def on_feature(feature: DeviceFeature):
+    def on_status(status: DeviceStatus):
         print(
-            f"Device info: Serial {feature.controller_serial_number}, FW {feature.controller_sw_version}"
+            f"Status: {status.dhw_temperature:.1f}°F, {status.current_inst_power:.1f}W"
         )
 
     # Subscribe with typed parsing
-    await mqtt.subscribe_device_feature(device, on_feature)
+    await mqtt.subscribe_device_status(device, on_status)
 
-    # Start periodic requests (every 5 minutes by default)
-    await mqtt.start_periodic_requests(device=device)
+    # Start periodic status requests (every 5 minutes by default)
+    await mqtt.start_periodic_requests(
+        device=device, request_type=PeriodicRequestType.DEVICE_STATUS
+    )
 
-    print("Periodic device info requests started (every 5 minutes)")
+    print("Periodic status requests started (every 5 minutes)")
     print("Press Ctrl+C to stop...")
 
     try:
-        # Run until interrupted
         while True:
             await asyncio.sleep(1)
     except (KeyboardInterrupt, asyncio.CancelledError):

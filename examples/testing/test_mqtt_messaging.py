@@ -93,7 +93,7 @@ async def test_mqtt_messaging():
             additional_value = device.device_info.additional_value
 
             try:
-                from examples.mask import mask_any, mask_location  # type: ignore
+                from mask import mask_any, mask_location  # type: ignore
             except Exception:
 
                 def mask_any(_):
@@ -156,7 +156,7 @@ async def test_mqtt_messaging():
                     # Avoid printing exception contents which may contain sensitive identifiers
                     try:
                         # mask_any should be available from earlier import
-                        from examples.mask import mask_any  # type: ignore
+                        from mask import mask_any  # type: ignore
                     except Exception:
 
                         def mask_any(_):

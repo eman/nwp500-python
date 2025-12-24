@@ -96,33 +96,39 @@ class NavienMqttClient(EventEmitter):
 
     Example (Event Emitter)::
 
+        >>> from nwp500.mqtt_events import MqttClientEvents
         >>> mqtt_client = NavienMqttClient(auth_client)
         ...
-        ... # Register multiple listeners
-        ... mqtt_client.on('temperature_changed', log_temperature)
-        ... mqtt_client.on('temperature_changed', update_ui)
-        ... mqtt_client.on('mode_changed', handle_mode_change)
+        ... # Type-safe event listeners with IDE autocomplete
+        ... mqtt_client.on(
+        ...     MqttClientEvents.TEMPERATURE_CHANGED, log_temperature
+        ... )
+        ... mqtt_client.on(MqttClientEvents.TEMPERATURE_CHANGED, update_ui)
+        ... mqtt_client.on(
+        ...     MqttClientEvents.MODE_CHANGED, handle_mode_change
+        ... )
         ...
         ... # One-time listener
-        ... mqtt_client.once('device_ready', initialize)
+        ... mqtt_client.once(MqttClientEvents.STATUS_RECEIVED, initialize)
         ...
         ... await mqtt_client.connect()
 
     Events Emitted:
-        - status_received: Raw status update (DeviceStatus)
-        - feature_received: Device feature/info (DeviceFeature)
-        - temperature_changed: Temperature changed (old_temp, new_temp)
-        - mode_changed: Operation mode changed (old_mode, new_mode)
-        - power_changed: Power consumption changed (old_power, new_power)
-        - heating_started: Device started heating (status)
-        - heating_stopped: Device stopped heating (status)
-        - error_detected: Error code detected (error_code, status)
-        - error_cleared: Error code cleared (error_code)
-        - connection_interrupted: Connection lost (error)
-        - connection_resumed: Connection restored (return_code,
-          session_present)
-        - reconnection_failed: Reconnection permanently failed after max
-          attempts (attempt_count)
+        See :class:`nwp500.mqtt_events.MqttClientEvents` for a complete,
+        type-safe registry of all events with full documentation.
+
+        Key events include:
+        - status_received: Raw status update
+        - feature_received: Device feature/capability information
+        - temperature_changed: DHW temperature changed
+        - mode_changed: Operation mode changed
+        - power_changed: Power consumption changed
+        - heating_started: Device started heating
+        - heating_stopped: Device stopped heating
+        - error_detected: Device error occurred
+        - error_cleared: Device error resolved
+        - connection_interrupted: Connection lost
+        - connection_resumed: Connection restored
     """
 
     def __init__(

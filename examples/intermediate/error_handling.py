@@ -28,7 +28,8 @@ logging.basicConfig(
 
 # If running from examples directory, add parent to path
 if __name__ == "__main__":
-    sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
+    sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "src"))
+    sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from nwp500 import NavienAPIClient, NavienMqttClient
 from nwp500.auth import NavienAuthClient

@@ -273,7 +273,7 @@ class CommandCode(IntEnum):
     - Control commands (33554xxx): Change device settings
 
     All commands and their expected payloads are documented in
-    docs/MQTT_MESSAGES.rst under the "Control Messages" section.
+    docs/protocol/mqtt_protocol.rst under the "Control Messages" section.
     """
 
     # Query Commands (Information Retrieval)

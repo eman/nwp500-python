@@ -19,7 +19,8 @@ logging.basicConfig(
 
 # If running from examples directory, add parent to path
 if __name__ == "__main__":
-    sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
+    sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "src"))
+    sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from nwp500 import NavienAPIClient
 from nwp500.auth import NavienAuthClient
@@ -70,7 +71,7 @@ async def example_basic_usage():
 
             # Display device information
             try:
-                from examples.mask import mask_mac  # type: ignore
+                from mask import mask_mac  # type: ignore
             except Exception:
                 # fallback helper if import fails when running examples directly
 
@@ -79,7 +80,7 @@ async def example_basic_usage():
                     return "[REDACTED_MAC]"
 
             try:
-                from examples.mask import mask_any, mask_location  # type: ignore
+                from mask import mask_any, mask_location  # type: ignore
             except Exception:
 
                 def mask_any(_):
@@ -197,7 +198,7 @@ async def example_convenience_function():
             print(f"[SUCCESS] Found {len(devices)} device(s):\n")
 
             try:
-                from examples.mask import mask_any, mask_location  # type: ignore
+                from mask import mask_any, mask_location  # type: ignore
             except Exception:
 
                 def mask_any(_):

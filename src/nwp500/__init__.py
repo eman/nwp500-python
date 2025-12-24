@@ -122,6 +122,9 @@ from nwp500.mqtt import (
     NavienMqttClient,
     PeriodicRequestType,
 )
+from nwp500.mqtt_events import (
+    MqttClientEvents,
+)
 from nwp500.utils import (
     log_performance,
 )
@@ -209,6 +212,7 @@ __all__ = [
     # Event Emitter
     "EventEmitter",
     "EventListener",
+    "MqttClientEvents",
     # Encoding utilities
     "encode_week_bitfield",
     "decode_week_bitfield",

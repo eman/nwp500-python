@@ -6,7 +6,7 @@ Import from nwp500.enums instead of nwp500.constants.
 
 # Note for maintainers:
 # Command codes and expected payload fields are defined in
-# `docs/MQTT_MESSAGES.rst` under the "Control Messages" section and
+# `docs/protocol/mqtt_protocol.rst` under the "Control Messages" section and
 # the subsections for Power Control, DHW Mode, Anti-Legionella,
 # Reservation Management and TOU Settings. When updating constants or
 # payload builders, verify against that document to avoid protocol

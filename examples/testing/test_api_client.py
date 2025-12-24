@@ -71,7 +71,7 @@ async def test_api_client():
                 return re.sub(mac_regex, "[REDACTED_MAC]", mac)
 
             try:
-                from examples.mask import mask_any, mask_location  # type: ignore
+                from mask import mask_any, mask_location  # type: ignore
             except Exception:
 
                 def mask_any(_):
