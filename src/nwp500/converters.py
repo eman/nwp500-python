@@ -4,7 +4,7 @@ This module handles conversion of device-specific data formats to Python types.
 The Navien device uses non-standard representations for boolean and numeric
 values.
 
-See docs/PROTOCOL_REFERENCE.md for comprehensive protocol details.
+See docs/protocol/quick_reference.rst for comprehensive protocol details.
 """
 
 from collections.abc import Callable

@@ -4,7 +4,7 @@ This module contains enumerations for the Navien device protocol. These
 enums define valid values for device control commands, status fields, and
 capabilities.
 
-See docs/PROTOCOL_REFERENCE.md for comprehensive protocol details.
+See docs/protocol/quick_reference.rst for comprehensive protocol details.
 """
 
 from enum import IntEnum

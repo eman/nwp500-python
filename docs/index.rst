@@ -133,6 +133,7 @@ Documentation Index
    :maxdepth: 2
    :caption: Advanced: Protocol Reference
 
+   protocol/quick_reference
    protocol/rest_api
    protocol/mqtt_protocol
    protocol/device_status
