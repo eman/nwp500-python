@@ -190,8 +190,6 @@ __all__ = [
     "DeviceNotFoundError",
     "DeviceOfflineError",
     "DeviceOperationError",
-    # Constants
-    "constants",
     # API Client
     "NavienAPIClient",
     # MQTT Client

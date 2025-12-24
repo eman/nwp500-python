@@ -21,7 +21,6 @@ from nwp500.exceptions import (
     ValidationError,
 )
 from nwp500.mqtt_utils import redact_serial
-from nwp500.topic_builder import MqttTopicBuilder
 
 from .output_formatters import (
     print_device_info,
@@ -29,8 +28,10 @@ from .output_formatters import (
     print_energy_usage,
     print_json,
 )
+from .rich_output import get_formatter
 
 _logger = logging.getLogger(__name__)
+_formatter = get_formatter()
 
 T = TypeVar("T")
 
@@ -81,14 +82,19 @@ async def _handle_command_with_status_feedback(
         if print_status:
             print_json(status.model_dump())
         _logger.info(success_msg)
-        print(success_msg)
+        _formatter.print_success(success_msg)
         return cast(DeviceStatus, status)
     except (ValidationError, RangeValidationError) as e:
         _logger.error(f"Invalid parameters: {e}")
+        _formatter.print_error(str(e), title="Invalid Parameters")
     except (MqttError, DeviceError, Nwp500Error) as e:
         _logger.error(f"Error {action_name}: {e}")
+        _formatter.print_error(
+            str(e), title=f"Error During {action_name.title()}"
+        )
     except Exception as e:
         _logger.error(f"Unexpected error {action_name}: {e}")
+        _formatter.print_error(str(e), title="Unexpected Error")
     return None
 
 
@@ -296,9 +302,9 @@ async def handle_get_reservations_request(
             future.set_result(None)
 
     device_type = str(device.device_info.device_type)
-    response_pattern = MqttTopicBuilder.command_topic(
-        device_type, mac_address="+", suffix="#"
-    )
+    # Subscribe to all command responses from this device type
+    # Topic pattern: cmd/{device_type}/+/# matches all responses
+    response_pattern = f"cmd/{device_type}/+/#"
     await mqtt.subscribe(response_pattern, raw_callback)
     await mqtt.control.request_reservations(device)
     try:

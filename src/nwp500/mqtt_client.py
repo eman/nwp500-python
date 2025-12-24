@@ -246,8 +246,7 @@ class NavienMqttClient(EventEmitter):
         active_subs = 0
         if self._subscription_manager:
             # Access protected subscriber count for diagnostics
-            # pylint: disable=protected-access
-            active_subs = len(self._subscription_manager._subscriptions)
+            active_subs = len(self._subscription_manager._subscriptions)  # type: ignore[attr-defined]
 
         # Record drop asynchronously
         self._schedule_coroutine(
@@ -560,7 +559,7 @@ class NavienMqttClient(EventEmitter):
                 async def ensure_callback(device: Device) -> bool:
                     return await self.ensure_device_info_cached(device)
 
-                self._device_controller._ensure_device_info_callback = (
+                self._device_controller.set_ensure_device_info_callback(
                     ensure_callback
                 )
                 # Note: These will be implemented later when we
@@ -907,7 +906,7 @@ class NavienMqttClient(EventEmitter):
 
         mac = device.device_info.mac_address
         redacted_mac = redact_mac(mac)
-        cached = await self._device_controller._device_info_cache.get(mac)
+        cached = await self._device_controller.device_info_cache.get(mac)
         if cached is not None:
             return True
 
@@ -929,7 +928,7 @@ class NavienMqttClient(EventEmitter):
             _logger.info(f"Waiting for device feature (timeout={timeout}s)")
             feature = await asyncio.wait_for(future, timeout=timeout)
             # Cache the feature immediately
-            await self._device_controller._device_info_cache.set(mac, feature)
+            await self._device_controller.device_info_cache.set(mac, feature)
             return True
         except TimeoutError:
             _logger.error(

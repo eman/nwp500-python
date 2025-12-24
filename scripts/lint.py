@@ -28,9 +28,13 @@ def run_command(cmd, description):
         if e.stderr:
             print(f"STDERR:\n{e.stderr}")
         return False
-    except FileNotFoundError:
-        print(f"[ERROR] {description} - FAILED (ruff not found)")
-        print("Install ruff with: python3 -m pip install ruff>=0.1.0")
+    except FileNotFoundError as err:
+        tool = str(err).split("'")[1] if "'" in str(err) else "tool"
+        print(f"[ERROR] {description} - FAILED ({tool} not found)")
+        if tool == "ruff":
+            print("Install ruff with: python3 -m pip install ruff>=0.1.0")
+        elif tool == "pyright":
+            print("Install pyright with: python3 -m pip install pyright>=1.1.0")
         return False
 
 
@@ -71,6 +75,15 @@ def main():
             ],
             "Ruff format check",
         ),
+        (
+            [
+                sys.executable,
+                "-m",
+                "pyright",
+                "src/nwp500",
+            ],
+            "Pyright type checking",
+        ),
     ]
 
     all_passed = True
@@ -90,6 +103,7 @@ def main():
         print("Run the following commands to fix issues:")
         print("  python3 -m ruff check --fix src/ tests/ examples/")
         print("  python3 -m ruff format src/ tests/ examples/")
+        print("  python3 -m pyright src/nwp500 tests")
         return 1
 
 

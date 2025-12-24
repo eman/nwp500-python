@@ -31,9 +31,11 @@ from .commands import (
     handle_trigger_recirculation_hot_button_request as handle_hot_btn,
 )
 from .monitoring import handle_monitoring
+from .rich_output import get_formatter
 from .token_storage import load_tokens, save_tokens
 
 _logger = logging.getLogger(__name__)
+_formatter = get_formatter()
 
 
 async def async_main(args: argparse.Namespace) -> int:
@@ -144,14 +146,19 @@ async def async_main(args: argparse.Namespace) -> int:
         TokenRefreshError,
     ) as e:
         _logger.error(f"Auth failed: {e}")
+        _formatter.print_error(str(e), title="Authentication Failed")
     except (MqttNotConnectedError, MqttConnectionError, MqttError) as e:
         _logger.error(f"MQTT error: {e}")
+        _formatter.print_error(str(e), title="MQTT Connection Error")
     except ValidationError as e:
         _logger.error(f"Validation error: {e}")
+        _formatter.print_error(str(e), title="Validation Error")
     except Nwp500Error as e:
         _logger.error(f"Library error: {e}")
+        _formatter.print_error(str(e), title="Library Error")
     except Exception as e:
         _logger.error(f"Unexpected error: {e}", exc_info=True)
+        _formatter.print_error(str(e), title="Unexpected Error")
     return 1
 
 

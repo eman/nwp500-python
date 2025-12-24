@@ -516,7 +516,9 @@ class NavienAuthClient:
                             old_tokens.authorization_expires_in
                         )
                         # Also preserve the AWS expiration timestamp
-                        new_tokens._aws_expires_at = old_tokens._aws_expires_at
+                        new_tokens._aws_expires_at = (  # type: ignore[attr-defined]
+                            old_tokens._aws_expires_at  # type: ignore[attr-defined]
+                        )
 
                 # Update stored auth response if we have one
                 if self._auth_response:
@@ -702,11 +704,11 @@ async def authenticate(user_id: str, password: str) -> AuthenticationResponse:
         >>> # Do not print tokens in production code
     """
     async with NavienAuthClient(user_id, password) as client:
-        if client._auth_response is None:
+        if client._auth_response is None:  # type: ignore[attr-defined]
             raise AuthenticationError(
                 "Authentication failed: no response received"
             )
-        return client._auth_response
+        return client._auth_response  # type: ignore[attr-defined]
 
 
 async def refresh_access_token(refresh_token: str) -> AuthTokens:

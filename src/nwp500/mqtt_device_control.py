@@ -19,7 +19,7 @@ This module handles all device control operations including:
 
 import logging
 from collections.abc import Awaitable, Callable, Sequence
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
 from nwp500.topic_builder import MqttTopicBuilder
@@ -85,6 +85,17 @@ class MqttDeviceController:
         self._ensure_device_info_callback: (
             Callable[[Device], Awaitable[bool]] | None
         ) = None
+
+    def set_ensure_device_info_callback(
+        self, callback: Callable[[Device], Awaitable[bool]] | None
+    ) -> None:
+        """Set the callback for ensuring device info is cached."""
+        self._ensure_device_info_callback = callback
+
+    @property
+    def device_info_cache(self) -> "DeviceInfoCache":
+        """Get the device info cache."""
+        return self._device_info_cache
 
     async def _ensure_device_info_cached(
         self, device: Device, timeout: float = 5.0
@@ -594,7 +605,7 @@ class MqttDeviceController:
         )
         message = {
             "clientID": self._client_id,
-            "timestamp": datetime.utcnow().isoformat() + "Z",
+            "timestamp": (datetime.now(UTC).isoformat().replace("+00:00", "Z")),
         }
 
         return await self._publish(topic, message)

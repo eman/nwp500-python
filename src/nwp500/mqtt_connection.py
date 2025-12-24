@@ -17,7 +17,6 @@ from awscrt.exceptions import AwsCrtError
 from awsiot import mqtt_connection_builder
 
 from .exceptions import (
-    MqttConnectionError,
     MqttCredentialsError,
     MqttNotConnectedError,
 )
@@ -49,7 +48,7 @@ class MqttConnection:
         config: "MqttConnectionConfig",
         auth_client: "NavienAuthClient",
         on_connection_interrupted: (
-            Callable[[mqtt.Connection, Exception], None] | None
+            Callable[[mqtt.Connection, AwsCrtError], None] | None
         ) = None,
         on_connection_resumed: Callable[[Any, Any | None], None] | None = None,
     ):
@@ -143,23 +142,20 @@ class MqttConnection:
             # Convert concurrent.futures.Future to asyncio.Future and await
             # Use shield to prevent cancellation from propagating to
             # underlying future
-            if self._connection is not None:
-                connect_future = self._connection.connect()
-                try:
-                    connect_result = await asyncio.shield(
-                        asyncio.wrap_future(connect_future)
-                    )
-                except asyncio.CancelledError:
-                    # Shield was cancelled - the underlying connect will
-                    # complete independently, preventing InvalidStateError
-                    # in AWS CRT callbacks
-                    _logger.debug(
-                        "Connect operation was cancelled but will complete "
-                        "in background"
-                    )
-                    raise
-            else:
-                raise MqttConnectionError("Connection not initialized")
+            connect_future = self._connection.connect()
+            try:
+                connect_result = await asyncio.shield(
+                    asyncio.wrap_future(connect_future)
+                )
+            except asyncio.CancelledError:
+                # Shield was cancelled - the underlying connect will
+                # complete independently, preventing InvalidStateError
+                # in AWS CRT callbacks
+                _logger.debug(
+                    "Connect operation was cancelled but will complete "
+                    "in background"
+                )
+                raise
 
             self._connected = True
             _logger.info(

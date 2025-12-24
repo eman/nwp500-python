@@ -11,6 +11,8 @@ from typing import Any
 
 from nwp500 import DeviceStatus
 
+from .rich_output import get_formatter
+
 _logger = logging.getLogger(__name__)
 
 
@@ -19,6 +21,58 @@ def _format_number(value: Any) -> str:
     if isinstance(value, float):
         return f"{value:.1f}"
     return str(value)
+
+
+def _get_unit_suffix(field_name: str, model_class: Any = DeviceStatus) -> str:
+    """Extract unit suffix from model field metadata.
+
+    Args:
+        field_name: Name of the field to get unit for
+        model_class: The Pydantic model class (default: DeviceStatus)
+
+    Returns:
+        Unit string (e.g., "°F", "GPM", "Wh") or empty string if not found
+    """
+    if not hasattr(model_class, "model_fields"):
+        return ""
+
+    model_fields = model_class.model_fields
+    if field_name not in model_fields:
+        return ""
+
+    field_info = model_fields[field_name]
+    if not hasattr(field_info, "json_schema_extra"):
+        return ""
+
+    extra = field_info.json_schema_extra
+    if isinstance(extra, dict) and "unit_of_measurement" in extra:
+        unit = extra["unit_of_measurement"]
+        return f" {unit}" if unit else ""
+
+    return ""
+
+
+def _add_numeric_item(
+    items: list[tuple[str, str, str]],
+    device_status: Any,
+    field_name: str,
+    category: str,
+    label: str,
+) -> None:
+    """Add a numeric field with unit to items list, extracting unit from model.
+
+    Args:
+        items: List to append to
+        device_status: DeviceStatus object
+        field_name: Name of the field to display
+        category: Category section in the output
+        label: Display label for the field
+    """
+    if hasattr(device_status, field_name):
+        value = getattr(device_status, field_name)
+        unit = _get_unit_suffix(field_name)
+        formatted = f"{_format_number(value)}{unit}"
+        items.append((category, label, formatted))
 
 
 def _json_default_serializer(obj: Any) -> Any:
@@ -121,10 +175,47 @@ def print_energy_usage(energy_response: Any) -> None:
     """
     Print energy usage data in human-readable tabular format.
 
+    Uses Rich formatting when available, falls back to plain text otherwise.
+
     Args:
         energy_response: EnergyUsageResponse object
     """
+    # First, print the plain text summary (always works)
     print(format_energy_usage(energy_response))
+
+    # Also prepare and print rich table if available
+    months_data = []
+
+    if energy_response.usage:
+        for month_data in energy_response.usage:
+            month_name_str = (
+                f"{month_name[month_data.month]} {month_data.year}"
+                if 1 <= month_data.month <= 12
+                else f"Month {month_data.month} {month_data.year}"
+            )
+            total_wh = sum(
+                d.heat_pump_usage + d.heat_element_usage
+                for d in month_data.data
+            )
+            hp_wh = sum(d.heat_pump_usage for d in month_data.data)
+            he_wh = sum(d.heat_element_usage for d in month_data.data)
+            hp_pct = (hp_wh / total_wh * 100) if total_wh > 0 else 0
+            he_pct = (he_wh / total_wh * 100) if total_wh > 0 else 0
+
+            months_data.append(
+                {
+                    "month_str": month_name_str,
+                    "total_kwh": total_wh / 1000,
+                    "hp_kwh": hp_wh / 1000,
+                    "hp_pct": hp_pct,
+                    "he_kwh": he_wh / 1000,
+                    "he_pct": he_pct,
+                }
+            )
+
+        # Print rich energy table if available
+        formatter = get_formatter()
+        formatter.print_energy_table(months_data)
 
 
 def write_status_to_csv(file_path: str, status: DeviceStatus) -> None:
@@ -178,18 +269,24 @@ def format_json_output(data: Any, indent: int = 2) -> str:
 
 def print_json(data: Any, indent: int = 2) -> None:
     """
-    Print data as formatted JSON.
+    Print data as formatted JSON with optional syntax highlighting.
+
+    Uses Rich highlighting when available, falls back to plain JSON otherwise.
 
     Args:
         data: Data to print
         indent: Number of spaces for indentation (default: 2)
     """
-    print(format_json_output(data, indent))
+    json_str = format_json_output(data, indent)
+    formatter = get_formatter()
+    formatter.print_json_highlighted(json.loads(json_str))
 
 
 def print_device_status(device_status: Any) -> None:
     """
     Print device status with aligned columns and dynamic width calculation.
+
+    Units are automatically extracted from the DeviceStatus model metadata.
 
     Args:
         device_status: DeviceStatus object
@@ -215,192 +312,170 @@ def print_device_status(device_status: Any) -> None:
         all_items.append(
             ("OPERATION STATUS", "State", device_status.current_statenum)
         )
-    if hasattr(device_status, "current_inst_power"):
-        all_items.append(
-            (
-                "OPERATION STATUS",
-                "Current Power",
-                f"{_format_number(device_status.current_inst_power)}W",
-            )
-        )
+    _add_numeric_item(
+        all_items,
+        device_status,
+        "current_inst_power",
+        "OPERATION STATUS",
+        "Current Power",
+    )
 
     # Water Temperatures
-    if hasattr(device_status, "dhw_temperature"):
-        all_items.append(
-            (
-                "WATER TEMPERATURES",
-                "DHW Current",
-                f"{_format_number(device_status.dhw_temperature)}°F",
-            )
-        )
-    if hasattr(device_status, "dhw_target_temperature_setting"):
-        all_items.append(
-            (
-                "WATER TEMPERATURES",
-                "DHW Target",
-                f"{_format_number(device_status.dhw_target_temperature_setting)}°F",
-            )
-        )
-    if hasattr(device_status, "tank_upper_temperature"):
-        all_items.append(
-            (
-                "WATER TEMPERATURES",
-                "Tank Upper",
-                f"{_format_number(device_status.tank_upper_temperature)}°F",
-            )
-        )
-    if hasattr(device_status, "tank_lower_temperature"):
-        all_items.append(
-            (
-                "WATER TEMPERATURES",
-                "Tank Lower",
-                f"{_format_number(device_status.tank_lower_temperature)}°F",
-            )
-        )
-    if hasattr(device_status, "current_inlet_temperature"):
-        all_items.append(
-            (
-                "WATER TEMPERATURES",
-                "Inlet Temp",
-                f"{_format_number(device_status.current_inlet_temperature)}°F",
-            )
-        )
-    if hasattr(device_status, "current_dhw_flow_rate"):
-        all_items.append(
-            (
-                "WATER TEMPERATURES",
-                "DHW Flow Rate",
-                _format_number(device_status.current_dhw_flow_rate),
-            )
-        )
+    _add_numeric_item(
+        all_items,
+        device_status,
+        "dhw_temperature",
+        "WATER TEMPERATURES",
+        "DHW Current",
+    )
+    _add_numeric_item(
+        all_items,
+        device_status,
+        "dhw_target_temperature_setting",
+        "WATER TEMPERATURES",
+        "DHW Target",
+    )
+    _add_numeric_item(
+        all_items,
+        device_status,
+        "tank_upper_temperature",
+        "WATER TEMPERATURES",
+        "Tank Upper",
+    )
+    _add_numeric_item(
+        all_items,
+        device_status,
+        "tank_lower_temperature",
+        "WATER TEMPERATURES",
+        "Tank Lower",
+    )
+    _add_numeric_item(
+        all_items,
+        device_status,
+        "current_inlet_temperature",
+        "WATER TEMPERATURES",
+        "Inlet Temp",
+    )
+    _add_numeric_item(
+        all_items,
+        device_status,
+        "current_dhw_flow_rate",
+        "WATER TEMPERATURES",
+        "DHW Flow Rate",
+    )
 
     # Ambient Temperatures
-    if hasattr(device_status, "outside_temperature"):
-        all_items.append(
-            (
-                "AMBIENT TEMPERATURES",
-                "Outside",
-                f"{_format_number(device_status.outside_temperature)}°F",
-            )
-        )
-    if hasattr(device_status, "ambient_temperature"):
-        all_items.append(
-            (
-                "AMBIENT TEMPERATURES",
-                "Ambient",
-                f"{_format_number(device_status.ambient_temperature)}°F",
-            )
-        )
+    _add_numeric_item(
+        all_items,
+        device_status,
+        "outside_temperature",
+        "AMBIENT TEMPERATURES",
+        "Outside",
+    )
+    _add_numeric_item(
+        all_items,
+        device_status,
+        "ambient_temperature",
+        "AMBIENT TEMPERATURES",
+        "Ambient",
+    )
 
     # System Temperatures
-    if hasattr(device_status, "discharge_temperature"):
-        all_items.append(
-            (
-                "SYSTEM TEMPERATURES",
-                "Discharge",
-                f"{_format_number(device_status.discharge_temperature)}°F",
-            )
-        )
-    if hasattr(device_status, "suction_temperature"):
-        all_items.append(
-            (
-                "SYSTEM TEMPERATURES",
-                "Suction",
-                f"{_format_number(device_status.suction_temperature)}°F",
-            )
-        )
-    if hasattr(device_status, "evaporator_temperature"):
-        all_items.append(
-            (
-                "SYSTEM TEMPERATURES",
-                "Evaporator",
-                f"{_format_number(device_status.evaporator_temperature)}°F",
-            )
-        )
-    if hasattr(device_status, "target_super_heat"):
-        all_items.append(
-            (
-                "SYSTEM TEMPERATURES",
-                "Target SuperHeat",
-                _format_number(device_status.target_super_heat),
-            )
-        )
-    if hasattr(device_status, "current_super_heat"):
-        all_items.append(
-            (
-                "SYSTEM TEMPERATURES",
-                "Current SuperHeat",
-                _format_number(device_status.current_super_heat),
-            )
-        )
+    _add_numeric_item(
+        all_items,
+        device_status,
+        "discharge_temperature",
+        "SYSTEM TEMPERATURES",
+        "Discharge",
+    )
+    _add_numeric_item(
+        all_items,
+        device_status,
+        "suction_temperature",
+        "SYSTEM TEMPERATURES",
+        "Suction",
+    )
+    _add_numeric_item(
+        all_items,
+        device_status,
+        "evaporator_temperature",
+        "SYSTEM TEMPERATURES",
+        "Evaporator",
+    )
+    _add_numeric_item(
+        all_items,
+        device_status,
+        "target_super_heat",
+        "SYSTEM TEMPERATURES",
+        "Target SuperHeat",
+    )
+    _add_numeric_item(
+        all_items,
+        device_status,
+        "current_super_heat",
+        "SYSTEM TEMPERATURES",
+        "Current SuperHeat",
+    )
 
     # Heat Pump Settings
-    if hasattr(device_status, "hp_upper_on_temp_setting"):
-        all_items.append(
-            (
-                "HEAT PUMP SETTINGS",
-                "Upper On",
-                f"{_format_number(device_status.hp_upper_on_temp_setting)}°F",
-            )
-        )
-    if hasattr(device_status, "hp_upper_off_temp_setting"):
-        all_items.append(
-            (
-                "HEAT PUMP SETTINGS",
-                "Upper Off",
-                f"{_format_number(device_status.hp_upper_off_temp_setting)}°F",
-            )
-        )
-    if hasattr(device_status, "hp_lower_on_temp_setting"):
-        all_items.append(
-            (
-                "HEAT PUMP SETTINGS",
-                "Lower On",
-                f"{_format_number(device_status.hp_lower_on_temp_setting)}°F",
-            )
-        )
-    if hasattr(device_status, "hp_lower_off_temp_setting"):
-        all_items.append(
-            (
-                "HEAT PUMP SETTINGS",
-                "Lower Off",
-                f"{_format_number(device_status.hp_lower_off_temp_setting)}°F",
-            )
-        )
+    _add_numeric_item(
+        all_items,
+        device_status,
+        "hp_upper_on_temp_setting",
+        "HEAT PUMP SETTINGS",
+        "Upper On",
+    )
+    _add_numeric_item(
+        all_items,
+        device_status,
+        "hp_upper_off_temp_setting",
+        "HEAT PUMP SETTINGS",
+        "Upper Off",
+    )
+    _add_numeric_item(
+        all_items,
+        device_status,
+        "hp_lower_on_temp_setting",
+        "HEAT PUMP SETTINGS",
+        "Lower On",
+    )
+    _add_numeric_item(
+        all_items,
+        device_status,
+        "hp_lower_off_temp_setting",
+        "HEAT PUMP SETTINGS",
+        "Lower Off",
+    )
 
     # Heat Element Settings
-    if hasattr(device_status, "he_upper_on_temp_setting"):
-        all_items.append(
-            (
-                "HEAT ELEMENT SETTINGS",
-                "Upper On",
-                f"{_format_number(device_status.he_upper_on_temp_setting)}°F",
-            )
-        )
-    if hasattr(device_status, "he_upper_off_temp_setting"):
-        all_items.append(
-            (
-                "HEAT ELEMENT SETTINGS",
-                "Upper Off",
-                f"{_format_number(device_status.he_upper_off_temp_setting)}°F",
-            )
-        )
-    if hasattr(device_status, "he_lower_on_temp_setting"):
-        all_items.append(
-            (
-                "HEAT ELEMENT SETTINGS",
-                "Lower On",
-                f"{_format_number(device_status.he_lower_on_temp_setting)}°F",
-            )
-        )
-    if hasattr(device_status, "he_lower_off_temp_setting"):
-        all_items.append(
-            (
-                "HEAT ELEMENT SETTINGS",
-                "Lower Off",
-                f"{_format_number(device_status.he_lower_off_temp_setting)}°F",
-            )
-        )
+    _add_numeric_item(
+        all_items,
+        device_status,
+        "he_upper_on_temp_setting",
+        "HEAT ELEMENT SETTINGS",
+        "Upper On",
+    )
+    _add_numeric_item(
+        all_items,
+        device_status,
+        "he_upper_off_temp_setting",
+        "HEAT ELEMENT SETTINGS",
+        "Upper Off",
+    )
+    _add_numeric_item(
+        all_items,
+        device_status,
+        "he_lower_on_temp_setting",
+        "HEAT ELEMENT SETTINGS",
+        "Lower On",
+    )
+    _add_numeric_item(
+        all_items,
+        device_status,
+        "he_lower_off_temp_setting",
+        "HEAT ELEMENT SETTINGS",
+        "Lower Off",
+    )
 
     # Power & Energy
     if hasattr(device_status, "wh_total_power_consumption"):
@@ -427,66 +502,64 @@ def print_device_status(device_status: Any) -> None:
                 f"{_format_number(device_status.wh_electric_heater_power)}Wh",
             )
         )
-    if hasattr(device_status, "total_energy_capacity"):
-        all_items.append(
-            (
-                "POWER & ENERGY",
-                "Total Capacity",
-                _format_number(device_status.total_energy_capacity),
-            )
-        )
-    if hasattr(device_status, "available_energy_capacity"):
-        all_items.append(
-            (
-                "POWER & ENERGY",
-                "Available Capacity",
-                _format_number(device_status.available_energy_capacity),
-            )
-        )
+    _add_numeric_item(
+        all_items,
+        device_status,
+        "total_energy_capacity",
+        "POWER & ENERGY",
+        "Total Capacity",
+    )
+    _add_numeric_item(
+        all_items,
+        device_status,
+        "available_energy_capacity",
+        "POWER & ENERGY",
+        "Available Capacity",
+    )
 
     # Fan Control
-    if hasattr(device_status, "target_fan_rpm"):
-        target_rpm = _format_number(device_status.target_fan_rpm)
-        all_items.append(("FAN CONTROL", "Target RPM", target_rpm))
-    if hasattr(device_status, "current_fan_rpm"):
-        current_rpm = _format_number(device_status.current_fan_rpm)
-        all_items.append(("FAN CONTROL", "Current RPM", current_rpm))
+    _add_numeric_item(
+        all_items, device_status, "target_fan_rpm", "FAN CONTROL", "Target RPM"
+    )
+    _add_numeric_item(
+        all_items,
+        device_status,
+        "current_fan_rpm",
+        "FAN CONTROL",
+        "Current RPM",
+    )
     if hasattr(device_status, "fan_pwm"):
         pwm_pct = f"{_format_number(device_status.fan_pwm)}%"
         all_items.append(("FAN CONTROL", "PWM", pwm_pct))
-    if hasattr(device_status, "cumulated_op_time_eva_fan"):
-        eva_fan_time = _format_number(device_status.cumulated_op_time_eva_fan)
-        all_items.append(
-            (
-                "FAN CONTROL",
-                "Eva Fan Time",
-                eva_fan_time,
-            )
-        )
+    _add_numeric_item(
+        all_items,
+        device_status,
+        "cumulated_op_time_eva_fan",
+        "FAN CONTROL",
+        "Eva Fan Time",
+    )
 
     # Compressor & Valve
     if hasattr(device_status, "mixing_rate"):
-        mixing = _format_number(device_status.mixing_rate)
+        mixing = f"{_format_number(device_status.mixing_rate)}%"
         all_items.append(("COMPRESSOR & VALVE", "Mixing Rate", mixing))
     if hasattr(device_status, "eev_step"):
-        eev = _format_number(device_status.eev_step)
+        eev = f"{_format_number(device_status.eev_step)} steps"
         all_items.append(("COMPRESSOR & VALVE", "EEV Step", eev))
-    if hasattr(device_status, "target_super_heat"):
-        all_items.append(
-            (
-                "COMPRESSOR & VALVE",
-                "Target SuperHeat",
-                _format_number(device_status.target_super_heat),
-            )
-        )
-    if hasattr(device_status, "current_super_heat"):
-        all_items.append(
-            (
-                "COMPRESSOR & VALVE",
-                "Current SuperHeat",
-                _format_number(device_status.current_super_heat),
-            )
-        )
+    _add_numeric_item(
+        all_items,
+        device_status,
+        "target_super_heat",
+        "COMPRESSOR & VALVE",
+        "Target SuperHeat",
+    )
+    _add_numeric_item(
+        all_items,
+        device_status,
+        "current_super_heat",
+        "COMPRESSOR & VALVE",
+        "Current SuperHeat",
+    )
 
     # Recirculation
     if hasattr(device_status, "recirc_operation_mode"):
@@ -505,22 +578,20 @@ def print_device_status(device_status: Any) -> None:
                 device_status.recirc_pump_operation_status,
             )
         )
-    if hasattr(device_status, "recirc_temperature"):
-        all_items.append(
-            (
-                "RECIRCULATION",
-                "Temperature",
-                f"{_format_number(device_status.recirc_temperature)}°F",
-            )
-        )
-    if hasattr(device_status, "recirc_faucet_temperature"):
-        all_items.append(
-            (
-                "RECIRCULATION",
-                "Faucet Temp",
-                f"{_format_number(device_status.recirc_faucet_temperature)}°F",
-            )
-        )
+    _add_numeric_item(
+        all_items,
+        device_status,
+        "recirc_temperature",
+        "RECIRCULATION",
+        "Temperature",
+    )
+    _add_numeric_item(
+        all_items,
+        device_status,
+        "recirc_faucet_temperature",
+        "RECIRCULATION",
+        "Faucet Temp",
+    )
 
     # Status & Alerts
     if hasattr(device_status, "error_code"):
@@ -549,41 +620,41 @@ def print_device_status(device_status: Any) -> None:
         )
 
     # Vacation Mode
-    if hasattr(device_status, "vacation_day_setting"):
-        all_items.append(
-            ("VACATION MODE", "Days Set", device_status.vacation_day_setting)
-        )
-    if hasattr(device_status, "vacation_day_elapsed"):
-        all_items.append(
-            (
-                "VACATION MODE",
-                "Days Elapsed",
-                device_status.vacation_day_elapsed,
-            )
-        )
+    _add_numeric_item(
+        all_items,
+        device_status,
+        "vacation_day_setting",
+        "VACATION MODE",
+        "Days Set",
+    )
+    _add_numeric_item(
+        all_items,
+        device_status,
+        "vacation_day_elapsed",
+        "VACATION MODE",
+        "Days Elapsed",
+    )
 
     # Air Filter
-    if hasattr(device_status, "air_filter_alarm_period"):
-        all_items.append(
-            (
-                "AIR FILTER",
-                "Alarm Period",
-                f"{device_status.air_filter_alarm_period}h",
-            )
-        )
-    if hasattr(device_status, "air_filter_alarm_elapsed"):
-        all_items.append(
-            (
-                "AIR FILTER",
-                "Alarm Elapsed",
-                f"{device_status.air_filter_alarm_elapsed}h",
-            )
-        )
+    _add_numeric_item(
+        all_items,
+        device_status,
+        "air_filter_alarm_period",
+        "AIR FILTER",
+        "Alarm Period",
+    )
+    _add_numeric_item(
+        all_items,
+        device_status,
+        "air_filter_alarm_elapsed",
+        "AIR FILTER",
+        "Alarm Elapsed",
+    )
 
     # WiFi & Network
-    if hasattr(device_status, "wifi_rssi"):
-        rssi_dbm = f"{_format_number(device_status.wifi_rssi)} dBm"
-        all_items.append(("WiFi & NETWORK", "RSSI", rssi_dbm))
+    _add_numeric_item(
+        all_items, device_status, "wifi_rssi", "WiFi & NETWORK", "RSSI"
+    )
 
     # Demand Response & TOU
     if hasattr(device_status, "dr_event_status"):
@@ -594,14 +665,13 @@ def print_device_status(device_status: Any) -> None:
                 device_status.dr_event_status,
             )
         )
-    if hasattr(device_status, "dr_override_status"):
-        all_items.append(
-            (
-                "DEMAND RESPONSE & TOU",
-                "DR Override Status",
-                device_status.dr_override_status,
-            )
-        )
+    _add_numeric_item(
+        all_items,
+        device_status,
+        "dr_override_status",
+        "DEMAND RESPONSE & TOU",
+        "DR Override Status",
+    )
     if hasattr(device_status, "tou_status"):
         all_items.append(
             ("DEMAND RESPONSE & TOU", "TOU Status", device_status.tou_status)
@@ -616,14 +686,13 @@ def print_device_status(device_status: Any) -> None:
         )
 
     # Anti-Legionella
-    if hasattr(device_status, "anti_legionella_period"):
-        all_items.append(
-            (
-                "ANTI-LEGIONELLA",
-                "Period",
-                f"{device_status.anti_legionella_period}h",
-            )
-        )
+    _add_numeric_item(
+        all_items,
+        device_status,
+        "anti_legionella_period",
+        "ANTI-LEGIONELLA",
+        "Period",
+    )
     if hasattr(device_status, "anti_legionella_operation_busy"):
         all_items.append(
             (
@@ -638,25 +707,11 @@ def print_device_status(device_status: Any) -> None:
     max_value_len = max(
         (len(str(value)) for _, _, value in all_items), default=20
     )
-    line_width = max_label_len + max_value_len + 4  # +4 for padding
+    _line_width = max_label_len + max_value_len + 4  # +4 for padding
 
-    # Print header
-    print("=" * line_width)
-    print("DEVICE STATUS")
-    print("=" * line_width)
-
-    # Print items grouped by category
-    current_category = None
-    for category, label, value in all_items:
-        if category != current_category:
-            if current_category is not None:
-                print()
-            print(category)
-            print("-" * line_width)
-            current_category = category
-        print(f"  {label:<{max_label_len}}  {value}")
-
-    print("=" * line_width)
+    # Use rich formatter for output
+    formatter = get_formatter()
+    formatter.print_status_table(all_items)
 
 
 def print_device_info(device_feature: Any) -> None:
@@ -843,22 +898,8 @@ def print_device_info(device_feature: Any) -> None:
     max_value_len = max(
         (len(str(value)) for _, _, value in all_items), default=20
     )
-    line_width = max_label_len + max_value_len + 4  # +4 for padding
+    _line_width = max_label_len + max_value_len + 4  # +4 for padding
 
-    # Print header
-    print("=" * line_width)
-    print("DEVICE INFORMATION")
-    print("=" * line_width)
-
-    # Print items grouped by category
-    current_category = None
-    for category, label, value in all_items:
-        if category != current_category:
-            if current_category is not None:
-                print()
-            print(category)
-            print("-" * line_width)
-            current_category = category
-        print(f"  {label:<{max_label_len}}  {value}")
-
-    print("=" * line_width)
+    # Use rich formatter for output
+    formatter = get_formatter()
+    formatter.print_status_table(all_items)

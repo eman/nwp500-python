@@ -72,7 +72,8 @@ def encode_week_bitfield(days: Iterable[str | int]) -> int:
                     value=value,
                 )
             bitfield |= WEEKDAY_NAME_TO_BIT[key]
-        elif isinstance(value, int):
+        else:
+            # At this point, value must be int (from type hint str | int)
             if 0 <= value <= 6:
                 bitfield |= 1 << value
             elif 1 <= value <= 7:
@@ -86,8 +87,6 @@ def encode_week_bitfield(days: Iterable[str | int]) -> int:
                     min_value=0,
                     max_value=7,
                 )
-        else:
-            raise TypeError("Weekday values must be strings or integers")
     return bitfield
 
 

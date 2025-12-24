@@ -2,6 +2,47 @@
 Changelog
 =========
 
+Version 7.2.0 (2025-12-23)
+==========================
+
+Added
+-----
+
+- **Dynamic Unit Extraction in CLI**: CLI output now dynamically extracts units from DeviceStatus model metadata
+  - New helper functions: ``_get_unit_suffix()`` and ``_add_numeric_item()``
+  - Eliminates hardcoded units in output formatter
+  - Single source of truth: model metadata drives CLI display
+
+Fixed
+-----
+
+- **Superheat Temperature Units**: Target and Current SuperHeat now correctly display in °F instead of °C
+  - Both fields use ``DeciCelsiusToF`` conversion, now properly reflected in CLI output
+  - Fields were displaying inconsistent units compared to all other temperature readings
+
+- **Missing CLI Output Units**: Multiple fields now display with proper units from model metadata
+  - ``current_dhw_flow_rate``: Now shows GPM unit
+  - ``total_energy_capacity``: Now shows Wh unit
+  - ``available_energy_capacity``: Now shows Wh unit
+  - ``dr_override_status``: Now shows hours unit
+  - ``vacation_day_setting``: Now shows days unit
+  - ``vacation_day_elapsed``: Now shows days unit
+  - ``anti_legionella_period``: Fixed to show days unit (was incorrectly h)
+  - ``wifi_rssi``: Now shows dBm unit
+
+- **Invalid MQTT Topic Filter**: Fixed ``reservations get`` command subscription topic
+  - Changed invalid topic pattern ``cmd/52/navilink-+/#`` to valid ``cmd/52/+/#``
+  - AWS IoT Core MQTT does not support wildcards within topic segments
+  - Affected: ``handle_get_reservations_request()`` in commands.py
+
+Changed
+-------
+
+- **CLI Output Formatter Refactoring**: Restructured ``print_device_status()`` to use dynamic unit extraction
+  - Reduced code duplication by ~400 lines
+  - Improved maintainability: field additions automatically get correct units
+  - No breaking changes to CLI output format or behavior
+
 Version 7.1.0 (2025-12-22)
 ==========================
 
