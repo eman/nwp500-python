@@ -127,6 +127,7 @@ Documentation Index
    guides/event_system
    guides/command_queue
    guides/auto_recovery
+   guides/mqtt_diagnostics
    guides/advanced_features_explained
 
 .. toctree::
