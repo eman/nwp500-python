@@ -345,5 +345,4 @@ async def monitor(mqtt: NavienMqttClient, device: Any, output: str) -> None:
 if __name__ == "__main__":
     cli()  # type: ignore[call-arg]
 
-
 run = cli

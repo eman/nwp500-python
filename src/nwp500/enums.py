@@ -223,9 +223,9 @@ class VolumeCode(IntEnum):
     These correspond to the different model variants available.
     """
 
-    VOLUME_50 = 1  # NWP500-50: 50-gallon (189.2 liter) tank capacity
-    VOLUME_65 = 2  # NWP500-65: 65-gallon (246.0 liter) tank capacity
-    VOLUME_80 = 3  # NWP500-80: 80-gallon (302.8 liter) tank capacity
+    VOLUME_50 = 1  # NWP500-50: 50-gallon (189.2 liters) tank capacity
+    VOLUME_65 = 2  # NWP500-65: 65-gallon (246.0 liters) tank capacity
+    VOLUME_80 = 3  # NWP500-80: 80-gallon (302.8 liters) tank capacity
 
 
 class UnitType(IntEnum):

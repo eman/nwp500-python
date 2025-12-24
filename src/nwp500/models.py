@@ -745,8 +745,11 @@ class DeviceFeature(NavienBaseModel):
     country_code: int = Field(
         description=(
             "Country/region code where device is certified for operation. "
-            "Device-specific code without public specification. "
-            "Example: USA devices report code 3 (previously documented as 1)"
+            "Device-specific code defined by Navien. "
+            "Example: USA devices report code 3. Earlier project "
+            "documentation incorrectly listed code 1 for USA; field "
+            "observations of production devices confirm that code 3 is "
+            "the correct value."
         )
     )
     model_type_code: UnitType | int = Field(
