@@ -1,7 +1,8 @@
 """Command registry for NWP500 CLI."""
 
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, Callable
+from typing import Any
 
 from . import handlers
 

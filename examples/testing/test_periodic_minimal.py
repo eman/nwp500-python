@@ -9,7 +9,7 @@ import sys
 from datetime import datetime
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "src"))
-    sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from nwp500 import (
     DeviceStatus,

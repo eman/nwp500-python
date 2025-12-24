@@ -3,7 +3,6 @@
 import asyncio
 import functools
 import logging
-import os
 import sys
 from typing import Any
 
@@ -43,20 +42,17 @@ def async_command(f: Any) -> Any:
         async def runner() -> int:
             email = ctx.obj.get("email")
             password = ctx.obj.get("password")
-            
+
             # Load cached tokens if available
             tokens, cached_email = load_tokens()
             # If email not provided in args, try cached email
             email = email or cached_email
-            
-            if not email or not password:
-                # Try env vars as last resort if not in ctx (though click handles env vars)
-                # Click's envvar support puts them in params, so they should be in ctx.obj if passed there
-                pass
 
             if not email or not password:
-                 _logger.error("Credentials missing. Use --email/--password or env vars.")
-                 return 1
+                _logger.error(
+                    "Credentials missing. Use --email/--password or env vars."
+                )
+                return 1
 
             try:
                 async with NavienAuthClient(
@@ -71,31 +67,16 @@ def async_command(f: Any) -> Any:
                         _logger.error("No devices found.")
                         return 1
 
-                    _logger.info(f"Using device: {device.device_info.device_name}")
+                    _logger.info(
+                        f"Using device: {device.device_info.device_name}"
+                    )
 
                     mqtt = NavienMqttClient(auth)
                     await mqtt.connect()
                     try:
-                        # Inject api_client if the function asks for it
-                        # Inspect the function signature might be overkill, 
-                        # just pass it if the wrapper arg list allows?
-                        # But simpler: The decorated function signature is known.
-                        # We'll just pass mqtt and device. If it needs API, we might need a different decorator
-                        # or just pass it too.
-                        # Only 'tou' command needs 'api'.
-                        # Let's check kwargs.
-                        
-                        # We'll pass api_client in kwargs if the function accepts it? 
-                        # No, we'll just pass mqtt and device as positional args.
-                        # If a command needs api, we can modify this or handle it.
-                        # Let's attach api to ctx.obj for edge cases, 
-                        # but passing it as arg 3 is risky if func doesn't expect it.
-                        
-                        # Better: just call f(mqtt, device, *args, **kwargs).
-                        # If f needs api, it can't get it easily this way unless we pass it.
-                        # Let's attach to ctx.obj['api'] = api
-                        ctx.obj['api'] = api
-                        
+                        # Attach api to context for commands that need it
+                        ctx.obj["api"] = api
+
                         await f(mqtt, device, *args, **kwargs)
                     finally:
                         await mqtt.disconnect()
@@ -129,24 +110,28 @@ def async_command(f: Any) -> Any:
 
 @click.group()
 @click.option("--email", envvar="NAVIEN_EMAIL", help="Navien account email")
-@click.option("--password", envvar="NAVIEN_PASSWORD", help="Navien account password")
+@click.option(
+    "--password", envvar="NAVIEN_PASSWORD", help="Navien account password"
+)
 @click.option("-v", "--verbose", count=True, help="Increase verbosity")
 @click.version_option(version=__version__)
 @click.pass_context
-def cli(ctx: click.Context, email: str | None, password: str | None, verbose: int) -> None:
+def cli(
+    ctx: click.Context, email: str | None, password: str | None, verbose: int
+) -> None:
     """Navien NWP500 Control CLI."""
     ctx.ensure_object(dict)
     ctx.obj["email"] = email
     ctx.obj["password"] = password
-    
+
     log_level = logging.WARNING
     if verbose == 1:
         log_level = logging.INFO
     elif verbose >= 2:
         log_level = logging.DEBUG
-        
+
     logging.basicConfig(
-        level=logging.WARNING, # Default for other libraries
+        level=logging.WARNING,  # Default for other libraries
         stream=sys.stdout,
         format="[%(asctime)s] %(levelname)s:%(name)s:%(message)s",
     )
@@ -156,7 +141,7 @@ def cli(ctx: click.Context, email: str | None, password: str | None, verbose: in
     logging.getLogger("aiohttp").setLevel(logging.WARNING)
 
 
-@cli.command()
+@cli.command()  # type: ignore[attr-defined]
 @click.option("--raw", is_flag=True, help="Output raw JSON response")
 @async_command
 async def info(mqtt: NavienMqttClient, device: Any, raw: bool) -> None:
@@ -164,7 +149,7 @@ async def info(mqtt: NavienMqttClient, device: Any, raw: bool) -> None:
     await handlers.handle_device_info_request(mqtt, device, raw)
 
 
-@cli.command()
+@cli.command()  # type: ignore[attr-defined]
 @click.option("--raw", is_flag=True, help="Output raw JSON response")
 @async_command
 async def status(mqtt: NavienMqttClient, device: Any, raw: bool) -> None:
@@ -172,35 +157,37 @@ async def status(mqtt: NavienMqttClient, device: Any, raw: bool) -> None:
     await handlers.handle_status_request(mqtt, device, raw)
 
 
-@cli.command()
+@cli.command()  # type: ignore[attr-defined]
 @async_command
 async def serial(mqtt: NavienMqttClient, device: Any) -> None:
     """Get controller serial number."""
     await handlers.handle_get_controller_serial_request(mqtt, device)
 
 
-@cli.command()
+@cli.command()  # type: ignore[attr-defined]
 @async_command
 async def hot_button(mqtt: NavienMqttClient, device: Any) -> None:
     """Trigger hot button (instant hot water)."""
     await handlers.handle_trigger_recirculation_hot_button_request(mqtt, device)
 
 
-@cli.command()
+@cli.command()  # type: ignore[attr-defined]
 @async_command
 async def reset_filter(mqtt: NavienMqttClient, device: Any) -> None:
     """Reset air filter maintenance timer."""
     await handlers.handle_reset_air_filter_request(mqtt, device)
 
 
-@cli.command()
+@cli.command()  # type: ignore[attr-defined]
 @async_command
 async def water_program(mqtt: NavienMqttClient, device: Any) -> None:
     """Enable water program reservation scheduling mode."""
-    await handlers.handle_configure_reservation_water_program_request(mqtt, device)
+    await handlers.handle_configure_reservation_water_program_request(
+        mqtt, device
+    )
 
 
-@cli.command()
+@cli.command()  # type: ignore[attr-defined]
 @click.argument("state", type=click.Choice(["on", "off"], case_sensitive=False))
 @async_command
 async def power(mqtt: NavienMqttClient, device: Any, state: str) -> None:
@@ -208,11 +195,18 @@ async def power(mqtt: NavienMqttClient, device: Any, state: str) -> None:
     await handlers.handle_power_request(mqtt, device, state.lower() == "on")
 
 
-@cli.command()
+@cli.command()  # type: ignore[attr-defined]
 @click.argument(
     "mode_name",
     type=click.Choice(
-        ["standby", "heat-pump", "electric", "energy-saver", "high-demand", "vacation"],
+        [
+            "standby",
+            "heat-pump",
+            "electric",
+            "energy-saver",
+            "high-demand",
+            "vacation",
+        ],
         case_sensitive=False,
     ),
 )
@@ -222,7 +216,7 @@ async def mode(mqtt: NavienMqttClient, device: Any, mode_name: str) -> None:
     await handlers.handle_set_mode_request(mqtt, device, mode_name)
 
 
-@cli.command()
+@cli.command()  # type: ignore[attr-defined]
 @click.argument("value", type=float)
 @async_command
 async def temp(mqtt: NavienMqttClient, device: Any, value: float) -> None:
@@ -230,7 +224,7 @@ async def temp(mqtt: NavienMqttClient, device: Any, value: float) -> None:
     await handlers.handle_set_dhw_temp_request(mqtt, device, value)
 
 
-@cli.command()
+@cli.command()  # type: ignore[attr-defined]
 @click.argument("days", type=int)
 @async_command
 async def vacation(mqtt: NavienMqttClient, device: Any, days: int) -> None:
@@ -238,92 +232,95 @@ async def vacation(mqtt: NavienMqttClient, device: Any, days: int) -> None:
     await handlers.handle_set_vacation_days_request(mqtt, device, days)
 
 
-@cli.command()
-@click.argument("mode_val", type=click.Choice(["1", "2", "3", "4"]), metavar="MODE")
+@cli.command()  # type: ignore[attr-defined]
+@click.argument(
+    "mode_val", type=click.Choice(["1", "2", "3", "4"]), metavar="MODE"
+)
 @async_command
 async def recirc(mqtt: NavienMqttClient, device: Any, mode_val: str) -> None:
     """Set recirculation pump mode (1-4)."""
-    await handlers.handle_set_recirculation_mode_request(mqtt, device, int(mode_val))
+    await handlers.handle_set_recirculation_mode_request(
+        mqtt, device, int(mode_val)
+    )
 
 
-@cli.group()
+@cli.group()  # type: ignore[attr-defined]
 def reservations() -> None:
     """Manage reservations."""
     pass
 
 
-@reservations.command("get")
+@reservations.command("get")  # type: ignore[attr-defined]
 @async_command
 async def reservations_get(mqtt: NavienMqttClient, device: Any) -> None:
     """Get current reservation schedule."""
     await handlers.handle_get_reservations_request(mqtt, device)
 
 
-@reservations.command("set")
+@reservations.command("set")  # type: ignore[attr-defined]
 @click.argument("json_str", metavar="JSON")
 @click.option("--disabled", is_flag=True, help="Disable reservations")
 @async_command
-async def reservations_set(mqtt: NavienMqttClient, device: Any, json_str: str, disabled: bool) -> None:
+async def reservations_set(
+    mqtt: NavienMqttClient, device: Any, json_str: str, disabled: bool
+) -> None:
     """Set reservation schedule from JSON."""
-    await handlers.handle_update_reservations_request(mqtt, device, json_str, not disabled)
+    await handlers.handle_update_reservations_request(
+        mqtt, device, json_str, not disabled
+    )
 
 
-@cli.group()
+@cli.group()  # type: ignore[attr-defined]
 def tou() -> None:
     """Manage Time-of-Use settings."""
     pass
 
 
-@tou.command("get")
-@click.pass_context # We need context to access api
+@tou.command("get")  # type: ignore[attr-defined]
+@click.pass_context  # We need context to access api
 @async_command
-async def tou_get(mqtt: NavienMqttClient, device: Any, ctx: click.Context | None = None) -> None:
+async def tou_get(
+    mqtt: NavienMqttClient, device: Any, ctx: click.Context | None = None
+) -> None:
     """Get current TOU schedule."""
-    # Note: async_command wrapper calls this with (mqtt, device, **kwargs)
-    # But wrapper itself has 'ctx'. 
-    # Wait, 'ctx' is passed to wrapper. But wrapper calls `f(mqtt, device, *args, **kwargs)`.
-    # kwargs comes from Click parameters.
-    # If we add @click.pass_context to this function, 'ctx' will be in kwargs? No, as first arg?
-    # Click passes ctx as first arg if @pass_context is used.
-    # wrapper receives (ctx, *args, **kwargs).
-    # wrapper calls `f` with injected args.
-    # If f is also decorated with pass_context, wrapper sees ctx in args?
-    # This gets complicated with double decorators.
-    
-    # Simpler solution: We put 'api' in ctx.obj in wrapper.
-    # We can access it if we can get ctx.
-    # Or, let's just make 'api' a kwarg in wrapper call if present in ctx.obj?
-    # But the function signature must match.
-    
-    # Hack: use click.get_current_context() inside the function.
     ctx = click.get_current_context()
-    api = ctx.obj.get('api')
+    api = None
+    if hasattr(ctx, "obj") and ctx.obj is not None:
+        api = ctx.obj.get("api")
     if api:
         await handlers.handle_get_tou_request(mqtt, device, api)
     else:
         _logger.error("API client not available")
 
 
-@tou.command("set")
+@tou.command("set")  # type: ignore[attr-defined]
 @click.argument("state", type=click.Choice(["on", "off"], case_sensitive=False))
 @async_command
 async def tou_set(mqtt: NavienMqttClient, device: Any, state: str) -> None:
     """Enable or disable TOU pricing."""
-    await handlers.handle_set_tou_enabled_request(mqtt, device, state.lower() == "on")
+    await handlers.handle_set_tou_enabled_request(
+        mqtt, device, state.lower() == "on"
+    )
 
 
-@cli.command()
+@cli.command()  # type: ignore[attr-defined]
 @click.option("--year", type=int, required=True)
-@click.option("--months", required=True, help="Comma-separated months (e.g. 1,2,3)")
+@click.option(
+    "--months", required=True, help="Comma-separated months (e.g. 1,2,3)"
+)
 @async_command
-async def energy(mqtt: NavienMqttClient, device: Any, year: int, months: str) -> None:
+async def energy(
+    mqtt: NavienMqttClient, device: Any, year: int, months: str
+) -> None:
     """Query historical energy usage."""
     month_list = [int(m.strip()) for m in months.split(",")]
     await handlers.handle_get_energy_request(mqtt, device, year, month_list)
 
 
-@cli.command()
-@click.argument("action", type=click.Choice(["enable", "disable"], case_sensitive=False))
+@cli.command()  # type: ignore[attr-defined]
+@click.argument(
+    "action", type=click.Choice(["enable", "disable"], case_sensitive=False)
+)
 @async_command
 async def dr(mqtt: NavienMqttClient, device: Any, action: str) -> None:
     """Enable or disable Demand Response."""
@@ -333,23 +330,20 @@ async def dr(mqtt: NavienMqttClient, device: Any, action: str) -> None:
         await handlers.handle_disable_demand_response_request(mqtt, device)
 
 
-@cli.command()
-@click.option("-o", "--output", default="nwp500_status.csv", help="Output CSV file")
+@cli.command()  # type: ignore[attr-defined]
+@click.option(
+    "-o", "--output", default="nwp500_status.csv", help="Output CSV file"
+)
 @async_command
 async def monitor(mqtt: NavienMqttClient, device: Any, output: str) -> None:
     """Monitor device status in real-time."""
     from .monitoring import handle_monitoring
+
     await handle_monitoring(mqtt, device, output)
 
 
 if __name__ == "__main__":
-
-
-    cli()
-
-
-
+    cli()  # type: ignore[call-arg]
 
 
 run = cli
-

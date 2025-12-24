@@ -178,5 +178,10 @@ reportUnknownArgumentType = "warning"
 reportMissingParameterType = "warning"
 reportPrivateImportUsage = "warning"
 
+# Untyped decorators and base classes from third-party libraries (Click, Pydantic)
+# These libraries don't have complete type stubs, so we report these as warnings
+reportUntypedFunctionDecorator = "warning"
+reportUntypedBaseClass = "warning"
+
 # Ignore missing imports for external libraries without stubs
 reportMissingImports = false
