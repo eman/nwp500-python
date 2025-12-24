@@ -93,6 +93,9 @@ from nwp500.exceptions import (
     TokenRefreshError,
     ValidationError,
 )
+from nwp500.factory import (
+    create_navien_clients,
+)
 from nwp500.models import (
     Device,
     DeviceFeature,
@@ -130,6 +133,8 @@ __all__ = [
     "DeviceCapabilityError",
     "MqttDeviceInfoCache",
     "requires_capability",
+    # Factory functions
+    "create_navien_clients",
     # Models
     "DeviceStatus",
     "DeviceFeature",
