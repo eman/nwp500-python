@@ -16,7 +16,7 @@ from typing import TYPE_CHECKING, Any
 from awscrt.exceptions import AwsCrtError
 
 if TYPE_CHECKING:
-    from .mqtt_utils import MqttConnectionConfig
+    from .utils import MqttConnectionConfig
 
 __author__ = "Emmanuel Levijarvi"
 __copyright__ = "Emmanuel Levijarvi"

@@ -16,14 +16,14 @@ from awscrt import mqtt
 from awscrt.exceptions import AwsCrtError
 from awsiot import mqtt_connection_builder
 
-from .exceptions import (
+from ..exceptions import (
     MqttCredentialsError,
     MqttNotConnectedError,
 )
 
 if TYPE_CHECKING:
-    from .auth import NavienAuthClient
-    from .mqtt_utils import MqttConnectionConfig
+    from ..auth import NavienAuthClient
+    from .utils import MqttConnectionConfig
 
 __author__ = "Emmanuel Levijarvi"
 __copyright__ = "Emmanuel Levijarvi"
@@ -142,6 +142,8 @@ class MqttConnection:
             # Convert concurrent.futures.Future to asyncio.Future and await
             # Use shield to prevent cancellation from propagating to
             # underlying future
+            if not self._connection:
+                raise RuntimeError("Connection not initialized")
             connect_future = self._connection.connect()
             try:
                 connect_result = await asyncio.shield(

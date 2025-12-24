@@ -11,7 +11,7 @@ from nwp500.auth import (
     UserInfo,
 )
 from nwp500.exceptions import MqttCredentialsError
-from nwp500.mqtt_client import NavienMqttClient
+from nwp500.mqtt import NavienMqttClient
 
 
 @pytest.fixture

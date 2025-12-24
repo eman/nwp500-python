@@ -35,7 +35,7 @@ from nwp500.exceptions import (
     AuthenticationError,
 )
 from nwp500.models import DeviceFeature, DeviceStatus
-from nwp500.mqtt_client import NavienMqttClient
+from nwp500.mqtt import NavienMqttClient
 
 try:
     from examples.mask import mask_mac  # type: ignore

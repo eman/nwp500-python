@@ -22,18 +22,18 @@ from collections.abc import Awaitable, Callable, Sequence
 from datetime import UTC, datetime
 from typing import Any
 
-from nwp500.topic_builder import MqttTopicBuilder
+from ..topic_builder import MqttTopicBuilder
 
-from .command_decorators import requires_capability
-from .device_capabilities import DeviceCapabilityChecker
-from .device_info_cache import DeviceInfoCache
-from .enums import CommandCode, DhwOperationSetting
-from .exceptions import (
+from ..command_decorators import requires_capability
+from ..device_capabilities import DeviceCapabilityChecker
+from ..device_info_cache import DeviceInfoCache
+from ..enums import CommandCode, DhwOperationSetting
+from ..exceptions import (
     DeviceCapabilityError,
     ParameterValidationError,
     RangeValidationError,
 )
-from .models import Device, DeviceFeature, fahrenheit_to_half_celsius
+from ..models import Device, DeviceFeature, fahrenheit_to_half_celsius
 
 __author__ = "Emmanuel Levijarvi"
 

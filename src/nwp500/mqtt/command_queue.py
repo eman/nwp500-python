@@ -15,10 +15,10 @@ from typing import TYPE_CHECKING, Any
 
 from awscrt import mqtt
 
-from .mqtt_utils import QueuedCommand, redact_topic
+from .utils import QueuedCommand, redact_topic
 
 if TYPE_CHECKING:
-    from .mqtt_utils import MqttConnectionConfig
+    from .utils import MqttConnectionConfig
 
 __author__ = "Emmanuel Levijarvi"
 __copyright__ = "Emmanuel Levijarvi"

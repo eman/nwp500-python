@@ -23,7 +23,7 @@ import sys
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 from nwp500 import NavienAPIClient, NavienAuthClient, NavienMqttClient
-from nwp500.mqtt_client import MqttConnectionConfig
+from nwp500.mqtt import MqttConnectionConfig
 
 # Configure logging
 logging.basicConfig(

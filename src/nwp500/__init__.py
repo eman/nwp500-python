@@ -110,14 +110,15 @@ from nwp500.models import (
     TOUSchedule,
     fahrenheit_to_half_celsius,
 )
-from nwp500.mqtt_client import NavienMqttClient
-from nwp500.mqtt_diagnostics import (
+from nwp500.mqtt import (
     ConnectionDropEvent,
     ConnectionEvent,
+    MqttConnectionConfig,
     MqttDiagnosticsCollector,
     MqttMetrics,
+    NavienMqttClient,
+    PeriodicRequestType,
 )
-from nwp500.mqtt_utils import MqttConnectionConfig, PeriodicRequestType
 from nwp500.utils import (
     log_performance,
 )

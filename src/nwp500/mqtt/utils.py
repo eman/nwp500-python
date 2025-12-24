@@ -16,7 +16,7 @@ from typing import Any
 
 from awscrt import mqtt
 
-from .config import AWS_IOT_ENDPOINT, AWS_REGION
+from ..config import AWS_IOT_ENDPOINT, AWS_REGION
 
 __author__ = "Emmanuel Levijarvi"
 __copyright__ = "Emmanuel Levijarvi"

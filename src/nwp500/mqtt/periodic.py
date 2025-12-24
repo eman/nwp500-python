@@ -19,8 +19,8 @@ from typing import Any
 
 from awscrt.exceptions import AwsCrtError
 
-from .models import Device
-from .mqtt_utils import PeriodicRequestType
+from ..models import Device
+from .utils import PeriodicRequestType
 
 __author__ = "Emmanuel Levijarvi"
 

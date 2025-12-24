@@ -20,7 +20,7 @@ from nwp500.exceptions import (
     RangeValidationError,
     ValidationError,
 )
-from nwp500.mqtt_utils import redact_serial
+from nwp500.mqtt.utils import redact_serial
 
 from .output_formatters import (
     print_device_info,

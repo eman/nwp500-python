@@ -26,7 +26,7 @@ logging.basicConfig(
 )
 
 from nwp500.auth import NavienAuthClient
-from nwp500.mqtt_client import MqttConnectionConfig, NavienMqttClient
+from nwp500.mqtt import MqttConnectionConfig, NavienMqttClient
 
 
 async def command_queue_demo():

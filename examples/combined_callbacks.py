@@ -32,7 +32,7 @@ from nwp500.api_client import NavienAPIClient
 from nwp500.auth import NavienAuthClient
 from nwp500.enums import OnOffFlag
 from nwp500.models import DeviceFeature, DeviceStatus
-from nwp500.mqtt_client import NavienMqttClient
+from nwp500.mqtt import NavienMqttClient
 
 
 async def main():

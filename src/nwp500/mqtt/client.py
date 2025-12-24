@@ -21,9 +21,9 @@ from typing import TYPE_CHECKING, Any, cast
 from awscrt import mqtt
 from awscrt.exceptions import AwsCrtError
 
-from .auth import NavienAuthClient
-from .events import EventEmitter
-from .exceptions import (
+from ..auth import NavienAuthClient
+from ..events import EventEmitter
+from ..exceptions import (
     AuthenticationError,
     MqttConnectionError,
     MqttCredentialsError,
@@ -33,20 +33,20 @@ from .exceptions import (
 )
 
 if TYPE_CHECKING:
-    from .models import (
+    from ..models import (
         Device,
         DeviceFeature,
         DeviceStatus,
         EnergyUsageResponse,
     )
-from .mqtt_command_queue import MqttCommandQueue
-from .mqtt_connection import MqttConnection
-from .mqtt_device_control import MqttDeviceController
-from .mqtt_diagnostics import MqttDiagnosticsCollector
-from .mqtt_periodic import MqttPeriodicRequestManager
-from .mqtt_reconnection import MqttReconnectionHandler
-from .mqtt_subscriptions import MqttSubscriptionManager
-from .mqtt_utils import (
+from .command_queue import MqttCommandQueue
+from .connection import MqttConnection
+from .control import MqttDeviceController
+from .diagnostics import MqttDiagnosticsCollector
+from .periodic import MqttPeriodicRequestManager
+from .reconnection import MqttReconnectionHandler
+from .subscriptions import MqttSubscriptionManager
+from .utils import (
     MqttConnectionConfig,
     PeriodicRequestType,
 )
@@ -245,8 +245,8 @@ class NavienMqttClient(EventEmitter):
         # Record diagnostic event
         active_subs = 0
         if self._subscription_manager:
-            # Access protected subscriber count for diagnostics
-            active_subs = len(self._subscription_manager._subscriptions)  # type: ignore[attr-defined]
+            # Access subscription count for diagnostics
+            active_subs = len(self._subscription_manager.subscriptions)
 
         # Record drop asynchronously
         self._schedule_coroutine(
@@ -532,7 +532,7 @@ class NavienMqttClient(EventEmitter):
                 self._reconnection_handler.enable()
 
                 # Initialize shared device info cache and client_id
-                from .device_info_cache import DeviceInfoCache
+                from ..device_info_cache import DeviceInfoCache
 
                 client_id = self.config.client_id or ""
                 device_info_cache = DeviceInfoCache(update_interval_minutes=30)
@@ -902,7 +902,7 @@ class NavienMqttClient(EventEmitter):
         if not self._connected or not self._device_controller:
             raise MqttNotConnectedError("Not connected to MQTT broker")
 
-        from .mqtt_utils import redact_mac
+        from .utils import redact_mac
 
         mac = device.device_info.mac_address
         redacted_mac = redact_mac(mac)
