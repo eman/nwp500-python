@@ -15,18 +15,35 @@ Added
      python3 -m nwp500.cli device-info
      python3 -m nwp500.cli device-info --raw
 
+- **ConnectionStatus Enum**: New ``ConnectionStatus`` enum for device cloud connection state
+  
+  - ``ConnectionStatus.DISCONNECTED`` = 1 - Device offline/not connected
+  - ``ConnectionStatus.CONNECTED`` = 2 - Device online and reachable
+  - Used in ``DeviceInfo.connected`` field with automatic validation
+
 - **InstallType Enum**: New ``InstallType`` enum for device installation classification
   
   - ``InstallType.RESIDENTIAL`` = "R" - Residential use
   - ``InstallType.COMMERCIAL`` = "C" - Commercial use
   - Used in ``DeviceInfo.install_type`` field with automatic validation
+  - Includes ``INSTALL_TYPE_TEXT`` mapping for display purposes
 
 - **String Enum Validator**: New ``str_enum_validator()`` converter for string-based enums
 
 Changed
 -------
-- **DeviceInfo Model**: ``install_type`` field now uses ``InstallType`` enum instead of plain string
+- **DeviceInfo Model**: 
+  - ``connected`` field now uses ``ConnectionStatus`` enum instead of plain int
+  - ``install_type`` field now uses ``InstallType`` enum instead of plain string
+
+- **TOU Status Conversion**: Simplified TOU status to use standard ``device_bool_to_python`` converter (consistent with other OnOffFlag fields)
+  - Removed special-case ``tou_status_to_python()`` converter
+  - ``TouStatus`` annotated type now uses ``device_bool_to_python`` validator
+  - Device encoding: 1=OFF/disabled, 2=ON/enabled (consistent with all other boolean fields)
+
 - **CLI Documentation**: Clarified distinction between ``info`` (DeviceFeature via MQTT) and ``device-info`` (DeviceInfo via REST API) commands
+
+- **Type Annotations**: Fixed CLI rich_output console type annotation to declare at class level
 
 Removed
 -------
@@ -41,6 +58,8 @@ Removed
      from nwp500.enums import CommandCode
 
 - **Firmware Tracking**: Removed unused firmware tracking constants and documentation (``KNOWN_FIRMWARE_FIELD_CHANGES``, ``LATEST_KNOWN_FIRMWARE``, ``docs/protocol/firmware_tracking.rst``)
+
+- **TOU Status Converter**: Removed redundant ``tou_status_to_python()`` converter function and associated tests
 
 
 Version 7.2.0 (2025-12-23)
