@@ -16,6 +16,8 @@ __all__ = [
     "tou_status_to_python",
     "tou_override_to_python",
     "div_10",
+    "enum_validator",
+    "str_enum_validator",
 ]
 
 
@@ -65,7 +67,8 @@ def device_bool_from_python(value: bool) -> int:
 def tou_status_to_python(value: Any) -> bool:
     """Convert Time of Use status to Python bool.
 
-    Device representation: 0 = Off/False, 1 = On/True
+    Device representation: 1 = Off/False, 2 = On/True
+    (Uses standard OnOffFlag encoding)
 
     Args:
         value: Device TOU status value.
@@ -74,12 +77,12 @@ def tou_status_to_python(value: Any) -> bool:
         Python boolean.
 
     Example:
-        >>> tou_status_to_python(1)
+        >>> tou_status_to_python(2)
         True
-        >>> tou_status_to_python(0)
+        >>> tou_status_to_python(1)
         False
     """
-    return bool(value == 1)
+    return bool(value == 2)
 
 
 def tou_override_to_python(value: Any) -> bool:
@@ -150,5 +153,35 @@ def enum_validator(enum_class: type[Any]) -> Callable[[Any], Any]:
         if isinstance(value, int):
             return enum_class(value)
         return enum_class(int(value))
+
+    return validate
+
+
+def str_enum_validator(enum_class: type[Any]) -> Callable[[Any], Any]:
+    """Create a validator for converting string to str-based Enum.
+
+    Args:
+        enum_class: The str Enum class to validate against.
+
+    Returns:
+        A validator function compatible with Pydantic BeforeValidator.
+
+    Example:
+        >>> from enum import Enum
+        >>> class Status(str, Enum):
+        ...     ACTIVE = "A"
+        ...     INACTIVE = "I"
+        >>> validator = str_enum_validator(Status)
+        >>> validator("A")
+        <Status.ACTIVE: 'A'>
+    """
+
+    def validate(value: Any) -> Any:
+        """Validate and convert value to enum."""
+        if isinstance(value, enum_class):
+            return value
+        if isinstance(value, str):
+            return enum_class(value)
+        return enum_class(str(value))
 
     return validate

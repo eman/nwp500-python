@@ -93,48 +93,49 @@ class TestDeviceBoolConverter:
 class TestTouStatusConverter:
     """Test tou_status_to_python converter.
 
-    TOU (Time of Use) status encoding converts device state to boolean.
-    Device: 1 = Enabled (True), anything else = Disabled (False)
-    NOTE: String values are NOT converted to int before comparison.
+    TOU (Time of Use) status encoding uses standard OnOffFlag:
+    Device: 1 = OFF/False, 2 = ON/True
     """
 
     def test_tou_disabled(self):
-        """TOU disabled state: 0 = False."""
-        result = tou_status_to_python(0)
+        """TOU disabled state: 1 = False."""
+        result = tou_status_to_python(1)
         assert isinstance(result, bool)
         assert result is False
 
     def test_tou_enabled(self):
-        """TOU enabled state: 1 = True."""
-        result = tou_status_to_python(1)
+        """TOU enabled state: 2 = True."""
+        result = tou_status_to_python(2)
         assert isinstance(result, bool)
         assert result is True
 
     def test_string_disabled(self):
-        """String '0' = TOU disabled."""
-        assert tou_status_to_python("0") is False
-
-    def test_string_enabled(self):
-        """String '1' is not equal to int 1, so returns False."""
-        # tou_status_to_python uses: bool(value == 1)
-        # String "1" != int 1, so result is False
+        """String '1' is not equal to int 2, so returns False."""
         assert tou_status_to_python("1") is False
 
+    def test_string_enabled(self):
+        """String '2' is not equal to int 2, so returns False."""
+        # tou_status_to_python uses: bool(value == 2)
+        # String "2" != int 2, so result is False
+        assert tou_status_to_python("2") is False
+
     def test_invalid_value(self):
-        """Value other than 1 is treated as False."""
-        assert tou_status_to_python(2) is False
+        """Value other than 2 is treated as False."""
+        assert tou_status_to_python(0) is False
         assert tou_status_to_python(3) is False
         assert tou_status_to_python(-1) is False
 
-    @pytest.mark.parametrize("enabled_value", [1, 1.0])
+    @pytest.mark.parametrize("enabled_value", [2, 2.0])
     def test_enabled_variations(self, enabled_value):
-        """Test numeric variations of enabled (value == 1)."""
-        # Only numeric 1 and float 1.0 equal int 1
+        """Test numeric variations of enabled (value == 2)."""
+        # Only numeric 2 and float 2.0 equal int 2
         assert tou_status_to_python(enabled_value) is True
 
-    @pytest.mark.parametrize("disabled_value", [0, "0", 0.0, 2, 3, -1, "1"])
+    @pytest.mark.parametrize(
+        "disabled_value", [0, "0", 0.0, 1, 3, -1, "1", "2"]
+    )
     def test_disabled_variations(self, disabled_value):
-        """Test various representations of disabled (value != 1)."""
+        """Test various representations of disabled (value != 2)."""
         assert tou_status_to_python(disabled_value) is False
 
 

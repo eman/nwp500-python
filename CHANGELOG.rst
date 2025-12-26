@@ -2,6 +2,33 @@
 Changelog
 =========
 
+Version 7.2.1 (2025-12-25)
+==========================
+
+Added
+-----
+- **CLI Command**: New ``device-info`` command to retrieve basic device information from REST API
+  
+  .. code-block:: bash
+  
+     # Get basic device info (DeviceInfo model)
+     python3 -m nwp500.cli device-info
+     python3 -m nwp500.cli device-info --raw
+
+- **InstallType Enum**: New ``InstallType`` enum for device installation classification
+  
+  - ``InstallType.RESIDENTIAL`` = "R" - Residential use
+  - ``InstallType.COMMERCIAL`` = "C" - Commercial use
+  - Used in ``DeviceInfo.install_type`` field with automatic validation
+
+- **String Enum Validator**: New ``str_enum_validator()`` converter for string-based enums
+
+Changed
+-------
+- **DeviceInfo Model**: ``install_type`` field now uses ``InstallType`` enum instead of plain string
+- **CLI Documentation**: Clarified distinction between ``info`` (DeviceFeature via MQTT) and ``device-info`` (DeviceInfo via REST API) commands
+
+
 Version 7.2.0 (2025-12-23)
 ==========================
 

@@ -152,6 +152,25 @@ async def info(mqtt: NavienMqttClient, device: Any, raw: bool) -> None:
 @cli.command()  # type: ignore[attr-defined]
 @click.option("--raw", is_flag=True, help="Output raw JSON response")
 @async_command
+async def device_info(
+    mqtt: NavienMqttClient,
+    device: Any,
+    raw: bool,
+) -> None:
+    """Show basic device info from REST API (DeviceInfo model)."""
+    ctx = click.get_current_context()
+    api = None
+    if ctx and hasattr(ctx, "obj") and ctx.obj is not None:
+        api = ctx.obj.get("api")
+    if api:
+        await handlers.handle_get_device_info_rest(api, device, raw)
+    else:
+        _logger.error("API client not available")
+
+
+@cli.command()  # type: ignore[attr-defined]
+@click.option("--raw", is_flag=True, help="Output raw JSON response")
+@async_command
 async def status(mqtt: NavienMqttClient, device: Any, raw: bool) -> None:
     """Show current device status (temps, mode, etc)."""
     await handlers.handle_status_request(mqtt, device, raw)

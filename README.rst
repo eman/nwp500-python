@@ -104,8 +104,11 @@ The library includes a command line interface for monitoring and controlling you
     # Get current device status
     python3 -m nwp500.cli status
 
-    # Get device information and firmware
+    # Get device information and firmware (via MQTT - DeviceFeature)
     python3 -m nwp500.cli info
+
+    # Get basic device info from REST API (DeviceInfo)
+    python3 -m nwp500.cli device-info
 
     # Get controller serial number
     python3 -m nwp500.cli serial

@@ -4,6 +4,7 @@ from .__main__ import run
 from .handlers import (
     handle_device_info_request,
     handle_get_controller_serial_request,
+    handle_get_device_info_rest,
     handle_get_energy_request,
     handle_get_reservations_request,
     handle_get_tou_request,
@@ -28,6 +29,7 @@ __all__ = [
     # Command handlers
     "handle_device_info_request",
     "handle_get_controller_serial_request",
+    "handle_get_device_info_rest",
     "handle_get_energy_request",
     "handle_get_reservations_request",
     "handle_get_tou_request",

@@ -16,6 +16,7 @@ from .converters import (
     device_bool_to_python,
     div_10,
     enum_validator,
+    str_enum_validator,
     tou_override_to_python,
     tou_status_to_python,
 )
@@ -27,6 +28,7 @@ from .enums import (
     DREvent,
     ErrorCode,
     HeatSource,
+    InstallType,
     RecirculationMode,
     TemperatureType,
     TempFormulaType,
@@ -60,6 +62,9 @@ TouStatus = Annotated[bool, BeforeValidator(tou_status_to_python)]
 TouOverride = Annotated[bool, BeforeValidator(tou_override_to_python)]
 VolumeCodeField = Annotated[
     VolumeCode, BeforeValidator(enum_validator(VolumeCode))
+]
+InstallTypeField = Annotated[
+    InstallType, BeforeValidator(str_enum_validator(InstallType))
 ]
 
 
@@ -152,7 +157,7 @@ class DeviceInfo(NavienBaseModel):
     device_type: DeviceType | int = DeviceType.NPF700_WIFI
     device_name: str = "Unknown"
     connected: int = 0
-    install_type: str | None = None
+    install_type: InstallTypeField | None = None
 
 
 class Location(NavienBaseModel):
