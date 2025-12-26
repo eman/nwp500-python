@@ -2,10 +2,12 @@
 
 Tests cover:
 - device_bool_to_python (device 1=False, 2=True)
-- tou_status_to_python (TOU status encoding)
 - tou_override_to_python (TOU override status encoding)
 - div_10 (divide by 10 converter)
 - enum_validator (enum validation and conversion)
+
+Note: tou_status field uses device_bool_to_python
+(same as all other OnOffFlag fields)
 """
 
 import pytest
@@ -15,7 +17,6 @@ from nwp500.converters import (
     div_10,
     enum_validator,
     tou_override_to_python,
-    tou_status_to_python,
 )
 from nwp500.enums import DhwOperationSetting, OnOffFlag
 
@@ -88,54 +89,6 @@ class TestDeviceBoolConverter:
     def test_off_value_variations(self, off_value):
         """Test various representations of False value."""
         assert device_bool_to_python(off_value) is False
-
-
-class TestTouStatusConverter:
-    """Test tou_status_to_python converter.
-
-    TOU (Time of Use) status encoding converts device state to boolean.
-    Device: 1 = Enabled (True), anything else = Disabled (False)
-    NOTE: String values are NOT converted to int before comparison.
-    """
-
-    def test_tou_disabled(self):
-        """TOU disabled state: 0 = False."""
-        result = tou_status_to_python(0)
-        assert isinstance(result, bool)
-        assert result is False
-
-    def test_tou_enabled(self):
-        """TOU enabled state: 1 = True."""
-        result = tou_status_to_python(1)
-        assert isinstance(result, bool)
-        assert result is True
-
-    def test_string_disabled(self):
-        """String '0' = TOU disabled."""
-        assert tou_status_to_python("0") is False
-
-    def test_string_enabled(self):
-        """String '1' is not equal to int 1, so returns False."""
-        # tou_status_to_python uses: bool(value == 1)
-        # String "1" != int 1, so result is False
-        assert tou_status_to_python("1") is False
-
-    def test_invalid_value(self):
-        """Value other than 1 is treated as False."""
-        assert tou_status_to_python(2) is False
-        assert tou_status_to_python(3) is False
-        assert tou_status_to_python(-1) is False
-
-    @pytest.mark.parametrize("enabled_value", [1, 1.0])
-    def test_enabled_variations(self, enabled_value):
-        """Test numeric variations of enabled (value == 1)."""
-        # Only numeric 1 and float 1.0 equal int 1
-        assert tou_status_to_python(enabled_value) is True
-
-    @pytest.mark.parametrize("disabled_value", [0, "0", 0.0, 2, 3, -1, "1"])
-    def test_disabled_variations(self, disabled_value):
-        """Test various representations of disabled (value != 1)."""
-        assert tou_status_to_python(disabled_value) is False
 
 
 class TestTouOverrideConverter:
