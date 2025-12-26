@@ -144,6 +144,14 @@ module = "aiohttp.*"
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
+module = "click.*"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "nwp500.cli.*"
+ignore_errors = true
+
+[[tool.mypy.overrides]]
 module = "pydantic.*"
 ignore_missing_imports = true
 

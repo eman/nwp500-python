@@ -629,6 +629,11 @@ class NavienAuthClient:
         return self._auth_response.tokens if self._auth_response else None
 
     @property
+    def auth_response(self) -> AuthenticationResponse | None:
+        """Get the complete authentication response."""
+        return self._auth_response
+
+    @property
     def user_email(self) -> str | None:
         """Get the email address of the authenticated user."""
         return self._user_email
@@ -716,7 +721,7 @@ async def authenticate(user_id: str, password: str) -> AuthenticationResponse:
         >>> # Do not print tokens in production code
     """
     async with NavienAuthClient(user_id, password) as client:
-        auth_response = cast(Any, client)._auth_response
+        auth_response = client.auth_response
         if auth_response is None:
             raise AuthenticationError(
                 "Authentication failed: no response received"

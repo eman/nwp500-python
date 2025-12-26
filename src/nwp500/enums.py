@@ -25,6 +25,17 @@ class OnOffFlag(IntEnum):
     ON = 2
 
 
+class ConnectionStatus(IntEnum):
+    """Device connection status to cloud/MQTT.
+
+    Represents whether the device is currently connected to the Navien cloud
+    service and can receive commands.
+    """
+
+    DISCONNECTED = 1
+    CONNECTED = 2
+
+
 class Operation(IntEnum):
     """Device operation state."""
 

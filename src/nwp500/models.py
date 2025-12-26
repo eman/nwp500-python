@@ -20,6 +20,7 @@ from .converters import (
     tou_status_to_python,
 )
 from .enums import (
+    ConnectionStatus,
     CurrentOperationMode,
     DeviceType,
     DHWControlTypeFlag,
@@ -60,6 +61,9 @@ TouStatus = Annotated[bool, BeforeValidator(tou_status_to_python)]
 TouOverride = Annotated[bool, BeforeValidator(tou_override_to_python)]
 VolumeCodeField = Annotated[
     VolumeCode, BeforeValidator(enum_validator(VolumeCode))
+]
+ConnectionStatusField = Annotated[
+    ConnectionStatus, BeforeValidator(enum_validator(ConnectionStatus))
 ]
 
 
@@ -151,7 +155,7 @@ class DeviceInfo(NavienBaseModel):
     additional_value: str = ""
     device_type: DeviceType | int = DeviceType.NPF700_WIFI
     device_name: str = "Unknown"
-    connected: int = 0
+    connected: ConnectionStatusField = ConnectionStatus.DISCONNECTED
     install_type: str | None = None
 
 
