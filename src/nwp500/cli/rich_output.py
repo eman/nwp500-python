@@ -65,7 +65,7 @@ class OutputFormatter:
             assert Console is not None
             self.console: Any = Console()
         else:
-            self.console: Any = None
+            self.console = None
 
     def print_status_table(self, items: list[tuple[str, str, str]]) -> None:
         """Print status items as a formatted table.

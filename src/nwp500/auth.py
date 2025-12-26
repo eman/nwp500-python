@@ -716,7 +716,7 @@ async def authenticate(user_id: str, password: str) -> AuthenticationResponse:
         >>> # Do not print tokens in production code
     """
     async with NavienAuthClient(user_id, password) as client:
-        auth_response = cast(Any, client)._auth_response
+        auth_response = client._auth_response
         if auth_response is None:
             raise AuthenticationError(
                 "Authentication failed: no response received"
