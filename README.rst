@@ -29,9 +29,45 @@ Quick Start
 Installation
 ------------
 
+Basic Installation (Library Only)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+For using the library as a Python package without the CLI:
+
 .. code-block:: bash
 
     pip install nwp500-python
+
+This installs the core library with support for API and MQTT clients.
+
+Installation with CLI Support
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+To use the command-line interface with rich formatting and colors:
+
+.. code-block:: bash
+
+    pip install nwp500-python[cli]
+
+This includes both the ``click`` CLI framework and the ``rich`` formatting library for enhanced terminal output.
+
+Optional Rich Formatting
+~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The library optionally supports `Rich <https://rich.readthedocs.io/>`_ for enhanced terminal output with:
+
+- Formatted tables with colors
+- Progress bars
+- Better error messages
+- Interactive displays
+
+To enable rich formatting without the CLI:
+
+.. code-block:: bash
+
+    pip install nwp500-python rich
+
+**Note:** Rich is automatically included with ``pip install nwp500-python[cli]``.
 
 Basic Usage
 -----------
@@ -93,7 +129,16 @@ Monitor your device in real-time using MQTT:
 Command Line Interface
 ======================
 
-The library includes a command line interface for monitoring and controlling your Navien water heater:
+The library includes a command line interface for monitoring and controlling your Navien water heater.
+
+**Installation Requirement:** The CLI requires the ``cli`` extra:
+
+.. code-block:: bash
+
+    pip install nwp500-python[cli]
+
+Quick Reference
+~~~~~~~~~~~~~~~
 
 .. code-block:: bash
 
