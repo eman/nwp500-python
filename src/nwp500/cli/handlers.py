@@ -360,22 +360,30 @@ async def handle_get_device_info_rest(
         if raw:
             print_json(device_info_obj.model_dump())
         else:
-            # Print simple formatted output
+            # Print formatted output with rich support
             info = device_info_obj.device_info
 
             install_type_str = info.install_type if info.install_type else "N/A"
-            print("\n=== Device Info (REST API) ===\n")
-            print(f"Device Name:       {info.device_name}")
             mac_display = (
                 redact_serial(info.mac_address) if info.mac_address else "N/A"
             )
-            print(f"MAC Address:       {mac_display}")
-            print(f"Device Type:       {info.device_type}")
-            print(f"Home Seq:          {info.home_seq}")
-            print(f"Connected:         {info.connected}")
-            print(f"Install Type:      {install_type_str}")
-            print(f"Additional Value:  {info.additional_value or 'N/A'}")
-            print()
+
+            # Collect items for rich formatter
+            all_items = [
+                ("DEVICE INFO", "Device Name", info.device_name),
+                ("DEVICE INFO", "MAC Address", mac_display),
+                ("DEVICE INFO", "Device Type", str(info.device_type)),
+                ("DEVICE INFO", "Home Seq", str(info.home_seq)),
+                ("DEVICE INFO", "Connected", str(info.connected)),
+                ("DEVICE INFO", "Install Type", install_type_str),
+                (
+                    "DEVICE INFO",
+                    "Additional Value",
+                    info.additional_value or "N/A",
+                ),
+            ]
+
+            _formatter.print_status_table(all_items)
     except Exception as e:
         _logger.error(f"Error fetching device info: {e}")
 
@@ -427,7 +435,11 @@ async def handle_set_tou_enabled_request(
 async def handle_get_energy_request(
     mqtt: NavienMqttClient, device: Device, year: int, months: list[int]
 ) -> None:
-    """Request energy usage data."""
+    """Request energy usage data.
+
+    If a single month is provided, shows daily breakdown.
+    If multiple months are provided, shows monthly summary.
+    """
     try:
         res: Any = await _wait_for_response(
             mqtt.subscribe_energy_usage,
@@ -436,7 +448,15 @@ async def handle_get_energy_request(
             action_name="energy usage",
             timeout=15,
         )
-        print_energy_usage(cast(EnergyUsageResponse, res))
+        # If single month requested, show daily breakdown
+        if len(months) == 1:
+            from .output_formatters import print_daily_energy_usage
+
+            print_daily_energy_usage(
+                cast(EnergyUsageResponse, res), year, months[0]
+            )
+        else:
+            print_energy_usage(cast(EnergyUsageResponse, res))
     except Exception as e:
         _logger.error(f"Error getting energy data: {e}")
 

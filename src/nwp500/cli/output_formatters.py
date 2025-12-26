@@ -218,6 +218,133 @@ def print_energy_usage(energy_response: Any) -> None:
         formatter.print_energy_table(months_data)
 
 
+def format_daily_energy_usage(
+    energy_response: Any, year: int, month: int
+) -> str:
+    """
+    Format daily energy usage for a specific month as a human-readable table.
+
+    Args:
+        energy_response: EnergyUsageResponse object
+        year: Year to filter for (e.g., 2025)
+        month: Month to filter for (1-12)
+
+    Returns:
+        Formatted string with daily energy usage data in tabular form
+    """
+    lines = []
+
+    # Add header
+    lines.append("=" * 100)
+    month_str = (
+        f"{month_name[month]} {year}"
+        if 1 <= month <= 12
+        else f"Month {month} {year}"
+    )
+    lines.append(f"DAILY ENERGY USAGE - {month_str}")
+    lines.append("=" * 100)
+
+    # Find the month data
+    month_data = energy_response.get_month_data(year, month)
+    if not month_data or not month_data.data:
+        lines.append("No data available for this month")
+        lines.append("=" * 100)
+        return "\n".join(lines)
+
+    # Total summary for the month
+    total = energy_response.total
+    total_usage_wh = total.total_usage
+    total_time_hours = total.total_time
+
+    lines.append("")
+    lines.append("TOTAL SUMMARY")
+    lines.append("-" * 100)
+    lines.append(
+        f"Total Energy Used:        {total_usage_wh:,} Wh ({total_usage_wh / 1000:.2f} kWh)"  # noqa: E501
+    )
+    lines.append(
+        f"  Heat Pump:              {total.heat_pump_usage:,} Wh ({total.heat_pump_percentage:.1f}%)"  # noqa: E501
+    )
+    lines.append(
+        f"  Heat Element:           {total.heat_element_usage:,} Wh ({total.heat_element_percentage:.1f}%)"  # noqa: E501
+    )
+    lines.append(f"Total Time Running:       {total_time_hours} hours")
+    lines.append(f"  Heat Pump:              {total.heat_pump_time} hours")
+    lines.append(f"  Heat Element:           {total.heat_element_time} hours")
+
+    # Daily breakdown
+    lines.append("")
+    lines.append("DAILY BREAKDOWN")
+    lines.append("-" * 100)
+    lines.append(
+        f"{'Day':<5} {'Energy (Wh)':<18} {'HP (Wh)':<15} {'HE (Wh)':<15} {'HP Time':<12} {'HE Time':<12}"  # noqa: E501
+    )
+    lines.append("-" * 100)
+
+    for day_data in month_data.data:
+        total_wh = day_data.total_usage
+        hp_wh = day_data.heat_pump_usage
+        he_wh = day_data.heat_element_usage
+        hp_time = day_data.heat_pump_time
+        he_time = day_data.heat_element_time
+
+        # Use day index + 1 as day number (assuming data is ordered by day)
+        day_num = month_data.data.index(day_data) + 1
+
+        lines.append(
+            f"{day_num:<5} {total_wh:>16,} {hp_wh:>13,} {he_wh:>13,} {hp_time:>10} {he_time:>10}"  # noqa: E501
+        )
+
+    lines.append("=" * 100)
+    return "\n".join(lines)
+
+
+def print_daily_energy_usage(
+    energy_response: Any, year: int, month: int
+) -> None:
+    """
+    Print daily energy usage data in human-readable tabular format.
+
+    Uses Rich formatting when available, falls back to plain text otherwise.
+
+    Args:
+        energy_response: EnergyUsageResponse object
+        year: Year to filter for (e.g., 2025)
+        month: Month to filter for (1-12)
+    """
+    # First, print the plain text summary (always works)
+    print(format_daily_energy_usage(energy_response, year, month))
+
+    # Also prepare and print rich table if available
+    month_data = energy_response.get_month_data(year, month)
+    if not month_data or not month_data.data:
+        return
+
+    days_data = []
+    for day_data in month_data.data:
+        day_num = month_data.data.index(day_data) + 1
+        total_wh = day_data.total_usage
+        hp_wh = day_data.heat_pump_usage
+        he_wh = day_data.heat_element_usage
+        hp_pct = (hp_wh / total_wh * 100) if total_wh > 0 else 0
+        he_pct = (he_wh / total_wh * 100) if total_wh > 0 else 0
+
+        days_data.append(
+            {
+                "day": day_num,
+                "total_kwh": total_wh / 1000,
+                "hp_kwh": hp_wh / 1000,
+                "hp_pct": hp_pct,
+                "he_kwh": he_wh / 1000,
+                "he_pct": he_pct,
+            }
+        )
+
+    # Print rich energy table if available
+    formatter = get_formatter()
+    formatter.print_daily_energy_table(days_data, year, month)
+
+
 def write_status_to_csv(file_path: str, status: DeviceStatus) -> None:
     """
     Append device status to a CSV file.
