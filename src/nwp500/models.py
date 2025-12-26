@@ -17,7 +17,6 @@ from .converters import (
     div_10,
     enum_validator,
     tou_override_to_python,
-    tou_status_to_python,
 )
 from .enums import (
     ConnectionStatus,
@@ -57,7 +56,7 @@ CapabilityFlag = Annotated[bool, BeforeValidator(device_bool_to_python)]
 Div10 = Annotated[float, BeforeValidator(div_10)]
 HalfCelsiusToF = Annotated[float, BeforeValidator(half_celsius_to_fahrenheit)]
 DeciCelsiusToF = Annotated[float, BeforeValidator(deci_celsius_to_fahrenheit)]
-TouStatus = Annotated[bool, BeforeValidator(tou_status_to_python)]
+TouStatus = Annotated[bool, BeforeValidator(device_bool_to_python)]
 TouOverride = Annotated[bool, BeforeValidator(tou_override_to_python)]
 VolumeCodeField = Annotated[
     VolumeCode, BeforeValidator(enum_validator(VolumeCode))
