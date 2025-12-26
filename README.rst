@@ -120,7 +120,7 @@ The library includes a command line interface for monitoring and controlling you
     pip install nwp500-python[cli]
 
 Quick Reference
-~~~~~~~~~~~~~~~
+---------------
 
 .. code-block:: bash
 
