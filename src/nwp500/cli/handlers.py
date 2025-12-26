@@ -11,6 +11,7 @@ from nwp500 import (
     DeviceFeature,
     DeviceStatus,
     EnergyUsageResponse,
+    NavienAPIClient,
     NavienMqttClient,
 )
 from nwp500.exceptions import (
@@ -345,6 +346,38 @@ async def handle_update_reservations_request(
         await asyncio.wait_for(future, timeout=10)
     except TimeoutError:
         _logger.error("Timed out updating reservations.")
+
+
+async def handle_get_device_info_rest(
+    api_client: NavienAPIClient, device: Device, raw: bool = False
+) -> None:
+    """Get device info from REST API (minimal DeviceInfo fields)."""
+    try:
+        device_info_obj = await api_client.get_device_info(
+            mac_address=device.device_info.mac_address,
+            additional_value=device.device_info.additional_value,
+        )
+        if raw:
+            print_json(device_info_obj.model_dump())
+        else:
+            # Print simple formatted output
+            info = device_info_obj.device_info
+
+            install_type_str = info.install_type if info.install_type else "N/A"
+            print("\n=== Device Info (REST API) ===\n")
+            print(f"Device Name:       {info.device_name}")
+            mac_display = (
+                redact_serial(info.mac_address) if info.mac_address else "N/A"
+            )
+            print(f"MAC Address:       {mac_display}")
+            print(f"Device Type:       {info.device_type}")
+            print(f"Home Seq:          {info.home_seq}")
+            print(f"Connected:         {info.connected}")
+            print(f"Install Type:      {install_type_str}")
+            print(f"Additional Value:  {info.additional_value or 'N/A'}")
+            print()
+    except Exception as e:
+        _logger.error(f"Error fetching device info: {e}")
 
 
 async def handle_get_tou_request(

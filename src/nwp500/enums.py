@@ -7,7 +7,7 @@ capabilities.
 See docs/protocol/quick_reference.rst for comprehensive protocol details.
 """
 
-from enum import IntEnum
+from enum import Enum, IntEnum
 
 # ============================================================================
 # Status Value Enumerations
@@ -239,6 +239,17 @@ class VolumeCode(IntEnum):
     VOLUME_80 = 3  # NWP500-80: 80-gallon (302.8 liters) tank capacity
 
 
+class InstallType(str, Enum):
+    """Installation type classification.
+
+    Indicates whether the device is installed for residential or commercial use.
+    This affects warranty terms and service requirements.
+    """
+
+    RESIDENTIAL = "R"  # Residential use
+    COMMERCIAL = "C"  # Commercial use
+
+
 class UnitType(IntEnum):
     """Navien device/unit model types."""
 
@@ -432,6 +443,11 @@ VOLUME_CODE_TEXT = {
     VolumeCode.VOLUME_50: "50 gallons",
     VolumeCode.VOLUME_65: "65 gallons",
     VolumeCode.VOLUME_80: "80 gallons",
+}
+
+INSTALL_TYPE_TEXT = {
+    InstallType.RESIDENTIAL: "Residential",
+    InstallType.COMMERCIAL: "Commercial",
 }
 
 
