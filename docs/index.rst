@@ -103,7 +103,6 @@ Documentation Index
    python_api/device_control
    python_api/models
    enumerations
-   python_api/constants
    python_api/events
    python_api/exceptions
    python_api/cli
@@ -142,7 +141,6 @@ Documentation Index
    protocol/data_conversions
    protocol/device_features
    protocol/error_codes
-   protocol/firmware_tracking
 
 .. toctree::
    :maxdepth: 1

@@ -28,6 +28,20 @@ Changed
 - **DeviceInfo Model**: ``install_type`` field now uses ``InstallType`` enum instead of plain string
 - **CLI Documentation**: Clarified distinction between ``info`` (DeviceFeature via MQTT) and ``device-info`` (DeviceInfo via REST API) commands
 
+Removed
+-------
+- **constants.py Module**: Removed empty ``constants.py`` module. ``CommandCode`` enum was already moved to ``enums.py`` in version 4.2.0.
+  
+  .. code-block:: python
+  
+     # OLD (removed)
+     from nwp500.constants import CommandCode
+     
+     # NEW (use this)
+     from nwp500.enums import CommandCode
+
+- **Firmware Tracking**: Removed unused firmware tracking constants and documentation (``KNOWN_FIRMWARE_FIELD_CHANGES``, ``LATEST_KNOWN_FIRMWARE``, ``docs/protocol/firmware_tracking.rst``)
+
 
 Version 7.2.0 (2025-12-23)
 ==========================
