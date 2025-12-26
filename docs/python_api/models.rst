@@ -89,7 +89,10 @@ Device identification and connection information.
 
    **Fields:**
 
-   * ``home_seq`` (int) - Home sequence number
+   * ``home_seq`` (int) - Unique home/location identifier used for MQTT message routing.
+     Each home/installation receives a unique sequence number from the Navien cloud
+     system. This value is included in all MQTT topic paths to route commands and
+     status updates to the correct location.
    * ``mac_address`` (str) - MAC address (without colons)
    * ``additional_value`` (str) - Additional identifier
    * ``device_type`` (int) - Device type code (52 for NWP500)

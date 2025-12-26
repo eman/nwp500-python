@@ -28,21 +28,24 @@ Command Topics
 
 .. code-block:: text
 
-   cmd/{deviceType}/{deviceId}/ctrl         # Control commands
-   cmd/{deviceType}/{deviceId}/st           # Status requests
-   cmd/{deviceType}/{clientId}/res/{type}   # Responses
+   cmd/{deviceType}/{homeSeq}/{userSeq}/{clientId}/ctrl            # Control commands
+   cmd/{deviceType}/{homeSeq}/{userSeq}/{clientId}/st              # Status requests
+   cmd/{deviceType}/{homeSeq}/{userSeq}/{clientId}/res/{type}      # Responses
 
 Event Topics
 ------------
 
 .. code-block:: text
 
-   evt/{deviceType}/{deviceId}/app-connection  # App connection signal
+   evt/{deviceType}/{homeSeq}/{userSeq}/app-connection  # App connection signal
 
 **Variables:**
 
 * ``{deviceType}`` - Device type code (52 for NWP500)
-* ``{deviceId}`` - Device MAC address (without colons)
+* ``{homeSeq}`` - Unique home/location identifier (assigned by Navien cloud system).
+  Groups devices within the same home/installation and ensures messages are routed to the
+  correct location. Retrieved from ``DeviceInfo.home_seq`` in the REST API.
+* ``{userSeq}`` - Unique user identifier for the account
 * ``{clientId}`` - MQTT client ID
 * ``{type}`` - Response type (status, info, energy-usage, etc.)
 
@@ -56,8 +59,8 @@ All MQTT messages are JSON with this structure:
    {
      "clientID": "client-12345",
      "sessionID": "session-67890",
-     "requestTopic": "cmd/52/04786332fca0/ctrl",
-     "responseTopic": "cmd/52/client-12345/res/status/rd",
+     "requestTopic": "cmd/52/25004/3456/client-12345/ctrl",
+     "responseTopic": "cmd/52/25004/3456/client-12345/res/status/rd",
      "protocolVersion": 2,
      "request": {
        "command": 33554438,
@@ -74,7 +77,7 @@ All MQTT messages are JSON with this structure:
 
 * ``clientID`` - MQTT client identifier
 * ``sessionID`` - Session identifier for tracking
-* ``requestTopic`` - Topic where command was sent
+* ``requestTopic`` - Topic where command was sent (note: includes homeSeq and userSeq)
 * ``responseTopic`` - Topic to subscribe for responses
 * ``protocolVersion`` - Protocol version (always 2)
 * ``request`` - Command payload (see below)
