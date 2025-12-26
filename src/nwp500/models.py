@@ -16,7 +16,6 @@ from .converters import (
     device_bool_to_python,
     div_10,
     enum_validator,
-    str_enum_validator,
     tou_override_to_python,
 )
 from .enums import (
@@ -28,7 +27,6 @@ from .enums import (
     DREvent,
     ErrorCode,
     HeatSource,
-    InstallType,
     RecirculationMode,
     TemperatureType,
     TempFormulaType,

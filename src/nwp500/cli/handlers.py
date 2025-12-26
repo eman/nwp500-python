@@ -362,19 +362,14 @@ async def handle_get_device_info_rest(
         else:
             # Print simple formatted output
             info = device_info_obj.device_info
-            from nwp500.enums import INSTALL_TYPE_TEXT
 
-            install_type_str = (
-                INSTALL_TYPE_TEXT.get(info.install_type, "N/A")
-                if info.install_type
-                else "N/A"
-            )
+            install_type_str = info.install_type if info.install_type else "N/A"
             print("\n=== Device Info (REST API) ===\n")
             print(f"Device Name:       {info.device_name}")
-            print(
-                f"MAC Address:       "
-                f"{redact_serial(info.mac_address) if info.mac_address else 'N/A'}"
+            mac_display = (
+                redact_serial(info.mac_address) if info.mac_address else "N/A"
             )
+            print(f"MAC Address:       {mac_display}")
             print(f"Device Type:       {info.device_type}")
             print(f"Home Seq:          {info.home_seq}")
             print(f"Connected:         {info.connected}")
