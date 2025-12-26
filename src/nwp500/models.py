@@ -18,9 +18,9 @@ from .converters import (
     enum_validator,
     str_enum_validator,
     tou_override_to_python,
-    tou_status_to_python,
 )
 from .enums import (
+    ConnectionStatus,
     CurrentOperationMode,
     DeviceType,
     DHWControlTypeFlag,
@@ -58,13 +58,13 @@ CapabilityFlag = Annotated[bool, BeforeValidator(device_bool_to_python)]
 Div10 = Annotated[float, BeforeValidator(div_10)]
 HalfCelsiusToF = Annotated[float, BeforeValidator(half_celsius_to_fahrenheit)]
 DeciCelsiusToF = Annotated[float, BeforeValidator(deci_celsius_to_fahrenheit)]
-TouStatus = Annotated[bool, BeforeValidator(tou_status_to_python)]
+TouStatus = Annotated[bool, BeforeValidator(device_bool_to_python)]
 TouOverride = Annotated[bool, BeforeValidator(tou_override_to_python)]
 VolumeCodeField = Annotated[
     VolumeCode, BeforeValidator(enum_validator(VolumeCode))
 ]
-InstallTypeField = Annotated[
-    InstallType, BeforeValidator(str_enum_validator(InstallType))
+ConnectionStatusField = Annotated[
+    ConnectionStatus, BeforeValidator(enum_validator(ConnectionStatus))
 ]
 
 
@@ -156,8 +156,8 @@ class DeviceInfo(NavienBaseModel):
     additional_value: str = ""
     device_type: DeviceType | int = DeviceType.NPF700_WIFI
     device_name: str = "Unknown"
-    connected: int = 0
-    install_type: InstallTypeField | None = None
+    connected: ConnectionStatusField = ConnectionStatus.DISCONNECTED
+    install_type: str | None = None
 
 
 class Location(NavienBaseModel):

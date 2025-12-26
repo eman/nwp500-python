@@ -196,6 +196,13 @@ List all devices registered to the user.
      ]
    }
 
+**Response Fields:**
+
+* ``homeSeq`` - Unique home/location identifier assigned by the Navien cloud system.
+  Used in MQTT topic paths (format: ``cmd/{deviceType}/{homeSeq}/{userSeq}/...``)
+  to route all device commands and status messages to the correct home installation.
+* Other fields as documented in :py:class:`nwp500.models.DeviceInfo`
+
 POST /device/info
 ^^^^^^^^^^^^^^^^^
 

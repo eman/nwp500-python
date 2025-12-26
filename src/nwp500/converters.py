@@ -13,7 +13,6 @@ from typing import Any
 __all__ = [
     "device_bool_to_python",
     "device_bool_from_python",
-    "tou_status_to_python",
     "tou_override_to_python",
     "div_10",
     "enum_validator",
@@ -62,27 +61,6 @@ def device_bool_from_python(value: bool) -> int:
         1
     """
     return 2 if value else 1
-
-
-def tou_status_to_python(value: Any) -> bool:
-    """Convert Time of Use status to Python bool.
-
-    Device representation: 1 = Off/False, 2 = On/True
-    (Uses standard OnOffFlag encoding)
-
-    Args:
-        value: Device TOU status value.
-
-    Returns:
-        Python boolean.
-
-    Example:
-        >>> tou_status_to_python(2)
-        True
-        >>> tou_status_to_python(1)
-        False
-    """
-    return bool(value == 2)
 
 
 def tou_override_to_python(value: Any) -> bool:

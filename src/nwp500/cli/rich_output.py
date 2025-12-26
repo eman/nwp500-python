@@ -61,11 +61,12 @@ class OutputFormatter:
     def __init__(self) -> None:
         """Initialize the formatter."""
         self.use_rich = _should_use_rich()
+        self.console: Any
         if self.use_rich:
             assert Console is not None
-            self.console: Any = Console()
+            self.console = Console()
         else:
-            self.console: Any = None
+            self.console = None
 
     def print_status_table(self, items: list[tuple[str, str, str]]) -> None:
         """Print status items as a formatted table.
