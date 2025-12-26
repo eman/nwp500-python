@@ -61,9 +61,10 @@ class OutputFormatter:
     def __init__(self) -> None:
         """Initialize the formatter."""
         self.use_rich = _should_use_rich()
+        self.console: Any
         if self.use_rich:
             assert Console is not None
-            self.console: Any = Console()
+            self.console = Console()
         else:
             self.console = None
 
