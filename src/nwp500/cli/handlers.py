@@ -371,7 +371,10 @@ async def handle_get_device_info_rest(
             )
             print("\n=== Device Info (REST API) ===\n")
             print(f"Device Name:       {info.device_name}")
-            print(f"MAC Address:       {info.mac_address}")
+            print(
+                f"MAC Address:       "
+                f"{redact_serial(info.mac_address) if info.mac_address else 'N/A'}"
+            )
             print(f"Device Type:       {info.device_type}")
             print(f"Home Seq:          {info.home_seq}")
             print(f"Connected:         {info.connected}")
