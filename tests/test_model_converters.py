@@ -6,8 +6,7 @@ Tests cover:
 - div_10 (divide by 10 converter)
 - enum_validator (enum validation and conversion)
 
-Note: tou_status field uses device_bool_to_python
-(same as all other OnOffFlag fields)
+Note: touStatus field uses built-in bool() for standard 0/1 encoding
 """
 
 import pytest
@@ -89,6 +88,38 @@ class TestDeviceBoolConverter:
     def test_off_value_variations(self, off_value):
         """Test various representations of False value."""
         assert device_bool_to_python(off_value) is False
+
+
+class TestBuiltinBoolForTouStatus:
+    """Test built-in bool() for TOU status field (0/1 encoding).
+
+    The touStatus field uses standard 0/1 encoding, so Python's built-in
+    bool() is sufficient - no custom converter needed.
+    """
+
+    def test_enabled_state(self):
+        """TOU enabled: 1 = True."""
+        assert bool(1) is True
+
+    def test_disabled_state(self):
+        """TOU disabled: 0 = False."""
+        assert bool(0) is False
+
+    def test_nonzero_is_true(self):
+        """Any non-zero value is truthy."""
+        assert bool(2) is True
+        assert bool(99) is True
+        assert bool(-1) is True
+
+    @pytest.mark.parametrize("value", [0, 0.0, "", [], {}, None])
+    def test_falsy_values(self, value):
+        """Test various falsy values."""
+        assert bool(value) is False
+
+    @pytest.mark.parametrize("value", [1, 2, -1, "text", [1], {1: 1}])
+    def test_truthy_values(self, value):
+        """Test various truthy values."""
+        assert bool(value) is True
 
 
 class TestTouOverrideConverter:

@@ -2,6 +2,19 @@
 Changelog
 =========
 
+Version 7.2.2 (2025-12-25)
+==========================
+
+Fixed
+-----
+- **TOU Status Always Showing False**: Fixed ``touStatus`` field always reporting ``False`` regardless of actual device state
+  
+  - Root cause: Version 7.2.1 incorrectly changed ``touStatus`` to use device-specific 1/2 encoding, but the device uses standard 0/1 encoding
+  - Solution: Use Python's built-in ``bool()`` for ``touStatus`` field (handles 0=False, 1=True naturally)
+  - Updated documentation in ``docs/protocol/quick_reference.rst`` to note ``touStatus`` exception
+  - Added tests verifying built-in ``bool()`` handles 0/1 encoding correctly
+  - Device encoding: 0=OFF/disabled, 1=ON/enabled (standard Python truthiness)
+
 Version 7.2.1 (2025-12-25)
 ==========================
 

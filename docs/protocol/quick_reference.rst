@@ -19,10 +19,12 @@ The device uses non-standard boolean encoding in many status fields:
      - Notes
    * - **1**
      - OFF / False
-     - Standard: False value. Used for power, TOU status, and most feature flags.
+     - Standard: False value. Used for power and most feature flags.
    * - **2**
      - ON / True
      - Standard: True value.
+
+**Exception:** The ``touStatus`` field uses 0/1 encoding (0=disabled, 1=enabled) instead of the standard 1/2 encoding.
 
 **Why 1 & 2?**
 This likely stems from legacy firmware design where:
