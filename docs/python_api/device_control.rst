@@ -744,7 +744,7 @@ device capabilities without requiring individual checker functions.
    ^^^^^^^^^^^^^
 
 supports()
-""""""""""
+----------
 
 .. py:staticmethod:: supports(feature, device_features)
 
@@ -780,7 +780,7 @@ supports()
           print("Device doesn't support recirculation pump")
 
 assert_supported()
-""""""""""""""""""
+------------------
 
 .. py:staticmethod:: assert_supported(feature, device_features)
 
@@ -807,7 +807,7 @@ assert_supported()
           print(f"Cannot set recirculation: {e}")
 
 get_available_controls()
-""""""""""""""""""""""""
+------------------------
 
 .. py:staticmethod:: get_available_controls(device_features)
 
@@ -830,7 +830,7 @@ get_available_controls()
           print(f"{status} {feature}")
 
 register_capability()
-"""""""""""""""""""""
+---------------------
 
 .. py:staticmethod:: register_capability(name, check_fn)
 
