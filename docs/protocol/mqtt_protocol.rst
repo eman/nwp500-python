@@ -770,8 +770,7 @@ Status Response
          "operationBusy": 2,
          "compUse": 2,
          "heatUpperUse": 1,
-         "errorCode": 0,
-         ...
+         "errorCode": 0
        }
      }
    }
@@ -796,8 +795,7 @@ Feature/Info Response
          "controller_sw_version": 184614912,
          "dhw_temperature_min": 75,
          "dhw_temperature_max": 130,
-         "energy_usage_use": 1,
-         ...
+         "energy_usage_use": 1
        }
      }
    }

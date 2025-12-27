@@ -94,6 +94,13 @@ Get current device status (one-time query).
 .. code-block:: bash
 
    python3 -m nwp500.cli status
+   python3 -m nwp500.cli status --raw
+
+**Options:**
+
+.. option:: --raw
+
+   Output raw JSON response (unformatted).
 
 **Output:** Device status including water temperature, target temperature, mode,
 power consumption, tank charge percentage, and component states.
@@ -122,9 +129,37 @@ Show comprehensive device information (firmware, model, capabilities, serial).
 .. code-block:: bash
 
    python3 -m nwp500.cli info
+   python3 -m nwp500.cli info --raw
+
+**Options:**
+
+.. option:: --raw
+
+   Output raw JSON response (unformatted).
 
 **Output:** Device name, MAC address, firmware versions, features supported,
 temperature ranges, and capabilities.
+
+device-info
+^^^^^^^^^^^
+
+Show basic device information from REST API (DeviceInfo model).
+
+.. code-block:: bash
+
+   python3 -m nwp500.cli device-info
+   python3 -m nwp500.cli device-info --raw
+
+**Options:**
+
+.. option:: --raw
+
+   Output raw JSON response (unformatted).
+
+**Output:** Basic device information from REST API.
+
+**Note:** Use ``info`` command for MQTT-based comprehensive information, or
+``device-info`` for REST API-based basic information.
 
 serial
 ^^^^^^
@@ -386,24 +421,27 @@ Energy & Utility Commands
 energy
 ^^^^^^
 
-Query historical energy usage data by month.
+Query historical energy usage data by month or daily breakdown.
 
 .. code-block:: bash
 
-   # Get October 2024
+   # Get monthly summary for October 2024
    python3 -m nwp500.cli energy --year 2024 --months 10
 
    # Get multiple months
    python3 -m nwp500.cli energy --year 2024 --months 8,9,10
 
-   # Get full year
+   # Get daily breakdown for October 2024
+   python3 -m nwp500.cli energy --year 2024 --month 10
+
+   # Get full year summary
    python3 -m nwp500.cli energy --year 2024 --months 1,2,3,4,5,6,7,8,9,10,11,12
 
 **Syntax:**
 
 .. code-block:: bash
 
-   python3 -m nwp500.cli energy --year <year> --months <month-list>
+   python3 -m nwp500.cli energy --year <year> [--months <month-list> | --month <month>]
 
 **Options:**
 
@@ -413,7 +451,13 @@ Query historical energy usage data by month.
 
 .. option:: --months MONTHS
 
-   Comma-separated list of months (1-12). **Required.**
+   Comma-separated list of months (1-12) for monthly summary. Use either
+   ``--months`` OR ``--month``, not both.
+
+.. option:: --month MONTH
+
+   Show daily breakdown for a specific month (1-12). Use either ``--month``
+   OR ``--months``, not both.
 
 **Output:** Energy usage breakdown by heat pump vs. electric heating.
 
@@ -427,7 +471,7 @@ Query historical energy usage data by month.
      "heat_pump_hours": 245,
      "electric_wh": 302469,
      "electric_hours": 67,
-     "by_day": [...]
+     "by_day": []
    }
 
 tou
@@ -717,4 +761,4 @@ Related Documentation
 * :doc:`auth_client` - Python authentication API
 * :doc:`api_client` - Python REST API
 * :doc:`mqtt_client` - Python MQTT API
-* :doc:`../guides/mqtt_basics` - MQTT protocol guide
+* :doc:`../guides/auto_recovery` - Connection recovery and resilience
