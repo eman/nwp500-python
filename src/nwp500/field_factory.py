@@ -6,6 +6,7 @@ reducing boilerplate in models while maintaining type safety.
 
 Each factory function creates a Pydantic Field with metadata for Home Assistant
 integration:
+
 - temperature_field: Adds unit_of_measurement, device_class='temperature',
   suggested_display_precision
 - signal_strength_field: Adds unit_of_measurement,

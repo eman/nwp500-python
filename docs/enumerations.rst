@@ -10,6 +10,7 @@ Device Control Commands
 .. autoclass:: nwp500.enums.CommandCode
    :members:
    :undoc-members:
+   :no-index:
 
 These command IDs are used in MQTT control messages to change device settings
 and trigger actions. The most commonly used commands include:
@@ -37,6 +38,7 @@ OnOffFlag
 .. autoclass:: nwp500.enums.OnOffFlag
    :members:
    :undoc-members:
+   :no-index:
 
 Generic on/off flag used throughout status fields for power status, TOU status,
 recirculation status, vacation mode, anti-legionella, and other boolean settings.
@@ -49,6 +51,7 @@ Operation
 .. autoclass:: nwp500.enums.Operation
    :members:
    :undoc-members:
+   :no-index:
 
 Device operation state indicating overall device activity.
 
@@ -58,6 +61,7 @@ DhwOperationSetting
 .. autoclass:: nwp500.enums.DhwOperationSetting
    :members:
    :undoc-members:
+   :no-index:
 
 User-configured DHW heating mode preference. This determines which heat source(s)
 the device will use when heating is needed:
@@ -83,6 +87,7 @@ CurrentOperationMode
 .. autoclass:: nwp500.enums.CurrentOperationMode
    :members:
    :undoc-members:
+   :no-index:
 
 Real-time operational state (read-only). This reflects what the device is actually
 doing right now, which may differ from the configured mode setting:
@@ -106,6 +111,7 @@ HeatSource
 .. autoclass:: nwp500.enums.HeatSource
    :members:
    :undoc-members:
+   :no-index:
 
 Currently active heat source (read-only status). This reflects what the device
 is *currently* using, not what mode it's set to. In Hybrid mode, this field
@@ -117,6 +123,7 @@ DREvent
 .. autoclass:: nwp500.enums.DREvent
    :members:
    :undoc-members:
+   :no-index:
 
 Demand Response event status. Allows utilities to manage grid load by signaling
 water heaters to reduce consumption (shed) or pre-heat (load up) before peak periods.
@@ -127,6 +134,7 @@ WaterLevel
 .. autoclass:: nwp500.enums.WaterLevel
    :members:
    :undoc-members:
+   :no-index:
 
 Hot water level indicator displayed as gauge in app. IDs are non-sequential,
 likely represent bit positions for multi-level displays.
@@ -137,6 +145,7 @@ FilterChange
 .. autoclass:: nwp500.enums.FilterChange
    :members:
    :undoc-members:
+   :no-index:
 
 Air filter status for heat pump models. Indicates when air filter maintenance
 is needed.
@@ -147,6 +156,7 @@ RecirculationMode
 .. autoclass:: nwp500.enums.RecirculationMode
    :members:
    :undoc-members:
+   :no-index:
 
 Recirculation pump operation mode:
 
@@ -164,6 +174,7 @@ TouWeekType
 .. autoclass:: nwp500.enums.TouWeekType
    :members:
    :undoc-members:
+   :no-index:
 
 Day grouping for TOU schedules. Allows separate schedules for weekdays and
 weekends to account for different electricity rates and usage patterns.
@@ -174,6 +185,7 @@ TouRateType
 .. autoclass:: nwp500.enums.TouRateType
    :members:
    :undoc-members:
+   :no-index:
 
 Electricity rate period type. Device behavior can be configured for each period:
 
@@ -190,6 +202,7 @@ TemperatureType
 .. autoclass:: nwp500.enums.TemperatureType
    :members:
    :undoc-members:
+   :no-index:
 
 Temperature display unit preference (Celsius or Fahrenheit).
 
@@ -201,6 +214,7 @@ TempFormulaType
 .. autoclass:: nwp500.enums.TempFormulaType
    :members:
    :undoc-members:
+   :no-index:
 
 Temperature conversion formula type. Different device models use slightly different
 rounding algorithms when converting internal Celsius values to Fahrenheit:
@@ -219,6 +233,7 @@ UnitType
 .. autoclass:: nwp500.enums.UnitType
    :members:
    :undoc-members:
+   :no-index:
 
 Navien device/unit model types. Common values:
 
@@ -236,6 +251,7 @@ DeviceType
 .. autoclass:: nwp500.enums.DeviceType
    :members:
    :undoc-members:
+   :no-index:
 
 Communication device type (WiFi module model).
 
@@ -245,6 +261,7 @@ FirmwareType
 .. autoclass:: nwp500.enums.FirmwareType
    :members:
    :undoc-members:
+   :no-index:
 
 Firmware component types. Devices may have multiple firmware components that
 can be updated independently.
@@ -290,4 +307,4 @@ For detailed protocol documentation, see:
 
 - :doc:`protocol/device_status` - Status field definitions
 - :doc:`guides/time_of_use` - TOU scheduling and rate types
-- :doc:`protocol/control_commands` - Control command usage
+- :doc:`protocol/quick_reference` - Quick reference and control commands

@@ -78,6 +78,7 @@ extensions = [
 # Suppress warnings for classes/functions exported in multiple modules
 suppress_warnings = [
     "ref.python",  # Suppress "more than one target found" warnings
+    "py.duplicate",  # Suppress all "duplicate" warnings including duplicate_description
 ]
 
 # Add any paths that contain templates here, relative to this directory.
@@ -288,5 +289,18 @@ intersphinx_mapping = {
     "setuptools": ("https://setuptools.pypa.io/en/stable/", None),
     "pyscaffold": ("https://pyscaffold.org/en/stable", None),
 }
+
+# Suppress duplicate object description warnings from re-exported classes
+import logging
+
+class DuplicateWarningFilter(logging.Filter):
+    def filter(self, record):
+        # Suppress "duplicate object description" warnings
+        return "duplicate object description" not in record.getMessage()
+
+# Install the filter when Sphinx initializes
+def setup(app):
+    logger = logging.getLogger("sphinx")
+    logger.addFilter(DuplicateWarningFilter())
 
 print(f"loading configurations for {project} {version} ...", file=sys.stderr)

@@ -608,4 +608,3 @@ Related Documentation
 * :doc:`auth_client` - Authentication
 * :doc:`api_client` - REST API
 * :doc:`mqtt_client` - MQTT client
-* :doc:`constants` - Command codes and constants
