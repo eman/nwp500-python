@@ -2,6 +2,50 @@
 Changelog
 =========
 
+Version 7.2.3 (2025-12-27)
+==========================
+
+Added
+-----
+- **Daily Energy Breakdown by Month**: New ``--month`` option for energy command to show daily energy data for a specific month
+  
+  .. code-block:: bash
+  
+     # Daily breakdown for a single month
+     nwp-cli energy --year 2025 --month 12
+     
+     # Monthly summary for multiple months (existing)
+     nwp-cli energy --year 2025 --months 10,11,12
+  
+  - Displays daily energy consumption, efficiency, and heat source breakdown
+  - Rich formatted output with progress bars and color-coded efficiency percentages
+  - Plain text fallback for non-Rich environments
+  - Smart routing: single month shows daily data, multiple months show summary
+
+Fixed
+-----
+- **Documentation**: Fixed all warnings and broken cross-references in documentation
+  
+  - Fixed docstring formatting in field_factory.py module
+  - Fixed broken cross-reference links in enumerations.rst, mqtt_diagnostics.rst, cli.rst, and models.rst
+  - Fixed invalid JSON syntax in code examples (removed invalid [...] and ... tokens)
+  - Suppressed duplicate object description warnings from re-exported classes
+  
+- **CLI Documentation**: Updated documentation for all 19 CLI commands
+  
+  - Added missing device-info command documentation
+  - Added --raw flag documentation for status, info, and device-info commands
+  - Added --month option documentation to energy command
+  - Clarified mutually exclusive options (--months vs --month)
+  
+- **RST Title Hierarchy**: Fixed title level inconsistencies in device_control.rst
+
+- **Read the Docs Configuration**: Updated Python version requirement to 3.13 in Read the Docs config
+
+Changed
+-------
+- **Installation Documentation**: Updated installation instructions to clarify optional CLI and Rich dependencies
+
 Version 7.2.2 (2025-12-25)
 ==========================
 
