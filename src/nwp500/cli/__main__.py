@@ -324,7 +324,7 @@ async def tou_set(mqtt: NavienMqttClient, device: Any, state: str) -> None:
 
 @cli.command()  # type: ignore[attr-defined]
 @click.option(
-    "--year", type=int, required=False, help="Year to query (required)"
+    "--year", type=int, required=True, help="Year to query"
 )
 @click.option(
     "--months", required=False, help="Comma-separated months (e.g. 1,2,3)"
@@ -339,31 +339,25 @@ async def tou_set(mqtt: NavienMqttClient, device: Any, state: str) -> None:
 async def energy(
     mqtt: NavienMqttClient,
     device: Any,
-    year: int | None,
+    year: int,
     months: str | None,
     month: int | None,
 ) -> None:
     """Query historical energy usage.
 
     Use either --months for monthly summary or --month for daily breakdown.
-    Must provide --year with either option.
     """
-    if year is None:
-        _logger.error("--year is required")
-        return
-
     if month is not None:
         # Daily breakdown for a single month
         if month < 1 or month > 12:
-            _logger.error("Month must be between 1 and 12")
-            return
+            raise click.ClickException("Month must be between 1 and 12")
         await handlers.handle_get_energy_request(mqtt, device, year, [month])
     elif months is not None:
         # Monthly summary
         month_list = [int(m.strip()) for m in months.split(",")]
         await handlers.handle_get_energy_request(mqtt, device, year, month_list)
     else:
-        _logger.error(
+        raise click.ClickException(
             "Either --months (for monthly summary) or --month "
             "(for daily breakdown) required"
         )

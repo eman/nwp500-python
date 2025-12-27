@@ -281,15 +281,12 @@ def format_daily_energy_usage(
     )
     lines.append("-" * 100)
 
-    for day_data in month_data.data:
+    for day_num, day_data in enumerate(month_data.data, start=1):
         total_wh = day_data.total_usage
         hp_wh = day_data.heat_pump_usage
         he_wh = day_data.heat_element_usage
         hp_time = day_data.heat_pump_time
         he_time = day_data.heat_element_time
-
-        # Use day index + 1 as day number (assuming data is ordered by day)
-        day_num = month_data.data.index(day_data) + 1
 
         lines.append(
             f"{day_num:<5} {total_wh:>16,} {hp_wh:>13,} {he_wh:>13,} {hp_time:>10} {he_time:>10}"  # noqa: E501
@@ -321,8 +318,7 @@ def print_daily_energy_usage(
         return
 
     days_data = []
-    for day_data in month_data.data:
-        day_num = month_data.data.index(day_data) + 1
+    for day_num, day_data in enumerate(month_data.data, start=1):
         total_wh = day_data.total_usage
         hp_wh = day_data.heat_pump_usage
         he_wh = day_data.heat_element_usage
