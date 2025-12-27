@@ -323,17 +323,42 @@ async def tou_set(mqtt: NavienMqttClient, device: Any, state: str) -> None:
 
 
 @cli.command()  # type: ignore[attr-defined]
-@click.option("--year", type=int, required=True)
+@click.option("--year", type=int, required=True, help="Year to query")
 @click.option(
-    "--months", required=True, help="Comma-separated months (e.g. 1,2,3)"
+    "--months", required=False, help="Comma-separated months (e.g. 1,2,3)"
+)
+@click.option(
+    "--month",
+    type=int,
+    required=False,
+    help="Show daily breakdown for a specific month (1-12)",
 )
 @async_command
 async def energy(
-    mqtt: NavienMqttClient, device: Any, year: int, months: str
+    mqtt: NavienMqttClient,
+    device: Any,
+    year: int,
+    months: str | None,
+    month: int | None,
 ) -> None:
-    """Query historical energy usage."""
-    month_list = [int(m.strip()) for m in months.split(",")]
-    await handlers.handle_get_energy_request(mqtt, device, year, month_list)
+    """Query historical energy usage.
+
+    Use either --months for monthly summary or --month for daily breakdown.
+    """
+    if month is not None:
+        # Daily breakdown for a single month
+        if month < 1 or month > 12:
+            raise click.ClickException("Month must be between 1 and 12")
+        await handlers.handle_get_energy_request(mqtt, device, year, [month])
+    elif months is not None:
+        # Monthly summary
+        month_list = [int(m.strip()) for m in months.split(",")]
+        await handlers.handle_get_energy_request(mqtt, device, year, month_list)
+    else:
+        raise click.ClickException(
+            "Either --months (for monthly summary) or --month "
+            "(for daily breakdown) required"
+        )
 
 
 @cli.command()  # type: ignore[attr-defined]

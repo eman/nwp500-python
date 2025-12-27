@@ -90,6 +90,21 @@ class OutputFormatter:
         else:
             self._print_energy_rich(months)
 
+    def print_daily_energy_table(
+        self, days: list[dict[str, Any]], year: int, month: int
+    ) -> None:
+        """Print daily energy usage data as a formatted table.
+
+        Args:
+            days: List of daily energy data dictionaries
+            year: Year for the data
+            month: Month for the data
+        """
+        if not self.use_rich:
+            self._print_daily_energy_plain(days, year, month)
+        else:
+            self._print_daily_energy_rich(days, year, month)
+
     def print_error(
         self,
         message: str,
@@ -364,6 +379,85 @@ class OutputFormatter:
         filled = int((percentage / 100) * width)
         bar = "█" * filled + "░" * (width - filled)
         return f"[{bar}]"
+
+    def _print_daily_energy_plain(
+        self, days: list[dict[str, Any]], year: int, month: int
+    ) -> None:
+        """Plain text daily energy output (fallback)."""
+        # This is a simplified version - the actual rendering comes from
+        # output_formatters.format_daily_energy_usage()
+        from calendar import month_name
+
+        month_str = (
+            f"{month_name[month]} {year}"
+            if 1 <= month <= 12
+            else f"Month {month} {year}"
+        )
+        print(f"DAILY ENERGY USAGE - {month_str}")
+        print("=" * 100)
+        for day in days:
+            print(f"{day}")
+
+    def _print_daily_energy_rich(
+        self, days: list[dict[str, Any]], year: int, month: int
+    ) -> None:
+        """Rich-enhanced daily energy output."""
+        from calendar import month_name
+
+        assert self.console is not None
+        assert _rich_available
+
+        month_str = (
+            f"{month_name[month]} {year}"
+            if 1 <= month <= 12
+            else f"Month {month} {year}"
+        )
+        table = cast(Any, Table)(
+            title=f"DAILY ENERGY USAGE - {month_str}", show_header=True
+        )
+        table.add_column("Day", style="cyan", width=6)
+        table.add_column(
+            "Total kWh", style="magenta", justify="right", width=12
+        )
+        table.add_column("HP Usage", width=18)
+        table.add_column("HE Usage", width=18)
+
+        for day in days:
+            day_num = day.get("day", "N/A")
+            total_kwh = day.get("total_kwh", 0)
+            hp_kwh = day.get("hp_kwh", 0)
+            he_kwh = day.get("he_kwh", 0)
+            hp_pct = day.get("hp_pct", 0)
+            he_pct = day.get("he_pct", 0)
+
+            # Create progress bar representations
+            hp_bar = self._create_progress_bar(hp_pct, 10)
+            he_bar = self._create_progress_bar(he_pct, 10)
+
+            # Color code based on efficiency
+            hp_color = (
+                "green"
+                if hp_pct >= 70
+                else ("yellow" if hp_pct >= 50 else "red")
+            )
+            he_color = (
+                "red"
+                if he_pct >= 50
+                else ("yellow" if he_pct >= 30 else "green")
+            )
+
+            hp_text = (
+                f"{hp_kwh:.1f} kWh "
+                f"[{hp_color}]{hp_pct:.0f}%[/{hp_color}]\n{hp_bar}"
+            )
+            he_text = (
+                f"{he_kwh:.1f} kWh "
+                f"[{he_color}]{he_pct:.0f}%[/{he_color}]\n{he_bar}"
+            )
+
+            table.add_row(str(day_num), f"{total_kwh:.1f}", hp_text, he_text)
+
+        self.console.print(table)
 
     def _print_error_rich(
         self,
