@@ -323,9 +323,7 @@ async def tou_set(mqtt: NavienMqttClient, device: Any, state: str) -> None:
 
 
 @cli.command()  # type: ignore[attr-defined]
-@click.option(
-    "--year", type=int, required=True, help="Year to query"
-)
+@click.option("--year", type=int, required=True, help="Year to query")
 @click.option(
     "--months", required=False, help="Comma-separated months (e.g. 1,2,3)"
 )
