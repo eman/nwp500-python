@@ -4,12 +4,15 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from nwp500.cli.handlers import (
-    get_controller_serial_number,
-    handle_set_dhw_temp_request,
-    handle_set_mode_request,
-    handle_status_request,
-)
+try:
+    from nwp500.cli.handlers import (
+        get_controller_serial_number,
+        handle_set_dhw_temp_request,
+        handle_set_mode_request,
+        handle_status_request,
+    )
+except ImportError:
+    pytest.skip("CLI dependencies not installed", allow_module_level=True)
 from nwp500.models import Device, DeviceFeature, DeviceStatus
 
 

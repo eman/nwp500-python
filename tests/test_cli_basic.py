@@ -5,7 +5,10 @@ from unittest.mock import patch
 
 import pytest
 
-from nwp500.cli.__main__ import run
+try:
+    from nwp500.cli.__main__ import run
+except ImportError:
+    pytest.skip("CLI dependencies not installed", allow_module_level=True)
 
 
 def test_cli_help():
