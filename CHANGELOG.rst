@@ -2,7 +2,7 @@
 Changelog
 =========
 
-Version 7.2.3 (2025-12-27)
+Version 7.2.3 (2026-01-15)
 ==========================
 
 Added
@@ -41,6 +41,13 @@ Fixed
 - **RST Title Hierarchy**: Fixed title level inconsistencies in device_control.rst
 
 - **Read the Docs Configuration**: Updated Python version requirement to 3.13 in Read the Docs config
+
+- **CI Test Failures**: Fixed ``ModuleNotFoundError`` when running tests without CLI dependencies installed
+  
+  - Wrapped CLI module imports in try-except blocks in test modules
+  - Tests are skipped gracefully when optional dependencies (click, rich) are not installed
+  - Allows pytest to run without CLI extra, while supporting full test suite with tox
+  - Network errors in authentication are now marked as retriable for better resilience
 
 Changed
 -------
