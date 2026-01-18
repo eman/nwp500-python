@@ -9,7 +9,7 @@ from enum import Enum
 from pathlib import Path
 from typing import Any
 
-from nwp500 import DeviceStatus
+from nwp500 import DeviceFeature, DeviceStatus
 
 from .rich_output import get_formatter
 
@@ -30,15 +30,22 @@ def _get_unit_suffix(
 ) -> str:
     """Extract unit suffix from model field metadata.
 
+    For dynamic fields (temperature, flow_rate, water), use the instance's
+    get_field_unit() method to get the correct unit based on device preferences.
+
     Args:
         field_name: Name of the field to get unit for
         model_class: The Pydantic model class (default: DeviceStatus)
-        instance: Optional instance of the model to check dynamic properties
-            (e.g. temperature type)
+        instance: Optional instance of the model for dynamic unit resolution
 
     Returns:
         Unit string (e.g., "°F", "°C", "GPM", "Wh") or empty string if not found
     """
+    # Use instance's method if available for dynamic unit resolution
+    if instance and hasattr(instance, "get_field_unit"):
+        return instance.get_field_unit(field_name)
+
+    # Fallback to static unit from schema
     if not hasattr(model_class, "model_fields"):
         return ""
 
@@ -51,73 +58,16 @@ def _get_unit_suffix(
         return ""
 
     extra = field_info.json_schema_extra
-    if isinstance(extra, dict):
-        # Special handling for temperature units
-        if "device_class" in extra and extra["device_class"] == "temperature":
-            # If we have an instance, check its preferred unit
-            if instance and hasattr(instance, "temperature_type"):
-                from nwp500.enums import TemperatureType
-
-                # Enum is already converted to name string in model_dump,
-                # so we might need to handle that.
-                # But here we likely get the raw object. Let's be safe.
-                temp_type = instance.temperature_type
-                if hasattr(temp_type, "value"):  # It's an enum
-                    is_celsius = temp_type == TemperatureType.CELSIUS
-                elif isinstance(temp_type, int):  # It's an int
-                    is_celsius = temp_type == TemperatureType.CELSIUS.value
-                else:  # It's likely a string name or other
-                    is_celsius = str(temp_type).upper() == "CELSIUS"
-
-                return " °C" if is_celsius else " °F"
-
-            # Default fallthrough if no instance provided or logic fails
-            return " °F"
-
-        if "device_class" in extra and extra["device_class"] == "flow_rate":
-            # If we have an instance, check its preferred unit
-            if instance and hasattr(instance, "temperature_type"):
-                from nwp500.enums import TemperatureType
-
-                temp_type = instance.temperature_type
-                if hasattr(temp_type, "value"):  # It's an enum
-                    is_celsius = temp_type == TemperatureType.CELSIUS
-                elif isinstance(temp_type, int):  # It's an int
-                    is_celsius = temp_type == TemperatureType.CELSIUS.value
-                else:  # It's likely a string name or other
-                    is_celsius = str(temp_type).upper() == "CELSIUS"
-
-                return " LPM" if is_celsius else " GPM"
-
-            return " GPM"
-
-        if "device_class" in extra and extra["device_class"] == "water":
-            # If we have an instance, check its preferred unit
-            if instance and hasattr(instance, "temperature_type"):
-                from nwp500.enums import TemperatureType
-
-                temp_type = instance.temperature_type
-                if hasattr(temp_type, "value"):  # It's an enum
-                    is_celsius = temp_type == TemperatureType.CELSIUS
-                elif isinstance(temp_type, int):  # It's an int
-                    is_celsius = temp_type == TemperatureType.CELSIUS.value
-                else:  # It's likely a string name or other
-                    is_celsius = str(temp_type).upper() == "CELSIUS"
-
-                return " L" if is_celsius else " gal"
-
-            return " gal"
-
-        if "unit_of_measurement" in extra:
-            unit_val = extra["unit_of_measurement"]
-            unit: str = unit_val if unit_val is not None else ""
-            return f" {unit}" if unit else ""
+    if isinstance(extra, dict) and "unit_of_measurement" in extra:
+        unit_val = extra["unit_of_measurement"]
+        unit: str = unit_val if unit_val is not None else ""
+        return f" {unit}" if unit else ""
 
     return ""
 
 
 def _add_numeric_item(
-    items: list[tuple[str, str, Any]],
+    items: list[tuple[str, str, str]],
     device_status: Any,
     field_name: str,
     category: str,
@@ -1025,27 +975,48 @@ def print_device_info(device_feature: Any) -> None:
             )
         )
     if "dhw_temperature_min" in device_dict:
+        unit_suffix = (
+            _get_unit_suffix(
+                "dhw_temperature_min", DeviceFeature, device_feature
+            )
+            if hasattr(device_feature, "get_field_unit")
+            else " °F"
+        )
         all_items.append(
             (
                 "CONFIGURATION",
                 "DHW Temp Range",
-                f"{device_dict['dhw_temperature_min']}°F - {device_dict['dhw_temperature_max']}°F",  # noqa: E501
+                f"{device_dict['dhw_temperature_min']}{unit_suffix} - {device_dict['dhw_temperature_max']}{unit_suffix}",  # noqa: E501
             )
         )
     if "freeze_protection_temp_min" in device_dict:
+        unit_suffix = (
+            _get_unit_suffix(
+                "freeze_protection_temp_min", DeviceFeature, device_feature
+            )
+            if hasattr(device_feature, "get_field_unit")
+            else " °F"
+        )
         all_items.append(
             (
                 "CONFIGURATION",
                 "Freeze Protection Range",
-                f"{device_dict['freeze_protection_temp_min']}°F - {device_dict['freeze_protection_temp_max']}°F",  # noqa: E501
+                f"{device_dict['freeze_protection_temp_min']}{unit_suffix} - {device_dict['freeze_protection_temp_max']}{unit_suffix}",  # noqa: E501
             )
         )
     if "recirc_temperature_min" in device_dict:
+        unit_suffix = (
+            _get_unit_suffix(
+                "recirc_temperature_min", DeviceFeature, device_feature
+            )
+            if hasattr(device_feature, "get_field_unit")
+            else " °F"
+        )
         all_items.append(
             (
                 "CONFIGURATION",
                 "Recirculation Temp Range",
-                f"{device_dict['recirc_temperature_min']}°F - {device_dict['recirc_temperature_max']}°F",  # noqa: E501
+                f"{device_dict['recirc_temperature_min']}{unit_suffix} - {device_dict['recirc_temperature_max']}{unit_suffix}",  # noqa: E501
             )
         )
 

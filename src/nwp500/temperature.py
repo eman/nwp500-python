@@ -10,6 +10,8 @@ All values are converted to Fahrenheit for API responses and user interaction.
 from abc import ABC, abstractmethod
 from typing import Any
 
+from .enums import TempFormulaType
+
 
 class Temperature(ABC):
     """Base class for temperature conversions with device protocol support."""
@@ -230,6 +232,104 @@ class DeciCelsius(Temperature):
             600
         """
         raw_value = round(celsius * 10)
+        return cls(raw_value)
+
+
+class RawCelsius(Temperature):
+    """Temperature in raw halves of Celsius (0.5°C precision).
+
+    Used for outdoor/ambient temperature measurements that require
+    formula-specific rounding for Fahrenheit conversion.
+    Formula: raw_value / 2.0 converts to Celsius.
+
+    The Fahrenheit conversion supports two formula types:
+    - Type 0 (Asymmetric Rounding): Uses floor/ceil based on remainder
+    - Type 1 (Standard Rounding): Uses standard math rounding
+
+    Example:
+        >>> temp = RawCelsius(120)  # Raw device value 120
+        >>> temp.to_celsius()
+        60.0
+        >>> temp.to_fahrenheit()
+        140.0
+    """
+
+    def to_celsius(self) -> float:
+        """Convert to Celsius.
+
+        Returns:
+            Temperature in Celsius.
+        """
+        return self.raw_value / 2.0
+
+    def to_fahrenheit(self) -> float:
+        """Convert to Fahrenheit using standard rounding.
+
+        Returns:
+            Temperature in Fahrenheit.
+        """
+        celsius = self.to_celsius()
+        return round((celsius * 9 / 5) + 32)
+
+    def to_fahrenheit_with_formula(
+        self, formula_type: TempFormulaType
+    ) -> float:
+        """Convert to Fahrenheit using formula-specific rounding.
+
+        Args:
+            formula_type: Temperature formula type (ASYMMETRIC or STANDARD)
+
+        Returns:
+            Temperature in Fahrenheit.
+        """
+        celsius = self.to_celsius()
+
+        if formula_type == TempFormulaType.ASYMMETRIC:
+            # Asymmetric Rounding: check remainder of raw value
+            remainder = int(self.raw_value) % 10
+            if remainder == 9:
+                return float(__import__("math").floor((celsius * 9 / 5) + 32))
+            else:
+                return float(__import__("math").ceil((celsius * 9 / 5) + 32))
+        else:
+            # Standard Rounding (default)
+            return round((celsius * 9 / 5) + 32)
+
+    @classmethod
+    def from_fahrenheit(cls, fahrenheit: float) -> "RawCelsius":
+        """Create RawCelsius from Fahrenheit (for device commands).
+
+        Args:
+            fahrenheit: Temperature in Fahrenheit.
+
+        Returns:
+            RawCelsius instance with raw value for device.
+
+        Example:
+            >>> temp = RawCelsius.from_fahrenheit(140.0)
+            >>> temp.raw_value
+            120
+        """
+        celsius = (fahrenheit - 32) * 5 / 9
+        raw_value = round(celsius * 2)
+        return cls(raw_value)
+
+    @classmethod
+    def from_celsius(cls, celsius: float) -> "RawCelsius":
+        """Create RawCelsius from Celsius (for device commands).
+
+        Args:
+            celsius: Temperature in Celsius.
+
+        Returns:
+            RawCelsius instance with raw value for device.
+
+        Example:
+            >>> temp = RawCelsius.from_celsius(60.0)
+            >>> temp.raw_value
+            120
+        """
+        raw_value = round(celsius * 2)
         return cls(raw_value)
 
 

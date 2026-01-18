@@ -55,28 +55,28 @@ Basic Example
            "email@example.com",
            "password"
        ) as auth:
-           
+
            # Get device list via REST API
            api = NavienAPIClient(auth)
            device = await api.get_first_device()
            print(f"Device: {device.device_info.device_name}")
-           
+
            # Connect to MQTT for real-time control
            mqtt = NavienMqttClient(auth)
            await mqtt.connect()
-           
+
            # Monitor device status
            def on_status(status):
                print(f"Temp: {status.dhw_temperature}°F")
                print(f"Power: {status.current_inst_power}W")
-           
+
            await mqtt.subscribe_device_status(device, on_status)
            await mqtt.control.request_device_status(device)
-           
+
            # Control device
            await mqtt.control.set_power(device, power_on=True)
            await mqtt.control.set_dhw_temperature(device, 120.0)
-           
+
            await asyncio.sleep(30)
            await mqtt.disconnect()
 
@@ -120,6 +120,7 @@ Documentation Index
    :caption: User Guides
 
    guides/authentication
+   guides/home_assistant_integration
    guides/reservations
    guides/scheduling_features
    guides/energy_monitoring

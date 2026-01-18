@@ -26,8 +26,8 @@ This document lists the fields found in the ``status`` object of device status m
    * - ``outsideTemperature``
      - integer
      - °F
-     - The outdoor/ambient temperature measured by the heat pump.
-     - None
+     - Outdoor/ambient temperature
+     - Raw / 2.0 = Celsius; then to Fahrenheit using KDUtils.getMgppBaseToF() with tempFormulaType
    * - ``specialFunctionStatus``
      - integer
      - None
@@ -540,17 +540,17 @@ Field Definitions
 
 **dhwOperationSetting** (DhwOperationSetting enum with command values 1-6)
   The user's **configured mode preference** - what heating mode the device should use when it needs to heat water. This is set via the ``dhw-mode`` command and persists until changed by the user or device.
-  
+
   * Type: ``DhwOperationSetting`` enum
-  * Values: 
-    
+  * Values:
+
     * 1 = ``HEAT_PUMP`` (Heat Pump Only)
     * 2 = ``ELECTRIC`` (Electric Only)
     * 3 = ``ENERGY_SAVER`` (Hybrid: Efficiency)
     * 4 = ``HIGH_DEMAND`` (Hybrid: Boost)
     * 5 = ``VACATION`` (Vacation mode)
     * 6 = ``POWER_OFF`` (Device is powered off)
-  
+
   * Set by: User via app, CLI, or MQTT command
   * Changes: Only when user explicitly changes the mode or powers device off/on
   * Meaning: "When heating is needed, use this mode" OR "I'm powered off" (if value is 6)
@@ -558,15 +558,15 @@ Field Definitions
 
 **operationMode** (CurrentOperationMode enum with status values 0, 32, 64, 96)
   The device's **current actual operational state** - what the device is doing RIGHT NOW. This reflects real-time operation and changes automatically based on whether the device is idle or actively heating.
-  
+
   * Type: ``CurrentOperationMode`` enum
   * Values:
-    
+
     * 0 = ``STANDBY`` (Idle, not heating)
     * 32 = ``HEAT_PUMP_MODE`` (Heat Pump actively running)
     * 64 = ``HYBRID_EFFICIENCY_MODE`` (Energy Saver actively heating)
     * 96 = ``HYBRID_BOOST_MODE`` (High Demand actively heating)
-  
+
   * Set by: Device automatically based on heating demand
   * Changes: Dynamically as device starts/stops heating
   * Meaning: "This is what I'm doing right now"
@@ -591,7 +591,7 @@ Real-World Examples
     dhwOperationSetting = 3 (ENERGY_SAVER)    # Configured mode
     operationMode = 0 (STANDBY)                # Currently idle
     dhwChargePer = 100                         # Tank is fully charged
-    
+
   *Interpretation:* Device is configured for Energy Saver mode, but water is already at temperature so no heating is occurring.
 
 **Example 2: Energy Saver Mode, Actively Heating**
@@ -601,7 +601,7 @@ Real-World Examples
     operationMode = 64 (HYBRID_EFFICIENCY_MODE)      # Actively heating
     operationBusy = true                             # Heating in progress
     dhwChargePer = 75                                # Tank at 75%
-    
+
   *Interpretation:* Device is using Energy Saver mode to heat the tank, currently at 75% charge.
 
 **Example 3: High Demand Mode, Heat Pump Running**
@@ -610,7 +610,7 @@ Real-World Examples
     dhwOperationSetting = 4 (HIGH_DEMAND)      # Configured mode
     operationMode = 32 (HEAT_PUMP_MODE)        # Heat pump active
     compUse = true                             # Compressor running
-    
+
   *Interpretation:* Device is configured for High Demand but is currently running just the heat pump component (hybrid heating will engage electric elements as needed).
 
 **Example 4: Device Powered Off**
@@ -619,7 +619,7 @@ Real-World Examples
     dhwOperationSetting = 6 (POWER_OFF)        # Device powered off
     operationMode = 0 (STANDBY)                # Currently idle
     operationBusy = false                      # No heating
-    
+
   *Interpretation:* Device was powered off using the power-off command. Although ``operationMode`` shows ``STANDBY`` (same as an idle device), the ``dhwOperationSetting`` value of 6 indicates it's actually powered off, not just idle.
 
 Displaying Status in a User Interface
@@ -629,7 +629,7 @@ For user-facing applications, follow these guidelines:
 
 **Primary Mode Display**
   Use ``dhwOperationSetting`` to show the user's configured mode preference. This is what users expect to see as "the current mode" because it represents their selection.
-  
+
   **Important**: Check for value 6 (``POWER_OFF``) first to show "Off" or "Powered Off" status.
 
   Example display::
@@ -652,12 +652,12 @@ For user-facing applications, follow these guidelines:
     Mode: Energy Saver
     Status: Idle ○
     Tank: 100%
-    
+
     # Device on and heating
     Mode: Energy Saver
     Status: Heating ●
     Tank: 75%
-    
+
     # Device powered off
     Mode: Off
     Status: Powered Off
@@ -670,7 +670,7 @@ For user-facing applications, follow these guidelines:
 
     def format_mode_display(status: DeviceStatus) -> dict:
         """Format mode and status for UI display."""
-        
+
         # Check if device is powered off first
         if status.dhw_operation_setting == DhwOperationSetting.POWER_OFF:
             return {
@@ -680,10 +680,10 @@ For user-facing applications, follow these guidelines:
                 'is_powered_on': False,
                 'tank_charge': status.dhwChargePer,
             }
-        
+
         # User's configured mode (what they selected)
         configured_mode = status.dhw_operation_setting.name.replace('_', ' ').title()
-        
+
         # Current operational state
         if status.operation_mode == CurrentOperationMode.STANDBY:
             operational_state = "Idle"
@@ -700,7 +700,7 @@ For user-facing applications, follow these guidelines:
         else:
             operational_state = "Unknown"
             is_heating = False
-        
+
         return {
             'configured_mode': configured_mode,       # "Energy Saver"
             'operational_state': operational_state,   # "Idle" or "Heating..."

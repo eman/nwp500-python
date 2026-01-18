@@ -41,9 +41,17 @@ def temperature_field(
 ) -> Any:
     """Create a temperature field with standard Home Assistant metadata.
 
+    The unit parameter is critical for tools consuming this library (e.g.,
+    Home Assistant) to correctly interpret the values. While the actual
+    displayed unit is dynamic based on device temperature_type setting
+    (Celsius or Fahrenheit), the unit parameter in json_schema_extra provides
+    the default/fallback unit and schema documentation for proper integration.
+
     Args:
         description: Field description
-        unit: Temperature unit (default: °F)
+        unit: Temperature unit (default: °F). Used in json_schema_extra for
+            Home Assistant and other integrations to understand value units.
+            Displayed units are dynamic based on device temperature_type.
         default: Default value or Pydantic default
         **kwargs: Additional Pydantic Field arguments
 

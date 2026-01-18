@@ -23,9 +23,11 @@ from .converters import (
     deci_celsius_to_preferred,
     device_bool_to_python,
     div_10,
+    div_10_celsius_to_preferred,
     enum_validator,
     flow_rate_to_preferred,
     half_celsius_to_preferred,
+    raw_celsius_to_preferred,
     tou_override_to_python,
     volume_to_preferred,
 )
@@ -63,8 +65,18 @@ _logger = logging.getLogger(__name__)
 DeviceBool = Annotated[bool, BeforeValidator(device_bool_to_python)]
 CapabilityFlag = Annotated[bool, BeforeValidator(device_bool_to_python)]
 Div10 = Annotated[float, BeforeValidator(div_10)]
-HalfCelsiusToF = Annotated[float, WrapValidator(half_celsius_to_preferred)]
-DeciCelsiusToF = Annotated[float, WrapValidator(deci_celsius_to_preferred)]
+HalfCelsiusToPreferred = Annotated[
+    float, WrapValidator(half_celsius_to_preferred)
+]
+DeciCelsiusToPreferred = Annotated[
+    float, WrapValidator(deci_celsius_to_preferred)
+]
+RawCelsiusToPreferred = Annotated[
+    float, WrapValidator(raw_celsius_to_preferred)
+]
+Div10CelsiusToPreferred = Annotated[
+    float, WrapValidator(div_10_celsius_to_preferred)
+]
 FlowRate = Annotated[float, WrapValidator(flow_rate_to_preferred)]
 Volume = Annotated[float, WrapValidator(volume_to_preferred)]
 TouStatus = Annotated[bool, BeforeValidator(bool)]
@@ -244,8 +256,9 @@ class TOUInfo(NavienBaseModel):
 class DeviceStatus(NavienBaseModel):
     """Represents the status of the Navien water heater device."""
 
-    # CRITICAL: temperature_type must be first. Wrap validators need it in
-    # ValidationInfo.data. Reordering breaks unit conversions. See
+    # CRITICAL: temperature_type must be defined before any temperature
+    # fields that depend on it. Wrap validators need it in ValidationInfo.data.
+    # Reordering breaks unit conversions. See
     # converters._get_temperature_preference() for details.
     temperature_type: TemperatureType = Field(
         default=TemperatureType.FAHRENHEIT,
@@ -259,8 +272,8 @@ class DeviceStatus(NavienBaseModel):
     command: int = Field(
         description="The command that triggered this status update"
     )
-    outside_temperature: float = temperature_field(
-        "The outdoor/ambient temperature measured by the heat pump"
+    outside_temperature: RawCelsiusToPreferred = temperature_field(
+        "Outdoor/ambient temperature"
     )
     special_function_status: int = Field(
         description=(
@@ -453,7 +466,7 @@ class DeviceStatus(NavienBaseModel):
     freeze_protection_use: DeviceBool = Field(
         description=(
             "Whether freeze protection is active. "
-            "Electric heater activates when tank water falls below 43°F (6°C)"
+            "Electric heater activates when tank water falls below threshold"
         )
     )
     dhw_use: DeviceBool = Field(
@@ -571,63 +584,62 @@ class DeviceStatus(NavienBaseModel):
     )
 
     # Temperature fields - encoded in half-degrees Celsius
-    dhw_temperature: HalfCelsiusToF = temperature_field(
+    dhw_temperature: HalfCelsiusToPreferred = temperature_field(
         "Current Domestic Hot Water (DHW) outlet temperature"
     )
-    dhw_temperature_setting: HalfCelsiusToF = temperature_field(
-        "User-configured target DHW temperature. "
-        "Range: 95°F (35°C) to 150°F (65.5°C). Default: 120°F (49°C)"
+    dhw_temperature_setting: HalfCelsiusToPreferred = temperature_field(
+        "User-configured target DHW temperature"
     )
-    dhw_target_temperature_setting: HalfCelsiusToF = temperature_field(
+    dhw_target_temperature_setting: HalfCelsiusToPreferred = temperature_field(
         "Duplicate of dhw_temperature_setting for legacy API compatibility"
     )
-    freeze_protection_temperature: HalfCelsiusToF = temperature_field(
+    freeze_protection_temperature: HalfCelsiusToPreferred = temperature_field(
         "Freeze protection temperature setpoint. "
-        "Range: 43-50°F (6-10°C), Default: 43°F"
+        "Prevents tank from freezing in cold environments"
     )
-    dhw_temperature2: HalfCelsiusToF = temperature_field(
+    dhw_temperature2: HalfCelsiusToPreferred = temperature_field(
         "Second DHW temperature reading"
     )
-    hp_upper_on_temp_setting: HalfCelsiusToF = temperature_field(
+    hp_upper_on_temp_setting: HalfCelsiusToPreferred = temperature_field(
         "Heat pump upper on temperature setting"
     )
-    hp_upper_off_temp_setting: HalfCelsiusToF = temperature_field(
+    hp_upper_off_temp_setting: HalfCelsiusToPreferred = temperature_field(
         "Heat pump upper off temperature setting"
     )
-    hp_lower_on_temp_setting: HalfCelsiusToF = temperature_field(
+    hp_lower_on_temp_setting: HalfCelsiusToPreferred = temperature_field(
         "Heat pump lower on temperature setting"
     )
-    hp_lower_off_temp_setting: HalfCelsiusToF = temperature_field(
+    hp_lower_off_temp_setting: HalfCelsiusToPreferred = temperature_field(
         "Heat pump lower off temperature setting"
     )
-    he_upper_on_temp_setting: HalfCelsiusToF = temperature_field(
+    he_upper_on_temp_setting: HalfCelsiusToPreferred = temperature_field(
         "Heater element upper on temperature setting"
     )
-    he_upper_off_temp_setting: HalfCelsiusToF = temperature_field(
+    he_upper_off_temp_setting: HalfCelsiusToPreferred = temperature_field(
         "Heater element upper off temperature setting"
     )
-    he_lower_on_temp_setting: HalfCelsiusToF = temperature_field(
+    he_lower_on_temp_setting: HalfCelsiusToPreferred = temperature_field(
         "Heater element lower on temperature setting"
     )
-    he_lower_off_temp_setting: HalfCelsiusToF = temperature_field(
+    he_lower_off_temp_setting: HalfCelsiusToPreferred = temperature_field(
         "Heater element lower off temperature setting"
     )
-    heat_min_op_temperature: HalfCelsiusToF = temperature_field(
+    heat_min_op_temperature: HalfCelsiusToPreferred = temperature_field(
         "Minimum heat pump operation temperature. "
-        "Lowest tank setpoint allowed (95-113°F, default 95°F)"
+        "Lowest tank setpoint allowed for heat pump operation"
     )
-    recirc_temp_setting: HalfCelsiusToF = temperature_field(
+    recirc_temp_setting: HalfCelsiusToPreferred = temperature_field(
         "Recirculation temperature setting"
     )
-    recirc_temperature: HalfCelsiusToF = temperature_field(
+    recirc_temperature: HalfCelsiusToPreferred = temperature_field(
         "Recirculation temperature"
     )
-    recirc_faucet_temperature: HalfCelsiusToF = temperature_field(
+    recirc_faucet_temperature: HalfCelsiusToPreferred = temperature_field(
         "Recirculation faucet temperature"
     )
 
     # Fields with scale division (raw / 10.0)
-    current_inlet_temperature: HalfCelsiusToF = temperature_field(
+    current_inlet_temperature: HalfCelsiusToPreferred = temperature_field(
         "Cold water inlet temperature"
     )
     current_dhw_flow_rate: FlowRate = Field(
@@ -637,49 +649,49 @@ class DeviceStatus(NavienBaseModel):
             "device_class": "flow_rate",
         },
     )
-    hp_upper_on_diff_temp_setting: Div10 = Field(
+    hp_upper_on_diff_temp_setting: Div10CelsiusToPreferred = Field(
         description="Heat pump upper on differential temperature setting",
         json_schema_extra={
             "unit_of_measurement": "°F",
             "device_class": "temperature",
         },
     )
-    hp_upper_off_diff_temp_setting: Div10 = Field(
+    hp_upper_off_diff_temp_setting: Div10CelsiusToPreferred = Field(
         description="Heat pump upper off differential temperature setting",
         json_schema_extra={
             "unit_of_measurement": "°F",
             "device_class": "temperature",
         },
     )
-    hp_lower_on_diff_temp_setting: Div10 = Field(
+    hp_lower_on_diff_temp_setting: Div10CelsiusToPreferred = Field(
         description="Heat pump lower on differential temperature setting",
         json_schema_extra={
             "unit_of_measurement": "°F",
             "device_class": "temperature",
         },
     )
-    hp_lower_off_diff_temp_setting: Div10 = Field(
+    hp_lower_off_diff_temp_setting: Div10CelsiusToPreferred = Field(
         description="Heat pump lower off differential temperature setting",
         json_schema_extra={
             "unit_of_measurement": "°F",
             "device_class": "temperature",
         },
     )
-    he_upper_on_diff_temp_setting: Div10 = Field(
+    he_upper_on_diff_temp_setting: Div10CelsiusToPreferred = Field(
         description="Heater element upper on differential temperature setting",
         json_schema_extra={
             "unit_of_measurement": "°F",
             "device_class": "temperature",
         },
     )
-    he_upper_off_diff_temp_setting: Div10 = Field(
+    he_upper_off_diff_temp_setting: Div10CelsiusToPreferred = Field(
         description="Heater element upper off differential temperature setting",
         json_schema_extra={
             "unit_of_measurement": "°F",
             "device_class": "temperature",
         },
     )
-    he_lower_on_diff_temp_setting: Div10 = Field(
+    he_lower_on_diff_temp_setting: Div10CelsiusToPreferred = Field(
         alias="heLowerOnTDiffempSetting",
         description="Heater element lower on differential temperature setting",
         json_schema_extra={
@@ -687,7 +699,7 @@ class DeviceStatus(NavienBaseModel):
             "device_class": "temperature",
         },
     )  # Handle API typo: heLowerOnTDiffempSetting -> heLowerOnDiffTempSetting
-    he_lower_off_diff_temp_setting: Div10 = Field(
+    he_lower_off_diff_temp_setting: Div10CelsiusToPreferred = Field(
         description="Heater element lower off differential temperature setting",
         json_schema_extra={
             "unit_of_measurement": "°F",
@@ -695,7 +707,7 @@ class DeviceStatus(NavienBaseModel):
         },
     )
     recirc_dhw_flow_rate: FlowRate = Field(
-        description="Recirculation DHW flow rate",
+        description="Recirculation DHW flow rate (dynamic units: LPM/GPM)",
         json_schema_extra={
             "unit_of_measurement": "GPM",
             "device_class": "flow_rate",
@@ -703,32 +715,32 @@ class DeviceStatus(NavienBaseModel):
     )
 
     # Temperature fields with decicelsius to Fahrenheit conversion
-    tank_upper_temperature: DeciCelsiusToF = temperature_field(
+    tank_upper_temperature: DeciCelsiusToPreferred = temperature_field(
         "Temperature of the upper part of the tank"
     )
-    tank_lower_temperature: DeciCelsiusToF = temperature_field(
+    tank_lower_temperature: DeciCelsiusToPreferred = temperature_field(
         "Temperature of the lower part of the tank"
     )
-    discharge_temperature: DeciCelsiusToF = temperature_field(
+    discharge_temperature: DeciCelsiusToPreferred = temperature_field(
         "Compressor discharge temperature - "
         "temperature of refrigerant leaving the compressor"
     )
-    suction_temperature: DeciCelsiusToF = temperature_field(
+    suction_temperature: DeciCelsiusToPreferred = temperature_field(
         "Compressor suction temperature - "
         "temperature of refrigerant entering the compressor"
     )
-    evaporator_temperature: DeciCelsiusToF = temperature_field(
+    evaporator_temperature: DeciCelsiusToPreferred = temperature_field(
         "Evaporator temperature - "
         "temperature where heat is absorbed from ambient air"
     )
-    ambient_temperature: DeciCelsiusToF = temperature_field(
+    ambient_temperature: DeciCelsiusToPreferred = temperature_field(
         "Ambient air temperature measured at the heat pump air intake"
     )
-    target_super_heat: DeciCelsiusToF = temperature_field(
+    target_super_heat: DeciCelsiusToPreferred = temperature_field(
         "Target superheat value - desired temperature difference "
         "ensuring complete refrigerant vaporization"
     )
-    current_super_heat: DeciCelsiusToF = temperature_field(
+    current_super_heat: DeciCelsiusToPreferred = temperature_field(
         "Current superheat value - actual temperature difference "
         "between suction and evaporator temperatures"
     )
@@ -742,13 +754,63 @@ class DeviceStatus(NavienBaseModel):
         default=DhwOperationSetting.ENERGY_SAVER,
         description="User's configured DHW operation mode preference",
     )
-    freeze_protection_temp_min: HalfCelsiusToF = temperature_field(
-        "Active freeze protection lower limit. Default: 43°F (6°C)",
+    freeze_protection_temp_min: HalfCelsiusToPreferred = temperature_field(
+        "Active freeze protection lower limit",
         default=43.0,
     )
-    freeze_protection_temp_max: HalfCelsiusToF = temperature_field(
-        "Active freeze protection upper limit. Default: 65°F", default=65.0
+    freeze_protection_temp_max: HalfCelsiusToPreferred = temperature_field(
+        "Active freeze protection upper limit", default=65.0
     )
+
+    def get_field_unit(self, field_name: str) -> str:
+        """Get the correct unit suffix based on temperature preference.
+
+        Resolves dynamic units for temperature, flow rate, and volume fields
+        that change based on the device's temperature_type setting
+        (Celsius or Fahrenheit).
+
+        Args:
+            field_name: Name of the field to get the unit for
+
+        Returns:
+            Unit string (e.g., " °C", " LPM", " L") or empty if field not found
+        """
+        model_fields = self.__class__.model_fields
+        if field_name not in model_fields:
+            return ""
+
+        field_info = model_fields[field_name]
+        if not hasattr(field_info, "json_schema_extra"):
+            return ""
+
+        extra = field_info.json_schema_extra
+        if not isinstance(extra, dict):
+            return ""
+
+        # Determine if Celsius based on this instance's temperature_type
+        is_celsius = self.temperature_type == TemperatureType.CELSIUS
+
+        device_class = extra.get("device_class")
+
+        # Handle temperature units
+        if device_class == "temperature":
+            return " °C" if is_celsius else " °F"
+
+        # Handle flow rate units
+        if device_class == "flow_rate":
+            return " LPM" if is_celsius else " GPM"
+
+        # Handle volume units
+        if device_class == "water":
+            return " L" if is_celsius else " gal"
+
+        # Fallback to static unit_of_measurement if present
+        if "unit_of_measurement" in extra:
+            unit_val = extra["unit_of_measurement"]
+            unit: str = str(unit_val) if unit_val is not None else ""
+            return f" {unit}" if unit else ""
+
+        return ""
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "DeviceStatus":
@@ -1009,30 +1071,77 @@ class DeviceFeature(NavienBaseModel):
     )
 
     # Temperature limit fields with half-degree Celsius scaling
-    dhw_temperature_min: HalfCelsiusToF = temperature_field(
-        "Minimum DHW temperature setting: 95°F (35°C) - "
-        "safety and efficiency lower limit"
+    dhw_temperature_min: HalfCelsiusToPreferred = temperature_field(
+        "Minimum DHW temperature setting - safety and efficiency lower limit"
     )
-    dhw_temperature_max: HalfCelsiusToF = temperature_field(
-        "Maximum DHW temperature setting: 150°F (65.5°C) - "
-        "scald protection upper limit"
+    dhw_temperature_max: HalfCelsiusToPreferred = temperature_field(
+        "Maximum DHW temperature setting - scald protection upper limit"
     )
-    freeze_protection_temp_min: HalfCelsiusToF = temperature_field(
-        "Minimum freeze protection threshold: 43°F (6°C) - "
+    freeze_protection_temp_min: HalfCelsiusToPreferred = temperature_field(
+        "Minimum freeze protection threshold - "
         "factory default activation temperature"
     )
-    freeze_protection_temp_max: HalfCelsiusToF = temperature_field(
-        "Maximum freeze protection threshold: 65°F - "
-        "user-adjustable upper limit"
+    freeze_protection_temp_max: HalfCelsiusToPreferred = temperature_field(
+        "Maximum freeze protection threshold - user-adjustable upper limit"
     )
-    recirc_temperature_min: HalfCelsiusToF = temperature_field(
+    recirc_temperature_min: HalfCelsiusToPreferred = temperature_field(
         "Minimum recirculation temperature setting - "
         "lower limit for recirculation loop temperature control"
     )
-    recirc_temperature_max: HalfCelsiusToF = temperature_field(
+    recirc_temperature_max: HalfCelsiusToPreferred = temperature_field(
         "Maximum recirculation temperature setting - "
         "upper limit for recirculation loop temperature control"
     )
+
+    def get_field_unit(self, field_name: str) -> str:
+        """Get the correct unit suffix based on temperature preference.
+
+        Resolves dynamic units for temperature, flow rate, and volume fields
+        that change based on the device's temperature_type setting
+        (Celsius or Fahrenheit).
+
+        Args:
+            field_name: Name of the field to get the unit for
+
+        Returns:
+            Unit string (e.g., " °C", " LPM", " L") or empty if field not found
+        """
+        model_fields = self.__class__.model_fields
+        if field_name not in model_fields:
+            return ""
+
+        field_info = model_fields[field_name]
+        if not hasattr(field_info, "json_schema_extra"):
+            return ""
+
+        extra = field_info.json_schema_extra
+        if not isinstance(extra, dict):
+            return ""
+
+        # Determine if Celsius based on this instance's temperature_type
+        is_celsius = self.temperature_type == TemperatureType.CELSIUS
+
+        device_class = extra.get("device_class")
+
+        # Handle temperature units
+        if device_class == "temperature":
+            return " °C" if is_celsius else " °F"
+
+        # Handle flow rate units
+        if device_class == "flow_rate":
+            return " LPM" if is_celsius else " GPM"
+
+        # Handle volume units
+        if device_class == "water":
+            return " L" if is_celsius else " gal"
+
+        # Fallback to static unit_of_measurement if present
+        if "unit_of_measurement" in extra:
+            unit_val = extra["unit_of_measurement"]
+            unit: str = str(unit_val) if unit_val is not None else ""
+            return f" {unit}" if unit else ""
+
+        return ""
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "DeviceFeature":
