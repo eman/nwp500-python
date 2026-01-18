@@ -11,6 +11,8 @@ The API uses JWT (JSON Web Tokens) for authentication with the following flow:
 4. Refresh tokens when accessToken expires
 """
 
+from __future__ import annotations
+
 import json
 import logging
 from datetime import datetime, timedelta

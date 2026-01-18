@@ -6,6 +6,8 @@ used in the Navien NWP500 water heater communication protocol.
 These models are based on the MQTT message formats and API responses.
 """
 
+from __future__ import annotations
+
 import logging
 from typing import Annotated, Any, Self, cast
 

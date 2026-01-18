@@ -7,6 +7,8 @@ values.
 See docs/protocol/quick_reference.rst for comprehensive protocol details.
 """
 
+from __future__ import annotations
+
 import contextlib
 import logging
 from collections.abc import Callable
@@ -209,28 +211,39 @@ def _get_temperature_preference(info: ValidationInfo) -> bool:
         return False
 
     # Handle both raw int values and Enum instances
-    if isinstance(temp_type, TemperatureType):
-        is_celsius = temp_type == TemperatureType.CELSIUS
-        unit_str = "Celsius" if is_celsius else "Fahrenheit"
-        _logger.debug(
-            f"Detected temperature_type from Enum: {temp_type.name}, "
-            f"using {unit_str}"
-        )
-        return is_celsius
-
-    try:
-        is_celsius = int(temp_type) == TemperatureType.CELSIUS
-        unit_str = "Celsius" if is_celsius else "Fahrenheit"
-        _logger.debug(
-            f"Detected temperature_type from int: {temp_type}, using {unit_str}"
-        )
-        return is_celsius
-    except (ValueError, TypeError) as e:
-        _logger.warning(
-            f"Could not parse temperature_type value {temp_type!r}: {e}, "
-            "defaulting to Fahrenheit"
-        )
-        return False
+    match temp_type:
+        case TemperatureType.CELSIUS:
+            _logger.debug(
+                f"Detected temperature_type from Enum: {temp_type.name}, "
+                "using Celsius"
+            )
+            return True
+        case TemperatureType.FAHRENHEIT:
+            _logger.debug(
+                f"Detected temperature_type from Enum: {temp_type.name}, "
+                "using Fahrenheit"
+            )
+            return False
+        case int():
+            try:
+                is_celsius = int(temp_type) == TemperatureType.CELSIUS.value
+                unit_str = "Celsius" if is_celsius else "Fahrenheit"
+                _logger.debug(
+                    f"Detected temperature_type from int: {temp_type}, using {unit_str}"
+                )
+                return is_celsius
+            except (ValueError, TypeError) as e:
+                _logger.warning(
+                    f"Could not parse temperature_type value {temp_type!r}: {e}, "
+                    "defaulting to Fahrenheit"
+                )
+                return False
+        case _:
+            _logger.warning(
+                f"Could not parse temperature_type value {temp_type!r}, "
+                "defaulting to Fahrenheit"
+            )
+            return False
 
 
 def half_celsius_to_preferred(

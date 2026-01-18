@@ -4,6 +4,8 @@ Client for interacting with the Navien NWP500 API.
 This module provides an async HTTP client for device management and control.
 """
 
+from __future__ import annotations
+
 import logging
 from typing import Any, Self, cast
 

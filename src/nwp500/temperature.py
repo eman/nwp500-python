@@ -4,9 +4,12 @@ The Navien NWP500 uses different temperature precision formats:
 - HalfCelsius: 0.5°C precision (value / 2.0)
 - DeciCelsius: 0.1°C precision (value / 10.0)
 
-All values are converted to Fahrenheit for API responses and user interaction.
+All values are converted to preferred unit based on device preference.
 """
 
+from __future__ import annotations
+
+import math
 from abc import ABC, abstractmethod
 from typing import Any
 
@@ -52,7 +55,7 @@ class Temperature(ABC):
         return self.to_celsius() if is_celsius else self.to_fahrenheit()
 
     @classmethod
-    def from_fahrenheit(cls, fahrenheit: float) -> "Temperature":
+    def from_fahrenheit(cls, fahrenheit: float) -> Temperature:
         """Create instance from Fahrenheit value (for commands).
 
         Args:
@@ -66,7 +69,7 @@ class Temperature(ABC):
         )
 
     @classmethod
-    def from_celsius(cls, celsius: float) -> "Temperature":
+    def from_celsius(cls, celsius: float) -> Temperature:
         """Create instance from Celsius value (for commands).
 
         Args:
@@ -82,7 +85,7 @@ class Temperature(ABC):
     @classmethod
     def from_preferred(
         cls, value: float, is_celsius: bool = False
-    ) -> "Temperature":
+    ) -> Temperature:
         """Create instance from preferred unit (C or F).
 
         Args:
@@ -92,9 +95,11 @@ class Temperature(ABC):
         Returns:
             Instance with raw value set for device command.
         """
-        if is_celsius:
-            return cls.from_celsius(value)
-        return cls.from_fahrenheit(value)
+        match is_celsius:
+            case True:
+                return cls.from_celsius(value)
+            case False:
+                return cls.from_fahrenheit(value)
 
 
 class HalfCelsius(Temperature):
@@ -129,7 +134,7 @@ class HalfCelsius(Temperature):
         return celsius * 9 / 5 + 32
 
     @classmethod
-    def from_fahrenheit(cls, fahrenheit: float) -> "HalfCelsius":
+    def from_fahrenheit(cls, fahrenheit: float) -> HalfCelsius:
         """Create HalfCelsius from Fahrenheit (for device commands).
 
         Args:
@@ -148,7 +153,7 @@ class HalfCelsius(Temperature):
         return cls(raw_value)
 
     @classmethod
-    def from_celsius(cls, celsius: float) -> "HalfCelsius":
+    def from_celsius(cls, celsius: float) -> HalfCelsius:
         """Create HalfCelsius from Celsius (for device commands).
 
         Args:
@@ -198,7 +203,7 @@ class DeciCelsius(Temperature):
         return celsius * 9 / 5 + 32
 
     @classmethod
-    def from_fahrenheit(cls, fahrenheit: float) -> "DeciCelsius":
+    def from_fahrenheit(cls, fahrenheit: float) -> DeciCelsius:
         """Create DeciCelsius from Fahrenheit (for device commands).
 
         Args:
@@ -217,7 +222,7 @@ class DeciCelsius(Temperature):
         return cls(raw_value)
 
     @classmethod
-    def from_celsius(cls, celsius: float) -> "DeciCelsius":
+    def from_celsius(cls, celsius: float) -> DeciCelsius:
         """Create DeciCelsius from Celsius (for device commands).
 
         Args:
@@ -283,20 +288,23 @@ class RawCelsius(Temperature):
             Temperature in Fahrenheit.
         """
         celsius = self.to_celsius()
+        fahrenheit_value = (celsius * 9 / 5) + 32
 
-        if formula_type == TempFormulaType.ASYMMETRIC:
-            # Asymmetric Rounding: check remainder of raw value
-            remainder = int(self.raw_value) % 10
-            if remainder == 9:
-                return float(__import__("math").floor((celsius * 9 / 5) + 32))
-            else:
-                return float(__import__("math").ceil((celsius * 9 / 5) + 32))
-        else:
-            # Standard Rounding (default)
-            return round((celsius * 9 / 5) + 32)
+        match formula_type:
+            case TempFormulaType.ASYMMETRIC:
+                # Asymmetric Rounding: check remainder of raw value
+                remainder = int(self.raw_value) % 10
+                match remainder:
+                    case 9:
+                        return float(math.floor(fahrenheit_value))
+                    case _:
+                        return float(math.ceil(fahrenheit_value))
+            case TempFormulaType.STANDARD:
+                # Standard Rounding (default)
+                return round(fahrenheit_value)
 
     @classmethod
-    def from_fahrenheit(cls, fahrenheit: float) -> "RawCelsius":
+    def from_fahrenheit(cls, fahrenheit: float) -> RawCelsius:
         """Create RawCelsius from Fahrenheit (for device commands).
 
         Args:
@@ -315,7 +323,7 @@ class RawCelsius(Temperature):
         return cls(raw_value)
 
     @classmethod
-    def from_celsius(cls, celsius: float) -> "RawCelsius":
+    def from_celsius(cls, celsius: float) -> RawCelsius:
         """Create RawCelsius from Celsius (for device commands).
 
         Args:
