@@ -9,13 +9,16 @@ These models are based on the MQTT message formats and API responses.
 import logging
 from typing import Annotated, Any, Self
 
-from pydantic import BaseModel, BeforeValidator, ConfigDict, Field
+from pydantic import BaseModel, BeforeValidator, ConfigDict, Field, WrapValidator
 from pydantic.alias_generators import to_camel
 
 from .converters import (
+    deci_celsius_to_preferred,
     device_bool_to_python,
     div_10,
     enum_validator,
+    flow_rate_to_preferred,
+    half_celsius_to_preferred,
     tou_override_to_python,
 )
 from .enums import (
@@ -39,8 +42,6 @@ from .field_factory import (
 )
 from .temperature import (
     HalfCelsius,
-    deci_celsius_to_fahrenheit,
-    half_celsius_to_fahrenheit,
 )
 
 _logger = logging.getLogger(__name__)
@@ -54,8 +55,9 @@ _logger = logging.getLogger(__name__)
 DeviceBool = Annotated[bool, BeforeValidator(device_bool_to_python)]
 CapabilityFlag = Annotated[bool, BeforeValidator(device_bool_to_python)]
 Div10 = Annotated[float, BeforeValidator(div_10)]
-HalfCelsiusToF = Annotated[float, BeforeValidator(half_celsius_to_fahrenheit)]
-DeciCelsiusToF = Annotated[float, BeforeValidator(deci_celsius_to_fahrenheit)]
+HalfCelsiusToF = Annotated[float, WrapValidator(half_celsius_to_preferred)]
+DeciCelsiusToF = Annotated[float, WrapValidator(deci_celsius_to_preferred)]
+FlowRate = Annotated[float, WrapValidator(flow_rate_to_preferred)]
 TouStatus = Annotated[bool, BeforeValidator(bool)]
 TouOverride = Annotated[bool, BeforeValidator(tou_override_to_python)]
 VolumeCodeField = Annotated[
@@ -245,6 +247,13 @@ class TOUInfo(NavienBaseModel):
 
 class DeviceStatus(NavienBaseModel):
     """Represents the status of the Navien water heater device."""
+
+    # IMPORTANT: temperature_type must be defined before any temperature fields
+    # so that it is available in the validation context (info.data).
+    temperature_type: TemperatureType = Field(
+        default=TemperatureType.FAHRENHEIT,
+        description="Type of temperature unit",
+    )
 
     # Basic status fields
     command: int = Field(
@@ -618,9 +627,12 @@ class DeviceStatus(NavienBaseModel):
     current_inlet_temperature: HalfCelsiusToF = temperature_field(
         "Cold water inlet temperature"
     )
-    current_dhw_flow_rate: Div10 = Field(
-        description="Current DHW flow rate in Gallons Per Minute",
-        json_schema_extra={"unit_of_measurement": "GPM"},
+    current_dhw_flow_rate: FlowRate = Field(
+        description="Current DHW flow rate",
+        json_schema_extra={
+            "unit_of_measurement": "GPM",
+            "device_class": "flow_rate",
+        },
     )
     hp_upper_on_diff_temp_setting: Div10 = Field(
         description="Heat pump upper on differential temperature setting",
@@ -679,9 +691,12 @@ class DeviceStatus(NavienBaseModel):
             "device_class": "temperature",
         },
     )
-    recirc_dhw_flow_rate: Div10 = Field(
+    recirc_dhw_flow_rate: FlowRate = Field(
         description="Recirculation DHW flow rate",
-        json_schema_extra={"unit_of_measurement": "GPM"},
+        json_schema_extra={
+            "unit_of_measurement": "GPM",
+            "device_class": "flow_rate",
+        },
     )
 
     # Temperature fields with decicelsius to Fahrenheit conversion
@@ -724,10 +739,6 @@ class DeviceStatus(NavienBaseModel):
         default=DhwOperationSetting.ENERGY_SAVER,
         description="User's configured DHW operation mode preference",
     )
-    temperature_type: TemperatureType = Field(
-        default=TemperatureType.FAHRENHEIT,
-        description="Type of temperature unit",
-    )
     freeze_protection_temp_min: HalfCelsiusToF = temperature_field(
         "Active freeze protection lower limit. Default: 43°F (6°C)",
         default=43.0,
@@ -744,6 +755,16 @@ class DeviceStatus(NavienBaseModel):
 
 class DeviceFeature(NavienBaseModel):
     """Device capabilities, configuration, and firmware info."""
+
+    # IMPORTANT: temperature_type must be defined before any temperature fields
+    # so that it is available in the validation context (info.data).
+    temperature_type: TemperatureType = Field(
+        default=TemperatureType.FAHRENHEIT,
+        description=(
+            "Default temperature unit preference - "
+            "factory set to Fahrenheit for USA"
+        ),
+    )
 
     country_code: int = Field(
         description=(
@@ -1008,15 +1029,6 @@ class DeviceFeature(NavienBaseModel):
     recirc_temperature_max: HalfCelsiusToF = temperature_field(
         "Maximum recirculation temperature setting - "
         "upper limit for recirculation loop temperature control"
-    )
-
-    # Enum field
-    temperature_type: TemperatureType = Field(
-        default=TemperatureType.FAHRENHEIT,
-        description=(
-            "Default temperature unit preference - "
-            "factory set to Fahrenheit for USA"
-        ),
     )
 
     @classmethod

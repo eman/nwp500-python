@@ -10,6 +10,11 @@ See docs/protocol/quick_reference.rst for comprehensive protocol details.
 from collections.abc import Callable
 from typing import Any
 
+from pydantic import ValidationInfo, ValidatorFunctionWrapHandler
+
+from .enums import TemperatureType
+from .temperature import DeciCelsius, HalfCelsius
+
 __all__ = [
     "device_bool_to_python",
     "device_bool_from_python",
@@ -17,6 +22,9 @@ __all__ = [
     "div_10",
     "enum_validator",
     "str_enum_validator",
+    "half_celsius_to_preferred",
+    "deci_celsius_to_preferred",
+    "flow_rate_to_preferred",
 ]
 
 
@@ -163,3 +171,101 @@ def str_enum_validator(enum_class: type[Any]) -> Callable[[Any], Any]:
         return enum_class(str(value))
 
     return validate
+
+
+def _get_temperature_preference(info: ValidationInfo) -> bool:
+    """Determine if Celsius is preferred based on validation context.
+
+    Checks 'temperature_type' or 'temperatureType' in the validation data.
+
+    Args:
+        info: Pydantic ValidationInfo context.
+
+    Returns:
+        True if Celsius is preferred, False otherwise (defaults to Fahrenheit).
+    """
+    if not info.data:
+        return False
+
+    temp_type = info.data.get("temperature_type")
+    
+    if temp_type is None:
+        # Try looking for the alias if model is not populating by name
+        temp_type = info.data.get("temperatureType")
+
+    if temp_type is None:
+        return False
+
+    # Handle both raw int values and Enum instances
+    if isinstance(temp_type, TemperatureType):
+        return temp_type == TemperatureType.CELSIUS
+
+    try:
+        return int(temp_type) == TemperatureType.CELSIUS
+    except (ValueError, TypeError):
+        return False
+
+
+def half_celsius_to_preferred(
+    value: Any, handler: ValidatorFunctionWrapHandler, info: ValidationInfo
+) -> float:
+    """Convert half-degrees Celsius to preferred unit (C or F).
+
+    Args:
+        value: Raw device value in half-Celsius format.
+        handler: Pydantic next validator handler (unused for simple conversion).
+        info: Pydantic validation context containing sibling fields.
+
+    Returns:
+        Temperature in preferred unit.
+    """
+    is_celsius = _get_temperature_preference(info)
+    if isinstance(value, (int, float)):
+        return HalfCelsius(value).to_preferred(is_celsius)
+    return float(value)
+
+
+def deci_celsius_to_preferred(
+    value: Any, handler: ValidatorFunctionWrapHandler, info: ValidationInfo
+) -> float:
+    """Convert decicelsius to preferred unit (C or F).
+
+    Args:
+        value: Raw device value in decicelsius format.
+        handler: Pydantic next validator handler (unused for simple conversion).
+        info: Pydantic validation context containing sibling fields.
+
+    Returns:
+        Temperature in preferred unit.
+    """
+    is_celsius = _get_temperature_preference(info)
+    if isinstance(value, (int, float)):
+        return DeciCelsius(value).to_preferred(is_celsius)
+    return float(value)
+
+
+def flow_rate_to_preferred(
+    value: Any, handler: ValidatorFunctionWrapHandler, info: ValidationInfo
+) -> float:
+    """Convert flow rate (LPM * 10) to preferred unit (LPM or GPM).
+    
+    Raw value from device is LPM * 10 (Metric native).
+    - If Metric (Celsius) mode: Return LPM (value / 10.0)
+    - If Imperial (Fahrenheit) mode: Convert to GPM (1 LPM ≈ 0.264172 GPM)
+
+    Args:
+        value: Raw device value (LPM * 10).
+        handler: Pydantic next validator handler (unused).
+        info: Pydantic validation context.
+
+    Returns:
+        Flow rate in preferred unit (LPM or GPM).
+    """
+    is_celsius = _get_temperature_preference(info)
+    lpm = div_10(value)
+    
+    if is_celsius:
+        return lpm
+    
+    # Convert LPM to GPM
+    return round(lpm * 0.264172, 2)

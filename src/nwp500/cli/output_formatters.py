@@ -23,15 +23,16 @@ def _format_number(value: Any) -> str:
     return str(value)
 
 
-def _get_unit_suffix(field_name: str, model_class: Any = DeviceStatus) -> str:
+def _get_unit_suffix(field_name: str, model_class: Any = DeviceStatus, instance: Any = None) -> str:
     """Extract unit suffix from model field metadata.
 
     Args:
         field_name: Name of the field to get unit for
         model_class: The Pydantic model class (default: DeviceStatus)
+        instance: Optional instance of the model to check dynamic properties (e.g. temperature type)
 
     Returns:
-        Unit string (e.g., "°F", "GPM", "Wh") or empty string if not found
+        Unit string (e.g., "°F", "°C", "GPM", "Wh") or empty string if not found
     """
     if not hasattr(model_class, "model_fields"):
         return ""
@@ -45,9 +46,47 @@ def _get_unit_suffix(field_name: str, model_class: Any = DeviceStatus) -> str:
         return ""
 
     extra = field_info.json_schema_extra
-    if isinstance(extra, dict) and "unit_of_measurement" in extra:
-        unit = extra["unit_of_measurement"]
-        return f" {unit}" if unit else ""
+    if isinstance(extra, dict):
+        # Special handling for temperature units
+        if "device_class" in extra and extra["device_class"] == "temperature":
+            # If we have an instance, check its preferred unit
+            if instance and hasattr(instance, "temperature_type"):
+                from nwp500.enums import TemperatureType
+                # Enum is already converted to name string in model_dump, so we might need to handle that
+                # But here we likely get the raw object. Let's be safe.
+                temp_type = instance.temperature_type
+                if hasattr(temp_type, "value"): # It's an enum
+                    is_celsius = temp_type == TemperatureType.CELSIUS
+                elif isinstance(temp_type, int): # It's an int
+                     is_celsius = temp_type == TemperatureType.CELSIUS.value
+                else: # It's likely a string name or other
+                     is_celsius = str(temp_type).upper() == "CELSIUS"
+                
+                return " °C" if is_celsius else " °F"
+            
+            # Default fallthrough if no instance provided or logic fails
+            return " °F"
+            
+        if "device_class" in extra and extra["device_class"] == "flow_rate":
+             # If we have an instance, check its preferred unit
+            if instance and hasattr(instance, "temperature_type"):
+                from nwp500.enums import TemperatureType
+                
+                temp_type = instance.temperature_type
+                if hasattr(temp_type, "value"): # It's an enum
+                    is_celsius = temp_type == TemperatureType.CELSIUS
+                elif isinstance(temp_type, int): # It's an int
+                     is_celsius = temp_type == TemperatureType.CELSIUS.value
+                else: # It's likely a string name or other
+                     is_celsius = str(temp_type).upper() == "CELSIUS"
+                
+                return " LPM" if is_celsius else " GPM"
+            
+            return " GPM"
+
+        if "unit_of_measurement" in extra:
+            unit = extra["unit_of_measurement"]
+            return f" {unit}" if unit else ""
 
     return ""
 
@@ -70,7 +109,7 @@ def _add_numeric_item(
     """
     if hasattr(device_status, field_name):
         value = getattr(device_status, field_name)
-        unit = _get_unit_suffix(field_name)
+        unit = _get_unit_suffix(field_name, instance=device_status)
         formatted = f"{_format_number(value)}{unit}"
         items.append((category, label, formatted))
 
