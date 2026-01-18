@@ -23,13 +23,18 @@ def _format_number(value: Any) -> str:
     return str(value)
 
 
-def _get_unit_suffix(field_name: str, model_class: Any = DeviceStatus, instance: Any = None) -> str:
+def _get_unit_suffix(
+    field_name: str,
+    model_class: Any = DeviceStatus,
+    instance: Any = None,
+) -> str:
     """Extract unit suffix from model field metadata.
 
     Args:
         field_name: Name of the field to get unit for
         model_class: The Pydantic model class (default: DeviceStatus)
-        instance: Optional instance of the model to check dynamic properties (e.g. temperature type)
+        instance: Optional instance of the model to check dynamic properties
+            (e.g. temperature type)
 
     Returns:
         Unit string (e.g., "°F", "°C", "GPM", "Wh") or empty string if not found
@@ -52,47 +57,67 @@ def _get_unit_suffix(field_name: str, model_class: Any = DeviceStatus, instance:
             # If we have an instance, check its preferred unit
             if instance and hasattr(instance, "temperature_type"):
                 from nwp500.enums import TemperatureType
-                # Enum is already converted to name string in model_dump, so we might need to handle that
+
+                # Enum is already converted to name string in model_dump,
+                # so we might need to handle that.
                 # But here we likely get the raw object. Let's be safe.
                 temp_type = instance.temperature_type
-                if hasattr(temp_type, "value"): # It's an enum
+                if hasattr(temp_type, "value"):  # It's an enum
                     is_celsius = temp_type == TemperatureType.CELSIUS
-                elif isinstance(temp_type, int): # It's an int
-                     is_celsius = temp_type == TemperatureType.CELSIUS.value
-                else: # It's likely a string name or other
-                     is_celsius = str(temp_type).upper() == "CELSIUS"
-                
+                elif isinstance(temp_type, int):  # It's an int
+                    is_celsius = temp_type == TemperatureType.CELSIUS.value
+                else:  # It's likely a string name or other
+                    is_celsius = str(temp_type).upper() == "CELSIUS"
+
                 return " °C" if is_celsius else " °F"
-            
+
             # Default fallthrough if no instance provided or logic fails
             return " °F"
-            
+
         if "device_class" in extra and extra["device_class"] == "flow_rate":
-             # If we have an instance, check its preferred unit
+            # If we have an instance, check its preferred unit
             if instance and hasattr(instance, "temperature_type"):
                 from nwp500.enums import TemperatureType
-                
+
                 temp_type = instance.temperature_type
-                if hasattr(temp_type, "value"): # It's an enum
+                if hasattr(temp_type, "value"):  # It's an enum
                     is_celsius = temp_type == TemperatureType.CELSIUS
-                elif isinstance(temp_type, int): # It's an int
-                     is_celsius = temp_type == TemperatureType.CELSIUS.value
-                else: # It's likely a string name or other
-                     is_celsius = str(temp_type).upper() == "CELSIUS"
-                
+                elif isinstance(temp_type, int):  # It's an int
+                    is_celsius = temp_type == TemperatureType.CELSIUS.value
+                else:  # It's likely a string name or other
+                    is_celsius = str(temp_type).upper() == "CELSIUS"
+
                 return " LPM" if is_celsius else " GPM"
-            
+
             return " GPM"
 
+        if "device_class" in extra and extra["device_class"] == "water":
+            # If we have an instance, check its preferred unit
+            if instance and hasattr(instance, "temperature_type"):
+                from nwp500.enums import TemperatureType
+
+                temp_type = instance.temperature_type
+                if hasattr(temp_type, "value"):  # It's an enum
+                    is_celsius = temp_type == TemperatureType.CELSIUS
+                elif isinstance(temp_type, int):  # It's an int
+                    is_celsius = temp_type == TemperatureType.CELSIUS.value
+                else:  # It's likely a string name or other
+                    is_celsius = str(temp_type).upper() == "CELSIUS"
+
+                return " L" if is_celsius else " gal"
+
+            return " gal"
+
         if "unit_of_measurement" in extra:
-            unit = extra["unit_of_measurement"]
+            unit_val = extra["unit_of_measurement"]
+            unit: str = unit_val if unit_val is not None else ""
             return f" {unit}" if unit else ""
 
     return ""
 
 
 def _add_numeric_item(
-    items: list[tuple[str, str, str]],
+    items: list[tuple[str, str, Any]],
     device_status: Any,
     field_name: str,
     category: str,
@@ -150,7 +175,7 @@ def format_energy_usage(energy_response: Any) -> str:
     Returns:
         Formatted string with energy usage data in tabular form
     """
-    lines = []
+    lines: list[str] = []
 
     # Add header
     lines.append("=" * 90)
@@ -223,7 +248,7 @@ def print_energy_usage(energy_response: Any) -> None:
     print(format_energy_usage(energy_response))
 
     # Also prepare and print rich table if available
-    months_data = []
+    months_data: list[dict[str, Any]] = []
 
     if energy_response.usage:
         for month_data in energy_response.usage:
@@ -271,7 +296,7 @@ def format_daily_energy_usage(
     Returns:
         Formatted string with daily energy usage data in tabular form
     """
-    lines = []
+    lines: list[str] = []
 
     # Add header
     lines.append("=" * 100)
@@ -356,7 +381,7 @@ def print_daily_energy_usage(
     if not month_data or not month_data.data:
         return
 
-    days_data = []
+    days_data: list[dict[str, Any]] = []
     for day_num, day_data in enumerate(month_data.data, start=1):
         total_wh = day_data.total_usage
         hp_wh = day_data.heat_pump_usage
@@ -454,7 +479,7 @@ def print_device_status(device_status: Any) -> None:
         device_status: DeviceStatus object
     """
     # Collect all items with their categories
-    all_items = []
+    all_items: list[tuple[str, str, Any]] = []
 
     # Operation Status
     if hasattr(device_status, "operation_mode"):
@@ -890,7 +915,7 @@ def print_device_info(device_feature: Any) -> None:
         device_dict = device_feature
 
     # Collect all items with their categories
-    all_items = []
+    all_items: list[tuple[str, str, Any]] = []
 
     # Device Identity
     if "controller_serial_number" in device_dict:

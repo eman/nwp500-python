@@ -498,6 +498,9 @@ def build_tou_period(
     week_bitfield = encode_week_bitfield(week_days)
     season_bitfield = encode_season_bitfield(season_months)
 
+    encoded_min: int
+    encoded_max: int
+
     # Encode prices if they're Real numbers (not already encoded integers)
     if not isinstance(price_min, int):
         encoded_min = encode_price(price_min, decimal_point)

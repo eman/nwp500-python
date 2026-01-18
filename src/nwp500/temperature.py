@@ -90,7 +90,9 @@ class Temperature(ABC):
         Returns:
             Instance with raw value set for device command.
         """
-        return cls.from_celsius(value) if is_celsius else cls.from_fahrenheit(value)
+        if is_celsius:
+            return cls.from_celsius(value)
+        return cls.from_fahrenheit(value)
 
 
 class HalfCelsius(Temperature):

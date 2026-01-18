@@ -657,7 +657,9 @@ class NavienMqttClient(EventEmitter):
 
     def _create_credentials_provider(self) -> Any:
         """Create AWS credentials provider from auth tokens."""
-        from awscrt.auth import AwsCredentialsProvider
+        from awscrt.auth import (
+            AwsCredentialsProvider,
+        )
 
         # Get current tokens from auth client
         auth_tokens = self._auth_client.current_tokens

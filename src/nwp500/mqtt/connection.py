@@ -10,7 +10,7 @@ import asyncio
 import json
 import logging
 from collections.abc import Callable
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 from awscrt import mqtt
 from awscrt.exceptions import AwsCrtError
@@ -144,7 +144,9 @@ class MqttConnection:
             # underlying future
             if not self._connection:
                 raise RuntimeError("Connection not initialized")
-            connect_future = self._connection.connect()
+            connect_future = cast(
+                asyncio.Future[Any], self._connection.connect()
+            )
             try:
                 connect_result = await asyncio.shield(
                     asyncio.wrap_future(connect_future)
@@ -181,7 +183,9 @@ class MqttConnection:
         Raises:
             ValueError: If tokens are not available
         """
-        from awscrt.auth import AwsCredentialsProvider
+        from awscrt.auth import (
+            AwsCredentialsProvider,
+        )
 
         # Get current tokens from auth client
         auth_tokens = self._auth_client.current_tokens
@@ -211,7 +215,9 @@ class MqttConnection:
             # Convert concurrent.futures.Future to asyncio.Future and await
             # Use shield to prevent cancellation from propagating to
             # underlying future
-            disconnect_future = self._connection.disconnect()
+            disconnect_future = cast(
+                asyncio.Future[Any], self._connection.disconnect()
+            )
             try:
                 await asyncio.shield(asyncio.wrap_future(disconnect_future))
             except asyncio.CancelledError:
@@ -259,9 +265,12 @@ class MqttConnection:
         # Convert concurrent.futures.Future to asyncio.Future and await
         # Use shield to prevent cancellation from propagating to
         # underlying future
-        subscribe_future, packet_id = self._connection.subscribe(
+        subscribe_future_raw, packet_id_raw = self._connection.subscribe(
             topic=topic, qos=qos, callback=callback
         )
+        subscribe_future = cast(asyncio.Future[Any], subscribe_future_raw)
+        packet_id = cast(int, packet_id_raw)
+
         try:
             await asyncio.shield(asyncio.wrap_future(subscribe_future))
         except asyncio.CancelledError:
@@ -298,9 +307,12 @@ class MqttConnection:
         # Convert concurrent.futures.Future to asyncio.Future and await
         # Use shield to prevent cancellation from propagating to
         # underlying future
-        unsubscribe_future, packet_id = self._connection.unsubscribe(
+        unsubscribe_future_raw, packet_id_raw = self._connection.unsubscribe(
             topic=topic
         )
+        unsubscribe_future = cast(asyncio.Future[Any], unsubscribe_future_raw)
+        packet_id = cast(int, packet_id_raw)
+
         try:
             await asyncio.shield(asyncio.wrap_future(unsubscribe_future))
         except asyncio.CancelledError:
@@ -314,7 +326,7 @@ class MqttConnection:
             raise
 
         _logger.info(f"Unsubscribed from '{topic}' with packet_id {packet_id}")
-        return int(packet_id)
+        return packet_id
 
     async def publish(
         self,
@@ -350,9 +362,11 @@ class MqttConnection:
             payload_bytes = payload.encode("utf-8")
 
         # Publish and get the concurrent.futures.Future
-        publish_future, packet_id = self._connection.publish(
+        publish_future_raw, packet_id_raw = self._connection.publish(
             topic=topic, payload=payload_bytes, qos=qos
         )
+        publish_future = cast(asyncio.Future[Any], publish_future_raw)
+        packet_id = cast(int, packet_id_raw)
 
         # Shield the operation to prevent cancellation from propagating to
         # the underlying concurrent.futures.Future. This avoids
@@ -385,7 +399,7 @@ class MqttConnection:
             raise
 
         _logger.debug(f"Published to '{topic}' with packet_id {packet_id}")
-        return int(packet_id)
+        return packet_id
 
     @property
     def is_connected(self) -> bool:

@@ -1,10 +1,118 @@
-"""
-Dummy conftest.py for nwp500.
+"""Test fixtures for nwp500."""
 
-If you don't know what this is for, just leave it empty.
-Read more about conftest.py under:
-- https://docs.pytest.org/en/stable/fixture.html
-- https://docs.pytest.org/en/stable/writing_plugins.html
-"""
+from typing import Any
 
-# import pytest
+import pytest
+
+
+@pytest.fixture
+def device_status_dict() -> dict[str, Any]:
+    """Return a dictionary with all required fields for DeviceStatus."""
+    return {
+        "command": 0,
+        "outsideTemperature": 200,  # 100.0°C (raw)
+        "specialFunctionStatus": 0,
+        "errorCode": 0,
+        "subErrorCode": 0,
+        "smartDiagnostic": 0,
+        "faultStatus1": 0,
+        "faultStatus2": 0,
+        "wifiRssi": -50,
+        "dhwChargePer": 100.0,
+        "drEventStatus": 0,
+        "vacationDaySetting": 0,
+        "vacationDayElapsed": 0,
+        "antiLegionellaPeriod": 7,
+        "programReservationType": 0,
+        "tempFormulaType": 1,
+        "currentStatenum": 0,
+        "targetFanRpm": 0,
+        "currentFanRpm": 0,
+        "fanPwm": 0,
+        "mixingRate": 0.0,
+        "eevStep": 0,
+        "airFilterAlarmPeriod": 1000,
+        "airFilterAlarmElapsed": 0,
+        "cumulatedOpTimeEvaFan": 0,
+        "cumulatedDhwFlowRate": 0.0,
+        "touStatus": False,
+        "drOverrideStatus": 0,
+        "touOverrideStatus": False,
+        "totalEnergyCapacity": 0.0,
+        "availableEnergyCapacity": 0.0,
+        "recircOperationMode": 0,
+        "recircPumpOperationStatus": 0,
+        "recircHotBtnReady": 0,
+        "recircOperationReason": 0,
+        "recircErrorStatus": 0,
+        "currentInstPower": 0.0,
+        "didReload": 1,
+        "operationBusy": 1,
+        "freezeProtectionUse": 1,
+        "dhwUse": 1,
+        "dhwUseSustained": 1,
+        "dhwOperationBusy": 1,
+        "programReservationUse": 1,
+        "ecoUse": 1,
+        "compUse": 1,
+        "eevUse": 1,
+        "evaFanUse": 1,
+        "shutOffValveUse": 1,
+        "conOvrSensorUse": 1,
+        "wtrOvrSensorUse": 1,
+        "antiLegionellaUse": 1,
+        "antiLegionellaOperationBusy": 1,
+        "errorBuzzerUse": 1,
+        "currentHeatUse": 0,
+        "heatUpperUse": 1,
+        "heatLowerUse": 1,
+        "scaldUse": 1,
+        "airFilterAlarmUse": 1,
+        "recircOperationBusy": 1,
+        "recircReservationUse": 1,
+        # Temperature fields (HalfCelsius)
+        "dhwTemperature": 120,
+        "dhwTemperatureSetting": 120,
+        "dhwTargetTemperatureSetting": 120,
+        "freezeProtectionTemperature": 86,
+        "dhwTemperature2": 120,
+        "hpUpperOnTempSetting": 120,
+        "hpUpperOffTempSetting": 120,
+        "hpLowerOnTempSetting": 120,
+        "hpLowerOffTempSetting": 120,
+        "heUpperOnTempSetting": 120,
+        "heUpperOffTempSetting": 120,
+        "heLowerOnTempSetting": 120,
+        "heLowerOffTempSetting": 120,
+        "heatMinOpTemperature": 95,
+        "recircTempSetting": 120,
+        "recircTemperature": 120,
+        "recircFaucetTemperature": 120,
+        "currentInletTemperature": 120,
+        # Div10 fields
+        "currentDhwFlowRate": 0,
+        "hpUpperOnDiffTempSetting": 0,
+        "hpUpperOffDiffTempSetting": 0,
+        "hpLowerOnDiffTempSetting": 0,
+        "hpLowerOffDiffTempSetting": 0,
+        "heUpperOnDiffTempSetting": 0,
+        "heUpperOffDiffTempSetting": 0,
+        "heLowerOnTDiffempSetting": 0,
+        "heLowerOffDiffTempSetting": 0,
+        "recircDhwFlowRate": 0,
+        # DeciCelsius fields
+        "tankUpperTemperature": 350,
+        "tankLowerTemperature": 350,
+        "dischargeTemperature": 350,
+        "suctionTemperature": 350,
+        "evaporatorTemperature": 350,
+        "ambientTemperature": 350,
+        "targetSuperHeat": 50,
+        "currentSuperHeat": 50,
+        # Enum fields
+        "operationMode": 0,
+        "dhwOperationSetting": 3,
+        "temperatureType": 2,  # Default to Fahrenheit
+        "freezeProtectionTempMin": 86,
+        "freezeProtectionTempMax": 130,
+    }

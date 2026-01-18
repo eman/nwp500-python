@@ -135,6 +135,30 @@ class TestHalfCelsius:
         # Allow some rounding tolerance
         assert temp.raw_value == pytest.approx(expected_raw, abs=1)
 
+    def test_from_celsius_known_points(self):
+        """Test conversion from Celsius to raw value."""
+        # 60°C = 120 raw
+        temp = HalfCelsius.from_celsius(60.0)
+        assert temp.raw_value == 120
+
+        # 0°C = 0 raw
+        temp = HalfCelsius.from_celsius(0.0)
+        assert temp.raw_value == 0
+
+        # -10°C = -20 raw
+        temp = HalfCelsius.from_celsius(-10.0)
+        assert temp.raw_value == -20
+
+    def test_from_preferred(self):
+        """Test from_preferred factory method."""
+        # Celsius mode
+        temp = HalfCelsius.from_preferred(60.0, is_celsius=True)
+        assert temp.raw_value == 120
+
+        # Fahrenheit mode
+        temp = HalfCelsius.from_preferred(140.0, is_celsius=False)
+        assert temp.raw_value == 120
+
     def test_roundtrip_conversion(self):
         """Test roundtrip: raw → Celsius → Fahrenheit → raw."""
         original_raw = 120

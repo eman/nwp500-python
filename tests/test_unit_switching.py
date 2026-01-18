@@ -1,19 +1,22 @@
 """Tests for dynamic temperature unit switching in models."""
+
 from typing import Any
 
 from nwp500.enums import TemperatureType
 from nwp500.models import DeviceStatus
 
 
-def test_device_status_converts_to_fahrenheit_by_default(device_status_dict: dict[str, Any]):
-    """Test that temperatures convert to Fahrenheit when temperature_type is default (Fahrenheit)."""
+def test_device_status_converts_to_fahrenheit_by_default(
+    device_status_dict: dict[str, Any],
+):
+    """Test temperatures convert to Fahrenheit when default."""
     data = device_status_dict.copy()
     # 120 (raw) / 2 = 60°C -> 140°F
     data["dhwTemperature"] = 120
     # 350 (raw) / 10 = 35.0°C -> 95°F
     data["tankUpperTemperature"] = 350
     data["temperatureType"] = 2  # Explicitly Fahrenheit or Default
-    
+
     status = DeviceStatus.model_validate(data)
 
     # Verify Fahrenheit (default)
@@ -22,15 +25,17 @@ def test_device_status_converts_to_fahrenheit_by_default(device_status_dict: dic
     assert status.tank_upper_temperature == 95.0
 
 
-def test_device_status_respects_celsius_type(device_status_dict: dict[str, Any]):
-    """Test that temperatures stay in Celsius when temperature_type is CELSIUS."""
+def test_device_status_respects_celsius_type(
+    device_status_dict: dict[str, Any],
+):
+    """Test temperatures stay in Celsius when temperature_type is CELSIUS."""
     data = device_status_dict.copy()
     data["temperatureType"] = 1  # CELSIUS
     # 120 (raw) / 2 = 60°C
     data["dhwTemperature"] = 120
     # 350 (raw) / 10 = 35.0°C
     data["tankUpperTemperature"] = 350
-    
+
     status = DeviceStatus.model_validate(data)
 
     assert status.temperature_type == TemperatureType.CELSIUS
@@ -38,13 +43,15 @@ def test_device_status_respects_celsius_type(device_status_dict: dict[str, Any])
     assert status.tank_upper_temperature == 35.0
 
 
-def test_device_status_respects_fahrenheit_explicit(device_status_dict: dict[str, Any]):
-    """Test that temperatures convert to Fahrenheit when temperature_type is explicitly FAHRENHEIT."""
+def test_device_status_respects_fahrenheit_explicit(
+    device_status_dict: dict[str, Any],
+):
+    """Test temperatures convert to Fahrenheit when explicitly FAHRENHEIT."""
     data = device_status_dict.copy()
     data["temperatureType"] = 2  # FAHRENHEIT
     # 100 (raw) / 2 = 50°C -> 122°F
     data["dhwTemperature"] = 100
-    
+
     status = DeviceStatus.model_validate(data)
 
     assert status.temperature_type == TemperatureType.FAHRENHEIT
@@ -57,7 +64,7 @@ def test_celsius_conversion_edge_cases(device_status_dict: dict[str, Any]):
     half_c_data = device_status_dict.copy()
     half_c_data["temperatureType"] = 1
     half_c_data["dhwTemperature"] = 121  # 60.5°C
-    
+
     status = DeviceStatus.model_validate(half_c_data)
     assert status.dhw_temperature == 60.5
 
@@ -65,19 +72,21 @@ def test_celsius_conversion_edge_cases(device_status_dict: dict[str, Any]):
     deci_c_data = device_status_dict.copy()
     deci_c_data["temperatureType"] = 1
     deci_c_data["tankUpperTemperature"] = 355  # 35.5°C
-    
+
     status = DeviceStatus.model_validate(deci_c_data)
     assert status.tank_upper_temperature == 35.5
 
 
-def test_missing_temperature_type_defaults_to_fahrenheit(device_status_dict: dict[str, Any]):
-    """Test that missing temperature_type field results in Fahrenheit conversion."""
+def test_missing_temperature_type_defaults_to_fahrenheit(
+    device_status_dict: dict[str, Any],
+):
+    """Test missing temperature_type field results in Fahrenheit conversion."""
     data = device_status_dict.copy()
     if "temperatureType" in data:
         del data["temperatureType"]
-    
+
     data["dhwTemperature"] = 100  # 50°C -> 122°F
-    
+
     # Should not raise validation error and default to F
     status = DeviceStatus.model_validate(data)
     assert status.temperature_type == TemperatureType.FAHRENHEIT
@@ -93,17 +102,42 @@ def test_flow_rate_conversion(device_status_dict: dict[str, Any]):
     f_data = device_status_dict.copy()
     f_data["temperatureType"] = 2  # FAHRENHEIT
     f_data["currentDhwFlowRate"] = 100  # 10.0 LPM
-    
+
     status_f = DeviceStatus.model_validate(f_data)
     assert status_f.temperature_type == TemperatureType.FAHRENHEIT
-    assert status_f.current_dhw_flow_rate == 2.64  # Should be GPM (rounded to 2 decimals)
+    # Should be GPM (rounded to 2 decimals)
+    assert status_f.current_dhw_flow_rate == 2.64
 
     # Case 2: Celsius (Metric) -> LPM
     c_data = device_status_dict.copy()
     c_data["temperatureType"] = 1  # CELSIUS
     c_data["currentDhwFlowRate"] = 100  # 10.0 LPM
-    
+
     status_c = DeviceStatus.model_validate(c_data)
     assert status_c.temperature_type == TemperatureType.CELSIUS
     assert status_c.current_dhw_flow_rate == 10.0  # Should be LPM
 
+
+def test_volume_conversion(device_status_dict: dict[str, Any]):
+    """Test volume conversion (Liters <-> Gallons)."""
+    # Case 1: Fahrenheit (Imperial) -> Gallons
+    # Assumption: Raw value is in Liters (Metric Native)
+    # 100 Liters * 0.264172 = 26.4172 Gallons
+    f_data = device_status_dict.copy()
+    f_data["temperatureType"] = 2  # FAHRENHEIT
+    f_data["cumulatedDhwFlowRate"] = 100.0  # 100 Liters
+
+    status_f = DeviceStatus.model_validate(f_data)
+    assert status_f.temperature_type == TemperatureType.FAHRENHEIT
+    # We expect this to be converted to Gallons
+    assert status_f.cumulated_dhw_flow_rate == 26.42
+
+    # Case 2: Celsius (Metric) -> Liters
+    c_data = device_status_dict.copy()
+    c_data["temperatureType"] = 1  # CELSIUS
+    c_data["cumulatedDhwFlowRate"] = 100.0  # 100 Liters
+
+    status_c = DeviceStatus.model_validate(c_data)
+    assert status_c.temperature_type == TemperatureType.CELSIUS
+    # We expect this to stay in Liters
+    assert status_c.cumulated_dhw_flow_rate == 100.0

@@ -234,9 +234,10 @@ class EventEmitter:
         if event not in self._listeners:
             return 0
 
-        listeners = self._listeners[event].copy()  # Copy to allow modification
+        listeners: list[EventListener] = self._listeners[event].copy()
+        # Copy to allow modification during iteration
         called_count = 0
-        listeners_to_remove = []
+        listeners_to_remove: list[EventListener] = []
 
         for listener in listeners:
             try:

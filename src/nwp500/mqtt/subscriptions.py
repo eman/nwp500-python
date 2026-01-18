@@ -295,7 +295,7 @@ class MqttSubscriptionManager:
         self._message_handlers.clear()
 
         # Re-establish each subscription
-        failed_subscriptions = set()
+        failed_subscriptions: set[str] = set()
         for topic, qos in subscriptions_to_restore:
             handlers = handlers_to_restore.get(topic, [])
             for handler in handlers:

@@ -86,8 +86,10 @@ class AuthTokens(NavienBaseModel):
     def handle_empty_aliases(cls, data: Any) -> Any:
         """Handle empty camelCase aliases with snake_case fallbacks."""
         if isinstance(data, dict):
+            # Explicitly type data as dict for clarity and type safety
+            d = cast(dict[str, Any], data)
             # Fields to check for fallback
-            fields_to_check = [
+            fields_to_check: list[tuple[str, str]] = [
                 ("accessToken", "access_token"),
                 ("accessKeyId", "access_key_id"),
                 ("secretKey", "secret_key"),
@@ -100,8 +102,9 @@ class AuthTokens(NavienBaseModel):
 
             for camel, snake in fields_to_check:
                 # If camel exists but is empty/None, and snake exists, use snake
-                if camel in data and not data[camel] and snake in data:
-                    data[camel] = data[snake]
+                if camel in d and not d[camel] and snake in d:
+                    d[camel] = d[snake]
+            return d
         return data
 
     def model_post_init(self, __context: Any) -> None:
@@ -193,7 +196,7 @@ class AuthenticationResponse(NavienBaseModel):
 
     user_info: UserInfo
     tokens: AuthTokens
-    legal: list[dict[str, Any]] = Field(default_factory=list)
+    legal: list[Any] = Field(default_factory=list)
     code: int = 200
     message: str = Field(default="SUCCESS", alias="msg")
 

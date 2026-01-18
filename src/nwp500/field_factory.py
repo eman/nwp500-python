@@ -58,12 +58,14 @@ def temperature_field(
     if "json_schema_extra" in kwargs:
         extra = kwargs.pop("json_schema_extra")
         if isinstance(extra, dict):
-            json_schema_extra.update(extra)
+            # Explicitly cast to dict[str, Any] for type safety
+            typed_extra = cast(dict[str, Any], extra)
+            json_schema_extra.update(typed_extra)
 
     return Field(
         default=default,
         description=description,
-        json_schema_extra=cast(Any, json_schema_extra),
+        json_schema_extra=json_schema_extra,
         **kwargs,
     )
 
@@ -93,12 +95,14 @@ def signal_strength_field(
     if "json_schema_extra" in kwargs:
         extra = kwargs.pop("json_schema_extra")
         if isinstance(extra, dict):
-            json_schema_extra.update(extra)
+            # Explicitly cast to dict[str, Any] for type safety
+            typed_extra = cast(dict[str, Any], extra)
+            json_schema_extra.update(typed_extra)
 
     return Field(
         default=default,
         description=description,
-        json_schema_extra=cast(Any, json_schema_extra),
+        json_schema_extra=json_schema_extra,
         **kwargs,
     )
 
@@ -128,12 +132,14 @@ def energy_field(
     if "json_schema_extra" in kwargs:
         extra = kwargs.pop("json_schema_extra")
         if isinstance(extra, dict):
-            json_schema_extra.update(extra)
+            # Explicitly cast to dict[str, Any] for type safety
+            typed_extra = cast(dict[str, Any], extra)
+            json_schema_extra.update(typed_extra)
 
     return Field(
         default=default,
         description=description,
-        json_schema_extra=cast(Any, json_schema_extra),
+        json_schema_extra=json_schema_extra,
         **kwargs,
     )
 
@@ -163,11 +169,13 @@ def power_field(
     if "json_schema_extra" in kwargs:
         extra = kwargs.pop("json_schema_extra")
         if isinstance(extra, dict):
-            json_schema_extra.update(extra)
+            # Explicitly cast to dict[str, Any] for type safety
+            typed_extra = cast(dict[str, Any], extra)
+            json_schema_extra.update(typed_extra)
 
     return Field(
         default=default,
         description=description,
-        json_schema_extra=cast(Any, json_schema_extra),
+        json_schema_extra=json_schema_extra,
         **kwargs,
     )

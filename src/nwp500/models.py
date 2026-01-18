@@ -7,9 +7,16 @@ These models are based on the MQTT message formats and API responses.
 """
 
 import logging
-from typing import Annotated, Any, Self
+from typing import Annotated, Any, Self, cast
 
-from pydantic import BaseModel, BeforeValidator, ConfigDict, Field, WrapValidator
+from pydantic import (
+    BaseModel,
+    BeforeValidator,
+    ConfigDict,
+    Field,
+    WrapValidator,
+    model_validator,
+)
 from pydantic.alias_generators import to_camel
 
 from .converters import (
@@ -20,6 +27,7 @@ from .converters import (
     flow_rate_to_preferred,
     half_celsius_to_preferred,
     tou_override_to_python,
+    volume_to_preferred,
 )
 from .enums import (
     ConnectionStatus,
@@ -58,6 +66,7 @@ Div10 = Annotated[float, BeforeValidator(div_10)]
 HalfCelsiusToF = Annotated[float, WrapValidator(half_celsius_to_preferred)]
 DeciCelsiusToF = Annotated[float, WrapValidator(deci_celsius_to_preferred)]
 FlowRate = Annotated[float, WrapValidator(flow_rate_to_preferred)]
+Volume = Annotated[float, WrapValidator(volume_to_preferred)]
 TouStatus = Annotated[bool, BeforeValidator(bool)]
 TouOverride = Annotated[bool, BeforeValidator(tou_override_to_python)]
 VolumeCodeField = Annotated[
@@ -137,6 +146,8 @@ class NavienBaseModel(BaseModel):
                 for k, v in data.items()
             }
         else:
+            # We know data is list or tuple here because of the earlier check
+            # `if not isinstance(data, (dict, list, tuple)): return data`
             res = type(data)(
                 [
                     NavienBaseModel._convert_enums_to_names(i, visited)
@@ -215,44 +226,33 @@ class TOUInfo(NavienBaseModel):
     zip_code: int = 0
     schedule: list[TOUSchedule] = Field(default_factory=list)
 
+    @model_validator(mode="before")
     @classmethod
-    def model_validate(
-        cls,
-        obj: Any,
-        *,
-        strict: bool | None = None,
-        from_attributes: bool | None = None,
-        context: dict[str, Any | None] | None = None,
-        **kwargs: Any,
-    ) -> "TOUInfo":
+    def _extract_nested_tou_info(cls, data: Any) -> Any:
         # Handle nested structure where fields are in 'touInfo'
-        if isinstance(obj, dict):
-            data = obj.copy()
-            if "touInfo" in data:
-                tou_data = data.pop("touInfo")
-                data.update(tou_data)
-            return super().model_validate(
-                data,
-                strict=strict,
-                from_attributes=from_attributes,
-                context=context,
-            )
-        return super().model_validate(
-            obj,
-            strict=strict,
-            from_attributes=from_attributes,
-            context=context,
-        )
+        if isinstance(data, dict):
+            # Explicitly cast to dict[str, Any] for type safety
+            d = cast(dict[str, Any], data).copy()
+            if "touInfo" in d:
+                tou_data = d.pop("touInfo")
+                if isinstance(tou_data, dict):
+                    d.update(tou_data)
+            return d
+        return data
 
 
 class DeviceStatus(NavienBaseModel):
     """Represents the status of the Navien water heater device."""
 
-    # IMPORTANT: temperature_type must be defined before any temperature fields
-    # so that it is available in the validation context (info.data).
+    # CRITICAL: temperature_type must be first. Wrap validators need it in
+    # ValidationInfo.data. Reordering breaks unit conversions. See
+    # converters._get_temperature_preference() for details.
     temperature_type: TemperatureType = Field(
         default=TemperatureType.FAHRENHEIT,
-        description="Type of temperature unit",
+        description=(
+            "Type of temperature unit (1=Celsius, 2=Fahrenheit). "
+            "Controls all unit conversions."
+        ),
     )
 
     # Basic status fields
@@ -368,12 +368,15 @@ class DeviceStatus(NavienBaseModel):
         ),
         json_schema_extra={"unit_of_measurement": "h"},
     )
-    cumulated_dhw_flow_rate: float = Field(
+    cumulated_dhw_flow_rate: Volume = Field(
         description=(
             "Cumulative DHW flow - "
-            "total gallons of hot water delivered since installation"
+            "total volume of hot water delivered since installation"
         ),
-        json_schema_extra={"unit_of_measurement": "gal"},
+        json_schema_extra={
+            "unit_of_measurement": "gal",
+            "device_class": "water",
+        },
     )
     tou_status: TouStatus = Field(
         description=(
