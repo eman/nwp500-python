@@ -119,6 +119,7 @@ Documentation Index
    :maxdepth: 1
    :caption: User Guides
 
+   guides/unit_conversion
    guides/authentication
    guides/home_assistant_integration
    guides/reservations
