@@ -38,6 +38,17 @@ class Temperature(ABC):
             Temperature in Fahrenheit.
         """
 
+    def to_preferred(self, is_celsius: bool = False) -> float:
+        """Convert to preferred unit (Celsius or Fahrenheit).
+
+        Args:
+            is_celsius: Whether the preferred unit is Celsius.
+
+        Returns:
+            Temperature in Celsius if is_celsius is True, else Fahrenheit.
+        """
+        return self.to_celsius() if is_celsius else self.to_fahrenheit()
+
     @classmethod
     def from_fahrenheit(cls, fahrenheit: float) -> "Temperature":
         """Create instance from Fahrenheit value (for commands).
@@ -51,6 +62,35 @@ class Temperature(ABC):
         raise NotImplementedError(
             f"{cls.__name__} does not support creation from Fahrenheit"
         )
+
+    @classmethod
+    def from_celsius(cls, celsius: float) -> "Temperature":
+        """Create instance from Celsius value (for commands).
+
+        Args:
+            celsius: Temperature in Celsius.
+
+        Returns:
+            Instance with raw value set for device command.
+        """
+        raise NotImplementedError(
+            f"{cls.__name__} does not support creation from Celsius"
+        )
+
+    @classmethod
+    def from_preferred(
+        cls, value: float, is_celsius: bool = False
+    ) -> "Temperature":
+        """Create instance from preferred unit (C or F).
+
+        Args:
+            value: Temperature value in preferred unit.
+            is_celsius: Whether the input value is in Celsius.
+
+        Returns:
+            Instance with raw value set for device command.
+        """
+        return cls.from_celsius(value) if is_celsius else cls.from_fahrenheit(value)
 
 
 class HalfCelsius(Temperature):
@@ -103,6 +143,24 @@ class HalfCelsius(Temperature):
         raw_value = round(celsius * 2)
         return cls(raw_value)
 
+    @classmethod
+    def from_celsius(cls, celsius: float) -> "HalfCelsius":
+        """Create HalfCelsius from Celsius (for device commands).
+
+        Args:
+            celsius: Temperature in Celsius.
+
+        Returns:
+            HalfCelsius instance with raw value for device.
+
+        Example:
+            >>> temp = HalfCelsius.from_celsius(60.0)
+            >>> temp.raw_value
+            120
+        """
+        raw_value = round(celsius * 2)
+        return cls(raw_value)
+
 
 class DeciCelsius(Temperature):
     """Temperature in decicelsius (0.1°C precision).
@@ -151,6 +209,24 @@ class DeciCelsius(Temperature):
             600
         """
         celsius = (fahrenheit - 32) * 5 / 9
+        raw_value = round(celsius * 10)
+        return cls(raw_value)
+
+    @classmethod
+    def from_celsius(cls, celsius: float) -> "DeciCelsius":
+        """Create DeciCelsius from Celsius (for device commands).
+
+        Args:
+            celsius: Temperature in Celsius.
+
+        Returns:
+            DeciCelsius instance with raw value for device.
+
+        Example:
+            >>> temp = DeciCelsius.from_celsius(60.0)
+            >>> temp.raw_value
+            600
+        """
         raw_value = round(celsius * 10)
         return cls(raw_value)
 
