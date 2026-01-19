@@ -55,6 +55,7 @@ from .field_factory import (
 from .temperature import (
     HalfCelsius,
 )
+from .unit_system import get_unit_system
 
 _logger = logging.getLogger(__name__)
 
@@ -768,8 +769,8 @@ class DeviceStatus(NavienBaseModel):
         """Get the correct unit suffix based on temperature preference.
 
         Resolves dynamic units for temperature, flow rate, and volume fields
-        that change based on the device's temperature_type setting
-        (Celsius or Fahrenheit).
+        that change based on unit system context override or the device's
+        temperature_type setting (Celsius or Fahrenheit).
 
         Args:
             field_name: Name of the field to get the unit for
@@ -789,8 +790,13 @@ class DeviceStatus(NavienBaseModel):
         if not isinstance(extra, dict):
             return ""
 
-        # Determine if Celsius based on this instance's temperature_type
-        is_celsius = self.temperature_type == TemperatureType.CELSIUS
+        # Check if unit system override is set in context
+        unit_system = get_unit_system()
+        if unit_system is not None:
+            is_celsius = unit_system == "metric"
+        else:
+            # Fall back to device's temperature_type setting
+            is_celsius = self.temperature_type == TemperatureType.CELSIUS
 
         device_class = extra.get("device_class")
 
@@ -1099,8 +1105,8 @@ class DeviceFeature(NavienBaseModel):
         """Get the correct unit suffix based on temperature preference.
 
         Resolves dynamic units for temperature, flow rate, and volume fields
-        that change based on the device's temperature_type setting
-        (Celsius or Fahrenheit).
+        that change based on unit system context override or the device's
+        temperature_type setting (Celsius or Fahrenheit).
 
         Args:
             field_name: Name of the field to get the unit for
@@ -1120,8 +1126,13 @@ class DeviceFeature(NavienBaseModel):
         if not isinstance(extra, dict):
             return ""
 
-        # Determine if Celsius based on this instance's temperature_type
-        is_celsius = self.temperature_type == TemperatureType.CELSIUS
+        # Check if unit system override is set in context
+        unit_system = get_unit_system()
+        if unit_system is not None:
+            is_celsius = unit_system == "metric"
+        else:
+            # Fall back to device's temperature_type setting
+            is_celsius = self.temperature_type == TemperatureType.CELSIUS
 
         device_class = extra.get("device_class")
 

@@ -183,6 +183,7 @@ class NavienMqttClient(EventEmitter):
             set_unit_system(unit_system)
 
         self._auth_client = auth_client
+        self._unit_system: Literal["metric", "imperial"] | None = unit_system
         self.config = config or MqttConnectionConfig()
 
         # Session tracking
@@ -562,6 +563,7 @@ class NavienMqttClient(EventEmitter):
                     event_emitter=self,
                     schedule_coroutine=self._schedule_coroutine,
                     device_info_cache=device_info_cache,
+                    unit_system=self._unit_system,
                 )
 
                 # Initialize device controller with cache

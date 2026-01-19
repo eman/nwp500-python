@@ -67,7 +67,12 @@ def async_command(f: Any) -> Any:
                     if auth.current_tokens and auth.user_email:
                         save_tokens(auth.current_tokens, auth.user_email)
 
-                    api = NavienAPIClient(auth_client=auth)
+                    if unit_system is not None:
+                        api = NavienAPIClient(
+                            auth_client=auth, unit_system=unit_system
+                        )
+                    else:
+                        api = NavienAPIClient(auth_client=auth)
                     device = await api.get_first_device()
                     if not device:
                         _logger.error("No devices found.")
@@ -77,7 +82,10 @@ def async_command(f: Any) -> Any:
                         f"Using device: {device.device_info.device_name}"
                     )
 
-                    mqtt = NavienMqttClient(auth)
+                    if unit_system is not None:
+                        mqtt = NavienMqttClient(auth, unit_system=unit_system)
+                    else:
+                        mqtt = NavienMqttClient(auth)
                     await mqtt.connect()
                     try:
                         # Attach api to context for commands that need it
