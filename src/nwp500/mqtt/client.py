@@ -16,7 +16,7 @@ import json
 import logging
 import uuid
 from collections.abc import Callable
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any, Literal, cast
 
 from awscrt import mqtt
 from awscrt.exceptions import AwsCrtError
@@ -31,6 +31,7 @@ from ..exceptions import (
     MqttPublishError,
     TokenRefreshError,
 )
+from ..unit_system import set_unit_system
 
 if TYPE_CHECKING:
     from ..models import (
@@ -135,6 +136,7 @@ class NavienMqttClient(EventEmitter):
         self,
         auth_client: NavienAuthClient,
         config: MqttConnectionConfig | None = None,
+        unit_system: Literal["metric", "imperial"] | None = None,
     ):
         """
         Initialize the MQTT client.
@@ -142,6 +144,10 @@ class NavienMqttClient(EventEmitter):
         Args:
             auth_client: Authentication client with valid tokens
             config: Optional connection configuration
+            unit_system: Preferred unit system:
+                - "metric": Celsius, LPM, Liters
+                - "imperial": Fahrenheit, GPM, Gallons
+                - None: Auto-detect from device (default)
 
         Raises:
             MqttCredentialsError: If auth client is not authenticated, tokens
@@ -171,6 +177,10 @@ class NavienMqttClient(EventEmitter):
 
         # Initialize EventEmitter
         super().__init__()
+
+        # Set unit system preference if provided
+        if unit_system is not None:
+            set_unit_system(unit_system)
 
         self._auth_client = auth_client
         self.config = config or MqttConnectionConfig()

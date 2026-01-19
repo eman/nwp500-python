@@ -18,6 +18,7 @@ from pydantic import ValidationInfo, ValidatorFunctionWrapHandler
 
 from .enums import TemperatureType, TempFormulaType
 from .temperature import DeciCelsius, HalfCelsius, RawCelsius
+from .unit_system import get_unit_system
 
 _logger = logging.getLogger(__name__)
 
@@ -183,9 +184,10 @@ def str_enum_validator(enum_class: type[Any]) -> Callable[[Any], Any]:
 
 
 def _get_temperature_preference(info: ValidationInfo) -> bool:
-    """Determine if Celsius is preferred based on validation context.
+    """Determine if Celsius is preferred based on unit system context.
 
-    Checks 'temperature_type' or 'temperatureType' in the validation data.
+    Checks for an explicit unit system override from context first, then falls
+    back to 'temperature_type' or 'temperatureType' in the validation data.
 
     Args:
         info: Pydantic ValidationInfo context.
@@ -193,6 +195,18 @@ def _get_temperature_preference(info: ValidationInfo) -> bool:
     Returns:
         True if Celsius is preferred, False otherwise (defaults to Fahrenheit).
     """
+    # Check if unit system override is set in context
+    unit_system = get_unit_system()
+    if unit_system is not None:
+        is_celsius = unit_system == "metric"
+        unit_str = "Celsius" if is_celsius else "Fahrenheit"
+        _logger.debug(
+            f"Using explicit unit system override from context: {unit_system}, "
+            f"using {unit_str}"
+        )
+        return is_celsius
+
+    # Fall back to device's temperature_type setting
     if not info.data:
         _logger.debug("No validation data available, defaulting to Fahrenheit")
         return False

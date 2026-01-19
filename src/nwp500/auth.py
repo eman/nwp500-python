@@ -16,7 +16,7 @@ from __future__ import annotations
 import json
 import logging
 from datetime import datetime, timedelta
-from typing import Any, Self, cast
+from typing import Any, Literal, Self, cast
 
 import aiohttp
 from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, model_validator
@@ -29,6 +29,7 @@ from .exceptions import (
     InvalidCredentialsError,
     TokenRefreshError,
 )
+from .unit_system import set_unit_system
 
 __author__ = "Emmanuel Levijarvi"
 __copyright__ = "Emmanuel Levijarvi"
@@ -288,6 +289,7 @@ class NavienAuthClient:
         session: aiohttp.ClientSession | None = None,
         timeout: int = 30,
         stored_tokens: AuthTokens | None = None,
+        unit_system: Literal["metric", "imperial"] | None = None,
     ):
         """
         Initialize the authentication client.
@@ -300,6 +302,10 @@ class NavienAuthClient:
             timeout: Request timeout in seconds
             stored_tokens: Previously saved tokens to restore session.
                           If provided and valid, skips initial sign_in.
+            unit_system: Preferred unit system:
+                - "metric": Celsius, LPM, Liters
+                - "imperial": Fahrenheit, GPM, Gallons
+                - None: Auto-detect from device (default)
 
         Note:
             Authentication is performed automatically when entering the
@@ -314,6 +320,10 @@ class NavienAuthClient:
         # Store credentials for automatic authentication
         self._user_id = user_id
         self._password = password
+
+        # Set unit system preference if provided
+        if unit_system is not None:
+            set_unit_system(unit_system)
 
         # Current authentication state
         self._auth_response: AuthenticationResponse | None = None
