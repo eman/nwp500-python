@@ -36,6 +36,34 @@ Added
 
   - Integration patterns for Home Assistant, CLI, and custom integrations documented
 
+- **Unit System Override**: Allow applications and CLI users to override the device's temperature preference and explicitly specify Metric or Imperial units
+
+  - Library-level: Add optional ``unit_system`` parameter to ``NavienAuthClient``, ``NavienMqttClient``, and ``NavienAPIClient`` initialization
+  - Set once at initialization; applies to all subsequent data conversions
+  - Accepts: ``"metric"`` (Celsius/LPM/Liters), ``"imperial"`` (Fahrenheit/GPM/Gallons), or ``None`` (auto-detect from device)
+  - Decouples unit preference from device configuration - users can override what the device is set to
+  - Uses context variables for thread-safe and async-safe unit system management
+  - Example usage:
+
+    .. code-block:: python
+
+       # Library initialization
+       from nwp500 import NavienAuthClient, set_unit_system
+       auth = NavienAuthClient(email, password, unit_system="metric")
+
+       # Or set after initialization
+       set_unit_system("imperial")
+       device_status = await mqtt.request_device_status(device)
+       # Values now in F, GPM, gallons regardless of device setting
+
+  - CLI-level: Add ``--unit-system`` flag for per-command override
+  - Example: ``nwp-cli status --unit-system metric``
+  - Defaults to device's setting if not specified
+  - New exported functions:
+    - ``set_unit_system(unit_system)`` - Set the preferred unit system
+    - ``get_unit_system()`` - Get the current unit system preference
+    - ``reset_unit_system()`` - Reset to auto-detect mode
+
 Fixed
 -----
 - **Type Annotation Quotes**: Removed unnecessary quoted type annotations (UP037 violations)
