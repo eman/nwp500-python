@@ -13,6 +13,7 @@ from nwp500 import (
     NavienAuthClient,
     NavienMqttClient,
     __version__,
+    set_unit_system,
 )
 from nwp500.exceptions import (
     AuthenticationError,
@@ -42,6 +43,11 @@ def async_command(f: Any) -> Any:
         async def runner() -> int:
             email = ctx.obj.get("email")
             password = ctx.obj.get("password")
+            unit_system = ctx.obj.get("unit_system")
+
+            # Set unit system if provided
+            if unit_system:
+                set_unit_system(unit_system)
 
             # Load cached tokens if available
             tokens, cached_email = load_tokens()
@@ -61,7 +67,12 @@ def async_command(f: Any) -> Any:
                     if auth.current_tokens and auth.user_email:
                         save_tokens(auth.current_tokens, auth.user_email)
 
-                    api = NavienAPIClient(auth_client=auth)
+                    if unit_system is not None:
+                        api = NavienAPIClient(
+                            auth_client=auth, unit_system=unit_system
+                        )
+                    else:
+                        api = NavienAPIClient(auth_client=auth)
                     device = await api.get_first_device()
                     if not device:
                         _logger.error("No devices found.")
@@ -71,7 +82,10 @@ def async_command(f: Any) -> Any:
                         f"Using device: {device.device_info.device_name}"
                     )
 
-                    mqtt = NavienMqttClient(auth)
+                    if unit_system is not None:
+                        mqtt = NavienMqttClient(auth, unit_system=unit_system)
+                    else:
+                        mqtt = NavienMqttClient(auth)
                     await mqtt.connect()
                     try:
                         # Attach api to context for commands that need it
@@ -113,16 +127,26 @@ def async_command(f: Any) -> Any:
 @click.option(
     "--password", envvar="NAVIEN_PASSWORD", help="Navien account password"
 )
+@click.option(
+    "--unit-system",
+    type=click.Choice(["metric", "imperial"], case_sensitive=False),
+    help="Unit system: metric (C/LPM/L) or imperial (F/GPM/gal)",
+)
 @click.option("-v", "--verbose", count=True, help="Increase verbosity")
 @click.version_option(version=__version__)
 @click.pass_context
 def cli(
-    ctx: click.Context, email: str | None, password: str | None, verbose: int
+    ctx: click.Context,
+    email: str | None,
+    password: str | None,
+    unit_system: str | None,
+    verbose: int,
 ) -> None:
     """Navien NWP500 Control CLI."""
     ctx.ensure_object(dict)
     ctx.obj["email"] = email
     ctx.obj["password"] = password
+    ctx.obj["unit_system"] = unit_system
 
     log_level = logging.WARNING
     if verbose == 1:

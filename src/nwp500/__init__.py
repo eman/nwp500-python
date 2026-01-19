@@ -126,6 +126,11 @@ from nwp500.mqtt import (
 from nwp500.mqtt_events import (
     MqttClientEvents,
 )
+from nwp500.unit_system import (
+    get_unit_system,
+    reset_unit_system,
+    set_unit_system,
+)
 from nwp500.utils import (
     log_performance,
 )
@@ -226,4 +231,8 @@ __all__ = [
     "build_tou_period",
     # Utilities
     "log_performance",
+    # Unit system management
+    "set_unit_system",
+    "get_unit_system",
+    "reset_unit_system",
 ]

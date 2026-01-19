@@ -9,7 +9,7 @@ from enum import Enum
 from pathlib import Path
 from typing import Any
 
-from nwp500 import DeviceStatus
+from nwp500 import DeviceFeature, DeviceStatus
 
 from .rich_output import get_formatter
 
@@ -23,16 +23,29 @@ def _format_number(value: Any) -> str:
     return str(value)
 
 
-def _get_unit_suffix(field_name: str, model_class: Any = DeviceStatus) -> str:
+def _get_unit_suffix(
+    field_name: str,
+    model_class: Any = DeviceStatus,
+    instance: Any = None,
+) -> str:
     """Extract unit suffix from model field metadata.
+
+    For dynamic fields (temperature, flow_rate, water), use the instance's
+    get_field_unit() method to get the correct unit based on device preferences.
 
     Args:
         field_name: Name of the field to get unit for
         model_class: The Pydantic model class (default: DeviceStatus)
+        instance: Optional instance of the model for dynamic unit resolution
 
     Returns:
-        Unit string (e.g., "°F", "GPM", "Wh") or empty string if not found
+        Unit string (e.g., "°F", "°C", "GPM", "Wh") or empty string if not found
     """
+    # Use instance's method if available for dynamic unit resolution
+    if instance and hasattr(instance, "get_field_unit"):
+        return instance.get_field_unit(field_name)
+
+    # Fallback to static unit from schema
     if not hasattr(model_class, "model_fields"):
         return ""
 
@@ -46,7 +59,8 @@ def _get_unit_suffix(field_name: str, model_class: Any = DeviceStatus) -> str:
 
     extra = field_info.json_schema_extra
     if isinstance(extra, dict) and "unit_of_measurement" in extra:
-        unit = extra["unit_of_measurement"]
+        unit_val = extra["unit_of_measurement"]
+        unit: str = unit_val if unit_val is not None else ""
         return f" {unit}" if unit else ""
 
     return ""
@@ -70,7 +84,7 @@ def _add_numeric_item(
     """
     if hasattr(device_status, field_name):
         value = getattr(device_status, field_name)
-        unit = _get_unit_suffix(field_name)
+        unit = _get_unit_suffix(field_name, instance=device_status)
         formatted = f"{_format_number(value)}{unit}"
         items.append((category, label, formatted))
 
@@ -111,7 +125,7 @@ def format_energy_usage(energy_response: Any) -> str:
     Returns:
         Formatted string with energy usage data in tabular form
     """
-    lines = []
+    lines: list[str] = []
 
     # Add header
     lines.append("=" * 90)
@@ -184,7 +198,7 @@ def print_energy_usage(energy_response: Any) -> None:
     print(format_energy_usage(energy_response))
 
     # Also prepare and print rich table if available
-    months_data = []
+    months_data: list[dict[str, Any]] = []
 
     if energy_response.usage:
         for month_data in energy_response.usage:
@@ -232,7 +246,7 @@ def format_daily_energy_usage(
     Returns:
         Formatted string with daily energy usage data in tabular form
     """
-    lines = []
+    lines: list[str] = []
 
     # Add header
     lines.append("=" * 100)
@@ -317,7 +331,7 @@ def print_daily_energy_usage(
     if not month_data or not month_data.data:
         return
 
-    days_data = []
+    days_data: list[dict[str, Any]] = []
     for day_num, day_data in enumerate(month_data.data, start=1):
         total_wh = day_data.total_usage
         hp_wh = day_data.heat_pump_usage
@@ -415,7 +429,7 @@ def print_device_status(device_status: Any) -> None:
         device_status: DeviceStatus object
     """
     # Collect all items with their categories
-    all_items = []
+    all_items: list[tuple[str, str, Any]] = []
 
     # Operation Status
     if hasattr(device_status, "operation_mode"):
@@ -851,7 +865,7 @@ def print_device_info(device_feature: Any) -> None:
         device_dict = device_feature
 
     # Collect all items with their categories
-    all_items = []
+    all_items: list[tuple[str, str, Any]] = []
 
     # Device Identity
     if "controller_serial_number" in device_dict:
@@ -961,27 +975,48 @@ def print_device_info(device_feature: Any) -> None:
             )
         )
     if "dhw_temperature_min" in device_dict:
+        unit_suffix = (
+            _get_unit_suffix(
+                "dhw_temperature_min", DeviceFeature, device_feature
+            )
+            if hasattr(device_feature, "get_field_unit")
+            else " °F"
+        )
         all_items.append(
             (
                 "CONFIGURATION",
                 "DHW Temp Range",
-                f"{device_dict['dhw_temperature_min']}°F - {device_dict['dhw_temperature_max']}°F",  # noqa: E501
+                f"{device_dict['dhw_temperature_min']}{unit_suffix} - {device_dict['dhw_temperature_max']}{unit_suffix}",  # noqa: E501
             )
         )
     if "freeze_protection_temp_min" in device_dict:
+        unit_suffix = (
+            _get_unit_suffix(
+                "freeze_protection_temp_min", DeviceFeature, device_feature
+            )
+            if hasattr(device_feature, "get_field_unit")
+            else " °F"
+        )
         all_items.append(
             (
                 "CONFIGURATION",
                 "Freeze Protection Range",
-                f"{device_dict['freeze_protection_temp_min']}°F - {device_dict['freeze_protection_temp_max']}°F",  # noqa: E501
+                f"{device_dict['freeze_protection_temp_min']}{unit_suffix} - {device_dict['freeze_protection_temp_max']}{unit_suffix}",  # noqa: E501
             )
         )
     if "recirc_temperature_min" in device_dict:
+        unit_suffix = (
+            _get_unit_suffix(
+                "recirc_temperature_min", DeviceFeature, device_feature
+            )
+            if hasattr(device_feature, "get_field_unit")
+            else " °F"
+        )
         all_items.append(
             (
                 "CONFIGURATION",
                 "Recirculation Temp Range",
-                f"{device_dict['recirc_temperature_min']}°F - {device_dict['recirc_temperature_max']}°F",  # noqa: E501
+                f"{device_dict['recirc_temperature_min']}{unit_suffix} - {device_dict['recirc_temperature_max']}{unit_suffix}",  # noqa: E501
             )
         )
 

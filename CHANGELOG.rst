@@ -2,21 +2,99 @@
 Changelog
 =========
 
+Version 7.3.0 (2026-01-19)
+==========================
+
+Added
+-----
+- **Dynamic Unit Conversion**: All temperature, flow, and volume measurements now dynamically convert based on user's region preference (Metric/Imperial)
+
+  - Temperature fields convert between Celsius and Fahrenheit using standard formulas
+  - Flow rate fields convert between LPM (Liters Per Minute) and GPM (Gallons Per Minute)
+  - Volume fields convert between Liters and Gallons
+  - Available devices and regions determine conversion support (validated at runtime)
+  - ``get_field_unit()`` method retrieves the correct unit suffix for any field
+  - All conversions use Pydantic ``WrapValidator`` for transparent, automatic conversion
+  - Comprehensive documentation in ``docs/guides/unit_conversion.rst``
+  - Example usage:
+
+    .. code-block:: python
+
+       # Get converted value with unit
+       temp_f = device_status.flow_rate_target  # Returns Fahrenheit if region prefers imperial
+       unit = device_status.get_field_unit("flow_rate_target")  # Returns "°F" or "°C"
+
+       # All conversions are transparent - values automatically convert to preferred units
+       flow_gpm = device_status.flow_rate_current  # GPM if imperial, LPM if metric
+       volume_gal = device_status.tank_volume  # Gallons if imperial, Liters if metric
+
+  - Supported conversion fields:
+
+    - **Temperature**: ``flow_rate_target``, ``flow_rate_current``, ``in_water_temp``, ``out_water_temp``, ``set_temp``, ``in_temp``, ``out_temp``, etc.
+    - **Flow Rate**: ``flow_rate_target``, ``flow_rate_current``
+    - **Volume**: ``tank_volume`` and related storage fields
+
+  - Integration patterns for Home Assistant, CLI, and custom integrations documented
+
+- **Unit System Override**: Allow applications and CLI users to override the device's temperature preference and explicitly specify Metric or Imperial units
+
+  - Library-level: Add optional ``unit_system`` parameter to ``NavienAuthClient``, ``NavienMqttClient``, and ``NavienAPIClient`` initialization
+  - Set once at initialization; applies to all subsequent data conversions
+  - Accepts: ``"metric"`` (Celsius/LPM/Liters), ``"imperial"`` (Fahrenheit/GPM/Gallons), or ``None`` (auto-detect from device)
+  - Decouples unit preference from device configuration - users can override what the device is set to
+  - Uses context variables for thread-safe and async-safe unit system management
+  - Example usage:
+
+    .. code-block:: python
+
+       # Library initialization
+       from nwp500 import NavienAuthClient, set_unit_system
+       auth = NavienAuthClient(email, password, unit_system="metric")
+
+       # Or set after initialization
+       set_unit_system("imperial")
+       device_status = await mqtt.request_device_status(device)
+       # Values now in F, GPM, gallons regardless of device setting
+
+  - CLI-level: Add ``--unit-system`` flag for per-command override
+  - Example: ``nwp-cli status --unit-system metric``
+  - Defaults to device's setting if not specified
+  - New exported functions:
+    - ``set_unit_system(unit_system)`` - Set the preferred unit system
+    - ``get_unit_system()`` - Get the current unit system preference
+    - ``reset_unit_system()`` - Reset to auto-detect mode
+
+Fixed
+-----
+- **MQTT Unit System Override Bug**: Fixed unit_system CLI flag not applying to device status values
+
+  - **Issue**: Running ``nwp-cli --unit-system metric status`` displayed values in device's native format (imperial) with metric unit strings (e.g., "104.9 °C" instead of "40.5 °C")
+  - **Root Cause**: MQTT callbacks from AWS CRT execute on different threads where context variables are not set. Since Python's context variables are task-local, the unit_system preference was not visible to validators
+  - **Solution**: Store unit_system in ``NavienMqttClient`` and ``MqttSubscriptionManager``. Before parsing MQTT messages, explicitly set the context variable in message handlers to ensure validators use the correct unit system regardless of thread context
+  - **Result**: Values and units now correctly convert when ``--unit-system`` override is specified
+  - **Testing**: All 393 tests pass including new unit system context override tests
+
+- **Type Annotation Quotes**: Removed unnecessary quoted type annotations (UP037 violations)
+
+  - With ``from __future__ import annotations``, explicit string quotes are redundant
+  - Updated ``from_dict()`` methods in ``UserInfo``, ``AuthTokens``, ``AuthenticationResponse``, ``DeviceStatus``, ``DeviceFeature``, and ``EnergyUsageResponse``
+  - Improves code clarity and passes modern linting standards
+
 Version 7.2.3 (2026-01-15)
 ==========================
 
 Added
 -----
 - **Daily Energy Breakdown by Month**: New ``--month`` option for energy command to show daily energy data for a specific month
-  
+
   .. code-block:: bash
-  
+
      # Daily breakdown for a single month
      nwp-cli energy --year 2025 --month 12
-     
+
      # Monthly summary for multiple months (existing)
      nwp-cli energy --year 2025 --months 10,11,12
-  
+
   - Displays daily energy consumption, efficiency, and heat source breakdown
   - Rich formatted output with progress bars and color-coded efficiency percentages
   - Plain text fallback for non-Rich environments
@@ -25,25 +103,25 @@ Added
 Fixed
 -----
 - **Documentation**: Fixed all warnings and broken cross-references in documentation
-  
+
   - Fixed docstring formatting in field_factory.py module
   - Fixed broken cross-reference links in enumerations.rst, mqtt_diagnostics.rst, cli.rst, and models.rst
   - Fixed invalid JSON syntax in code examples (removed invalid [...] and ... tokens)
   - Suppressed duplicate object description warnings from re-exported classes
-  
+
 - **CLI Documentation**: Updated documentation for all 19 CLI commands
-  
+
   - Added missing device-info command documentation
   - Added --raw flag documentation for status, info, and device-info commands
   - Added --month option documentation to energy command
   - Clarified mutually exclusive options (--months vs --month)
-  
+
 - **RST Title Hierarchy**: Fixed title level inconsistencies in device_control.rst
 
 - **Read the Docs Configuration**: Updated Python version requirement to 3.13 in Read the Docs config
 
 - **CI Test Failures**: Fixed ``ModuleNotFoundError`` when running tests without CLI dependencies installed
-  
+
   - Wrapped CLI module imports in try-except blocks in test modules
   - Tests are skipped gracefully when optional dependencies (click, rich) are not installed
   - Allows pytest to run without CLI extra, while supporting full test suite with tox
@@ -59,7 +137,7 @@ Version 7.2.2 (2025-12-25)
 Fixed
 -----
 - **TOU Status Always Showing False**: Fixed ``touStatus`` field always reporting ``False`` regardless of actual device state
-  
+
   - Root cause: Version 7.2.1 incorrectly changed ``touStatus`` to use device-specific 1/2 encoding, but the device uses standard 0/1 encoding
   - Solution: Use Python's built-in ``bool()`` for ``touStatus`` field (handles 0=False, 1=True naturally)
   - Updated documentation in ``docs/protocol/quick_reference.rst`` to note ``touStatus`` exception
@@ -72,21 +150,21 @@ Version 7.2.1 (2025-12-25)
 Added
 -----
 - **CLI Command**: New ``device-info`` command to retrieve basic device information from REST API
-  
+
   .. code-block:: bash
-  
+
      # Get basic device info (DeviceInfo model)
      python3 -m nwp500.cli device-info
      python3 -m nwp500.cli device-info --raw
 
 - **ConnectionStatus Enum**: New ``ConnectionStatus`` enum for device cloud connection state
-  
+
   - ``ConnectionStatus.DISCONNECTED`` = 1 - Device offline/not connected
   - ``ConnectionStatus.CONNECTED`` = 2 - Device online and reachable
   - Used in ``DeviceInfo.connected`` field with automatic validation
 
 - **InstallType Enum**: New ``InstallType`` enum for device installation classification
-  
+
   - ``InstallType.RESIDENTIAL`` = "R" - Residential use
   - ``InstallType.COMMERCIAL`` = "C" - Commercial use
   - Used in ``DeviceInfo.install_type`` field with automatic validation
@@ -96,7 +174,7 @@ Added
 
 Changed
 -------
-- **DeviceInfo Model**: 
+- **DeviceInfo Model**:
   - ``connected`` field now uses ``ConnectionStatus`` enum instead of plain int
   - ``install_type`` field now uses ``InstallType`` enum instead of plain string
 
@@ -112,12 +190,12 @@ Changed
 Removed
 -------
 - **constants.py Module**: Removed empty ``constants.py`` module. ``CommandCode`` enum was already moved to ``enums.py`` in version 4.2.0.
-  
+
   .. code-block:: python
-  
+
      # OLD (removed)
      from nwp500.constants import CommandCode
-     
+
      # NEW (use this)
      from nwp500.enums import CommandCode
 
@@ -140,20 +218,20 @@ Removed
 
      # OLD (removed)
      from nwp500 import DeviceCapabilityChecker, DeviceInfoCache
-     
+
      # NEW
      from nwp500 import MqttDeviceCapabilityChecker, MqttDeviceInfoCache
 
-  **Rationale**: The original names were too generic. These classes are specifically designed 
-  for MQTT client functionality (auto-fetching device info, caching, capability checking). 
-  The new names make it clear they're MQTT-specific implementations, leaving room for future 
+  **Rationale**: The original names were too generic. These classes are specifically designed
+  for MQTT client functionality (auto-fetching device info, caching, capability checking).
+  The new names make it clear they're MQTT-specific implementations, leaving room for future
   REST API versions if needed.
 
   **Migration**: Simple find-and-replace:
-  
+
   - ``DeviceCapabilityChecker`` → ``MqttDeviceCapabilityChecker``
   - ``DeviceInfoCache`` → ``MqttDeviceInfoCache``
-  
+
   All functionality remains identical - only the class names changed.
 
 Added
@@ -165,7 +243,7 @@ Added
 
      # Create both API and MQTT clients in one call
      from nwp500 import create_navien_clients
-     
+
      async with create_navien_clients(email, password) as (api_client, mqtt_client):
          devices = await api_client.get_devices()
          await mqtt_client.connect()
@@ -183,10 +261,10 @@ Added
   .. code-block:: python
 
      from nwp500 import VolumeCode
-     
+
      # Enum values: VOLUME_50GAL = 65, VOLUME_65GAL = 66, VOLUME_80GAL = 67
      # Human-readable text available in VOLUME_CODE_TEXT dict
-     
+
   - Maps device codes to actual tank capacities (50, 65, 80 gallons)
   - Used in ``DeviceFeature.volume_code`` field with automatic validation
   - Exported from main package for convenience
@@ -254,7 +332,7 @@ Changed
      from nwp500.mqtt_client import NavienMqttClient
      from nwp500.mqtt_diagnostics import MqttDiagnosticsCollector
      from nwp500.mqtt_utils import MqttConnectionConfig
-     
+
      # NEW imports (preferred)
      from nwp500.mqtt import NavienMqttClient, MqttDiagnosticsCollector, MqttConnectionConfig
      # OR import from main package (recommended)
@@ -285,12 +363,12 @@ Changed
   - Renamed and moved 35+ example scripts for better discoverability
   - Updated ``examples/README.md`` with 'Getting Started' guide and categorized index
   - Added 01-04 beginner series for smooth onboarding:
-    
+
     - ``beginner/01_authentication.py`` - Basic authentication patterns
     - ``beginner/02_list_devices.py`` - Retrieving device information
     - ``beginner/03_get_status.py`` - Getting device status
     - ``beginner/04_set_temperature.py`` - Basic device control
-    
+
   - Intermediate examples: event-driven control, error handling, MQTT monitoring
   - Advanced examples: demand response, recirculation, TOU schedules, diagnostics
   - Testing examples: connection testing, periodic updates, minimal examples
@@ -427,18 +505,18 @@ Fixed
 Version 7.0.0 (2025-12-17)
 ==========================
 
-**BREAKING CHANGES**: 
+**BREAKING CHANGES**:
 - Minimum Python version raised to 3.13
 - Enumerations refactored for type safety and consistency
 
 Removed
 -------
 - **Python 3.9-3.12 Support**: Minimum Python version is now 3.13
-  
+
   Home Assistant has deprecated Python 3.12 support, making Python 3.13 the de facto minimum for this ecosystem.
-  
+
   Python 3.13 features and improvements:
-  
+
   - **Experimental free-threaded mode** (PEP 703): Optional GIL removal for true parallelism
   - **JIT compiler** (PEP 744): Just-in-time compilation for performance improvements
   - **Better error messages**: Enhanced suggestions for NameError, AttributeError, and import errors
@@ -447,16 +525,16 @@ Removed
   - PEP 695: New type parameter syntax for generics
   - PEP 701: f-string improvements
   - Built-in ``datetime.UTC`` constant
-  
+
   If you need Python 3.12 support, use version 6.1.x of this library.
 
 - **CommandCode moved**: Import from ``nwp500.enums`` instead of ``nwp500.constants``
-  
+
   .. code-block:: python
-  
+
      # OLD (removed)
      from nwp500.constants import CommandCode
-     
+
      # NEW
      from nwp500.enums import CommandCode
      # OR
@@ -466,14 +544,14 @@ Added
 -----
 
 - **Python 3.12+ Optimizations**: Leverage latest Python features
-  
+
   - PEP 695: New type parameter syntax (``def func[T](...)`` instead of ``TypeVar``)
   - Use ``datetime.UTC`` constant instead of ``datetime.timezone.utc``
   - Native union syntax (``X | Y`` instead of ``Union[X, Y]``)
   - Cleaner generic type annotations throughout codebase
 
 - **Enumerations Module (``src/nwp500/enums.py``)**: Comprehensive type-safe enums for device control and status
-  
+
   - Status value enums: ``OnOffFlag``, ``Operation``, ``DhwOperationSetting``, ``CurrentOperationMode``, ``HeatSource``, ``DREvent``, ``WaterLevel``, ``FilterChange``, ``RecirculationMode``
   - Time of Use enums: ``TouWeekType``, ``TouRateType``
   - Device capability enums: ``CapabilityFlag``, ``TemperatureType``, ``DeviceType``
@@ -488,7 +566,7 @@ Changed
 -------
 
 - **Command Code Constants**: Migrated from ``constants.py`` to ``CommandCode`` enum in ``enums.py``
-  
+
   - ``ANTI_LEGIONELLA_ENABLE`` → ``CommandCode.ANTI_LEGIONELLA_ON``
   - ``ANTI_LEGIONELLA_DISABLE`` → ``CommandCode.ANTI_LEGIONELLA_OFF``
   - ``TOU_ENABLE`` → ``CommandCode.TOU_ON``
@@ -497,19 +575,19 @@ Changed
   - All command constants now use consistent naming in ``CommandCode`` enum
 
 - **Model Enumerations**: Updated type annotations for clarity and type safety
-  
+
   - ``TemperatureUnit`` → ``TemperatureType`` (matches device protocol field names)
   - All capability flags (e.g., ``power_use``, ``dhw_use``) now use ``CapabilityFlag`` type
   - ``MqttRequest.device_type`` now accepts ``Union[DeviceType, int]`` for flexibility
 
 - **Model Serialization**: Enums automatically serialize to human-readable names
-  
+
   - `model_dump()` converts enums to names (e.g., `DhwOperationSetting.HEAT_PUMP` → `"HEAT_PUMP"`)
   - CLI and other consumers benefit from automatic enum name serialization
   - Text mappings available for custom formatting (e.g., `DHW_OPERATION_TEXT[enum]` → "Heat Pump Only")
 
 - **Documentation**: Comprehensive updates across protocol and API documentation
-  
+
   - ``docs/guides/time_of_use.rst``: Clarified TOU override status behavior (1=OFF/override active, 2=ON/normal operation)
   - ``docs/protocol/data_conversions.rst``: Updated TOU field descriptions with correct enum values
   - ``docs/protocol/device_features.rst``: Added capability flag pattern explanation (2=supported, 1=not supported)
@@ -517,14 +595,14 @@ Changed
   - ``docs/python_api/models.rst``: Updated model field type annotations
 
 - **Examples**: Updated to use new enums for type-safe device control
-  
+
   - ``examples/anti_legionella_example.py``: Uses ``CommandCode`` enum
   - ``examples/device_feature_callback.py``: Uses capability enums
   - ``examples/event_emitter_demo.py``: Uses status enums
   - ``examples/mqtt_diagnostics_example.py``: Uses command enums
 
 - **CLI Code Cleanup**: Refactored JSON formatting to use shared utility function
-  
+
   - Extracted repeated `json.dumps()` calls to `format_json_output()` helper
   - Cleaner code with consistent formatting across all commands
 
@@ -572,7 +650,7 @@ Changed
 
      # OLD (removed)
      build_reservation_entry(..., param=120)
-     
+
      # NEW
      build_reservation_entry(..., temperature_f=140.0)
 
@@ -583,7 +661,7 @@ Changed
 
      # OLD (removed)
      await mqtt.set_dhw_temperature(device, 120)
-     
+
      # NEW
      await mqtt.set_dhw_temperature(device, 140.0)
 
@@ -604,7 +682,7 @@ Added
   .. code-block:: python
 
      from nwp500 import fahrenheit_to_half_celsius
-     
+
      param = fahrenheit_to_half_celsius(140.0)  # Returns 120
 
 Fixed
@@ -644,7 +722,7 @@ Fixed
 
 - **Example Code**: Fixed ``device_status_callback.py`` example to use snake_case attribute names consistently
 - **Field Descriptions**: Clarified distinctions between similar fields:
-  
+
   - ``dhw_temperature_setting`` vs ``dhw_target_temperature_setting`` descriptions
   - ``freeze_protection_temp`` descriptions differ between DeviceStatus and DeviceFeature
   - ``eco_use`` descriptions differ between DeviceStatus (current state) and DeviceFeature (capability)
@@ -656,7 +734,7 @@ Fixed
 -----
 
 - **CRITICAL Temperature Conversion Bug**: Corrected temperature conversion formula for 8 sensor fields that were displaying values ~100°F higher than expected. The v6.0.4 change incorrectly used division by 5 (pentacelsius) instead of division by 10 (decicelsius) for these fields:
-  
+
   - ``tank_upper_temperature`` - Water tank upper sensor
   - ``tank_lower_temperature`` - Water tank lower sensor
   - ``discharge_temperature`` - Compressor discharge temperature (refrigerant)
@@ -665,13 +743,13 @@ Fixed
   - ``ambient_temperature`` - Ambient air temperature at heat pump
   - ``target_super_heat`` - Target superheat setpoint
   - ``current_super_heat`` - Measured superheat value
-  
+
   **Impact**: These fields now correctly display temperatures in expected ranges:
-  
+
   - Tank temperatures: ~120°F (close to DHW temperature, not ~220°F)
   - Discharge temperature: 120-180°F (not 220-280°F)
   - Suction, evaporator, ambient: Now showing physically realistic values
-  
+
   **Technical details**: Changed from ``PentaCelsiusToF`` (÷5) back to ``DeciCelsiusToF`` (÷10). The correct formula is ``(raw_value / 10.0) * 9/5 + 32``.
 
 Changed
@@ -686,7 +764,7 @@ Fixed
 -----
 
 - **Temperature Conversion Accuracy**: Corrected temperature conversion logic based on analysis of the decompiled mobile application. Previous conversions used approximations; new logic uses exact formulas from the app:
-  
+
   - Replaced ``Add20`` validator with ``HalfCelsiusToF`` for fields transmitted as half-degrees Celsius
   - Replaced ``DeciCelsiusToF`` with ``PentaCelsiusToF`` for fields scaled by factor of 5
   - Affects multiple temperature sensor readings for improved accuracy
@@ -818,32 +896,32 @@ Removed
 -------
 
 - **Constructor Callbacks**: Removed ``on_connection_interrupted`` and ``on_connection_resumed`` constructor parameters from ``NavienMqttClient``
-  
+
   .. code-block:: python
-  
+
      # OLD (removed in v6.0.0)
      mqtt_client = NavienMqttClient(
          auth_client,
          on_connection_interrupted=on_interrupted,
          on_connection_resumed=on_resumed,
      )
-     
+
      # NEW (use event emitter pattern)
      mqtt_client = NavienMqttClient(auth_client)
      mqtt_client.on("connection_interrupted", on_interrupted)
      mqtt_client.on("connection_resumed", on_resumed)
 
 - **Backward Compatibility Re-exports**: Removed exception re-exports from ``api_client`` and ``auth`` modules
-  
+
   .. code-block:: python
-  
+
      # OLD (removed in v6.0.0)
      from nwp500.api_client import APIError
      from nwp500.auth import AuthenticationError, TokenRefreshError
-     
+
      # NEW (import from exceptions module)
      from nwp500.exceptions import APIError, AuthenticationError, TokenRefreshError
-     
+
      # OR (import from package root - recommended)
      from nwp500 import APIError, AuthenticationError, TokenRefreshError
 
@@ -854,7 +932,7 @@ Changed
 -------
 
 - **Migration Benefits**:
-  
+
   - Multiple listeners per event (not just one callback)
   - Consistent API with other events (temperature_changed, mode_changed, etc.)
   - Dynamic listener management (add/remove listeners at runtime)
@@ -877,7 +955,7 @@ Fixed
 -----
 
 - **MQTT Future Cancellation**: Fixed InvalidStateError exceptions during disconnect
-  
+
   - Added asyncio.shield() to protect concurrent.futures.Future objects from cancellation
   - Applied consistent cancellation handling across all MQTT operations (connect, disconnect, subscribe, unsubscribe, publish)
   - AWS CRT callbacks can now complete independently without raising InvalidStateError
@@ -905,7 +983,7 @@ Changed
 Version 5.0.0 (2025-10-27)
 ==========================
 
-**BREAKING CHANGES**: This release introduces a comprehensive enterprise exception architecture. 
+**BREAKING CHANGES**: This release introduces a comprehensive enterprise exception architecture.
 See migration guide below for details on updating your code.
 
 Added
@@ -915,10 +993,10 @@ Added
 
   - Created ``exceptions.py`` module with comprehensive exception hierarchy
   - Added ``Nwp500Error`` as base exception for all library errors
-  - Added MQTT-specific exceptions: ``MqttError``, ``MqttConnectionError``, ``MqttNotConnectedError``, 
+  - Added MQTT-specific exceptions: ``MqttError``, ``MqttConnectionError``, ``MqttNotConnectedError``,
     ``MqttPublishError``, ``MqttSubscriptionError``, ``MqttCredentialsError``
   - Added validation exceptions: ``ValidationError``, ``ParameterValidationError``, ``RangeValidationError``
-  - Added device exceptions: ``DeviceError``, ``DeviceNotFoundError``, ``DeviceOfflineError``, 
+  - Added device exceptions: ``DeviceError``, ``DeviceNotFoundError``, ``DeviceOfflineError``,
     ``DeviceOperationError``
   - All exceptions now include ``error_code``, ``details``, and ``retriable`` attributes
   - Added ``to_dict()`` method to all exceptions for structured logging
@@ -946,7 +1024,7 @@ Migration Guide (v4.x to v5.0)
 
 **Breaking Changes Summary**:
 
-The library now uses specific exception types instead of generic ``RuntimeError`` and ``ValueError``. 
+The library now uses specific exception types instead of generic ``RuntimeError`` and ``ValueError``.
 This improves error handling but requires updates to exception handling code.
 
 **1. MQTT Connection Errors**
@@ -962,7 +1040,7 @@ This improves error handling but requires updates to exception handling code.
 
     # NEW CODE (v5.0+)
     from nwp500 import MqttNotConnectedError, MqttError
-    
+
     try:
         await mqtt_client.request_device_status(device)
     except MqttNotConnectedError:
@@ -985,7 +1063,7 @@ This improves error handling but requires updates to exception handling code.
 
     # NEW CODE (v5.0+)
     from nwp500 import RangeValidationError, ValidationError
-    
+
     try:
         set_vacation_mode(device, days=35)
     except RangeValidationError as e:
@@ -1009,7 +1087,7 @@ This improves error handling but requires updates to exception handling code.
 
     # NEW CODE (v5.0+)
     from nwp500 import MqttCredentialsError
-    
+
     try:
         mqtt_client = NavienMqttClient(auth_client)
     except MqttCredentialsError as e:
@@ -1023,14 +1101,14 @@ This improves error handling but requires updates to exception handling code.
 
     # NEW CODE (v5.0+) - catch all library exceptions
     from nwp500 import Nwp500Error
-    
+
     try:
         # Any library operation
         await mqtt_client.request_device_status(device)
     except Nwp500Error as e:
         # All nwp500 exceptions inherit from Nwp500Error
         logger.error(f"Library error: {e.to_dict()}")
-        
+
         # Check if retriable
         if e.retriable:
             await retry_operation()
@@ -1042,7 +1120,7 @@ All exceptions now include structured information:
 .. code-block:: python
 
     from nwp500 import MqttPublishError
-    
+
     try:
         await mqtt_client.publish(topic, payload)
     except MqttPublishError as e:
@@ -1055,10 +1133,10 @@ All exceptions now include structured information:
         #     'details': {},
         #     'retriable': True
         # }
-        
+
         # Log for monitoring/alerting
         logger.error("Publish failed", extra=error_info)
-        
+
         # Implement retry logic
         if e.retriable:
             await asyncio.sleep(1)
@@ -1116,7 +1194,7 @@ Added
 -----
 
 - **MQTT Reconnection**: Two-tier reconnection strategy with unlimited retries
-  
+
   - Implemented quick reconnection (attempts 1-9) for fast recovery from transient network issues
   - Implemented deep reconnection (every 10th attempt) with full connection rebuild and credential refresh
   - Changed default ``max_reconnect_attempts`` from 10 to -1 (unlimited retries)
@@ -1132,7 +1210,7 @@ Improved
 --------
 
 - **Exception Handling**: Replaced 25 catch-all exception handlers with specific exception types
-  
+
   - ``mqtt_client.py``: Uses ``AwsCrtError``, ``AuthenticationError``, ``TokenRefreshError``, ``RuntimeError``, ``ValueError``, ``TypeError``, ``AttributeError``
   - ``mqtt_reconnection.py``: Uses ``AwsCrtError``, ``RuntimeError``, ``ValueError``, ``TypeError``
   - ``mqtt_connection.py``: Uses ``AwsCrtError``, ``RuntimeError``, ``ValueError``
@@ -1142,7 +1220,7 @@ Improved
   - Added exception handling guidelines to ``.github/copilot-instructions.md``
 
 - **Code Quality**: Multiple readability and safety improvements
-  
+
   - Simplified nested conditions by extracting to local variables
   - Added ``hasattr()`` checks before accessing ``AwsCrtError.name`` attribute
   - Optimized ``resubscribe_all()`` to break after first failure per topic (reduces redundant error logs)
@@ -1153,7 +1231,7 @@ Fixed
 -----
 
 - **MQTT Reconnection**: Eliminated duplicate "Connection interrupted" log messages
-  
+
   - Removed duplicate logging from ``mqtt_client.py`` (kept in ``mqtt_reconnection.py``)
 
 Version 3.1.4 (2025-10-26)
@@ -1163,7 +1241,7 @@ Fixed
 -----
 
 - **MQTT Reconnection**: Fixed MQTT reconnection failures due to expired AWS credentials
-  
+
   - Added AWS credential expiration tracking (``_aws_expires_at`` field in ``AuthTokens``)
   - Added ``are_aws_credentials_expired`` property to check AWS credential validity
   - Modified ``ensure_valid_token()`` to prioritize AWS credential expiration check
@@ -1180,7 +1258,7 @@ Fixed
 -----
 
 - **MQTT Reconnection**: Improved MQTT reconnection reliability with active reconnection
-  
+
   - **Breaking Internal Change**: ``MqttReconnectionHandler`` now requires ``reconnect_func`` parameter (not Optional)
   - Implemented active reconnection that always recreates MQTT connection on interruption
   - Removed unreliable passive fallback to AWS IoT SDK automatic reconnection
@@ -1199,7 +1277,7 @@ Fixed
 -----
 
 - **Authentication**: Fixed 401 authentication errors with automatic token refresh
-  
+
   - Add automatic token refresh on 401 Unauthorized responses in API client
   - Preserve AWS credentials when refreshing tokens (required for MQTT)
   - Save refreshed tokens to cache after successful API calls
@@ -1216,7 +1294,7 @@ Fixed
 -----
 
 - **MQTT Client**: Fixed connection interrupted callback signature for AWS SDK
-  
+
   - Updated callback to match latest AWS IoT SDK signature: ``(connection, error, **kwargs)``
   - Fixed type annotations in ``MqttConnection`` for proper type checking
   - Resolves mypy type checking errors and ensures AWS SDK compatibility
@@ -1228,14 +1306,14 @@ Version 3.0.0 (Unreleased)
 **Breaking Changes**
 
 - **REMOVED**: ``OperationMode`` enum has been removed
-  
+
   - This enum was deprecated in v2.0.0 and has now been fully removed
   - Use ``DhwOperationSetting`` for user-configured mode preferences (values 1-6)
   - Use ``CurrentOperationMode`` for real-time operational states (values 0, 32, 64, 96)
   - Migration was supported throughout the v2.x series
 
 - **REMOVED**: Migration helper functions and deprecation infrastructure
-  
+
   - Removed ``migrate_operation_mode_usage()`` function
   - Removed ``enable_deprecation_warnings()`` function
   - Removed migration documentation files (MIGRATION.md, BREAKING_CHANGES_V3.md)
@@ -1248,7 +1326,7 @@ Version 2.0.0 (Unreleased)
 
 - **DEPRECATION**: ``OperationMode`` enum is deprecated and will be removed in v3.0.0
 
-  
+
   - Use ``DhwOperationSetting`` for user-configured mode preferences (values 1-6)
   - Use ``CurrentOperationMode`` for real-time operational states (values 0, 32, 64, 96)
   - See ``MIGRATION.md`` for detailed migration guide
@@ -1325,7 +1403,7 @@ Added
   - Standardized ruff configuration across all environments
   - Eliminates "passes locally but fails in CI" issues
   - Cross-platform support (Linux, macOS, Windows, containers)
-  
+
   - All MQTT operations (connect, disconnect, subscribe, unsubscribe, publish) use ``asyncio.wrap_future()`` to convert AWS SDK Futures to asyncio Futures
   - Eliminates "blocking I/O detected" warnings in Home Assistant and other async applications
   - Fully compatible with async event loops without blocking other operations
@@ -1336,7 +1414,7 @@ Added
   - Updated documentation with non-blocking implementation details
 
 - **Event Emitter Pattern (Phase 1)**: Event-driven architecture for device state changes
-  
+
   - ``EventEmitter`` base class with multiple listeners per event
   - Async and sync handler support
   - Priority-based execution order (higher priority executes first)
@@ -1354,7 +1432,7 @@ Added
   - Documentation: ``EVENT_EMITTER.rst``, ``EVENT_QUICK_REFERENCE.rst``, ``EVENT_ARCHITECTURE.rst``
 
 - **Authentication**: Simplified constructor-based authentication
-  
+
   - ``NavienAuthClient`` now requires ``user_id`` and ``password`` in constructor
   - Automatic authentication when entering async context manager
   - No need to call ``sign_in()`` manually
@@ -1363,7 +1441,7 @@ Added
   - Updated all documentation with new authentication examples
 
 - **MQTT Command Queue**: Automatic command queuing when disconnected
-  
+
   - Commands sent while disconnected are automatically queued
   - Queue processed in FIFO order when connection is restored
   - Configurable queue size (default: 100 commands)
@@ -1376,7 +1454,7 @@ Added
   - Documentation: ``COMMAND_QUEUE.rst``
 
 - **MQTT Reconnection**: Automatic reconnection with exponential backoff
-  
+
   - Automatic reconnection on connection interruption
   - Configurable exponential backoff (default: 1s, 2s, 4s, 8s, ... up to 120s)
   - Configurable max attempts (default: 10)
@@ -1388,7 +1466,7 @@ Added
   - Documentation: Added reconnection section to MQTT_CLIENT.rst
 
 - **MQTT Client**: Complete implementation of real-time device communication
-  
+
   - WebSocket MQTT connection to AWS IoT Core
   - Device subscription and message handling
   - Status request methods (device info, device status)
@@ -1397,7 +1475,7 @@ Added
   - Connection lifecycle management (connect, disconnect, reconnect)
 
 - **Device Control**: Fully implemented and verified control commands
-  
+
   - Power control (on/off) with correct command codes
   - DHW mode control (Heat Pump, Electric, Energy Saver, High Demand)
   - DHW temperature control with 20°F offset handling
@@ -1405,7 +1483,7 @@ Added
   - Helper method for display-value temperature control
 
 - **Typed Callbacks**: 100% coverage of all MQTT response types
-  
+
   - ``subscribe_device_status()`` - Automatic parsing of status messages into ``DeviceStatus`` objects
   - ``subscribe_device_feature()`` - Automatic parsing of feature messages into ``DeviceFeature`` objects
   - ``subscribe_energy_usage()`` - Automatic parsing of energy usage responses into ``EnergyUsageResponse`` objects
@@ -1414,7 +1492,7 @@ Added
   - Example scripts demonstrating usage patterns
 
 - **Energy Usage API (EMS)**: Historical energy consumption data
-  
+
   - ``request_energy_usage()`` - Query daily energy usage for specified month(s)
   - ``EnergyUsageResponse`` dataclass with daily breakdown
   - ``EnergyUsageTotal`` with percentage calculations
@@ -1426,7 +1504,7 @@ Added
   - Efficiency percentage calculations
 
 - **Data Models**: Comprehensive type-safe models
-  
+
   - ``DeviceStatus`` dataclass with 125 sensor and operational fields
   - ``DeviceFeature`` dataclass with 46 capability and configuration fields
   - ``EnergyUsageResponse`` dataclass for historical energy data
@@ -1439,7 +1517,7 @@ Added
   - Authentication tokens and user info
 
 - **API Client**: High-level REST API client
-  
+
   - Device listing and information retrieval
   - Firmware information queries
   - Time-of-Use (TOU) schedule management
@@ -1448,7 +1526,7 @@ Added
   - Automatic session management
 
 - **Authentication**: AWS Cognito integration
-  
+
   - Sign-in with email/password
   - Access token management
   - Token refresh functionality
@@ -1456,7 +1534,7 @@ Added
   - Async context manager support
 
 - **Documentation**: Complete protocol and API documentation
-  
+
   - MQTT message format specifications
   - Energy usage query API documentation (EMS data)
   - API client usage guide
@@ -1468,7 +1546,7 @@ Added
   - Complete energy data reference (ENERGY_DATA_SUMMARY.md)
 
 - **Examples**: Production-ready example scripts
-  
+
   - ``device_status_callback.py`` - Real-time status monitoring with typed callbacks
   - ``device_feature_callback.py`` - Device capabilities and firmware info
   - ``combined_callbacks.py`` - Both status and feature callbacks together
@@ -1481,7 +1559,7 @@ Changed
 -------
 
 - **Breaking**: Python version requirement updated to 3.9+
-  
+
   - Minimum Python version is now 3.9 (was 3.8)
   - Migrated to native type hints (PEP 585): ``dict[str, Any]`` instead of ``Dict[str, Any]``
   - Removed ``typing.Dict``, ``typing.List``, ``typing.Deque`` imports
@@ -1490,7 +1568,7 @@ Changed
   - Updated ruff target-version to py39
 
 - **Breaking**: ``NavienAuthClient`` constructor signature
-  
+
   - Now requires ``user_id`` and ``password`` as first parameters
   - Old: ``NavienAuthClient()`` then ``await client.sign_in(email, password)``
   - New: ``NavienAuthClient(email, password)`` - authentication is automatic
@@ -1499,7 +1577,7 @@ Changed
   - All documentation updated with new examples
 
 - **Documentation**: Major updates across all files
-  
+
   - Fixed all RST formatting issues (title underlines, tables)
   - Updated authentication examples in 8 documentation files
   - Fixed broken documentation links (local file paths)
@@ -1514,7 +1592,7 @@ Fixed
 -----
 
 - **Critical Bug**: Thread-safe reconnection task creation from MQTT callbacks
-  
+
   - Fixed ``RuntimeError: no running event loop`` when connection is interrupted
   - Fixed ``RuntimeWarning: coroutine '_reconnect_with_backoff' was never awaited``
   - Connection interruption callbacks run in separate threads without event loops
@@ -1524,7 +1602,7 @@ Fixed
   - Ensures reconnection tasks are properly awaited and executed
 
 - **Critical Bug**: Thread-safe event emission from MQTT callbacks
-  
+
   - Fixed ``RuntimeError: no running event loop in thread 'Dummy-1'``
   - MQTT callbacks run in separate threads created by AWS IoT SDK
   - Implemented ``_schedule_coroutine()`` method for thread-safe scheduling
@@ -1534,7 +1612,7 @@ Fixed
   - All event emissions now work correctly from any thread
 
 - **Bug**: Incorrect method parameter passing in temperature control
-  
+
   - Fixed ``set_dhw_temperature_display()`` calling ``set_dhw_temperature()`` with wrong parameters
   - Was passing individual parameters (``device_id``, ``device_type``, ``additional_value``)
   - Now correctly passes ``Device`` object as expected by method signature
@@ -1542,14 +1620,14 @@ Fixed
   - Updated docstrings to match actual method signatures
 
 - **Enhancement**: Anonymized MAC addresses in documentation
-  
+
   - Replaced all occurrences of real MAC address (``04786332fca0``) with placeholder (``aabbccddeeff``)
   - Updated ``API_CLIENT.rst``, ``MQTT_CLIENT.rst``, ``MQTT_MESSAGES.rst``
   - Updated built HTML documentation files
   - Protects privacy in public documentation
 
 - **Critical Bug**: Device control command codes
-  
+
   - Fixed incorrect command code usage causing unintended power-off
   - Power-off now uses command code ``33554433``
   - Power-on now uses command code ``33554434``
@@ -1557,7 +1635,7 @@ Fixed
   - Discovered through network traffic analysis of official app
 
 - **Critical Bug**: MQTT topic pattern matching with wildcards
-  
+
   - Fixed ``_topic_matches_pattern()`` to correctly handle ``#`` wildcard
   - Topics now match when message arrives on base topic (e.g., ``cmd/52/device/res``)
   - Topics also match subtopics (e.g., ``cmd/52/device/res/extra``)
@@ -1565,21 +1643,21 @@ Fixed
   - Enables callbacks to receive messages correctly
 
 - **Bug**: Missing ``OperationMode.STANDBY`` enum value
-  
+
   - Added ``STANDBY = 0`` to ``OperationMode`` enum
   - Device reports mode 0 when tank is fully charged and no heating is needed
   - Added graceful fallback for unknown enum values
   - Prevents ``ValueError`` when parsing device status
 
 - **Bug**: Insufficient topic subscriptions
-  
+
   - Examples now subscribe to broader topic patterns
   - Subscribe to ``cmd/{device_type}/{device_topic}/#`` to catch all command messages
   - Subscribe to ``evt/{device_type}/{device_topic}/#`` to catch all event messages
   - Ensures all device responses are received
 
 - **Enhancement**: Robust enum conversion with fallbacks
-  
+
   - Added try/except blocks for all enum conversions in ``DeviceStatus.from_dict()``
   - Added try/except blocks for all enum conversions in ``DeviceFeature.from_dict()``
   - Unknown operation modes default to ``STANDBY``
@@ -1592,7 +1670,7 @@ Verified
 --------
 
 - **Device Control**: Real-world testing with Navien NWP500 device
-  
+
   - Successfully changed DHW mode from Heat Pump to Energy Saver
   - Successfully changed DHW mode from Energy Saver to High Demand
   - Successfully changed DHW temperature (discovered 20°F offset between message and display)

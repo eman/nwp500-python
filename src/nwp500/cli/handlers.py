@@ -322,9 +322,10 @@ async def handle_update_reservations_request(
 ) -> None:
     """Update reservation schedule."""
     try:
-        reservations = json.loads(reservations_json)
-        if not isinstance(reservations, list):
+        data: Any = json.loads(reservations_json)
+        if not isinstance(data, list):
             raise ValueError("Must be a JSON array")
+        reservations: list[Any] = data  # type: ignore[reportUnknownVariableType]
     except (json.JSONDecodeError, ValueError) as e:
         _logger.error(f"Invalid reservations JSON: {e}")
         return

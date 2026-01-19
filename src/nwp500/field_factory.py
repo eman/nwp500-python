@@ -20,6 +20,8 @@ Example:
     ...     temp: float = temperature_field("DHW Temperature", unit="°F")
 """
 
+from __future__ import annotations
+
 from typing import Any, cast
 
 from pydantic import Field
@@ -41,9 +43,17 @@ def temperature_field(
 ) -> Any:
     """Create a temperature field with standard Home Assistant metadata.
 
+    The unit parameter is critical for tools consuming this library (e.g.,
+    Home Assistant) to correctly interpret the values. While the actual
+    displayed unit is dynamic based on device temperature_type setting
+    (Celsius or Fahrenheit), the unit parameter in json_schema_extra provides
+    the default/fallback unit and schema documentation for proper integration.
+
     Args:
         description: Field description
-        unit: Temperature unit (default: °F)
+        unit: Temperature unit (default: °F). Used in json_schema_extra for
+            Home Assistant and other integrations to understand value units.
+            Displayed units are dynamic based on device temperature_type.
         default: Default value or Pydantic default
         **kwargs: Additional Pydantic Field arguments
 
@@ -58,12 +68,14 @@ def temperature_field(
     if "json_schema_extra" in kwargs:
         extra = kwargs.pop("json_schema_extra")
         if isinstance(extra, dict):
-            json_schema_extra.update(extra)
+            # Explicitly cast to dict[str, Any] for type safety
+            typed_extra = cast(dict[str, Any], extra)
+            json_schema_extra.update(typed_extra)
 
     return Field(
         default=default,
         description=description,
-        json_schema_extra=cast(Any, json_schema_extra),
+        json_schema_extra=json_schema_extra,
         **kwargs,
     )
 
@@ -93,12 +105,14 @@ def signal_strength_field(
     if "json_schema_extra" in kwargs:
         extra = kwargs.pop("json_schema_extra")
         if isinstance(extra, dict):
-            json_schema_extra.update(extra)
+            # Explicitly cast to dict[str, Any] for type safety
+            typed_extra = cast(dict[str, Any], extra)
+            json_schema_extra.update(typed_extra)
 
     return Field(
         default=default,
         description=description,
-        json_schema_extra=cast(Any, json_schema_extra),
+        json_schema_extra=json_schema_extra,
         **kwargs,
     )
 
@@ -128,12 +142,14 @@ def energy_field(
     if "json_schema_extra" in kwargs:
         extra = kwargs.pop("json_schema_extra")
         if isinstance(extra, dict):
-            json_schema_extra.update(extra)
+            # Explicitly cast to dict[str, Any] for type safety
+            typed_extra = cast(dict[str, Any], extra)
+            json_schema_extra.update(typed_extra)
 
     return Field(
         default=default,
         description=description,
-        json_schema_extra=cast(Any, json_schema_extra),
+        json_schema_extra=json_schema_extra,
         **kwargs,
     )
 
@@ -163,11 +179,13 @@ def power_field(
     if "json_schema_extra" in kwargs:
         extra = kwargs.pop("json_schema_extra")
         if isinstance(extra, dict):
-            json_schema_extra.update(extra)
+            # Explicitly cast to dict[str, Any] for type safety
+            typed_extra = cast(dict[str, Any], extra)
+            json_schema_extra.update(typed_extra)
 
     return Field(
         default=default,
         description=description,
-        json_schema_extra=cast(Any, json_schema_extra),
+        json_schema_extra=json_schema_extra,
         **kwargs,
     )

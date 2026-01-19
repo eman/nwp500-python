@@ -4,8 +4,10 @@ Client for interacting with the Navien NWP500 API.
 This module provides an async HTTP client for device management and control.
 """
 
+from __future__ import annotations
+
 import logging
-from typing import Any, Self, cast
+from typing import Any, Literal, Self, cast
 
 import aiohttp
 
@@ -13,6 +15,7 @@ from .auth import NavienAuthClient
 from .config import API_BASE_URL
 from .exceptions import APIError, AuthenticationError, TokenRefreshError
 from .models import Device, FirmwareInfo, TOUInfo
+from .unit_system import set_unit_system
 
 __author__ = "Emmanuel Levijarvi"
 __copyright__ = "Emmanuel Levijarvi"
@@ -47,17 +50,21 @@ class NavienAPIClient:
         auth_client: NavienAuthClient,
         base_url: str = API_BASE_URL,
         session: aiohttp.ClientSession | None = None,
+        unit_system: Literal["metric", "imperial"] | None = None,
     ):
         """
         Initialize Navien API client.
 
         Args:
             auth_client: Authenticated NavienAuthClient instance. Must already
-            be
-                        authenticated via sign_in().
+                be authenticated via sign_in().
             base_url: Base URL for the API
             session: Optional aiohttp session (uses auth_client's session if not
-            provided)
+                provided)
+            unit_system: Preferred unit system:
+                - "metric": Celsius, LPM, Liters
+                - "imperial": Fahrenheit, GPM, Gallons
+                - None: Auto-detect from device (default)
 
         Raises:
             ValueError: If auth_client is not authenticated
@@ -78,6 +85,10 @@ class NavienAPIClient:
             )
         self._owned_session = False
         self._owned_auth = False
+
+        # Set unit system preference if provided
+        if unit_system is not None:
+            set_unit_system(unit_system)
 
     async def __aenter__(self) -> Self:
         """Enter async context manager."""

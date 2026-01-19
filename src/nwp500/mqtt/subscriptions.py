@@ -15,7 +15,7 @@ import asyncio
 import json
 import logging
 from collections.abc import Callable
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal
 
 from awscrt import mqtt
 from awscrt.exceptions import AwsCrtError
@@ -25,6 +25,7 @@ from ..events import EventEmitter
 from ..exceptions import MqttNotConnectedError
 from ..models import Device, DeviceFeature, DeviceStatus, EnergyUsageResponse
 from ..topic_builder import MqttTopicBuilder
+from ..unit_system import set_unit_system
 from .utils import redact_topic, topic_matches_pattern
 
 if TYPE_CHECKING:
@@ -54,6 +55,7 @@ class MqttSubscriptionManager:
         event_emitter: EventEmitter,
         schedule_coroutine: Callable[[Any], None],
         device_info_cache: MqttDeviceInfoCache | None = None,
+        unit_system: Literal["metric", "imperial"] | None = None,
     ):
         """
         Initialize subscription manager.
@@ -65,12 +67,14 @@ class MqttSubscriptionManager:
             schedule_coroutine: Function to schedule async tasks
             device_info_cache: Optional MqttDeviceInfoCache for caching device
                 features
+            unit_system: Preferred unit system ("metric", "imperial", or None)
         """
         self._connection = connection
         self._client_id = client_id
         self._event_emitter = event_emitter
         self._schedule_coroutine = schedule_coroutine
         self._device_info_cache = device_info_cache
+        self._unit_system: Literal["metric", "imperial"] | None = unit_system
 
         # Track subscriptions and handlers
         self._subscriptions: dict[str, mqtt.QoS] = {}
@@ -295,7 +299,7 @@ class MqttSubscriptionManager:
         self._message_handlers.clear()
 
         # Re-establish each subscription
-        failed_subscriptions = set()
+        failed_subscriptions: set[str] = set()
         for topic, qos in subscriptions_to_restore:
             handlers = handlers_to_restore.get(topic, [])
             for handler in handlers:
@@ -367,6 +371,12 @@ class MqttSubscriptionManager:
 
         def handler(topic: str, message: dict[str, Any]) -> None:
             try:
+                # Set unit system context before parsing if configured
+                # This ensures validators use the correct unit system even
+                # when called from AWS CRT threads
+                if self._unit_system is not None:
+                    set_unit_system(self._unit_system)
+
                 res = message.get("response", {})
                 # Try nested response field, then fallback to top-level
                 data = (res.get(key) if key else res) or (

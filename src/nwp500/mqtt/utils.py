@@ -77,7 +77,7 @@ def redact(obj: Any, keys_to_redact: set[str] | None = None) -> Any:
 
     # dicts: redact sensitive keys recursively
     if isinstance(obj, dict):
-        redacted = {}
+        redacted: dict[Any, Any] = {}
         for k, v in obj.items():
             if str(k) in keys_to_redact:
                 redacted[k] = "<REDACTED>"
@@ -87,6 +87,7 @@ def redact(obj: Any, keys_to_redact: set[str] | None = None) -> Any:
 
     # lists / tuples: redact elements
     if isinstance(obj, (list, tuple)):
+        # Explicitly annotate generator expression to avoid unknown types
         return type(obj)(redact(v, keys_to_redact) for v in obj)
 
     # fallback: represent object as string but avoid huge dumps

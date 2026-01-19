@@ -11,10 +11,12 @@ The API uses JWT (JSON Web Tokens) for authentication with the following flow:
 4. Refresh tokens when accessToken expires
 """
 
+from __future__ import annotations
+
 import json
 import logging
 from datetime import datetime, timedelta
-from typing import Any, Self, cast
+from typing import Any, Literal, Self, cast
 
 import aiohttp
 from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, model_validator
@@ -27,6 +29,7 @@ from .exceptions import (
     InvalidCredentialsError,
     TokenRefreshError,
 )
+from .unit_system import set_unit_system
 
 __author__ = "Emmanuel Levijarvi"
 __copyright__ = "Emmanuel Levijarvi"
@@ -53,7 +56,7 @@ class UserInfo(NavienBaseModel):
     user_seq: int = 0
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "UserInfo":
+    def from_dict(cls, data: dict[str, Any]) -> UserInfo:
         """Create UserInfo from API response dictionary (compatibility)."""
         return cls.model_validate(data)
 
@@ -86,8 +89,10 @@ class AuthTokens(NavienBaseModel):
     def handle_empty_aliases(cls, data: Any) -> Any:
         """Handle empty camelCase aliases with snake_case fallbacks."""
         if isinstance(data, dict):
+            # Explicitly type data as dict for clarity and type safety
+            d = cast(dict[str, Any], data)
             # Fields to check for fallback
-            fields_to_check = [
+            fields_to_check: list[tuple[str, str]] = [
                 ("accessToken", "access_token"),
                 ("accessKeyId", "access_key_id"),
                 ("secretKey", "secret_key"),
@@ -100,8 +105,9 @@ class AuthTokens(NavienBaseModel):
 
             for camel, snake in fields_to_check:
                 # If camel exists but is empty/None, and snake exists, use snake
-                if camel in data and not data[camel] and snake in data:
-                    data[camel] = data[snake]
+                if camel in d and not d[camel] and snake in d:
+                    d[camel] = d[snake]
+            return d
         return data
 
     def model_post_init(self, __context: Any) -> None:
@@ -119,7 +125,7 @@ class AuthTokens(NavienBaseModel):
             self._aws_expires_at = None
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "AuthTokens":
+    def from_dict(cls, data: dict[str, Any]) -> AuthTokens:
         """Create AuthTokens from API response dictionary or stored data.
 
         Args:
@@ -193,14 +199,12 @@ class AuthenticationResponse(NavienBaseModel):
 
     user_info: UserInfo
     tokens: AuthTokens
-    legal: list[dict[str, Any]] = Field(default_factory=list)
+    legal: list[Any] = Field(default_factory=list)
     code: int = 200
     message: str = Field(default="SUCCESS", alias="msg")
 
     @classmethod
-    def from_dict(
-        cls, response_data: dict[str, Any]
-    ) -> "AuthenticationResponse":
+    def from_dict(cls, response_data: dict[str, Any]) -> AuthenticationResponse:
         """Create AuthenticationResponse from API response."""
         # Map nested API response to flat model structure
         # API response: { "code": ..., "msg": ..., "data": { ... } }
@@ -285,6 +289,7 @@ class NavienAuthClient:
         session: aiohttp.ClientSession | None = None,
         timeout: int = 30,
         stored_tokens: AuthTokens | None = None,
+        unit_system: Literal["metric", "imperial"] | None = None,
     ):
         """
         Initialize the authentication client.
@@ -297,6 +302,10 @@ class NavienAuthClient:
             timeout: Request timeout in seconds
             stored_tokens: Previously saved tokens to restore session.
                           If provided and valid, skips initial sign_in.
+            unit_system: Preferred unit system:
+                - "metric": Celsius, LPM, Liters
+                - "imperial": Fahrenheit, GPM, Gallons
+                - None: Auto-detect from device (default)
 
         Note:
             Authentication is performed automatically when entering the
@@ -311,6 +320,10 @@ class NavienAuthClient:
         # Store credentials for automatic authentication
         self._user_id = user_id
         self._password = password
+
+        # Set unit system preference if provided
+        if unit_system is not None:
+            set_unit_system(unit_system)
 
         # Current authentication state
         self._auth_response: AuthenticationResponse | None = None
