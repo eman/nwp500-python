@@ -55,7 +55,7 @@ class UserInfo(NavienBaseModel):
     user_seq: int = 0
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "UserInfo":
+    def from_dict(cls, data: dict[str, Any]) -> UserInfo:
         """Create UserInfo from API response dictionary (compatibility)."""
         return cls.model_validate(data)
 
@@ -124,7 +124,7 @@ class AuthTokens(NavienBaseModel):
             self._aws_expires_at = None
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "AuthTokens":
+    def from_dict(cls, data: dict[str, Any]) -> AuthTokens:
         """Create AuthTokens from API response dictionary or stored data.
 
         Args:
@@ -203,9 +203,7 @@ class AuthenticationResponse(NavienBaseModel):
     message: str = Field(default="SUCCESS", alias="msg")
 
     @classmethod
-    def from_dict(
-        cls, response_data: dict[str, Any]
-    ) -> "AuthenticationResponse":
+    def from_dict(cls, response_data: dict[str, Any]) -> AuthenticationResponse:
         """Create AuthenticationResponse from API response."""
         # Map nested API response to flat model structure
         # API response: { "code": ..., "msg": ..., "data": { ... } }

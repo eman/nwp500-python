@@ -229,19 +229,17 @@ def _get_temperature_preference(info: ValidationInfo) -> bool:
                 is_celsius = int(temp_type) == TemperatureType.CELSIUS.value
                 unit_str = "Celsius" if is_celsius else "Fahrenheit"
                 _logger.debug(
-                    f"Detected temperature_type from int: {temp_type}, using {unit_str}"
+                    f"Detected temperature_type from int: {temp_type}, "
+                    f"using {unit_str}"
                 )
                 return is_celsius
             except (ValueError, TypeError) as e:
-                _logger.warning(
-                    f"Could not parse temperature_type value {temp_type!r}: {e}, "
-                    "defaulting to Fahrenheit"
-                )
+                msg = f"Could not parse temperature_type: {e}"
+                _logger.warning(f"{msg}, defaulting to Fahrenheit")
                 return False
         case _:
             _logger.warning(
-                f"Could not parse temperature_type value {temp_type!r}, "
-                "defaulting to Fahrenheit"
+                "Could not parse temperature_type, defaulting to Fahrenheit"
             )
             return False
 

@@ -815,7 +815,7 @@ class DeviceStatus(NavienBaseModel):
         return ""
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "DeviceStatus":
+    def from_dict(cls, data: dict[str, Any]) -> DeviceStatus:
         """Compatibility method for existing code."""
         return cls.model_validate(data)
 
@@ -1146,7 +1146,7 @@ class DeviceFeature(NavienBaseModel):
         return ""
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "DeviceFeature":
+    def from_dict(cls, data: dict[str, Any]) -> DeviceFeature:
         """Compatibility method."""
         return cls.model_validate(data)
 
@@ -1249,6 +1249,6 @@ class EnergyUsageResponse(NavienBaseModel):
         return None
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "EnergyUsageResponse":
+    def from_dict(cls, data: dict[str, Any]) -> EnergyUsageResponse:
         """Compatibility method."""
         return cls.model_validate(data)
