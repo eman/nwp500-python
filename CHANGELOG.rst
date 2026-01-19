@@ -66,6 +66,14 @@ Added
 
 Fixed
 -----
+- **MQTT Unit System Override Bug**: Fixed unit_system CLI flag not applying to device status values
+
+  - **Issue**: Running ``nwp-cli --unit-system metric status`` displayed values in device's native format (imperial) with metric unit strings (e.g., "104.9 °C" instead of "40.5 °C")
+  - **Root Cause**: MQTT callbacks from AWS CRT execute on different threads where context variables are not set. Since Python's context variables are task-local, the unit_system preference was not visible to validators
+  - **Solution**: Store unit_system in ``NavienMqttClient`` and ``MqttSubscriptionManager``. Before parsing MQTT messages, explicitly set the context variable in message handlers to ensure validators use the correct unit system regardless of thread context
+  - **Result**: Values and units now correctly convert when ``--unit-system`` override is specified
+  - **Testing**: All 393 tests pass including new unit system context override tests
+
 - **Type Annotation Quotes**: Removed unnecessary quoted type annotations (UP037 violations)
 
   - With ``from __future__ import annotations``, explicit string quotes are redundant
