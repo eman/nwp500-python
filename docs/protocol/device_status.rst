@@ -27,7 +27,7 @@ This document lists the fields found in the ``status`` object of device status m
      - integer
      - °F
      - Outdoor/ambient temperature
-     - Raw / 2.0 = Celsius; then to Fahrenheit using KDUtils.getMgppBaseToF() with tempFormulaType
+     - ``RawCelsius(raw_value).to_fahrenheit_with_formula(TempFormulaType)`` - See :class:`nwp500.temperature.RawCelsius` and :meth:`nwp500.temperature.RawCelsius.to_fahrenheit_with_formula`
    * - ``specialFunctionStatus``
      - integer
      - None
