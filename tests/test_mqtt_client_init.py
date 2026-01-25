@@ -108,44 +108,40 @@ class TestMqttClientInitValidation:
 
         assert "must be authenticated" in str(exc_info.value).lower()
 
-    def test_mqtt_client_init_rejects_expired_jwt(
+    def test_mqtt_client_init_accepts_expired_jwt(
         self, auth_client_with_expired_jwt
     ):
-        """Test MQTT client rejects auth client with expired JWT tokens."""
-        with pytest.raises(MqttCredentialsError) as exc_info:
-            NavienMqttClient(auth_client_with_expired_jwt)
+        """Test MQTT client can be created with expired JWT tokens.
 
-        error_msg = str(exc_info.value).lower()
-        assert "stale/expired" in error_msg
-        assert (
-            "ensure_valid_token" in error_msg or "re_authenticate" in error_msg
-        )
+        Token refresh happens in connect(), not in __init__().
+        """
+        # Should not raise - token refresh happens during connect()
+        mqtt_client = NavienMqttClient(auth_client_with_expired_jwt)
+        assert mqtt_client is not None
+        assert not mqtt_client.is_connected
 
-    def test_mqtt_client_init_rejects_expired_aws_credentials(
+    def test_mqtt_client_init_accepts_expired_aws_credentials(
         self, auth_client_with_expired_aws_credentials
     ):
-        """Test MQTT client rejects auth client with expired AWS credentials."""
-        with pytest.raises(MqttCredentialsError) as exc_info:
-            NavienMqttClient(auth_client_with_expired_aws_credentials)
+        """Test MQTT client can be created with expired AWS credentials.
 
-        error_msg = str(exc_info.value).lower()
-        assert "stale/expired" in error_msg
-        assert (
-            "ensure_valid_token" in error_msg or "re_authenticate" in error_msg
-        )
+        Token refresh happens in connect(), not in __init__().
+        """
+        # Should not raise - token refresh happens during connect()
+        mqtt_client = NavienMqttClient(auth_client_with_expired_aws_credentials)
+        assert mqtt_client is not None
+        assert not mqtt_client.is_connected
 
-    def test_mqtt_client_init_error_message_guidance(
+    def test_mqtt_client_init_accepts_expired_tokens_without_error(
         self, auth_client_with_expired_jwt
     ):
-        """Test MQTT client init error provides clear guidance on recovery."""
-        with pytest.raises(MqttCredentialsError) as exc_info:
-            NavienMqttClient(auth_client_with_expired_jwt)
+        """Test MQTT client accepts expired tokens without error.
 
-        error_msg = str(exc_info.value)
-        # Should mention recovery methods
-        assert (
-            "ensure_valid_token" in error_msg or "re_authenticate" in error_msg
-        ), f"Error message should mention recovery methods: {error_msg}"
+        Token validation moved to connect() which handles refresh automatically.
+        """
+        # Should not raise any error about stale/expired tokens
+        mqtt_client = NavienMqttClient(auth_client_with_expired_jwt)
+        assert mqtt_client is not None
 
 
 class TestHasValidTokensProperty:
@@ -195,12 +191,16 @@ class TestHasValidTokensProperty:
         # Should be True: JWT valid and AWS credentials have no expiration
         assert auth_client.has_valid_tokens is True
 
-    def test_has_valid_tokens_integration_with_mqtt_init(
+    def test_mqtt_client_creation_succeeds_with_valid_tokens(
         self, auth_client_with_valid_tokens
     ):
-        """Test that has_valid_tokens integrates correctly with MQTT init."""
-        # When has_valid_tokens is True, MQTT init should succeed
-        assert auth_client_with_valid_tokens.has_valid_tokens is True
+        """Test that MQTT client creation succeeds with valid tokens.
+
+        Verifies MQTT client can be created successfully when auth_client has
+        valid tokens. Token validation is deferred to connect().
+        """
+        # MQTT init should succeed regardless of token validity
+        # Token validation is deferred to connect()
         mqtt_client = NavienMqttClient(auth_client_with_valid_tokens)
         assert mqtt_client is not None
 
@@ -475,7 +475,11 @@ class TestTokenValidationEdgeCases:
     """Test edge cases in token validation."""
 
     def test_expired_jwt_near_expiry_buffer(self):
-        """Test token considered expired within 5-minute buffer."""
+        """Test token considered expired within 5-minute buffer.
+
+        MQTT init no longer rejects expired tokens since validation
+        happens in connect().
+        """
         auth_client = NavienAuthClient("test@example.com", "password")
         # Token expires in 3 minutes - should be considered expired
         near_expiry = datetime.now() - timedelta(seconds=3420)
@@ -497,11 +501,11 @@ class TestTokenValidationEdgeCases:
         assert tokens.is_expired is True
         assert auth_client.has_valid_tokens is False
 
-        # MQTT init should reject it
-        with pytest.raises(MqttCredentialsError) as exc_info:
-            NavienMqttClient(auth_client)
-
-        assert "stale/expired" in str(exc_info.value).lower()
+        # MQTT init should NOT reject it - token validation moved to
+        # connect()
+        mqtt_client = NavienMqttClient(auth_client)
+        assert mqtt_client is not None
+        assert not mqtt_client.is_connected
 
     def test_multiple_validation_checks_mqtt_init(
         self, auth_client_with_valid_tokens

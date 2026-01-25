@@ -150,8 +150,8 @@ class NavienMqttClient(EventEmitter):
                 - None: Auto-detect from device (default)
 
         Raises:
-            MqttCredentialsError: If auth client is not authenticated, tokens
-                are stale/expired, or AWS credentials are not available
+            MqttCredentialsError: If auth client is not authenticated or AWS
+                credentials are not available
         """
         if not auth_client.is_authenticated:
             raise MqttCredentialsError(
@@ -159,11 +159,12 @@ class NavienMqttClient(EventEmitter):
                 "creating MQTT client. Call auth_client.sign_in() first."
             )
 
-        if not auth_client.has_valid_tokens:
-            raise MqttCredentialsError(
-                "Tokens are stale/expired. "
-                "Call ensure_valid_token() or re_authenticate() first."
-            )
+        # Token validity is checked in connect() which also refreshes stale
+        # tokens automatically. This allows creating MQTT clients with
+        # restored tokens that may have expired between sessions. Token
+        # validation and refresh are deferred until connect() is called; if
+        # connect() is never called, tokens are not revalidated/refreshed
+        # and no MQTT connection is established.
 
         if not auth_client.current_tokens:
             raise MqttCredentialsError("No tokens available from auth client")
