@@ -2,6 +2,20 @@
 Changelog
 =========
 
+Version 7.3.1 (2026-01-25)
+==========================
+
+Fixed
+-----
+- **MQTT Client Initialization**: Removed overly strict token validity check from ``NavienMqttClient.__init__()``
+
+  - The strict token validity check prevented creating MQTT clients with restored tokens that may have expired between application restarts
+  - However, ``NavienMqttClient.connect()`` already handles token refresh automatically, making the check redundant
+  - This change allows integrations to create MQTT clients with expired tokens and let connect() handle validation
+  - Simplifies application code by removing duplicate token refresh calls
+  - Enables proper handling of restored authentication sessions
+  - Fixes MQTT connection failures when using stored tokens across application restarts
+
 Version 7.3.0 (2026-01-19)
 ==========================
 
