@@ -132,10 +132,10 @@ class TestMqttClientInitValidation:
         assert mqtt_client is not None
         assert not mqtt_client.is_connected
 
-    def test_mqtt_client_init_no_error_message_for_expired_tokens(
+    def test_mqtt_client_init_accepts_expired_tokens_without_error(
         self, auth_client_with_expired_jwt
     ):
-        """Test MQTT client init does not reject expired tokens.
+        """Test MQTT client accepts expired tokens without error.
 
         Token validation moved to connect() which handles refresh automatically.
         """
@@ -191,12 +191,13 @@ class TestHasValidTokensProperty:
         # Should be True: JWT valid and AWS credentials have no expiration
         assert auth_client.has_valid_tokens is True
 
-    def test_has_valid_tokens_integration_with_mqtt_init(
+    def test_mqtt_client_creation_succeeds_with_valid_tokens(
         self, auth_client_with_valid_tokens
     ):
-        """Test that MQTT client works with valid tokens.
+        """Test that MQTT client creation succeeds with valid tokens.
 
-        MQTT init no longer checks token validity - that happens in connect().
+        Verifies MQTT client can be created successfully when auth_client has
+        valid tokens. Token validation is deferred to connect().
         """
         # MQTT init should succeed regardless of token validity
         # Token validation is deferred to connect()

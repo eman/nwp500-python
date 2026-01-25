@@ -159,9 +159,12 @@ class NavienMqttClient(EventEmitter):
                 "creating MQTT client. Call auth_client.sign_in() first."
             )
 
-        # Note: Token validity is checked in connect() which also refreshes
-        # stale tokens automatically. This allows creating MQTT clients with
-        # restored tokens that may have expired between sessions.
+        # Token validity is checked in connect() which also refreshes stale
+        # tokens automatically. This allows creating MQTT clients with
+        # restored tokens that may have expired between sessions. Token
+        # validation and refresh are deferred until connect() is called; if
+        # connect() is never called, tokens are not revalidated/refreshed
+        # and no MQTT connection is established.
 
         if not auth_client.current_tokens:
             raise MqttCredentialsError("No tokens available from auth client")
