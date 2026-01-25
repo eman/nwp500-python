@@ -112,7 +112,7 @@ class TestMqttClientInitValidation:
         self, auth_client_with_expired_jwt
     ):
         """Test MQTT client can be created with expired JWT tokens.
-        
+
         Token refresh happens in connect(), not in __init__().
         """
         # Should not raise - token refresh happens during connect()
@@ -124,7 +124,7 @@ class TestMqttClientInitValidation:
         self, auth_client_with_expired_aws_credentials
     ):
         """Test MQTT client can be created with expired AWS credentials.
-        
+
         Token refresh happens in connect(), not in __init__().
         """
         # Should not raise - token refresh happens during connect()
@@ -136,7 +136,7 @@ class TestMqttClientInitValidation:
         self, auth_client_with_expired_jwt
     ):
         """Test MQTT client init does not reject expired tokens.
-        
+
         Token validation moved to connect() which handles refresh automatically.
         """
         # Should not raise any error about stale/expired tokens
@@ -195,7 +195,7 @@ class TestHasValidTokensProperty:
         self, auth_client_with_valid_tokens
     ):
         """Test that MQTT client works with valid tokens.
-        
+
         MQTT init no longer checks token validity - that happens in connect().
         """
         # MQTT init should succeed regardless of token validity
@@ -475,7 +475,7 @@ class TestTokenValidationEdgeCases:
 
     def test_expired_jwt_near_expiry_buffer(self):
         """Test token considered expired within 5-minute buffer.
-        
+
         MQTT init no longer rejects expired tokens since validation
         happens in connect().
         """
