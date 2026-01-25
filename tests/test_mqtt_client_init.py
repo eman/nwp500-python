@@ -474,7 +474,10 @@ class TestTokenValidationEdgeCases:
     """Test edge cases in token validation."""
 
     def test_expired_jwt_near_expiry_buffer(self):
-        """Test token considered expired within 5-minute buffer."""
+        """Test token considered expired within 5-minute buffer.
+        
+        MQTT init no longer rejects expired tokens - validation happens in connect().
+        """
         auth_client = NavienAuthClient("test@example.com", "password")
         # Token expires in 3 minutes - should be considered expired
         near_expiry = datetime.now() - timedelta(seconds=3420)
@@ -496,11 +499,10 @@ class TestTokenValidationEdgeCases:
         assert tokens.is_expired is True
         assert auth_client.has_valid_tokens is False
 
-        # MQTT init should reject it
-        with pytest.raises(MqttCredentialsError) as exc_info:
-            NavienMqttClient(auth_client)
-
-        assert "stale/expired" in str(exc_info.value).lower()
+        # MQTT init should NOT reject it - token validation moved to connect()
+        mqtt_client = NavienMqttClient(auth_client)
+        assert mqtt_client is not None
+        assert not mqtt_client.is_connected
 
     def test_multiple_validation_checks_mqtt_init(
         self, auth_client_with_valid_tokens
