@@ -55,7 +55,7 @@ class MqttSubscriptionManager:
         event_emitter: EventEmitter,
         schedule_coroutine: Callable[[Any], None],
         device_info_cache: MqttDeviceInfoCache | None = None,
-        unit_system: Literal["metric", "us_customary", "imperial"] | None = None,
+        unit_system: Literal["metric", "us_customary"] | None = None,
     ):
         """
         Initialize subscription manager.
@@ -67,14 +67,14 @@ class MqttSubscriptionManager:
             schedule_coroutine: Function to schedule async tasks
             device_info_cache: Optional MqttDeviceInfoCache for caching device
                 features
-            unit_system: Preferred unit system ("metric", "imperial", or None)
+            unit_system: Preferred unit system ("metric", "us_customary", or None)
         """
         self._connection = connection
         self._client_id = client_id
         self._event_emitter = event_emitter
         self._schedule_coroutine = schedule_coroutine
         self._device_info_cache = device_info_cache
-        self._unit_system: Literal["metric", "us_customary", "imperial"] | None = unit_system
+        self._unit_system: Literal["metric", "us_customary"] | None = unit_system
 
         # Track subscriptions and handlers
         self._subscriptions: dict[str, mqtt.QoS] = {}

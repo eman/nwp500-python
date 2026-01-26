@@ -353,8 +353,8 @@ def test_unit_system_context_override_affects_field_units():
     assert feature.get_field_unit("freeze_protection_temp_min") == " °C"
     assert feature.get_field_unit("recirc_temperature_min") == " °C"
 
-    # Test 3: Override to imperial - should return Fahrenheit units
-    set_unit_system("imperial")
+    # Test 3: Override to us_customary - should return Fahrenheit units
+    set_unit_system("us_customary")
     assert feature.get_field_unit("dhw_temperature_min") == " °F"
     assert feature.get_field_unit("freeze_protection_temp_min") == " °F"
     assert feature.get_field_unit("recirc_temperature_min") == " °F"
@@ -478,8 +478,8 @@ def test_unit_system_context_override_with_flow_rate_units():
     set_unit_system("metric")
     assert status.get_field_unit("current_dhw_flow_rate") == " LPM"
 
-    # Test 3: Override to imperial - should return GPM units
-    set_unit_system("imperial")
+    # Test 3: Override to us_customary - should return GPM units
+    set_unit_system("us_customary")
     assert status.get_field_unit("current_dhw_flow_rate") == " GPM"
 
     # Clean up
@@ -601,8 +601,8 @@ def test_unit_system_context_override_with_volume_units():
     set_unit_system("metric")
     assert status.get_field_unit("cumulated_dhw_flow_rate") == " L"
 
-    # Test 3: Override to imperial - should return Gallons units
-    set_unit_system("imperial")
+    # Test 3: Override to us_customary - should return Gallons units
+    set_unit_system("us_customary")
     assert status.get_field_unit("cumulated_dhw_flow_rate") == " gal"
 
     # Clean up

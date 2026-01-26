@@ -136,7 +136,7 @@ class NavienMqttClient(EventEmitter):
         self,
         auth_client: NavienAuthClient,
         config: MqttConnectionConfig | None = None,
-        unit_system: Literal["metric", "us_customary", "imperial"] | None = None,
+        unit_system: Literal["metric", "us_customary"] | None = None,
     ):
         """
         Initialize the MQTT client.
@@ -147,7 +147,7 @@ class NavienMqttClient(EventEmitter):
             unit_system: Preferred unit system:
                 - "metric": Celsius, LPM, Liters
                 - "us_customary": Fahrenheit, GPM, Gallons
-                - "imperial": Fahrenheit, GPM, Gallons
+
                 - None: Auto-detect from device (default)
 
         Raises:
@@ -185,7 +185,7 @@ class NavienMqttClient(EventEmitter):
             set_unit_system(unit_system)
 
         self._auth_client = auth_client
-        self._unit_system: Literal["metric", "us_customary", "imperial"] | None = unit_system
+        self._unit_system: Literal["metric", "us_customary"] | None = unit_system
         self.config = config or MqttConnectionConfig()
 
         # Session tracking

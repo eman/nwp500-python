@@ -24,14 +24,14 @@ _logger = logging.getLogger(__name__)
 
 # Context variable to store the preferred unit system
 # None means auto-detect from device
-# "metric" means Celsius, "us_customary" means Fahrenheit (also accepts "imperial" for compatibility)
+"metric" means Celsius, "us_customary" means Fahrenheit
 _unit_system_context: contextvars.ContextVar[
-    Literal["metric", "us_customary", "imperial"] | None
+    Literal["metric", "us_customary"] | None
 ] = contextvars.ContextVar("unit_system", default=None)
 
 
 def set_unit_system(
-    unit_system: Literal["metric", "us_customary", "imperial"] | None,
+    unit_system: Literal["metric", "us_customary"] | None,
 ) -> None:
     """Set preferred unit system for temperature, flow, and volume conversions.
 
@@ -42,7 +42,6 @@ def set_unit_system(
         unit_system: Preferred unit system:
             - "metric": Use Celsius, LPM, and Liters
             - "us_customary": Use Fahrenheit, GPM, and Gallons
-            - "imperial": Use Fahrenheit, GPM, and Gallons
             - None: Auto-detect from device's temperature_type (default)
 
     Example:
@@ -54,12 +53,7 @@ def set_unit_system(
     Note:
         This is context-aware and works with async code. Each async task
         maintains its own unit system preference.
-        "imperial" is supported for backward compatibility but "us_customary"
-        is the official Home Assistant term.
     """
-    # Map "imperial" to "us_customary" for consistency with Home Assistant
-    if unit_system == "imperial":
-        unit_system = "us_customary"
     _unit_system_context.set(unit_system)
 
 
@@ -85,29 +79,29 @@ def reset_unit_system() -> None:
 
 
 def unit_system_to_temperature_type(
-    unit_system: Literal["metric", "us_customary", "imperial"] | None,
+    unit_system: Literal["metric", "us_customary"] | None,
 ) -> TemperatureType | None:
     """Convert unit system preference to TemperatureType enum.
 
     Args:
-        unit_system: Unit system preference ("metric", "us_customary", "imperial", or None)
+        unit_system: Unit system preference ("metric", "us_customary", or None)
 
     Returns:
         - TemperatureType.CELSIUS for "metric"
-        - TemperatureType.FAHRENHEIT for "us_customary" or "imperial"
+        - TemperatureType.FAHRENHEIT for "us_customary"
         - None for None (auto-detect)
     """
     match unit_system:
         case "metric":
             return TemperatureType.CELSIUS
-        case "us_customary" | "imperial":
+        case "us_customary":
             return TemperatureType.FAHRENHEIT
         case None:
             return None
 
 
 def is_metric_preferred(
-    override: Literal["metric", "us_customary", "imperial"] | None = None,
+    override: Literal["metric", "us_customary"] | None = None,
 ) -> bool:
     """Check if metric (Celsius) is preferred.
 
