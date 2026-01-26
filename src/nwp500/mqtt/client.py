@@ -32,17 +32,6 @@ from ..exceptions import (
     TokenRefreshError,
 )
 from ..unit_system import set_unit_system
-
-# Type alias for unit system preference
-UnitSystemType = Literal["metric", "us_customary"] | None
-
-if TYPE_CHECKING:
-    from ..models import (
-        Device,
-        DeviceFeature,
-        DeviceStatus,
-        EnergyUsageResponse,
-    )
 from .command_queue import MqttCommandQueue
 from .connection import MqttConnection
 from .control import MqttDeviceController
@@ -54,6 +43,17 @@ from .utils import (
     MqttConnectionConfig,
     PeriodicRequestType,
 )
+
+# Type alias for unit system preference
+UnitSystemType = Literal["metric", "us_customary"] | None
+
+if TYPE_CHECKING:
+    from ..models import (
+        Device,
+        DeviceFeature,
+        DeviceStatus,
+        EnergyUsageResponse,
+    )
 
 __author__ = "Emmanuel Levijarvi"
 __copyright__ = "Emmanuel Levijarvi"

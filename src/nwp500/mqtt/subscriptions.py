@@ -70,7 +70,8 @@ class MqttSubscriptionManager:
             schedule_coroutine: Function to schedule async tasks
             device_info_cache: Optional MqttDeviceInfoCache for caching device
                 features
-            unit_system: Preferred unit system ("metric", "us_customary", or None)
+            unit_system: Preferred unit system ("metric", "us_customary",
+                or None)
         """
         self._connection = connection
         self._client_id = client_id
