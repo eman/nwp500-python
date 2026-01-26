@@ -31,7 +31,7 @@ from ..exceptions import (
     MqttPublishError,
     TokenRefreshError,
 )
-from ..unit_system import set_unit_system
+from ..unit_system import set_unit_system, UnitSystemType
 from .command_queue import MqttCommandQueue
 from .connection import MqttConnection
 from .control import MqttDeviceController
@@ -43,9 +43,6 @@ from .utils import (
     MqttConnectionConfig,
     PeriodicRequestType,
 )
-
-# Type alias for unit system preference
-UnitSystemType = Literal["metric", "us_customary"] | None
 
 if TYPE_CHECKING:
     from ..models import (

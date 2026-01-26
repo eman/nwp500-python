@@ -22,6 +22,9 @@ __license__ = "MIT"
 
 _logger = logging.getLogger(__name__)
 
+# Type alias for unit system preference
+UnitSystemType = Literal["metric", "us_customary"] | None
+
 # Context variable to store the preferred unit system
 # None means auto-detect from device
 # "metric" means Celsius, "us_customary" means Fahrenheit

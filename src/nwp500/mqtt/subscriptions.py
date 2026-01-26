@@ -25,11 +25,8 @@ from ..events import EventEmitter
 from ..exceptions import MqttNotConnectedError
 from ..models import Device, DeviceFeature, DeviceStatus, EnergyUsageResponse
 from ..topic_builder import MqttTopicBuilder
-from ..unit_system import set_unit_system
+from ..unit_system import set_unit_system, UnitSystemType
 from .utils import redact_topic, topic_matches_pattern
-
-# Type alias for unit system preference
-UnitSystemType = Literal["metric", "us_customary"] | None
 
 if TYPE_CHECKING:
     from ..device_info_cache import MqttDeviceInfoCache
