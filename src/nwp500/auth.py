@@ -289,7 +289,7 @@ class NavienAuthClient:
         session: aiohttp.ClientSession | None = None,
         timeout: int = 30,
         stored_tokens: AuthTokens | None = None,
-        unit_system: Literal["metric", "imperial"] | None = None,
+        unit_system: Literal["metric", "us_customary"] | None = None,
     ):
         """
         Initialize the authentication client.
@@ -304,7 +304,8 @@ class NavienAuthClient:
                           If provided and valid, skips initial sign_in.
             unit_system: Preferred unit system:
                 - "metric": Celsius, LPM, Liters
-                - "imperial": Fahrenheit, GPM, Gallons
+                - "us_customary": Fahrenheit, GPM, Gallons
+
                 - None: Auto-detect from device (default)
 
         Note:

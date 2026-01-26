@@ -16,7 +16,7 @@ import json
 import logging
 import uuid
 from collections.abc import Callable
-from typing import TYPE_CHECKING, Any, Literal, cast
+from typing import TYPE_CHECKING, Any, cast
 
 from awscrt import mqtt
 from awscrt.exceptions import AwsCrtError
@@ -31,15 +31,7 @@ from ..exceptions import (
     MqttPublishError,
     TokenRefreshError,
 )
-from ..unit_system import set_unit_system
-
-if TYPE_CHECKING:
-    from ..models import (
-        Device,
-        DeviceFeature,
-        DeviceStatus,
-        EnergyUsageResponse,
-    )
+from ..unit_system import UnitSystemType, set_unit_system
 from .command_queue import MqttCommandQueue
 from .connection import MqttConnection
 from .control import MqttDeviceController
@@ -51,6 +43,14 @@ from .utils import (
     MqttConnectionConfig,
     PeriodicRequestType,
 )
+
+if TYPE_CHECKING:
+    from ..models import (
+        Device,
+        DeviceFeature,
+        DeviceStatus,
+        EnergyUsageResponse,
+    )
 
 __author__ = "Emmanuel Levijarvi"
 __copyright__ = "Emmanuel Levijarvi"
@@ -136,7 +136,7 @@ class NavienMqttClient(EventEmitter):
         self,
         auth_client: NavienAuthClient,
         config: MqttConnectionConfig | None = None,
-        unit_system: Literal["metric", "imperial"] | None = None,
+        unit_system: UnitSystemType = None,
     ):
         """
         Initialize the MQTT client.
@@ -146,7 +146,8 @@ class NavienMqttClient(EventEmitter):
             config: Optional connection configuration
             unit_system: Preferred unit system:
                 - "metric": Celsius, LPM, Liters
-                - "imperial": Fahrenheit, GPM, Gallons
+                - "us_customary": Fahrenheit, GPM, Gallons
+
                 - None: Auto-detect from device (default)
 
         Raises:
@@ -184,7 +185,7 @@ class NavienMqttClient(EventEmitter):
             set_unit_system(unit_system)
 
         self._auth_client = auth_client
-        self._unit_system: Literal["metric", "imperial"] | None = unit_system
+        self._unit_system: UnitSystemType = unit_system
         self.config = config or MqttConnectionConfig()
 
         # Session tracking

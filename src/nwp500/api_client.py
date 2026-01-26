@@ -50,7 +50,7 @@ class NavienAPIClient:
         auth_client: NavienAuthClient,
         base_url: str = API_BASE_URL,
         session: aiohttp.ClientSession | None = None,
-        unit_system: Literal["metric", "imperial"] | None = None,
+        unit_system: Literal["metric", "us_customary"] | None = None,
     ):
         """
         Initialize Navien API client.
@@ -63,7 +63,8 @@ class NavienAPIClient:
                 provided)
             unit_system: Preferred unit system:
                 - "metric": Celsius, LPM, Liters
-                - "imperial": Fahrenheit, GPM, Gallons
+                - "us_customary": Fahrenheit, GPM, Gallons
+
                 - None: Auto-detect from device (default)
 
         Raises:

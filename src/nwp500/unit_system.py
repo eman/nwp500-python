@@ -22,16 +22,19 @@ __license__ = "MIT"
 
 _logger = logging.getLogger(__name__)
 
+# Type alias for unit system preference
+UnitSystemType = Literal["metric", "us_customary"] | None
+
 # Context variable to store the preferred unit system
 # None means auto-detect from device
-# "metric" means Celsius, "imperial" means Fahrenheit
+# "metric" means Celsius, "us_customary" means Fahrenheit
 _unit_system_context: contextvars.ContextVar[
-    Literal["metric", "imperial"] | None
+    Literal["metric", "us_customary"] | None
 ] = contextvars.ContextVar("unit_system", default=None)
 
 
 def set_unit_system(
-    unit_system: Literal["metric", "imperial"] | None,
+    unit_system: Literal["metric", "us_customary"] | None,
 ) -> None:
     """Set preferred unit system for temperature, flow, and volume conversions.
 
@@ -41,12 +44,12 @@ def set_unit_system(
     Args:
         unit_system: Preferred unit system:
             - "metric": Use Celsius, LPM, and Liters
-            - "imperial": Use Fahrenheit, GPM, and Gallons
+            - "us_customary": Use Fahrenheit, GPM, and Gallons
             - None: Auto-detect from device's temperature_type (default)
 
     Example:
         >>> from nwp500 import set_unit_system
-        >>> set_unit_system("imperial")
+        >>> set_unit_system("us_customary")
         >>> # All values now in F, GPM, Gallons
         >>> set_unit_system(None)  # Reset to auto-detect
 
@@ -57,13 +60,13 @@ def set_unit_system(
     _unit_system_context.set(unit_system)
 
 
-def get_unit_system() -> Literal["metric", "imperial"] | None:
+def get_unit_system() -> Literal["metric", "us_customary"] | None:
     """Get the currently configured unit system preference.
 
     Returns:
         The current unit system preference:
             - "metric": Celsius, LPM, Liters
-            - "imperial": Fahrenheit, GPM, Gallons
+            - "us_customary": Fahrenheit, GPM, Gallons
             - None: Auto-detect from device (default)
     """
     return _unit_system_context.get()
@@ -79,29 +82,29 @@ def reset_unit_system() -> None:
 
 
 def unit_system_to_temperature_type(
-    unit_system: Literal["metric", "imperial"] | None,
+    unit_system: Literal["metric", "us_customary"] | None,
 ) -> TemperatureType | None:
     """Convert unit system preference to TemperatureType enum.
 
     Args:
-        unit_system: Unit system preference ("metric", "imperial", or None)
+        unit_system: Unit system preference ("metric", "us_customary", or None)
 
     Returns:
         - TemperatureType.CELSIUS for "metric"
-        - TemperatureType.FAHRENHEIT for "imperial"
+        - TemperatureType.FAHRENHEIT for "us_customary"
         - None for None (auto-detect)
     """
     match unit_system:
         case "metric":
             return TemperatureType.CELSIUS
-        case "imperial":
+        case "us_customary":
             return TemperatureType.FAHRENHEIT
         case None:
             return None
 
 
 def is_metric_preferred(
-    override: Literal["metric", "imperial"] | None = None,
+    override: Literal["metric", "us_customary"] | None = None,
 ) -> bool:
     """Check if metric (Celsius) is preferred.
 
@@ -113,7 +116,8 @@ def is_metric_preferred(
             over the context-configured unit system.
 
     Returns:
-        True if metric (Celsius) is preferred, False if imperial (Fahrenheit).
+        True if metric (Celsius) is preferred, False if us_customary
+        (Fahrenheit).
     """
     # If override is provided, use it
     if override is not None:

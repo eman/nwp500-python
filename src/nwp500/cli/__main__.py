@@ -129,8 +129,8 @@ def async_command(f: Any) -> Any:
 )
 @click.option(
     "--unit-system",
-    type=click.Choice(["metric", "imperial"], case_sensitive=False),
-    help="Unit system: metric (C/LPM/L) or imperial (F/GPM/gal)",
+    type=click.Choice(["metric", "us_customary"], case_sensitive=False),
+    help="Unit system: metric (C/LPM/L) or us_customary (F/GPM/gal)",
 )
 @click.option("-v", "--verbose", count=True, help="Increase verbosity")
 @click.version_option(version=__version__)
