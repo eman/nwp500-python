@@ -2,6 +2,27 @@
 Changelog
 =========
 
+Version 7.3.2 (2026-01-25)
+==========================
+
+Changed
+-------
+- **Unit System Consistency**: Removed deprecated ``"imperial"`` unit system identifier in favor of ``"us_customary"`` for Home Assistant compatibility
+
+  - Changed all references from ``UnitSystem.IMPERIAL`` to ``UnitSystem.US_CUSTOMARY``
+  - Updated ``set_unit_system()`` and related functions to use ``"us_customary"`` exclusively
+  - ``"metric"`` remains unchanged for Metric conversions
+  - Affects API client, MQTT client, and CLI unit system handling
+  - Improves consistency with Home Assistant naming conventions
+
+Fixed
+-----
+- **Unit System Consolidation**: Consolidated duplicate ``UnitSystemType`` type alias definitions into single canonical definition in ``unit_system.py``
+
+  - Removed redundant type definitions from multiple modules
+  - Improved code maintainability and consistency
+  - All unit system operations now reference centralized type definition
+
 Version 7.3.1 (2026-01-25)
 ==========================
 
