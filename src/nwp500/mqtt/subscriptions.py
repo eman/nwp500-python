@@ -28,6 +28,9 @@ from ..topic_builder import MqttTopicBuilder
 from ..unit_system import set_unit_system
 from .utils import redact_topic, topic_matches_pattern
 
+# Type alias for unit system preference
+UnitSystemType = Literal["metric", "us_customary"] | None
+
 if TYPE_CHECKING:
     from ..device_info_cache import MqttDeviceInfoCache
 
@@ -55,7 +58,7 @@ class MqttSubscriptionManager:
         event_emitter: EventEmitter,
         schedule_coroutine: Callable[[Any], None],
         device_info_cache: MqttDeviceInfoCache | None = None,
-        unit_system: Literal["metric", "us_customary"] | None = None,
+        unit_system: UnitSystemType = None,
     ):
         """
         Initialize subscription manager.
@@ -74,7 +77,7 @@ class MqttSubscriptionManager:
         self._event_emitter = event_emitter
         self._schedule_coroutine = schedule_coroutine
         self._device_info_cache = device_info_cache
-        self._unit_system: Literal["metric", "us_customary"] | None = unit_system
+        self._unit_system: UnitSystemType = unit_system
 
         # Track subscriptions and handlers
         self._subscriptions: dict[str, mqtt.QoS] = {}

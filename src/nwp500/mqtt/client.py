@@ -33,6 +33,9 @@ from ..exceptions import (
 )
 from ..unit_system import set_unit_system
 
+# Type alias for unit system preference
+UnitSystemType = Literal["metric", "us_customary"] | None
+
 if TYPE_CHECKING:
     from ..models import (
         Device,
@@ -136,7 +139,7 @@ class NavienMqttClient(EventEmitter):
         self,
         auth_client: NavienAuthClient,
         config: MqttConnectionConfig | None = None,
-        unit_system: Literal["metric", "us_customary"] | None = None,
+        unit_system: UnitSystemType = None,
     ):
         """
         Initialize the MQTT client.
@@ -185,7 +188,7 @@ class NavienMqttClient(EventEmitter):
             set_unit_system(unit_system)
 
         self._auth_client = auth_client
-        self._unit_system: Literal["metric", "us_customary"] | None = unit_system
+        self._unit_system: UnitSystemType = unit_system
         self.config = config or MqttConnectionConfig()
 
         # Session tracking

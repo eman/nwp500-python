@@ -24,7 +24,7 @@ _logger = logging.getLogger(__name__)
 
 # Context variable to store the preferred unit system
 # None means auto-detect from device
-"metric" means Celsius, "us_customary" means Fahrenheit
+# "metric" means Celsius, "us_customary" means Fahrenheit
 _unit_system_context: contextvars.ContextVar[
     Literal["metric", "us_customary"] | None
 ] = contextvars.ContextVar("unit_system", default=None)
@@ -113,7 +113,8 @@ def is_metric_preferred(
             over the context-configured unit system.
 
     Returns:
-        True if metric (Celsius) is preferred, False if us_customary (Fahrenheit).
+        True if metric (Celsius) is preferred, False if us_customary
+        (Fahrenheit).
     """
     # If override is provided, use it
     if override is not None:
