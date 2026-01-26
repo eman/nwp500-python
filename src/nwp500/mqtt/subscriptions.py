@@ -55,7 +55,7 @@ class MqttSubscriptionManager:
         event_emitter: EventEmitter,
         schedule_coroutine: Callable[[Any], None],
         device_info_cache: MqttDeviceInfoCache | None = None,
-        unit_system: Literal["metric", "imperial"] | None = None,
+        unit_system: Literal["metric", "us_customary", "imperial"] | None = None,
     ):
         """
         Initialize subscription manager.
@@ -74,7 +74,7 @@ class MqttSubscriptionManager:
         self._event_emitter = event_emitter
         self._schedule_coroutine = schedule_coroutine
         self._device_info_cache = device_info_cache
-        self._unit_system: Literal["metric", "imperial"] | None = unit_system
+        self._unit_system: Literal["metric", "us_customary", "imperial"] | None = unit_system
 
         # Track subscriptions and handlers
         self._subscriptions: dict[str, mqtt.QoS] = {}
