@@ -16,7 +16,7 @@ import json
 import logging
 import uuid
 from collections.abc import Callable
-from typing import TYPE_CHECKING, Any, Literal, cast
+from typing import TYPE_CHECKING, Any, cast
 
 from awscrt import mqtt
 from awscrt.exceptions import AwsCrtError
@@ -31,7 +31,7 @@ from ..exceptions import (
     MqttPublishError,
     TokenRefreshError,
 )
-from ..unit_system import set_unit_system, UnitSystemType
+from ..unit_system import UnitSystemType, set_unit_system
 from .command_queue import MqttCommandQueue
 from .connection import MqttConnection
 from .control import MqttDeviceController
