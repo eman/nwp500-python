@@ -326,7 +326,9 @@ def build_reservation_entry(
     hour: int,
     minute: int,
     mode_id: int,
-    temperature_f: float,
+    temperature: float,
+    temperature_min: float | None = None,
+    temperature_max: float | None = None,
 ) -> dict[str, int]:
     """
     Build a reservation payload entry matching the documented MQTT format.
@@ -337,8 +339,13 @@ def build_reservation_entry(
         hour: Hour (0-23)
         minute: Minute (0-59)
         mode_id: DHW operation mode ID (1-6, see DhwOperationSetting)
-        temperature_f: Target temperature in Fahrenheit (95-150°F).
+        temperature: Target temperature in the user's preferred unit
+            (Celsius or Fahrenheit based on global context).
             Automatically converted to half-degrees Celsius for the device.
+        temperature_min: Minimum allowed temperature. If not provided,
+            defaults are used: 95°F or ~35°C.
+        temperature_max: Maximum allowed temperature. If not provided,
+            defaults are used: 150°F or ~65°C.
 
     Returns:
         Dictionary with reservation entry fields
@@ -355,12 +362,17 @@ def build_reservation_entry(
         ...     hour=6,
         ...     minute=30,
         ...     mode_id=3,
-        ...     temperature_f=140.0
+        ...     temperature=140.0
         ... )
         {'enable': 1, 'week': 42, 'hour': 6, 'min': 30, 'mode': 3, 'param': 120}
     """
     # Import here to avoid circular import
-    from .models import fahrenheit_to_half_celsius
+    from .models import preferred_to_half_celsius
+
+    # Use device-provided limits if available, otherwise use defaults
+    # Defaults are conservative: 95°F / 35°C minimum, 150°F / 65°C maximum
+    min_temp = temperature_min if temperature_min is not None else 95
+    max_temp = temperature_max if temperature_max is not None else 150
 
     if not 0 <= hour <= 23:
         raise RangeValidationError(
@@ -386,13 +398,13 @@ def build_reservation_entry(
             min_value=1,
             max_value=6,
         )
-    if not 95 <= temperature_f <= 150:
+    if not min_temp <= temperature <= max_temp:
         raise RangeValidationError(
-            "temperature_f must be between 95 and 150°F",
-            field="temperature_f",
-            value=temperature_f,
-            min_value=95,
-            max_value=150,
+            f"temperature must be between {min_temp} and {max_temp}",
+            field="temperature",
+            value=temperature,
+            min_value=min_temp,
+            max_value=max_temp,
         )
 
     if isinstance(enabled, bool):
@@ -407,7 +419,7 @@ def build_reservation_entry(
         )
 
     week_bitfield = encode_week_bitfield(days)
-    param = fahrenheit_to_half_celsius(temperature_f)
+    param = preferred_to_half_celsius(temperature)
 
     return {
         "enable": enable_flag,

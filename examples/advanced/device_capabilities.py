@@ -138,13 +138,16 @@ async def main():
                     )
 
                     print("\nConfiguration:")
+                    unit_suffix = (
+                        "°C" if feature.temperature_type.name == "CELSIUS" else "°F"
+                    )
                     print(f"  Temperature Unit:   {feature.temperature_type.name}")
                     print(f"  Temp Formula Type:  {feature.temp_formula_type}")
                     print(
-                        f"  DHW Temp Range:     {feature.dhw_temperature_min}°F - {feature.dhw_temperature_max}°F"
+                        f"  DHW Temp Range:     {feature.dhw_temperature_min}{unit_suffix} - {feature.dhw_temperature_max}{unit_suffix}"
                     )
                     print(
-                        f"  Freeze Prot Range:  {feature.freeze_protection_temp_min}°F - {feature.freeze_protection_temp_max}°F"
+                        f"  Freeze Prot Range:  {feature.freeze_protection_temp_min}{unit_suffix} - {feature.freeze_protection_temp_max}{unit_suffix}"
                     )
 
                     print("\nFeature Support:")

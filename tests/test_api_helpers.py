@@ -68,7 +68,7 @@ def test_build_reservation_entry():
         hour=6,
         minute=30,
         mode_id=4,
-        temperature_f=140.0,
+        temperature=140.0,
     )
 
     assert reservation["enable"] == 1
@@ -85,7 +85,7 @@ def test_build_reservation_entry():
         hour=8,
         minute=0,
         mode_id=3,
-        temperature_f=120.0,
+        temperature=120.0,
     )
     assert reservation2["param"] == 98  # 120°F ≈ 48.9°C ≈ 98 half-degrees
 
@@ -96,7 +96,7 @@ def test_build_reservation_entry():
             hour=24,
             minute=0,
             mode_id=1,
-            temperature_f=120.0,
+            temperature=120.0,
         )
 
     # Test temperature out of range
@@ -107,7 +107,7 @@ def test_build_reservation_entry():
             hour=6,
             minute=0,
             mode_id=1,
-            temperature_f=200.0,  # Too high
+            temperature=200.0,  # Too high
         )
 
 

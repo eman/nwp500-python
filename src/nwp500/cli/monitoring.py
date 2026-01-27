@@ -4,6 +4,7 @@ import asyncio
 import logging
 
 from nwp500 import Device, DeviceStatus, NavienMqttClient
+from nwp500.unit_system import get_unit_system
 
 from .output_formatters import write_status_to_csv
 
@@ -30,8 +31,10 @@ async def handle_monitoring(
     _logger.info("Press Ctrl+C to stop.")
 
     def on_status_update(status: DeviceStatus) -> None:
+        unit_suffix = "°C" if get_unit_system() == "metric" else "°F"
         _logger.info(
-            f"Received status update: Temp={status.dhw_temperature}°F, "
+            f"Received status update: Temp={status.dhw_temperature}"
+            f"{unit_suffix}, "
             f"Power={'ON' if status.dhw_use else 'OFF'}"
         )
         write_status_to_csv(output_file, status)

@@ -83,8 +83,11 @@ class EventEmitter:
 
         Example::
 
+            from nwp500.unit_system import get_unit_system
+
             def on_temp_change(old_temp: float, new_temp: float):
-                print(f"Temperature: {old_temp}°F → {new_temp}°F")
+                unit = "°C" if get_unit_system() == "metric" else "°F"
+                print(f"Temperature: {old_temp}{unit} → {new_temp}{unit}")
 
             emitter.on('temperature_changed', on_temp_change)
 

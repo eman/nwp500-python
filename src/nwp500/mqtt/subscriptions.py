@@ -25,7 +25,7 @@ from ..events import EventEmitter
 from ..exceptions import MqttNotConnectedError
 from ..models import Device, DeviceFeature, DeviceStatus, EnergyUsageResponse
 from ..topic_builder import MqttTopicBuilder
-from ..unit_system import UnitSystemType, set_unit_system
+from ..unit_system import UnitSystemType, get_unit_system, set_unit_system
 from .utils import redact_topic, topic_matches_pattern
 
 if TYPE_CHECKING:
@@ -428,9 +428,10 @@ class MqttSubscriptionManager:
                     prev.dhw_temperature,
                     status.dhw_temperature,
                 )
+                unit_suffix = "°C" if get_unit_system() == "metric" else "°F"
                 _logger.debug(
-                    f"Temperature changed: {prev.dhw_temperature}°F → "
-                    f"{status.dhw_temperature}°F"
+                    f"Temperature changed: {prev.dhw_temperature}"
+                    f"{unit_suffix} → {status.dhw_temperature}{unit_suffix}"
                 )
 
             # Operation mode change

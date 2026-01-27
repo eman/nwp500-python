@@ -11,12 +11,14 @@ NavienMqttClient, with full type information and documentation. This enables:
 Example::
 
     from nwp500.mqtt_events import MqttClientEvents
+    from nwp500.unit_system import get_unit_system
 
     # Type-safe event listening with autocomplete
-    mqtt_client.on(
-        MqttClientEvents.TEMPERATURE_CHANGED,
-        lambda old_temp, new_temp: print(f"Temp: {old_temp}°F → {new_temp}°F")
-    )
+    def on_temperature_changed(old_temp, new_temp):
+        unit = "°C" if get_unit_system() == "metric" else "°F"
+        print(f"Temp: {old_temp}{unit} → {new_temp}{unit}")
+
+    mqtt_client.on(MqttClientEvents.TEMPERATURE_CHANGED, on_temperature_changed)
 
     # List all available events
     for event_name in MqttClientEvents.get_all_events():
@@ -71,8 +73,10 @@ class TemperatureChangedEvent:
     """Emitted when the DHW temperature changes.
 
     Attributes:
-        old_temperature: Previous DHW temperature in °F
-        new_temperature: New DHW temperature in °F
+        old_temperature: Previous DHW temperature in user's preferred unit
+            (Celsius or Fahrenheit based on unit system context)
+        new_temperature: New DHW temperature in user's preferred unit
+            (Celsius or Fahrenheit based on unit system context)
     """
 
     old_temperature: float
@@ -221,8 +225,10 @@ class MqttClientEvents:
     """Emitted: DHW temperature changed.
 
     Args:
-        old_temperature (float): Previous DHW temperature (°F)
-        new_temperature (float): New DHW temperature (°F)
+        old_temperature (float): Previous DHW temperature in user's
+            preferred unit
+        new_temperature (float): New DHW temperature in user's preferred
+            unit
 
     See: :class:`TemperatureChangedEvent`
     """

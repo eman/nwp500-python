@@ -2,6 +2,95 @@
 Changelog
 =========
 
+Version 7.4.0 (UNRELEASED)
+==========================
+
+Breaking Changes
+----------------
+- **Temperature Setpoint Limits**: Replaced hardcoded temperature limits with device-provided values
+
+  - ``set_dhw_temperature()`` now validates against device-specific ``dhw_temperature_min`` and ``dhw_temperature_max`` instead of hardcoded 95-150°F bounds
+  - ``build_reservation_entry()`` changed parameter name from ``temperature_f`` to ``temperature`` (unit-agnostic)
+  - Added optional ``temperature_min`` and ``temperature_max`` parameters to ``build_reservation_entry()`` for device-specific limit overrides
+  - Temperature parameters now accept values in the user's preferred unit (Celsius or Fahrenheit) based on global unit system context
+  - Fixes Home Assistant and other integrations that prefer Celsius unit display
+
+  **Migration guide:**
+
+  .. code-block:: python
+
+     # OLD (hardcoded 95-150°F)
+     await mqtt.control.set_dhw_temperature(device, temperature_f=140.0)
+     entry = build_reservation_entry(
+         enabled=True,
+         days=["Monday"],
+         hour=6,
+         minute=0,
+         mode_id=3,
+         temperature_f=140.0,
+     )
+
+     # NEW (device-provided limits, unit-aware)
+     # Temperature value automatically uses user's preferred unit
+     await mqtt.control.set_dhw_temperature(device, 140.0)
+     
+     # Device features provide min/max in user's preferred unit
+     features = await device_info_cache.get(device.device_info.mac_address)
+     entry = build_reservation_entry(
+         enabled=True,
+         days=["Monday"],
+         hour=6,
+         minute=0,
+         mode_id=3,
+         temperature=140.0,
+         temperature_min=features.dhw_temperature_min,
+         temperature_max=features.dhw_temperature_max,
+     )
+
+Added
+-----
+- **Reservation Temperature Conversion**: New ``reservation_param_to_preferred()`` utility function for unit-aware reservation display
+
+  - Converts device reservation parameters (half-degree Celsius) to user's preferred unit
+  - Respects global unit system context (metric/us_customary)
+  - Enables proper thermostat/reservation scheduling display in Home Assistant and other integrations
+  - Example usage:
+
+  .. code-block:: python
+
+     from nwp500 import reservation_param_to_preferred
+
+     # Display reservation temperature in user's preferred unit
+     param = 120  # Device raw value in half-Celsius
+     temp = reservation_param_to_preferred(param)
+     # Returns: 60.0 (Celsius) or 140.0 (Fahrenheit) based on unit context
+
+- **Unit-Aware Temperature Conversion**: New ``preferred_to_half_celsius()`` utility function
+
+  - Converts temperature from user's preferred unit to half-degree Celsius for device commands
+  - Respects global unit system context (metric/us_customary)
+  - Replaces misleading ``fahrenheit_to_half_celsius()`` in unit-agnostic code paths
+  - Used internally by ``set_dhw_temperature()`` and ``build_reservation_entry()``
+
+Changed
+-------
+- **Unit System Agnostic Display**: All logging and user-facing messages now respect global unit system context
+
+  - Temperature change logs dynamically show °C or °F based on user preference
+  - CLI monitoring and temperature setting messages use correct unit suffix
+  - Event listener documentation updated with unit-aware examples
+  - Reservation schedule examples now use ``reservation_param_to_preferred()`` for proper unit handling
+
+Fixed
+-----
+- **Critical: Temperature Unit Bug in Set Operations**: Fixed incorrect temperature conversion when setting DHW temperature and reservations
+
+  - ``set_dhw_temperature()`` was calling ``fahrenheit_to_half_celsius()`` with unit-agnostic temperature parameter
+  - ``build_reservation_entry()`` had the same issue
+  - **Impact**: If user preferred Celsius, temperature would be interpreted as Fahrenheit, causing wrong setpoints
+  - **Fix**: Use new ``preferred_to_half_celsius()`` that respects unit system context
+  - This was a critical data correctness bug that would cause incorrect device behavior for Celsius users
+
 Version 7.3.2 (2026-01-25)
 ==========================
 
