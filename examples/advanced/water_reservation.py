@@ -48,8 +48,9 @@ async def water_program_example():
                 nonlocal current_status
                 current_status = status
                 logger.info(f"Current operation mode: {status.operation_mode.name}")
+                unit = status.get_field_unit("dhw_target_temperature_setting")
                 logger.info(
-                    f"Current DHW temperature setting: {status.dhw_target_temperature_setting}°F"
+                    f"Current DHW temperature setting: {status.dhw_target_temperature_setting}{unit}"
                 )
 
             await mqtt_client.subscribe_device_status(device, on_current_status)

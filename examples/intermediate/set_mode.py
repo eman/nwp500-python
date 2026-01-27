@@ -63,7 +63,8 @@ async def set_mode_example():
                 nonlocal mode_changed
                 logger.info("Mode change response received!")
                 logger.info(f"New mode: {status.operation_mode.name}")
-                logger.info(f"DHW Temperature: {status.dhw_temperature}°F")
+                unit = status.get_field_unit("dhw_temperature")
+                logger.info(f"DHW Temperature: {status.dhw_temperature}{unit}")
                 logger.info(f"Tank Charge: {status.dhw_charge_per}%")
                 mode_changed = True
 

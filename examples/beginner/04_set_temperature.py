@@ -47,18 +47,22 @@ async def set_dhw_temperature_example():
             def on_current_status(status):
                 nonlocal current_status
                 current_status = status
+                unit = status.get_field_unit("dhw_target_temperature_setting")
                 logger.info(
-                    f"Current DHW target temperature: {status.dhw_target_temperature_setting}°F"
+                    f"Current DHW target temperature: {status.dhw_target_temperature_setting}{unit}"
                 )
-                logger.info(f"Current DHW temperature: {status.dhw_temperature}°F")
+                logger.info(f"Current DHW temperature: {status.dhw_temperature}{unit}")
 
             await mqtt_client.subscribe_device_status(device, on_current_status)
             await mqtt_client.control.request_device_status(device)
             await asyncio.sleep(3)  # Wait for current status
 
-            # Set new target temperature to 140°F
+            # Set new target temperature to 140 (in user's preferred unit)
             target_temperature = 140
-            logger.info(f"Setting DHW target temperature to {target_temperature}°F...")
+            unit = "°C" if current_status.temperature_type.name == "CELSIUS" else "°F"
+            logger.info(
+                f"Setting DHW target temperature to {target_temperature}{unit}..."
+            )
 
             # Set up callback to capture temperature change response
             temp_changed = False
@@ -66,10 +70,11 @@ async def set_dhw_temperature_example():
             def on_temp_change_response(status):
                 nonlocal temp_changed
                 logger.info("Temperature change response received!")
+                unit = status.get_field_unit("dhw_target_temperature_setting")
                 logger.info(
-                    f"New target temperature: {status.dhw_target_temperature_setting}°F"
+                    f"New target temperature: {status.dhw_target_temperature_setting}{unit}"
                 )
-                logger.info(f"Current DHW temperature: {status.dhw_temperature}°F")
+                logger.info(f"Current DHW temperature: {status.dhw_temperature}{unit}")
                 logger.info(f"Operation mode: {status.operation_mode.name}")
                 logger.info(f"Tank charge: {status.dhw_charge_per}%")
                 temp_changed = True
@@ -98,7 +103,7 @@ if __name__ == "__main__":
     print("This example demonstrates:")
     print("1. Connecting to device via MQTT")
     print("2. Getting current DHW target temperature")
-    print("3. Setting new DHW target temperature to 140°F")
+    print("3. Setting new DHW target temperature (in device's preferred unit)")
     print("4. Receiving and displaying the response")
     print()
 
@@ -116,5 +121,5 @@ if __name__ == "__main__":
     print("  python -m nwp500.cli temp 130")
     print("  python -m nwp500.cli temp 150")
     print()
-    print("Valid temperature range: 115-150°F")
-    print("Note: The device may cap temperatures at 150°F maximum")
+    print("Valid temperature range depends on device configuration")
+    print("Note: Temperature values are interpreted in your device's preferred unit")

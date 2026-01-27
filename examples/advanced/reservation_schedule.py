@@ -25,7 +25,7 @@ async def main() -> None:
             print("No devices found for this account")
             return
 
-        # Build a weekday morning reservation for High Demand mode at 140°F
+        # Build a weekday morning reservation for High Demand mode at 140 (user's preferred unit)
         weekday_reservation = build_reservation_entry(
             enabled=True,
             days=["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"],

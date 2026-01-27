@@ -48,7 +48,8 @@ async def power_control_example():
                 nonlocal current_status
                 current_status = status
                 logger.info(f"Current operation mode: {status.operation_mode.name}")
-                logger.info(f"Current DHW temperature: {status.dhw_temperature}°F")
+                unit = status.get_field_unit("dhw_temperature")
+                logger.info(f"Current DHW temperature: {status.dhw_temperature}{unit}")
 
             await mqtt_client.subscribe_device_status(device, on_current_status)
             await mqtt_client.control.request_device_status(device)

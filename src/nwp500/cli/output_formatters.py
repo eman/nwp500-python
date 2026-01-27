@@ -565,9 +565,23 @@ def print_device_status(device_status: Any) -> None:
     _add_numeric_item(
         all_items,
         device_status,
+        "hp_upper_on_diff_temp_setting",
+        "HEAT PUMP SETTINGS",
+        "Upper On Diff",
+    )
+    _add_numeric_item(
+        all_items,
+        device_status,
         "hp_upper_off_temp_setting",
         "HEAT PUMP SETTINGS",
         "Upper Off",
+    )
+    _add_numeric_item(
+        all_items,
+        device_status,
+        "hp_upper_off_diff_temp_setting",
+        "HEAT PUMP SETTINGS",
+        "Upper Off Diff",
     )
     _add_numeric_item(
         all_items,
@@ -579,9 +593,23 @@ def print_device_status(device_status: Any) -> None:
     _add_numeric_item(
         all_items,
         device_status,
+        "hp_lower_on_diff_temp_setting",
+        "HEAT PUMP SETTINGS",
+        "Lower On Diff",
+    )
+    _add_numeric_item(
+        all_items,
+        device_status,
         "hp_lower_off_temp_setting",
         "HEAT PUMP SETTINGS",
         "Lower Off",
+    )
+    _add_numeric_item(
+        all_items,
+        device_status,
+        "hp_lower_off_diff_temp_setting",
+        "HEAT PUMP SETTINGS",
+        "Lower Off Diff",
     )
 
     # Heat Element Settings
@@ -595,9 +623,23 @@ def print_device_status(device_status: Any) -> None:
     _add_numeric_item(
         all_items,
         device_status,
+        "he_upper_on_diff_temp_setting",
+        "HEAT ELEMENT SETTINGS",
+        "Upper On Diff",
+    )
+    _add_numeric_item(
+        all_items,
+        device_status,
         "he_upper_off_temp_setting",
         "HEAT ELEMENT SETTINGS",
         "Upper Off",
+    )
+    _add_numeric_item(
+        all_items,
+        device_status,
+        "he_upper_off_diff_temp_setting",
+        "HEAT ELEMENT SETTINGS",
+        "Upper Off Diff",
     )
     _add_numeric_item(
         all_items,
@@ -609,9 +651,23 @@ def print_device_status(device_status: Any) -> None:
     _add_numeric_item(
         all_items,
         device_status,
+        "he_lower_on_diff_temp_setting",
+        "HEAT ELEMENT SETTINGS",
+        "Lower On Diff",
+    )
+    _add_numeric_item(
+        all_items,
+        device_status,
         "he_lower_off_temp_setting",
         "HEAT ELEMENT SETTINGS",
         "Lower Off",
+    )
+    _add_numeric_item(
+        all_items,
+        device_status,
+        "he_lower_off_diff_temp_setting",
+        "HEAT ELEMENT SETTINGS",
+        "Lower Off Diff",
     )
 
     # Power & Energy

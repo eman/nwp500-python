@@ -2,6 +2,25 @@
 Changelog
 =========
 
+Version 7.3.4 (2026-01-27)
+==========================
+
+Fixed
+-----
+- **Temperature Delta Conversions**: Fixed incorrect Fahrenheit conversion for differential temperature settings (heat pump and heater element on/off thresholds)
+
+  - Created new ``DeciCelsiusDelta`` class for temperature deltas that apply scale factor (9/5) but NOT the +32 offset
+  - Heat pump and heater element differential settings now use ``DeciCelsiusDelta`` instead of ``DeciCelsius``
+  - ``hp_upper_on_diff_temp_setting``, ``hp_lower_on_diff_temp_setting``, ``he_upper_on_diff_temp_setting``, ``he_lower_on_diff_temp_setting``, and related off settings now convert correctly to Fahrenheit
+  - Example: A device value of 5 (representing 0.5°C delta) now correctly converts to 0.9°F delta instead of 32.9°F
+
+- **CLI Output**: Added display of heat pump and heater element differential temperature settings in device status output
+
+Changed
+-------
+- **Internal API**: Added ``div_10_celsius_delta_to_preferred`` converter for temperature delta values in device models
+
+
 Version 7.3.3 (2026-01-27)
 ==========================
 

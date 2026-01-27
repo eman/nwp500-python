@@ -40,8 +40,9 @@ async def main():
 
     # Typed callback
     def on_status(status: DeviceStatus):
+        unit = status.get_field_unit("dhw_temperature")
         print(
-            f"Status: {status.dhw_temperature:.1f}°F, {status.current_inst_power:.1f}W"
+            f"Status: {status.dhw_temperature:.1f}{unit}, {status.current_inst_power:.1f}W"
         )
 
     # Subscribe with typed parsing

@@ -73,8 +73,9 @@ async def main():
         nonlocal status_count
         status_count += 1
 
+        unit = status.get_field_unit("dhw_temperature")
         print(f"\n--- Status Response #{status_count} ---")
-        print(f"  Temperature: {status.dhw_temperature:.1f}°F")
+        print(f"  Temperature: {status.dhw_temperature:.1f}{unit}")
         print(f"  Power: {status.current_inst_power:.1f}W")
         print(f"  Available Energy: {status.available_energy_capacity:.0f} Wh")
 

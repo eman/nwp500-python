@@ -44,9 +44,10 @@ async def main():
 
         # Step 4: Monitor device status
         def on_status(status):
+            unit = status.get_field_unit("dhw_temperature")
             print("\n📊 Device Status:")
-            print(f"   Temperature: {status.dhw_temperature}°F")
-            print(f"   Target: {status.dhw_temperature_setting}°F")
+            print(f"   Temperature: {status.dhw_temperature}{unit}")
+            print(f"   Target: {status.dhw_temperature_setting}{unit}")
             print(f"   Power: {status.current_inst_power}W")
 
         await mqtt.subscribe_device_status(device, on_status)

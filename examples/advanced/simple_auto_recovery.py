@@ -200,8 +200,9 @@ async def main():
         def on_status(status):
             nonlocal status_count
             status_count += 1
+            unit = status.get_field_unit("dhw_temperature")
             logger.info(
-                f"Status #{status_count}: Temp={status.dhw_temperature}°F, "
+                f"Status #{status_count}: Temp={status.dhw_temperature}{unit}, "
                 f"Mode={status.operation_mode}"
             )
 

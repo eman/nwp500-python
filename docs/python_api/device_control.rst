@@ -220,7 +220,7 @@ Temperature Control
 set_dhw_temperature()
 ^^^^^^^^^^^^^^^^^^^^^
 
-.. py:method:: set_dhw_temperature(device, temperature_f)
+.. py:method:: set_dhw_temperature(device, temperature)
 
    Set DHW target temperature.
 
@@ -228,24 +228,25 @@ set_dhw_temperature()
 
    :param device: Device object
    :type device: Device
-   :param temperature_f: Target temperature in Fahrenheit (95-150°F)
-   :type temperature_f: float
+   :param temperature: Target temperature in user's preferred unit (Celsius or Fahrenheit)
+   :type temperature: float
    :return: Publish packet ID
    :rtype: int
-   :raises RangeValidationError: If temperature is outside 95-150°F range
+   :raises RangeValidationError: If temperature is outside valid range
    :raises DeviceCapabilityError: If device doesn't support temperature control
 
    The temperature is automatically converted to the device's internal format
-   (half-degrees Celsius).
+   (half-degrees Celsius). The valid range depends on the device's
+   temperature preference and configuration.
 
    **Example:**
 
    .. code-block:: python
 
-      # Set temperature to 140°F
+      # Set temperature (interpreted in device's preferred unit)
       await mqtt.control.set_dhw_temperature(device, 140.0)
       
-      # Common temperatures
+      # Common temperatures (device-dependent units)
       await mqtt.control.set_dhw_temperature(device, 120.0)  # Standard
       await mqtt.control.set_dhw_temperature(device, 130.0)  # Medium
       await mqtt.control.set_dhw_temperature(device, 140.0)  # Hot

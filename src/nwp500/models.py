@@ -25,6 +25,7 @@ from .converters import (
     deci_celsius_to_preferred,
     device_bool_to_python,
     div_10,
+    div_10_celsius_delta_to_preferred,
     div_10_celsius_to_preferred,
     enum_validator,
     flow_rate_to_preferred,
@@ -79,6 +80,9 @@ RawCelsiusToPreferred = Annotated[
 ]
 Div10CelsiusToPreferred = Annotated[
     float, WrapValidator(div_10_celsius_to_preferred)
+]
+Div10CelsiusDeltaToPreferred = Annotated[
+    float, WrapValidator(div_10_celsius_delta_to_preferred)
 ]
 FlowRate = Annotated[float, WrapValidator(flow_rate_to_preferred)]
 Volume = Annotated[float, WrapValidator(volume_to_preferred)]
@@ -709,49 +713,49 @@ class DeviceStatus(NavienBaseModel):
             "device_class": "flow_rate",
         },
     )
-    hp_upper_on_diff_temp_setting: Div10CelsiusToPreferred = Field(
+    hp_upper_on_diff_temp_setting: Div10CelsiusDeltaToPreferred = Field(
         description="Heat pump upper on differential temperature setting",
         json_schema_extra={
             "unit_of_measurement": "°F",
             "device_class": "temperature",
         },
     )
-    hp_upper_off_diff_temp_setting: Div10CelsiusToPreferred = Field(
+    hp_upper_off_diff_temp_setting: Div10CelsiusDeltaToPreferred = Field(
         description="Heat pump upper off differential temperature setting",
         json_schema_extra={
             "unit_of_measurement": "°F",
             "device_class": "temperature",
         },
     )
-    hp_lower_on_diff_temp_setting: Div10CelsiusToPreferred = Field(
+    hp_lower_on_diff_temp_setting: Div10CelsiusDeltaToPreferred = Field(
         description="Heat pump lower on differential temperature setting",
         json_schema_extra={
             "unit_of_measurement": "°F",
             "device_class": "temperature",
         },
     )
-    hp_lower_off_diff_temp_setting: Div10CelsiusToPreferred = Field(
+    hp_lower_off_diff_temp_setting: Div10CelsiusDeltaToPreferred = Field(
         description="Heat pump lower off differential temperature setting",
         json_schema_extra={
             "unit_of_measurement": "°F",
             "device_class": "temperature",
         },
     )
-    he_upper_on_diff_temp_setting: Div10CelsiusToPreferred = Field(
+    he_upper_on_diff_temp_setting: Div10CelsiusDeltaToPreferred = Field(
         description="Heater element upper on differential temperature setting",
         json_schema_extra={
             "unit_of_measurement": "°F",
             "device_class": "temperature",
         },
     )
-    he_upper_off_diff_temp_setting: Div10CelsiusToPreferred = Field(
+    he_upper_off_diff_temp_setting: Div10CelsiusDeltaToPreferred = Field(
         description="Heater element upper off differential temperature setting",
         json_schema_extra={
             "unit_of_measurement": "°F",
             "device_class": "temperature",
         },
     )
-    he_lower_on_diff_temp_setting: Div10CelsiusToPreferred = Field(
+    he_lower_on_diff_temp_setting: Div10CelsiusDeltaToPreferred = Field(
         alias="heLowerOnTDiffempSetting",
         description="Heater element lower on differential temperature setting",
         json_schema_extra={
@@ -759,7 +763,7 @@ class DeviceStatus(NavienBaseModel):
             "device_class": "temperature",
         },
     )  # Handle API typo: heLowerOnTDiffempSetting -> heLowerOnDiffTempSetting
-    he_lower_off_diff_temp_setting: Div10CelsiusToPreferred = Field(
+    he_lower_off_diff_temp_setting: Div10CelsiusDeltaToPreferred = Field(
         description="Heater element lower off differential temperature setting",
         json_schema_extra={
             "unit_of_measurement": "°F",

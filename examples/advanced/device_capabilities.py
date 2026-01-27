@@ -138,9 +138,7 @@ async def main():
                     )
 
                     print("\nConfiguration:")
-                    unit_suffix = (
-                        "°C" if feature.temperature_type.name == "CELSIUS" else "°F"
-                    )
+                    unit_suffix = feature.get_field_unit("dhw_temperature_min")
                     print(f"  Temperature Unit:   {feature.temperature_type.name}")
                     print(f"  Temp Formula Type:  {feature.temp_formula_type}")
                     print(

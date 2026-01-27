@@ -34,8 +34,16 @@ The device uses several encoding schemes to minimize transmission overhead:
    - Applied to decimal precision values
    - Formula: ``displayed_value = raw_value / 10.0``
    - Purpose: Preserve decimal precision in integer storage
-   - Common for flow rates and differential temperatures
+   - Common for flow rates
    - Example: Raw 125 → 12.5 GPM
+
+3.5. **Temperature Delta (Decicelsius)** (div_10_celsius_delta)
+   - Applied to differential temperature settings (heat pump and element hysteresis)
+   - Formula: ``displayed_value_celsius = raw_value / 10.0``, ``displayed_value_fahrenheit = (raw_value / 10.0) * 9/5`` (NO +32 offset)
+   - Purpose: Represents temperature DIFFERENCES/DELTAS, not absolute temperatures
+   - Key difference from absolute temperature conversion: No +32 offset applied when converting to Fahrenheit
+   - Example: Raw 5 → 0.5°C delta → 0.9°F delta (NOT 32.9°F)
+   - Used for: Heat pump on/off differential, heating element on/off differential
 
 4. **Boolean Encoding** (device_bool)
    - Applied to all status flags
@@ -181,21 +189,21 @@ Electric heating elements are controlled via thermostat ranges. Two sensors (upp
      - °F
      - **Lower element OFF threshold**. Lower tank temp rises above this to deactivate lower element.
    * - ``heUpperOnDiffTempSetting``
-     - div_10
+     - div_10_celsius_delta
      - °F
-     - **Upper element differential** (ON-OFF difference). Hysteresis width to prevent rapid cycling. Typically 2-5°F.
+     - **Upper element differential** (ON-OFF hysteresis width). Temperature delta to prevent rapid cycling. Typically 2-5°F. This is a DELTA value, not an absolute temperature (0 delta = 0°F difference).
    * - ``heUpperOffDiffTempSetting``
-     - div_10
+     - div_10_celsius_delta
      - °F
-     - **Upper element differential** variation (advanced tuning). May vary based on mode.
+     - **Upper element OFF differential** (advanced tuning). May vary based on mode. DELTA value.
    * - ``heLowerOnDiffTempSetting``
-     - div_10
+     - div_10_celsius_delta
      - °F
-     - **Lower element differential** (ON-OFF difference).
+     - **Lower element differential** (ON-OFF hysteresis width). DELTA value.
    * - ``heLowerOffDiffTempSetting``
-     - div_10
+     - div_10_celsius_delta
      - °F
-     - **Lower element differential** variation.
+     - **Lower element OFF differential** variation. DELTA value.
    * - ``heatMinOpTemperature``
      - HalfCelsiusToF
      - °F
@@ -231,21 +239,21 @@ Heat pump stages are similarly controlled via thermostat ranges:
      - °F
      - **Lower heat pump OFF**. Lower tank rises above this to stop lower tank heat pump operation.
    * - ``hpUpperOnDiffTempSetting``
-     - div_10
+     - div_10_celsius_delta
      - °F
-     - **Heat pump upper differential** (ON-OFF hysteresis). Prevents rapid cycling.
+     - **Heat pump upper differential** (ON-OFF hysteresis). Temperature delta to prevent rapid cycling. DELTA value.
    * - ``hpUpperOffDiffTempSetting``
-     - div_10
+     - div_10_celsius_delta
      - °F
-     - **Heat pump upper differential** variation.
+     - **Heat pump upper OFF differential** variation. DELTA value.
    * - ``hpLowerOnDiffTempSetting``
-     - div_10
+     - div_10_celsius_delta
      - °F
-     - **Heat pump lower differential**.
+     - **Heat pump lower ON differential**. DELTA value.
    * - ``hpLowerOffDiffTempSetting``
-     - div_10
+     - div_10_celsius_delta
      - °F
-     - **Heat pump lower differential** variation.
+     - **Heat pump lower OFF differential** variation. DELTA value.
 
 Freeze Protection Temperatures
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^

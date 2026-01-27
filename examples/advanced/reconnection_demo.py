@@ -89,8 +89,9 @@ async def main():
         def on_status(status):
             nonlocal status_count
             status_count += 1
+            unit = status.get_field_unit("dhw_temperature")
             print(f"\n📊 Status update #{status_count}:")
-            print(f"   Temperature: {status.dhw_temperature}°F")
+            print(f"   Temperature: {status.dhw_temperature}{unit}")
             print(f"   Connected: {mqtt_client.is_connected}")
             if mqtt_client.is_reconnecting:
                 print(f"   Reconnecting: attempt {mqtt_client.reconnect_attempts}...")
