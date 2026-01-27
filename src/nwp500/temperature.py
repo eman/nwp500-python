@@ -407,7 +407,7 @@ class DeciCelsiusDelta(Temperature):
             Temperature delta in Fahrenheit.
         """
         celsius = self.to_celsius()
-        return round(celsius * 9 / 5, 1)
+        return celsius * 9 / 5
 
     @classmethod
     def from_fahrenheit(cls, fahrenheit: float) -> DeciCelsiusDelta:
