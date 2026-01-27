@@ -32,7 +32,7 @@ async def main() -> None:
             hour=6,
             minute=30,
             mode_id=4,  # High Demand
-            temperature_f=140.0,  # Temperature in Fahrenheit
+            temperature=140.0,  # Temperature in user's preferred unit
         )
 
         mqtt_client = NavienMqttClient(auth_client)
@@ -42,6 +42,9 @@ async def main() -> None:
         response_topic = f"cmd/{device.device_info.device_type}/{mqtt_client.config.client_id}/res/rsv/rd"
 
         def on_reservation_update(topic: str, message: dict[str, Any]) -> None:
+            from nwp500 import reservation_param_to_preferred
+            from nwp500.unit_system import get_unit_system
+
             response = message.get("response", {})
             reservations = response.get("reservation", [])
             print("\nReceived reservation response:")
@@ -49,18 +52,25 @@ async def main() -> None:
                 f"  reservationUse: {response.get('reservationUse')} (1=enabled, 2=disabled)"
             )
             print(f"  entries: {len(reservations)}")
+            unit_suffix = (
+                "°C"
+                if get_unit_system() == "metric"
+                else "°F"
+            )
             for idx, entry in enumerate(reservations, start=1):
                 week_days = decode_week_bitfield(entry.get("week", 0))
-                # Convert half-degrees Celsius param back to Fahrenheit for display
+                # Convert half-degrees Celsius param to user's preferred unit
                 param = entry.get("param", 0)
-                temp_f = (param / 2.0) * 9 / 5 + 32
+                temp = reservation_param_to_preferred(param)
                 print(
-                    "   - #{idx}: {time:02d}:{minute:02d} mode={mode} temp={temp:.1f}°F days={days}".format(
+                    "   - #{idx}: {time:02d}:{minute:02d} mode={mode} "
+                    "temp={temp:.1f}{unit} days={days}".format(
                         idx=idx,
                         time=entry.get("hour", 0),
                         minute=entry.get("min", 0),
                         mode=entry.get("mode"),
-                        temp=temp_f,
+                        temp=temp,
+                        unit=unit_suffix,
                         days=", ".join(week_days) or "<none>",
                     )
                 )

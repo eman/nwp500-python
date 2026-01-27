@@ -422,7 +422,7 @@ DHW Temperature
    Temperature values are encoded in **half-degrees Celsius**. 
    Use formula: ``fahrenheit = (param / 2.0) * 9/5 + 32``
    For 140°F, send ``param=120`` (which is 60°C × 2).
-   Valid range: 95-150°F (70-150 raw value).
+   Valid range: Device-specific (see device features for ``dhw_temperature_min`` and ``dhw_temperature_max``).
 
 Anti-Legionella
 ---------------

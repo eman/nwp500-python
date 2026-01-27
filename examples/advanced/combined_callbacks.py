@@ -98,8 +98,9 @@ async def main():
                     print(f"\n📋 Feature Info #{counts['feature']}")
                     print(f"  Serial: {feature.controller_serial_number}")
                     print(f"  FW Version: {feature.controller_sw_version}")
+                    unit_suffix = "°C" if feature.temperature_type.name == "CELSIUS" else "°F"
                     print(
-                        f"  Temp Range: {feature.dhw_temperature_min}-{feature.dhw_temperature_max}°F"
+                        f"  Temp Range: {feature.dhw_temperature_min}-{feature.dhw_temperature_max}{unit_suffix}"
                     )
                     print(
                         f"  Heat Pump: {'Yes' if feature.heatpump_use == OnOffFlag.ON else 'No'}"

@@ -22,6 +22,7 @@ from nwp500.exceptions import (
     ValidationError,
 )
 from nwp500.mqtt.utils import redact_serial
+from nwp500.unit_system import get_unit_system
 
 from .output_formatters import (
     print_device_info,
@@ -239,12 +240,17 @@ async def handle_set_dhw_temp_request(
     mqtt: NavienMqttClient, device: Device, temperature: float
 ) -> None:
     """Set DHW target temperature."""
+    unit_suffix = (
+        "°C"
+        if get_unit_system() == "metric"
+        else "°F"
+    )
     await _handle_command_with_status_feedback(
         mqtt,
         device,
         lambda: mqtt.control.set_dhw_temperature(device, temperature),
         "setting temperature",
-        f"Temperature set to {temperature}°F",
+        f"Temperature set to {temperature}{unit_suffix}",
     )
 
 

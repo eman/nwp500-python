@@ -31,7 +31,11 @@ from ..exceptions import (
     ParameterValidationError,
     RangeValidationError,
 )
-from ..models import Device, DeviceFeature, fahrenheit_to_half_celsius
+from ..models import (
+    Device,
+    DeviceFeature,
+    preferred_to_half_celsius,
+)
 from ..topic_builder import MqttTopicBuilder
 
 __author__ = "Emmanuel Levijarvi"
@@ -395,15 +399,34 @@ class MqttDeviceController:
 
     @requires_capability("dhw_temperature_setting_use")
     async def set_dhw_temperature(
-        self, device: Device, temperature_f: float
+        self, device: Device, temperature: float
     ) -> int:
-        """Set DHW target temperature (95-150°F)."""
-        self._validate_range("temperature_f", temperature_f, 95, 150)
+        """Set DHW target temperature.
+
+        Temperature is in the user's preferred unit (Celsius or Fahrenheit)
+        based on the global unit system context.
+        """
+        features = await self._get_device_features(device)
+        if features is None:
+            raise DeviceCapabilityError(
+                "dhw_temperature_setting_use",
+                (
+                    "Device features not available. "
+                    "Unable to validate temperature range."
+                ),
+            )
+
+        self._validate_range(
+            "temperature",
+            temperature,
+            features.dhw_temperature_min,
+            features.dhw_temperature_max,
+        )
         return await self._mode_command(
             device,
             CommandCode.DHW_TEMPERATURE,
             "dhw-temperature",
-            [fahrenheit_to_half_celsius(temperature_f)],
+            [preferred_to_half_celsius(temperature)],
         )
 
     async def update_reservations(

@@ -113,6 +113,8 @@ from nwp500.models import (
     TOUInfo,
     TOUSchedule,
     fahrenheit_to_half_celsius,
+    preferred_to_half_celsius,
+    reservation_param_to_preferred,
 )
 from nwp500.mqtt import (
     ConnectionDropEvent,
@@ -179,6 +181,8 @@ __all__ = [
     "VolumeCode",
     # Conversion utilities
     "fahrenheit_to_half_celsius",
+    "preferred_to_half_celsius",
+    "reservation_param_to_preferred",
     # Authentication
     "NavienAuthClient",
     "AuthenticationResponse",
