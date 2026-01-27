@@ -14,13 +14,11 @@ Example::
     from nwp500.unit_system import get_unit_system
 
     # Type-safe event listening with autocomplete
-    mqtt_client.on(
-        MqttClientEvents.TEMPERATURE_CHANGED,
-        lambda old_temp, new_temp: (
-            unit := "°C" if get_unit_system() == "metric" else "°F",
-            print(f"Temp: {old_temp}{unit} → {new_temp}{unit}")
-        )
-    )
+    def on_temperature_changed(old_temp, new_temp):
+        unit = "°C" if get_unit_system() == "metric" else "°F"
+        print(f"Temp: {old_temp}{unit} → {new_temp}{unit}")
+
+    mqtt_client.on(MqttClientEvents.TEMPERATURE_CHANGED, on_temperature_changed)
 
     # List all available events
     for event_name in MqttClientEvents.get_all_events():
