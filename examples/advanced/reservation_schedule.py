@@ -52,11 +52,7 @@ async def main() -> None:
                 f"  reservationUse: {response.get('reservationUse')} (1=enabled, 2=disabled)"
             )
             print(f"  entries: {len(reservations)}")
-            unit_suffix = (
-                "°C"
-                if get_unit_system() == "metric"
-                else "°F"
-            )
+            unit_suffix = "°C" if get_unit_system() == "metric" else "°F"
             for idx, entry in enumerate(reservations, start=1):
                 week_days = decode_week_bitfield(entry.get("week", 0))
                 # Convert half-degrees Celsius param to user's preferred unit

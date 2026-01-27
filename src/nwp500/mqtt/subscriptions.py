@@ -428,11 +428,7 @@ class MqttSubscriptionManager:
                     prev.dhw_temperature,
                     status.dhw_temperature,
                 )
-                unit_suffix = (
-                    "°C"
-                    if get_unit_system() == "metric"
-                    else "°F"
-                )
+                unit_suffix = "°C" if get_unit_system() == "metric" else "°F"
                 _logger.debug(
                     f"Temperature changed: {prev.dhw_temperature}"
                     f"{unit_suffix} → {status.dhw_temperature}{unit_suffix}"

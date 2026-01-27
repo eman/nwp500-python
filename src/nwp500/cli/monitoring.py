@@ -31,11 +31,7 @@ async def handle_monitoring(
     _logger.info("Press Ctrl+C to stop.")
 
     def on_status_update(status: DeviceStatus) -> None:
-        unit_suffix = (
-            "°C"
-            if get_unit_system() == "metric"
-            else "°F"
-        )
+        unit_suffix = "°C" if get_unit_system() == "metric" else "°F"
         _logger.info(
             f"Received status update: Temp={status.dhw_temperature}"
             f"{unit_suffix}, "

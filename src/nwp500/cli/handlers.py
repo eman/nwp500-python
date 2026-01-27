@@ -240,11 +240,7 @@ async def handle_set_dhw_temp_request(
     mqtt: NavienMqttClient, device: Device, temperature: float
 ) -> None:
     """Set DHW target temperature."""
-    unit_suffix = (
-        "°C"
-        if get_unit_system() == "metric"
-        else "°F"
-    )
+    unit_suffix = "°C" if get_unit_system() == "metric" else "°F"
     await _handle_command_with_status_feedback(
         mqtt,
         device,
