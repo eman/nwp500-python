@@ -2,7 +2,7 @@
 Changelog
 =========
 
-Version 7.4.0 (UNRELEASED)
+Version 7.3.3 (2026-01-27)
 ==========================
 
 Breaking Changes
