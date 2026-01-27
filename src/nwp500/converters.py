@@ -17,7 +17,7 @@ from typing import Any
 from pydantic import ValidationInfo, ValidatorFunctionWrapHandler
 
 from .enums import TemperatureType, TempFormulaType
-from .temperature import DeciCelsius, HalfCelsius, RawCelsius
+from .temperature import DeciCelsius, DeciCelsiusDelta, HalfCelsius, RawCelsius
 from .unit_system import get_unit_system
 
 _logger = logging.getLogger(__name__)
@@ -35,6 +35,7 @@ __all__ = [
     "flow_rate_to_preferred",
     "volume_to_preferred",
     "div_10_celsius_to_preferred",
+    "div_10_celsius_delta_to_preferred",
 ]
 
 
@@ -479,3 +480,40 @@ def div_10_celsius_to_preferred(
 
     # Convert Celsius to Fahrenheit
     return round(celsius * 9 / 5 + 32, 1)
+
+
+def div_10_celsius_delta_to_preferred(
+    value: Any, handler: ValidatorFunctionWrapHandler, info: ValidationInfo
+) -> float:
+    """Convert decicelsius delta value (raw / 10) to preferred unit (C or F).
+
+    Raw device values are in tenths of Celsius (0.1°C per unit).
+    This represents a temperature DELTA (difference), not an absolute
+    temperature.
+
+    Key difference from div_10_celsius_to_preferred: For deltas, we apply the
+    scale factor but NOT the +32 offset.
+
+    - If Metric (Celsius) mode: Return Celsius delta (value / 10.0)
+    - If Imperial (Fahrenheit) mode: Convert to Fahrenheit delta (no +32)
+
+    Uses WrapValidator instead of BeforeValidator to access ValidationInfo.data,
+    which contains sibling fields needed to determine the device's temperature
+    preference (Celsius or Fahrenheit).
+
+    Args:
+        value: Raw device value (tenths of Celsius delta).
+        handler: Pydantic next validator handler. Not invoked as we bypass the
+            validation chain to directly convert using the device's temperature
+            preference. WrapValidator is required for access to ValidationInfo.
+        info: Pydantic validation context containing sibling fields, used to
+            retrieve the device's temperature_type preference.
+
+    Returns:
+        Temperature delta in preferred unit (Celsius or Fahrenheit).
+    """
+    is_celsius = _get_temperature_preference(info)
+
+    if isinstance(value, (int, float)):
+        return DeciCelsiusDelta(value).to_preferred(is_celsius)
+    return float(value)

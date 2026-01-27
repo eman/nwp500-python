@@ -41,20 +41,20 @@ from nwp500.models import DeviceStatus
 # Example 1: Multiple listeners for the same event
 def log_temperature(old_temp: float, new_temp: float):
     """Logger for temperature changes."""
-    print(f"📊 [Logger] Temperature: {old_temp}°F → {new_temp}°F")
+    print(f"📊 [Logger] Temperature: {old_temp} → {new_temp}")
 
 
 def alert_on_high_temp(old_temp: float, new_temp: float):
     """Alert handler for high temperatures."""
     if new_temp > 145:
-        print(f"[WARNING]  [Alert] HIGH TEMPERATURE: {new_temp}°F!")
+        print(f"[WARNING]  [Alert] HIGH TEMPERATURE: {new_temp}!")
 
 
 async def save_temperature_to_db(old_temp: float, new_temp: float):
     """Async database saver (simulated)."""
     # Simulate async database operation
     await asyncio.sleep(0.1)
-    print(f"💾 [Database] Saved temperature change: {new_temp}°F")
+    print(f"💾 [Database] Saved temperature change: {new_temp}")
 
 
 # Example 2: Mode change handlers
@@ -90,7 +90,8 @@ def on_heating_stopped(status: DeviceStatus):
 def on_error_detected(error_code: str, status: DeviceStatus):
     """Handler for error detection."""
     print(f"[ERROR] [Error] ERROR DETECTED: {error_code}")
-    print(f"   Temperature: {status.dhw_temperature}°F")
+    unit = status.get_field_unit("dhw_temperature")
+    print(f"   Temperature: {status.dhw_temperature}{unit}")
     print(f"   Mode: {status.operation_mode}")
 
 
@@ -190,7 +191,9 @@ async def main():
             # One-time listener example
             mqtt_client.once(
                 MqttClientEvents.STATUS_RECEIVED,
-                lambda s: print(f"   🎉 First status received: {s.dhw_temperature}°F"),
+                lambda s: print(
+                    f"   🎉 First status received: {s.dhw_temperature}{s.get_field_unit('dhw_temperature')}"
+                ),
             )
             print("   [SUCCESS] Registered one-time status handler")
             print()

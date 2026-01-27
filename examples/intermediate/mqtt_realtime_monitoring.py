@@ -147,12 +147,13 @@ async def main():
                     """Typed callback for device status."""
                     message_count["count"] += 1
                     message_count["status"] += 1
+                    unit = status.get_field_unit("dhw_temperature")
                     print(
                         f"\n📊 Status Update #{message_count['status']} (Message #{message_count['count']})"
                     )
-                    print(f"   - DHW Temperature: {status.dhw_temperature:.1f}°F")
-                    print(f"   - Tank Upper: {status.tank_upper_temperature:.1f}°F")
-                    print(f"   - Tank Lower: {status.tank_lower_temperature:.1f}°F")
+                    print(f"   - DHW Temperature: {status.dhw_temperature:.1f}{unit}")
+                    print(f"   - Tank Upper: {status.tank_upper_temperature:.1f}{unit}")
+                    print(f"   - Tank Lower: {status.tank_lower_temperature:.1f}{unit}")
                     print(f"   - Operation Mode: {status.operation_mode}")
                     print(f"   - DHW Active: {status.dhw_use}")
                     print(f"   - Compressor: {status.comp_use}")

@@ -137,22 +137,28 @@ async def main():
                     print("=" * 60)
 
                     # Access typed status fields directly
+                    unit = status.get_field_unit("dhw_temperature")
+                    flow_unit = status.get_field_unit("current_dhw_flow_rate")
+                    superheat_unit = status.get_field_unit("current_super_heat")
+
                     print("Temperatures:")
-                    print(f"  DHW Temperature:        {status.dhw_temperature:.1f}°F")
                     print(
-                        f"  DHW Target Setting:     {status.dhw_target_temperature_setting:.1f}°F"
+                        f"  DHW Temperature:        {status.dhw_temperature:.1f}{unit}"
                     )
                     print(
-                        f"  Tank Upper:             {status.tank_upper_temperature:.1f}°F"
+                        f"  DHW Target Setting:     {status.dhw_target_temperature_setting:.1f}{unit}"
                     )
                     print(
-                        f"  Tank Lower:             {status.tank_lower_temperature:.1f}°F"
+                        f"  Tank Upper:             {status.tank_upper_temperature:.1f}{unit}"
                     )
                     print(
-                        f"  Discharge:              {status.discharge_temperature:.1f}°F"
+                        f"  Tank Lower:             {status.tank_lower_temperature:.1f}{unit}"
                     )
                     print(
-                        f"  Ambient:                {status.ambient_temperature:.1f}°F"
+                        f"  Discharge:              {status.discharge_temperature:.1f}{unit}"
+                    )
+                    print(
+                        f"  Ambient:                {status.ambient_temperature:.1f}{unit}"
                     )
 
                     print("\nOperation:")
@@ -176,10 +182,10 @@ async def main():
                     )
                     print(f"  EEV Step:               {status.eev_step}")
                     print(
-                        f"  Super Heat:             {status.current_super_heat:.1f}°F"
+                        f"  Super Heat:             {status.current_super_heat:.1f}{superheat_unit}"
                     )
                     print(
-                        f"  Flow Rate:              {status.current_dhw_flow_rate:.1f} GPM"
+                        f"  Flow Rate:              {status.current_dhw_flow_rate:.1f}{flow_unit}"
                     )
                     print(f"  Temperature Unit:       {status.temperature_type.name}")
 

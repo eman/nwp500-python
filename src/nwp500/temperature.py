@@ -371,3 +371,77 @@ def deci_celsius_to_fahrenheit(value: Any) -> float:
     if isinstance(value, (int, float)):
         return DeciCelsius(value).to_fahrenheit()
     return float(value)
+
+
+class DeciCelsiusDelta(Temperature):
+    """Temperature delta in decicelsius (0.1°C precision).
+
+    Represents a temperature difference/delta, NOT an absolute temperature.
+    Used for differential temperature settings (e.g., heat pump on/off Diff).
+    Formula: raw_value / 10.0 converts to Celsius delta.
+
+    Key difference from DeciCelsius: When converting to Fahrenheit, we apply
+    the scale factor (9/5) but NOT the offset (+32), since this is a delta not
+    an absolute temperature.
+
+    Example:
+        >>> temp = DeciCelsiusDelta(5)  # Raw device value 5
+        >>> temp.to_celsius()
+        0.5
+        >>> temp.to_fahrenheit()
+        0.9  # 0.5°C * 9/5 = 0.9°F, no +32 offset
+    """
+
+    def to_celsius(self) -> float:
+        """Convert to Celsius delta.
+
+        Returns:
+            Temperature delta in Celsius.
+        """
+        return self.raw_value / 10.0
+
+    def to_fahrenheit(self) -> float:
+        """Convert to Fahrenheit delta (without +32 offset).
+
+        Returns:
+            Temperature delta in Fahrenheit.
+        """
+        celsius = self.to_celsius()
+        return round(celsius * 9 / 5, 1)
+
+    @classmethod
+    def from_fahrenheit(cls, fahrenheit: float) -> DeciCelsiusDelta:
+        """Create DeciCelsiusDelta from Fahrenheit delta (for device commands).
+
+        Args:
+            fahrenheit: Temperature delta in Fahrenheit.
+
+        Returns:
+            DeciCelsiusDelta instance with raw value for device.
+
+        Example:
+            >>> temp = DeciCelsiusDelta.from_fahrenheit(0.9)
+            >>> temp.raw_value
+            5
+        """
+        celsius = fahrenheit * 5 / 9
+        raw_value = round(celsius * 10)
+        return cls(raw_value)
+
+    @classmethod
+    def from_celsius(cls, celsius: float) -> DeciCelsiusDelta:
+        """Create DeciCelsiusDelta from Celsius delta (for device commands).
+
+        Args:
+            celsius: Temperature delta in Celsius.
+
+        Returns:
+            DeciCelsiusDelta instance with raw value for device.
+
+        Example:
+            >>> temp = DeciCelsiusDelta.from_celsius(0.5)
+            >>> temp.raw_value
+            5
+        """
+        raw_value = round(celsius * 10)
+        return cls(raw_value)

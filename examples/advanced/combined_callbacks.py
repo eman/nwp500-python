@@ -86,9 +86,10 @@ async def main():
                 # Callback for status updates
                 def on_status(status: DeviceStatus):
                     counts["status"] += 1
+                    unit = status.get_field_unit("dhw_temperature")
                     print(f"\n📊 Status Update #{counts['status']}")
                     print(f"  Mode: {status.operation_mode.name}")
-                    print(f"  DHW Temp: {status.dhw_temperature:.1f}°F")
+                    print(f"  DHW Temp: {status.dhw_temperature:.1f}{unit}")
                     print(f"  DHW Charge: {status.dhw_charge_per:.1f}%")
                     print(f"  Compressor: {'On' if status.comp_use else 'Off'}")
 
@@ -98,9 +99,7 @@ async def main():
                     print(f"\n📋 Feature Info #{counts['feature']}")
                     print(f"  Serial: {feature.controller_serial_number}")
                     print(f"  FW Version: {feature.controller_sw_version}")
-                    unit_suffix = (
-                        "°C" if feature.temperature_type.name == "CELSIUS" else "°F"
-                    )
+                    unit_suffix = feature.get_field_unit("dhw_temperature_min")
                     print(
                         f"  Temp Range: {feature.dhw_temperature_min}-{feature.dhw_temperature_max}{unit_suffix}"
                     )

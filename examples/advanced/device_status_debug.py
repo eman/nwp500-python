@@ -129,10 +129,11 @@ async def main():
                 def on_device_status(status: DeviceStatus):
                     """Parsed status callback."""
                     message_count["status"] += 1
+                    unit = status.get_field_unit("dhw_temperature")
                     print(
                         f"\n[SUCCESS] PARSED Status Update #{message_count['status']}"
                     )
-                    print(f"   DHW Temperature: {status.dhw_temperature:.1f}°F")
+                    print(f"   DHW Temperature: {status.dhw_temperature:.1f}{unit}")
                     print(f"   Operation Mode: {status.operation_mode.name}")
                     print(f"   Compressor: {status.comp_use}")
 

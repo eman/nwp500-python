@@ -49,8 +49,9 @@ Basic Monitoring
            
            # Subscribe to status updates
            def on_status(status):
-               print(f"Water Temp: {status.dhw_temperature}°F")
-               print(f"Target: {status.dhw_temperature_setting}°F")
+               unit = status.get_field_unit('dhw_temperature')
+               print(f"Water Temp: {status.dhw_temperature}{unit}")
+               print(f"Target: {status.dhw_temperature_setting}{unit}")
                print(f"Power: {status.current_inst_power}W")
                print(f"Mode: {status.dhw_operation_setting.name}")
            
@@ -87,7 +88,7 @@ control method reference, capability checking, and advanced features.
            # Control operations (with automatic capability checking)
            await mqtt.control.set_power(device, power_on=True)
            await mqtt.control.set_dhw_mode(device, mode_id=3)  # Energy Saver
-           await mqtt.control.set_dhw_temperature(device, 140.0)
+           await mqtt.control.set_dhw_temperature(device, 140.0)  # Temperature in user's preferred unit
            
            await mqtt.disconnect()
 
@@ -442,29 +443,30 @@ set_dhw_mode()
 set_dhw_temperature()
 ^^^^^^^^^^^^^^^^^^^^^
 
-.. py:method:: set_dhw_temperature(device, temperature_f)
+.. py:method:: set_dhw_temperature(device, temperature)
 
    Set target DHW temperature.
 
    :param device: Device object
    :type device: Device
-   :param temperature_f: Temperature in Fahrenheit (95-150°F)
-   :type temperature_f: float
+   :param temperature: Temperature in user's preferred unit (Celsius or Fahrenheit)
+   :type temperature: float
    :return: Publish packet ID
    :rtype: int
-   :raises RangeValidationError: If temperature is outside 95-150°F range
+   :raises RangeValidationError: If temperature is outside valid range
 
    The temperature is automatically converted to the device's internal
-   format (half-degrees Celsius).
+   format (half-degrees Celsius). The actual valid range depends on the
+   device's temperature preference and configuration.
 
    **Example:**
 
    .. code-block:: python
 
-      # Set temperature to 140°F
+      # Set temperature (value interpreted in device's preferred unit)
       await mqtt.control.set_dhw_temperature(device, 140.0)
       
-      # Common temperatures
+      # Common temperatures (device-dependent units)
       await mqtt.control.set_dhw_temperature(device, 120.0)  # Standard
       await mqtt.control.set_dhw_temperature(device, 130.0)  # Medium
       await mqtt.control.set_dhw_temperature(device, 140.0)  # Hot

@@ -48,7 +48,8 @@ async def example_basic_pattern():
         if devices:
             device = devices[0]
             print(f"  Device: {device.device_info.device_name}")
-            print(f"  Temperature: {device.status.dhw_temperature}°F")
+            unit = device.status.get_field_unit("dhw_temperature")
+            print(f"  Temperature: {device.status.dhw_temperature}{unit}")
 
     print("✓ Context exited, session closed")
 
@@ -90,8 +91,9 @@ async def example_with_mqtt():
 
             # Subscribe to status updates
             def on_status(status):
+                unit = status.get_field_unit("dhw_temperature")
                 print(
-                    f"  📊 Status: Temp={status.dhw_temperature}°F, "
+                    f"  📊 Status: Temp={status.dhw_temperature}{unit}, "
                     f"Mode={status.operation_mode}, "
                     f"Power={status.current_inst_power}W"
                 )

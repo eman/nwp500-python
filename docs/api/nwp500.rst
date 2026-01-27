@@ -149,6 +149,14 @@ nwp500.topic\_builder module
    :show-inheritance:
    :undoc-members:
 
+nwp500.unit\_system module
+--------------------------
+
+.. automodule:: nwp500.unit_system
+   :members:
+   :show-inheritance:
+   :undoc-members:
+
 nwp500.utils module
 -------------------
 

@@ -81,8 +81,9 @@ async def main():
         print(f"Controller Serial: {feature.controller_serial_number}")
         print(f"Controller SW Version: {feature.controller_sw_version}")
         print(f"Heat Pump Use: {feature.heatpump_use}")
+        unit = feature.get_field_unit("dhw_temperature_min")
         print(
-            f"DHW Temp Min/Max: {feature.dhw_temperature_min}/{feature.dhw_temperature_max}°F"
+            f"DHW Temp Min/Max: {feature.dhw_temperature_min}/{feature.dhw_temperature_max}{unit}"
         )
 
     # Subscribe with typed parsing

@@ -44,14 +44,14 @@ Here's a simple example that sets up a weekday morning reservation:
            device = await api.get_first_device()
 
            # Build reservation entry
-           weekday_morning = NavienAPIClient.build_reservation_entry(
+           weekday_morning = build_reservation_entry(
                enabled=True,
                days=["Monday", "Tuesday", "Wednesday", "Thursday",
                      "Friday"],
                hour=6,
                minute=30,
                mode_id=4,  # High Demand
-               temperature_f=140.0  # Temperature in Fahrenheit
+               temperature=140.0  # Temperature in user's preferred unit
            )
 
            # Send to device
@@ -149,8 +149,8 @@ Field Descriptions
    (e.g., ``98`` for 120°F) for consistency.
 
    **Note:** When using ``build_reservation_entry()``, you don't need to
-   calculate the param value manually - just pass ``temperature_f`` in
-   Fahrenheit and the conversion is handled automatically.
+   calculate the param value manually - just pass ``temperature`` in
+   your user's preferred unit and the conversion is handled automatically.
 
 Helper Functions
 ================
@@ -161,33 +161,33 @@ Building Reservation Entries
 -----------------------------
 
 Use ``build_reservation_entry()`` to create properly formatted entries.
-The function accepts temperature in Fahrenheit and handles the conversion
+The function accepts temperature in your user's preferred unit and handles the conversion
 to the device's internal format automatically:
 
 .. code-block:: python
 
    from nwp500 import build_reservation_entry
 
-   # Weekday morning - High Demand mode at 140°F
+   # Weekday morning - High Demand mode at 140 (°F or °C based on unit preference)
    entry = build_reservation_entry(
        enabled=True,
        days=["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"],
        hour=6,
        minute=30,
        mode_id=4,  # High Demand
-       temperature_f=140.0  # Temperature in Fahrenheit
+       temperature=140.0  # Temperature in user's preferred unit
    )
    # Returns: {'enable': 1, 'week': 62, 'hour': 6, 'min': 30,
    #           'mode': 4, 'param': 120}
 
-   # Weekend - Energy Saver mode at 120°F
+   # Weekend - Energy Saver mode at 120 (°F or °C)
    entry2 = build_reservation_entry(
        enabled=True,
        days=["Saturday", "Sunday"],
        hour=8,
        minute=0,
        mode_id=3,  # Energy Saver
-       temperature_f=120.0
+       temperature=120.0
    )
 
    # You can also use day indices (0=Sunday, 6=Saturday)
@@ -197,7 +197,7 @@ to the device's internal format automatically:
        hour=18,
        minute=0,
        mode_id=1,  # Heat Pump Only
-       temperature_f=130.0
+       temperature=130.0
    )
 
 Temperature Conversion Utility
@@ -269,7 +269,7 @@ Send a new reservation schedule to the device:
 
            # Build multiple reservation entries
            reservations = [
-               # Weekday morning: High Demand at 140°F
+               # Weekday morning: High Demand at 140 (user's preferred unit)
                build_reservation_entry(
                    enabled=True,
                    days=["Monday", "Tuesday", "Wednesday", "Thursday",
@@ -277,9 +277,9 @@ Send a new reservation schedule to the device:
                    hour=6,
                    minute=30,
                    mode_id=4,
-                   temperature_f=140.0
+                   temperature=140.0
                ),
-               # Weekday evening: Energy Saver at 130°F
+               # Weekday evening: Energy Saver at 130 (user's preferred unit)
                build_reservation_entry(
                    enabled=True,
                    days=["Monday", "Tuesday", "Wednesday", "Thursday",
@@ -287,16 +287,16 @@ Send a new reservation schedule to the device:
                    hour=18,
                    minute=0,
                    mode_id=3,
-                   temperature_f=130.0
+                   temperature=130.0
                ),
-               # Weekend: Heat Pump Only at 120°F
+               # Weekend: Heat Pump Only at 120 (user's preferred unit)
                build_reservation_entry(
                    enabled=True,
                    days=["Saturday", "Sunday"],
                    hour=8,
                    minute=0,
                    mode_id=1,
-                   temperature_f=120.0
+                   temperature=120.0
                ),
            ]
 
@@ -439,7 +439,7 @@ Different settings for work days and weekends:
            hour=5,
            minute=30,
            mode_id=4,  # High Demand
-           temperature_f=140.0
+           temperature=140.0
        ),
        # Weekend morning: later start, energy saver
        build_reservation_entry(
@@ -448,7 +448,7 @@ Different settings for work days and weekends:
            hour=8,
            minute=0,
            mode_id=3,  # Energy Saver
-           temperature_f=130.0
+           temperature=130.0
        ),
    ]
 
@@ -467,7 +467,7 @@ Minimize energy use during peak hours:
            hour=6,
            minute=0,
            mode_id=4,
-           temperature_f=140.0
+           temperature=140.0
        ),
        # Day: 9:00 AM - Switch to Energy Saver
        build_reservation_entry(
@@ -476,7 +476,7 @@ Minimize energy use during peak hours:
            hour=9,
            minute=0,
            mode_id=3,
-           temperature_f=120.0
+           temperature=120.0
        ),
        # Evening: 5:00 PM - Heat Pump Only (before peak pricing)
        build_reservation_entry(
@@ -485,7 +485,7 @@ Minimize energy use during peak hours:
            hour=17,
            minute=0,
            mode_id=1,
-           temperature_f=130.0
+           temperature=130.0
        ),
        # Night: 10:00 PM - Back to Energy Saver
        build_reservation_entry(
@@ -494,7 +494,7 @@ Minimize energy use during peak hours:
            hour=22,
            minute=0,
            mode_id=3,
-           temperature_f=120.0
+           temperature=120.0
        ),
    ]
 
@@ -512,7 +512,7 @@ Automatically enable vacation mode during a trip:
        hour=20,
        minute=0,
        mode_id=5,  # Vacation Mode
-       temperature_f=120.0  # Temperature doesn't matter for vacation mode
+       temperature=120.0  # Temperature doesn't matter for vacation mode
    )
 
    # Return to normal operation when you get back
@@ -522,7 +522,7 @@ Automatically enable vacation mode during a trip:
        hour=14,
        minute=0,
        mode_id=3,  # Energy Saver
-       temperature_f=130.0
+       temperature=130.0
    )
 
    reservations = [start_vacation, end_vacation]
@@ -533,11 +533,12 @@ Important Notes
 Temperature Conversion
 -----------------------
 
-When using ``build_reservation_entry()``, pass temperatures in Fahrenheit
-using the ``temperature_f`` parameter. The function automatically converts
-to the device's internal format (half-degrees Celsius).
+When using ``build_reservation_entry()``, pass temperatures in your user's
+preferred unit (Celsius or Fahrenheit) using the ``temperature`` parameter.
+The function automatically converts to the device's internal format
+(half-degrees Celsius).
 
-The valid temperature range is 95°F to 150°F.
+The valid temperature range is 35°C to 65.5°C (95°F to 150°F).
 
 For reading reservation responses from the device, the ``param`` field
 contains the raw half-degrees Celsius value. Convert to Fahrenheit with:
@@ -619,7 +620,7 @@ Full working example with error handling and response monitoring:
                    hour=6,
                    minute=30,
                    mode_id=4,  # High Demand
-                   temperature_f=140.0
+                   temperature=140.0
                ),
                # Weekday day
                build_reservation_entry(
@@ -629,7 +630,7 @@ Full working example with error handling and response monitoring:
                    hour=9,
                    minute=0,
                    mode_id=3,  # Energy Saver
-                   temperature_f=120.0
+                   temperature=120.0
                ),
                # Weekend morning
                build_reservation_entry(
@@ -638,7 +639,7 @@ Full working example with error handling and response monitoring:
                    hour=8,
                    minute=0,
                    mode_id=3,  # Energy Saver
-                   temperature_f=130.0
+                   temperature=130.0
                ),
            ]
 
