@@ -24,12 +24,17 @@ from pydantic.alias_generators import to_camel
 from .converters import (
     deci_celsius_to_preferred,
     device_bool_to_python,
+    device_bool_with_zero_as_none,
     div_10,
     div_10_celsius_delta_to_preferred,
     div_10_celsius_to_preferred,
     enum_validator,
+    enum_with_zero_as_none_validator,
+    float_with_zero_as_none,
     flow_rate_to_preferred,
     half_celsius_to_preferred,
+    half_celsius_to_preferred_setting,
+    int_with_zero_as_none,
     raw_celsius_to_preferred,
     tou_override_to_python,
     volume_to_preferred,
@@ -67,19 +72,27 @@ _logger = logging.getLogger(__name__)
 
 # Reusable Annotated types for conversions
 DeviceBool = Annotated[bool, BeforeValidator(device_bool_to_python)]
+DeviceBoolOptional = Annotated[
+    bool | None, BeforeValidator(device_bool_with_zero_as_none)
+]
 CapabilityFlag = Annotated[bool, BeforeValidator(device_bool_to_python)]
 Div10 = Annotated[float, BeforeValidator(div_10)]
+# Temperature types that can be N/A (sensor readings)
 HalfCelsiusToPreferred = Annotated[
-    float, WrapValidator(half_celsius_to_preferred)
+    float | None, WrapValidator(half_celsius_to_preferred)
 ]
 DeciCelsiusToPreferred = Annotated[
-    float, WrapValidator(deci_celsius_to_preferred)
+    float | None, WrapValidator(deci_celsius_to_preferred)
 ]
 RawCelsiusToPreferred = Annotated[
-    float, WrapValidator(raw_celsius_to_preferred)
+    float | None, WrapValidator(raw_celsius_to_preferred)
 ]
 Div10CelsiusToPreferred = Annotated[
-    float, WrapValidator(div_10_celsius_to_preferred)
+    float | None, WrapValidator(div_10_celsius_to_preferred)
+]
+# Temperature types for settings/limits (never N/A)
+HalfCelsiusToPreferredSetting = Annotated[
+    float, WrapValidator(half_celsius_to_preferred_setting)
 ]
 Div10CelsiusDeltaToPreferred = Annotated[
     float, WrapValidator(div_10_celsius_delta_to_preferred)
@@ -412,10 +425,13 @@ class DeviceStatus(NavienBaseModel):
         json_schema_extra={"unit_of_measurement": "RPM"},
     )
     fan_pwm: int = Field(description="Fan PWM value")
-    mixing_rate: float = Field(
+    mixing_rate: Annotated[
+        float | None, BeforeValidator(float_with_zero_as_none)
+    ] = Field(
         description=(
             "Mixing valve rate percentage (0-100%). "
-            "Controls mixing of hot tank water with cold inlet water"
+            "Controls mixing of hot tank water with cold inlet water. "
+            "None if device does not have mixing valve feature"
         ),
         json_schema_extra={"unit_of_measurement": "%"},
     )
@@ -494,19 +510,22 @@ class DeviceStatus(NavienBaseModel):
             "device_class": "energy",
         },
     )
-    recirc_operation_mode: RecirculationMode = Field(
-        description="Recirculation operation mode"
-    )
-    recirc_pump_operation_status: int = Field(
-        description="Recirculation pump operation status"
-    )
-    recirc_hot_btn_ready: int = Field(
-        description="Recirculation HotButton ready status"
-    )
-    recirc_operation_reason: int = Field(
-        description="Recirculation operation reason"
-    )
-    recirc_error_status: int = Field(description="Recirculation error status")
+    recirc_operation_mode: Annotated[
+        RecirculationMode | None,
+        BeforeValidator(enum_with_zero_as_none_validator(RecirculationMode)),
+    ] = Field(description="Recirculation operation mode")
+    recirc_pump_operation_status: Annotated[
+        int | None, BeforeValidator(int_with_zero_as_none)
+    ] = Field(description="Recirculation pump operation status")
+    recirc_hot_btn_ready: Annotated[
+        int | None, BeforeValidator(int_with_zero_as_none)
+    ] = Field(description="Recirculation HotButton ready status")
+    recirc_operation_reason: Annotated[
+        int | None, BeforeValidator(int_with_zero_as_none)
+    ] = Field(description="Recirculation operation reason")
+    recirc_error_status: Annotated[
+        int | None, BeforeValidator(int_with_zero_as_none)
+    ] = Field(description="Recirculation error status")
     current_inst_power: float = Field(
         description=(
             "Current instantaneous power consumption in Watts. "
@@ -640,10 +659,10 @@ class DeviceStatus(NavienBaseModel):
             "Triggers alerts based on operating hours. Default: On"
         )
     )
-    recirc_operation_busy: DeviceBool = Field(
+    recirc_operation_busy: DeviceBoolOptional = Field(
         description="Recirculation operation busy status"
     )
-    recirc_reservation_use: DeviceBool = Field(
+    recirc_reservation_use: DeviceBoolOptional = Field(
         description="Recirculation reservation usage status"
     )
 
@@ -651,36 +670,40 @@ class DeviceStatus(NavienBaseModel):
     dhw_temperature: HalfCelsiusToPreferred = temperature_field(
         "Current Domestic Hot Water (DHW) outlet temperature"
     )
-    dhw_temperature_setting: HalfCelsiusToPreferred = temperature_field(
+    dhw_temperature_setting: HalfCelsiusToPreferredSetting = temperature_field(
         "User-configured target DHW temperature"
     )
-    dhw_target_temperature_setting: HalfCelsiusToPreferred = temperature_field(
-        "Duplicate of dhw_temperature_setting for legacy API compatibility"
+    dhw_target_temperature_setting: HalfCelsiusToPreferredSetting = (
+        temperature_field(
+            "Duplicate of dhw_temperature_setting for legacy API compatibility"
+        )
     )
-    freeze_protection_temperature: HalfCelsiusToPreferred = temperature_field(
-        "Freeze protection temperature setpoint. "
-        "Prevents tank from freezing in cold environments"
+    freeze_protection_temperature: HalfCelsiusToPreferredSetting = (
+        temperature_field(
+            "Freeze protection temperature setpoint. "
+            "Prevents tank from freezing in cold environments"
+        )
     )
     dhw_temperature2: HalfCelsiusToPreferred = temperature_field(
         "Second DHW temperature reading"
     )
-    hp_upper_on_temp_setting: HalfCelsiusToPreferred = temperature_field(
+    hp_upper_on_temp_setting: HalfCelsiusToPreferredSetting = temperature_field(
         "Heat pump upper on temperature setting"
     )
-    hp_upper_off_temp_setting: HalfCelsiusToPreferred = temperature_field(
-        "Heat pump upper off temperature setting"
+    hp_upper_off_temp_setting: HalfCelsiusToPreferredSetting = (
+        temperature_field("Heat pump upper off temperature setting")
     )
-    hp_lower_on_temp_setting: HalfCelsiusToPreferred = temperature_field(
+    hp_lower_on_temp_setting: HalfCelsiusToPreferredSetting = temperature_field(
         "Heat pump lower on temperature setting"
     )
-    hp_lower_off_temp_setting: HalfCelsiusToPreferred = temperature_field(
-        "Heat pump lower off temperature setting"
+    hp_lower_off_temp_setting: HalfCelsiusToPreferredSetting = (
+        temperature_field("Heat pump lower off temperature setting")
     )
-    he_upper_on_temp_setting: HalfCelsiusToPreferred = temperature_field(
+    he_upper_on_temp_setting: HalfCelsiusToPreferredSetting = temperature_field(
         "Heater element upper on temperature setting"
     )
-    he_upper_off_temp_setting: HalfCelsiusToPreferred = temperature_field(
-        "Heater element upper off temperature setting"
+    he_upper_off_temp_setting: HalfCelsiusToPreferredSetting = (
+        temperature_field("Heater element upper off temperature setting")
     )
     he_lower_on_temp_setting: HalfCelsiusToPreferred = temperature_field(
         "Heater element lower on temperature setting"
@@ -688,11 +711,11 @@ class DeviceStatus(NavienBaseModel):
     he_lower_off_temp_setting: HalfCelsiusToPreferred = temperature_field(
         "Heater element lower off temperature setting"
     )
-    heat_min_op_temperature: HalfCelsiusToPreferred = temperature_field(
+    heat_min_op_temperature: HalfCelsiusToPreferredSetting = temperature_field(
         "Minimum heat pump operation temperature. "
         "Lowest tank setpoint allowed for heat pump operation"
     )
-    recirc_temp_setting: HalfCelsiusToPreferred = temperature_field(
+    recirc_temp_setting: HalfCelsiusToPreferredSetting = temperature_field(
         "Recirculation temperature setting"
     )
     recirc_temperature: HalfCelsiusToPreferred = temperature_field(
@@ -818,12 +841,14 @@ class DeviceStatus(NavienBaseModel):
         default=DhwOperationSetting.ENERGY_SAVER,
         description="User's configured DHW operation mode preference",
     )
-    freeze_protection_temp_min: HalfCelsiusToPreferred = temperature_field(
-        "Active freeze protection lower limit",
-        default=43.0,
+    freeze_protection_temp_min: HalfCelsiusToPreferredSetting = (
+        temperature_field(
+            "Active freeze protection lower limit",
+            default=43.0,
+        )
     )
-    freeze_protection_temp_max: HalfCelsiusToPreferred = temperature_field(
-        "Active freeze protection upper limit", default=65.0
+    freeze_protection_temp_max: HalfCelsiusToPreferredSetting = (
+        temperature_field("Active freeze protection upper limit", default=65.0)
     )
 
     def get_field_unit(self, field_name: str) -> str:
@@ -1140,24 +1165,28 @@ class DeviceFeature(NavienBaseModel):
     )
 
     # Temperature limit fields with half-degree Celsius scaling
-    dhw_temperature_min: HalfCelsiusToPreferred = temperature_field(
+    dhw_temperature_min: HalfCelsiusToPreferredSetting = temperature_field(
         "Minimum DHW temperature setting - safety and efficiency lower limit"
     )
-    dhw_temperature_max: HalfCelsiusToPreferred = temperature_field(
+    dhw_temperature_max: HalfCelsiusToPreferredSetting = temperature_field(
         "Maximum DHW temperature setting - scald protection upper limit"
     )
-    freeze_protection_temp_min: HalfCelsiusToPreferred = temperature_field(
-        "Minimum freeze protection threshold - "
-        "factory default activation temperature"
+    freeze_protection_temp_min: HalfCelsiusToPreferredSetting = (
+        temperature_field(
+            "Minimum freeze protection threshold - "
+            "factory default activation temperature"
+        )
     )
-    freeze_protection_temp_max: HalfCelsiusToPreferred = temperature_field(
-        "Maximum freeze protection threshold - user-adjustable upper limit"
+    freeze_protection_temp_max: HalfCelsiusToPreferredSetting = (
+        temperature_field(
+            "Maximum freeze protection threshold - user-adjustable upper limit"
+        )
     )
-    recirc_temperature_min: HalfCelsiusToPreferred = temperature_field(
+    recirc_temperature_min: HalfCelsiusToPreferredSetting = temperature_field(
         "Minimum recirculation temperature setting - "
         "lower limit for recirculation loop temperature control"
     )
-    recirc_temperature_max: HalfCelsiusToPreferred = temperature_field(
+    recirc_temperature_max: HalfCelsiusToPreferredSetting = temperature_field(
         "Maximum recirculation temperature setting - "
         "upper limit for recirculation loop temperature control"
     )

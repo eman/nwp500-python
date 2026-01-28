@@ -2,6 +2,38 @@
 Changelog
 =========
 
+Version 7.4.0 (2026-01-27)
+==========================
+
+Added
+-----
+- **N/A Value Support**: Temperature sensors, optional features, and recirculation pump status now display "N/A" when not available
+
+  - Temperature sensor fields return ``None`` when device reports 0 (indicating sensor doesn't exist)
+  - Optional feature settings (mixing valve rate, heating element lower temps) return ``None`` when not applicable
+  - Recirculation pump status fields return ``None`` when no pump installed
+  - CLI now displays "N/A" instead of misleading zero values (e.g., "0.0°C" or "32.0°F")
+  - Affects ~25 fields across ``DeviceStatus`` model including outside temperature, inlet temperature, mixing rate, and all recirculation status fields
+  - New converters: ``int_with_zero_as_none()``, ``float_with_zero_as_none()``, ``enum_with_zero_as_none_validator()``, ``device_bool_with_zero_as_none()``
+  - New type annotations: ``DeviceBoolOptional`` for optional feature boolean fields
+  - See ``CHANGES.md`` for comprehensive documentation of all changes
+
+Changed
+-------
+- **Temperature Converters**: All temperature sensor converters now return ``float | None`` instead of ``float``
+
+  - Modified converters: ``half_celsius_to_preferred()``, ``deci_celsius_to_preferred()``, ``raw_celsius_to_preferred()``, ``div_10_celsius_to_preferred()``
+  - Created separate ``half_celsius_to_preferred_setting()`` converter for configuration settings that should never be None
+  - Temperature sensor fields (e.g., ``current_outside_temperature``, ``current_inlet_temperature``) can now be None
+  - Temperature setting fields (e.g., ``dhw_temperature_setting``) remain non-nullable
+
+- **Model Field Types**: Updated ~25 fields in ``DeviceStatus`` to support optional values
+
+  - Temperature sensors: 15+ fields now ``HalfCelsiusToPreferred`` (``float | None``)
+  - Mixing valve rate: Now ``float | None``
+  - Heating element lower settings: Now ``HalfCelsiusToPreferred`` (``float | None``) - mode-dependent
+  - Recirculation fields: 7 fields now support None (``RecirculationMode | None``, ``int | None``, ``DeviceBoolOptional``)
+
 Version 7.3.4 (2026-01-27)
 ==========================
 
