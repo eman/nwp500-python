@@ -86,10 +86,7 @@ def _add_numeric_item(
         value = getattr(device_status, field_name)
         unit = _get_unit_suffix(field_name, instance=device_status)
         # Handle None values (N/A sensors)
-        if value is None:
-            formatted = "N/A"
-        else:
-            formatted = f"{_format_number(value)}{unit}"
+        formatted = "N/A" if value is None else f"{_format_number(value)}{unit}"
         items.append((category, label, formatted))
 
 

@@ -198,7 +198,7 @@ def test_mixing_rate_non_zero_is_preserved(default_status_data):
 
 
 def test_he_lower_temp_settings_zero_is_none(default_status_data):
-    """Test that heating element lower temp settings with 0 are None (feature not available)."""
+    """Test heating element lower temp settings with 0 are None."""
     default_status_data["heLowerOnTempSetting"] = 0
     default_status_data["heLowerOffTempSetting"] = 0
     status = DeviceStatus.model_validate(default_status_data)
@@ -207,7 +207,7 @@ def test_he_lower_temp_settings_zero_is_none(default_status_data):
 
 
 def test_he_lower_temp_settings_non_zero_are_converted(default_status_data):
-    """Test that non-zero heating element lower temp settings are properly converted."""
+    """Test non-zero heating element lower temps are converted."""
     # 122 half-celsius = 61°C = 141.8°F
     default_status_data["heLowerOnTempSetting"] = 122
     default_status_data["heLowerOffTempSetting"] = 100
@@ -217,7 +217,7 @@ def test_he_lower_temp_settings_non_zero_are_converted(default_status_data):
 
 
 def test_recirc_status_fields_zero_is_none(default_status_data):
-    """Test that recirculation status fields with 0 are None (no recirculation pump)."""
+    """Test recirculation status fields with 0 are None."""
     default_status_data["recircOperationMode"] = 0
     default_status_data["recircPumpOperationStatus"] = 0
     default_status_data["recircHotBtnReady"] = 0
