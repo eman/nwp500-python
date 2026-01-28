@@ -243,7 +243,7 @@ def test_recirc_status_fields_non_zero_are_preserved(default_status_data):
     default_status_data["recircPumpOperationStatus"] = 1
     default_status_data["recircHotBtnReady"] = 5
     default_status_data["recircOperationReason"] = 3
-    default_status_data["recircErrorStatus"] = 0  # Should be None
+    default_status_data["recircErrorStatus"] = 0  # 0 will become None
     default_status_data["recircOperationBusy"] = 2  # ON (True)
     default_status_data["recircReservationUse"] = 1  # OFF (False)
     status = DeviceStatus.model_validate(default_status_data)
