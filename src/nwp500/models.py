@@ -30,6 +30,7 @@ from .converters import (
     enum_validator,
     flow_rate_to_preferred,
     half_celsius_to_preferred,
+    mul_10,
     raw_celsius_to_preferred,
     tou_override_to_python,
     volume_to_preferred,
@@ -69,6 +70,7 @@ _logger = logging.getLogger(__name__)
 DeviceBool = Annotated[bool, BeforeValidator(device_bool_to_python)]
 CapabilityFlag = Annotated[bool, BeforeValidator(device_bool_to_python)]
 Div10 = Annotated[float, BeforeValidator(div_10)]
+TenWhToWh = Annotated[float, BeforeValidator(mul_10)]
 HalfCelsiusToPreferred = Annotated[
     float, WrapValidator(half_celsius_to_preferred)
 ]
@@ -477,14 +479,14 @@ class DeviceStatus(NavienBaseModel):
             "False = device follows TOU schedule normally"
         )
     )
-    total_energy_capacity: float = Field(
+    total_energy_capacity: TenWhToWh = Field(
         description="Total energy capacity of the tank in Watt-hours",
         json_schema_extra={
             "unit_of_measurement": "Wh",
             "device_class": "energy",
         },
     )
-    available_energy_capacity: float = Field(
+    available_energy_capacity: TenWhToWh = Field(
         description=(
             "Available energy capacity - "
             "remaining hot water energy available in Watt-hours"

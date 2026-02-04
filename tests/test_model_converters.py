@@ -15,6 +15,7 @@ from nwp500.converters import (
     device_bool_to_python,
     div_10,
     enum_validator,
+    mul_10,
     tou_override_to_python,
 )
 from nwp500.enums import DhwOperationSetting, OnOffFlag
@@ -239,6 +240,78 @@ class TestDiv10Converter:
     def test_known_values(self, input_value, expected):
         """Test known div_10 conversions for numeric types."""
         result = div_10(input_value)
+        assert result == pytest.approx(expected, abs=0.001)
+
+
+class TestMul10Converter:
+    """Test mul_10 converter (multiply by 10).
+
+    Used for energy capacity fields where the device reports in 10Wh units,
+    but we want to store standard Wh.
+    Only multiplies numeric types (int, float), returns float(value) for others.
+    """
+
+    def test_zero(self):
+        """0 * 10 = 0.0."""
+        assert mul_10(0) == 0.0
+
+    def test_positive_value(self):
+        """100 * 10 = 1000.0."""
+        assert mul_10(100) == 1000.0
+
+    def test_negative_value(self):
+        """-50 * 10 = -500.0."""
+        assert mul_10(-50) == -500.0
+
+    def test_single_digit(self):
+        """5 * 10 = 50.0."""
+        assert mul_10(5) == 50.0
+
+    def test_float_input(self):
+        """50.5 * 10 = 505.0."""
+        assert mul_10(50.5) == 505.0
+
+    def test_string_numeric(self):
+        """String '100' is converted to float without multiplication."""
+        # mul_10 converts non-numeric to float but doesn't multiply
+        result = mul_10("100")
+        assert result == pytest.approx(100.0)
+
+    def test_energy_capacity_example(self):
+        """Test with realistic energy capacity values from issue #70."""
+        # Device reports 1404.0 (10Wh units), should convert to 14040.0 Wh
+        device_value = 1404.0
+        expected_wh = 14040.0
+        assert mul_10(device_value) == expected_wh
+
+    def test_large_value(self):
+        """1000 * 10 = 10000.0."""
+        assert mul_10(1000) == 10000.0
+
+    def test_very_small_value(self):
+        """0.1 * 10 = 1.0."""
+        assert mul_10(0.1) == 1.0
+
+    def test_negative_small_value(self):
+        """-0.5 * 10 = -5.0."""
+        assert mul_10(-0.5) == -5.0
+
+    @pytest.mark.parametrize(
+        "input_value,expected",
+        [
+            (0, 0.0),
+            (10, 100.0),
+            (50, 500.0),
+            (100, 1000.0),
+            (1000, 10000.0),
+            (-100, -1000.0),
+            (1.5, 15.0),
+            (99.9, 999.0),
+        ],
+    )
+    def test_known_values(self, input_value, expected):
+        """Test known mul_10 conversions for numeric types."""
+        result = mul_10(input_value)
         assert result == pytest.approx(expected, abs=0.001)
 
 
