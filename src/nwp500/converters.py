@@ -27,6 +27,7 @@ __all__ = [
     "device_bool_from_python",
     "tou_override_to_python",
     "div_10",
+    "mul_10",
     "enum_validator",
     "str_enum_validator",
     "half_celsius_to_preferred",
@@ -120,6 +121,29 @@ def div_10(value: Any) -> float:
     """
     if isinstance(value, (int, float)):
         return float(value) / 10.0
+    return float(value)
+
+
+def mul_10(value: Any) -> float:
+    """Multiply numeric value by 10.0.
+
+    Used for energy capacity fields where the device reports in 10Wh units,
+    but we want to store standard Wh.
+
+    Args:
+        value: Numeric value to multiply.
+
+    Returns:
+        Value multiplied by 10.0.
+
+    Example:
+        >>> mul_10(150)
+        1500.0
+        >>> mul_10(25.5)
+        255.0
+    """
+    if isinstance(value, (int, float)):
+        return float(value) * 10.0
     return float(value)
 
 
