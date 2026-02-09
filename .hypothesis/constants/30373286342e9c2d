@@ -1,0 +1,4 @@
+# file: /home/emmanuel/Projects/nwp500-python/src/nwp500/mqtt_events.py
+# hypothesis_version: 6.151.5
+
+['CurrentOperationMode', 'DeviceFeature', 'DeviceStatus', 'ErrorCode', '_', 'connection_resumed', 'error_cleared', 'error_detected', 'feature_received', 'heating_started', 'heating_stopped', 'mode_changed', 'power_changed', 'status_received', 'temperature_changed']

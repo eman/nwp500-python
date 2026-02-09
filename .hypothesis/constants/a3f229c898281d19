@@ -1,0 +1,4 @@
+# file: /home/emmanuel/Projects/nwp500-python/src/nwp500/mqtt/utils.py
+# hypothesis_version: 6.151.5
+
+[1.0, 2.0, 120.0, 100, 256, 512, 1200, '#', '([0-9A-Fa-f]{12})', '+', '...<redacted>...', '/', '<REDACTED>', '<UNREPRESENTABLE>', 'Emmanuel Levijarvi', 'MIT', 'REDACTED', '[0-9A-Fa-f]{8,}', '\\1REDACTED', '\\b[0-9a-fA-F]{12}\\b', 'access_key_id', 'auth', 'clientID', 'clientId', 'client_id', 'device_info', 'device_status', 'email', 'macAddress', 'mac_address', 'navilink-', 'password', 'pushToken', 'push_token', 'secret_access_key', 'secret_key', 'sessionID', 'sessionToken', 'session_token', 'token']

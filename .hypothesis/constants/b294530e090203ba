@@ -1,0 +1,4 @@
+# file: /home/emmanuel/Projects/nwp500-python/.tox/default/bin/pytest
+# hypothesis_version: 6.151.5
+
+['.exe', '__main__']

@@ -1,0 +1,4 @@
+# file: /home/emmanuel/Projects/nwp500-python/src/nwp500/api_client.py
+# hypothesis_version: 6.151.5
+
+[200, 401, '/', '/device/info', '/device/list', '/device/tou', '1.0.0', '3.8+', 'Emmanuel Levijarvi', 'GET', 'MIT', 'NavienAPIClient', 'O', 'POST', 'Python', 'Python Client', '_session', 'additionalValue', 'appVersion', 'code', 'controllerId', 'count', 'data', 'firmwares', 'macAddress', 'metric', 'modelName', 'msg', 'offset', 'os', 'osVersion', 'pushToken', 'us_customary', 'userId', 'userType']
