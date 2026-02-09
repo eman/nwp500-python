@@ -1,6 +1,7 @@
 import pytest
+from hypothesis import given
+from hypothesis import strategies as st
 
-from hypothesis import given, strategies as st
 from nwp500.enums import TemperatureType
 from nwp500.models import DeviceStatus
 
@@ -160,10 +161,11 @@ def test_device_status_fuzzing(
         assert status.tank_upper_temperature == pytest.approx(tank_celsius_val)
     else:
         tank_fahrenheit_val = (tank_celsius_val * 9 / 5) + 32
-        # Note: DeciCelsiusToPreferred in models calls DeciCelsius(raw).to_preferred(
-        # is_celsius) to_preferred -> to_fahrenheit -> standard conversion
-        # We need to match the exact logic if there's rounding involved, but simple
-        # math should match approx.
+        # Note: DeciCelsiusToPreferred calls DeciCelsius(raw).to_preferred(
+        # is_celsius)
+        # to_preferred -> to_fahrenheit -> standard conversion
+        # We need to match the exact logic if there's rounding involved, but
+        # simple math should match approx.
         assert status.tank_upper_temperature == pytest.approx(
             tank_fahrenheit_val
         )
