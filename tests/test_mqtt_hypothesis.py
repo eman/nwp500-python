@@ -1,8 +1,8 @@
-
 import pytest
+
 from hypothesis import given, strategies as st
-from nwp500.models import DeviceStatus
 from nwp500.enums import TemperatureType
+from nwp500.models import DeviceStatus
 
 # Base payload matching required fields in DeviceStatus
 BASE_PAYLOAD = {
@@ -110,31 +110,34 @@ BASE_PAYLOAD = {
     "freezeProtectionTempMax": 65.0,
 }
 
+
 @given(
     temperature_type_int=st.sampled_from([1, 2]),
     dhw_temp_raw=st.integers(min_value=0, max_value=200),  # 0 to 100°C
-    tank_temp_raw=st.integers(min_value=0, max_value=1000), # 0 to 100°C (deci)
-    flow_rate_raw=st.integers(min_value=0, max_value=500), # 0 to 50 LPM
+    tank_temp_raw=st.integers(min_value=0, max_value=1000),  # 0 to 100°C (deci)
+    flow_rate_raw=st.integers(min_value=0, max_value=500),  # 0 to 50 LPM
 )
-def test_device_status_fuzzing(temperature_type_int, dhw_temp_raw, tank_temp_raw, flow_rate_raw):
+def test_device_status_fuzzing(
+    temperature_type_int, dhw_temp_raw, tank_temp_raw, flow_rate_raw
+):
     """
     Fuzz test parsing of DeviceStatus with varying temperature types and values.
     """
     # Create a copy of the base payload
     payload = BASE_PAYLOAD.copy()
-    
+
     # Update with fuzzed values
     payload["temperatureType"] = temperature_type_int
     payload["dhwTemperature"] = dhw_temp_raw
     payload["tankUpperTemperature"] = tank_temp_raw
     payload["currentDhwFlowRate"] = flow_rate_raw
-    
+
     # Parse the model
     status = DeviceStatus.model_validate(payload)
-    
+
     # Assertions based on temperature type
-    is_celsius = (temperature_type_int == 1) # 1=Celsius, 2=Fahrenheit
-    
+    is_celsius = temperature_type_int == 1  # 1=Celsius, 2=Fahrenheit
+
     # 1. Check Temperature Type parsing
     if is_celsius:
         assert status.temperature_type == TemperatureType.CELSIUS
@@ -142,12 +145,12 @@ def test_device_status_fuzzing(temperature_type_int, dhw_temp_raw, tank_temp_raw
         assert status.temperature_type == TemperatureType.FAHRENHEIT
 
     # 2. Check DHW Temperature (HalfCelsius)
-    # Raw value is half-celsius. 
+    # Raw value is half-celsius.
     celsius_val = dhw_temp_raw / 2.0
     if is_celsius:
         assert status.dhw_temperature == pytest.approx(celsius_val)
     else:
-        fahrenheit_val = (celsius_val * 9/5) + 32
+        fahrenheit_val = (celsius_val * 9 / 5) + 32
         assert status.dhw_temperature == pytest.approx(fahrenheit_val)
 
     # 3. Check Tank Temperature (DeciCelsius)
@@ -156,11 +159,14 @@ def test_device_status_fuzzing(temperature_type_int, dhw_temp_raw, tank_temp_raw
     if is_celsius:
         assert status.tank_upper_temperature == pytest.approx(tank_celsius_val)
     else:
-        tank_fahrenheit_val = (tank_celsius_val * 9/5) + 32
-        # Note: DeciCelsiusToPreferred in models calls DeciCelsius(raw).to_preferred(is_celsius)
-        # to_preferred -> to_fahrenheit -> standard conversion
-        # We need to match the exact logic if there's rounding involved, but simple math should match approx.
-        assert status.tank_upper_temperature == pytest.approx(tank_fahrenheit_val)
+        tank_fahrenheit_val = (tank_celsius_val * 9 / 5) + 32
+        # Note: DeciCelsiusToPreferred in models calls DeciCelsius(raw).to_preferred(
+        # is_celsius) to_preferred -> to_fahrenheit -> standard conversion
+        # We need to match the exact logic if there's rounding involved, but simple
+        # math should match approx.
+        assert status.tank_upper_temperature == pytest.approx(
+            tank_fahrenheit_val
+        )
 
     # 4. Check Flow Rate (LPM * 10)
     lpm_val = flow_rate_raw / 10.0
@@ -170,4 +176,3 @@ def test_device_status_fuzzing(temperature_type_int, dhw_temp_raw, tank_temp_raw
         # Imperial: LPM to GPM
         gpm_val = round(lpm_val * 0.264172, 2)
         assert status.current_dhw_flow_rate == pytest.approx(gpm_val)
-
