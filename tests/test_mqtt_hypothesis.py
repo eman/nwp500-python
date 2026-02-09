@@ -177,6 +177,4 @@ def test_device_status_fuzzing(
     else:
         # Imperial: LPM to GPM (rounded to 2 decimals in the converter)
         gpm_val = lpm_val * 0.264172
-        assert status.current_dhw_flow_rate == pytest.approx(
-            gpm_val, abs=0.01
-        )
+        assert status.current_dhw_flow_rate == pytest.approx(gpm_val, abs=0.01)
