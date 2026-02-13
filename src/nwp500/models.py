@@ -78,7 +78,10 @@ DeviceBoolOptional = Annotated[
 ]
 CapabilityFlag = Annotated[bool, BeforeValidator(device_bool_to_python)]
 Div10 = Annotated[float, BeforeValidator(div_10)]
-# Temperature types that can be N/A (sensor readings)
+# Temperature type annotations - Protocol uses 0 as sentinel differently:
+# - DeciCelsiusToPreferred: Heat pump sensors, 0 = valid 0°C reading
+# - HalfCelsiusToPreferred: Optional/mode-dependent, 0 = N/A
+# - RawCelsiusToPreferred: Optional sensor, 0 = not installed
 TenWhToWh = Annotated[float, BeforeValidator(mul_10)]
 HalfCelsiusToPreferred = Annotated[
     float | None, WrapValidator(half_celsius_to_preferred)

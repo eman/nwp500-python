@@ -17,7 +17,12 @@ _logger = logging.getLogger(__name__)
 
 
 def _format_number(value: Any) -> str:
-    """Format number to one decimal place if float, otherwise return as-is."""
+    """Format number to one decimal place if float, otherwise return as-is.
+
+    Handles None by returning "N/A".
+    """
+    if value is None:
+        return "N/A"
     if isinstance(value, float):
         return f"{value:.1f}"
     return str(value)

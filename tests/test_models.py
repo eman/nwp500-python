@@ -143,23 +143,30 @@ def test_fahrenheit_to_half_celsius():
     assert fahrenheit_to_half_celsius(130.0) == 109  # ~54.4°C × 2
 
 
-def test_temperature_zero_values_are_none(default_status_data):
-    """Test that zero temperature values are converted to None (N/A)."""
-    # Test HalfCelsiusToPreferred with 0
+def test_temperature_zero_values(default_status_data):
+    """Test handling of zero temperature values.
+
+    The protocol uses 0 as a sentinel ("N/A") for different field types:
+    - HalfCelsiusToPreferred: Optional sensors & mode-dependent settings -> None
+    - DeciCelsiusToPreferred: Heat pump sensors (can measure 0°C) -> 0°C/32°F
+    - RawCelsiusToPreferred: Optional external sensor -> None
+    """
+    # Test HalfCelsiusToPreferred with 0 - should be None (optional sensors)
     default_status_data["dhwTemperature"] = 0
     default_status_data["currentInletTemperature"] = 0
     status = DeviceStatus.model_validate(default_status_data)
-    assert status.dhw_temperature is None
-    assert status.current_inlet_temperature is None
+    assert status.dhw_temperature is None  # Optional hot water temp sensor
+    assert status.current_inlet_temperature is None  # No flow = no reading
 
-    # Test DeciCelsiusToPreferred with 0
+    # Test DeciCelsiusToPreferred with 0 - should be 0°C/32°F (can be freezing)
     default_status_data["tankUpperTemperature"] = 0
     default_status_data["ambientTemperature"] = 0
     status = DeviceStatus.model_validate(default_status_data)
-    assert status.tank_upper_temperature is None
-    assert status.ambient_temperature is None
+    # 0 decicelsius = 0°C = 32°F (heat pump can operate in freezing temps)
+    assert status.tank_upper_temperature == pytest.approx(32.0, abs=1.0)
+    assert status.ambient_temperature == pytest.approx(32.0, abs=1.0)
 
-    # Test RawCelsiusToPreferred with 0
+    # Test RawCelsiusToPreferred with 0 - should be None (optional sensor)
     default_status_data["outsideTemperature"] = 0
     status = DeviceStatus.model_validate(default_status_data)
     assert status.outside_temperature is None

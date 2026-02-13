@@ -2,6 +2,58 @@
 Changelog
 =========
 
+Version 7.5.0 (2026-02-13)
+==========================
+
+**BREAKING CHANGES**: Heat Pump Temperature Sensor Behavior
+
+Fixed
+-----
+- **Heat Pump Sensor Zero-as-None Bug**: Fixed critical bug where 0°C (32°F) readings from heat pump sensors were incorrectly treated as "sensor not available"
+  
+  - **Impact**: Heat pump compressor/refrigerant sensors (tank, discharge, suction, evaporator, ambient) now correctly report 0°C/32°F as valid measurements
+  - **Why**: These sensors measure refrigerant and air temperatures that can legitimately be at or below freezing during normal heat pump operation
+  - **Root Cause**: The protocol uses 0 as a sentinel for "N/A" on SOME fields (optional sensors, mode-dependent settings) but NOT for heat pump sensors
+  - **Breaking**: Temperature fields using ``DeciCelsiusToPreferred`` that previously returned ``None`` for 0°C will now return ``32.0`` (°F) or ``0.0`` (°C)
+  - **Fixed converter**: ``deci_celsius_to_preferred()`` no longer treats 0 as None
+  - **Unaffected**: ``half_celsius_to_preferred()`` still treats 0 as None (used for optional sensors like inlet temp)
+  - **Unaffected**: ``raw_celsius_to_preferred()`` still treats 0 as None (used for optional outside sensor)
+  
+- **Type Safety**: Added None-handling to formatters and examples that use optional temperature fields
+  
+  - Updated ``_format_number()`` in CLI formatters to handle None values gracefully
+  - Updated example code to safely format optional temperatures
+
+Clarification on Zero-as-None Behavior
+---------------------------------------
+The device protocol uses different temperature field types with different semantics:
+
+1. **DeciCelsius (0.1°C precision)** - Heat pump compressor/refrigerant sensors
+   
+   - Used for: tank temperatures, discharge, suction, evaporator, ambient
+   - Can measure: 0°C and below during normal operation
+   - **0 means**: Actual temperature of 0°C (32°F)
+   
+2. **HalfCelsius (0.5°C precision)** - Water and optional sensors
+   
+   - Used for: inlet water temp, secondary DHW sensor, mode-dependent settings
+   - **0 means**: Sensor not present OR setting not applicable in current mode
+   
+3. **RawCelsius** - Optional external sensors
+   
+   - Used for: outside temperature
+   - **0 means**: Sensor not installed on this model
+
+Migration Notes
+---------------
+For consumers (e.g., Home Assistant integration):
+
+- Heat pump sensors (``tank_upper_temperature``, ``ambient_temperature``, etc.) may now report 0°C/32°F instead of None/Unknown during cold weather or specific operating conditions
+- Inlet water temperature (``current_inlet_temperature``) still returns None when no water is flowing
+- Mode-dependent settings (``he_lower_on_temp_setting``) still return None when not applicable
+- Only ``outside_temperature`` definitively uses 0 as "sensor not available"
+- Update any automations that assumed 0°C readings meant "sensor missing"
+
 Version 7.4.5 (2026-02-04)
 ==========================
 

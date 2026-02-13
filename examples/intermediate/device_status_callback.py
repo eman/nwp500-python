@@ -148,17 +148,22 @@ async def main():
                     print(
                         f"  DHW Target Setting:     {status.dhw_target_temperature_setting:.1f}{unit}"
                     )
+
+                    def fmt_temp(val: float | None, unit: str) -> str:
+                        """Format temperature value, handling None."""
+                        return f"{val:.1f}{unit}" if val is not None else "N/A"
+
                     print(
-                        f"  Tank Upper:             {status.tank_upper_temperature:.1f}{unit}"
+                        f"  Tank Upper:             {fmt_temp(status.tank_upper_temperature, unit)}"
                     )
                     print(
-                        f"  Tank Lower:             {status.tank_lower_temperature:.1f}{unit}"
+                        f"  Tank Lower:             {fmt_temp(status.tank_lower_temperature, unit)}"
                     )
                     print(
-                        f"  Discharge:              {status.discharge_temperature:.1f}{unit}"
+                        f"  Discharge:              {fmt_temp(status.discharge_temperature, unit)}"
                     )
                     print(
-                        f"  Ambient:                {status.ambient_temperature:.1f}{unit}"
+                        f"  Ambient:                {fmt_temp(status.ambient_temperature, unit)}"
                     )
 
                     print("\nOperation:")

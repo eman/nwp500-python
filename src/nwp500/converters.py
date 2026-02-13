@@ -420,6 +420,15 @@ def half_celsius_to_preferred(
     which contains sibling fields needed to determine the device's temperature
     preference (Celsius or Fahrenheit).
 
+    Note: This converter treats 0 as None (sensor/setting not available).
+    This is used for:
+    - Optional sensors (inlet water temp when not flowing)
+    - Mode-dependent settings (heating element lower temps in Heat Pump mode)
+    - Secondary sensors that may not exist (dhw_temperature2)
+
+    For heat pump compressor/refrigerant sensors that can measure 0°C,
+    use deci_celsius_to_preferred instead (those use 0.1°C precision).
+
     Args:
         value: Raw device value in half-degrees Celsius format.
         handler: Pydantic next validator handler. Not invoked as we bypass the
@@ -433,11 +442,14 @@ def half_celsius_to_preferred(
     """
     is_celsius = _get_temperature_preference(info)
     if isinstance(value, (int, float)):
-        # 0 indicates sensor not available / not supported
+        # 0 indicates sensor not available / setting not applicable
         if value == 0:
             return None
         return HalfCelsius(value).to_preferred(is_celsius)
-    return float(value)
+    try:
+        return HalfCelsius(float(value)).to_preferred(is_celsius)
+    except (ValueError, TypeError):
+        return None
 
 
 def half_celsius_to_preferred_setting(
@@ -471,6 +483,10 @@ def deci_celsius_to_preferred(
     which contains sibling fields needed to determine the device's temperature
     preference (Celsius or Fahrenheit).
 
+    Note: This converter does NOT treat 0 as None, because 0°C (32°F) is a
+    valid temperature measurement for heat pump sensors. For optional
+    sensors that use 0 as a sentinel, use raw_celsius_to_preferred instead.
+
     Args:
         value: Raw device value in decicelsius format (0.1 °C per unit).
         handler: Pydantic next validator handler. Not invoked as we bypass the
@@ -480,15 +496,16 @@ def deci_celsius_to_preferred(
             retrieve the device's temperature_type preference.
 
     Returns:
-        Temperature in preferred unit, or None if value is 0 (indicating N/A).
+        Temperature in preferred unit. May be 0 for freezing temperatures.
+        Returns None only if value cannot be parsed.
     """
     is_celsius = _get_temperature_preference(info)
     if isinstance(value, (int, float)):
-        # 0 indicates sensor not available / not supported
-        if value == 0:
-            return None
         return DeciCelsius(value).to_preferred(is_celsius)
-    return float(value)
+    try:
+        return DeciCelsius(float(value)).to_preferred(is_celsius)
+    except (ValueError, TypeError):
+        return None
 
 
 def flow_rate_to_preferred(
