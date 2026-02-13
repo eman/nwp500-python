@@ -250,7 +250,7 @@ class MqttSubscriptionManager:
             self._subscriptions.pop(topic, None)
             self._message_handlers.pop(topic, None)
 
-            _logger.info(f"Unsubscribed from '{redact_topic(topic)}'")
+            _logger.info("Unsubscribed from MQTT topic")
 
             return int(packet_id)
 
