@@ -634,6 +634,11 @@ class NavienAuthClient:
         return tokens
 
     @property
+    def session(self) -> aiohttp.ClientSession | None:
+        """Get the active aiohttp session."""
+        return self._session
+
+    @property
     def is_authenticated(self) -> bool:
         """Check if client is currently authenticated."""
         return self._auth_response is not None

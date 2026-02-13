@@ -15,7 +15,7 @@ import asyncio
 import json
 import logging
 from collections.abc import Callable
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 from awscrt import mqtt
 from awscrt.exceptions import AwsCrtError
@@ -124,7 +124,7 @@ class MqttSubscriptionManager:
         try:
             # Parse JSON payload
             message = json.loads(payload.decode("utf-8"))
-            _logger.debug("Received message on topic: %s", topic)
+            _logger.debug("Received message on topic: %s", redact_topic(topic))
 
             # Call registered handlers that match this topic
             # Need to match against subscription patterns with wildcards
@@ -227,7 +227,13 @@ class MqttSubscriptionManager:
         if not self._connection:
             raise MqttNotConnectedError("Not connected to MQTT broker")
 
-        _logger.info(f"Unsubscribing from topic: {redact_topic(topic)}")
+        # Redact topic for logging to avoid leaking sensitive information
+        # (device IDs). We perform this check early to ensure we don't log raw
+        # topics.
+        # Note: CodeQL flags log calls using the topic variable (even redacted)
+        # as a security risk ("Clear-text logging of sensitive information").
+        # To pass CI, we must use a generic message here.
+        _logger.info("Unsubscribing from topic (redacted)")
 
         try:
             # Convert concurrent.futures.Future to asyncio.Future and await
@@ -241,7 +247,7 @@ class MqttSubscriptionManager:
                 # complete independently, preventing InvalidStateError
                 # in AWS CRT callbacks
                 _logger.debug(
-                    f"Unsubscribe from '{redact_topic(topic)}' was "
+                    "Unsubscribe from topic (redacted) was "
                     "cancelled but will complete in background"
                 )
                 raise
@@ -250,14 +256,12 @@ class MqttSubscriptionManager:
             self._subscriptions.pop(topic, None)
             self._message_handlers.pop(topic, None)
 
-            _logger.info(f"Unsubscribed from '{topic}'")
+            _logger.info("Unsubscribed from topic (redacted)")
 
             return int(packet_id)
 
         except (AwsCrtError, RuntimeError) as e:
-            _logger.error(
-                f"Failed to unsubscribe from '{redact_topic(topic)}': {e}"
-            )
+            _logger.error(f"Failed to unsubscribe from topic (redacted): {e}")
             raise
 
     async def resubscribe_all(self) -> None:
@@ -401,6 +405,7 @@ class MqttSubscriptionManager:
                     f"Error parsing {model.__name__} on {topic}: {e}"
                 )
 
+        cast(Any, handler)._original_callback = callback
         return handler
 
     async def _detect_state_changes(self, status: DeviceStatus) -> None:
@@ -507,6 +512,31 @@ class MqttSubscriptionManager:
             DeviceFeature, callback, "feature", post_parse
         )
         return await self.subscribe_device(device=device, callback=handler)
+
+    async def unsubscribe_device_feature(
+        self, device: Device, callback: Callable[[DeviceFeature], None]
+    ) -> None:
+        """Unsubscribe a specific device feature callback."""
+        device_id = device.device_info.mac_address
+        device_type = str(device.device_info.device_type)
+        topic = MqttTopicBuilder.command_topic(device_type, device_id, "#")
+
+        if topic not in self._message_handlers:
+            return
+
+        # Find and remove the specific handler
+        handlers = self._message_handlers[topic]
+        handlers_to_remove = []
+        for h in handlers:
+            if getattr(h, "_original_callback", None) == callback:
+                handlers_to_remove.append(h)
+
+        for h in handlers_to_remove:
+            handlers.remove(h)
+
+        # If no handlers left, unsubscribe from MQTT
+        if not handlers:
+            await self.unsubscribe(topic)
 
     async def subscribe_energy_usage(
         self,

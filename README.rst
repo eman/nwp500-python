@@ -70,7 +70,7 @@ Basic Usage
         if device:
             # Access status information
             status = device.status
-            print(f"Water Temperature: {status.dhw_temperature}°F")
+            print(f"Water Temperature: {status.dhw_temperature}")
             print(f"Tank Charge: {status.dhw_charge_per}%")
             print(f"Power Consumption: {status.current_inst_power}W")
             

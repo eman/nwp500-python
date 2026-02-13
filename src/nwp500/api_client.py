@@ -78,7 +78,8 @@ class NavienAPIClient:
 
         self.base_url = base_url.rstrip("/")
         self._auth_client = auth_client
-        self._session = session or getattr(auth_client, "_session", None)
+        self._session = session or auth_client.session
+
         if self._session is None:
             raise ValueError(
                 "auth_client must have an active session or a session "
