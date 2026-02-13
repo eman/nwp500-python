@@ -2,6 +2,14 @@
 Changelog
 =========
 
+Version 7.4.5 (2026-02-04)
+==========================
+
+Fixed
+-----
+- **Energy Capacity Unit Scaling**: Corrected unit scaling for energy capacity fields that were off by a factor of 10
+- **CLI Output**: Fixed linting issue by replacing str and Enum with StrEnum for InstallType
+
 Version 7.4.0 (2026-01-27)
 ==========================
 

@@ -7,7 +7,7 @@ capabilities.
 See docs/protocol/quick_reference.rst for comprehensive protocol details.
 """
 
-from enum import Enum, IntEnum
+from enum import IntEnum, StrEnum
 
 # ============================================================================
 # Status Value Enumerations
@@ -239,7 +239,7 @@ class VolumeCode(IntEnum):
     VOLUME_80 = 3  # NWP500-80: 80-gallon (302.8 liters) tank capacity
 
 
-class InstallType(str, Enum):
+class InstallType(StrEnum):
     """Installation type classification.
 
     Indicates whether the device is installed for residential or commercial use.

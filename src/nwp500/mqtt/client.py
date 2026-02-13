@@ -375,6 +375,7 @@ class NavienMqttClient(EventEmitter):
                         self._subscription_manager.update_connection(
                             self._connection
                         )
+                        await self._subscription_manager.resubscribe_all()
 
                     _logger.info("Active reconnection successful")
                 else:
@@ -894,6 +895,16 @@ class NavienMqttClient(EventEmitter):
             "subscribe_device_feature", device, callback
         )
 
+    async def unsubscribe_device_feature(
+        self, device: Device, callback: Callable[[DeviceFeature], None]
+    ) -> None:
+        """Unsubscribe a specific device feature callback."""
+        if not self._connected or not self._subscription_manager:
+            return
+        await self._subscription_manager.unsubscribe_device_feature(
+            device, callback
+        )
+
     async def subscribe_energy_usage(
         self,
         device: Device,
@@ -961,10 +972,8 @@ class NavienMqttClient(EventEmitter):
             )
             return False
         finally:
-            # Note: We don't unsubscribe token here because it might
-            # interfere with other subscribers if we're not careful.
-            # But the subscription manager handles multiple callbacks.
-            pass
+            # Unsubscribe using the specific callback to avoid leaking resources
+            await self.unsubscribe_device_feature(device, on_feature)
 
     @property
     def control(self) -> MqttDeviceController:
