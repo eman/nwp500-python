@@ -124,7 +124,7 @@ class MqttSubscriptionManager:
         try:
             # Parse JSON payload
             message = json.loads(payload.decode("utf-8"))
-            _logger.debug("Received message on topic: %s", topic)
+            _logger.debug("Received message on topic: %s", redact_topic(topic))
 
             # Call registered handlers that match this topic
             # Need to match against subscription patterns with wildcards
@@ -250,7 +250,7 @@ class MqttSubscriptionManager:
             self._subscriptions.pop(topic, None)
             self._message_handlers.pop(topic, None)
 
-            _logger.info(f"Unsubscribed from '{topic}'")
+            _logger.info(f"Unsubscribed from '{redact_topic(topic)}'")
 
             return int(packet_id)
 
