@@ -1,0 +1,4 @@
+# file: /home/emmanuel/Projects/nwp500-python/src/nwp500/mqtt/subscriptions.py
+# hypothesis_version: 6.151.5
+
+['#', 'Emmanuel Levijarvi', 'Heating started', 'Heating stopped', 'error_cleared', 'error_detected', 'feature', 'feature_received', 'heating_started', 'heating_stopped', 'metric', 'mode_changed', 'power_changed', 'response', 'status', 'status_received', 'temperature_changed', 'utf-8', '°C', '°F']

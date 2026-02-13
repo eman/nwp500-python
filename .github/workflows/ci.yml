@@ -28,6 +28,25 @@ jobs:
       - name: Run tox lint
         run: tox -e lint
 
+  security:
+    name: Security Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      
+      - name: Install tox
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install tox
+
+      - name: Run bandit
+        run: tox -e bandit
+
   test:
     name: Test on Python ${{ matrix.python-version }}
     runs-on: ubuntu-latest

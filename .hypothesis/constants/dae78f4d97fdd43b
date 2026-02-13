@@ -1,0 +1,4 @@
+# file: /home/emmanuel/Projects/nwp500-python/src/nwp500/field_factory.py
+# hypothesis_version: 6.151.5
+
+['W', 'dBm', 'device_class', 'energy', 'energy_field', 'json_schema_extra', 'kWh', 'power', 'power_field', 'signal_strength', 'temperature', 'temperature_field', 'unit_of_measurement', '°F']

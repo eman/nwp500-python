@@ -1,0 +1,4 @@
+# file: /home/emmanuel/Projects/nwp500-python/src/nwp500/auth.py
+# hypothesis_version: 6.151.5
+
+[200, 401, 3600, '/', 'AuthTokens', 'Content-Type', 'Emmanuel Levijarvi', 'MIT', 'NavienAuthClient', 'SUCCESS', 'Token expires in: %s', 'User-Agent', 'UserInfo', 'accessKeyId', 'accessToken', 'access_key_id', 'access_token', 'application/json', 'authenticate', 'authorization', 'before', 'code', 'data', 'idToken', 'id_token', 'ignore', 'invalid', 'json', 'legal', 'metric', 'msg', 'password', 'refreshToken', 'refresh_access_token', 'refresh_token', 'secretKey', 'secret_key', 'sessionToken', 'session_token', 'token', 'tokens', 'unauthorized', 'us_customary', 'userId', 'userInfo']
