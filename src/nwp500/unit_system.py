@@ -128,5 +128,5 @@ def is_metric_preferred(
     if unit_system is not None:
         return unit_system == "metric"
 
-    # If neither override nor context is set, return None (auto-detect)
-    return None  # type: ignore[return-value]
+    # If neither override nor context is set, default to Fahrenheit (US)
+    return False

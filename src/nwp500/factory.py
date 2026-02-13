@@ -73,7 +73,12 @@ async def create_navien_clients(
     auth_client = NavienAuthClient(email, password)
 
     # Authenticate and enter context manager
-    await auth_client.__aenter__()
+    try:
+        await auth_client.__aenter__()
+    except BaseException:
+        # Ensure session is cleaned up if authentication fails
+        await auth_client.__aexit__(None, None, None)
+        raise
 
     # Create API and MQTT clients that share the session
     api_client = NavienAPIClient(auth_client=auth_client)

@@ -122,7 +122,7 @@ def div_10(value: Any) -> float:
     """
     if isinstance(value, (int, float)):
         return float(value) / 10.0
-    return float(value)
+    return float(value) / 10.0
 
 
 def mul_10(value: Any) -> float:
@@ -145,7 +145,7 @@ def mul_10(value: Any) -> float:
     """
     if isinstance(value, (int, float)):
         return float(value) * 10.0
-    return float(value)
+    return float(value) * 10.0
 
 
 def enum_validator(enum_class: type[Any]) -> Callable[[Any], Any]:
