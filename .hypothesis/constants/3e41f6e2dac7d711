@@ -1,4 +1,0 @@
-# file: /home/emmanuel/Projects/nwp500-python/src/nwp500/converters.py
-# hypothesis_version: 6.151.5
-
-[0.0, 0.264172, 10.0, 'Celsius', 'Fahrenheit', 'div_10', 'enum_validator', 'metric', 'mul_10', 'str_enum_validator', 'temp_formula_type', 'temperatureType', 'temperature_type', 'volume_to_preferred']

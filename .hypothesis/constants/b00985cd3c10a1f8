@@ -1,4 +1,0 @@
-# file: /home/emmanuel/Projects/nwp500-python/src/nwp500/models.py
-# hypothesis_version: 6.151.5
-
-[0.0, 43.0, 65.0, 100.0, ' GPM', ' L', ' LPM', ' gal', ' °C', ' °F', '%', '...', 'Current fan RPM', 'Current state number', 'Fan PWM value', 'GPM', 'RPM', 'Target fan RPM', 'Unknown', 'Vacation day setting', 'W', 'Wh', 'before', 'clientID', 'days', 'device_class', 'device_info', 'energy', 'flow_rate', 'gal', 'h', 'heTime', 'heUsage', 'hours', 'hpTime', 'hpUsage', 'ignore', 'interval', 'json_schema_extra', 'metric', 'mixingValveUse', 'mode', 'power', 'python', 'sessionID', 'temperature', 'touInfo', 'unit_of_measurement', 'water', '°F']

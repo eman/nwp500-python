@@ -1,4 +1,0 @@
-# file: /home/emmanuel/Projects/nwp500-python/src/nwp500/encoding.py
-# hypothesis_version: 6.151.5
-
-[150, 'Friday', 'Monday', 'Saturday', 'Sunday', 'Thursday', 'Tuesday', 'Wednesday', 'day_index', 'decimalPoint', 'decimal_point', 'enable', 'enabled', 'endHour', 'endMinute', 'end_hour', 'end_minute', 'hour', 'min', 'minute', 'mode', 'mode_id', 'month', 'param', 'priceMax', 'priceMin', 'season', 'startHour', 'startMinute', 'start_hour', 'start_minute', 'temperature', 'week', 'weekday']

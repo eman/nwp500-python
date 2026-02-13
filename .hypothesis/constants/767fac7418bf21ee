@@ -1,4 +1,0 @@
-# file: /home/emmanuel/Projects/nwp500-python/src/nwp500/device_info_cache.py
-# hypothesis_version: 6.151.5
-
-['Device info cached', 'DeviceFeature', 'DeviceFeature | None', 'Emmanuel Levijarvi', 'cached_at', 'device_count', 'devices', 'expires_at', 'is_expired', 'mac']

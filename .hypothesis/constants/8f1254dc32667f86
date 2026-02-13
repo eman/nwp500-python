@@ -1,4 +1,0 @@
-# file: /home/emmanuel/Projects/nwp500-python/src/nwp500/mqtt/control.py
-# hypothesis_version: 6.151.5
-
-[5.0, 365, '+00:00', 'Emmanuel Levijarvi', 'MqttDeviceInfoCache', 'Z', 'additionalValue', 'air-filter-reset', 'anti-leg-off', 'anti-leg-on', 'app-connection', 'clientID', 'command', 'ctrl', 'ctrl/rsv/rd', 'ctrl/tou/rd', 'days', 'deviceType', 'device_info', 'dhw-mode', 'dhw-temperature', 'dhw_use', 'dr-off', 'dr-on', 'goout-day', 'holiday_use', 'macAddress', 'mode', 'period_days', 'periods', 'power-off', 'power-on', 'power_use', 'protocolVersion', 'recirc-hotbtn', 'recirc-mode', 'recirculation_use', 'request', 'requestTopic', 'reservation-mode', 'responseTopic', 'rsv/rd', 'sessionID', 'st', 'st/did', 'st/rsv/rd', 'temperature', 'timestamp', 'tou-off', 'tou-on', 'tou/rd', 'vacation_days']

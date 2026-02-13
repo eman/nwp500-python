@@ -1,4 +1,0 @@
-# file: /home/emmanuel/Projects/nwp500-python/src/nwp500/mqtt/diagnostics.py
-# hypothesis_version: 6.151.5
-
-[0.0, 1000, '-', '1', '11+', '2-5', '6-10', '=', 'Emmanuel Levijarvi', 'MIT', 'aws_error_counts', 'code', 'connected', 'inf', 'metrics', 'name', 'recent_connections', 'recent_drops', 'sample_durations', 'timestamp', 'total_sessions']
