@@ -227,7 +227,11 @@ class MqttSubscriptionManager:
         if not self._connection:
             raise MqttNotConnectedError("Not connected to MQTT broker")
 
-        _logger.info(f"Unsubscribing from topic: {redact_topic(topic)}")
+        # Redact topic for logging to avoid leaking sensitive information
+        # (device IDs). We perform this check early to ensure we don't log raw
+        # topics.
+        safe_topic = redact_topic(topic)
+        _logger.info(f"Unsubscribing from topic: {safe_topic}")
 
         try:
             # Convert concurrent.futures.Future to asyncio.Future and await
@@ -241,7 +245,7 @@ class MqttSubscriptionManager:
                 # complete independently, preventing InvalidStateError
                 # in AWS CRT callbacks
                 _logger.debug(
-                    f"Unsubscribe from '{redact_topic(topic)}' was "
+                    f"Unsubscribe from '{safe_topic}' was "
                     "cancelled but will complete in background"
                 )
                 raise
@@ -250,13 +254,13 @@ class MqttSubscriptionManager:
             self._subscriptions.pop(topic, None)
             self._message_handlers.pop(topic, None)
 
-            _logger.info("Unsubscribed from MQTT topic")
+            _logger.info(f"Unsubscribed from '{safe_topic}'")
 
             return int(packet_id)
 
         except (AwsCrtError, RuntimeError) as e:
             _logger.error(
-                f"Failed to unsubscribe from '{redact_topic(topic)}': {e}"
+                f"Failed to unsubscribe from '{safe_topic}': {e}"
             )
             raise
 
