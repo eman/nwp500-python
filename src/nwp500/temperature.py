@@ -299,8 +299,8 @@ class RawCelsius(Temperature):
                         return float(math.floor(fahrenheit_value))
                     case _:
                         return float(math.ceil(fahrenheit_value))
-            case TempFormulaType.STANDARD:
-                # Standard Rounding (default)
+            case _:
+                # Standard Rounding (default for STANDARD and any future types)
                 return round(fahrenheit_value)
 
     @classmethod
