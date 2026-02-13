@@ -54,6 +54,71 @@ When working on pull requests, use the GitHub CLI to access review comments:
 
 This ensures you can address all feedback from code reviewers systematically.
 
+#### Marking Conversations as Resolved
+
+After addressing a review comment, mark the conversation as resolved to signal reviewers that the feedback has been acted upon.
+
+**Step 1: Get review thread IDs**
+```bash
+gh api graphql -f query='
+query {
+  repository(owner: "eman", name: "nwp500-python") {
+    pullRequest(number: 74) {
+      reviewThreads(first: 10) {
+        nodes {
+          id
+          path
+          line
+          isResolved
+        }
+      }
+    }
+  }
+}
+'
+```
+
+Replace `74` with the actual PR number. This returns thread IDs like `PRRT_kwDOP_hNvM5ukIVT`.
+
+**Step 2: Resolve a thread**
+```bash
+gh api graphql -f query='
+mutation {
+  resolveReviewThread(input: {threadId: "PRRT_kwDOP_hNvM5ukIVT"}) {
+    thread {
+      isResolved
+    }
+  }
+}
+'
+```
+
+Replace the thread ID with the one from Step 1. Success response shows `"isResolved": true`.
+
+**Step 3: Resolve multiple threads efficiently**
+```bash
+for id in PRRT_kwDOP_hNvM5ukIVT PRRT_kwDOP_hNvM5ukIVo PRRT_kwDOP_hNvM5ukIVx; do
+  gh api graphql -f query="
+  mutation {
+    resolveReviewThread(input: {threadId: \"$id\"}) {
+      thread { isResolved }
+    }
+  }
+  " && echo "✓ $id resolved"
+done
+```
+
+**Step 4: Verify all are resolved**
+Re-run Step 1 query and confirm all addressed threads show `"isResolved": true`.
+
+**Important Notes:**
+- Only inline code review comments can be resolved (not general PR comments)
+- Conversations remain resolvable even after force-pushing commits
+- When commits are amended and force-pushed, old thread IDs remain valid
+- If you need to reopen a resolved thread, use `unresolveReviewThread` mutation instead
+
+See detailed instructions at `.github/copilot-instructions.md` for more examples and troubleshooting.
+
 ### Before Committing Changes
 Always run these checks before finalizing changes to ensure your code will pass CI:
 1. **Linting**: `make ci-lint` - Ensures code style matches CI requirements

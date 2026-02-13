@@ -297,13 +297,13 @@ def decode_reservation_hex(hex_string: str) -> list[dict[str, int]]:
     for i in range(0, len(data), 6):
         chunk = data[i : i + 6]
 
-        # Skip empty entries (all zeros)
-        if all(b == 0 for b in chunk):
-            continue
-
         # Ensure we have a full 6-byte entry
         if len(chunk) != 6:
             break
+
+        # Skip empty entries (all zeros)
+        if all(b == 0 for b in chunk):
+            continue
 
         reservations.append(
             {

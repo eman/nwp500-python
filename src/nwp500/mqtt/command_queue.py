@@ -100,8 +100,8 @@ class MqttCommandQueue:
             self._queue.put_nowait(command)
             _logger.info(f"Queued command (queue size: {self._queue.qsize()})")
         except asyncio.QueueFull:
-            # Should not happen since we checked/cleared above
             _logger.error("Failed to enqueue command - queue unexpectedly full")
+            raise
 
     async def send_all(
         self,

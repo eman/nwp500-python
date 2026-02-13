@@ -183,7 +183,7 @@ class TestDiv10Converter:
     """Test div_10 converter (divide by 10).
 
     Used for fields that need precision of 0.1 units.
-    Only divides numeric types (int, float), returns float(value) for others.
+    Divides all input types (converts to float first if needed).
     """
 
     def test_zero(self):
@@ -207,10 +207,9 @@ class TestDiv10Converter:
         assert div_10(50.5) == pytest.approx(5.05)
 
     def test_string_numeric(self):
-        """String '100' is converted to float without division."""
-        # div_10 converts non-numeric to float but doesn't divide
+        """String '100' is converted to float and divided."""
         result = div_10("100")
-        assert result == pytest.approx(100.0)
+        assert result == pytest.approx(10.0)
 
     def test_large_value(self):
         """1000 / 10 = 100.0."""
@@ -248,7 +247,7 @@ class TestMul10Converter:
 
     Used for energy capacity fields where the device reports in 10Wh units,
     but we want to store standard Wh.
-    Only multiplies numeric types (int, float), returns float(value) for others.
+    Multiplies all input types (converts to float first if needed).
     """
 
     def test_zero(self):
@@ -272,10 +271,9 @@ class TestMul10Converter:
         assert mul_10(50.5) == 505.0
 
     def test_string_numeric(self):
-        """String '100' is converted to float without multiplication."""
-        # mul_10 converts non-numeric to float but doesn't multiply
+        """String '100' is converted to float and multiplied."""
         result = mul_10("100")
-        assert result == pytest.approx(100.0)
+        assert result == pytest.approx(1000.0)
 
     def test_energy_capacity_example(self):
         """Test with realistic energy capacity values from issue #70."""

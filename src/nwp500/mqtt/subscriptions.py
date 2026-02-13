@@ -200,7 +200,8 @@ class MqttSubscriptionManager:
             self._subscriptions[topic] = qos
             if topic not in self._message_handlers:
                 self._message_handlers[topic] = []
-            self._message_handlers[topic].append(callback)
+            if callback not in self._message_handlers[topic]:
+                self._message_handlers[topic].append(callback)
 
             return int(packet_id)
 
