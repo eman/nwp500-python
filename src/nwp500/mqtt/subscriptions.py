@@ -230,9 +230,7 @@ class MqttSubscriptionManager:
         # Redact topic for logging to avoid leaking sensitive information
         # (device IDs). We perform this check early to ensure we don't log raw
         # topics.
-        # Note: CodeQL may still flag this if we log the variable derived from
-        # topic, so we use a generic message.
-        _logger.info("Unsubscribing from topic (redacted)")
+        _logger.info(f"Unsubscribing from topic: {redact_topic(topic)}")
 
         try:
             # Convert concurrent.futures.Future to asyncio.Future and await
@@ -246,8 +244,9 @@ class MqttSubscriptionManager:
                 # complete independently, preventing InvalidStateError
                 # in AWS CRT callbacks
                 _logger.debug(
-                    "Unsubscribe from topic (redacted) was "
-                    "cancelled but will complete in background"
+                    "Unsubscribe from topic: %s was cancelled but will "
+                    "complete in background",
+                    redact_topic(topic),
                 )
                 raise
 
@@ -255,12 +254,14 @@ class MqttSubscriptionManager:
             self._subscriptions.pop(topic, None)
             self._message_handlers.pop(topic, None)
 
-            _logger.info("Unsubscribed from topic (redacted)")
+            _logger.info(f"Unsubscribed from topic: {redact_topic(topic)}")
 
             return int(packet_id)
 
         except (AwsCrtError, RuntimeError) as e:
-            _logger.error(f"Failed to unsubscribe from topic (redacted): {e}")
+            _logger.error(
+                f"Failed to unsubscribe from topic: {redact_topic(topic)}: {e}"
+            )
             raise
 
     async def resubscribe_all(self) -> None:

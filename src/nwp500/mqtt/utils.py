@@ -119,35 +119,28 @@ def redact_topic(topic: str) -> str:
     Note:
         Uses pre-compiled regex patterns for better performance.
     """
-    # Use a new variable to avoid confusion in static analysis
-    redacted_topic = topic
-
     # Extra safety: catch any remaining hexadecimal or device-related sequences
     # MAC/device length w/ possible delimiters, prefixes, or casing
     for pattern in _MAC_PATTERNS:
-        redacted_topic = pattern.sub("REDACTED", redacted_topic)
+        topic = pattern.sub("REDACTED", topic)
     # Defensive: Cleanup for most common MAC and device ID patterns
-    redacted_topic = re.sub(
-        r"([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})", "REDACTED", redacted_topic
+    topic = re.sub(
+        r"([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})", "REDACTED", topic
     )  # 01:23:45:67:89:ab
-    redacted_topic = re.sub(
-        r"([0-9A-Fa-f]{2}-){5}[0-9A-Fa-f]{2}", "REDACTED", redacted_topic
+    topic = re.sub(
+        r"([0-9A-Fa-f]{2}-){5}[0-9A-Fa-f]{2}", "REDACTED", topic
     )  # 01-23-45-67-89-ab
-    redacted_topic = re.sub(
-        r"([0-9A-Fa-f]{12})", "REDACTED", redacted_topic
-    )  # 0123456789ab
-    redacted_topic = re.sub(
-        r"(navilink-)[0-9A-Fa-f]{8,}", r"\1REDACTED", redacted_topic
+    topic = re.sub(r"([0-9A-Fa-f]{12})", "REDACTED", topic)  # 0123456789ab
+    topic = re.sub(
+        r"(navilink-)[0-9A-Fa-f]{8,}", r"\1REDACTED", topic
     )  # navilink-xxxxxxx
     # Further defensive: catch anything that looks like a device ID
     # (alphanumeric, 8+ chars)
-    redacted_topic = re.sub(
-        r"(device[-_]?)?[0-9A-Fa-f]{8,}", "REDACTED", redacted_topic
-    )
+    topic = re.sub(r"(device[-_]?)?[0-9A-Fa-f]{8,}", "REDACTED", topic)
     # Final fallback: catch any continuous hex/alphanumeric string
     # longer than 8 chars (to cover variant IDs)
-    redacted_topic = re.sub(r"[0-9A-Fa-f]{8,}", "REDACTED", redacted_topic)
-    return redacted_topic
+    topic = re.sub(r"[0-9A-Fa-f]{8,}", "REDACTED", topic)
+    return topic
 
 
 def redact_mac(mac: str | None) -> str:
