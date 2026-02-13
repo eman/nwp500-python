@@ -260,9 +260,7 @@ class MqttSubscriptionManager:
             return int(packet_id)
 
         except (AwsCrtError, RuntimeError) as e:
-            _logger.error(
-                f"Failed to unsubscribe from topic (redacted): {e}"
-            )
+            _logger.error(f"Failed to unsubscribe from topic (redacted): {e}")
             raise
 
     async def resubscribe_all(self) -> None:
