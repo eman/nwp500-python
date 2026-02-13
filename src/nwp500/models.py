@@ -775,7 +775,6 @@ class DeviceStatus(NavienBaseModel):
     recirc_dhw_flow_rate: FlowRate = Field(
         description="Recirculation DHW flow rate (dynamic units: LPM/GPM)",
         json_schema_extra={
-            "unit_of_measurement": "GPM",
             "device_class": "flow_rate",
         },
     )

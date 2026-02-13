@@ -15,7 +15,7 @@ import asyncio
 import json
 import logging
 from collections.abc import Callable
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 from awscrt import mqtt
 from awscrt.exceptions import AwsCrtError
@@ -401,6 +401,7 @@ class MqttSubscriptionManager:
                     f"Error parsing {model.__name__} on {topic}: {e}"
                 )
 
+        cast(Any, handler)._original_callback = callback
         return handler
 
     async def _detect_state_changes(self, status: DeviceStatus) -> None:
@@ -507,6 +508,31 @@ class MqttSubscriptionManager:
             DeviceFeature, callback, "feature", post_parse
         )
         return await self.subscribe_device(device=device, callback=handler)
+
+    async def unsubscribe_device_feature(
+        self, device: Device, callback: Callable[[DeviceFeature], None]
+    ) -> None:
+        """Unsubscribe a specific device feature callback."""
+        device_id = device.device_info.mac_address
+        device_type = str(device.device_info.device_type)
+        topic = MqttTopicBuilder.command_topic(device_type, device_id, "#")
+
+        if topic not in self._message_handlers:
+            return
+
+        # Find and remove the specific handler
+        handlers = self._message_handlers[topic]
+        handlers_to_remove = []
+        for h in handlers:
+            if getattr(h, "_original_callback", None) == callback:
+                handlers_to_remove.append(h)
+
+        for h in handlers_to_remove:
+            handlers.remove(h)
+
+        # If no handlers left, unsubscribe from MQTT
+        if not handlers:
+            await self.unsubscribe(topic)
 
     async def subscribe_energy_usage(
         self,
