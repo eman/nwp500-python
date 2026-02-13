@@ -504,7 +504,11 @@ async def handle_set_recirculation_mode_request(
         f"Recirculation mode set to {mode_name}",
     )
 
-    if status and status.recirc_operation_mode.value != mode:
+    if (
+        status
+        and status.recirc_operation_mode is not None
+        and status.recirc_operation_mode.value != mode
+    ):
         _logger.warning(
             f"Device reported mode {status.recirc_operation_mode.name} "
             f"instead of expected {mode_name}. External factor or "

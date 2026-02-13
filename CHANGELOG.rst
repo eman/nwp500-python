@@ -2,6 +2,58 @@
 Changelog
 =========
 
+Version 7.5.0 (2026-02-13)
+==========================
+
+**BREAKING CHANGES**: Heat Pump Temperature Sensor Behavior
+
+Fixed
+-----
+- **Heat Pump Sensor Zero-as-None Bug**: Fixed critical bug where 0°C (32°F) readings from heat pump sensors were incorrectly treated as "sensor not available"
+  
+  - **Impact**: Heat pump compressor/refrigerant sensors (tank, discharge, suction, evaporator, ambient) now correctly report 0°C/32°F as valid measurements
+  - **Why**: These sensors measure refrigerant and air temperatures that can legitimately be at or below freezing during normal heat pump operation
+  - **Root Cause**: The protocol uses 0 as a sentinel for "N/A" on SOME fields (optional sensors, mode-dependent settings) but NOT for heat pump sensors
+  - **Breaking**: Temperature fields using ``DeciCelsiusToPreferred`` that previously returned ``None`` for 0°C will now return ``32.0`` (°F) or ``0.0`` (°C)
+  - **Fixed converter**: ``deci_celsius_to_preferred()`` no longer treats 0 as None
+  - **Unaffected**: ``half_celsius_to_preferred()`` still treats 0 as None (used for optional sensors like inlet temp)
+  - **Unaffected**: ``raw_celsius_to_preferred()`` still treats 0 as None (used for optional outside sensor)
+  
+- **Type Safety**: Added None-handling to formatters and examples that use optional temperature fields
+  
+  - Updated ``_format_number()`` in CLI formatters to handle None values gracefully
+  - Updated example code to safely format optional temperatures
+
+Clarification on Zero-as-None Behavior
+---------------------------------------
+The device protocol uses different temperature field types with different semantics:
+
+1. **DeciCelsius (0.1°C precision)** - Heat pump compressor/refrigerant sensors
+   
+   - Used for: tank temperatures, discharge, suction, evaporator, ambient
+   - Can measure: 0°C and below during normal operation
+   - **0 means**: Actual temperature of 0°C (32°F)
+   
+2. **HalfCelsius (0.5°C precision)** - Water and optional sensors
+   
+   - Used for: inlet water temp, secondary DHW sensor, mode-dependent settings
+   - **0 means**: Sensor not present OR setting not applicable in current mode
+   
+3. **RawCelsius** - Optional external sensors
+   
+   - Used for: outside temperature
+   - **0 means**: Sensor not installed on this model
+
+Migration Notes
+---------------
+For consumers (e.g., Home Assistant integration):
+
+- Heat pump sensors (``tank_upper_temperature``, ``ambient_temperature``, etc.) may now report 0°C/32°F instead of None/Unknown during cold weather or specific operating conditions
+- Inlet water temperature (``current_inlet_temperature``) still returns None when no water is flowing
+- Mode-dependent settings (``he_lower_on_temp_setting``) still return None when not applicable
+- Only ``outside_temperature`` definitively uses 0 as "sensor not available"
+- Update any automations that assumed 0°C readings meant "sensor missing"
+
 Version 7.4.5 (2026-02-04)
 ==========================
 
@@ -9,6 +61,38 @@ Fixed
 -----
 - **Energy Capacity Unit Scaling**: Corrected unit scaling for energy capacity fields that were off by a factor of 10
 - **CLI Output**: Fixed linting issue by replacing str and Enum with StrEnum for InstallType
+
+Version 7.4.0 (2026-01-27)
+==========================
+
+Added
+-----
+- **N/A Value Support**: Temperature sensors, optional features, and recirculation pump status now display "N/A" when not available
+
+  - Temperature sensor fields return ``None`` when device reports 0 (indicating sensor doesn't exist)
+  - Optional feature settings (mixing valve rate, heating element lower temps) return ``None`` when not applicable
+  - Recirculation pump status fields return ``None`` when no pump installed
+  - CLI now displays "N/A" instead of misleading zero values (e.g., "0.0°C" or "32.0°F")
+  - Affects ~25 fields across ``DeviceStatus`` model including outside temperature, inlet temperature, mixing rate, and all recirculation status fields
+  - New converters: ``int_with_zero_as_none()``, ``float_with_zero_as_none()``, ``enum_with_zero_as_none_validator()``, ``device_bool_with_zero_as_none()``
+  - New type annotations: ``DeviceBoolOptional`` for optional feature boolean fields
+  - See ``CHANGES.md`` for comprehensive documentation of all changes
+
+Changed
+-------
+- **Temperature Converters**: All temperature sensor converters now return ``float | None`` instead of ``float``
+
+  - Modified converters: ``half_celsius_to_preferred()``, ``deci_celsius_to_preferred()``, ``raw_celsius_to_preferred()``, ``div_10_celsius_to_preferred()``
+  - Created separate ``half_celsius_to_preferred_setting()`` converter for configuration settings that should never be None
+  - Temperature sensor fields (e.g., ``current_outside_temperature``, ``current_inlet_temperature``) can now be None
+  - Temperature setting fields (e.g., ``dhw_temperature_setting``) remain non-nullable
+
+- **Model Field Types**: Updated ~25 fields in ``DeviceStatus`` to support optional values
+
+  - Temperature sensors: 15+ fields now ``HalfCelsiusToPreferred`` (``float | None``)
+  - Mixing valve rate: Now ``float | None``
+  - Heating element lower settings: Now ``HalfCelsiusToPreferred`` (``float | None``) - mode-dependent
+  - Recirculation fields: 7 fields now support None (``RecirculationMode | None``, ``int | None``, ``DeviceBoolOptional``)
 
 Version 7.3.4 (2026-01-27)
 ==========================

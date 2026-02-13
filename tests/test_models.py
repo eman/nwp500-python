@@ -141,3 +141,123 @@ def test_fahrenheit_to_half_celsius():
     assert fahrenheit_to_half_celsius(95.0) == 70  # 35°C × 2
     assert fahrenheit_to_half_celsius(150.0) == 131  # ~65.6°C × 2
     assert fahrenheit_to_half_celsius(130.0) == 109  # ~54.4°C × 2
+
+
+def test_temperature_zero_values(default_status_data):
+    """Test handling of zero temperature values.
+
+    The protocol uses 0 as a sentinel ("N/A") for different field types:
+    - HalfCelsiusToPreferred: Optional sensors & mode-dependent settings -> None
+    - DeciCelsiusToPreferred: Heat pump sensors (can measure 0°C) -> 0°C/32°F
+    - RawCelsiusToPreferred: Optional external sensor -> None
+    """
+    # Test HalfCelsiusToPreferred with 0 - should be None (optional sensors)
+    default_status_data["dhwTemperature"] = 0
+    default_status_data["currentInletTemperature"] = 0
+    status = DeviceStatus.model_validate(default_status_data)
+    assert status.dhw_temperature is None  # Optional hot water temp sensor
+    assert status.current_inlet_temperature is None  # No flow = no reading
+
+    # Test DeciCelsiusToPreferred with 0 - should be 0°C/32°F (can be freezing)
+    default_status_data["tankUpperTemperature"] = 0
+    default_status_data["ambientTemperature"] = 0
+    status = DeviceStatus.model_validate(default_status_data)
+    # 0 decicelsius = 0°C = 32°F (heat pump can operate in freezing temps)
+    assert status.tank_upper_temperature == pytest.approx(32.0, abs=1.0)
+    assert status.ambient_temperature == pytest.approx(32.0, abs=1.0)
+
+    # Test RawCelsiusToPreferred with 0 - should be None (optional sensor)
+    default_status_data["outsideTemperature"] = 0
+    status = DeviceStatus.model_validate(default_status_data)
+    assert status.outside_temperature is None
+
+
+def test_temperature_non_zero_values_are_converted(default_status_data):
+    """Test that non-zero temperature values are properly converted."""
+    # Test HalfCelsiusToPreferred with non-zero value
+    default_status_data["dhwTemperature"] = 122
+    status = DeviceStatus.model_validate(default_status_data)
+    assert status.dhw_temperature == pytest.approx(141.8)
+
+    # Test DeciCelsiusToPreferred with non-zero value
+    default_status_data["tankUpperTemperature"] = 489
+    status = DeviceStatus.model_validate(default_status_data)
+    assert status.tank_upper_temperature == pytest.approx(120.0, abs=0.1)
+
+    # Test RawCelsiusToPreferred with non-zero value
+    default_status_data["outsideTemperature"] = 50  # 25°C = 77°F
+    status = DeviceStatus.model_validate(default_status_data)
+    assert status.outside_temperature == pytest.approx(77.0, abs=1.0)
+
+
+def test_mixing_rate_zero_is_none(default_status_data):
+    """Test that mixing_rate of 0 is treated as None (feature not available)."""
+    default_status_data["mixingRate"] = 0
+    status = DeviceStatus.model_validate(default_status_data)
+    assert status.mixing_rate is None
+
+
+def test_mixing_rate_non_zero_is_preserved(default_status_data):
+    """Test that non-zero mixing_rate values are preserved."""
+    default_status_data["mixingRate"] = 50.5
+    status = DeviceStatus.model_validate(default_status_data)
+    assert status.mixing_rate == 50.5
+
+
+def test_he_lower_temp_settings_zero_is_none(default_status_data):
+    """Test heating element lower temp settings with 0 are None."""
+    default_status_data["heLowerOnTempSetting"] = 0
+    default_status_data["heLowerOffTempSetting"] = 0
+    status = DeviceStatus.model_validate(default_status_data)
+    assert status.he_lower_on_temp_setting is None
+    assert status.he_lower_off_temp_setting is None
+
+
+def test_he_lower_temp_settings_non_zero_are_converted(default_status_data):
+    """Test non-zero heating element lower temps are converted."""
+    # 122 half-celsius = 61°C = 141.8°F
+    default_status_data["heLowerOnTempSetting"] = 122
+    default_status_data["heLowerOffTempSetting"] = 100
+    status = DeviceStatus.model_validate(default_status_data)
+    assert status.he_lower_on_temp_setting == pytest.approx(141.8)
+    assert status.he_lower_off_temp_setting == pytest.approx(122.0)
+
+
+def test_recirc_status_fields_zero_is_none(default_status_data):
+    """Test recirculation status fields with 0 are None."""
+    default_status_data["recircOperationMode"] = 0
+    default_status_data["recircPumpOperationStatus"] = 0
+    default_status_data["recircHotBtnReady"] = 0
+    default_status_data["recircOperationReason"] = 0
+    default_status_data["recircErrorStatus"] = 0
+    default_status_data["recircOperationBusy"] = 0
+    default_status_data["recircReservationUse"] = 0
+    status = DeviceStatus.model_validate(default_status_data)
+    assert status.recirc_operation_mode is None
+    assert status.recirc_pump_operation_status is None
+    assert status.recirc_hot_btn_ready is None
+    assert status.recirc_operation_reason is None
+    assert status.recirc_error_status is None
+    assert status.recirc_operation_busy is None
+    assert status.recirc_reservation_use is None
+
+
+def test_recirc_status_fields_non_zero_are_preserved(default_status_data):
+    """Test that non-zero recirculation status fields are properly preserved."""
+    from nwp500.enums import RecirculationMode
+
+    default_status_data["recircOperationMode"] = 2  # BUTTON mode
+    default_status_data["recircPumpOperationStatus"] = 1
+    default_status_data["recircHotBtnReady"] = 5
+    default_status_data["recircOperationReason"] = 3
+    default_status_data["recircErrorStatus"] = 0  # 0 will become None
+    default_status_data["recircOperationBusy"] = 2  # ON (True)
+    default_status_data["recircReservationUse"] = 1  # OFF (False)
+    status = DeviceStatus.model_validate(default_status_data)
+    assert status.recirc_operation_mode == RecirculationMode.BUTTON
+    assert status.recirc_pump_operation_status == 1
+    assert status.recirc_hot_btn_ready == 5
+    assert status.recirc_operation_reason == 3
+    assert status.recirc_error_status is None
+    assert status.recirc_operation_busy is True
+    assert status.recirc_reservation_use is False

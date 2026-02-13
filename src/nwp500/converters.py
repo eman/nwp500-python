@@ -27,10 +27,13 @@ __all__ = [
     "device_bool_from_python",
     "tou_override_to_python",
     "div_10",
+    "float_with_zero_as_none",
+    "int_with_zero_as_none",
     "mul_10",
     "enum_validator",
     "str_enum_validator",
     "half_celsius_to_preferred",
+    "half_celsius_to_preferred_setting",
     "deci_celsius_to_preferred",
     "raw_celsius_to_preferred",
     "flow_rate_to_preferred",
@@ -63,6 +66,36 @@ def device_bool_to_python(value: Any) -> bool:
         False
     """
     return bool(value == 2)
+
+
+def device_bool_with_zero_as_none(value: Any) -> bool | None:
+    """Convert device boolean representation to Python bool, treating 0 as None.
+
+    Device protocol uses: 0 = N/A, 1 = OFF/False, 2 = ON/True
+
+    This is used for boolean fields that represent features which may not be
+    available on all device models. The device protocol uses 0 to indicate
+    "not applicable" or "feature not present".
+
+    Args:
+        value: Device value (typically 0, 1, or 2).
+
+    Returns:
+        Python boolean (1→False, 2→True), or None if value is 0.
+
+    Example:
+        >>> device_bool_with_zero_as_none(2)
+        True
+        >>> device_bool_with_zero_as_none(1)
+        False
+        >>> device_bool_with_zero_as_none(0)
+        None
+    """
+    if isinstance(value, (int, float)):
+        if value == 0:
+            return None
+        return bool(value == 2)
+    return bool(int(value) == 2)
 
 
 def device_bool_from_python(value: bool) -> int:
@@ -125,6 +158,60 @@ def div_10(value: Any) -> float:
     return float(value) / 10.0
 
 
+def float_with_zero_as_none(value: Any) -> float | None:
+    """Convert value to float, treating 0 as None (N/A).
+
+    This is used for numeric fields that represent features which may not be
+    available on all device models. The device protocol uses 0 to indicate
+    "not applicable" or "feature not present".
+
+    Args:
+        value: Input value (typically int or float).
+
+    Returns:
+        Float value, or None if value is 0.
+
+    Example:
+        >>> float_with_zero_as_none(50.5)
+        50.5
+        >>> float_with_zero_as_none(0)
+        None
+        >>> float_with_zero_as_none(0.0)
+        None
+    """
+    if isinstance(value, (int, float)):
+        if value == 0:
+            return None
+        return float(value)
+    return float(value)
+
+
+def int_with_zero_as_none(value: Any) -> int | None:
+    """Convert value to int, treating 0 as None (N/A).
+
+    This is used for status/enum fields that represent features which may not be
+    available on all device models. The device protocol uses 0 to indicate
+    "not applicable" or "feature not present".
+
+    Args:
+        value: Input value (typically int).
+
+    Returns:
+        Integer value, or None if value is 0.
+
+    Example:
+        >>> int_with_zero_as_none(3)
+        3
+        >>> int_with_zero_as_none(0)
+        None
+    """
+    if isinstance(value, (int, float)):
+        if value == 0:
+            return None
+        return int(value)
+    return int(value)
+
+
 def mul_10(value: Any) -> float:
     """Multiply numeric value by 10.0.
 
@@ -169,6 +256,47 @@ def enum_validator(enum_class: type[Any]) -> Callable[[Any], Any]:
 
     def validate(value: Any) -> Any:
         """Validate and convert value to enum."""
+        if isinstance(value, enum_class):
+            return value
+        if isinstance(value, int):
+            return enum_class(value)
+        return enum_class(int(value))
+
+    return validate
+
+
+def enum_with_zero_as_none_validator(
+    enum_class: type[Any],
+) -> Callable[[Any], Any]:
+    """Create a validator for converting int to Enum, treating 0 as None.
+
+    This is used for enum fields that represent features which may not be
+    available on all device models. The device protocol uses 0 to indicate
+    "not applicable" or "feature not present".
+
+    Args:
+        enum_class: The Enum class to validate against.
+
+    Returns:
+        A validator function compatible with Pydantic BeforeValidator.
+
+    Example:
+        >>> from enum import Enum
+        >>> class Mode(Enum):
+        ...     UNKNOWN = 0
+        ...     MODE_A = 1
+        ...     MODE_B = 2
+        >>> validator = enum_with_zero_as_none_validator(Mode)
+        >>> validator(1)
+        <Mode.MODE_A: 1>
+        >>> validator(0)
+        None
+    """
+
+    def validate(value: Any) -> Any:
+        """Validate and convert value to enum, returning None for 0."""
+        if value == 0 or value == 0.0:
+            return None
         if isinstance(value, enum_class):
             return value
         if isinstance(value, int):
@@ -285,12 +413,21 @@ def _get_temperature_preference(info: ValidationInfo) -> bool:
 
 def half_celsius_to_preferred(
     value: Any, handler: ValidatorFunctionWrapHandler, info: ValidationInfo
-) -> float:
+) -> float | None:
     """Convert half-degrees Celsius to preferred unit (C or F).
 
     Uses WrapValidator instead of BeforeValidator to access ValidationInfo.data,
     which contains sibling fields needed to determine the device's temperature
     preference (Celsius or Fahrenheit).
+
+    Note: This converter treats 0 as None (sensor/setting not available).
+    This is used for:
+    - Optional sensors (inlet water temp when not flowing)
+    - Mode-dependent settings (heating element lower temps in Heat Pump mode)
+    - Secondary sensors that may not exist (dhw_temperature2)
+
+    For heat pump compressor/refrigerant sensors that can measure 0°C,
+    use deci_celsius_to_preferred instead (those use 0.1°C precision).
 
     Args:
         value: Raw device value in half-degrees Celsius format.
@@ -301,7 +438,35 @@ def half_celsius_to_preferred(
             retrieve the device's temperature_type preference.
 
     Returns:
-        Temperature in preferred unit.
+        Temperature in preferred unit, or None if value is 0 (indicating N/A).
+    """
+    is_celsius = _get_temperature_preference(info)
+    if isinstance(value, (int, float)):
+        # 0 indicates sensor not available / setting not applicable
+        if value == 0:
+            return None
+        return HalfCelsius(value).to_preferred(is_celsius)
+    try:
+        return HalfCelsius(float(value)).to_preferred(is_celsius)
+    except (ValueError, TypeError):
+        return None
+
+
+def half_celsius_to_preferred_setting(
+    value: Any, handler: ValidatorFunctionWrapHandler, info: ValidationInfo
+) -> float:
+    """Convert half-degrees Celsius to preferred unit for settings/limits.
+
+    Like half_celsius_to_preferred, but never returns None. Used for temperature
+    settings, limits, and configuration values that should always have a value.
+
+    Args:
+        value: Raw device value in half-degrees Celsius format.
+        handler: Pydantic next validator handler.
+        info: Pydantic validation context containing sibling fields.
+
+    Returns:
+        Temperature in preferred unit (never None).
     """
     is_celsius = _get_temperature_preference(info)
     if isinstance(value, (int, float)):
@@ -311,12 +476,16 @@ def half_celsius_to_preferred(
 
 def deci_celsius_to_preferred(
     value: Any, handler: ValidatorFunctionWrapHandler, info: ValidationInfo
-) -> float:
+) -> float | None:
     """Convert decicelsius to preferred unit (C or F).
 
     Uses WrapValidator instead of BeforeValidator to access ValidationInfo.data,
     which contains sibling fields needed to determine the device's temperature
     preference (Celsius or Fahrenheit).
+
+    Note: This converter does NOT treat 0 as None, because 0°C (32°F) is a
+    valid temperature measurement for heat pump sensors. For optional
+    sensors that use 0 as a sentinel, use raw_celsius_to_preferred instead.
 
     Args:
         value: Raw device value in decicelsius format (0.1 °C per unit).
@@ -327,12 +496,16 @@ def deci_celsius_to_preferred(
             retrieve the device's temperature_type preference.
 
     Returns:
-        Temperature in preferred unit.
+        Temperature in preferred unit. May be 0 for freezing temperatures.
+        Returns None only if value cannot be parsed.
     """
     is_celsius = _get_temperature_preference(info)
     if isinstance(value, (int, float)):
         return DeciCelsius(value).to_preferred(is_celsius)
-    return float(value)
+    try:
+        return DeciCelsius(float(value)).to_preferred(is_celsius)
+    except (ValueError, TypeError):
+        return None
 
 
 def flow_rate_to_preferred(
@@ -413,7 +586,7 @@ def volume_to_preferred(
 
 def raw_celsius_to_preferred(
     value: Any, handler: ValidatorFunctionWrapHandler, info: ValidationInfo
-) -> float:
+) -> float | None:
     """Convert raw halves-of-Celsius to preferred unit (C or F).
 
     Raw device values are in halves of Celsius (0.5°C precision).
@@ -435,11 +608,15 @@ def raw_celsius_to_preferred(
             retrieve the device's temperature_type preference and formula type.
 
     Returns:
-        Temperature in preferred unit (Celsius or Fahrenheit).
+        Temperature in preferred unit (Celsius or Fahrenheit), or None if
+        value is 0 (indicating N/A).
     """
     is_celsius = _get_temperature_preference(info)
 
     if isinstance(value, (int, float)):
+        # 0 indicates sensor not available / not supported
+        if value == 0:
+            return None
         raw_temp = RawCelsius(value)
     else:
         try:
@@ -467,7 +644,7 @@ def raw_celsius_to_preferred(
 
 def div_10_celsius_to_preferred(
     value: Any, handler: ValidatorFunctionWrapHandler, info: ValidationInfo
-) -> float:
+) -> float | None:
     """Convert decicelsius value (raw / 10) to preferred unit (C or F).
 
     Raw device values are in tenths of Celsius (0.1°C per unit).
@@ -487,11 +664,15 @@ def div_10_celsius_to_preferred(
             retrieve the device's temperature_type preference.
 
     Returns:
-        Temperature in preferred unit (Celsius or Fahrenheit).
+        Temperature in preferred unit (Celsius or Fahrenheit), or None if
+        value is 0 (indicating N/A).
     """
     is_celsius = _get_temperature_preference(info)
 
     if isinstance(value, (int, float)):
+        # 0 indicates sensor not available / not supported
+        if value == 0:
+            return None
         celsius = float(value) / 10.0
     else:
         try:

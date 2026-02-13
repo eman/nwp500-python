@@ -148,7 +148,9 @@ def test_device_status_fuzzing(
     # 2. Check DHW Temperature (HalfCelsius)
     # Raw value is half-celsius.
     celsius_val = dhw_temp_raw / 2.0
-    if is_celsius:
+    if dhw_temp_raw == 0:
+        assert status.dhw_temperature is None
+    elif is_celsius:
         assert status.dhw_temperature == pytest.approx(celsius_val)
     else:
         fahrenheit_val = (celsius_val * 9 / 5) + 32
@@ -157,7 +159,9 @@ def test_device_status_fuzzing(
     # 3. Check Tank Temperature (DeciCelsius)
     # Raw value is deci-celsius.
     tank_celsius_val = tank_temp_raw / 10.0
-    if is_celsius:
+    if tank_temp_raw == 0:
+        assert status.tank_upper_temperature is None
+    elif is_celsius:
         assert status.tank_upper_temperature == pytest.approx(tank_celsius_val)
     else:
         tank_fahrenheit_val = (tank_celsius_val * 9 / 5) + 32

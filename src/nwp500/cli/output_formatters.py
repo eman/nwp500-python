@@ -17,7 +17,12 @@ _logger = logging.getLogger(__name__)
 
 
 def _format_number(value: Any) -> str:
-    """Format number to one decimal place if float, otherwise return as-is."""
+    """Format number to one decimal place if float, otherwise return as-is.
+
+    Handles None by returning "N/A".
+    """
+    if value is None:
+        return "N/A"
     if isinstance(value, float):
         return f"{value:.1f}"
     return str(value)
@@ -85,7 +90,8 @@ def _add_numeric_item(
     if hasattr(device_status, field_name):
         value = getattr(device_status, field_name)
         unit = _get_unit_suffix(field_name, instance=device_status)
-        formatted = f"{_format_number(value)}{unit}"
+        # Handle None values (N/A sensors)
+        formatted = "N/A" if value is None else f"{_format_number(value)}{unit}"
         items.append((category, label, formatted))
 
 
