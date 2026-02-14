@@ -183,7 +183,7 @@ class TestDiv10Converter:
     """Test div_10 converter (divide by 10).
 
     Used for fields that need precision of 0.1 units.
-    Only divides numeric types (int, float), returns float(value) for others.
+    Divides all input types (converts to float first if needed).
     """
 
     def test_zero(self):
@@ -247,7 +247,7 @@ class TestMul10Converter:
 
     Used for energy capacity fields where the device reports in 10Wh units,
     but we want to store standard Wh.
-    Only multiplies numeric types (int, float), returns float(value) for others.
+    Multiplies all input types (converts to float first if needed).
     """
 
     def test_zero(self):
