@@ -2,6 +2,33 @@
 Changelog
 =========
 
+Version 7.4.6 (2026-02-13)
+==========================
+
+Fixed
+-----
+- **Converter Consistency**: ``div_10()`` and ``mul_10()`` now correctly apply division/multiplication to all input types after ``float()`` conversion, not just ``int``/``float`` types
+- **Reservation Decoding**: Fixed ``decode_reservation_hex()`` to validate chunk length before checking for empty entries, preventing potential out-of-bounds access
+- **Factory Cleanup**: ``create_navien_clients()`` now properly cleans up auth session if authentication fails during context manager entry
+- **MQTT Reconnection**: MQTT client now resubscribes to all topics after successful reconnection
+- **Subscription Leak**: Fixed resource leak where ``wait_for_device_feature()`` did not unsubscribe its callback after completion
+- **Duplicate Handlers**: Subscription manager now prevents duplicate callback registration for the same topic
+- **Command Queue**: ``MqttCommandQueue`` now raises on ``QueueFull`` instead of silently swallowing the error
+- **Flow Rate Metadata**: Removed hardcoded ``"GPM"`` unit from ``recirc_dhw_flow_rate`` field; unit is now dynamic based on unit system
+- **Temperature Rounding**: ``RawCelsius`` Fahrenheit conversion now uses a catch-all default for standard rounding instead of matching only ``STANDARD`` enum value
+- **Unit System Default**: ``is_metric_preferred()`` now returns ``False`` (Fahrenheit) instead of ``None`` when no unit system override or context is set
+
+Security
+--------
+- **Sensitive Data Logging**: Redacted MQTT topics in subscription manager logging to prevent leaking device IDs (resolves CodeQL alerts)
+
+Added
+-----
+- **Auth Session Property**: Added ``NavienAuthClient.session`` property to access the active ``aiohttp`` session without using ``getattr``
+- **Unsubscribe Feature**: Added ``unsubscribe_device_feature()`` method to MQTT client and subscription manager for targeted callback removal
+- **Hypothesis Fuzzing**: Added property-based fuzzing tests for MQTT payload handling
+- **Bandit Security Scanning**: Added bandit configuration for security analysis in CI
+
 Version 7.4.5 (2026-02-04)
 ==========================
 
