@@ -375,8 +375,11 @@ View and update reservation schedule.
 
 .. code-block:: bash
 
-   # Get current reservations
+   # Get current reservations (table format)
    python3 -m nwp500.cli reservations get
+
+   # Get current reservations (JSON format)
+   python3 -m nwp500.cli reservations get --json
 
    # Set reservations from JSON
    python3 -m nwp500.cli reservations set '[{"hour": 6, "min": 0, ...}]'
@@ -385,18 +388,40 @@ View and update reservation schedule.
 
 .. code-block:: bash
 
-   python3 -m nwp500.cli reservations get
+   python3 -m nwp500.cli reservations get [--json]
    python3 -m nwp500.cli reservations set <json> [--disabled]
 
-**Options:**
+**Options (get):**
+
+.. option:: --json
+
+   Output raw JSON instead of formatted table.
+
+**Options (set):**
 
 .. option:: --disabled
 
    Create reservation in disabled state.
 
-**Output (get):** Current reservation schedule configuration.
+**Output (get):** Current reservation schedule displayed as a formatted table by default,
+showing the global reservation status (ENABLED/DISABLED) followed by individual reservations.
+Use ``--json`` flag for raw JSON output.
 
-**Example Output:**
+**Example Table Output:**
+
+.. code-block:: text
+
+   Reservations: ENABLED
+
+   RESERVATIONS
+   ================================================================================
+     #   Enabled    Days                      Time     Temp (°F)
+   ================================================================================
+     1   Yes        Mon-Fri                   06:00    160
+     2   No         Sat-Sun                   08:00    140
+   ================================================================================
+
+**Example JSON Output (--json):**
 
 .. code-block:: json
 
@@ -407,10 +432,20 @@ View and update reservation schedule.
        {
          "number": 1,
          "enabled": true,
-         "days": [1, 1, 1, 1, 1, 0, 0],
+         "days": ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"],
          "time": "06:00",
          "mode": 3,
-         "temperatureF": 140
+         "temperatureF": 160,
+         "raw": {...}
+       },
+       {
+         "number": 2,
+         "enabled": false,
+         "days": ["Saturday", "Sunday"],
+         "time": "08:00",
+         "mode": 3,
+         "temperatureF": 140,
+         "raw": {...}
        }
      ]
    }
@@ -643,8 +678,13 @@ Example 8: Smart Scheduling with Reservations
 .. code-block:: bash
 
    #!/bin/bash
-   # Set reservation schedule: 6 AM - 10 PM at 140°F on weekdays
+   # View current reservations (table format - default)
+   python3 -m nwp500.cli reservations get
 
+   # View current reservations (JSON format)
+   python3 -m nwp500.cli reservations get --json
+
+   # Set reservation schedule: 6 AM - 10 PM at 140°F on weekdays
    python3 -m nwp500.cli reservations set \
      '[{"hour": 6, "min": 0, "mode": 3, "temp": 140, "days": [1,1,1,1,1,0,0]}]'
 

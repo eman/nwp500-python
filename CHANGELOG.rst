@@ -14,6 +14,7 @@ Added
 - **CLI ``tou rates``**: Browse utilities and rate plans for a zip code (``nwp500 tou rates 94903``).
 - **CLI ``tou plan``**: View converted rate plan details with decoded pricing (``nwp500 tou plan 94903 "EV Rate A"``).
 - **CLI ``tou apply``**: Apply a rate plan to the water heater with optional ``--enable`` flag to activate TOU via MQTT.
+- **CLI Reservations Table Output**: ``nwp-cli reservations get`` now displays reservations as a formatted table by default with global status indicator (ENABLED/DISABLED). Use ``--json`` flag for JSON output.
 
 Changed
 -------

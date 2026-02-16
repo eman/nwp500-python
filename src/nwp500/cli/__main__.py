@@ -294,10 +294,13 @@ def reservations() -> None:
 
 
 @reservations.command("get")  # type: ignore[attr-defined]
+@click.option("--json", "output_json", is_flag=True, help="Output raw JSON")
 @async_command
-async def reservations_get(mqtt: NavienMqttClient, device: Any) -> None:
+async def reservations_get(
+    mqtt: NavienMqttClient, device: Any, output_json: bool = False
+) -> None:
     """Get current reservation schedule."""
-    await handlers.handle_get_reservations_request(mqtt, device)
+    await handlers.handle_get_reservations_request(mqtt, device, output_json)
 
 
 @reservations.command("set")  # type: ignore[attr-defined]
