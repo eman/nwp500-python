@@ -305,8 +305,10 @@ async def handle_get_reservations_request(
             if output_json:
                 print_json(output)
             else:
+                reservation_list = output["reservations"]
+                is_enabled = bool(output["reservationEnabled"])
                 _formatter.print_reservations_table(
-                    output["reservations"], output["reservationEnabled"]
+                    reservation_list, is_enabled
                 )
             future.set_result(None)
 

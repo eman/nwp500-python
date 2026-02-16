@@ -443,12 +443,13 @@ class OutputFormatter:
 
         for res in reservations:
             num = res.get("number", "?")
-            enabled = "Yes" if res.get("enabled", False) else "No"
+            is_enabled = res.get("enabled", False)
+            enabled_str = "Yes" if is_enabled else "No"
             days_str = _abbreviate_days(res.get("days", []))
             time_str = res.get("time", "??:??")
             temp = res.get("temperatureF", "?")
             print(
-                f"  {num:<3} {enabled:<10} {days_str:<25} "
+                f"  {num:<3} {enabled_str:<10} {days_str:<25} "
                 f"{time_str:<8} {temp:<10}"
             )
         print("=" * 80)
