@@ -513,6 +513,199 @@ paths:
                           zipCode:
                             type: integer
                             example: 94595
+    put:
+      summary: Apply TOU Rate Plan
+      description: |
+        Applies a Time of Use rate plan to a device. The request includes the converted
+        TOU schedule (from POST /device/tou/convert), the original source data from OpenEI,
+        and device identifiers.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - additionalValue
+                - macAddress
+                - sourceData
+                - sourceType
+                - touInfo
+                - userId
+                - userType
+                - zipCode
+              properties:
+                additionalValue:
+                  type: string
+                  example: "5322"
+                macAddress:
+                  type: string
+                  example: "04786332fca0"
+                registerPath:
+                  type: string
+                  example: "wifi"
+                  description: Device connection type (wifi or bt)
+                sourceData:
+                  type: object
+                  description: Original OpenEI rate plan object
+                sourceType:
+                  type: string
+                  example: "openei"
+                touInfo:
+                  type: object
+                  properties:
+                    name:
+                      type: string
+                      example: "Electric Vehicle EV (Sch) Rate A"
+                    schedule:
+                      type: array
+                      items:
+                        type: object
+                        properties:
+                          season:
+                            type: integer
+                          interval:
+                            type: array
+                            items:
+                              $ref: '#/components/schemas/TOUInterval'
+                    utility:
+                      type: string
+                      example: "Pacific Gas & Electric Co"
+                    zipCode:
+                      type: string
+                      example: "94903"
+                userId:
+                  type: string
+                  example: "user@example.com"
+                userType:
+                  type: string
+                  example: "O"
+                zipCode:
+                  type: string
+                  example: "94903"
+      responses:
+        '200':
+          description: Rate plan applied successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: integer
+                    example: 200
+                  msg:
+                    type: string
+                    example: SUCCESS
+                  data:
+                    type: object
+                    properties:
+                      sourceType:
+                        type: string
+                        example: "openei"
+                      touInfo:
+                        type: object
+                        properties:
+                          name:
+                            type: string
+                          schedule:
+                            type: array
+                            items:
+                              type: object
+                              properties:
+                                season:
+                                  type: integer
+                                interval:
+                                  type: array
+                                  items:
+                                    $ref: '#/components/schemas/TOUInterval'
+                          utility:
+                            type: string
+                          zipCode:
+                            type: integer
+                          controllerId:
+                            type: string
+  /device/tou/convert:
+    post:
+      summary: Convert OpenEI Rate Plans to Device Format
+      description: |
+        Converts raw OpenEI rate plan data into the device-ready TOU format with
+        season bitfields, week bitfields, and scaled pricing. This endpoint handles
+        the complex conversion logic server-side.
+
+        Send all rate plan items from an OpenEI API response and receive back the
+        converted schedules ready for use with PUT /device/tou.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - sourceData
+                - sourceType
+                - sourceVersion
+                - userId
+                - userType
+              properties:
+                sourceData:
+                  type: array
+                  description: Array of OpenEI rate plan objects
+                  items:
+                    type: object
+                sourceType:
+                  type: string
+                  example: "openei"
+                sourceVersion:
+                  type: integer
+                  example: 7
+                userId:
+                  type: string
+                  example: "user@example.com"
+                userType:
+                  type: string
+                  example: "O"
+      responses:
+        '200':
+          description: Converted rate plans
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: integer
+                    example: 200
+                  msg:
+                    type: string
+                    example: SUCCESS
+                  data:
+                    type: object
+                    properties:
+                      touInfo:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            utility:
+                              type: string
+                              example: "Pacific Gas & Electric Co"
+                            name:
+                              type: string
+                              example: "Electric Vehicle EV (Sch) Rate A"
+                            schedule:
+                              type: array
+                              items:
+                                type: object
+                                properties:
+                                  season:
+                                    type: integer
+                                    example: 3087
+                                    description: Season bitfield
+                                  interval:
+                                    type: array
+                                    items:
+                                      $ref: '#/components/schemas/TOUInterval'
   /app/update-push-token:
     post:
       summary: Update Push Token
@@ -551,6 +744,44 @@ paths:
                     type: string
                     example: SUCCESS
 components:
+  schemas:
+    TOUInterval:
+      type: object
+      properties:
+        week:
+          type: integer
+          example: 124
+          description: >
+            Days of week bitfield (62=weekdays, 65=weekend,
+            127=all; Sun=1, Mon=2, ..., Sat=64)
+        startHour:
+          type: integer
+          example: 0
+        startMinute:
+          type: integer
+          example: 0
+        endHour:
+          type: integer
+          example: 6
+        endMinute:
+          type: integer
+          example: 59
+        priceMin:
+          type: integer
+          example: 31794
+          description: >
+            Minimum price (divide by 10^decimalPoint)
+        priceMax:
+          type: integer
+          example: 31794
+          description: >
+            Maximum price (divide by 10^decimalPoint)
+        decimalPoint:
+          type: integer
+          example: 5
+          description: >
+            Decimal places for price (e.g., 5 = divide by
+            100000)
   securitySchemes:
     bearerAuth:
       type: http

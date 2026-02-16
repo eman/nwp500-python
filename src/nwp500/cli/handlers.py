@@ -392,9 +392,19 @@ async def handle_get_device_info_rest(
 
 
 async def handle_get_tou_request(
-    mqtt: NavienMqttClient, device: Device, api_client: Any
+    mqtt: NavienMqttClient,
+    device: Device,
+    api_client: Any,
+    *,
+    output_json: bool = False,
 ) -> None:
     """Request Time-of-Use settings from REST API."""
+    from nwp500.encoding import (
+        decode_price,
+        decode_season_bitfield,
+        decode_week_bitfield,
+    )
+
     try:
         serial = await get_controller_serial_number(mqtt, device)
         if not serial:
@@ -407,16 +417,32 @@ async def handle_get_tou_request(
             controller_id=serial,
             user_type="O",
         )
-        print_json(
-            {
-                "name": tou_info.name,
-                "utility": tou_info.utility,
-                "zipCode": tou_info.zip_code,
-                "schedule": [
-                    {"season": s.season, "intervals": s.intervals}
-                    for s in tou_info.schedule
-                ],
-            }
+
+        if output_json:
+            print_json(
+                {
+                    "name": tou_info.name,
+                    "utility": tou_info.utility,
+                    "zipCode": tou_info.zip_code,
+                    "schedule": [
+                        {
+                            "season": s.season,
+                            "intervals": s.intervals,
+                        }
+                        for s in tou_info.schedule
+                    ],
+                }
+            )
+            return
+
+        _formatter.print_tou_schedule(
+            name=tou_info.name,
+            utility=tou_info.utility,
+            zip_code=tou_info.zip_code,
+            schedules=tou_info.schedule,
+            decode_season=decode_season_bitfield,
+            decode_week=decode_week_bitfield,
+            decode_price_fn=decode_price,
         )
     except Exception as e:
         _logger.error(f"Error fetching TOU: {e}")
@@ -433,6 +459,237 @@ async def handle_set_tou_enabled_request(
         f"{'enabling' if enabled else 'disabling'} TOU",
         f"TOU {'enabled' if enabled else 'disabled'}",
     )
+
+
+async def handle_tou_rates_request(
+    zip_code: str,
+    utility: str | None = None,
+) -> None:
+    """List utilities and rate plans for a zip code."""
+    from nwp500.openei import OpenEIClient
+
+    try:
+        async with OpenEIClient() as client:
+            plans = await client.list_rate_plans(zip_code, utility=utility)
+
+        if not plans:
+            _formatter.print_error(
+                f"No rate plans found for zip code {zip_code}",
+                title="No Results",
+            )
+            return
+
+        # Group by utility
+        utilities: dict[str, list[dict[str, Any]]] = {}
+        for plan in plans:
+            util_name = plan["utility"]
+            utilities.setdefault(util_name, []).append(plan)
+
+        output: list[dict[str, Any]] = []
+        for util_name, util_plans in sorted(utilities.items()):
+            unique_names = sorted({p["name"] for p in util_plans})
+            output.append(
+                {
+                    "utility": util_name,
+                    "planCount": len(unique_names),
+                    "plans": unique_names,
+                }
+            )
+
+        print_json(output)
+    except ValueError as e:
+        _formatter.print_error(str(e), title="Configuration Error")
+    except Exception as e:
+        _logger.error(f"Error fetching rate plans: {e}")
+        _formatter.print_error(str(e), title="Error")
+
+
+async def handle_tou_plan_request(
+    api_client: NavienAPIClient,
+    zip_code: str,
+    plan_name: str,
+    utility: str | None = None,
+    *,
+    output_json: bool = False,
+) -> None:
+    """View a converted rate plan's details."""
+    from nwp500.encoding import (
+        decode_price,
+        decode_season_bitfield,
+        decode_week_bitfield,
+    )
+    from nwp500.openei import OpenEIClient
+
+    try:
+        async with OpenEIClient() as client:
+            rate_plan = await client.get_rate_plan(
+                zip_code, plan_name, utility=utility
+            )
+
+        if not rate_plan:
+            _formatter.print_error(
+                f"Rate plan matching '{plan_name}' not found",
+                title="Not Found",
+            )
+            return
+
+        # Convert via Navien backend
+        converted = await api_client.convert_tou([rate_plan])
+
+        if not converted:
+            _formatter.print_error(
+                "Backend returned no converted plans",
+                title="Conversion Error",
+            )
+            return
+
+        plan = converted[0]
+
+        if output_json:
+            schedules = []
+            for sched in plan.schedule:
+                months = decode_season_bitfield(sched.season)
+                intervals = []
+                for iv in sched.intervals:
+                    days = decode_week_bitfield(iv.get("week", 0))
+                    dp = iv.get("decimalPoint", 5)
+                    intervals.append(
+                        {
+                            "days": days,
+                            "time": (
+                                f"{iv.get('startHour', 0):02d}:"
+                                f"{iv.get('startMinute', 0):02d}-"
+                                f"{iv.get('endHour', 0):02d}:"
+                                f"{iv.get('endMinute', 0):02d}"
+                            ),
+                            "priceMin": (
+                                "$"
+                                f"{decode_price(iv.get('priceMin', 0), dp):.5f}"
+                                "/kWh"
+                            ),
+                            "priceMax": (
+                                "$"
+                                f"{decode_price(iv.get('priceMax', 0), dp):.5f}"
+                                "/kWh"
+                            ),
+                        }
+                    )
+                schedules.append({"months": months, "intervals": intervals})
+            print_json(
+                {
+                    "utility": plan.utility,
+                    "name": plan.name,
+                    "schedules": schedules,
+                }
+            )
+            return
+
+        _formatter.print_tou_schedule(
+            name=plan.name,
+            utility=plan.utility,
+            zip_code=int(zip_code) if zip_code.isdigit() else 0,
+            schedules=plan.schedule,
+            decode_season=decode_season_bitfield,
+            decode_week=decode_week_bitfield,
+            decode_price_fn=decode_price,
+        )
+    except ValueError as e:
+        _formatter.print_error(str(e), title="Configuration Error")
+    except Exception as e:
+        _logger.error(f"Error viewing rate plan: {e}")
+        _formatter.print_error(str(e), title="Error")
+
+
+async def handle_tou_apply_request(
+    mqtt: NavienMqttClient,
+    device: Device,
+    api_client: NavienAPIClient,
+    zip_code: str,
+    plan_name: str,
+    utility: str | None = None,
+    enable: bool = False,
+) -> None:
+    """Apply a TOU rate plan to the water heater."""
+    from nwp500.openei import OpenEIClient
+
+    try:
+        # Step 1: Find the rate plan from OpenEI
+        async with OpenEIClient() as client:
+            rate_plan = await client.get_rate_plan(
+                zip_code, plan_name, utility=utility
+            )
+
+        if not rate_plan:
+            _formatter.print_error(
+                f"Rate plan matching '{plan_name}' not found",
+                title="Not Found",
+            )
+            return
+
+        # Step 2: Convert via Navien backend
+        converted = await api_client.convert_tou([rate_plan])
+
+        if not converted:
+            _formatter.print_error(
+                "Backend returned no converted plans",
+                title="Conversion Error",
+            )
+            return
+
+        plan = converted[0]
+
+        # Step 3: Get device register path from current TOU info
+        serial = await get_controller_serial_number(mqtt, device)
+        if not serial:
+            _logger.error("Failed to get controller serial.")
+            return
+
+        current_tou = await api_client.get_tou_info(
+            mac_address=device.device_info.mac_address,
+            additional_value=device.device_info.additional_value,
+            controller_id=serial,
+        )
+        register_path = current_tou.register_path or "wifi"
+
+        # Step 4: Apply via PUT /device/tou
+        tou_info_dict = {
+            "name": plan.name,
+            "schedule": [
+                {"season": s.season, "interval": s.intervals}
+                for s in plan.schedule
+            ],
+            "utility": plan.utility,
+            "zipCode": zip_code,
+        }
+
+        result = await api_client.update_tou(
+            mac_address=device.device_info.mac_address,
+            additional_value=device.device_info.additional_value,
+            tou_info=tou_info_dict,
+            source_data=rate_plan,
+            zip_code=zip_code,
+            register_path=register_path,
+        )
+
+        _formatter.print_success(
+            f"Applied rate plan: {result.name} ({result.utility})"
+        )
+
+        # Step 5: Optionally enable TOU
+        if enable:
+            await _handle_command_with_status_feedback(
+                mqtt,
+                device,
+                lambda: mqtt.control.set_tou_enabled(device, True),
+                "enabling TOU",
+                "TOU enabled",
+            )
+
+    except ValueError as e:
+        _formatter.print_error(str(e), title="Configuration Error")
+    except Exception as e:
+        _logger.error(f"Error applying rate plan: {e}")
+        _formatter.print_error(str(e), title="Error")
 
 
 async def handle_get_energy_request(

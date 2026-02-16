@@ -14,7 +14,7 @@ import aiohttp
 from .auth import NavienAuthClient
 from .config import API_BASE_URL
 from .exceptions import APIError, AuthenticationError, TokenRefreshError
-from .models import Device, FirmwareInfo, TOUInfo
+from .models import ConvertedTOUPlan, Device, FirmwareInfo, TOUInfo
 from .unit_system import set_unit_system
 
 __author__ = "Emmanuel Levijarvi"
@@ -378,6 +378,109 @@ class NavienAPIClient:
 
         _logger.info("Retrieved TOU info for device")
         return tou_info
+
+    async def convert_tou(
+        self,
+        source_data: list[dict[str, Any]],
+        source_type: str = "openei",
+        source_version: int = 7,
+    ) -> list[ConvertedTOUPlan]:
+        """
+        Convert OpenEI rate plans to device TOU format.
+
+        Sends raw OpenEI rate plan data to the Navien backend for
+        conversion into device-ready TOU schedules with season/week
+        bitfields and scaled pricing.
+
+        Args:
+            source_data: List of OpenEI rate plan dictionaries
+            source_type: Data source type (default: "openei")
+            source_version: API version (default: 7)
+
+        Returns:
+            List of ConvertedTOUPlan objects with device-ready schedules
+
+        Raises:
+            APIError: If API request fails
+            AuthenticationError: If not authenticated
+        """
+        if not self._auth_client.user_email:
+            raise AuthenticationError("Must authenticate first")
+
+        response = await self._make_request(
+            "POST",
+            "/device/tou/convert",
+            json_data={
+                "sourceData": source_data,
+                "sourceType": source_type,
+                "sourceVersion": source_version,
+                "userId": self._auth_client.user_email,
+                "userType": "O",
+            },
+        )
+
+        data = response.get("data", {})
+        tou_list = data.get("touInfo", [])
+        plans = [ConvertedTOUPlan.model_validate(item) for item in tou_list]
+
+        _logger.info("Converted %d rate plans to device format", len(plans))
+        return plans
+
+    async def update_tou(
+        self,
+        mac_address: str,
+        additional_value: str,
+        tou_info: dict[str, Any],
+        source_data: dict[str, Any],
+        zip_code: str,
+        register_path: str = "wifi",
+        source_type: str = "openei",
+        user_type: str = "O",
+    ) -> TOUInfo:
+        """
+        Apply a TOU rate plan to a device.
+
+        Args:
+            mac_address: Device MAC address
+            additional_value: Additional device identifier
+            tou_info: Converted TOU info dict (name, schedule, utility, zipCode)
+            source_data: Original OpenEI rate plan dictionary
+            zip_code: Service area zip code
+            register_path: Device connection type (default: "wifi")
+            source_type: Data source type (default: "openei")
+            user_type: User type (default: "O")
+
+        Returns:
+            TOUInfo object with the applied configuration
+
+        Raises:
+            APIError: If API request fails
+            AuthenticationError: If not authenticated
+        """
+        if not self._auth_client.user_email:
+            raise AuthenticationError("Must authenticate first")
+
+        response = await self._make_request(
+            "PUT",
+            "/device/tou",
+            json_data={
+                "additionalValue": additional_value,
+                "macAddress": mac_address,
+                "registerPath": register_path,
+                "sourceData": source_data,
+                "sourceType": source_type,
+                "touInfo": tou_info,
+                "userId": self._auth_client.user_email,
+                "userType": user_type,
+                "zipCode": zip_code,
+            },
+        )
+
+        data = response.get("data", {})
+        result = TOUInfo.model_validate(data)
+
+        _logger.info("Applied TOU rate plan to device")
+        return result
 
     async def update_push_token(
         self,

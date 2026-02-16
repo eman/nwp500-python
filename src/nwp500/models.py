@@ -292,6 +292,19 @@ class TOUSchedule(NavienBaseModel):
     )
 
 
+class ConvertedTOUPlan(NavienBaseModel):
+    """A rate plan converted by the Navien backend from OpenEI format.
+
+    Returned by POST /device/tou/convert. Contains the utility name,
+    plan name, and device-ready schedule with season/week bitfields
+    and scaled pricing.
+    """
+
+    utility: str = ""
+    name: str = ""
+    schedule: list[TOUSchedule] = Field(default_factory=list)
+
+
 class TOUInfo(NavienBaseModel):
     """Time of Use information."""
 

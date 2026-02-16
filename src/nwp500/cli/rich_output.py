@@ -3,6 +3,7 @@
 import json
 import logging
 import os
+from collections.abc import Callable
 from typing import TYPE_CHECKING, Any, cast
 
 if TYPE_CHECKING:
@@ -48,6 +49,118 @@ def _should_use_rich() -> bool:
         return False
     # Allow explicit override via environment variable
     return os.getenv("NWP500_NO_RICH", "0") != "1"
+
+
+_MONTH_ABBR = [
+    "",
+    "Jan",
+    "Feb",
+    "Mar",
+    "Apr",
+    "May",
+    "Jun",
+    "Jul",
+    "Aug",
+    "Sep",
+    "Oct",
+    "Nov",
+    "Dec",
+]
+
+_DAY_ABBR: dict[str, str] = {
+    "Sunday": "Sun",
+    "Monday": "Mon",
+    "Tuesday": "Tue",
+    "Wednesday": "Wed",
+    "Thursday": "Thu",
+    "Friday": "Fri",
+    "Saturday": "Sat",
+}
+
+
+def _format_months(month_nums: list[int]) -> str:
+    """Format month numbers into a compact string.
+
+    Collapses consecutive months into ranges
+    (e.g. ``[6,7,8,9]`` → ``"Jun–Sep"``).
+    """
+    if len(month_nums) == 12:
+        return "All year"
+    return _collapse_ranges(
+        month_nums,
+        lambda m: _MONTH_ABBR[int(m)],
+        cycle_size=12,
+    )
+
+
+# Canonical ordering used by _abbreviate_days
+_DAY_ORDER = [
+    "Sunday",
+    "Monday",
+    "Tuesday",
+    "Wednesday",
+    "Thursday",
+    "Friday",
+    "Saturday",
+]
+
+
+def _abbreviate_days(day_names: list[str]) -> str:
+    """Format day names into a compact string.
+
+    Collapses consecutive days into ranges
+    (e.g. ``['Tue','Wed','Thu','Fri','Sat']`` → ``"Tue–Sat"``).
+    """
+    if len(day_names) == 7:
+        return "Every day"
+    s = set(day_names)
+    if s == {"Saturday", "Sunday"}:
+        return "Sat–Sun"
+    # Sort into canonical week order
+    ordered = sorted(day_names, key=lambda d: _DAY_ORDER.index(d))
+    return _collapse_ranges(
+        ordered,
+        lambda d: _DAY_ABBR.get(str(d), str(d)[:3]),
+        cycle_size=7,
+    )
+
+
+def _collapse_ranges(
+    items: list[Any],
+    label_fn: Callable[[Any], str],
+    cycle_size: int,
+) -> str:
+    """Collapse consecutive items into 'start–end' ranges.
+
+    Works for both day names (given in canonical order) and
+    month numbers (1-based ints).
+    """
+    if not items:
+        return ""
+
+    # Build groups of consecutive items
+    groups: list[list[Any]] = [[items[0]]]
+    for prev, curr in zip(items, items[1:], strict=False):
+        if isinstance(prev, int):
+            consecutive = (curr - prev) == 1 or (
+                prev == cycle_size and curr == 1
+            )
+        else:
+            pi = _DAY_ORDER.index(prev)
+            ci = _DAY_ORDER.index(curr)
+            consecutive = (ci - pi) == 1 or (pi == 6 and ci == 0)
+        if consecutive:
+            groups[-1].append(curr)
+        else:
+            groups.append([curr])
+
+    parts: list[str] = []
+    for group in groups:
+        if len(group) >= 3:
+            parts.append(f"{label_fn(group[0])}–{label_fn(group[-1])}")
+        else:
+            parts.extend(label_fn(g) for g in group)
+    return ", ".join(parts)
 
 
 class OutputFormatter:
@@ -156,6 +269,48 @@ class OutputFormatter:
         else:
             self._print_device_list_rich(devices)
 
+    def print_tou_schedule(
+        self,
+        name: str,
+        utility: str,
+        zip_code: int,
+        schedules: Any,
+        decode_season: Any,
+        decode_week: Any,
+        decode_price_fn: Any,
+    ) -> None:
+        """Print TOU schedule as a human-readable table.
+
+        Args:
+            name: Rate plan name
+            utility: Utility company name
+            zip_code: Service ZIP code
+            schedules: List of TOUSchedule objects
+            decode_season: Function to decode season bitfield
+            decode_week: Function to decode week bitfield
+            decode_price_fn: Function to decode price values
+        """
+        if not self.use_rich:
+            self._print_tou_plain(
+                name,
+                utility,
+                zip_code,
+                schedules,
+                decode_season,
+                decode_week,
+                decode_price_fn,
+            )
+        else:
+            self._print_tou_rich(
+                name,
+                utility,
+                zip_code,
+                schedules,
+                decode_season,
+                decode_week,
+                decode_price_fn,
+            )
+
     # Plain text implementations (fallback)
 
     def _print_status_plain(self, items: list[tuple[str, str, str]]) -> None:
@@ -207,6 +362,50 @@ class OutputFormatter:
             temp = device.get("temperature", "N/A")
             print(f"  {name:<20} {status:<15} {temp}")
         print("-" * 80)
+
+    def _print_tou_plain(
+        self,
+        name: str,
+        utility: str,
+        zip_code: int,
+        schedules: Any,
+        decode_season: Any,
+        decode_week: Any,
+        decode_price_fn: Any,
+    ) -> None:
+        """Plain text TOU schedule output."""
+        print("TOU SCHEDULE")
+        print("=" * 72)
+        print(f"  Plan:    {name}")
+        print(f"  Utility: {utility}")
+        print(f"  ZIP:     {zip_code}")
+        print("=" * 72)
+
+        for sched in schedules:
+            months = decode_season(sched.season)
+            month_str = _format_months(months)
+            print(f"\n  Season: {month_str}")
+            print(
+                f"  {'Days':<20} {'Time':>13}"
+                f"  {'Min $/kWh':>10}  {'Max $/kWh':>10}"
+            )
+            print(f"  {'-' * 57}")
+            for iv in sched.intervals:
+                days = decode_week(iv.get("week", 0))
+                dp = iv.get("decimalPoint", 5)
+                p_min = decode_price_fn(iv.get("priceMin", 0), dp)
+                p_max = decode_price_fn(iv.get("priceMax", 0), dp)
+                time_str = (
+                    f"{iv.get('startHour', 0):02d}:"
+                    f"{iv.get('startMinute', 0):02d}"
+                    f"–{iv.get('endHour', 0):02d}:"
+                    f"{iv.get('endMinute', 0):02d}"
+                )
+                day_str = _abbreviate_days(days)
+                print(
+                    f"  {day_str:<20} {time_str:>13}"
+                    f"  {p_min:>10.5f}  {p_max:>10.5f}"
+                )
 
     def _print_error_plain(
         self,
@@ -281,6 +480,74 @@ class OutputFormatter:
             )
 
         self.console.print(table)
+
+    def _print_tou_rich(
+        self,
+        name: str,
+        utility: str,
+        zip_code: int,
+        schedules: Any,
+        decode_season: Any,
+        decode_week: Any,
+        decode_price_fn: Any,
+    ) -> None:
+        """Rich-enhanced TOU schedule output."""
+        assert self.console is not None
+        assert _rich_available
+
+        self.console.print()
+        self.console.print(
+            cast(Any, Panel)(
+                f"[bold]{name}[/bold]\n[dim]{utility}  •  ZIP {zip_code}[/dim]",
+                title="⚡ TOU Schedule",
+                border_style="cyan",
+            )
+        )
+
+        for sched in schedules:
+            months = decode_season(sched.season)
+            month_str = _format_months(months)
+
+            table = cast(Any, Table)(
+                title=f"Season: {month_str}",
+                show_header=True,
+                title_style="bold yellow",
+            )
+            table.add_column("Days", style="cyan", width=20)
+            table.add_column("Time", style="white", width=13, justify="right")
+            table.add_column(
+                "Min $/kWh",
+                style="green",
+                width=10,
+                justify="right",
+            )
+            table.add_column(
+                "Max $/kWh",
+                style="green",
+                width=10,
+                justify="right",
+            )
+
+            for iv in sched.intervals:
+                days = decode_week(iv.get("week", 0))
+                dp = iv.get("decimalPoint", 5)
+                p_min = decode_price_fn(iv.get("priceMin", 0), dp)
+                p_max = decode_price_fn(iv.get("priceMax", 0), dp)
+                time_str = (
+                    f"{iv.get('startHour', 0):02d}:"
+                    f"{iv.get('startMinute', 0):02d}"
+                    f"–{iv.get('endHour', 0):02d}:"
+                    f"{iv.get('endMinute', 0):02d}"
+                )
+                day_str = _abbreviate_days(days)
+                table.add_row(
+                    day_str,
+                    time_str,
+                    f"{p_min:.5f}",
+                    f"{p_max:.5f}",
+                )
+
+            self.console.print(table)
 
     # Rich implementations
 
