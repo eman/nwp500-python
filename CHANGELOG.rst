@@ -2,6 +2,23 @@
 Changelog
 =========
 
+Version 7.5.0 (2026-02-16)
+==========================
+
+Added
+-----
+- **OpenEI Client Module**: New ``OpenEIClient`` async client (``nwp500.openei``) for browsing utility rate plans from the OpenEI API by zip code. Supports listing utilities, filtering rate plans, and fetching plan details. API key read from ``OPENEI_API_KEY`` environment variable.
+- **Convert TOU API**: ``NavienAPIClient.convert_tou()`` sends raw OpenEI rate data to the Navien backend for server-side conversion into device-ready TOU schedules with season/week bitfields and scaled pricing.
+- **Update TOU API**: ``NavienAPIClient.update_tou()`` applies a converted TOU rate plan to a device, matching the mobile app's ``PUT /device/tou`` endpoint.
+- **ConvertedTOUPlan Model**: New Pydantic model for parsed ``convert_tou()`` results (utility, name, schedule).
+- **CLI ``tou rates``**: Browse utilities and rate plans for a zip code (``nwp500 tou rates 94903``).
+- **CLI ``tou plan``**: View converted rate plan details with decoded pricing (``nwp500 tou plan 94903 "EV Rate A"``).
+- **CLI ``tou apply``**: Apply a rate plan to the water heater with optional ``--enable`` flag to activate TOU via MQTT.
+
+Changed
+-------
+- **``examples/advanced/tou_openei.py``**: Rewritten to use the new ``OpenEIClient`` and ``convert_tou()``/``update_tou()`` library methods instead of inline OpenEI API calls and client-side conversion.
+
 Version 7.4.6 (2026-02-13)
 ==========================
 

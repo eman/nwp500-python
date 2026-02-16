@@ -13,6 +13,9 @@ from .handlers import (
     handle_set_mode_request,
     handle_set_tou_enabled_request,
     handle_status_request,
+    handle_tou_apply_request,
+    handle_tou_plan_request,
+    handle_tou_rates_request,
     handle_update_reservations_request,
 )
 from .monitoring import handle_monitoring
@@ -39,6 +42,9 @@ __all__ = [
     "handle_set_mode_request",
     "handle_set_tou_enabled_request",
     "handle_status_request",
+    "handle_tou_apply_request",
+    "handle_tou_plan_request",
+    "handle_tou_rates_request",
     "handle_update_reservations_request",
     # Output formatters
     "format_json_output",

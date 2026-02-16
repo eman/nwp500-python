@@ -221,6 +221,86 @@ Retrieves stored TOU configuration from the Navien cloud API.
         zip_code: int            # ZIP code
         schedule: List[TOUSchedule]  # TOU schedule periods
 
+REST API: Convert TOU Rate Plans
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. code-block:: python
+
+    async def convert_tou(
+        source_data: List[Dict[str, Any]],
+        source_type: str = "openei",
+        source_version: int = 7
+    ) -> List[ConvertedTOUPlan]
+
+Sends raw OpenEI rate plan data to the Navien backend for conversion into
+device-ready TOU schedules with season/week bitfields and scaled pricing.
+
+**Parameters:**
+
+* ``source_data``: List of OpenEI rate plan dictionaries (from ``OpenEIClient.fetch_rates()``)
+* ``source_type``: Data source type (default: ``"openei"``)
+* ``source_version``: OpenEI API version (default: ``7``)
+
+**Returns:**
+
+List of ``ConvertedTOUPlan`` objects, each containing:
+
+* ``utility``: Utility company name
+* ``name``: Rate plan name
+* ``schedule``: List of ``TOUSchedule`` with device-ready intervals
+
+REST API: Apply TOU Rate Plan
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. code-block:: python
+
+    async def update_tou(
+        mac_address: str,
+        additional_value: str,
+        tou_info: Dict[str, Any],
+        source_data: Dict[str, Any],
+        zip_code: str,
+        register_path: str = "wifi",
+        source_type: str = "openei",
+        user_type: str = "O"
+    ) -> TOUInfo
+
+Applies a converted TOU rate plan to a device.
+
+**Parameters:**
+
+* ``mac_address``: Device MAC address
+* ``additional_value``: Additional device identifier
+* ``tou_info``: Converted TOU schedule (from ``convert_tou()``)
+* ``source_data``: Original OpenEI rate plan dictionary
+* ``zip_code``: Service area zip code
+* ``register_path``: Connection type (``"wifi"`` or ``"bt"``)
+
+**Returns:**
+
+``TOUInfo`` object with the applied configuration.
+
+OpenEI Client
+~~~~~~~~~~~~~
+
+.. code-block:: python
+
+    from nwp500 import OpenEIClient
+
+    async with OpenEIClient() as client:
+        # List utilities for a zip code
+        utilities = await client.list_utilities("94903")
+
+        # List rate plans (optionally filtered by utility)
+        plans = await client.list_rate_plans("94903", utility="Pacific Gas")
+
+        # Get a specific rate plan
+        plan = await client.get_rate_plan("94903", "EV Rate A")
+
+The ``OpenEIClient`` reads the API key from the ``OPENEI_API_KEY`` environment
+variable or accepts it as a constructor parameter. Get a free key at
+https://openei.org/services/api/signup/
+
 MQTT: Configure TOU Schedule
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -652,167 +732,77 @@ Enable or disable TOU operation:
     # Disable TOU
     asyncio.run(toggle_tou(False))
 
-Example 5: Retrieve Schedule from OpenEI API
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Example 5: Apply Rate Plan from OpenEI
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-This example demonstrates the complete workflow of retrieving utility rate 
-data from the OpenEI API and configuring it on your device:
+Use the ``OpenEIClient`` and ``convert_tou()``/``update_tou()`` methods to
+browse, convert, and apply a rate plan from OpenEI — the same workflow the
+Navien mobile app uses:
 
 .. code-block:: python
 
     import asyncio
-    import aiohttp
-    from nwp500 import NavienAPIClient, NavienAuthClient, NavienMqttClient, build_tou_period
+    from nwp500 import (
+        NavienAPIClient,
+        NavienAuthClient,
+        NavienMqttClient,
+        OpenEIClient,
+    )
 
-    OPENEI_API_URL = "https://api.openei.org/utility_rates"
-    OPENEI_API_KEY = "DEMO_KEY"  # Get your own key at openei.org
-
-    async def fetch_openei_rates(zip_code: str, api_key: str):
-        """Fetch utility rates from OpenEI API."""
-        params = {
-            "version": 7,
-            "format": "json",
-            "api_key": api_key,
-            "detail": "full",
-            "address": zip_code,
-            "sector": "Residential",
-            "orderby": "startdate",
-            "direction": "desc",
-            "limit": 100,
-        }
-        
-        async with aiohttp.ClientSession() as session:
-            async with session.get(OPENEI_API_URL, params=params) as response:
-                response.raise_for_status()
-                return await response.json()
-
-    def select_tou_rate_plan(rate_data):
-        """Select first approved residential TOU plan."""
-        for plan in rate_data.get("items", []):
-            if (
-                plan.get("approved")
-                and plan.get("sector") == "Residential"
-                and "energyweekdayschedule" in plan
-                and "energyratestructure" in plan
-            ):
-                return plan
-        return None
-
-    def convert_openei_to_tou_periods(rate_plan):
-        """Convert OpenEI rate structure to Navien TOU periods."""
-        weekday_schedule = rate_plan["energyweekdayschedule"][0]
-        rate_structure = rate_plan["energyratestructure"][0]
-        
-        # Map period indices to rates
-        period_rates = {}
-        for idx, tier in enumerate(rate_structure):
-            period_rates[idx] = tier.get("rate", 0.0)
-        
-        # Find continuous time blocks
-        periods = []
-        current_period = None
-        start_hour = 0
-        
-        for hour in range(24):
-            period_idx = weekday_schedule[hour]
-            
-            if period_idx != current_period:
-                if current_period is not None:
-                    # Save previous period
-                    periods.append({
-                        "start_hour": start_hour,
-                        "end_hour": hour - 1,
-                        "end_minute": 59,
-                        "rate": period_rates.get(current_period, 0.0),
-                    })
-                current_period = period_idx
-                start_hour = hour
-        
-        # Last period
-        periods.append({
-            "start_hour": start_hour,
-            "end_hour": 23,
-            "end_minute": 59,
-            "rate": period_rates.get(current_period, 0.0),
-        })
-        
-        # Convert to TOU format
-        weekdays = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"]
-        return [
-            build_tou_period(
-                season_months=range(1, 13),
-                week_days=weekdays,
-                start_hour=p["start_hour"],
-                start_minute=0,
-                end_hour=p["end_hour"],
-                end_minute=p["end_minute"],
-                price_min=p["rate"],
-                price_max=p["rate"],
-                decimal_point=5,
-            )
-            for p in periods
-        ]
-
-    async def configure_openei_schedule():
-        """Main function to retrieve and configure TOU from OpenEI."""
-        zip_code = "94103"  # San Francisco example
-        
-        # Fetch and parse OpenEI data
-        rate_data = await fetch_openei_rates(zip_code, OPENEI_API_KEY)
-        rate_plan = select_tou_rate_plan(rate_data)
-        
-        if not rate_plan:
-            print("No suitable TOU rate plan found")
-            return
-        
-        print(f"Using plan: {rate_plan['name']}")
-        print(f"Utility: {rate_plan['utility']}")
-        
-        tou_periods = convert_openei_to_tou_periods(rate_plan)
-        
-        # Configure on device
+    async def apply_openei_rate_plan():
         async with NavienAuthClient("user@example.com", "password") as auth:
             api_client = NavienAPIClient(auth_client=auth)
             device = await api_client.get_first_device()
-            
+
+            # 1. Browse available rate plans
+            async with OpenEIClient() as openei:
+                rates = await openei.fetch_rates("94903")
+                items = rates.get("items", [])
+
+            # 2. Convert all plans to device format
+            converted = await api_client.convert_tou(source_data=items)
+
+            # 3. Find the plan you want
+            plan = next(p for p in converted if "EV" in p.name)
+
+            # 4. Build tou_info dict for update
+            tou_info = {
+                "name": plan.name,
+                "utility": plan.utility,
+                "schedule": [s.model_dump() for s in plan.schedule],
+                "zipCode": "94903",
+            }
+
+            # 5. Find matching source data
+            source = next(
+                i for i in items if i.get("name") == plan.name
+            )
+
+            # 6. Apply to device
+            result = await api_client.update_tou(
+                mac_address=device.device_info.mac_address,
+                additional_value=str(device.device_info.additional_value),
+                tou_info=tou_info,
+                source_data=source,
+                zip_code="94903",
+            )
+            print(f"Applied: {result.name} ({result.utility})")
+
+            # 7. Enable TOU via MQTT
             mqtt_client = NavienMqttClient(auth)
             await mqtt_client.connect()
-            
-            # Get controller serial (see Example 1 for full code)
-            # ... obtain controller_serial ...
-            
-            # Configure the schedule
-            await mqtt_client.control.configure_tou_schedule(
-                device=device,
-                controller_serial_number=controller_serial,
-                periods=tou_periods,
-                enabled=True,
-            )
-            
-            print(f"Configured {len(tou_periods)} TOU periods from OpenEI")
+            await mqtt_client.control.set_tou_enabled(device, enabled=True)
             await mqtt_client.disconnect()
 
-    asyncio.run(configure_openei_schedule())
+    asyncio.run(apply_openei_rate_plan())
 
 **Key Points:**
 
-* The OpenEI API requires a free API key (register at openei.org)
-* The ``DEMO_KEY`` is rate-limited and suitable for testing only
-* Rate structures vary by utility - this example handles simple TOU plans
-* Complex tiered rates may require additional logic to flatten into periods
-* The example uses weekday schedules; extend for weekends as needed
-* Set ``ZIP_CODE`` environment variable to search your location
-
-**Required Dependencies:**
-
-.. code-block:: bash
-
-    pip install aiohttp
-
-**Complete Working Example:**
-
-See ``examples/tou_openei_example.py`` for a fully working implementation 
-with error handling, weekend support, and detailed console output.
+* Set the ``OPENEI_API_KEY`` environment variable before running
+* Get a free key at https://openei.org/services/api/signup/
+* ``convert_tou()`` handles the complex format conversion server-side
+* The ``update_tou()`` method stores the plan in the Navien cloud
+* Use ``set_tou_enabled()`` to activate TOU mode on the device
 
 MQTT Message Format
 -------------------
@@ -977,5 +967,23 @@ Related Examples
 
 * ``examples/tou_schedule_example.py`` - Complete working example of manual TOU configuration
 * ``examples/tou_openei_example.py`` - Retrieve TOU schedules from OpenEI API and configure device
+
+CLI Commands
+~~~~~~~~~~~~
+
+The CLI provides commands for the full TOU workflow:
+
+.. code-block:: bash
+
+    # List utilities and rate plans for a zip code
+    nwp500 tou rates 94903
+    nwp500 tou rates 94903 --utility "Pacific Gas"
+
+    # View converted rate plan details
+    nwp500 tou plan 94903 "EV Rate A"
+
+    # Apply a rate plan to the water heater
+    nwp500 tou apply 94903 "EV Rate A"
+    nwp500 tou apply 94903 "EV Rate A" --enable  # also enable TOU
 
 For questions or issues related to TOU functionality, please refer to the project repository.

@@ -98,6 +98,7 @@ from nwp500.factory import (
     create_navien_clients,
 )
 from nwp500.models import (
+    ConvertedTOUPlan,
     Device,
     DeviceFeature,
     DeviceInfo,
@@ -128,6 +129,9 @@ from nwp500.mqtt import (
 from nwp500.mqtt_events import (
     MqttClientEvents,
 )
+from nwp500.openei import (
+    OpenEIClient,
+)
 from nwp500.unit_system import (
     get_unit_system,
     reset_unit_system,
@@ -147,6 +151,7 @@ __all__ = [
     # Factory functions
     "create_navien_clients",
     # Models
+    "ConvertedTOUPlan",
     "DeviceStatus",
     "DeviceFeature",
     "DeviceInfo",
@@ -212,6 +217,8 @@ __all__ = [
     "DeviceOperationError",
     # API Client
     "NavienAPIClient",
+    # OpenEI Client
+    "OpenEIClient",
     # MQTT Client
     "NavienMqttClient",
     "MqttConnectionConfig",

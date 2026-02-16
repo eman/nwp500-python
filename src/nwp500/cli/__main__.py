@@ -320,10 +320,12 @@ def tou() -> None:
 
 
 @tou.command("get")  # type: ignore[attr-defined]
-@click.pass_context  # We need context to access api
+@click.option("--json", "output_json", is_flag=True, help="Output raw JSON")
 @async_command
 async def tou_get(
-    mqtt: NavienMqttClient, device: Any, ctx: click.Context | None = None
+    mqtt: NavienMqttClient,
+    device: Any,
+    output_json: bool = False,
 ) -> None:
     """Get current TOU schedule."""
     ctx = click.get_current_context()
@@ -331,7 +333,9 @@ async def tou_get(
     if ctx and hasattr(ctx, "obj") and ctx.obj is not None:
         api = ctx.obj.get("api")
     if api:
-        await handlers.handle_get_tou_request(mqtt, device, api)
+        await handlers.handle_get_tou_request(
+            mqtt, device, api, output_json=output_json
+        )
     else:
         _logger.error("API client not available")
 
@@ -344,6 +348,91 @@ async def tou_set(mqtt: NavienMqttClient, device: Any, state: str) -> None:
     await handlers.handle_set_tou_enabled_request(
         mqtt, device, state.lower() == "on"
     )
+
+
+@tou.command("rates")  # type: ignore[attr-defined]
+@click.argument("zip_code")
+@click.option("--utility", default=None, help="Filter by utility name")
+@async_command
+async def tou_rates(
+    mqtt: NavienMqttClient, device: Any, zip_code: str, utility: str | None
+) -> None:
+    """List utility rate plans for a zip code.
+
+    Queries the OpenEI API for residential electricity rate plans.
+    Requires OPENEI_API_KEY environment variable.
+    """
+    await handlers.handle_tou_rates_request(zip_code, utility=utility)
+
+
+@tou.command("plan")  # type: ignore[attr-defined]
+@click.argument("zip_code")
+@click.argument("plan_name")
+@click.option("--utility", default=None, help="Filter by utility name")
+@click.option("--json", "output_json", is_flag=True, help="Output raw JSON")
+@async_command
+async def tou_plan(
+    mqtt: NavienMqttClient,
+    device: Any,
+    zip_code: str,
+    plan_name: str,
+    utility: str | None,
+    output_json: bool = False,
+) -> None:
+    """View converted rate plan details.
+
+    Shows decoded seasons, time intervals, and prices per kWh.
+    Requires OPENEI_API_KEY environment variable.
+    """
+    ctx = click.get_current_context()
+    api = ctx.obj.get("api") if ctx and ctx.obj else None
+    if api:
+        await handlers.handle_tou_plan_request(
+            api,
+            zip_code,
+            plan_name,
+            utility=utility,
+            output_json=output_json,
+        )
+    else:
+        _logger.error("API client not available")
+
+
+@tou.command("apply")  # type: ignore[attr-defined]
+@click.argument("zip_code")
+@click.argument("plan_name")
+@click.option("--utility", default=None, help="Filter by utility name")
+@click.option("--enable", is_flag=True, help="Also enable TOU after applying")
+@async_command
+async def tou_apply(
+    mqtt: NavienMqttClient,
+    device: Any,
+    zip_code: str,
+    plan_name: str,
+    utility: str | None,
+    enable: bool,
+) -> None:
+    """Apply a rate plan to the water heater.
+
+    Fetches the plan from OpenEI, converts it via the Navien backend,
+    and applies it to the device. Use --enable to also enable TOU mode.
+
+    Requires OPENEI_API_KEY environment variable.
+    """
+    ctx = click.get_current_context()
+    api = ctx.obj.get("api") if ctx and ctx.obj else None
+    if api:
+        await handlers.handle_tou_apply_request(
+            mqtt,
+            device,
+            api,
+            zip_code,
+            plan_name,
+            utility=utility,
+            enable=enable,
+        )
+    else:
+        _logger.error("API client not available")
 
 
 @cli.command()  # type: ignore[attr-defined]
