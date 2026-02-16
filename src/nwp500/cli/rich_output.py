@@ -311,6 +311,20 @@ class OutputFormatter:
                 decode_price_fn,
             )
 
+    def print_reservations_table(
+        self, reservations: list[dict[str, Any]], enabled: bool = False
+    ) -> None:
+        """Print reservations as a formatted table.
+
+        Args:
+            reservations: List of reservation dictionaries
+            enabled: Whether reservations are enabled globally
+        """
+        if not self.use_rich:
+            self._print_reservations_plain(reservations, enabled)
+        else:
+            self._print_reservations_rich(reservations, enabled)
+
     # Plain text implementations (fallback)
 
     def _print_status_plain(self, items: list[tuple[str, str, str]]) -> None:
@@ -406,6 +420,38 @@ class OutputFormatter:
                     f"  {day_str:<20} {time_str:>13}"
                     f"  {p_min:>10.5f}  {p_max:>10.5f}"
                 )
+
+    def _print_reservations_plain(
+        self, reservations: list[dict[str, Any]], enabled: bool = False
+    ) -> None:
+        """Plain text reservations output (fallback)."""
+        status_str = "ENABLED" if enabled else "DISABLED"
+        print(f"Reservations: {status_str}")
+        print()
+
+        if not reservations:
+            print("No reservations configured")
+            return
+
+        print("RESERVATIONS")
+        print("=" * 80)
+        print(
+            f"  {'#':<3} {'Enabled':<10} {'Days':<25} "
+            f"{'Time':<8} {'Temp (°F)':<10}"
+        )
+        print("=" * 80)
+
+        for res in reservations:
+            num = res.get("number", "?")
+            enabled = "Yes" if res.get("enabled", False) else "No"
+            days_str = _abbreviate_days(res.get("days", []))
+            time_str = res.get("time", "??:??")
+            temp = res.get("temperatureF", "?")
+            print(
+                f"  {num:<3} {enabled:<10} {days_str:<25} "
+                f"{time_str:<8} {temp:<10}"
+            )
+        print("=" * 80)
 
     def _print_error_plain(
         self,
@@ -548,6 +594,47 @@ class OutputFormatter:
                 )
 
             self.console.print(table)
+
+    def _print_reservations_rich(
+        self, reservations: list[dict[str, Any]], enabled: bool = False
+    ) -> None:
+        """Rich-enhanced reservations output."""
+        assert self.console is not None
+        assert _rich_available
+
+        status_color = "green" if enabled else "red"
+        status_text = "ENABLED" if enabled else "DISABLED"
+        panel = cast(Any, Panel)(
+            f"[{status_color}]{status_text}[/{status_color}]",
+            title="📋 Reservations Status",
+            border_style=status_color,
+        )
+        self.console.print(panel)
+
+        if not reservations:
+            panel = cast(Any, Panel)("No reservations configured")
+            self.console.print(panel)
+            return
+
+        table = cast(Any, Table)(
+            title="💧 Reservations", show_header=True, highlight=True
+        )
+        table.add_column("#", style="cyan", width=3, justify="center")
+        table.add_column("Status", style="magenta", width=10)
+        table.add_column("Days", style="white", width=25)
+        table.add_column("Time", style="yellow", width=8, justify="center")
+        table.add_column("Temp (°F)", style="green", width=10, justify="center")
+
+        for res in reservations:
+            num = str(res.get("number", "?"))
+            enabled = res.get("enabled", False)
+            status = "[green]✓[/green]" if enabled else "[dim]✗[/dim]"
+            days_str = _abbreviate_days(res.get("days", []))
+            time_str = res.get("time", "??:??")
+            temp = str(res.get("temperatureF", "?"))
+            table.add_row(num, status, days_str, time_str, temp)
+
+        self.console.print(table)
 
     # Rich implementations
 

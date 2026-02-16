@@ -265,7 +265,7 @@ async def handle_power_request(
 
 
 async def handle_get_reservations_request(
-    mqtt: NavienMqttClient, device: Device
+    mqtt: NavienMqttClient, device: Device, output_json: bool = False
 ) -> None:
     """Request current reservation schedule."""
     future = asyncio.get_running_loop().create_future()
@@ -301,7 +301,13 @@ async def handle_get_reservations_request(
                     for i, e in enumerate(reservations)
                 ],
             }
-            print_json(output)
+
+            if output_json:
+                print_json(output)
+            else:
+                _formatter.print_reservations_table(
+                    output["reservations"], output["reservationEnabled"]
+                )
             future.set_result(None)
 
     device_type = str(device.device_info.device_type)
