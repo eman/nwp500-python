@@ -420,35 +420,70 @@ The CLI provides convenience commands:
 
    nwp-cli reservations delete 1
 
-Library Helpers (Needed)
-^^^^^^^^^^^^^^^^^^^^^^^^
+Library Helpers
+^^^^^^^^^^^^^^^^
 
-The following convenience methods should exist in the library to abstract
-the read-modify-write pattern:
+The library provides convenience functions that abstract the
+read-modify-write pattern for individual reservation entries.
+
+**fetch_reservations()** — Retrieve the current schedule:
 
 .. code-block:: python
 
-   from nwp500.mqtt import NavienMqttClient
-   from nwp500.encoding import build_reservation_entry
+   from nwp500 import fetch_reservations
 
-   entry = build_reservation_entry(
+   schedule = await fetch_reservations(mqtt, device)
+   if schedule is not None:
+       print(f"Schedule enabled: {schedule.enabled}")
+       for entry in schedule.reservation:
+           print(f"  {entry.time} {', '.join(entry.days)}"
+                 f" — {entry.temperature}{entry.unit}"
+                 f" — {entry.mode_name}")
+
+**add_reservation()** — Append a new entry to the schedule:
+
+.. code-block:: python
+
+   from nwp500 import add_reservation
+
+   await add_reservation(
+       mqtt, device,
        enabled=True,
        days=["MO", "TU", "WE", "TH", "FR"],
-       hour=6, minute=30,
-       mode_id=4, temperature=60.0
+       hour=6,
+       minute=30,
+       mode=4,           # High Demand
+       temperature=60.0, # In user's preferred unit
    )
 
-   # Add a single reservation (automatically fetches current, modifies, sends)
-   # await mqtt.add_reservation(device, entry)
+**delete_reservation()** — Remove an entry by 1-based index:
 
-   # Update an existing reservation by index
-   # await mqtt.update_reservation(device, index, mode=3, temperature=58)
+.. code-block:: python
 
-   # Delete a reservation by index
-   # await mqtt.delete_reservation(device, index)
+   from nwp500 import delete_reservation
 
-   # Get current schedule as ReservationSchedule model
-   # schedule = await mqtt.get_reservations(device)
+   await delete_reservation(mqtt, device, index=2)
+
+**update_reservation()** — Modify specific fields of an existing entry.
+Only the keyword arguments you supply are changed; all others are kept:
+
+.. code-block:: python
+
+   from nwp500 import update_reservation
+
+   # Change temperature only
+   await update_reservation(mqtt, device, 1, temperature=55.0)
+
+   # Change days and time
+   await update_reservation(mqtt, device, 1, days=["SA", "SU"], hour=8, minute=0)
+
+   # Disable without deleting
+   await update_reservation(mqtt, device, 1, enabled=False)
+
+These helpers raise :class:`ValueError` for out-of-range arguments,
+:class:`~nwp500.exceptions.RangeValidationError` or
+:class:`~nwp500.exceptions.ValidationError` for device-protocol
+violations, and :class:`TimeoutError` if the device does not respond.
 
 
 Mode Selection Strategy
