@@ -21,8 +21,9 @@ from nwp500.exceptions import (
     RangeValidationError,
     ValidationError,
 )
+from nwp500.models import ReservationSchedule
 from nwp500.mqtt.utils import redact_serial
-from nwp500.unit_system import get_unit_system
+from nwp500.unit_system import get_unit_system, set_unit_system
 
 from .output_formatters import (
     print_device_info,
@@ -34,6 +35,16 @@ from .rich_output import get_formatter
 
 _logger = logging.getLogger(__name__)
 _formatter = get_formatter()
+
+# Raw protocol fields for ReservationEntry (used in model_dump include)
+_RAW_RESERVATION_FIELDS = {
+    "enable",
+    "week",
+    "hour",
+    "min",
+    "mode",
+    "param",
+}
 
 T = TypeVar("T")
 
@@ -264,64 +275,71 @@ async def handle_power_request(
     )
 
 
-async def handle_get_reservations_request(
-    mqtt: NavienMqttClient, device: Device, output_json: bool = False
-) -> None:
-    """Request current reservation schedule."""
-    future = asyncio.get_running_loop().create_future()
+async def _fetch_reservations(
+    mqtt: NavienMqttClient, device: Device
+) -> ReservationSchedule | None:
+    """Fetch current reservations from device and return as a model.
+
+    Returns None on timeout.
+    """
+    future: asyncio.Future[ReservationSchedule] = (
+        asyncio.get_running_loop().create_future()
+    )
+    caller_unit_system = get_unit_system()
 
     def raw_callback(topic: str, message: dict[str, Any]) -> None:
-        if not future.done() and "response" in message:
-            from nwp500.encoding import (
-                decode_reservation_hex,
-                decode_week_bitfield,
-            )
-
-            response = message.get("response", {})
-            reservation_hex = response.get("reservation", "")
-            reservations = (
-                decode_reservation_hex(reservation_hex)
-                if isinstance(reservation_hex, str)
-                else []
-            )
-
-            output = {
-                "reservationUse": response.get("reservationUse", 0),
-                "reservationEnabled": response.get("reservationUse") == 1,
-                "reservations": [
-                    {
-                        "number": i + 1,
-                        "enabled": e.get("enable") == 1,
-                        "days": decode_week_bitfield(e.get("week", 0)),
-                        "time": f"{e.get('hour', 0):02d}:{e.get('min', 0):02d}",
-                        "mode": e.get("mode"),
-                        "temperatureF": e.get("param", 0) + 20,
-                        "raw": e,
-                    }
-                    for i, e in enumerate(reservations)
-                ],
-            }
-
-            if output_json:
-                print_json(output)
-            else:
-                reservation_list = output["reservations"]
-                is_enabled = bool(output["reservationEnabled"])
-                _formatter.print_reservations_table(
-                    reservation_list, is_enabled
-                )
-            future.set_result(None)
+        if (
+            future.done()
+            or "response" not in message
+            or "/res/rsv/" not in topic
+        ):
+            return
+        response = message.get("response", {})
+        # Ensure it's actually a reservation response (not some other /res/ msg)
+        if "reservationUse" not in response and "reservation" not in response:
+            return
+        if caller_unit_system:
+            set_unit_system(caller_unit_system)
+        schedule = ReservationSchedule(**response)
+        future.set_result(schedule)
 
     device_type = str(device.device_info.device_type)
-    # Subscribe to all command responses from this device type
-    # Topic pattern: cmd/{device_type}/+/# matches all responses
     response_pattern = f"cmd/{device_type}/+/#"
     await mqtt.subscribe(response_pattern, raw_callback)
     await mqtt.control.request_reservations(device)
     try:
-        await asyncio.wait_for(future, timeout=10)
+        return await asyncio.wait_for(future, timeout=10)
     except TimeoutError:
         _logger.error("Timed out waiting for reservations.")
+        return None
+
+
+def _schedule_to_display_list(
+    schedule: ReservationSchedule,
+) -> list[dict[str, Any]]:
+    """Convert a ReservationSchedule to a list of display-ready dicts."""
+    result: list[dict[str, Any]] = []
+    for i, entry in enumerate(schedule.reservation):
+        d = entry.model_dump()
+        d["number"] = i + 1
+        d["mode"] = d.pop("mode_name")
+        result.append(d)
+    return result
+
+
+async def handle_get_reservations_request(
+    mqtt: NavienMqttClient, device: Device, output_json: bool = False
+) -> None:
+    """Request current reservation schedule."""
+    schedule = await _fetch_reservations(mqtt, device)
+    if schedule is None:
+        return
+
+    if output_json:
+        print_json(schedule.model_dump())
+    else:
+        reservation_list = _schedule_to_display_list(schedule)
+        _formatter.print_reservations_table(reservation_list, schedule.enabled)
 
 
 async def handle_update_reservations_request(
@@ -348,7 +366,7 @@ async def handle_update_reservations_request(
             future.set_result(None)
 
     device_type = device.device_info.device_type
-    response_topic = f"cmd/{device_type}/+/+/{mqtt.client_id}/res/rsv/rd"
+    response_topic = f"cmd/{device_type}/{mqtt.client_id}/res/rsv/rd"
     await mqtt.subscribe(response_topic, raw_callback)
     await mqtt.control.update_reservations(
         device, reservations, enabled=enabled
@@ -357,6 +375,290 @@ async def handle_update_reservations_request(
         await asyncio.wait_for(future, timeout=10)
     except TimeoutError:
         _logger.error("Timed out updating reservations.")
+
+
+async def handle_add_reservation_request(
+    mqtt: NavienMqttClient,
+    device: Device,
+    enabled: bool,
+    days: str,
+    hour: int,
+    minute: int,
+    mode: int,
+    temperature: float,
+) -> None:
+    """Add a single reservation to the existing schedule."""
+    from nwp500.encoding import build_reservation_entry
+
+    # Validate inputs
+    if not 0 <= hour <= 23:
+        _logger.error("Hour must be between 0 and 23")
+        return
+    if not 0 <= minute <= 59:
+        _logger.error("Minute must be between 0 and 59")
+        return
+    if not 1 <= mode <= 6:
+        _logger.error("Mode must be between 1 and 6")
+        return
+
+    # Parse day string (comma-separated: "MO,WE,FR" or full day names)
+    day_list = [d.strip() for d in days.split(",")]
+
+    try:
+        # Build the reservation entry
+        reservation_entry = build_reservation_entry(
+            enabled=enabled,
+            days=day_list,
+            hour=hour,
+            minute=minute,
+            mode_id=mode,
+            temperature=temperature,
+        )
+
+        # Fetch current reservations using shared helper
+        schedule = await _fetch_reservations(mqtt, device)
+        if schedule is None:
+            _logger.error("Timed out fetching current reservations")
+            return
+
+        # Build raw entry list and append new one
+        current_reservations = [
+            e.model_dump(include=_RAW_RESERVATION_FIELDS)
+            for e in schedule.reservation
+        ]
+        current_reservations.append(reservation_entry)
+
+        # Update the full schedule
+        await mqtt.control.update_reservations(
+            device, current_reservations, enabled=True
+        )
+
+        print("✓ Reservation added successfully")
+
+    except (RangeValidationError, ValidationError) as e:
+        _logger.error(f"Failed to add reservation: {e}")
+
+
+async def handle_delete_reservation_request(
+    mqtt: NavienMqttClient,
+    device: Device,
+    index: int,
+) -> None:
+    """Delete a single reservation by 1-based index."""
+    schedule = await _fetch_reservations(mqtt, device)
+    if schedule is None:
+        _logger.error("Timed out fetching current reservations")
+        return
+
+    count = len(schedule.reservation)
+    if index < 1 or index > count:
+        _logger.error(
+            f"Invalid reservation index {index}. "
+            f"Valid range: 1-{count} ({count} reservation(s) exist)"
+        )
+        return
+
+    # Build raw entry list and remove the target
+    current_reservations = [
+        e.model_dump(include=_RAW_RESERVATION_FIELDS)
+        for e in schedule.reservation
+    ]
+    removed = current_reservations.pop(index - 1)
+    _logger.info(f"Removing reservation {index}: {removed}")
+
+    # Determine if reservations should stay enabled
+    still_enabled = schedule.enabled and len(current_reservations) > 0
+
+    await mqtt.control.update_reservations(
+        device, current_reservations, enabled=still_enabled
+    )
+    print(f"✓ Reservation {index} deleted successfully")
+
+
+async def handle_update_reservation_request(
+    mqtt: NavienMqttClient,
+    device: Device,
+    index: int,
+    *,
+    enabled: bool | None = None,
+    days: str | None = None,
+    hour: int | None = None,
+    minute: int | None = None,
+    mode: int | None = None,
+    temperature: float | None = None,
+) -> None:
+    """Update a single reservation by 1-based index.
+
+    Only the provided fields are modified; others are preserved.
+    """
+    from nwp500.encoding import build_reservation_entry
+
+    schedule = await _fetch_reservations(mqtt, device)
+    if schedule is None:
+        _logger.error("Timed out fetching current reservations")
+        return
+
+    count = len(schedule.reservation)
+    if index < 1 or index > count:
+        _logger.error(
+            f"Invalid reservation index {index}. "
+            f"Valid range: 1-{count} ({count} reservation(s) exist)"
+        )
+        return
+
+    existing = schedule.reservation[index - 1]
+
+    # Merge: use provided values or fall back to existing
+    new_enabled = enabled if enabled is not None else existing.enabled
+    new_days: list[str] = (
+        [d.strip() for d in days.split(",")] if days else existing.days
+    )
+    new_hour = hour if hour is not None else existing.hour
+    new_minute = minute if minute is not None else existing.min
+    new_mode = mode if mode is not None else existing.mode
+
+    # Temperature requires special handling: if user provides a value
+    # it's in their preferred unit, otherwise keep the raw param.
+    if temperature is not None:
+        new_entry = build_reservation_entry(
+            enabled=new_enabled,
+            days=new_days,
+            hour=new_hour,
+            minute=new_minute,
+            mode_id=new_mode,
+            temperature=temperature,
+        )
+    else:
+        from nwp500.encoding import encode_week_bitfield
+
+        new_entry = {
+            "enable": 2 if new_enabled else 1,
+            "week": encode_week_bitfield(new_days),
+            "hour": new_hour,
+            "min": new_minute,
+            "mode": new_mode,
+            "param": existing.param,
+        }
+
+    # Build full list with the replacement
+    current_reservations = [
+        e.model_dump(include=_RAW_RESERVATION_FIELDS)
+        for e in schedule.reservation
+    ]
+    current_reservations[index - 1] = new_entry
+
+    await mqtt.control.update_reservations(
+        device, current_reservations, enabled=schedule.enabled
+    )
+    print(f"✓ Reservation {index} updated successfully")
+
+
+async def handle_enable_anti_legionella_request(
+    mqtt: NavienMqttClient,
+    device: Device,
+    period_days: int,
+) -> None:
+    """Enable Anti-Legionella disinfection cycle."""
+    try:
+        await mqtt.control.enable_anti_legionella(device, period_days)
+        print(f"✓ Anti-Legionella enabled (cycle every {period_days} day(s))")
+    except (RangeValidationError, ValidationError) as e:
+        _logger.error(f"Failed to enable Anti-Legionella: {e}")
+    except DeviceError as e:
+        _logger.error(f"Device error: {e}")
+
+
+async def handle_set_anti_legionella_period_request(
+    mqtt: NavienMqttClient,
+    device: Device,
+    period_days: int,
+) -> None:
+    """Set Anti-Legionella cycle period without changing enabled state."""
+    future: asyncio.Future[DeviceStatus] = (
+        asyncio.get_running_loop().create_future()
+    )
+
+    def _on_status(status: DeviceStatus) -> None:
+        if not future.done():
+            future.set_result(status)
+
+    try:
+        await mqtt.subscribe_device_status(device, _on_status)
+        await mqtt.control.request_device_status(device)
+        status = await asyncio.wait_for(future, timeout=10)
+
+        # Get current enabled state
+        use = getattr(status, "anti_legionella_use", None)
+
+        # If enabled, keep it enabled; otherwise, enable it
+        # (period only, no disable-state for set operation)
+        if use:
+            await mqtt.control.enable_anti_legionella(device, period_days)
+        else:
+            await mqtt.control.enable_anti_legionella(device, period_days)
+
+        print(f"✓ Anti-Legionella period set to {period_days} day(s)")
+    except (RangeValidationError, ValidationError) as e:
+        _logger.error(f"Failed to set Anti-Legionella period: {e}")
+    except DeviceError as e:
+        _logger.error(f"Device error: {e}")
+    except TimeoutError:
+        _logger.error("Timeout waiting for device status")
+
+
+async def handle_disable_anti_legionella_request(
+    mqtt: NavienMqttClient,
+    device: Device,
+) -> None:
+    """Disable Anti-Legionella disinfection cycle."""
+    try:
+        await mqtt.control.disable_anti_legionella(device)
+        print("✓ Anti-Legionella disabled")
+    except DeviceError as e:
+        _logger.error(f"Device error: {e}")
+
+
+async def handle_get_anti_legionella_status_request(
+    mqtt: NavienMqttClient,
+    device: Device,
+) -> None:
+    """Display Anti-Legionella status from device status."""
+    future: asyncio.Future[DeviceStatus] = (
+        asyncio.get_running_loop().create_future()
+    )
+
+    def _on_status(status: DeviceStatus) -> None:
+        if not future.done():
+            future.set_result(status)
+
+    await mqtt.subscribe_device_status(device, _on_status)
+    await mqtt.control.request_device_status(device)
+    try:
+        status = await asyncio.wait_for(future, timeout=10)
+        period = getattr(status, "anti_legionella_period", None)
+        use = getattr(status, "anti_legionella_use", None)
+        busy = getattr(status, "anti_legionella_operation_busy", None)
+
+        items = [
+            (
+                "ANTI-LEGIONELLA",
+                "Status",
+                "Enabled" if use else "Disabled",
+            ),
+            (
+                "ANTI-LEGIONELLA",
+                "Cycle Period",
+                f"{period} day(s)" if period else "N/A",
+            ),
+            (
+                "ANTI-LEGIONELLA",
+                "Currently Running",
+                "Yes" if busy else "No",
+            ),
+        ]
+        _formatter.print_status_table(items)
+    except TimeoutError:
+        _logger.error("Timed out waiting for device status.")
 
 
 async def handle_get_device_info_rest(

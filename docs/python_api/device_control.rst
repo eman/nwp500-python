@@ -1183,7 +1183,6 @@ Related Documentation
 * :doc:`models` - Data models (DeviceStatus, DeviceFeature, etc.)
 * :doc:`exceptions` - Exception handling (DeviceCapabilityError, etc.)
 * :doc:`../protocol/device_features` - Device features reference
-* :doc:`../guides/scheduling_features` - Scheduling guide
+* :doc:`../guides/scheduling` - Scheduling guide
 * :doc:`../guides/energy_monitoring` - Energy monitoring guide
-* :doc:`../guides/reservations` - Reservations guide
 * :doc:`../guides/time_of_use` - Time-of-use guide

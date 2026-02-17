@@ -450,7 +450,7 @@ class MqttDeviceController:
         # See docs/protocol/mqtt_protocol.rst "Reservation Management" for the
         # command code (16777226) and the reservation object fields
         # (enable, week, hour, min, mode, param).
-        reservation_use = 1 if enabled else 2
+        reservation_use = 2 if enabled else 1
         reservation_payload = [dict(entry) for entry in reservations]
 
         return await self._send_command(
@@ -517,7 +517,7 @@ class MqttDeviceController:
                 "At least one TOU period must be provided", parameter="periods"
             )
 
-        reservation_use = 1 if enabled else 2
+        reservation_use = 2 if enabled else 1
         reservation_payload = [dict(period) for period in periods]
 
         return await self._send_command(

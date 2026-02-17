@@ -371,43 +371,50 @@ Scheduling Commands
 reservations
 ^^^^^^^^^^^^
 
-View and update reservation schedule.
+View and manage reservation schedules.
 
 .. code-block:: bash
 
-   # Get current reservations (table format)
-   python3 -m nwp500.cli reservations get
+   # View current reservations (table or JSON)
+   nwp-cli reservations get
+   nwp-cli reservations get --json
 
-   # Get current reservations (JSON format)
-   python3 -m nwp500.cli reservations get --json
+   # Add a reservation
+   nwp-cli reservations add --days "MO,TU,WE,TH,FR" \
+     --hour 6 --minute 30 --mode 4 --temp 60
 
-   # Set reservations from JSON
-   python3 -m nwp500.cli reservations set '[{"hour": 6, "min": 0, ...}]'
+   # Delete by index (1-based)
+   nwp-cli reservations delete 2
 
-**Syntax:**
+   # Update specific fields (partial update)
+   nwp-cli reservations update 1 --temp 55
+   nwp-cli reservations update 1 --days "SA,SU" --hour 8
+
+   # Set full schedule from JSON
+   nwp-cli reservations set '[{"hour": 6, "min": 0, ...}]'
+
+**Subcommands:**
 
 .. code-block:: bash
 
-   python3 -m nwp500.cli reservations get [--json]
-   python3 -m nwp500.cli reservations set <json> [--disabled]
+   nwp-cli reservations get [--json]
+   nwp-cli reservations set <json> [--disabled]
+   nwp-cli reservations add --days DAYS --hour H --minute M --mode N --temp T [--disabled]
+   nwp-cli reservations delete <index>
+   nwp-cli reservations update <index> [--days] [--hour] [--minute] [--mode] [--temp] [--enable|--disable]
 
-**Options (get):**
+**Options (add):**
 
-.. option:: --json
+.. option:: --days
 
-   Output raw JSON instead of formatted table.
+   Comma-separated day list. Accepts 2-letter abbreviations (``MO``, ``TU``, etc.),
+   full names, or a mix.
 
-**Options (set):**
+.. option:: --temp
 
-.. option:: --disabled
+   Temperature in the device's configured unit (auto-detected).
 
-   Create reservation in disabled state.
-
-**Output (get):** Current reservation schedule displayed as a formatted table by default,
-showing the global reservation status (ENABLED/DISABLED) followed by individual reservations.
-Use ``--json`` flag for raw JSON output.
-
-**Example Table Output:**
+**Output (get):**
 
 .. code-block:: text
 
@@ -415,40 +422,40 @@ Use ``--json`` flag for raw JSON output.
 
    RESERVATIONS
    ================================================================================
-     #   Enabled    Days                      Time     Temp (°F)
+     #   Enabled    Days                      Time     Temp (°C)
    ================================================================================
-     1   Yes        Mon-Fri                   06:00    160
-     2   No         Sat-Sun                   08:00    140
+     1   Yes        Tue-Sat                   06:30    60.0
+     2   No         Sat-Sun                   08:00    55.0
    ================================================================================
 
-**Example JSON Output (--json):**
+anti-legionella
+^^^^^^^^^^^^^^^
 
-.. code-block:: json
+Manage anti-legionella disinfection cycles.
 
-   {
-     "reservationUse": 1,
-     "reservationEnabled": true,
-     "reservations": [
-       {
-         "number": 1,
-         "enabled": true,
-         "days": ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"],
-         "time": "06:00",
-         "mode": 3,
-         "temperatureF": 160,
-         "raw": {...}
-       },
-       {
-         "number": 2,
-         "enabled": false,
-         "days": ["Saturday", "Sunday"],
-         "time": "08:00",
-         "mode": 3,
-         "temperatureF": 140,
-         "raw": {...}
-       }
-     ]
-   }
+.. code-block:: bash
+
+   # Enable with a 14-day cycle
+   nwp-cli anti-legionella enable --period 14
+
+   # Disable
+   nwp-cli anti-legionella disable
+
+   # Set cycle period without changing enabled state
+   nwp-cli anti-legionella set-period 21
+
+   # Check status
+   nwp-cli anti-legionella status
+
+**Subcommands:**
+
+.. code-block:: bash
+
+   nwp-cli anti-legionella enable --period <days>
+   nwp-cli anti-legionella disable
+   nwp-cli anti-legionella set-period <days>
+   nwp-cli anti-legionella status
+
 
 Energy & Utility Commands
 --------------------------
@@ -678,15 +685,22 @@ Example 8: Smart Scheduling with Reservations
 .. code-block:: bash
 
    #!/bin/bash
-   # View current reservations (table format - default)
-   python3 -m nwp500.cli reservations get
+   # View current reservations
+   nwp-cli reservations get
 
-   # View current reservations (JSON format)
-   python3 -m nwp500.cli reservations get --json
+   # Add a weekday morning reservation
+   nwp-cli reservations add \
+     --days "MO,TU,WE,TH,FR" --hour 6 --minute 30 \
+     --mode 4 --temp 60
 
-   # Set reservation schedule: 6 AM - 10 PM at 140°F on weekdays
-   python3 -m nwp500.cli reservations set \
-     '[{"hour": 6, "min": 0, "mode": 3, "temp": 140, "days": [1,1,1,1,1,0,0]}]'
+   # Update temperature on entry 1
+   nwp-cli reservations update 1 --temp 55
+
+   # Delete entry 2
+   nwp-cli reservations delete 2
+
+   # Check anti-legionella status
+   nwp-cli anti-legionella status
 
 Troubleshooting
 ===============

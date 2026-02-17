@@ -434,12 +434,12 @@ class OutputFormatter:
             return
 
         print("RESERVATIONS")
-        print("=" * 80)
+        print("=" * 110)
         print(
             f"  {'#':<3} {'Enabled':<10} {'Days':<25} "
-            f"{'Time':<8} {'Temp (°F)':<10}"
+            f"{'Time':<8} {'Mode':<20} {'Temp':<10}"
         )
-        print("=" * 80)
+        print("=" * 110)
 
         for res in reservations:
             num = res.get("number", "?")
@@ -447,12 +447,15 @@ class OutputFormatter:
             enabled_str = "Yes" if is_enabled else "No"
             days_str = _abbreviate_days(res.get("days", []))
             time_str = res.get("time", "??:??")
-            temp = res.get("temperatureF", "?")
+            mode = res.get("mode", "?")
+            temp = res.get("temperature", "?")
+            unit = res.get("unit", "")
+            temp_str = f"{temp}{unit}" if temp != "?" else "?"
             print(
                 f"  {num:<3} {enabled_str:<10} {days_str:<25} "
-                f"{time_str:<8} {temp:<10}"
+                f"{time_str:<8} {mode:<20} {temp_str:<10}"
             )
-        print("=" * 80)
+        print("=" * 110)
 
     def _print_error_plain(
         self,
@@ -624,7 +627,10 @@ class OutputFormatter:
         table.add_column("Status", style="magenta", width=10)
         table.add_column("Days", style="white", width=25)
         table.add_column("Time", style="yellow", width=8, justify="center")
-        table.add_column("Temp (°F)", style="green", width=10, justify="center")
+        table.add_column("Mode", style="blue", width=18)
+        table.add_column(
+            "Temperature", style="green", width=12, justify="center"
+        )
 
         for res in reservations:
             num = str(res.get("number", "?"))
@@ -632,8 +638,11 @@ class OutputFormatter:
             status = "[green]✓[/green]" if enabled else "[dim]✗[/dim]"
             days_str = _abbreviate_days(res.get("days", []))
             time_str = res.get("time", "??:??")
-            temp = str(res.get("temperatureF", "?"))
-            table.add_row(num, status, days_str, time_str, temp)
+            mode = str(res.get("mode", "?"))
+            temp = res.get("temperature", "?")
+            unit = res.get("unit", "")
+            temp_str = f"{temp}{unit}" if temp != "?" else "?"
+            table.add_row(num, status, days_str, time_str, mode, temp_str)
 
         self.console.print(table)
 

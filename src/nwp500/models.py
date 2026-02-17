@@ -17,6 +17,7 @@ from pydantic import (
     ConfigDict,
     Field,
     WrapValidator,
+    computed_field,
     model_validator,
 )
 from pydantic.alias_generators import to_camel
@@ -36,6 +37,7 @@ from .converters import (
     volume_to_preferred,
 )
 from .enums import (
+    DHW_OPERATION_SETTING_TEXT,
     ConnectionStatus,
     CurrentOperationMode,
     DeviceType,
@@ -330,6 +332,117 @@ class TOUInfo(NavienBaseModel):
                     d.update(tou_data)
             return d
         return data
+
+
+class ReservationEntry(NavienBaseModel):
+    """A single scheduled reservation entry.
+
+    Wraps the raw 6-byte protocol fields and provides computed properties
+    for display-ready values including unit-aware temperature conversion.
+
+    The raw protocol fields are:
+        - enable: 2=enabled, 1=disabled (device boolean)
+        - week: bitfield of active days (Sun=bit7, Mon=bit6, ..., Sat=bit1)
+        - hour: 0-23
+        - min: 0-59
+        - mode: DHW operation mode ID (1-6)
+        - param: temperature in half-degrees Celsius
+    """
+
+    enable: int = 2
+    week: int = 0
+    hour: int = 0
+    min: int = 0
+    mode: int = 1
+    param: int = 0
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def enabled(self) -> bool:
+        """Whether this reservation is active (device bool: 2=on, 1=off)."""
+        return self.enable == 2
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def days(self) -> list[str]:
+        """Weekday names for this reservation."""
+        from .encoding import decode_week_bitfield
+
+        return decode_week_bitfield(self.week)
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def time(self) -> str:
+        """Formatted time string (HH:MM)."""
+        return f"{self.hour:02d}:{self.min:02d}"
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def temperature(self) -> float:
+        """Temperature in the user's preferred unit."""
+        return reservation_param_to_preferred(self.param)
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def unit(self) -> str:
+        """Temperature unit symbol."""
+        return "°C" if get_unit_system() == "metric" else "°F"
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def mode_name(self) -> str:
+        """Human-readable operation mode name."""
+        try:
+            return DHW_OPERATION_SETTING_TEXT.get(
+                DhwOperationSetting(self.mode), f"Unknown ({self.mode})"
+            )
+        except ValueError:
+            return f"Unknown ({self.mode})"
+
+
+class ReservationSchedule(NavienBaseModel):
+    """Complete reservation schedule from the device.
+
+    Can be constructed from raw MQTT response data. The ``reservation``
+    field accepts either a hex string (from GET responses) or a list of
+    dicts/ReservationEntry objects.
+    """
+
+    reservation_use: int = Field(default=0, alias="reservationUse")
+    reservation: list[ReservationEntry] = Field(default_factory=list)
+
+    model_config = ConfigDict(
+        alias_generator=None,
+        populate_by_name=True,
+        extra="ignore",
+        use_enum_values=False,
+    )
+
+    @model_validator(mode="before")
+    @classmethod
+    def _decode_hex_reservation(cls, data: Any) -> Any:
+        """Decode hex-encoded reservation string into entry list."""
+        if isinstance(data, dict):
+            d = cast(dict[str, Any], data).copy()
+            raw = d.get("reservation", "")
+            if isinstance(raw, str):
+                if raw:
+                    from .encoding import decode_reservation_hex
+
+                    d["reservation"] = decode_reservation_hex(raw)
+                else:
+                    d["reservation"] = []
+            return d
+        return data
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def enabled(self) -> bool:
+        """Whether the reservation system is globally enabled.
+
+        Device bool convention: 2=on, 1=off.
+        """
+        return self.reservation_use == 2
 
 
 class DeviceStatus(NavienBaseModel):

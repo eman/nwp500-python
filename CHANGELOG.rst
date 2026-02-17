@@ -2,7 +2,7 @@
 Changelog
 =========
 
-Version 7.5.0 (2026-02-16)
+Version 7.4.7 (2026-02-17)
 ==========================
 
 Added
@@ -15,10 +15,18 @@ Added
 - **CLI ``tou plan``**: View converted rate plan details with decoded pricing (``nwp500 tou plan 94903 "EV Rate A"``).
 - **CLI ``tou apply``**: Apply a rate plan to the water heater with optional ``--enable`` flag to activate TOU via MQTT.
 - **CLI Reservations Table Output**: ``nwp-cli reservations get`` now displays reservations as a formatted table by default with global status indicator (ENABLED/DISABLED). Use ``--json`` flag for JSON output.
+- **CLI ``anti-legionella set-period``**: New subcommand to change the Anti-Legionella cycle period (1-30 days) without toggling the feature. Use ``nwp-cli anti-legionella set-period 7`` to update cycle period.
 
 Changed
 -------
 - **``examples/advanced/tou_openei.py``**: Rewritten to use the new ``OpenEIClient`` and ``convert_tou()``/``update_tou()`` library methods instead of inline OpenEI API calls and client-side conversion.
+
+Fixed
+-----
+- **Week Bitfield Encoding (CRITICAL)**: Fixed MGPP week bitfield encoding to match NaviLink APK protocol. Sunday is now correctly bit 7 (128), Monday bit 6 (64), ..., Saturday bit 1 (2); bit 0 is unused. Affects all reservation and TOU schedule operations. Verified against reference captures.
+- **Enable/Disable Convention**: Fixed reservation and TOU enable/disable flags to use standard device boolean convention (1=OFF, 2=ON) instead of inverted logic. This aligns with other device binary sensors and matches app behavior. Global reservation status now correctly shows DISABLED when ``reservationUse=1``.
+- **Reservation Set Command Timeout**: Fixed ``reservations set`` subscription pattern that had extra wildcards preventing response matching. Command now receives confirmations correctly.
+- **Intermittent Fetch Bug**: Tightened MQTT topic filter for reservation fetch from ``/res/`` to ``/res/rsv/`` with content validation to prevent false matches on unrelated response messages.
 
 Version 7.4.6 (2026-02-13)
 ==========================

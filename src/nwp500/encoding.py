@@ -11,7 +11,17 @@ from numbers import Real
 
 from .exceptions import ParameterValidationError, RangeValidationError
 
-# Weekday constants
+# MGPP Week Bitfield Encoding (from NaviLink APK KDEnum.MgppReservationWeek).
+# Uses a single byte where bits 1-7 represent days; bit 0 is unused.
+#
+#   Bit 7 (128) = Sunday
+#   Bit 6 (64)  = Monday
+#   Bit 5 (32)  = Tuesday
+#   Bit 4 (16)  = Wednesday
+#   Bit 3 (8)   = Thursday
+#   Bit 2 (4)   = Friday
+#   Bit 1 (2)   = Saturday
+#   Bit 0 (1)   = Unused
 WEEKDAY_ORDER = [
     "Sunday",
     "Monday",
@@ -22,10 +32,37 @@ WEEKDAY_ORDER = [
     "Saturday",
 ]
 
-# Pre-computed lookup tables for performance
-WEEKDAY_NAME_TO_BIT = {
-    name.lower(): 1 << idx for idx, name in enumerate(WEEKDAY_ORDER)
+# Explicit bit values per the MGPP protocol (bit 0 unused).
+_WEEKDAY_BIT_VALUES: dict[str, int] = {
+    "Sunday": 128,
+    "Monday": 64,
+    "Tuesday": 32,
+    "Wednesday": 16,
+    "Thursday": 8,
+    "Friday": 4,
+    "Saturday": 2,
 }
+
+# Pre-computed lookup tables for performance.
+WEEKDAY_NAME_TO_BIT: dict[str, int] = {
+    name.lower(): bit for name, bit in _WEEKDAY_BIT_VALUES.items()
+}
+# Add standard 2-letter abbreviations (MO, TU, WE, TH, FR, SA, SU)
+_WEEKDAY_ABBREVIATIONS = {
+    "mo": "monday",
+    "tu": "tuesday",
+    "we": "wednesday",
+    "th": "thursday",
+    "fr": "friday",
+    "sa": "saturday",
+    "su": "sunday",
+}
+WEEKDAY_NAME_TO_BIT.update(
+    {
+        abbr: WEEKDAY_NAME_TO_BIT[full]
+        for abbr, full in _WEEKDAY_ABBREVIATIONS.items()
+    }
+)
 MONTH_TO_BIT = {month: 1 << (month - 1) for month in range(1, 13)}
 
 
@@ -39,28 +76,32 @@ def encode_week_bitfield(days: Iterable[str | int]) -> int:
     Convert a collection of day names or indices into a reservation bitfield.
 
     Args:
-        days: Collection of weekday names (case-insensitive) or indices (0-6 or
-        1-7)
+        days: Collection of weekday names (full or 2-letter abbreviations,
+            case-insensitive) or 0-based indices (Monday=0, Sunday=6)
 
     Returns:
-        Integer bitfield where each bit represents a day (Sunday=bit 0,
-        Monday=bit 1, etc.)
+        Integer bitfield (MGPP encoding: Sun=bit7, Mon=bit6, ..., Sat=bit1)
 
     Raises:
         ParameterValidationError: If day name is unknown/invalid
-        RangeValidationError: If day index is out of range (not 0-7)
+        RangeValidationError: If day index is out of range (not 0-6)
         TypeError: If day value is neither string nor integer
 
     Examples:
         >>> encode_week_bitfield(["Monday", "Wednesday", "Friday"])
-        42  # 0b101010
+        84  # 64 + 16 + 4
 
-        >>> encode_week_bitfield([1, 3, 5])  # 0-indexed
-        42
+        >>> encode_week_bitfield(["MO", "WE", "FR"])  # 2-letter abbreviations
+        84
 
-        >>> encode_week_bitfield([0, 6])  # Sunday and Saturday
-        65  # 0b1000001
+        >>> encode_week_bitfield([0, 2, 4])  # 0-indexed: Mon, Wed, Fri
+        84
+
+        >>> encode_week_bitfield([5, 6])  # Saturday and Sunday
+        130  # 2 + 128
     """
+    # Lookup for integer indices (Monday=0 .. Sunday=6) → bit value
+    _INDEX_TO_BIT = [64, 32, 16, 8, 4, 2, 128]  # Mon..Sun
     bitfield = 0
     for value in days:
         if isinstance(value, str):
@@ -73,19 +114,15 @@ def encode_week_bitfield(days: Iterable[str | int]) -> int:
                 )
             bitfield |= WEEKDAY_NAME_TO_BIT[key]
         else:
-            # At this point, value must be int (from type hint str | int)
             if 0 <= value <= 6:
-                bitfield |= 1 << value
-            elif 1 <= value <= 7:
-                # Support 1-7 indexing (Monday=1, Sunday=7)
-                bitfield |= 1 << (value - 1)
+                bitfield |= _INDEX_TO_BIT[value]
             else:
                 raise RangeValidationError(
-                    "Day index must be between 0-6 or 1-7",
+                    "Day index must be between 0-6 (Monday=0, Sunday=6)",
                     field="day_index",
                     value=value,
                     min_value=0,
-                    max_value=7,
+                    max_value=6,
                 )
     return bitfield
 
@@ -98,22 +135,32 @@ def decode_week_bitfield(bitfield: int) -> list[str]:
         bitfield: Integer bitfield where each bit represents a day
 
     Returns:
-        List of weekday names in order (Sunday through Saturday)
+        List of weekday names in order (Monday through Sunday)
 
     Examples:
-        >>> decode_week_bitfield(42)
+        >>> decode_week_bitfield(84)
         ['Monday', 'Wednesday', 'Friday']
 
-        >>> decode_week_bitfield(127)  # All days
-        ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday',
-        'Saturday']
+        >>> decode_week_bitfield(254)  # All days
+        ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday',
+        'Saturday', 'Sunday']
 
-        >>> decode_week_bitfield(65)
-        ['Sunday', 'Saturday']
+        >>> decode_week_bitfield(130)
+        ['Saturday', 'Sunday']
     """
+    # Return days in Mon-Sun display order
+    _DECODE_ORDER = [
+        ("Monday", 64),
+        ("Tuesday", 32),
+        ("Wednesday", 16),
+        ("Thursday", 8),
+        ("Friday", 4),
+        ("Saturday", 2),
+        ("Sunday", 128),
+    ]
     days: list[str] = []
-    for idx, name in enumerate(WEEKDAY_ORDER):
-        if bitfield & (1 << idx):
+    for name, bit in _DECODE_ORDER:
+        if bitfield & bit:
             days.append(name)
     return days
 
@@ -334,7 +381,8 @@ def build_reservation_entry(
     Build a reservation payload entry matching the documented MQTT format.
 
     Args:
-        enabled: Enable flag (True/False or 1=enabled/2=disabled)
+        enabled: Enable flag (True/False or 2=enabled/1=disabled per device
+            boolean convention)
         days: Collection of weekday names or indices
         hour: Hour (0-23)
         minute: Minute (0-59)
@@ -364,7 +412,14 @@ def build_reservation_entry(
         ...     mode_id=3,
         ...     temperature=140.0
         ... )
-        {'enable': 1, 'week': 42, 'hour': 6, 'min': 30, 'mode': 3, 'param': 120}
+        {
+            'enable': 2,
+            'week': 158,
+            'hour': 6,
+            'min': 30,
+            'mode': 3,
+            'param': 120,
+        }
     """
     # Import here to avoid circular import
     from .models import preferred_to_half_celsius
@@ -408,7 +463,7 @@ def build_reservation_entry(
         )
 
     if isinstance(enabled, bool):
-        enable_flag = 1 if enabled else 2
+        enable_flag = 2 if enabled else 1
     elif enabled in (1, 2):
         enable_flag = int(enabled)
     else:
