@@ -325,12 +325,18 @@ Managing Reservations
 **Important:** The device protocol requires sending the **full list**
 of reservations for every update. Individual add/delete/update
 operations work by fetching the current schedule, modifying it, and
-sending the full list back. The CLI and Python helpers handle this
-automatically.
+sending the full list back. The MQTT client provides low-level methods,
+and the CLI includes high-level helpers for common operations.
+
+Low-Level Methods (``NavienMqttClient``)
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 **Update the full schedule:**
 
 .. code-block:: python
+
+   from nwp500.mqtt import NavienMqttClient
+   from nwp500.encoding import build_reservation_entry
 
    reservations = [
        build_reservation_entry(
@@ -358,22 +364,105 @@ automatically.
        device, [], enabled=False
    )
 
+**Request current schedule:**
+
+.. code-block:: python
+
+   await mqtt.control.request_reservations(device)
+
 **Read the current schedule using models:**
 
 .. code-block:: python
 
    from nwp500 import ReservationSchedule
 
-   # Subscribe and request
+   # Subscribe to responses
+   def on_reservations(schedule: ReservationSchedule) -> None:
+       print(f"Enabled: {schedule.enabled}")
+       for entry in schedule.reservation:
+           print(f"  {entry.time} - {', '.join(entry.days)}"
+                 f" - {entry.temperature}{entry.unit}"
+                 f" - {entry.mode_name}")
+
+   await mqtt.subscribe_device_feature(
+       device, on_reservations, path="reservations"
+   )
    await mqtt.control.request_reservations(device)
 
-   # In the callback, parse with the model:
-   schedule = ReservationSchedule(**response)
-   print(f"Enabled: {schedule.enabled}")
-   for entry in schedule.reservation:
-       print(f"  {entry.time} - {', '.join(entry.days)}"
-             f" - {entry.temperature}{entry.unit}"
-             f" - {entry.mode_name}")
+High-Level Helpers (CLI - Recommended)
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+For typical use cases, the CLI provides helper commands that handle
+the read-modify-write pattern automatically. These are the recommended
+public API for working with reservations:
+
+**List current reservations:**
+
+.. code-block:: bash
+
+   nwp-cli reservations get      # Formatted table
+   nwp-cli reservations get --json  # JSON output
+
+**Add a single reservation:**
+
+.. code-block:: bash
+
+   nwp-cli reservations add --days MO,TU,WE,TH,FR \
+     --hour 6 --minute 30 --mode 4 --temperature 60
+
+**Update an existing reservation:**
+
+.. code-block:: bash
+
+   nwp-cli reservations update --mode 3 --temperature 58 1
+
+**Delete a reservation:**
+
+.. code-block:: bash
+
+   nwp-cli reservations delete 1
+
+These CLI commands internally:
+1. Fetch the current reservation schedule
+2. Validate inputs
+3. Modify the entry or list
+4. Send the full updated list back to the device
+5. Parse the response and display results
+
+**Why Use the CLI Helpers?**
+
+- ✅ Automatic read-modify-write pattern
+- ✅ Input validation (time ranges, mode IDs, temperatures)
+- ✅ Helpful error messages
+- ✅ Unit system awareness (shows temps in your preferred unit)
+- ✅ Formatted output (tables, JSON, human-readable)
+- ✅ No need to manually fetch, modify, and send reservations
+
+**For Python SDK Users:**
+
+If you need programmatic access, the CLI helpers can be invoked via
+the Python API using the handler functions (though the low-level MQTT
+methods are usually sufficient for most cases):
+
+.. code-block:: python
+
+   from nwp500.cli.handlers import (
+       handle_add_reservation_request,
+       handle_get_reservations_request
+   )
+
+   # Add via handler
+   await handle_add_reservation_request(
+       mqtt, device,
+       enabled=True,
+       days="MO,TU,WE,TH,FR",
+       hour=6, minute=30,
+       mode=4, temperature=60.0
+   )
+
+   # Get via handler (displays formatted output)
+   await handle_get_reservations_request(mqtt, device)
+
 
 Mode Selection Strategy
 -----------------------
