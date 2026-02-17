@@ -509,8 +509,8 @@ async def anti_legionella_status(mqtt: NavienMqttClient, device: Any) -> None:
 async def anti_legionella_set_period(
     mqtt: NavienMqttClient, device: Any, days: int
 ) -> None:
-    """Set Anti-Legionella cycle period in days (1-30)."""
-    await handlers.handle_enable_anti_legionella_request(mqtt, device, days)
+    """Set Anti-Legionella period in days (1-30) without changing state."""
+    await handlers.handle_set_anti_legionella_period_request(mqtt, device, days)
 
 
 @cli.group()  # type: ignore[attr-defined]

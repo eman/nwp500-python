@@ -341,7 +341,7 @@ class ReservationEntry(NavienBaseModel):
     for display-ready values including unit-aware temperature conversion.
 
     The raw protocol fields are:
-        - enable: 1=enabled, 2=disabled
+        - enable: 2=enabled, 1=disabled (device boolean)
         - week: bitfield of active days (Sun=bit7, Mon=bit6, ..., Sat=bit1)
         - hour: 0-23
         - min: 0-59

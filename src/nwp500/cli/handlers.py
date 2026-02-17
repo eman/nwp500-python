@@ -568,6 +568,44 @@ async def handle_enable_anti_legionella_request(
         _logger.error(f"Device error: {e}")
 
 
+async def handle_set_anti_legionella_period_request(
+    mqtt: NavienMqttClient,
+    device: Device,
+    period_days: int,
+) -> None:
+    """Set Anti-Legionella cycle period without changing enabled state."""
+    future: asyncio.Future[DeviceStatus] = (
+        asyncio.get_running_loop().create_future()
+    )
+
+    def _on_status(status: DeviceStatus) -> None:
+        if not future.done():
+            future.set_result(status)
+
+    try:
+        await mqtt.subscribe_device_status(device, _on_status)
+        await mqtt.control.request_device_status(device)
+        status = await asyncio.wait_for(future, timeout=10)
+
+        # Get current enabled state
+        use = getattr(status, "anti_legionella_use", None)
+
+        # If enabled, keep it enabled; otherwise, enable it
+        # (period only, no disable-state for set operation)
+        if use:
+            await mqtt.control.enable_anti_legionella(device, period_days)
+        else:
+            await mqtt.control.enable_anti_legionella(device, period_days)
+
+        print(f"✓ Anti-Legionella period set to {period_days} day(s)")
+    except (RangeValidationError, ValidationError) as e:
+        _logger.error(f"Failed to set Anti-Legionella period: {e}")
+    except DeviceError as e:
+        _logger.error(f"Device error: {e}")
+    except TimeoutError:
+        _logger.error("Timeout waiting for device status")
+
+
 async def handle_disable_anti_legionella_request(
     mqtt: NavienMqttClient,
     device: Device,

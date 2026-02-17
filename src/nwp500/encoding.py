@@ -381,7 +381,8 @@ def build_reservation_entry(
     Build a reservation payload entry matching the documented MQTT format.
 
     Args:
-        enabled: Enable flag (True/False or 1=enabled/2=disabled)
+        enabled: Enable flag (True/False or 2=enabled/1=disabled per device
+            boolean convention)
         days: Collection of weekday names or indices
         hour: Hour (0-23)
         minute: Minute (0-59)
@@ -411,7 +412,14 @@ def build_reservation_entry(
         ...     mode_id=3,
         ...     temperature=140.0
         ... )
-        {'enable': 1, 'week': 21, 'hour': 6, 'min': 30, 'mode': 3, 'param': 120}
+        {
+            'enable': 2,
+            'week': 158,
+            'hour': 6,
+            'min': 30,
+            'mode': 3,
+            'param': 120,
+        }
     """
     # Import here to avoid circular import
     from .models import preferred_to_half_celsius

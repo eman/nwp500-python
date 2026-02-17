@@ -165,7 +165,7 @@ models for type-safe reservation handling.
    from nwp500 import ReservationEntry
 
    entry = ReservationEntry(
-       enable=1, week=62, hour=6, min=30, mode=4, param=120
+       enable=2, week=62, hour=6, min=30, mode=4, param=120
    )
    entry.enabled       # True
    entry.days          # ['Tue', 'Wed', 'Thu', 'Fri', 'Sat']
@@ -290,7 +290,7 @@ Helper Functions
        mode_id=4,
        temperature=60.0   # In user's preferred unit
    )
-   # {'enable': 1, 'week': 31, 'hour': 6, 'min': 30,
+   # {'enable': 2, 'week': 124, 'hour': 6, 'min': 30,
    #  'mode': 4, 'param': 120}
 
 The ``days`` parameter accepts:
@@ -311,10 +311,10 @@ The ``days`` parameter accepts:
    )
 
    encode_week_bitfield(["MO", "TU", "WE", "TH", "FR"])
-   # 31
+   # 124
 
    encode_week_bitfield([5, 6])   # Saturday + Sunday
-   # 96
+   # 3
 
    decode_week_bitfield(62)
    # ['Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
@@ -483,9 +483,9 @@ Each TOU period defines a time window with price information:
        "season": 448,        # Bitfield for months
                               # (bit 0=Jan … bit 11=Dec)
                               # 448 = Jun+Jul+Aug
-       "week": 31,           # Bitfield for weekdays
+       "week": 124,          # Bitfield for weekdays
                               # (same as reservations)
-                              # 31 = Mon-Fri
+                              # 124 = Mon-Fri
        "startHour": 9,
        "startMinute": 0,
        "endHour": 17,

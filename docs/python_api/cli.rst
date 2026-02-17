@@ -441,6 +441,9 @@ Manage anti-legionella disinfection cycles.
    # Disable
    nwp-cli anti-legionella disable
 
+   # Set cycle period without changing enabled state
+   nwp-cli anti-legionella set-period 21
+
    # Check status
    nwp-cli anti-legionella status
 
@@ -450,6 +453,7 @@ Manage anti-legionella disinfection cycles.
 
    nwp-cli anti-legionella enable --period <days>
    nwp-cli anti-legionella disable
+   nwp-cli anti-legionella set-period <days>
    nwp-cli anti-legionella status
 
 
