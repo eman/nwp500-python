@@ -314,7 +314,7 @@ The ``days`` parameter accepts:
    # 124
 
    encode_week_bitfield([5, 6])   # Saturday + Sunday
-   # 3
+   # 130
 
    decode_week_bitfield(62)
    # ['Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
