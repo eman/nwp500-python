@@ -9,12 +9,15 @@ from typing import Any
 import click
 
 from nwp500 import (
+    Device,
+    DeviceStatus,
     NavienAPIClient,
     NavienAuthClient,
     NavienMqttClient,
     __version__,
     set_unit_system,
 )
+from nwp500.enums import TemperatureType
 from nwp500.exceptions import (
     AuthenticationError,
     InvalidCredentialsError,
@@ -25,6 +28,7 @@ from nwp500.exceptions import (
     TokenRefreshError,
     ValidationError,
 )
+from nwp500.unit_system import UnitSystemType
 
 from . import handlers
 from .rich_output import get_formatter
@@ -32,6 +36,37 @@ from .token_storage import load_tokens, save_tokens
 
 _logger = logging.getLogger(__name__)
 _formatter = get_formatter()
+
+
+async def _detect_unit_system(
+    mqtt: NavienMqttClient, device: Device
+) -> UnitSystemType:
+    """Detect unit system from device status when not explicitly set.
+
+    Requests a quick device status to read the device's temperature_type
+    preference, then returns the matching unit system.
+    """
+    loop = asyncio.get_running_loop()
+    future: asyncio.Future[DeviceStatus] = loop.create_future()
+
+    def _on_status(status: DeviceStatus) -> None:
+        if not future.done():
+            future.set_result(status)
+
+    await mqtt.subscribe_device_status(device, _on_status)
+    await mqtt.control.request_device_status(device)
+    try:
+        status = await asyncio.wait_for(future, timeout=5.0)
+        if status.temperature_type == TemperatureType.CELSIUS:
+            _logger.info("Auto-detected metric unit system from device")
+            return "metric"
+        _logger.info("Auto-detected us_customary unit system from device")
+        return "us_customary"
+    except TimeoutError:
+        _logger.warning(
+            "Timed out detecting unit system, defaulting to us_customary"
+        )
+        return None
 
 
 def async_command(f: Any) -> Any:
@@ -88,6 +123,14 @@ def async_command(f: Any) -> Any:
                         mqtt = NavienMqttClient(auth)
                     await mqtt.connect()
                     try:
+                        # Auto-detect unit system from device when not
+                        # explicitly set. This ensures commands like
+                        # reservations use the correct temperature unit.
+                        if unit_system is None:
+                            detected = await _detect_unit_system(mqtt, device)
+                            if detected:
+                                set_unit_system(detected)
+
                         # Attach api to context for commands that need it
                         ctx.obj["api"] = api
 
@@ -353,6 +396,121 @@ async def reservations_add(
     await handlers.handle_add_reservation_request(
         mqtt, device, not disabled, days, hour, minute, mode, temp
     )
+
+
+@reservations.command("delete")  # type: ignore[attr-defined]
+@click.argument("index", type=int)
+@async_command
+async def reservations_delete(
+    mqtt: NavienMqttClient, device: Any, index: int
+) -> None:
+    """Delete a reservation by its number (1-based index)."""
+    await handlers.handle_delete_reservation_request(mqtt, device, index)
+
+
+@reservations.command("update")  # type: ignore[attr-defined]
+@click.argument("index", type=int)
+@click.option(
+    "--days",
+    default=None,
+    help="Days (comma-separated: MO,TU,WE,TH,FR,SA,SU or full names)",
+)
+@click.option("--hour", type=int, default=None, help="Hour (0-23)")
+@click.option("--minute", type=int, default=None, help="Minute (0-59)")
+@click.option(
+    "--mode",
+    type=int,
+    default=None,
+    help="Mode: 1=HP, 2=Electric, 3=EnergySaver, 4=HighDemand, "
+    "5=Vacation, 6=PowerOff",
+)
+@click.option(
+    "--temp",
+    type=float,
+    default=None,
+    help="Temperature in preferred unit (Fahrenheit or Celsius)",
+)
+@click.option("--enable", is_flag=True, default=None, help="Enable")
+@click.option("--disable", is_flag=True, default=None, help="Disable")
+@async_command
+async def reservations_update(
+    mqtt: NavienMqttClient,
+    device: Any,
+    index: int,
+    days: str | None,
+    hour: int | None,
+    minute: int | None,
+    mode: int | None,
+    temp: float | None,
+    enable: bool | None,
+    disable: bool | None,
+) -> None:
+    """Update a reservation by its number (1-based index).
+
+    Only the specified fields are changed; others are preserved.
+    """
+    enabled: bool | None = None
+    if enable:
+        enabled = True
+    elif disable:
+        enabled = False
+
+    await handlers.handle_update_reservation_request(
+        mqtt,
+        device,
+        index,
+        enabled=enabled,
+        days=days,
+        hour=hour,
+        minute=minute,
+        mode=mode,
+        temperature=temp,
+    )
+
+
+@cli.group()  # type: ignore[attr-defined]
+def anti_legionella() -> None:
+    """Manage Anti-Legionella disinfection settings."""
+    pass
+
+
+@anti_legionella.command("enable")  # type: ignore[attr-defined]
+@click.option(
+    "--period",
+    type=int,
+    required=True,
+    help="Cycle period in days (1-30)",
+)
+@async_command
+async def anti_legionella_enable(
+    mqtt: NavienMqttClient, device: Any, period: int
+) -> None:
+    """Enable Anti-Legionella disinfection cycle."""
+    await handlers.handle_enable_anti_legionella_request(mqtt, device, period)
+
+
+@anti_legionella.command("disable")  # type: ignore[attr-defined]
+@async_command
+async def anti_legionella_disable(mqtt: NavienMqttClient, device: Any) -> None:
+    """Disable Anti-Legionella disinfection cycle."""
+    await handlers.handle_disable_anti_legionella_request(mqtt, device)
+
+
+@anti_legionella.command("status")  # type: ignore[attr-defined]
+@async_command
+async def anti_legionella_status(mqtt: NavienMqttClient, device: Any) -> None:
+    """Show Anti-Legionella status."""
+    await handlers.handle_get_anti_legionella_status_request(mqtt, device)
+
+
+@anti_legionella.command("set-period")  # type: ignore[attr-defined]
+@click.argument("days", type=int)
+@async_command
+async def anti_legionella_set_period(
+    mqtt: NavienMqttClient, device: Any, days: int
+) -> None:
+    """Set Anti-Legionella cycle period in days (1-30)."""
+    await handlers.handle_enable_anti_legionella_request(mqtt, device, days)
 
 
 @cli.group()  # type: ignore[attr-defined]

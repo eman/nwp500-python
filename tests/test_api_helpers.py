@@ -23,13 +23,46 @@ from nwp500.exceptions import (
 def test_encode_decode_week_bitfield():
     days = ["Monday", "Wednesday", "Friday"]
     bitfield = encode_week_bitfield(days)
-    assert bitfield == (2 | 8 | 32)
+    assert bitfield == (64 | 16 | 4)  # Mon=64, Wed=16, Fri=4 → 84
     decoded = decode_week_bitfield(bitfield)
     assert decoded == ["Monday", "Wednesday", "Friday"]
 
-    # Support integer indices (0=Sunday) and 1-based (1=Monday)
-    assert encode_week_bitfield([0, 6]) == (1 | 64)
-    assert encode_week_bitfield([1, 7]) == (2 | 64)
+    # Support integer indices (0=Monday, 6=Sunday)
+    assert encode_week_bitfield([0, 5]) == (64 | 2)  # Monday(64) + Saturday(2)
+    assert encode_week_bitfield([1, 6]) == (32 | 128)  # Tue(32)+Sun(128)
+
+    # Support 2-letter abbreviations
+    assert encode_week_bitfield(["MO", "WE", "FR"]) == (64 | 16 | 4)
+    assert encode_week_bitfield(["tu", "th"]) == (32 | 8)
+
+    # Known device protocol values (from NaviLink APK)
+    assert encode_week_bitfield(["TU", "WE", "TH", "FR", "SA"]) == 62
+    assert encode_week_bitfield(["MO", "TU", "WE", "TH", "FR"]) == 124
+    assert encode_week_bitfield(["SA", "SU"]) == 130  # Weekend
+    assert decode_week_bitfield(62) == [
+        "Tuesday",
+        "Wednesday",
+        "Thursday",
+        "Friday",
+        "Saturday",
+    ]
+    assert decode_week_bitfield(124) == [
+        "Monday",
+        "Tuesday",
+        "Wednesday",
+        "Thursday",
+        "Friday",
+    ]
+    assert decode_week_bitfield(130) == ["Saturday", "Sunday"]
+    assert decode_week_bitfield(254) == [
+        "Monday",
+        "Tuesday",
+        "Wednesday",
+        "Thursday",
+        "Friday",
+        "Saturday",
+        "Sunday",
+    ]
 
     # Invalid weekday name raises ParameterValidationError
     with pytest.raises(ParameterValidationError):
@@ -38,6 +71,10 @@ def test_encode_decode_week_bitfield():
     # Invalid weekday index raises RangeValidationError
     with pytest.raises(RangeValidationError):
         encode_week_bitfield([10])  # type: ignore[arg-type]
+
+    # Value 7 is out of range (0-6 only)
+    with pytest.raises(RangeValidationError):
+        encode_week_bitfield([7])  # type: ignore[arg-type]
 
 
 def test_encode_decode_season_bitfield():
@@ -71,8 +108,8 @@ def test_build_reservation_entry():
         temperature=140.0,
     )
 
-    assert reservation["enable"] == 1
-    assert reservation["week"] == (2 | 4)
+    assert reservation["enable"] == 2  # device bool: 2=ON
+    assert reservation["week"] == (64 | 32)  # Mon=64, Tue=32
     assert reservation["hour"] == 6
     assert reservation["min"] == 30
     assert reservation["mode"] == 4
@@ -125,7 +162,7 @@ def test_build_tou_period():
     )
 
     assert period["season"] == (2**12 - 1)
-    assert period["week"] == (2 | 32)
+    assert period["week"] == (64 | 4)  # Mon=64, Fri=4
     assert period["startHour"] == 0
     assert period["endHour"] == 14
     assert period["priceMin"] == 34831

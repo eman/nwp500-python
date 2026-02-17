@@ -2,6 +2,20 @@
 Changelog
 =========
 
+Version 7.5.1 (2026-02-17)
+==========================
+
+Fixed
+-----
+- **Week Bitfield Encoding (CRITICAL)**: Fixed MGPP week bitfield encoding to match NaviLink APK protocol. Sunday is now correctly bit 7 (128), Monday bit 6 (64), ..., Saturday bit 1 (2); bit 0 is unused. Affects all reservation and TOU schedule operations. Verified against reference captures.
+- **Enable/Disable Convention**: Fixed reservation and TOU enable/disable flags to use standard device boolean convention (1=OFF, 2=ON) instead of inverted logic. This aligns with other device binary sensors and matches app behavior. Global reservation status now correctly shows DISABLED when ``reservationUse=1``.
+- **Reservation Set Command Timeout**: Fixed ``reservations set`` subscription pattern that had extra wildcards preventing response matching. Command now receives confirmations correctly.
+- **Intermittent Fetch Bug**: Tightened MQTT topic filter for reservation fetch from ``/res/`` to ``/res/rsv/`` with content validation to prevent false matches on unrelated response messages.
+
+Added
+-----
+- **CLI ``anti-legionella set-period``**: New subcommand to change the Anti-Legionella cycle period (1-30 days) without toggling the feature. Use ``nwp-cli anti-legionella set-period 7`` to update cycle period.
+
 Version 7.5.0 (2026-02-16)
 ==========================
 

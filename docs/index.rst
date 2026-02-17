@@ -122,8 +122,7 @@ Documentation Index
    guides/unit_conversion
    guides/authentication
    guides/home_assistant_integration
-   guides/reservations
-   guides/scheduling_features
+   guides/scheduling
    guides/energy_monitoring
    guides/time_of_use
    guides/event_system

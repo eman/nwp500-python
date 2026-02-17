@@ -454,13 +454,13 @@ Encodes a list of day names into a bitfield.
 
 **Valid day names:**
 
-* ``"Sunday"`` (bit 0)
-* ``"Monday"`` (bit 1)
-* ``"Tuesday"`` (bit 2)
-* ``"Wednesday"`` (bit 3)
-* ``"Thursday"`` (bit 4)
-* ``"Friday"`` (bit 5)
-* ``"Saturday"`` (bit 6)
+* ``"Monday"`` (bit 6, value 64)
+* ``"Tuesday"`` (bit 5, value 32)
+* ``"Wednesday"`` (bit 4, value 16)
+* ``"Thursday"`` (bit 3, value 8)
+* ``"Friday"`` (bit 2, value 4)
+* ``"Saturday"`` (bit 1, value 2)
+* ``"Sunday"`` (bit 7, value 128)
 
 **Example:**
 
@@ -472,7 +472,7 @@ Encodes a list of day names into a bitfield.
     bitfield = encode_week_bitfield([
         "Monday", "Tuesday", "Wednesday", "Thursday", "Friday"
     ])
-    # Returns: 0b0111110 = 62
+    # Returns: 0b1111100 = 124
 
 decode_week_bitfield()
 """"""""""""""""""""""
@@ -491,7 +491,7 @@ Decodes a bitfield back into a list of day names.
     
     # Decode weekday bitfield
     days = decode_week_bitfield(62)
-    # Returns: ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"]
+    # Returns: ["Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]
 
 Usage Examples
 ==============
@@ -861,7 +861,7 @@ Field Descriptions
      - Bitfield of months (bit 0 = Jan, ... bit 11 = Dec). ``4095`` = all months
    * - ``week``
      - integer
-     - Bitfield of days (bit 0 = Sun, ... bit 6 = Sat)
+     - Bitfield of days (bit 7 = Sun, bit 6 = Mon, ... bit 1 = Sat; bit 0 unused). ``124`` = weekdays
    * - ``startHour``
      - integer
      - Start hour (0-23)

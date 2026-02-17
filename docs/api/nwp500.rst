@@ -133,6 +133,14 @@ nwp500.mqtt\_events module
    :show-inheritance:
    :undoc-members:
 
+nwp500.openei module
+--------------------
+
+.. automodule:: nwp500.openei
+   :members:
+   :show-inheritance:
+   :undoc-members:
+
 nwp500.temperature module
 -------------------------
 

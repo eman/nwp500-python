@@ -499,5 +499,5 @@ See Also
 
 * :doc:`../protocol/data_conversions` - Temperature field conversions (HalfCelsiusToF, DeciCelsiusToF)
 * :doc:`../protocol/device_status` - Complete device status field reference
-* :doc:`scheduling_features` - Reservation and TOU integration points
+* :doc:`scheduling` - Scheduling and automation guide
 * :doc:`../python_api/models` - DeviceStatus model field definitions

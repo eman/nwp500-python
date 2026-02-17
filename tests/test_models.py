@@ -1,6 +1,12 @@
 import pytest
 
-from nwp500.models import DeviceStatus, fahrenheit_to_half_celsius
+from nwp500.models import (
+    DeviceStatus,
+    ReservationEntry,
+    ReservationSchedule,
+    fahrenheit_to_half_celsius,
+)
+from nwp500.unit_system import reset_unit_system, set_unit_system
 
 
 @pytest.fixture
@@ -141,3 +147,129 @@ def test_fahrenheit_to_half_celsius():
     assert fahrenheit_to_half_celsius(95.0) == 70  # 35°C × 2
     assert fahrenheit_to_half_celsius(150.0) == 131  # ~65.6°C × 2
     assert fahrenheit_to_half_celsius(130.0) == 109  # ~54.4°C × 2
+
+
+class TestReservationEntry:
+    """Tests for ReservationEntry pydantic model."""
+
+    def setup_method(self):
+        reset_unit_system()
+
+    def teardown_method(self):
+        reset_unit_system()
+
+    def test_from_raw_dict(self):
+        entry = ReservationEntry(
+            enable=2, week=62, hour=6, min=30, mode=4, param=120
+        )
+        assert entry.enabled is True
+        assert entry.days == [
+            "Tuesday",
+            "Wednesday",
+            "Thursday",
+            "Friday",
+            "Saturday",
+        ]
+        assert entry.time == "06:30"
+        assert entry.mode_name == "High Demand"
+
+    def test_temperature_fahrenheit(self):
+        set_unit_system("us_customary")
+        entry = ReservationEntry(param=120)
+        assert entry.temperature == 140.0
+        assert entry.unit == "°F"
+
+    def test_temperature_celsius(self):
+        set_unit_system("metric")
+        entry = ReservationEntry(param=120)
+        assert entry.temperature == 60.0
+        assert entry.unit == "°C"
+
+    def test_disabled_entry(self):
+        entry = ReservationEntry(enable=1)
+        assert entry.enabled is False
+
+    def test_model_dump_includes_computed(self):
+        set_unit_system("metric")
+        entry = ReservationEntry(
+            enable=1, week=64, hour=8, min=0, mode=3, param=100
+        )
+        d = entry.model_dump()
+        assert "enabled" in d
+        assert "days" in d
+        assert "time" in d
+        assert "temperature" in d
+        assert "unit" in d
+        assert "mode_name" in d
+        assert d["days"] == ["Monday"]
+        assert d["time"] == "08:00"
+
+    def test_raw_fields_only(self):
+        entry = ReservationEntry(
+            enable=1, week=62, hour=6, min=30, mode=4, param=120
+        )
+        raw = entry.model_dump(
+            include={"enable", "week", "hour", "min", "mode", "param"}
+        )
+        assert raw == {
+            "enable": 1,
+            "week": 62,
+            "hour": 6,
+            "min": 30,
+            "mode": 4,
+            "param": 120,
+        }
+
+
+class TestReservationSchedule:
+    """Tests for ReservationSchedule pydantic model."""
+
+    def setup_method(self):
+        reset_unit_system()
+
+    def teardown_method(self):
+        reset_unit_system()
+
+    def test_from_hex_string(self):
+        set_unit_system("metric")
+        # Hex: 02=enabled, 3e=week62, 06=hour6, 1e=min30, 04=mode4, 78=param120
+        schedule = ReservationSchedule(
+            reservationUse=2, reservation="023e061e0478"
+        )
+        assert schedule.enabled is True
+        assert len(schedule.reservation) == 1
+        entry = schedule.reservation[0]
+        assert entry.enabled is True
+        assert entry.temperature == 60.0
+
+    def test_from_entry_list(self):
+        schedule = ReservationSchedule(
+            reservationUse=1,
+            reservation=[
+                {
+                    "enable": 1,
+                    "week": 1,
+                    "hour": 7,
+                    "min": 0,
+                    "mode": 3,
+                    "param": 100,
+                },
+            ],
+        )
+        assert schedule.enabled is False
+        assert len(schedule.reservation) == 1
+        assert schedule.reservation[0].hour == 7
+
+    def test_empty_schedule(self):
+        schedule = ReservationSchedule(reservationUse=0, reservation="")
+        assert schedule.enabled is False
+        assert len(schedule.reservation) == 0
+
+    def test_skips_empty_entries(self):
+        # 12 hex chars of zeros = one empty 6-byte entry
+        schedule = ReservationSchedule(
+            reservationUse=1,
+            reservation="000000000000013e061e0478",
+        )
+        assert len(schedule.reservation) == 1
+        assert schedule.reservation[0].week == 62
