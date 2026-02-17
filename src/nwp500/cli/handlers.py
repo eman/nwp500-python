@@ -14,6 +14,7 @@ from nwp500 import (
     NavienAPIClient,
     NavienMqttClient,
 )
+from nwp500.enums import DHW_OPERATION_SETTING_TEXT, DhwOperationSetting
 from nwp500.exceptions import (
     DeviceError,
     MqttError,
@@ -22,6 +23,7 @@ from nwp500.exceptions import (
     ValidationError,
 )
 from nwp500.mqtt.utils import redact_serial
+from nwp500.temperature import HalfCelsius
 from nwp500.unit_system import get_unit_system
 
 from .output_formatters import (
@@ -285,21 +287,44 @@ async def handle_get_reservations_request(
                 else []
             )
 
-            output = {
-                "reservationUse": response.get("reservationUse", 0),
-                "reservationEnabled": response.get("reservationUse") == 1,
-                "reservations": [
+            # Determine if metric/Celsius is preferred
+            unit_system = get_unit_system()
+            is_metric = unit_system == "metric"
+
+            reservation_list = []
+            for i, e in enumerate(reservations):
+                # Convert temperature from HalfCelsius format to preferred unit
+                param = e.get("param", 0)
+                half_celsius_temp = HalfCelsius(param)
+                temp_value = (
+                    half_celsius_temp.to_celsius()
+                    if is_metric
+                    else half_celsius_temp.to_fahrenheit()
+                )
+
+                # Get mode name
+                mode_id = e.get("mode")
+                mode_name = DHW_OPERATION_SETTING_TEXT.get(
+                    DhwOperationSetting(mode_id), f"Unknown ({mode_id})"
+                )
+
+                reservation_list.append(
                     {
                         "number": i + 1,
                         "enabled": e.get("enable") == 1,
                         "days": decode_week_bitfield(e.get("week", 0)),
                         "time": f"{e.get('hour', 0):02d}:{e.get('min', 0):02d}",
-                        "mode": e.get("mode"),
-                        "temperatureF": e.get("param", 0) + 20,
+                        "mode": mode_name,
+                        "temperature": temp_value,
+                        "unit": "°C" if is_metric else "°F",
                         "raw": e,
                     }
-                    for i, e in enumerate(reservations)
-                ],
+                )
+
+            output = {
+                "reservationUse": response.get("reservationUse", 0),
+                "reservationEnabled": response.get("reservationUse") == 1,
+                "reservations": reservation_list,
             }
 
             if output_json:
@@ -357,6 +382,104 @@ async def handle_update_reservations_request(
         await asyncio.wait_for(future, timeout=10)
     except TimeoutError:
         _logger.error("Timed out updating reservations.")
+
+
+async def handle_add_reservation_request(
+    mqtt: NavienMqttClient,
+    device: Device,
+    enabled: bool,
+    days: str,
+    hour: int,
+    minute: int,
+    mode: int,
+    temperature: float,
+) -> None:
+    """Add a single reservation to the existing schedule."""
+    from nwp500.encoding import build_reservation_entry
+
+    # Validate inputs
+    if not 0 <= hour <= 23:
+        _logger.error("Hour must be between 0 and 23")
+        return
+    if not 0 <= minute <= 59:
+        _logger.error("Minute must be between 0 and 59")
+        return
+    if not 1 <= mode <= 6:
+        _logger.error("Mode must be between 1 and 6")
+        return
+
+    # Parse day string (comma-separated: "MO,WE,FR" or full day names)
+    day_list = [d.strip() for d in days.split(",")]
+
+    try:
+        # Build the reservation entry
+        reservation_entry = build_reservation_entry(
+            enabled=enabled,
+            days=day_list,
+            hour=hour,
+            minute=minute,
+            mode_id=mode,
+            temperature=temperature,
+        )
+
+        # First, get current reservations
+        current_res_future = asyncio.get_running_loop().create_future()
+        current_reservations: list[dict[str, Any]] = []
+
+        def get_callback(topic: str, message: dict[str, Any]) -> None:
+            if not current_res_future.done() and "response" in message:
+                from nwp500.encoding import decode_reservation_hex
+
+                response = message.get("response", {})
+                reservation_hex = response.get("reservation", "")
+                reservations = (
+                    decode_reservation_hex(reservation_hex)
+                    if isinstance(reservation_hex, str)
+                    else []
+                )
+                current_reservations.extend(reservations)
+                current_res_future.set_result(None)
+
+        device_type = str(device.device_info.device_type)
+        response_pattern = f"cmd/{device_type}/+/#"
+        await mqtt.subscribe(response_pattern, get_callback)
+        await mqtt.control.request_reservations(device)
+
+        try:
+            await asyncio.wait_for(current_res_future, timeout=10)
+        except TimeoutError:
+            _logger.error("Timed out fetching current reservations")
+            return
+
+        # Add new reservation to the list
+        current_reservations.append(reservation_entry)
+
+        # Update the full schedule
+        update_future = asyncio.get_running_loop().create_future()
+
+        def update_callback(topic: str, message: dict[str, Any]) -> None:
+            if not update_future.done() and "response" in message:
+                print_json(message)
+                update_future.set_result(None)
+
+        response_topic = f"cmd/{device_type}/+/+/{mqtt.client_id}/res/rsv/rd"
+        await mqtt.subscribe(response_topic, update_callback)
+
+        # Get reservation enabled status (assume enabled for new reservations)
+        await mqtt.control.update_reservations(
+            device, current_reservations, enabled=True
+        )
+
+        try:
+            await asyncio.wait_for(update_future, timeout=10)
+        except TimeoutError:
+            _logger.error("Timed out adding reservation")
+            return
+
+        print("✓ Reservation added successfully")
+
+    except Exception as e:
+        _logger.error(f"Failed to add reservation: {e}")
 
 
 async def handle_get_device_info_rest(

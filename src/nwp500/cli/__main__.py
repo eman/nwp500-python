@@ -316,6 +316,45 @@ async def reservations_set(
     )
 
 
+@reservations.command("add")  # type: ignore[attr-defined]
+@click.option(
+    "--days",
+    required=True,
+    help="Days (comma-separated: MO,TU,WE,TH,FR,SA,SU or full names)",
+)
+@click.option("--hour", type=int, required=True, help="Hour (0-23)")
+@click.option("--minute", type=int, required=True, help="Minute (0-59)")
+@click.option(
+    "--mode",
+    type=int,
+    required=True,
+    help="Mode: 1=HP, 2=Electric, 3=EnergySaver, 4=HighDemand, "
+    "5=Vacation, 6=PowerOff",
+)
+@click.option(
+    "--temp",
+    type=float,
+    required=True,
+    help="Temperature in device unit (Fahrenheit or Celsius)",
+)
+@click.option("--disabled", is_flag=True, help="Create as disabled reservation")
+@async_command
+async def reservations_add(
+    mqtt: NavienMqttClient,
+    device: Any,
+    days: str,
+    hour: int,
+    minute: int,
+    mode: int,
+    temp: float,
+    disabled: bool,
+) -> None:
+    """Add a single reservation to the schedule."""
+    await handlers.handle_add_reservation_request(
+        mqtt, device, not disabled, days, hour, minute, mode, temp
+    )
+
+
 @cli.group()  # type: ignore[attr-defined]
 def tou() -> None:
     """Manage Time-of-Use settings."""
