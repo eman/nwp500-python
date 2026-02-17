@@ -384,9 +384,7 @@ multiple entries at once:
                  f" - {entry.temperature}{entry.unit}"
                  f" - {entry.mode_name}")
 
-   await mqtt.subscribe_device_feature(
-       device, on_reservations, path="reservations"
-   )
+   await mqtt.subscribe_device_feature(device, on_reservations)
    await mqtt.control.request_reservations(device)
 
 CLI Helpers
@@ -483,7 +481,10 @@ Only the keyword arguments you supply are changed; all others are kept:
 These helpers raise :class:`ValueError` for out-of-range arguments,
 :class:`~nwp500.exceptions.RangeValidationError` or
 :class:`~nwp500.exceptions.ValidationError` for device-protocol
-violations, and :class:`TimeoutError` if the device does not respond.
+violations. :func:`fetch_reservations` returns ``None`` on timeout and
+logs the failure, while the mutating helpers (:func:`add_reservation`,
+:func:`update_reservation`, :func:`delete_reservation`) raise
+:class:`TimeoutError` if the device does not respond.
 
 
 Mode Selection Strategy

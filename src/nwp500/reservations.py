@@ -71,20 +71,33 @@ async def fetch_reservations(
         # Ensure it's actually a reservation response (not some other /res/ msg)
         if "reservationUse" not in response and "reservation" not in response:
             return
-        if caller_unit_system:
-            set_unit_system(caller_unit_system)
-        schedule = ReservationSchedule(**response)
+        previous = get_unit_system()
+        try:
+            if caller_unit_system:
+                set_unit_system(caller_unit_system)
+            schedule = ReservationSchedule(**response)
+        finally:
+            if previous is not None:
+                set_unit_system(previous)
         future.set_result(schedule)
 
     device_type = str(device.device_info.device_type)
-    response_pattern = f"cmd/{device_type}/+/#"
-    await mqtt.subscribe(response_pattern, raw_callback)
+    response_topic = f"cmd/{device_type}/{mqtt.client_id}/res/rsv/rd"
+    await mqtt.subscribe(response_topic, raw_callback)
     await mqtt.control.request_reservations(device)
     try:
         return await asyncio.wait_for(future, timeout=timeout)
     except TimeoutError:
-        _logger.error("Timed out waiting for reservations.")
         return None
+    finally:
+        try:
+            await mqtt.unsubscribe(response_topic)
+        except Exception:
+            _logger.warning(
+                "Failed to unsubscribe reservations response handler for %s",
+                response_topic,
+                exc_info=True,
+            )
 
 
 async def add_reservation(
@@ -230,7 +243,8 @@ async def update_reservation(
             or ``None`` to keep the existing raw ``param`` value unchanged.
 
     Raises:
-        ValueError: If ``index`` is out of the valid range.
+        ValueError: If ``index`` is out of the valid range, or if any of
+            ``hour``, ``minute``, or ``mode`` are provided but out of range.
         RangeValidationError: If ``temperature`` is out of the device's range.
         ValidationError: If the updated entry fails model validation.
         TimeoutError: If the current schedule cannot be fetched.
@@ -245,6 +259,13 @@ async def update_reservation(
             f"Invalid reservation index {index}. "
             f"Valid range: 1–{count} ({count} reservation(s) exist)"
         )
+
+    if hour is not None and not 0 <= hour <= 23:
+        raise ValueError(f"Hour must be between 0 and 23, got {hour}")
+    if minute is not None and not 0 <= minute <= 59:
+        raise ValueError(f"Minute must be between 0 and 59, got {minute}")
+    if mode is not None and not 1 <= mode <= 6:
+        raise ValueError(f"Mode must be between 1 and 6, got {mode}")
 
     existing = schedule.reservation[index - 1]
 
