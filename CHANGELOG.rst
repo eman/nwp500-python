@@ -2,6 +2,18 @@
 Changelog
 =========
 
+Version 7.4.8 (2026-02-17)
+==========================
+
+Added
+-----
+- **Reservation CRUD Helpers**: New public functions ``fetch_reservations()``,
+  ``add_reservation()``, ``delete_reservation()``, and ``update_reservation()``
+  in ``nwp500.reservations`` (and exported from ``nwp500``). These abstract the
+  read-modify-write pattern for single-entry schedule management so library
+  users no longer need to fetch the full schedule, splice it manually, and send
+  it back. The CLI now delegates to these library functions.
+
 Version 7.4.7 (2026-02-17)
 ==========================
 

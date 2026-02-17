@@ -325,12 +325,18 @@ Managing Reservations
 **Important:** The device protocol requires sending the **full list**
 of reservations for every update. Individual add/delete/update
 operations work by fetching the current schedule, modifying it, and
-sending the full list back. The CLI and Python helpers handle this
-automatically.
+sending the full list back.
 
-**Update the full schedule:**
+Low-Level Method (``NavienMqttClient``)
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Use ``update_reservations()`` when you need full control or are managing
+multiple entries at once:
 
 .. code-block:: python
+
+   from nwp500.mqtt import NavienMqttClient
+   from nwp500.encoding import build_reservation_entry
 
    reservations = [
        build_reservation_entry(
@@ -358,22 +364,128 @@ automatically.
        device, [], enabled=False
    )
 
+**Request current schedule:**
+
+.. code-block:: python
+
+   await mqtt.control.request_reservations(device)
+
 **Read the current schedule using models:**
 
 .. code-block:: python
 
    from nwp500 import ReservationSchedule
 
-   # Subscribe and request
+   # Subscribe to responses
+   def on_reservations(schedule: ReservationSchedule) -> None:
+       print(f"Enabled: {schedule.enabled}")
+       for entry in schedule.reservation:
+           print(f"  {entry.time} - {', '.join(entry.days)}"
+                 f" - {entry.temperature}{entry.unit}"
+                 f" - {entry.mode_name}")
+
+   await mqtt.subscribe_device_feature(device, on_reservations)
    await mqtt.control.request_reservations(device)
 
-   # In the callback, parse with the model:
-   schedule = ReservationSchedule(**response)
-   print(f"Enabled: {schedule.enabled}")
-   for entry in schedule.reservation:
-       print(f"  {entry.time} - {', '.join(entry.days)}"
-             f" - {entry.temperature}{entry.unit}"
-             f" - {entry.mode_name}")
+CLI Helpers
+^^^^^^^^^^^
+
+The CLI provides convenience commands:
+
+**List current reservations:**
+
+.. code-block:: bash
+
+   nwp-cli reservations get      # Formatted table
+   nwp-cli reservations get --json  # JSON output
+
+**Add a single reservation:**
+
+.. code-block:: bash
+
+   nwp-cli reservations add --days MO,TU,WE,TH,FR \
+     --hour 6 --minute 30 --mode 4 --temperature 60
+
+**Update an existing reservation:**
+
+.. code-block:: bash
+
+   nwp-cli reservations update --mode 3 --temperature 58 1
+
+**Delete a reservation:**
+
+.. code-block:: bash
+
+   nwp-cli reservations delete 1
+
+Library Helpers
+^^^^^^^^^^^^^^^^
+
+The library provides convenience functions that abstract the
+read-modify-write pattern for individual reservation entries.
+
+**fetch_reservations()** — Retrieve the current schedule:
+
+.. code-block:: python
+
+   from nwp500 import fetch_reservations
+
+   schedule = await fetch_reservations(mqtt, device)
+   if schedule is not None:
+       print(f"Schedule enabled: {schedule.enabled}")
+       for entry in schedule.reservation:
+           print(f"  {entry.time} {', '.join(entry.days)}"
+                 f" — {entry.temperature}{entry.unit}"
+                 f" — {entry.mode_name}")
+
+**add_reservation()** — Append a new entry to the schedule:
+
+.. code-block:: python
+
+   from nwp500 import add_reservation
+
+   await add_reservation(
+       mqtt, device,
+       enabled=True,
+       days=["MO", "TU", "WE", "TH", "FR"],
+       hour=6,
+       minute=30,
+       mode=4,           # High Demand
+       temperature=60.0, # In user's preferred unit
+   )
+
+**delete_reservation()** — Remove an entry by 1-based index:
+
+.. code-block:: python
+
+   from nwp500 import delete_reservation
+
+   await delete_reservation(mqtt, device, index=2)
+
+**update_reservation()** — Modify specific fields of an existing entry.
+Only the keyword arguments you supply are changed; all others are kept:
+
+.. code-block:: python
+
+   from nwp500 import update_reservation
+
+   # Change temperature only
+   await update_reservation(mqtt, device, 1, temperature=55.0)
+
+   # Change days and time
+   await update_reservation(mqtt, device, 1, days=["SA", "SU"], hour=8, minute=0)
+
+   # Disable without deleting
+   await update_reservation(mqtt, device, 1, enabled=False)
+
+These helpers raise :class:`ValueError` for out-of-range arguments,
+:class:`~nwp500.exceptions.RangeValidationError` or
+:class:`~nwp500.exceptions.ValidationError` for device-protocol
+violations. :func:`fetch_reservations` returns ``None`` on timeout and
+logs the failure, while the mutating helpers (:func:`add_reservation`,
+:func:`update_reservation`, :func:`delete_reservation`) raise
+:class:`TimeoutError` if the device does not respond.
+
 
 Mode Selection Strategy
 -----------------------

@@ -134,6 +134,12 @@ from nwp500.mqtt_events import (
 from nwp500.openei import (
     OpenEIClient,
 )
+from nwp500.reservations import (
+    add_reservation,
+    delete_reservation,
+    fetch_reservations,
+    update_reservation,
+)
 from nwp500.unit_system import (
     get_unit_system,
     reset_unit_system,
@@ -223,6 +229,11 @@ __all__ = [
     "NavienAPIClient",
     # OpenEI Client
     "OpenEIClient",
+    # Reservation helpers
+    "fetch_reservations",
+    "add_reservation",
+    "delete_reservation",
+    "update_reservation",
     # MQTT Client
     "NavienMqttClient",
     "MqttConnectionConfig",
