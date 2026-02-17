@@ -62,3 +62,9 @@ venv*/
 .secrets
 reference/*
 resources/*
+
+# Tool caches
+.mypy_cache/
+.ruff_cache/
+.bandit
+.agent/
