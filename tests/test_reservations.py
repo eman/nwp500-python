@@ -164,9 +164,7 @@ async def test_add_reservation_success(
     existing = _entry(hour=6, min=0)
     schedule = _make_schedule([existing])
 
-    with patch(
-        "nwp500.reservations.fetch_reservations", return_value=schedule
-    ):
+    with patch("nwp500.reservations.fetch_reservations", return_value=schedule):
         await add_reservation(
             mock_mqtt,
             mock_device,
@@ -189,8 +187,13 @@ async def test_add_reservation_invalid_hour(
 ) -> None:
     with pytest.raises(ValueError, match="Hour"):
         await add_reservation(
-            mock_mqtt, mock_device,
-            enabled=True, days=["MO"], hour=25, minute=0, mode=1,
+            mock_mqtt,
+            mock_device,
+            enabled=True,
+            days=["MO"],
+            hour=25,
+            minute=0,
+            mode=1,
             temperature=120.0,
         )
 
@@ -201,8 +204,13 @@ async def test_add_reservation_invalid_minute(
 ) -> None:
     with pytest.raises(ValueError, match="Minute"):
         await add_reservation(
-            mock_mqtt, mock_device,
-            enabled=True, days=["MO"], hour=6, minute=60, mode=1,
+            mock_mqtt,
+            mock_device,
+            enabled=True,
+            days=["MO"],
+            hour=6,
+            minute=60,
+            mode=1,
             temperature=120.0,
         )
 
@@ -213,8 +221,13 @@ async def test_add_reservation_invalid_mode(
 ) -> None:
     with pytest.raises(ValueError, match="Mode"):
         await add_reservation(
-            mock_mqtt, mock_device,
-            enabled=True, days=["MO"], hour=6, minute=0, mode=7,
+            mock_mqtt,
+            mock_device,
+            enabled=True,
+            days=["MO"],
+            hour=6,
+            minute=0,
+            mode=7,
             temperature=120.0,
         )
 
@@ -226,8 +239,13 @@ async def test_add_reservation_timeout(
     with patch("nwp500.reservations.fetch_reservations", return_value=None):
         with pytest.raises(TimeoutError):
             await add_reservation(
-                mock_mqtt, mock_device,
-                enabled=True, days=["MO"], hour=6, minute=0, mode=1,
+                mock_mqtt,
+                mock_device,
+                enabled=True,
+                days=["MO"],
+                hour=6,
+                minute=0,
+                mode=1,
                 temperature=120.0,
             )
 
@@ -302,9 +320,7 @@ async def test_update_reservation_temperature(
     schedule = _make_schedule([_entry(param=120)])
 
     with patch("nwp500.reservations.fetch_reservations", return_value=schedule):
-        await update_reservation(
-            mock_mqtt, mock_device, 1, temperature=150.0
-        )
+        await update_reservation(mock_mqtt, mock_device, 1, temperature=150.0)
 
     mock_mqtt.control.update_reservations.assert_called_once()
     _, reservations = mock_mqtt.control.update_reservations.call_args.args
@@ -320,9 +336,7 @@ async def test_update_reservation_preserves_fields(
     schedule = _make_schedule([_entry(hour=6, param=120)])
 
     with patch("nwp500.reservations.fetch_reservations", return_value=schedule):
-        await update_reservation(
-            mock_mqtt, mock_device, 1, hour=8
-        )
+        await update_reservation(mock_mqtt, mock_device, 1, hour=8)
 
     _, reservations = mock_mqtt.control.update_reservations.call_args.args
     assert reservations[0]["hour"] == 8
