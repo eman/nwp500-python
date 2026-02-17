@@ -325,13 +325,13 @@ Managing Reservations
 **Important:** The device protocol requires sending the **full list**
 of reservations for every update. Individual add/delete/update
 operations work by fetching the current schedule, modifying it, and
-sending the full list back. The MQTT client provides low-level methods,
-and the CLI includes high-level helpers for common operations.
+sending the full list back.
 
-Low-Level Methods (``NavienMqttClient``)
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Low-Level Method (``NavienMqttClient``)
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-**Update the full schedule:**
+Use ``update_reservations()`` when you need full control or are managing
+multiple entries at once:
 
 .. code-block:: python
 
@@ -389,12 +389,10 @@ Low-Level Methods (``NavienMqttClient``)
    )
    await mqtt.control.request_reservations(device)
 
-High-Level Helpers (CLI - Recommended)
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+CLI Helpers
+^^^^^^^^^^^
 
-For typical use cases, the CLI provides helper commands that handle
-the read-modify-write pattern automatically. These are the recommended
-public API for working with reservations:
+The CLI provides convenience commands:
 
 **List current reservations:**
 
@@ -422,46 +420,35 @@ public API for working with reservations:
 
    nwp-cli reservations delete 1
 
-These CLI commands internally:
-1. Fetch the current reservation schedule
-2. Validate inputs
-3. Modify the entry or list
-4. Send the full updated list back to the device
-5. Parse the response and display results
+Library Helpers (Needed)
+^^^^^^^^^^^^^^^^^^^^^^^^
 
-**Why Use the CLI Helpers?**
-
-- ✅ Automatic read-modify-write pattern
-- ✅ Input validation (time ranges, mode IDs, temperatures)
-- ✅ Helpful error messages
-- ✅ Unit system awareness (shows temps in your preferred unit)
-- ✅ Formatted output (tables, JSON, human-readable)
-- ✅ No need to manually fetch, modify, and send reservations
-
-**For Python SDK Users:**
-
-If you need programmatic access, the CLI helpers can be invoked via
-the Python API using the handler functions (though the low-level MQTT
-methods are usually sufficient for most cases):
+The following convenience methods should exist in the library to abstract
+the read-modify-write pattern:
 
 .. code-block:: python
 
-   from nwp500.cli.handlers import (
-       handle_add_reservation_request,
-       handle_get_reservations_request
-   )
+   from nwp500.mqtt import NavienMqttClient
+   from nwp500.encoding import build_reservation_entry
 
-   # Add via handler
-   await handle_add_reservation_request(
-       mqtt, device,
+   entry = build_reservation_entry(
        enabled=True,
-       days="MO,TU,WE,TH,FR",
+       days=["MO", "TU", "WE", "TH", "FR"],
        hour=6, minute=30,
-       mode=4, temperature=60.0
+       mode_id=4, temperature=60.0
    )
 
-   # Get via handler (displays formatted output)
-   await handle_get_reservations_request(mqtt, device)
+   # Add a single reservation (automatically fetches current, modifies, sends)
+   # await mqtt.add_reservation(device, entry)
+
+   # Update an existing reservation by index
+   # await mqtt.update_reservation(device, index, mode=3, temperature=58)
+
+   # Delete a reservation by index
+   # await mqtt.delete_reservation(device, index)
+
+   # Get current schedule as ReservationSchedule model
+   # schedule = await mqtt.get_reservations(device)
 
 
 Mode Selection Strategy
