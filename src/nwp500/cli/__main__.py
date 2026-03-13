@@ -66,7 +66,7 @@ async def _detect_unit_system(
         _logger.warning(
             "Timed out detecting unit system, defaulting to us_customary"
         )
-        return None
+        return "us_customary"
 
 
 def async_command(f: Any) -> Any:

@@ -252,8 +252,8 @@ class EventEmitter:
 
                 called_count += 1
 
-                # Check if this is a once listener using O(1) set lookup
-                if (event, listener.callback) in self._once_callbacks:
+                # Check if this is a once listener
+                if listener.once:
                     listeners_to_remove.append(listener)
                     self._once_callbacks.discard((event, listener.callback))
 

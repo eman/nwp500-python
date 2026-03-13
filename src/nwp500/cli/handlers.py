@@ -452,12 +452,10 @@ async def handle_set_anti_legionella_period_request(
         # Get current enabled state
         use = getattr(status, "anti_legionella_use", None)
 
-        # If enabled, keep it enabled; otherwise, enable it
-        # (period only, no disable-state for set operation)
         if use:
             await mqtt.control.enable_anti_legionella(device, period_days)
         else:
-            await mqtt.control.enable_anti_legionella(device, period_days)
+            await mqtt.control.disable_anti_legionella(device)
 
         print(f"✓ Anti-Legionella period set to {period_days} day(s)")
     except (RangeValidationError, ValidationError) as e:

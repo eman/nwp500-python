@@ -4,8 +4,8 @@ hypothesis = pytest.importorskip("hypothesis")
 given = hypothesis.given
 st = hypothesis.strategies
 
-from nwp500.enums import TemperatureType
-from nwp500.models import DeviceStatus
+from nwp500.enums import TemperatureType  # noqa: E402
+from nwp500.models import DeviceStatus  # noqa: E402
 
 # Base payload matching required fields in DeviceStatus
 BASE_PAYLOAD = {

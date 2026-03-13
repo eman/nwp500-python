@@ -322,8 +322,19 @@ class MqttSubscriptionManager:
                     break  # Exit handler loop, move to next topic
 
         if failed_subscriptions:
+            # Restore failed subscriptions to internal state so they can be
+            # retried on the next reconnection cycle.
+            qos_map = dict(subscriptions_to_restore)
+            for topic in failed_subscriptions:
+                self._subscriptions[topic] = qos_map.get(
+                    topic, mqtt.QoS.AT_LEAST_ONCE
+                )
+                self._message_handlers[topic] = handlers_to_restore.get(
+                    topic, []
+                )
             _logger.warning(
-                f"Failed to restore {len(failed_subscriptions)} subscription(s)"
+                f"Failed to restore {len(failed_subscriptions)} "
+                "subscription(s); will retry on next reconnection"
             )
         else:
             _logger.info("All subscriptions re-established successfully")
