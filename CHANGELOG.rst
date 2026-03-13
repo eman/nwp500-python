@@ -2,6 +2,48 @@
 Changelog
 =========
 
+Unreleased
+==========
+
+Fixed
+-----
+- **Anti-Legionella set-period State Preservation**: ``nwp-cli anti-legionella
+  set-period`` was calling ``enable_anti_legionella()`` in both the enabled and
+  disabled branches, silently re-enabling the feature when it was off. The
+  command now informs the user that the period can only be updated while the
+  feature is enabled and directs them to ``anti-legionella enable``.
+- **Subscription State Lost After Failed Resubscription**: ``resubscribe_all()``
+  cleared ``_subscriptions`` and ``_message_handlers`` before the re-subscribe
+  loop. Topics that failed to resubscribe were permanently dropped from internal
+  state and could not be retried on the next reconnection. Failed topics are now
+  restored so they are retried automatically.
+- **Unit System Detection Returns None on Timeout**: ``_detect_unit_system()``
+  declared return type ``UnitSystemType`` but returned ``None`` on
+  ``TimeoutError``, violating the type contract. Now returns
+  ``"us_customary"`` consistent with the warning message.
+- **Once-Listener Becomes Permanent With Duplicate Callbacks**: ``emit()``
+  identified once-listeners via a ``set`` of ``(event, callback)`` tuples. If
+  the same callback was registered twice with ``once=True``, the set
+  deduplicated the tuple — after the first emit the second listener lost its
+  once-status and became permanent. Fixed by checking ``listener.once``
+  directly on the ``EventListener`` object.
+- **Auth Session Leaked on Client Construction Failure**: In
+  ``create_navien_clients()``, if ``NavienAPIClient`` or
+  ``NavienMqttClient`` construction raised after a successful
+  ``auth_client.__aenter__()``, the auth session and its underlying
+  ``aiohttp`` session would leak. Client construction is now wrapped in a
+  ``try/except`` that calls ``auth_client.__aexit__()`` on failure.
+- **Hypothesis Tests Broke All Test Collection**: ``test_mqtt_hypothesis.py``
+  imported ``hypothesis`` at module level; when it was not installed, pytest
+  failed to collect every test in the suite. ``hypothesis`` is now mandated
+  as a ``[testing]`` extra dependency, restoring correct collection behaviour.
+
+Changed
+-------
+- **Dependency: awsiotsdk >= 1.28.2**: Bumped minimum ``awsiotsdk`` version
+  from ``>=1.27.0`` to ``>=1.28.2`` to track the current patch release.
+  ``awscrt`` 0.31.3 is pulled in transitively.
+
 Version 7.4.8 (2026-02-17)
 ==========================
 
