@@ -81,7 +81,11 @@ async def create_navien_clients(
         raise
 
     # Create API and MQTT clients that share the session
-    api_client = NavienAPIClient(auth_client=auth_client)
-    mqtt_client = NavienMqttClient(auth_client=auth_client)
+    try:
+        api_client = NavienAPIClient(auth_client=auth_client)
+        mqtt_client = NavienMqttClient(auth_client=auth_client)
+    except BaseException:
+        await auth_client.__aexit__(None, None, None)
+        raise
 
     return auth_client, api_client, mqtt_client
