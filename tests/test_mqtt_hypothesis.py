@@ -1,6 +1,8 @@
 import pytest
-from hypothesis import given
-from hypothesis import strategies as st
+
+hypothesis = pytest.importorskip("hypothesis")
+given = hypothesis.given
+st = hypothesis.strategies
 
 from nwp500.enums import TemperatureType
 from nwp500.models import DeviceStatus
