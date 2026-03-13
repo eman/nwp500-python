@@ -454,10 +454,13 @@ async def handle_set_anti_legionella_period_request(
 
         if use:
             await mqtt.control.enable_anti_legionella(device, period_days)
+            print(f"Anti-Legionella period set to {period_days} day(s)")
         else:
-            await mqtt.control.disable_anti_legionella(device)
-
-        print(f"✓ Anti-Legionella period set to {period_days} day(s)")
+            print(
+                "Anti-Legionella is currently disabled. "
+                "Enable it first to set the period, or use "
+                "'anti-legionella enable' with the desired period."
+            )
     except (RangeValidationError, ValidationError) as e:
         _logger.error(f"Failed to set Anti-Legionella period: {e}")
     except DeviceError as e:
