@@ -100,11 +100,7 @@ async def main() -> None:
             return
 
         device_type = str(device.device_info.device_type)
-        mac = device.device_info.mac_address
-        print(
-            f"Device: {device.device_info.device_name}  "
-            f"[{device_type} / {_redact_mac_in_text(mac)}]"
-        )
+        print(f"Device connected [{device_type}]")
 
         mqtt_client = NavienMqttClient(auth_client)
         await mqtt_client.connect()
