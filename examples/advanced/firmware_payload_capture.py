@@ -48,13 +48,19 @@ _logger = logging.getLogger(__name__)
 
 def _redact_mac_in_text(text: str) -> str:
     """Redact MAC addresses in text before console output."""
-    mac_pattern = re.compile(r"(?i)\b([0-9a-f]{2}[:-]){5}[0-9a-f]{2}\b")
+    separated_mac_pattern = re.compile(r"(?i)\b([0-9a-f]{2}[:-]){5}[0-9a-f]{2}\b")
+    compact_mac_pattern = re.compile(r"(?i)\b[0-9a-f]{12}\b")
 
-    def _mask(match: re.Match[str]) -> str:
+    def _mask_separated(match: re.Match[str]) -> str:
         parts = re.split(r"[:-]", match.group(0))
         return ":".join(parts[:3] + ["**", "**", "**"])
 
-    return mac_pattern.sub(_mask, text)
+    def _mask_compact(match: re.Match[str]) -> str:
+        value = match.group(0).lower()
+        return f"{value[:2]}:{value[2:4]}:{value[4:6]}:**:**:**"
+
+    text = separated_mac_pattern.sub(_mask_separated, text)
+    return compact_mac_pattern.sub(_mask_compact, text)
 
 
 class PayloadCapture:
