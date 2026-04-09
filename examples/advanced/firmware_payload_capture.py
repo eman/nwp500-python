@@ -29,6 +29,7 @@ import asyncio
 import json
 import logging
 import os
+import re
 import sys
 from datetime import UTC, datetime
 from pathlib import Path
@@ -45,6 +46,17 @@ logging.basicConfig(
 _logger = logging.getLogger(__name__)
 
 
+def _redact_mac_in_text(text: str) -> str:
+    """Redact MAC addresses in text before console output."""
+    mac_pattern = re.compile(r"(?i)\b([0-9a-f]{2}[:-]){5}[0-9a-f]{2}\b")
+
+    def _mask(match: re.Match[str]) -> str:
+        parts = re.split(r"[:-]", match.group(0))
+        return ":".join(parts[:3] + ["**", "**", "**"])
+
+    return mac_pattern.sub(_mask, text)
+
+
 class PayloadCapture:
     """Captures and records raw MQTT payloads."""
 
@@ -58,7 +70,7 @@ class PayloadCapture:
             "payload": message,
         }
         self.payloads.append(entry)
-        print(f"  ← {topic}")
+        print(f"  ← {_redact_mac_in_text(topic)}")
 
     def save(self, path: Path) -> None:
         data = {
@@ -89,7 +101,10 @@ async def main() -> None:
 
         device_type = str(device.device_info.device_type)
         mac = device.device_info.mac_address
-        print(f"Device: {device.device_info.device_name}  [{device_type} / {mac}]")
+        print(
+            f"Device: {device.device_info.device_name}  "
+            f"[{device_type} / {_redact_mac_in_text(mac)}]"
+        )
 
         mqtt_client = NavienMqttClient(auth_client)
         await mqtt_client.connect()
@@ -103,7 +118,10 @@ async def main() -> None:
         # All event messages pushed by the device
         evt_wildcard = MqttTopicBuilder.event_topic(device_type, mac, "#")
 
-        print(f"\nSubscribing to:\n  {res_wildcard}\n  {evt_wildcard}\n")
+        print(
+            f"\nSubscribing to:\n  {_redact_mac_in_text(res_wildcard)}\n"
+            f"  {_redact_mac_in_text(evt_wildcard)}\n"
+        )
         print("Captured topics:")
 
         await mqtt_client.subscribe(res_wildcard, capture.record)
