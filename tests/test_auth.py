@@ -1,6 +1,6 @@
 """Tests for authentication functionality."""
 
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import aiohttp
@@ -122,7 +122,7 @@ def test_auth_tokens_creation():
 
 def test_auth_tokens_expires_at_calculation():
     """Test AuthTokens expires_at property."""
-    now = datetime.now()
+    now = datetime.now(UTC)
     tokens = AuthTokens(
         id_token="test",
         access_token="test",
@@ -149,7 +149,7 @@ def test_auth_tokens_is_expired_false():
 
 def test_auth_tokens_is_expired_true():
     """Test AuthTokens.is_expired when token is expired."""
-    old_time = datetime.now() - timedelta(seconds=7200)  # 2 hours ago
+    old_time = datetime.now(UTC) - timedelta(seconds=7200)  # 2 hours ago
     tokens = AuthTokens(
         id_token="test",
         access_token="test",
@@ -164,7 +164,7 @@ def test_auth_tokens_is_expired_true():
 def test_auth_tokens_is_expired_near_expiry():
     """Test AuthTokens.is_expired within 5-minute buffer."""
     # Token expires in 3 minutes - should be considered expired
-    near_expiry = datetime.now() - timedelta(seconds=3420)  # 57 minutes ago
+    near_expiry = datetime.now(UTC) - timedelta(seconds=3420)  # 57 minutes ago
     tokens = AuthTokens(
         id_token="test",
         access_token="test",
@@ -194,7 +194,7 @@ def test_auth_tokens_aws_credentials_expired_false():
 
 def test_auth_tokens_aws_credentials_expired_true():
     """Test are_aws_credentials_expired when AWS credentials are expired."""
-    old_time = datetime.now() - timedelta(seconds=7200)  # 2 hours ago
+    old_time = datetime.now(UTC) - timedelta(seconds=7200)  # 2 hours ago
     tokens = AuthTokens(
         id_token="test",
         access_token="test",
@@ -583,7 +583,7 @@ async def test_ensure_valid_token_aws_credentials_expired():
     )
 
     # Create tokens with expired AWS credentials but valid JWT
-    old_time = datetime.now() - timedelta(seconds=3900)  # 65 minutes ago
+    old_time = datetime.now(UTC) - timedelta(seconds=3900)  # 65 minutes ago
     tokens = AuthTokens(
         id_token="test",
         access_token="test",
@@ -660,7 +660,7 @@ async def test_ensure_valid_token_jwt_expired():
     )
 
     # Create tokens with expired JWT
-    old_time = datetime.now() - timedelta(seconds=3900)  # 65 minutes ago
+    old_time = datetime.now(UTC) - timedelta(seconds=3900)  # 65 minutes ago
     tokens = AuthTokens(
         id_token="test",
         access_token="test",
@@ -792,7 +792,7 @@ async def test_context_manager():
 
 def test_aws_credentials_preservation_in_token_refresh():
     """Test that AWS credentials are preserved during token refresh."""
-    old_time = datetime.now() - timedelta(seconds=1800)  # 30 minutes ago
+    old_time = datetime.now(UTC) - timedelta(seconds=1800)  # 30 minutes ago
 
     old_tokens = AuthTokens(
         id_token="old_id",
@@ -842,7 +842,7 @@ def test_aws_credentials_preservation_in_token_refresh():
 # Test token restoration functionality
 def test_auth_tokens_to_dict():
     """Test AuthTokens.to_dict serialization."""
-    issued_at = datetime.now()
+    issued_at = datetime.now(UTC)
     tokens = AuthTokens(
         id_token="test_id",
         access_token="test_access",
@@ -865,12 +865,13 @@ def test_auth_tokens_to_dict():
     assert result["secret_key"] == "test_secret"
     assert result["session_token"] == "test_session"
     assert result["authorization_expires_in"] == 1800
-    assert result["issued_at"] == issued_at.isoformat()
+    expected_issued_at = issued_at.strftime("%Y-%m-%dT%H:%M:%S.%f") + "Z"
+    assert result["issued_at"] == expected_issued_at
 
 
 def test_auth_tokens_from_dict_with_issued_at():
     """Test AuthTokens.from_dict with issued_at timestamp."""
-    issued_at = datetime.now() - timedelta(seconds=1800)
+    issued_at = datetime.now(UTC) - timedelta(seconds=1800)
     data = {
         "id_token": "test_id",
         "access_token": "test_access",
@@ -899,7 +900,7 @@ def test_auth_tokens_from_dict_with_issued_at():
 
 def test_auth_tokens_serialization_roundtrip():
     """Test that tokens can be serialized and deserialized without data loss."""
-    issued_at = datetime.now() - timedelta(seconds=1800)
+    issued_at = datetime.now(UTC) - timedelta(seconds=1800)
     original = AuthTokens(
         id_token="test_id",
         access_token="test_access",
@@ -1021,7 +1022,7 @@ async def test_context_manager_with_valid_stored_tokens():
 @pytest.mark.asyncio
 async def test_context_manager_with_expired_jwt_stored_tokens():
     """Test async context manager with expired JWT refreshes tokens."""
-    old_time = datetime.now() - timedelta(seconds=3900)  # 65 minutes ago
+    old_time = datetime.now(UTC) - timedelta(seconds=3900)  # 65 minutes ago
     stored_tokens = AuthTokens(
         id_token="stored_id",
         access_token="stored_access",
@@ -1055,7 +1056,7 @@ async def test_context_manager_with_expired_jwt_stored_tokens():
 @pytest.mark.asyncio
 async def test_context_manager_with_expired_aws_credentials():
     """Test async context manager re-authenticates on AWS creds expiry."""
-    old_time = datetime.now() - timedelta(seconds=3900)  # 65 minutes ago
+    old_time = datetime.now(UTC) - timedelta(seconds=3900)  # 65 minutes ago
     stored_tokens = AuthTokens(
         id_token="stored_id",
         access_token="stored_access",

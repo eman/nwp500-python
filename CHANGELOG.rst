@@ -5,8 +5,30 @@ Changelog
 Unreleased
 ==========
 
+Added
+-----
+- **Firmware Payload Capture Tool**: New example script
+  ``examples/advanced/firmware_payload_capture.py`` for capturing raw MQTT
+  payloads to detect firmware-introduced protocol changes. Subscribes to all
+  response and event topics via wildcards, requests the full scheduling
+  data set (weekly reservations, TOU, device info), and saves everything to a
+  timestamped JSON file suitable for ``jq``/``diff`` comparison across firmware
+  versions.
+
 Fixed
 -----
+- **Timezone-naive datetime in token expiry checks**: ``AuthTokens.is_expired``,
+  ``are_aws_credentials_expired``, and ``time_until_expiry`` used
+  ``datetime.now()`` (naive, local time). During DST transitions or timezone
+  changes this could cause incorrect expiry detection, leading to premature
+  re-authentication or use of an actually-expired token. Fixed by using
+  ``datetime.now(UTC)`` throughout and switching the ``issued_at`` field
+  default to ``datetime.now(UTC)``.
+- **Duplicate AWS IoT subscribe calls on reconnect**: ``resubscribe_all()``
+  called ``connection.subscribe()`` (a network round-trip to AWS IoT) once per
+  handler per topic. If a topic had N handlers, N identical subscribe requests
+  were sent on every reconnect. Fixed by making one network call per unique
+  topic and registering remaining handlers directly into ``_message_handlers``.
 - **Anti-Legionella set-period State Preservation**: ``nwp-cli anti-legionella
   set-period`` was calling ``enable_anti_legionella()`` in both the enabled and
   disabled branches, silently re-enabling the feature when it was off. The
@@ -40,6 +62,9 @@ Fixed
 
 Changed
 -------
+- **Dependency updates**: Bumped minimum versions to track current releases:
+  ``aiohttp >= 3.13.5``, ``pydantic >= 2.12.5``, ``click >= 8.3.0``,
+  ``rich >= 14.3.0``.
 - **Dependency: awsiotsdk >= 1.28.2**: Bumped minimum ``awsiotsdk`` version
   from ``>=1.27.0`` to ``>=1.28.2`` to track the current patch release.
   ``awscrt`` 0.31.3 is pulled in transitively.

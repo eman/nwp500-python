@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import json
 import logging
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from typing import Any, Literal, Self, cast
 
 import aiohttp
@@ -79,7 +79,7 @@ class AuthTokens(NavienBaseModel):
     authorization_expires_in: int | None = None
 
     # Calculated fields
-    issued_at: datetime = Field(default_factory=datetime.now)
+    issued_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
     _expires_at: datetime = PrivateAttr()
     _aws_expires_at: datetime | None = PrivateAttr(default=None)
@@ -159,7 +159,7 @@ class AuthTokens(NavienBaseModel):
     def is_expired(self) -> bool:
         """Check if the access token has expired (cached calculation)."""
         # Consider expired if within 5 minutes of expiration
-        return datetime.now() >= (self._expires_at - timedelta(minutes=5))
+        return datetime.now(UTC) >= (self._expires_at - timedelta(minutes=5))
 
     @property
     def are_aws_credentials_expired(self) -> bool:
@@ -178,7 +178,9 @@ class AuthTokens(NavienBaseModel):
             # This handles cases where authorization_expires_in wasn't provided
             return False
         # Consider expired if within 5 minutes of expiration
-        return datetime.now() >= (self._aws_expires_at - timedelta(minutes=5))
+        return datetime.now(UTC) >= (
+            self._aws_expires_at - timedelta(minutes=5)
+        )
 
     @property
     def time_until_expiry(self) -> timedelta:
@@ -186,7 +188,7 @@ class AuthTokens(NavienBaseModel):
 
         Uses cached expiration time for efficiency.
         """
-        return self._expires_at - datetime.now()
+        return self._expires_at - datetime.now(UTC)
 
     @property
     def bearer_token(self) -> str:

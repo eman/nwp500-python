@@ -304,22 +304,27 @@ class MqttSubscriptionManager:
         self._subscriptions.clear()
         self._message_handlers.clear()
 
-        # Re-establish each subscription
+        # Re-establish each subscription — one network call per topic,
+        # regardless of how many handlers are registered for it.
         failed_subscriptions: set[str] = set()
         for topic, qos in subscriptions_to_restore:
             handlers = handlers_to_restore.get(topic, [])
-            for handler in handlers:
-                try:
-                    await self.subscribe(topic, handler, qos)
-                except (AwsCrtError, RuntimeError) as e:
-                    _logger.error(
-                        f"Failed to re-subscribe to "
-                        f"'{redact_topic(topic)}': {e}"
-                    )
-                    # Mark topic as failed and skip remaining handlers
-                    # since they will fail for the same reason
-                    failed_subscriptions.add(topic)
-                    break  # Exit handler loop, move to next topic
+            if not handlers:
+                continue
+            try:
+                # One network subscribe for the first handler
+                await self.subscribe(topic, handlers[0], qos)
+            except (AwsCrtError, RuntimeError) as e:
+                _logger.error(
+                    f"Failed to re-subscribe to '{redact_topic(topic)}': {e}"
+                )
+                failed_subscriptions.add(topic)
+                continue
+
+            # Register remaining handlers without extra network calls
+            for handler in handlers[1:]:
+                if handler not in self._message_handlers[topic]:
+                    self._message_handlers[topic].append(handler)
 
         if failed_subscriptions:
             # Restore failed subscriptions to internal state so they can be
