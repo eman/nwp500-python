@@ -18,6 +18,8 @@ Example:
     ...     devices = await api.list_devices()
 """
 
+import asyncio
+
 from .api_client import NavienAPIClient
 from .auth import NavienAuthClient
 from .mqtt import NavienMqttClient
@@ -75,17 +77,20 @@ async def create_navien_clients(
     # Authenticate and enter context manager
     try:
         await auth_client.__aenter__()
-    except BaseException:
-        # Ensure session is cleaned up if authentication fails
-        await auth_client.__aexit__(None, None, None)
+    except asyncio.CancelledError:
+        # Shield cleanup from further cancellation
+        await asyncio.shield(auth_client.__aexit__(None, None, None))
+        raise
+    except Exception as exc:
+        await auth_client.__aexit__(type(exc), exc, exc.__traceback__)
         raise
 
     # Create API and MQTT clients that share the session
     try:
         api_client = NavienAPIClient(auth_client=auth_client)
         mqtt_client = NavienMqttClient(auth_client=auth_client)
-    except BaseException:
-        await auth_client.__aexit__(None, None, None)
+    except Exception as exc:
+        await auth_client.__aexit__(type(exc), exc, exc.__traceback__)
         raise
 
     return auth_client, api_client, mqtt_client

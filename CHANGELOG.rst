@@ -22,8 +22,10 @@ Fixed
   ``datetime.now()`` (naive, local time). During DST transitions or timezone
   changes this could cause incorrect expiry detection, leading to premature
   re-authentication or use of an actually-expired token. Fixed by using
-  ``datetime.now(UTC)`` throughout and switching the ``issued_at`` field
-  default to ``datetime.now(UTC)``.
+  ``datetime.now(UTC)`` throughout, switching the ``issued_at`` field default
+  to ``datetime.now(UTC)``, and adding a field validator to normalize any
+  timezone-naive ``issued_at`` values loaded from old stored token files to UTC
+  (previously this would raise a ``TypeError`` at comparison time).
 - **Duplicate AWS IoT subscribe calls on reconnect**: ``resubscribe_all()``
   called ``connection.subscribe()`` (a network round-trip to AWS IoT) once per
   handler per topic. If a topic had N handlers, N identical subscribe requests
@@ -55,6 +57,11 @@ Fixed
   ``auth_client.__aenter__()``, the auth session and its underlying
   ``aiohttp`` session would leak. Client construction is now wrapped in a
   ``try/except`` that calls ``auth_client.__aexit__()`` on failure.
+  Additionally, both ``except BaseException`` blocks have been replaced with
+  ``except Exception`` (passing real exception info to ``__aexit__``) plus a
+  separate ``except asyncio.CancelledError`` block that uses
+  ``asyncio.shield()`` to ensure cleanup completes even when the task is
+  being cancelled.
 - **Hypothesis Tests Broke All Test Collection**: ``test_mqtt_hypothesis.py``
   imported ``hypothesis`` at module level; when it was not installed, pytest
   failed to collect every test in the suite. ``hypothesis`` is now mandated

@@ -19,7 +19,14 @@ from datetime import UTC, datetime, timedelta
 from typing import Any, Literal, Self, cast
 
 import aiohttp
-from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    PrivateAttr,
+    field_validator,
+    model_validator,
+)
 from pydantic.alias_generators import to_camel
 
 from . import __version__
@@ -83,6 +90,17 @@ class AuthTokens(NavienBaseModel):
 
     _expires_at: datetime = PrivateAttr()
     _aws_expires_at: datetime | None = PrivateAttr(default=None)
+
+    @field_validator("issued_at", mode="before")
+    @classmethod
+    def _normalize_issued_at_tz(cls, v: Any) -> Any:
+        """Assume UTC for timezone-naive datetimes.
+
+        Handles old stored tokens that may not have timezone info.
+        """
+        if isinstance(v, datetime) and v.tzinfo is None:
+            return v.replace(tzinfo=UTC)
+        return v
 
     @model_validator(mode="before")
     @classmethod
