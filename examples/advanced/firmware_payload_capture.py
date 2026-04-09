@@ -18,7 +18,9 @@ Usage:
 
 Output:
     payload_capture_YYYYMMDD_HHMMSS.json  — all captured payloads with topics
-                                            and timestamps
+                                            and timestamps. Sensitive fields
+                                            (MAC address, session IDs, client
+                                            IDs) are redacted in the output.
 
 Comparing two captures to find firmware changes:
     diff <(jq '.payloads[] | select(.topic | contains("rsv"))' before.json) \\
@@ -29,7 +31,6 @@ import asyncio
 import json
 import logging
 import os
-import re
 import sys
 from datetime import UTC, datetime
 from pathlib import Path
@@ -37,6 +38,7 @@ from typing import Any
 
 from nwp500 import NavienAPIClient, NavienAuthClient, NavienMqttClient
 from nwp500.models import DeviceFeature
+from nwp500.mqtt.utils import redact, redact_topic
 from nwp500.topic_builder import MqttTopicBuilder
 
 logging.basicConfig(
@@ -44,23 +46,6 @@ logging.basicConfig(
     format="%(asctime)s %(levelname)s %(name)s: %(message)s",
 )
 _logger = logging.getLogger(__name__)
-
-
-def _redact_mac_in_text(text: str) -> str:
-    """Redact MAC addresses in text before console output."""
-    separated_mac_pattern = re.compile(r"(?i)\b([0-9a-f]{2}[:-]){5}[0-9a-f]{2}\b")
-    compact_mac_pattern = re.compile(r"(?i)\b[0-9a-f]{12}\b")
-
-    def _mask_separated(match: re.Match[str]) -> str:
-        parts = re.split(r"[:-]", match.group(0))
-        return ":".join(parts[:3] + ["**", "**", "**"])
-
-    def _mask_compact(match: re.Match[str]) -> str:
-        value = match.group(0).lower()
-        return f"{value[:2]}:{value[2:4]}:{value[4:6]}:**:**:**"
-
-    text = separated_mac_pattern.sub(_mask_separated, text)
-    return compact_mac_pattern.sub(_mask_compact, text)
 
 
 class PayloadCapture:
@@ -76,13 +61,24 @@ class PayloadCapture:
             "payload": message,
         }
         self.payloads.append(entry)
-        print(f"  ← {_redact_mac_in_text(topic)}")
+        print(f"  ← {redact_topic(topic)}")
 
     def save(self, path: Path) -> None:
+        # Redact sensitive fields (MAC, session IDs, client IDs) before saving
+        # so the output file is safe to share. Protocol structure and payload
+        # field values used for firmware analysis are preserved.
+        redacted_payloads = [
+            {
+                "timestamp": e["timestamp"],
+                "topic": redact_topic(e["topic"]),
+                "payload": redact(e["payload"]),
+            }
+            for e in self.payloads
+        ]
         data = {
             "captured_at": datetime.now(UTC).isoformat(),
             "total_payloads": len(self.payloads),
-            "payloads": self.payloads,
+            "payloads": redacted_payloads,
         }
         path.write_text(json.dumps(data, indent=2, default=str))
         print(f"\nSaved {len(self.payloads)} payloads → {path}")
@@ -106,7 +102,8 @@ async def main() -> None:
             return
 
         device_type = str(device.device_info.device_type)
-        print(f"Device connected [{device_type}]")
+        mac = device.device_info.mac_address
+        print(f"Device: {device.device_info.device_name}  [{device_type}]")
 
         mqtt_client = NavienMqttClient(auth_client)
         await mqtt_client.connect()
@@ -121,8 +118,8 @@ async def main() -> None:
         evt_wildcard = MqttTopicBuilder.event_topic(device_type, mac, "#")
 
         print(
-            f"\nSubscribing to:\n  {_redact_mac_in_text(res_wildcard)}\n"
-            f"  {_redact_mac_in_text(evt_wildcard)}\n"
+            f"\nSubscribing to:\n  {redact_topic(res_wildcard)}\n"
+            f"  {redact_topic(evt_wildcard)}\n"
         )
         print("Captured topics:")
 
@@ -186,7 +183,7 @@ async def main() -> None:
     for entry in capture.payloads:
         by_topic[entry["topic"]] = by_topic.get(entry["topic"], 0) + 1
     for topic, count in sorted(by_topic.items()):
-        print(f"  {count:2d}x  {topic}")
+        print(f"  {count:2d}x  {redact_topic(topic)}")
 
     if device_feature:
         print(
@@ -197,9 +194,9 @@ async def main() -> None:
             "Compare this file against a capture from a different firmware version "
             "to detect scheduling changes.\n"
             "Useful diff command:\n"
-            f"  diff <(jq '.payloads[] | select(.topic | contains(\"rsv\"))' "
+            "  diff <(jq '.payloads[] | select(.topic | contains(\"rsv\"))' "
             f"before.json) \\\n"
-            f"       <(jq '.payloads[] | select(.topic | contains(\"rsv\"))' "
+            "       <(jq '.payloads[] | select(.topic | contains(\"rsv\"))' "
             f"{output_path})"
         )
 
