@@ -648,10 +648,13 @@ class MqttDeviceController:
 
     @requires_capability("holiday_use")
     async def set_vacation_days(self, device: Device, days: int) -> int:
-        """Set vacation/away mode duration (1-365 days)."""
-        self._validate_range("days", days, 1, 365)
+        """Set vacation/away mode duration (1-30 days)."""
+        self._validate_range("days", days, 1, 30)
         return await self._mode_command(
-            device, CommandCode.GOOUT_DAY, "goout-day", [days]
+            device,
+            CommandCode.DHW_MODE,
+            "dhw-mode",
+            [DhwOperationSetting.VACATION.value, days],
         )
 
     @requires_capability("program_reservation_use")
