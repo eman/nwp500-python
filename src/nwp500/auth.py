@@ -96,8 +96,11 @@ class AuthTokens(NavienBaseModel):
     def _normalize_issued_at_tz(cls, v: Any) -> Any:
         """Assume UTC for timezone-naive datetimes.
 
-        Handles old stored tokens that may not have timezone info.
+        Handles old stored tokens that may not have timezone info,
+        whether provided as a datetime object or an ISO 8601 string.
         """
+        if isinstance(v, str) and "+" not in v and not v.endswith("Z"):
+            return v + "+00:00"
         if isinstance(v, datetime) and v.tzinfo is None:
             return v.replace(tzinfo=UTC)
         return v
