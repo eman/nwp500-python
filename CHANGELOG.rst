@@ -25,7 +25,17 @@ Fixed
   ``datetime.now(UTC)`` throughout, switching the ``issued_at`` field default
   to ``datetime.now(UTC)``, and adding a field validator to normalize any
   timezone-naive ``issued_at`` values loaded from old stored token files to UTC
-  (previously this would raise a ``TypeError`` at comparison time).
+  (previously this would raise a ``TypeError`` at comparison time). The
+  validator was further extended to also handle ISO 8601 strings without
+  timezone info (e.g. ``"2026-02-17T14:47:01.686943"``), which is the actual
+  format written by ``to_dict()`` for tokens stored before this fix.
+- **Vacation mode sent wrong MQTT command**: ``set_vacation_days()`` used
+  ``CommandCode.GOOUT_DAY`` (33554466), which the device silently accepted
+  but did not activate vacation mode — the operating mode remained unchanged.
+  HAR capture of the official Navien app confirms the correct command is
+  ``DHW_MODE`` (33554437) with ``param=[5, days]``
+  (``DhwOperationSetting.VACATION``). The valid range has also been corrected
+  from 1–365 to 1–30 to match the device's actual constraint.
 - **Duplicate AWS IoT subscribe calls on reconnect**: ``resubscribe_all()``
   called ``connection.subscribe()`` (a network round-trip to AWS IoT) once per
   handler per topic. If a topic had N handlers, N identical subscribe requests
