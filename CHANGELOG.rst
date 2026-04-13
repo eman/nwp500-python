@@ -2,6 +2,15 @@
 Changelog
 =========
 
+Version 7.4.10 (2026-04-13)
+===========================
+
+Changed
+-------
+- **Loosened pydantic version requirement**: Changed from ``pydantic>=2.12.5`` to
+  ``pydantic>=2.0.0`` to resolve dependency conflicts with Home Assistant, which
+  ships with ``pydantic==2.12.2``.
+
 Version 7.4.9 (2026-04-12)
 ==========================
 
