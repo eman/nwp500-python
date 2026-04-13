@@ -2,6 +2,90 @@
 Changelog
 =========
 
+Version 7.4.9 (2026-04-12)
+==========================
+
+Added
+-----
+- **Firmware Payload Capture Tool**: New example script
+  ``examples/advanced/firmware_payload_capture.py`` for capturing raw MQTT
+  payloads to detect firmware-introduced protocol changes. Subscribes to all
+  response and event topics via wildcards, requests the full scheduling
+  data set (weekly reservations, TOU, device info), and saves everything to a
+  timestamped JSON file suitable for ``jq``/``diff`` comparison across firmware
+  versions.
+
+Fixed
+-----
+- **Timezone-naive datetime in token expiry checks**: ``AuthTokens.is_expired``,
+  ``are_aws_credentials_expired``, and ``time_until_expiry`` used
+  ``datetime.now()`` (naive, local time). During DST transitions or timezone
+  changes this could cause incorrect expiry detection, leading to premature
+  re-authentication or use of an actually-expired token. Fixed by using
+  ``datetime.now(UTC)`` throughout, switching the ``issued_at`` field default
+  to ``datetime.now(UTC)``, and adding a field validator to normalize any
+  timezone-naive ``issued_at`` values loaded from old stored token files to UTC
+  (previously this would raise a ``TypeError`` at comparison time). The
+  validator was further extended to also handle ISO 8601 strings without
+  timezone info (e.g. ``"2026-02-17T14:47:01.686943"``), which is the actual
+  format written by ``to_dict()`` for tokens stored before this fix.
+- **Vacation mode sent wrong MQTT command**: ``set_vacation_days()`` used
+  ``CommandCode.GOOUT_DAY`` (33554466), which the device silently accepted
+  but did not activate vacation mode — the operating mode remained unchanged.
+  HAR capture of the official Navien app confirms the correct command is
+  ``DHW_MODE`` (33554437) with ``param=[5, days]``
+  (``DhwOperationSetting.VACATION``). The valid range has also been corrected
+  from 1–365 to 1–30 to match the device's actual constraint.
+- **Duplicate AWS IoT subscribe calls on reconnect**: ``resubscribe_all()``
+  called ``connection.subscribe()`` (a network round-trip to AWS IoT) once per
+  handler per topic. If a topic had N handlers, N identical subscribe requests
+  were sent on every reconnect. Fixed by making one network call per unique
+  topic and registering remaining handlers directly into ``_message_handlers``.
+- **Anti-Legionella set-period State Preservation**: ``nwp-cli anti-legionella
+  set-period`` was calling ``enable_anti_legionella()`` in both the enabled and
+  disabled branches, silently re-enabling the feature when it was off. The
+  command now informs the user that the period can only be updated while the
+  feature is enabled and directs them to ``anti-legionella enable``.
+- **Subscription State Lost After Failed Resubscription**: ``resubscribe_all()``
+  cleared ``_subscriptions`` and ``_message_handlers`` before the re-subscribe
+  loop. Topics that failed to resubscribe were permanently dropped from internal
+  state and could not be retried on the next reconnection. Failed topics are now
+  restored so they are retried automatically.
+- **Unit System Detection Returns None on Timeout**: ``_detect_unit_system()``
+  declared return type ``UnitSystemType`` but returned ``None`` on
+  ``TimeoutError``, violating the type contract. Now returns
+  ``"us_customary"`` consistent with the warning message.
+- **Once-Listener Becomes Permanent With Duplicate Callbacks**: ``emit()``
+  identified once-listeners via a ``set`` of ``(event, callback)`` tuples. If
+  the same callback was registered twice with ``once=True``, the set
+  deduplicated the tuple — after the first emit the second listener lost its
+  once-status and became permanent. Fixed by checking ``listener.once``
+  directly on the ``EventListener`` object.
+- **Auth Session Leaked on Client Construction Failure**: In
+  ``create_navien_clients()``, if ``NavienAPIClient`` or
+  ``NavienMqttClient`` construction raised after a successful
+  ``auth_client.__aenter__()``, the auth session and its underlying
+  ``aiohttp`` session would leak. Client construction is now wrapped in a
+  ``try/except`` that calls ``auth_client.__aexit__()`` on failure.
+  Additionally, both ``except BaseException`` blocks have been replaced with
+  ``except Exception`` (passing real exception info to ``__aexit__``) plus a
+  separate ``except asyncio.CancelledError`` block that uses
+  ``asyncio.shield()`` to ensure cleanup completes even when the task is
+  being cancelled.
+- **Hypothesis Tests Broke All Test Collection**: ``test_mqtt_hypothesis.py``
+  imported ``hypothesis`` at module level; when it was not installed, pytest
+  failed to collect every test in the suite. ``hypothesis`` is now mandated
+  as a ``[testing]`` extra dependency, restoring correct collection behaviour.
+
+Changed
+-------
+- **Dependency updates**: Bumped minimum versions to track current releases:
+  ``aiohttp >= 3.13.5``, ``pydantic >= 2.12.5``, ``click >= 8.3.0``,
+  ``rich >= 14.3.0``.
+- **Dependency: awsiotsdk >= 1.28.2**: Bumped minimum ``awsiotsdk`` version
+  from ``>=1.27.0`` to ``>=1.28.2`` to track the current patch release.
+  ``awscrt`` 0.31.3 is pulled in transitively.
+
 Version 7.4.8 (2026-02-17)
 ==========================
 

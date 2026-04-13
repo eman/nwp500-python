@@ -15,11 +15,18 @@ from __future__ import annotations
 
 import json
 import logging
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from typing import Any, Literal, Self, cast
 
 import aiohttp
-from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    PrivateAttr,
+    field_validator,
+    model_validator,
+)
 from pydantic.alias_generators import to_camel
 
 from . import __version__
@@ -79,10 +86,30 @@ class AuthTokens(NavienBaseModel):
     authorization_expires_in: int | None = None
 
     # Calculated fields
-    issued_at: datetime = Field(default_factory=datetime.now)
+    issued_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
     _expires_at: datetime = PrivateAttr()
     _aws_expires_at: datetime | None = PrivateAttr(default=None)
+
+    @field_validator("issued_at", mode="before")
+    @classmethod
+    def _normalize_issued_at_tz(cls, v: Any) -> Any:
+        """Assume UTC for timezone-naive datetimes.
+
+        Handles old stored tokens that may not have timezone info,
+        whether provided as a datetime object or an ISO 8601 string.
+        """
+        if isinstance(v, str) and not v.endswith("Z"):
+            # Check for a timezone offset (+HH:MM or -HH:MM) in the time
+            # portion only (after the 'T' separator), so that date-part hyphens
+            # like "2026-02-17" are not mistaken for a negative offset.
+            t_pos = v.find("T")
+            time_part = v[t_pos + 1 :] if t_pos >= 0 else v
+            if "+" not in time_part and "-" not in time_part:
+                return v + "+00:00"
+        if isinstance(v, datetime) and v.tzinfo is None:
+            return v.replace(tzinfo=UTC)
+        return v
 
     @model_validator(mode="before")
     @classmethod
@@ -159,7 +186,7 @@ class AuthTokens(NavienBaseModel):
     def is_expired(self) -> bool:
         """Check if the access token has expired (cached calculation)."""
         # Consider expired if within 5 minutes of expiration
-        return datetime.now() >= (self._expires_at - timedelta(minutes=5))
+        return datetime.now(UTC) >= (self._expires_at - timedelta(minutes=5))
 
     @property
     def are_aws_credentials_expired(self) -> bool:
@@ -178,7 +205,9 @@ class AuthTokens(NavienBaseModel):
             # This handles cases where authorization_expires_in wasn't provided
             return False
         # Consider expired if within 5 minutes of expiration
-        return datetime.now() >= (self._aws_expires_at - timedelta(minutes=5))
+        return datetime.now(UTC) >= (
+            self._aws_expires_at - timedelta(minutes=5)
+        )
 
     @property
     def time_until_expiry(self) -> timedelta:
@@ -186,7 +215,7 @@ class AuthTokens(NavienBaseModel):
 
         Uses cached expiration time for efficiency.
         """
-        return self._expires_at - datetime.now()
+        return self._expires_at - datetime.now(UTC)
 
     @property
     def bearer_token(self) -> str:

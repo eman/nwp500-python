@@ -1,6 +1,6 @@
 """Tests for MQTT client initialization and token validation."""
 
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
@@ -39,7 +39,7 @@ def auth_client_with_valid_tokens():
 def auth_client_with_expired_jwt():
     """Create an auth client with expired JWT token."""
     auth_client = NavienAuthClient("test@example.com", "password")
-    old_time = datetime.now() - timedelta(seconds=7200)
+    old_time = datetime.now(UTC) - timedelta(seconds=7200)
     expired_tokens = AuthTokens(
         id_token="test_id",
         access_token="test_access",
@@ -62,7 +62,7 @@ def auth_client_with_expired_jwt():
 def auth_client_with_expired_aws_credentials():
     """Create an auth client with expired AWS credentials."""
     auth_client = NavienAuthClient("test@example.com", "password")
-    old_time = datetime.now() - timedelta(seconds=7200)
+    old_time = datetime.now(UTC) - timedelta(seconds=7200)
     expired_tokens = AuthTokens(
         id_token="test_id",
         access_token="test_access",
@@ -221,7 +221,7 @@ class TestHasValidTokensPropertyComprehensive:
         auth_client = NavienAuthClient("test@example.com", "password")
 
         # Create tokens with expired JWT but valid AWS credentials
-        old_time = datetime.now() - timedelta(seconds=7200)
+        old_time = datetime.now(UTC) - timedelta(seconds=7200)
         expired_jwt_tokens = AuthTokens(
             id_token="test_id",
             access_token="test_access",
@@ -248,7 +248,7 @@ class TestHasValidTokensPropertyComprehensive:
         auth_client = NavienAuthClient("test@example.com", "password")
 
         # Create tokens with valid JWT but expired AWS credentials
-        old_time = datetime.now() - timedelta(seconds=7200)
+        old_time = datetime.now(UTC) - timedelta(seconds=7200)
         expired_aws_tokens = AuthTokens(
             id_token="test_id",
             access_token="test_access",
@@ -275,7 +275,7 @@ class TestHasValidTokensPropertyComprehensive:
         auth_client = NavienAuthClient("test@example.com", "password")
 
         # Create tokens with both JWT and AWS credentials expired
-        old_time = datetime.now() - timedelta(seconds=7200)
+        old_time = datetime.now(UTC) - timedelta(seconds=7200)
         both_expired_tokens = AuthTokens(
             id_token="test_id",
             access_token="test_access",
@@ -351,7 +351,7 @@ class TestHasValidTokensPropertyComprehensive:
         auth_client = NavienAuthClient("test@example.com", "password")
 
         # Token expires in 3 minutes (within 5-minute buffer)
-        near_expiry = datetime.now() - timedelta(seconds=3420)
+        near_expiry = datetime.now(UTC) - timedelta(seconds=3420)
         near_expiry_tokens = AuthTokens(
             id_token="test_id",
             access_token="test_access",
@@ -376,7 +376,7 @@ class TestHasValidTokensPropertyComprehensive:
         auth_client = NavienAuthClient("test@example.com", "password")
 
         # AWS creds expire in 3 minutes (within 5-minute buffer)
-        near_expiry = datetime.now() - timedelta(seconds=3420)
+        near_expiry = datetime.now(UTC) - timedelta(seconds=3420)
         near_expiry_tokens = AuthTokens(
             id_token="test_id",
             access_token="test_access",
@@ -482,7 +482,7 @@ class TestTokenValidationEdgeCases:
         """
         auth_client = NavienAuthClient("test@example.com", "password")
         # Token expires in 3 minutes - should be considered expired
-        near_expiry = datetime.now() - timedelta(seconds=3420)
+        near_expiry = datetime.now(UTC) - timedelta(seconds=3420)
         tokens = AuthTokens(
             id_token="test_id",
             access_token="test_access",
@@ -763,7 +763,7 @@ class TestRecoverConnectionIntegration:
 
         # Manually expire tokens to simulate them expiring after creation
         mqtt_client._auth_client._auth_response.tokens._expires_at = (
-            datetime.now() - timedelta(minutes=10)
+            datetime.now(UTC) - timedelta(minutes=10)
         )
 
         # Mock ensure_valid_token to refresh the tokens
