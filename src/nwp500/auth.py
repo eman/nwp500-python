@@ -99,8 +99,14 @@ class AuthTokens(NavienBaseModel):
         Handles old stored tokens that may not have timezone info,
         whether provided as a datetime object or an ISO 8601 string.
         """
-        if isinstance(v, str) and "+" not in v and not v.endswith("Z"):
-            return v + "+00:00"
+        if isinstance(v, str) and not v.endswith("Z"):
+            # Check for a timezone offset (+HH:MM or -HH:MM) in the time
+            # portion only (after the 'T' separator), so that date-part hyphens
+            # like "2026-02-17" are not mistaken for a negative offset.
+            t_pos = v.find("T")
+            time_part = v[t_pos + 1 :] if t_pos >= 0 else v
+            if "+" not in time_part and "-" not in time_part:
+                return v + "+00:00"
         if isinstance(v, datetime) and v.tzinfo is None:
             return v.replace(tzinfo=UTC)
         return v
