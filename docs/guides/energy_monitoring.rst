@@ -7,7 +7,7 @@ from Navien NWP500 water heaters.
 Overview
 --------
 
-The NWP500 provides comprehensive energy monitoring through real-time
+The NWP500 provides energy monitoring data through real-time
 status updates via MQTT. All energy-related data is available through
 the ``DeviceStatus`` object returned by the
 ``subscribe_device_status()`` callback.
@@ -29,7 +29,7 @@ The most important metric for energy monitoring:
        power_watts = status.current_inst_power
        print(f"Current Power: {power_watts} W")
 
-| **Field:** ``currentInstPower``
+| **Field:** ``current_inst_power``
 | **Type:** ``float``
 | **Units:** Watts (W)
 | **Description:** Total instantaneous power consumption of the entire
@@ -52,9 +52,11 @@ Know which heating components are currently active:
        if status.heat_lower_use:
            print("Lower electric heater is running")
 
-| **Fields:** - ``compUse`` (bool): Heat pump compressor status -
-  ``heatUpperUse`` (bool): Upper electric heating element status
-| - ``heatLowerUse`` (bool): Lower electric heating element status
+**Fields:**
+
+- ``comp_use`` (bool): Heat pump compressor active
+- ``heat_upper_use`` (bool): Upper electric heating element active
+- ``heat_lower_use`` (bool): Lower electric heating element active
 
 Cumulative Usage Statistics
 ---------------------------
@@ -73,11 +75,11 @@ Track total runtime for each heating component:
        print(f"Upper Heater Runtime: {heater1_hours:.1f} hours")
        print(f"Lower Heater Runtime: {heater2_hours:.1f} hours")
 
-**Fields:** - ``compRunningMinuteTotal`` (int): Total heat pump
-compressor runtime in minutes - ``heater1RunningMinuteTotal`` (int):
-Total upper electric heater runtime in minutes -
-``heater2RunningMinuteTotal`` (int): Total lower electric heater runtime
-in minutes
+**Fields:**
+
+- ``comp_running_minute_total`` (int): Total heat pump compressor runtime in minutes
+- ``heater1_running_minute_total`` (int): Total upper electric heater runtime in minutes
+- ``heater2_running_minute_total`` (int): Total lower electric heater runtime in minutes
 
 Historical Energy Usage
 -----------------------
@@ -106,7 +108,7 @@ Request detailed daily energy usage data for specific months:
    # Request multiple months
    await mqtt_client.control.request_energy_usage(device, year=2025, months=[7, 8, 9])
 
-**Key Methods:**
+**Methods:**
 
 - ``request_energy_usage(device, year, months)``: Request historical data
 - ``subscribe_energy_usage(device, callback)``: Subscribe to energy usage responses
@@ -134,7 +136,7 @@ Monitor available stored energy:
        elif capacity > 80:
            print("High energy - tank is hot")
 
-| **Field:** ``availableEnergyCapacity``
+| **Field:** ``available_energy_capacity``
 | **Type:** ``int``
 | **Units:** Percentage (0-100)
 | **Description:** Available energy in the tank as a percentage,
@@ -155,10 +157,12 @@ Water Temperature
        
        print(f"Water Temperature: {current_temp}°F (Target: {target_temp}°F)")
 
-**Fields:** - ``dhwTemperature`` (float): Current water
-temperature - ``dhwTemperatureSetting`` (int): Target temperature
-setting - ``dhwTemperatureMin`` (int): Minimum allowed temperature -
-``dhwTemperatureMax`` (int): Maximum allowed temperature
+**Fields:**
+
+- ``dhw_temperature`` (float): Current water temperature
+- ``dhw_temperature_setting`` (int): Target temperature setting
+- ``dhw_temperature_min`` (int): Minimum allowed temperature
+- ``dhw_temperature_max`` (int): Maximum allowed temperature
 
 Component Temperatures
 ~~~~~~~~~~~~~~~~~~~~~~
@@ -187,74 +191,64 @@ Complete Energy Monitoring Example
        return kwh * cost_per_kwh
 
    async def monitor_energy():
-       # Authenticate and get device
        async with NavienAuthClient("email@example.com", "password") as auth_client:
-           
            api_client = NavienAPIClient(auth_client=auth_client)
            device = await api_client.get_first_device()
-       
-       # Create MQTT client
-       mqtt_client = NavienMqttClient(auth_client)
-       await mqtt_client.connect()
-       
-       # Energy monitoring callback
-       def on_status(status: DeviceStatus):
-           print("\n" + "="*50)
-           print("ENERGY MONITORING")
-           print("="*50)
            
-           # Real-time power
-           print(f"\nCurrent Power: {status.current_inst_power} W")
+           # Create MQTT client inside the auth context
+           mqtt_client = NavienMqttClient(auth_client)
+           await mqtt_client.connect()
            
-           # Active components
-           components = []
-           if status.comp_use:
-               components.append("Heat Pump")
-           if status.heat_upper_use:
-               components.append("Upper Heater")
-           if status.heat_lower_use:
-               components.append("Lower Heater")
+           # Energy monitoring callback
+           def on_status(status: DeviceStatus):
+               print("\n" + "="*50)
+               print("ENERGY MONITORING")
+               print("="*50)
+               
+               # Real-time power
+               print(f"\nCurrent Power: {status.current_inst_power} W")
+               
+               # Active components
+               components = []
+               if status.comp_use:
+                   components.append("Heat Pump")
+               if status.heat_upper_use:
+                   components.append("Upper Heater")
+               if status.heat_lower_use:
+                   components.append("Lower Heater")
+               
+               if components:
+                   print(f"Active: {', '.join(components)}")
+               else:
+                   print("Active: None (Standby)")
+               
+               # Cumulative runtime
+               print(f"\nCumulative Runtime:")
+               print(f"  Heat Pump: {status.comp_running_minute_total / 60:.1f} hours")
+               print(f"  Upper Heater: {status.heater1_running_minute_total / 60:.1f} hours")
+               print(f"  Lower Heater: {status.heater2_running_minute_total / 60:.1f} hours")
+               
+               # Energy capacity and temperature
+               print(f"\nEnergy Capacity: {status.available_energy_capacity}%")
+               print(f"Water Temp: {status.dhw_temperature}°F "
+                     f"(Target: {status.dhw_temperature_setting}°F)")
+               
+               # Estimated hourly cost (if running continuously at current power)
+               if status.current_inst_power > 0:
+                   hourly_cost = calculate_power_cost(status.current_inst_power, 1.0)
+                   print(f"\nEstimated Cost (if sustained): ${hourly_cost:.3f}/hour")
            
-           if components:
-               print(f"Active: {', '.join(components)}")
-           else:
-               print("Active: None (Standby)")
+           # Subscribe to device status
+           await mqtt_client.subscribe_device_status(device, on_status)
            
-           # Cumulative runtime
-           print(f"\nCumulative Runtime:")
-           print(f"  Heat Pump: {status.comp_running_minute_total / 60:.1f} hours")
-           print(f"  Upper Heater: {status.heater1_running_minute_total / 60:.1f} hours")
-           print(f"  Lower Heater: {status.heater2_running_minute_total / 60:.1f} hours")
+           # Request initial status
+           await mqtt_client.control.request_device_status(device)
            
-           # Energy capacity and temperature
-           print(f"\nEnergy Capacity: {status.available_energy_capacity}%")
-           print(f"Water Temp: {status.dhw_temperature}°F "
-                 f"(Target: {status.dhw_temperature_setting}°F)")
+           # Monitor for 5 minutes
+           print("Monitoring energy consumption for 5 minutes...")
+           await asyncio.sleep(300)
            
-           # Estimated hourly cost (if running continuously at current power)
-           if status.current_inst_power > 0:
-               hourly_cost = calculate_power_cost(status.current_inst_power, 1.0)
-               print(f"\nEstimated Cost (if sustained): ${hourly_cost:.3f}/hour")
-       
-       # Subscribe to device status
-       await mqtt_client.subscribe_device_status(
-           device.device_info.mac_address,
-           on_status
-       )
-       
-       # Request initial status
-       await mqtt_client.control.request_device_status(
-           device.device_info.mac_address,
-           device.device_info.device_type,
-           device.device_info.additional_value
-       )
-       
-       # Monitor for 5 minutes
-       print("Monitoring energy consumption for 5 minutes...")
-       await asyncio.sleep(300)
-       
-       # Cleanup
-       await mqtt_client.disconnect()
+           await mqtt_client.disconnect()
 
    if __name__ == "__main__":
        asyncio.run(monitor_energy())
@@ -268,58 +262,58 @@ Power Consumption
 +----------------------+------------+--------------+---------------------------+
 | Field                | Type       | Units        | Description               |
 +======================+============+==============+===========================+
-| ``currentInstPower`` | float      | W            | Total instantaneous power |
-|                      |            |              | consumption               |
-+----------------------+------------+--------------+---------------------------+
-| ``compUse``          | bool       | -            | Heat pump compressor      |
-|                      |            |              | active                    |
-+----------------------+------------+--------------+---------------------------+
-| ``heatUpperUse``     | bool       | -            | Upper electric heater     |
-|                      |            |              | active                    |
-+----------------------+------------+--------------+---------------------------+
-| ``heatLowerUse``     | bool       | -            | Lower electric heater     |
-|                      |            |              | active                    |
-+----------------------+------------+--------------+---------------------------+
+| ``current_inst_power`` | float    | W            | Total instantaneous power |
+|                        |           |              | consumption               |
++------------------------+-----------+--------------+---------------------------+
+| ``comp_use``           | bool      | -            | Heat pump compressor      |
+|                        |           |              | active                    |
++------------------------+-----------+--------------+---------------------------+
+| ``heat_upper_use``     | bool      | -            | Upper electric heater     |
+|                        |           |              | active                    |
++------------------------+-----------+--------------+---------------------------+
+| ``heat_lower_use``     | bool      | -            | Lower electric heater     |
+|                        |           |              | active                    |
++------------------------+-----------+--------------+---------------------------+
 
 Cumulative Usage
 ~~~~~~~~~~~~~~~~
 
-+-------------------------------+------------+--------------+---------------------------+
-| Field                         | Type       | Units        | Description               |
-+===============================+============+==============+===========================+
-| ``compRunningMinuteTotal``    | int        | minutes      | Total heat pump runtime   |
-+-------------------------------+------------+--------------+---------------------------+
-| ``heater1RunningMinuteTotal`` | int        | minutes      | Total upper heater        |
-|                               |            |              | runtime                   |
-+-------------------------------+------------+--------------+---------------------------+
-| ``heater2RunningMinuteTotal`` | int        | minutes      | Total lower heater        |
-|                               |            |              | runtime                   |
-+-------------------------------+------------+--------------+---------------------------+
++--------------------------------+------------+--------------+---------------------------+
+| Field                          | Type       | Units        | Description               |
++================================+============+==============+===========================+
+| ``comp_running_minute_total``  | int        | minutes      | Total heat pump runtime   |
++--------------------------------+------------+--------------+---------------------------+
+| ``heater1_running_minute_total`` | int      | minutes      | Total upper heater        |
+|                                |            |              | runtime                   |
++--------------------------------+------------+--------------+---------------------------+
+| ``heater2_running_minute_total`` | int      | minutes      | Total lower heater        |
+|                                |            |              | runtime                   |
++--------------------------------+------------+--------------+---------------------------+
 
 .. _energy-capacity-1:
 
 Energy Capacity
 ~~~~~~~~~~~~~~~
 
-============================= ==== ===== =========================
-Field                         Type Units Description
-============================= ==== ===== =========================
-``availableEnergyCapacity``   int  %     Available energy (0-100%)
-============================= ==== ===== =========================
+=============================== ==== ===== =========================
+Field                           Type Units Description
+=============================== ==== ===== =========================
+``available_energy_capacity``   int  %     Available energy (0-100%)
+=============================== ==== ===== =========================
 
 Temperature
 ~~~~~~~~~~~
 
-============================= ===== ===== =================================
-Field                         Type  Units Description
-============================= ===== ===== =================================
-``dhwTemperature``            float °F    Current water temperature
-``dhwTemperatureSetting``     int   °F    Target temperature setting
-``compTemp``                  float °F    Heat pump compressor temperature
-``dhwTankUpperTemp``          float °F    Upper tank temperature
-``dhwTankLowerTemp``          float °F    Lower tank temperature
-``dhwHeatexOutTemp``          float °F    Heat exchanger outlet temperature
-============================= ===== ===== =================================
+============================== ===== ===== =================================
+Field                          Type  Units Description
+============================== ===== ===== =================================
+``dhw_temperature``            float °F    Current water temperature
+``dhw_temperature_setting``    int   °F    Target temperature setting
+``comp_temp``                  float °F    Heat pump compressor temperature
+``dhw_tank_upper_temp``        float °F    Upper tank temperature
+``dhw_tank_lower_temp``        float °F    Lower tank temperature
+``dhw_heatex_out_temp``        float °F    Heat exchanger outlet temperature
+============================== ===== ===== =================================
 
 Notes
 -----

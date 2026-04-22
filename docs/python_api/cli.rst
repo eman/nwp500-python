@@ -124,7 +124,7 @@ power consumption, tank charge percentage, and component states.
 info
 ^^^^
 
-Show comprehensive device information (firmware, model, capabilities, serial).
+Show full device information (firmware, model, capabilities, serial).
 
 .. code-block:: bash
 
@@ -158,7 +158,7 @@ Show basic device information from REST API (DeviceInfo model).
 
 **Output:** Basic device information from REST API.
 
-**Note:** Use ``info`` command for MQTT-based comprehensive information, or
+**Note:** Use ``info`` for MQTT-based full device information, or
 ``device-info`` for REST API-based basic information.
 
 serial

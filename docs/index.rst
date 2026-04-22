@@ -19,7 +19,7 @@ This library provides a complete Python interface to Navien NWP500 heat
 pump water heaters through the Navien Smart Control cloud platform. It
 supports both REST API and real-time MQTT communication.
 
-**Key Features:**
+**Features:**
 
 * **REST API Client** - Complete implementation of Navien Smart Control
   API
@@ -34,53 +34,8 @@ supports both REST API and real-time MQTT communication.
 Quick Start
 ===========
 
-Installation
-------------
-
-.. code-block:: bash
-
-   pip install nwp500-python
-
-Basic Example
--------------
-
-.. code-block:: python
-
-   import asyncio
-   from nwp500 import NavienAuthClient, NavienAPIClient, NavienMqttClient
-
-   async def main():
-       # Authenticate (credentials from env vars or direct)
-       async with NavienAuthClient(
-           "email@example.com",
-           "password"
-       ) as auth:
-
-           # Get device list via REST API
-           api = NavienAPIClient(auth)
-           device = await api.get_first_device()
-           print(f"Device: {device.device_info.device_name}")
-
-           # Connect to MQTT for real-time control
-           mqtt = NavienMqttClient(auth)
-           await mqtt.connect()
-
-           # Monitor device status
-           def on_status(status):
-               print(f"Temp: {status.dhw_temperature}°F")
-               print(f"Power: {status.current_inst_power}W")
-
-           await mqtt.subscribe_device_status(device, on_status)
-           await mqtt.control.request_device_status(device)
-
-           # Control device
-           await mqtt.control.set_power(device, power_on=True)
-           await mqtt.control.set_dhw_temperature(device, 120.0)
-
-           await asyncio.sleep(30)
-           await mqtt.disconnect()
-
-   asyncio.run(main())
+Install with ``pip install nwp500-python``, then see the :doc:`quickstart` guide
+to connect and control your device in minutes.
 
 Documentation Index
 ===================
@@ -119,15 +74,15 @@ Documentation Index
    :maxdepth: 1
    :caption: User Guides
 
-   guides/unit_conversion
    guides/authentication
-   guides/home_assistant_integration
-   guides/scheduling
-   guides/energy_monitoring
-   guides/time_of_use
    guides/event_system
    guides/command_queue
    guides/auto_recovery
+   guides/scheduling
+   guides/energy_monitoring
+   guides/time_of_use
+   guides/unit_conversion
+   guides/home_assistant_integration
    guides/mqtt_diagnostics
    guides/advanced_features_explained
 

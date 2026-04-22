@@ -43,7 +43,7 @@ This likely stems from legacy firmware design where:
 
 When parsed via ``DeviceStatus``, this becomes ``status.power == True``.
 
-Key Enum Values
+Enum Values
 ---------------
 
 CurrentOperationMode

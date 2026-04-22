@@ -1,7 +1,7 @@
 Data Conversions and Units Reference
 ====================================
 
-This document provides comprehensive details on all data conversions applied to device status messages, field units, and the meaning of various data structures.
+This document covers all data conversions applied to device status messages, field units, and the meaning of various data structures.
 
 .. warning::
    This document describes the underlying protocol details. Most users should use the
@@ -41,7 +41,7 @@ The device uses several encoding schemes to minimize transmission overhead:
    - Applied to differential temperature settings (heat pump and element hysteresis)
    - Formula: ``displayed_value_celsius = raw_value / 10.0``, ``displayed_value_fahrenheit = (raw_value / 10.0) * 9/5`` (NO +32 offset)
    - Purpose: Represents temperature DIFFERENCES/DELTAS, not absolute temperatures
-   - Key difference from absolute temperature conversion: No +32 offset applied when converting to Fahrenheit
+   - Unlike absolute temperature conversion, no +32 offset is applied when converting to Fahrenheit
    - Example: Raw 5 → 0.5°C delta → 0.9°F delta (NOT 32.9°F)
    - Used for: Heat pump on/off differential, heating element on/off differential
 
@@ -653,7 +653,7 @@ The ``temp_formula_type`` field indicates which temperature conversion formula t
 **Type 1: STANDARD** (most devices)
 - Standard rounding: ``round(fahrenheit)``
 
-Both formulas convert from half-degrees Celsius to Fahrenheit based on the raw encoded temperature value. This ensures temperature display matches the device's built-in LCD.
+Both formulas convert from half-degrees Celsius to Fahrenheit based on the raw encoded temperature value, matching the device's built-in LCD display.
 
 See Also
 --------

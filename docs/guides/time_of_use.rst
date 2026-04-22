@@ -14,12 +14,12 @@ Time of Use pricing enables:
 * **Seasonal support**: Different schedules for different months of the year
 * **Weekday/weekend support**: Separate schedules for weekdays and weekends
 
-The system uses utility rate data from OpenEI to automatically configure optimal heating schedules based on your location and utility provider.
+The system uses utility rate data from OpenEI to configure heating schedules based on your location and utility provider.
 
 OpenEI API Integration
 ----------------------
 
-The Navien mobile app queries the OpenEI Utility Rates API to retrieve current electricity rate information for the user's location. This allows the app to present available rate plans and configure TOU schedules automatically.
+The Navien mobile app queries the OpenEI Utility Rates API to retrieve current electricity rate information for the user's location, then presents available rate plans and configures TOU schedules.
 
 API Endpoint
 ~~~~~~~~~~~~
@@ -120,7 +120,7 @@ The API returns a JSON response with an array of utility rate plans:
       ]
     }
 
-Key Response Fields
+Response Fields
 """""""""""""""""""
 
 .. list-table::
@@ -736,7 +736,7 @@ Example 5: Apply Rate Plan from OpenEI
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Use the ``OpenEIClient`` and ``convert_tou()``/``update_tou()`` methods to
-browse, convert, and apply a rate plan from OpenEI — the same workflow the
+browse, convert, and apply a rate plan from OpenEI. This is the same workflow the
 Navien mobile app uses:
 
 .. code-block:: python
@@ -796,7 +796,7 @@ Navien mobile app uses:
 
     asyncio.run(apply_openei_rate_plan())
 
-**Key Points:**
+**Notes:**
 
 * Set the ``OPENEI_API_KEY`` environment variable before running
 * Get a free key at https://openei.org/services/api/signup/

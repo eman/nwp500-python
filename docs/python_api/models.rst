@@ -185,7 +185,7 @@ Complete real-time device status with 100+ fields.
 
 .. py:class:: DeviceStatus
 
-   **Key Temperature Fields:**
+   **Temperature Fields:**
 
    * ``dhw_temperature`` (float) - Current water temperature (°F or °C)
    * ``dhw_temperature_setting`` (float) - Target temperature setting
@@ -199,7 +199,7 @@ Complete real-time device status with 100+ fields.
    .. note::
       Temperature values from the device are automatically converted from their raw (scaled Celsius) representation to Fahrenheit or Celsius based on the device's settings. The library handles these conversions transparently.
 
-   **Key Power/Energy Fields:**
+   **Power/Energy Fields:**
 
    * ``current_inst_power`` (float) - Current power consumption (Watts)
    * ``total_energy_capacity`` (float) - Total energy capacity (%)

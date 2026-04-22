@@ -5,7 +5,7 @@ nwp500-python
 Python library for Navien NWP500 Heat Pump Water Heater
 ========================================================
 
-A Python library for monitoring and controlling the Navien NWP500 Heat Pump Water Heater through the Navilink cloud service. This library provides comprehensive access to device status, temperature control, operation mode management, and real-time monitoring capabilities.
+A Python library for monitoring and controlling the Navien NWP500 Heat Pump Water Heater through the Navilink cloud service.
 
 **Documentation:** https://nwp500-python.readthedocs.io/
 
@@ -32,24 +32,20 @@ Installation
 Basic Installation (Library Only)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-For using the library as a Python package without the CLI:
+For using the library as a Python package:
 
 .. code-block:: bash
 
     pip install nwp500-python
 
-This installs the core library with support for API and MQTT clients. No CLI framework is required.
-
 Installation with CLI Support
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-To use the command-line interface with rich formatting and colors:
+To use the CLI with rich formatting and colors:
 
 .. code-block:: bash
 
     pip install nwp500-python[cli]
-
-This includes both the ``click`` CLI framework and the ``rich`` formatting library for enhanced terminal output with formatted tables, progress bars, and colored output.
 
 Basic Usage
 -----------
@@ -111,9 +107,9 @@ Monitor your device in real-time using MQTT:
 Command Line Interface
 ======================
 
-The library includes a command line interface for monitoring and controlling your Navien water heater.
+Monitor and control your Navien water heater from the terminal.
 
-**Installation Requirement:** The CLI requires the ``cli`` extra:
+**Installation Requirement:**
 
 .. code-block:: bash
 
@@ -218,38 +214,17 @@ Quick Reference
 Device Status Fields
 ====================
 
-The library provides access to comprehensive device status information:
-
-**Temperature Sensors**
-    * Water temperature (current and target)
-    * Tank upper/lower temperatures
-    * Ambient temperature
-    * Discharge, suction, and evaporator temperatures
-    * Inlet temperature
-
-**System Status**
-    * Operation mode (Heat Pump, Energy Saver, High Demand, Electric, Vacation)
-    * Compressor status
-    * Heat pump and electric heater status
-    * Evaporator fan status
-    * Tank charge percentage
-
-**Power & Energy**
-    * Current power consumption (Watts)
-    * Total energy capacity (Wh)
-    * Available energy capacity (Wh)
-
-**Diagnostics**
-    * WiFi signal strength
-    * Error codes
-    * Fault status
-    * Cumulative operation time
-    * Flow rates
+The library provides access to comprehensive device status information. See the `full documentation <https://nwp500-python.readthedocs.io/>`_ for all available fields.
 
 Documentation
 =============
 
 Full docs: https://nwp500-python.readthedocs.io/
+
+Home Assistant Integration
+==========================
+
+Use this library with Home Assistant: `ha_nwp500 <https://github.com/eman/ha_nwp500>`_
 
 Data Models
 ===========

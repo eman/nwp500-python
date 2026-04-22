@@ -1,7 +1,7 @@
 Error Codes
 ===========
 
-This document provides a comprehensive reference for NWP500 heat pump water heater error codes.
+This document lists error codes for the NWP500 heat pump water heater.
 
 .. warning::
    This document describes the underlying protocol details. Most users should use the

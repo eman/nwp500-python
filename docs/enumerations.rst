@@ -1,8 +1,7 @@
 Enumerations Reference
 ======================
 
-This document provides a comprehensive reference for all enumerations used in
-the Navien NWP500 protocol.
+This document lists all enumerations used in the Navien NWP500 protocol.
 
 Device Control Commands
 -----------------------
@@ -222,7 +221,7 @@ rounding algorithms when converting internal Celsius values to Fahrenheit:
 - **ASYMMETRIC** (Type 0): Special rounding based on raw value remainder
 - **STANDARD** (Type 1): Simple round to nearest integer
 
-This ensures the mobile app matches the device's built-in display exactly.
+This keeps the mobile app display in sync with the device's built-in display.
 
 Device Type Enumerations
 -------------------------
