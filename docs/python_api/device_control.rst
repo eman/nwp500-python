@@ -1044,7 +1044,7 @@ Best Practices
           logger.warning(f"Feature not supported: {e.feature}")
           # Fallback to alternative command
 
-4. **Use try/except for robust error handling:**
+4. **Use try/except for error handling:**
 
    .. code-block:: python
 

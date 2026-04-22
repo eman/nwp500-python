@@ -4,7 +4,7 @@ Exceptions
 
 **New in v5.0:** Complete exception architecture with enterprise-grade error handling.
 
-The nwp500 library provides a comprehensive exception hierarchy for robust error handling.
+The nwp500 library provides a structured exception hierarchy for error handling.
 All custom exceptions inherit from a base class and provide structured error information.
 
 Exception Hierarchy

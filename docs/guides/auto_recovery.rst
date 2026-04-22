@@ -127,7 +127,7 @@ Refresh authentication tokens before retrying (handles token expiry).
        await mqtt_client.subscribe_device_status(device, on_status)
        await mqtt_client.start_periodic_requests(device)
 
-**Pros:** Handles token expiry, more robust
+**Pros:** Handles token expiry, more reliable
 
 **Cons:** More complex, need to manage client lifecycle
 
@@ -453,4 +453,4 @@ For production use, **use Strategy 4 (Exponential Backoff)** via the ``Resilient
 * Subscription restoration
 * Configurable limits and delays
 
-This ensures your application stays connected even during extended network outages.
+Your application will stay connected even through extended network outages.

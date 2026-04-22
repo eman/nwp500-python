@@ -7,9 +7,9 @@ This guide provides best practices for integrating the nwp500-python library wit
 Overview
 ========
 
-The nwp500-python library automatically converts device values to the user's preferred temperature unit (Celsius or Fahrenheit) based on the device's ``temperature_type`` setting. This guide shows how Home Assistant integrations should handle these dynamic units to provide a seamless user experience.
+The nwp500-python library automatically converts device values to the user's preferred temperature unit (Celsius or Fahrenheit) based on the device's ``temperature_type`` setting. This guide shows how Home Assistant integrations should handle these dynamic units.
 
-Key Concepts
+Concepts
 ============
 
 **Dynamic Unit Conversion**
@@ -152,8 +152,7 @@ Here's a complete example showing how to implement dynamic units in a Home Assis
        def native_unit_of_measurement(self) -> str | None:
            """Return dynamic unit based on device temperature preference.
 
-           This ensures Home Assistant displays the correct unit symbol
-           (°C or °F) based on the device's current setting.
+           Reflects the device's current temperature_type setting (°C or °F).
            """
            if not self._status:
                return self.entity_description.native_unit_of_measurement

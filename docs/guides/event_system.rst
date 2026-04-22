@@ -98,8 +98,8 @@ Event Registry
 --------------
 
 The :class:`nwp500.mqtt_events.MqttClientEvents` class provides type-safe event
-constants and programmatic discovery. This ensures your callbacks use valid event
-names and enables IDE autocomplete:
+constants and programmatic discovery, so your callbacks use valid event
+names and get IDE autocomplete:
 
 .. code-block:: python
 

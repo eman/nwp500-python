@@ -2,7 +2,7 @@
 Dynamic Unit Conversion
 =======================
 
-The nwp500-python library implements a sophisticated dynamic unit conversion system that automatically converts all temperature, flow rate, and volume measurements between metric (Celsius, LPM, Liters) and imperial (Fahrenheit, GPM, Gallons) units based on the device's configured ``temperature_type`` setting.
+The library automatically converts temperature, flow rate, and volume values to the user's preferred unit system (metric or imperial) based on the device's configured ``temperature_type`` setting.
 
 Overview
 ========

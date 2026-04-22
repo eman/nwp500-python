@@ -9,7 +9,7 @@ MQTT Connection Drops Investigation & Diagnostics Guide
 Overview
 ========
 
-This guide provides a comprehensive toolkit for investigating and resolving AWS
+This guide covers tools for investigating and resolving AWS
 MQTT connection drops (``AWS_ERROR_MQTT_UNEXPECTED_HANGUP``). It helps identify
 whether drops are caused by network/environmental issues, AWS server-side limits,
 or client-side configuration problems.
@@ -104,7 +104,7 @@ The ``MqttDiagnosticsCollector`` class provides telemetry:
    metrics = diagnostics.get_metrics()
    diagnostics.print_summary()
 
-Key Classes
+Classes
 -----------
 
 **MqttDiagnosticsCollector**
@@ -912,7 +912,7 @@ Implement Home Assistant's native diagnostics protocol to expose your data:
         # Redact sensitive info (credentials, tokens, etc.)
         return async_redact_data(data, REDACT_FIELDS)
 
-This allows users to view diagnostics directly in Home Assistant UI:
+Users can view diagnostics directly in the Home Assistant UI:
 **Settings → System → Diagnostics** for your integration.
 
 Periodic Export Schedule

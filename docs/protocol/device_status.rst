@@ -572,7 +572,7 @@ Field Definitions
   * Meaning: "This is what I'm doing right now"
   * **Note**: This field shows ``STANDBY`` (0) both when device is powered off AND when it's on but not heating. Check ``dhwOperationSetting`` to determine if device is actually powered off (value 6).
 
-Key Relationship
+Relationship
 ^^^^^^^^^^^^^^^^
 
 The relationship between these fields can be summarized as:

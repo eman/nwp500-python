@@ -17,7 +17,7 @@ This document lists the fields found in the ``feature`` object (also known as
    This is the standard Navien protocol pattern for boolean-like values, not traditional 0/1 booleans.
    The Python library automatically converts these to Python ``bool`` (True/False).
 
-The DeviceFeature data contains comprehensive device capabilities, configuration, and firmware information received via MQTT when calling ``request_device_info()``. This data is much more detailed than the basic device information available through the REST API and corresponds to the actual device specifications and capabilities as documented in the official Navien NWP500 Installation and User manuals.
+The DeviceFeature data contains device capabilities, configuration, and firmware information received via MQTT when calling ``request_device_info()``. This data is much more detailed than the basic device information available through the REST API and corresponds to the actual device specifications and capabilities as documented in the official Navien NWP500 Installation and User manuals.
 
 .. list-table::
    :header-rows: 1
@@ -278,7 +278,7 @@ The device feature data corresponds to these official NWP500 specifications:
 Firmware Version Interpretation
 -------------------------------
 
-The device returns three separate firmware components for comprehensive system identification:
+The device returns three separate firmware components for full system identification:
 
 **Main Controller (``controllerSwVersion``, ``controllerSwCode``)**
    * Manages heat pump compressor, heating elements, temperature sensors

@@ -1,16 +1,16 @@
-Advanced Features Explained: Weather-Responsive Heating, Demand Response, and Tank Stratification
-==================================================================================================
+Weather Response, Demand Response, and Tank Stratification
+===========================================================
 
-This document provides comprehensive technical documentation for three advanced NWP500 features.
+This document covers three advanced NWP500 features.
 
 Overview of Advanced Features
 -----------------------------
 
-The NWP500 heat pump water heater implements sophisticated algorithms for grid integration, environmental responsiveness, and efficiency optimization:
+The NWP500 heat pump water heater implements algorithms for grid integration, environmental responsiveness, and efficiency optimization:
 
 1. **Weather-Responsive Heating** - Adjusts heating strategy based on ambient temperature conditions
 2. **Demand Response Integration** - Responds to grid signals for demand/response events (CTA-2045)
-3. **Tank Stratification Optimization** - Uses dual temperature sensors for enhanced heating efficiency
+3. **Tank Stratification Optimization** - Uses dual temperature sensors for improved heating efficiency
 
 Weather-Responsive Heating
 ==========================
@@ -18,7 +18,7 @@ Weather-Responsive Heating
 Feature Overview
 ----------------
 
-The device continuously monitors ambient air temperature to optimize heat pump performance and adjust heating strategies. This enables the system to maintain comfort while adapting to seasonal conditions automatically.
+The device continuously monitors ambient air temperature to optimize heat pump performance and adjust heating strategies based on seasonal conditions.
 
 Technical Implementation
 ------------------------
@@ -229,12 +229,6 @@ Implementation in Device Firmware
 2. **Rate Optimization**: Auto-respond to time-of-use pricing signals
 3. **Grid Stability**: Participate in demand response events, earn utility incentives
 4. **Cost Reduction**: Shift heating to low-price periods automatically
-
-Utility Integration Requirements
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-To use demand response with your NWP500:
-
 
 Tank Temperature Sensors
 ------------------------

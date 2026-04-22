@@ -54,15 +54,12 @@ Queue Management
 
 **Internal Components:**
 
-- ``QueuedCommand`` dataclass - Stores command details (topic, payload, QoS, timestamp)
-- ``_command_queue`` - Deque with maximum length for efficient FIFO operations
-- ``_queue_command()`` - Internal method to add commands to queue
-- ``_send_queued_commands()`` - Internal method to process queue on reconnection
+Internally, the queue uses a fixed-length deque for O(1) operations and FIFO ordering. You do not need to interact with these components directly.
 
 Integration with Reconnection
 ------------------------------
 
-The command queue integrates seamlessly with the existing automatic reconnection feature:
+The command queue works with the existing automatic reconnection feature:
 
 1. Connection is lost
 2. Commands sent during disconnection are queued
@@ -231,7 +228,7 @@ Benefits
 ========
 
 1. **No Lost Commands** - Commands sent during disconnection are preserved
-2. **Automatic Recovery** - Works seamlessly with auto-reconnection
+2. **Automatic Recovery** - Works with auto-reconnection
 3. **Transparent** - Works automatically without user intervention
 4. **Configurable** - Adjust queue size or disable if needed
 5. **Monitorable** - Query queue status at any time
@@ -247,7 +244,7 @@ The command queue feature is designed with reliability and ease of use in mind:
 - **Enabled by default** - Most users want commands preserved during network issues
 - **Automatic operation** - No manual queue management required
 - **Configurable** - Can be disabled or tuned for specific use cases
-- **Integrated** - Works seamlessly with automatic reconnection
+- **Integrated** - Works with automatic reconnection
 
 Use Cases
 =========
