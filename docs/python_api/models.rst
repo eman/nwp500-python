@@ -36,7 +36,7 @@ See :doc:`../enumerations` for the complete enumeration reference including:
    from nwp500 import DhwOperationSetting, CurrentOperationMode, HeatSource, TemperatureType
    
    # Set operation mode (user preference)
-   await mqtt.control.set_dhw_mode(device, DhwOperationSetting.ENERGY_SAVER.value)
+   await mqtt.set_dhw_mode(device, DhwOperationSetting.ENERGY_SAVER.value)
    
    # Check current heat source
    if status.current_heat_use == HeatSource.HEATPUMP:
@@ -387,6 +387,157 @@ Device capabilities, features, and firmware information.
           if feature.high_demand_use:
               print("  [OK] High Demand mode")
 
+Scheduling Models
+=================
+
+ReservationEntry
+----------------
+
+A single timed reservation entry used by :class:`ReservationSchedule`.
+
+.. py:class:: ReservationEntry
+
+   **Raw Fields:**
+
+   * ``enable`` (int) - Device boolean (``2`` enabled, ``1`` disabled)
+   * ``week`` (int) - Weekday bitfield
+   * ``hour`` (int) - Start hour (0-23)
+   * ``min`` (int) - Start minute (0-59)
+   * ``mode`` (int) - DHW operation mode ID
+   * ``param`` (int) - Temperature encoded in half-degrees Celsius
+
+   **Computed Properties:**
+
+   * ``enabled`` (bool)
+   * ``days`` (list[str])
+   * ``time`` (str)
+   * ``temperature`` (float)
+   * ``unit`` (str)
+   * ``mode_name`` (str)
+
+ReservationSchedule
+-------------------
+
+Full programmed reservation schedule used by ``request_reservations()`` and
+``update_reservations()``.
+
+.. py:class:: ReservationSchedule
+
+   **Fields:**
+
+   * ``reservation_use`` (int) - Device boolean for global enable/disable state
+   * ``reservation`` (list[ReservationEntry]) - Reservation entries
+
+   **Computed Properties / Methods:**
+
+   * ``enabled`` (bool)
+   * :meth:`from_dict` - Parse a raw MQTT response payload
+
+WeeklyReservationEntry
+----------------------
+
+A single entry in the weekly reservation schedule used by
+:meth:`nwp500.mqtt.client.NavienMqttClient.update_weekly_reservation`.
+
+.. py:class:: WeeklyReservationEntry
+
+   **Raw Fields:**
+
+   * ``enable`` (int) - Device boolean (``2`` enabled, ``1`` disabled)
+   * ``week`` (int) - Weekday bitfield
+   * ``hour`` (int) - Scheduled hour (0-23)
+   * ``min`` (int) - Scheduled minute (0-59)
+   * ``mode`` (int) - DHW operation mode ID
+   * ``param`` (int) - Temperature encoded in half-degrees Celsius
+
+   **Computed Properties:**
+
+   * ``enabled`` (bool)
+   * ``days`` (list[str])
+   * ``time`` (str)
+   * ``temperature`` (float)
+   * ``unit`` (str)
+   * ``mode_name`` (str)
+
+WeeklyReservationSchedule
+-------------------------
+
+Full weekly reservation schedule.
+
+.. py:class:: WeeklyReservationSchedule
+
+   **Fields:**
+
+   * ``reservation_use`` (int) - Device boolean for global enable/disable state
+   * ``reservation`` (list[WeeklyReservationEntry]) - Weekly schedule entries
+
+   **Computed Properties / Methods:**
+
+   * ``enabled`` (bool)
+   * :meth:`from_dict` - Parse a raw MQTT response payload
+
+RecirculationScheduleEntry
+--------------------------
+
+A single recirculation pump schedule entry.
+
+.. py:class:: RecirculationScheduleEntry
+
+   **Fields:**
+
+   * ``enable`` (int) - Device boolean (``2`` enabled, ``1`` disabled)
+   * ``week`` (int) - Weekday bitfield
+   * ``start_hour`` (int) - Start hour (0-23)
+   * ``start_min`` (int) - Start minute (0-59)
+   * ``end_hour`` (int) - End hour (0-23)
+   * ``end_min`` (int) - End minute (0-59)
+   * ``mode`` (int) - Recirculation mode ID
+
+   **Computed Properties:**
+
+   * ``enabled`` (bool)
+   * ``days`` (list[str])
+   * ``start_time`` (str)
+   * ``end_time`` (str)
+   * ``mode_name`` (str)
+
+RecirculationSchedule
+---------------------
+
+Full recirculation schedule used by
+:meth:`nwp500.mqtt.client.NavienMqttClient.configure_recirculation_schedule`.
+
+.. py:class:: RecirculationSchedule
+
+   **Fields:**
+
+   * ``schedule`` (list[RecirculationScheduleEntry]) - Scheduled recirculation windows
+
+   **Methods:**
+
+   * :meth:`from_dict` - Parse a raw MQTT response payload
+
+OtaCommitPayload
+----------------
+
+Payload model used by
+:meth:`nwp500.mqtt.client.NavienMqttClient.commit_firmware_update`.
+
+.. py:class:: OtaCommitPayload
+
+   **Fields:**
+
+   * ``sw_code`` (int) - Firmware component code (for example controller, panel,
+     or WiFi module)
+   * ``sw_version`` (int) - Firmware version to commit
+
+   **Example:**
+
+   .. code-block:: python
+
+      payload = OtaCommitPayload(swCode=1, swVersion=1234)
+      await mqtt.commit_firmware_update(device, payload)
+
 Energy Models
 =============
 
@@ -574,10 +725,10 @@ Best Practices
 
       # ✓ Type-safe
       from nwp500 import DhwOperationSetting
-      await mqtt.control.set_dhw_mode(device, DhwOperationSetting.ENERGY_SAVER.value)
+      await mqtt.set_dhw_mode(device, DhwOperationSetting.ENERGY_SAVER.value)
 
       # ✗ Magic numbers
-      await mqtt.control.set_dhw_mode(device, 3)
+      await mqtt.set_dhw_mode(device, 3)
 
 2. **Check feature support:**
 
@@ -586,7 +737,7 @@ Best Practices
       def on_feature(feature):
           if feature.energy_usage_use:
               # Device supports energy monitoring
-              await mqtt.control.request_energy_usage(device, year, months)
+              await mqtt.request_energy_usage(device, year, months)
 
 3. **Monitor operation state:**
 

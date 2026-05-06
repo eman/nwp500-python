@@ -56,7 +56,7 @@ Basic Monitoring
                print(f"Mode: {status.dhw_operation_setting.name}")
            
            await mqtt.subscribe_device_status(device, on_status)
-           await mqtt.control.request_device_status(device)
+           await mqtt.request_device_status(device)
            
            # Monitor for 60 seconds
            await asyncio.sleep(60)
@@ -67,9 +67,12 @@ Basic Monitoring
 Device Control
 --------------
 
-Control operations require device capability information to be cached. Always request
-device info before using control commands. See :doc:`device_control` for complete
-control method reference, capability checking, and advanced features.
+Control operations are now exposed directly on :class:`NavienMqttClient`; use
+the direct ``mqtt.*`` methods for control operations.
+
+Control methods rely on cached device feature data for capability-aware
+validation. Request device info first, or call
+:meth:`nwp500.mqtt.client.NavienMqttClient.ensure_device_info_cached` before issuing commands.
 
 .. code-block:: python
 
@@ -77,22 +80,18 @@ control method reference, capability checking, and advanced features.
        async with NavienAuthClient(email, password) as auth:
            api = NavienAPIClient(auth)
            device = await api.get_first_device()
-           
+
            mqtt = NavienMqttClient(auth)
            await mqtt.connect()
-           
-           # Request device info first (populates capability cache)
-           await mqtt.subscribe_device_feature(device, lambda f: None)
-           await mqtt.control.request_device_info(device)
-           
-           # Control operations (with automatic capability checking)
-           await mqtt.control.set_power(device, power_on=True)
-           await mqtt.control.set_dhw_mode(device, mode_id=3)  # Energy Saver
-           await mqtt.control.set_dhw_temperature(device, 140.0)  # Temperature in user's preferred unit
-           
-           await mqtt.disconnect()
 
-   asyncio.run(control_device())
+           await mqtt.subscribe_device_feature(device, lambda f: None)
+           await mqtt.request_device_info(device)
+
+           await mqtt.set_power(device, power_on=True)
+           await mqtt.set_dhw_mode(device, mode_id=3)
+           await mqtt.set_dhw_temperature(device, 140.0)
+
+           await mqtt.disconnect()
 
 API Reference
 =============
@@ -130,11 +129,11 @@ NavienMqttClient
       mqtt = NavienMqttClient(auth, config=config)
       
       # Register event handlers
-      def on_interrupted(error):
-          print(f"Connection lost: {error}")
+      def on_interrupted(event):
+          print(f"Connection lost: {event.error}")
       
-      def on_resumed(return_code, session_present):
-          print("Connection restored!")
+      def on_resumed(event):
+          print(f"Connection restored! session_present={event.session_present}")
       
       mqtt.on("connection_interrupted", on_interrupted)
       mqtt.on("connection_resumed", on_resumed)
@@ -239,7 +238,7 @@ subscribe_device_status()
               print(f"ERROR: {status.error_code}")
       
       await mqtt.subscribe_device_status(device, on_status)
-      await mqtt.control.request_device_status(device)
+      await mqtt.request_device_status(device)
 
 request_device_status()
 ^^^^^^^^^^^^^^^^^^^^^^^
@@ -261,11 +260,11 @@ request_device_status()
       await mqtt.subscribe_device_status(device, on_status)
       
       # Then request
-      await mqtt.control.request_device_status(device)
+      await mqtt.request_device_status(device)
       
       # Can request periodically
       while monitoring:
-          await mqtt.control.request_device_status(device)
+          await mqtt.request_device_status(device)
           await asyncio.sleep(30)  # Every 30 seconds
 
 subscribe_device_feature()
@@ -305,7 +304,7 @@ subscribe_device_feature()
               print("Reservations: Supported")
       
       await mqtt.subscribe_device_feature(device, on_feature)
-      await mqtt.control.request_device_info(device)
+      await mqtt.request_device_info(device)
 
 request_device_info()
 ^^^^^^^^^^^^^^^^^^^^^
@@ -324,7 +323,7 @@ request_device_info()
    .. code-block:: python
 
       await mqtt.subscribe_device_feature(device, on_feature)
-      await mqtt.control.request_device_info(device)
+      await mqtt.request_device_info(device)
 
 subscribe_device()
 ^^^^^^^^^^^^^^^^^^
@@ -366,313 +365,364 @@ subscribe_device()
 Control Methods
 ---------------
 
+Capability Checking
+^^^^^^^^^^^^^^^^^^^
+
+Most control commands depend on device capabilities reported by
+:class:`~nwp500.models.DeviceFeature`. Request device info first so the client
+can validate support and ranges before sending commands.
+
+.. code-block:: python
+
+   await mqtt.subscribe_device_feature(device, lambda feature: print(feature))
+   await mqtt.request_device_info(device)
+
+   # Alternative helper: request and wait until the cache is populated
+   await mqtt.ensure_device_info_cached(device)
+
+Common capability flags include ``power_use``, ``dhw_use``,
+``dhw_temperature_setting_use``, ``program_reservation_use``,
+``recirculation_use``, ``recirc_reservation_use``, ``freeze_protection_use``,
+and ``smart_diagnostic_use``.
+
 set_power()
 ^^^^^^^^^^^
 
 .. py:method:: set_power(device, power_on)
 
-   Turn device on or off.
+   Turn device power on or off.
+
+   **Capability Required:** ``power_use``
 
    :param device: Device object
    :type device: Device
-   :param power_on: True to turn on, False to turn off
+   :param power_on: ``True`` to power on, ``False`` to power off
    :type power_on: bool
    :return: Publish packet ID
    :rtype: int
-
-   **Example:**
-
-   .. code-block:: python
-
-      # Turn on
-      await mqtt.control.set_power(device, power_on=True)
-      print("Device powered ON")
-      
-      # Turn off
-      await mqtt.control.set_power(device, power_on=False)
-      print("Device powered OFF")
 
 set_dhw_mode()
 ^^^^^^^^^^^^^^
 
 .. py:method:: set_dhw_mode(device, mode_id, vacation_days=None)
 
-   Set DHW (Domestic Hot Water) operation mode.
+   Set the DHW operating mode.
 
-   :param device: Device object
-   :type device: Device
-   :param mode_id: Mode ID (1-5)
+   **Capability Required:** ``dhw_use``
+
+   :param mode_id: One of the DHW operation mode IDs
    :type mode_id: int
-   :param vacation_days: Number of days for vacation mode (required if mode_id=5)
+   :param vacation_days: Required for vacation mode; valid range ``1``-``30``
    :type vacation_days: int or None
-   :return: Publish packet ID
-   :rtype: int
-
-   **Operation Modes:**
-
-   * 1 = Heat Pump Only - Most efficient, uses only heat pump
-   * 2 = Electric Only - Fast recovery, uses only electric heaters
-   * 3 = Energy Saver - Balanced, recommended for most users
-   * 4 = High Demand - Maximum heating capacity
-   * 5 = Vacation - Low power mode for extended absence
-
-   **Example:**
-
-   .. code-block:: python
-
-      from nwp500 import DhwOperationSetting
-      
-      # Set to Heat Pump Only (most efficient)
-      await mqtt.control.set_dhw_mode(device, DhwOperationSetting.HEAT_PUMP.value)
-      
-      # Set to Energy Saver (balanced, recommended)
-      await mqtt.control.set_dhw_mode(device, DhwOperationSetting.ENERGY_SAVER.value)
-      # or just:
-      await mqtt.control.set_dhw_mode(device, 3)
-      
-      # Set to High Demand (maximum heating)
-      await mqtt.control.set_dhw_mode(device, DhwOperationSetting.HIGH_DEMAND.value)
-      
-      # Set vacation mode for 7 days
-      await mqtt.control.set_dhw_mode(
-          device,
-          DhwOperationSetting.VACATION.value,
-          vacation_days=7
-      )
+   :raises ParameterValidationError: If vacation mode is missing ``vacation_days``
+   :raises RangeValidationError: If ``vacation_days`` is outside ``1``-``30``
 
 set_dhw_temperature()
 ^^^^^^^^^^^^^^^^^^^^^
 
 .. py:method:: set_dhw_temperature(device, temperature)
 
-   Set target DHW temperature.
+   Set the target water temperature in the current unit system.
 
-   :param device: Device object
-   :type device: Device
-   :param temperature: Temperature in user's preferred unit (Celsius or Fahrenheit)
-   :type temperature: float
-   :return: Publish packet ID
-   :rtype: int
-   :raises RangeValidationError: If temperature is outside valid range
+   **Capability Required:** ``dhw_temperature_setting_use``
 
-   The temperature is automatically converted to the device's internal
-   format (half-degrees Celsius). The actual valid range depends on the
-   device's temperature preference and configuration.
-
-   **Example:**
-
-   .. code-block:: python
-
-      # Set temperature (value interpreted in device's preferred unit)
-      await mqtt.control.set_dhw_temperature(device, 140.0)
-      
-      # Common temperatures (device-dependent units)
-      await mqtt.control.set_dhw_temperature(device, 120.0)  # Standard
-      await mqtt.control.set_dhw_temperature(device, 130.0)  # Medium
-      await mqtt.control.set_dhw_temperature(device, 140.0)  # Hot
-      await mqtt.control.set_dhw_temperature(device, 150.0)  # Maximum
+   The valid range is checked against the device's reported
+   ``dhw_temperature_min`` and ``dhw_temperature_max`` values.
 
 enable_anti_legionella()
 ^^^^^^^^^^^^^^^^^^^^^^^^
 
 .. py:method:: enable_anti_legionella(device, period_days)
 
-   Enable anti-Legionella protection cycle.
+   Enable the anti-Legionella cycle.
 
-   :param device: Device object
-   :type device: Device
-   :param period_days: Cycle period in days (typically 7 or 14)
+   **Capability Required:** ``anti_legionella_setting_use``
+
+   :param period_days: Cycle period in days (``1``-``30``)
    :type period_days: int
-   :return: Publish packet ID
-   :rtype: int
-
-   **Example:**
-
-   .. code-block:: python
-
-      # Enable weekly anti-Legionella cycle
-      await mqtt.control.enable_anti_legionella(device, period_days=7)
-      
-      # Enable bi-weekly cycle
-      await mqtt.control.enable_anti_legionella(device, period_days=14)
 
 disable_anti_legionella()
 ^^^^^^^^^^^^^^^^^^^^^^^^^
 
 .. py:method:: disable_anti_legionella(device)
 
-   Disable anti-Legionella protection.
+   Disable the anti-Legionella cycle.
 
-   :param device: Device object
-   :type device: Device
-   :return: Publish packet ID
-   :rtype: int
+set_vacation_days()
+^^^^^^^^^^^^^^^^^^^
 
-   **Example:**
+.. py:method:: set_vacation_days(device, days)
 
-   .. code-block:: python
+   Convenience wrapper for vacation mode.
 
-      await mqtt.control.disable_anti_legionella(device)
-
-Energy Monitoring Methods
---------------------------
-
-request_energy_usage()
-^^^^^^^^^^^^^^^^^^^^^^
-
-.. py:method:: request_energy_usage(device, year, months)
-
-   Request daily energy usage data for specified period.
-
-   :param device: Device object
-   :type device: Device
-   :param year: Year to query (e.g., 2024)
-   :type year: int
-   :param months: List of months to query (1-12)
-   :type months: list[int]
-   :return: Publish packet ID
-   :rtype: int
-
-   **Example:**
-
-   .. code-block:: python
-
-      # Subscribe first
-      await mqtt.subscribe_energy_usage(device, on_energy)
-      
-      # Request current month
-      from datetime import datetime
-      now = datetime.now()
-      await mqtt.control.request_energy_usage(device, now.year, [now.month])
-      
-      # Request multiple months
-      await mqtt.control.request_energy_usage(device, 2024, [8, 9, 10])
-      
-      # Request full year
-      await mqtt.control.request_energy_usage(device, 2024, list(range(1, 13)))
-
-subscribe_energy_usage()
-^^^^^^^^^^^^^^^^^^^^^^^^
-
-.. py:method:: subscribe_energy_usage(device, callback)
-
-   Subscribe to energy usage query responses.
-
-   :param device: Device object
-   :type device: Device
-   :param callback: Function receiving EnergyUsageResponse objects
-   :type callback: Callable[[EnergyUsageResponse], None]
-   :return: Subscription packet ID
-   :rtype: int
-
-   **Example:**
-
-   .. code-block:: python
-
-      def on_energy(energy):
-          """Process energy usage data."""
-          print(f"Total Usage: {energy.total.total_usage} Wh")
-          print(f"Heat Pump: {energy.total.heat_pump_percentage:.1f}%")
-          print(f"Electric: {energy.total.heat_element_percentage:.1f}%")
-          
-          print("\nDaily Breakdown:")
-          for monthly_data in energy.usage:
-              print(f"  Month: {monthly_data.year}-{monthly_data.month}")
-              for day_data in monthly_data.data:
-                  # Skip empty days (all zeros)
-                  if day_data.total_usage > 0:
-                      print(f"    Day {monthly_data.data.index(day_data) + 1}:")
-                      print(f"      Total: {day_data.total_usage} Wh")
-                      print(f"      HP: {day_data.heat_pump_usage} Wh ({day_data.heat_pump_time}h)")
-                      print(f"      HE: {day_data.heat_element_usage} Wh ({day_data.heat_element_time}h)")
-      
-      await mqtt.subscribe_energy_usage(device, on_energy)
-      await mqtt.control.request_energy_usage(device, year=2024, months=[10])
-
-Reservation Methods
--------------------
+   **Capability Required:** ``holiday_use``
 
 update_reservations()
 ^^^^^^^^^^^^^^^^^^^^^
 
-.. py:method:: update_reservations(device, enabled, reservations)
+.. py:method:: update_reservations(device, reservations, *, enabled=True)
 
-   Update device reservation schedule.
+   Update the standard reservation program.
 
-   :param device: Device object
-   :type device: Device
-   :param enabled: Enable/disable reservation schedule
+   :param reservations: Sequence of raw reservation entries using the protocol
+      fields ``enable``, ``week``, ``hour``, ``min``, ``mode``, and ``param``
+   :type reservations: Sequence[dict[str, Any]]
+   :param enabled: Global reservation enable flag
    :type enabled: bool
-   :param reservations: List of reservation objects
-   :type reservations: list[dict]
-   :return: Publish packet ID
-   :rtype: int
 
    **Example:**
 
    .. code-block:: python
 
-      # Define reservations
+      from nwp500 import build_reservation_entry
+
       reservations = [
-          {
-              "startHour": 6,
-              "startMinute": 0,
-              "endHour": 22,
-              "endMinute": 0,
-              "weekDays": [1, 1, 1, 1, 1, 0, 0],  # Mon-Fri
-              "temperature": 120
-          },
-          {
-              "startHour": 8,
-              "startMinute": 0,
-              "endHour": 20,
-              "endMinute": 0,
-              "weekDays": [0, 0, 0, 0, 0, 1, 1],  # Sat-Sun
-              "temperature": 130
-          }
+          build_reservation_entry(
+              enabled=True,
+              days=["MO", "TU", "WE", "TH", "FR"],
+              hour=6,
+              minute=0,
+              mode_id=4,
+              temperature=60.0,
+          )
       ]
-      
-      # Update schedule
-      await mqtt.control.update_reservations(device, True, reservations)
+
+      await mqtt.update_reservations(device, reservations, enabled=True)
 
 request_reservations()
 ^^^^^^^^^^^^^^^^^^^^^^
 
 .. py:method:: request_reservations(device)
 
-   Request current reservation schedule.
+   Request the current programmed reservations.
 
-   :param device: Device object
-   :type device: Device
-   :return: Publish packet ID
-   :rtype: int
+subscribe_reservation_response()
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Time-of-Use Methods
--------------------
+.. py:method:: subscribe_reservation_response(device, callback)
+
+   Subscribe to parsed reservation read responses.
+
+   :param callback: Called with :class:`~nwp500.models.ReservationSchedule`
+   :type callback: Callable[[ReservationSchedule], None]
+
+update_weekly_reservation()
+^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+.. py:method:: update_weekly_reservation(device, schedule)
+
+   Send a typed weekly reservation schedule.
+
+   **Capability Required:** ``program_reservation_use``
+
+   :param schedule: Weekly reservation schedule payload
+   :type schedule: WeeklyReservationSchedule
+
+subscribe_weekly_reservation_response()
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+.. py:method:: subscribe_weekly_reservation_response(device, callback)
+
+   Subscribe to parsed weekly reservation responses.
+
+   :param callback: Called with :class:`~nwp500.models.WeeklyReservationSchedule`
+   :type callback: Callable[[WeeklyReservationSchedule], None]
+
+configure_reservation_water_program()
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+.. py:method:: configure_reservation_water_program(device)
+
+   Enable the device's reservation water-program mode.
+
+   **Capability Required:** ``program_reservation_use``
+
+configure_recirculation_schedule()
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+.. py:method:: configure_recirculation_schedule(device, schedule)
+
+   Configure the timed recirculation schedule.
+
+   **Capability Required:** ``recirc_reservation_use``
+
+   :param schedule: Recirculation schedule payload
+   :type schedule: RecirculationSchedule
+
+subscribe_recirculation_schedule_response()
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+.. py:method:: subscribe_recirculation_schedule_response(device, callback)
+
+   Subscribe to parsed recirculation schedule responses.
+
+   :param callback: Called with :class:`~nwp500.models.RecirculationSchedule`
+   :type callback: Callable[[RecirculationSchedule], None]
+
+set_recirculation_mode()
+^^^^^^^^^^^^^^^^^^^^^^^^
+
+.. py:method:: set_recirculation_mode(device, mode)
+
+   Set the recirculation operating mode.
+
+   **Capability Required:** ``recirculation_use``
+
+   :param mode: Mode ID in the range ``1``-``4``
+   :type mode: int
+
+trigger_recirculation_hot_button()
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+.. py:method:: trigger_recirculation_hot_button(device)
+
+   Trigger an immediate recirculation run.
+
+   **Capability Required:** ``recirculation_use``
+
+configure_tou_schedule()
+^^^^^^^^^^^^^^^^^^^^^^^^
+
+.. py:method:: configure_tou_schedule(device, controller_serial_number, periods, *, enabled=True)
+
+   Configure the Time-of-Use schedule.
+
+   **Capability Required:** ``program_reservation_use``
+
+request_tou_settings()
+^^^^^^^^^^^^^^^^^^^^^^
+
+.. py:method:: request_tou_settings(device, controller_serial_number)
+
+   Request the current TOU schedule.
 
 set_tou_enabled()
 ^^^^^^^^^^^^^^^^^
 
 .. py:method:: set_tou_enabled(device, enabled)
 
-   Enable or disable Time-of-Use optimization.
+   Enable or disable TOU optimization.
 
-   :param device: Device object
-   :type device: Device
-   :param enabled: True to enable, False to disable
-   :type enabled: bool
-   :return: Publish packet ID
-   :rtype: int
+   **Capability Required:** ``program_reservation_use``
 
-   **Example:**
+request_energy_usage()
+^^^^^^^^^^^^^^^^^^^^^^
 
-   .. code-block:: python
+.. py:method:: request_energy_usage(device, year, months)
 
-      # Enable TOU
-      await mqtt.control.set_tou_enabled(device, True)
-      
-      # Disable TOU
-      await mqtt.control.set_tou_enabled(device, False)
+   Request daily energy usage data for one or more months.
+
+subscribe_energy_usage()
+^^^^^^^^^^^^^^^^^^^^^^^^
+
+.. py:method:: subscribe_energy_usage(device, callback)
+
+   Subscribe to parsed energy usage responses.
+
+   :param callback: Called with :class:`~nwp500.models.EnergyUsageResponse`
+   :type callback: Callable[[EnergyUsageResponse], None]
+
+check_firmware_update()
+^^^^^^^^^^^^^^^^^^^^^^^
+
+.. py:method:: check_firmware_update(device)
+
+   Trigger an OTA firmware availability check. The response arrives
+   asynchronously on the device's MQTT response topic.
+
+commit_firmware_update()
+^^^^^^^^^^^^^^^^^^^^^^^^
+
+.. py:method:: commit_firmware_update(device, payload)
+
+   Commit a previously downloaded firmware update.
+
+   :param payload: OTA commit payload identifying the component and version
+   :type payload: OtaCommitPayload
+
+   .. warning::
+
+      The device reboots when a firmware commit is applied.
+
+reconnect_wifi()
+^^^^^^^^^^^^^^^^
+
+.. py:method:: reconnect_wifi(device)
+
+   Ask the device to reconnect to WiFi using its current configuration.
+
+reset_wifi()
+^^^^^^^^^^^^
+
+.. py:method:: reset_wifi(device)
+
+   Clear the stored WiFi configuration.
+
+   .. warning::
+
+      After ``reset_wifi()``, the device must be provisioned again.
+
+set_freeze_protection_temperature()
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+.. py:method:: set_freeze_protection_temperature(device, temperature)
+
+   Set the freeze-protection threshold in the current unit system.
+
+   Available on devices that expose ``freeze_protection_use``.
+
+run_smart_diagnostic()
+^^^^^^^^^^^^^^^^^^^^^^
+
+.. py:method:: run_smart_diagnostic(device)
+
+   Trigger the device's smart diagnostic routine.
+
+   Available on devices that expose ``smart_diagnostic_use``.
+
+   The result appears in the next ``DeviceStatus.smart_diagnostic`` update.
+
+enable_intelligent_scheduling()
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+.. py:method:: enable_intelligent_scheduling(device)
+
+   Enable adaptive/intelligent scheduling mode.
+
+disable_intelligent_scheduling()
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+.. py:method:: disable_intelligent_scheduling(device)
+
+   Disable adaptive/intelligent scheduling mode.
+
+enable_demand_response()
+^^^^^^^^^^^^^^^^^^^^^^^^
+
+.. py:method:: enable_demand_response(device)
+
+   Enable utility demand-response participation.
+
+disable_demand_response()
+^^^^^^^^^^^^^^^^^^^^^^^^^
+
+.. py:method:: disable_demand_response(device)
+
+   Disable utility demand-response participation.
+
+reset_air_filter()
+^^^^^^^^^^^^^^^^^^
+
+.. py:method:: reset_air_filter(device)
+
+   Reset the air-filter maintenance timer.
+
+signal_app_connection()
+^^^^^^^^^^^^^^^^^^^^^^^
+
+.. py:method:: signal_app_connection(device)
+
+   Publish an app-connection heartbeat event to the device.
 
 Periodic Request Methods
 ------------------------
@@ -758,7 +808,7 @@ signal_app_connection()
    .. code-block:: python
 
       await mqtt.connect()
-      await mqtt.control.signal_app_connection(device)
+      await mqtt.signal_app_connection(device)
 
 subscribe(), unsubscribe(), publish()
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -782,7 +832,7 @@ is_connected
    .. code-block:: python
 
       if mqtt.is_connected:
-          await mqtt.control.set_power(device, True)
+          await mqtt.set_power(device, True)
       else:
           print("Not connected")
 
@@ -870,7 +920,7 @@ Example 1: Complete Monitoring Application
                # Temperature changed
                if last_temp != status.dhw_temperature:
                    print(f"[{now}] Temperature: {status.dhw_temperature}°F "
-                         f"(Target: {status.dhw_temperatureSetting}°F)")
+                         f"(Target: {status.dhw_temperature_setting}°F)")
                    last_temp = status.dhw_temperature
                
                # Power changed
@@ -890,7 +940,7 @@ Example 1: Complete Monitoring Application
                    print(f"[{now}] Heating: {', '.join(components)}")
            
            await mqtt.subscribe_device_status(device, on_status)
-           await mqtt.control.request_device_status(device)
+           await mqtt.request_device_status(device)
            
            # Monitor indefinitely
            try:
@@ -976,7 +1026,7 @@ Example 3: Multi-Device Monitoring
            for device in devices:
                callback = create_callback(device.device_info.device_name)
                await mqtt.subscribe_device_status(device, callback)
-               await mqtt.control.request_device_status(device)
+               await mqtt.request_device_status(device)
            
            # Monitor
            await asyncio.sleep(3600)
@@ -993,10 +1043,10 @@ Best Practices
 
       # CORRECT order
       await mqtt.subscribe_device_status(device, on_status)
-      await mqtt.control.request_device_status(device)
+      await mqtt.request_device_status(device)
       
       # WRONG - response will be missed
-      await mqtt.control.request_device_status(device)
+      await mqtt.request_device_status(device)
       await mqtt.subscribe_device_status(device, on_status)
 
 2. **Use context managers:**
@@ -1017,12 +1067,12 @@ Best Practices
 
       mqtt = NavienMqttClient(auth)
       
-      def on_interrupted(error):
-          print(f"Connection lost: {error}")
+      def on_interrupted(event):
+          print(f"Connection lost: {event.error}")
           # Save state, notify user, etc.
       
-      def on_resumed(return_code, session_present):
-          print("Connection restored")
+      def on_resumed(event):
+          print(f"Connection restored (session_present={event.session_present})")
           # Re-request status, etc.
       
       mqtt.on("connection_interrupted", on_interrupted)
@@ -1046,7 +1096,7 @@ Best Practices
    .. code-block:: python
 
       if mqtt.is_connected:
-          await mqtt.control.set_power(device, True)
+          await mqtt.set_power(device, True)
       else:
           print("Not connected - reconnecting...")
           await mqtt.connect()
@@ -1056,11 +1106,12 @@ Related Documentation
 
 * :doc:`auth_client` - Authentication client
 * :doc:`api_client` - REST API client
-* :doc:`device_control` - Device control commands and capability checking
 * :doc:`models` - Data models (DeviceStatus, DeviceFeature, etc.)
 * :doc:`events` - Event system
 * :doc:`exceptions` - Exception handling
 * :doc:`../protocol/mqtt_protocol` - MQTT protocol details
 * :doc:`../guides/energy_monitoring` - Energy monitoring guide
+* :doc:`../guides/scheduling` - Scheduling, recirculation, and intelligent modes
+* :doc:`../guides/device_maintenance` - OTA, WiFi, freeze protection, and diagnostics
 * :doc:`../guides/command_queue` - Command queueing guide
 * :doc:`../guides/auto_recovery` - Auto-reconnection guide

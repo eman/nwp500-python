@@ -36,8 +36,21 @@ Benefits
 Basic Usage
 ===========
 
+Two Callback Patterns
+---------------------
+
+The MQTT client exposes two distinct callback styles:
+
+* :meth:`nwp500.mqtt.client.NavienMqttClient.subscribe_device_status` and other
+  ``subscribe_*`` methods deliver parsed model objects directly. For example,
+  ``subscribe_device_status()`` still calls ``callback(DeviceStatus)``.
+* :meth:`nwp500.events.EventEmitter.on` listens for higher-level client events.
+  These callbacks now receive a **single typed event dataclass** such as
+  :class:`nwp500.mqtt_events.StatusReceivedEvent` or
+  :class:`nwp500.mqtt_events.ConnectionResumedEvent`.
+
 Discovering Available Events
------------------------------
+----------------------------
 
 The :class:`nwp500.mqtt_events.MqttClientEvents` class provides a complete registry
 of all events with type-safe constants and full documentation:
@@ -46,22 +59,8 @@ of all events with type-safe constants and full documentation:
 
    from nwp500 import MqttClientEvents
 
-   # List all available events
    for event_name in MqttClientEvents.get_all_events():
        print(f"- {event_name}")
-
-   # Output:
-   # - CONNECTION_INTERRUPTED
-   # - CONNECTION_RESUMED
-   # - STATUS_RECEIVED
-   # - TEMPERATURE_CHANGED
-   # - MODE_CHANGED
-   # - POWER_CHANGED
-   # - HEATING_STARTED
-   # - HEATING_STOPPED
-   # - ERROR_DETECTED
-   # - ERROR_CLEARED
-   # - FEATURE_RECEIVED
 
 Simple Event Handler
 --------------------
@@ -79,27 +78,39 @@ Simple Event Handler
            mqtt = NavienMqttClient(auth)
            await mqtt.connect()
 
-           # Use type-safe event constants with IDE autocomplete
-           def on_status_update(status):
+           def on_status_event(event):
+               status = event.status
                print(f"Temperature: {status.dhw_temperature}°F")
                print(f"Power: {status.current_inst_power}W")
 
-           # Subscribe using event constants
-           mqtt.on(MqttClientEvents.STATUS_RECEIVED, on_status_update)
-           await mqtt.control.request_device_status(device)
+           mqtt.on(MqttClientEvents.STATUS_RECEIVED, on_status_event)
+           await mqtt.request_device_status(device)
 
-           # Monitor for 5 minutes
            await asyncio.sleep(300)
            await mqtt.disconnect()
 
    asyncio.run(main())
 
+Raw status subscription
+-----------------------
+
+Use a typed subscription when you want the raw model directly instead of an event
+wrapper:
+
+.. code-block:: python
+
+   def on_status(status):
+       print(status.dhw_temperature)
+
+   await mqtt.subscribe_device_status(device, on_status)
+   await mqtt.request_device_status(device)
+
 Event Registry
 --------------
 
 The :class:`nwp500.mqtt_events.MqttClientEvents` class provides type-safe event
-constants and programmatic discovery, so your callbacks use valid event
-names and get IDE autocomplete:
+constants and programmatic discovery, so your callbacks use valid event names and
+get IDE autocomplete:
 
 .. code-block:: python
 
@@ -107,26 +118,32 @@ names and get IDE autocomplete:
 
    mqtt_client = NavienMqttClient(auth)
 
-   # Type-safe constants with IDE autocomplete
+   def on_temp_change(event):
+       print(f"Temperature: {event.old_temperature} -> {event.new_temperature}")
+
+   def on_heating_start(event):
+       print(f"Heating started at {event.status.dhw_temperature}")
+
+   def on_error(event):
+       print(f"Error: {event.error_code}")
+
    mqtt_client.on(MqttClientEvents.TEMPERATURE_CHANGED, on_temp_change)
    mqtt_client.on(MqttClientEvents.HEATING_STARTED, on_heating_start)
    mqtt_client.on(MqttClientEvents.ERROR_DETECTED, on_error)
 
-   # Programmatically discover all events
    print("Available events:")
    for event_name in MqttClientEvents.get_all_events():
        print(f"  - {event_name}")
 
-   # Get event string value if needed
    event_value = MqttClientEvents.get_event_value("TEMPERATURE_CHANGED")
-   print(f"Event value: {event_value}")  # Output: "temperature_changed"
+   print(f"Event value: {event_value}")
 
-Each event has full type documentation. See
-:class:`nwp500.mqtt_events` for complete details on event data types and
-their arguments.
+Each event has full type documentation. See :doc:`../python_api/events` for the
+complete event dataclass reference.
 
 Advanced Patterns
 =================
+
 
 Pattern 1: State Tracking
 --------------------------

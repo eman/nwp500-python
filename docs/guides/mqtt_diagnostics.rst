@@ -38,12 +38,12 @@ Quick Start
 
    # Hook events
    mqtt_client.on('connection_interrupted',
-       lambda e: diagnostics.record_connection_drop(error=e)
+       lambda event: diagnostics.record_connection_drop(error=event.error)
    )
 
    mqtt_client.on('connection_resumed',
-       lambda rc, sp: diagnostics.record_connection_success(
-           event_type='resumed', session_present=sp
+       lambda event: diagnostics.record_connection_success(
+           event_type='resumed', session_present=event.session_present
        )
    )
 
@@ -233,20 +233,20 @@ Enable diagnostics and collect baseline data.
            
            # Hook connection events
            mqtt_client.on('connection_interrupted',
-               lambda e: asyncio.create_task(
-                   diagnostics.record_connection_drop(
-                       error=e,
+               lambda event: asyncio.create_task(
+                    diagnostics.record_connection_drop(
+                        error=event.error,
                        queued_commands=mqtt_client.queued_commands_count
                    )
                )
            )
            
            mqtt_client.on('connection_resumed',
-               lambda rc, sp: asyncio.create_task(
-                   diagnostics.record_connection_success(
-                       event_type='resumed',
-                       session_present=sp,
-                       return_code=rc
+               lambda event: asyncio.create_task(
+                    diagnostics.record_connection_success(
+                        event_type='resumed',
+                        session_present=event.session_present,
+                        return_code=event.return_code
                    )
                )
            )
@@ -512,15 +512,15 @@ Basic Monitoring Loop
            mqtt_client = NavienMqttClient(auth_client, config=config)
            
            mqtt_client.on('connection_interrupted',
-               lambda e: asyncio.create_task(
-                   diagnostics.record_connection_drop(error=e)
+               lambda event: asyncio.create_task(
+                    diagnostics.record_connection_drop(error=event.error)
                )
            )
            
            mqtt_client.on('connection_resumed',
-               lambda rc, sp: asyncio.create_task(
-                   diagnostics.record_connection_success(
-                       event_type='resumed', session_present=sp
+               lambda event: asyncio.create_task(
+                    diagnostics.record_connection_success(
+                        event_type='resumed', session_present=event.session_present
                    )
                )
            )
@@ -598,11 +598,11 @@ Class-Based Monitoring
                self.mqtt_client = NavienMqttClient(self.auth_client, config=config)
                
                self.mqtt_client.on('connection_interrupted',
-                   lambda e: asyncio.create_task(self._on_drop(e))
+                   lambda event: asyncio.create_task(self._on_drop(event.error))
                )
                
                self.mqtt_client.on('connection_resumed',
-                   lambda rc, sp: asyncio.create_task(self._on_resume(rc, sp))
+                   lambda event: asyncio.create_task(self._on_resume(event.return_code, event.session_present))
                )
                
                await self.mqtt_client.connect()
@@ -795,17 +795,17 @@ Integration Pattern
         def _setup_event_hooks(self):
             """Hook diagnostics into MQTT client events."""
             self.mqtt_client.on('connection_interrupted',
-                lambda e: asyncio.create_task(
-                    self.diagnostics.record_connection_drop(error=e)
+                lambda event: asyncio.create_task(
+                    self.diagnostics.record_connection_drop(error=event.error)
                 )
             )
             
             self.mqtt_client.on('connection_resumed',
-                lambda rc, sp: asyncio.create_task(
+                lambda event: asyncio.create_task(
                     self.diagnostics.record_connection_success(
                         event_type='resumed',
-                        session_present=sp,
-                        return_code=rc
+                        session_present=event.session_present,
+                        return_code=event.return_code
                     )
                 )
             )
@@ -991,17 +991,17 @@ Example: Minimal HA Component with Diagnostics
         
         # Hook diagnostics
         mqtt_client.on('connection_interrupted',
-            lambda e: asyncio.create_task(
-                diagnostics.record_connection_drop(error=e)
+            lambda event: asyncio.create_task(
+                diagnostics.record_connection_drop(error=event.error)
             )
         )
         
         mqtt_client.on('connection_resumed',
-            lambda rc, sp: asyncio.create_task(
+            lambda event: asyncio.create_task(
                 diagnostics.record_connection_success(
                     event_type='resumed',
-                    session_present=sp,
-                    return_code=rc,
+                    session_present=event.session_present,
+                    return_code=event.return_code,
                 )
             )
         )

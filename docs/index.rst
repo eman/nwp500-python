@@ -55,7 +55,6 @@ Documentation Index
    python_api/auth_client
    python_api/api_client
    python_api/mqtt_client
-   python_api/device_control
    python_api/models
    enumerations
    python_api/events
@@ -79,6 +78,7 @@ Documentation Index
    guides/command_queue
    guides/auto_recovery
    guides/scheduling
+   guides/device_maintenance
    guides/energy_monitoring
    guides/time_of_use
    guides/unit_conversion

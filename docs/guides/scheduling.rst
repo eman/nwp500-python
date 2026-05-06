@@ -86,7 +86,7 @@ Quick Example
 
            mqtt = NavienMqttClient(auth)
            await mqtt.connect()
-           await mqtt.control.update_reservations(
+           await mqtt.update_reservations(
                device, [entry], enabled=True
            )
            await mqtt.disconnect()
@@ -352,7 +352,7 @@ multiple entries at once:
            mode_id=3, temperature=55.0
        ),
    ]
-   await mqtt.control.update_reservations(
+   await mqtt.update_reservations(
        device, reservations, enabled=True
    )
 
@@ -360,7 +360,7 @@ multiple entries at once:
 
 .. code-block:: python
 
-   await mqtt.control.update_reservations(
+   await mqtt.update_reservations(
        device, [], enabled=False
    )
 
@@ -368,7 +368,7 @@ multiple entries at once:
 
 .. code-block:: python
 
-   await mqtt.control.request_reservations(device)
+   await mqtt.request_reservations(device)
 
 **Read the current schedule using models:**
 
@@ -384,8 +384,8 @@ multiple entries at once:
                  f" - {entry.temperature}{entry.unit}"
                  f" - {entry.mode_name}")
 
-   await mqtt.subscribe_device_feature(device, on_reservations)
-   await mqtt.control.request_reservations(device)
+   await mqtt.subscribe_reservation_response(device, on_reservations)
+   await mqtt.request_reservations(device)
 
 CLI Helpers
 ^^^^^^^^^^^
@@ -576,6 +576,113 @@ Important Notes
 * Reservations persist through power cycles and internet outages.
 * Reservations are suspended when vacation mode or TOU is active.
 
+
+Weekly Reservations
+===================
+
+``update_weekly_reservation()`` configures a separate weekly reservation payload
+using :class:`~nwp500.models.WeeklyReservationSchedule`. This is useful when you
+want to send the whole weekly program as one typed object.
+
+.. code-block:: python
+
+   from nwp500 import (
+       WeeklyReservationEntry,
+       WeeklyReservationSchedule,
+       build_reservation_entry,
+   )
+
+   morning = WeeklyReservationEntry.model_validate(
+       build_reservation_entry(
+           enabled=True,
+           days=["MO", "TU", "WE", "TH", "FR"],
+           hour=6,
+           minute=0,
+           mode_id=4,
+           temperature=60.0,
+       )
+   )
+
+   day = WeeklyReservationEntry.model_validate(
+       build_reservation_entry(
+           enabled=True,
+           days=["MO", "TU", "WE", "TH", "FR"],
+           hour=9,
+           minute=0,
+           mode_id=3,
+           temperature=50.0,
+       )
+   )
+
+   schedule = WeeklyReservationSchedule(
+       reservationUse=2,
+       reservation=[morning, day],
+   )
+
+   await mqtt.update_weekly_reservation(device, schedule)
+
+You can also subscribe to weekly reservation responses with
+:meth:`nwp500.mqtt.client.NavienMqttClient.subscribe_weekly_reservation_response`.
+
+Recirculation Scheduling
+========================
+
+Recirculation schedules are represented by
+:class:`~nwp500.models.RecirculationSchedule` and
+:class:`~nwp500.models.RecirculationScheduleEntry`.
+
+.. code-block:: python
+
+   from nwp500 import RecirculationSchedule, RecirculationScheduleEntry
+
+   schedule = RecirculationSchedule(
+       schedule=[
+           RecirculationScheduleEntry(
+               enable=2,
+               week=124,  # Mon-Fri
+               start_hour=6,
+               start_min=0,
+               end_hour=8,
+               end_min=30,
+               mode=2,
+           ),
+           RecirculationScheduleEntry(
+               enable=2,
+               week=130,  # Sat-Sun
+               start_hour=7,
+               start_min=0,
+               end_hour=9,
+               end_min=0,
+               mode=2,
+           ),
+       ]
+   )
+
+   await mqtt.configure_recirculation_schedule(device, schedule)
+
+   def on_recirculation(schedule):
+       for entry in schedule.schedule:
+           print(entry.start_time, entry.end_time, entry.mode_name)
+
+   await mqtt.subscribe_recirculation_schedule_response(device, on_recirculation)
+
+Use :meth:`nwp500.mqtt.client.NavienMqttClient.set_recirculation_mode` to switch
+between always-on, button, schedule, and temperature modes.
+
+Intelligent Scheduling
+======================
+
+Intelligent scheduling enables the device's adaptive heating mode.
+
+.. code-block:: python
+
+   await mqtt.enable_intelligent_scheduling(device)
+
+   # Later, return to manual scheduling behavior
+   await mqtt.disable_intelligent_scheduling(device)
+
+This mode is separate from standard reservations. Use it when you want the
+heater to adapt automatically instead of following only fixed time windows.
 
 Time of Use (TOU)
 ==================
@@ -786,8 +893,8 @@ See Also
 ========
 
 * :doc:`time_of_use` — Full TOU guide with OpenEI integration
-* :doc:`../python_api/device_control` — Device control API reference
 * :doc:`../python_api/mqtt_client` — MQTT client API reference
+* :doc:`device_maintenance` — Maintenance and OTA operations
 * :doc:`../protocol/data_conversions` — Temperature and power field
   conversions
 * :doc:`auto_recovery` — Handling temporary connectivity issues

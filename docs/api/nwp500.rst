@@ -8,6 +8,7 @@ Subpackages
    :maxdepth: 4
 
    nwp500.cli
+   nwp500.models
    nwp500.mqtt
 
 Submodules
@@ -117,14 +118,6 @@ nwp500.field\_factory module
    :show-inheritance:
    :undoc-members:
 
-nwp500.models module
---------------------
-
-.. automodule:: nwp500.models
-   :members:
-   :show-inheritance:
-   :undoc-members:
-
 nwp500.mqtt\_events module
 --------------------------
 
@@ -137,6 +130,14 @@ nwp500.openei module
 --------------------
 
 .. automodule:: nwp500.openei
+   :members:
+   :show-inheritance:
+   :undoc-members:
+
+nwp500.reservations module
+--------------------------
+
+.. automodule:: nwp500.reservations
    :members:
    :show-inheritance:
    :undoc-members:

@@ -1,358 +1,287 @@
-============
 Event System
 ============
 
-The ``nwp500.events`` module provides an event-driven architecture for
-reacting to device state changes, errors, and system events.
+The MQTT client exposes two complementary callback patterns:
+
+* ``subscribe_*()`` methods parse device messages and call your callback with a
+  model object such as :class:`~nwp500.models.DeviceStatus` or
+  :class:`~nwp500.models.ReservationSchedule`.
+* :meth:`nwp500.events.EventEmitter.on` listens for higher-level client events
+  from :class:`nwp500.mqtt_events.MqttClientEvents`. These callbacks always
+  receive **one typed event dataclass**.
 
 Overview
 ========
 
-The MQTT client uses an EventEmitter pattern that allows you to:
+Use the event system when you want to react to connection changes, status
+transitions, or derived state changes such as temperature deltas and error
+conditions.
 
-* Subscribe to specific events with callback functions
-* React to device state changes in real-time
-* Handle connection events (interruption, resumption)
-* Monitor errors and diagnostics
-* Build reactive, event-driven applications
+Two Subscription Patterns
+=========================
 
-All events are emitted asynchronously and callbacks are invoked with
-relevant data.
+Typed device subscriptions
+--------------------------
 
-EventEmitter
-============
-
-Base class for event-driven components.
-
-.. py:class:: EventEmitter
-
-   Provides event subscription and emission capabilities.
-
-   **Methods:**
-
-   .. py:method:: on(event, callback)
-
-      Register a callback for an event.
-
-      :param event: Event name
-      :type event: str
-      :param callback: Function to call when event fires
-      :type callback: Callable
-
-   .. py:method:: off(event, callback=None)
-
-      Unregister callback(s) for an event.
-
-      :param event: Event name
-      :type event: str
-      :param callback: Specific callback to remove, or None for all
-      :type callback: Callable or None
-
-   .. py:method:: emit(event, *args, **kwargs)
-
-      Emit an event to all registered callbacks.
-
-      :param event: Event name
-      :type event: str
-      :param args: Positional arguments for callbacks
-      :param kwargs: Keyword arguments for callbacks
-
-MQTT Client Events
-==================
-
-The :doc:`mqtt_client` emits the following events:
-
-Connection Events
------------------
-
-connection_interrupted
-^^^^^^^^^^^^^^^^^^^^^^
-
-Emitted when MQTT connection is lost.
-
-**Callback signature:**
-
-.. code-block:: python
-
-   def on_interrupted(error):
-       """
-       :param error: Error that caused interruption
-       :type error: Exception
-       """
-
-**Example:**
-
-.. code-block:: python
-
-   def handle_disconnect(error):
-       print(f"Connection lost: {error}")
-       # Save state, notify user, etc.
-
-   mqtt.on('connection_interrupted', handle_disconnect)
-
-connection_resumed
-^^^^^^^^^^^^^^^^^^
-
-Emitted when MQTT connection is restored.
-
-**Callback signature:**
-
-.. code-block:: python
-
-   def on_resumed(return_code, session_present):
-       """
-       :param return_code: MQTT return code
-       :type return_code: int
-       :param session_present: Whether session was resumed
-       :type session_present: bool
-       """
-
-**Example:**
-
-.. code-block:: python
-
-   def handle_reconnect(return_code, session_present):
-       print("Connection restored")
-       # Re-request status, resume operations
-       await mqtt.control.request_device_status(device)
-
-   mqtt.on('connection_resumed', handle_reconnect)
-
-Device Events
--------------
-
-status_received
-^^^^^^^^^^^^^^^
-
-Emitted when device status update is received.
-
-**Callback signature:**
+These methods deliver parsed model objects directly to the callback.
 
 .. code-block:: python
 
    def on_status(status):
-       """
-       :param status: Device status object
-       :type status: DeviceStatus
-       """
+       print(status.dhw_temperature)
+       print(status.current_inst_power)
 
-**Example:**
+   await mqtt.subscribe_device_status(device, on_status)
+   await mqtt.request_device_status(device)
 
-.. code-block:: python
+Examples include:
 
-   def handle_status(status):
-       print(f"Temperature: {status.dhw_temperature}°F")
-       print(f"Power: {status.current_inst_power}W")
+* :meth:`nwp500.mqtt.client.NavienMqttClient.subscribe_device_status`
+* :meth:`nwp500.mqtt.client.NavienMqttClient.subscribe_device_feature`
+* :meth:`nwp500.mqtt.client.NavienMqttClient.subscribe_energy_usage`
+* :meth:`nwp500.mqtt.client.NavienMqttClient.subscribe_reservation_response`
+* :meth:`nwp500.mqtt.client.NavienMqttClient.subscribe_weekly_reservation_response`
+* :meth:`nwp500.mqtt.client.NavienMqttClient.subscribe_recirculation_schedule_response`
 
-   mqtt.on('status_received', handle_status)
+Client event subscriptions
+--------------------------
 
-feature_received
-^^^^^^^^^^^^^^^^
-
-Emitted when device feature/info update is received.
-
-**Callback signature:**
+Event emitter callbacks receive a single event object.
 
 .. code-block:: python
 
-   def on_feature(feature):
-       """
-       :param feature: Device feature object
-       :type feature: DeviceFeature
-       """
+   from nwp500 import MqttClientEvents
 
-temperature_changed
-^^^^^^^^^^^^^^^^^^^
+   def on_status_event(event):
+       print(event.status.dhw_temperature)
 
-Emitted when water temperature changes significantly.
+   def on_resumed(event):
+       print(event.return_code)
+       print(event.session_present)
 
-**Callback signature:**
+   mqtt.on(MqttClientEvents.STATUS_RECEIVED, on_status_event)
+   mqtt.on(MqttClientEvents.CONNECTION_RESUMED, on_resumed)
 
-.. code-block:: python
+EventEmitter API
+================
 
-   def on_temp_change(old_temp, new_temp):
-       """
-       :param old_temp: Previous temperature
-       :type old_temp: float
-       :param new_temp: Current temperature
-       :type new_temp: float
-       """
+.. py:class:: EventEmitter
 
-mode_changed
-^^^^^^^^^^^^
+   Base class for event-driven components.
 
-Emitted when operation mode changes.
+   .. py:method:: on(event, callback)
 
-**Callback signature:**
+      Register a callback for an event name.
 
-.. code-block:: python
+   .. py:method:: off(event, callback=None)
 
-   def on_mode_change(old_mode, new_mode):
-       """
-       :param old_mode: Previous mode
-       :type old_mode: DhwOperationSetting
-       :param new_mode: Current mode
-       :type new_mode: DhwOperationSetting
-       """
+      Remove one callback or all callbacks for an event.
 
-error_detected
-^^^^^^^^^^^^^^
+   .. py:method:: wait_for(event, timeout=None)
 
-Emitted when device reports an error code.
+      Wait for the next event emission and return the positional event
+      arguments as a tuple.
 
-**Callback signature:**
+      .. code-block:: python
+
+         args = await mqtt.wait_for(MqttClientEvents.CONNECTION_RESUMED, timeout=30)
+         resumed = args[0]
+         print(resumed.session_present)
+
+MQTT Client Events
+==================
+
+The :class:`nwp500.mqtt_events.MqttClientEvents` registry exposes all supported
+client event names with IDE-friendly constants.
 
 .. code-block:: python
 
-   def on_error(error_code, sub_error_code):
-       """
-       :param error_code: Main error code
-       :type error_code: int
-       :param sub_error_code: Sub-error code
-       :type sub_error_code: int
-       """
+   from nwp500 import MqttClientEvents
 
-Examples
-========
+   for event_name in MqttClientEvents.get_all_events():
+       print(event_name)
 
-Example 1: Basic Event Handling
---------------------------------
+ConnectionInterruptedEvent
+--------------------------
 
-.. code-block:: python
+.. py:class:: nwp500.mqtt_events.ConnectionInterruptedEvent
 
-   from nwp500 import NavienAuthClient, NavienMqttClient
+   Emitted for :attr:`nwp500.mqtt_events.MqttClientEvents.CONNECTION_INTERRUPTED`.
 
-   async def main():
-       async with NavienAuthClient(email, password) as auth:
-           mqtt = NavienMqttClient(auth)
+   **Fields:**
 
-           # Register event handlers
-           mqtt.on('status_received', lambda s: print(f"Temp: {s.dhwTemperature}°F"))
-           mqtt.on('error_detected', lambda e, se: print(f"Error: {e}"))
+   * ``error`` (:class:`Exception`) - The exception that interrupted the MQTT
+     connection.
 
-           await mqtt.connect()
-           # Events will be emitted automatically
-           await asyncio.sleep(300)
+   **Example:**
 
-Example 2: Connection Monitoring
----------------------------------
+   .. code-block:: python
 
-.. code-block:: python
+      def on_interrupted(event):
+          print(f"Connection lost: {event.error}")
 
-   async def monitor_connection():
-       async with NavienAuthClient(email, password) as auth:
-           mqtt = NavienMqttClient(auth)
+      mqtt.on(MqttClientEvents.CONNECTION_INTERRUPTED, on_interrupted)
 
-           def on_disconnected(error):
-               print(f"Lost connection: {error}")
-               # Alert user, save state
+ConnectionResumedEvent
+----------------------
 
-           def on_reconnected(rc, session):
-               print("Connection restored!")
-               # Resume operations
+.. py:class:: nwp500.mqtt_events.ConnectionResumedEvent
 
-           mqtt.on('connection_interrupted', on_disconnected)
-           mqtt.on('connection_resumed', on_reconnected)
+   Emitted for :attr:`nwp500.mqtt_events.MqttClientEvents.CONNECTION_RESUMED`.
 
-           await mqtt.connect()
-           await asyncio.sleep(86400)  # Monitor for 24h
+   **Fields:**
 
-Example 3: Temperature Alerts
-------------------------------
+   * ``return_code`` (int) - MQTT return code from the resume attempt.
+   * ``session_present`` (bool) - Whether broker session state was preserved.
 
-.. code-block:: python
+   **Example:**
 
-   async def temperature_alerts():
-       async with NavienAuthClient(email, password) as auth:
-           mqtt = NavienMqttClient(auth)
+   .. code-block:: python
 
-           def check_temp(status):
-               if status.dhw_temperature < 110:
-                   print("WARNING: Temperature below 110°F")
-                   send_alert("Low water temperature")
+      def on_resumed(event):
+          if not event.session_present:
+              print("Broker session was reset")
 
-               if status.dhw_temperature > 145:
-                   print("WARNING: Temperature above 145°F")
-                   send_alert("High water temperature")
+      mqtt.on(MqttClientEvents.CONNECTION_RESUMED, on_resumed)
 
-           mqtt.on('status_received', check_temp)
+StatusReceivedEvent
+-------------------
 
-           await mqtt.connect()
-           await mqtt.subscribe_device_status(device, lambda s: None)
-           await mqtt.start_periodic_requests(device, period_seconds=60)
+.. py:class:: nwp500.mqtt_events.StatusReceivedEvent
 
-           await asyncio.sleep(86400)
+   Emitted for :attr:`nwp500.mqtt_events.MqttClientEvents.STATUS_RECEIVED`.
 
-Example 4: Multiple Event Handlers
------------------------------------
+   **Fields:**
 
-.. code-block:: python
+   * ``status`` (:class:`~nwp500.models.DeviceStatus`) - Parsed device status.
 
-   async def multi_handler():
-       async with NavienAuthClient(email, password) as auth:
-           mqtt = NavienMqttClient(auth)
+TemperatureChangedEvent
+-----------------------
 
-           # Log all status updates
-           mqtt.on('status_received', lambda s: log_status(s))
+.. py:class:: nwp500.mqtt_events.TemperatureChangedEvent
 
-           # Track temperature
-           mqtt.on('temperature_changed', lambda old, new: 
-                   print(f"Temp: {old}°F → {new}°F"))
+   Emitted for :attr:`nwp500.mqtt_events.MqttClientEvents.TEMPERATURE_CHANGED`.
 
-           # Monitor mode changes
-           mqtt.on('mode_changed', lambda old, new:
-                   print(f"Mode: {old.name} → {new.name}"))
+   **Fields:**
 
-           # Alert on errors
-           mqtt.on('error_detected', lambda e, se:
-                   send_alert(f"Error: {e}:{se}"))
+   * ``old_temperature`` (float) - Previous DHW temperature in the current unit system.
+   * ``new_temperature`` (float) - New DHW temperature in the current unit system.
 
-           await mqtt.connect()
-           # All handlers will be called automatically
+ModeChangedEvent
+----------------
 
-Best Practices
+.. py:class:: nwp500.mqtt_events.ModeChangedEvent
+
+   Emitted for :attr:`nwp500.mqtt_events.MqttClientEvents.MODE_CHANGED`.
+
+   **Fields:**
+
+   * ``old_mode`` (:class:`~nwp500.CurrentOperationMode`) - Previous operating mode.
+   * ``new_mode`` (:class:`~nwp500.CurrentOperationMode`) - New operating mode.
+
+PowerChangedEvent
+-----------------
+
+.. py:class:: nwp500.mqtt_events.PowerChangedEvent
+
+   Emitted for :attr:`nwp500.mqtt_events.MqttClientEvents.POWER_CHANGED`.
+
+   **Fields:**
+
+   * ``old_power`` (float) - Previous instantaneous power draw in watts.
+   * ``new_power`` (float) - New instantaneous power draw in watts.
+
+HeatingStartedEvent
+-------------------
+
+.. py:class:: nwp500.mqtt_events.HeatingStartedEvent
+
+   Emitted for :attr:`nwp500.mqtt_events.MqttClientEvents.HEATING_STARTED`.
+
+   **Fields:**
+
+   * ``status`` (:class:`~nwp500.models.DeviceStatus`) - Status snapshot when
+     heating started.
+
+HeatingStoppedEvent
+-------------------
+
+.. py:class:: nwp500.mqtt_events.HeatingStoppedEvent
+
+   Emitted for :attr:`nwp500.mqtt_events.MqttClientEvents.HEATING_STOPPED`.
+
+   **Fields:**
+
+   * ``status`` (:class:`~nwp500.models.DeviceStatus`) - Status snapshot when
+     heating stopped.
+
+ErrorDetectedEvent
+------------------
+
+.. py:class:: nwp500.mqtt_events.ErrorDetectedEvent
+
+   Emitted for :attr:`nwp500.mqtt_events.MqttClientEvents.ERROR_DETECTED`.
+
+   **Fields:**
+
+   * ``error_code`` (:class:`~nwp500.ErrorCode`) - Newly detected device error.
+   * ``status`` (:class:`~nwp500.models.DeviceStatus`) - Status snapshot that
+     contained the error.
+
+ErrorClearedEvent
+-----------------
+
+.. py:class:: nwp500.mqtt_events.ErrorClearedEvent
+
+   Emitted for :attr:`nwp500.mqtt_events.MqttClientEvents.ERROR_CLEARED`.
+
+   **Fields:**
+
+   * ``error_code`` (:class:`~nwp500.ErrorCode`) - Error code that cleared.
+
+FeatureReceivedEvent
+--------------------
+
+.. py:class:: nwp500.mqtt_events.FeatureReceivedEvent
+
+   Emitted for :attr:`nwp500.mqtt_events.MqttClientEvents.FEATURE_RECEIVED`.
+
+   **Fields:**
+
+   * ``feature`` (:class:`~nwp500.models.DeviceFeature`) - Parsed device feature payload.
+
+Usage Examples
 ==============
 
-1. **Register handlers before connecting:**
+React to typed event payloads
+-----------------------------
 
-   .. code-block:: python
+.. code-block:: python
 
-      # GOOD: Register first
-      mqtt.on('status_received', handler)
-      await mqtt.connect()
+   from nwp500 import MqttClientEvents
 
-      # BAD: May miss early events
-      await mqtt.connect()
-      mqtt.on('status_received', handler)
+   def on_temperature_changed(event):
+       print(f"{event.old_temperature} -> {event.new_temperature}")
 
-2. **Use lambda for simple handlers:**
+   def on_error(event):
+       print(f"Error: {event.error_code}")
+       print(f"Current mode: {event.status.operation_mode}")
 
-   .. code-block:: python
+   mqtt.on(MqttClientEvents.TEMPERATURE_CHANGED, on_temperature_changed)
+   mqtt.on(MqttClientEvents.ERROR_DETECTED, on_error)
 
-      mqtt.on('status_received', lambda s: print(f"{s.dhwTemperature}°F"))
+Wait for a connection event
+---------------------------
 
-3. **Use named functions for complex handlers:**
+.. code-block:: python
 
-   .. code-block:: python
-
-      def complex_handler(status):
-          # Complex logic
-          process_status(status)
-          update_database(status)
-          check_alerts(status)
-
-      mqtt.on('status_received', complex_handler)
-
-4. **Clean up handlers when done:**
-
-   .. code-block:: python
-
-      mqtt.off('status_received', handler)  # Remove specific
-      mqtt.off('status_received')           # Remove all
+   args = await mqtt.wait_for(MqttClientEvents.CONNECTION_RESUMED, timeout=30)
+   resumed = args[0]
+   print(resumed.return_code)
 
 Related Documentation
 =====================
 
-* :doc:`mqtt_client` - MQTT client with events
-* :doc:`models` - Data models passed to event handlers
-* :doc:`exceptions` - Exception handling
+* :doc:`mqtt_client` - MQTT client API reference
+* :doc:`models` - Models used by subscription callbacks
+* :doc:`../guides/event_system` - Event-driven programming guide
