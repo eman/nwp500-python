@@ -355,6 +355,11 @@ class ReservationSchedule(NavienBaseModel):
         """
         return self.reservation_use == 2
 
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> ReservationSchedule:
+        """Construct from a raw MQTT response dict."""
+        return cls.model_validate(data)
+
 
 class WeeklyReservationEntry(NavienBaseModel):
     """A single entry in a weekly temperature reservation schedule.
@@ -467,6 +472,11 @@ class WeeklyReservationSchedule(NavienBaseModel):
         """
         return self.reservation_use == 2
 
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> WeeklyReservationSchedule:
+        """Construct from a raw MQTT response dict."""
+        return cls.model_validate(data)
+
 
 class RecirculationScheduleEntry(NavienBaseModel):
     """A single entry in a recirculation pump schedule.
@@ -544,6 +554,11 @@ class RecirculationSchedule(NavienBaseModel):
     """
 
     schedule: list[RecirculationScheduleEntry] = Field(default_factory=list)
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> RecirculationSchedule:
+        """Construct from a raw MQTT response dict."""
+        return cls.model_validate(data)
 
 
 class OtaCommitPayload(NavienBaseModel):

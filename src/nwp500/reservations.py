@@ -14,11 +14,10 @@ from __future__ import annotations
 import asyncio
 import logging
 from collections.abc import Sequence
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from .encoding import build_reservation_entry, encode_week_bitfield
 from .models import ReservationSchedule
-from .topic_builder import MqttTopicBuilder
 
 if TYPE_CHECKING:
     from .models import Device
@@ -59,31 +58,23 @@ async def fetch_reservations(
         asyncio.get_running_loop().create_future()
     )
 
-    def raw_callback(topic: str, message: dict[str, Any]) -> None:
-        if (
-            future.done()
-            or "response" not in message
-            or "/res/rsv/" not in topic
-        ):
-            return
-        response = message.get("response", {})
-        # Ensure it's actually a reservation response (not some other /res/ msg)
-        if "reservationUse" not in response and "reservation" not in response:
-            return
-        schedule = ReservationSchedule(**response)
-        future.set_result(schedule)
+    def on_schedule(schedule: ReservationSchedule) -> None:
+        if not future.done():
+            future.set_result(schedule)
 
     device_type = str(device.device_info.device_type)
-    response_topic = MqttTopicBuilder.response_topic(
-        device_type, mqtt.client_id, "rsv/rd"
-    )
-    await mqtt.subscribe(response_topic, raw_callback)
+    await mqtt.subscribe_reservation_response(device, on_schedule)
     await mqtt.control.request_reservations(device)
     try:
         return await asyncio.wait_for(future, timeout=timeout)
     except TimeoutError:
         return None
     finally:
+        from .topic_builder import MqttTopicBuilder
+
+        response_topic = MqttTopicBuilder.response_topic(
+            device_type, mqtt.client_id, "rsv/rd"
+        )
         try:
             await mqtt.unsubscribe(response_topic)
         except Exception:

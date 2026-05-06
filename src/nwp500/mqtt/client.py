@@ -54,6 +54,9 @@ if TYPE_CHECKING:
         DeviceFeature,
         DeviceStatus,
         EnergyUsageResponse,
+        RecirculationSchedule,
+        ReservationSchedule,
+        WeeklyReservationSchedule,
     )
 
 __author__ = "Emmanuel Levijarvi"
@@ -924,6 +927,36 @@ class NavienMqttClient(EventEmitter):
         """Subscribe to energy usage query responses with automatic parsing."""
         return await self._delegate_subscription(
             "subscribe_energy_usage", device, callback
+        )
+
+    async def subscribe_reservation_response(
+        self,
+        device: Device,
+        callback: Callable[[ReservationSchedule], None],
+    ) -> int:
+        """Subscribe to reservation read responses with automatic parsing."""
+        return await self._delegate_subscription(
+            "subscribe_reservation_response", device, callback
+        )
+
+    async def subscribe_weekly_reservation_response(
+        self,
+        device: Device,
+        callback: Callable[[WeeklyReservationSchedule], None],
+    ) -> int:
+        """Subscribe to weekly reservation read responses."""
+        return await self._delegate_subscription(
+            "subscribe_weekly_reservation_response", device, callback
+        )
+
+    async def subscribe_recirculation_schedule_response(
+        self,
+        device: Device,
+        callback: Callable[[RecirculationSchedule], None],
+    ) -> int:
+        """Subscribe to recirculation schedule read responses."""
+        return await self._delegate_subscription(
+            "subscribe_recirculation_schedule_response", device, callback
         )
 
     async def ensure_device_info_cached(

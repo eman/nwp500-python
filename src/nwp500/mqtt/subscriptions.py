@@ -23,7 +23,15 @@ from pydantic import ValidationError
 
 from ..events import EventEmitter
 from ..exceptions import MqttNotConnectedError
-from ..models import Device, DeviceFeature, DeviceStatus, EnergyUsageResponse
+from ..models import (
+    Device,
+    DeviceFeature,
+    DeviceStatus,
+    EnergyUsageResponse,
+    RecirculationSchedule,
+    ReservationSchedule,
+    WeeklyReservationSchedule,
+)
 from ..mqtt_events import FeatureReceivedEvent, StatusReceivedEvent
 from ..topic_builder import MqttTopicBuilder
 from .state_tracker import DeviceStateTracker
@@ -482,6 +490,86 @@ class MqttSubscriptionManager:
             str(device.device_info.device_type),
             self._client_id,
             "energy-usage-daily-query/rd",
+        )
+        return await self.subscribe(topic, handler)
+
+    async def subscribe_reservation_response(
+        self,
+        device: Device,
+        callback: Callable[[ReservationSchedule], None],
+    ) -> int:
+        """Subscribe to reservation read responses with automatic parsing.
+
+        Subscribes to the ``rsv/rd`` response topic for the given device.
+        The callback receives a fully-parsed
+        :class:`~nwp500.models.ReservationSchedule` whenever the device
+        responds to a reservation read request.
+
+        Args:
+            device: Device whose reservation responses to receive.
+            callback: Called with the parsed schedule on each response.
+
+        Returns:
+            Publish packet ID from the MQTT subscribe call.
+        """
+        handler = self._make_handler(ReservationSchedule, callback)
+        topic = MqttTopicBuilder.response_topic(
+            str(device.device_info.device_type),
+            self._client_id,
+            "rsv/rd",
+        )
+        return await self.subscribe(topic, handler)
+
+    async def subscribe_weekly_reservation_response(
+        self,
+        device: Device,
+        callback: Callable[[WeeklyReservationSchedule], None],
+    ) -> int:
+        """Subscribe to weekly reservation read responses.
+
+        Subscribes to the ``rsv-weekly/rd`` response topic for the given
+        device. The callback receives a
+        :class:`~nwp500.models.WeeklyReservationSchedule`
+        whenever the device responds to a weekly reservation read request.
+
+        Args:
+            device: Device whose weekly reservation responses to receive.
+            callback: Called with the parsed schedule on each response.
+
+        Returns:
+            Publish packet ID from the MQTT subscribe call.
+        """
+        handler = self._make_handler(WeeklyReservationSchedule, callback)
+        topic = MqttTopicBuilder.response_topic(
+            str(device.device_info.device_type),
+            self._client_id,
+            "rsv-weekly/rd",
+        )
+        return await self.subscribe(topic, handler)
+
+    async def subscribe_recirculation_schedule_response(
+        self,
+        device: Device,
+        callback: Callable[[RecirculationSchedule], None],
+    ) -> int:
+        """Subscribe to recirculation schedule read responses.
+
+        Subscribes to the ``recirc-rsv/rd`` response topic for the given device.
+        The callback receives a :class:`~nwp500.models.RecirculationSchedule`
+        whenever the device responds to a recirculation schedule read request.
+
+        Args:
+            device: Device whose recirculation schedule responses to receive.
+            callback: Called with the parsed schedule on each response.
+
+        Returns:
+            Publish packet ID from the MQTT subscribe call.
+        """
+        handler = self._make_handler(RecirculationSchedule, callback)
+        topic = MqttTopicBuilder.response_topic(
+            str(device.device_info.device_type),
+            self._client_id,
+            "recirc-rsv/rd",
         )
         return await self.subscribe(topic, handler)
 

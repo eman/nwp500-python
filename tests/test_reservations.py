@@ -32,6 +32,7 @@ def mock_mqtt(mock_device: MagicMock) -> MagicMock:
     mqtt = MagicMock()
     mqtt.client_id = "test-client"
     mqtt.subscribe = AsyncMock()
+    mqtt.subscribe_reservation_response = AsyncMock()
     mqtt.unsubscribe = AsyncMock()
     mqtt.control.request_reservations = AsyncMock()
     mqtt.control.update_reservations = AsyncMock()
@@ -79,31 +80,22 @@ async def test_fetch_reservations_success(
     schedule = _make_schedule([_entry()])
     captured_callback: list[Any] = []
 
-    async def fake_subscribe(topic: str, cb: Any) -> int:
+    async def fake_subscribe_reservation(device: Any, cb: Any) -> int:
         captured_callback.append(cb)
         return 1
 
-    mock_mqtt.subscribe.side_effect = fake_subscribe
+    mock_mqtt.subscribe_reservation_response.side_effect = (
+        fake_subscribe_reservation
+    )
 
     async def fake_request(device: Any) -> None:
         # Simulate the device response arriving after subscribe
-        topic = "cmd/NWP500/test-client/res/rsv/rd"
-        msg = {
-            "response": {
-                "reservationUse": 2,
-                "reservation": "023e061e0478",
-            }
-        }
         for cb in captured_callback:
-            cb(topic, msg)
+            cb(schedule)
 
     mock_mqtt.control.request_reservations.side_effect = fake_request
 
-    with patch(
-        "nwp500.reservations.ReservationSchedule",
-        return_value=schedule,
-    ):
-        result = await fetch_reservations(mock_mqtt, mock_device)
+    result = await fetch_reservations(mock_mqtt, mock_device)
 
     assert result is schedule
     mock_mqtt.unsubscribe.assert_called_once_with(
@@ -116,7 +108,7 @@ async def test_fetch_reservations_timeout(
     mock_mqtt: MagicMock, mock_device: MagicMock
 ) -> None:
     """fetch_reservations returns None on timeout and still unsubscribes."""
-    mock_mqtt.subscribe = AsyncMock()
+    mock_mqtt.subscribe_reservation_response = AsyncMock()
     mock_mqtt.control.request_reservations = AsyncMock()  # never fires callback
 
     result = await fetch_reservations(mock_mqtt, mock_device, timeout=0.01)
@@ -128,27 +120,32 @@ async def test_fetch_reservations_timeout(
 
 
 @pytest.mark.asyncio
-async def test_fetch_reservations_ignores_wrong_topic(
+async def test_fetch_reservations_ignores_multiple_responses(
     mock_mqtt: MagicMock, mock_device: MagicMock
 ) -> None:
-    """fetch_reservations ignores messages on non-reservation topics."""
+    """fetch_reservations resolves on first response, ignores later ones."""
+    schedule = _make_schedule([_entry()])
+    second_schedule = _make_schedule([_entry(hour=9)])
     captured_callback: list[Any] = []
 
-    async def fake_subscribe(topic: str, cb: Any) -> int:
+    async def fake_subscribe_reservation(device: Any, cb: Any) -> int:
         captured_callback.append(cb)
         return 1
 
-    mock_mqtt.subscribe.side_effect = fake_subscribe
+    mock_mqtt.subscribe_reservation_response.side_effect = (
+        fake_subscribe_reservation
+    )
 
     async def fake_request(device: Any) -> None:
-        # Wrong topic — should be ignored
+        # Fire callback twice — only the first should resolve the future
         for cb in captured_callback:
-            cb("cmd/NWP500/test-client/res/other/rd", {"response": {"foo": 1}})
+            cb(schedule)
+            cb(second_schedule)
 
     mock_mqtt.control.request_reservations.side_effect = fake_request
 
-    result = await fetch_reservations(mock_mqtt, mock_device, timeout=0.01)
-    assert result is None
+    result = await fetch_reservations(mock_mqtt, mock_device)
+    assert result is schedule
 
 
 # ---------------------------------------------------------------------------
