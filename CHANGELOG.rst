@@ -2,6 +2,85 @@
 Changelog
 =========
 
+Version 8.0.0 (2026-05-06)
+===========================
+
+**BREAKING CHANGES**: ``.on()`` event handler callbacks now receive a single typed
+event dataclass instead of positional arguments. ``MqttDeviceController`` is no longer
+accessible as ``.control`` on ``NavienMqttClient``; all control methods are now
+available directly on the client.
+
+Breaking Changes
+----------------
+- **Typed event payloads**: All ``.on()`` event handler callbacks now receive a single
+  typed event dataclass instance. The dataclasses are exported from
+  ``nwp500.mqtt_events``.
+
+  .. code-block:: python
+
+     # OLD (removed)
+     mqtt.on("temperature_changed", lambda old, new: print(old, new))
+     mqtt.on("connection_resumed", lambda rc, sp: print(rc, sp))
+
+     # NEW
+     mqtt.on("temperature_changed", lambda e: print(e.old_temperature, e.new_temperature))
+     mqtt.on("connection_resumed", lambda e: print(e.return_code, e.session_present))
+
+- **``MqttDeviceController`` no longer public**: ``NavienMqttClient`` no longer exposes
+  a ``.control`` attribute. All control methods are now available directly on the
+  client.
+
+  .. code-block:: python
+
+     # OLD (removed)
+     await mqtt.control.set_temperature(device, 50)
+
+     # NEW
+     await mqtt.set_temperature(device, 50)
+
+Added
+-----
+- **New control methods**: Nine previously unimplemented ``CommandCode`` values now have
+  full implementations: ``check_firmware``, ``commit_firmware``, ``reconnect_wifi``,
+  ``reset_wifi``, ``set_freeze_protection_temperature``, ``run_smart_diagnostic``,
+  ``enable_intelligent_reservation``, ``disable_intelligent_reservation``, and
+  ``set_water_program_reservation``.
+- **Typed subscription methods**: ``subscribe_reservation``,
+  ``subscribe_weekly_reservation``, and ``subscribe_recirculation`` return typed
+  responses directly without requiring raw MQTT event handlers.
+- **New protocol models**: ``WeeklyReservationSchedule``, ``WeeklyReservationEntry``,
+  ``RecirculationSchedule``, ``RecirculationScheduleEntry``, and ``OtaCommitPayload``.
+- **``DeviceStateTracker``**: State change detection extracted into a dedicated class
+  in ``nwp500.mqtt.state_tracker`` with per-device tracking keyed by MAC address.
+- **``MQTT_PROTOCOL_VERSION`` constant**: Protocol version is now a named constant in
+  ``nwp500.config`` rather than a hardcoded integer in the command payload builder.
+- **``response_ack_topic()``**: New method on ``MqttTopicBuilder`` for control command
+  acknowledgement topics.
+
+Changed
+-------
+- **Unit conversion redesign**: Temperature, flow rate, and volume fields in
+  ``DeviceStatus`` and ``DeviceFeature`` now store raw device values as ``*_raw: int``
+  fields and expose converted values via lazy computed properties. Conversion happens at
+  access time rather than during Pydantic deserialization, preserving the original
+  device value in all cases.
+- **Models split into subpackage**: ``nwp500.models`` is now a package
+  (``nwp500/models/``) with modules for status, schedule, TOU, and MQTT models. Public
+  imports from ``nwp500.models`` are unchanged.
+- **Topic building centralised**: All MQTT topic construction now goes through
+  ``MqttTopicBuilder``. Hardcoded topic strings removed from ``control.py``,
+  ``reservations.py``, and ``cli/handlers.py``.
+- **``set_vacation_days`` delegates to ``set_dhw_mode``**: The method now calls
+  ``set_dhw_mode(device, DhwOperationSetting.VACATION, vacation_days=days)`` directly.
+- **Per-device state tracking**: ``_previous_status`` changed from a single
+  ``DeviceStatus | None`` to a ``dict[str, DeviceStatus]`` keyed by MAC address,
+  preventing spurious state-change events when multiple devices are connected.
+- **Unit system stored as instance variable**: ``NavienAPIClient``,
+  ``NavienMqttClient``, and ``NavienAuthClient`` no longer call ``set_unit_system()``
+  as a constructor side-effect.
+- **``NavienBaseModel`` consolidated**: Duplicate definitions in ``auth.py`` and
+  ``models.py`` merged into a single definition in ``nwp500._base``.
+
 Version 7.4.10 (2026-04-13)
 ===========================
 
