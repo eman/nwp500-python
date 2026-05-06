@@ -25,7 +25,7 @@ from ..events import EventEmitter
 from ..exceptions import MqttNotConnectedError
 from ..models import Device, DeviceFeature, DeviceStatus, EnergyUsageResponse
 from ..topic_builder import MqttTopicBuilder
-from ..unit_system import UnitSystemType, get_unit_system, set_unit_system
+from ..unit_system import get_unit_system
 from .utils import redact_topic, topic_matches_pattern
 
 if TYPE_CHECKING:
@@ -55,7 +55,6 @@ class MqttSubscriptionManager:
         event_emitter: EventEmitter,
         schedule_coroutine: Callable[[Any], None],
         device_info_cache: MqttDeviceInfoCache | None = None,
-        unit_system: UnitSystemType = None,
     ):
         """
         Initialize subscription manager.
@@ -67,15 +66,12 @@ class MqttSubscriptionManager:
             schedule_coroutine: Function to schedule async tasks
             device_info_cache: Optional MqttDeviceInfoCache for caching device
                 features
-            unit_system: Preferred unit system ("metric", "us_customary",
-                or None)
         """
         self._connection = connection
         self._client_id = client_id
         self._event_emitter = event_emitter
         self._schedule_coroutine = schedule_coroutine
         self._device_info_cache = device_info_cache
-        self._unit_system: UnitSystemType = unit_system
 
         # Track subscriptions and handlers
         self._subscriptions: dict[str, mqtt.QoS] = {}
@@ -396,12 +392,6 @@ class MqttSubscriptionManager:
 
         def handler(topic: str, message: dict[str, Any]) -> None:
             try:
-                # Set unit system context before parsing if configured
-                # This ensures validators use the correct unit system even
-                # when called from AWS CRT threads
-                if self._unit_system is not None:
-                    set_unit_system(self._unit_system)
-
                 res = message.get("response", {})
                 # Try nested response field, then fallback to top-level
                 data = (res.get(key) if key else res) or (

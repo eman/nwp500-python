@@ -562,7 +562,6 @@ class NavienMqttClient(EventEmitter):
                     event_emitter=self,
                     schedule_coroutine=self._schedule_coroutine,
                     device_info_cache=device_info_cache,
-                    unit_system=self._unit_system,
                 )
 
                 # Initialize device controller with cache

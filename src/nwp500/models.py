@@ -15,25 +15,17 @@ from pydantic import (
     BeforeValidator,
     ConfigDict,
     Field,
-    WrapValidator,
     computed_field,
     model_validator,
 )
 
 from ._base import NavienBaseModel
 from .converters import (
-    deci_celsius_to_preferred,
     device_bool_to_python,
     div_10,
-    div_10_celsius_delta_to_preferred,
-    div_10_celsius_to_preferred,
     enum_validator,
-    flow_rate_to_preferred,
-    half_celsius_to_preferred,
     mul_10,
-    raw_celsius_to_preferred,
     tou_override_to_python,
-    volume_to_preferred,
 )
 from .enums import (
     DHW_OPERATION_SETTING_TEXT,
@@ -56,7 +48,10 @@ from .field_factory import (
     temperature_field,
 )
 from .temperature import (
+    DeciCelsius,
+    DeciCelsiusDelta,
     HalfCelsius,
+    RawCelsius,
 )
 from .unit_system import get_unit_system
 
@@ -72,23 +67,6 @@ DeviceBool = Annotated[bool, BeforeValidator(device_bool_to_python)]
 CapabilityFlag = Annotated[bool, BeforeValidator(device_bool_to_python)]
 Div10 = Annotated[float, BeforeValidator(div_10)]
 TenWhToWh = Annotated[float, BeforeValidator(mul_10)]
-HalfCelsiusToPreferred = Annotated[
-    float, WrapValidator(half_celsius_to_preferred)
-]
-DeciCelsiusToPreferred = Annotated[
-    float, WrapValidator(deci_celsius_to_preferred)
-]
-RawCelsiusToPreferred = Annotated[
-    float, WrapValidator(raw_celsius_to_preferred)
-]
-Div10CelsiusToPreferred = Annotated[
-    float, WrapValidator(div_10_celsius_to_preferred)
-]
-Div10CelsiusDeltaToPreferred = Annotated[
-    float, WrapValidator(div_10_celsius_delta_to_preferred)
-]
-FlowRate = Annotated[float, WrapValidator(flow_rate_to_preferred)]
-Volume = Annotated[float, WrapValidator(volume_to_preferred)]
 TouStatus = Annotated[bool, BeforeValidator(bool)]
 TouOverride = Annotated[bool, BeforeValidator(tou_override_to_python)]
 VolumeCodeField = Annotated[
@@ -381,10 +359,8 @@ class ReservationSchedule(NavienBaseModel):
 class DeviceStatus(NavienBaseModel):
     """Represents the status of the Navien water heater device."""
 
-    # CRITICAL: temperature_type must be defined before any temperature
-    # fields that depend on it. Wrap validators need it in ValidationInfo.data.
-    # Reordering breaks unit conversions. See
-    # converters._get_temperature_preference() for details.
+    # CRITICAL: temperature_type must remain the first field so computed
+    # temperature properties can fall back to the device's native unit setting.
     temperature_type: TemperatureType = Field(
         default=TemperatureType.FAHRENHEIT,
         description=(
@@ -396,9 +372,6 @@ class DeviceStatus(NavienBaseModel):
     # Basic status fields
     command: int = Field(
         description="The command that triggered this status update"
-    )
-    outside_temperature: RawCelsiusToPreferred = temperature_field(
-        "Outdoor/ambient temperature"
     )
     special_function_status: int = Field(
         description=(
@@ -463,6 +436,9 @@ class DeviceStatus(NavienBaseModel):
     temp_formula_type: TempFormulaType = Field(
         description="Temperature formula type"
     )
+    outside_temperature_raw: int = temperature_field(
+        "Outdoor/ambient temperature", alias="outsideTemperature"
+    )
     current_statenum: int = Field(description="Current state number")
     target_fan_rpm: int = Field(
         description="Target fan RPM",
@@ -506,7 +482,8 @@ class DeviceStatus(NavienBaseModel):
         ),
         json_schema_extra={"unit_of_measurement": "h"},
     )
-    cumulated_dhw_flow_rate: Volume = Field(
+    cumulated_dhw_flow_rate_raw: int = Field(
+        alias="cumulatedDhwFlowRate",
         description=(
             "Cumulative DHW flow - "
             "total volume of hot water delivered since installation"
@@ -708,115 +685,138 @@ class DeviceStatus(NavienBaseModel):
         description="Recirculation reservation usage status"
     )
 
-    # Temperature fields - encoded in half-degrees Celsius
-    dhw_temperature: HalfCelsiusToPreferred = temperature_field(
-        "Current Domestic Hot Water (DHW) outlet temperature"
+    # Raw temperature, flow, and volume fields
+    dhw_temperature_raw: int = temperature_field(
+        "Current Domestic Hot Water (DHW) outlet temperature",
+        alias="dhwTemperature",
     )
-    dhw_temperature_setting: HalfCelsiusToPreferred = temperature_field(
-        "User-configured target DHW temperature"
+    dhw_temperature_setting_raw: int = temperature_field(
+        "User-configured target DHW temperature",
+        alias="dhwTemperatureSetting",
     )
-    dhw_target_temperature_setting: HalfCelsiusToPreferred = temperature_field(
-        "Duplicate of dhw_temperature_setting for legacy API compatibility"
+    dhw_target_temperature_setting_raw: int = temperature_field(
+        "Duplicate of dhw_temperature_setting for legacy API compatibility",
+        alias="dhwTargetTemperatureSetting",
     )
-    freeze_protection_temperature: HalfCelsiusToPreferred = temperature_field(
+    freeze_protection_temperature_raw: int = temperature_field(
         "Freeze protection temperature setpoint. "
-        "Prevents tank from freezing in cold environments"
+        "Prevents tank from freezing in cold environments",
+        alias="freezeProtectionTemperature",
     )
-    dhw_temperature2: HalfCelsiusToPreferred = temperature_field(
-        "Second DHW temperature reading"
+    dhw_temperature2_raw: int = temperature_field(
+        "Second DHW temperature reading",
+        alias="dhwTemperature2",
     )
-    hp_upper_on_temp_setting: HalfCelsiusToPreferred = temperature_field(
-        "Heat pump upper on temperature setting"
+    hp_upper_on_temp_setting_raw: int = temperature_field(
+        "Heat pump upper on temperature setting",
+        alias="hpUpperOnTempSetting",
     )
-    hp_upper_off_temp_setting: HalfCelsiusToPreferred = temperature_field(
-        "Heat pump upper off temperature setting"
+    hp_upper_off_temp_setting_raw: int = temperature_field(
+        "Heat pump upper off temperature setting",
+        alias="hpUpperOffTempSetting",
     )
-    hp_lower_on_temp_setting: HalfCelsiusToPreferred = temperature_field(
-        "Heat pump lower on temperature setting"
+    hp_lower_on_temp_setting_raw: int = temperature_field(
+        "Heat pump lower on temperature setting",
+        alias="hpLowerOnTempSetting",
     )
-    hp_lower_off_temp_setting: HalfCelsiusToPreferred = temperature_field(
-        "Heat pump lower off temperature setting"
+    hp_lower_off_temp_setting_raw: int = temperature_field(
+        "Heat pump lower off temperature setting",
+        alias="hpLowerOffTempSetting",
     )
-    he_upper_on_temp_setting: HalfCelsiusToPreferred = temperature_field(
-        "Heater element upper on temperature setting"
+    he_upper_on_temp_setting_raw: int = temperature_field(
+        "Heater element upper on temperature setting",
+        alias="heUpperOnTempSetting",
     )
-    he_upper_off_temp_setting: HalfCelsiusToPreferred = temperature_field(
-        "Heater element upper off temperature setting"
+    he_upper_off_temp_setting_raw: int = temperature_field(
+        "Heater element upper off temperature setting",
+        alias="heUpperOffTempSetting",
     )
-    he_lower_on_temp_setting: HalfCelsiusToPreferred = temperature_field(
-        "Heater element lower on temperature setting"
+    he_lower_on_temp_setting_raw: int = temperature_field(
+        "Heater element lower on temperature setting",
+        alias="heLowerOnTempSetting",
     )
-    he_lower_off_temp_setting: HalfCelsiusToPreferred = temperature_field(
-        "Heater element lower off temperature setting"
+    he_lower_off_temp_setting_raw: int = temperature_field(
+        "Heater element lower off temperature setting",
+        alias="heLowerOffTempSetting",
     )
-    heat_min_op_temperature: HalfCelsiusToPreferred = temperature_field(
+    heat_min_op_temperature_raw: int = temperature_field(
         "Minimum heat pump operation temperature. "
-        "Lowest tank setpoint allowed for heat pump operation"
+        "Lowest tank setpoint allowed for heat pump operation",
+        alias="heatMinOpTemperature",
     )
-    recirc_temp_setting: HalfCelsiusToPreferred = temperature_field(
-        "Recirculation temperature setting"
+    recirc_temp_setting_raw: int = temperature_field(
+        "Recirculation temperature setting",
+        alias="recircTempSetting",
     )
-    recirc_temperature: HalfCelsiusToPreferred = temperature_field(
-        "Recirculation temperature"
+    recirc_temperature_raw: int = temperature_field(
+        "Recirculation temperature",
+        alias="recircTemperature",
     )
-    recirc_faucet_temperature: HalfCelsiusToPreferred = temperature_field(
-        "Recirculation faucet temperature"
+    recirc_faucet_temperature_raw: int = temperature_field(
+        "Recirculation faucet temperature",
+        alias="recircFaucetTemperature",
     )
-
-    # Fields with scale division (raw / 10.0)
-    current_inlet_temperature: HalfCelsiusToPreferred = temperature_field(
-        "Cold water inlet temperature"
+    current_inlet_temperature_raw: int = temperature_field(
+        "Cold water inlet temperature",
+        alias="currentInletTemperature",
     )
-    current_dhw_flow_rate: FlowRate = Field(
+    current_dhw_flow_rate_raw: int = Field(
+        alias="currentDhwFlowRate",
         description="Current DHW flow rate",
         json_schema_extra={
             "unit_of_measurement": "GPM",
             "device_class": "flow_rate",
         },
     )
-    hp_upper_on_diff_temp_setting: Div10CelsiusDeltaToPreferred = Field(
+    hp_upper_on_diff_temp_setting_raw: int = Field(
+        alias="hpUpperOnDiffTempSetting",
         description="Heat pump upper on differential temperature setting",
         json_schema_extra={
             "unit_of_measurement": "°F",
             "device_class": "temperature",
         },
     )
-    hp_upper_off_diff_temp_setting: Div10CelsiusDeltaToPreferred = Field(
+    hp_upper_off_diff_temp_setting_raw: int = Field(
+        alias="hpUpperOffDiffTempSetting",
         description="Heat pump upper off differential temperature setting",
         json_schema_extra={
             "unit_of_measurement": "°F",
             "device_class": "temperature",
         },
     )
-    hp_lower_on_diff_temp_setting: Div10CelsiusDeltaToPreferred = Field(
+    hp_lower_on_diff_temp_setting_raw: int = Field(
+        alias="hpLowerOnDiffTempSetting",
         description="Heat pump lower on differential temperature setting",
         json_schema_extra={
             "unit_of_measurement": "°F",
             "device_class": "temperature",
         },
     )
-    hp_lower_off_diff_temp_setting: Div10CelsiusDeltaToPreferred = Field(
+    hp_lower_off_diff_temp_setting_raw: int = Field(
+        alias="hpLowerOffDiffTempSetting",
         description="Heat pump lower off differential temperature setting",
         json_schema_extra={
             "unit_of_measurement": "°F",
             "device_class": "temperature",
         },
     )
-    he_upper_on_diff_temp_setting: Div10CelsiusDeltaToPreferred = Field(
+    he_upper_on_diff_temp_setting_raw: int = Field(
+        alias="heUpperOnDiffTempSetting",
         description="Heater element upper on differential temperature setting",
         json_schema_extra={
             "unit_of_measurement": "°F",
             "device_class": "temperature",
         },
     )
-    he_upper_off_diff_temp_setting: Div10CelsiusDeltaToPreferred = Field(
+    he_upper_off_diff_temp_setting_raw: int = Field(
+        alias="heUpperOffDiffTempSetting",
         description="Heater element upper off differential temperature setting",
         json_schema_extra={
             "unit_of_measurement": "°F",
             "device_class": "temperature",
         },
     )
-    he_lower_on_diff_temp_setting: Div10CelsiusDeltaToPreferred = Field(
+    he_lower_on_diff_temp_setting_raw: int = Field(
         alias="heLowerOnTDiffempSetting",
         description="Heater element lower on differential temperature setting",
         json_schema_extra={
@@ -824,49 +824,57 @@ class DeviceStatus(NavienBaseModel):
             "device_class": "temperature",
         },
     )  # Handle API typo: heLowerOnTDiffempSetting -> heLowerOnDiffTempSetting
-    he_lower_off_diff_temp_setting: Div10CelsiusDeltaToPreferred = Field(
+    he_lower_off_diff_temp_setting_raw: int = Field(
+        alias="heLowerOffDiffTempSetting",
         description="Heater element lower off differential temperature setting",
         json_schema_extra={
             "unit_of_measurement": "°F",
             "device_class": "temperature",
         },
     )
-    recirc_dhw_flow_rate: FlowRate = Field(
+    recirc_dhw_flow_rate_raw: int = Field(
+        alias="recircDhwFlowRate",
         description="Recirculation DHW flow rate (dynamic units: LPM/GPM)",
         json_schema_extra={
             "device_class": "flow_rate",
         },
     )
-
-    # Temperature fields with decicelsius to Fahrenheit conversion
-    tank_upper_temperature: DeciCelsiusToPreferred = temperature_field(
-        "Temperature of the upper part of the tank"
+    tank_upper_temperature_raw: int = temperature_field(
+        "Temperature of the upper part of the tank",
+        alias="tankUpperTemperature",
     )
-    tank_lower_temperature: DeciCelsiusToPreferred = temperature_field(
-        "Temperature of the lower part of the tank"
+    tank_lower_temperature_raw: int = temperature_field(
+        "Temperature of the lower part of the tank",
+        alias="tankLowerTemperature",
     )
-    discharge_temperature: DeciCelsiusToPreferred = temperature_field(
+    discharge_temperature_raw: int = temperature_field(
         "Compressor discharge temperature - "
-        "temperature of refrigerant leaving the compressor"
+        "temperature of refrigerant leaving the compressor",
+        alias="dischargeTemperature",
     )
-    suction_temperature: DeciCelsiusToPreferred = temperature_field(
+    suction_temperature_raw: int = temperature_field(
         "Compressor suction temperature - "
-        "temperature of refrigerant entering the compressor"
+        "temperature of refrigerant entering the compressor",
+        alias="suctionTemperature",
     )
-    evaporator_temperature: DeciCelsiusToPreferred = temperature_field(
+    evaporator_temperature_raw: int = temperature_field(
         "Evaporator temperature - "
-        "temperature where heat is absorbed from ambient air"
+        "temperature where heat is absorbed from ambient air",
+        alias="evaporatorTemperature",
     )
-    ambient_temperature: DeciCelsiusToPreferred = temperature_field(
-        "Ambient air temperature measured at the heat pump air intake"
+    ambient_temperature_raw: int = temperature_field(
+        "Ambient air temperature measured at the heat pump air intake",
+        alias="ambientTemperature",
     )
-    target_super_heat: DeciCelsiusToPreferred = temperature_field(
+    target_super_heat_raw: int = temperature_field(
         "Target superheat value - desired temperature difference "
-        "ensuring complete refrigerant vaporization"
+        "ensuring complete refrigerant vaporization",
+        alias="targetSuperHeat",
     )
-    current_super_heat: DeciCelsiusToPreferred = temperature_field(
+    current_super_heat_raw: int = temperature_field(
         "Current superheat value - actual temperature difference "
-        "between suction and evaporator temperatures"
+        "between suction and evaporator temperatures",
+        alias="currentSuperHeat",
     )
 
     # Enum fields
@@ -878,13 +886,307 @@ class DeviceStatus(NavienBaseModel):
         default=DhwOperationSetting.ENERGY_SAVER,
         description="User's configured DHW operation mode preference",
     )
-    freeze_protection_temp_min: HalfCelsiusToPreferred = temperature_field(
+    freeze_protection_temp_min_raw: int = temperature_field(
         "Active freeze protection lower limit",
-        default=43.0,
+        alias="freezeProtectionTempMin",
+        default=43,
     )
-    freeze_protection_temp_max: HalfCelsiusToPreferred = temperature_field(
-        "Active freeze protection upper limit", default=65.0
+    freeze_protection_temp_max_raw: int = temperature_field(
+        "Active freeze protection upper limit",
+        alias="freezeProtectionTempMax",
+        default=65,
     )
+
+    def _is_celsius(self) -> bool:
+        """Return True if metric/Celsius units should be used."""
+        unit_system = get_unit_system()
+        if unit_system is not None:
+            return unit_system == "metric"
+        return self.temperature_type == TemperatureType.CELSIUS
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def outside_temperature(self) -> float:
+        raw = RawCelsius(self.outside_temperature_raw)
+        if self._is_celsius():
+            return raw.to_celsius()
+        return raw.to_fahrenheit_with_formula(self.temp_formula_type)
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def dhw_temperature(self) -> float:
+        return HalfCelsius(self.dhw_temperature_raw).to_preferred(
+            self._is_celsius()
+        )
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def dhw_temperature_setting(self) -> float:
+        return HalfCelsius(self.dhw_temperature_setting_raw).to_preferred(
+            self._is_celsius()
+        )
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def dhw_target_temperature_setting(self) -> float:
+        return HalfCelsius(
+            self.dhw_target_temperature_setting_raw
+        ).to_preferred(self._is_celsius())
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def freeze_protection_temperature(self) -> float:
+        return HalfCelsius(self.freeze_protection_temperature_raw).to_preferred(
+            self._is_celsius()
+        )
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def dhw_temperature2(self) -> float:
+        return HalfCelsius(self.dhw_temperature2_raw).to_preferred(
+            self._is_celsius()
+        )
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def hp_upper_on_temp_setting(self) -> float:
+        return HalfCelsius(self.hp_upper_on_temp_setting_raw).to_preferred(
+            self._is_celsius()
+        )
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def hp_upper_off_temp_setting(self) -> float:
+        return HalfCelsius(self.hp_upper_off_temp_setting_raw).to_preferred(
+            self._is_celsius()
+        )
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def hp_lower_on_temp_setting(self) -> float:
+        return HalfCelsius(self.hp_lower_on_temp_setting_raw).to_preferred(
+            self._is_celsius()
+        )
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def hp_lower_off_temp_setting(self) -> float:
+        return HalfCelsius(self.hp_lower_off_temp_setting_raw).to_preferred(
+            self._is_celsius()
+        )
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def he_upper_on_temp_setting(self) -> float:
+        return HalfCelsius(self.he_upper_on_temp_setting_raw).to_preferred(
+            self._is_celsius()
+        )
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def he_upper_off_temp_setting(self) -> float:
+        return HalfCelsius(self.he_upper_off_temp_setting_raw).to_preferred(
+            self._is_celsius()
+        )
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def he_lower_on_temp_setting(self) -> float:
+        return HalfCelsius(self.he_lower_on_temp_setting_raw).to_preferred(
+            self._is_celsius()
+        )
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def he_lower_off_temp_setting(self) -> float:
+        return HalfCelsius(self.he_lower_off_temp_setting_raw).to_preferred(
+            self._is_celsius()
+        )
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def heat_min_op_temperature(self) -> float:
+        return HalfCelsius(self.heat_min_op_temperature_raw).to_preferred(
+            self._is_celsius()
+        )
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def recirc_temp_setting(self) -> float:
+        return HalfCelsius(self.recirc_temp_setting_raw).to_preferred(
+            self._is_celsius()
+        )
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def recirc_temperature(self) -> float:
+        return HalfCelsius(self.recirc_temperature_raw).to_preferred(
+            self._is_celsius()
+        )
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def recirc_faucet_temperature(self) -> float:
+        return HalfCelsius(self.recirc_faucet_temperature_raw).to_preferred(
+            self._is_celsius()
+        )
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def current_inlet_temperature(self) -> float:
+        return HalfCelsius(self.current_inlet_temperature_raw).to_preferred(
+            self._is_celsius()
+        )
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def current_dhw_flow_rate(self) -> float:
+        lpm = self.current_dhw_flow_rate_raw / 10.0
+        if self._is_celsius():
+            return lpm
+        return round(lpm * 0.264172, 2)
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def hp_upper_on_diff_temp_setting(self) -> float:
+        return DeciCelsiusDelta(
+            self.hp_upper_on_diff_temp_setting_raw
+        ).to_preferred(self._is_celsius())
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def hp_upper_off_diff_temp_setting(self) -> float:
+        return DeciCelsiusDelta(
+            self.hp_upper_off_diff_temp_setting_raw
+        ).to_preferred(self._is_celsius())
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def hp_lower_on_diff_temp_setting(self) -> float:
+        return DeciCelsiusDelta(
+            self.hp_lower_on_diff_temp_setting_raw
+        ).to_preferred(self._is_celsius())
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def hp_lower_off_diff_temp_setting(self) -> float:
+        return DeciCelsiusDelta(
+            self.hp_lower_off_diff_temp_setting_raw
+        ).to_preferred(self._is_celsius())
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def he_upper_on_diff_temp_setting(self) -> float:
+        return DeciCelsiusDelta(
+            self.he_upper_on_diff_temp_setting_raw
+        ).to_preferred(self._is_celsius())
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def he_upper_off_diff_temp_setting(self) -> float:
+        return DeciCelsiusDelta(
+            self.he_upper_off_diff_temp_setting_raw
+        ).to_preferred(self._is_celsius())
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def he_lower_on_diff_temp_setting(self) -> float:
+        return DeciCelsiusDelta(
+            self.he_lower_on_diff_temp_setting_raw
+        ).to_preferred(self._is_celsius())
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def he_lower_off_diff_temp_setting(self) -> float:
+        return DeciCelsiusDelta(
+            self.he_lower_off_diff_temp_setting_raw
+        ).to_preferred(self._is_celsius())
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def recirc_dhw_flow_rate(self) -> float:
+        lpm = self.recirc_dhw_flow_rate_raw / 10.0
+        if self._is_celsius():
+            return lpm
+        return round(lpm * 0.264172, 2)
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def tank_upper_temperature(self) -> float:
+        return DeciCelsius(self.tank_upper_temperature_raw).to_preferred(
+            self._is_celsius()
+        )
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def tank_lower_temperature(self) -> float:
+        return DeciCelsius(self.tank_lower_temperature_raw).to_preferred(
+            self._is_celsius()
+        )
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def discharge_temperature(self) -> float:
+        return DeciCelsius(self.discharge_temperature_raw).to_preferred(
+            self._is_celsius()
+        )
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def suction_temperature(self) -> float:
+        return DeciCelsius(self.suction_temperature_raw).to_preferred(
+            self._is_celsius()
+        )
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def evaporator_temperature(self) -> float:
+        return DeciCelsius(self.evaporator_temperature_raw).to_preferred(
+            self._is_celsius()
+        )
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def ambient_temperature(self) -> float:
+        return DeciCelsius(self.ambient_temperature_raw).to_preferred(
+            self._is_celsius()
+        )
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def target_super_heat(self) -> float:
+        return DeciCelsius(self.target_super_heat_raw).to_preferred(
+            self._is_celsius()
+        )
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def current_super_heat(self) -> float:
+        return DeciCelsius(self.current_super_heat_raw).to_preferred(
+            self._is_celsius()
+        )
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def cumulated_dhw_flow_rate(self) -> float:
+        liters = float(self.cumulated_dhw_flow_rate_raw)
+        if self._is_celsius():
+            return liters
+        return round(liters * 0.264172, 2)
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def freeze_protection_temp_min(self) -> float:
+        return HalfCelsius(self.freeze_protection_temp_min_raw).to_preferred(
+            self._is_celsius()
+        )
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def freeze_protection_temp_max(self) -> float:
+        return HalfCelsius(self.freeze_protection_temp_max_raw).to_preferred(
+            self._is_celsius()
+        )
 
     def get_field_unit(self, field_name: str) -> str:
         """Get the correct unit suffix based on temperature preference.
@@ -900,10 +1202,13 @@ class DeviceStatus(NavienBaseModel):
             Unit string (e.g., " °C", " LPM", " L") or empty if field not found
         """
         model_fields = self.__class__.model_fields
-        if field_name not in model_fields:
+        lookup_name = (
+            field_name if field_name in model_fields else f"{field_name}_raw"
+        )
+        if lookup_name not in model_fields:
             return ""
 
-        field_info = model_fields[field_name]
+        field_info = model_fields[lookup_name]
         if not hasattr(field_info, "json_schema_extra"):
             return ""
 
@@ -911,13 +1216,7 @@ class DeviceStatus(NavienBaseModel):
         if not isinstance(extra, dict):
             return ""
 
-        # Check if unit system override is set in context
-        unit_system = get_unit_system()
-        if unit_system is not None:
-            is_celsius = unit_system == "metric"
-        else:
-            # Fall back to device's temperature_type setting
-            is_celsius = self.temperature_type == TemperatureType.CELSIUS
+        is_celsius = self._is_celsius()
 
         device_class = extra.get("device_class")
 
@@ -950,8 +1249,8 @@ class DeviceStatus(NavienBaseModel):
 class DeviceFeature(NavienBaseModel):
     """Device capabilities, configuration, and firmware info."""
 
-    # IMPORTANT: temperature_type must be defined before any temperature fields
-    # so that it is available in the validation context (info.data).
+    # IMPORTANT: temperature_type must remain the first field so computed
+    # temperature properties can fall back to the device's native unit setting.
     temperature_type: TemperatureType = Field(
         default=TemperatureType.FAHRENHEIT,
         description=(
@@ -1199,28 +1498,83 @@ class DeviceFeature(NavienBaseModel):
         ),
     )
 
-    # Temperature limit fields with half-degree Celsius scaling
-    dhw_temperature_min: HalfCelsiusToPreferred = temperature_field(
-        "Minimum DHW temperature setting - safety and efficiency lower limit"
+    # Raw temperature limit fields with half-degree Celsius scaling
+    dhw_temperature_min_raw: int = temperature_field(
+        "Minimum DHW temperature setting - safety and efficiency lower limit",
+        alias="dhwTemperatureMin",
     )
-    dhw_temperature_max: HalfCelsiusToPreferred = temperature_field(
-        "Maximum DHW temperature setting - scald protection upper limit"
+    dhw_temperature_max_raw: int = temperature_field(
+        "Maximum DHW temperature setting - scald protection upper limit",
+        alias="dhwTemperatureMax",
     )
-    freeze_protection_temp_min: HalfCelsiusToPreferred = temperature_field(
+    freeze_protection_temp_min_raw: int = temperature_field(
         "Minimum freeze protection threshold - "
-        "factory default activation temperature"
+        "factory default activation temperature",
+        alias="freezeProtectionTempMin",
     )
-    freeze_protection_temp_max: HalfCelsiusToPreferred = temperature_field(
-        "Maximum freeze protection threshold - user-adjustable upper limit"
+    freeze_protection_temp_max_raw: int = temperature_field(
+        "Maximum freeze protection threshold - user-adjustable upper limit",
+        alias="freezeProtectionTempMax",
     )
-    recirc_temperature_min: HalfCelsiusToPreferred = temperature_field(
+    recirc_temperature_min_raw: int = temperature_field(
         "Minimum recirculation temperature setting - "
-        "lower limit for recirculation loop temperature control"
+        "lower limit for recirculation loop temperature control",
+        alias="recircTemperatureMin",
     )
-    recirc_temperature_max: HalfCelsiusToPreferred = temperature_field(
+    recirc_temperature_max_raw: int = temperature_field(
         "Maximum recirculation temperature setting - "
-        "upper limit for recirculation loop temperature control"
+        "upper limit for recirculation loop temperature control",
+        alias="recircTemperatureMax",
     )
+
+    def _is_celsius(self) -> bool:
+        """Return True if metric/Celsius units should be used."""
+        unit_system = get_unit_system()
+        if unit_system is not None:
+            return unit_system == "metric"
+        return self.temperature_type == TemperatureType.CELSIUS
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def dhw_temperature_min(self) -> float:
+        return HalfCelsius(self.dhw_temperature_min_raw).to_preferred(
+            self._is_celsius()
+        )
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def dhw_temperature_max(self) -> float:
+        return HalfCelsius(self.dhw_temperature_max_raw).to_preferred(
+            self._is_celsius()
+        )
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def freeze_protection_temp_min(self) -> float:
+        return HalfCelsius(self.freeze_protection_temp_min_raw).to_preferred(
+            self._is_celsius()
+        )
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def freeze_protection_temp_max(self) -> float:
+        return HalfCelsius(self.freeze_protection_temp_max_raw).to_preferred(
+            self._is_celsius()
+        )
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def recirc_temperature_min(self) -> float:
+        return HalfCelsius(self.recirc_temperature_min_raw).to_preferred(
+            self._is_celsius()
+        )
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def recirc_temperature_max(self) -> float:
+        return HalfCelsius(self.recirc_temperature_max_raw).to_preferred(
+            self._is_celsius()
+        )
 
     def get_field_unit(self, field_name: str) -> str:
         """Get the correct unit suffix based on temperature preference.
@@ -1236,10 +1590,13 @@ class DeviceFeature(NavienBaseModel):
             Unit string (e.g., " °C", " LPM", " L") or empty if field not found
         """
         model_fields = self.__class__.model_fields
-        if field_name not in model_fields:
+        lookup_name = (
+            field_name if field_name in model_fields else f"{field_name}_raw"
+        )
+        if lookup_name not in model_fields:
             return ""
 
-        field_info = model_fields[field_name]
+        field_info = model_fields[lookup_name]
         if not hasattr(field_info, "json_schema_extra"):
             return ""
 
@@ -1247,13 +1604,7 @@ class DeviceFeature(NavienBaseModel):
         if not isinstance(extra, dict):
             return ""
 
-        # Check if unit system override is set in context
-        unit_system = get_unit_system()
-        if unit_system is not None:
-            is_celsius = unit_system == "metric"
-        else:
-            # Fall back to device's temperature_type setting
-            is_celsius = self.temperature_type == TemperatureType.CELSIUS
+        is_celsius = self._is_celsius()
 
         device_class = extra.get("device_class")
 
