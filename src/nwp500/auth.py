@@ -16,41 +16,31 @@ from __future__ import annotations
 import json
 import logging
 from datetime import UTC, datetime, timedelta
-from typing import Any, Literal, Self, cast
+from typing import Any, Self, cast
 
 import aiohttp
 from pydantic import (
-    BaseModel,
-    ConfigDict,
     Field,
     PrivateAttr,
     field_validator,
     model_validator,
 )
-from pydantic.alias_generators import to_camel
 
 from . import __version__
+from ._base import NavienBaseModel
 from .config import API_BASE_URL, REFRESH_ENDPOINT, SIGN_IN_ENDPOINT
 from .exceptions import (
     AuthenticationError,
     InvalidCredentialsError,
     TokenRefreshError,
 )
-from .unit_system import set_unit_system
+from .unit_system import UnitSystemType
 
 __author__ = "Emmanuel Levijarvi"
 __copyright__ = "Emmanuel Levijarvi"
 __license__ = "MIT"
 
 _logger = logging.getLogger(__name__)
-
-
-class NavienBaseModel(BaseModel):
-    """Base model for Navien authentication models."""
-
-    model_config = ConfigDict(
-        alias_generator=to_camel, populate_by_name=True, extra="ignore"
-    )
 
 
 class UserInfo(NavienBaseModel):
@@ -318,7 +308,7 @@ class NavienAuthClient:
         session: aiohttp.ClientSession | None = None,
         timeout: int = 30,
         stored_tokens: AuthTokens | None = None,
-        unit_system: Literal["metric", "us_customary"] | None = None,
+        unit_system: UnitSystemType = None,
     ):
         """
         Initialize the authentication client.
@@ -350,10 +340,7 @@ class NavienAuthClient:
         # Store credentials for automatic authentication
         self._user_id = user_id
         self._password = password
-
-        # Set unit system preference if provided
-        if unit_system is not None:
-            set_unit_system(unit_system)
+        self._unit_system: UnitSystemType = unit_system
 
         # Current authentication state
         self._auth_response: AuthenticationResponse | None = None

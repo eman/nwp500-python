@@ -12,7 +12,6 @@ import logging
 from typing import Annotated, Any, Self, cast
 
 from pydantic import (
-    BaseModel,
     BeforeValidator,
     ConfigDict,
     Field,
@@ -20,8 +19,8 @@ from pydantic import (
     computed_field,
     model_validator,
 )
-from pydantic.alias_generators import to_camel
 
+from ._base import NavienBaseModel
 from .converters import (
     deci_celsius_to_preferred,
     device_bool_to_python,
@@ -171,72 +170,6 @@ def reservation_param_to_preferred(param: int) -> float:
     if get_unit_system() == "metric":
         return round(half_celsius.to_celsius(), 1)
     return round(half_celsius.to_fahrenheit(), 1)
-
-
-class NavienBaseModel(BaseModel):
-    """Base model for all Navien models.
-
-    Note: use_enum_values=False keeps enums as objects during validation.
-    Serialization to names happens in model_dump() method.
-    """
-
-    model_config = ConfigDict(
-        alias_generator=to_camel,
-        populate_by_name=True,
-        extra="ignore",  # Ignore unknown fields by default
-        use_enum_values=False,  # Keep enums as objects during validation
-    )
-
-    def model_dump(self, **kwargs: Any) -> dict[str, Any]:
-        """Dump model to dict with enums as names by default."""
-        # Default to 'name' mode for enums unless explicitly overridden
-        if "mode" not in kwargs:
-            kwargs["mode"] = "python"
-        result = super().model_dump(**kwargs)
-        # Convert enums to their names
-        converted: dict[str, Any] = self._convert_enums_to_names(result)
-        return converted
-
-    @staticmethod
-    def _convert_enums_to_names(
-        data: Any, visited: set[int] | None = None
-    ) -> Any:
-        """Recursively convert Enum values to their names.
-
-        Args:
-            data: The data structure to convert.
-            visited: Set of object IDs already visited to prevent infinite
-                     recursion. None indicates uninitialized/first call.
-        """
-        from enum import Enum
-
-        if isinstance(data, Enum):
-            return data.name
-        if not isinstance(data, (dict, list, tuple)):
-            return data
-
-        visited = visited or set()
-        if id(data) in visited:
-            return data
-        visited.add(id(data))
-
-        if isinstance(data, dict):
-            res: dict[Any, Any] | list[Any] | tuple[Any, ...] = {
-                k: NavienBaseModel._convert_enums_to_names(v, visited)
-                for k, v in data.items()
-            }
-        else:
-            # We know data is list or tuple here because of the earlier check
-            # `if not isinstance(data, (dict, list, tuple)): return data`
-            res = type(data)(
-                [
-                    NavienBaseModel._convert_enums_to_names(i, visited)
-                    for i in data
-                ]
-            )
-
-        visited.discard(id(data))
-        return res
 
 
 class DeviceInfo(NavienBaseModel):

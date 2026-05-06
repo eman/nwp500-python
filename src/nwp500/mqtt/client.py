@@ -31,7 +31,7 @@ from ..exceptions import (
     MqttPublishError,
     TokenRefreshError,
 )
-from ..unit_system import UnitSystemType, set_unit_system
+from ..unit_system import UnitSystemType
 from .command_queue import MqttCommandQueue
 from .connection import MqttConnection
 from .control import MqttDeviceController
@@ -179,10 +179,6 @@ class NavienMqttClient(EventEmitter):
 
         # Initialize EventEmitter
         super().__init__()
-
-        # Set unit system preference if provided
-        if unit_system is not None:
-            set_unit_system(unit_system)
 
         self._auth_client = auth_client
         self._unit_system: UnitSystemType = unit_system

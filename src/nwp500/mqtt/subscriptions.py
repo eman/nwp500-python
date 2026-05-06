@@ -83,8 +83,8 @@ class MqttSubscriptionManager:
             str, list[Callable[[str, dict[str, Any]], None]]
         ] = {}
 
-        # Track previous state for change detection
-        self._previous_status: DeviceStatus | None = None
+        # Track previous state for change detection, keyed by device MAC
+        self._previous_status: dict[str, DeviceStatus] = {}
 
     @property
     def subscriptions(self) -> dict[str, mqtt.QoS]:
@@ -370,12 +370,15 @@ class MqttSubscriptionManager:
         self, device: Device, callback: Callable[[DeviceStatus], None]
     ) -> int:
         """Subscribe to device status messages with automatic parsing."""
+        device_mac = device.device_info.mac_address
 
         def post_parse(status: DeviceStatus) -> None:
             self._schedule_coroutine(
                 self._event_emitter.emit("status_received", status)
             )
-            self._schedule_coroutine(self._detect_state_changes(status))
+            self._schedule_coroutine(
+                self._detect_state_changes(device_mac, status)
+            )
 
         handler = self._make_handler(
             DeviceStatus, callback, "status", post_parse
@@ -425,22 +428,25 @@ class MqttSubscriptionManager:
         cast(Any, handler)._original_callback = callback
         return handler
 
-    async def _detect_state_changes(self, status: DeviceStatus) -> None:
+    async def _detect_state_changes(
+        self, device_mac: str, status: DeviceStatus
+    ) -> None:
         """
         Detect state changes and emit granular events.
 
-        This method compares the current status with the previous status
+        Compares the current status with the previous status for this device
         and emits events for any detected changes.
 
         Args:
+            device_mac: MAC address of the device (for per-device tracking)
             status: Current device status
         """
-        if self._previous_status is None:
-            # First status received, just store it
-            self._previous_status = status
+        if device_mac not in self._previous_status:
+            # First status received for this device, just store it
+            self._previous_status[device_mac] = status
             return
 
-        prev = self._previous_status
+        prev = self._previous_status[device_mac]
 
         try:
             # Temperature change
@@ -506,8 +512,8 @@ class MqttSubscriptionManager:
         except (TypeError, AttributeError, RuntimeError) as e:
             _logger.error(f"Error detecting state changes: {e}", exc_info=True)
         finally:
-            # Always update previous status
-            self._previous_status = status
+            # Always update previous status for this device
+            self._previous_status[device_mac] = status
 
     async def subscribe_device_feature(
         self, device: Device, callback: Callable[[DeviceFeature], None]
@@ -573,4 +579,4 @@ class MqttSubscriptionManager:
         """Clear all subscription tracking (called on disconnect)."""
         self._subscriptions.clear()
         self._message_handlers.clear()
-        self._previous_status = None
+        self._previous_status.clear()

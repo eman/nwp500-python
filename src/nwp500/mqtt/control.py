@@ -23,6 +23,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from ..command_decorators import requires_capability
+from ..config import MQTT_PROTOCOL_VERSION
 from ..device_capabilities import MqttDeviceCapabilityChecker
 from ..device_info_cache import MqttDeviceInfoCache
 from ..enums import CommandCode, DhwOperationSetting
@@ -223,7 +224,7 @@ class MqttDeviceController:
         return {
             "clientID": self._client_id,
             "sessionID": self._session_id,
-            "protocolVersion": 2,
+            "protocolVersion": MQTT_PROTOCOL_VERSION,
             "request": request,
             "requestTopic": f"cmd/{device_type}/{device_topic}",
             "responseTopic": (
@@ -649,12 +650,8 @@ class MqttDeviceController:
     @requires_capability("holiday_use")
     async def set_vacation_days(self, device: Device, days: int) -> int:
         """Set vacation/away mode duration (1-30 days)."""
-        self._validate_range("days", days, 1, 30)
-        return await self._mode_command(
-            device,
-            CommandCode.DHW_MODE,
-            "dhw-mode",
-            [DhwOperationSetting.VACATION.value, days],
+        return await self.set_dhw_mode(
+            device, DhwOperationSetting.VACATION.value, vacation_days=days
         )
 
     @requires_capability("program_reservation_use")

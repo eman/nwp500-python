@@ -5,3 +5,4 @@ SIGN_IN_ENDPOINT = "/user/sign-in"
 REFRESH_ENDPOINT = "/auth/refresh"
 AWS_IOT_ENDPOINT = "a1t30mldyslmuq-ats.iot.us-east-1.amazonaws.com"
 AWS_REGION = "us-east-1"
+MQTT_PROTOCOL_VERSION = 2

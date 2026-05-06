@@ -7,7 +7,7 @@ This module provides an async HTTP client for device management and control.
 from __future__ import annotations
 
 import logging
-from typing import Any, Literal, Self, cast
+from typing import Any, Self, cast
 
 import aiohttp
 
@@ -15,7 +15,7 @@ from .auth import NavienAuthClient
 from .config import API_BASE_URL
 from .exceptions import APIError, AuthenticationError, TokenRefreshError
 from .models import ConvertedTOUPlan, Device, FirmwareInfo, TOUInfo
-from .unit_system import set_unit_system
+from .unit_system import UnitSystemType
 
 __author__ = "Emmanuel Levijarvi"
 __copyright__ = "Emmanuel Levijarvi"
@@ -50,7 +50,7 @@ class NavienAPIClient:
         auth_client: NavienAuthClient,
         base_url: str = API_BASE_URL,
         session: aiohttp.ClientSession | None = None,
-        unit_system: Literal["metric", "us_customary"] | None = None,
+        unit_system: UnitSystemType = None,
     ):
         """
         Initialize Navien API client.
@@ -78,6 +78,7 @@ class NavienAPIClient:
 
         self.base_url = base_url.rstrip("/")
         self._auth_client = auth_client
+        self._unit_system = unit_system
         self._session = session or auth_client.session
 
         if self._session is None:
@@ -87,10 +88,6 @@ class NavienAPIClient:
             )
         self._owned_session = False
         self._owned_auth = False
-
-        # Set unit system preference if provided
-        if unit_system is not None:
-            set_unit_system(unit_system)
 
     async def __aenter__(self) -> Self:
         """Enter async context manager."""
