@@ -2,8 +2,7 @@
 Quickstart
 ==========
 
-This guide will get you up and running with the nwp500-python library
-in just a few minutes.
+Install the library and start talking to your device.
 
 Prerequisites
 =============
@@ -276,7 +275,7 @@ Common Issues
    reach the Navien cloud platform.
 
 **Import Errors**
-   Make sure you installed the library: ``pip install nwp500-python``
+   Check that the library is installed: ``pip install nwp500-python``
 
 For more help, see the :doc:`development/contributing` guide or file an
 issue on GitHub.

@@ -2,58 +2,46 @@
 Event-Driven Programming
 ========================
 
-This guide demonstrates how to build event-driven applications using the
-nwp500 library's event system.
-
-Overview
-========
-
-The event system allows you to:
-
-* React to device state changes in real-time
-* Build responsive, reactive applications
-* Separate concerns (monitoring, logging, alerting)
-* Handle multiple devices with a unified interface
-
-Benefits
---------
-
-**Compared to polling:**
-
-* Lower latency - react immediately to changes
-* More efficient - no wasted requests
-* Cleaner code - declarative callbacks vs loops
-* Better scalability - handle multiple devices easily
-
-**Use cases:**
-
-* Home automation triggers
-* Alert systems
-* Data logging and analytics
-* UI updates
-* Integration with other systems
-
-Basic Usage
-===========
+The nwp500 event system lets you react to device state changes, connection
+events, and derived transitions (temperature delta, mode change, etc.) without
+polling.
 
 Two Callback Patterns
----------------------
+=====================
 
-The MQTT client exposes two distinct callback styles:
+``subscribe_*()`` methods
+--------------------------
 
-* :meth:`nwp500.mqtt.client.NavienMqttClient.subscribe_device_status` and other
-  ``subscribe_*`` methods deliver parsed model objects directly. For example,
-  ``subscribe_device_status()`` still calls ``callback(DeviceStatus)``.
-* :meth:`nwp500.events.EventEmitter.on` listens for higher-level client events.
-  These callbacks now receive a **single typed event dataclass** such as
-  :class:`nwp500.mqtt_events.StatusReceivedEvent` or
-  :class:`nwp500.mqtt_events.ConnectionResumedEvent`.
+These deliver parsed model objects directly to your callback:
 
-Discovering Available Events
-----------------------------
+.. code-block:: python
 
-The :class:`nwp500.mqtt_events.MqttClientEvents` class provides a complete registry
-of all events with type-safe constants and full documentation:
+   def on_status(status):
+       print(status.dhw_temperature)
+
+   await mqtt.subscribe_device_status(device, on_status)
+   await mqtt.request_device_status(device)
+
+``.on()`` event emitter
+------------------------
+
+These deliver a single typed event dataclass. Use them for connection events and
+derived state transitions (temperature delta, mode change, etc.):
+
+.. code-block:: python
+
+   from nwp500 import MqttClientEvents
+
+   def on_status_event(event):
+       status = event.status
+       print(f"Temperature: {status.dhw_temperature}°F")
+
+   mqtt.on(MqttClientEvents.STATUS_RECEIVED, on_status_event)
+
+See :doc:`../python_api/events` for the full event dataclass reference.
+
+Available Events
+----------------
 
 .. code-block:: python
 
@@ -94,8 +82,7 @@ Simple Event Handler
 Raw status subscription
 -----------------------
 
-Use a typed subscription when you want the raw model directly instead of an event
-wrapper:
+Use a typed subscription when you want the model object directly:
 
 .. code-block:: python
 
@@ -108,9 +95,7 @@ wrapper:
 Event Registry
 --------------
 
-The :class:`nwp500.mqtt_events.MqttClientEvents` class provides type-safe event
-constants and programmatic discovery, so your callbacks use valid event names and
-get IDE autocomplete:
+Use ``MqttClientEvents`` constants to avoid typos and get IDE autocomplete:
 
 .. code-block:: python
 
@@ -131,24 +116,18 @@ get IDE autocomplete:
    mqtt_client.on(MqttClientEvents.HEATING_STARTED, on_heating_start)
    mqtt_client.on(MqttClientEvents.ERROR_DETECTED, on_error)
 
-   print("Available events:")
    for event_name in MqttClientEvents.get_all_events():
        print(f"  - {event_name}")
 
-   event_value = MqttClientEvents.get_event_value("TEMPERATURE_CHANGED")
-   print(f"Event value: {event_value}")
-
-Each event has full type documentation. See :doc:`../python_api/events` for the
-complete event dataclass reference.
+See :doc:`../python_api/events` for the event dataclass reference.
 
 Advanced Patterns
 =================
 
+Tracking significant changes
+----------------------------
 
-Pattern 1: State Tracking
---------------------------
-
-Track state changes and react only when values change significantly.
+Filter callbacks to only act when a value changes by more than a threshold:
 
 .. code-block:: python
 
@@ -191,8 +170,8 @@ Track state changes and react only when values change significantly.
 
            await asyncio.sleep(3600)  # Monitor for 1 hour
 
-Pattern 2: Multi-Device Monitoring
------------------------------------
+Multiple devices
+----------------
 
 Monitor multiple devices with individual callbacks.
 
@@ -250,10 +229,10 @@ Monitor multiple devices with individual callbacks.
            while True:
                await asyncio.sleep(60)
 
-Pattern 3: Alert System
-------------------------
+Alert rules
+-----------
 
-Build an alert system that triggers on specific conditions.
+Trigger actions when the device crosses a threshold:
 
 .. code-block:: python
 
@@ -349,8 +328,8 @@ Build an alert system that triggers on specific conditions.
            while True:
                await asyncio.sleep(3600)
 
-Pattern 4: Data Logger
------------------------
+Data logging
+------------
 
 Log device data to a database or file.
 
@@ -433,10 +412,10 @@ Log device data to a database or file.
            while True:
                await asyncio.sleep(3600)
 
-Pattern 5: Home Automation Integration
----------------------------------------
+Home automation bridge
+----------------------
 
-Integrate with Home Assistant, OpenHAB, or custom systems.
+Publish status updates to Home Assistant or similar systems:
 
 .. code-block:: python
 
@@ -516,69 +495,60 @@ Integrate with Home Assistant, OpenHAB, or custom systems.
 Best Practices
 ==============
 
-1. **Keep handlers lightweight:**
+Keep handlers lightweight
+--------------------------
 
-   .. code-block:: python
+Offload heavy work with ``asyncio.create_task`` rather than blocking in the callback:
 
-      # GOOD: Fast handler
-      def on_status(status):
-          asyncio.create_task(process_status(status))
+.. code-block:: python
 
-      # BAD: Slow handler (blocks event loop)
-      def on_status(status):
-          time.sleep(5)  # BAD
-          process_status(status)
+   def on_status(status):
+       asyncio.create_task(process_status(status))
 
-2. **Handle errors in callbacks:**
+Wrap callbacks in try/except
+-----------------------------
 
-   .. code-block:: python
+An unhandled exception in a callback won't crash the event loop, but it will
+silence subsequent events for that subscription:
 
-      def safe_handler(status):
-          try:
-              process_status(status)
-          except Exception as e:
-              print(f"Handler error: {e}")
-              # Don't let errors crash the event loop
+.. code-block:: python
 
-3. **Unsubscribe when done:**
+   def safe_handler(status):
+       try:
+           process_status(status)
+       except Exception as e:
+           print(f"Handler error: {e}")
 
-   .. code-block:: python
+Async callbacks
+---------------
 
-      # Track callback references
-      callback = lambda s: print(s.dhw_temperature)
+Callbacks can be async. The client will schedule them as tasks:
 
-      await mqtt.subscribe_device_status(device, callback)
+.. code-block:: python
 
-      # Later, unsubscribe
-      # (if the MQTT client supports it)
+   async def async_handler(status):
+       await save_to_database(status)
+       await send_notification(status)
 
-4. **Use async callbacks when possible:**
+Batch processing
+----------------
 
-   .. code-block:: python
+Buffer updates and flush periodically to reduce I/O overhead:
 
-      async def async_handler(status):
-          # Can await async operations
-          await save_to_database(status)
-          await send_notification(status)
+.. code-block:: python
 
-5. **Batch updates to reduce overhead:**
+   class BatchProcessor:
+       def __init__(self):
+           self.buffer = []
 
-   .. code-block:: python
+       def on_status(self, status):
+           self.buffer.append(status)
+           if len(self.buffer) >= 10:
+               self.flush()
 
-      class BatchProcessor:
-          def __init__(self):
-              self.buffer = []
-
-          def on_status(self, status):
-              self.buffer.append(status)
-
-              if len(self.buffer) >= 10:
-                  self.flush()
-
-          def flush(self):
-              # Process batch
-              save_batch_to_db(self.buffer)
-              self.buffer.clear()
+       def flush(self):
+           save_batch_to_db(self.buffer)
+           self.buffer.clear()
 
 Related Documentation
 =====================

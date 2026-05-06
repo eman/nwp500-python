@@ -2,29 +2,22 @@
 MQTT Client
 ============
 
-The ``NavienMqttClient`` is the **primary interface** for real-time communication
-with Navien devices. Use this for monitoring status and sending control commands.
+``NavienMqttClient`` is the main interface for real-time communication with
+Navien devices — status monitoring, device control, and event callbacks.
 
 .. important::
-   **MQTT is the main way to interact with your Navien device.** Use the REST API
-   only for device discovery. MQTT provides real-time updates, lower latency,
-   bidirectional communication, and event-driven architecture.
+   Use the REST API only for device discovery. Everything else goes through MQTT.
 
 Overview
 ========
 
-The MQTT client provides:
-
-* **Real-Time Monitoring** - Subscribe to device status updates as they happen
+* **Real-Time Monitoring** - Subscribe to device status updates
 * **Device Control** - Send commands (power, temperature, mode)
 * **Event System** - React to state changes with callbacks
-* **Auto-Reconnection** - Automatic recovery from network issues with exponential backoff
-* **Command Queueing** - Commands queued when offline, sent automatically on reconnect
-* **Type-Safe** - Returns strongly-typed data models (DeviceStatus, DeviceFeature)
-* **Periodic Requests** - Automatic periodic status/info requests
-* **Energy Monitoring** - Query and subscribe to energy usage data
-
-All operations are fully asynchronous and non-blocking.
+* **Auto-Reconnection** - Exponential backoff reconnection with command queueing
+* **Type-Safe** - Returns typed models (DeviceStatus, DeviceFeature)
+* **Periodic Requests** - Scheduled status polling
+* **Energy Monitoring** - Query historical energy usage data
 
 Quick Start
 ===========
@@ -195,8 +188,8 @@ subscribe_device_status()
 
    Subscribe to device status updates with automatic parsing.
 
-   The callback receives DeviceStatus objects with 100+ fields including temperature,
-   power consumption, operation mode, and component states.
+   The callback receives :class:`~nwp500.models.DeviceStatus` objects containing
+   temperature, power, operation mode, component states, and more.
 
    :param device: Device object
    :type device: Device
@@ -1037,69 +1030,57 @@ Example 3: Multi-Device Monitoring
 Best Practices
 ==============
 
-1. **Always subscribe before requesting:**
+Subscribe before requesting
+----------------------------
 
-   .. code-block:: python
+The device responds on a topic you must already be listening to:
 
-      # CORRECT order
-      await mqtt.subscribe_device_status(device, on_status)
-      await mqtt.request_device_status(device)
-      
-      # WRONG - response will be missed
-      await mqtt.request_device_status(device)
-      await mqtt.subscribe_device_status(device, on_status)
+.. code-block:: python
 
-2. **Use context managers:**
+   # correct
+   await mqtt.subscribe_device_status(device, on_status)
+   await mqtt.request_device_status(device)
 
-   .. code-block:: python
+   # wrong — response arrives before subscription
+   await mqtt.request_device_status(device)
+   await mqtt.subscribe_device_status(device, on_status)
 
-      async with NavienAuthClient(email, password) as auth:
-          mqtt = NavienMqttClient(auth)
-          try:
-              await mqtt.connect()
-              # ... operations ...
-          finally:
-              await mqtt.disconnect()
+Use context managers
+---------------------
 
-3. **Handle connection events:**
+.. code-block:: python
 
-   .. code-block:: python
+   async with NavienAuthClient(email, password) as auth:
+       mqtt = NavienMqttClient(auth)
+       try:
+           await mqtt.connect()
+           # ... operations ...
+       finally:
+           await mqtt.disconnect()
 
-      mqtt = NavienMqttClient(auth)
-      
-      def on_interrupted(event):
-          print(f"Connection lost: {event.error}")
-          # Save state, notify user, etc.
-      
-      def on_resumed(event):
-          print(f"Connection restored (session_present={event.session_present})")
-          # Re-request status, etc.
-      
-      mqtt.on("connection_interrupted", on_interrupted)
-      mqtt.on("connection_resumed", on_resumed)
+Handle connection events
+------------------------
 
-4. **Use periodic requests for long-running monitoring:**
+.. code-block:: python
 
-   .. code-block:: python
+   def on_interrupted(event):
+       print(f"Connection lost: {event.error}")
 
-      # Instead of manual loop
-      await mqtt.subscribe_device_status(device, on_status)
-      await mqtt.start_periodic_requests(device, period_seconds=300)
-      
-      # Monitor as long as needed
-      await asyncio.sleep(86400)  # 24 hours
-      
-      await mqtt.stop_periodic_requests(device)
+   def on_resumed(event):
+       print(f"Connection restored (session_present={event.session_present})")
 
-5. **Check connection status:**
+   mqtt.on("connection_interrupted", on_interrupted)
+   mqtt.on("connection_resumed", on_resumed)
 
-   .. code-block:: python
+Periodic requests for long-running monitoring
+----------------------------------------------
 
-      if mqtt.is_connected:
-          await mqtt.set_power(device, True)
-      else:
-          print("Not connected - reconnecting...")
-          await mqtt.connect()
+.. code-block:: python
+
+   await mqtt.subscribe_device_status(device, on_status)
+   await mqtt.start_periodic_requests(device, period_seconds=300)
+   await asyncio.sleep(86400)
+   await mqtt.stop_periodic_requests(device)
 
 Related Documentation
 =====================

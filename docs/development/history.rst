@@ -7,7 +7,7 @@ decisions made during the development of the nwp500 Python library.
 Project Overview
 ----------------
 
-A comprehensive Python client library for Navien NWP500 water heaters,
+A Python client library for Navien NWP500 water heaters,
 providing:
 
 - REST API client for device management
@@ -289,7 +289,7 @@ interruptions:
 - Queue processed in FIFO order when connection is restored
 - Configurable queue size (default: 100 commands)
 - Enabled by default for best user experience
-- Integrates seamlessly with automatic reconnection
+- Integrates with automatic reconnection
 - Properties: ``queued_commands_count`` for monitoring
 - Methods: ``clear_command_queue()`` for manual management
 

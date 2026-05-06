@@ -25,17 +25,16 @@ supports both REST API and real-time MQTT communication.
   API
 * **MQTT Client** - Real-time device communication via AWS IoT Core
 * **Authentication** - JWT-based auth with automatic token refresh
-* **Type Safety** - Comprehensive type-annotated data models
+* **Type Safety** - Type-annotated models for all device data
 * **Event System** - Subscribe to device state changes with callbacks
 * **Energy Monitoring** - Track power consumption and usage statistics
 * **Time-of-Use (TOU)** - Optimize for variable electricity pricing
-* **Async/Await** - Fully asynchronous, non-blocking operations
+* **Async/Await** - Built on asyncio throughout
 
 Quick Start
 ===========
 
-Install with ``pip install nwp500-python``, then see the :doc:`quickstart` guide
-to connect and control your device in minutes.
+Install with ``pip install nwp500-python``, then see the :doc:`quickstart` guide.
 
 Documentation Index
 ===================

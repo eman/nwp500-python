@@ -100,13 +100,13 @@ Troubleshooting
 ImportError: No module named 'nwp500'
 --------------------------------------
 
-Make sure you installed the package:
+Check that you installed the package:
 
 .. code-block:: bash
 
    pip install nwp500-python
 
-If using a virtual environment, ensure it's activated.
+If using a virtual environment, activate it first.
 
 SSL/TLS Errors
 --------------

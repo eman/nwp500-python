@@ -214,7 +214,7 @@ Quick Reference
 Device Status Fields
 ====================
 
-The library provides access to comprehensive device status information. See the `full documentation <https://nwp500-python.readthedocs.io/>`_ for all available fields.
+See the `full documentation <https://nwp500-python.readthedocs.io/>`_ for all available status fields.
 
 Documentation
 =============
