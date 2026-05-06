@@ -64,7 +64,7 @@ async def fetch_reservations(
 
     device_type = str(device.device_info.device_type)
     await mqtt.subscribe_reservation_response(device, on_schedule)
-    await mqtt.control.request_reservations(device)
+    await mqtt.request_reservations(device)
     try:
         return await asyncio.wait_for(future, timeout=timeout)
     except TimeoutError:
@@ -146,9 +146,7 @@ async def add_reservation(
     ]
     current_reservations.append(reservation_entry)
 
-    await mqtt.control.update_reservations(
-        device, current_reservations, enabled=True
-    )
+    await mqtt.update_reservations(device, current_reservations, enabled=True)
 
 
 async def delete_reservation(
@@ -191,7 +189,7 @@ async def delete_reservation(
 
     still_enabled = schedule.enabled and len(current_reservations) > 0
 
-    await mqtt.control.update_reservations(
+    await mqtt.update_reservations(
         device, current_reservations, enabled=still_enabled
     )
 
@@ -285,7 +283,7 @@ async def update_reservation(
     ]
     current_reservations[index - 1] = new_entry
 
-    await mqtt.control.update_reservations(
+    await mqtt.update_reservations(
         device, current_reservations, enabled=schedule.enabled
     )
 
