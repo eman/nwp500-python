@@ -35,80 +35,77 @@ from nwp500 import (
     MqttClientEvents,
     CurrentOperationMode,
 )
-from nwp500.models import DeviceStatus
 
 
 # Example 1: Multiple listeners for the same event
-def log_temperature(old_temp: float, new_temp: float):
+def log_temperature(event):
     """Logger for temperature changes."""
-    print(f"📊 [Logger] Temperature: {old_temp} → {new_temp}")
+    print(f"📊 [Logger] Temperature: {event.old_temperature} → {event.new_temperature}")
 
 
-def alert_on_high_temp(old_temp: float, new_temp: float):
+def alert_on_high_temp(event):
     """Alert handler for high temperatures."""
-    if new_temp > 145:
-        print(f"[WARNING]  [Alert] HIGH TEMPERATURE: {new_temp}!")
+    if event.new_temperature > 145:
+        print(f"[WARNING]  [Alert] HIGH TEMPERATURE: {event.new_temperature}!")
 
 
-async def save_temperature_to_db(old_temp: float, new_temp: float):
+async def save_temperature_to_db(event):
     """Async database saver (simulated)."""
     # Simulate async database operation
     await asyncio.sleep(0.1)
-    print(f"💾 [Database] Saved temperature change: {new_temp}")
+    print(f"💾 [Database] Saved temperature change: {event.new_temperature}")
 
 
 # Example 2: Mode change handlers
-def log_mode_change(old_mode: CurrentOperationMode, new_mode: CurrentOperationMode):
+def log_mode_change(event):
     """Log operation mode changes."""
-    print(f"🔄 [Mode] Changed from {old_mode.name} to {new_mode.name}")
+    print(f"🔄 [Mode] Changed from {event.old_mode.name} to {event.new_mode.name}")
 
 
-def optimize_on_mode_change(
-    old_mode: CurrentOperationMode, new_mode: CurrentOperationMode
-):
+def optimize_on_mode_change(event):
     """Optimization handler."""
-    if new_mode == CurrentOperationMode.HEAT_PUMP_MODE:
+    if event.new_mode == CurrentOperationMode.HEAT_PUMP_MODE:
         print("♻️  [Optimizer] Heat pump mode - maximum efficiency!")
-    elif new_mode == CurrentOperationMode.HYBRID_EFFICIENCY_MODE:
+    elif event.new_mode == CurrentOperationMode.HYBRID_EFFICIENCY_MODE:
         print("⚡ [Optimizer] Energy Saver mode - balanced performance!")
-    elif new_mode == CurrentOperationMode.HYBRID_BOOST_MODE:
+    elif event.new_mode == CurrentOperationMode.HYBRID_BOOST_MODE:
         print("⚡ [Optimizer] High Demand mode - fast recovery!")
 
 
 # Example 3: Power state handlers
-def on_heating_started(status: DeviceStatus):
+def on_heating_started(event):
     """Handler for when heating starts."""
-    print(f"🔥 [Power] Heating STARTED - Power: {status.current_inst_power}W")
+    print(f"🔥 [Power] Heating STARTED - Power: {event.status.current_inst_power}W")
 
 
-def on_heating_stopped(status: DeviceStatus):
+def on_heating_stopped(event):
     """Handler for when heating stops."""
     print("💤 [Power] Heating STOPPED")
 
 
 # Example 4: Error handlers
-def on_error_detected(error_code: str, status: DeviceStatus):
+def on_error_detected(event):
     """Handler for error detection."""
-    print(f"[ERROR] [Error] ERROR DETECTED: {error_code}")
-    unit = status.get_field_unit("dhw_temperature")
-    print(f"   Temperature: {status.dhw_temperature}{unit}")
-    print(f"   Mode: {status.operation_mode}")
+    print(f"[ERROR] [Error] ERROR DETECTED: {event.error_code}")
+    unit = event.status.get_field_unit("dhw_temperature")
+    print(f"   Temperature: {event.status.dhw_temperature}{unit}")
+    print(f"   Mode: {event.status.operation_mode}")
 
 
-def on_error_cleared(error_code: str):
+def on_error_cleared(event):
     """Handler for error cleared."""
-    print(f"[SUCCESS] [Error] ERROR CLEARED: {error_code}")
+    print(f"[SUCCESS] [Error] ERROR CLEARED: {event.error_code}")
 
 
 # Example 5: Connection state handlers
-def on_connection_interrupted(error):
+def on_connection_interrupted(event):
     """Handler for connection interruption."""
-    print(f"🔌 [Connection] DISCONNECTED: {error}")
+    print(f"🔌 [Connection] DISCONNECTED: {event.error}")
 
 
-def on_connection_resumed(return_code, session_present):
+def on_connection_resumed(event):
     """Handler for connection resumption."""
-    print(f"🔌 [Connection] RECONNECTED (code: {return_code})")
+    print(f"🔌 [Connection] RECONNECTED (code: {event.return_code})")
 
 
 async def main():
@@ -191,8 +188,8 @@ async def main():
             # One-time listener example
             mqtt_client.once(
                 MqttClientEvents.STATUS_RECEIVED,
-                lambda s: print(
-                    f"   🎉 First status received: {s.dhw_temperature}{s.get_field_unit('dhw_temperature')}"
+                lambda event: print(
+                    f"   🎉 First status received: {event.status.dhw_temperature}{event.status.get_field_unit('dhw_temperature')}"
                 ),
             )
             print("   [SUCCESS] Registered one-time status handler")

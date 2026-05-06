@@ -67,14 +67,14 @@ async def main():
         )
 
         # Register event handlers
-        def on_interrupted(error):
-            print(f"\n[WARNING]  Connection interrupted: {error}")
+        def on_interrupted(event):
+            print(f"\n[WARNING]  Connection interrupted: {event.error}")
             print("   Automatic reconnection will begin...")
 
-        def on_resumed(return_code, session_present):
+        def on_resumed(event):
             print("\n[SUCCESS] Connection resumed!")
-            print(f"   Return code: {return_code}")
-            print(f"   Session present: {session_present}")
+            print(f"   Return code: {event.return_code}")
+            print(f"   Session present: {event.session_present}")
 
         mqtt_client.on("connection_interrupted", on_interrupted)
         mqtt_client.on("connection_resumed", on_resumed)

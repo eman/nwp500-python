@@ -24,6 +24,7 @@ from pydantic import ValidationError
 from ..events import EventEmitter
 from ..exceptions import MqttNotConnectedError
 from ..models import Device, DeviceFeature, DeviceStatus, EnergyUsageResponse
+from ..mqtt_events import FeatureReceivedEvent, StatusReceivedEvent
 from ..topic_builder import MqttTopicBuilder
 from .state_tracker import DeviceStateTracker
 from .utils import redact_topic, topic_matches_pattern
@@ -370,7 +371,10 @@ class MqttSubscriptionManager:
 
         def post_parse(status: DeviceStatus) -> None:
             self._schedule_coroutine(
-                self._event_emitter.emit("status_received", status)
+                self._event_emitter.emit(
+                    "status_received",
+                    StatusReceivedEvent(status=status),
+                )
             )
             self._schedule_coroutine(
                 self._state_tracker.process(device_mac, status)
@@ -431,7 +435,10 @@ class MqttSubscriptionManager:
                     )
                 )
             self._schedule_coroutine(
-                self._event_emitter.emit("feature_received", feature)
+                self._event_emitter.emit(
+                    "feature_received",
+                    FeatureReceivedEvent(feature=feature),
+                )
             )
 
         handler = self._make_handler(

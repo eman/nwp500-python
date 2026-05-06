@@ -31,6 +31,10 @@ from ..exceptions import (
     MqttPublishError,
     TokenRefreshError,
 )
+from ..mqtt_events import (
+    ConnectionInterruptedEvent,
+    ConnectionResumedEvent,
+)
 from ..unit_system import UnitSystemType
 from .command_queue import MqttCommandQueue
 from .connection import MqttConnection
@@ -102,7 +106,8 @@ class NavienMqttClient(EventEmitter):
         ...
         ... # Type-safe event listeners with IDE autocomplete
         ... mqtt_client.on(
-        ...     MqttClientEvents.TEMPERATURE_CHANGED, log_temperature
+        ...     MqttClientEvents.TEMPERATURE_CHANGED,
+        ...     lambda event: log_temperature(event.new_temperature),
         ... )
         ... mqtt_client.on(MqttClientEvents.TEMPERATURE_CHANGED, update_ui)
         ... mqtt_client.on(
@@ -251,7 +256,12 @@ class NavienMqttClient(EventEmitter):
         self._connected = False
 
         # Emit event
-        self._schedule_coroutine(self.emit("connection_interrupted", error))
+        self._schedule_coroutine(
+            self.emit(
+                "connection_interrupted",
+                ConnectionInterruptedEvent(error=error),
+            )
+        )
 
         # Delegate to reconnection handler if available
         if self._reconnection_handler and self.config.auto_reconnect:
@@ -291,7 +301,13 @@ class NavienMqttClient(EventEmitter):
 
         # Emit event
         self._schedule_coroutine(
-            self.emit("connection_resumed", return_code, session_present)
+            self.emit(
+                "connection_resumed",
+                ConnectionResumedEvent(
+                    return_code=return_code,
+                    session_present=session_present,
+                ),
+            )
         )
 
         # Delegate to reconnection handler to reset state

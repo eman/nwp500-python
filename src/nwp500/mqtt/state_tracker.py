@@ -11,6 +11,15 @@ import logging
 
 from ..events import EventEmitter
 from ..models import DeviceStatus
+from ..mqtt_events import (
+    ErrorClearedEvent,
+    ErrorDetectedEvent,
+    HeatingStartedEvent,
+    HeatingStoppedEvent,
+    ModeChangedEvent,
+    PowerChangedEvent,
+    TemperatureChangedEvent,
+)
 from ..unit_system import get_unit_system
 
 _logger = logging.getLogger(__name__)
@@ -38,13 +47,13 @@ class DeviceStateTracker:
 
         Emits the following events when values change:
 
-        - ``temperature_changed(prev_temp, curr_temp)``
-        - ``mode_changed(prev_mode, curr_mode)``
-        - ``power_changed(prev_power, curr_power)``
-        - ``heating_started(curr_status)``
-        - ``heating_stopped(curr_status)``
-        - ``error_detected(error_code, curr_status)``
-        - ``error_cleared(prev_error_code)``
+        - ``temperature_changed(TemperatureChangedEvent(...))``
+        - ``mode_changed(ModeChangedEvent(...))``
+        - ``power_changed(PowerChangedEvent(...))``
+        - ``heating_started(HeatingStartedEvent(...))``
+        - ``heating_stopped(HeatingStoppedEvent(...))``
+        - ``error_detected(ErrorDetectedEvent(...))``
+        - ``error_cleared(ErrorClearedEvent(...))``
 
         Args:
             device_mac: MAC address used as the per-device key.
@@ -61,8 +70,10 @@ class DeviceStateTracker:
             if status.dhw_temperature != prev.dhw_temperature:
                 await self._event_emitter.emit(
                     "temperature_changed",
-                    prev.dhw_temperature,
-                    status.dhw_temperature,
+                    TemperatureChangedEvent(
+                        old_temperature=prev.dhw_temperature,
+                        new_temperature=status.dhw_temperature,
+                    ),
                 )
                 unit_suffix = "°C" if get_unit_system() == "metric" else "°F"
                 _logger.debug(
@@ -77,8 +88,10 @@ class DeviceStateTracker:
             if status.operation_mode != prev.operation_mode:
                 await self._event_emitter.emit(
                     "mode_changed",
-                    prev.operation_mode,
-                    status.operation_mode,
+                    ModeChangedEvent(
+                        old_mode=prev.operation_mode,
+                        new_mode=status.operation_mode,
+                    ),
                 )
                 _logger.debug(
                     "Mode changed: %s → %s",
@@ -90,8 +103,10 @@ class DeviceStateTracker:
             if status.current_inst_power != prev.current_inst_power:
                 await self._event_emitter.emit(
                     "power_changed",
-                    prev.current_inst_power,
-                    status.current_inst_power,
+                    PowerChangedEvent(
+                        old_power=prev.current_inst_power,
+                        new_power=status.current_inst_power,
+                    ),
                 )
                 _logger.debug(
                     "Power changed: %sW → %sW",
@@ -104,22 +119,35 @@ class DeviceStateTracker:
             curr_heating = status.current_inst_power > 0
 
             if curr_heating and not prev_heating:
-                await self._event_emitter.emit("heating_started", status)
+                await self._event_emitter.emit(
+                    "heating_started",
+                    HeatingStartedEvent(status=status),
+                )
                 _logger.debug("Heating started")
 
             if not curr_heating and prev_heating:
-                await self._event_emitter.emit("heating_stopped", status)
+                await self._event_emitter.emit(
+                    "heating_stopped",
+                    HeatingStoppedEvent(status=status),
+                )
                 _logger.debug("Heating stopped")
 
             # Error detection / clearance
             if status.error_code and not prev.error_code:
                 await self._event_emitter.emit(
-                    "error_detected", status.error_code, status
+                    "error_detected",
+                    ErrorDetectedEvent(
+                        error_code=status.error_code,
+                        status=status,
+                    ),
                 )
                 _logger.info("Error detected: %s", status.error_code)
 
             if not status.error_code and prev.error_code:
-                await self._event_emitter.emit("error_cleared", prev.error_code)
+                await self._event_emitter.emit(
+                    "error_cleared",
+                    ErrorClearedEvent(error_code=prev.error_code),
+                )
                 _logger.info("Error cleared: %s", prev.error_code)
 
         except (TypeError, AttributeError, RuntimeError) as e:

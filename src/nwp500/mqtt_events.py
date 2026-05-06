@@ -14,9 +14,12 @@ Example::
     from nwp500.unit_system import get_unit_system
 
     # Type-safe event listening with autocomplete
-    def on_temperature_changed(old_temp, new_temp):
+    def on_temperature_changed(event):
         unit = "°C" if get_unit_system() == "metric" else "°F"
-        print(f"Temp: {old_temp}{unit} → {new_temp}{unit}")
+        print(
+            f"Temp: {event.old_temperature}{unit} → "
+            f"{event.new_temperature}{unit}"
+        )
 
     mqtt_client.on(MqttClientEvents.TEMPERATURE_CHANGED, on_temperature_changed)
 
@@ -177,11 +180,14 @@ class MqttClientEvents:
 
         mqtt_client.on(
             MqttClientEvents.TEMPERATURE_CHANGED,
-            lambda old_temp, new_temp: update_display(new_temp)
+            lambda event: update_display(event.new_temperature)
         )
 
         # Wait for a specific event
-        await mqtt_client.wait_for(MqttClientEvents.CONNECTION_RESUMED)
+        args, _ = await mqtt_client.wait_for(
+            MqttClientEvents.CONNECTION_RESUMED
+        )
+        connection_event = args[0]
 
         # List all available events
         events = ', '.join(MqttClientEvents.get_all_events())
@@ -196,7 +202,7 @@ class MqttClientEvents:
     """Emitted: MQTT connection interrupted with error.
 
     Args:
-        error (Exception): The error that caused the interruption
+        event (ConnectionInterruptedEvent): Event object with the error field.
 
     See: :class:`ConnectionInterruptedEvent`
     """
@@ -205,8 +211,8 @@ class MqttClientEvents:
     """Emitted: MQTT connection resumed after interruption.
 
     Args:
-        return_code (int): MQTT return code (0 = success)
-        session_present (bool): Whether session state was preserved
+        event (ConnectionResumedEvent): Event object with return_code and
+            session_present fields.
 
     See: :class:`ConnectionResumedEvent`
     """
@@ -216,7 +222,7 @@ class MqttClientEvents:
     """Emitted: Device status message received.
 
     Args:
-        status (DeviceStatus): Current device status snapshot
+        event (StatusReceivedEvent): Event object with the status field.
 
     See: :class:`StatusReceivedEvent`
     """
@@ -225,10 +231,8 @@ class MqttClientEvents:
     """Emitted: DHW temperature changed.
 
     Args:
-        old_temperature (float): Previous DHW temperature in user's
-            preferred unit
-        new_temperature (float): New DHW temperature in user's preferred
-            unit
+        event (TemperatureChangedEvent): Event object with old_temperature
+            and new_temperature fields.
 
     See: :class:`TemperatureChangedEvent`
     """
@@ -237,8 +241,8 @@ class MqttClientEvents:
     """Emitted: Device operation mode changed.
 
     Args:
-        old_mode (CurrentOperationMode): Previous mode
-        new_mode (CurrentOperationMode): New mode
+        event (ModeChangedEvent): Event object with old_mode and new_mode
+            fields.
 
     See: :class:`ModeChangedEvent`
     """
@@ -247,8 +251,8 @@ class MqttClientEvents:
     """Emitted: Instantaneous power consumption changed.
 
     Args:
-        old_power (float): Previous power consumption (W)
-        new_power (float): New power consumption (W)
+        event (PowerChangedEvent): Event object with old_power and new_power
+            fields.
 
     See: :class:`PowerChangedEvent`
     """
@@ -258,7 +262,7 @@ class MqttClientEvents:
     """Emitted: Device started heating.
 
     Args:
-        status (DeviceStatus): Device status when heating started
+        event (HeatingStartedEvent): Event object with the status field.
 
     See: :class:`HeatingStartedEvent`
     """
@@ -267,7 +271,7 @@ class MqttClientEvents:
     """Emitted: Device stopped heating.
 
     Args:
-        status (DeviceStatus): Device status when heating stopped
+        event (HeatingStoppedEvent): Event object with the status field.
 
     See: :class:`HeatingStoppedEvent`
     """
@@ -277,8 +281,8 @@ class MqttClientEvents:
     """Emitted: Device error detected.
 
     Args:
-        error_code (ErrorCode): The error code
-        status (DeviceStatus): Status when error was detected
+        event (ErrorDetectedEvent): Event object with error_code and status
+            fields.
 
     See: :class:`ErrorDetectedEvent`
     """
@@ -287,7 +291,7 @@ class MqttClientEvents:
     """Emitted: Device error cleared.
 
     Args:
-        error_code (ErrorCode): The error code that was cleared
+        event (ErrorClearedEvent): Event object with the error_code field.
 
     See: :class:`ErrorClearedEvent`
     """
@@ -297,7 +301,7 @@ class MqttClientEvents:
     """Emitted: Device feature information received.
 
     Args:
-        feature (DeviceFeature): Device feature information
+        event (FeatureReceivedEvent): Event object with the feature field.
 
     See: :class:`FeatureReceivedEvent`
     """

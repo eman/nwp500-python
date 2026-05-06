@@ -80,11 +80,11 @@ async def command_queue_demo():
             )
 
             # Register event handlers
-            def on_interrupted(error):
-                print(f"   [WARNING]  Connection interrupted: {error}")
+            def on_interrupted(event):
+                print(f"   [WARNING]  Connection interrupted: {event.error}")
                 print(f"   [NOTE] Queued commands: {mqtt_client.queued_commands_count}")
 
-            def on_resumed(return_code, session_present):
+            def on_resumed(event):
                 print("   [SUCCESS] Connection resumed!")
                 print(f"   [NOTE] Queued commands: {mqtt_client.queued_commands_count}")
 
