@@ -29,6 +29,7 @@ from nwp500.reservations import (
     fetch_reservations,
     update_reservation,
 )
+from nwp500.topic_builder import MqttTopicBuilder
 from nwp500.unit_system import get_unit_system
 
 from .output_formatters import (
@@ -322,8 +323,10 @@ async def handle_update_reservations_request(
             print_json(message)
             future.set_result(None)
 
-    device_type = device.device_info.device_type
-    response_topic = f"cmd/{device_type}/{mqtt.client_id}/res/rsv/rd"
+    device_type = str(device.device_info.device_type)
+    response_topic = MqttTopicBuilder.response_topic(
+        device_type, mqtt.client_id, "rsv/rd"
+    )
     await mqtt.subscribe(response_topic, raw_callback)
     await mqtt.control.update_reservations(
         device, reservations, enabled=enabled

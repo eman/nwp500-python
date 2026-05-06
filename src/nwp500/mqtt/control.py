@@ -217,18 +217,17 @@ class MqttDeviceController:
             **kwargs,
         }
 
-        # Use navilink- prefix for device ID in topics (from reference
-        # implementation)
-        device_topic = f"navilink-{device_id}"
-
+        device_type_str = str(device_type)
         return {
             "clientID": self._client_id,
             "sessionID": self._session_id,
             "protocolVersion": MQTT_PROTOCOL_VERSION,
             "request": request,
-            "requestTopic": f"cmd/{device_type}/{device_topic}",
-            "responseTopic": (
-                f"cmd/{device_type}/{device_topic}/{self._client_id}/res"
+            "requestTopic": MqttTopicBuilder.command_topic(
+                device_type_str, device_id
+            ),
+            "responseTopic": MqttTopicBuilder.response_ack_topic(
+                device_type_str, device_id, self._client_id
             ),
         }
 

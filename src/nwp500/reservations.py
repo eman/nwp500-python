@@ -18,7 +18,7 @@ from typing import TYPE_CHECKING, Any
 
 from .encoding import build_reservation_entry, encode_week_bitfield
 from .models import ReservationSchedule
-from .unit_system import get_unit_system, set_unit_system
+from .topic_builder import MqttTopicBuilder
 
 if TYPE_CHECKING:
     from .models import Device
@@ -58,7 +58,6 @@ async def fetch_reservations(
     future: asyncio.Future[ReservationSchedule] = (
         asyncio.get_running_loop().create_future()
     )
-    caller_unit_system = get_unit_system()
 
     def raw_callback(topic: str, message: dict[str, Any]) -> None:
         if (
@@ -71,18 +70,13 @@ async def fetch_reservations(
         # Ensure it's actually a reservation response (not some other /res/ msg)
         if "reservationUse" not in response and "reservation" not in response:
             return
-        previous = get_unit_system()
-        try:
-            if caller_unit_system:
-                set_unit_system(caller_unit_system)
-            schedule = ReservationSchedule(**response)
-        finally:
-            if previous is not None:
-                set_unit_system(previous)
+        schedule = ReservationSchedule(**response)
         future.set_result(schedule)
 
     device_type = str(device.device_info.device_type)
-    response_topic = f"cmd/{device_type}/{mqtt.client_id}/res/rsv/rd"
+    response_topic = MqttTopicBuilder.response_topic(
+        device_type, mqtt.client_id, "rsv/rd"
+    )
     await mqtt.subscribe(response_topic, raw_callback)
     await mqtt.control.request_reservations(device)
     try:

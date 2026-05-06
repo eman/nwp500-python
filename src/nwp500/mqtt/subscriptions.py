@@ -25,7 +25,7 @@ from ..events import EventEmitter
 from ..exceptions import MqttNotConnectedError
 from ..models import Device, DeviceFeature, DeviceStatus, EnergyUsageResponse
 from ..topic_builder import MqttTopicBuilder
-from ..unit_system import get_unit_system
+from .state_tracker import DeviceStateTracker
 from .utils import redact_topic, topic_matches_pattern
 
 if TYPE_CHECKING:
@@ -79,8 +79,8 @@ class MqttSubscriptionManager:
             str, list[Callable[[str, dict[str, Any]], None]]
         ] = {}
 
-        # Track previous state for change detection, keyed by device MAC
-        self._previous_status: dict[str, DeviceStatus] = {}
+        # Per-device state change detection
+        self._state_tracker = DeviceStateTracker(event_emitter)
 
     @property
     def subscriptions(self) -> dict[str, mqtt.QoS]:
@@ -373,7 +373,7 @@ class MqttSubscriptionManager:
                 self._event_emitter.emit("status_received", status)
             )
             self._schedule_coroutine(
-                self._detect_state_changes(device_mac, status)
+                self._state_tracker.process(device_mac, status)
             )
 
         handler = self._make_handler(
@@ -417,93 +417,6 @@ class MqttSubscriptionManager:
 
         cast(Any, handler)._original_callback = callback
         return handler
-
-    async def _detect_state_changes(
-        self, device_mac: str, status: DeviceStatus
-    ) -> None:
-        """
-        Detect state changes and emit granular events.
-
-        Compares the current status with the previous status for this device
-        and emits events for any detected changes.
-
-        Args:
-            device_mac: MAC address of the device (for per-device tracking)
-            status: Current device status
-        """
-        if device_mac not in self._previous_status:
-            # First status received for this device, just store it
-            self._previous_status[device_mac] = status
-            return
-
-        prev = self._previous_status[device_mac]
-
-        try:
-            # Temperature change
-            if status.dhw_temperature != prev.dhw_temperature:
-                await self._event_emitter.emit(
-                    "temperature_changed",
-                    prev.dhw_temperature,
-                    status.dhw_temperature,
-                )
-                unit_suffix = "°C" if get_unit_system() == "metric" else "°F"
-                _logger.debug(
-                    f"Temperature changed: {prev.dhw_temperature}"
-                    f"{unit_suffix} → {status.dhw_temperature}{unit_suffix}"
-                )
-
-            # Operation mode change
-            if status.operation_mode != prev.operation_mode:
-                await self._event_emitter.emit(
-                    "mode_changed",
-                    prev.operation_mode,
-                    status.operation_mode,
-                )
-                _logger.debug(
-                    f"Mode changed: {prev.operation_mode} → "
-                    f"{status.operation_mode}"
-                )
-
-            # Power consumption change
-            if status.current_inst_power != prev.current_inst_power:
-                await self._event_emitter.emit(
-                    "power_changed",
-                    prev.current_inst_power,
-                    status.current_inst_power,
-                )
-                _logger.debug(
-                    f"Power changed: {prev.current_inst_power}W → "
-                    f"{status.current_inst_power}W"
-                )
-
-            # Heating started/stopped
-            prev_heating = prev.current_inst_power > 0
-            curr_heating = status.current_inst_power > 0
-
-            if curr_heating and not prev_heating:
-                await self._event_emitter.emit("heating_started", status)
-                _logger.debug("Heating started")
-
-            if not curr_heating and prev_heating:
-                await self._event_emitter.emit("heating_stopped", status)
-                _logger.debug("Heating stopped")
-
-            # Error detection
-            if status.error_code and not prev.error_code:
-                await self._event_emitter.emit(
-                    "error_detected", status.error_code, status
-                )
-                _logger.info(f"Error detected: {status.error_code}")
-
-            if not status.error_code and prev.error_code:
-                await self._event_emitter.emit("error_cleared", prev.error_code)
-                _logger.info(f"Error cleared: {prev.error_code}")
-
-        except (TypeError, AttributeError, RuntimeError) as e:
-            _logger.error(f"Error detecting state changes: {e}", exc_info=True)
-        finally:
-            # Always update previous status for this device
-            self._previous_status[device_mac] = status
 
     async def subscribe_device_feature(
         self, device: Device, callback: Callable[[DeviceFeature], None]
@@ -569,4 +482,4 @@ class MqttSubscriptionManager:
         """Clear all subscription tracking (called on disconnect)."""
         self._subscriptions.clear()
         self._message_handlers.clear()
-        self._previous_status.clear()
+        self._state_tracker.clear()
