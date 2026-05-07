@@ -1,8 +1,6 @@
 from __future__ import annotations
 
-import warnings
-from typing import Any
-, cast
+from typing import Any, cast
 
 from pydantic import ConfigDict, Field, computed_field, model_validator
 
@@ -126,9 +124,6 @@ class ReservationSchedule(NavienBaseModel):
         """
         return self.reservation_use == 2
 
-    @classmethod
-    )
-
 
 class WeeklyReservationEntry(NavienBaseModel):
     """A single entry in a weekly temperature reservation schedule.
@@ -241,9 +236,6 @@ class WeeklyReservationSchedule(NavienBaseModel):
         """
         return self.reservation_use == 2
 
-    @classmethod
-    )
-
 
 class RecirculationScheduleEntry(NavienBaseModel):
     """A single entry in a recirculation pump schedule.
@@ -322,9 +314,6 @@ class RecirculationSchedule(NavienBaseModel):
 
     schedule: list[RecirculationScheduleEntry] = Field(default_factory=list)
 
-    @classmethod
-    )
-
 
 class OtaCommitPayload(NavienBaseModel):
     """Payload for committing a firmware component update.
@@ -344,3 +333,6 @@ class OtaCommitPayload(NavienBaseModel):
 
     model_config = ConfigDict(
         alias_generator=None,
+        populate_by_name=True,
+        extra="ignore",
+    )

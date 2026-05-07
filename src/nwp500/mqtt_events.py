@@ -28,6 +28,8 @@ Example::
         print(event_name)
 """
 
+from __future__ import annotations
+
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, cast
 
@@ -68,7 +70,7 @@ class StatusReceivedEvent:
         status: The current device status snapshot
     """
 
-    status: "DeviceStatus"
+    status: DeviceStatus
 
 
 @dataclass(frozen=True)
@@ -95,8 +97,8 @@ class ModeChangedEvent:
         new_mode: New operation mode
     """
 
-    old_mode: "CurrentOperationMode"
-    new_mode: "CurrentOperationMode"
+    old_mode: CurrentOperationMode
+    new_mode: CurrentOperationMode
 
 
 @dataclass(frozen=True)
@@ -120,7 +122,7 @@ class HeatingStartedEvent:
         status: Device status when heating started
     """
 
-    status: "DeviceStatus"
+    status: DeviceStatus
 
 
 @dataclass(frozen=True)
@@ -131,7 +133,7 @@ class HeatingStoppedEvent:
         status: Device status when heating stopped
     """
 
-    status: "DeviceStatus"
+    status: DeviceStatus
 
 
 @dataclass(frozen=True)
@@ -143,8 +145,8 @@ class ErrorDetectedEvent:
         status: Device status when error was detected
     """
 
-    error_code: "ErrorCode"
-    status: "DeviceStatus"
+    error_code: ErrorCode
+    status: DeviceStatus
 
 
 @dataclass(frozen=True)
@@ -155,7 +157,7 @@ class ErrorClearedEvent:
         error_code: The error code that was cleared
     """
 
-    error_code: "ErrorCode"
+    error_code: ErrorCode
 
 
 @dataclass(frozen=True)
@@ -166,7 +168,7 @@ class FeatureReceivedEvent:
         feature: The device feature information
     """
 
-    feature: "DeviceFeature"
+    feature: DeviceFeature
 
 
 class MqttClientEvents:

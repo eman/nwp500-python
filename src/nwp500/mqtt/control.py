@@ -17,6 +17,8 @@ This module handles all device control operations including:
 - Recirculation pump control and scheduling
 """
 
+from __future__ import annotations
+
 import logging
 from collections.abc import Awaitable, Callable, Sequence
 from datetime import UTC, datetime
@@ -100,12 +102,12 @@ class MqttDeviceController:
         self._ensure_device_info_callback = callback
 
     @property
-    def device_info_cache(self) -> "MqttDeviceInfoCache":
+    def device_info_cache(self) -> MqttDeviceInfoCache:
         """Get the device info cache."""
         return self._device_info_cache
 
     @device_info_cache.setter
-    def device_info_cache(self, cache: "MqttDeviceInfoCache") -> None:
+    def device_info_cache(self, cache: MqttDeviceInfoCache) -> None:
         """Set the device info cache."""
         self._device_info_cache = cache
 

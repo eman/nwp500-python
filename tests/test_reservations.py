@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from typing import Any
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import ANY, AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -33,6 +33,7 @@ def mock_mqtt(mock_device: MagicMock) -> MagicMock:
     mqtt.client_id = "test-client"
     mqtt.subscribe = AsyncMock()
     mqtt.subscribe_reservation_response = AsyncMock()
+    mqtt.unsubscribe_reservation_response = AsyncMock()
     mqtt.unsubscribe = AsyncMock()
     mqtt.request_reservations = AsyncMock()
     mqtt.update_reservations = AsyncMock()
@@ -98,8 +99,8 @@ async def test_fetch_reservations_success(
     result = await fetch_reservations(mock_mqtt, mock_device)
 
     assert result is schedule
-    mock_mqtt.unsubscribe.assert_called_once_with(
-        "cmd/NWP500/test-client/res/rsv/rd"
+    mock_mqtt.unsubscribe_reservation_response.assert_called_once_with(
+        mock_device, ANY
     )
 
 
@@ -114,8 +115,8 @@ async def test_fetch_reservations_timeout(
     result = await fetch_reservations(mock_mqtt, mock_device, timeout=0.01)
 
     assert result is None
-    mock_mqtt.unsubscribe.assert_called_once_with(
-        "cmd/NWP500/test-client/res/rsv/rd"
+    mock_mqtt.unsubscribe_reservation_response.assert_called_once_with(
+        mock_device, ANY
     )
 
 

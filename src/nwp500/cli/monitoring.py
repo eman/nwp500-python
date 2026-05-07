@@ -1,5 +1,7 @@
 """Monitoring and periodic status polling."""
 
+from __future__ import annotations
+
 import asyncio
 import logging
 
@@ -41,9 +43,7 @@ async def handle_monitoring(
 
     await mqtt.subscribe_device_status(device, on_status_update)
     await mqtt.start_periodic_requests(device, period_seconds=30)
-    await mqtt.request_device_status(
-        device
-    )  # Get an initial status right away
+    await mqtt.request_device_status(device)  # Get an initial status right away
 
     # Keep the script running indefinitely
     await asyncio.Event().wait()

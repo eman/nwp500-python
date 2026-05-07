@@ -1,7 +1,6 @@
 from __future__ import annotations
 
-import warnings
-from typing import Annotated, Any
+from typing import Annotated
 
 from pydantic import BeforeValidator, Field, computed_field
 
@@ -404,3 +403,4 @@ class DeviceFeature(NavienBaseModel):
             unit: str = str(unit_val) if unit_val is not None else ""
             return f" {unit}" if unit else ""
 
+        return ""

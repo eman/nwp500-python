@@ -4,6 +4,8 @@ This module manages caching of device information (features, capabilities)
 with automatic periodic updates to keep data synchronized with the device.
 """
 
+from __future__ import annotations
+
 import asyncio
 import logging
 from datetime import UTC, datetime, timedelta
@@ -57,7 +59,7 @@ class MqttDeviceInfoCache:
         self._cache: dict[str, tuple[DeviceFeature, datetime]] = {}
         self._lock = asyncio.Lock()
 
-    async def get(self, device_mac: str) -> "DeviceFeature | None":
+    async def get(self, device_mac: str) -> DeviceFeature | None:
         """Get cached device features if available and not expired.
 
         Args:
@@ -79,7 +81,7 @@ class MqttDeviceInfoCache:
 
             return features
 
-    async def set(self, device_mac: str, features: "DeviceFeature") -> None:
+    async def set(self, device_mac: str, features: DeviceFeature) -> None:
         """Cache device features with current timestamp.
 
         Args:
@@ -128,7 +130,7 @@ class MqttDeviceInfoCache:
         age = datetime.now(UTC) - timestamp
         return age > self.update_interval
 
-    async def get_all_cached(self) -> dict[str, "DeviceFeature"]:
+    async def get_all_cached(self) -> dict[str, DeviceFeature]:
         """Get all currently cached device features.
 
         Returns:

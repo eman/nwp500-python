@@ -28,7 +28,7 @@ def mock_device():
 def mock_mqtt():
     mqtt = MagicMock()
     # Control attribute contains device control methods
-    
+
     mqtt.request_device_info = AsyncMock()
     mqtt.request_device_status = AsyncMock()
     mqtt.set_dhw_mode = AsyncMock()
@@ -144,6 +144,4 @@ async def test_handle_set_dhw_temp_request_success(mock_mqtt, mock_device):
 
     await handle_set_dhw_temp_request(mock_mqtt, mock_device, 120.0)
 
-    mock_mqtt.set_dhw_temperature.assert_called_once_with(
-        mock_device, 120.0
-    )
+    mock_mqtt.set_dhw_temperature.assert_called_once_with(mock_device, 120.0)

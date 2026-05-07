@@ -15,7 +15,6 @@ from __future__ import annotations
 
 import json
 import logging
-import warnings
 from datetime import UTC, datetime, timedelta
 from typing import Any, Self, cast
 
@@ -181,6 +180,21 @@ class AuthTokens(NavienBaseModel):
     def bearer_token(self) -> str:
         """Get the formatted Bearer token for Authorization header."""
         return f"Bearer {self.access_token}"
+
+    def to_dict(self) -> dict[str, Any]:
+        """Convert tokens to a dictionary for serialization.
+
+        This includes the calculated issued_at timestamp, which is needed
+        to maintain the correct expiration time when restoring tokens.
+        """
+        data = self.model_dump()
+        # Ensure issued_at is serialized in a format that model_validate can
+        # parse
+        if isinstance(data.get("issued_at"), datetime):
+            data["issued_at"] = (
+                data["issued_at"].strftime("%Y-%m-%dT%H:%M:%S.%f") + "Z"
+            )
+        return data
 
 
 class AuthenticationResponse(NavienBaseModel):
@@ -428,7 +442,9 @@ class NavienAuthClient:
                     )
 
                 # Parse successful response
-                auth_response = AuthenticationResponse.model_validate(response_data)
+                auth_response = AuthenticationResponse.model_validate(
+                    response_data
+                )
                 self._auth_response = auth_response
                 self._user_email = user_id  # Store the email for later use
 

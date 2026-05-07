@@ -62,7 +62,6 @@ async def fetch_reservations(
         if not future.done():
             future.set_result(schedule)
 
-    device_type = str(device.device_info.device_type)
     await mqtt.subscribe_reservation_response(device, on_schedule)
     await mqtt.request_reservations(device)
     try:
@@ -74,7 +73,8 @@ async def fetch_reservations(
             await mqtt.unsubscribe_reservation_response(device, on_schedule)
         except Exception:
             _logger.warning(
-                "Failed to unsubscribe reservations response handler for device %s",
+                "Failed to unsubscribe reservations response handler for "
+                "device %s",
                 device.device_info.mac_address,
                 exc_info=True,
             )

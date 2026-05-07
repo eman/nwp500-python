@@ -204,7 +204,8 @@ class NavienMqttClient(EventEmitter):
         # Command queue (independent, can be created immediately)
         self._command_queue = MqttCommandQueue(config=self.config)
 
-        # Device controller (independent of connection status, uses client.publish for queuing)
+        # Device controller (independent of connection status,
+        # uses client.publish for queuing)
         self._device_controller = MqttDeviceController(
             client_id=self.config.client_id or "",
             session_id=self._session_id,
@@ -695,8 +696,12 @@ class NavienMqttClient(EventEmitter):
 
         # Get current tokens from auth client
         auth_tokens = self._auth_client.current_tokens
-        if not auth_tokens:
-            raise MqttCredentialsError("No tokens available from auth client")
+        if (
+            not auth_tokens
+            or not auth_tokens.access_key_id
+            or not auth_tokens.secret_key
+        ):
+            raise MqttCredentialsError("AWS credentials not available")
 
         return AwsCredentialsProvider.new_static(
             access_key_id=auth_tokens.access_key_id,
@@ -994,9 +999,8 @@ class NavienMqttClient(EventEmitter):
         """Unsubscribe a specific weekly reservation callback."""
         if not self._connected or not self._subscription_manager:
             return
-        await self._subscription_manager.unsubscribe_weekly_reservation_response(
-            device, callback
-        )
+        manager = self._subscription_manager
+        await manager.unsubscribe_weekly_reservation_response(device, callback)
 
     async def subscribe_recirculation_schedule_response(
         self,
@@ -1016,7 +1020,8 @@ class NavienMqttClient(EventEmitter):
         """Unsubscribe a specific recirculation schedule callback."""
         if not self._connected or not self._subscription_manager:
             return
-        await self._subscription_manager.unsubscribe_recirculation_schedule_response(
+        manager = self._subscription_manager
+        await manager.unsubscribe_recirculation_schedule_response(
             device, callback
         )
 
@@ -1040,13 +1045,17 @@ class NavienMqttClient(EventEmitter):
         self, device: Device, mode_id: int, vacation_days: int | None = None
     ) -> int:
         """Set DHW operation mode."""
-        return await self._device_controller.set_dhw_mode(device, mode_id, vacation_days)
+        return await self._device_controller.set_dhw_mode(
+            device, mode_id, vacation_days
+        )
 
     async def enable_anti_legionella(
         self, device: Device, period_days: int
     ) -> int:
         """Enable Anti-Legionella disinfection."""
-        return await self._device_controller.enable_anti_legionella(device, period_days)
+        return await self._device_controller.enable_anti_legionella(
+            device, period_days
+        )
 
     async def disable_anti_legionella(self, device: Device) -> int:
         """Disable the Anti-Legionella disinfection cycle."""
@@ -1056,7 +1065,9 @@ class NavienMqttClient(EventEmitter):
         self, device: Device, temperature: float
     ) -> int:
         """Set DHW target temperature in the user's preferred unit."""
-        return await self._device_controller.set_dhw_temperature(device, temperature)
+        return await self._device_controller.set_dhw_temperature(
+            device, temperature
+        )
 
     async def update_reservations(
         self,
@@ -1103,7 +1114,9 @@ class NavienMqttClient(EventEmitter):
         self, device: Device, year: int, months: list[int]
     ) -> int:
         """Request daily energy usage data for specified month(s)."""
-        return await self._device_controller.request_energy_usage(device, year, months)
+        return await self._device_controller.request_energy_usage(
+            device, year, months
+        )
 
     async def signal_app_connection(self, device: Device) -> int:
         """Signal that the app has connected."""
@@ -1129,11 +1142,13 @@ class NavienMqttClient(EventEmitter):
         self, device: Device, schedule: WeeklyReservationSchedule
     ) -> int:
         """Configure the weekly temperature reservation schedule."""
-        return await self._device_controller.update_weekly_reservation(device, schedule)
+        return await self._device_controller.update_weekly_reservation(
+            device, schedule
+        )
 
     async def configure_reservation_water_program(self, device: Device) -> int:
         """Enable/configure water program reservation mode."""
-        return await self._device_controller.configure_reservation_water_program(device)
+        return await self._control.configure_reservation_water_program(device)
 
     async def configure_recirculation_schedule(
         self, device: Device, schedule: RecirculationSchedule
@@ -1145,11 +1160,15 @@ class NavienMqttClient(EventEmitter):
 
     async def set_recirculation_mode(self, device: Device, mode: int) -> int:
         """Set recirculation pump operation mode (1-4)."""
-        return await self._device_controller.set_recirculation_mode(device, mode)
+        return await self._device_controller.set_recirculation_mode(
+            device, mode
+        )
 
     async def trigger_recirculation_hot_button(self, device: Device) -> int:
         """Manually trigger the recirculation pump hot button."""
-        return await self._device_controller.trigger_recirculation_hot_button(device)
+        return await self._device_controller.trigger_recirculation_hot_button(
+            device
+        )
 
     async def check_firmware_update(self, device: Device) -> int:
         """Check for available over-the-air firmware updates."""
@@ -1159,7 +1178,9 @@ class NavienMqttClient(EventEmitter):
         self, device: Device, payload: OtaCommitPayload
     ) -> int:
         """Commit a previously downloaded firmware update."""
-        return await self._device_controller.commit_firmware_update(device, payload)
+        return await self._device_controller.commit_firmware_update(
+            device, payload
+        )
 
     async def reconnect_wifi(self, device: Device) -> int:
         """Trigger a WiFi reconnection on the device."""
@@ -1183,11 +1204,15 @@ class NavienMqttClient(EventEmitter):
 
     async def enable_intelligent_scheduling(self, device: Device) -> int:
         """Enable intelligent/adaptive heating mode."""
-        return await self._device_controller.enable_intelligent_scheduling(device)
+        return await self._device_controller.enable_intelligent_scheduling(
+            device
+        )
 
     async def disable_intelligent_scheduling(self, device: Device) -> int:
         """Disable intelligent/adaptive heating mode."""
-        return await self._device_controller.disable_intelligent_scheduling(device)
+        return await self._device_controller.disable_intelligent_scheduling(
+            device
+        )
 
     async def ensure_device_info_cached(
         self, device: Device, timeout: float = 30.0

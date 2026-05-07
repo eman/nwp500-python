@@ -4,6 +4,8 @@ This module provides decorators that automatically validate device capabilities
 before command execution, preventing unsupported commands from being sent.
 """
 
+from __future__ import annotations
+
 import functools
 import inspect
 import logging

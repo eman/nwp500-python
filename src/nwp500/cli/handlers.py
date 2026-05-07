@@ -1,5 +1,7 @@
 """Command handlers for CLI operations."""
 
+from __future__ import annotations
+
 import asyncio
 import json
 import logging
@@ -328,9 +330,7 @@ async def handle_update_reservations_request(
         device_type, mqtt.client_id, "rsv/rd"
     )
     await mqtt.subscribe(response_topic, raw_callback)
-    await mqtt.update_reservations(
-        device, reservations, enabled=enabled
-    )
+    await mqtt.update_reservations(device, reservations, enabled=enabled)
     try:
         await asyncio.wait_for(future, timeout=10)
     except TimeoutError:

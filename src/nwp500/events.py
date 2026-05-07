@@ -6,6 +6,8 @@ changes, allowing multiple listeners per event and automatic state change
 detection.
 """
 
+from __future__ import annotations
+
 import asyncio
 import inspect
 import logging

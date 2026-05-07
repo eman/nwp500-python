@@ -222,8 +222,8 @@ class MqttSubscriptionManager:
 
         except (AwsCrtError, RuntimeError) as e:
             # Clean up handler on failure if this was the first one
-            if topic in self._message_handlers and callback in self._message_handlers[topic]:
-                self._message_handlers[topic].remove(callback)
+            if (h := self._message_handlers.get(topic)) and callback in h:
+                h.remove(callback)
             _logger.error(
                 f"Failed to subscribe to '{redact_topic(topic)}': {e}"
             )

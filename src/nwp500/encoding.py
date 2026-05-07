@@ -6,6 +6,8 @@ prices, and building payload structures for reservations and TOU schedules.
 These utilities are used by both the API client and MQTT client.
 """
 
+from __future__ import annotations
+
 from collections.abc import Iterable
 from numbers import Real
 
