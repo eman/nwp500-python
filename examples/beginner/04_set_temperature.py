@@ -54,7 +54,7 @@ async def set_dhw_temperature_example():
                 logger.info(f"Current DHW temperature: {status.dhw_temperature}{unit}")
 
             await mqtt_client.subscribe_device_status(device, on_current_status)
-            await mqtt_client.control.request_device_status(device)
+            await mqtt_client.request_device_status(device)
             await asyncio.sleep(3)  # Wait for current status
 
             # Set new target temperature to 140 (in user's preferred unit)
@@ -82,7 +82,7 @@ async def set_dhw_temperature_example():
             await mqtt_client.subscribe_device_status(device, on_temp_change_response)
 
             # Send temperature change command using display temperature value
-            await mqtt_client.control.set_dhw_temperature(device, target_temperature)
+            await mqtt_client.set_dhw_temperature(device, target_temperature)
 
             # Wait for confirmation
             for i in range(15):  # Wait up to 15 seconds

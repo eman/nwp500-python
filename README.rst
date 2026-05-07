@@ -2,6 +2,8 @@
 nwp500-python
 =============
 
+|PyPI-v| |Python-versions| |CI-status| |Docs-status| |Code-style| |License|
+
 Python library for Navien NWP500 Heat Pump Water Heater
 ========================================================
 
@@ -239,10 +241,10 @@ The library includes type-safe data models with automatic unit conversions:
 Requirements
 ============
 
-* Python 3.13+
-* aiohttp >= 3.8.0
+* Python 3.14+
+* aiohttp >= 3.13.5
 * pydantic >= 2.0.0
-* awsiotsdk >= 1.27.0
+* awsiotsdk >= 1.29.0
 
 License
 =======
@@ -259,3 +261,16 @@ Acknowledgments
 
 This project has been set up using PyScaffold 4.6. For details and usage
 information on PyScaffold see https://pyscaffold.org/.
+
+.. |PyPI-v| image:: https://img.shields.io/pypi/v/nwp500-python.svg
+   :target: https://pypi.org/project/nwp500-python/
+.. |Python-versions| image:: https://img.shields.io/pypi/pyversions/nwp500-python.svg
+   :target: https://pypi.org/project/nwp500-python/
+.. |CI-status| image:: https://github.com/eman/nwp500-python/actions/workflows/ci.yml/badge.svg
+   :target: https://github.com/eman/nwp500-python/actions/workflows/ci.yml
+.. |Docs-status| image:: https://readthedocs.org/projects/nwp500-python/badge/?version=latest
+   :target: https://nwp500-python.readthedocs.io/en/latest/?badge=latest
+.. |Code-style| image:: https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json
+   :target: https://github.com/astral-sh/ruff
+.. |License| image:: https://img.shields.io/pypi/l/nwp500-python.svg
+   :target: https://opensource.org/licenses/MIT

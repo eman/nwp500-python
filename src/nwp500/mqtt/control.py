@@ -104,6 +104,11 @@ class MqttDeviceController:
         """Get the device info cache."""
         return self._device_info_cache
 
+    @device_info_cache.setter
+    def device_info_cache(self, cache: "MqttDeviceInfoCache") -> None:
+        """Set the device info cache."""
+        self._device_info_cache = cache
+
     async def _ensure_device_info_cached(
         self, device: Device, timeout: float = 5.0
     ) -> None:

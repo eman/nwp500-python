@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import json
 import logging
+import warnings
 from datetime import UTC, datetime, timedelta
 from typing import Any, Self, cast
 
@@ -51,11 +52,6 @@ class UserInfo(NavienBaseModel):
     user_last_name: str = ""
     user_status: str = ""
     user_seq: int = 0
-
-    @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> UserInfo:
-        """Create UserInfo from API response dictionary (compatibility)."""
-        return cls.model_validate(data)
 
     @property
     def full_name(self) -> str:
@@ -141,32 +137,6 @@ class AuthTokens(NavienBaseModel):
         else:
             self._aws_expires_at = None
 
-    @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> AuthTokens:
-        """Create AuthTokens from API response dictionary or stored data.
-
-        Args:
-            data: Dictionary containing token data. Can be from API response
-                 (using camelCase keys) or from stored data (using snake_case
-                 keys from to_dict()).
-
-        Returns:
-            AuthTokens instance
-        """
-        # Pydantic with populate_by_name=True handles both snake_case (stored)
-        # and camelCase (API alias) automatically.
-        return cls.model_validate(data)
-
-    def to_dict(self) -> dict[str, Any]:
-        """Convert AuthTokens to a dictionary for storage.
-
-        Returns:
-            Dictionary with snake_case keys suitable for JSON serialization.
-            DateTime fields are serialized to ISO 8601 format strings
-            (e.g., "2025-11-19T08:51:00") for backward compatibility.
-        """
-        return self.model_dump(mode="json")
-
     @property
     def expires_at(self) -> datetime:
         """Get the cached expiration timestamp."""
@@ -222,23 +192,21 @@ class AuthenticationResponse(NavienBaseModel):
     code: int = 200
     message: str = Field(default="SUCCESS", alias="msg")
 
+    @model_validator(mode="before")
     @classmethod
-    def from_dict(cls, response_data: dict[str, Any]) -> AuthenticationResponse:
-        """Create AuthenticationResponse from API response."""
-        # Map nested API response to flat model structure
-        # API response: { "code": ..., "msg": ..., "data": { ... } }
-        data = response_data.get("data", {})
-
-        # Construct a dict that matches the model structure
-        model_data = {
-            "code": response_data.get("code", 200),
-            "msg": response_data.get("msg", "SUCCESS"),
-            "userInfo": data.get("userInfo", {}),
-            "tokens": data.get("token", {}),
-            "legal": data.get("legal", []),
-        }
-
-        return cls.model_validate(model_data)
+    def wrap_api_response(cls, data: Any) -> Any:
+        """Handle nested 'data' wrapper in API responses."""
+        if isinstance(data, dict) and "data" in data:
+            # Lift fields from 'data' into the top level for validation
+            # while preserving top-level code/msg
+            response_data = data.get("data", {})
+            if isinstance(response_data, dict):
+                merged = {**data, **response_data}
+                # Handle 'token' vs 'tokens' inconsistency in API
+                if "token" in response_data and "tokens" not in response_data:
+                    merged["tokens"] = response_data["token"]
+                return merged
+        return data
 
 
 __all__ = [
@@ -290,7 +258,7 @@ class NavienAuthClient:
         ...     await mqtt_client.connect()
 
         Restore session from stored tokens:
-        >>> stored_tokens = AuthTokens.from_dict(saved_data)
+        >>> stored_tokens = AuthTokens.model_validate(saved_data)
         >>> async with NavienAuthClient(
         ...     user_id="user@example.com",
         ...     password="password",
@@ -460,7 +428,7 @@ class NavienAuthClient:
                     )
 
                 # Parse successful response
-                auth_response = AuthenticationResponse.from_dict(response_data)
+                auth_response = AuthenticationResponse.model_validate(response_data)
                 self._auth_response = auth_response
                 self._user_email = user_id  # Store the email for later use
 
@@ -535,7 +503,7 @@ class NavienAuthClient:
 
                 # Parse new tokens
                 data = response_data.get("data", {})
-                new_tokens = AuthTokens.from_dict(data)
+                new_tokens = AuthTokens.model_validate(data)
 
                 # Preserve AWS credentials from old tokens if not in refresh
                 # response
@@ -812,4 +780,4 @@ async def refresh_access_token(refresh_token: str) -> AuthTokens:
             )
 
         data = response_data.get("data", {})
-        return AuthTokens.from_dict(data)
+        return AuthTokens.model_validate(data)

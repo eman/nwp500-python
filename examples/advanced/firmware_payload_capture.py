@@ -136,7 +136,7 @@ async def main() -> None:
             device_info_event.set()
 
         await mqtt_client.subscribe_device_feature(device, on_feature)
-        await mqtt_client.control.request_device_info(device)
+        await mqtt_client.request_device_info(device)
         await asyncio.wait_for(device_info_event.wait(), timeout=30.0)
 
         if device_feature:
@@ -147,12 +147,12 @@ async def main() -> None:
             )
 
         # --- Step 2: request device status ---
-        await mqtt_client.control.request_device_status(device)
+        await mqtt_client.request_device_status(device)
         await asyncio.sleep(3)
 
         # --- Step 3: request reservation (weekly) schedule ---
         print("\nRequesting weekly reservation schedule...")
-        await mqtt_client.control.request_reservations(device)
+        await mqtt_client.request_reservations(device)
         await asyncio.sleep(5)
 
         # --- Step 4: request TOU schedule (requires controller serial number) ---
@@ -161,7 +161,7 @@ async def main() -> None:
             if serial:
                 print("Requesting TOU schedule...")
                 try:
-                    await mqtt_client.control.request_tou_settings(device, serial)
+                    await mqtt_client.request_tou_settings(device, serial)
                     await asyncio.sleep(5)
                 except Exception as exc:
                     print(f"  TOU request failed: {exc}")

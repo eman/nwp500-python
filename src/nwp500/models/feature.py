@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import warnings
 from typing import Annotated, Any
 
 from pydantic import BeforeValidator, Field, computed_field
@@ -403,9 +404,3 @@ class DeviceFeature(NavienBaseModel):
             unit: str = str(unit_val) if unit_val is not None else ""
             return f" {unit}" if unit else ""
 
-        return ""
-
-    @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> DeviceFeature:
-        """Compatibility method."""
-        return cls.model_validate(data)

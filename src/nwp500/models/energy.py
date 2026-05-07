@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import warnings
 from typing import Any
 
 from pydantic import Field
@@ -77,9 +78,3 @@ class EnergyUsageResponse(NavienBaseModel):
         for monthly_data in self.usage:
             if monthly_data.year == year and monthly_data.month == month:
                 return monthly_data
-        return None
-
-    @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> EnergyUsageResponse:
-        """Compatibility method."""
-        return cls.model_validate(data)

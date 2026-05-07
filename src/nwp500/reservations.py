@@ -70,17 +70,12 @@ async def fetch_reservations(
     except TimeoutError:
         return None
     finally:
-        from .topic_builder import MqttTopicBuilder
-
-        response_topic = MqttTopicBuilder.response_topic(
-            device_type, mqtt.client_id, "rsv/rd"
-        )
         try:
-            await mqtt.unsubscribe(response_topic)
+            await mqtt.unsubscribe_reservation_response(device, on_schedule)
         except Exception:
             _logger.warning(
-                "Failed to unsubscribe reservations response handler for %s",
-                response_topic,
+                "Failed to unsubscribe reservations response handler for device %s",
+                device.device_info.mac_address,
                 exc_info=True,
             )
 

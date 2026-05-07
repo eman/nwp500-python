@@ -108,7 +108,7 @@ async def main() -> None:
         print("Enabling TOU mode…")
         mqtt = NavienMqttClient(auth)
         await mqtt.connect()
-        await mqtt.control.set_tou_enabled(device, enabled=True)
+        await mqtt.set_tou_enabled(device, enabled=True)
         await mqtt.disconnect()
 
     print("\nDone! TOU schedule configured and enabled.")

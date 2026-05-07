@@ -66,8 +66,8 @@ class DeviceStateTracker:
         prev = self._previous_status[device_mac]
 
         try:
-            # Temperature change
-            if status.dhw_temperature != prev.dhw_temperature:
+            # Temperature change (compare raw values)
+            if status.dhw_temperature_raw != prev.dhw_temperature_raw:
                 await self._event_emitter.emit(
                     "temperature_changed",
                     TemperatureChangedEvent(
@@ -84,7 +84,7 @@ class DeviceStateTracker:
                     unit_suffix,
                 )
 
-            # Operation mode change
+            # Operation mode change (compare raw values)
             if status.operation_mode != prev.operation_mode:
                 await self._event_emitter.emit(
                     "mode_changed",
@@ -99,8 +99,8 @@ class DeviceStateTracker:
                     status.operation_mode,
                 )
 
-            # Power consumption change
-            if status.current_inst_power != prev.current_inst_power:
+            # Power consumption change (compare raw values)
+            if status.current_inst_power_raw != prev.current_inst_power_raw:
                 await self._event_emitter.emit(
                     "power_changed",
                     PowerChangedEvent(
@@ -114,9 +114,9 @@ class DeviceStateTracker:
                     status.current_inst_power,
                 )
 
-            # Heating started / stopped
-            prev_heating = prev.current_inst_power > 0
-            curr_heating = status.current_inst_power > 0
+            # Heating started / stopped (compare raw values)
+            prev_heating = prev.current_inst_power_raw > 0
+            curr_heating = status.current_inst_power_raw > 0
 
             if curr_heating and not prev_heating:
                 await self._event_emitter.emit(

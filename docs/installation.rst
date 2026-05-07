@@ -5,7 +5,7 @@ Installation
 Requirements
 ============
 
-* Python 3.13 or higher
+* Python 3.14 or higher
 * pip (Python package installer)
 * Navien Smart Control account
 
@@ -50,8 +50,8 @@ Core Dependencies
 
 The library requires:
 
-* ``aiohttp>=3.8.0`` - Async HTTP client for REST API
-* ``awsiotsdk>=1.27.0`` - AWS IoT SDK for MQTT
+* ``aiohttp>=3.13.5`` - Async HTTP client for REST API
+* ``awsiotsdk>=1.29.0`` - AWS IoT SDK for MQTT
 * ``pydantic>=2.0.0`` - Data validation and models
 
 Optional Dependencies
@@ -128,7 +128,7 @@ The MQTT client requires the AWS IoT SDK:
 
 .. code-block:: bash
 
-   pip install awsiotsdk>=1.27.0
+   pip install awsiotsdk>=1.29.0
 
 Upgrading
 =========

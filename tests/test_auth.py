@@ -64,8 +64,8 @@ def test_user_info_full_name_with_empty_names():
     assert user_info.full_name == "Doe"
 
 
-def test_user_info_from_dict():
-    """Test UserInfo.from_dict class method."""
+def test_user_info_model_validate_validate():
+    """Test UserInfo.model_validate class method."""
     data = {
         "userType": "premium",
         "userFirstName": "Jane",
@@ -74,7 +74,7 @@ def test_user_info_from_dict():
         "userSeq": 456,
     }
 
-    user_info = UserInfo.from_dict(data)
+    user_info = UserInfo.model_validate(data)
 
     assert user_info.user_type == "premium"
     assert user_info.user_first_name == "Jane"
@@ -83,11 +83,11 @@ def test_user_info_from_dict():
     assert user_info.user_seq == 456
 
 
-def test_user_info_from_dict_with_missing_fields():
-    """Test UserInfo.from_dict with missing fields."""
+def test_user_info_model_validate_validate_with_missing_fields():
+    """Test UserInfo.model_validate with missing fields."""
     data = {}
 
-    user_info = UserInfo.from_dict(data)
+    user_info = UserInfo.model_validate(data)
 
     assert user_info.user_type == ""
     assert user_info.user_first_name == ""
@@ -250,8 +250,8 @@ def test_auth_tokens_bearer_token():
     assert tokens.bearer_token == "Bearer my_access_token"
 
 
-def test_auth_tokens_from_dict():
-    """Test AuthTokens.from_dict class method."""
+def test_auth_tokens_model_validate_validate():
+    """Test AuthTokens.model_validate class method."""
     data = {
         "idToken": "test_id",
         "accessToken": "test_access",
@@ -263,7 +263,7 @@ def test_auth_tokens_from_dict():
         "authorizationExpiresIn": 1800,
     }
 
-    tokens = AuthTokens.from_dict(data)
+    tokens = AuthTokens.model_validate(data)
 
     assert tokens.id_token == "test_id"
     assert tokens.access_token == "test_access"
@@ -275,11 +275,11 @@ def test_auth_tokens_from_dict():
     assert tokens.authorization_expires_in == 1800
 
 
-def test_auth_tokens_from_dict_minimal():
-    """Test AuthTokens.from_dict with minimal data."""
+def test_auth_tokens_model_validate_validate_minimal():
+    """Test AuthTokens.model_validate with minimal data."""
     data = {}
 
-    tokens = AuthTokens.from_dict(data)
+    tokens = AuthTokens.model_validate(data)
 
     assert tokens.id_token == ""
     assert tokens.access_token == ""
@@ -292,8 +292,8 @@ def test_auth_tokens_from_dict_minimal():
 
 
 # Test AuthenticationResponse dataclass
-def test_authentication_response_from_dict():
-    """Test AuthenticationResponse.from_dict class method."""
+def test_authentication_response_model_validate_validate():
+    """Test AuthenticationResponse.model_validate class method."""
     data = {
         "code": 200,
         "msg": "SUCCESS",
@@ -315,7 +315,7 @@ def test_authentication_response_from_dict():
         },
     }
 
-    response = AuthenticationResponse.from_dict(data)
+    response = AuthenticationResponse.model_validate(data)
 
     assert response.code == 200
     assert response.message == "SUCCESS"
@@ -869,8 +869,8 @@ def test_auth_tokens_to_dict():
     assert result["issued_at"] == expected_issued_at
 
 
-def test_auth_tokens_from_dict_with_issued_at():
-    """Test AuthTokens.from_dict with issued_at timestamp."""
+def test_auth_tokens_model_validate_validate_with_issued_at():
+    """Test AuthTokens.model_validate with issued_at timestamp."""
     issued_at = datetime.now(UTC) - timedelta(seconds=1800)
     data = {
         "id_token": "test_id",
@@ -884,7 +884,7 @@ def test_auth_tokens_from_dict_with_issued_at():
         "issued_at": issued_at.isoformat(),
     }
 
-    tokens = AuthTokens.from_dict(data)
+    tokens = AuthTokens.model_validate(data)
 
     assert tokens.id_token == "test_id"
     assert tokens.access_token == "test_access"
@@ -915,7 +915,7 @@ def test_auth_tokens_serialization_roundtrip():
 
     # Serialize and deserialize
     serialized = original.to_dict()
-    restored = AuthTokens.from_dict(serialized)
+    restored = AuthTokens.model_validate(serialized)
 
     # Verify all fields match
     assert restored.id_token == original.id_token
@@ -937,8 +937,8 @@ def test_auth_tokens_serialization_roundtrip():
     assert restored.is_expired == original.is_expired
 
 
-def test_auth_tokens_from_dict_with_empty_strings():
-    """Test AuthTokens.from_dict handles empty strings in camelCase."""
+def test_auth_tokens_model_validate_validate_with_empty_strings():
+    """Test AuthTokens.model_validate handles empty strings in camelCase."""
     # Simulate API response with empty optional fields (camelCase)
     # Should fall back to snake_case alternatives
     data = {
@@ -955,7 +955,7 @@ def test_auth_tokens_from_dict_with_empty_strings():
         "secret_key": "fallback_secret",
     }
 
-    tokens = AuthTokens.from_dict(data)
+    tokens = AuthTokens.model_validate(data)
 
     assert tokens.id_token == "test_id"
     assert tokens.access_token == "fallback_access"  # Should use snake_case

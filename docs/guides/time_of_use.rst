@@ -524,7 +524,7 @@ Configure two rate periods - off-peak and peak pricing:
                     feature_future.set_result(feature)
             
             await mqtt_client.subscribe_device_feature(device, capture_feature)
-            await mqtt_client.control.request_device_info(device)
+            await mqtt_client.request_device_info(device)
             feature = await asyncio.wait_for(feature_future, timeout=15)
             controller_serial = feature.controllerSerialNumber
             
@@ -555,7 +555,7 @@ Configure two rate periods - off-peak and peak pricing:
             )
             
             # Configure TOU schedule
-            await mqtt_client.control.configure_tou_schedule(
+            await mqtt_client.configure_tou_schedule(
                 device=device,
                 controller_serial_number=controller_serial,
                 periods=[off_peak, peak],
@@ -636,7 +636,7 @@ Configure different rates for summer and winter:
             )
             
             # Configure all periods
-            await mqtt_client.control.configure_tou_schedule(
+            await mqtt_client.configure_tou_schedule(
                 device=device,
                 controller_serial_number=controller_serial,
                 periods=[summer_off_peak, summer_peak, winter_off_peak, winter_peak],
@@ -697,7 +697,7 @@ Query the device for its current TOU configuration:
             await mqtt_client.subscribe(response_topic, on_tou_response)
             
             # Request current settings
-            await mqtt_client.control.request_tou_settings(device, controller_serial)
+            await mqtt_client.request_tou_settings(device, controller_serial)
             
             # Wait for response
             await asyncio.sleep(5)
@@ -721,7 +721,7 @@ Enable or disable TOU operation:
             await mqtt_client.connect()
             
             # Enable or disable TOU
-            await mqtt_client.control.set_tou_enabled(device, enabled=enable)
+            await mqtt_client.set_tou_enabled(device, enabled=enable)
             
             print(f"TOU {'enabled' if enable else 'disabled'}")
             await mqtt_client.disconnect()
@@ -791,7 +791,7 @@ Navien mobile app uses:
             # 7. Enable TOU via MQTT
             mqtt_client = NavienMqttClient(auth)
             await mqtt_client.connect()
-            await mqtt_client.control.set_tou_enabled(device, enabled=True)
+            await mqtt_client.set_tou_enabled(device, enabled=True)
             await mqtt_client.disconnect()
 
     asyncio.run(apply_openei_rate_plan())

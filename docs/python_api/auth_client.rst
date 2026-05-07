@@ -84,7 +84,7 @@ NavienAuthClient
       auth = NavienAuthClient()
       
       # With stored tokens (skip re-authentication)
-      stored = AuthTokens.from_dict(saved_data)
+      stored = AuthTokens.model_validate(saved_data)
       auth = NavienAuthClient(
           "email@example.com", 
           "password",
@@ -345,7 +345,7 @@ AuthTokens
 
    **Methods:**
 
-   .. py:method:: from_dict(data)
+   .. py:method:: model_validate(data)
       :classmethod:
 
       Create AuthTokens from dictionary (API response or saved data).
@@ -373,7 +373,7 @@ AuthTokens
          token_data = tokens.to_dict()
          
          # Later, restore tokens
-         restored = AuthTokens.from_dict(token_data)
+         restored = AuthTokens.model_validate(token_data)
 
 AuthenticationResponse
 ----------------------
@@ -497,7 +497,7 @@ Example 5: Token Restoration (Skip Re-authentication)
            token_data = json.load(f)
        
        # Deserialize tokens
-       stored_tokens = AuthTokens.from_dict(token_data)
+       stored_tokens = AuthTokens.model_validate(token_data)
        
        # Initialize client with stored tokens
        # This skips initial authentication if tokens are still valid

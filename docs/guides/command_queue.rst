@@ -162,7 +162,7 @@ Basic Usage (Default Configuration)
         
         # Command queue is enabled by default
         # Commands sent during disconnection are automatically queued
-        await mqtt_client.control.request_device_status(device)
+        await mqtt_client.request_device_status(device)
         
         # If disconnected, command is queued and sent on reconnection
         # No user action needed
@@ -219,7 +219,7 @@ Handle Queue Full Condition
     # Queue has max size of 100 by default
     # Oldest commands automatically dropped when full
     for i in range(150):
-        await mqtt_client.control.request_device_status(device)
+        await mqtt_client.request_device_status(device)
         # First 100 queued, remaining 50 replace oldest
 
     print(f"Queued: {mqtt_client.queued_commands_count}")  # Will be 100
@@ -255,8 +255,8 @@ Reliable Device Control
 .. code-block:: python
 
     # Even during network issues, commands are preserved
-    await mqtt_client.control.set_dhw_temperature(device, 140.0)
-    await mqtt_client.control.set_dhw_mode(device, 2)  # Energy Saver mode
+    await mqtt_client.set_dhw_temperature(device, 140.0)
+    await mqtt_client.set_dhw_mode(device, 2)  # Energy Saver mode
 
     # Commands queued if disconnected, sent when reconnected
 
@@ -277,8 +277,8 @@ Batch Operations
 
     # Send multiple commands without worrying about connection state
     for device in devices:
-        await mqtt_client.control.request_device_status(device)
-        await mqtt_client.control.request_device_info(device)
+        await mqtt_client.request_device_status(device)
+        await mqtt_client.request_device_info(device)
 
     # All commands reach their destination eventually
 

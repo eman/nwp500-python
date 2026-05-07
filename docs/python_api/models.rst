@@ -431,7 +431,7 @@ Full programmed reservation schedule used by ``request_reservations()`` and
    **Computed Properties / Methods:**
 
    * ``enabled`` (bool)
-   * :meth:`from_dict` - Parse a raw MQTT response payload
+   * :meth:`model_validate` - Parse a raw MQTT response payload
 
 WeeklyReservationEntry
 ----------------------
@@ -474,7 +474,7 @@ Full weekly reservation schedule.
    **Computed Properties / Methods:**
 
    * ``enabled`` (bool)
-   * :meth:`from_dict` - Parse a raw MQTT response payload
+   * :meth:`model_validate` - Parse a raw MQTT response payload
 
 RecirculationScheduleEntry
 --------------------------
@@ -515,7 +515,7 @@ Full recirculation schedule used by
 
    **Methods:**
 
-   * :meth:`from_dict` - Parse a raw MQTT response payload
+   * :meth:`model_validate` - Parse a raw MQTT response payload
 
 OtaCommitPayload
 ----------------

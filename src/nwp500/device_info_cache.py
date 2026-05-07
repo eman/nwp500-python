@@ -7,7 +7,7 @@ with automatic periodic updates to keep data synchronized with the device.
 import asyncio
 import logging
 from datetime import UTC, datetime, timedelta
-from typing import TYPE_CHECKING, TypedDict
+from typing import TYPE_CHECKING, ReadOnly, TypedDict
 
 if TYPE_CHECKING:
     from .models import DeviceFeature
@@ -20,18 +20,18 @@ _logger = logging.getLogger(__name__)
 class CachedDeviceInfo(TypedDict):
     """Cached device information metadata."""
 
-    mac: str
-    cached_at: str
-    expires_at: str | None
-    is_expired: bool
+    mac: ReadOnly[str]
+    cached_at: ReadOnly[str]
+    expires_at: ReadOnly[str | None]
+    is_expired: ReadOnly[bool]
 
 
 class CacheInfoResult(TypedDict):
     """Result of get_cache_info() call."""
 
-    device_count: int
-    update_interval_minutes: float
-    devices: list[CachedDeviceInfo]
+    device_count: ReadOnly[int]
+    update_interval_minutes: ReadOnly[float]
+    devices: ReadOnly[list[CachedDeviceInfo]]
 
 
 class MqttDeviceInfoCache:

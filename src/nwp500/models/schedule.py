@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from typing import Any, cast
+import warnings
+from typing import Any
+, cast
 
 from pydantic import ConfigDict, Field, computed_field, model_validator
 
@@ -125,9 +127,7 @@ class ReservationSchedule(NavienBaseModel):
         return self.reservation_use == 2
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> ReservationSchedule:
-        """Construct from a raw MQTT response dict."""
-        return cls.model_validate(data)
+    )
 
 
 class WeeklyReservationEntry(NavienBaseModel):
@@ -242,9 +242,7 @@ class WeeklyReservationSchedule(NavienBaseModel):
         return self.reservation_use == 2
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> WeeklyReservationSchedule:
-        """Construct from a raw MQTT response dict."""
-        return cls.model_validate(data)
+    )
 
 
 class RecirculationScheduleEntry(NavienBaseModel):
@@ -325,9 +323,7 @@ class RecirculationSchedule(NavienBaseModel):
     schedule: list[RecirculationScheduleEntry] = Field(default_factory=list)
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> RecirculationSchedule:
-        """Construct from a raw MQTT response dict."""
-        return cls.model_validate(data)
+    )
 
 
 class OtaCommitPayload(NavienBaseModel):
@@ -348,7 +344,3 @@ class OtaCommitPayload(NavienBaseModel):
 
     model_config = ConfigDict(
         alias_generator=None,
-        populate_by_name=True,
-        extra="ignore",
-        use_enum_values=False,
-    )

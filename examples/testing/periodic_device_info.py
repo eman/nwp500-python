@@ -97,7 +97,7 @@ async def main():
 
     # Send initial request to get immediate response
     print("   Sending initial request...")
-    await mqtt.control.request_device_info(device)
+    await mqtt.request_device_info(device)
 
     # Wait for a few updates with the default period
     print("   Waiting 15 seconds for response...")
@@ -112,7 +112,7 @@ async def main():
 
     # Send initial request for immediate feedback
     print("   Sending initial request...")
-    await mqtt.control.request_device_info(device)
+    await mqtt.request_device_info(device)
 
     # Monitor for 2 minutes
     print("\n   Monitoring for 2 minutes...")

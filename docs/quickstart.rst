@@ -7,7 +7,7 @@ Install the library and start talking to your device.
 Prerequisites
 =============
 
-* Python 3.13 or higher
+* Python 3.14 or higher
 * Navien Smart Control account (via Navilink mobile app)
 * At least one Navien NWP500 device registered to your account
 * Valid email and password for your Navien account

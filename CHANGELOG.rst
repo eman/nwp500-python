@@ -38,6 +38,34 @@ Breaking Changes
      # NEW
      await mqtt.set_temperature(device, 50)
 
+Migration Guide (from 7.x.x)
+----------------------------
+The following steps are recommended for a smooth migration, particularly for complex
+integrations like Home Assistant:
+
+1.  **Update Event Listeners**: Locate all ``mqtt.on()`` or ``mqtt.once()`` calls.
+    Update the callback signatures to accept a single argument (the event object) and
+    update the body to access fields via the object (e.g., ``event.new_temperature``
+    instead of ``new_val``).
+2.  **Refactor Control Calls**: Remove ``.control`` from all device command invocations.
+    Instead of ``await mqtt.control.set_power(...)``, use ``await mqtt.set_power(...)``.
+3.  **Handle Unit Conversions**: If your integration previously performed its own
+    conversions or relied on the library's eager conversion, note that
+    ``DeviceStatus`` fields like ``dhw_temperature`` are now properties. They return
+    values based on the global unit system context (``us_customary`` by default).
+    *   **Home Assistant Tip**: To ensure your state tracking is immune to unit system
+        toggles within the library, use the new ``*_raw`` fields (e.g.,
+        ``status.dhw_temperature_raw``) for comparison logic, and use the properties
+        only for display or when a converted value is explicitly needed.
+4.  **Remove ``from_dict()`` Calls**: The ``from_dict()`` method has been removed
+    from all models. Use ``model_validate()`` instead.
+    *   **Note**: ``AuthenticationResponse.model_validate()`` now automatically handles
+        the ``"data": { ... }`` wrapper found in raw API responses.
+5.  **Subpackage Imports**: While top-level imports from ``nwp500.models`` are
+    preserved, if you were importing from the internal ``nwp500.models`` module file
+    directly, you must update your imports to point to the new structured files
+    (e.g., ``nwp500.models.status``).
+
 Added
 -----
 - **New control methods**: Nine previously unimplemented ``CommandCode`` values now have
@@ -284,7 +312,7 @@ Breaking Changes
   .. code-block:: python
 
      # OLD (hardcoded 95-150°F)
-     await mqtt.control.set_dhw_temperature(device, temperature_f=140.0)
+     await mqtt.set_dhw_temperature(device, temperature_f=140.0)
      entry = build_reservation_entry(
          enabled=True,
          days=["Monday"],
@@ -296,7 +324,7 @@ Breaking Changes
 
      # NEW (device-provided limits, unit-aware)
      # Temperature value automatically uses user's preferred unit
-     await mqtt.control.set_dhw_temperature(device, 140.0)
+     await mqtt.set_dhw_temperature(device, 140.0)
      
      # Device features provide min/max in user's preferred unit
      features = await device_info_cache.get(device.device_info.mac_address)
