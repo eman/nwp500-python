@@ -100,7 +100,7 @@ class DeviceStateTracker:
                 )
 
             # Power consumption change (compare raw values)
-            if status.current_inst_power_raw != prev.current_inst_power_raw:
+            if status.current_inst_power != prev.current_inst_power:
                 await self._event_emitter.emit(
                     "power_changed",
                     PowerChangedEvent(
@@ -115,8 +115,8 @@ class DeviceStateTracker:
                 )
 
             # Heating started / stopped (compare raw values)
-            prev_heating = prev.current_inst_power_raw > 0
-            curr_heating = status.current_inst_power_raw > 0
+            prev_heating = prev.current_inst_power > 0
+            curr_heating = status.current_inst_power > 0
 
             if curr_heating and not prev_heating:
                 await self._event_emitter.emit(
