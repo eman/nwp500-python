@@ -274,7 +274,7 @@ class MqttClientEvents:
         event (PowerChangedEvent): Event object with old_power and new_power
             fields.
 
-    See: :class:`PowerChangedEvent"
+    See: :class:`PowerChangedEvent`
     """
 
     # Heating events

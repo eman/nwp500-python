@@ -9,6 +9,7 @@ Features
 --------
 - **Multi-device support enhancements**: Improved support for accounts with multiple
   Navilink devices by injecting device identity into models and events.
+
   - Added ``mac_address`` field to ``DeviceStatus`` and ``DeviceFeature`` models.
   - Added ``device_mac`` attribute to all device-specific MQTT events (temperature
     changes, mode changes, power updates, errors, etc.).
@@ -66,12 +67,14 @@ integrations like Home Assistant:
     conversions or relied on the library's eager conversion, note that
     ``DeviceStatus`` fields like ``dhw_temperature`` are now properties. They return
     values based on the global unit system context (``us_customary`` by default).
+
     *   **Home Assistant Tip**: To ensure your state tracking is immune to unit system
         toggles within the library, use the new ``*_raw`` fields (e.g.,
         ``status.dhw_temperature_raw``) for comparison logic, and use the properties
         only for display or when a converted value is explicitly needed.
 4.  **Remove ``from_dict()`` Calls**: The ``from_dict()`` method has been removed
     from all models. Use ``model_validate()`` instead.
+
     *   **Note**: ``AuthenticationResponse.model_validate()`` now automatically handles
         the ``"data": { ... }`` wrapper found in raw API responses.
 5.  **Subpackage Imports**: While top-level imports from ``nwp500.models`` are
