@@ -317,7 +317,7 @@ class MqttConnection:
             topic=topic
         )
         unsubscribe_future = cast(asyncio.Future[Any], unsubscribe_future_raw)
-        packet_id = packet_id_raw
+        packet_id = int(packet_id_raw)
 
         try:
             await asyncio.shield(asyncio.wrap_future(unsubscribe_future))
@@ -372,7 +372,7 @@ class MqttConnection:
             topic=topic, payload=payload_bytes, qos=qos
         )
         publish_future = cast(asyncio.Future[Any], publish_future_raw)
-        packet_id = packet_id_raw
+        packet_id = int(packet_id_raw)
 
         # Shield the operation to prevent cancellation from propagating to
         # the underlying concurrent.futures.Future. This avoids

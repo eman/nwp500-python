@@ -269,6 +269,45 @@ class PeriodicRequestType(Enum):
     DEVICE_STATUS = "device_status"
 
 
+_ALT_KEYS: dict[str, str] = {
+    "status": "st",
+    "feature": "did",
+}
+
+
+def get_response_data(message: dict[str, Any], key: str | None) -> Any:
+    """Extract data from an MQTT message, supporting key variants.
+
+    Checks both the nested ``response`` dict and the top-level message,
+    using both the primary key and its alternate short-form name (e.g.
+    ``"status"`` / ``"st"``, ``"feature"`` / ``"did"``). Lookup order
+    preserves a strict *nested-first* precedence:
+
+    1. ``response[key]``
+    2. ``response[alt_key]``
+    3. ``message[key]``
+    4. ``message[alt_key]``
+
+    Args:
+        message: Raw MQTT message dict.
+        key: Primary key to look up, or ``None`` to return the full
+            ``response`` dict.
+
+    Returns:
+        The first non-falsy value found, or ``None``.
+    """
+    res: dict[str, Any] = message.get("response", {})
+    if key is None:
+        return res
+    alt_key = _ALT_KEYS.get(key)
+    return (
+        res.get(key)
+        or (res.get(alt_key) if alt_key else None)
+        or message.get(key)
+        or (message.get(alt_key) if alt_key else None)
+    )
+
+
 def topic_matches_pattern(topic: str, pattern: str) -> bool:
     """
     Check if a topic matches a subscription pattern with wildcards.
