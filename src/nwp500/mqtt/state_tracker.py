@@ -71,6 +71,7 @@ class DeviceStateTracker:
                 await self._event_emitter.emit(
                     "temperature_changed",
                     TemperatureChangedEvent(
+                        device_mac=device_mac,
                         old_temperature=prev.dhw_temperature,
                         new_temperature=status.dhw_temperature,
                     ),
@@ -89,6 +90,7 @@ class DeviceStateTracker:
                 await self._event_emitter.emit(
                     "mode_changed",
                     ModeChangedEvent(
+                        device_mac=device_mac,
                         old_mode=prev.operation_mode,
                         new_mode=status.operation_mode,
                     ),
@@ -104,6 +106,7 @@ class DeviceStateTracker:
                 await self._event_emitter.emit(
                     "power_changed",
                     PowerChangedEvent(
+                        device_mac=device_mac,
                         old_power=prev.current_inst_power,
                         new_power=status.current_inst_power,
                     ),
@@ -121,14 +124,14 @@ class DeviceStateTracker:
             if curr_heating and not prev_heating:
                 await self._event_emitter.emit(
                     "heating_started",
-                    HeatingStartedEvent(status=status),
+                    HeatingStartedEvent(device_mac=device_mac, status=status),
                 )
                 _logger.debug("Heating started")
 
             if not curr_heating and prev_heating:
                 await self._event_emitter.emit(
                     "heating_stopped",
-                    HeatingStoppedEvent(status=status),
+                    HeatingStoppedEvent(device_mac=device_mac, status=status),
                 )
                 _logger.debug("Heating stopped")
 
@@ -137,6 +140,7 @@ class DeviceStateTracker:
                 await self._event_emitter.emit(
                     "error_detected",
                     ErrorDetectedEvent(
+                        device_mac=device_mac,
                         error_code=status.error_code,
                         status=status,
                     ),
@@ -146,7 +150,9 @@ class DeviceStateTracker:
             if not status.error_code and prev.error_code:
                 await self._event_emitter.emit(
                     "error_cleared",
-                    ErrorClearedEvent(error_code=prev.error_code),
+                    ErrorClearedEvent(
+                        device_mac=device_mac, error_code=prev.error_code
+                    ),
                 )
                 _logger.info("Error cleared: %s", prev.error_code)
 

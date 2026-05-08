@@ -67,9 +67,11 @@ class StatusReceivedEvent:
     """Emitted when a device status message is received.
 
     Attributes:
+        device_mac: MAC address of the origin device
         status: The current device status snapshot
     """
 
+    device_mac: str
     status: DeviceStatus
 
 
@@ -78,12 +80,14 @@ class TemperatureChangedEvent:
     """Emitted when the DHW temperature changes.
 
     Attributes:
+        device_mac: MAC address of the origin device
         old_temperature: Previous DHW temperature in user's preferred unit
             (Celsius or Fahrenheit based on unit system context)
         new_temperature: New DHW temperature in user's preferred unit
             (Celsius or Fahrenheit based on unit system context)
     """
 
+    device_mac: str
     old_temperature: float
     new_temperature: float
 
@@ -93,10 +97,12 @@ class ModeChangedEvent:
     """Emitted when the device operation mode changes.
 
     Attributes:
+        device_mac: MAC address of the origin device
         old_mode: Previous operation mode
         new_mode: New operation mode
     """
 
+    device_mac: str
     old_mode: CurrentOperationMode
     new_mode: CurrentOperationMode
 
@@ -106,10 +112,12 @@ class PowerChangedEvent:
     """Emitted when instantaneous power consumption changes.
 
     Attributes:
+        device_mac: MAC address of the origin device
         old_power: Previous power consumption in watts
         new_power: New power consumption in watts
     """
 
+    device_mac: str
     old_power: float
     new_power: float
 
@@ -119,9 +127,11 @@ class HeatingStartedEvent:
     """Emitted when device transitions from idle to heating.
 
     Attributes:
+        device_mac: MAC address of the origin device
         status: Device status when heating started
     """
 
+    device_mac: str
     status: DeviceStatus
 
 
@@ -130,9 +140,11 @@ class HeatingStoppedEvent:
     """Emitted when device transitions from heating to idle.
 
     Attributes:
+        device_mac: MAC address of the origin device
         status: Device status when heating stopped
     """
 
+    device_mac: str
     status: DeviceStatus
 
 
@@ -141,10 +153,12 @@ class ErrorDetectedEvent:
     """Emitted when a device error is first detected.
 
     Attributes:
+        device_mac: MAC address of the origin device
         error_code: The error code that occurred
         status: Device status when error was detected
     """
 
+    device_mac: str
     error_code: ErrorCode
     status: DeviceStatus
 
@@ -154,9 +168,11 @@ class ErrorClearedEvent:
     """Emitted when a device error is resolved.
 
     Attributes:
+        device_mac: MAC address of the origin device
         error_code: The error code that was cleared
     """
 
+    device_mac: str
     error_code: ErrorCode
 
 
@@ -165,9 +181,11 @@ class FeatureReceivedEvent:
     """Emitted when device feature information is received.
 
     Attributes:
+        device_mac: MAC address of the origin device
         feature: The device feature information
     """
 
+    device_mac: str
     feature: DeviceFeature
 
 
@@ -256,7 +274,7 @@ class MqttClientEvents:
         event (PowerChangedEvent): Event object with old_power and new_power
             fields.
 
-    See: :class:`PowerChangedEvent`
+    See: :class:`PowerChangedEvent"
     """
 
     # Heating events

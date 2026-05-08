@@ -36,6 +36,11 @@ class DeviceFeature(NavienBaseModel):
         ),
     )
 
+    mac_address: str | None = Field(
+        default=None,
+        description="MAC address of the origin device",
+    )
+
     country_code: int = Field(
         description=(
             "Country/region code where device is certified for operation. "

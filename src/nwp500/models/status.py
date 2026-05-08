@@ -50,6 +50,11 @@ class DeviceStatus(NavienBaseModel):
         ),
     )
 
+    mac_address: str | None = Field(
+        default=None,
+        description="MAC address of the origin device",
+    )
+
     # Basic status fields
     command: int = Field(
         description="The command that triggered this status update"

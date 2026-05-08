@@ -414,7 +414,7 @@ class MqttSubscriptionManager:
             self._schedule_coroutine(
                 self._event_emitter.emit(
                     "status_received",
-                    StatusReceivedEvent(status=status),
+                    StatusReceivedEvent(device_mac=device_mac, status=status),
                 )
             )
             self._schedule_coroutine(
@@ -422,7 +422,7 @@ class MqttSubscriptionManager:
             )
 
         handler = self._make_handler(
-            DeviceStatus, callback, "status", post_parse
+            DeviceStatus, callback, "status", post_parse, device_mac=device_mac
         )
         return await self.subscribe_device(device=device, callback=handler)
 
@@ -450,6 +450,7 @@ class MqttSubscriptionManager:
         callback: Callable[[Any], None],
         key: str | None = None,
         post_parse: Callable[[Any], None] | None = None,
+        device_mac: str | None = None,
     ) -> Callable[[str, dict[str, Any]], None]:
         """Generic factory for MQTT message handlers."""
 
@@ -460,6 +461,9 @@ class MqttSubscriptionManager:
                     return
 
                 parsed = model.model_validate(data)
+                if device_mac and hasattr(parsed, "mac_address"):
+                    parsed.mac_address = device_mac
+
                 if post_parse:
                     post_parse(parsed)
                 callback(parsed)
@@ -481,23 +485,22 @@ class MqttSubscriptionManager:
         self, device: Device, callback: Callable[[DeviceFeature], None]
     ) -> int:
         """Subscribe to device feature/info messages with automatic parsing."""
+        device_mac = device.device_info.mac_address
 
         def post_parse(feature: DeviceFeature) -> None:
             if self._device_info_cache:
                 self._schedule_coroutine(
-                    self._device_info_cache.set(
-                        device.device_info.mac_address, feature
-                    )
+                    self._device_info_cache.set(device_mac, feature)
                 )
             self._schedule_coroutine(
                 self._event_emitter.emit(
                     "feature_received",
-                    FeatureReceivedEvent(feature=feature),
+                    FeatureReceivedEvent(device_mac=device_mac, feature=feature),
                 )
             )
 
         handler = self._make_handler(
-            DeviceFeature, callback, "feature", post_parse
+            DeviceFeature, callback, "feature", post_parse, device_mac=device_mac
         )
         return await self.subscribe_device(device=device, callback=handler)
 
