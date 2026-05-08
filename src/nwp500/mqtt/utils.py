@@ -274,6 +274,8 @@ _ALT_KEYS: dict[str, str] = {
     "feature": "did",
 }
 
+_SENTINEL = object()
+
 
 def get_response_data(message: dict[str, Any], key: str | None) -> Any:
     """Extract data from an MQTT message, supporting key variants.
@@ -288,24 +290,34 @@ def get_response_data(message: dict[str, Any], key: str | None) -> Any:
     3. ``message[key]``
     4. ``message[alt_key]``
 
+    Key presence is checked explicitly (not by truthiness), so falsy
+    values like ``0``, ``False``, or ``{}`` are returned correctly and
+    do not fall through to a lower-precedence candidate.
+
     Args:
         message: Raw MQTT message dict.
-        key: Primary key to look up, or ``None`` to return the full
-            ``response`` dict.
+        key: Primary key to look up. When ``None``, the nested
+            ``response`` dict is returned directly.
 
     Returns:
-        The first non-falsy value found, or ``None``.
+        The value of the first *present* key in priority order,
+        or ``None`` if no candidate key is found.
     """
     res: dict[str, Any] = message.get("response", {})
     if key is None:
         return res
     alt_key = _ALT_KEYS.get(key)
-    return (
-        res.get(key)
-        or (res.get(alt_key) if alt_key else None)
-        or message.get(key)
-        or (message.get(alt_key) if alt_key else None)
-    )
+    for source, k in (
+        (res, key),
+        (res, alt_key),
+        (message, key),
+        (message, alt_key),
+    ):
+        if k is not None:
+            value = source.get(k, _SENTINEL)
+            if value is not _SENTINEL:
+                return value
+    return None
 
 
 def topic_matches_pattern(topic: str, pattern: str) -> bool:
