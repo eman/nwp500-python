@@ -455,9 +455,12 @@ class MqttSubscriptionManager:
         def handler(topic: str, message: dict[str, Any]) -> None:
             try:
                 res = message.get("response", {})
-                # Try nested response field, then fallback to top-level
+                # Try multiple possible keys for Navien protocol compatibility
+                alt_key = "st" if key == "status" else "did" if key == "feature" else None
                 data = (res.get(key) if key else res) or (
                     message.get(key) if key else None
+                ) or (res.get(alt_key) if alt_key else None) or (
+                    message.get(alt_key) if alt_key else None
                 )
                 if not data:
                     return
