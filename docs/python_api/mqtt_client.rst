@@ -589,6 +589,31 @@ request_tou_settings()
 
    Request the current TOU schedule.
 
+subscribe_tou_response()
+^^^^^^^^^^^^^^^^^^^^^^^^
+
+.. py:method:: subscribe_tou_response(device, callback)
+
+   Subscribe to parsed TOU schedule responses.
+
+   The callback is invoked with a :class:`~nwp500.models.TOUReservationSchedule`
+   whenever the device responds to a :meth:`request_tou_settings` read or a
+   :meth:`configure_tou_schedule` write (both use the ``tou/rd`` response
+   topic).
+
+   :param callback: Called with the parsed TOU schedule on each response.
+   :type callback: Callable[[TOUReservationSchedule], None]
+
+unsubscribe_tou_response()
+^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+.. py:method:: unsubscribe_tou_response(device, callback)
+
+   Unsubscribe a previously registered TOU response callback.
+
+   :param callback: The same callable passed to :meth:`subscribe_tou_response`.
+   :type callback: Callable[[TOUReservationSchedule], None]
+
 set_tou_enabled()
 ^^^^^^^^^^^^^^^^^
 

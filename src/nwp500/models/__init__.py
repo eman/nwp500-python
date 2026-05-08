@@ -47,7 +47,13 @@ from .status import (
     TouOverride,
     TouStatus,
 )
-from .tou import ConvertedTOUPlan, TOUInfo, TOUSchedule
+from .tou import (
+    ConvertedTOUPlan,
+    TOUInfo,
+    TOUPeriod,
+    TOUReservationSchedule,
+    TOUSchedule,
+)
 
 __all__ = [
     "NavienBaseModel",
@@ -69,6 +75,8 @@ __all__ = [
     "TOUSchedule",
     "ConvertedTOUPlan",
     "TOUInfo",
+    "TOUPeriod",
+    "TOUReservationSchedule",
     "ReservationEntry",
     "ReservationSchedule",
     "WeeklyReservationEntry",

@@ -30,6 +30,7 @@ from ..models import (
     EnergyUsageResponse,
     RecirculationSchedule,
     ReservationSchedule,
+    TOUReservationSchedule,
     WeeklyReservationSchedule,
 )
 from ..mqtt_events import FeatureReceivedEvent, StatusReceivedEvent
@@ -691,6 +692,58 @@ class MqttSubscriptionManager:
             str(device.device_info.device_type),
             self._client_id,
             "recirc-rsv/rd",
+        )
+
+        target_handler = None
+        if topic in self._message_handlers:
+            for h in self._message_handlers[topic]:
+                if getattr(h, "_original_callback", None) == callback:
+                    target_handler = h
+                    break
+
+        if target_handler:
+            await self.unsubscribe(topic, target_handler)
+
+    async def subscribe_tou_response(
+        self,
+        device: Device,
+        callback: Callable[[TOUReservationSchedule], None],
+    ) -> int:
+        """Subscribe to Time-of-Use schedule read responses with automatic
+        parsing.
+
+        Subscribes to the ``tou/rd`` response topic for the given device.
+        The callback receives a fully-parsed
+        :class:`~nwp500.models.TOUReservationSchedule` whenever the device
+        responds to a TOU read or configure request (triggered by
+        :meth:`~nwp500.NavienMqttClient.request_tou_settings` or
+        :meth:`~nwp500.NavienMqttClient.configure_tou_schedule`).
+
+        Args:
+            device: Device whose TOU responses to receive.
+            callback: Called with the parsed schedule on each response.
+
+        Returns:
+            Publish packet ID from the MQTT subscribe call.
+        """
+        handler = self._make_handler(TOUReservationSchedule, callback)
+        topic = MqttTopicBuilder.response_topic(
+            str(device.device_info.device_type),
+            self._client_id,
+            "tou/rd",
+        )
+        return await self.subscribe(topic, handler)
+
+    async def unsubscribe_tou_response(
+        self,
+        device: Device,
+        callback: Callable[[TOUReservationSchedule], None],
+    ) -> None:
+        """Unsubscribe a specific TOU response callback."""
+        topic = MqttTopicBuilder.response_topic(
+            str(device.device_info.device_type),
+            self._client_id,
+            "tou/rd",
         )
 
         target_handler = None

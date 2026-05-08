@@ -58,6 +58,7 @@ if TYPE_CHECKING:
         OtaCommitPayload,
         RecirculationSchedule,
         ReservationSchedule,
+        TOUReservationSchedule,
         WeeklyReservationSchedule,
     )
 
@@ -1022,6 +1023,43 @@ class NavienMqttClient(EventEmitter):
             return
         manager = self._subscription_manager
         await manager.unsubscribe_recirculation_schedule_response(
+            device, callback
+        )
+
+    async def subscribe_tou_response(
+        self,
+        device: Device,
+        callback: Callable[[TOUReservationSchedule], None],
+    ) -> int:
+        """Subscribe to Time-of-Use schedule read responses with automatic
+        parsing.
+
+        Subscribes to the ``tou/rd`` response topic for the given device.
+        The callback receives a fully-parsed
+        :class:`~nwp500.models.TOUReservationSchedule` whenever the device
+        responds to a TOU read or configure request (triggered by
+        :meth:`request_tou_settings` or :meth:`configure_tou_schedule`).
+
+        Args:
+            device: Device whose TOU responses to receive.
+            callback: Called with the parsed schedule on each response.
+
+        Returns:
+            Publish packet ID from the MQTT subscribe call.
+        """
+        return await self._delegate_subscription(
+            "subscribe_tou_response", device, callback
+        )
+
+    async def unsubscribe_tou_response(
+        self,
+        device: Device,
+        callback: Callable[[TOUReservationSchedule], None],
+    ) -> None:
+        """Unsubscribe a specific TOU response callback."""
+        if not self._connected or not self._subscription_manager:
+            return
+        await self._subscription_manager.unsubscribe_tou_response(
             device, callback
         )
 
