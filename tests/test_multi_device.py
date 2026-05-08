@@ -22,10 +22,10 @@ def test_models_have_mac_address():
     assert status.mac_address == "00:11:22:33:44:55"
 
     feature = DeviceFeature.model_construct(
-        controller_serial_number="ABC123",
-        mac_address="00:11:22:33:44:55"
+        controller_serial_number="ABC123", mac_address="00:11:22:33:44:55"
     )
     assert feature.mac_address == "00:11:22:33:44:55"
+
 
 def test_events_have_device_mac():
     """Test that events carry device_mac."""
@@ -36,9 +36,10 @@ def test_events_have_device_mac():
     temp_event = TemperatureChangedEvent(
         device_mac="00:11:22:33:44:55",
         old_temperature=120.0,
-        new_temperature=122.0
+        new_temperature=122.0,
     )
     assert temp_event.device_mac == "00:11:22:33:44:55"
+
 
 @pytest.mark.asyncio
 async def test_state_tracker_emits_with_mac():
@@ -57,13 +58,13 @@ async def test_state_tracker_emits_with_mac():
         dhw_temperature_raw=100,
         operation_mode=CurrentOperationMode.STANDBY,
         current_inst_power=0.0,
-        error_code=0
+        error_code=0,
     )
     status1_v2 = DeviceStatus.model_construct(
         dhw_temperature_raw=104,
         operation_mode=CurrentOperationMode.STANDBY,
         current_inst_power=0.0,
-        error_code=0
+        error_code=0,
     )
 
     # First update sets initial state
@@ -85,13 +86,13 @@ async def test_state_tracker_emits_with_mac():
         dhw_temperature_raw=110,
         operation_mode=CurrentOperationMode.STANDBY,
         current_inst_power=0.0,
-        error_code=0
+        error_code=0,
     )
     status2_v2 = DeviceStatus.model_construct(
         dhw_temperature_raw=114,
         operation_mode=CurrentOperationMode.STANDBY,
         current_inst_power=0.0,
-        error_code=0
+        error_code=0,
     )
 
     await tracker.process(mac2, status2_v1)
@@ -102,6 +103,7 @@ async def test_state_tracker_emits_with_mac():
     args, kwargs = emitter.emit.call_args
     event = args[1]
     assert event.device_mac == mac2
+
 
 def test_make_handler_injects_mac():
     """Test that MqttSubscriptionManager._make_handler injects mac_address."""
@@ -114,7 +116,7 @@ def test_make_handler_injects_mac():
         connection=connection,
         client_id="test_client",
         event_emitter=event_emitter,
-        schedule_coroutine=schedule_coroutine
+        schedule_coroutine=schedule_coroutine,
     )
 
     mac = "00:11:22:33:44:55"
@@ -124,10 +126,7 @@ def test_make_handler_injects_mac():
         callback_called.append(parsed)
 
     handler = manager._make_handler(
-        model=DeviceStatus,
-        callback=my_callback,
-        key="status",
-        device_mac=mac
+        model=DeviceStatus, callback=my_callback, key="status", device_mac=mac
     )
 
     # Simulate receiving a message
