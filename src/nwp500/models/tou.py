@@ -75,9 +75,9 @@ class TOUPeriod(NavienBaseModel):
     season: int = 0
     week: int = 0
     start_hour: int = Field(default=0, alias="startHour")
-    start_minute: int = Field(default=0, alias="startMinute")
+    start_min: int = Field(default=0, alias="startMinute")
     end_hour: int = Field(default=0, alias="endHour")
-    end_minute: int = Field(default=0, alias="endMinute")
+    end_min: int = Field(default=0, alias="endMinute")
     price_min: int = Field(default=0, alias="priceMin")
     price_max: int = Field(default=0, alias="priceMax")
     decimal_point: int = Field(default=5, alias="decimalPoint")
@@ -93,13 +93,13 @@ class TOUPeriod(NavienBaseModel):
     @property
     def start_time(self) -> str:
         """Formatted start time (HH:MM)."""
-        return f"{self.start_hour:02d}:{self.start_minute:02d}"
+        return f"{self.start_hour:02d}:{self.start_min:02d}"
 
     @computed_field  # type: ignore[prop-decorator]
     @property
     def end_time(self) -> str:
         """Formatted end time (HH:MM)."""
-        return f"{self.end_hour:02d}:{self.end_minute:02d}"
+        return f"{self.end_hour:02d}:{self.end_min:02d}"
 
     @computed_field  # type: ignore[prop-decorator]
     @property
@@ -128,7 +128,7 @@ class TOUReservationSchedule(NavienBaseModel):
     The payload structure is::
 
         {
-            "reservationUse": 2,          # 1=disabled, 2=enabled
+            "reservationUse": 2,          # 0=disabled, 2=enabled
             "reservation": [              # list of TOU period dicts
                 {
                     "season": 4095, "week": 254,
@@ -157,6 +157,6 @@ class TOUReservationSchedule(NavienBaseModel):
     def enabled(self) -> bool:
         """Whether TOU scheduling is globally enabled.
 
-        Device bool convention: 2=on, 1=off.
+        Protocol convention: 0=disabled, 2=enabled.
         """
         return self.reservation_use == 2
