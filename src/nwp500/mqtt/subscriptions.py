@@ -495,12 +495,18 @@ class MqttSubscriptionManager:
             self._schedule_coroutine(
                 self._event_emitter.emit(
                     "feature_received",
-                    FeatureReceivedEvent(device_mac=device_mac, feature=feature),
+                    FeatureReceivedEvent(
+                        device_mac=device_mac, feature=feature
+                    ),
                 )
             )
 
         handler = self._make_handler(
-            DeviceFeature, callback, "feature", post_parse, device_mac=device_mac
+            DeviceFeature,
+            callback,
+            "feature",
+            post_parse,
+            device_mac=device_mac,
         )
         return await self.subscribe_device(device=device, callback=handler)
 

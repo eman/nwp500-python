@@ -1,22 +1,26 @@
+from unittest.mock import AsyncMock, MagicMock
+
 import pytest
-from unittest.mock import MagicMock, AsyncMock
-from nwp500.models import DeviceStatus, DeviceFeature
+
+from nwp500.enums import CurrentOperationMode
+from nwp500.events import EventEmitter
+from nwp500.models import DeviceFeature, DeviceStatus
+from nwp500.mqtt.state_tracker import DeviceStateTracker
+from nwp500.mqtt.subscriptions import MqttSubscriptionManager
 from nwp500.mqtt_events import (
     StatusReceivedEvent,
     TemperatureChangedEvent,
-    FeatureReceivedEvent,
 )
-from nwp500.mqtt.state_tracker import DeviceStateTracker
-from nwp500.events import EventEmitter
-from nwp500.enums import CurrentOperationMode, DhwOperationSetting
-from nwp500.mqtt.subscriptions import MqttSubscriptionManager
+
 
 def test_models_have_mac_address():
     """Test that DeviceStatus and DeviceFeature have mac_address field."""
     # Use model_construct to avoid providing all required fields
-    status = DeviceStatus.model_construct(command=0, mac_address="00:11:22:33:44:55")
+    status = DeviceStatus.model_construct(
+        command=0, mac_address="00:11:22:33:44:55"
+    )
     assert status.mac_address == "00:11:22:33:44:55"
-    
+
     feature = DeviceFeature.model_construct(
         controller_serial_number="ABC123",
         mac_address="00:11:22:33:44:55"
@@ -28,7 +32,7 @@ def test_events_have_device_mac():
     status = DeviceStatus.model_construct(command=0)
     event = StatusReceivedEvent(device_mac="00:11:22:33:44:55", status=status)
     assert event.device_mac == "00:11:22:33:44:55"
-    
+
     temp_event = TemperatureChangedEvent(
         device_mac="00:11:22:33:44:55",
         old_temperature=120.0,
@@ -42,12 +46,13 @@ async def test_state_tracker_emits_with_mac():
     emitter = MagicMock(spec=EventEmitter)
     emitter.emit = AsyncMock(return_value=1)
     tracker = DeviceStateTracker(emitter)
-    
+
     mac1 = "00:11:22:33:44:55"
     mac2 = "AA:BB:CC:DD:EE:FF"
-    
+
     # We need to provide enough fields for computed properties if they are used
-    # DeviceStatus uses dhwTemperature computed property which uses dhw_temperature_raw
+    # DeviceStatus uses dhwTemperature computed property
+    # which uses dhw_temperature_raw
     status1_v1 = DeviceStatus.model_construct(
         dhw_temperature_raw=100,
         operation_mode=CurrentOperationMode.STANDBY,
@@ -60,21 +65,21 @@ async def test_state_tracker_emits_with_mac():
         current_inst_power=0.0,
         error_code=0
     )
-    
+
     # First update sets initial state
     await tracker.process(mac1, status1_v1)
     assert emitter.emit.call_count == 0
-    
+
     # Second update triggers event
     await tracker.process(mac1, status1_v2)
     assert emitter.emit.call_count == 1
-    
+
     args, kwargs = emitter.emit.call_args
     assert args[0] == "temperature_changed"
     event = args[1]
     assert isinstance(event, TemperatureChangedEvent)
     assert event.device_mac == mac1
-    
+
     # Update for different device
     status2_v1 = DeviceStatus.model_construct(
         dhw_temperature_raw=110,
@@ -88,10 +93,10 @@ async def test_state_tracker_emits_with_mac():
         current_inst_power=0.0,
         error_code=0
     )
-    
+
     await tracker.process(mac2, status2_v1)
     await tracker.process(mac2, status2_v2)
-    
+
     # Should have emitted another event for mac2
     assert emitter.emit.call_count == 2
     args, kwargs = emitter.emit.call_args
@@ -104,27 +109,27 @@ def test_make_handler_injects_mac():
     connection = MagicMock()
     event_emitter = MagicMock()
     schedule_coroutine = MagicMock()
-    
+
     manager = MqttSubscriptionManager(
         connection=connection,
         client_id="test_client",
         event_emitter=event_emitter,
         schedule_coroutine=schedule_coroutine
     )
-    
+
     mac = "00:11:22:33:44:55"
     callback_called = []
-    
+
     def my_callback(parsed):
         callback_called.append(parsed)
-        
+
     handler = manager._make_handler(
         model=DeviceStatus,
         callback=my_callback,
         key="status",
         device_mac=mac
     )
-    
+
     # Simulate receiving a message
     message = {
         "status": {
@@ -230,9 +235,9 @@ def test_make_handler_injects_mac():
             "freezeProtectionTempMax": 65.0,
         }
     }
-    
+
     handler("test/topic", message)
-    
+
     assert len(callback_called) == 1
     parsed = callback_called[0]
     assert isinstance(parsed, DeviceStatus)
