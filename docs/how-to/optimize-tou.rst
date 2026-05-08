@@ -910,7 +910,7 @@ The device status includes TOU-related fields:
 * ``touStatus``: ``1`` if TOU scheduling is enabled/active, ``0`` if disabled/inactive
 * ``touOverrideStatus``: ``2`` (ON) = TOU schedule is operating normally, ``1`` (OFF) = user has overridden TOU to force immediate heating
 
-See :doc:`../protocol/device_status` for more details.
+See :doc:`../reference/protocol/device_status` for more details.
 
 Best Practices
 --------------
@@ -955,10 +955,10 @@ Limitations
 Further Reading
 ---------------
 
-* :doc:`../python_api/api_client` - API client documentation and ``get_tou_info()`` method
-* :doc:`../python_api/mqtt_client` - MQTT client and TOU configuration methods
-* :doc:`../protocol/mqtt_protocol` - MQTT message formats including TOU commands
-* :doc:`../protocol/device_status` - Device status fields including ``touStatus``
+* :doc:`../reference/python_api/api_client` - API client documentation and ``get_tou_info()`` method
+* :doc:`../reference/python_api/mqtt_client` - MQTT client and TOU configuration methods
+* :doc:`../reference/protocol/mqtt_protocol` - MQTT message formats including TOU commands
+* :doc:`../reference/protocol/device_status` - Device status fields including ``touStatus``
 * `OpenEI Utility Rates API <https://openei.org/services/doc/rest/util_rates/?version=7>`__ - Official OpenEI API documentation
 * `OpenEI IURDB <https://apps.openei.org/IURDB/>`__ - Interactive Utility Rate Database
 

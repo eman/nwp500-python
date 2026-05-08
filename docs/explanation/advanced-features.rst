@@ -464,7 +464,7 @@ The NWP500 uses **half-degrees Celsius** encoding for temperature fields.
 
 **Related Documentation**:
 
-See :doc:`../protocol/data_conversions` for complete field conversion reference and formula applications.
+See :doc:`../reference/protocol/data_conversions` for complete field conversion reference and formula applications.
 
 Summary and Recommendations
 ============================
@@ -491,7 +491,7 @@ Summary and Recommendations
 See Also
 --------
 
-* :doc:`../protocol/data_conversions` - Temperature field conversions (HalfCelsiusToF, DeciCelsiusToF)
-* :doc:`../protocol/device_status` - Complete device status field reference
-* :doc:`scheduling` - Scheduling and automation guide
-* :doc:`../python_api/models` - DeviceStatus model field definitions
+* :doc:`../reference/protocol/data_conversions` - Temperature field conversions (HalfCelsiusToF, DeciCelsiusToF)
+* :doc:`../reference/protocol/device_status` - Complete device status field reference
+* :doc:`../how-to/schedule-operation` - Scheduling and automation guide
+* :doc:`../reference/python_api/models` - DeviceStatus model field definitions

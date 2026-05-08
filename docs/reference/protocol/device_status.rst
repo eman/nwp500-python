@@ -764,5 +764,5 @@ See Also
 --------
 
 * :doc:`error_codes` - Complete error code reference with diagnostics
-* :doc:`../guides/energy_monitoring` - Energy consumption tracking
+* :doc:`../../how-to/track-energy` - Energy consumption tracking
 * :doc:`mqtt_protocol` - Status message format details

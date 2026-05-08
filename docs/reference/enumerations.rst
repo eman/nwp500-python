@@ -305,5 +305,5 @@ Related Documentation
 For detailed protocol documentation, see:
 
 - :doc:`protocol/device_status` - Status field definitions
-- :doc:`guides/time_of_use` - TOU scheduling and rate types
+- :doc:`../how-to/optimize-tou` - TOU scheduling and rate types
 - :doc:`protocol/quick_reference` - Quick reference and control commands

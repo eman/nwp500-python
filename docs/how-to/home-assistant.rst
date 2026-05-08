@@ -365,6 +365,6 @@ Best Practices
 See Also
 ========
 
-- :doc:`../python_api/models` - Complete model reference
-- :doc:`../protocol/data_conversions` - Detailed conversion formulas
-- :doc:`../enumerations` - TemperatureType and other enumerations
+- :doc:`../reference/python_api/models` - Complete model reference
+- :doc:`../reference/protocol/data_conversions` - Detailed conversion formulas
+- :doc:`../reference/enumerations` - TemperatureType and other enumerations

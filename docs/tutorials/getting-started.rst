@@ -253,11 +253,11 @@ Next Steps
 
 Now that you have the basics, explore these topics:
 
-* :doc:`python_api/auth_client` - Deep dive into authentication
-* :doc:`python_api/mqtt_client` - Complete MQTT client documentation
-* :doc:`guides/energy_monitoring` - Track energy usage
-* :doc:`guides/time_of_use` - Optimize for TOU pricing
-* :doc:`guides/event_system` - Use the event-driven architecture
+* :doc:`../reference/python_api/auth_client` - Deep dive into authentication
+* :doc:`../reference/python_api/mqtt_client` - Complete MQTT client documentation
+* :doc:`../how-to/track-energy` - Track energy usage
+* :doc:`../how-to/optimize-tou` - Optimize for TOU pricing
+* :doc:`../how-to/monitor-status` - Use the event-driven architecture
 
 Common Issues
 =============
@@ -277,5 +277,5 @@ Common Issues
 **Import Errors**
    Check that the library is installed: ``pip install nwp500-python``
 
-For more help, see the :doc:`development/contributing` guide or file an
+For more help, see the :doc:`../project/contributing` guide or file an
 issue on GitHub.

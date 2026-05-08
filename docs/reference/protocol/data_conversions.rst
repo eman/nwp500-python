@@ -660,6 +660,6 @@ See Also
 
 * :doc:`device_status` - Complete status message structure and field definitions
 * :doc:`error_codes` - Error code reference for fault diagnosis
-* :doc:`../guides/energy_monitoring` - Using energy data for optimization
-* :doc:`../guides/time_of_use` - TOU scheduling and rate optimization
-* :doc:`../guides/advanced_features_explained` - Weather-responsive heating, demand response, and tank stratification
+* :doc:`../../how-to/track-energy` - Using energy data for optimization
+* :doc:`../../how-to/optimize-tou` - TOU scheduling and rate optimization
+* :doc:`../../explanation/advanced-features` - Weather-responsive heating, demand response, and tank stratification

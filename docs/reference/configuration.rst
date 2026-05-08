@@ -144,8 +144,8 @@ The MQTT client supports various configuration options through
 
 For detailed configuration guides, see:
 
-* :doc:`guides/auto_recovery` - Connection recovery settings
-* :doc:`guides/command_queue` - Offline command queuing
+* :doc:`../how-to/auto-recovery` - Connection recovery settings
+* :doc:`../how-to/queue-commands` - Offline command queuing
 
 Basic Example
 -------------
@@ -281,7 +281,7 @@ Example: Production Configuration
 Next Steps
 ==========
 
-* :doc:`quickstart` - Build your first application
+* :doc:`../tutorials/getting-started` - Build your first application
 * :doc:`python_api/auth_client` - Authentication details
 * :doc:`python_api/mqtt_client` - MQTT client configuration
-* :doc:`guides/auto_recovery` - Automatic reconnection guide
+* :doc:`../how-to/auto-recovery` - Automatic reconnection guide

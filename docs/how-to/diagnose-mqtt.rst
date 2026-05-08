@@ -1116,8 +1116,8 @@ Investigation Checklist
 See Also
 ========
 
-- :doc:`../protocol/device_status` - Device status field reference
-- :doc:`../python_api/mqtt_client` - MQTT client API documentation
+- :doc:`../reference/protocol/device_status` - Device status field reference
+- :doc:`../reference/python_api/mqtt_client` - MQTT client API documentation
 
 External Resources
 

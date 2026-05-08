@@ -297,9 +297,9 @@ Technical Notes
 See Also
 ========
 
-- :doc:`../python_api/mqtt_client` - MQTT client documentation
-- :doc:`../python_api/events` - Event emitter documentation
-- :doc:`../python_api/auth_client` - Authentication and tokens
+- :doc:`../reference/python_api/mqtt_client` - MQTT client documentation
+- :doc:`../reference/python_api/events` - Event emitter documentation
+- :doc:`../reference/python_api/auth_client` - Authentication and tokens
 
 Example Code
 ============

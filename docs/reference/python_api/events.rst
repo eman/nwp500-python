@@ -284,4 +284,4 @@ Related Documentation
 
 * :doc:`mqtt_client` - MQTT client API reference
 * :doc:`models` - Models used by subscription callbacks
-* :doc:`../guides/event_system` - Event-driven programming guide
+* :doc:`../../how-to/monitor-status` - Event-driven programming guide

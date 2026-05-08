@@ -18,7 +18,11 @@ The easiest way to install nwp500-python:
 
    pip install nwp500-python
 
-This will install the library and all required dependencies.
+For rich formatting and colors when using the CLI:
+
+.. code-block:: bash
+
+   pip install nwp500-python[cli]
 
 Installing from Source
 ======================

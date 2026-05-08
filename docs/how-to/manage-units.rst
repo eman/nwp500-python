@@ -657,7 +657,7 @@ This feature represents a breaking change from previous versions where all value
 See Also
 ========
 
-- :doc:`../python_api/models` - Complete model reference
-- :doc:`../enumerations` - TemperatureType and TemperatureFormulaType enumerations
-- :doc:`../protocol/data_conversions` - Raw protocol data formats
-- :doc:`home_assistant_integration` - Home Assistant integration guide
+- :doc:`../reference/python_api/models` - Complete model reference
+- :doc:`../reference/enumerations` - TemperatureType and TemperatureFormulaType enumerations
+- :doc:`../reference/protocol/data_conversions` - Raw protocol data formats
+- :doc:`home-assistant` - Home Assistant integration guide

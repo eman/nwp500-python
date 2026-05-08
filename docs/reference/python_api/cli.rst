@@ -815,4 +815,4 @@ Related Documentation
 * :doc:`auth_client` - Python authentication API
 * :doc:`api_client` - Python REST API
 * :doc:`mqtt_client` - Python MQTT API
-* :doc:`../guides/auto_recovery` - Connection recovery and resilience
+* :doc:`../../how-to/auto-recovery` - Connection recovery and resilience

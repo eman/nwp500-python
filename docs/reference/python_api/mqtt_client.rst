@@ -1116,8 +1116,8 @@ Related Documentation
 * :doc:`events` - Event system
 * :doc:`exceptions` - Exception handling
 * :doc:`../protocol/mqtt_protocol` - MQTT protocol details
-* :doc:`../guides/energy_monitoring` - Energy monitoring guide
-* :doc:`../guides/scheduling` - Scheduling, recirculation, and intelligent modes
-* :doc:`../guides/device_maintenance` - OTA, WiFi, freeze protection, and diagnostics
-* :doc:`../guides/command_queue` - Command queueing guide
-* :doc:`../guides/auto_recovery` - Auto-reconnection guide
+* :doc:`../../how-to/track-energy` - Energy monitoring guide
+* :doc:`../../how-to/schedule-operation` - Scheduling, recirculation, and intelligent modes
+* :doc:`../../how-to/maintenance` - OTA, WiFi, freeze protection, and diagnostics
+* :doc:`../../how-to/queue-commands` - Command queueing guide
+* :doc:`../../how-to/auto-recovery` - Auto-reconnection guide

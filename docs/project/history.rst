@@ -85,8 +85,8 @@ compatibility - Automatic credential handling from authentication API -
 Session ID generation for connection tracking
 
 **Key Files:** - ``src/nwp500/mqtt_client.py`` - MQTT client
-implementation - :doc:`../python_api/mqtt_client` - Complete documentation -
-:doc:`../protocol/mqtt_protocol` - Message format reference
+implementation - :doc:`../reference/python_api/mqtt_client` - Complete documentation -
+:doc:`../reference/protocol/mqtt_protocol` - Message format reference
 
 Device Status & Feature Callbacks (October 7, 2025)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -265,10 +265,11 @@ Complete event-driven architecture for device state changes:
 - ``src/nwp500/events.py`` - EventEmitter implementation (370 lines)
 - ``src/nwp500/mqtt_client.py`` - MQTT integration with event emitter
 - ``examples/event_emitter_demo.py`` - Comprehensive demonstration
-- ``tests/test_events.py`` - Unit tests (19 tests)
-- :doc:`../python_api/events` - Feature documentation
+- tests/test_events.py - Unit tests (19 tests)
+- :doc:`../reference/python_api/events` - Feature documentation
 
 **Thread Safety Implementation:**
+
 
 MQTT callbacks run in separate threads (e.g., 'Dummy-1') created by AWS IoT SDK. To safely emit events:
 
@@ -323,8 +324,8 @@ References
 ----------
 
 - `OpenAPI Specification <openapi.yaml>`__ - API specification
-- :doc:`../protocol/mqtt_protocol` - MQTT message reference
-- :doc:`../protocol/device_status` - Device status fields
-- :doc:`../python_api/auth_client` - Authentication guide
-- :doc:`../python_api/api_client` - API client guide
-- :doc:`../python_api/mqtt_client` - MQTT client guide
+- :doc:`../reference/protocol/mqtt_protocol` - MQTT message reference
+- :doc:`../reference/protocol/device_status` - Device status fields
+- :doc:`../reference/python_api/auth_client` - Authentication guide
+- :doc:`../reference/python_api/api_client` - API client guide
+- :doc:`../reference/python_api/mqtt_client` - MQTT client guide

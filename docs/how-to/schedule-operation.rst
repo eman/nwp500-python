@@ -689,7 +689,7 @@ Time of Use (TOU)
 
 TOU scheduling allows price-aware heating optimization based on your
 utility's electricity rate structure. For the full TOU guide including
-OpenEI integration, see :doc:`time_of_use`.
+OpenEI integration, see :doc:`optimize-tou`.
 
 TOU Period Structure
 --------------------
@@ -892,9 +892,9 @@ Anti-legionella is especially important when:
 See Also
 ========
 
-* :doc:`time_of_use` — Full TOU guide with OpenEI integration
-* :doc:`../python_api/mqtt_client` — MQTT client API reference
-* :doc:`device_maintenance` — Maintenance and OTA operations
-* :doc:`../protocol/data_conversions` — Temperature and power field
+* :doc:`optimize-tou` — Full TOU guide with OpenEI integration
+* :doc:`../reference/python_api/mqtt_client` — MQTT client API reference
+* :doc:`maintenance` — Maintenance and OTA operations
+* :doc:`../reference/protocol/data_conversions` — Temperature and power field
   conversions
-* :doc:`auto_recovery` — Handling temporary connectivity issues
+* :doc:`auto-recovery` — Handling temporary connectivity issues

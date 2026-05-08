@@ -38,7 +38,7 @@ derived state transitions (temperature delta, mode change, etc.):
 
    mqtt.on(MqttClientEvents.STATUS_RECEIVED, on_status_event)
 
-See :doc:`../python_api/events` for the full event dataclass reference.
+See :doc:`../reference/python_api/events` for the full event dataclass reference.
 
 Available Events
 ----------------
@@ -119,7 +119,7 @@ Use ``MqttClientEvents`` constants to avoid typos and get IDE autocomplete:
    for event_name in MqttClientEvents.get_all_events():
        print(f"  - {event_name}")
 
-See :doc:`../python_api/events` for the event dataclass reference.
+See :doc:`../reference/python_api/events` for the event dataclass reference.
 
 Advanced Patterns
 =================
@@ -553,6 +553,6 @@ Buffer updates and flush periodically to reduce I/O overhead:
 Related Documentation
 =====================
 
-* :doc:`../python_api/events` - Event API reference
-* :doc:`../python_api/mqtt_client` - MQTT client
-* :doc:`../python_api/models` - Data models
+* :doc:`../reference/python_api/events` - Event API reference
+* :doc:`../reference/python_api/mqtt_client` - MQTT client
+* :doc:`../reference/python_api/models` - Data models
