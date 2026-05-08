@@ -2,6 +2,19 @@
 Changelog
 =========
 
+Version 8.1.0 (2026-05-07)
+==========================
+
+Features
+--------
+- **Multi-device support enhancements**: Improved support for accounts with multiple
+  Navilink devices by injecting device identity into models and events.
+  - Added ``mac_address`` field to ``DeviceStatus`` and ``DeviceFeature`` models.
+  - Added ``device_mac`` attribute to all device-specific MQTT events (temperature
+    changes, mode changes, power updates, errors, etc.).
+  - Updated ``DeviceStateTracker`` and ``MqttSubscriptionManager`` to propagate
+    device identity correctly.
+
 Version 8.0.0 (2026-05-06)
 ===========================
 
