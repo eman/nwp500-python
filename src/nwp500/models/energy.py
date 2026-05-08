@@ -75,3 +75,4 @@ class EnergyUsageResponse(NavienBaseModel):
         for monthly_data in self.usage:
             if monthly_data.year == year and monthly_data.month == month:
                 return monthly_data
+        return None

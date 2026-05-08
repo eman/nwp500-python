@@ -7,6 +7,7 @@ import pytest
 try:
     from nwp500.cli.handlers import (
         get_controller_serial_number,
+        handle_device_info_request,
         handle_set_dhw_temp_request,
         handle_set_mode_request,
         handle_status_request,
@@ -35,6 +36,7 @@ def mock_mqtt():
     mqtt.set_dhw_temperature = AsyncMock()
 
     # Async methods on mqtt itself
+    mqtt.subscribe_device = AsyncMock()
     mqtt.subscribe_device_feature = AsyncMock()
     mqtt.subscribe_device_status = AsyncMock()
     return mqtt
@@ -145,3 +147,59 @@ async def test_handle_set_dhw_temp_request_success(mock_mqtt, mock_device):
     await handle_set_dhw_temp_request(mock_mqtt, mock_device, 120.0)
 
     mock_mqtt.set_dhw_temperature.assert_called_once_with(mock_device, 120.0)
+
+
+@pytest.mark.asyncio
+async def test_handle_status_request_raw_with_st_key(
+    mock_mqtt, mock_device, capsys
+):
+    """Raw status request handles the 'st' alt key from Navien devices."""
+    status_data = {"operationMode": 1, "hotWaterTemperature": 500}
+
+    async def subscribe_and_invoke(device, callback):
+        callback("cmd/52/device/st", {"response": {"st": status_data}})
+
+    mock_mqtt.subscribe_device = AsyncMock(side_effect=subscribe_and_invoke)
+
+    await handle_status_request(mock_mqtt, mock_device, raw=True)
+
+    captured = capsys.readouterr()
+    assert "operationMode" in captured.out
+    assert "hotWaterTemperature" in captured.out
+
+
+@pytest.mark.asyncio
+async def test_handle_device_info_request_raw_with_did_key(
+    mock_mqtt, mock_device, capsys
+):
+    """Raw device info request handles the 'did' alt key from Navien devices."""
+    feature_data = {"serialNumber": "ABC123", "modelName": "NWP500"}
+
+    async def subscribe_and_invoke(device, callback):
+        callback("cmd/52/device/st/did", {"response": {"did": feature_data}})
+
+    mock_mqtt.subscribe_device = AsyncMock(side_effect=subscribe_and_invoke)
+
+    await handle_device_info_request(mock_mqtt, mock_device, raw=True)
+
+    captured = capsys.readouterr()
+    assert "serialNumber" in captured.out
+    assert "modelName" in captured.out
+
+
+@pytest.mark.asyncio
+async def test_handle_status_request_raw_with_standard_key(
+    mock_mqtt, mock_device, capsys
+):
+    """Raw status request handles the standard 'status' key."""
+    status_data = {"operationMode": 2, "hotWaterTemperature": 600}
+
+    async def subscribe_and_invoke(device, callback):
+        callback("cmd/52/device/st", {"response": {"status": status_data}})
+
+    mock_mqtt.subscribe_device = AsyncMock(side_effect=subscribe_and_invoke)
+
+    await handle_status_request(mock_mqtt, mock_device, raw=True)
+
+    captured = capsys.readouterr()
+    assert "operationMode" in captured.out

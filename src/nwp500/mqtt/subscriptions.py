@@ -35,7 +35,7 @@ from ..models import (
 from ..mqtt_events import FeatureReceivedEvent, StatusReceivedEvent
 from ..topic_builder import MqttTopicBuilder
 from .state_tracker import DeviceStateTracker
-from .utils import redact_topic, topic_matches_pattern
+from .utils import get_response_data, redact_topic, topic_matches_pattern
 
 if TYPE_CHECKING:
     from ..device_info_cache import MqttDeviceInfoCache
@@ -454,11 +454,7 @@ class MqttSubscriptionManager:
 
         def handler(topic: str, message: dict[str, Any]) -> None:
             try:
-                res = message.get("response", {})
-                # Try nested response field, then fallback to top-level
-                data = (res.get(key) if key else res) or (
-                    message.get(key) if key else None
-                )
+                data = get_response_data(message, key)
                 if not data:
                     return
 

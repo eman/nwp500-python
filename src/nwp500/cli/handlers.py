@@ -24,7 +24,7 @@ from nwp500.exceptions import (
     ValidationError,
 )
 from nwp500.models import ReservationSchedule
-from nwp500.mqtt.utils import redact_serial
+from nwp500.mqtt.utils import get_response_data, redact_serial
 from nwp500.reservations import (
     add_reservation,
     delete_reservation,
@@ -172,9 +172,7 @@ async def _handle_info_request(
 
             def raw_cb(topic: str, message: dict[str, Any]) -> None:
                 if not future.done():
-                    res = message.get("response", {}).get(
-                        data_key
-                    ) or message.get(data_key)
+                    res = get_response_data(message, data_key)
                     if res:
                         print_json(res)
                         future.set_result(None)
