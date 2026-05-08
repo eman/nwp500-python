@@ -22,9 +22,6 @@ supports both REST API and real-time MQTT communication.
 Documentation
 =============
 
-The documentation is organized into four sections, following the
-`Diátaxis <https://diataxis.fr/>`_ framework:
-
 .. toctree::
    :maxdepth: 2
    :caption: Tutorials
