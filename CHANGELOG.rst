@@ -2,6 +2,23 @@
 Changelog
 =========
 
+Version 8.1.1 (2026-05-12)
+==========================
+
+Bug Fixes
+---------
+- **Fix MQTT reconnection after unexpected AWS hangup**: The
+  ``on_connection_resumed`` callback was missing the ``connection`` parameter
+  required by the AWS IoT SDK callback signature. The SDK calls
+  ``on_connection_resumed(connection, return_code, session_present, **kwargs)``,
+  but the handler only accepted ``(return_code, session_present)``. The
+  mismatched signature caused the callback to fail silently (exception swallowed
+  by the AWS CRT C layer), so ``self._connected`` was never restored to ``True``
+  after an ``AWS_ERROR_MQTT_UNEXPECTED_HANGUP``. As a result, the
+  ``connection_resumed`` event was never emitted, the reconnection loop ran
+  indefinitely, and device sensors became permanently unavailable until a manual
+  restart. (`#85 <https://github.com/eman/nwp500-python/issues/85>`_)
+
 Version 8.1.0 (2026-05-07)
 ==========================
 
