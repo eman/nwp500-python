@@ -52,7 +52,9 @@ class MqttConnection:
         on_connection_interrupted: (
             Callable[[mqtt.Connection, AwsCrtError], None] | None
         ) = None,
-        on_connection_resumed: Callable[[Any, Any | None], None] | None = None,
+        on_connection_resumed: (
+            Callable[[mqtt.Connection, Any, Any | None], None] | None
+        ) = None,
     ):
         """
         Initialize connection manager.

@@ -303,9 +303,20 @@ class NavienMqttClient(EventEmitter):
         )
 
     def _on_connection_resumed_internal(
-        self, return_code: Any, session_present: Any
+        self,
+        connection: mqtt.Connection,
+        return_code: Any,
+        session_present: Any,
+        **kwargs: Any,
     ) -> None:
-        """Internal handler for connection resumption."""
+        """Internal handler for connection resumption.
+
+        Args:
+            connection: MQTT connection that was resumed
+            return_code: MQTT return code from the resumed connection
+            session_present: Whether the previous session was present
+            **kwargs: Forward-compatibility kwargs from AWS SDK
+        """
         _logger.info(
             f"Connection resumed: return_code={return_code}, "
             f"session_present={session_present}"
