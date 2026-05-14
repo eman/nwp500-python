@@ -2,8 +2,8 @@
 Changelog
 =========
 
-Version 8.1.1 (2026-05-12)
-==========================
+Unreleased (8.x)
+================
 
 Bug Fixes
 ---------
@@ -19,9 +19,6 @@ Bug Fixes
   indefinitely, and device sensors became permanently unavailable until a manual
   restart. (`#85 <https://github.com/eman/nwp500-python/issues/85>`_)
 
-Version 8.1.0 (2026-05-07)
-==========================
-
 Features
 --------
 - **Multi-device support enhancements**: Improved support for accounts with multiple
@@ -32,9 +29,6 @@ Features
     changes, mode changes, power updates, errors, etc.).
   - Updated ``DeviceStateTracker`` and ``MqttSubscriptionManager`` to propagate
     device identity correctly.
-
-Version 8.0.0 (2026-05-06)
-===========================
 
 **BREAKING CHANGES**: ``.on()`` event handler callbacks now receive a single typed
 event dataclass instead of positional arguments. ``MqttDeviceController`` is no longer
