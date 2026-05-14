@@ -1,5 +1,7 @@
 """Token storage and management for CLI authentication."""
 
+from __future__ import annotations
+
 import json
 import logging
 from pathlib import Path
@@ -47,8 +49,8 @@ def load_tokens() -> tuple[AuthTokens | None, str | None]:
                 _logger.error("No email found in token file")
                 return None, None
 
-            # Use the built-in from_dict() method for deserialization
-            tokens = AuthTokens.from_dict(data)
+            # Use the built-in model_validate() method for deserialization
+            tokens = AuthTokens.model_validate(data)
             _logger.info(f"Tokens loaded from {TOKEN_FILE} for user {email}")
             return tokens, email
     except (OSError, json.JSONDecodeError, KeyError, ValueError) as e:

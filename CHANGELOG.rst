@@ -2,6 +2,140 @@
 Changelog
 =========
 
+Unreleased (8.x)
+================
+
+Bug Fixes
+---------
+- **Fix MQTT reconnection after unexpected AWS hangup**: The
+  ``on_connection_resumed`` callback was missing the ``connection`` parameter
+  required by the AWS IoT SDK callback signature. The SDK calls
+  ``on_connection_resumed(connection, return_code, session_present, **kwargs)``,
+  but the handler only accepted ``(return_code, session_present)``. The
+  mismatched signature caused the callback to fail silently (exception swallowed
+  by the AWS CRT C layer), so ``self._connected`` was never restored to ``True``
+  after an ``AWS_ERROR_MQTT_UNEXPECTED_HANGUP``. As a result, the
+  ``connection_resumed`` event was never emitted, the reconnection loop ran
+  indefinitely, and device sensors became permanently unavailable until a manual
+  restart. (`#85 <https://github.com/eman/nwp500-python/issues/85>`_)
+
+Features
+--------
+- **Multi-device support enhancements**: Improved support for accounts with multiple
+  Navilink devices by injecting device identity into models and events.
+
+  - Added ``mac_address`` field to ``DeviceStatus`` and ``DeviceFeature`` models.
+  - Added ``device_mac`` attribute to all device-specific MQTT events (temperature
+    changes, mode changes, power updates, errors, etc.).
+  - Updated ``DeviceStateTracker`` and ``MqttSubscriptionManager`` to propagate
+    device identity correctly.
+
+**BREAKING CHANGES**: ``.on()`` event handler callbacks now receive a single typed
+event dataclass instead of positional arguments. ``MqttDeviceController`` is no longer
+accessible as ``.control`` on ``NavienMqttClient``; all control methods are now
+available directly on the client.
+
+Breaking Changes
+----------------
+- **Typed event payloads**: All ``.on()`` event handler callbacks now receive a single
+  typed event dataclass instance. The dataclasses are exported from
+  ``nwp500.mqtt_events``.
+
+  .. code-block:: python
+
+     # OLD (removed)
+     mqtt.on("temperature_changed", lambda old, new: print(old, new))
+     mqtt.on("connection_resumed", lambda rc, sp: print(rc, sp))
+
+     # NEW
+     mqtt.on("temperature_changed", lambda e: print(e.old_temperature, e.new_temperature))
+     mqtt.on("connection_resumed", lambda e: print(e.return_code, e.session_present))
+
+- **``MqttDeviceController`` no longer public**: ``NavienMqttClient`` no longer exposes
+  a ``.control`` attribute. All control methods are now available directly on the
+  client.
+
+  .. code-block:: python
+
+     # OLD (removed)
+     await mqtt.control.set_temperature(device, 50)
+
+     # NEW
+     await mqtt.set_temperature(device, 50)
+
+Migration Guide (from 7.x.x)
+----------------------------
+The following steps are recommended for a smooth migration, particularly for complex
+integrations like Home Assistant:
+
+1.  **Update Event Listeners**: Locate all ``mqtt.on()`` or ``mqtt.once()`` calls.
+    Update the callback signatures to accept a single argument (the event object) and
+    update the body to access fields via the object (e.g., ``event.new_temperature``
+    instead of ``new_val``).
+2.  **Refactor Control Calls**: Remove ``.control`` from all device command invocations.
+    Instead of ``await mqtt.control.set_power(...)``, use ``await mqtt.set_power(...)``.
+3.  **Handle Unit Conversions**: If your integration previously performed its own
+    conversions or relied on the library's eager conversion, note that
+    ``DeviceStatus`` fields like ``dhw_temperature`` are now properties. They return
+    values based on the global unit system context (``us_customary`` by default).
+
+    *   **Home Assistant Tip**: To ensure your state tracking is immune to unit system
+        toggles within the library, use the new ``*_raw`` fields (e.g.,
+        ``status.dhw_temperature_raw``) for comparison logic, and use the properties
+        only for display or when a converted value is explicitly needed.
+4.  **Remove ``from_dict()`` Calls**: The ``from_dict()`` method has been removed
+    from all models. Use ``model_validate()`` instead.
+
+    *   **Note**: ``AuthenticationResponse.model_validate()`` now automatically handles
+        the ``"data": { ... }`` wrapper found in raw API responses.
+5.  **Subpackage Imports**: While top-level imports from ``nwp500.models`` are
+    preserved, if you were importing from the internal ``nwp500.models`` module file
+    directly, you must update your imports to point to the new structured files
+    (e.g., ``nwp500.models.status``).
+
+Added
+-----
+- **New control methods**: Nine previously unimplemented ``CommandCode`` values now have
+  full implementations: ``check_firmware``, ``commit_firmware``, ``reconnect_wifi``,
+  ``reset_wifi``, ``set_freeze_protection_temperature``, ``run_smart_diagnostic``,
+  ``enable_intelligent_reservation``, ``disable_intelligent_reservation``, and
+  ``set_water_program_reservation``.
+- **Typed subscription methods**: ``subscribe_reservation``,
+  ``subscribe_weekly_reservation``, and ``subscribe_recirculation`` return typed
+  responses directly without requiring raw MQTT event handlers.
+- **New protocol models**: ``WeeklyReservationSchedule``, ``WeeklyReservationEntry``,
+  ``RecirculationSchedule``, ``RecirculationScheduleEntry``, and ``OtaCommitPayload``.
+- **``DeviceStateTracker``**: State change detection extracted into a dedicated class
+  in ``nwp500.mqtt.state_tracker`` with per-device tracking keyed by MAC address.
+- **``MQTT_PROTOCOL_VERSION`` constant**: Protocol version is now a named constant in
+  ``nwp500.config`` rather than a hardcoded integer in the command payload builder.
+- **``response_ack_topic()``**: New method on ``MqttTopicBuilder`` for control command
+  acknowledgement topics.
+
+Changed
+-------
+- **Unit conversion redesign**: Temperature, flow rate, and volume fields in
+  ``DeviceStatus`` and ``DeviceFeature`` now store raw device values as ``*_raw: int``
+  fields and expose converted values via lazy computed properties. Conversion happens at
+  access time rather than during Pydantic deserialization, preserving the original
+  device value in all cases.
+- **Models split into subpackage**: ``nwp500.models`` is now a package
+  (``nwp500/models/``) with modules for status, schedule, TOU, and MQTT models. Public
+  imports from ``nwp500.models`` are unchanged.
+- **Topic building centralised**: All MQTT topic construction now goes through
+  ``MqttTopicBuilder``. Hardcoded topic strings removed from ``control.py``,
+  ``reservations.py``, and ``cli/handlers.py``.
+- **``set_vacation_days`` delegates to ``set_dhw_mode``**: The method now calls
+  ``set_dhw_mode(device, DhwOperationSetting.VACATION, vacation_days=days)`` directly.
+- **Per-device state tracking**: ``_previous_status`` changed from a single
+  ``DeviceStatus | None`` to a ``dict[str, DeviceStatus]`` keyed by MAC address,
+  preventing spurious state-change events when multiple devices are connected.
+- **Unit system stored as instance variable**: ``NavienAPIClient``,
+  ``NavienMqttClient``, and ``NavienAuthClient`` no longer call ``set_unit_system()``
+  as a constructor side-effect.
+- **``NavienBaseModel`` consolidated**: Duplicate definitions in ``auth.py`` and
+  ``models.py`` merged into a single definition in ``nwp500._base``.
+
 Version 7.4.10 (2026-04-13)
 ===========================
 
@@ -205,7 +339,7 @@ Breaking Changes
   .. code-block:: python
 
      # OLD (hardcoded 95-150°F)
-     await mqtt.control.set_dhw_temperature(device, temperature_f=140.0)
+     await mqtt.set_dhw_temperature(device, temperature_f=140.0)
      entry = build_reservation_entry(
          enabled=True,
          days=["Monday"],
@@ -217,7 +351,7 @@ Breaking Changes
 
      # NEW (device-provided limits, unit-aware)
      # Temperature value automatically uses user's preferred unit
-     await mqtt.control.set_dhw_temperature(device, 140.0)
+     await mqtt.set_dhw_temperature(device, 140.0)
      
      # Device features provide min/max in user's preferred unit
      features = await device_info_cache.get(device.device_info.mac_address)

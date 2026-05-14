@@ -227,10 +227,10 @@ async def main():
 
                 # Step 5: Request device info to get feature data
                 print("Step 5: Requesting device information...")
-                await mqtt_client.control.signal_app_connection(device)
+                await mqtt_client.signal_app_connection(device)
                 await asyncio.sleep(1)
 
-                await mqtt_client.control.request_device_info(device)
+                await mqtt_client.request_device_info(device)
                 print("[SUCCESS] Device info request sent")
                 print()
 

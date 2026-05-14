@@ -14,11 +14,10 @@ from __future__ import annotations
 import asyncio
 import logging
 from collections.abc import Sequence
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from .encoding import build_reservation_entry, encode_week_bitfield
 from .models import ReservationSchedule
-from .unit_system import get_unit_system, set_unit_system
 
 if TYPE_CHECKING:
     from .models import Device
@@ -58,44 +57,25 @@ async def fetch_reservations(
     future: asyncio.Future[ReservationSchedule] = (
         asyncio.get_running_loop().create_future()
     )
-    caller_unit_system = get_unit_system()
 
-    def raw_callback(topic: str, message: dict[str, Any]) -> None:
-        if (
-            future.done()
-            or "response" not in message
-            or "/res/rsv/" not in topic
-        ):
-            return
-        response = message.get("response", {})
-        # Ensure it's actually a reservation response (not some other /res/ msg)
-        if "reservationUse" not in response and "reservation" not in response:
-            return
-        previous = get_unit_system()
-        try:
-            if caller_unit_system:
-                set_unit_system(caller_unit_system)
-            schedule = ReservationSchedule(**response)
-        finally:
-            if previous is not None:
-                set_unit_system(previous)
-        future.set_result(schedule)
+    def on_schedule(schedule: ReservationSchedule) -> None:
+        if not future.done():
+            future.set_result(schedule)
 
-    device_type = str(device.device_info.device_type)
-    response_topic = f"cmd/{device_type}/{mqtt.client_id}/res/rsv/rd"
-    await mqtt.subscribe(response_topic, raw_callback)
-    await mqtt.control.request_reservations(device)
+    await mqtt.subscribe_reservation_response(device, on_schedule)
+    await mqtt.request_reservations(device)
     try:
         return await asyncio.wait_for(future, timeout=timeout)
     except TimeoutError:
         return None
     finally:
         try:
-            await mqtt.unsubscribe(response_topic)
+            await mqtt.unsubscribe_reservation_response(device, on_schedule)
         except Exception:
             _logger.warning(
-                "Failed to unsubscribe reservations response handler for %s",
-                response_topic,
+                "Failed to unsubscribe reservations response handler for "
+                "device %s",
+                device.device_info.mac_address,
                 exc_info=True,
             )
 
@@ -161,9 +141,7 @@ async def add_reservation(
     ]
     current_reservations.append(reservation_entry)
 
-    await mqtt.control.update_reservations(
-        device, current_reservations, enabled=True
-    )
+    await mqtt.update_reservations(device, current_reservations, enabled=True)
 
 
 async def delete_reservation(
@@ -206,7 +184,7 @@ async def delete_reservation(
 
     still_enabled = schedule.enabled and len(current_reservations) > 0
 
-    await mqtt.control.update_reservations(
+    await mqtt.update_reservations(
         device, current_reservations, enabled=still_enabled
     )
 
@@ -300,7 +278,7 @@ async def update_reservation(
     ]
     current_reservations[index - 1] = new_entry
 
-    await mqtt.control.update_reservations(
+    await mqtt.update_reservations(
         device, current_reservations, enabled=schedule.enabled
     )
 

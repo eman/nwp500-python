@@ -67,14 +67,14 @@ async def main():
         )
 
         # Register event handlers
-        def on_interrupted(error):
-            print(f"\n[WARNING]  Connection interrupted: {error}")
+        def on_interrupted(event):
+            print(f"\n[WARNING]  Connection interrupted: {event.error}")
             print("   Automatic reconnection will begin...")
 
-        def on_resumed(return_code, session_present):
+        def on_resumed(event):
             print("\n[SUCCESS] Connection resumed!")
-            print(f"   Return code: {return_code}")
-            print(f"   Session present: {session_present}")
+            print(f"   Return code: {event.return_code}")
+            print(f"   Session present: {event.session_present}")
 
         mqtt_client.on("connection_interrupted", on_interrupted)
         mqtt_client.on("connection_resumed", on_resumed)
@@ -97,7 +97,7 @@ async def main():
                 print(f"   Reconnecting: attempt {mqtt_client.reconnect_attempts}...")
 
         await mqtt_client.subscribe_device_status(device, on_status)
-        await mqtt_client.control.request_device_status(device)
+        await mqtt_client.request_device_status(device)
 
         # Monitor connection status
         print("\n" + "=" * 70)
@@ -126,7 +126,7 @@ async def main():
 
                 # Request status update if connected
                 if mqtt_client.is_connected:
-                    await mqtt_client.control.request_device_status(device)
+                    await mqtt_client.request_device_status(device)
 
         print("\n" + "=" * 70)
         print(f"Monitoring complete. Received {status_count} status updates.")

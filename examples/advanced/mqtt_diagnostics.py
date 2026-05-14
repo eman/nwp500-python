@@ -128,9 +128,9 @@ class MqttDiagnosticsExample:
             except Exception as e:
                 _logger.error(f"Error monitoring state: {e}", exc_info=True)
 
-    async def on_connection_drop(self, error: Exception) -> None:
+    async def on_connection_drop(self, event) -> None:
         """Handle connection drop event."""
-        _logger.warning(f"Connection dropped: {error}")
+        _logger.warning(f"Connection dropped: {event.error}")
 
         # Record with diagnostics
         active_subs = (
@@ -145,24 +145,22 @@ class MqttDiagnosticsExample:
         queued_cmds = self.mqtt_client.queued_commands_count if self.mqtt_client else 0
 
         await self.diagnostics.record_connection_drop(
-            error=error,
+            error=event.error,
             active_subscriptions=active_subs,
             queued_commands=queued_cmds,
         )
 
-    async def on_connection_resumed(
-        self, return_code: int, session_present: bool
-    ) -> None:
+    async def on_connection_resumed(self, event) -> None:
         """Handle connection resumed event."""
         _logger.info(
-            f"Connection resumed: return_code={return_code}, "
-            f"session_present={session_present}"
+            f"Connection resumed: return_code={event.return_code}, "
+            f"session_present={event.session_present}"
         )
 
         await self.diagnostics.record_connection_success(
             event_type="resumed",
-            session_present=session_present,
-            return_code=return_code,
+            session_present=event.session_present,
+            return_code=event.return_code,
         )
 
     async def run_example(
@@ -212,12 +210,12 @@ class MqttDiagnosticsExample:
                 # Hook into connection events
                 self.mqtt_client.on(
                     "connection_interrupted",
-                    lambda e: asyncio.create_task(self.on_connection_drop(e)),
+                    lambda event: asyncio.create_task(self.on_connection_drop(event)),
                 )
                 self.mqtt_client.on(
                     "connection_resumed",
-                    lambda rc, sp: asyncio.create_task(
-                        self.on_connection_resumed(rc, sp)
+                    lambda event: asyncio.create_task(
+                        self.on_connection_resumed(event)
                     ),
                 )
 

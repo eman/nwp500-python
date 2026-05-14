@@ -33,7 +33,7 @@ try:  # for Sphinx >= 1.7
 except ImportError:
     from sphinx import apidoc
 
-output_dir = os.path.join(__location__, "api")
+output_dir = os.path.join(__location__, "reference", "api")
 module_dir = os.path.join(__location__, "../src/nwp500")
 try:
     shutil.rmtree(output_dir)

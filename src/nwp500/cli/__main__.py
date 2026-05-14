@@ -1,5 +1,7 @@
 """Navien Water Heater Control CLI - Main Entry Point."""
 
+from __future__ import annotations
+
 import asyncio
 import functools
 import logging
@@ -54,7 +56,7 @@ async def _detect_unit_system(
             future.set_result(status)
 
     await mqtt.subscribe_device_status(device, _on_status)
-    await mqtt.control.request_device_status(device)
+    await mqtt.request_device_status(device)
     try:
         status = await asyncio.wait_for(future, timeout=5.0)
         if status.temperature_type == TemperatureType.CELSIUS:

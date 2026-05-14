@@ -101,7 +101,7 @@ async def example_with_mqtt():
             await mqtt_client.subscribe_device_status(device, on_status)
 
             # Request initial status
-            await mqtt_client.control.request_device_status(device)
+            await mqtt_client.request_device_status(device)
 
             # Wait for a moment to receive updates
             await asyncio.sleep(3)

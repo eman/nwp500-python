@@ -5,6 +5,8 @@ This module provides utilities that are used across multiple components,
 including performance monitoring decorators and helper functions.
 """
 
+from __future__ import annotations
+
 import functools
 import inspect
 import logging

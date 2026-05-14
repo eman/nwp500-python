@@ -17,12 +17,15 @@ This module handles all device control operations including:
 - Recirculation pump control and scheduling
 """
 
+from __future__ import annotations
+
 import logging
 from collections.abc import Awaitable, Callable, Sequence
 from datetime import UTC, datetime
 from typing import Any
 
 from ..command_decorators import requires_capability
+from ..config import MQTT_PROTOCOL_VERSION
 from ..device_capabilities import MqttDeviceCapabilityChecker
 from ..device_info_cache import MqttDeviceInfoCache
 from ..enums import CommandCode, DhwOperationSetting
@@ -34,6 +37,9 @@ from ..exceptions import (
 from ..models import (
     Device,
     DeviceFeature,
+    OtaCommitPayload,
+    RecirculationSchedule,
+    WeeklyReservationSchedule,
     preferred_to_half_celsius,
 )
 from ..topic_builder import MqttTopicBuilder
@@ -96,9 +102,14 @@ class MqttDeviceController:
         self._ensure_device_info_callback = callback
 
     @property
-    def device_info_cache(self) -> "MqttDeviceInfoCache":
+    def device_info_cache(self) -> MqttDeviceInfoCache:
         """Get the device info cache."""
         return self._device_info_cache
+
+    @device_info_cache.setter
+    def device_info_cache(self, cache: MqttDeviceInfoCache) -> None:
+        """Set the device info cache."""
+        self._device_info_cache = cache
 
     async def _ensure_device_info_cached(
         self, device: Device, timeout: float = 5.0
@@ -216,18 +227,17 @@ class MqttDeviceController:
             **kwargs,
         }
 
-        # Use navilink- prefix for device ID in topics (from reference
-        # implementation)
-        device_topic = f"navilink-{device_id}"
-
+        device_type_str = str(device_type)
         return {
             "clientID": self._client_id,
             "sessionID": self._session_id,
-            "protocolVersion": 2,
+            "protocolVersion": MQTT_PROTOCOL_VERSION,
             "request": request,
-            "requestTopic": f"cmd/{device_type}/{device_topic}",
-            "responseTopic": (
-                f"cmd/{device_type}/{device_topic}/{self._client_id}/res"
+            "requestTopic": MqttTopicBuilder.command_topic(
+                device_type_str, device_id
+            ),
+            "responseTopic": MqttTopicBuilder.response_ack_topic(
+                device_type_str, device_id, self._client_id
             ),
         }
 
@@ -649,12 +659,31 @@ class MqttDeviceController:
     @requires_capability("holiday_use")
     async def set_vacation_days(self, device: Device, days: int) -> int:
         """Set vacation/away mode duration (1-30 days)."""
-        self._validate_range("days", days, 1, 30)
-        return await self._mode_command(
-            device,
-            CommandCode.DHW_MODE,
-            "dhw-mode",
-            [DhwOperationSetting.VACATION.value, days],
+        return await self.set_dhw_mode(
+            device, DhwOperationSetting.VACATION.value, vacation_days=days
+        )
+
+    @requires_capability("program_reservation_use")
+    async def update_weekly_reservation(
+        self, device: Device, schedule: WeeklyReservationSchedule
+    ) -> int:
+        """Configure the weekly temperature reservation schedule.
+
+        Sends the complete weekly schedule to the device using command
+        code RESERVATION_WEEKLY (33554438).
+
+        Args:
+            device: Device to configure
+            schedule: Weekly reservation schedule with entries for each
+                time slot
+
+        Returns:
+            Publish packet ID
+        """
+        return await self._send_command(
+            device=device,
+            command_code=CommandCode.RESERVATION_WEEKLY,
+            reservation=schedule.model_dump(by_alias=True),
         )
 
     @requires_capability("program_reservation_use")
@@ -668,16 +697,22 @@ class MqttDeviceController:
     async def configure_recirculation_schedule(
         self,
         device: Device,
-        schedule: dict[str, Any],
+        schedule: RecirculationSchedule,
     ) -> int:
-        """
-        Configure recirculation pump schedule.
-        ...
+        """Configure the recirculation pump timed schedule.
+
+        Args:
+            device: Device to configure
+            schedule: Recirculation schedule with one or more time window
+                entries
+
+        Returns:
+            Publish packet ID
         """
         return await self._send_command(
             device=device,
             command_code=CommandCode.RECIR_RESERVATION,
-            schedule=schedule,
+            schedule=schedule.model_dump(by_alias=True),
         )
 
     @requires_capability("recirculation_use")
@@ -693,4 +728,150 @@ class MqttDeviceController:
         """Manually trigger the recirculation pump hot button."""
         return await self._mode_command(
             device, CommandCode.RECIR_HOT_BTN, "recirc-hotbtn", [1]
+        )
+
+    async def check_firmware_update(self, device: Device) -> int:
+        """Check for available over-the-air firmware updates.
+
+        Sends the OTA_CHECK command (33554443) to query whether a firmware
+        update is available. The device responds on the control ack topic.
+
+        Args:
+            device: Device to check for updates
+
+        Returns:
+            Publish packet ID
+        """
+        return await self._mode_command(
+            device, CommandCode.OTA_CHECK, "ota-check"
+        )
+
+    async def commit_firmware_update(
+        self, device: Device, payload: OtaCommitPayload
+    ) -> int:
+        """Commit a previously downloaded firmware update.
+
+        Sends the OTA_COMMIT command (33554442) with a special
+        ``commitOta`` structure (not the standard mode/param format).
+
+        Args:
+            device: Device to update
+            payload: OTA commit payload specifying which firmware component
+                and version to commit.
+
+        Returns:
+            Publish packet ID
+        """
+        return await self._send_command(
+            device=device,
+            command_code=CommandCode.OTA_COMMIT,
+            commitOta=payload.model_dump(by_alias=True),
+        )
+
+    async def reconnect_wifi(self, device: Device) -> int:
+        """Trigger a WiFi reconnection on the device.
+
+        Sends the WIFI_RECONNECT command (33554446). Useful when the
+        device has lost its WiFi connection and needs to re-associate.
+
+        Args:
+            device: Device to reconnect
+
+        Returns:
+            Publish packet ID
+        """
+        return await self._mode_command(
+            device, CommandCode.WIFI_RECONNECT, "wifi-reconnect"
+        )
+
+    async def reset_wifi(self, device: Device) -> int:
+        """Reset WiFi settings to factory defaults.
+
+        Sends the WIFI_RESET command (33554447). This will clear stored
+        WiFi credentials and require re-provisioning the device.
+
+        .. warning::
+            This operation clears all stored WiFi credentials. The device
+            will need to be re-provisioned to reconnect to the network.
+
+        Args:
+            device: Device to reset
+
+        Returns:
+            Publish packet ID
+        """
+        return await self._mode_command(
+            device, CommandCode.WIFI_RESET, "wifi-reset"
+        )
+
+    async def set_freeze_protection_temperature(
+        self, device: Device, temperature: float
+    ) -> int:
+        """Set the freeze protection activation temperature.
+
+        Sends the FREZ_TEMP command (33554451). The device activates
+        freeze protection heating when the ambient temperature drops
+        below this threshold.
+
+        Args:
+            device: Device to configure
+            temperature: Activation temperature in the user's preferred unit
+                (°C if unit system is metric, °F otherwise).
+                Valid range: 35–45°F (1.7–7.2°C).
+
+        Returns:
+            Publish packet ID
+        """
+        raw = preferred_to_half_celsius(temperature)
+        return await self._mode_command(
+            device, CommandCode.FREZ_TEMP, "frez-temp", [raw]
+        )
+
+    async def run_smart_diagnostic(self, device: Device) -> int:
+        """Trigger the smart diagnostic routine on the device.
+
+        Sends the SMART_DIAGNOSTIC command (33554455). The diagnostic
+        result is reflected in the ``smart_diagnostic`` field of the next
+        :class:`~nwp500.models.DeviceStatus` update.
+
+        Args:
+            device: Device to diagnose
+
+        Returns:
+            Publish packet ID
+        """
+        return await self._mode_command(
+            device, CommandCode.SMART_DIAGNOSTIC, "smart-diagnostic"
+        )
+
+    async def enable_intelligent_scheduling(self, device: Device) -> int:
+        """Enable intelligent/adaptive heating mode.
+
+        Sends the RESERVATION_INTELLIGENT_ON command (33554468). In this
+        mode the device learns usage patterns and pre-heats water
+        proactively to reduce energy consumption.
+
+        Args:
+            device: Device to configure
+
+        Returns:
+            Publish packet ID
+        """
+        return await self._mode_command(
+            device, CommandCode.RESERVATION_INTELLIGENT_ON, "intelligent-on"
+        )
+
+    async def disable_intelligent_scheduling(self, device: Device) -> int:
+        """Disable intelligent/adaptive heating mode.
+
+        Sends the RESERVATION_INTELLIGENT_OFF command (33554467).
+
+        Args:
+            device: Device to configure
+
+        Returns:
+            Publish packet ID
+        """
+        return await self._mode_command(
+            device, CommandCode.RESERVATION_INTELLIGENT_OFF, "intelligent-off"
         )

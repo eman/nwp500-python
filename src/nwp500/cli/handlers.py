@@ -1,5 +1,7 @@
 """Command handlers for CLI operations."""
 
+from __future__ import annotations
+
 import asyncio
 import json
 import logging
@@ -22,13 +24,14 @@ from nwp500.exceptions import (
     ValidationError,
 )
 from nwp500.models import ReservationSchedule
-from nwp500.mqtt.utils import redact_serial
+from nwp500.mqtt.utils import get_response_data, redact_serial
 from nwp500.reservations import (
     add_reservation,
     delete_reservation,
     fetch_reservations,
     update_reservation,
 )
+from nwp500.topic_builder import MqttTopicBuilder
 from nwp500.unit_system import get_unit_system
 
 from .output_formatters import (
@@ -115,7 +118,7 @@ async def get_controller_serial_number(
         feature: Any = await _wait_for_response(
             mqtt.subscribe_device_feature,
             device,
-            lambda: mqtt.control.request_device_info(device),
+            lambda: mqtt.request_device_info(device),
             timeout=timeout,
             action_name="controller serial",
         )
@@ -169,9 +172,7 @@ async def _handle_info_request(
 
             def raw_cb(topic: str, message: dict[str, Any]) -> None:
                 if not future.done():
-                    res = message.get("response", {}).get(
-                        data_key
-                    ) or message.get(data_key)
+                    res = get_response_data(message, data_key)
                     if res:
                         print_json(res)
                         future.set_result(None)
@@ -191,7 +192,7 @@ async def handle_status_request(
         mqtt,
         device,
         mqtt.subscribe_device_status,
-        mqtt.control.request_device_status,
+        mqtt.request_device_status,
         "status",
         "device status",
         raw,
@@ -207,7 +208,7 @@ async def handle_device_info_request(
         mqtt,
         device,
         mqtt.subscribe_device_feature,
-        mqtt.control.request_device_info,
+        mqtt.request_device_info,
         "feature",
         "device information",
         raw,
@@ -237,7 +238,7 @@ async def handle_set_mode_request(
     await _handle_command_with_status_feedback(
         mqtt,
         device,
-        lambda: mqtt.control.set_dhw_mode(device, mode_id),
+        lambda: mqtt.set_dhw_mode(device, mode_id),
         "setting mode",
         f"Mode changed to {mode_name}",
     )
@@ -251,7 +252,7 @@ async def handle_set_dhw_temp_request(
     await _handle_command_with_status_feedback(
         mqtt,
         device,
-        lambda: mqtt.control.set_dhw_temperature(device, temperature),
+        lambda: mqtt.set_dhw_temperature(device, temperature),
         "setting temperature",
         f"Temperature set to {temperature}{unit_suffix}",
     )
@@ -265,7 +266,7 @@ async def handle_power_request(
     await _handle_command_with_status_feedback(
         mqtt,
         device,
-        lambda: mqtt.control.set_power(device, power_on),
+        lambda: mqtt.set_power(device, power_on),
         f"turning {state}",
         f"Device turned {state}",
     )
@@ -322,12 +323,12 @@ async def handle_update_reservations_request(
             print_json(message)
             future.set_result(None)
 
-    device_type = device.device_info.device_type
-    response_topic = f"cmd/{device_type}/{mqtt.client_id}/res/rsv/rd"
-    await mqtt.subscribe(response_topic, raw_callback)
-    await mqtt.control.update_reservations(
-        device, reservations, enabled=enabled
+    device_type = str(device.device_info.device_type)
+    response_topic = MqttTopicBuilder.response_topic(
+        device_type, mqtt.client_id, "rsv/rd"
     )
+    await mqtt.subscribe(response_topic, raw_callback)
+    await mqtt.update_reservations(device, reservations, enabled=enabled)
     try:
         await asyncio.wait_for(future, timeout=10)
     except TimeoutError:
@@ -422,7 +423,7 @@ async def handle_enable_anti_legionella_request(
 ) -> None:
     """Enable Anti-Legionella disinfection cycle."""
     try:
-        await mqtt.control.enable_anti_legionella(device, period_days)
+        await mqtt.enable_anti_legionella(device, period_days)
         print(f"✓ Anti-Legionella enabled (cycle every {period_days} day(s))")
     except (RangeValidationError, ValidationError) as e:
         _logger.error(f"Failed to enable Anti-Legionella: {e}")
@@ -446,14 +447,14 @@ async def handle_set_anti_legionella_period_request(
 
     try:
         await mqtt.subscribe_device_status(device, _on_status)
-        await mqtt.control.request_device_status(device)
+        await mqtt.request_device_status(device)
         status = await asyncio.wait_for(future, timeout=10)
 
         # Get current enabled state
         use = getattr(status, "anti_legionella_use", None)
 
         if use:
-            await mqtt.control.enable_anti_legionella(device, period_days)
+            await mqtt.enable_anti_legionella(device, period_days)
             print(f"Anti-Legionella period set to {period_days} day(s)")
         else:
             print(
@@ -475,7 +476,7 @@ async def handle_disable_anti_legionella_request(
 ) -> None:
     """Disable Anti-Legionella disinfection cycle."""
     try:
-        await mqtt.control.disable_anti_legionella(device)
+        await mqtt.disable_anti_legionella(device)
         print("✓ Anti-Legionella disabled")
     except DeviceError as e:
         _logger.error(f"Device error: {e}")
@@ -495,7 +496,7 @@ async def handle_get_anti_legionella_status_request(
             future.set_result(status)
 
     await mqtt.subscribe_device_status(device, _on_status)
-    await mqtt.control.request_device_status(device)
+    await mqtt.request_device_status(device)
     try:
         status = await asyncio.wait_for(future, timeout=10)
         period = getattr(status, "anti_legionella_period", None)
@@ -628,7 +629,7 @@ async def handle_set_tou_enabled_request(
     await _handle_command_with_status_feedback(
         mqtt,
         device,
-        lambda: mqtt.control.set_tou_enabled(device, enabled),
+        lambda: mqtt.set_tou_enabled(device, enabled),
         f"{'enabling' if enabled else 'disabling'} TOU",
         f"TOU {'enabled' if enabled else 'disabled'}",
     )
@@ -853,7 +854,7 @@ async def handle_tou_apply_request(
             await _handle_command_with_status_feedback(
                 mqtt,
                 device,
-                lambda: mqtt.control.set_tou_enabled(device, True),
+                lambda: mqtt.set_tou_enabled(device, True),
                 "enabling TOU",
                 "TOU enabled",
             )
@@ -877,7 +878,7 @@ async def handle_get_energy_request(
         res: Any = await _wait_for_response(
             mqtt.subscribe_energy_usage,
             device,
-            lambda: mqtt.control.request_energy_usage(device, year, months),
+            lambda: mqtt.request_energy_usage(device, year, months),
             action_name="energy usage",
             timeout=15,
         )
@@ -901,7 +902,7 @@ async def handle_reset_air_filter_request(
     await _handle_command_with_status_feedback(
         mqtt,
         device,
-        lambda: mqtt.control.reset_air_filter(device),
+        lambda: mqtt.reset_air_filter(device),
         "resetting air filter",
         "Air filter timer reset",
     )
@@ -914,7 +915,7 @@ async def handle_set_vacation_days_request(
     await _handle_command_with_status_feedback(
         mqtt,
         device,
-        lambda: mqtt.control.set_vacation_days(device, days),
+        lambda: mqtt.set_vacation_days(device, days),
         "setting vacation days",
         f"Vacation days set to {days}",
     )
@@ -929,7 +930,7 @@ async def handle_set_recirculation_mode_request(
     status = await _handle_command_with_status_feedback(
         mqtt,
         device,
-        lambda: mqtt.control.set_recirculation_mode(device, mode),
+        lambda: mqtt.set_recirculation_mode(device, mode),
         "setting recirculation mode",
         f"Recirculation mode set to {mode_name}",
     )
@@ -949,7 +950,7 @@ async def handle_trigger_recirculation_hot_button_request(
     await _handle_command_with_status_feedback(
         mqtt,
         device,
-        lambda: mqtt.control.trigger_recirculation_hot_button(device),
+        lambda: mqtt.trigger_recirculation_hot_button(device),
         "triggering hot button",
         "Hot button triggered",
     )
@@ -962,7 +963,7 @@ async def handle_enable_demand_response_request(
     await _handle_command_with_status_feedback(
         mqtt,
         device,
-        lambda: mqtt.control.enable_demand_response(device),
+        lambda: mqtt.enable_demand_response(device),
         "enabling DR",
         "Demand response enabled",
     )
@@ -975,7 +976,7 @@ async def handle_disable_demand_response_request(
     await _handle_command_with_status_feedback(
         mqtt,
         device,
-        lambda: mqtt.control.disable_demand_response(device),
+        lambda: mqtt.disable_demand_response(device),
         "disabling DR",
         "Demand response disabled",
     )
@@ -988,7 +989,7 @@ async def handle_configure_reservation_water_program_request(
     await _handle_command_with_status_feedback(
         mqtt,
         device,
-        lambda: mqtt.control.configure_reservation_water_program(device),
+        lambda: mqtt.configure_reservation_water_program(device),
         "configuring water program",
         "Water program configured",
     )

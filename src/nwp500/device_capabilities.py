@@ -6,6 +6,8 @@ that a device supports specific controllable features without requiring
 individual checker functions.
 """
 
+from __future__ import annotations
+
 from collections.abc import Callable
 from typing import TYPE_CHECKING
 
@@ -48,7 +50,7 @@ class MqttDeviceCapabilityChecker:
     }
 
     @classmethod
-    def supports(cls, feature: str, device_features: "DeviceFeature") -> bool:
+    def supports(cls, feature: str, device_features: DeviceFeature) -> bool:
         """Check if device supports control of a specific feature.
 
         Args:
@@ -71,7 +73,7 @@ class MqttDeviceCapabilityChecker:
 
     @classmethod
     def assert_supported(
-        cls, feature: str, device_features: "DeviceFeature"
+        cls, feature: str, device_features: DeviceFeature
     ) -> None:
         """Assert that device supports control of a feature.
 
@@ -103,7 +105,7 @@ class MqttDeviceCapabilityChecker:
 
     @classmethod
     def get_available_controls(
-        cls, device_features: "DeviceFeature"
+        cls, device_features: DeviceFeature
     ) -> dict[str, bool]:
         """Get all controllable features available on a device.
 
@@ -119,7 +121,7 @@ class MqttDeviceCapabilityChecker:
         }
 
 
-def _check_dhw_temperature_control(features: "DeviceFeature") -> bool:
+def _check_dhw_temperature_control(features: DeviceFeature) -> bool:
     """Check if device supports DHW temperature control.
 
     Returns True if temperature control is enabled (not UNKNOWN or DISABLE).

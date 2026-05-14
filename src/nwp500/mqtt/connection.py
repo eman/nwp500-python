@@ -6,6 +6,8 @@ Core,
 including credential management and connection state tracking.
 """
 
+from __future__ import annotations
+
 import asyncio
 import json
 import logging
@@ -45,12 +47,14 @@ class MqttConnection:
 
     def __init__(
         self,
-        config: "MqttConnectionConfig",
-        auth_client: "NavienAuthClient",
+        config: MqttConnectionConfig,
+        auth_client: NavienAuthClient,
         on_connection_interrupted: (
             Callable[[mqtt.Connection, AwsCrtError], None] | None
         ) = None,
-        on_connection_resumed: Callable[[Any, Any | None], None] | None = None,
+        on_connection_resumed: (
+            Callable[[mqtt.Connection, Any, Any | None], None] | None
+        ) = None,
     ):
         """
         Initialize connection manager.
@@ -189,8 +193,12 @@ class MqttConnection:
 
         # Get current tokens from auth client
         auth_tokens = self._auth_client.current_tokens
-        if not auth_tokens:
-            raise MqttCredentialsError("No tokens available from auth client")
+        if (
+            not auth_tokens
+            or not auth_tokens.access_key_id
+            or not auth_tokens.secret_key
+        ):
+            raise MqttCredentialsError("AWS credentials not available")
 
         return AwsCredentialsProvider.new_static(
             access_key_id=auth_tokens.access_key_id,
@@ -269,7 +277,7 @@ class MqttConnection:
             topic=topic, qos=qos, callback=callback
         )
         subscribe_future = cast(asyncio.Future[Any], subscribe_future_raw)
-        packet_id = cast(int, packet_id_raw)
+        packet_id = packet_id_raw
 
         try:
             await asyncio.shield(asyncio.wrap_future(subscribe_future))
@@ -311,7 +319,7 @@ class MqttConnection:
             topic=topic
         )
         unsubscribe_future = cast(asyncio.Future[Any], unsubscribe_future_raw)
-        packet_id = cast(int, packet_id_raw)
+        packet_id = int(packet_id_raw)
 
         try:
             await asyncio.shield(asyncio.wrap_future(unsubscribe_future))
@@ -366,7 +374,7 @@ class MqttConnection:
             topic=topic, payload=payload_bytes, qos=qos
         )
         publish_future = cast(asyncio.Future[Any], publish_future_raw)
-        packet_id = cast(int, packet_id_raw)
+        packet_id = int(packet_id_raw)
 
         # Shield the operation to prevent cancellation from propagating to
         # the underlying concurrent.futures.Future. This avoids

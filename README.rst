@@ -2,260 +2,77 @@
 nwp500-python
 =============
 
+|PyPI-v| |Python-versions| |CI-status| |Docs-status| |Code-style| |License|
+
 Python library for Navien NWP500 Heat Pump Water Heater
 ========================================================
 
-A Python library for monitoring and controlling the Navien NWP500 Heat Pump Water Heater through the Navilink cloud service.
+A complete Python library for monitoring and controlling the Navien NWP500 Heat Pump Water Heater through the Navilink cloud service.
 
-**Documentation:** https://nwp500-python.readthedocs.io/
-
-**Source Code:** https://github.com/eman/nwp500-python
+* **Documentation:** https://nwp500-python.readthedocs.io/
+* **Source:** https://github.com/eman/nwp500-python
 
 Features
 ========
-* Monitor status (temperature, power, charge %)
-* Set target water temperature
-* Change operation mode
-* Optional scheduling (reservations)
-* Optional time-of-use settings
-* Periodic high-temp cycle info
-* Access detailed status fields
+* **Complete Interface:** Full support for both REST API and real-time MQTT (AWS IoT).
+* **Monitoring:** Real-time tracking of temperature, power usage, tank charge, and component status.
+* **Control:** Remote control of target temperatures, operation modes, and vacation settings.
+* **Advanced Features:** Native support for reservations, time-of-use (TOU) optimization, and anti-legionella cycles.
+* **Type-Safe:** Built with Pydantic for robust data validation and unit handling.
+* **Async/Await:** Modern asyncio-based implementation for high-performance integration.
 
-* Async friendly
-
-Quick Start
-===========
-
-Installation
-------------
-
-Basic Installation (Library Only)
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-For using the library as a Python package:
+Getting Started
+===============
 
 .. code-block:: bash
 
     pip install nwp500-python
 
-Installation with CLI Support
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-To use the CLI with rich formatting and colors:
-
-.. code-block:: bash
-
-    pip install nwp500-python[cli]
-
-Basic Usage
------------
+Quick Example
+-------------
 
 .. code-block:: python
 
     from nwp500 import NavienAuthClient, NavienAPIClient
 
-    # Authentication happens automatically when entering the context
-    async with NavienAuthClient("your_email@example.com", "your_password") as auth_client:
-        # Create API client
-        api_client = NavienAPIClient(auth_client=auth_client)
+    async with NavienAuthClient("email@example.com", "password") as auth:
+        api = NavienAPIClient(auth)
+        devices = await api.list_devices()
         
-        # Get device data
-        devices = await api_client.list_devices()
-        device = devices[0] if devices else None
-        
-        if device:
-            # Access status information
-            status = device.status
-            print(f"Water Temperature: {status.dhw_temperature}")
-            print(f"Tank Charge: {status.dhw_charge_per}%")
-            print(f"Power Consumption: {status.current_inst_power}W")
-            
-            # Set temperature
-            await api_client.set_device_temperature(device, 130)
-            
-            # Change operation mode
-            await api_client.set_device_mode(device, "heat_pump")
-
-For more detailed authentication information, see the `Authentication & Session Management <https://nwp500-python.readthedocs.io/en/latest/guides/authentication.html>`_ guide.
-
-MQTT Real-Time Monitoring
---------------------------
-
-Monitor your device in real-time using MQTT:
-
-.. code-block:: python
-
-    from nwp500 import NavienAuthClient, NavienMqttClient
-
-    async with NavienAuthClient("your_email@example.com", "your_password") as auth_client:
-        # Create MQTT client
-        mqtt_client = NavienMqttClient(auth_client=auth_client)
-        await mqtt_client.connect()
-        
-        # Subscribe to device status updates
-        def on_status(status):
-            print(f"Temperature: {status.dhw_temperature}°F")
-            print(f"Mode: {status.operation_mode}")
-        
-        device = (await api_client.list_devices())[0]
-        await mqtt_client.subscribe_device_status(device, on_status)
-        
-        # Keep the connection alive
-        await mqtt_client.wait()
-
-
-Command Line Interface
-======================
-
-Monitor and control your Navien water heater from the terminal.
-
-**Installation Requirement:**
-
-.. code-block:: bash
-
-    pip install nwp500-python[cli]
-
-Quick Reference
----------------
-
-.. code-block:: bash
-
-    # Set credentials via environment variables
-    export NAVIEN_EMAIL="your_email@example.com"
-    export NAVIEN_PASSWORD="your_password"
-
-    # Get current device status
-    python3 -m nwp500.cli status
-
-    # Get device information and firmware (via MQTT - DeviceFeature)
-    python3 -m nwp500.cli info
-
-    # Get basic device info from REST API (DeviceInfo)
-    python3 -m nwp500.cli device-info
-
-    # Get controller serial number
-    python3 -m nwp500.cli serial
-
-    # Turn device on/off
-    python3 -m nwp500.cli power on
-    python3 -m nwp500.cli power off
-
-    # Set operation mode
-    python3 -m nwp500.cli mode heat-pump
-    python3 -m nwp500.cli mode energy-saver
-    python3 -m nwp500.cli mode high-demand
-    python3 -m nwp500.cli mode electric
-    python3 -m nwp500.cli mode vacation
-    python3 -m nwp500.cli mode standby
-
-    # Set target temperature
-    python3 -m nwp500.cli temp 140
-
-    # Set vacation days
-    python3 -m nwp500.cli vacation 7
-
-    # Trigger instant hot water
-    python3 -m nwp500.cli hot-button
-
-    # Set recirculation pump mode (1-4)
-    python3 -m nwp500.cli recirc 2
-
-    # Reset air filter timer
-    python3 -m nwp500.cli reset-filter
-
-    # Enable water program mode
-    python3 -m nwp500.cli water-program
-
-    # View and update schedules
-    python3 -m nwp500.cli reservations get
-    python3 -m nwp500.cli reservations set '[{"hour": 6, "min": 0, ...}]'
-
-    # Time-of-use settings
-    python3 -m nwp500.cli tou get
-    python3 -m nwp500.cli tou set on
-
-    # Energy usage data
-    python3 -m nwp500.cli energy --year 2024 --months 10,11,12
-
-    # Demand response
-    python3 -m nwp500.cli dr enable
-    python3 -m nwp500.cli dr disable
-
-    # Real-time monitoring (logs to CSV)
-    python3 -m nwp500.cli monitor
-    python3 -m nwp500.cli monitor -o my_data.csv
-
-**Global Options:**
-
-* ``--email EMAIL``: Navien account email (or use ``NAVIEN_EMAIL`` env var)
-* ``--password PASSWORD``: Navien account password (or use ``NAVIEN_PASSWORD`` env var)
-* ``-v, --verbose``: Enable debug logging
-* ``--version``: Show version and exit
-
-**Available Commands:**
-
-* ``status``: Show current device status (temperature, mode, power)
-* ``info``: Show device information (firmware, capabilities)
-* ``serial``: Get controller serial number
-* ``power on|off``: Turn device on or off
-* ``mode MODE``: Set operation mode (heat-pump, electric, energy-saver, high-demand, vacation, standby)
-* ``temp TEMPERATURE``: Set target water temperature in °F
-* ``vacation DAYS``: Enable vacation mode for N days
-* ``recirc MODE``: Set recirculation pump (1=always, 2=button, 3=schedule, 4=temperature)
-* ``hot-button``: Trigger instant hot water
-* ``reset-filter``: Reset air filter maintenance timer
-* ``water-program``: Enable water program reservation mode
-* ``reservations get|set``: View or update schedule
-* ``tou get|set STATE``: View or configure time-of-use settings
-* ``energy``: Query historical energy usage (requires ``--year`` and ``--months``)
-* ``dr enable|disable``: Enable or disable demand response
-* ``monitor``: Monitor device status in real-time (logs to CSV with ``-o`` option)
-
-Device Status Fields
-====================
-
-The library provides access to comprehensive device status information. See the `full documentation <https://nwp500-python.readthedocs.io/>`_ for all available fields.
+        if devices:
+            device = devices[0]
+            print(f"Temperature: {device.status.dhw_temperature}°F")
+            await api.set_device_temperature(device, 130)
 
 Documentation
 =============
 
-Full docs: https://nwp500-python.readthedocs.io/
+The documentation follows the `Diátaxis <https://diataxis.fr/>`_ framework:
 
-Home Assistant Integration
-==========================
+* `Tutorials <https://nwp500-python.readthedocs.io/en/latest/tutorials/getting-started.html>`_: Start here if you're new to the library.
+* `How-to Guides <https://nwp500-python.readthedocs.io/en/latest/how-to/index.html>`_: Practical step-by-step recipes for specific tasks.
+* `Reference <https://nwp500-python.readthedocs.io/en/latest/reference/index.html>`_: Technical descriptions of the API, models, and protocol.
+* `Explanation <https://nwp500-python.readthedocs.io/en/latest/explanation/index.html>`_: Understanding-oriented deep dives into the library's design and advanced features.
 
-Use this library with Home Assistant: `ha_nwp500 <https://github.com/eman/ha_nwp500>`_
-
-Data Models
-===========
-
-The library includes type-safe data models with automatic unit conversions:
-
-* **DeviceStatus**: Complete device status with 70+ fields
-* **DeviceFeature**: Device capabilities, firmware versions, and configuration limits
-* **OperationMode**: Enumeration of available operation modes
-* **TemperatureUnit**: Celsius/Fahrenheit handling
-
-Requirements
+Contributing
 ============
 
-* Python 3.13+
-* aiohttp >= 3.8.0
-* pydantic >= 2.0.0
-* awsiotsdk >= 1.27.0
+We welcome contributions! Please see our `Contributing Guide <https://nwp500-python.readthedocs.io/en/latest/project/contributing.html>`_ for more details.
 
 License
 =======
 
-This project is licensed under the MIT License.
+This project is licensed under the MIT License. See the `LICENSE.txt <https://github.com/eman/nwp500-python/blob/main/LICENSE.txt>`_ file for details.
 
-Author
-======
-
-Emmanuel Levijarvi <emansl@gmail.com>
-
-Acknowledgments
-===============
-
-This project has been set up using PyScaffold 4.6. For details and usage
-information on PyScaffold see https://pyscaffold.org/.
+.. |PyPI-v| image:: https://img.shields.io/pypi/v/nwp500-python.svg
+   :target: https://pypi.org/project/nwp500-python/
+.. |Python-versions| image:: https://img.shields.io/pypi/pyversions/nwp500-python.svg
+   :target: https://pypi.org/project/nwp500-python/
+.. |CI-status| image:: https://github.com/eman/nwp500-python/actions/workflows/ci.yml/badge.svg
+   :target: https://github.com/eman/nwp500-python/actions/workflows/ci.yml
+.. |Docs-status| image:: https://readthedocs.org/projects/nwp500-python/badge/?version=latest
+   :target: https://nwp500-python.readthedocs.io/en/latest/?badge=latest
+.. |Code-style| image:: https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json
+   :target: https://github.com/astral-sh/ruff
+.. |License| image:: https://img.shields.io/pypi/l/nwp500-python.svg
+   :target: https://opensource.org/licenses/MIT

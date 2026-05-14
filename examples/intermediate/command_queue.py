@@ -80,11 +80,11 @@ async def command_queue_demo():
             )
 
             # Register event handlers
-            def on_interrupted(error):
-                print(f"   [WARNING]  Connection interrupted: {error}")
+            def on_interrupted(event):
+                print(f"   [WARNING]  Connection interrupted: {event.error}")
                 print(f"   [NOTE] Queued commands: {mqtt_client.queued_commands_count}")
 
-            def on_resumed(return_code, session_present):
+            def on_resumed(event):
                 print("   [SUCCESS] Connection resumed!")
                 print(f"   [NOTE] Queued commands: {mqtt_client.queued_commands_count}")
 
@@ -111,7 +111,7 @@ async def command_queue_demo():
             # Step 5: Test normal operation
             print("\n5. Testing normal operation (connected)...")
             print("   Sending status request...")
-            await mqtt_client.control.request_device_status(device)
+            await mqtt_client.request_device_status(device)
             print("   [SUCCESS] Command sent successfully")
             await asyncio.sleep(2)
 
@@ -131,15 +131,15 @@ async def command_queue_demo():
 
             # These will be queued
             print("   Queuing status request...")
-            await mqtt_client.control.request_device_status(device)
+            await mqtt_client.request_device_status(device)
             print(f"   Queue size: {mqtt_client.queued_commands_count}")
 
             print("   Queuing device info request...")
-            await mqtt_client.control.request_device_info(device)
+            await mqtt_client.request_device_info(device)
             print(f"   Queue size: {mqtt_client.queued_commands_count}")
 
             print("   Queuing temperature change...")
-            await mqtt_client.control.set_dhw_temperature(device, 130)
+            await mqtt_client.set_dhw_temperature(device, 130)
             print(f"   Queue size: {mqtt_client.queued_commands_count}")
 
             print(f"   [SUCCESS] Queued {mqtt_client.queued_commands_count} command(s)")
@@ -164,7 +164,7 @@ async def command_queue_demo():
             # Try to exceed queue limit
             print(f"   Sending {config.max_queued_commands + 5} commands...")
             for _i in range(config.max_queued_commands + 5):
-                await mqtt_client.control.request_device_status(device)
+                await mqtt_client.request_device_status(device)
 
             print(
                 f"   Queue size: {mqtt_client.queued_commands_count} (max: {config.max_queued_commands})"

@@ -135,7 +135,7 @@ Follow a clear exception hierarchy with consistent naming:
   .. code-block:: python
 
       try:
-          await mqtt_client.control.set_temperature(device, 150)
+          await mqtt_client.set_temperature(device, 150)
       except MqttNotConnectedError:
           # Handle specific case: not connected
           print("Connect to device first")

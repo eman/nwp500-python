@@ -11,6 +11,8 @@ Main exports:
 - MqttMetrics, ConnectionDropEvent, ConnectionEvent: Diagnostic types
 """
 
+from __future__ import annotations
+
 from .client import NavienMqttClient
 from .diagnostics import (
     ConnectionDropEvent,

@@ -6,6 +6,8 @@ changes, allowing multiple listeners per event and automatic state change
 detection.
 """
 
+from __future__ import annotations
+
 import asyncio
 import inspect
 import logging
@@ -50,7 +52,7 @@ class EventEmitter:
         emitter.on('temperature_changed', update_ui)
 
         # Emit events
-        await emitter.emit('temperature_changed', old_temp, new_temp)
+        await emitter.emit('temperature_changed', temperature_event)
 
         # One-time listener
         emitter.once('device_ready', initialize)
@@ -85,15 +87,18 @@ class EventEmitter:
 
             from nwp500.unit_system import get_unit_system
 
-            def on_temp_change(old_temp: float, new_temp: float):
+            def on_temp_change(event):
                 unit = "°C" if get_unit_system() == "metric" else "°F"
-                print(f"Temperature: {old_temp}{unit} → {new_temp}{unit}")
+                print(
+                    f"Temperature: {event.old_temperature}{unit} → "
+                    f"{event.new_temperature}{unit}"
+                )
 
             emitter.on('temperature_changed', on_temp_change)
 
             # Async handler
-            async def save_to_db(temp: float):
-                await db.save(temp)
+            async def save_to_db(event):
+                await db.save(event.new_temperature)
 
             emitter.on('temperature_changed', save_to_db, priority=100)
         """
@@ -228,8 +233,8 @@ class EventEmitter:
 
         Example::
 
-            # Emit with arguments
-            await emitter.emit('temperature_changed', 120, 130)
+            # Emit with an event object
+            await emitter.emit('temperature_changed', temperature_event)
 
             # Emit with keyword arguments
             await emitter.emit('status_updated', status=device_status)
@@ -386,7 +391,9 @@ class EventEmitter:
             await emitter.wait_for('device_ready', timeout=30)
 
             # Wait for specific condition
-            old_temp, new_temp = await emitter.wait_for('temperature_changed')
+            args, _ = await emitter.wait_for('temperature_changed')
+            temperature_event = args[0]
+            current_temp = temperature_event.new_temperature
         """
         future: asyncio.Future[tuple[tuple[Any, ...], dict[str, Any]]] = (
             asyncio.Future()

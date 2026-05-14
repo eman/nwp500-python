@@ -4,6 +4,8 @@ This package provides Python bindings for Navien Smart Control API and MQTT
 communication for NWP500 heat pump water heaters.
 """
 
+from __future__ import annotations
+
 from importlib.metadata import (
     PackageNotFoundError,
     version,
@@ -111,10 +113,17 @@ from nwp500.models import (
     MonthlyEnergyData,
     MqttCommand,
     MqttRequest,
+    OtaCommitPayload,
+    RecirculationSchedule,
+    RecirculationScheduleEntry,
     ReservationEntry,
     ReservationSchedule,
     TOUInfo,
+    TOUPeriod,
+    TOUReservationSchedule,
     TOUSchedule,
+    WeeklyReservationEntry,
+    WeeklyReservationSchedule,
     fahrenheit_to_half_celsius,
     preferred_to_half_celsius,
     reservation_param_to_preferred,
@@ -168,8 +177,15 @@ __all__ = [
     "FirmwareInfo",
     "ReservationEntry",
     "ReservationSchedule",
+    "WeeklyReservationEntry",
+    "WeeklyReservationSchedule",
+    "RecirculationScheduleEntry",
+    "RecirculationSchedule",
+    "OtaCommitPayload",
     "TOUSchedule",
     "TOUInfo",
+    "TOUPeriod",
+    "TOUReservationSchedule",
     "MqttRequest",
     "MqttCommand",
     "EnergyUsageTotal",

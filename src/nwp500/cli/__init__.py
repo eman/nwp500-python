@@ -1,5 +1,7 @@
 """CLI package for nwp500-python."""
 
+from __future__ import annotations
+
 from .__main__ import run
 from .handlers import (
     handle_device_info_request,

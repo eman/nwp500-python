@@ -89,7 +89,7 @@ async def restore_tokens_example():
     # Import after getting token_data to avoid circular import issues
     from nwp500.auth import AuthTokens
 
-    stored_tokens = AuthTokens.from_dict(token_data)
+    stored_tokens = AuthTokens.model_validate(token_data)
 
     logger.info(f"Stored tokens issued at: {stored_tokens.issued_at}")
     logger.info(f"Stored tokens expire at: {stored_tokens.expires_at}")
