@@ -137,11 +137,17 @@ class MqttDeviceInfoCache:
             Dictionary mapping MAC addresses to DeviceFeature objects
         """
         async with self._lock:
-            # Filter out expired entries
+            # Filter out expired entries and purge them from cache
+            expired_keys = [
+                mac
+                for mac, (_, timestamp) in self._cache.items()
+                if self.is_expired(timestamp)
+            ]
+            for mac in expired_keys:
+                del self._cache[mac]
             return {
                 mac: features
-                for mac, (features, timestamp) in self._cache.items()
-                if not self.is_expired(timestamp)
+                for mac, (features, _) in self._cache.items()
             }
 
     async def get_cache_info(

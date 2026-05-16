@@ -1298,14 +1298,14 @@ class NavienMqttClient(EventEmitter):
             return True
 
         # Not cached, request and wait
-        future: asyncio.Future[DeviceFeature] = (
-            asyncio.get_running_loop().create_future()
-        )
+        loop = asyncio.get_running_loop()
+        future: asyncio.Future[DeviceFeature] = loop.create_future()
 
         def on_feature(feature: DeviceFeature) -> None:
+            # Called from AWS SDK thread — must use thread-safe method
             if not future.done():
                 _logger.info(f"Device feature received for {redacted_mac}")
-                future.set_result(feature)
+                loop.call_soon_threadsafe(future.set_result, feature)
 
         _logger.info(f"Ensuring device info cached for {redacted_mac}")
         await self.subscribe_device_feature(device, on_feature)

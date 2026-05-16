@@ -396,7 +396,7 @@ class EventEmitter:
             current_temp = temperature_event.new_temperature
         """
         future: asyncio.Future[tuple[tuple[Any, ...], dict[str, Any]]] = (
-            asyncio.Future()
+            asyncio.get_running_loop().create_future()
         )
 
         def handler(*args: Any, **kwargs: Any) -> None:
