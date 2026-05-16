@@ -434,18 +434,21 @@ def build_reservation_entry(
     from .models import preferred_to_half_celsius
     from .unit_system import get_unit_system
 
+    # Read unit system once to keep min/max bounds consistent
+    unit_system = get_unit_system()
+
     # Use device-provided limits if available, otherwise use defaults
     # in the user's preferred unit system.
     if temperature_min is not None:
         min_temp = temperature_min
-    elif get_unit_system() == "metric":
+    elif unit_system == "metric":
         min_temp = 35.0  # ~35°C
     else:
         min_temp = 95.0  # 95°F
 
     if temperature_max is not None:
         max_temp = temperature_max
-    elif get_unit_system() == "metric":
+    elif unit_system == "metric":
         max_temp = 65.0  # ~65°C
     else:
         max_temp = 150.0  # 150°F

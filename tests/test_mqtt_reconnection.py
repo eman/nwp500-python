@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import asyncio
+import concurrent.futures
 from unittest.mock import MagicMock
 
 import pytest
@@ -40,6 +40,16 @@ def config():
     return MqttConnectionConfig(client_id="test-client")
 
 
+def _make_cf_future(result=None, exception=None):
+    """Return a resolved concurrent.futures.Future matching SDK behaviour."""
+    f = concurrent.futures.Future()
+    if exception is not None:
+        f.set_exception(exception)
+    else:
+        f.set_result(result)
+    return f
+
+
 class TestMqttConnectionClose:
     """Tests for MqttConnection.close() method."""
 
@@ -55,15 +65,14 @@ class TestMqttConnectionClose:
 
     @pytest.mark.asyncio(loop_scope="function")
     async def test_close_clears_state(self, config, mock_auth_client):
-        """close() should clear _connection and _connected regardless."""
+        """close() should clear _connection and _connected regardless.
+
+        Uses concurrent.futures.Future to match what the AWS IoT SDK
+        returns from disconnect(), exercising the wrap_future() path.
+        """
         conn = MqttConnection(config, mock_auth_client)
-        # Simulate a connection that was interrupted (_connected=False
-        # but _connection still exists)
         mock_sdk_conn = MagicMock()
-        loop = asyncio.get_running_loop()
-        future = loop.create_future()
-        future.set_result(None)
-        mock_sdk_conn.disconnect.return_value = future
+        mock_sdk_conn.disconnect.return_value = _make_cf_future()
         conn._connection = mock_sdk_conn
         conn._connected = False  # Interrupted state
 
@@ -97,16 +106,13 @@ class TestMqttConnectionClose:
 
         conn = MqttConnection(config, mock_auth_client)
         mock_sdk_conn = MagicMock()
-        loop = asyncio.get_running_loop()
-        future = loop.create_future()
-        future.set_exception(
-            AwsCrtError(
+        mock_sdk_conn.disconnect.return_value = _make_cf_future(
+            exception=AwsCrtError(
                 code=0,
                 name="AWS_ERROR_MQTT_CONNECTION_DESTROYED",
                 message="Connection destroyed",
             )
         )
-        mock_sdk_conn.disconnect.return_value = future
         conn._connection = mock_sdk_conn
         conn._connected = False
 

@@ -1300,10 +1300,16 @@ class NavienMqttClient(EventEmitter):
         future: asyncio.Future[DeviceFeature] = loop.create_future()
 
         def on_feature(feature: DeviceFeature) -> None:
-            # Called from AWS SDK thread — must use thread-safe method
-            if not future.done():
-                _logger.info(f"Device feature received for {redacted_mac}")
-                loop.call_soon_threadsafe(future.set_result, feature)
+            # Called from AWS SDK thread — schedule onto the event loop
+            # thread-safely. The done() check is inside the scheduled
+            # callback so it runs on the event loop thread, eliminating
+            # the race between the check and set_result.
+            def _set_result() -> None:
+                if not future.done():
+                    _logger.info(f"Device feature received for {redacted_mac}")
+                    future.set_result(feature)
+
+            loop.call_soon_threadsafe(_set_result)
 
         _logger.info(f"Ensuring device info cached for {redacted_mac}")
         await self.subscribe_device_feature(device, on_feature)
