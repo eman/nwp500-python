@@ -3,11 +3,11 @@
 from __future__ import annotations
 
 import asyncio
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 
-from nwp500.auth import AuthTokens, AuthenticationResponse, UserInfo
+from nwp500.auth import AuthenticationResponse, AuthTokens, UserInfo
 from nwp500.mqtt.connection import MqttConnection
 from nwp500.mqtt.utils import MqttConnectionConfig
 
@@ -43,46 +43,53 @@ def config():
 class TestMqttConnectionClose:
     """Tests for MqttConnection.close() method."""
 
-    def test_close_on_none_connection(self, config, mock_auth_client):
+    @pytest.mark.asyncio(loop_scope="function")
+    async def test_close_on_none_connection(self, config, mock_auth_client):
         """close() should be safe to call when _connection is None."""
         conn = MqttConnection(config, mock_auth_client)
         assert conn._connection is None
         # Should not raise
-        asyncio.get_event_loop().run_until_complete(conn.close())
+        await conn.close()
         assert conn._connected is False
         assert conn._connection is None
 
-    def test_close_clears_state(self, config, mock_auth_client):
+    @pytest.mark.asyncio(loop_scope="function")
+    async def test_close_clears_state(self, config, mock_auth_client):
         """close() should clear _connection and _connected regardless."""
         conn = MqttConnection(config, mock_auth_client)
         # Simulate a connection that was interrupted (_connected=False
         # but _connection still exists)
         mock_sdk_conn = MagicMock()
-        future = asyncio.Future()
+        loop = asyncio.get_running_loop()
+        future = loop.create_future()
         future.set_result(None)
         mock_sdk_conn.disconnect.return_value = future
         conn._connection = mock_sdk_conn
         conn._connected = False  # Interrupted state
 
-        asyncio.get_event_loop().run_until_complete(conn.close())
+        await conn.close()
 
         assert conn._connection is None
         assert conn._connected is False
         mock_sdk_conn.disconnect.assert_called_once()
 
-    def test_disconnect_skips_when_not_connected(self, config, mock_auth_client):
-        """disconnect() should skip when _connected is False (existing behavior)."""
+    @pytest.mark.asyncio(loop_scope="function")
+    async def test_disconnect_skips_when_not_connected(
+        self, config, mock_auth_client
+    ):
+        """disconnect() should skip when _connected is False."""
         conn = MqttConnection(config, mock_auth_client)
         mock_sdk_conn = MagicMock()
         conn._connection = mock_sdk_conn
         conn._connected = False  # Interrupted state
 
-        asyncio.get_event_loop().run_until_complete(conn.disconnect())
+        await conn.disconnect()
 
         # disconnect() should NOT call the SDK disconnect
         mock_sdk_conn.disconnect.assert_not_called()
 
-    def test_close_handles_already_dead_connection(
+    @pytest.mark.asyncio(loop_scope="function")
+    async def test_close_handles_already_dead_connection(
         self, config, mock_auth_client
     ):
         """close() should handle errors from SDK disconnect gracefully."""
@@ -90,7 +97,8 @@ class TestMqttConnectionClose:
 
         conn = MqttConnection(config, mock_auth_client)
         mock_sdk_conn = MagicMock()
-        future = asyncio.Future()
+        loop = asyncio.get_running_loop()
+        future = loop.create_future()
         future.set_exception(
             AwsCrtError(
                 code=0,
@@ -103,13 +111,14 @@ class TestMqttConnectionClose:
         conn._connected = False
 
         # Should not raise
-        asyncio.get_event_loop().run_until_complete(conn.close())
+        await conn.close()
         assert conn._connection is None
 
-    def test_close_idempotent(self, config, mock_auth_client):
+    @pytest.mark.asyncio(loop_scope="function")
+    async def test_close_idempotent(self, config, mock_auth_client):
         """close() should be safe to call multiple times."""
         conn = MqttConnection(config, mock_auth_client)
         # Call twice - should not raise
-        asyncio.get_event_loop().run_until_complete(conn.close())
-        asyncio.get_event_loop().run_until_complete(conn.close())
+        await conn.close()
+        await conn.close()
         assert conn._connection is None
