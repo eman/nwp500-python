@@ -371,7 +371,10 @@ class NavienMqttClient(EventEmitter):
         reconnect instead of passively waiting for AWS IoT SDK.
 
         Note: This creates a new connection while preserving subscriptions
-        and configuration.
+        and configuration. The old connection is closed first to prevent
+        its SDK auto-reconnect from creating a competing connection with
+        the same client ID (which causes the broker to kick one off,
+        leading to an infinite connect/disconnect loop).
         """
         if self._connected:
             _logger.debug("Already connected, skipping reconnection")
@@ -385,12 +388,17 @@ class NavienMqttClient(EventEmitter):
 
             # If we have a connection manager, try to reconnect using it
             if self._connection_manager:
-                # The connection might be in a bad state, so we need to
-                # recreate the underlying connection
+                # Close old connection to stop SDK auto-reconnect and
+                # prevent two connections with the same client ID.
                 _logger.debug("Recreating MQTT connection...")
+                try:
+                    await self._connection_manager.close()
+                except (AwsCrtError, RuntimeError) as e:
+                    _logger.debug(
+                        f"Old connection cleanup (benign): {e}"
+                    )
 
                 # Create a new connection manager with same config
-                old_connection_manager = self._connection_manager
                 self._connection_manager = MqttConnection(
                     config=self.config,
                     auth_client=self._auth_client,
@@ -415,9 +423,6 @@ class NavienMqttClient(EventEmitter):
 
                     _logger.info("Active reconnection successful")
                 else:
-                    # Restore old connection manager and connection reference
-                    self._connection_manager = old_connection_manager
-                    self._connection = old_connection_manager.connection
                     _logger.warning("Active reconnection failed")
             else:
                 _logger.warning(
@@ -458,8 +463,7 @@ class NavienMqttClient(EventEmitter):
             if self._connection_manager:
                 _logger.debug("Cleaning up old connection...")
                 try:
-                    if self._connection_manager.is_connected:
-                        await self._connection_manager.disconnect()
+                    await self._connection_manager.close()
                 except (AwsCrtError, RuntimeError) as e:
                     # Expected: connection already dead or in bad state
                     _logger.debug(f"Error during cleanup: {e} (expected)")
