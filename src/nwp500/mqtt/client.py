@@ -394,9 +394,7 @@ class NavienMqttClient(EventEmitter):
                 try:
                     await self._connection_manager.close()
                 except (AwsCrtError, RuntimeError) as e:
-                    _logger.debug(
-                        f"Old connection cleanup (benign): {e}"
-                    )
+                    _logger.debug(f"Old connection cleanup (benign): {e}")
 
                 # Create a new connection manager with same config
                 self._connection_manager = MqttConnection(

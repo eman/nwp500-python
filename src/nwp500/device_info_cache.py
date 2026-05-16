@@ -145,10 +145,7 @@ class MqttDeviceInfoCache:
             ]
             for mac in expired_keys:
                 del self._cache[mac]
-            return {
-                mac: features
-                for mac, (features, _) in self._cache.items()
-            }
+            return {mac: features for mac, (features, _) in self._cache.items()}
 
     async def get_cache_info(
         self,
