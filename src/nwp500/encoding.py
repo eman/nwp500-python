@@ -8,10 +8,13 @@ These utilities are used by both the API client and MQTT client.
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Iterable
 from numbers import Real
 
 from .exceptions import ParameterValidationError, RangeValidationError
+
+_logger = logging.getLogger(__name__)
 
 # MGPP Week Bitfield Encoding (from NaviLink APK KDEnum.MgppReservationWeek).
 # Uses a single byte where bits 1-7 represent days; bit 0 is unused.
@@ -342,13 +345,17 @@ def decode_reservation_hex(hex_string: str) -> list[dict[str, int]]:
     data = bytes.fromhex(hex_string)
     reservations = []
 
-    # Process 6 bytes at a time
-    for i in range(0, len(data), 6):
-        chunk = data[i : i + 6]
+    if len(data) % 6 != 0:
+        _logger.warning(
+            "Reservation hex data length %d is not a multiple of 6; "
+            "trailing %d bytes will be ignored",
+            len(data),
+            len(data) % 6,
+        )
 
-        # Ensure we have a full 6-byte entry
-        if len(chunk) != 6:
-            break
+    # Process 6 bytes at a time
+    for i in range(0, len(data) - (len(data) % 6), 6):
+        chunk = data[i : i + 6]
 
         # Skip empty entries (all zeros)
         if all(b == 0 for b in chunk):
@@ -425,11 +432,26 @@ def build_reservation_entry(
     """
     # Import here to avoid circular import
     from .models import preferred_to_half_celsius
+    from .unit_system import get_unit_system
+
+    # Read unit system once to keep min/max bounds consistent
+    unit_system = get_unit_system()
 
     # Use device-provided limits if available, otherwise use defaults
-    # Defaults are conservative: 95°F / 35°C minimum, 150°F / 65°C maximum
-    min_temp = temperature_min if temperature_min is not None else 95
-    max_temp = temperature_max if temperature_max is not None else 150
+    # in the user's preferred unit system.
+    if temperature_min is not None:
+        min_temp = temperature_min
+    elif unit_system == "metric":
+        min_temp = 35.0  # ~35°C
+    else:
+        min_temp = 95.0  # 95°F
+
+    if temperature_max is not None:
+        max_temp = temperature_max
+    elif unit_system == "metric":
+        max_temp = 65.0  # ~65°C
+    else:
+        max_temp = 150.0  # 150°F
 
     if not 0 <= hour <= 23:
         raise RangeValidationError(

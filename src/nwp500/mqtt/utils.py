@@ -233,11 +233,13 @@ class MqttConnectionConfig:
     max_queued_commands: int = 100
 
     def __post_init__(self) -> None:
-        """Generate client ID if not provided."""
+        """Generate client ID if not provided and validate settings."""
         if not self.client_id:
             object.__setattr__(
                 self, "client_id", f"navien-client-{uuid.uuid4().hex[:8]}"
             )
+        if self.deep_reconnect_threshold < 1:
+            object.__setattr__(self, "deep_reconnect_threshold", 1)
 
 
 @dataclass

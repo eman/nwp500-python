@@ -245,6 +245,44 @@ class MqttConnection:
             _logger.error(f"Error during disconnect: {e}")
             raise
 
+    async def close(self) -> None:
+        """Unconditionally close the underlying SDK connection.
+
+        Unlike :meth:`disconnect`, this method closes the connection
+        regardless of the ``_connected`` flag.  After a connection
+        interruption, ``_connected`` is ``False`` but the SDK connection
+        object is still alive and its built-in auto-reconnect can still
+        fire.  Calling ``close()`` ensures the SDK connection is fully
+        torn down so its callbacks and auto-reconnect cannot interfere
+        with a replacement connection.
+
+        This method is safe to call multiple times or on already-closed
+        connections.
+        """
+        connection = self._connection
+        self._connection = None
+        self._connected = False
+
+        if connection is None:
+            return
+
+        _logger.debug("Closing underlying SDK connection...")
+        try:
+            disconnect_future = cast(
+                asyncio.Future[Any], connection.disconnect()
+            )
+            await asyncio.shield(asyncio.wrap_future(disconnect_future))
+            _logger.debug("SDK connection closed")
+        except (AwsCrtError, RuntimeError) as e:
+            # Expected when connection is already dead or in bad state
+            _logger.debug(f"SDK connection close (benign): {e}")
+        except asyncio.CancelledError:
+            _logger.debug(
+                "Close operation cancelled but SDK disconnect "
+                "will complete in background"
+            )
+            raise
+
     async def subscribe(
         self,
         topic: str,

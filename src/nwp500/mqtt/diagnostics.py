@@ -95,7 +95,11 @@ class MqttMetrics:
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for JSON serialization."""
-        return asdict(self)
+        d = asdict(self)
+        # Replace inf with None for JSON compatibility
+        if d.get("shortest_session_seconds") == float("inf"):
+            d["shortest_session_seconds"] = None
+        return d
 
 
 class MqttDiagnosticsCollector:
@@ -213,6 +217,7 @@ class MqttDiagnosticsCollector:
 
         # Update metrics
         self._metrics.total_connection_drops += 1
+        self._metrics.total_reconnect_attempts += 1
         if error_name:
             self._metrics.connection_drops_by_error[error_name] = (
                 self._metrics.connection_drops_by_error.get(error_name, 0) + 1

@@ -2,8 +2,70 @@
 Changelog
 =========
 
-Unreleased (8.x)
-================
+Unreleased
+==========
+
+Version 8.1.0 (2026-05-16)
+==========================
+
+Bug Fixes
+---------
+- **Fix MQTT connection flapping after reconnect**: When ``_active_reconnect()``
+  created a new ``MqttConnection``, the old connection was never closed. The old
+  SDK connection's built-in auto-reconnect would eventually succeed, creating two
+  active connections sharing the same client ID. Because AWS IoT allows only one
+  connection per client ID, the broker would kick one off, triggering
+  ``on_connection_interrupted`` and starting yet another reconnection — an
+  infinite connect/disconnect loop. Fixed by adding ``MqttConnection.close()``
+  (unconditional teardown regardless of ``_connected`` state) and calling it
+  before creating the replacement connection in both ``_active_reconnect()`` and
+  ``_deep_reconnect()``.
+
+- **Thread-safety race in ``ensure_device_info_cached``**: The ``future.done()``
+  check and ``future.set_result()`` were performed in the AWS SDK callback thread
+  without synchronisation, creating a race against the asyncio event loop thread.
+  Moved both operations inside a ``call_soon_threadsafe`` callback so they execute
+  atomically on the event loop thread.
+
+- **ZeroDivisionError when ``deep_reconnect_threshold`` is 0**: Config validation
+  now clamps ``deep_reconnect_threshold`` to a minimum of 1, preventing a
+  ``ZeroDivisionError`` in the exponential-backoff reconnection logic.
+
+- **Reconnect counter never incremented**: ``total_reconnect_attempts`` in
+  diagnostics was not incremented on connection drops, so it always reported 0
+  despite active reconnections. Counter is now incremented on each
+  ``on_connection_interrupted`` event.
+
+- **``shortest_session_seconds`` not JSON-serialisable**: The diagnostics
+  ``to_dict()`` method used ``float('inf')`` as the initial value for
+  ``shortest_session_seconds``, which is not valid JSON. Changed to ``None``
+  so serialisation succeeds when no session has completed yet.
+
+- **``wait_for()`` future not bound to running loop**: ``wait_for()`` created a
+  bare ``asyncio.Future()`` rather than
+  ``asyncio.get_running_loop().create_future()``, which could bind the future to
+  a different loop in multi-loop test setups.
+
+- **Reservation temperature validation was US-only**: ``build_reservation_entry``
+  validated set-point temperatures against hardcoded Fahrenheit bounds (95–150 °F)
+  regardless of the active unit system. Validation now uses the current unit system
+  context: 35–65 °C in metric mode, 95–150 °F in US mode. Celsius users previously
+  received spurious ``ValueError`` rejections for valid temperatures.
+
+- **Malformed reservation data silently dropped**: ``build_reservation_entry`` now
+  logs a warning when reservation hex data contains unexpected trailing bytes
+  instead of silently dropping partial entries.
+
+- **Unknown ``PeriodicRequestType`` silently ignored**: The periodic-request handler
+  now logs an error and breaks when it encounters an unknown request type instead of
+  doing nothing.
+
+- **Memory leak in device info cache**: ``get_all_cached()`` only filtered expired
+  entries from its return value but left them in the cache dictionary. Expired
+  entries are now evicted during ``get_all_cached()`` to prevent unbounded growth.
+
+Version 8.0.0 (2026-05-13)
+===========================
 
 Bug Fixes
 ---------

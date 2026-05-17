@@ -22,6 +22,8 @@ field is for the PyScaffold tool version, not the package version!
 import re
 import subprocess
 import sys
+from datetime import date
+from pathlib import Path
 
 
 def run_git_command(args: list) -> str:
@@ -140,6 +142,75 @@ def check_working_directory_clean() -> None:
         sys.exit(1)
 
 
+def update_changelog(version: str) -> None:
+    """Insert a version heading into CHANGELOG.rst below the Unreleased section.
+
+    Transforms:
+
+        Unreleased
+        ==========
+
+        <content...>
+
+    into:
+
+        Unreleased
+        ==========
+
+        Version X.Y.Z (YYYY-MM-DD)
+        ===========================
+
+        <content...>
+    """
+    changelog_path = Path("CHANGELOG.rst")
+    if not changelog_path.exists():
+        print("Warning: CHANGELOG.rst not found, skipping changelog update.")
+        return
+
+    content = changelog_path.read_text(encoding="utf-8")
+
+    heading = f"Version {version} ({date.today().isoformat()})"
+    underline = "=" * len(heading)
+    version_block = f"{heading}\n{underline}\n"
+
+    # Match "Unreleased\n==========\n" (any number of = signs) followed by
+    # one or more blank lines, then insert the version block after them.
+    pattern = re.compile(
+        r"(Unreleased\n=+\n)"  # group 1: Unreleased heading
+        r"(\n+)",              # group 2: blank line(s) separator
+        re.MULTILINE,
+    )
+
+    match = pattern.search(content)
+    if not match:
+        print(
+            "Warning: Could not find 'Unreleased' section in CHANGELOG.rst. "
+            "Skipping changelog update.",
+            file=sys.stderr,
+        )
+        return
+
+    # Insert the version block after the blank lines that follow "Unreleased"
+    new_content = (
+        content[: match.end()]
+        + version_block
+        + "\n"
+        + content[match.end() :]
+    )
+
+    changelog_path.write_text(new_content, encoding="utf-8")
+    print(f"[OK] Updated CHANGELOG.rst with {heading}")
+
+
+def commit_changelog(version: str) -> None:
+    """Stage and commit the CHANGELOG.rst update."""
+    run_git_command(["add", "CHANGELOG.rst"])
+    run_git_command(
+        ["commit", "-m", f"Update changelog for v{version}"]
+    )
+    print("[OK] Committed changelog update")
+
+
 def create_tag(version: str, message: str = None) -> None:
     """Create a git tag for the version."""
     tag_name = f"v{version}"
@@ -223,6 +294,11 @@ def main() -> None:
     # Validate version progression
     validate_version_progression(current_version, new_version)
 
+    # Update CHANGELOG.rst and commit, then create the tag
+    print("\nUpdating CHANGELOG.rst...")
+    update_changelog(new_version)
+    commit_changelog(new_version)
+
     # Create the tag
     print(f"\nCreating tag v{new_version}...")
     create_tag(new_version)
@@ -230,6 +306,7 @@ def main() -> None:
     print("\n[OK] Version bump complete!")
     print("\nNext steps:")
     print(f"  1. Push the tag:    git push origin v{new_version}")
+    print("     (also push the changelog commit: git push origin HEAD)")
     print("  2. Build release:   make build")
     print("  3. Test on TestPyPI: make publish-test")
     print("  4. Publish to PyPI:  make publish")
