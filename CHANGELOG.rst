@@ -5,6 +5,9 @@ Changelog
 Unreleased
 ==========
 
+Version 8.1.0 (2026-05-16)
+==========================
+
 Bug Fixes
 ---------
 - **Fix MQTT connection flapping after reconnect**: When ``_active_reconnect()``
