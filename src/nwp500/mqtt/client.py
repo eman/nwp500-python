@@ -226,6 +226,11 @@ class NavienMqttClient(EventEmitter):
         # Connection state (simpler than checking _connection_manager)
         self._connection: mqtt.Connection | None = None
         self._connected = False
+        # Guards _active_reconnect / _deep_reconnect against re-entrancy.
+        # While True, _on_connection_interrupted_internal will not forward
+        # events to the reconnection handler, preventing the intentional
+        # teardown of the old connection from spawning a competing backoff loop.
+        self._actively_reconnecting = False
 
         _logger.info(
             f"Initialized MQTT client with ID: {self.config.client_id}"
@@ -276,8 +281,17 @@ class NavienMqttClient(EventEmitter):
             )
         )
 
-        # Delegate to reconnection handler if available
-        if self._reconnection_handler and self.config.auto_reconnect:
+        # Delegate to reconnection handler if available.
+        # Skip while _actively_reconnecting: the interruption was caused by
+        # _active_reconnect / _deep_reconnect intentionally closing the old
+        # connection.  Forwarding it would queue a _start_reconnect_task
+        # coroutine that could fire after the new connection is up and the
+        # existing backoff task has been cancelled, spawning a competing loop.
+        if (
+            self._reconnection_handler
+            and self.config.auto_reconnect
+            and not self._actively_reconnecting
+        ):
             self._reconnection_handler.on_connection_interrupted(error)
 
         # Record diagnostic event
@@ -380,8 +394,13 @@ class NavienMqttClient(EventEmitter):
             _logger.debug("Already connected, skipping reconnection")
             return
 
+        if self._actively_reconnecting:
+            _logger.debug("Active reconnection already in progress, skipping")
+            return
+
         _logger.info("Attempting active reconnection...")
 
+        self._actively_reconnecting = True
         try:
             # Ensure tokens are still valid
             await self._auth_client.ensure_valid_token()
@@ -390,6 +409,9 @@ class NavienMqttClient(EventEmitter):
             if self._connection_manager:
                 # Close old connection to stop SDK auto-reconnect and
                 # prevent two connections with the same client ID.
+                # _actively_reconnecting suppresses the on_connection_interrupted
+                # callback that closing triggers, preventing a competing backoff
+                # loop from being spawned.
                 _logger.debug("Recreating MQTT connection...")
                 try:
                     await self._connection_manager.close()
@@ -432,6 +454,8 @@ class NavienMqttClient(EventEmitter):
                 f"Error during active reconnection: {e}", exc_info=True
             )
             raise
+        finally:
+            self._actively_reconnecting = False
 
     async def _deep_reconnect(self) -> None:
         """
@@ -451,13 +475,21 @@ class NavienMqttClient(EventEmitter):
             _logger.debug("Already connected, skipping deep reconnection")
             return
 
+        if self._actively_reconnecting:
+            _logger.debug("Active reconnection already in progress, skipping")
+            return
+
         _logger.warning(
             "Performing deep reconnection (full rebuild)... "
             "This may take longer."
         )
 
+        self._actively_reconnecting = True
         try:
-            # Step 1: Clean up existing connection if any
+            # Step 1: Clean up existing connection if any.
+            # _actively_reconnecting suppresses the on_connection_interrupted
+            # callback that closing triggers, preventing a competing backoff
+            # loop from being spawned.
             if self._connection_manager:
                 _logger.debug("Cleaning up old connection...")
                 try:
@@ -534,6 +566,8 @@ class NavienMqttClient(EventEmitter):
         ) as e:
             _logger.error(f"Error during deep reconnection: {e}", exc_info=True)
             raise
+        finally:
+            self._actively_reconnecting = False
 
     async def connect(self) -> bool:
         """

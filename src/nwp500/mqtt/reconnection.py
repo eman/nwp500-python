@@ -94,11 +94,18 @@ class MqttReconnectionHandler:
         """
         _logger.warning(f"Connection interrupted: {error}")
 
-        # Start automatic reconnection if enabled
+        # Start automatic reconnection if enabled.
+        # Also guard against stale interruption events that arrive after the
+        # connection has already been restored: these can be queued via
+        # run_coroutine_threadsafe and fire after on_connection_resumed has
+        # cancelled _reconnect_task (setting it to None), which would
+        # otherwise bypass the task-existence check and spawn a new backoff
+        # loop while the client is perfectly healthy.
         if (
             self.config.auto_reconnect
             and self._enabled
             and not self._manual_disconnect
+            and not self._is_connected_func()
             and (not self._reconnect_task or self._reconnect_task.done())
         ):
             _logger.info("Starting automatic reconnection...")
@@ -132,8 +139,17 @@ class MqttReconnectionHandler:
 
         This is a helper method to create the reconnect task from within
         a coroutine that's scheduled via _schedule_coroutine.
+
+        The is_connected guard is re-checked here because this coroutine may
+        be queued via run_coroutine_threadsafe and run after the connection
+        has already been restored (e.g. by on_connection_resumed cancelling
+        _reconnect_task), in which case starting a new backoff loop would
+        incorrectly tear down a healthy connection.
         """
-        if not self._reconnect_task or self._reconnect_task.done():
+        if (
+            not self._is_connected_func()
+            and (not self._reconnect_task or self._reconnect_task.done())
+        ):
             self._reconnect_task = asyncio.create_task(
                 self._reconnect_with_backoff()
             )
