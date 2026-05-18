@@ -146,9 +146,8 @@ class MqttReconnectionHandler:
         _reconnect_task), in which case starting a new backoff loop would
         incorrectly tear down a healthy connection.
         """
-        if (
-            not self._is_connected_func()
-            and (not self._reconnect_task or self._reconnect_task.done())
+        if not self._is_connected_func() and (
+            not self._reconnect_task or self._reconnect_task.done()
         ):
             self._reconnect_task = asyncio.create_task(
                 self._reconnect_with_backoff()
