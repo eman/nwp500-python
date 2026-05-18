@@ -409,9 +409,9 @@ class NavienMqttClient(EventEmitter):
             if self._connection_manager:
                 # Close old connection to stop SDK auto-reconnect and
                 # prevent two connections with the same client ID.
-                # _actively_reconnecting suppresses the on_connection_interrupted
-                # callback that closing triggers, preventing a competing backoff
-                # loop from being spawned.
+                # _actively_reconnecting suppresses the
+                # on_connection_interrupted callback that closing triggers,
+                # preventing a competing backoff loop from being spawned.
                 _logger.debug("Recreating MQTT connection...")
                 try:
                     await self._connection_manager.close()

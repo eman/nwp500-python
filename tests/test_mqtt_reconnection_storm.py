@@ -30,10 +30,14 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from nwp500.auth import AuthenticationResponse, AuthTokens, NavienAuthClient, UserInfo
+from nwp500.auth import (
+    AuthenticationResponse,
+    AuthTokens,
+    NavienAuthClient,
+    UserInfo,
+)
 from nwp500.mqtt.reconnection import MqttReconnectionHandler
 from nwp500.mqtt.utils import MqttConnectionConfig
-
 
 # ---------------------------------------------------------------------------
 # Shared helpers
@@ -101,7 +105,7 @@ class TestReconnectionHandlerIsConnectedGuard:
     async def test_on_connection_interrupted_does_not_start_task_when_connected(
         self,
     ):
-        """on_connection_interrupted is a no-op when is_connected returns True."""
+        """on_connection_interrupted is a no-op when connected."""
         connected = True
         config = MqttConnectionConfig(auto_reconnect=True)
         scheduled = []
@@ -125,7 +129,7 @@ class TestReconnectionHandlerIsConnectedGuard:
     async def test_on_connection_interrupted_starts_task_when_disconnected(
         self,
     ):
-        """on_connection_interrupted schedules a task when genuinely disconnected."""
+        """on_connection_interrupted schedules a task when disconnected."""
         handler, scheduled = _make_handler(connected=False)
 
         handler.on_connection_interrupted(Exception("dropped"))
@@ -137,7 +141,7 @@ class TestReconnectionHandlerIsConnectedGuard:
 
     @pytest.mark.asyncio(loop_scope="function")
     async def test_start_reconnect_task_no_op_when_connected(self):
-        """_start_reconnect_task must not create a Task when is_connected is True."""
+        """_start_reconnect_task must not create a Task when connected."""
         connected = True
         config = MqttConnectionConfig(auto_reconnect=True)
 
@@ -234,9 +238,9 @@ class TestReconnectionHandlerIsConnectedGuard:
 
 
 class TestActivelyReconnectingFlag:
-    """Bug 2 – closing the old connection must not trigger a new backoff loop."""
+    """Bug 2 – old connection teardown must not trigger a new backoff loop."""
 
-    def _make_mqtt_client(self) -> "NavienMqttClient":  # noqa: F821
+    def _make_mqtt_client(self) -> NavienMqttClient:  # noqa: F821
         from nwp500.mqtt import NavienMqttClient
 
         return NavienMqttClient(_make_auth_client())
@@ -247,7 +251,7 @@ class TestActivelyReconnectingFlag:
         assert client._actively_reconnecting is False
 
     @pytest.mark.asyncio(loop_scope="function")
-    async def test_on_connection_interrupted_internal_skips_handler_when_flag_set(
+    async def test_interrupted_internal_skips_handler_when_flag_set(  # noqa: E501
         self,
     ):
         """
@@ -334,11 +338,11 @@ class TestActivelyReconnectingFlag:
             await client._active_reconnect()
 
         assert flag_during == [True], "Flag must be True while reconnecting"
-        assert client._actively_reconnecting is False, "Flag must be cleared after"
+        assert not client._actively_reconnecting, "Flag must be cleared after"
 
     @pytest.mark.asyncio(loop_scope="function")
     async def test_active_reconnect_clears_flag_on_exception(self):
-        """_active_reconnect clears the flag even when an exception is raised."""
+        """_active_reconnect clears the flag even on exception."""
         from awscrt.exceptions import AwsCrtError
 
         client = self._make_mqtt_client()
@@ -361,10 +365,7 @@ class TestActivelyReconnectingFlag:
             with pytest.raises(AwsCrtError):
                 await client._active_reconnect()
 
-        assert client._actively_reconnecting is False, "Flag must be cleared on error"
-
-    @pytest.mark.asyncio(loop_scope="function")
-    async def test_active_reconnect_is_reentrant_safe(self):
+        assert not client._actively_reconnecting, "must be cleared on error"
         """
         A second concurrent call to _active_reconnect while the first is
         still running must return immediately without making changes.
@@ -413,8 +414,8 @@ class TestActivelyReconnectingFlag:
             client._subscription_manager = None
             await client._deep_reconnect()
 
-        assert flag_during == [True], "Flag must be True while deep-reconnecting"
-        assert client._actively_reconnecting is False, "Flag must be cleared after"
+        assert flag_during == [True], "Flag True while deep-reconnecting"
+        assert not client._actively_reconnecting, "Flag must be cleared after"
 
     @pytest.mark.asyncio(loop_scope="function")
     async def test_deep_reconnect_clears_flag_on_exception(self):
@@ -443,4 +444,4 @@ class TestActivelyReconnectingFlag:
             with pytest.raises(AwsCrtError):
                 await client._deep_reconnect()
 
-        assert client._actively_reconnecting is False, "Flag must be cleared on error"
+        assert not client._actively_reconnecting, "must be cleared on error"
