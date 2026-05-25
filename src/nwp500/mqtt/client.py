@@ -371,21 +371,13 @@ class NavienMqttClient(EventEmitter):
         # the MqttReconnectionHandler fires its own reconnect path — in that
         # scenario the reconnect handler sees _connected==True and exits early,
         # so resubscribe_all() would never be called without this block.
-        if (
-            not session_present
-            and self._subscription_manager
-            and self._connection_manager
-            and self._connection_manager.connection
-        ):
-            self._subscription_manager.update_connection(
-                self._connection_manager.connection
-            )
-            self._schedule_coroutine(
-                self._subscription_manager.resubscribe_all()
-            )
-
-        # Send any queued commands
-        if self.config.enable_command_queue and self._command_queue:
+        #
+        # When session_present=False, we must resubscribe before sending queued
+        # commands to ensure subscriptions are restored before device responses
+        # are processed. Use a composite coroutine to enforce ordering.
+        if not session_present and self._subscription_manager:
+            self._schedule_coroutine(self._handle_clean_session_resume())
+        elif self.config.enable_command_queue and self._command_queue:
             self._schedule_coroutine(self._send_queued_commands_internal())
 
     async def _send_queued_commands_internal(self) -> None:
@@ -396,6 +388,29 @@ class NavienMqttClient(EventEmitter):
         await self._command_queue.send_all(
             self._connection_manager.publish, lambda: self._connected
         )
+
+    async def _handle_clean_session_resume(self) -> None:
+        """
+        Handle clean session reconnection with ordered resubscription.
+
+        When session_present=False (clean session), the broker has dropped all
+        subscriptions. This method ensures subscriptions are restored BEFORE
+        sending any queued commands, preventing commands from being processed
+        before their subscriptions are re-established.
+        """
+        if not self._subscription_manager or not self._connection_manager:
+            return
+
+        if not self._connection_manager.connection:
+            return
+
+        self._subscription_manager.update_connection(
+            self._connection_manager.connection
+        )
+        await self._subscription_manager.resubscribe_all()
+
+        if self.config.enable_command_queue and self._command_queue:
+            await self._send_queued_commands_internal()
 
     async def _active_reconnect(self) -> None:
         """
