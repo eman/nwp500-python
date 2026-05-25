@@ -173,12 +173,6 @@ class MqttPeriodicRequestManager:
                             await self._request_device_info(device)
                         elif request_type == PeriodicRequestType.DEVICE_STATUS:
                             await self._request_device_status(device)
-                        else:
-                            _logger.error(
-                                "Unknown periodic request type: %s",
-                                request_type,
-                            )
-                            break
 
                         _logger.debug(
                             "Sent periodic %s request for %s",
