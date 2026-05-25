@@ -364,6 +364,24 @@ class NavienMqttClient(EventEmitter):
             )
         )
 
+        # When the broker starts a clean session (session_present=False), all
+        # previous subscriptions have been dropped server-side.  We must
+        # re-establish them before any device data can flow.  This covers the
+        # common case where the AWS IoT SDK auto-reconnects internally before
+        # the MqttReconnectionHandler fires its own reconnect path — in that
+        # scenario the reconnect handler sees _connected==True and exits early,
+        # so resubscribe_all() would never be called without this block.
+        if (
+            not session_present
+            and self._subscription_manager
+            and self._connection_manager
+            and self._connection_manager.connection
+        ):
+            self._subscription_manager.update_connection(
+                self._connection_manager.connection
+            )
+            self._schedule_coroutine(self._subscription_manager.resubscribe_all())
+
         # Send any queued commands
         if self.config.enable_command_queue and self._command_queue:
             self._schedule_coroutine(self._send_queued_commands_internal())
