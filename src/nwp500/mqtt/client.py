@@ -380,7 +380,9 @@ class NavienMqttClient(EventEmitter):
             self._subscription_manager.update_connection(
                 self._connection_manager.connection
             )
-            self._schedule_coroutine(self._subscription_manager.resubscribe_all())
+            self._schedule_coroutine(
+                self._subscription_manager.resubscribe_all()
+            )
 
         # Send any queued commands
         if self.config.enable_command_queue and self._command_queue:
