@@ -47,8 +47,6 @@ Quick Example
 Documentation
 =============
 
-The documentation follows the `Diátaxis <https://diataxis.fr/>`_ framework:
-
 * `Tutorials <https://nwp500-python.readthedocs.io/en/latest/tutorials/getting-started.html>`_: Start here if you're new to the library.
 * `How-to Guides <https://nwp500-python.readthedocs.io/en/latest/how-to/index.html>`_: Practical step-by-step recipes for specific tasks.
 * `Reference <https://nwp500-python.readthedocs.io/en/latest/reference/index.html>`_: Technical descriptions of the API, models, and protocol.
