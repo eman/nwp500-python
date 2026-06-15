@@ -288,8 +288,11 @@ class TestThreadSafeTaskCancellation:
 
         # _cancel_pending_reconnect must have been *scheduled*, not run yet
         assert len(scheduled) == 1
-        # The task must still be alive (cancel not yet applied on the loop)
+        # No direct Task.cancel() was called from the background thread:
+        # task.cancelling() == 0 proves no cancellation request is pending
+        # before the event loop runs _cancel_pending_reconnect.
         assert handler._reconnect_task is not None
+        assert handler._reconnect_task.cancelling() == 0
 
         # Now let the event loop process the cancellation
         await asyncio.gather(*scheduled, return_exceptions=True)
@@ -310,7 +313,7 @@ class TestThreadSafeTaskCancellation:
 
     @pytest.mark.asyncio(loop_scope="function")
     async def test_cancel_pending_reconnect_clears_completed_task(self):
-        """_cancel_pending_reconnect is a no-op when task is already done."""
+        """_cancel_pending_reconnect clears a stale reference to a done task."""
         handler, scheduled = _make_handler(connected=False)
 
         handler.on_connection_interrupted(Exception("dropped"))
@@ -320,13 +323,15 @@ class TestThreadSafeTaskCancellation:
         task = handler._reconnect_task
         assert task is not None
 
-        # Cancel and drain the task manually first
+        # Cancel and drain the task manually, leaving a stale reference
         task.cancel()
         await asyncio.gather(task, return_exceptions=True)
         assert task.done()
+        assert handler._reconnect_task is task  # stale reference still held
 
-        # _cancel_pending_reconnect with an already-done task must not raise
+        # _cancel_pending_reconnect must clear the stale reference
         await handler._cancel_pending_reconnect()
+        assert handler._reconnect_task is None
 
     @pytest.mark.asyncio(loop_scope="function")
     async def test_resumed_then_interrupted_creates_new_task(self):

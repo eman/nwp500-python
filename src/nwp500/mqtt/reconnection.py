@@ -144,11 +144,26 @@ class MqttReconnectionHandler:
 
         Must be called on the event loop (via _schedule_coroutine) so that
         asyncio Task operations are thread-safe.
+
+        Uses an identity check before clearing _reconnect_task to avoid
+        accidentally wiping a new task that was created while the cancelled
+        task was being awaited.  Also clears stale references to already-done
+        tasks so the handler never holds on to finished task objects.
         """
-        if self._reconnect_task and not self._reconnect_task.done():
-            self._reconnect_task.cancel()
-            with contextlib.suppress(asyncio.CancelledError):
-                await self._reconnect_task
+        task = self._reconnect_task
+        if task is None:
+            return
+        if task.done():
+            # Clear stale reference to an already-finished task.
+            if self._reconnect_task is task:
+                self._reconnect_task = None
+            return
+        task.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await task
+        # Only clear the reference if it still points to the same task.
+        # A new reconnect task may have been created while we were awaiting.
+        if self._reconnect_task is task:
             self._reconnect_task = None
 
     async def _start_reconnect_task(self) -> None:
