@@ -5,6 +5,23 @@ Changelog
 Unreleased
 ==========
 
+Bug Fixes
+---------
+- **Fix MQTT reconnection storm caused by non-thread-safe Task.cancel()**: The
+  ``on_connection_resumed`` callback is invoked from an AWS IoT SDK background
+  thread.  It was calling ``asyncio.Task.cancel()`` directly on that thread, which
+  is not thread-safe.  When the event loop was busy at the moment of cancellation
+  (e.g. the sleeping task's timer callback had already been enqueued), the
+  cancellation was silently dropped.  The stale ``_reconnect_with_backoff`` task
+  would then complete its sleep, call ``_reconnect_func``, and tear down an
+  otherwise healthy connection — restarting the entire disconnect → reconnect →
+  ``AWS_ERROR_MQTT_UNEXPECTED_HANGUP`` cycle.  Fixed by replacing the direct
+  ``task.cancel()`` call with a ``_cancel_pending_reconnect()`` coroutine scheduled
+  via ``_schedule_coroutine``, so the cancellation runs on the event loop where
+  asyncio operations are safe.  The method also uses an identity check before
+  clearing ``_reconnect_task`` to avoid wiping a newer task created during the
+  await, and clears stale references to already-done tasks.
+
 Version 8.1.0 (2026-05-16)
 ==========================
 

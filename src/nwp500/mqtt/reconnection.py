@@ -128,9 +128,42 @@ class MqttReconnectionHandler:
         # Reset reconnection attempts on successful connection
         self._reconnect_attempts = 0
 
-        # Cancel any pending reconnection task
-        if self._reconnect_task and not self._reconnect_task.done():
-            self._reconnect_task.cancel()
+        # Schedule cancellation of any pending reconnect task on the event loop.
+        # This method is called from an AWS SDK background thread; asyncio's
+        # Task.cancel() is NOT thread-safe when invoked directly from a
+        # non-event-loop thread.  If the event loop is busy (e.g. the sleeping
+        # task's timer callback was already queued) the cancellation can be
+        # silently dropped, leaving the stale _reconnect_with_backoff loop
+        # alive.  That loop then completes its sleep and calls _reconnect_func,
+        # tearing down a perfectly healthy connection and restarting the
+        # disconnect/reconnect cycle.
+        self._schedule_coroutine(self._cancel_pending_reconnect())
+
+    async def _cancel_pending_reconnect(self) -> None:
+        """Cancel any pending reconnect task.
+
+        Must be called on the event loop (via _schedule_coroutine) so that
+        asyncio Task operations are thread-safe.
+
+        Uses an identity check before clearing _reconnect_task to avoid
+        accidentally wiping a new task that was created while the cancelled
+        task was being awaited.  Also clears stale references to already-done
+        tasks so the handler never holds on to finished task objects.
+        """
+        task = self._reconnect_task
+        if task is None:
+            return
+        if task.done():
+            # Clear stale reference to an already-finished task.
+            if self._reconnect_task is task:
+                self._reconnect_task = None
+            return
+        task.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await task
+        # Only clear the reference if it still points to the same task.
+        # A new reconnect task may have been created while we were awaiting.
+        if self._reconnect_task is task:
             self._reconnect_task = None
 
     async def _start_reconnect_task(self) -> None:
@@ -142,7 +175,7 @@ class MqttReconnectionHandler:
 
         The is_connected guard is re-checked here because this coroutine may
         be queued via run_coroutine_threadsafe and run after the connection
-        has already been restored (e.g. by on_connection_resumed cancelling
+        has already been restored (e.g. by _cancel_pending_reconnect clearing
         _reconnect_task), in which case starting a new backoff loop would
         incorrectly tear down a healthy connection.
         """
