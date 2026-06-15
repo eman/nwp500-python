@@ -27,7 +27,8 @@ Bug 3 — on_connection_resumed calls Task.cancel() directly from an AWS SDK
   loop is busy (e.g. the sleeping task's timer callback was already enqueued)
   the cancellation can be silently dropped.  The stale _reconnect_with_backoff
   task then completes its sleep, calls _reconnect_func, and tears down an
-  otherwise healthy connection, restarting the entire disconnect/reconnect cycle.
+  otherwise healthy connection, restarting the entire
+  disconnect/reconnect cycle.
 
   Fix: on_connection_resumed schedules _cancel_pending_reconnect() via
   _schedule_coroutine so the cancellation runs on the event loop where asyncio
@@ -309,7 +310,7 @@ class TestThreadSafeTaskCancellation:
 
     @pytest.mark.asyncio(loop_scope="function")
     async def test_cancel_pending_reconnect_clears_completed_task(self):
-        """_cancel_pending_reconnect is a no-op when the task is already done."""
+        """_cancel_pending_reconnect is a no-op when task is already done."""
         handler, scheduled = _make_handler(connected=False)
 
         handler.on_connection_interrupted(Exception("dropped"))
