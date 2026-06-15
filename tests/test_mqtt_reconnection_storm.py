@@ -1,7 +1,7 @@
 """
 Tests for the MQTT reconnection storm fix.
 
-Two bugs were fixed:
+Three bugs were fixed:
 
 Bug 1 — Stale interruption events fire after a resume clears _reconnect_task.
   The AWS SDK fires on_connection_interrupted callbacks from background threads
@@ -21,6 +21,17 @@ Bug 2 — Closing the old connection inside _active_reconnect / _deep_reconnect
   Fix: _actively_reconnecting flag suppresses the reconnection-handler
   delegation in _on_connection_interrupted_internal while the intentional
   teardown is in progress.
+
+Bug 3 — on_connection_resumed calls Task.cancel() directly from an AWS SDK
+  background thread.  asyncio.Task.cancel() is NOT thread-safe; when the event
+  loop is busy (e.g. the sleeping task's timer callback was already enqueued)
+  the cancellation can be silently dropped.  The stale _reconnect_with_backoff
+  task then completes its sleep, calls _reconnect_func, and tears down an
+  otherwise healthy connection, restarting the entire disconnect/reconnect cycle.
+
+  Fix: on_connection_resumed schedules _cancel_pending_reconnect() via
+  _schedule_coroutine so the cancellation runs on the event loop where asyncio
+  Task operations are safe.
 """
 
 from __future__ import annotations
@@ -177,10 +188,11 @@ class TestReconnectionHandlerIsConnectedGuard:
 
         1. Connection drops  → on_connection_interrupted schedules
            _start_reconnect_task (coroutine A queued but not yet run).
-        2. Connection resumes → on_connection_resumed cancels task, sets
-           _reconnect_task = None.
-        3. Coroutine A finally runs – without the fix it would see
-           _reconnect_task=None and create a new backoff loop.
+        2. Connection resumes → on_connection_resumed schedules
+           _cancel_pending_reconnect (no task to cancel yet since A hasn't run).
+        3. Both queued coroutines finally run – without the is_connected guard
+           coroutine A would see _reconnect_task=None and create a new backoff
+           loop even though the client is now healthy.
         """
         state = {"connected": False}
         config = MqttConnectionConfig(auto_reconnect=True)
@@ -200,13 +212,16 @@ class TestReconnectionHandlerIsConnectedGuard:
         handler.on_connection_interrupted(Exception("dropped"))
         assert len(scheduled) == 1
 
-        # Step 2: connection resumes before the scheduled coroutine runs
+        # Step 2: connection resumes before the scheduled coroutine runs.
+        # on_connection_resumed now schedules _cancel_pending_reconnect rather
+        # than calling task.cancel() directly (Bug 3 fix).
         state["connected"] = True
         handler.on_connection_resumed(return_code=0, session_present=False)
-        assert handler._reconnect_task is None
+        assert handler._reconnect_task is None  # no task was ever created
 
-        # Step 3: the stale coroutine from step 1 runs now
-        await scheduled[0]
+        # Step 3: run all scheduled coroutines
+        # (_start_reconnect_task + _cancel_pending_reconnect)
+        await asyncio.gather(*scheduled, return_exceptions=True)
 
         # With the fix, no new task must have been created
         assert handler._reconnect_task is None
@@ -227,6 +242,131 @@ class TestReconnectionHandlerIsConnectedGuard:
         await asyncio.gather(*scheduled, return_exceptions=True)
 
         # Only one _reconnect_with_backoff task should exist
+        assert handler._reconnect_task is not None
+        handler._reconnect_task.cancel()
+        await asyncio.gather(handler._reconnect_task, return_exceptions=True)
+
+
+# ---------------------------------------------------------------------------
+# Bug 3: on_connection_resumed must cancel via the event loop, not directly
+# ---------------------------------------------------------------------------
+
+
+class TestThreadSafeTaskCancellation:
+    """Bug 3 – on_connection_resumed must not call Task.cancel() from a thread.
+
+    asyncio.Task.cancel() is NOT thread-safe.  When called from an AWS SDK
+    background thread, the cancellation can be silently dropped if the event
+    loop is busy (e.g. the sleep timer fires at the same moment).  The stale
+    task then triggers a spurious reconnection.
+
+    Fix: on_connection_resumed schedules _cancel_pending_reconnect() via
+    _schedule_coroutine so the cancellation happens on the event loop.
+    """
+
+    @pytest.mark.asyncio(loop_scope="function")
+    async def test_on_connection_resumed_schedules_cancel_not_direct_call(
+        self,
+    ):
+        """
+        on_connection_resumed must schedule _cancel_pending_reconnect via
+        _schedule_coroutine rather than calling task.cancel() directly.
+        """
+        handler, scheduled = _make_handler(connected=False)
+
+        # Let a reconnect task start (sleeping in backoff)
+        handler.on_connection_interrupted(Exception("dropped"))
+        await asyncio.gather(*scheduled, return_exceptions=True)
+        scheduled.clear()
+
+        assert handler._reconnect_task is not None
+        assert not handler._reconnect_task.done()
+
+        # Simulate connection resuming from a background thread
+        handler.on_connection_resumed(return_code=0, session_present=True)
+
+        # _cancel_pending_reconnect must have been *scheduled*, not run yet
+        assert len(scheduled) == 1
+        # The task must still be alive (cancel not yet applied on the loop)
+        assert handler._reconnect_task is not None
+
+        # Now let the event loop process the cancellation
+        await asyncio.gather(*scheduled, return_exceptions=True)
+
+        # After the event-loop cancellation, the task must be cleared
+        assert handler._reconnect_task is None
+
+    @pytest.mark.asyncio(loop_scope="function")
+    async def test_cancel_pending_reconnect_is_idempotent_with_no_task(self):
+        """_cancel_pending_reconnect is a no-op when _reconnect_task is None."""
+        handler, _ = _make_handler(connected=True)
+        assert handler._reconnect_task is None
+
+        # Should not raise
+        await handler._cancel_pending_reconnect()
+
+        assert handler._reconnect_task is None
+
+    @pytest.mark.asyncio(loop_scope="function")
+    async def test_cancel_pending_reconnect_clears_completed_task(self):
+        """_cancel_pending_reconnect is a no-op when the task is already done."""
+        handler, scheduled = _make_handler(connected=False)
+
+        handler.on_connection_interrupted(Exception("dropped"))
+        await asyncio.gather(*scheduled, return_exceptions=True)
+        scheduled.clear()
+
+        task = handler._reconnect_task
+        assert task is not None
+
+        # Cancel and drain the task manually first
+        task.cancel()
+        await asyncio.gather(task, return_exceptions=True)
+        assert task.done()
+
+        # _cancel_pending_reconnect with an already-done task must not raise
+        await handler._cancel_pending_reconnect()
+
+    @pytest.mark.asyncio(loop_scope="function")
+    async def test_resumed_then_interrupted_creates_new_task(self):
+        """
+        After resume cancels an existing task, a subsequent genuine drop must
+        still be able to start a fresh reconnect task.
+        """
+        state = {"connected": False}
+        config = MqttConnectionConfig(auto_reconnect=True)
+        scheduled = []
+
+        handler = MqttReconnectionHandler(
+            config=config,
+            is_connected_func=lambda: state["connected"],
+            schedule_coroutine_func=lambda coro: scheduled.append(
+                asyncio.ensure_future(coro)
+            ),
+            reconnect_func=AsyncMock(),
+        )
+        handler.enable()
+
+        # Connection drops → backoff task starts
+        handler.on_connection_interrupted(Exception("first drop"))
+        await asyncio.gather(*scheduled, return_exceptions=True)
+        scheduled.clear()
+        assert handler._reconnect_task is not None
+
+        # Connection resumes → cancel scheduled on loop
+        state["connected"] = True
+        handler.on_connection_resumed(return_code=0, session_present=True)
+        await asyncio.gather(*scheduled, return_exceptions=True)
+        scheduled.clear()
+        assert handler._reconnect_task is None
+
+        # Connection drops again (genuine)
+        state["connected"] = False
+        handler.on_connection_interrupted(Exception("second drop"))
+        await asyncio.gather(*scheduled, return_exceptions=True)
+        scheduled.clear()
+
+        # A new reconnect task must have been created
         assert handler._reconnect_task is not None
         handler._reconnect_task.cancel()
         await asyncio.gather(handler._reconnect_task, return_exceptions=True)
