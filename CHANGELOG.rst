@@ -5,6 +5,9 @@ Changelog
 Unreleased
 ==========
 
+Version 8.1.3 (2026-06-15)
+==========================
+
 Bug Fixes
 ---------
 - **Fix MQTT reconnection storm caused by non-thread-safe Task.cancel()**: The
