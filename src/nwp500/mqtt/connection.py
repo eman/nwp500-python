@@ -9,10 +9,11 @@ including credential management and connection state tracking.
 from __future__ import annotations
 
 import asyncio
+import concurrent.futures
 import json
 import logging
 from collections.abc import Callable
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any
 
 from awscrt import mqtt
 from awscrt.exceptions import AwsCrtError
@@ -97,7 +98,9 @@ class MqttConnection:
         )
 
     async def _await_ack(
-        self, future: asyncio.Future[Any], operation: str
+        self,
+        future: concurrent.futures.Future[Any] | asyncio.Future[Any],
+        operation: str,
     ) -> Any:
         """Await a broker acknowledgement future with a timeout.
 
@@ -110,7 +113,10 @@ class MqttConnection:
         the keep-alive expires (20+ minutes).
 
         Args:
-            future: concurrent.futures.Future returned by the SDK
+            future: Acknowledgement future — the
+                ``concurrent.futures.Future`` returned by the AWS CRT SDK
+                (wrapped via ``asyncio.wrap_future``), or an already
+                loop-bound ``asyncio.Future``
             operation: Human-readable operation name for error messages
 
         Returns:
@@ -121,9 +127,14 @@ class MqttConnection:
                 config.operation_timeout seconds
             asyncio.CancelledError: If the awaiting task is cancelled
         """
+        awaitable_future: asyncio.Future[Any] = (
+            asyncio.wrap_future(future)
+            if isinstance(future, concurrent.futures.Future)
+            else future
+        )
         try:
             return await asyncio.wait_for(
-                asyncio.shield(asyncio.wrap_future(future)),
+                asyncio.shield(awaitable_future),
                 timeout=self.config.operation_timeout,
             )
         except asyncio.CancelledError:
@@ -191,9 +202,7 @@ class MqttConnection:
             # underlying future
             if not self._connection:
                 raise RuntimeError("Connection not initialized")
-            connect_future = cast(
-                asyncio.Future[Any], self._connection.connect()
-            )
+            connect_future = self._connection.connect()
             connect_result = await self._await_ack(connect_future, "Connect")
 
             self._connected = True
@@ -254,9 +263,7 @@ class MqttConnection:
             # Convert concurrent.futures.Future to asyncio.Future and await
             # Use shield to prevent cancellation from propagating to
             # underlying future
-            disconnect_future = cast(
-                asyncio.Future[Any], self._connection.disconnect()
-            )
+            disconnect_future = self._connection.disconnect()
             await self._await_ack(disconnect_future, "Disconnect")
 
             self._connected = False
@@ -289,9 +296,7 @@ class MqttConnection:
 
         _logger.debug("Closing underlying SDK connection...")
         try:
-            disconnect_future = cast(
-                asyncio.Future[Any], connection.disconnect()
-            )
+            disconnect_future = connection.disconnect()
             await self._await_ack(disconnect_future, "Close")
             _logger.debug("SDK connection closed")
         except (AwsCrtError, RuntimeError, TimeoutError) as e:
@@ -335,7 +340,7 @@ class MqttConnection:
         subscribe_future_raw, packet_id_raw = self._connection.subscribe(
             topic=topic, qos=qos, callback=callback
         )
-        subscribe_future = cast(asyncio.Future[Any], subscribe_future_raw)
+        subscribe_future = subscribe_future_raw
         packet_id = packet_id_raw
 
         await self._await_ack(subscribe_future, f"Subscribe to '{topic}'")
@@ -367,7 +372,7 @@ class MqttConnection:
         unsubscribe_future_raw, packet_id_raw = self._connection.unsubscribe(
             topic=topic
         )
-        unsubscribe_future = cast(asyncio.Future[Any], unsubscribe_future_raw)
+        unsubscribe_future = unsubscribe_future_raw
         packet_id = int(packet_id_raw)
 
         await self._await_ack(unsubscribe_future, f"Unsubscribe from '{topic}'")
@@ -412,7 +417,7 @@ class MqttConnection:
         publish_future_raw, packet_id_raw = self._connection.publish(
             topic=topic, payload=payload_bytes, qos=qos
         )
-        publish_future = cast(asyncio.Future[Any], publish_future_raw)
+        publish_future = publish_future_raw
         packet_id = int(packet_id_raw)
 
         # Shield the operation to prevent cancellation from propagating to

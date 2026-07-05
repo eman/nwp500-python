@@ -541,3 +541,90 @@ class TestOperationTimeouts:
 
         packet_id = await conn.publish("test/topic", {"key": "value"})
         assert packet_id == 42
+
+
+class TestScheduleCoroutineCleanup:
+    """Scheduling failures must not leak un-awaited coroutines."""
+
+    def test_coroutine_closed_when_no_loop_available(self, mock_auth_client):
+        from nwp500.mqtt import NavienMqttClient
+
+        client = NavienMqttClient(mock_auth_client)
+        client._loop = None  # no captured loop, and no running loop here
+
+        async def never_runs():
+            raise AssertionError("must not execute")
+
+        coro = never_runs()
+        client._schedule_coroutine(coro)  # must not raise or warn
+
+        # A closed coroutine raises RuntimeError when sent to
+        with pytest.raises(RuntimeError, match="cannot reuse already"):
+            coro.send(None)
+
+    def test_coroutine_closed_when_loop_is_closed(self, mock_auth_client):
+        from nwp500.mqtt import NavienMqttClient
+
+        client = NavienMqttClient(mock_auth_client)
+        loop = asyncio.new_event_loop()
+        loop.close()
+        client._loop = loop
+
+        async def never_runs():
+            raise AssertionError("must not execute")
+
+        coro = never_runs()
+        client._schedule_coroutine(coro)
+
+        with pytest.raises(RuntimeError, match="cannot reuse already"):
+            coro.send(None)
+
+    def test_done_callback_logs_traceback(self, caplog):
+        """The log record must carry the coroutine's traceback."""
+        import logging
+
+        from nwp500.mqtt.client import _log_scheduled_coroutine_result
+
+        def boom():
+            raise MqttNotConnectedError("scheduled failure")
+
+        future: concurrent.futures.Future = concurrent.futures.Future()
+        try:
+            boom()
+        except MqttNotConnectedError as e:
+            future.set_exception(e)
+
+        with caplog.at_level(logging.ERROR, logger="nwp500.mqtt.client"):
+            _log_scheduled_coroutine_result(future)
+
+        record = caplog.records[-1]
+        assert record.exc_info is not None
+        assert record.exc_info[0] is MqttNotConnectedError
+        # Traceback present and points at the raising function
+        assert "boom" in caplog.text
+
+
+class TestAwaitAckFutureTypes:
+    """_await_ack must accept both concurrent and asyncio futures."""
+
+    @pytest.mark.asyncio
+    async def test_concurrent_future(self, mock_auth_client):
+        config = MqttConnectionConfig(client_id="t", operation_timeout=1.0)
+        conn = MqttConnection(config, mock_auth_client)
+
+        future: concurrent.futures.Future = concurrent.futures.Future()
+        future.set_result({"ok": True})
+
+        result = await conn._await_ack(future, "Test")
+        assert result == {"ok": True}
+
+    @pytest.mark.asyncio
+    async def test_asyncio_future(self, mock_auth_client):
+        config = MqttConnectionConfig(client_id="t", operation_timeout=1.0)
+        conn = MqttConnection(config, mock_auth_client)
+
+        future = asyncio.get_running_loop().create_future()
+        future.set_result({"ok": True})
+
+        result = await conn._await_ack(future, "Test")
+        assert result == {"ok": True}

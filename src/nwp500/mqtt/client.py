@@ -84,7 +84,15 @@ def _log_scheduled_coroutine_result(
         return
     exc = future.exception()
     if exc is not None:
-        _logger.error("Scheduled coroutine failed: %s", exc, exc_info=exc)
+        # Pass an explicit (type, value, traceback) tuple: a bare
+        # exception instance is treated by logging as a truthy flag,
+        # which would log the *current* exception context (empty in a
+        # done-callback) instead of the coroutine's traceback.
+        _logger.error(
+            "Scheduled coroutine failed: %s",
+            exc,
+            exc_info=(type(exc), exc, exc.__traceback__),
+        )
 
 
 class NavienMqttClient(EventEmitter):
@@ -270,6 +278,10 @@ class NavienMqttClient(EventEmitter):
                 self._loop = asyncio.get_running_loop()
             except RuntimeError:
                 _logger.warning("No event loop available to schedule coroutine")
+                # Close the never-scheduled coroutine to avoid a
+                # "coroutine was never awaited" warning and release any
+                # resources it holds.
+                coro.close()
                 return
 
         # Schedule the coroutine in the stored loop using thread-safe method
@@ -278,6 +290,7 @@ class NavienMqttClient(EventEmitter):
         except RuntimeError as e:
             # Event loop is closed or not running
             _logger.error(f"Failed to schedule coroutine: {e}", exc_info=True)
+            coro.close()
         else:
             # Never drop the future: exceptions from scheduled coroutines
             # (e.g. a failed resubscribe after a clean-session resume) would
