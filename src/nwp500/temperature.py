@@ -146,7 +146,7 @@ class HalfCelsius(Temperature):
         Example:
             >>> temp = HalfCelsius.from_fahrenheit(140.0)
             >>> temp.raw_value
-            120
+            120.0
         """
         celsius = (fahrenheit - 32) * 5 / 9
         raw_value = round(celsius * 2)
@@ -165,7 +165,7 @@ class HalfCelsius(Temperature):
         Example:
             >>> temp = HalfCelsius.from_celsius(60.0)
             >>> temp.raw_value
-            120
+            120.0
         """
         raw_value = round(celsius * 2)
         return cls(raw_value)
@@ -215,7 +215,7 @@ class DeciCelsius(Temperature):
         Example:
             >>> temp = DeciCelsius.from_fahrenheit(140.0)
             >>> temp.raw_value
-            600
+            600.0
         """
         celsius = (fahrenheit - 32) * 5 / 9
         raw_value = round(celsius * 10)
@@ -234,7 +234,7 @@ class DeciCelsius(Temperature):
         Example:
             >>> temp = DeciCelsius.from_celsius(60.0)
             >>> temp.raw_value
-            600
+            600.0
         """
         raw_value = round(celsius * 10)
         return cls(raw_value)
@@ -271,10 +271,11 @@ class RawCelsius(Temperature):
         """Convert to Fahrenheit using standard rounding.
 
         Returns:
-            Temperature in Fahrenheit.
+            Temperature in Fahrenheit (rounded to a whole degree, but
+            returned as float for consistency with the base class API).
         """
         celsius = self.to_celsius()
-        return round((celsius * 9 / 5) + 32)
+        return float(round((celsius * 9 / 5) + 32))
 
     def to_fahrenheit_with_formula(
         self, formula_type: TempFormulaType
@@ -292,8 +293,14 @@ class RawCelsius(Temperature):
 
         match formula_type:
             case TempFormulaType.ASYMMETRIC:
-                # Asymmetric Rounding: check remainder of raw value
-                remainder = int(self.raw_value) % 10
+                # Asymmetric Rounding: check remainder of raw value.
+                # Use the truncated remainder (like the firmware/app's
+                # Java % operator), NOT Python's floored modulo: for
+                # negative raw values Python's % is always non-negative
+                # (-11 % 10 == 9), which would apply floor where the
+                # firmware applies ceil, giving off-by-one Fahrenheit
+                # values for sub-zero temperatures.
+                remainder = int(math.fmod(int(self.raw_value), 10))
                 match remainder:
                     case 9:
                         return float(math.floor(fahrenheit_value))
@@ -316,7 +323,7 @@ class RawCelsius(Temperature):
         Example:
             >>> temp = RawCelsius.from_fahrenheit(140.0)
             >>> temp.raw_value
-            120
+            120.0
         """
         celsius = (fahrenheit - 32) * 5 / 9
         raw_value = round(celsius * 2)
@@ -335,7 +342,7 @@ class RawCelsius(Temperature):
         Example:
             >>> temp = RawCelsius.from_celsius(60.0)
             >>> temp.raw_value
-            120
+            120.0
         """
         raw_value = round(celsius * 2)
         return cls(raw_value)
@@ -389,7 +396,7 @@ class DeciCelsiusDelta(Temperature):
         >>> temp.to_celsius()
         0.5
         >>> temp.to_fahrenheit()
-        0.9  # 0.5°C * 9/5 = 0.9°F, no +32 offset
+        0.9
     """
 
     def to_celsius(self) -> float:
@@ -422,7 +429,7 @@ class DeciCelsiusDelta(Temperature):
         Example:
             >>> temp = DeciCelsiusDelta.from_fahrenheit(0.9)
             >>> temp.raw_value
-            5
+            5.0
         """
         celsius = fahrenheit * 5 / 9
         raw_value = round(celsius * 10)
@@ -441,7 +448,7 @@ class DeciCelsiusDelta(Temperature):
         Example:
             >>> temp = DeciCelsiusDelta.from_celsius(0.5)
             >>> temp.raw_value
-            5
+            5.0
         """
         raw_value = round(celsius * 10)
         return cls(raw_value)

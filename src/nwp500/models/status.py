@@ -575,12 +575,16 @@ class DeviceStatus(NavienBaseModel):
     freeze_protection_temp_min_raw: int = temperature_field(
         "Active freeze protection lower limit",
         alias="freezeProtectionTempMin",
-        default=43,
+        # Raw half-degrees Celsius: 12 = 6 degC = 43 degF (documented
+        # fixed lower limit in data_conversions.rst)
+        default=12,
     )
     freeze_protection_temp_max_raw: int = temperature_field(
         "Active freeze protection upper limit",
         alias="freezeProtectionTempMax",
-        default=65,
+        # Raw half-degrees Celsius: 20 = 10 degC = 50 degF (documented
+        # fixed upper limit in data_conversions.rst)
+        default=20,
     )
 
     def _is_celsius(self) -> bool:

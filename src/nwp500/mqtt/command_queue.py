@@ -7,8 +7,8 @@ and automatically sends them when the connection is restored.
 
 from __future__ import annotations
 
-import asyncio
 import logging
+from collections import deque
 from collections.abc import Callable
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
@@ -35,9 +35,11 @@ class MqttCommandQueue:
     when the connection is restored. This ensures commands are not lost
     during temporary network interruptions.
 
-    The queue uses asyncio.Queue with a fixed maximum size. When the queue
-    is full, the oldest command is automatically dropped to make room for
-    new commands (FIFO with overflow dropping).
+    The queue uses a deque with a fixed maximum size. When the queue is
+    full, the oldest command is automatically dropped to make room for
+    new commands (FIFO with overflow dropping). Commands older than
+    ``config.max_queued_command_age`` seconds are discarded at send time
+    rather than replayed to the device.
     """
 
     def __init__(self, config: MqttConnectionConfig):
@@ -48,9 +50,10 @@ class MqttCommandQueue:
             config: MQTT connection configuration with queue settings
         """
         self.config = config
-        # Python 3.10+ handles asyncio.Queue initialization without running loop
-        self._queue: asyncio.Queue[QueuedCommand] = asyncio.Queue(
-            maxsize=config.max_queued_commands
+        # A deque (not asyncio.Queue) so a command that fails mid-flush
+        # can be re-inserted at the FRONT, preserving command order.
+        self._queue: deque[QueuedCommand] = deque(
+            maxlen=config.max_queued_commands
         )
 
     def enqueue(
@@ -82,26 +85,17 @@ class MqttCommandQueue:
             timestamp=datetime.now(UTC),
         )
 
-        # If queue is full, drop oldest command first
-        if self._queue.full():
-            try:
-                # Remove oldest command (non-blocking)
-                dropped = self._queue.get_nowait()
-                _logger.warning(
-                    f"Command queue full ({self.config.max_queued_commands}), "
-                    f"dropped oldest command to '{redact_topic(dropped.topic)}'"
-                )
-            except asyncio.QueueEmpty:
-                # Race condition - queue was emptied between check and get
-                pass
+        # deque(maxlen=N) drops from the opposite end automatically, but
+        # log the overflow explicitly for visibility.
+        if len(self._queue) == self._queue.maxlen:
+            dropped = self._queue.popleft()
+            _logger.warning(
+                f"Command queue full ({self.config.max_queued_commands}), "
+                f"dropped oldest command to '{redact_topic(dropped.topic)}'"
+            )
 
-        # Add new command (should never block since we just made room if needed)
-        try:
-            self._queue.put_nowait(command)
-            _logger.info(f"Queued command (queue size: {self._queue.qsize()})")
-        except asyncio.QueueFull:
-            _logger.error("Failed to enqueue command - queue unexpectedly full")
-            raise
+        self._queue.append(command)
+        _logger.info(f"Queued command (queue size: {len(self._queue)})")
 
     async def send_all(
         self,
@@ -121,22 +115,30 @@ class MqttCommandQueue:
         Returns:
             Tuple of (sent_count, failed_count)
         """
-        if self._queue.empty():
+        if not self._queue:
             return (0, 0)
 
-        queue_size = self._queue.qsize()
+        queue_size = len(self._queue)
         _logger.info(f"Sending {queue_size} queued command(s)...")
 
         sent_count = 0
         failed_count = 0
+        max_age = self.config.max_queued_command_age
+        now = datetime.now(UTC)
 
-        while not self._queue.empty() and is_connected_func():
-            try:
-                # Get command from queue (non-blocking)
-                command = self._queue.get_nowait()
-            except asyncio.QueueEmpty:
-                # Queue was emptied by another task
-                break
+        while self._queue and is_connected_func():
+            command = self._queue.popleft()
+
+            # Don't replay stale control commands (e.g. an hours-old
+            # set_power) to a physical appliance after a long outage.
+            age = (now - command.timestamp).total_seconds()
+            if max_age is not None and age > max_age:
+                _logger.warning(
+                    f"Discarding expired queued command to "
+                    f"'{redact_topic(command.topic)}' "
+                    f"(age {age:.0f}s > max {max_age:.0f}s)"
+                )
+                continue
 
             try:
                 # Publish the queued command
@@ -156,15 +158,10 @@ class MqttCommandQueue:
                     f"Failed to send queued command to "
                     f"'{redact_topic(command.topic)}': {e}"
                 )
-                # Re-queue if there's room
-                if not self._queue.full():
-                    try:
-                        self._queue.put_nowait(command)
-                        _logger.warning("Re-queued failed command")
-                    except asyncio.QueueFull:
-                        _logger.error(
-                            "Failed to re-queue command - queue is full"
-                        )
+                # Re-queue at the FRONT so command order is preserved on
+                # the next flush (re-appending would invert order-
+                # sensitive sequences like power_on -> set_temp).
+                self._queue.appendleft(command)
                 break  # Stop processing on error to avoid cascade failures
 
         if sent_count > 0:
@@ -182,14 +179,8 @@ class MqttCommandQueue:
         Returns:
             Number of commands cleared
         """
-        # Drain the queue
-        cleared = 0
-        while not self._queue.empty():
-            try:
-                self._queue.get_nowait()
-                cleared += 1
-            except asyncio.QueueEmpty:
-                break
+        cleared = len(self._queue)
+        self._queue.clear()
 
         if cleared > 0:
             _logger.info(f"Cleared {cleared} queued command(s)")
@@ -198,14 +189,14 @@ class MqttCommandQueue:
     @property
     def count(self) -> int:
         """Get the number of queued commands."""
-        return self._queue.qsize()
+        return len(self._queue)
 
     @property
     def is_empty(self) -> bool:
         """Check if the queue is empty."""
-        return self._queue.empty()
+        return not self._queue
 
     @property
     def is_full(self) -> bool:
         """Check if the queue is full."""
-        return self._queue.full()
+        return len(self._queue) == self._queue.maxlen

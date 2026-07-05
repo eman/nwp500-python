@@ -135,8 +135,10 @@ class DeviceStateTracker:
                 )
                 _logger.debug("Heating stopped")
 
-            # Error detection / clearance
-            if status.error_code and not prev.error_code:
+            # Error detection / clearance. Also emit when the error code
+            # CHANGES between two non-zero codes (e.g. E799 -> E407), so
+            # consumers never keep displaying a stale error.
+            if status.error_code and status.error_code != prev.error_code:
                 await self._event_emitter.emit(
                     "error_detected",
                     ErrorDetectedEvent(
