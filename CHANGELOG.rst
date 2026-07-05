@@ -7,6 +7,44 @@ Unreleased
 
 Bug Fixes
 ---------
+- **Serialize concurrent token refresh**: ``ensure_valid_token()`` and
+  ``refresh_token()`` had no lock, so concurrent callers (API 401 retry,
+  MQTT reconnect, periodic requests) at token expiry fired parallel
+  refresh requests; with token rotation the losers were left holding
+  invalidated tokens. Refreshes are now serialized behind an
+  ``asyncio.Lock`` with a post-acquire re-check: callers that lose the
+  race receive the already-refreshed tokens, callers passing a stale
+  (pre-rotation) refresh token get the fresh tokens instead of a
+  guaranteed failure, and an explicit refresh with the current token
+  still forces a refresh (deep-reconnect behavior preserved).
+- **Preserve refresh_token/id_token across refreshes**: the refresh
+  response merge preserved AWS credential fields but not
+  ``refresh_token``/``id_token``. A refresh response omitting them wiped
+  the stored refresh token, so the next refresh posted an empty string
+  and failed unconditionally.
+- **Fix aiohttp session leak when authentication fails in**
+  ``__aenter__``: Python never calls ``__aexit__`` when ``__aenter__``
+  raises, so bad credentials or a network error leaked the owned
+  ``ClientSession`` (one per retry attempt). The session is now closed
+  before the exception propagates.
+- **Make** ``NavienAuthClient.__aenter__`` **idempotent**:
+  ``create_navien_clients()`` pre-enters the context and its docstring
+  instructs users to enter again with ``async with auth:``; the second
+  entry created a fresh session and orphaned the first — which the API
+  client was still pinned to. Re-entering now reuses the existing
+  session.
+- **Fall back to full sign-in when stored-token refresh fails**:
+  restoring expired stored tokens raised ``TokenRefreshError`` even
+  though credentials for a full ``sign_in()`` were available.
+- **Stop pinning the auth session in the API client**:
+  ``NavienAPIClient`` captured ``auth_client.session`` at construction
+  and kept using it after the auth client recreated its session
+  (``RuntimeError: Session is closed``). The session is now resolved per
+  request; an explicitly provided session still takes precedence.
+- **Add HTTP timeouts to unguarded sessions**: the standalone
+  ``refresh_access_token()`` helper and ``OpenEIClient`` created
+  ``ClientSession``s without a ``ClientTimeout``; requests could hang
+  indefinitely. Both now use a 30-second total timeout.
 - **Fix reconnection loop dying on authentication errors**: the backoff
   loop caught only ``AwsCrtError`` and ``RuntimeError``, so
   ``TokenRefreshError``, ``AuthenticationError``, and
