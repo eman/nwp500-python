@@ -96,6 +96,49 @@ class MqttConnection:
             f"Initialized connection manager with client ID: {config.client_id}"
         )
 
+    async def _await_ack(
+        self, future: asyncio.Future[Any], operation: str
+    ) -> Any:
+        """Await a broker acknowledgement future with a timeout.
+
+        The awscrt future is shielded so cancellation (or a timeout) never
+        propagates into the SDK future — the underlying operation completes
+        independently, preventing InvalidStateError in AWS CRT callbacks.
+
+        A timeout guards against half-open TCP connections where the
+        acknowledgement never arrives; without it callers can hang until
+        the keep-alive expires (20+ minutes).
+
+        Args:
+            future: concurrent.futures.Future returned by the SDK
+            operation: Human-readable operation name for error messages
+
+        Returns:
+            The acknowledgement result
+
+        Raises:
+            TimeoutError: If no acknowledgement within
+                config.operation_timeout seconds
+            asyncio.CancelledError: If the awaiting task is cancelled
+        """
+        try:
+            return await asyncio.wait_for(
+                asyncio.shield(asyncio.wrap_future(future)),
+                timeout=self.config.operation_timeout,
+            )
+        except asyncio.CancelledError:
+            _logger.debug(
+                "%s was cancelled but will complete in background", operation
+            )
+            raise
+        except TimeoutError:
+            _logger.error(
+                "%s not acknowledged within %.1fs",
+                operation,
+                self.config.operation_timeout,
+            )
+            raise
+
     async def connect(self) -> bool:
         """
         Establish connection to AWS IoT Core.
@@ -151,19 +194,7 @@ class MqttConnection:
             connect_future = cast(
                 asyncio.Future[Any], self._connection.connect()
             )
-            try:
-                connect_result = await asyncio.shield(
-                    asyncio.wrap_future(connect_future)
-                )
-            except asyncio.CancelledError:
-                # Shield was cancelled - the underlying connect will
-                # complete independently, preventing InvalidStateError
-                # in AWS CRT callbacks
-                _logger.debug(
-                    "Connect operation was cancelled but will complete "
-                    "in background"
-                )
-                raise
+            connect_result = await self._await_ack(connect_future, "Connect")
 
             self._connected = True
             _logger.info(
@@ -226,17 +257,7 @@ class MqttConnection:
             disconnect_future = cast(
                 asyncio.Future[Any], self._connection.disconnect()
             )
-            try:
-                await asyncio.shield(asyncio.wrap_future(disconnect_future))
-            except asyncio.CancelledError:
-                # Shield was cancelled - the underlying disconnect will
-                # complete independently, preventing InvalidStateError
-                # in AWS CRT callbacks
-                _logger.debug(
-                    "Disconnect operation was cancelled but will complete "
-                    "in background"
-                )
-                raise
+            await self._await_ack(disconnect_future, "Disconnect")
 
             self._connected = False
             self._connection = None
@@ -271,9 +292,9 @@ class MqttConnection:
             disconnect_future = cast(
                 asyncio.Future[Any], connection.disconnect()
             )
-            await asyncio.shield(asyncio.wrap_future(disconnect_future))
+            await self._await_ack(disconnect_future, "Close")
             _logger.debug("SDK connection closed")
-        except (AwsCrtError, RuntimeError) as e:
+        except (AwsCrtError, RuntimeError, TimeoutError) as e:
             # Expected when connection is already dead or in bad state
             _logger.debug(f"SDK connection close (benign): {e}")
         except asyncio.CancelledError:
@@ -317,17 +338,7 @@ class MqttConnection:
         subscribe_future = cast(asyncio.Future[Any], subscribe_future_raw)
         packet_id = packet_id_raw
 
-        try:
-            await asyncio.shield(asyncio.wrap_future(subscribe_future))
-        except asyncio.CancelledError:
-            # Shield was cancelled - the underlying subscribe will
-            # complete independently, preventing InvalidStateError
-            # in AWS CRT callbacks
-            _logger.debug(
-                f"Subscribe to '{topic}' was cancelled but will complete "
-                "in background"
-            )
-            raise
+        await self._await_ack(subscribe_future, f"Subscribe to '{topic}'")
 
         _logger.info(f"Subscribed to '{topic}' with packet_id {packet_id}")
         return (subscribe_future, packet_id)
@@ -359,17 +370,7 @@ class MqttConnection:
         unsubscribe_future = cast(asyncio.Future[Any], unsubscribe_future_raw)
         packet_id = int(packet_id_raw)
 
-        try:
-            await asyncio.shield(asyncio.wrap_future(unsubscribe_future))
-        except asyncio.CancelledError:
-            # Shield was cancelled - the underlying unsubscribe will
-            # complete independently, preventing InvalidStateError
-            # in AWS CRT callbacks
-            _logger.debug(
-                f"Unsubscribe from '{topic}' was cancelled but will "
-                "complete in background"
-            )
-            raise
+        await self._await_ack(unsubscribe_future, f"Unsubscribe from '{topic}'")
 
         _logger.info(f"Unsubscribed from '{topic}' with packet_id {packet_id}")
         return packet_id
@@ -419,16 +420,7 @@ class MqttConnection:
         # InvalidStateError when AWS CRT tries to set exception on a
         # cancelled future.
         try:
-            await asyncio.shield(asyncio.wrap_future(publish_future))
-        except asyncio.CancelledError:
-            # Shield was cancelled - the underlying publish will complete
-            # independently, preventing InvalidStateError in AWS CRT
-            # callbacks
-            _logger.debug(
-                f"Publish to '{topic}' was cancelled but will complete "
-                "in background"
-            )
-            raise
+            await self._await_ack(publish_future, f"Publish to '{topic}'")
         except AwsCrtError as e:
             # Handle connection destruction during publish
             # This can happen when AWS IoT Core disconnects (e.g., 24-hour

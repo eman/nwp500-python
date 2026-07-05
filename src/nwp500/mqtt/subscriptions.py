@@ -65,6 +65,7 @@ class MqttSubscriptionManager:
         event_emitter: EventEmitter,
         schedule_coroutine: Callable[[Any], None],
         device_info_cache: MqttDeviceInfoCache | None = None,
+        operation_timeout: float = 30.0,
     ):
         """
         Initialize subscription manager.
@@ -76,12 +77,15 @@ class MqttSubscriptionManager:
             schedule_coroutine: Function to schedule async tasks
             device_info_cache: Optional MqttDeviceInfoCache for caching device
                 features
+            operation_timeout: Maximum seconds to wait for broker
+                acknowledgement of subscribe/unsubscribe operations
         """
         self._connection = connection
         self._client_id = client_id
         self._event_emitter = event_emitter
         self._schedule_coroutine = schedule_coroutine
         self._device_info_cache = device_info_cache
+        self._operation_timeout = operation_timeout
 
         # Track subscriptions and handlers
         self._subscriptions: dict[str, mqtt.QoS] = {}
@@ -191,20 +195,19 @@ class MqttSubscriptionManager:
         _logger.info(f"Subscribing to topic: {redact_topic(topic)}")
 
         try:
-            # Convert concurrent.futures.Future to asyncio.Future and await
-            # Use shield to prevent cancellation from propagating to
-            # underlying future
+            # Await the broker acknowledgement with a timeout. Shield the
+            # SDK future so a timeout/cancel never propagates into AWS CRT
+            # callbacks (avoids InvalidStateError); the underlying
+            # subscribe completes independently.
             subscribe_future, packet_id = self._connection.subscribe(
                 topic=topic, qos=qos, callback=self._on_message_received
             )
             try:
-                subscribe_result = await asyncio.shield(
-                    asyncio.wrap_future(subscribe_future)
+                subscribe_result = await asyncio.wait_for(
+                    asyncio.shield(asyncio.wrap_future(subscribe_future)),
+                    timeout=self._operation_timeout,
                 )
             except asyncio.CancelledError:
-                # Shield was cancelled - the underlying subscribe will
-                # complete independently, preventing InvalidStateError
-                # in AWS CRT callbacks
                 _logger.debug(
                     f"Subscribe to '{redact_topic(topic)}' was cancelled "
                     "but will complete in background"
@@ -221,7 +224,7 @@ class MqttSubscriptionManager:
 
             return int(packet_id)
 
-        except (AwsCrtError, RuntimeError) as e:
+        except (AwsCrtError, RuntimeError, TimeoutError) as e:
             # Clean up handler on failure if this was the first one
             if (h := self._message_handlers.get(topic)) and callback in h:
                 h.remove(callback)
@@ -275,16 +278,15 @@ class MqttSubscriptionManager:
         _logger.info("Unsubscribing from topic (redacted)")
 
         try:
-            # Convert concurrent.futures.Future to asyncio.Future and await
-            # Use shield to prevent cancellation from propagating to
-            # underlying future
+            # Await the broker acknowledgement with a timeout (see
+            # subscribe() for shielding rationale).
             unsubscribe_future, packet_id = self._connection.unsubscribe(topic)
             try:
-                await asyncio.shield(asyncio.wrap_future(unsubscribe_future))
+                await asyncio.wait_for(
+                    asyncio.shield(asyncio.wrap_future(unsubscribe_future)),
+                    timeout=self._operation_timeout,
+                )
             except asyncio.CancelledError:
-                # Shield was cancelled - the underlying unsubscribe will
-                # complete independently, preventing InvalidStateError
-                # in AWS CRT callbacks
                 _logger.debug(
                     "Unsubscribe from topic (redacted) was "
                     "cancelled but will complete in background"
@@ -299,7 +301,7 @@ class MqttSubscriptionManager:
 
             return int(packet_id)
 
-        except (AwsCrtError, RuntimeError) as e:
+        except (AwsCrtError, RuntimeError, TimeoutError) as e:
             _logger.error(f"Failed to unsubscribe from topic (redacted): {e}")
             raise
 
