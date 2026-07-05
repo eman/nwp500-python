@@ -220,13 +220,13 @@ async def handle_set_mode_request(
     mqtt: NavienMqttClient, device: Device, mode_name: str
 ) -> None:
     """Set device operation mode."""
+    # Vacation mode (5) requires a day count and has its own `vacation`
+    # command; power-off (6) is handled by the `power` command.
     mode_mapping = {
-        "standby": 0,
         "heat-pump": 1,
         "electric": 2,
         "energy-saver": 3,
         "high-demand": 4,
-        "vacation": 5,
     }
     mode_id = mode_mapping.get(mode_name.lower())
     if mode_id is None:

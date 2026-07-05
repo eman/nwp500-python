@@ -830,3 +830,52 @@ class TestRecoverConnectionIntegration:
                 # Verify call order
                 assert call_order == ["ensure_valid_token", "connect"]
                 assert result is True
+
+
+class TestDeviceControllerProxies:
+    """Regression tests for client -> device-controller delegation."""
+
+    @pytest.mark.asyncio
+    async def test_configure_reservation_water_program_delegates(
+        self, auth_client_with_valid_tokens
+    ):
+        """Regression: this proxy referenced a nonexistent self._control."""
+        from unittest.mock import AsyncMock, MagicMock
+
+        mqtt_client = NavienMqttClient(auth_client_with_valid_tokens)
+        mqtt_client._device_controller = AsyncMock()
+        mqtt_client._device_controller.configure_reservation_water_program = (
+            AsyncMock(return_value=1)
+        )
+        device = MagicMock()
+
+        result = await mqtt_client.configure_reservation_water_program(device)
+
+        assert result == 1
+        proxy_target = mqtt_client._device_controller
+        proxy_target.configure_reservation_water_program.assert_awaited_once_with(
+            device
+        )
+
+    def test_no_references_to_undefined_control_attribute(self):
+        """No code may reference self._control (never assigned).
+
+        Uses an AST walk rather than a source substring search so that
+        mentions in comments, docstrings, or examples cannot cause
+        false failures — only actual attribute access counts.
+        """
+        import ast
+        import inspect
+
+        import nwp500.mqtt.client as client_module
+
+        tree = ast.parse(inspect.getsource(client_module))
+        offenders = [
+            node.lineno
+            for node in ast.walk(tree)
+            if isinstance(node, ast.Attribute)
+            and node.attr == "_control"
+            and isinstance(node.value, ast.Name)
+            and node.value.id == "self"
+        ]
+        assert offenders == []

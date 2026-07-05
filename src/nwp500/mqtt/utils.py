@@ -208,6 +208,11 @@ class MqttConnectionConfig:
         deep_reconnect_threshold: Attempt count to trigger full
             connection rebuild
 
+        operation_timeout: Maximum seconds to wait for a broker
+            acknowledgement of an MQTT operation (connect, publish,
+            subscribe, unsubscribe). Prevents callers from hanging
+            forever on half-open TCP connections.
+
         enable_command_queue: Enable command queueing when disconnected
         max_queued_commands: Maximum number of queued commands
         max_queued_command_age: Maximum age in seconds for a queued
@@ -231,6 +236,9 @@ class MqttConnectionConfig:
     deep_reconnect_threshold: int = (
         10  # Switch to full rebuild after N attempts
     )
+
+    # MQTT operation acknowledgement timeout
+    operation_timeout: float = 30.0  # seconds
 
     # Command queue settings
     enable_command_queue: bool = True

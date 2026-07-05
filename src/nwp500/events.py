@@ -245,7 +245,21 @@ class EventEmitter:
         listeners: list[EventListener] = self._listeners[event].copy()
         # Copy to allow modification during iteration
         called_count = 0
-        listeners_to_remove: list[EventListener] = []
+
+        # Remove one-time listeners BEFORE invoking them (synchronously,
+        # in the same event-loop slice as the snapshot):
+        # - a raising callback must not stay registered forever
+        # - concurrent emits each snapshot the list; deferring removal
+        #   until after (awaited) iteration double-fires once-listeners
+        for listener in listeners:
+            if listener.once:
+                if listener in self._listeners.get(event, []):
+                    self._listeners[event].remove(listener)
+                self._once_callbacks.discard((event, listener.callback))
+
+        # Clean up if no listeners left
+        if event in self._listeners and not self._listeners[event]:
+            del self._listeners[event]
 
         for listener in listeners:
             try:
@@ -257,11 +271,6 @@ class EventEmitter:
 
                 called_count += 1
 
-                # Check if this is a once listener
-                if listener.once:
-                    listeners_to_remove.append(listener)
-                    self._once_callbacks.discard((event, listener.callback))
-
             except Exception as e:
                 # Catch all exceptions from user callbacks to ensure
                 # resilience. We intentionally catch Exception here because:
@@ -272,15 +281,6 @@ class EventEmitter:
                     f"Error in '{event}' event handler: {e}",
                     exc_info=True,
                 )
-
-        # Remove one-time listeners after iteration
-        for listener in listeners_to_remove:
-            if listener in self._listeners[event]:
-                self._listeners[event].remove(listener)
-
-        # Clean up if no listeners left
-        if not self._listeners[event]:
-            del self._listeners[event]
 
         # Track event count
         self._event_counts[event] += 1
@@ -391,7 +391,7 @@ class EventEmitter:
             await emitter.wait_for('device_ready', timeout=30)
 
             # Wait for specific condition
-            args, _ = await emitter.wait_for('temperature_changed')
+            args = await emitter.wait_for('temperature_changed')
             temperature_event = args[0]
             current_temp = temperature_event.new_temperature
         """
@@ -416,7 +416,9 @@ class EventEmitter:
             # Return just args for simplicity (most common case)
             return args_tuple
 
-        except TimeoutError:
-            # Remove the listener on timeout
+        finally:
+            # Always unregister: on timeout AND on cancellation. A leaked
+            # once-listener would otherwise stay registered until the
+            # event next fires (setting a result on a dead future).
+            # No-op when the listener already fired (once() removed it).
             self.off(event, handler)
-            raise
