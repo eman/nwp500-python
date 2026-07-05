@@ -858,10 +858,24 @@ class TestDeviceControllerProxies:
         )
 
     def test_no_references_to_undefined_control_attribute(self):
-        """No proxy may reference self._control (never assigned)."""
+        """No code may reference self._control (never assigned).
+
+        Uses an AST walk rather than a source substring search so that
+        mentions in comments, docstrings, or examples cannot cause
+        false failures — only actual attribute access counts.
+        """
+        import ast
         import inspect
 
         import nwp500.mqtt.client as client_module
 
-        source = inspect.getsource(client_module)
-        assert "self._control." not in source
+        tree = ast.parse(inspect.getsource(client_module))
+        offenders = [
+            node.lineno
+            for node in ast.walk(tree)
+            if isinstance(node, ast.Attribute)
+            and node.attr == "_control"
+            and isinstance(node.value, ast.Name)
+            and node.value.id == "self"
+        ]
+        assert offenders == []
