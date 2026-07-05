@@ -398,3 +398,60 @@ class TestTouPriceEncoding:
         )
         assert period["priceMin"] == 500
         assert period["priceMax"] == 75
+
+
+class TestConfigValidation:
+    """MqttConnectionConfig must reject unusable queue settings."""
+
+    def test_zero_max_queued_commands_rejected(self):
+        with pytest.raises(ValueError, match="max_queued_commands"):
+            MqttConnectionConfig(client_id="t", max_queued_commands=0)
+
+    def test_negative_max_queued_commands_rejected(self):
+        with pytest.raises(ValueError, match="max_queued_commands"):
+            MqttConnectionConfig(client_id="t", max_queued_commands=-5)
+
+    def test_negative_max_age_rejected(self):
+        with pytest.raises(ValueError, match="max_queued_command_age"):
+            MqttConnectionConfig(client_id="t", max_queued_command_age=-1.0)
+
+    def test_none_max_age_allowed(self):
+        config = MqttConnectionConfig(
+            client_id="t", max_queued_command_age=None
+        )
+        assert config.max_queued_command_age is None
+
+    def test_zero_max_age_allowed(self):
+        config = MqttConnectionConfig(client_id="t", max_queued_command_age=0.0)
+        assert config.max_queued_command_age == 0.0
+
+    def test_nonpositive_operation_timeout_rejected(self):
+        with pytest.raises(ValueError, match="operation_timeout"):
+            MqttConnectionConfig(client_id="t", operation_timeout=0)
+
+
+class TestEncodePriceDecimalPrecision:
+    """encode_price must not lose precision by round-tripping via float."""
+
+    def test_decimal_input_used_directly(self):
+        from decimal import Decimal
+
+        # A value that is exact as Decimal but not as binary float
+        assert encode_price(Decimal("0.145"), 2) == 15  # HALF_UP on exact half
+
+    def test_high_precision_decimal(self):
+        from decimal import Decimal
+
+        assert encode_price(Decimal("0.1234567895"), 10) == 1234567895
+
+    def test_int_input(self):
+        assert encode_price(100, 0) == 100
+
+    def test_float_input_unchanged_behavior(self):
+        assert encode_price(12.34, 2) == 1234
+        assert encode_price(0.125, 2) == 13
+
+    def test_rawcelsius_to_fahrenheit_returns_float(self):
+        result = RawCelsius(120).to_fahrenheit()
+        assert result == 140.0
+        assert isinstance(result, float)

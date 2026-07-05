@@ -208,6 +208,11 @@ class MqttConnectionConfig:
         deep_reconnect_threshold: Attempt count to trigger full
             connection rebuild
 
+        operation_timeout: Maximum seconds to wait for a broker
+            acknowledgement of an MQTT operation (connect, publish,
+            subscribe, unsubscribe). Prevents callers from hanging
+            forever on half-open TCP connections.
+
         enable_command_queue: Enable command queueing when disconnected
         max_queued_commands: Maximum number of queued commands
         max_queued_command_age: Maximum age in seconds for a queued
@@ -232,6 +237,9 @@ class MqttConnectionConfig:
         10  # Switch to full rebuild after N attempts
     )
 
+    # MQTT operation acknowledgement timeout
+    operation_timeout: float = 30.0  # seconds
+
     # Command queue settings
     enable_command_queue: bool = True
     max_queued_commands: int = 100
@@ -245,6 +253,26 @@ class MqttConnectionConfig:
             )
         if self.deep_reconnect_threshold < 1:
             object.__setattr__(self, "deep_reconnect_threshold", 1)
+        # Validate queue settings up front: a non-positive queue size
+        # would make enqueue() fail at runtime in hard-to-debug ways,
+        # and a negative max age would silently expire every command.
+        if self.max_queued_commands < 1:
+            raise ValueError(
+                "max_queued_commands must be >= 1, got "
+                f"{self.max_queued_commands}"
+            )
+        if (
+            self.max_queued_command_age is not None
+            and self.max_queued_command_age < 0
+        ):
+            raise ValueError(
+                "max_queued_command_age must be >= 0 or None, got "
+                f"{self.max_queued_command_age}"
+            )
+        if self.operation_timeout <= 0:
+            raise ValueError(
+                f"operation_timeout must be > 0, got {self.operation_timeout}"
+            )
 
 
 @dataclass

@@ -162,7 +162,7 @@ class RawCelsius(Temperature):
         >>> temp.to_celsius()
         60.0
         >>> temp.to_fahrenheit()
-        140
+        140.0
     """
 
     _scale: ClassVar[float] = 2.0
@@ -171,9 +171,10 @@ class RawCelsius(Temperature):
         """Convert to Fahrenheit using standard rounding.
 
         Returns:
-            Temperature in Fahrenheit.
+            Temperature in Fahrenheit (rounded to a whole degree, but
+            returned as float for consistency with the base class API).
         """
-        return round(super().to_fahrenheit())
+        return float(round(super().to_fahrenheit()))
 
     def to_fahrenheit_with_formula(
         self, formula_type: TempFormulaType

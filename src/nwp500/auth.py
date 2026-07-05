@@ -13,6 +13,7 @@ The API uses JWT (JSON Web Tokens) for authentication with the following flow:
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 from datetime import UTC, datetime, timedelta
@@ -338,6 +339,12 @@ class NavienAuthClient:
         self._auth_response: AuthenticationResponse | None = None
         self._user_email: str | None = None
 
+        # Serializes token refresh / re-authentication so concurrent
+        # callers (API 401 retry, MQTT reconnect, periodic requests)
+        # cannot stampede the refresh endpoint and invalidate each
+        # other's tokens.
+        self._refresh_lock = asyncio.Lock()
+
         # Restore tokens if provided
         if stored_tokens:
             # Create a minimal AuthenticationResponse with stored tokens
@@ -349,27 +356,53 @@ class NavienAuthClient:
             self._user_email = user_id
 
     async def __aenter__(self) -> Self:
-        """Async context manager entry."""
-        if self._owned_session:
+        """Async context manager entry.
+
+        Idempotent with respect to session creation: entering an
+        already-entered client reuses the existing session instead of
+        creating (and orphaning) a new one.
+
+        If authentication fails, the owned session is closed before the
+        exception propagates, because ``__aexit__`` is never called when
+        ``__aenter__`` raises.
+        """
+        if self._owned_session and self._session is None:
             self._session = self._create_session()
 
-        # Check if we have valid stored tokens
-        if self._auth_response and self._auth_response.tokens:
-            tokens = self._auth_response.tokens
-            # If tokens are expired, refresh or re-authenticate
-            if tokens.are_aws_credentials_expired:
-                _logger.info(
-                    "Stored AWS credentials expired, re-authenticating..."
-                )
-                await self.sign_in(self._user_id, self._password)
-            elif tokens.is_expired:
-                _logger.info("Stored JWT token expired, refreshing...")
-                await self.refresh_token(tokens.refresh_token)
+        try:
+            # Check if we have valid stored tokens
+            if self._auth_response and self._auth_response.tokens:
+                tokens = self._auth_response.tokens
+                # If tokens are expired, refresh or re-authenticate
+                if tokens.are_aws_credentials_expired:
+                    _logger.info(
+                        "Stored AWS credentials expired, re-authenticating..."
+                    )
+                    await self.sign_in(self._user_id, self._password)
+                elif tokens.is_expired:
+                    _logger.info("Stored JWT token expired, refreshing...")
+                    try:
+                        await self.refresh_token(tokens.refresh_token)
+                    except TokenRefreshError as e:
+                        if not self.has_stored_credentials:
+                            raise
+                        _logger.warning(
+                            "Stored token refresh failed: %s. Falling back "
+                            "to full sign-in...",
+                            e,
+                        )
+                        await self.sign_in(self._user_id, self._password)
+                else:
+                    _logger.info("Using stored tokens, skipping authentication")
             else:
-                _logger.info("Using stored tokens, skipping authentication")
-        else:
-            # No stored tokens, perform full authentication
-            await self.sign_in(self._user_id, self._password)
+                # No stored tokens, perform full authentication
+                await self.sign_in(self._user_id, self._password)
+        except BaseException:
+            # __aexit__ won't run; don't leak the owned session.
+            if self._owned_session and self._session:
+                await self._session.close()
+                self._session = None
+            raise
 
         return self
 
@@ -377,6 +410,7 @@ class NavienAuthClient:
         """Async context manager exit."""
         if self._owned_session and self._session:
             await self._session.close()
+            self._session = None
 
     def _create_session(self) -> aiohttp.ClientSession:
         """Create an aiohttp ClientSession with ThreadedResolver.
@@ -487,6 +521,11 @@ class NavienAuthClient:
         """
         Refresh access token using refresh token.
 
+        Refreshes are serialized: if another task is already refreshing,
+        this call waits for it and — when no explicit ``refresh_token``
+        was given and the stored tokens are now valid — returns the
+        already-refreshed tokens instead of issuing a duplicate request.
+
         Args:
             refresh_token: The refresh token obtained from sign-in.
                 If not provided, uses the stored refresh token.
@@ -497,6 +536,25 @@ class NavienAuthClient:
         Raises:
             TokenRefreshError: If token refresh fails or no token available
         """
+        async with self._refresh_lock:
+            current = self.current_tokens
+            # Another task may have refreshed while we waited for the
+            # lock; don't hit the endpoint again with valid tokens. An
+            # explicit refresh_token equal to the stored one is a forced
+            # refresh and proceeds; a differing one is stale (rotated by
+            # the concurrent refresh) and would be rejected anyway.
+            if (
+                current
+                and not current.is_expired
+                and refresh_token != current.refresh_token
+            ):
+                return current
+            return await self._refresh_token_unlocked(refresh_token)
+
+    async def _refresh_token_unlocked(
+        self, refresh_token: str | None = None
+    ) -> AuthTokens:
+        """Perform the actual token refresh. Caller must hold _refresh_lock."""
         if refresh_token is None:
             if self._auth_response and self._auth_response.tokens.refresh_token:
                 refresh_token = self._auth_response.tokens.refresh_token
@@ -531,10 +589,20 @@ class NavienAuthClient:
                 data = response_data.get("data", {})
                 new_tokens = AuthTokens.model_validate(data)
 
-                # Preserve AWS credentials from old tokens if not in refresh
-                # response
+                # Preserve fields the refresh response may omit. The
+                # refresh endpoint does not return AWS credentials, and it
+                # may not echo the refresh token itself — without this,
+                # new_tokens.refresh_token would be "" and every
+                # subsequent refresh would fail.
                 if self._auth_response and self._auth_response.tokens:
                     old_tokens = self._auth_response.tokens
+                    if (
+                        not new_tokens.refresh_token
+                        and old_tokens.refresh_token
+                    ):
+                        new_tokens.refresh_token = old_tokens.refresh_token
+                    if not new_tokens.id_token and old_tokens.id_token:
+                        new_tokens.id_token = old_tokens.id_token
                     if (
                         not new_tokens.access_key_id
                         and old_tokens.access_key_id
@@ -631,15 +699,28 @@ class NavienAuthClient:
 
         # Check if AWS credentials have expired
         if tokens.are_aws_credentials_expired:
-            _logger.info("AWS credentials expired, re-authenticating...")
-            # Re-authenticate to get fresh AWS credentials
-            await self.sign_in(self._user_id, self._password)
-            return self._auth_response.tokens if self._auth_response else None
+            async with self._refresh_lock:
+                # Re-check after acquiring the lock: another task may have
+                # re-authenticated while we waited.
+                if not self._auth_response:
+                    return None
+                tokens = self._auth_response.tokens
+                if tokens.are_aws_credentials_expired:
+                    _logger.info(
+                        "AWS credentials expired, re-authenticating..."
+                    )
+                    # Re-authenticate to get fresh AWS credentials
+                    await self.sign_in(self._user_id, self._password)
+                return (
+                    self._auth_response.tokens if self._auth_response else None
+                )
 
-        # Check if JWT token has expired
+        # Check if JWT token has expired. refresh_token() serializes
+        # concurrent refreshes and returns the already-refreshed tokens
+        # to callers that lost the race.
         if tokens.is_expired:
             _logger.info("Token expired, refreshing...")
-            return await self.refresh_token(tokens.refresh_token)
+            return await self.refresh_token()
 
         return tokens
 
@@ -789,8 +870,9 @@ async def refresh_access_token(refresh_token: str) -> AuthTokens:
     # Use ThreadedResolver for reliable DNS in containerized environments
     resolver = aiohttp.ThreadedResolver()
     connector = aiohttp.TCPConnector(resolver=resolver)
+    timeout = aiohttp.ClientTimeout(total=30)
     async with (
-        aiohttp.ClientSession(connector=connector) as session,
+        aiohttp.ClientSession(connector=connector, timeout=timeout) as session,
         session.post(url, json=payload) as response,
     ):
         response_data = await response.json()

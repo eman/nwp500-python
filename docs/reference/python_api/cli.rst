@@ -224,12 +224,6 @@ Set operation mode.
    # High Demand (maximum capacity)
    python3 -m nwp500.cli mode high-demand
 
-   # Vacation Mode
-   python3 -m nwp500.cli mode vacation
-
-   # Standby
-   python3 -m nwp500.cli mode standby
-
 **Syntax:**
 
 .. code-block:: bash
@@ -238,12 +232,13 @@ Set operation mode.
 
 **Available Modes:**
 
-* ``standby`` - Device off but ready
-* ``heat-pump`` - Heat pump only (0)
+* ``heat-pump`` - Heat pump only (1)
 * ``electric`` - Electric heating only (2)
 * ``energy-saver`` - Hybrid/balanced mode (3) **recommended**
 * ``high-demand`` - Maximum heating capacity (4)
-* ``vacation`` - Extended vacancy mode (5)
+
+For vacation mode use the ``vacation`` command (it requires a day count);
+to power the unit off use the ``power`` command.
 
 **Output:** Confirmation message and updated device status.
 
