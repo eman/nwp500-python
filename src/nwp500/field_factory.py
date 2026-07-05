@@ -34,6 +34,39 @@ __all__ = [
 ]
 
 
+def _metadata_field(
+    description: str,
+    metadata: dict[str, Any],
+    default: Any,
+    kwargs: dict[str, Any],
+) -> Any:
+    """Build a Pydantic Field with device metadata in json_schema_extra.
+
+    Args:
+        description: Field description
+        metadata: Base json_schema_extra metadata for this field type
+        default: Default value or Pydantic default
+        kwargs: Additional Pydantic Field arguments; a caller-provided
+            json_schema_extra dict is merged over the base metadata
+
+    Returns:
+        Pydantic Field with the merged metadata
+    """
+    json_schema_extra = dict(metadata)
+    if "json_schema_extra" in kwargs:
+        extra = kwargs.pop("json_schema_extra")
+        if isinstance(extra, dict):
+            # Explicitly cast to dict[str, Any] for type safety
+            json_schema_extra.update(cast(dict[str, Any], extra))
+
+    return Field(
+        default=default,
+        description=description,
+        json_schema_extra=json_schema_extra,
+        **kwargs,
+    )
+
+
 def temperature_field(
     description: str,
     *,
@@ -60,23 +93,15 @@ def temperature_field(
     Returns:
         Pydantic Field with temperature metadata
     """
-    json_schema_extra: dict[str, Any] = {
-        "unit_of_measurement": unit,
-        "device_class": "temperature",
-        "suggested_display_precision": 1,
-    }
-    if "json_schema_extra" in kwargs:
-        extra = kwargs.pop("json_schema_extra")
-        if isinstance(extra, dict):
-            # Explicitly cast to dict[str, Any] for type safety
-            typed_extra = cast(dict[str, Any], extra)
-            json_schema_extra.update(typed_extra)
-
-    return Field(
-        default=default,
-        description=description,
-        json_schema_extra=json_schema_extra,
-        **kwargs,
+    return _metadata_field(
+        description,
+        {
+            "unit_of_measurement": unit,
+            "device_class": "temperature",
+            "suggested_display_precision": 1,
+        },
+        default,
+        kwargs,
     )
 
 
@@ -98,22 +123,11 @@ def signal_strength_field(
     Returns:
         Pydantic Field with signal strength metadata
     """
-    json_schema_extra: dict[str, Any] = {
-        "unit_of_measurement": unit,
-        "device_class": "signal_strength",
-    }
-    if "json_schema_extra" in kwargs:
-        extra = kwargs.pop("json_schema_extra")
-        if isinstance(extra, dict):
-            # Explicitly cast to dict[str, Any] for type safety
-            typed_extra = cast(dict[str, Any], extra)
-            json_schema_extra.update(typed_extra)
-
-    return Field(
-        default=default,
-        description=description,
-        json_schema_extra=json_schema_extra,
-        **kwargs,
+    return _metadata_field(
+        description,
+        {"unit_of_measurement": unit, "device_class": "signal_strength"},
+        default,
+        kwargs,
     )
 
 
@@ -135,22 +149,11 @@ def energy_field(
     Returns:
         Pydantic Field with energy metadata
     """
-    json_schema_extra: dict[str, Any] = {
-        "unit_of_measurement": unit,
-        "device_class": "energy",
-    }
-    if "json_schema_extra" in kwargs:
-        extra = kwargs.pop("json_schema_extra")
-        if isinstance(extra, dict):
-            # Explicitly cast to dict[str, Any] for type safety
-            typed_extra = cast(dict[str, Any], extra)
-            json_schema_extra.update(typed_extra)
-
-    return Field(
-        default=default,
-        description=description,
-        json_schema_extra=json_schema_extra,
-        **kwargs,
+    return _metadata_field(
+        description,
+        {"unit_of_measurement": unit, "device_class": "energy"},
+        default,
+        kwargs,
     )
 
 
@@ -172,20 +175,9 @@ def power_field(
     Returns:
         Pydantic Field with power metadata
     """
-    json_schema_extra: dict[str, Any] = {
-        "unit_of_measurement": unit,
-        "device_class": "power",
-    }
-    if "json_schema_extra" in kwargs:
-        extra = kwargs.pop("json_schema_extra")
-        if isinstance(extra, dict):
-            # Explicitly cast to dict[str, Any] for type safety
-            typed_extra = cast(dict[str, Any], extra)
-            json_schema_extra.update(typed_extra)
-
-    return Field(
-        default=default,
-        description=description,
-        json_schema_extra=json_schema_extra,
-        **kwargs,
+    return _metadata_field(
+        description,
+        {"unit_of_measurement": unit, "device_class": "power"},
+        default,
+        kwargs,
     )

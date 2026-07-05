@@ -467,7 +467,7 @@ update_reservations()
 
    .. code-block:: python
 
-      from nwp500 import build_reservation_entry
+      from nwp500.encoding import build_reservation_entry
 
       reservations = [
           build_reservation_entry(

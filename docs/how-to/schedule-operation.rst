@@ -64,8 +64,8 @@ Quick Example
        NavienAuthClient,
        NavienAPIClient,
        NavienMqttClient,
-       build_reservation_entry,
    )
+   from nwp500.encoding import build_reservation_entry
 
    async def main():
        async with NavienAuthClient(
@@ -279,7 +279,7 @@ Helper Functions
 
 .. code-block:: python
 
-   from nwp500 import build_reservation_entry
+   from nwp500.encoding import build_reservation_entry
 
    entry = build_reservation_entry(
        enabled=True,
@@ -589,8 +589,8 @@ want to send the whole weekly program as one typed object.
    from nwp500 import (
        WeeklyReservationEntry,
        WeeklyReservationSchedule,
-       build_reservation_entry,
    )
+   from nwp500.encoding import build_reservation_entry
 
    morning = WeeklyReservationEntry.model_validate(
        build_reservation_entry(

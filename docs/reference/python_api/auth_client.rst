@@ -529,7 +529,6 @@ Error Handling
 
    from nwp500 import (
        InvalidCredentialsError,
-       TokenExpiredError,
        TokenRefreshError,
        AuthenticationError
    )
@@ -542,9 +541,6 @@ Error Handling
        
        except InvalidCredentialsError:
            print("Wrong email or password")
-       
-       except TokenExpiredError:
-           print("Token expired and refresh failed")
        
        except TokenRefreshError:
            print("Could not refresh token - sign in again")

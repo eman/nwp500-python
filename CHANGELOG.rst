@@ -5,6 +5,74 @@ Changelog
 Unreleased
 ==========
 
+**BREAKING CHANGES**: Public API surface trimmed and dead code removed.
+These changes require a major version bump.
+
+Removed
+-------
+- **Deprecated ``.control`` property**: removed
+  ``NavienMqttClient.control`` (deprecated shim slated for v9.0.0; the
+  project policy is to remove rather than deprecate). Use the delegated
+  methods on the client directly:
+
+  .. code-block:: python
+
+     # OLD (removed)
+     await client.control.set_power(device, True)
+
+     # NEW
+     await client.set_power(device, True)
+
+- **Unused exception classes**: removed ``TokenExpiredError``,
+  ``MqttSubscriptionError``, ``DeviceNotFoundError``,
+  ``DeviceOfflineError``, and ``DeviceOperationError``. None of them was
+  ever raised by the library, so no working error handling can break;
+  catch the parent classes (``AuthenticationError``, ``MqttError``,
+  ``DeviceError``) instead.
+- **Internal plumbing removed from the top-level namespace**: the
+  package no longer re-exports ``requires_capability``,
+  ``MqttDeviceInfoCache``, ``MqttDeviceCapabilityChecker``,
+  ``log_performance``, or the bit-encoding helpers
+  (``encode_week_bitfield``, ``decode_week_bitfield``,
+  ``encode_season_bitfield``, ``decode_season_bitfield``,
+  ``encode_price``, ``decode_price``, ``build_reservation_entry``,
+  ``build_tou_period``). Import them from their owning modules:
+
+  .. code-block:: python
+
+     # OLD (removed)
+     from nwp500 import build_reservation_entry, encode_price
+
+     # NEW
+     from nwp500.encoding import build_reservation_entry, encode_price
+
+- **Dead code**: removed the never-imported ``nwp500.cli.commands``
+  module (its metadata had drifted from the real click commands), the
+  unused ``converters.str_enum_validator``, the unused module-level
+  ``temperature.half_celsius_to_fahrenheit`` /
+  ``deci_celsius_to_fahrenheit`` wrappers, the no-op
+  ``NavienMqttClient._on_message_received`` placeholder, and unused
+  width calculations in the CLI formatters.
+
+Changed
+-------
+- **Temperature classes deduplicated**: ``HalfCelsius``, ``DeciCelsius``,
+  ``RawCelsius``, and ``DeciCelsiusDelta`` were four near-identical
+  copies differing only in a scale constant. All conversions are now
+  implemented once on the ``Temperature`` base class with a per-class
+  ``_scale``; only special rounding (``RawCelsius``) and delta semantics
+  (``DeciCelsiusDelta``) are overridden. Behavior is unchanged
+  (~200 lines removed).
+- **field_factory deduplicated**: the four field factories shared a
+  copy-pasted metadata-merge block, now extracted into a single private
+  helper. Behavior is unchanged.
+- **Device boolean encoding centralized**: ``mqtt/control.py`` now uses
+  ``converters.device_bool_from_python()`` instead of inline
+  ``2 if enabled else 1`` literals.
+- **Version resolution decoupled**: ``auth.py`` resolves the package
+  version from distribution metadata instead of ``from . import
+  __version__``, removing an order-dependent near-circular import.
+
 Bug Fixes
 ---------
 - **Fix malformed weekly reservation and recirculation schedule

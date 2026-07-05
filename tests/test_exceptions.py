@@ -6,20 +6,15 @@ from nwp500.exceptions import (
     APIError,
     AuthenticationError,
     DeviceError,
-    DeviceNotFoundError,
-    DeviceOfflineError,
-    DeviceOperationError,
     InvalidCredentialsError,
     MqttConnectionError,
     MqttCredentialsError,
     MqttError,
     MqttNotConnectedError,
     MqttPublishError,
-    MqttSubscriptionError,
     Nwp500Error,
     ParameterValidationError,
     RangeValidationError,
-    TokenExpiredError,
     TokenRefreshError,
     ValidationError,
 )
@@ -39,7 +34,6 @@ class TestExceptionHierarchy:
     def test_authentication_exception_hierarchy(self):
         """Test authentication exception inheritance."""
         assert issubclass(InvalidCredentialsError, AuthenticationError)
-        assert issubclass(TokenExpiredError, AuthenticationError)
         assert issubclass(TokenRefreshError, AuthenticationError)
 
     def test_mqtt_exception_hierarchy(self):
@@ -47,19 +41,12 @@ class TestExceptionHierarchy:
         assert issubclass(MqttConnectionError, MqttError)
         assert issubclass(MqttNotConnectedError, MqttError)
         assert issubclass(MqttPublishError, MqttError)
-        assert issubclass(MqttSubscriptionError, MqttError)
         assert issubclass(MqttCredentialsError, MqttError)
 
     def test_validation_exception_hierarchy(self):
         """Test validation exception inheritance."""
         assert issubclass(ParameterValidationError, ValidationError)
         assert issubclass(RangeValidationError, ValidationError)
-
-    def test_device_exception_hierarchy(self):
-        """Test device exception inheritance."""
-        assert issubclass(DeviceNotFoundError, DeviceError)
-        assert issubclass(DeviceOfflineError, DeviceError)
-        assert issubclass(DeviceOperationError, DeviceError)
 
     def test_all_inherit_from_base_exception(self):
         """Test that all custom exceptions inherit from Exception."""
@@ -161,12 +148,6 @@ class TestAuthenticationExceptions:
         assert error.message == "Invalid password"
         assert error.status_code == 401
 
-    def test_token_expired_error(self):
-        """Test TokenExpiredError."""
-        error = TokenExpiredError("Token has expired")
-        assert isinstance(error, AuthenticationError)
-        assert error.message == "Token has expired"
-
     def test_token_refresh_error(self):
         """Test TokenRefreshError."""
         error = TokenRefreshError("Refresh failed", status_code=400)
@@ -213,11 +194,6 @@ class TestMQTTExceptions:
         assert isinstance(error, MqttError)
         assert error.retriable is True
         assert error.error_code == "PUB_001"
-
-    def test_mqtt_subscription_error(self):
-        """Test MqttSubscriptionError."""
-        error = MqttSubscriptionError("Subscribe failed")
-        assert isinstance(error, MqttError)
 
     def test_mqtt_credentials_error(self):
         """Test MqttCredentialsError."""
@@ -269,21 +245,6 @@ class TestValidationExceptions:
 
 class TestDeviceExceptions:
     """Test device-related exceptions."""
-
-    def test_device_not_found_error(self):
-        """Test DeviceNotFoundError."""
-        error = DeviceNotFoundError("Device ABC123 not found")
-        assert isinstance(error, DeviceError)
-
-    def test_device_offline_error(self):
-        """Test DeviceOfflineError."""
-        error = DeviceOfflineError("Device is offline")
-        assert isinstance(error, DeviceError)
-
-    def test_device_operation_error(self):
-        """Test DeviceOperationError."""
-        error = DeviceOperationError("Failed to change mode")
-        assert isinstance(error, DeviceError)
 
 
 class TestExceptionChaining:

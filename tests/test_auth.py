@@ -15,7 +15,6 @@ from nwp500.auth import (
 from nwp500.exceptions import (
     AuthenticationError,
     InvalidCredentialsError,
-    TokenExpiredError,
     TokenRefreshError,
 )
 
@@ -343,14 +342,6 @@ def test_invalid_credentials_error():
 
     assert str(error) == "Invalid password"
     assert error.status_code == 401
-    assert isinstance(error, AuthenticationError)
-
-
-def test_token_expired_error():
-    """Test TokenExpiredError exception."""
-    error = TokenExpiredError("Token expired")
-
-    assert str(error) == "Token expired"
     assert isinstance(error, AuthenticationError)
 
 

@@ -26,6 +26,7 @@ from typing import Any
 
 from ..command_decorators import requires_capability
 from ..config import MQTT_PROTOCOL_VERSION
+from ..converters import device_bool_from_python
 from ..device_capabilities import MqttDeviceCapabilityChecker
 from ..device_info_cache import MqttDeviceInfoCache
 from ..enums import CommandCode, DhwOperationSetting
@@ -460,7 +461,7 @@ class MqttDeviceController:
         # See docs/protocol/mqtt_protocol.rst "Reservation Management" for the
         # command code (16777226) and the reservation object fields
         # (enable, week, hour, min, mode, param).
-        reservation_use = 2 if enabled else 1
+        reservation_use = device_bool_from_python(enabled)
         reservation_payload = [dict(entry) for entry in reservations]
 
         return await self._send_command(
@@ -527,7 +528,7 @@ class MqttDeviceController:
                 "At least one TOU period must be provided", parameter="periods"
             )
 
-        reservation_use = 2 if enabled else 1
+        reservation_use = device_bool_from_python(enabled)
         reservation_payload = [dict(period) for period in periods]
 
         return await self._send_command(

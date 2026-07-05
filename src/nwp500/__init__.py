@@ -32,25 +32,6 @@ from nwp500.auth import (
     authenticate,
     refresh_access_token,
 )
-from nwp500.command_decorators import (
-    requires_capability,
-)
-from nwp500.device_capabilities import (
-    MqttDeviceCapabilityChecker,
-)
-from nwp500.device_info_cache import (
-    MqttDeviceInfoCache,
-)
-from nwp500.encoding import (
-    build_reservation_entry,
-    build_tou_period,
-    decode_price,
-    decode_season_bitfield,
-    decode_week_bitfield,
-    encode_price,
-    encode_season_bitfield,
-    encode_week_bitfield,
-)
 from nwp500.enums import (
     CommandCode,
     CurrentOperationMode,
@@ -79,20 +60,15 @@ from nwp500.exceptions import (
     AuthenticationError,
     DeviceCapabilityError,
     DeviceError,
-    DeviceNotFoundError,
-    DeviceOfflineError,
-    DeviceOperationError,
     InvalidCredentialsError,
     MqttConnectionError,
     MqttCredentialsError,
     MqttError,
     MqttNotConnectedError,
     MqttPublishError,
-    MqttSubscriptionError,
     Nwp500Error,
     ParameterValidationError,
     RangeValidationError,
-    TokenExpiredError,
     TokenRefreshError,
     ValidationError,
 )
@@ -154,17 +130,11 @@ from nwp500.unit_system import (
     reset_unit_system,
     set_unit_system,
 )
-from nwp500.utils import (
-    log_performance,
-)
 
 __all__ = [
     "__version__",
-    # Device Capabilities & Caching
-    "MqttDeviceCapabilityChecker",
+    # Device Capabilities
     "DeviceCapabilityError",
-    "MqttDeviceInfoCache",
-    "requires_capability",
     # Factory functions
     "create_navien_clients",
     # Models
@@ -225,22 +195,17 @@ __all__ = [
     "Nwp500Error",
     "AuthenticationError",
     "InvalidCredentialsError",
-    "TokenExpiredError",
     "TokenRefreshError",
     "APIError",
     "MqttError",
     "MqttConnectionError",
     "MqttNotConnectedError",
     "MqttPublishError",
-    "MqttSubscriptionError",
     "MqttCredentialsError",
     "ValidationError",
     "ParameterValidationError",
     "RangeValidationError",
     "DeviceError",
-    "DeviceNotFoundError",
-    "DeviceOfflineError",
-    "DeviceOperationError",
     # API Client
     "NavienAPIClient",
     # OpenEI Client
@@ -262,17 +227,6 @@ __all__ = [
     "EventEmitter",
     "EventListener",
     "MqttClientEvents",
-    # Encoding utilities
-    "encode_week_bitfield",
-    "decode_week_bitfield",
-    "encode_season_bitfield",
-    "decode_season_bitfield",
-    "encode_price",
-    "decode_price",
-    "build_reservation_entry",
-    "build_tou_period",
-    # Utilities
-    "log_performance",
     # Unit system management
     "set_unit_system",
     "get_unit_system",

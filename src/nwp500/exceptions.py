@@ -9,22 +9,17 @@ Exception Hierarchy::
     Nwp500Error (base)
     ├── AuthenticationError
     │   ├── InvalidCredentialsError
-    │   ├── TokenExpiredError
     │   └── TokenRefreshError
     ├── APIError
     ├── MqttError
     │   ├── MqttConnectionError
     │   ├── MqttNotConnectedError
     │   ├── MqttPublishError
-    │   ├── MqttSubscriptionError
     │   └── MqttCredentialsError
     ├── ValidationError
     │   ├── ParameterValidationError
     │   └── RangeValidationError
     └── DeviceError
-        ├── DeviceNotFoundError
-        ├── DeviceOfflineError
-        ├── DeviceOperationError
         └── DeviceCapabilityError
 
 Migration from v4.x
@@ -181,16 +176,6 @@ class InvalidCredentialsError(AuthenticationError):
     pass
 
 
-class TokenExpiredError(AuthenticationError):
-    """Raised when an authentication token has expired.
-
-    Tokens have a limited lifetime and must be refreshed periodically.
-    This exception indicates that a token has passed its expiration time.
-    """
-
-    pass
-
-
 class TokenRefreshError(AuthenticationError):
     """Raised when token refresh operation fails.
 
@@ -287,16 +272,6 @@ class MqttPublishError(MqttError):
     Raised when a message cannot be published to an MQTT topic. This may
     occur during connection interruptions or when the broker rejects the
     message.
-    """
-
-    pass
-
-
-class MqttSubscriptionError(MqttError):
-    """Failed to subscribe to MQTT topic.
-
-    Raised when subscription to an MQTT topic fails. This may occur if the
-    connection is interrupted or if the client lacks permissions for the topic.
     """
 
     pass
@@ -411,38 +386,6 @@ class DeviceError(Nwp500Error):
     """Base exception for device operations.
 
     All device-related errors inherit from this base class.
-    """
-
-    pass
-
-
-class DeviceNotFoundError(DeviceError):
-    """Requested device not found.
-
-    Raised when a device cannot be found in the user's device list or
-    when attempting to access a non-existent device.
-    """
-
-    pass
-
-
-class DeviceOfflineError(DeviceError):
-    """Device is offline or unreachable.
-
-    Raised when a device is offline and cannot respond to commands or
-    status requests. The device may be powered off, disconnected from
-    the network, or experiencing connectivity issues.
-    """
-
-    pass
-
-
-class DeviceOperationError(DeviceError):
-    """Device operation failed.
-
-    Raised when a device operation (mode change, temperature setting, etc.)
-    fails. This may occur due to invalid commands, device restrictions,
-    or device-side errors.
     """
 
     pass
