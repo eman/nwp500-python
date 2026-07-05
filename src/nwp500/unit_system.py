@@ -8,8 +8,6 @@ The unit system preference can be set at library initialization and is used
 during model validation to convert device values to the user's preferred units.
 """
 
-from __future__ import annotations
-
 import contextvars
 import logging
 from typing import Literal

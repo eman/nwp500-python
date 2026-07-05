@@ -5,8 +5,6 @@ enum serialization) so that both the authentication models and the device
 protocol models share a single base class.
 """
 
-from __future__ import annotations
-
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict

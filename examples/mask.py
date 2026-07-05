@@ -4,8 +4,6 @@ Place this file in the examples/ directory. Example scripts will try to import
 these helpers; if that import fails we leave a small fallback in each script.
 """
 
-from __future__ import annotations
-
 import re
 
 

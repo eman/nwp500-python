@@ -1,9 +1,8 @@
 """Token storage and management for CLI authentication."""
 
-from __future__ import annotations
-
 import json
 import logging
+import os
 from pathlib import Path
 
 from nwp500.auth import AuthTokens
@@ -22,7 +21,11 @@ def save_tokens(tokens: AuthTokens, email: str) -> None:
         email: User email address
     """
     try:
-        with open(TOKEN_FILE, "w") as f:
+        # Tokens grant account access; keep the file owner-readable only.
+        # O_CREAT mode only applies to new files, so chmod existing ones.
+        fd = os.open(TOKEN_FILE, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        with os.fdopen(fd, "w") as f:
+            TOKEN_FILE.chmod(0o600)
             # Use the built-in to_dict() method for serialization
             token_data = tokens.to_dict()
             token_data["email"] = email
@@ -42,7 +45,7 @@ def load_tokens() -> tuple[AuthTokens | None, str | None]:
     if not TOKEN_FILE.exists():
         return None, None
     try:
-        with open(TOKEN_FILE) as f:
+        with TOKEN_FILE.open() as f:
             data = json.load(f)
             email = data.get("email")
             if not email:

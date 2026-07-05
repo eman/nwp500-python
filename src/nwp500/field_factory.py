@@ -20,8 +20,6 @@ Example:
     ...     temp: float = temperature_field("DHW Temperature", unit="°F")
 """
 
-from __future__ import annotations
-
 from typing import Any, cast
 
 from pydantic import Field

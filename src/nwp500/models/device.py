@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 from typing import Annotated, Self
 
 from pydantic import BeforeValidator

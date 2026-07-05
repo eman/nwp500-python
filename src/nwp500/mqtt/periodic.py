@@ -9,8 +9,6 @@ and status up-to-date. Features include:
 - Per-device, per-type task management
 """
 
-from __future__ import annotations
-
 import asyncio
 import contextlib
 import logging
@@ -169,10 +167,11 @@ class MqttPeriodicRequestManager:
                             consecutive_skips = 0
 
                         # Send appropriate request type
-                        if request_type == PeriodicRequestType.DEVICE_INFO:
-                            await self._request_device_info(device)
-                        elif request_type == PeriodicRequestType.DEVICE_STATUS:
-                            await self._request_device_status(device)
+                        match request_type:
+                            case PeriodicRequestType.DEVICE_INFO:
+                                await self._request_device_info(device)
+                            case PeriodicRequestType.DEVICE_STATUS:
+                                await self._request_device_status(device)
 
                         _logger.debug(
                             "Sent periodic %s request for %s",

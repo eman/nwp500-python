@@ -1,7 +1,6 @@
 """Rich-enhanced output formatting with graceful fallback."""
 
-from __future__ import annotations
-
+import itertools
 import json
 import logging
 import os
@@ -142,7 +141,7 @@ def _collapse_ranges(
 
     # Build groups of consecutive items
     groups: list[list[Any]] = [[items[0]]]
-    for prev, curr in zip(items, items[1:], strict=False):
+    for prev, curr in itertools.pairwise(items):
         if isinstance(prev, int):
             consecutive = (curr - prev) == 1 or (
                 prev == cycle_size and curr == 1

@@ -275,7 +275,7 @@ class MqttDiagnosticsExample:
 
                     # Final export
                     _logger.info("Exporting final diagnostics...")
-                    timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+                    timestamp = datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
                     final_file = self.output_dir / f"diagnostics_final_{timestamp}.json"
                     with open(final_file, "w") as f:
                         f.write(self.diagnostics.export_json())

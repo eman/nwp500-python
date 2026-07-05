@@ -28,8 +28,6 @@ Example::
         print(event_name)
 """
 
-from __future__ import annotations
-
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, cast
 
@@ -38,7 +36,7 @@ if TYPE_CHECKING:
     from .models import DeviceFeature, DeviceStatus
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class ConnectionInterruptedEvent:
     """Emitted when MQTT connection is interrupted.
 
@@ -49,7 +47,7 @@ class ConnectionInterruptedEvent:
     error: Exception
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class ConnectionResumedEvent:
     """Emitted when MQTT connection is resumed after interruption.
 
@@ -62,7 +60,7 @@ class ConnectionResumedEvent:
     session_present: bool
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class StatusReceivedEvent:
     """Emitted when a device status message is received.
 
@@ -75,7 +73,7 @@ class StatusReceivedEvent:
     status: DeviceStatus
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class TemperatureChangedEvent:
     """Emitted when the DHW temperature changes.
 
@@ -92,7 +90,7 @@ class TemperatureChangedEvent:
     new_temperature: float
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class ModeChangedEvent:
     """Emitted when the device operation mode changes.
 
@@ -107,7 +105,7 @@ class ModeChangedEvent:
     new_mode: CurrentOperationMode
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class PowerChangedEvent:
     """Emitted when instantaneous power consumption changes.
 
@@ -122,7 +120,7 @@ class PowerChangedEvent:
     new_power: float
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class HeatingStartedEvent:
     """Emitted when device transitions from idle to heating.
 
@@ -135,7 +133,7 @@ class HeatingStartedEvent:
     status: DeviceStatus
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class HeatingStoppedEvent:
     """Emitted when device transitions from heating to idle.
 
@@ -148,7 +146,7 @@ class HeatingStoppedEvent:
     status: DeviceStatus
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class ErrorDetectedEvent:
     """Emitted when a device error is first detected.
 
@@ -163,7 +161,7 @@ class ErrorDetectedEvent:
     status: DeviceStatus
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class ErrorClearedEvent:
     """Emitted when a device error is resolved.
 
@@ -176,7 +174,7 @@ class ErrorClearedEvent:
     error_code: ErrorCode
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class FeatureReceivedEvent:
     """Emitted when device feature information is received.
 

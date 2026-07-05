@@ -245,10 +245,11 @@ async def test_wait_for_event():
         await emitter.emit("test_event", "test_value")
 
     # Start emitting in background
-    asyncio.create_task(emit_later())
+    task = asyncio.create_task(emit_later())
 
     # Wait for event
     result = await emitter.wait_for("test_event", timeout=1.0)
+    await task
 
     assert result == ("test_value",)
 

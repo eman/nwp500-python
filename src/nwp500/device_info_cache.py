@@ -4,8 +4,6 @@ This module manages caching of device information (features, capabilities)
 with automatic periodic updates to keep data synchronized with the device.
 """
 
-from __future__ import annotations
-
 import asyncio
 import logging
 from datetime import UTC, datetime, timedelta

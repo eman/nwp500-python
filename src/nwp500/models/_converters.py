@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 from ..temperature import HalfCelsius
 from ..unit_system import get_unit_system
 

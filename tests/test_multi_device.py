@@ -75,7 +75,7 @@ async def test_state_tracker_emits_with_mac():
     await tracker.process(mac1, status1_v2)
     assert emitter.emit.call_count == 1
 
-    args, kwargs = emitter.emit.call_args
+    args, _kwargs = emitter.emit.call_args
     assert args[0] == "temperature_changed"
     event = args[1]
     assert isinstance(event, TemperatureChangedEvent)
@@ -100,7 +100,7 @@ async def test_state_tracker_emits_with_mac():
 
     # Should have emitted another event for mac2
     assert emitter.emit.call_count == 2
-    args, kwargs = emitter.emit.call_args
+    args, _kwargs = emitter.emit.call_args
     event = args[1]
     assert event.device_mac == mac2
 

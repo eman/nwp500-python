@@ -9,8 +9,6 @@ The client uses WebSocket connections with AWS credentials obtained from
 the authentication flow.
 """
 
-from __future__ import annotations
-
 import asyncio
 import logging
 import uuid

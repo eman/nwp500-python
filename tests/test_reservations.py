@@ -1,7 +1,5 @@
 """Tests for the nwp500.reservations public helpers."""
 
-from __future__ import annotations
-
 from typing import Any
 from unittest.mock import ANY, AsyncMock, MagicMock, patch
 

@@ -4,8 +4,6 @@ Client for interacting with the Navien NWP500 API.
 This module provides an async HTTP client for device management and control.
 """
 
-from __future__ import annotations
-
 import logging
 from typing import Any, Self, cast
 
@@ -217,7 +215,7 @@ class NavienAPIClient:
 
         except aiohttp.ClientError as e:
             _logger.error(f"Network error: {e}")
-            raise APIError(f"Network error: {str(e)}") from e
+            raise APIError(f"Network error: {e!s}") from e
 
     # Device Management Endpoints
 

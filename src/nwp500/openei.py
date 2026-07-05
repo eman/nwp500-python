@@ -8,8 +8,6 @@ schedules on Navien devices.
 API key can be obtained for free at https://openei.org/services/api/signup/
 """
 
-from __future__ import annotations
-
 import logging
 import os
 from typing import Any

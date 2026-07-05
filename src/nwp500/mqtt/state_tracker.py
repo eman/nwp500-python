@@ -5,8 +5,6 @@ granular events when individual fields change (temperature, mode, power,
 errors).
 """
 
-from __future__ import annotations
-
 import logging
 
 from ..events import EventEmitter
