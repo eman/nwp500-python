@@ -19,6 +19,7 @@ from typing import Any
 
 from awscrt.exceptions import AwsCrtError
 
+from ..exceptions import Nwp500Error
 from ..models import Device
 from .utils import PeriodicRequestType
 
@@ -184,13 +185,24 @@ class MqttPeriodicRequestManager:
                     await asyncio.sleep(period_seconds)
 
                 except asyncio.CancelledError:
+                    # Re-raise so the task is actually marked as cancelled
+                    # instead of ending "successfully".
                     _logger.info(
                         f"Periodic {request_type.value} requests cancelled "
                         f"for {redacted_device_id}"
                     )
-                    break
-                except (AwsCrtError, RuntimeError) as e:
-                    # Handle known MQTT errors gracefully
+                    raise
+                except (
+                    AwsCrtError,
+                    Nwp500Error,
+                    RuntimeError,
+                    TimeoutError,
+                ) as e:
+                    # Handle known MQTT/library errors gracefully. This must
+                    # include Nwp500Error: publish failures raise
+                    # MqttNotConnectedError/MqttPublishError (not
+                    # RuntimeError), which would otherwise silently kill
+                    # the periodic task while it still looks alive.
                     error_name = (
                         getattr(e, "name", None)
                         if isinstance(e, AwsCrtError)

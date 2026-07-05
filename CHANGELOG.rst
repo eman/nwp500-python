@@ -7,6 +7,44 @@ Unreleased
 
 Bug Fixes
 ---------
+- **Fix reconnection loop dying on authentication errors**: the backoff
+  loop caught only ``AwsCrtError`` and ``RuntimeError``, so
+  ``TokenRefreshError``, ``AuthenticationError``, and
+  ``MqttCredentialsError`` raised during quick/deep reconnection escaped
+  and silently killed the reconnect task. A routine outage coinciding
+  with token expiry left the client permanently offline despite unlimited
+  retries. All library errors (``Nwp500Error``) and operation timeouts
+  are now treated as failed attempts and retried; only
+  ``InvalidCredentialsError`` is fatal and stops the loop with a
+  ``reconnection_failed`` event.
+- **Fix disconnect() being a no-op while the connection is interrupted**:
+  calling ``disconnect()`` during an interruption returned early without
+  disabling automatic reconnection or stopping periodic tasks, so the
+  backoff loop would resurrect the connection after the application shut
+  the client down. ``disconnect()`` now always disables reconnection and
+  stops periodic tasks, and tears down the SDK connection even when not
+  connected.
+- **Fix queued commands being lost after active/deep reconnection**: the
+  command queue was only flushed from the SDK's ``on_connection_resumed``
+  callback, which never fires for the new connection built by
+  active/deep reconnection. Commands queued while offline were silently
+  dropped. Both reconnect paths now flush the queue after subscriptions
+  are restored.
+- **Fix periodic request tasks dying on MQTT errors**: the periodic loop
+  caught only ``AwsCrtError`` and ``RuntimeError``;
+  ``MqttNotConnectedError``/``MqttPublishError`` raised by a publish
+  racing a disconnection permanently killed the polling task while it
+  still appeared active. The loop now survives all library errors.
+- **Fix silent failures in thread-scheduled coroutines**: futures
+  returned by ``run_coroutine_threadsafe`` were discarded, so exceptions
+  from scheduled work (e.g. a failed resubscribe after a clean-session
+  resume, leaving the client connected but deaf) vanished. A done
+  callback now logs them.
+- **Fix CancelledError being swallowed in reconnection and periodic
+  loops**: both loops caught ``asyncio.CancelledError`` and ``break``-ed,
+  so cancelled tasks ended "successfully" (and the reconnection loop
+  could emit ``reconnection_failed`` during a manual disconnect).
+  Cancellation now propagates correctly.
 - **Fix AttributeError in configure_reservation_water_program**: The
   ``NavienMqttClient`` proxy referenced ``self._control``, which is never
   assigned (the attribute is ``_device_controller``), so every call raised
@@ -32,6 +70,18 @@ Bug Fixes
 - **Fix broken example import**: ``examples/advanced/mqtt_diagnostics.py``
   imported ``MqttConnectionConfig`` from the nonexistent ``nwp500.mqtt_utils``
   module and used the deprecated ``datetime.utcnow()``.
+
+Improvements
+------------
+- **MQTT operation acknowledgement timeouts**: connect, publish,
+  subscribe, unsubscribe, and disconnect acknowledgements are now awaited
+  with a timeout (``MqttConnectionConfig.operation_timeout``, default 30
+  seconds). Previously a half-open TCP connection could hang callers
+  until the 20-minute keep-alive expired.
+- **Reconnection backoff jitter**: reconnect delays are now randomized
+  (±50%, capped at ``max_reconnect_delay``) so fleets of clients
+  disconnected simultaneously (e.g. the AWS IoT 24-hour disconnect) no
+  longer reconnect in synchronized waves.
 
 Security
 --------
