@@ -5,6 +5,51 @@ Changelog
 Unreleased
 ==========
 
+Bug Fixes
+---------
+- **Fix malformed weekly reservation and recirculation schedule
+  payloads**: ``update_weekly_reservation()`` and
+  ``configure_recirculation_schedule()`` dumped the schedule models
+  as-is, double-nesting the request (``request.reservation.reservation``
+  / ``request.schedule.schedule``) and leaking pydantic computed display
+  fields — including a unit-converted ``temperature`` alongside the raw
+  half-Celsius ``param`` — into device commands. Both now send the flat,
+  raw protocol shape used by ``update_reservations()``. A new
+  ``NavienBaseModel.to_protocol_dict()`` dumps only declared protocol
+  fields.
+- **Preserve command order when a queued flush fails**: a command that
+  failed mid-flush was re-queued at the tail, behind commands queued
+  after it, inverting order-sensitive sequences (e.g. ``set_temp``
+  replayed before ``power_on``). The queue is now a deque and failed
+  commands are re-inserted at the front.
+- **Expire stale queued commands**: queued commands stored a timestamp
+  that was never checked, so a multi-hour outage replayed hours-old
+  control commands (e.g. ``set_power``) to the appliance on reconnect.
+  Commands older than ``MqttConnectionConfig.max_queued_command_age``
+  (default 300 s, ``None`` to disable) are now discarded at send time.
+- **Fix Fahrenheit conversion for sub-zero temperatures** (ASYMMETRIC
+  formula): the rounding used Python's floored ``%``, which is always
+  non-negative, while the firmware/app uses a truncated remainder. Raw
+  ``-11`` (-5.5 °C) decoded to 22 °F instead of the app's 23 °F. Now
+  uses ``math.fmod`` semantics.
+- **Fix freeze protection default limits**: the defaults (43/65) were
+  Fahrenheit display values stored in raw half-Celsius fields, decoding
+  to 70.7 °F / 90.5 °F when the device omitted them. Corrected to raw
+  12/20 (43 °F / 50 °F), matching the documented fixed limits.
+- **Emit error_detected when the error code changes**: a transition
+  between two non-zero error codes (e.g. E799 → E407) emitted no event,
+  so consumers kept displaying the stale error.
+- **Fix TOU price encoding**: ``encode_price()`` used banker's rounding,
+  under-encoding exact half values at even boundaries (0.125 at
+  ``decimal_point=2`` encoded to 12 instead of 13) — now uses
+  ``Decimal`` half-up rounding. ``build_tou_period()`` also treated
+  ``bool`` prices as pre-encoded integers (``True`` sent as price 1).
+- **Fix protocol documentation errors**: ``decode_reservation_hex()``
+  documented the enable flag inverted (1=enabled instead of 2=enabled);
+  the ``build_reservation_entry()`` example showed ``week: 158`` for
+  Mon/Wed/Fri instead of the correct 84; temperature doctest examples
+  showed ``int`` raw values where ``float`` is returned.
+
 Version 8.1.3 (2026-06-15)
 ==========================
 

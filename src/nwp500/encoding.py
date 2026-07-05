@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Iterable
+from decimal import ROUND_HALF_UP, Decimal
 from numbers import Real
 
 from .exceptions import ParameterValidationError, RangeValidationError
@@ -238,7 +239,7 @@ def decode_season_bitfield(bitfield: int) -> list[int]:
 # ============================================================================
 
 
-def encode_price(value: Real, decimal_point: int) -> int:
+def encode_price(value: Real | float, decimal_point: int) -> int:
     """
     Encode a price into the integer representation expected by the device.
 
@@ -274,8 +275,11 @@ def encode_price(value: Real, decimal_point: int) -> int:
             min_value=0,
             max_value=10,
         )
-    scale = 10**decimal_point
-    return int(round(float(value) * scale))
+    # Use Decimal with HALF_UP rounding: round() applies banker's
+    # rounding, which under-encodes exact half values at even
+    # boundaries (e.g. 0.125 at decimal_point=2 -> 12 instead of 13).
+    scaled = Decimal(str(float(value))) * (Decimal(10) ** decimal_point)
+    return int(scaled.quantize(Decimal("1"), rounding=ROUND_HALF_UP))
 
 
 def decode_price(value: int, decimal_point: int) -> float:
@@ -324,7 +328,7 @@ def decode_reservation_hex(hex_string: str) -> list[dict[str, int]]:
     Decode a hex-encoded reservation string into structured reservation entries.
 
     The reservation data is encoded as 6 bytes per entry:
-    - Byte 0: enable (1=enabled, 2=disabled)
+    - Byte 0: enable (2=enabled, 1=disabled, device boolean convention)
     - Byte 1: week bitfield (days of week)
     - Byte 2: hour (0-23)
     - Byte 3: minute (0-59)
@@ -423,7 +427,7 @@ def build_reservation_entry(
         ... )
         {
             'enable': 2,
-            'week': 158,
+            'week': 84,
             'hour': 6,
             'min': 30,
             'mode': 3,
@@ -592,16 +596,26 @@ def build_tou_period(
     encoded_min: int
     encoded_max: int
 
-    # Encode prices if they're Real numbers (not already encoded integers)
-    if not isinstance(price_min, int):
-        encoded_min = encode_price(price_min, decimal_point)
-    else:
-        encoded_min = price_min
+    # bool is an int subclass and would otherwise silently pass through
+    # the "already encoded" branch below as 1/0; treat it as a numeric
+    # price instead.
+    price_min_num: Real | float = (
+        float(price_min) if isinstance(price_min, bool) else price_min
+    )
+    price_max_num: Real | float = (
+        float(price_max) if isinstance(price_max, bool) else price_max
+    )
 
-    if not isinstance(price_max, int):
-        encoded_max = encode_price(price_max, decimal_point)
+    # Encode prices if they're Real numbers (not already encoded integers)
+    if not isinstance(price_min_num, int):
+        encoded_min = encode_price(price_min_num, decimal_point)
     else:
-        encoded_max = price_max
+        encoded_min = price_min_num
+
+    if not isinstance(price_max_num, int):
+        encoded_max = encode_price(price_max_num, decimal_point)
+    else:
+        encoded_max = price_max_num
 
     return {
         "season": season_bitfield,

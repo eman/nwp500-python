@@ -39,6 +39,17 @@ class NavienBaseModel(BaseModel):
         converted: dict[str, Any] = self._convert_enums_to_names(result)
         return converted
 
+    def to_protocol_dict(self) -> dict[str, Any]:
+        """Dump only the declared protocol fields, by alias.
+
+        Excludes pydantic ``computed_field`` properties, which are
+        display-oriented (formatted times, weekday names, unit-converted
+        temperatures) and must never be sent to the device.
+        """
+        return self.model_dump(
+            by_alias=True, include=set(type(self).model_fields)
+        )
+
     @staticmethod
     def _convert_enums_to_names(
         data: Any, visited: set[int] | None = None

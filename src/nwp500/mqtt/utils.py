@@ -210,6 +210,10 @@ class MqttConnectionConfig:
 
         enable_command_queue: Enable command queueing when disconnected
         max_queued_commands: Maximum number of queued commands
+        max_queued_command_age: Maximum age in seconds for a queued
+            command to still be sent when the connection is restored;
+            older commands are discarded instead of being replayed to
+            the appliance. ``None`` disables expiry.
     """
 
     endpoint: str = AWS_IOT_ENDPOINT
@@ -231,6 +235,7 @@ class MqttConnectionConfig:
     # Command queue settings
     enable_command_queue: bool = True
     max_queued_commands: int = 100
+    max_queued_command_age: float | None = 300.0  # seconds
 
     def __post_init__(self) -> None:
         """Generate client ID if not provided and validate settings."""

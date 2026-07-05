@@ -680,10 +680,18 @@ class MqttDeviceController:
         Returns:
             Publish packet ID
         """
+        # Match the documented request shape used by update_reservations():
+        # reservationUse at the request level and reservation as a flat
+        # list of raw protocol entries. Dumping the schedule model as-is
+        # would double-nest the payload and leak computed display fields
+        # (formatted times, unit-converted temperatures) to the device.
         return await self._send_command(
             device=device,
             command_code=CommandCode.RESERVATION_WEEKLY,
-            reservation=schedule.model_dump(by_alias=True),
+            reservationUse=schedule.reservation_use,
+            reservation=[
+                entry.to_protocol_dict() for entry in schedule.reservation
+            ],
         )
 
     @requires_capability("program_reservation_use")
@@ -709,10 +717,13 @@ class MqttDeviceController:
         Returns:
             Publish packet ID
         """
+        # Send a flat list of raw protocol entries; dumping the schedule
+        # model as-is would nest the payload as schedule.schedule and
+        # leak computed display fields to the device.
         return await self._send_command(
             device=device,
             command_code=CommandCode.RECIR_RESERVATION,
-            schedule=schedule.model_dump(by_alias=True),
+            schedule=[entry.to_protocol_dict() for entry in schedule.schedule],
         )
 
     @requires_capability("recirculation_use")
