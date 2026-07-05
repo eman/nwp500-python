@@ -29,6 +29,12 @@ from nwp500.unit_system import (
 
 @pytest.fixture(autouse=True)
 def _reset_units():
+    """Reset the process-wide unit preference before AND after each test.
+
+    Resetting only in teardown would let the first test in this module
+    inherit a value set by earlier tests in the session.
+    """
+    reset_unit_system()
     yield
     reset_unit_system()
 
