@@ -57,11 +57,30 @@ select = [
     "C4",    # flake8-comprehensions
     "SIM",   # flake8-simplify
     "S",     # flake8-bandit (security)
+    "RUF",   # Ruff-specific rules (incl. unused noqa)
+    "DTZ",   # flake8-datetimez (naive datetime usage)
+    "PTH",   # flake8-use-pathlib
+    "ASYNC", # flake8-async
+    "PERF",  # perflint
 ]
 
 ignore = [
     "E203",  # whitespace before ':' (conflicts with black/ruff format)
     "B904",  # raise from - will be addressed in a future update
+    # Async functions taking a `timeout:` parameter are a deliberate,
+    # documented public API of this library (e.g. wait_for, command
+    # helpers); switching callers to asyncio.timeout() would be a
+    # breaking change with no behavioral benefit.
+    "ASYNC109",
+    # Degree signs, en-dashes, and multiplication signs in docstrings
+    # and user-facing strings are intentional (temperature units,
+    # ranges), not typos of ASCII look-alikes.
+    "RUF001",
+    "RUF002",
+    "RUF003",
+    # __all__ lists are deliberately grouped by category with comments,
+    # not sorted alphabetically.
+    "RUF022",
 ]
 
 # Allow autofix for all enabled rules (when `--fix` is provided)

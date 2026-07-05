@@ -12,8 +12,6 @@ Topic schema:
   Event:                        evt/{device_type}/navilink-{mac}/{suffix}
 """
 
-from __future__ import annotations
-
 
 class MqttTopicBuilder:
     """Helper to construct standard MQTT topics for Navien devices."""

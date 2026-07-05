@@ -1,7 +1,5 @@
 """Output formatting utilities for CLI (CSV, JSON)."""
 
-from __future__ import annotations
-
 import csv
 import json
 import logging
@@ -369,13 +367,14 @@ def write_status_to_csv(file_path: str, status: DeviceStatus) -> None:
         # Convert status to dict (enums are already converted to names)
         status_dict = status.model_dump()
 
-        # Add a timestamp to the beginning of the data
-        status_dict["timestamp"] = datetime.now().isoformat()
+        # Add a timestamp to the beginning of the data (timezone-aware,
+        # in the local timezone)
+        status_dict["timestamp"] = datetime.now().astimezone().isoformat()
 
         # Check if file exists to determine if we need to write the header
         file_exists = Path(file_path).exists()
 
-        with open(file_path, "a", newline="") as csvfile:
+        with Path(file_path).open("a", newline="") as csvfile:
             # Get the field names from the dict keys
             fieldnames = list(status_dict.keys())
             writer = csv.DictWriter(csvfile, fieldnames=fieldnames)

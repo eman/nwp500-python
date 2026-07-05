@@ -18,8 +18,6 @@ Example:
     ...     devices = await api.list_devices()
 """
 
-from __future__ import annotations
-
 import asyncio
 
 from .api_client import NavienAPIClient

@@ -17,8 +17,6 @@ This module handles all device control operations including:
 - Recirculation pump control and scheduling
 """
 
-from __future__ import annotations
-
 import logging
 from collections.abc import Awaitable, Callable, Sequence
 from datetime import UTC, datetime

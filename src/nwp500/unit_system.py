@@ -11,8 +11,6 @@ task and thread, including model validation triggered by MQTT callbacks that
 run outside the task that configured it.
 """
 
-from __future__ import annotations
-
 import logging
 from typing import Literal
 

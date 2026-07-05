@@ -1,7 +1,5 @@
 """Configuration for the Navien API client."""
 
-from __future__ import annotations
-
 API_BASE_URL = "https://nlus.naviensmartcontrol.com/api/v2.1"
 SIGN_IN_ENDPOINT = "/user/sign-in"
 REFRESH_ENDPOINT = "/auth/refresh"

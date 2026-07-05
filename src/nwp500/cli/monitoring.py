@@ -1,7 +1,5 @@
 """Monitoring and periodic status polling."""
 
-from __future__ import annotations
-
 import asyncio
 import logging
 

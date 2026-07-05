@@ -9,8 +9,6 @@ fetch the current schedule, apply the change, then send the updated list back.
 All functions are ``async`` and require a connected :class:`NavienMqttClient`.
 """
 
-from __future__ import annotations
-
 import asyncio
 import logging
 from collections.abc import Sequence

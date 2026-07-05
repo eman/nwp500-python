@@ -6,10 +6,8 @@ that a device supports specific controllable features without requiring
 individual checker functions.
 """
 
-from __future__ import annotations
-
 from collections.abc import Callable
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, ClassVar
 
 from .exceptions import DeviceCapabilityError
 
@@ -34,7 +32,7 @@ class MqttDeviceCapabilityChecker:
     # Map of controllable features to their check functions
     # Capability names MUST match DeviceFeature attribute names exactly
     # for traceability: capability name -> DeviceFeature.{name}
-    _CAPABILITY_MAP: dict[str, CapabilityCheckFn] = {
+    _CAPABILITY_MAP: ClassVar[dict[str, CapabilityCheckFn]] = {
         "power_use": lambda f: bool(f.power_use),
         "dhw_use": lambda f: bool(f.dhw_use),
         "dhw_temperature_setting_use": lambda f: _check_dhw_temperature_control(

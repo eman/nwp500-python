@@ -6,8 +6,6 @@ changes, allowing multiple listeners per event and automatic state change
 detection.
 """
 
-from __future__ import annotations
-
 import asyncio
 import inspect
 import logging
@@ -23,7 +21,7 @@ __license__ = "MIT"
 _logger = logging.getLogger(__name__)
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class EventListener:
     """Represents a registered event listener."""
 

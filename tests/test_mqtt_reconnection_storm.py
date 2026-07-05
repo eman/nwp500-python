@@ -35,8 +35,6 @@ Bug 3 — on_connection_resumed calls Task.cancel() directly from an AWS SDK
   Task operations are safe.
 """
 
-from __future__ import annotations
-
 import asyncio
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -397,7 +395,7 @@ class TestActivelyReconnectingFlag:
         assert client._actively_reconnecting is False
 
     @pytest.mark.asyncio(loop_scope="function")
-    async def test_interrupted_internal_skips_handler_when_flag_set(  # noqa: E501
+    async def test_interrupted_internal_skips_handler_when_flag_set(
         self,
     ):
         """

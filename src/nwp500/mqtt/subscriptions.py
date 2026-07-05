@@ -9,8 +9,6 @@ This module handles all subscription-related operations including:
 - State change detection and event emission
 """
 
-from __future__ import annotations
-
 import asyncio
 import json
 import logging

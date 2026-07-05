@@ -8,6 +8,35 @@ Unreleased
 **BREAKING CHANGES**: Public API surface trimmed and dead code removed.
 These changes require a major version bump.
 
+Modernization (Python 3.14)
+---------------------------
+- **Removed** ``from __future__ import annotations`` **project-wide**
+  (57 files): redundant on a Python >=3.14-only package where lazy
+  annotation evaluation (PEP 649) is the default.
+- **Adopted additional ruff rule sets**: ``RUF`` (Ruff-specific),
+  ``DTZ`` (naive datetime), ``PTH`` (pathlib), ``ASYNC``, and ``PERF``,
+  with documented ignores for intentional patterns (grouped ``__all__``
+  lists, unicode degree signs, public ``timeout`` parameters). Fixes
+  applied for all resulting findings, including a timezone-naive
+  timestamp in CSV exports (now timezone-aware local time),
+  ``Path.open()`` usage, ``itertools.pairwise()`` in the CLI range
+  collapser, a ``ClassVar`` annotation on the capability map, and
+  dangling ``asyncio.create_task`` references in tests.
+- **PeriodicRequestType is now a StrEnum** (was a plain ``Enum`` with
+  string values), matching the enum style used elsewhere.
+- **Event payload dataclasses use** ``slots=True``: the frozen event
+  dataclasses in ``mqtt_events.py`` and ``events.EventListener`` are
+  created per state change; slots reduce their memory footprint.
+- **match statement** for the periodic request-type dispatch.
+
+Testing
+-------
+- New unit tests for previously untested modules:
+  ``topic_builder.py`` (full topic schema), ``field_factory.py``
+  (metadata defaults, overrides, merge semantics), and
+  ``models/_converters.py`` (unit-preference conversions and
+  round-trips).
+
 Removed
 -------
 - **Deprecated ``.control`` property**: removed

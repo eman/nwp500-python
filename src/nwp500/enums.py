@@ -7,8 +7,6 @@ capabilities.
 See docs/protocol/quick_reference.rst for comprehensive protocol details.
 """
 
-from __future__ import annotations
-
 from enum import IntEnum, StrEnum
 
 # ============================================================================

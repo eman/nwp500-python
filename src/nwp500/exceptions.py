@@ -60,8 +60,6 @@ If you were catching generic exceptions in your code, update as follows:
         # handle other validation errors
 """
 
-from __future__ import annotations
-
 from typing import Any
 
 __author__ = "Emmanuel Levijarvi"

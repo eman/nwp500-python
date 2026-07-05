@@ -1,7 +1,5 @@
 """Token storage and management for CLI authentication."""
 
-from __future__ import annotations
-
 import json
 import logging
 import os
@@ -47,7 +45,7 @@ def load_tokens() -> tuple[AuthTokens | None, str | None]:
     if not TOKEN_FILE.exists():
         return None, None
     try:
-        with open(TOKEN_FILE) as f:
+        with TOKEN_FILE.open() as f:
             data = json.load(f)
             email = data.get("email")
             if not email:

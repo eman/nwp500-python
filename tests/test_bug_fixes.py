@@ -1,7 +1,5 @@
 """Tests for bug fixes: diagnostics, config validation, encoding, cache."""
 
-from __future__ import annotations
-
 import asyncio
 import json
 from unittest.mock import patch
@@ -97,8 +95,9 @@ class TestEventEmitterFuture:
             await asyncio.sleep(0.01)
             await emitter.emit("test_event", "data")
 
-        asyncio.create_task(emit_soon())
+        task = asyncio.create_task(emit_soon())
         result = await emitter.wait_for("test_event", timeout=1.0)
+        await task
         assert result == ("data",)
 
 

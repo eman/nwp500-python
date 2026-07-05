@@ -7,8 +7,6 @@ values.
 See docs/protocol/quick_reference.rst for comprehensive protocol details.
 """
 
-from __future__ import annotations
-
 from collections.abc import Callable
 from typing import Any
 

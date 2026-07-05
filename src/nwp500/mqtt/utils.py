@@ -5,13 +5,11 @@ This module provides utility functions for redacting sensitive information,
 configuration classes, and common data structures used across MQTT modules.
 """
 
-from __future__ import annotations
-
 import re
 import uuid
 from dataclasses import dataclass
 from datetime import datetime
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 
 from awscrt import mqtt
@@ -292,7 +290,7 @@ class QueuedCommand:
     timestamp: datetime
 
 
-class PeriodicRequestType(Enum):
+class PeriodicRequestType(StrEnum):
     """Types of periodic requests that can be sent.
 
     Attributes:

@@ -4,8 +4,6 @@ This module provides decorators that automatically validate device capabilities
 before command execution, preventing unsupported commands from being sent.
 """
 
-from __future__ import annotations
-
 import functools
 import inspect
 import logging
@@ -84,7 +82,7 @@ def requires_capability(feature: str) -> Callable[[F], F]:
                     # Wrap other errors (timeouts, connection issues, etc)
                     raise DeviceCapabilityError(
                         feature,
-                        f"Cannot execute {func.__name__}: {str(e)}",
+                        f"Cannot execute {func.__name__}: {e!s}",
                     ) from e
 
                 if cached_features is None:

@@ -6,8 +6,6 @@ Core,
 including credential management and connection state tracking.
 """
 
-from __future__ import annotations
-
 import asyncio
 import concurrent.futures
 import json

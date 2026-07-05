@@ -7,8 +7,6 @@ The Navien NWP500 uses different temperature precision formats:
 All values are converted to preferred unit based on device preference.
 """
 
-from __future__ import annotations
-
 import math
 from typing import ClassVar, Self
 
