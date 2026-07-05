@@ -5,6 +5,9 @@ Changelog
 Unreleased
 ==========
 
+Version 9.0.0 (2026-07-05)
+==========================
+
 **BREAKING CHANGES**: Public API surface trimmed and dead code removed.
 These changes require a major version bump.
 
