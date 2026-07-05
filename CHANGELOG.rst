@@ -45,6 +45,31 @@ Bug Fixes
   so cancelled tasks ended "successfully" (and the reconnection loop
   could emit ``reconnection_failed`` during a manual disconnect).
   Cancellation now propagates correctly.
+- **Fix AttributeError in configure_reservation_water_program**: The
+  ``NavienMqttClient`` proxy referenced ``self._control``, which is never
+  assigned (the attribute is ``_device_controller``), so every call raised
+  ``AttributeError``. Now delegates correctly; a regression test guards all
+  proxies against references to the undefined attribute.
+- **Fix broken CLI mode choices**: ``nwp-cli mode vacation`` always failed
+  because vacation mode (5) requires a day count that was never supplied, and
+  ``mode standby`` sent the invalid writable mode value ``0``. Both choices
+  were removed from the ``mode`` command; use the dedicated ``vacation DAYS``
+  and ``power off`` commands instead.
+- **Fix CLI exit codes**: click ignores command return values in standalone
+  mode, so the CLI always exited ``0`` even when a command failed. Failures
+  now propagate through ``ctx.exit()`` and produce a non-zero exit code for
+  scripts and automation.
+- **Fix cached tokens being reused for a different account**: passing
+  ``--email`` for account B while tokens for account A were cached silently
+  ran commands against account A's session. Cached tokens are now discarded
+  when the provided email does not match the cached one.
+- **Surface OpenEI application errors**: OpenEI reports errors such as an
+  invalid API key in the body of an HTTP 200 response; these were masked as
+  "no rate plans found". ``fetch_rates()`` now raises ``APIError`` with the
+  API's error message.
+- **Fix broken example import**: ``examples/advanced/mqtt_diagnostics.py``
+  imported ``MqttConnectionConfig`` from the nonexistent ``nwp500.mqtt_utils``
+  module and used the deprecated ``datetime.utcnow()``.
 
 Improvements
 ------------
@@ -57,6 +82,12 @@ Improvements
   (±50%, capped at ``max_reconnect_delay``) so fleets of clients
   disconnected simultaneously (e.g. the AWS IoT 24-hour disconnect) no
   longer reconnect in synchronized waves.
+
+Security
+--------
+- **Restrict token cache file permissions**: ``~/.nwp500_tokens.json``
+  (refresh token and AWS credentials) was written world-readable. It is now
+  created with mode ``0600``, and existing files are tightened on save.
 
 Version 8.1.3 (2026-06-15)
 ==========================
