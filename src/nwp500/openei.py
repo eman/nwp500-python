@@ -14,6 +14,8 @@ from typing import Any
 
 import aiohttp
 
+from .exceptions import APIError
+
 __author__ = "Emmanuel Levijarvi"
 __copyright__ = "Emmanuel Levijarvi"
 __license__ = "MIT"
@@ -65,7 +67,9 @@ class OpenEIClient:
 
     async def __aenter__(self) -> OpenEIClient:
         if self._session is None:
-            self._session = aiohttp.ClientSession()
+            self._session = aiohttp.ClientSession(
+                timeout=aiohttp.ClientTimeout(total=30)
+            )
             self._owned_session = True
         return self
 
@@ -118,6 +122,16 @@ class OpenEIClient:
         async with self._session.get(OPENEI_API_URL, params=params) as resp:
             resp.raise_for_status()
             data: dict[str, Any] = await resp.json()
+            # OpenEI reports application errors (e.g. invalid API key) in
+            # the body of an HTTP 200 response.
+            if "error" in data:
+                error = data["error"]
+                message = (
+                    error.get("message", str(error))
+                    if isinstance(error, dict)
+                    else str(error)
+                )
+                raise APIError(f"OpenEI API error: {message}", response=data)
             items: list[dict[str, Any]] = data.get("items", [])
             _logger.info(
                 "Retrieved %d rate plans for zip %s",

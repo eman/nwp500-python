@@ -686,8 +686,8 @@ async def test_ensure_valid_token_jwt_expired():
 
         result = await client.ensure_valid_token()
 
-        # Should have called refresh_token
-        mock_refresh.assert_called_once_with("test")
+        # Should have called refresh_token (stored token used implicitly)
+        mock_refresh.assert_awaited_once_with()
         assert result == new_tokens
 
 

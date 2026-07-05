@@ -8,10 +8,13 @@ the MQTT connection is interrupted.
 import asyncio
 import contextlib
 import logging
+import random
 from collections.abc import Awaitable, Callable
 from typing import TYPE_CHECKING, Any
 
 from awscrt.exceptions import AwsCrtError
+
+from ..exceptions import InvalidCredentialsError, Nwp500Error
 
 if TYPE_CHECKING:
     from .utils import MqttConnectionConfig
@@ -195,8 +198,16 @@ class MqttReconnectionHandler:
         Uses a two-tier strategy:
         - Quick reconnects (attempts 1-N): Fast reconnection with existing setup
         - Deep reconnects (attempts N+): Full rebuild including token refresh
+
+        All library errors (``Nwp500Error``, including authentication and
+        MQTT errors raised by the reconnect functions), transient runtime
+        errors, and operation timeouts count as failed attempts and are
+        retried. Only ``InvalidCredentialsError`` is fatal: retrying with
+        rejected credentials can never succeed, so the loop stops and
+        emits ``reconnection_failed``.
         """
         unlimited_retries = self.config.max_reconnect_attempts < 0
+        fatal_error: Exception | None = None
 
         while (
             not self._is_connected_func()
@@ -221,13 +232,20 @@ class MqttReconnectionHandler:
                 has_deep_reconnect and is_at_threshold and is_threshold_multiple
             )
 
-            # Calculate delay with exponential backoff
+            # Calculate delay with exponential backoff, then apply random
+            # jitter so a fleet of clients disconnected at the same moment
+            # (e.g. AWS IoT 24-hour disconnect) doesn't reconnect in
+            # synchronized waves.
             delay = min(
                 self.config.initial_reconnect_delay
                 * (
                     self.config.reconnect_backoff_multiplier
                     ** (self._reconnect_attempts - 1)
                 ),
+                self.config.max_reconnect_delay,
+            )
+            delay = min(
+                delay * random.uniform(0.5, 1.5),  # noqa: S311
                 self.config.max_reconnect_delay,
             )
 
@@ -270,7 +288,15 @@ class MqttReconnectionHandler:
                                 "Successfully reconnected via deep reconnection"
                             )
                             break
-                    except (AwsCrtError, RuntimeError, ValueError) as e:
+                    except InvalidCredentialsError:
+                        raise
+                    except (
+                        AwsCrtError,
+                        Nwp500Error,
+                        RuntimeError,
+                        ValueError,
+                        TimeoutError,
+                    ) as e:
                         _logger.warning(
                             f"Deep reconnection failed: {e}. Will retry..."
                         )
@@ -284,30 +310,63 @@ class MqttReconnectionHandler:
                                 "quick reconnection"
                             )
                             break
-                    except (AwsCrtError, RuntimeError) as e:
+                    except InvalidCredentialsError:
+                        raise
+                    except (
+                        AwsCrtError,
+                        Nwp500Error,
+                        RuntimeError,
+                        TimeoutError,
+                    ) as e:
                         _logger.warning(
                             f"Quick reconnection failed: {e}. Will retry..."
                         )
 
             except asyncio.CancelledError:
+                # Re-raise so the task is actually marked as cancelled;
+                # swallowing it would let execution continue past the loop
+                # (e.g. emitting reconnection_failed during a manual
+                # disconnect) and break cancellation semantics.
                 _logger.info("Reconnection task cancelled")
+                raise
+            except InvalidCredentialsError as e:
+                _logger.error(
+                    "Credentials rejected during reconnection; "
+                    "stopping automatic reconnection: %s",
+                    e,
+                )
+                fatal_error = e
                 break
-            except (AwsCrtError, RuntimeError) as e:
+            except (
+                AwsCrtError,
+                Nwp500Error,
+                RuntimeError,
+                TimeoutError,
+            ) as e:
                 _logger.error(
                     f"Error during reconnection attempt: {e}", exc_info=True
                 )
 
-        # Check final state (only if not unlimited retries)
-        if (
+        # Check final state: report failure when retries are exhausted
+        # (limited mode) or a fatal error stopped the loop.
+        attempts_exhausted = (
             not unlimited_retries
             and self._reconnect_attempts >= self.config.max_reconnect_attempts
-            and not self._is_connected_func()
-        ):
-            _logger.error(
-                f"Failed to reconnect after "
-                f"{self.config.max_reconnect_attempts} attempts. "
-                "Manual reconnection required."
-            )
+        )
+        if (
+            fatal_error is not None or attempts_exhausted
+        ) and not self._is_connected_func():
+            if fatal_error is not None:
+                _logger.error(
+                    "Reconnection stopped due to fatal error. "
+                    "Manual reconnection required."
+                )
+            else:
+                _logger.error(
+                    f"Failed to reconnect after "
+                    f"{self.config.max_reconnect_attempts} attempts. "
+                    "Manual reconnection required."
+                )
             # Emit reconnection_failed event if event emitter is available
             if self._emit_event:
                 try:

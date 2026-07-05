@@ -63,6 +63,7 @@ class MqttSubscriptionManager:
         event_emitter: EventEmitter,
         schedule_coroutine: Callable[[Any], None],
         device_info_cache: MqttDeviceInfoCache | None = None,
+        operation_timeout: float = 30.0,
     ):
         """
         Initialize subscription manager.
@@ -74,12 +75,15 @@ class MqttSubscriptionManager:
             schedule_coroutine: Function to schedule async tasks
             device_info_cache: Optional MqttDeviceInfoCache for caching device
                 features
+            operation_timeout: Maximum seconds to wait for broker
+                acknowledgement of subscribe/unsubscribe operations
         """
         self._connection = connection
         self._client_id = client_id
         self._event_emitter = event_emitter
         self._schedule_coroutine = schedule_coroutine
         self._device_info_cache = device_info_cache
+        self._operation_timeout = operation_timeout
 
         # Track subscriptions and handlers
         self._subscriptions: dict[str, mqtt.QoS] = {}
@@ -116,37 +120,61 @@ class MqttSubscriptionManager:
     def _on_message_received(
         self, topic: str, payload: bytes, **kwargs: Any
     ) -> None:
-        """Handle received MQTT messages.
+        """Handle received MQTT messages (AWS CRT callback).
 
-        Parses JSON payload and routes to registered handlers.
+        This runs on the AWS CRT network thread. It must stay trivial:
+        JSON parsing, pydantic validation, and user callbacks are
+        marshaled onto the asyncio event loop so that
+
+        - a slow or blocking user callback cannot stall all MQTT message
+          processing,
+        - handler registries mutated on the event loop are never iterated
+          concurrently from this thread, and
+        - user callbacks run where asyncio operations are safe, instead
+          of on an undocumented SDK thread.
 
         Args:
             topic: MQTT topic the message was received on
             payload: Raw message payload (JSON bytes)
             **kwargs: Additional MQTT metadata
         """
+        self._schedule_coroutine(self._dispatch_message(topic, payload))
+
+    async def _dispatch_message(self, topic: str, payload: bytes) -> None:
+        """Parse a message and route it to registered handlers.
+
+        Runs on the event loop.
+
+        Args:
+            topic: MQTT topic the message was received on
+            payload: Raw message payload (JSON bytes)
+        """
         try:
-            # Parse JSON payload
             message = json.loads(payload.decode("utf-8"))
+        except (json.JSONDecodeError, UnicodeDecodeError) as e:
+            _logger.error(f"Failed to parse message payload: {e}")
+            return
+
+        if _logger.isEnabledFor(logging.DEBUG):
             _logger.debug("Received message on topic: %s", redact_topic(topic))
 
-            # Call registered handlers that match this topic
-            # Need to match against subscription patterns with wildcards
-            for (
-                subscription_pattern,
-                handlers,
-            ) in self._message_handlers.items():
-                if topic_matches_pattern(topic, subscription_pattern):
-                    for handler in handlers:
-                        try:
-                            handler(topic, message)
-                        except (TypeError, AttributeError, KeyError) as e:
-                            _logger.error(f"Error in message handler: {e}")
-
-        except json.JSONDecodeError as e:
-            _logger.error(f"Failed to parse message payload: {e}")
-        except (AttributeError, KeyError, TypeError) as e:
-            _logger.error(f"Error processing message: {e}")
+        # Call registered handlers that match this topic.
+        # Iterate over snapshots so handlers can subscribe/unsubscribe
+        # (mutating the registries) during dispatch.
+        for subscription_pattern, handlers in list(
+            self._message_handlers.items()
+        ):
+            if topic_matches_pattern(topic, subscription_pattern):
+                for handler in list(handlers):
+                    try:
+                        handler(topic, message)
+                    except Exception:
+                        # One bad handler must not abort delivery to the
+                        # remaining handlers for this message.
+                        _logger.exception(
+                            "Error in message handler for %s",
+                            redact_topic(topic),
+                        )
 
     async def subscribe(
         self,
@@ -189,20 +217,19 @@ class MqttSubscriptionManager:
         _logger.info(f"Subscribing to topic: {redact_topic(topic)}")
 
         try:
-            # Convert concurrent.futures.Future to asyncio.Future and await
-            # Use shield to prevent cancellation from propagating to
-            # underlying future
+            # Await the broker acknowledgement with a timeout. Shield the
+            # SDK future so a timeout/cancel never propagates into AWS CRT
+            # callbacks (avoids InvalidStateError); the underlying
+            # subscribe completes independently.
             subscribe_future, packet_id = self._connection.subscribe(
                 topic=topic, qos=qos, callback=self._on_message_received
             )
             try:
-                subscribe_result = await asyncio.shield(
-                    asyncio.wrap_future(subscribe_future)
+                subscribe_result = await asyncio.wait_for(
+                    asyncio.shield(asyncio.wrap_future(subscribe_future)),
+                    timeout=self._operation_timeout,
                 )
             except asyncio.CancelledError:
-                # Shield was cancelled - the underlying subscribe will
-                # complete independently, preventing InvalidStateError
-                # in AWS CRT callbacks
                 _logger.debug(
                     f"Subscribe to '{redact_topic(topic)}' was cancelled "
                     "but will complete in background"
@@ -219,7 +246,7 @@ class MqttSubscriptionManager:
 
             return int(packet_id)
 
-        except (AwsCrtError, RuntimeError) as e:
+        except (AwsCrtError, RuntimeError, TimeoutError) as e:
             # Clean up handler on failure if this was the first one
             if (h := self._message_handlers.get(topic)) and callback in h:
                 h.remove(callback)
@@ -273,16 +300,15 @@ class MqttSubscriptionManager:
         _logger.info("Unsubscribing from topic (redacted)")
 
         try:
-            # Convert concurrent.futures.Future to asyncio.Future and await
-            # Use shield to prevent cancellation from propagating to
-            # underlying future
+            # Await the broker acknowledgement with a timeout (see
+            # subscribe() for shielding rationale).
             unsubscribe_future, packet_id = self._connection.unsubscribe(topic)
             try:
-                await asyncio.shield(asyncio.wrap_future(unsubscribe_future))
+                await asyncio.wait_for(
+                    asyncio.shield(asyncio.wrap_future(unsubscribe_future)),
+                    timeout=self._operation_timeout,
+                )
             except asyncio.CancelledError:
-                # Shield was cancelled - the underlying unsubscribe will
-                # complete independently, preventing InvalidStateError
-                # in AWS CRT callbacks
                 _logger.debug(
                     "Unsubscribe from topic (redacted) was "
                     "cancelled but will complete in background"
@@ -297,7 +323,7 @@ class MqttSubscriptionManager:
 
             return int(packet_id)
 
-        except (AwsCrtError, RuntimeError) as e:
+        except (AwsCrtError, RuntimeError, TimeoutError) as e:
             _logger.error(f"Failed to unsubscribe from topic (redacted): {e}")
             raise
 

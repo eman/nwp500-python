@@ -237,7 +237,7 @@ def decode_season_bitfield(bitfield: int) -> list[int]:
 # ============================================================================
 
 
-def encode_price(value: Real | float, decimal_point: int) -> int:
+def encode_price(value: Real | float | Decimal, decimal_point: int) -> int:
     """
     Encode a price into the integer representation expected by the device.
 
@@ -276,7 +276,21 @@ def encode_price(value: Real | float, decimal_point: int) -> int:
     # Use Decimal with HALF_UP rounding: round() applies banker's
     # rounding, which under-encodes exact half values at even
     # boundaries (e.g. 0.125 at decimal_point=2 -> 12 instead of 13).
-    scaled = Decimal(str(float(value))) * (Decimal(10) ** decimal_point)
+    # Build the Decimal from the original value where possible —
+    # round-tripping through float would lose precision for Decimal
+    # inputs and introduce binary floating-point artifacts.
+    decimal_value: Decimal
+    if isinstance(value, Decimal):
+        decimal_value = value
+    elif isinstance(value, bool | int):
+        decimal_value = Decimal(int(value))
+    elif isinstance(value, float):
+        decimal_value = Decimal(str(value))
+    else:
+        # Other Real implementations (e.g. Fraction) may not have a
+        # Decimal-parseable str(); go through float as a last resort.
+        decimal_value = Decimal(str(float(value)))
+    scaled = decimal_value * (Decimal(10) ** decimal_point)
     return int(scaled.quantize(Decimal("1"), rounding=ROUND_HALF_UP))
 
 

@@ -1,14 +1,16 @@
 """Unit system management for temperature, flow rate, and volume conversions.
 
-This module provides context-based unit system management, allowing applications
-to override the device's temperature_type setting and specify a preferred
-measurement system (Metric or Imperial).
+This module provides process-wide unit system management, allowing
+applications to override the device's temperature_type setting and specify a
+preferred measurement system (Metric or Imperial).
 
 The unit system preference can be set at library initialization and is used
-during model validation to convert device values to the user's preferred units.
+during model validation to convert device values to the user's preferred
+units. The preference is a process-wide setting: it is visible from every
+task and thread, including model validation triggered by MQTT callbacks that
+run outside the task that configured it.
 """
 
-import contextvars
 import logging
 from typing import Literal
 
@@ -23,12 +25,15 @@ _logger = logging.getLogger(__name__)
 # Type alias for unit system preference
 UnitSystemType = Literal["metric", "us_customary"] | None
 
-# Context variable to store the preferred unit system
+# Process-wide preferred unit system.
 # None means auto-detect from device
 # "metric" means Celsius, "us_customary" means Fahrenheit
-_unit_system_context: contextvars.ContextVar[
-    Literal["metric", "us_customary"] | None
-] = contextvars.ContextVar("unit_system", default=None)
+#
+# This is intentionally NOT a contextvars.ContextVar: MQTT message handling
+# runs in tasks scheduled from AWS CRT callback threads whose context never
+# inherits from the application task, so a context-local preference silently
+# reverted to auto-detect for all real-time data.
+_unit_system: Literal["metric", "us_customary"] | None = None
 
 
 def set_unit_system(
@@ -36,8 +41,9 @@ def set_unit_system(
 ) -> None:
     """Set preferred unit system for temperature, flow, and volume conversions.
 
-    This setting overrides the device's temperature_type setting and applies to
-    all subsequent model validation operations in the current async context.
+    This setting overrides the device's temperature_type setting and applies
+    process-wide to all subsequent model validation operations, including
+    those triggered by MQTT callbacks running in other tasks or threads.
 
     Args:
         unit_system: Preferred unit system:
@@ -50,12 +56,9 @@ def set_unit_system(
         >>> set_unit_system("us_customary")
         >>> # All values now in F, GPM, Gallons
         >>> set_unit_system(None)  # Reset to auto-detect
-
-    Note:
-        This is context-aware and works with async code. Each async task
-        maintains its own unit system preference.
     """
-    _unit_system_context.set(unit_system)
+    global _unit_system
+    _unit_system = unit_system
 
 
 def get_unit_system() -> Literal["metric", "us_customary"] | None:
@@ -67,7 +70,7 @@ def get_unit_system() -> Literal["metric", "us_customary"] | None:
             - "us_customary": Fahrenheit, GPM, Gallons
             - None: Auto-detect from device (default)
     """
-    return _unit_system_context.get()
+    return _unit_system
 
 
 def reset_unit_system() -> None:
@@ -76,7 +79,7 @@ def reset_unit_system() -> None:
     This is useful for tests or when switching between different
     device configurations.
     """
-    _unit_system_context.set(None)
+    set_unit_system(None)
 
 
 def unit_system_to_temperature_type(
@@ -106,8 +109,8 @@ def is_metric_preferred(
 ) -> bool:
     """Check if metric (Celsius) is preferred.
 
-    Checks the override first, then falls back to the context-configured
-    unit system. Used during validation to determine preferred units.
+    Checks the override first, then falls back to the configured unit
+    system. Used during validation to determine preferred units.
 
     Args:
         override: Optional override value. If provided, this takes precedence
@@ -121,7 +124,7 @@ def is_metric_preferred(
     if override is not None:
         return override == "metric"
 
-    # Otherwise check context
+    # Otherwise check the configured preference
     unit_system = get_unit_system()
     if unit_system is not None:
         return unit_system == "metric"

@@ -27,8 +27,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from nwp500 import NavienAuthClient, NavienMqttClient
-from nwp500.mqtt import MqttDiagnosticsCollector
-from nwp500.mqtt_utils import MqttConnectionConfig
+from nwp500.mqtt import MqttConnectionConfig, MqttDiagnosticsCollector
 
 # Configure logging to show detailed MQTT information
 logging.basicConfig(
