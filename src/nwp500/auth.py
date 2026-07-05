@@ -504,14 +504,12 @@ class NavienAuthClient:
         except aiohttp.ClientError as e:
             _logger.error(f"Network error during sign-in: {e}")
             raise AuthenticationError(
-                f"Network error: {str(e)}",
+                f"Network error: {e!s}",
                 retriable=True,
             ) from e
         except (KeyError, ValueError, json.JSONDecodeError) as e:
             _logger.error(f"Failed to parse authentication response: {e}")
-            raise AuthenticationError(
-                f"Invalid response format: {str(e)}"
-            ) from e
+            raise AuthenticationError(f"Invalid response format: {e!s}") from e
 
     async def refresh_token(
         self, refresh_token: str | None = None
@@ -639,12 +637,12 @@ class NavienAuthClient:
         except aiohttp.ClientError as e:
             _logger.error(f"Network error during token refresh: {e}")
             raise TokenRefreshError(
-                f"Network error: {str(e)}",
+                f"Network error: {e!s}",
                 retriable=True,
             ) from e
         except (KeyError, ValueError, json.JSONDecodeError) as e:
             _logger.error(f"Failed to parse refresh response: {e}")
-            raise TokenRefreshError(f"Invalid response format: {str(e)}") from e
+            raise TokenRefreshError(f"Invalid response format: {e!s}") from e
 
     async def re_authenticate(self) -> AuthenticationResponse:
         """

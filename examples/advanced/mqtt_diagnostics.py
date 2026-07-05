@@ -84,7 +84,7 @@ class MqttDiagnosticsExample:
                 output_file = self.output_dir / f"diagnostics_{timestamp}.json"
 
                 json_data = self.diagnostics.export_json()
-                with open(output_file, "w") as f:
+                with output_file.open("w") as f:
                     f.write(json_data)
 
                 _logger.info(f"Exported diagnostics to {output_file}")
@@ -276,7 +276,7 @@ class MqttDiagnosticsExample:
                     _logger.info("Exporting final diagnostics...")
                     timestamp = datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
                     final_file = self.output_dir / f"diagnostics_final_{timestamp}.json"
-                    with open(final_file, "w") as f:
+                    with final_file.open("w") as f:
                         f.write(self.diagnostics.export_json())
                     _logger.info(f"Final diagnostics saved to {final_file}")
 
