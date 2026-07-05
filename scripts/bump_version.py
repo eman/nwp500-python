@@ -20,17 +20,20 @@ field is for the PyScaffold tool version, not the package version!
 """
 
 import re
+import shutil
 import subprocess
 import sys
-from datetime import date
+from datetime import datetime
 from pathlib import Path
 
+GIT = shutil.which("git") or "git"
 
-def run_git_command(args: list) -> str:
+
+def run_git_command(args: list[str]) -> str:
     """Run a git command and return the output."""
     try:
-        result = subprocess.run(
-            ["git"] + args,
+        result = subprocess.run(  # noqa: S603
+            [GIT, *args],
             capture_output=True,
             text=True,
             check=True,
@@ -142,6 +145,73 @@ def check_working_directory_clean() -> None:
         sys.exit(1)
 
 
+def check_up_to_date_with_remote() -> None:
+    """Ensure the local branch is in sync with its remote before bumping.
+
+    Running the version bump from a stale local checkout can silently drop
+    CHANGELOG.rst entries: the local file is missing changes (e.g. a prior
+    release's changelog section) that already exist upstream, so the diff
+    inserted by update_changelog() is based on outdated content and the
+    upstream entry never makes it back in once pushed/merged.
+    """
+    branch = run_git_command(["rev-parse", "--abbrev-ref", "HEAD"])
+    upstream = subprocess.run(  # noqa: S603
+        [GIT, "rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"],
+        capture_output=True,
+        text=True,
+    )
+    if upstream.returncode != 0:
+        print(
+            f"Warning: Branch '{branch}' has no upstream tracking branch; "
+            "skipping remote sync check.",
+            file=sys.stderr,
+        )
+        return
+
+    upstream_ref = upstream.stdout.strip()
+
+    # Fetch quietly so the comparison below reflects the latest remote state.
+    fetch = subprocess.run(  # noqa: S603
+        [GIT, "fetch", "--quiet"],
+        capture_output=True,
+        text=True,
+    )
+    if fetch.returncode != 0:
+        print(
+            f"Warning: 'git fetch' failed, remote sync check may be stale: "
+            f"{fetch.stderr.strip()}",
+            file=sys.stderr,
+        )
+
+    local_sha = run_git_command(["rev-parse", "HEAD"])
+    upstream_sha = run_git_command(["rev-parse", upstream_ref])
+
+    if local_sha == upstream_sha:
+        return
+
+    behind = run_git_command(["rev-list", "--count", f"HEAD..{upstream_ref}"])
+    ahead = run_git_command(["rev-list", "--count", f"{upstream_ref}..HEAD"])
+
+    if int(behind) > 0:
+        print(
+            f"Error: Local branch '{branch}' is {behind} commit(s) behind "
+            f"'{upstream_ref}'.",
+            file=sys.stderr,
+        )
+        print(
+            "Pull the latest changes before bumping the version, otherwise "
+            "CHANGELOG.rst entries from other releases may be lost.",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+    if int(ahead) > 0:
+        print(
+            f"Warning: Local branch '{branch}' is {ahead} commit(s) ahead of "
+            f"'{upstream_ref}' (unpushed commits)."
+        )
+
+
 def update_changelog(version: str) -> None:
     """Insert a version heading into CHANGELOG.rst below the Unreleased section.
 
@@ -169,7 +239,8 @@ def update_changelog(version: str) -> None:
 
     content = changelog_path.read_text(encoding="utf-8")
 
-    heading = f"Version {version} ({date.today().isoformat()})"
+    today = datetime.now().astimezone().date().isoformat()
+    heading = f"Version {version} ({today})"
     underline = "=" * len(heading)
     version_block = f"{heading}\n{underline}\n"
 
@@ -177,7 +248,7 @@ def update_changelog(version: str) -> None:
     # one or more blank lines, then insert the version block after them.
     pattern = re.compile(
         r"(Unreleased\n=+\n)"  # group 1: Unreleased heading
-        r"(\n+)",              # group 2: blank line(s) separator
+        r"(\n+)",  # group 2: blank line(s) separator
         re.MULTILINE,
     )
 
@@ -192,10 +263,7 @@ def update_changelog(version: str) -> None:
 
     # Insert the version block after the blank lines that follow "Unreleased"
     new_content = (
-        content[: match.end()]
-        + version_block
-        + "\n"
-        + content[match.end() :]
+        content[: match.end()] + version_block + "\n" + content[match.end() :]
     )
 
     changelog_path.write_text(new_content, encoding="utf-8")
@@ -205,20 +273,18 @@ def update_changelog(version: str) -> None:
 def commit_changelog(version: str) -> None:
     """Stage and commit the CHANGELOG.rst update."""
     run_git_command(["add", "CHANGELOG.rst"])
-    run_git_command(
-        ["commit", "-m", f"Update changelog for v{version}"]
-    )
+    run_git_command(["commit", "-m", f"Update changelog for v{version}"])
     print("[OK] Committed changelog update")
 
 
-def create_tag(version: str, message: str = None) -> None:
+def create_tag(version: str, message: str | None = None) -> None:
     """Create a git tag for the version."""
     tag_name = f"v{version}"
 
     # Check if tag already exists
     try:
-        subprocess.run(
-            ["git", "rev-parse", tag_name],
+        subprocess.run(  # noqa: S603
+            [GIT, "rev-parse", tag_name],
             capture_output=True,
             check=True,
         )
@@ -282,6 +348,10 @@ def main() -> None:
 
     # Check working directory is clean
     check_working_directory_clean()
+
+    # Ensure we're not bumping from a stale checkout, which can silently
+    # drop CHANGELOG.rst entries from releases made on the remote branch.
+    check_up_to_date_with_remote()
 
     # Get current version
     current_version = get_current_version()
