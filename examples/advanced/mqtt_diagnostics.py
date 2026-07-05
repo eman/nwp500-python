@@ -27,8 +27,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from nwp500 import NavienAuthClient, NavienMqttClient
-from nwp500.mqtt import MqttDiagnosticsCollector
-from nwp500.mqtt_utils import MqttConnectionConfig
+from nwp500.mqtt import MqttConnectionConfig, MqttDiagnosticsCollector
 
 # Configure logging to show detailed MQTT information
 logging.basicConfig(
@@ -275,7 +274,7 @@ class MqttDiagnosticsExample:
 
                     # Final export
                     _logger.info("Exporting final diagnostics...")
-                    timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+                    timestamp = datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
                     final_file = self.output_dir / f"diagnostics_final_{timestamp}.json"
                     with open(final_file, "w") as f:
                         f.write(self.diagnostics.export_json())

@@ -45,6 +45,125 @@ Bug Fixes
   ``args, _ = await emitter.wait_for(...)``, but ``wait_for`` returns
   just the args tuple — following the documented pattern raised
   ``ValueError`` or silently mis-assigned.
+- **Serialize concurrent token refresh**: ``ensure_valid_token()`` and
+  ``refresh_token()`` had no lock, so concurrent callers (API 401 retry,
+  MQTT reconnect, periodic requests) at token expiry fired parallel
+  refresh requests; with token rotation the losers were left holding
+  invalidated tokens. Refreshes are now serialized behind an
+  ``asyncio.Lock`` with a post-acquire re-check: callers that lose the
+  race receive the already-refreshed tokens, callers passing a stale
+  (pre-rotation) refresh token get the fresh tokens instead of a
+  guaranteed failure, and an explicit refresh with the current token
+  still forces a refresh (deep-reconnect behavior preserved).
+- **Preserve refresh_token/id_token across refreshes**: the refresh
+  response merge preserved AWS credential fields but not
+  ``refresh_token``/``id_token``. A refresh response omitting them wiped
+  the stored refresh token, so the next refresh posted an empty string
+  and failed unconditionally.
+- **Fix aiohttp session leak when authentication fails in**
+  ``__aenter__``: Python never calls ``__aexit__`` when ``__aenter__``
+  raises, so bad credentials or a network error leaked the owned
+  ``ClientSession`` (one per retry attempt). The session is now closed
+  before the exception propagates.
+- **Make** ``NavienAuthClient.__aenter__`` **idempotent**:
+  ``create_navien_clients()`` pre-enters the context and its docstring
+  instructs users to enter again with ``async with auth:``; the second
+  entry created a fresh session and orphaned the first — which the API
+  client was still pinned to. Re-entering now reuses the existing
+  session.
+- **Fall back to full sign-in when stored-token refresh fails**:
+  restoring expired stored tokens raised ``TokenRefreshError`` even
+  though credentials for a full ``sign_in()`` were available.
+- **Stop pinning the auth session in the API client**:
+  ``NavienAPIClient`` captured ``auth_client.session`` at construction
+  and kept using it after the auth client recreated its session
+  (``RuntimeError: Session is closed``). The session is now resolved per
+  request; an explicitly provided session still takes precedence.
+- **Add HTTP timeouts to unguarded sessions**: the standalone
+  ``refresh_access_token()`` helper and ``OpenEIClient`` created
+  ``ClientSession``s without a ``ClientTimeout``; requests could hang
+  indefinitely. Both now use a 30-second total timeout.
+- **Fix reconnection loop dying on authentication errors**: the backoff
+  loop caught only ``AwsCrtError`` and ``RuntimeError``, so
+  ``TokenRefreshError``, ``AuthenticationError``, and
+  ``MqttCredentialsError`` raised during quick/deep reconnection escaped
+  and silently killed the reconnect task. A routine outage coinciding
+  with token expiry left the client permanently offline despite unlimited
+  retries. All library errors (``Nwp500Error``) and operation timeouts
+  are now treated as failed attempts and retried; only
+  ``InvalidCredentialsError`` is fatal and stops the loop with a
+  ``reconnection_failed`` event.
+- **Fix disconnect() being a no-op while the connection is interrupted**:
+  calling ``disconnect()`` during an interruption returned early without
+  disabling automatic reconnection or stopping periodic tasks, so the
+  backoff loop would resurrect the connection after the application shut
+  the client down. ``disconnect()`` now always disables reconnection and
+  stops periodic tasks, and tears down the SDK connection even when not
+  connected.
+- **Fix queued commands being lost after active/deep reconnection**: the
+  command queue was only flushed from the SDK's ``on_connection_resumed``
+  callback, which never fires for the new connection built by
+  active/deep reconnection. Commands queued while offline were silently
+  dropped. Both reconnect paths now flush the queue after subscriptions
+  are restored.
+- **Fix periodic request tasks dying on MQTT errors**: the periodic loop
+  caught only ``AwsCrtError`` and ``RuntimeError``;
+  ``MqttNotConnectedError``/``MqttPublishError`` raised by a publish
+  racing a disconnection permanently killed the polling task while it
+  still appeared active. The loop now survives all library errors.
+- **Fix silent failures in thread-scheduled coroutines**: futures
+  returned by ``run_coroutine_threadsafe`` were discarded, so exceptions
+  from scheduled work (e.g. a failed resubscribe after a clean-session
+  resume, leaving the client connected but deaf) vanished. A done
+  callback now logs them.
+- **Fix CancelledError being swallowed in reconnection and periodic
+  loops**: both loops caught ``asyncio.CancelledError`` and ``break``-ed,
+  so cancelled tasks ended "successfully" (and the reconnection loop
+  could emit ``reconnection_failed`` during a manual disconnect).
+  Cancellation now propagates correctly.
+- **Fix AttributeError in configure_reservation_water_program**: The
+  ``NavienMqttClient`` proxy referenced ``self._control``, which is never
+  assigned (the attribute is ``_device_controller``), so every call raised
+  ``AttributeError``. Now delegates correctly; a regression test guards all
+  proxies against references to the undefined attribute.
+- **Fix broken CLI mode choices**: ``nwp-cli mode vacation`` always failed
+  because vacation mode (5) requires a day count that was never supplied, and
+  ``mode standby`` sent the invalid writable mode value ``0``. Both choices
+  were removed from the ``mode`` command; use the dedicated ``vacation DAYS``
+  and ``power off`` commands instead.
+- **Fix CLI exit codes**: click ignores command return values in standalone
+  mode, so the CLI always exited ``0`` even when a command failed. Failures
+  now propagate through ``ctx.exit()`` and produce a non-zero exit code for
+  scripts and automation.
+- **Fix cached tokens being reused for a different account**: passing
+  ``--email`` for account B while tokens for account A were cached silently
+  ran commands against account A's session. Cached tokens are now discarded
+  when the provided email does not match the cached one.
+- **Surface OpenEI application errors**: OpenEI reports errors such as an
+  invalid API key in the body of an HTTP 200 response; these were masked as
+  "no rate plans found". ``fetch_rates()`` now raises ``APIError`` with the
+  API's error message.
+- **Fix broken example import**: ``examples/advanced/mqtt_diagnostics.py``
+  imported ``MqttConnectionConfig`` from the nonexistent ``nwp500.mqtt_utils``
+  module and used the deprecated ``datetime.utcnow()``.
+
+Improvements
+------------
+- **MQTT operation acknowledgement timeouts**: connect, publish,
+  subscribe, unsubscribe, and disconnect acknowledgements are now awaited
+  with a timeout (``MqttConnectionConfig.operation_timeout``, default 30
+  seconds). Previously a half-open TCP connection could hang callers
+  until the 20-minute keep-alive expired.
+- **Reconnection backoff jitter**: reconnect delays are now randomized
+  (±50%, capped at ``max_reconnect_delay``) so fleets of clients
+  disconnected simultaneously (e.g. the AWS IoT 24-hour disconnect) no
+  longer reconnect in synchronized waves.
+
+Security
+--------
+- **Restrict token cache file permissions**: ``~/.nwp500_tokens.json``
+  (refresh token and AWS credentials) was written world-readable. It is now
+  created with mode ``0600``, and existing files are tightened on save.
 
 Version 8.1.3 (2026-06-15)
 ==========================
