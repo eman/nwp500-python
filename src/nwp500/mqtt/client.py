@@ -1268,7 +1268,8 @@ class NavienMqttClient(EventEmitter):
 
     async def configure_reservation_water_program(self, device: Device) -> int:
         """Enable/configure water program reservation mode."""
-        return await self._control.configure_reservation_water_program(device)
+        controller = self._device_controller
+        return await controller.configure_reservation_water_program(device)
 
     async def configure_recirculation_schedule(
         self, device: Device, schedule: RecirculationSchedule

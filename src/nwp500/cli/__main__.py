@@ -88,6 +88,10 @@ def async_command(f: Any) -> Any:
 
             # Load cached tokens if available
             tokens, cached_email = load_tokens()
+            # Cached tokens belong to cached_email; never reuse them for a
+            # different account.
+            if email and cached_email and email != cached_email:
+                tokens = None
             # If email not provided in args, try cached email
             email = email or cached_email
 
@@ -162,7 +166,9 @@ def async_command(f: Any) -> Any:
                 _formatter.print_error(str(e), title="Unexpected Error")
             return 1
 
-        return asyncio.run(runner())
+        # click ignores callback return values in standalone mode, so
+        # propagate failures via ctx.exit to get a non-zero exit code.
+        ctx.exit(asyncio.run(runner()))
 
     return wrapper
 
@@ -288,12 +294,10 @@ async def power(mqtt: NavienMqttClient, device: Any, state: str) -> None:
     "mode_name",
     type=click.Choice(
         [
-            "standby",
             "heat-pump",
             "electric",
             "energy-saver",
             "high-demand",
-            "vacation",
         ],
         case_sensitive=False,
     ),

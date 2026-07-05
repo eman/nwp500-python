@@ -132,6 +132,21 @@ async def test_handle_set_mode_request_invalid_mode(mock_mqtt, mock_device):
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("mode_name", ["standby", "vacation"])
+async def test_handle_set_mode_request_unsupported_modes(
+    mock_mqtt, mock_device, mode_name
+):
+    """Standby/vacation are not settable via the mode command.
+
+    Vacation requires a day count (dedicated ``vacation`` command) and
+    standby (0) is not a writable DhwOperationSetting value.
+    """
+    await handle_set_mode_request(mock_mqtt, mock_device, mode_name)
+
+    mock_mqtt.set_dhw_mode.assert_not_called()
+
+
+@pytest.mark.asyncio
 async def test_handle_set_dhw_temp_request_success(mock_mqtt, mock_device):
     """Test successful temperature setting."""
     status = MagicMock(spec=DeviceStatus)

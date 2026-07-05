@@ -4,6 +4,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from nwp500.exceptions import APIError
 from nwp500.openei import OpenEIClient
 
 # Sample OpenEI API response items (realistic data from HAR captures)
@@ -180,6 +181,28 @@ async def test_get_rate_plan_not_found() -> None:
         plan = await client.get_rate_plan("94903", "Nonexistent Plan")
 
     assert plan is None
+
+
+@pytest.mark.asyncio
+async def test_error_body_raises_api_error() -> None:
+    """OpenEI reports errors in an HTTP 200 body; they must not be masked."""
+    mock_resp = MagicMock()
+    mock_resp.raise_for_status = MagicMock()
+    mock_resp.json = AsyncMock(
+        return_value={"error": {"message": "The API_KEY provided is invalid"}}
+    )
+    mock_resp.__aenter__ = AsyncMock(return_value=mock_resp)
+    mock_resp.__aexit__ = AsyncMock(return_value=False)
+
+    mock_session = MagicMock()
+    mock_session.get = MagicMock(return_value=mock_resp)
+
+    client = OpenEIClient(api_key="bad-key")
+    client._session = mock_session
+    client._owned_session = False
+
+    with pytest.raises(APIError, match="API_KEY provided is invalid"):
+        await client.fetch_rates("94903")
 
 
 @pytest.mark.asyncio

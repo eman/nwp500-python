@@ -830,3 +830,38 @@ class TestRecoverConnectionIntegration:
                 # Verify call order
                 assert call_order == ["ensure_valid_token", "connect"]
                 assert result is True
+
+
+class TestDeviceControllerProxies:
+    """Regression tests for client -> device-controller delegation."""
+
+    @pytest.mark.asyncio
+    async def test_configure_reservation_water_program_delegates(
+        self, auth_client_with_valid_tokens
+    ):
+        """Regression: this proxy referenced a nonexistent self._control."""
+        from unittest.mock import AsyncMock, MagicMock
+
+        mqtt_client = NavienMqttClient(auth_client_with_valid_tokens)
+        mqtt_client._device_controller = AsyncMock()
+        mqtt_client._device_controller.configure_reservation_water_program = (
+            AsyncMock(return_value=1)
+        )
+        device = MagicMock()
+
+        result = await mqtt_client.configure_reservation_water_program(device)
+
+        assert result == 1
+        proxy_target = mqtt_client._device_controller
+        proxy_target.configure_reservation_water_program.assert_awaited_once_with(
+            device
+        )
+
+    def test_no_references_to_undefined_control_attribute(self):
+        """No proxy may reference self._control (never assigned)."""
+        import inspect
+
+        import nwp500.mqtt.client as client_module
+
+        source = inspect.getsource(client_module)
+        assert "self._control." not in source
