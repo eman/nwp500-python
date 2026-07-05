@@ -253,6 +253,26 @@ class MqttConnectionConfig:
             )
         if self.deep_reconnect_threshold < 1:
             object.__setattr__(self, "deep_reconnect_threshold", 1)
+        # Validate queue settings up front: a non-positive queue size
+        # would make enqueue() fail at runtime in hard-to-debug ways,
+        # and a negative max age would silently expire every command.
+        if self.max_queued_commands < 1:
+            raise ValueError(
+                "max_queued_commands must be >= 1, got "
+                f"{self.max_queued_commands}"
+            )
+        if (
+            self.max_queued_command_age is not None
+            and self.max_queued_command_age < 0
+        ):
+            raise ValueError(
+                "max_queued_command_age must be >= 0 or None, got "
+                f"{self.max_queued_command_age}"
+            )
+        if self.operation_timeout <= 0:
+            raise ValueError(
+                f"operation_timeout must be > 0, got {self.operation_timeout}"
+            )
 
 
 @dataclass
