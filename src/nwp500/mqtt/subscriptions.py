@@ -118,37 +118,61 @@ class MqttSubscriptionManager:
     def _on_message_received(
         self, topic: str, payload: bytes, **kwargs: Any
     ) -> None:
-        """Handle received MQTT messages.
+        """Handle received MQTT messages (AWS CRT callback).
 
-        Parses JSON payload and routes to registered handlers.
+        This runs on the AWS CRT network thread. It must stay trivial:
+        JSON parsing, pydantic validation, and user callbacks are
+        marshaled onto the asyncio event loop so that
+
+        - a slow or blocking user callback cannot stall all MQTT message
+          processing,
+        - handler registries mutated on the event loop are never iterated
+          concurrently from this thread, and
+        - user callbacks run where asyncio operations are safe, instead
+          of on an undocumented SDK thread.
 
         Args:
             topic: MQTT topic the message was received on
             payload: Raw message payload (JSON bytes)
             **kwargs: Additional MQTT metadata
         """
+        self._schedule_coroutine(self._dispatch_message(topic, payload))
+
+    async def _dispatch_message(self, topic: str, payload: bytes) -> None:
+        """Parse a message and route it to registered handlers.
+
+        Runs on the event loop.
+
+        Args:
+            topic: MQTT topic the message was received on
+            payload: Raw message payload (JSON bytes)
+        """
         try:
-            # Parse JSON payload
             message = json.loads(payload.decode("utf-8"))
+        except (json.JSONDecodeError, UnicodeDecodeError) as e:
+            _logger.error(f"Failed to parse message payload: {e}")
+            return
+
+        if _logger.isEnabledFor(logging.DEBUG):
             _logger.debug("Received message on topic: %s", redact_topic(topic))
 
-            # Call registered handlers that match this topic
-            # Need to match against subscription patterns with wildcards
-            for (
-                subscription_pattern,
-                handlers,
-            ) in self._message_handlers.items():
-                if topic_matches_pattern(topic, subscription_pattern):
-                    for handler in handlers:
-                        try:
-                            handler(topic, message)
-                        except (TypeError, AttributeError, KeyError) as e:
-                            _logger.error(f"Error in message handler: {e}")
-
-        except json.JSONDecodeError as e:
-            _logger.error(f"Failed to parse message payload: {e}")
-        except (AttributeError, KeyError, TypeError) as e:
-            _logger.error(f"Error processing message: {e}")
+        # Call registered handlers that match this topic.
+        # Iterate over snapshots so handlers can subscribe/unsubscribe
+        # (mutating the registries) during dispatch.
+        for subscription_pattern, handlers in list(
+            self._message_handlers.items()
+        ):
+            if topic_matches_pattern(topic, subscription_pattern):
+                for handler in list(handlers):
+                    try:
+                        handler(topic, message)
+                    except Exception:
+                        # One bad handler must not abort delivery to the
+                        # remaining handlers for this message.
+                        _logger.exception(
+                            "Error in message handler for %s",
+                            redact_topic(topic),
+                        )
 
     async def subscribe(
         self,
