@@ -12,6 +12,7 @@ the authentication flow.
 from __future__ import annotations
 
 import asyncio
+import concurrent.futures
 import json
 import logging
 import uuid
@@ -67,6 +68,31 @@ __copyright__ = "Emmanuel Levijarvi"
 __license__ = "MIT"
 
 _logger = logging.getLogger(__name__)
+
+
+def _log_scheduled_coroutine_result(
+    future: concurrent.futures.Future[Any],
+) -> None:
+    """Surface exceptions from scheduled coroutines.
+
+    Attached to futures returned by ``run_coroutine_threadsafe``.
+    Without this callback the returned future is discarded and any
+    exception (e.g. resubscribe failure after a clean-session resume) is
+    silently swallowed.
+    """
+    if future.cancelled():
+        return
+    exc = future.exception()
+    if exc is not None:
+        # Pass an explicit (type, value, traceback) tuple: a bare
+        # exception instance is treated by logging as a truthy flag,
+        # which would log the *current* exception context (empty in a
+        # done-callback) instead of the coroutine's traceback.
+        _logger.error(
+            "Scheduled coroutine failed: %s",
+            exc,
+            exc_info=(type(exc), exc, exc.__traceback__),
+        )
 
 
 class NavienMqttClient(EventEmitter):
@@ -252,14 +278,24 @@ class NavienMqttClient(EventEmitter):
                 self._loop = asyncio.get_running_loop()
             except RuntimeError:
                 _logger.warning("No event loop available to schedule coroutine")
+                # Close the never-scheduled coroutine to avoid a
+                # "coroutine was never awaited" warning and release any
+                # resources it holds.
+                coro.close()
                 return
 
         # Schedule the coroutine in the stored loop using thread-safe method
         try:
-            asyncio.run_coroutine_threadsafe(coro, self._loop)
+            future = asyncio.run_coroutine_threadsafe(coro, self._loop)
         except RuntimeError as e:
             # Event loop is closed or not running
             _logger.error(f"Failed to schedule coroutine: {e}", exc_info=True)
+            coro.close()
+        else:
+            # Never drop the future: exceptions from scheduled coroutines
+            # (e.g. a failed resubscribe after a clean-session resume) would
+            # otherwise be stored on the discarded future and vanish.
+            future.add_done_callback(_log_scheduled_coroutine_result)
 
     def _on_connection_interrupted_internal(
         self, connection: mqtt.Connection, error: AwsCrtError, **kwargs: Any
@@ -476,6 +512,12 @@ class NavienMqttClient(EventEmitter):
                         )
                         await self._subscription_manager.resubscribe_all()
 
+                    # A brand-new connection never fires the SDK's
+                    # on_connection_resumed callback, so queued commands
+                    # must be flushed here or they would be lost.
+                    if self.config.enable_command_queue and self._command_queue:
+                        await self._send_queued_commands_internal()
+
                     _logger.info("Active reconnection successful")
                 else:
                     _logger.warning("Active reconnection failed")
@@ -587,6 +629,12 @@ class NavienMqttClient(EventEmitter):
                     )
                     await self._subscription_manager.resubscribe_all()
 
+                # A brand-new connection never fires the SDK's
+                # on_connection_resumed callback, so queued commands must
+                # be flushed here or they would be lost.
+                if self.config.enable_command_queue and self._command_queue:
+                    await self._send_queued_commands_internal()
+
                 _logger.info(
                     "Deep reconnection successful - fully rebuilt connection"
                 )
@@ -673,6 +721,7 @@ class NavienMqttClient(EventEmitter):
                     event_emitter=self,
                     schedule_coroutine=self._schedule_coroutine,
                     device_info_cache=device_info_cache,
+                    operation_timeout=self.config.operation_timeout,
                 )
 
                 # Update device controller cache
@@ -793,32 +842,46 @@ class NavienMqttClient(EventEmitter):
         )
 
     async def disconnect(self) -> None:
-        """Disconnect from AWS IoT Core and stop all periodic tasks."""
-        if not self._connected or not self._connection_manager:
+        """Disconnect from AWS IoT Core and stop all periodic tasks.
+
+        Safe to call in any state. Even when the connection is currently
+        interrupted (``_connected`` is False with a reconnection loop
+        running), this method disables automatic reconnection and stops
+        periodic tasks so a backoff loop cannot resurrect the connection
+        after the application has shut the client down.
+        """
+        # Always disable automatic reconnection first, regardless of the
+        # current connection state.
+        if self._reconnection_handler:
+            self._reconnection_handler.disable()
+            await self._reconnection_handler.cancel()
+
+        # Stop all periodic tasks
+        if self._periodic_manager:
+            await self._periodic_manager.stop_all_periodic_tasks()
+
+        if not self._connection_manager:
             _logger.warning("Not connected")
             return
 
         _logger.info("Disconnecting from AWS IoT...")
 
-        # Disable automatic reconnection
-        if self._reconnection_handler:
-            self._reconnection_handler.disable()
-            await self._reconnection_handler.cancel()
-
-        # Stop all periodic tasks first
-        if self._periodic_manager:
-            await self._periodic_manager.stop_all_periodic_tasks()
-
         try:
-            # Delegate disconnection to connection manager
-            await self._connection_manager.disconnect()
+            if self._connected:
+                # Delegate graceful disconnection to connection manager
+                await self._connection_manager.disconnect()
+            else:
+                # Interrupted state: no broker session to end gracefully,
+                # but the SDK connection object must still be torn down so
+                # its auto-reconnect cannot fire after shutdown.
+                await self._connection_manager.close()
 
             # Clear connection state
             self._connected = False
             self._connection = None
 
             _logger.info("Disconnected successfully")
-        except (AwsCrtError, RuntimeError) as e:
+        except (AwsCrtError, RuntimeError, TimeoutError) as e:
             _logger.error(f"Error during disconnect: {e}")
             raise
 
@@ -1268,7 +1331,8 @@ class NavienMqttClient(EventEmitter):
 
     async def configure_reservation_water_program(self, device: Device) -> int:
         """Enable/configure water program reservation mode."""
-        return await self._control.configure_reservation_water_program(device)
+        controller = self._device_controller
+        return await controller.configure_reservation_water_program(device)
 
     async def configure_recirculation_schedule(
         self, device: Device, schedule: RecirculationSchedule
