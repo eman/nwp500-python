@@ -67,7 +67,9 @@ class OpenEIClient:
 
     async def __aenter__(self) -> OpenEIClient:
         if self._session is None:
-            self._session = aiohttp.ClientSession()
+            self._session = aiohttp.ClientSession(
+                timeout=aiohttp.ClientTimeout(total=30)
+            )
             self._owned_session = True
         return self
 

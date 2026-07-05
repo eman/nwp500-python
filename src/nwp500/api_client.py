@@ -7,7 +7,7 @@ This module provides an async HTTP client for device management and control.
 from __future__ import annotations
 
 import logging
-from typing import Any, Self, cast
+from typing import Any, Self
 
 import aiohttp
 
@@ -79,15 +79,24 @@ class NavienAPIClient:
         self.base_url = base_url.rstrip("/")
         self._auth_client = auth_client
         self._unit_system = unit_system
-        self._session = session or auth_client.session
+        # An explicitly provided session always wins; otherwise the auth
+        # client's session is resolved per request (never cached) so the
+        # API client keeps working if the auth client recreates its
+        # session.
+        self._session_override = session
 
-        if self._session is None:
+        if self._session_override is None and auth_client.session is None:
             raise ValueError(
                 "auth_client must have an active session or a session "
                 "must be provided"
             )
         self._owned_session = False
         self._owned_auth = False
+
+    @property
+    def _session(self) -> aiohttp.ClientSession | None:
+        """The session used for requests, resolved dynamically."""
+        return self._session_override or self._auth_client.session
 
     async def __aenter__(self) -> Self:
         """Enter async context manager."""
@@ -152,7 +161,12 @@ class NavienAPIClient:
 
         try:
             _logger.debug(f"Starting {method} request to {url}")
-            session = cast(aiohttp.ClientSession, self._session)
+            session = self._session
+            if session is None:
+                raise APIError(
+                    "No active session available. The auth client session "
+                    "has been closed."
+                )
             async with session.request(
                 method,
                 url,
