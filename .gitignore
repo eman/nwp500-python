@@ -68,3 +68,6 @@ resources/*
 .ruff_cache/
 .bandit
 .agent/
+.agents/
+.env
+skills-lock.json
