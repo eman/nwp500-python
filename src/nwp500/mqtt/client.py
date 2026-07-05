@@ -12,10 +12,8 @@ the authentication flow.
 from __future__ import annotations
 
 import asyncio
-import json
 import logging
 import uuid
-import warnings
 from collections.abc import Callable, Sequence
 from typing import TYPE_CHECKING, Any, cast
 
@@ -822,25 +820,6 @@ class NavienMqttClient(EventEmitter):
             _logger.error(f"Error during disconnect: {e}")
             raise
 
-    def _on_message_received(
-        self, topic: str, payload: bytes, **kwargs: Any
-    ) -> None:
-        """Internal callback for received messages."""
-        try:
-            # Parse JSON payload and delegate to subscription manager
-            _logger.debug("Received message on topic: %s", topic)
-
-            # Call registered handlers via subscription manager
-            if self._subscription_manager:
-                # The subscription manager will handle matching
-                # and calling handlers
-                pass  # Subscription manager handles this internally
-
-        except json.JSONDecodeError as e:
-            _logger.error(f"Failed to parse message payload: {e}")
-        except (AttributeError, KeyError, TypeError) as e:
-            _logger.error(f"Error processing message: {e}")
-
     async def subscribe(
         self,
         topic: str,
@@ -1409,16 +1388,6 @@ class NavienMqttClient(EventEmitter):
             This property is now internal. Use the delegated methods on
             NavienMqttClient directly for device control.
         """
-        return self._device_controller
-
-    @property
-    @warnings.deprecated(
-        "The .control attribute is deprecated and will be removed in v9.0.0. "
-        "Use the delegated methods on NavienMqttClient directly (e.g., "
-        "client.set_power() instead of client.control.set_power())."
-    )
-    def control(self) -> MqttDeviceController:
-        """Deprecated access to device controller."""
         return self._device_controller
 
     async def start_periodic_requests(

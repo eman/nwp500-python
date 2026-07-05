@@ -897,13 +897,6 @@ def print_device_status(device_status: Any) -> None:
             )
         )
 
-    # Calculate widths dynamically
-    max_label_len = max((len(label) for _, label, _ in all_items), default=20)
-    max_value_len = max(
-        (len(str(value)) for _, _, value in all_items), default=20
-    )
-    _line_width = max_label_len + max_value_len + 4  # +4 for padding
-
     # Use rich formatter for output
     formatter = get_formatter()
     formatter.print_status_table(all_items)
@@ -1108,13 +1101,6 @@ def print_device_info(device_feature: Any) -> None:
             value = getattr(device_feature, attr)
             status = "Yes" if value else "No"
             all_items.append(("SUPPORTED FEATURES", label, status))
-
-    # Calculate widths dynamically
-    max_label_len = max((len(label) for _, label, _ in all_items), default=20)
-    max_value_len = max(
-        (len(str(value)) for _, _, value in all_items), default=20
-    )
-    _line_width = max_label_len + max_value_len + 4  # +4 for padding
 
     # Use rich formatter for output
     formatter = get_formatter()

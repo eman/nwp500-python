@@ -418,7 +418,7 @@ Encodes a floating-point price into an integer for transmission.
 
 .. code-block:: python
 
-    from nwp500 import encode_price
+    from nwp500.encoding import encode_price
     
     # Encode $0.45000 per kWh
     encoded = encode_price(0.45, decimal_point=5)
@@ -437,7 +437,7 @@ Decodes an integer price back to floating-point.
 
 .. code-block:: python
 
-    from nwp500 import decode_price
+    from nwp500.encoding import decode_price
     
     # Decode price from device
     price = decode_price(45000, decimal_point=5)
@@ -466,7 +466,7 @@ Encodes a list of day names into a bitfield.
 
 .. code-block:: python
 
-    from nwp500 import encode_week_bitfield
+    from nwp500.encoding import encode_week_bitfield
     
     # Weekdays only
     bitfield = encode_week_bitfield([
@@ -487,7 +487,7 @@ Decodes a bitfield back into a list of day names.
 
 .. code-block:: python
 
-    from nwp500 import decode_week_bitfield
+    from nwp500.encoding import decode_week_bitfield
     
     # Decode weekday bitfield
     days = decode_week_bitfield(62)
@@ -504,7 +504,8 @@ Configure two rate periods - off-peak and peak pricing:
 .. code-block:: python
 
     import asyncio
-    from nwp500 import NavienAPIClient, NavienAuthClient, NavienMqttClient, build_tou_period
+    from nwp500 import NavienAPIClient, NavienAuthClient, NavienMqttClient
+    from nwp500.encoding import build_tou_period
 
     async def configure_simple_tou():
         async with NavienAuthClient("user@example.com", "password") as auth_client:
@@ -654,7 +655,7 @@ Query the device for its current TOU configuration:
 
 .. code-block:: python
 
-    from nwp500 import decode_week_bitfield, decode_price
+    from nwp500.encoding import decode_week_bitfield, decode_price
 
     async def check_tou_settings():
         async with NavienAuthClient("user@example.com", "password") as auth_client:

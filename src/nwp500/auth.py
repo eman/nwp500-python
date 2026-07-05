@@ -16,6 +16,8 @@ from __future__ import annotations
 import json
 import logging
 from datetime import UTC, datetime, timedelta
+from importlib.metadata import PackageNotFoundError
+from importlib.metadata import version as _dist_version
 from typing import Any, Self, cast
 
 import aiohttp
@@ -26,7 +28,6 @@ from pydantic import (
     model_validator,
 )
 
-from . import __version__
 from ._base import NavienBaseModel
 from .config import API_BASE_URL, REFRESH_ENDPOINT, SIGN_IN_ENDPOINT
 from .exceptions import (
@@ -35,6 +36,15 @@ from .exceptions import (
     TokenRefreshError,
 )
 from .unit_system import UnitSystemType
+
+# Resolve the package version directly from distribution metadata instead
+# of importing it from the package __init__ (which imports this module,
+# making `from . import __version__` an order-dependent near-circular
+# import).
+try:
+    __version__ = _dist_version("nwp500-python")
+except PackageNotFoundError:  # pragma: no cover
+    __version__ = "unknown"
 
 __author__ = "Emmanuel Levijarvi"
 __copyright__ = "Emmanuel Levijarvi"

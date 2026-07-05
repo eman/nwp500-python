@@ -21,6 +21,8 @@ from nwp500 import (
     NavienAuthClient,
     NavienMqttClient,
     OpenEIClient,
+)
+from nwp500.encoding import (
     decode_price,
     decode_week_bitfield,
 )

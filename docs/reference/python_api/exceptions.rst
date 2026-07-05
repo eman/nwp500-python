@@ -15,22 +15,17 @@ All library exceptions inherit from ``Nwp500Error``::
     Nwp500Error (base)
     ├── AuthenticationError
     │   ├── InvalidCredentialsError
-    │   ├── TokenExpiredError
     │   └── TokenRefreshError
     ├── APIError
     ├── MqttError
     │   ├── MqttConnectionError
     │   ├── MqttNotConnectedError
     │   ├── MqttPublishError
-    │   ├── MqttSubscriptionError
     │   └── MqttCredentialsError
     ├── ValidationError
     │   ├── ParameterValidationError
     │   └── RangeValidationError
     └── DeviceError
-        ├── DeviceNotFoundError
-        ├── DeviceOfflineError
-        ├── DeviceOperationError
         └── DeviceCapabilityError
 
 Base Exception
@@ -133,16 +128,6 @@ InvalidCredentialsError
           print(f"Invalid credentials: {e}")
           print("Please check your email and password")
           # Prompt user to re-enter credentials
-
-TokenExpiredError
------------------
-
-.. py:class:: TokenExpiredError
-
-   Raised when an authentication token has expired.
-
-   Subclass of :py:class:`AuthenticationError`. Tokens have a limited lifetime
-   and must be refreshed periodically.
 
 TokenRefreshError
 -----------------
@@ -305,16 +290,6 @@ MqttPublishError
                   else:
                       raise  # Not retriable or max retries reached
 
-MqttSubscriptionError
----------------------
-
-.. py:class:: MqttSubscriptionError
-
-   Failed to subscribe to MQTT topic.
-
-   Raised when subscription to an MQTT topic fails. This may occur if the
-   connection is interrupted or if the client lacks permissions for the topic.
-
 MqttCredentialsError
 --------------------
 
@@ -408,38 +383,6 @@ DeviceError
    Base exception for device operations.
 
    All device-related errors inherit from this base class.
-
-DeviceNotFoundError
--------------------
-
-.. py:class:: DeviceNotFoundError
-
-   Requested device not found.
-
-   Raised when a device cannot be found in the user's device list or when
-   attempting to access a non-existent device.
-
-DeviceOfflineError
-------------------
-
-.. py:class:: DeviceOfflineError
-
-   Device is offline or unreachable.
-
-   Raised when a device is offline and cannot respond to commands or status
-   requests. The device may be powered off, disconnected from the network,
-   or experiencing connectivity issues.
-
-DeviceOperationError
---------------------
-
-.. py:class:: DeviceOperationError
-
-   Device operation failed.
-
-   Raised when a device operation (mode change, temperature setting, etc.)
-   fails. This may occur due to invalid commands, device restrictions, or
-   device-side errors.
 
 DeviceCapabilityError
 ---------------------

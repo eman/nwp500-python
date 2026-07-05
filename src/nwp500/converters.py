@@ -19,7 +19,6 @@ __all__ = [
     "div_10",
     "mul_10",
     "enum_validator",
-    "str_enum_validator",
 ]
 
 
@@ -103,8 +102,6 @@ def div_10(value: Any) -> float:
         >>> div_10(25.5)
         2.55
     """
-    if isinstance(value, (int, float)):
-        return float(value) / 10.0
     return float(value) / 10.0
 
 
@@ -126,8 +123,6 @@ def mul_10(value: Any) -> float:
         >>> mul_10(25.5)
         255.0
     """
-    if isinstance(value, (int, float)):
-        return float(value) * 10.0
     return float(value) * 10.0
 
 
@@ -157,35 +152,5 @@ def enum_validator(enum_class: type[Any]) -> Callable[[Any], Any]:
         if isinstance(value, int):
             return enum_class(value)
         return enum_class(int(value))
-
-    return validate
-
-
-def str_enum_validator(enum_class: type[Any]) -> Callable[[Any], Any]:
-    """Create a validator for converting string to str-based Enum.
-
-    Args:
-        enum_class: The str Enum class to validate against.
-
-    Returns:
-        A validator function compatible with Pydantic BeforeValidator.
-
-    Example:
-        >>> from enum import Enum
-        >>> class Status(str, Enum):
-        ...     ACTIVE = "A"
-        ...     INACTIVE = "I"
-        >>> validator = str_enum_validator(Status)
-        >>> validator("A")
-        <Status.ACTIVE: 'A'>
-    """
-
-    def validate(value: Any) -> Any:
-        """Validate and convert value to enum."""
-        if isinstance(value, enum_class):
-            return value
-        if isinstance(value, str):
-            return enum_class(value)
-        return enum_class(str(value))
 
     return validate
