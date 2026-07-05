@@ -7,6 +7,44 @@ Unreleased
 
 Bug Fixes
 ---------
+- **Run MQTT message dispatch on the event loop**: JSON parsing, pydantic
+  model validation, and user callbacks all executed directly on the AWS
+  CRT network thread. A slow or blocking callback (e.g. the CLI monitor's
+  CSV writes) stalled all MQTT message processing, user callbacks ran on
+  an undocumented SDK thread where asyncio operations are unsafe, and the
+  handler registry could be mutated on the event loop while the CRT
+  thread iterated it (``RuntimeError: dictionary changed size during
+  iteration``, dropping the message — most likely during the
+  reconnect/resubscribe window). The awscrt callback now only marshals
+  the raw payload onto the event loop; parsing and dispatch run there,
+  iterating snapshots of the handler registries.
+- **Stop one raising handler from aborting message delivery**: handler
+  dispatch caught only ``(TypeError, AttributeError, KeyError)``; a user
+  callback raising anything else (e.g. ``ValueError``) escaped into the
+  awscrt callback machinery and skipped the remaining handlers for that
+  message. Individual handler failures are now logged and isolated.
+- **Make the unit system preference process-wide**:
+  ``set_unit_system()`` stored the preference in a ``ContextVar`` set in
+  the caller's task. Tasks scheduled from AWS CRT callback threads never
+  inherit that context, so the preference silently reverted to
+  auto-detect for all MQTT-delivered data — ``nwp-cli --unit-system
+  metric monitor`` logged temperatures in the device's native unit while
+  labeling them °C. The preference is now a process-wide setting visible
+  from every task and thread.
+- **Fix once-listeners firing more than once**: ``EventEmitter.emit()``
+  removed one-time listeners only after invoking them, so a callback
+  that raised stayed registered forever, and two overlapping emits could
+  both fire the same once-listener. Once-listeners are now removed
+  before invocation.
+- **Fix wait_for() leaking its listener on cancellation**:
+  ``EventEmitter.wait_for()`` removed its listener only on timeout; a
+  cancelled waiter left the listener registered until the event next
+  fired, setting a result on a dead future. Cleanup now happens in a
+  ``finally`` block.
+- **Fix wait_for() docstring examples**: examples showed
+  ``args, _ = await emitter.wait_for(...)``, but ``wait_for`` returns
+  just the args tuple — following the documented pattern raised
+  ``ValueError`` or silently mis-assigned.
 - **Serialize concurrent token refresh**: ``ensure_valid_token()`` and
   ``refresh_token()`` had no lock, so concurrent callers (API 401 retry,
   MQTT reconnect, periodic requests) at token expiry fired parallel

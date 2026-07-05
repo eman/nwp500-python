@@ -204,7 +204,7 @@ class MqttClientEvents:
         )
 
         # Wait for a specific event
-        args, _ = await mqtt_client.wait_for(
+        args = await mqtt_client.wait_for(
             MqttClientEvents.CONNECTION_RESUMED
         )
         connection_event = args[0]
