@@ -123,9 +123,9 @@ def test_preference_set_in_one_thread_seen_in_another_thread():
 
     writer_thread = threading.Thread(target=writer)
     reader_thread = threading.Thread(target=reader)
+    reader_thread.start()
     writer_thread.start()
     writer_thread.join()
-    reader_thread.start()
     reader_thread.join()
 
     assert results["seen_preference"] == "metric"
