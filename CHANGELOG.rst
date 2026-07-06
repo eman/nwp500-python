@@ -5,6 +5,9 @@ Changelog
 Unreleased
 ==========
 
+Version 9.2.0 (2026-07-06)
+==========================
+
 Changed
 -------
 - **CLI formatting stacks merged; Rich is the sole human renderer**
