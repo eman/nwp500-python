@@ -25,6 +25,18 @@ Changed
   is byte-for-byte unchanged (verified by golden capture and the existing
   CLI tests); energy output now renders a summary table plus a breakdown
   table entirely in Rich rather than printing plain text and a Rich table.
+- **Event system relationship clarified and de-duplicated** (`#102
+  <https://github.com/eman/nwp500-python/issues/102>`_): ``events.py`` and
+  ``mqtt_events.py`` are not two competing event mechanisms.
+  ``EventEmitter`` (``events.py``) is the sole delivery mechanism, while
+  ``mqtt_events.py`` provides the event-name registry
+  (``MqttClientEvents``) and the typed dataclass payloads it carries.
+  Internal ``emit`` call sites in ``mqtt/state_tracker.py``,
+  ``mqtt/client.py`` and ``mqtt/subscriptions.py`` now reference the
+  ``MqttClientEvents`` constants instead of duplicating the raw event-name
+  strings, so each event name is defined in exactly one place. Module
+  docstrings and the event-system reference docs were updated to document
+  the relationship, and typed-payload delivery is now covered by tests.
 - **awscrt types wrapped out of public MQTT signatures** (`#101
   <https://github.com/eman/nwp500-python/issues/101>`_): the library no
   longer exposes ``awscrt`` SDK types on its own public/semi-public API

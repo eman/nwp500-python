@@ -1,9 +1,26 @@
 """
 Event Emitter for Navien device state changes.
 
-This module provides an event-driven architecture for handling device state
-changes, allowing multiple listeners per event and automatic state change
-detection.
+This module provides the event-driven *mechanism* used throughout the library:
+a generic, string-keyed :class:`EventEmitter` supporting multiple listeners,
+async handlers, one-time listeners, and priority ordering.
+
+Relationship to :mod:`nwp500.mqtt_events`
+-----------------------------------------
+:class:`EventEmitter` is only the delivery mechanism. It does not define which
+events exist or what payloads they carry. Those are declared in
+:mod:`nwp500.mqtt_events`, which provides:
+
+- the canonical event-name registry
+  (:class:`~nwp500.mqtt_events.MqttClientEvents` string constants), and
+- the typed, frozen dataclass payloads
+  (e.g. :class:`~nwp500.mqtt_events.StatusReceivedEvent`) passed as the
+  event argument.
+
+The two modules are complementary, not competing: internal ``emit`` call
+sites reference the ``MqttClientEvents`` constants and emit the matching
+typed payload, while consumers subscribe with the same constants via
+:meth:`EventEmitter.on`.
 """
 
 import asyncio
