@@ -16,7 +16,6 @@ import logging
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Any, cast
 
-from awscrt import mqtt
 from awscrt.exceptions import AwsCrtError
 from pydantic import ValidationError
 
@@ -35,6 +34,7 @@ from ..models import (
 from ..mqtt_events import FeatureReceivedEvent, StatusReceivedEvent
 from ..topic_builder import MqttTopicBuilder
 from .state_tracker import DeviceStateTracker
+from .types import QoS, to_awscrt_qos
 from .utils import get_response_data, redact_topic, topic_matches_pattern
 
 if TYPE_CHECKING:
@@ -87,7 +87,7 @@ class MqttSubscriptionManager:
         self._operation_timeout = operation_timeout
 
         # Track subscriptions and handlers
-        self._subscriptions: dict[str, mqtt.QoS] = {}
+        self._subscriptions: dict[str, QoS] = {}
         self._message_handlers: dict[
             str, list[Callable[[str, dict[str, Any]], None]]
         ] = {}
@@ -96,7 +96,7 @@ class MqttSubscriptionManager:
         self._state_tracker = DeviceStateTracker(event_emitter)
 
     @property
-    def subscriptions(self) -> dict[str, mqtt.QoS]:
+    def subscriptions(self) -> dict[str, QoS]:
         """Get current subscriptions."""
         return self._subscriptions.copy()
 
@@ -205,7 +205,7 @@ class MqttSubscriptionManager:
         self,
         topic: str,
         callback: Callable[[str, dict[str, Any]], None],
-        qos: mqtt.QoS = mqtt.QoS.AT_LEAST_ONCE,
+        qos: QoS = QoS.AT_LEAST_ONCE,
     ) -> int:
         """
         Subscribe to an MQTT topic.
@@ -247,7 +247,9 @@ class MqttSubscriptionManager:
             # callbacks (avoids InvalidStateError); the underlying
             # subscribe completes independently.
             subscribe_future, packet_id = self._connection.subscribe(
-                topic=topic, qos=qos, callback=self._on_message_received
+                topic=topic,
+                qos=to_awscrt_qos(qos),
+                callback=self._on_message_received,
             )
             awaitable_future = asyncio.wrap_future(subscribe_future)
             try:
@@ -457,7 +459,7 @@ class MqttSubscriptionManager:
             qos_map = dict(subscriptions_to_restore)
             for topic in failed_subscriptions:
                 self._subscriptions[topic] = qos_map.get(
-                    topic, mqtt.QoS.AT_LEAST_ONCE
+                    topic, QoS.AT_LEAST_ONCE
                 )
                 self._message_handlers[topic] = handlers_to_restore.get(
                     topic, []
