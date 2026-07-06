@@ -25,6 +25,16 @@ Changed
   is byte-for-byte unchanged (verified by golden capture and the existing
   CLI tests); energy output now renders a summary table plus a breakdown
   table entirely in Rich rather than printing plain text and a Rich table.
+- **mqtt/client.py slimmed toward a thin façade** (`#99
+  <https://github.com/eman/nwp500-python/issues/99>`_): the ~40 device
+  control command proxies and the typed ``subscribe_*``/``unsubscribe_*``
+  device-subscription proxies were moved out of ``NavienMqttClient`` into
+  two focused mixins, ``DeviceControlCommandsMixin``
+  (``mqtt/_control_commands.py``) and ``DeviceSubscriptionsMixin``
+  (``mqtt/_device_subscriptions.py``). ``NavienMqttClient`` now inherits
+  both, so its public API is unchanged, while ``mqtt/client.py`` shrinks
+  from ~1572 to ~1196 lines and reads more clearly as connection
+  orchestration plus a public façade. No behavior change.
 - **Event system relationship clarified and de-duplicated** (`#102
   <https://github.com/eman/nwp500-python/issues/102>`_): ``events.py`` and
   ``mqtt_events.py`` are not two competing event mechanisms.
