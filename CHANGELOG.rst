@@ -5,6 +5,27 @@ Changelog
 Unreleased
 ==========
 
+Changed
+-------
+- **CLI formatting stacks merged; Rich is the sole human renderer**
+  (`#100 <https://github.com/eman/nwp500-python/issues/100>`_): a new
+  ``src/nwp500/cli/presentation.py`` owns all data-shaping for CLI output
+  (field selection, labels, units, ordering, value formatting and energy
+  aggregation) as presentation-neutral structures. Because the CLI
+  hard-requires ``rich`` (there is no plain-text fallback), the redundant
+  plain-text human renderer and the Rich-vs-plain fallback machinery were
+  removed: ``rich_output.py`` no longer contains ``_should_use_rich``,
+  ``_rich_available``, the ``NWP500_NO_RICH`` toggle, or any
+  ``_print_*_plain`` methods, and now renders the neutral structures
+  (including the energy ``TOTAL SUMMARY``) exclusively with Rich, consuming
+  the presentation dataclasses directly instead of dict adapters.
+  ``output_formatters.py`` keeps only JSON/CSV rendering plus thin
+  human-output dispatch. Net CLI code drops from ~2088 to ~1838 lines with a
+  single data-shaping layer and a single human renderer. Non-energy output
+  is byte-for-byte unchanged (verified by golden capture and the existing
+  CLI tests); energy output now renders a summary table plus a breakdown
+  table entirely in Rich rather than printing plain text and a Rich table.
+
 Fixed
 -----
 - **MQTT ack futures now consumed on abandonment** (`#97
