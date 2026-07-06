@@ -10,6 +10,7 @@ This module handles all subscription-related operations including:
 """
 
 import asyncio
+import functools
 import json
 import logging
 from collections.abc import Callable
@@ -260,8 +261,9 @@ class MqttSubscriptionManager:
                     "but will complete in background"
                 )
                 awaitable_future.add_done_callback(
-                    lambda f: self._consume_abandoned_future(
-                        f, f"Subscribe to '{redact_topic(topic)}'"
+                    functools.partial(
+                        MqttSubscriptionManager._consume_abandoned_future,
+                        operation=f"Subscribe to '{redact_topic(topic)}'",
                     )
                 )
                 raise
@@ -271,8 +273,9 @@ class MqttSubscriptionManager:
                     f"acknowledged within {self._operation_timeout:.1f}s"
                 )
                 awaitable_future.add_done_callback(
-                    lambda f: self._consume_abandoned_future(
-                        f, f"Subscribe to '{redact_topic(topic)}'"
+                    functools.partial(
+                        MqttSubscriptionManager._consume_abandoned_future,
+                        operation=f"Subscribe to '{redact_topic(topic)}'",
                     )
                 )
                 raise
@@ -356,8 +359,9 @@ class MqttSubscriptionManager:
                     "cancelled but will complete in background"
                 )
                 awaitable_future.add_done_callback(
-                    lambda f: self._consume_abandoned_future(
-                        f, "Unsubscribe from topic (redacted)"
+                    functools.partial(
+                        MqttSubscriptionManager._consume_abandoned_future,
+                        operation="Unsubscribe from topic (redacted)",
                     )
                 )
                 raise
@@ -367,8 +371,9 @@ class MqttSubscriptionManager:
                     f"acknowledged within {self._operation_timeout:.1f}s"
                 )
                 awaitable_future.add_done_callback(
-                    lambda f: self._consume_abandoned_future(
-                        f, "Unsubscribe from topic (redacted)"
+                    functools.partial(
+                        MqttSubscriptionManager._consume_abandoned_future,
+                        operation="Unsubscribe from topic (redacted)",
                     )
                 )
                 raise
