@@ -80,7 +80,7 @@ def print_daily_energy_usage(
             f"No daily energy data available for {month}/{year}"
         )
         return
-    formatter.print_daily_energy_table(report, year, month)
+    formatter.print_daily_energy_table(report)
 
 
 def write_status_to_csv(file_path: str, status: DeviceStatus) -> None:

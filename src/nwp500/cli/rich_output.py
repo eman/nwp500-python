@@ -169,18 +169,15 @@ class OutputFormatter:
         if report.months:
             self._print_energy_rich(report.months)
 
-    def print_daily_energy_table(
-        self, report: DailyEnergyReport, year: int, month: int
-    ) -> None:
+    def print_daily_energy_table(self, report: DailyEnergyReport) -> None:
         """Print a daily energy usage report (summary + daily breakdown).
 
         Args:
             report: Neutral daily energy report from :mod:`.presentation`
-            year: Year for the data
-            month: Month for the data
         """
         from calendar import month_name
 
+        year, month = report.year, report.month
         month_str = (
             f"{month_name[month]} {year}"
             if 1 <= month <= 12
@@ -189,7 +186,7 @@ class OutputFormatter:
         self._print_energy_summary(
             report.totals, f"DAILY ENERGY USAGE - {month_str}"
         )
-        self._print_daily_energy_rich(report.days, year, month)
+        self._print_daily_energy_rich(report.days)
 
     def print_error(
         self,
@@ -570,9 +567,7 @@ class OutputFormatter:
         bar = "█" * filled + "░" * (width - filled)
         return f"[{bar}]"
 
-    def _print_daily_energy_rich(
-        self, days: list[EnergyPeriodRow], year: int, month: int
-    ) -> None:
+    def _print_daily_energy_rich(self, days: list[EnergyPeriodRow]) -> None:
         """Rich-enhanced daily energy breakdown."""
         assert self.console is not None
 

@@ -1,11 +1,11 @@
 """Presentation-neutral intermediate representation for CLI output.
 
 This module owns the *data-shaping* concerns shared by every CLI output
-mode (plain text, Rich tables, CSV, JSON): which fields are shown, their
-labels, units, ordering and value-to-string formatting. Both the plain-text
-renderer in :mod:`.output_formatters` and the Rich renderer in
-:mod:`.rich_output` consume the neutral structures produced here, so a field
-or command only needs to be described once.
+mode (Rich tables, CSV, JSON): which fields are shown, their labels, units,
+ordering and value-to-string formatting. Both the CSV/JSON renderer in
+:mod:`.output_formatters` and the Rich renderer in :mod:`.rich_output`
+consume the neutral structures produced here, so a field or command only
+needs to be described once.
 
 The structures are deliberately free of any rendering technology (no colors,
 Rich objects or fixed-width layout). Renderers decide how to present them.
