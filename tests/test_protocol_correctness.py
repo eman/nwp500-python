@@ -14,7 +14,6 @@ from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-from awscrt import mqtt
 
 from nwp500.encoding import build_tou_period, encode_price
 from nwp500.events import EventEmitter
@@ -28,6 +27,7 @@ from nwp500.models.status import DeviceStatus
 from nwp500.mqtt.command_queue import MqttCommandQueue
 from nwp500.mqtt.control import MqttDeviceController
 from nwp500.mqtt.state_tracker import DeviceStateTracker
+from nwp500.mqtt.types import QoS
 from nwp500.mqtt.utils import MqttConnectionConfig
 from nwp500.temperature import RawCelsius, TempFormulaType
 from nwp500.unit_system import reset_unit_system
@@ -176,10 +176,8 @@ class TestCommandQueueOrdering:
         newer commands, so [power_on, set_temp] became [set_temp,
         power_on] on the next flush."""
         queue = _queue()
-        queue.enqueue(
-            "topic/power_on", {"cmd": "power"}, mqtt.QoS.AT_LEAST_ONCE
-        )
-        queue.enqueue("topic/set_temp", {"cmd": "temp"}, mqtt.QoS.AT_LEAST_ONCE)
+        queue.enqueue("topic/power_on", {"cmd": "power"}, QoS.AT_LEAST_ONCE)
+        queue.enqueue("topic/set_temp", {"cmd": "temp"}, QoS.AT_LEAST_ONCE)
 
         publish = AsyncMock(side_effect=RuntimeError("still down"))
 
@@ -207,8 +205,8 @@ class TestCommandQueueExpiry:
     @pytest.mark.asyncio
     async def test_expired_commands_discarded_on_flush(self):
         queue = _queue(max_age=300.0)
-        queue.enqueue("topic/old", {"cmd": "old"}, mqtt.QoS.AT_LEAST_ONCE)
-        queue.enqueue("topic/new", {"cmd": "new"}, mqtt.QoS.AT_LEAST_ONCE)
+        queue.enqueue("topic/old", {"cmd": "old"}, QoS.AT_LEAST_ONCE)
+        queue.enqueue("topic/new", {"cmd": "new"}, QoS.AT_LEAST_ONCE)
         # Age the first command past the limit
         queue._queue[0].timestamp = datetime.now(UTC) - timedelta(hours=2)
 
@@ -222,7 +220,7 @@ class TestCommandQueueExpiry:
     @pytest.mark.asyncio
     async def test_expiry_disabled_with_none(self):
         queue = _queue(max_age=None)
-        queue.enqueue("topic/old", {"cmd": "old"}, mqtt.QoS.AT_LEAST_ONCE)
+        queue.enqueue("topic/old", {"cmd": "old"}, QoS.AT_LEAST_ONCE)
         queue._queue[0].timestamp = datetime.now(UTC) - timedelta(days=1)
 
         publish = AsyncMock(return_value=1)
@@ -236,7 +234,7 @@ class TestCommandQueueExpiry:
         )
         queue = MqttCommandQueue(config)
         for name in ("a", "b", "c"):
-            queue.enqueue(f"topic/{name}", {}, mqtt.QoS.AT_LEAST_ONCE)
+            queue.enqueue(f"topic/{name}", {}, QoS.AT_LEAST_ONCE)
 
         assert queue.count == 2
         assert [c.topic for c in queue._queue] == ["topic/b", "topic/c"]

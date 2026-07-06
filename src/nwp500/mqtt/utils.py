@@ -12,9 +12,8 @@ from datetime import datetime
 from enum import StrEnum
 from typing import Any
 
-from awscrt import mqtt
-
 from ..config import AWS_IOT_ENDPOINT, AWS_REGION
+from .types import QoS
 
 __author__ = "Emmanuel Levijarvi"
 __copyright__ = "Emmanuel Levijarvi"
@@ -286,7 +285,7 @@ class QueuedCommand:
 
     topic: str
     payload: dict[str, Any]
-    qos: mqtt.QoS
+    qos: QoS
     timestamp: datetime
 
 

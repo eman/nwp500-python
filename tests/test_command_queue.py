@@ -3,9 +3,8 @@
 from collections import deque
 from datetime import UTC, datetime
 
-from awscrt import mqtt
-
 from nwp500.mqtt import MqttConnectionConfig
+from nwp500.mqtt.types import QoS
 from nwp500.mqtt.utils import QueuedCommand
 
 
@@ -13,7 +12,7 @@ def test_queued_command_dataclass():
     """Test QueuedCommand dataclass creation."""
     topic = "test/topic"
     payload = {"key": "value"}
-    qos = mqtt.QoS.AT_LEAST_ONCE
+    qos = QoS.AT_LEAST_ONCE
     timestamp = datetime.now(UTC)
 
     command = QueuedCommand(
@@ -74,7 +73,7 @@ def test_queued_command_fifo_order():
         command = QueuedCommand(
             topic=f"test/topic/{i}",
             payload={"value": i},
-            qos=mqtt.QoS.AT_LEAST_ONCE,
+            qos=QoS.AT_LEAST_ONCE,
             timestamp=timestamp,
         )
         queue.append(command)

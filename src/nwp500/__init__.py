@@ -110,6 +110,7 @@ from nwp500.mqtt import (
     MqttMetrics,
     NavienMqttClient,
     PeriodicRequestType,
+    QoS,
 )
 from nwp500.mqtt_events import (
     MqttClientEvents,
@@ -221,6 +222,7 @@ __all__ = [
     "MqttMetrics",
     "ConnectionDropEvent",
     "ConnectionEvent",
+    "QoS",
     # Event Emitter
     "EventEmitter",
     "EventListener",

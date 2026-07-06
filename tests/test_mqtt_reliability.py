@@ -20,7 +20,6 @@ import logging
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from awscrt import mqtt
 
 from nwp500.auth import AuthenticationResponse, AuthTokens, UserInfo
 from nwp500.exceptions import (
@@ -31,6 +30,7 @@ from nwp500.exceptions import (
 from nwp500.mqtt.connection import MqttConnection
 from nwp500.mqtt.periodic import MqttPeriodicRequestManager
 from nwp500.mqtt.reconnection import MqttReconnectionHandler
+from nwp500.mqtt.types import QoS
 from nwp500.mqtt.utils import MqttConnectionConfig, PeriodicRequestType
 
 
@@ -523,7 +523,7 @@ class TestOperationTimeouts:
         conn._connected = True
 
         with pytest.raises(TimeoutError):
-            await conn.subscribe("test/topic", qos=mqtt.QoS.AT_LEAST_ONCE)
+            await conn.subscribe("test/topic", qos=QoS.AT_LEAST_ONCE)
 
     @pytest.mark.asyncio
     async def test_publish_resolves_before_timeout(self, mock_auth_client):
@@ -632,7 +632,7 @@ class TestAbandonedAckFutureConsumed:
         conn._connected = True
 
         with pytest.raises(TimeoutError):
-            await conn.subscribe("test/topic", qos=mqtt.QoS.AT_LEAST_ONCE)
+            await conn.subscribe("test/topic", qos=QoS.AT_LEAST_ONCE)
 
         from awscrt.exceptions import AwsCrtError
 
@@ -666,7 +666,7 @@ class TestAbandonedAckFutureConsumed:
         conn._connected = True
 
         task = asyncio.ensure_future(
-            conn.subscribe("test/topic", qos=mqtt.QoS.AT_LEAST_ONCE)
+            conn.subscribe("test/topic", qos=QoS.AT_LEAST_ONCE)
         )
         await asyncio.sleep(0)
         task.cancel()

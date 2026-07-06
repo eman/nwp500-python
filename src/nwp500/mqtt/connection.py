@@ -14,7 +14,6 @@ import logging
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
 
-from awscrt import mqtt
 from awscrt.exceptions import AwsCrtError
 from awsiot import mqtt_connection_builder
 
@@ -22,6 +21,7 @@ from ..exceptions import (
     MqttCredentialsError,
     MqttNotConnectedError,
 )
+from .types import MqttConnectionHandle, QoS, to_awscrt_qos
 
 if TYPE_CHECKING:
     from ..auth import NavienAuthClient
@@ -50,10 +50,10 @@ class MqttConnection:
         config: MqttConnectionConfig,
         auth_client: NavienAuthClient,
         on_connection_interrupted: (
-            Callable[[mqtt.Connection, AwsCrtError], None] | None
+            Callable[[MqttConnectionHandle, Exception], None] | None
         ) = None,
         on_connection_resumed: (
-            Callable[[mqtt.Connection, Any, Any | None], None] | None
+            Callable[[MqttConnectionHandle, Any, Any | None], None] | None
         ) = None,
     ):
         """
@@ -87,7 +87,7 @@ class MqttConnection:
 
         self.config = config
         self._auth_client = auth_client
-        self._connection: mqtt.Connection | None = None
+        self._connection: MqttConnectionHandle | None = None
         self._connected = False
         self._on_connection_interrupted = on_connection_interrupted
         self._on_connection_resumed = on_connection_resumed
@@ -350,7 +350,7 @@ class MqttConnection:
     async def subscribe(
         self,
         topic: str,
-        qos: mqtt.QoS,
+        qos: QoS,
         callback: Callable[..., None] | None = None,
     ) -> tuple[Any, int]:
         """
@@ -376,7 +376,7 @@ class MqttConnection:
         # Use shield to prevent cancellation from propagating to
         # underlying future
         subscribe_future_raw, packet_id_raw = self._connection.subscribe(
-            topic=topic, qos=qos, callback=callback
+            topic=topic, qos=to_awscrt_qos(qos), callback=callback
         )
         subscribe_future = subscribe_future_raw
         packet_id = packet_id_raw
@@ -422,7 +422,7 @@ class MqttConnection:
         self,
         topic: str,
         payload: str | dict[str, Any],
-        qos: mqtt.QoS = mqtt.QoS.AT_LEAST_ONCE,
+        qos: QoS = QoS.AT_LEAST_ONCE,
     ) -> int:
         """
         Publish a message to an MQTT topic.
@@ -453,7 +453,7 @@ class MqttConnection:
 
         # Publish and get the concurrent.futures.Future
         publish_future_raw, packet_id_raw = self._connection.publish(
-            topic=topic, payload=payload_bytes, qos=qos
+            topic=topic, payload=payload_bytes, qos=to_awscrt_qos(qos)
         )
         publish_future = publish_future_raw
         packet_id = int(packet_id_raw)
@@ -488,7 +488,7 @@ class MqttConnection:
         return self._connected
 
     @property
-    def connection(self) -> mqtt.Connection | None:
+    def connection(self) -> MqttConnectionHandle | None:
         """Get the underlying MQTT connection.
 
         Returns:

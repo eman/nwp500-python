@@ -11,8 +11,7 @@ from collections.abc import Callable
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
-from awscrt import mqtt
-
+from .types import QoS
 from .utils import QueuedCommand, redact_topic
 
 if TYPE_CHECKING:
@@ -54,9 +53,7 @@ class MqttCommandQueue:
             maxlen=config.max_queued_commands
         )
 
-    def enqueue(
-        self, topic: str, payload: dict[str, Any], qos: mqtt.QoS
-    ) -> None:
+    def enqueue(self, topic: str, payload: dict[str, Any], qos: QoS) -> None:
         """
         Add a command to the queue.
 

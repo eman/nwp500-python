@@ -5,6 +5,32 @@ Changelog
 Unreleased
 ==========
 
+Changed
+-------
+- **awscrt types wrapped out of public MQTT signatures** (`#101
+  <https://github.com/eman/nwp500-python/issues/101>`_): the library no
+  longer exposes ``awscrt`` SDK types on its own public/semi-public API
+  surface. A library-owned ``nwp500.mqtt.QoS`` ``IntEnum`` (also exported
+  as ``nwp500.QoS``) now replaces ``awscrt.mqtt.QoS`` on the ``publish``
+  and ``subscribe`` methods of ``NavienMqttClient``, ``MqttConnection``
+  and ``MqttSubscriptionManager``, on ``MqttCommandQueue.enqueue`` and on
+  the ``QueuedCommand`` dataclass. ``awscrt.mqtt.Connection`` handles are
+  typed behind the ``MqttConnectionHandle`` alias, and translation to/from
+  ``awscrt`` happens only at the connection-layer boundary
+  (``nwp500/mqtt/types.py``). ``NavienMqttClient.publish`` now wraps
+  otherwise-uncaught ``AwsCrtError`` in ``MqttPublishError`` so ``awscrt``
+  exceptions no longer leak out of the public boundary.
+
+  .. code-block:: python
+
+     # OLD
+     from awscrt import mqtt
+     await client.publish(topic, payload, qos=mqtt.QoS.AT_LEAST_ONCE)
+
+     # NEW
+     from nwp500 import QoS
+     await client.publish(topic, payload, qos=QoS.AT_LEAST_ONCE)
+
 Fixed
 -----
 - **MQTT ack futures now consumed on abandonment** (`#97
