@@ -31,6 +31,7 @@ from ..exceptions import (
 from ..mqtt_events import (
     ConnectionInterruptedEvent,
     ConnectionResumedEvent,
+    MqttClientEvents,
 )
 from ..unit_system import UnitSystemType
 from .command_queue import MqttCommandQueue
@@ -308,7 +309,7 @@ class NavienMqttClient(EventEmitter):
         # Emit event
         self._schedule_coroutine(
             self.emit(
-                "connection_interrupted",
+                MqttClientEvents.CONNECTION_INTERRUPTED,
                 ConnectionInterruptedEvent(error=error),
             )
         )
@@ -372,7 +373,7 @@ class NavienMqttClient(EventEmitter):
         # Emit event
         self._schedule_coroutine(
             self.emit(
-                "connection_resumed",
+                MqttClientEvents.CONNECTION_RESUMED,
                 ConnectionResumedEvent(
                     return_code=return_code,
                     session_present=session_present,
