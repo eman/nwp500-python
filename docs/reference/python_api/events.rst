@@ -17,6 +17,23 @@ Use the event system when you want to react to connection changes, status
 transitions, or derived state changes such as temperature deltas and error
 conditions.
 
+How the pieces fit together
+---------------------------
+
+The event system is split across two complementary modules:
+
+* :mod:`nwp500.events` provides the delivery **mechanism** — the generic
+  :class:`~nwp500.events.EventEmitter` (multiple listeners, async handlers,
+  one-time listeners, priority ordering). ``NavienMqttClient`` extends it.
+* :mod:`nwp500.mqtt_events` provides the **vocabulary** — the
+  :class:`~nwp500.mqtt_events.MqttClientEvents` name registry and the typed,
+  frozen dataclass payloads carried by each event.
+
+These are not two competing systems. Internal ``emit`` call sites reference the
+``MqttClientEvents`` constants and emit the matching payload dataclass, and you
+subscribe with the same constants, so an event name is defined in exactly one
+place.
+
 Two Subscription Patterns
 =========================
 

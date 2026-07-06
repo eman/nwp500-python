@@ -15,6 +15,7 @@ from ..mqtt_events import (
     HeatingStartedEvent,
     HeatingStoppedEvent,
     ModeChangedEvent,
+    MqttClientEvents,
     PowerChangedEvent,
     TemperatureChangedEvent,
 )
@@ -67,7 +68,7 @@ class DeviceStateTracker:
             # Temperature change (compare raw values)
             if status.dhw_temperature_raw != prev.dhw_temperature_raw:
                 await self._event_emitter.emit(
-                    "temperature_changed",
+                    MqttClientEvents.TEMPERATURE_CHANGED,
                     TemperatureChangedEvent(
                         device_mac=device_mac,
                         old_temperature=prev.dhw_temperature,
@@ -86,7 +87,7 @@ class DeviceStateTracker:
             # Operation mode change (compare raw values)
             if status.operation_mode != prev.operation_mode:
                 await self._event_emitter.emit(
-                    "mode_changed",
+                    MqttClientEvents.MODE_CHANGED,
                     ModeChangedEvent(
                         device_mac=device_mac,
                         old_mode=prev.operation_mode,
@@ -102,7 +103,7 @@ class DeviceStateTracker:
             # Power consumption change (compare raw values)
             if status.current_inst_power != prev.current_inst_power:
                 await self._event_emitter.emit(
-                    "power_changed",
+                    MqttClientEvents.POWER_CHANGED,
                     PowerChangedEvent(
                         device_mac=device_mac,
                         old_power=prev.current_inst_power,
@@ -121,14 +122,14 @@ class DeviceStateTracker:
 
             if curr_heating and not prev_heating:
                 await self._event_emitter.emit(
-                    "heating_started",
+                    MqttClientEvents.HEATING_STARTED,
                     HeatingStartedEvent(device_mac=device_mac, status=status),
                 )
                 _logger.debug("Heating started")
 
             if not curr_heating and prev_heating:
                 await self._event_emitter.emit(
-                    "heating_stopped",
+                    MqttClientEvents.HEATING_STOPPED,
                     HeatingStoppedEvent(device_mac=device_mac, status=status),
                 )
                 _logger.debug("Heating stopped")
@@ -138,7 +139,7 @@ class DeviceStateTracker:
             # consumers never keep displaying a stale error.
             if status.error_code and status.error_code != prev.error_code:
                 await self._event_emitter.emit(
-                    "error_detected",
+                    MqttClientEvents.ERROR_DETECTED,
                     ErrorDetectedEvent(
                         device_mac=device_mac,
                         error_code=status.error_code,
@@ -149,7 +150,7 @@ class DeviceStateTracker:
 
             if not status.error_code and prev.error_code:
                 await self._event_emitter.emit(
-                    "error_cleared",
+                    MqttClientEvents.ERROR_CLEARED,
                     ErrorClearedEvent(
                         device_mac=device_mac, error_code=prev.error_code
                     ),

@@ -1,12 +1,24 @@
 """Typed event definitions for NavienMqttClient.
 
-This module provides a centralized registry of all events emitted by the
-NavienMqttClient, with full type information and documentation. This enables:
+This module is the companion to :mod:`nwp500.events`. It does **not** implement
+a second event system; delivery is handled solely by the
+:class:`~nwp500.events.EventEmitter` mechanism. What this module provides is the
+*vocabulary* for that mechanism:
+
+- a centralized registry of event names
+  (:class:`MqttClientEvents` string constants), and
+- the typed, frozen dataclass payloads carried by each event.
+
+Together with the emitter, this enables:
 
 - IDE autocomplete for event names
 - Type-safe event handlers
 - Clear contracts for event data
 - Programmatic event discovery
+
+Internal ``emit`` call sites use the :class:`MqttClientEvents` constants (rather
+than raw strings) and emit the matching payload dataclass, so the event name is
+defined in exactly one place.
 
 Example::
 

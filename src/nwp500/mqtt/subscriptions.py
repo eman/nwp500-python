@@ -31,7 +31,11 @@ from ..models import (
     TOUReservationSchedule,
     WeeklyReservationSchedule,
 )
-from ..mqtt_events import FeatureReceivedEvent, StatusReceivedEvent
+from ..mqtt_events import (
+    FeatureReceivedEvent,
+    MqttClientEvents,
+    StatusReceivedEvent,
+)
 from ..topic_builder import MqttTopicBuilder
 from .state_tracker import DeviceStateTracker
 from .types import QoS, to_awscrt_qos
@@ -502,7 +506,7 @@ class MqttSubscriptionManager:
         def post_parse(status: DeviceStatus) -> None:
             self._schedule_coroutine(
                 self._event_emitter.emit(
-                    "status_received",
+                    MqttClientEvents.STATUS_RECEIVED,
                     StatusReceivedEvent(device_mac=device_mac, status=status),
                 )
             )
@@ -583,7 +587,7 @@ class MqttSubscriptionManager:
                 )
             self._schedule_coroutine(
                 self._event_emitter.emit(
-                    "feature_received",
+                    MqttClientEvents.FEATURE_RECEIVED,
                     FeatureReceivedEvent(
                         device_mac=device_mac, feature=feature
                     ),
