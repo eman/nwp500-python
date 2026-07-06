@@ -5,6 +5,22 @@ Changelog
 Unreleased
 ==========
 
+Fixed
+-----
+- **MQTT ack futures now consumed on abandonment** (`#97
+  <https://github.com/eman/nwp500-python/issues/97>`_): ``_await_ack()``
+  in ``mqtt/connection.py`` and the inline subscribe/unsubscribe
+  acknowledgement waits in ``mqtt/subscriptions.py`` shield the AWS CRT
+  future so a timeout or cancellation doesn't propagate into the SDK
+  future. Previously, if the shielded future later completed with an
+  exception (e.g. ``AwsCrtError`` from clean-session cancellation during
+  reconnect) after the awaiting task had already given up, nobody
+  retrieved that exception, and asyncio logged a "Future exception was
+  never retrieved" warning at garbage-collection time. A done callback
+  is now attached whenever a wait is abandoned so the eventual
+  result/exception is always retrieved and logged at debug level
+  instead of leaking as an unhandled asyncio warning.
+
 Version 9.0.0 (2026-07-05)
 ==========================
 
