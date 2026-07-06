@@ -21,6 +21,30 @@ Fixed
   result/exception is always retrieved and logged at debug level
   instead of leaking as an unhandled asyncio warning.
 
+Documentation
+-------------
+- **Unit-system preference is a deliberate process-wide global** (`#103
+  <https://github.com/eman/nwp500-python/issues/103>`_): clarified and
+  locked in that the preference in ``nwp500.unit_system`` is an intentional
+  process-wide module-level global rather than a
+  ``contextvars.ContextVar``. A context-local value silently reverted to
+  auto-detect for real-time data because MQTT message handling runs in tasks
+  scheduled from AWS CRT callback threads whose context never inherits from
+  the application task. Added prominent docstring notes to the affected
+  models (``DeviceStatus``, ``DeviceFeature``, ``ReservationEntry``,
+  ``WeeklyReservationEntry``, and ``TOUPeriod``) explaining that unit-aware
+  computed fields read the preference at access time and share it across all
+  async tasks and threads. This is a non-breaking documentation and test
+  change; no API changes.
+
+Added
+-----
+- **Tests for process-wide unit-system semantics** (`#103
+  <https://github.com/eman/nwp500-python/issues/103>`_): new
+  ``tests/test_unit_system_process_wide.py`` verifies that setting the global
+  preference affects already-constructed model instances at access time and
+  that the preference is visible across async tasks and threads.
+
 Version 9.0.0 (2026-07-05)
 ==========================
 

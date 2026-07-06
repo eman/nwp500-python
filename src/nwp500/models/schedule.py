@@ -25,6 +25,16 @@ class ReservationEntry(NavienBaseModel):
         - min: 0-59
         - mode: DHW operation mode ID (1-6)
         - param: temperature in half-degrees Celsius
+
+    Unit-aware note:
+        The ``temperature`` and ``unit`` computed fields read the
+        *process-wide* unit-system preference via
+        :func:`nwp500.unit_system.get_unit_system` at access time, not at
+        construction time. Changing the preference with
+        :func:`nwp500.unit_system.set_unit_system` therefore affects values
+        read from already-constructed instances, and the preference is shared
+        across every async task and thread rather than being context-local
+        (see issue #103).
     """
 
     enable: int = 2
@@ -137,6 +147,16 @@ class WeeklyReservationEntry(NavienBaseModel):
         - min: 0-59
         - mode: DHW operation mode ID (1-6)
         - param: temperature in half-degrees Celsius
+
+    Unit-aware note:
+        The ``temperature`` and ``unit`` computed fields read the
+        *process-wide* unit-system preference via
+        :func:`nwp500.unit_system.get_unit_system` at access time, not at
+        construction time. Changing the preference with
+        :func:`nwp500.unit_system.set_unit_system` therefore affects values
+        read from already-constructed instances, and the preference is shared
+        across every async task and thread rather than being context-local
+        (see issue #103).
     """
 
     enable: int = 2

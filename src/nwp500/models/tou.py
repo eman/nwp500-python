@@ -68,6 +68,14 @@ class TOUPeriod(NavienBaseModel):
         - priceMin / priceMax: encoded integer prices (divide by
           10^decimalPoint)
         - decimalPoint: number of decimal places for price values
+
+    Unit-aware note:
+        Unlike temperature-bearing models such as
+        :class:`~nwp500.models.status.DeviceStatus`, the computed price and
+        time fields here are independent of the process-wide unit-system
+        preference (see :func:`nwp500.unit_system.get_unit_system` and issue
+        #103); pricing is always decoded the same way regardless of the
+        configured unit system.
     """
 
     season: int = 0

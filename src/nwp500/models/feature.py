@@ -22,7 +22,19 @@ VolumeCodeField = Annotated[
 
 
 class DeviceFeature(NavienBaseModel):
-    """Device capabilities, configuration, and firmware info."""
+    """Device capabilities, configuration, and firmware info.
+
+    Unit-aware note:
+        Temperature computed fields (e.g. ``dhw_temperature_min``,
+        ``dhw_temperature_max``, ``recirc_temperature_min``) read the
+        *process-wide* unit-system preference via
+        :func:`nwp500.unit_system.get_unit_system` at access time, not at
+        construction time. Changing the preference with
+        :func:`nwp500.unit_system.set_unit_system` therefore affects values
+        read from already-constructed instances, and the preference is shared
+        across every async task and thread rather than being context-local
+        (see issue #103).
+    """
 
     # IMPORTANT: temperature_type must remain the first field so computed
     # temperature properties can fall back to the device's native unit setting.
@@ -308,7 +320,13 @@ class DeviceFeature(NavienBaseModel):
     )
 
     def _is_celsius(self) -> bool:
-        """Return True if metric/Celsius units should be used."""
+        """Return True if metric/Celsius units should be used.
+
+        Reads the process-wide unit-system preference at call time and falls
+        back to the device's native ``temperature_type`` when no preference is
+        set. Every unit-aware computed property routes through this helper, so
+        they all reflect the current global preference.
+        """
         unit_system = get_unit_system()
         if unit_system is not None:
             return unit_system == "metric"
