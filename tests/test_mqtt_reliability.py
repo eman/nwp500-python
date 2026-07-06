@@ -604,6 +604,90 @@ class TestScheduleCoroutineCleanup:
         assert "boom" in caplog.text
 
 
+class TestAbandonedAckFutureConsumed:
+    """Abandoned ack futures must not leak "never retrieved" warnings.
+
+    Regression test for https://github.com/eman/nwp500-python/issues/97:
+    when ``_await_ack`` times out or is cancelled, the shielded future
+    keeps running in the background. If nobody retrieves its eventual
+    exception, asyncio logs a "Future exception was never retrieved"
+    warning at garbage-collection time. We assert the fix retrieves the
+    exception itself (logged at debug level) rather than relying on GC
+    timing to observe the (absence of the) warning.
+    """
+
+    @pytest.mark.asyncio
+    async def test_timeout_then_late_exception_is_consumed(
+        self, mock_auth_client, caplog
+    ):
+        config = MqttConnectionConfig(
+            client_id="test-client", operation_timeout=0.05
+        )
+        conn = MqttConnection(config, mock_auth_client)
+
+        raw_future: concurrent.futures.Future = concurrent.futures.Future()
+        sdk_conn = MagicMock()
+        sdk_conn.subscribe.return_value = (raw_future, 7)
+        conn._connection = sdk_conn
+        conn._connected = True
+
+        with pytest.raises(TimeoutError):
+            await conn.subscribe("test/topic", qos=mqtt.QoS.AT_LEAST_ONCE)
+
+        from awscrt.exceptions import AwsCrtError
+
+        with caplog.at_level(logging.DEBUG, logger="nwp500.mqtt.connection"):
+            # The ack arrives late, after the caller has given up.
+            raw_future.set_exception(
+                AwsCrtError(
+                    0,
+                    "AWS_ERROR_MQTT_CANCELLED_FOR_CLEAN_SESSION",
+                    "clean session cancellation",
+                )
+            )
+            # Let the done callback attached by _await_ack run.
+            await asyncio.sleep(0)
+
+        assert "completed with exception after being abandoned" in (caplog.text)
+
+    @pytest.mark.asyncio
+    async def test_cancelled_then_late_exception_is_consumed(
+        self, mock_auth_client, caplog
+    ):
+        config = MqttConnectionConfig(
+            client_id="test-client", operation_timeout=5.0
+        )
+        conn = MqttConnection(config, mock_auth_client)
+
+        raw_future: concurrent.futures.Future = concurrent.futures.Future()
+        sdk_conn = MagicMock()
+        sdk_conn.subscribe.return_value = (raw_future, 7)
+        conn._connection = sdk_conn
+        conn._connected = True
+
+        task = asyncio.ensure_future(
+            conn.subscribe("test/topic", qos=mqtt.QoS.AT_LEAST_ONCE)
+        )
+        await asyncio.sleep(0)
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+
+        from awscrt.exceptions import AwsCrtError
+
+        with caplog.at_level(logging.DEBUG, logger="nwp500.mqtt.connection"):
+            raw_future.set_exception(
+                AwsCrtError(
+                    0,
+                    "AWS_ERROR_MQTT_CANCELLED_FOR_CLEAN_SESSION",
+                    "clean session cancellation",
+                )
+            )
+            await asyncio.sleep(0)
+
+        assert "completed with exception after being abandoned" in (caplog.text)
+
+
 class TestAwaitAckFutureTypes:
     """_await_ack must accept both concurrent and asyncio futures."""
 

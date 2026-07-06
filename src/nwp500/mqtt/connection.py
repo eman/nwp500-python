@@ -8,6 +8,7 @@ including credential management and connection state tracking.
 
 import asyncio
 import concurrent.futures
+import functools
 import json
 import logging
 from collections.abc import Callable
@@ -95,6 +96,30 @@ class MqttConnection:
             f"Initialized connection manager with client ID: {config.client_id}"
         )
 
+    @staticmethod
+    def _consume_abandoned_future(
+        future: asyncio.Future[Any], operation: str
+    ) -> None:
+        """Retrieve the eventual result of an abandoned acknowledgement future.
+
+        When ``_await_ack`` is cancelled or times out, the shielded future
+        keeps running in the background. If nobody retrieves its eventual
+        exception, asyncio logs a "Future exception was never retrieved"
+        warning at garbage-collection time. This callback consumes that
+        result/exception so the warning is never emitted, logging benign
+        errors (e.g. ``AwsCrtError`` from clean-session cancellation during
+        reconnect) at debug level instead.
+        """
+        if future.cancelled():
+            return
+        exc = future.exception()
+        if exc is not None:
+            _logger.debug(
+                "%s completed with exception after being abandoned: %s",
+                operation,
+                exc,
+            )
+
     async def _await_ack(
         self,
         future: concurrent.futures.Future[Any] | asyncio.Future[Any],
@@ -109,6 +134,11 @@ class MqttConnection:
         A timeout guards against half-open TCP connections where the
         acknowledgement never arrives; without it callers can hang until
         the keep-alive expires (20+ minutes).
+
+        If the awaiting task is cancelled or times out before the shielded
+        future completes, a done callback is attached so its eventual
+        result/exception is still retrieved, preventing asyncio's "Future
+        exception was never retrieved" warnings.
 
         Args:
             future: Acknowledgement future — the
@@ -139,12 +169,22 @@ class MqttConnection:
             _logger.debug(
                 "%s was cancelled but will complete in background", operation
             )
+            awaitable_future.add_done_callback(
+                functools.partial(
+                    self._consume_abandoned_future, operation=operation
+                )
+            )
             raise
         except TimeoutError:
             _logger.error(
                 "%s not acknowledged within %.1fs",
                 operation,
                 self.config.operation_timeout,
+            )
+            awaitable_future.add_done_callback(
+                functools.partial(
+                    self._consume_abandoned_future, operation=operation
+                )
             )
             raise
 
