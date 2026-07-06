@@ -9,6 +9,7 @@ Main exports:
 - PeriodicRequestType: Enum for periodic request types
 - MqttDiagnosticsCollector: Metrics and diagnostics collector
 - MqttMetrics, ConnectionDropEvent, ConnectionEvent: Diagnostic types
+- QoS: Library-owned MQTT Quality of Service enum
 """
 
 from .client import NavienMqttClient
@@ -18,6 +19,7 @@ from .diagnostics import (
     MqttDiagnosticsCollector,
     MqttMetrics,
 )
+from .types import QoS
 from .utils import MqttConnectionConfig, PeriodicRequestType
 
 __all__ = [
@@ -28,4 +30,5 @@ __all__ = [
     "MqttMetrics",
     "ConnectionDropEvent",
     "ConnectionEvent",
+    "QoS",
 ]

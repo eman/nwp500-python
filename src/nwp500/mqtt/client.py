@@ -16,7 +16,6 @@ import uuid
 from collections.abc import Callable, Sequence
 from typing import TYPE_CHECKING, Any, cast
 
-from awscrt import mqtt
 from awscrt.exceptions import AwsCrtError
 
 from ..auth import NavienAuthClient
@@ -41,6 +40,7 @@ from .diagnostics import MqttDiagnosticsCollector
 from .periodic import MqttPeriodicRequestManager
 from .reconnection import MqttReconnectionHandler
 from .subscriptions import MqttSubscriptionManager
+from .types import MqttConnectionHandle, QoS
 from .utils import (
     MqttConnectionConfig,
     PeriodicRequestType,
@@ -246,7 +246,7 @@ class NavienMqttClient(EventEmitter):
         self._diagnostics = MqttDiagnosticsCollector()
 
         # Connection state (simpler than checking _connection_manager)
-        self._connection: mqtt.Connection | None = None
+        self._connection: MqttConnectionHandle | None = None
         self._connected = False
         # Guards _active_reconnect / _deep_reconnect against re-entrancy.
         # While True, _on_connection_interrupted_internal will not forward
@@ -294,7 +294,7 @@ class NavienMqttClient(EventEmitter):
             future.add_done_callback(_log_scheduled_coroutine_result)
 
     def _on_connection_interrupted_internal(
-        self, connection: mqtt.Connection, error: AwsCrtError, **kwargs: Any
+        self, connection: MqttConnectionHandle, error: Exception, **kwargs: Any
     ) -> None:
         """Internal handler for connection interruption.
 
@@ -350,7 +350,7 @@ class NavienMqttClient(EventEmitter):
 
     def _on_connection_resumed_internal(
         self,
-        connection: mqtt.Connection,
+        connection: MqttConnectionHandle,
         return_code: Any,
         session_present: Any,
         **kwargs: Any,
@@ -885,7 +885,7 @@ class NavienMqttClient(EventEmitter):
         self,
         topic: str,
         callback: Callable[[str, dict[str, Any]], None],
-        qos: mqtt.QoS = mqtt.QoS.AT_LEAST_ONCE,
+        qos: QoS = QoS.AT_LEAST_ONCE,
     ) -> int:
         """
         Subscribe to an MQTT topic.
@@ -930,7 +930,7 @@ class NavienMqttClient(EventEmitter):
         self,
         topic: str,
         payload: dict[str, Any],
-        qos: mqtt.QoS = mqtt.QoS.AT_LEAST_ONCE,
+        qos: QoS = QoS.AT_LEAST_ONCE,
     ) -> int:
         """
         Publish a message to an MQTT topic.
@@ -990,9 +990,13 @@ class NavienMqttClient(EventEmitter):
                     retriable=True,
                 ) from e
 
-            # Other AWS CRT errors
+            # Other AWS CRT errors: wrap so awscrt exceptions never leak out
+            # of the public publish() boundary.
             _logger.error(f"Failed to publish to topic: {e}")
-            raise
+            raise MqttPublishError(
+                f"Failed to publish to MQTT topic: {e}",
+                retriable=True,
+            ) from e
 
     # Navien-specific convenience methods
 
