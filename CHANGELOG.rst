@@ -5,6 +5,21 @@ Changelog
 Unreleased
 ==========
 
+Changed
+-------
+- **CLI formatting stacks merged behind a presentation-neutral layer**
+  (`#100 <https://github.com/eman/nwp500-python/issues/100>`_): introduced
+  ``src/nwp500/cli/presentation.py``, which owns all data-shaping for CLI
+  output (field selection, labels, units, ordering, value formatting and
+  energy aggregation) as presentation-neutral structures. Both the
+  plain-text/CSV/JSON renderer (``output_formatters.py``) and the Rich
+  renderer (``rich_output.py``) now consume these structures instead of
+  each re-deriving the same values. Device status/info row building and the
+  monthly/daily energy aggregation (previously duplicated between the
+  plain-text and Rich code paths) now live in one place. CLI output is
+  unchanged for all existing commands; this is an internal refactor only,
+  verified by the existing CLI tests.
+
 Fixed
 -----
 - **MQTT ack futures now consumed on abandonment** (`#97
