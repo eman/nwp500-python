@@ -641,10 +641,12 @@ class MqttDeviceController:
 
         return await self._publish(topic, message)
 
+    @requires_capability("dr_setting_use")
     async def enable_demand_response(self, device: Device) -> int:
         """Enable utility demand response participation."""
         return await self._mode_command(device, CommandCode.DR_ON, "dr-on")
 
+    @requires_capability("dr_setting_use")
     async def disable_demand_response(self, device: Device) -> int:
         """Disable utility demand response participation."""
         return await self._mode_command(device, CommandCode.DR_OFF, "dr-off")

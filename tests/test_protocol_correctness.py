@@ -299,6 +299,56 @@ class TestFreezeProtectionDefaults:
         assert status.freeze_protection_temp_max == pytest.approx(50, abs=1)
 
 
+class TestDemandResponseCapabilityGate:
+    """enable/disable_demand_response must be gated on dr_setting_use."""
+
+    @pytest.mark.asyncio
+    async def test_enable_blocked_when_unsupported(self, mock_device):
+        from nwp500.exceptions import DeviceCapabilityError
+
+        controller, publish = _make_controller()
+        controller._get_device_features = AsyncMock(
+            return_value=MagicMock(dr_setting_use=False)
+        )
+
+        with pytest.raises(DeviceCapabilityError):
+            await controller.enable_demand_response(mock_device)
+        publish.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_disable_blocked_when_unsupported(self, mock_device):
+        from nwp500.exceptions import DeviceCapabilityError
+
+        controller, publish = _make_controller()
+        controller._get_device_features = AsyncMock(
+            return_value=MagicMock(dr_setting_use=False)
+        )
+
+        with pytest.raises(DeviceCapabilityError):
+            await controller.disable_demand_response(mock_device)
+        publish.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_enable_allowed_when_supported(self, mock_device):
+        controller, publish = _make_controller()
+        controller._get_device_features = AsyncMock(
+            return_value=MagicMock(dr_setting_use=True)
+        )
+
+        await controller.enable_demand_response(mock_device)
+        publish.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_disable_allowed_when_supported(self, mock_device):
+        controller, publish = _make_controller()
+        controller._get_device_features = AsyncMock(
+            return_value=MagicMock(dr_setting_use=True)
+        )
+
+        await controller.disable_demand_response(mock_device)
+        publish.assert_awaited_once()
+
+
 class TestFreezeProtectionTemperatureValidation:
     """set_freeze_protection_temperature must validate against device limits."""
 
