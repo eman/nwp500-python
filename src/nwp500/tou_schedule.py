@@ -93,9 +93,11 @@ async def configure_tou_schedule_confirmed(
         try:
             await mqtt.unsubscribe_tou_response(device, on_schedule)
         except Exception:
+            from .mqtt.utils import redact_mac
+
             _logger.warning(
                 "Failed to unsubscribe TOU response handler for device %s",
-                device.device_info.mac_address,
+                redact_mac(device.device_info.mac_address),
                 exc_info=True,
             )
 
