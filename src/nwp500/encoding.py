@@ -355,7 +355,7 @@ def decode_reservation_hex(hex_string: str) -> list[dict[str, int]]:
 
     Examples:
         >>> decode_reservation_hex("013e061e0478")
-        [{'enable': 1, 'week': 62, 'hour': 6, 'minute': 30, 'mode': 4, 'param':
+        [{'enable': 1, 'week': 62, 'hour': 6, 'min': 30, 'mode': 4, 'param':
         120}]
     """
     data = bytes.fromhex(hex_string)
