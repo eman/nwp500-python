@@ -5,6 +5,62 @@ Changelog
 Unreleased
 ==========
 
+Added
+-----
+- **Confirmed reservation/TOU write helpers and canonical schedule
+  comparison** (`#111 <https://github.com/eman/nwp500-python/issues/111>`_):
+  ``update_reservations`` and ``configure_tou_schedule`` were
+  fire-and-forget, returning only an MQTT publish packet id with no way to
+  confirm the device applied the write. New
+  ``nwp500.reservations.update_reservations_confirmed()`` and
+  ``nwp500.tou_schedule.configure_tou_schedule_confirmed()`` (also exported
+  from the top-level ``nwp500`` package) send the write and await the
+  device's ``rsv/rd``/``tou/rd`` echo, returning the parsed schedule the
+  device now holds (or ``None`` on timeout). Because the protocol has no
+  request/response correlation id on these topics, a response is only
+  accepted once it matches the content that was just written, so a
+  stale/unrelated response from a concurrent read or a previous write
+  can't be mistaken for confirmation. Also added
+  ``ReservationEntry.canonical_key()``/``ReservationSchedule.canonical()``
+  and the ``TOUPeriod``/``TOUReservationSchedule`` equivalents: a stable,
+  order-independent, hashable representation of the raw protocol fields so
+  a desired program can be compared against a device read-back with
+  ``desired.canonical() == confirmed.canonical()`` instead of hand-diffing.
+
+Fixed
+-----
+- **Freeze protection temperature now validated against device limits**
+  (`#112 <https://github.com/eman/nwp500-python/issues/112>`_):
+  ``set_freeze_protection_temperature`` documented a 35-45°F valid range
+  but sent the value straight through with no validation. It now fetches
+  device features and validates against
+  ``freeze_protection_temp_min``/``freeze_protection_temp_max`` (raising
+  ``RangeValidationError`` if out of range), matching the pattern already
+  used by ``set_dhw_temperature``. The command is also now gated behind a
+  new ``freeze_protection_use`` capability (added to
+  ``MqttDeviceCapabilityChecker._CAPABILITY_MAP`` and enforced with
+  ``@requires_capability``), so it's no longer dispatched to devices that
+  don't support freeze protection at all.
+- **Demand response commands gated on the dr_setting_use capability**
+  (`#114 <https://github.com/eman/nwp500-python/issues/114>`_):
+  ``enable_demand_response``/``disable_demand_response`` were dispatched
+  unconditionally even though the ``dr_setting_use`` capability flag
+  exists on ``DeviceFeature``. Every other controllable feature follows
+  flag + ``_CAPABILITY_MAP`` entry + ``@requires_capability`` decorator;
+  DR was the one gap. Added the missing map entry and decorators so DR
+  now follows the same pattern.
+
+Documentation
+-------------
+- **decode_reservation_hex docstring corrected** (`#113
+  <https://github.com/eman/nwp500-python/issues/113>`_): the ``param``
+  byte was documented as "temperature offset by 20°F", contradicting the
+  half-degrees-Celsius encoding used consistently everywhere else
+  (``models/schedule.py``, ``models/_converters.py``). Corrected to
+  "target temperature, half-degrees Celsius; °C = param/2", and fixed the
+  accompanying doctest-style example, which showed a ``minute`` key where
+  the function actually returns ``min``.
+
 Version 9.2.0 (2026-07-06)
 ==========================
 
