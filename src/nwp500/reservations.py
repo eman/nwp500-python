@@ -16,7 +16,7 @@ from typing import TYPE_CHECKING, Any
 
 from .converters import device_bool_from_python
 from .encoding import build_reservation_entry, encode_week_bitfield
-from .models import ReservationSchedule
+from .models import ReservationEntry, ReservationSchedule
 
 if TYPE_CHECKING:
     from .models import Device
@@ -120,7 +120,7 @@ async def update_reservations_confirmed(
     """
     expected = ReservationSchedule(
         reservationUse=device_bool_from_python(enabled),
-        reservation=list(reservations),
+        reservation=[ReservationEntry(**entry) for entry in reservations],
     ).canonical()
 
     future: asyncio.Future[ReservationSchedule] = (

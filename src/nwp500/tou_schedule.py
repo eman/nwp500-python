@@ -15,7 +15,7 @@ from collections.abc import Sequence
 from typing import TYPE_CHECKING, Any
 
 from .converters import device_bool_from_python
-from .models import TOUReservationSchedule
+from .models import TOUPeriod, TOUReservationSchedule
 
 if TYPE_CHECKING:
     from .models import Device
@@ -69,7 +69,7 @@ async def configure_tou_schedule_confirmed(
     """
     expected = TOUReservationSchedule(
         reservationUse=device_bool_from_python(enabled),
-        reservation=list(periods),
+        reservation=[TOUPeriod(**period) for period in periods],
     ).canonical()
 
     future: asyncio.Future[TOUReservationSchedule] = (
