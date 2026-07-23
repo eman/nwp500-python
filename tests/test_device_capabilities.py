@@ -90,6 +90,7 @@ class TestMqttDeviceCapabilityChecker:
         mock_feature.recirc_reservation_use = False
         mock_feature.anti_legionella_setting_use = True
         mock_feature.dr_setting_use = True
+        mock_feature.freeze_protection_use = True
 
         controls = MqttDeviceCapabilityChecker.get_available_controls(
             mock_feature
@@ -104,7 +105,8 @@ class TestMqttDeviceCapabilityChecker:
         assert controls["recirc_reservation_use"] is False
         assert controls["anti_legionella_setting_use"] is True
         assert controls["dr_setting_use"] is True
-        assert len(controls) == 9
+        assert controls["freeze_protection_use"] is True
+        assert len(controls) == 10
 
     def test_dr_setting_use_capability(self) -> None:
         """dr_setting_use must be a registered capability (issue #114)."""
@@ -117,6 +119,19 @@ class TestMqttDeviceCapabilityChecker:
         mock_feature.dr_setting_use = False
         assert not MqttDeviceCapabilityChecker.supports(
             "dr_setting_use", mock_feature
+        )
+
+    def test_freeze_protection_use_capability(self) -> None:
+        """freeze_protection_use must be a registered capability."""
+        mock_feature = Mock()
+        mock_feature.freeze_protection_use = True
+        assert MqttDeviceCapabilityChecker.supports(
+            "freeze_protection_use", mock_feature
+        )
+
+        mock_feature.freeze_protection_use = False
+        assert not MqttDeviceCapabilityChecker.supports(
+            "freeze_protection_use", mock_feature
         )
 
     def test_register_capability(self) -> None:
