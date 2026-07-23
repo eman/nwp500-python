@@ -814,6 +814,7 @@ class MqttDeviceController:
             device, CommandCode.WIFI_RESET, "wifi-reset"
         )
 
+    @requires_capability("freeze_protection_use")
     async def set_freeze_protection_temperature(
         self, device: Device, temperature: float
     ) -> int:
@@ -826,15 +827,19 @@ class MqttDeviceController:
         Args:
             device: Device to configure
             temperature: Activation temperature in the user's preferred unit
-                (°C if unit system is metric, °F otherwise).
-                Valid range: 35–45°F (1.7–7.2°C).
+                (°C if unit system is metric, °F otherwise). Validated
+                against the device's reported
+                ``freeze_protection_temp_min``/``freeze_protection_temp_max``
+                feature limits (typically around 35-45°F / 1.7-7.2°C, but
+                this can vary by device).
 
         Returns:
             Publish packet ID
 
         Raises:
-            DeviceCapabilityError: If device features are not available and
-                the temperature range cannot be validated.
+            DeviceCapabilityError: If the device does not support freeze
+                protection, or its features are not available so the
+                temperature range cannot be validated.
             RangeValidationError: If temperature is outside the device's
                 supported freeze protection range.
         """

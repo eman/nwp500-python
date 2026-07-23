@@ -309,6 +309,7 @@ class TestFreezeProtectionTemperatureValidation:
         controller, publish = _make_controller()
         controller._get_device_features = AsyncMock(
             return_value=MagicMock(
+                freeze_protection_use=True,
                 freeze_protection_temp_min=35.0,
                 freeze_protection_temp_max=45.0,
             )
@@ -325,6 +326,7 @@ class TestFreezeProtectionTemperatureValidation:
         controller, publish = _make_controller()
         controller._get_device_features = AsyncMock(
             return_value=MagicMock(
+                freeze_protection_use=True,
                 freeze_protection_temp_min=35.0,
                 freeze_protection_temp_max=45.0,
             )
@@ -341,6 +343,30 @@ class TestFreezeProtectionTemperatureValidation:
 
         controller, publish = _make_controller()
         controller._get_device_features = AsyncMock(return_value=None)
+
+        with pytest.raises(DeviceCapabilityError):
+            await controller.set_freeze_protection_temperature(
+                mock_device, 40.0
+            )
+        publish.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_blocked_when_device_lacks_freeze_protection(
+        self, mock_device
+    ):
+        """Regression: a device that doesn't support freeze protection at
+        all (freeze_protection_use=False) must not receive the command,
+        even if the requested temperature would otherwise be in-range."""
+        from nwp500.exceptions import DeviceCapabilityError
+
+        controller, publish = _make_controller()
+        controller._get_device_features = AsyncMock(
+            return_value=MagicMock(
+                freeze_protection_use=False,
+                freeze_protection_temp_min=35.0,
+                freeze_protection_temp_max=45.0,
+            )
+        )
 
         with pytest.raises(DeviceCapabilityError):
             await controller.set_freeze_protection_temperature(
