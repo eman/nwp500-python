@@ -338,6 +338,16 @@ class TestDemandResponseCapabilityGate:
         await controller.enable_demand_response(mock_device)
         publish.assert_awaited_once()
 
+    @pytest.mark.asyncio
+    async def test_disable_allowed_when_supported(self, mock_device):
+        controller, publish = _make_controller()
+        controller._get_device_features = AsyncMock(
+            return_value=MagicMock(dr_setting_use=True)
+        )
+
+        await controller.disable_demand_response(mock_device)
+        publish.assert_awaited_once()
+
 
 class TestErrorCodeChangeEvents:
     """error_detected must fire when the error code changes."""
