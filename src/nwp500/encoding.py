@@ -345,7 +345,7 @@ def decode_reservation_hex(hex_string: str) -> list[dict[str, int]]:
     - Byte 2: hour (0-23)
     - Byte 3: minute (0-59)
     - Byte 4: mode (operation mode ID)
-    - Byte 5: param (temperature offset by 20°F)
+    - Byte 5: param (target temperature, half-degrees Celsius; °C = param/2)
 
     Args:
         hex_string: Hexadecimal string representing reservation data
