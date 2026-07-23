@@ -155,3 +155,38 @@ async def test_configure_tou_schedule_confirmed_matches_desired(
 
     assert result is not None
     assert result.canonical() == desired.canonical()
+
+
+@pytest.mark.asyncio
+async def test_configure_tou_schedule_confirmed_ignores_stale_response(
+    mock_mqtt: MagicMock, mock_device: MagicMock
+) -> None:
+    """A tou/rd response that doesn't match this write (e.g. the echo of a
+    concurrent, unrelated read or a previous configure) must not resolve
+    the future early — only a response matching the sent periods should."""
+    periods = [_period(start_hour=0, end_hour=11)]
+    stale = _make_schedule([_period(start_hour=12, end_hour=23)])
+    matching = _make_schedule(periods)
+    captured_callback: list[Any] = []
+
+    async def fake_subscribe(device: Any, cb: Any) -> int:
+        captured_callback.append(cb)
+        return 1
+
+    mock_mqtt.subscribe_tou_response.side_effect = fake_subscribe
+
+    async def fake_configure(
+        device: Any, controller_serial_number: Any, periods: Any, **kwargs: Any
+    ) -> int:
+        for cb in captured_callback:
+            cb(stale)
+            cb(matching)
+        return 1
+
+    mock_mqtt.configure_tou_schedule.side_effect = fake_configure
+
+    result = await configure_tou_schedule_confirmed(
+        mock_mqtt, mock_device, "SERIAL123", periods
+    )
+
+    assert result is matching

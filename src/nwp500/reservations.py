@@ -14,6 +14,7 @@ import logging
 from collections.abc import Sequence
 from typing import TYPE_CHECKING, Any
 
+from .converters import device_bool_from_python
 from .encoding import build_reservation_entry, encode_week_bitfield
 from .models import ReservationSchedule
 
@@ -106,14 +107,28 @@ async def update_reservations_confirmed(
 
     Returns:
         The :class:`ReservationSchedule` the device echoed back after the
-        write, or ``None`` if no response arrived within ``timeout``.
+        write, or ``None`` if no matching response arrived within
+        ``timeout``.
+
+    Note:
+        The device protocol has no request/response correlation id on
+        ``rsv/rd``, so a response is only accepted once its
+        :meth:`~nwp500.models.ReservationSchedule.canonical` form matches
+        what was just written. This avoids resolving on a stale/unrelated
+        ``rsv/rd`` message (e.g. from a concurrent read or a previous
+        write) that happens to arrive in the same window.
     """
+    expected = ReservationSchedule(
+        reservationUse=device_bool_from_python(enabled),
+        reservation=list(reservations),
+    ).canonical()
+
     future: asyncio.Future[ReservationSchedule] = (
         asyncio.get_running_loop().create_future()
     )
 
     def on_schedule(schedule: ReservationSchedule) -> None:
-        if not future.done():
+        if not future.done() and schedule.canonical() == expected:
             future.set_result(schedule)
 
     await mqtt.subscribe_reservation_response(device, on_schedule)

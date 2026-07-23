@@ -244,6 +244,41 @@ async def test_update_reservations_confirmed_matches_desired(
     assert result.canonical() == desired.canonical()
 
 
+@pytest.mark.asyncio
+async def test_update_reservations_confirmed_ignores_stale_response(
+    mock_mqtt: MagicMock, mock_device: MagicMock
+) -> None:
+    """A rsv/rd response that doesn't match this write (e.g. the echo of a
+    concurrent, unrelated read or a previous write) must not resolve the
+    future early — only a response matching the sent entries should."""
+    entries = [_entry(hour=6)]
+    stale = _make_schedule([_entry(hour=23)])
+    matching = _make_schedule(entries)
+    captured_callback: list[Any] = []
+
+    async def fake_subscribe_reservation(device: Any, cb: Any) -> int:
+        captured_callback.append(cb)
+        return 1
+
+    mock_mqtt.subscribe_reservation_response.side_effect = (
+        fake_subscribe_reservation
+    )
+
+    async def fake_update(device: Any, reservations: Any, **kwargs: Any) -> int:
+        for cb in captured_callback:
+            cb(stale)
+            cb(matching)
+        return 1
+
+    mock_mqtt.update_reservations.side_effect = fake_update
+
+    result = await update_reservations_confirmed(
+        mock_mqtt, mock_device, entries
+    )
+
+    assert result is matching
+
+
 # ---------------------------------------------------------------------------
 # add_reservation
 # ---------------------------------------------------------------------------

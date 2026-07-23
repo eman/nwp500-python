@@ -14,6 +14,7 @@ import logging
 from collections.abc import Sequence
 from typing import TYPE_CHECKING, Any
 
+from .converters import device_bool_from_python
 from .models import TOUReservationSchedule
 
 if TYPE_CHECKING:
@@ -55,14 +56,28 @@ async def configure_tou_schedule_confirmed(
 
     Returns:
         The :class:`TOUReservationSchedule` the device echoed back after
-        the write, or ``None`` if no response arrived within ``timeout``.
+        the write, or ``None`` if no matching response arrived within
+        ``timeout``.
+
+    Note:
+        The device protocol has no request/response correlation id on
+        ``tou/rd``, so a response is only accepted once its
+        :meth:`~nwp500.models.TOUReservationSchedule.canonical` form
+        matches what was just written. This avoids resolving on a
+        stale/unrelated ``tou/rd`` message (e.g. from a concurrent read or
+        a previous configure) that happens to arrive in the same window.
     """
+    expected = TOUReservationSchedule(
+        reservationUse=device_bool_from_python(enabled),
+        reservation=list(periods),
+    ).canonical()
+
     future: asyncio.Future[TOUReservationSchedule] = (
         asyncio.get_running_loop().create_future()
     )
 
     def on_schedule(schedule: TOUReservationSchedule) -> None:
-        if not future.done():
+        if not future.done() and schedule.canonical() == expected:
             future.set_result(schedule)
 
     await mqtt.subscribe_tou_response(device, on_schedule)
