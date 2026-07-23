@@ -123,6 +123,10 @@ from nwp500.reservations import (
     delete_reservation,
     fetch_reservations,
     update_reservation,
+    update_reservations_confirmed,
+)
+from nwp500.tou_schedule import (
+    configure_tou_schedule_confirmed,
 )
 from nwp500.unit_system import (
     get_unit_system,
@@ -214,6 +218,9 @@ __all__ = [
     "add_reservation",
     "delete_reservation",
     "update_reservation",
+    "update_reservations_confirmed",
+    # TOU schedule helpers
+    "configure_tou_schedule_confirmed",
     # MQTT Client
     "NavienMqttClient",
     "MqttConnectionConfig",

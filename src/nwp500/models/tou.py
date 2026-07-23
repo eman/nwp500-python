@@ -121,6 +121,26 @@ class TOUPeriod(NavienBaseModel):
         divisor: float = 10.0**self.decimal_point
         return float(self.price_max) / divisor
 
+    def canonical_key(
+        self,
+    ) -> tuple[int, int, int, int, int, int, int, int, int]:
+        """Raw protocol fields as a stable, hashable tuple.
+
+        Used to compare a desired TOU period against a device read-back
+        without depending on field order or computed properties.
+        """
+        return (
+            self.season,
+            self.week,
+            self.start_hour,
+            self.start_min,
+            self.end_hour,
+            self.end_min,
+            self.price_min,
+            self.price_max,
+            self.decimal_point,
+        )
+
 
 class TOUReservationSchedule(NavienBaseModel):
     """TOU schedule as returned by the MQTT ``tou/rd`` response topic.
@@ -166,3 +186,18 @@ class TOUReservationSchedule(NavienBaseModel):
         Protocol convention: 0=disabled, 2=enabled.
         """
         return self.reservation_use == 2
+
+    def canonical(self) -> tuple[bool, tuple[tuple[int, ...], ...]]:
+        """Normalized, order-independent representation of this schedule.
+
+        Mirrors :meth:`nwp500.models.schedule.ReservationSchedule.canonical`:
+        periods are sorted by their raw field tuple so two schedules with the
+        same periods compare equal regardless of the order the device
+        returned them in.
+        """
+        return (
+            self.enabled,
+            tuple(
+                sorted(period.canonical_key() for period in self.reservation)
+            ),
+        )
