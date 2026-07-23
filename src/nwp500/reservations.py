@@ -12,7 +12,7 @@ All functions are ``async`` and require a connected :class:`NavienMqttClient`.
 import asyncio
 import logging
 from collections.abc import Sequence
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from .encoding import build_reservation_entry, encode_week_bitfield
 from .models import ReservationSchedule
@@ -66,6 +66,63 @@ async def fetch_reservations(
         return await asyncio.wait_for(future, timeout=timeout)
     except TimeoutError:
         return None
+    finally:
+        try:
+            await mqtt.unsubscribe_reservation_response(device, on_schedule)
+        except Exception:
+            _logger.warning(
+                "Failed to unsubscribe reservations response handler for "
+                "device %s",
+                device.device_info.mac_address,
+                exc_info=True,
+            )
+
+
+async def update_reservations_confirmed(
+    mqtt: NavienMqttClient,
+    device: Device,
+    reservations: Sequence[dict[str, Any]],
+    *,
+    enabled: bool = True,
+    timeout: float = 10.0,
+) -> ReservationSchedule | None:
+    """Write the full reservation list and confirm the device applied it.
+
+    Sends ``update_reservations`` and waits for the device's ``rsv/rd``
+    echo, returning the parsed :class:`ReservationSchedule` the device now
+    holds. Compare it against the desired program with
+    :meth:`ReservationSchedule.canonical`, e.g.::
+
+        confirmed = await update_reservations_confirmed(mqtt, device, entries)
+        assert confirmed is not None
+        assert confirmed.canonical() == desired_schedule.canonical()
+
+    Args:
+        mqtt: Connected MQTT client.
+        device: Target device.
+        reservations: List of raw reservation entry dicts to write.
+        enabled: Whether reservations are enabled (default: True).
+        timeout: Seconds to wait for the confirming response.
+
+    Returns:
+        The :class:`ReservationSchedule` the device echoed back after the
+        write, or ``None`` if no response arrived within ``timeout``.
+    """
+    future: asyncio.Future[ReservationSchedule] = (
+        asyncio.get_running_loop().create_future()
+    )
+
+    def on_schedule(schedule: ReservationSchedule) -> None:
+        if not future.done():
+            future.set_result(schedule)
+
+    await mqtt.subscribe_reservation_response(device, on_schedule)
+    try:
+        await mqtt.update_reservations(device, reservations, enabled=enabled)
+        try:
+            return await asyncio.wait_for(future, timeout=timeout)
+        except TimeoutError:
+            return None
     finally:
         try:
             await mqtt.unsubscribe_reservation_response(device, on_schedule)
@@ -283,6 +340,7 @@ async def update_reservation(
 
 __all__ = [
     "fetch_reservations",
+    "update_reservations_confirmed",
     "add_reservation",
     "delete_reservation",
     "update_reservation",

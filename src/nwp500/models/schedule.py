@@ -87,6 +87,21 @@ class ReservationEntry(NavienBaseModel):
         except ValueError:
             return f"Unknown ({self.mode})"
 
+    def canonical_key(self) -> tuple[int, int, int, int, int, int]:
+        """Raw protocol fields as a stable, hashable tuple.
+
+        Used to compare a desired reservation entry against a device
+        read-back without depending on field order or computed properties.
+        """
+        return (
+            self.enable,
+            self.week,
+            self.hour,
+            self.min,
+            self.mode,
+            self.param,
+        )
+
 
 class ReservationSchedule(NavienBaseModel):
     """Complete reservation schedule from the device.
@@ -131,6 +146,22 @@ class ReservationSchedule(NavienBaseModel):
         Device bool convention: 2=on, 1=off.
         """
         return self.reservation_use == 2
+
+    def canonical(self) -> tuple[bool, tuple[tuple[int, ...], ...]]:
+        """Normalized, order-independent representation of this schedule.
+
+        Entry order in a device read-back is not guaranteed to match the
+        order a program was written in, so entries are sorted by their raw
+        field tuple. Two schedules holding the same reservations return
+        equal (and equally hashable) results from this method regardless of
+        entry order — the intended way to compare a desired program against
+        a device read-back (see
+        :func:`nwp500.reservations.update_reservations_confirmed`).
+        """
+        return (
+            self.enabled,
+            tuple(sorted(entry.canonical_key() for entry in self.reservation)),
+        )
 
 
 class WeeklyReservationEntry(NavienBaseModel):
