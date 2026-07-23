@@ -45,6 +45,7 @@ class MqttDeviceCapabilityChecker:
         "anti_legionella_setting_use": lambda f: bool(
             f.anti_legionella_setting_use
         ),
+        "dr_setting_use": lambda f: bool(f.dr_setting_use),
     }
 
     @classmethod
