@@ -299,6 +299,56 @@ class TestFreezeProtectionDefaults:
         assert status.freeze_protection_temp_max == pytest.approx(50, abs=1)
 
 
+class TestFreezeProtectionTemperatureValidation:
+    """set_freeze_protection_temperature must validate against device limits."""
+
+    @pytest.mark.asyncio
+    async def test_rejects_out_of_range_temperature(self, mock_device):
+        from nwp500.exceptions import RangeValidationError
+
+        controller, publish = _make_controller()
+        controller._get_device_features = AsyncMock(
+            return_value=MagicMock(
+                freeze_protection_temp_min=35.0,
+                freeze_protection_temp_max=45.0,
+            )
+        )
+
+        with pytest.raises(RangeValidationError):
+            await controller.set_freeze_protection_temperature(
+                mock_device, 60.0
+            )
+        publish.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_accepts_in_range_temperature(self, mock_device):
+        controller, publish = _make_controller()
+        controller._get_device_features = AsyncMock(
+            return_value=MagicMock(
+                freeze_protection_temp_min=35.0,
+                freeze_protection_temp_max=45.0,
+            )
+        )
+
+        await controller.set_freeze_protection_temperature(mock_device, 40.0)
+        publish.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_raises_capability_error_when_features_unavailable(
+        self, mock_device
+    ):
+        from nwp500.exceptions import DeviceCapabilityError
+
+        controller, publish = _make_controller()
+        controller._get_device_features = AsyncMock(return_value=None)
+
+        with pytest.raises(DeviceCapabilityError):
+            await controller.set_freeze_protection_temperature(
+                mock_device, 40.0
+            )
+        publish.assert_not_awaited()
+
+
 class TestErrorCodeChangeEvents:
     """error_detected must fire when the error code changes."""
 

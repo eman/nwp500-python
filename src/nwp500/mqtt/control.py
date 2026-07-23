@@ -831,7 +831,30 @@ class MqttDeviceController:
 
         Returns:
             Publish packet ID
+
+        Raises:
+            DeviceCapabilityError: If device features are not available and
+                the temperature range cannot be validated.
+            RangeValidationError: If temperature is outside the device's
+                supported freeze protection range.
         """
+        features = await self._get_device_features(device)
+        if features is None:
+            raise DeviceCapabilityError(
+                "freeze_protection_use",
+                (
+                    "Device features not available. "
+                    "Unable to validate temperature range."
+                ),
+            )
+
+        self._validate_range(
+            "temperature",
+            temperature,
+            features.freeze_protection_temp_min,
+            features.freeze_protection_temp_max,
+        )
+
         raw = preferred_to_half_celsius(temperature)
         return await self._mode_command(
             device, CommandCode.FREZ_TEMP, "frez-temp", [raw]
