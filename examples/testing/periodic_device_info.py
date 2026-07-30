@@ -13,12 +13,15 @@ The helper is useful for:
 """
 
 import asyncio
+import logging
 import os
 import sys
 
 # Add src directory to path for development
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "src"))
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+
+logger = logging.getLogger(__name__)
 
 from nwp500 import (
     DeviceFeature,
@@ -29,7 +32,7 @@ from nwp500 import (
 
 try:
     from mask import mask_mac  # type: ignore
-except Exception:
+except ImportError:
 
     def mask_mac(mac):  # pragma: no cover - fallback for examples
         return "[REDACTED_MAC]"
@@ -148,7 +151,5 @@ if __name__ == "__main__":
         print("\n\nInterrupted by user")
         sys.exit(0)
     except Exception:
-        import logging
-
-        logging.exception("Error running periodic_device_info example")
+        logger.exception("Error running periodic_device_info example")
         sys.exit(1)

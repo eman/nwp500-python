@@ -23,7 +23,9 @@ def mask_mac_in_topic(topic: str, mac_addr: str | None = None) -> str:
         if mac_addr and mac_addr in topic_masked:
             topic_masked = topic_masked.replace(mac_addr, "[REDACTED_MAC]")
         return topic_masked
-    except Exception:
+    except TypeError:
+        # `topic` was not a string; redact the whole thing rather than
+        # risk echoing an unexpected value.
         return "[REDACTED_TOPIC]"
 
 
@@ -44,7 +46,8 @@ def mask_any(value: str | None) -> str:
             return "[REDACTED]"
         # Do not expose the string content in examples
         return "[REDACTED]"
-    except Exception:
+    except (TypeError, ValueError):
+        # A broken __str__ still must not leak the underlying value.
         return "[REDACTED]"
 
 

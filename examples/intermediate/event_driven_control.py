@@ -29,12 +29,13 @@ logging.basicConfig(
 )
 
 from nwp500 import (
+    CurrentOperationMode,
+    MqttClientEvents,
     NavienAPIClient,
     NavienAuthClient,
     NavienMqttClient,
-    MqttClientEvents,
-    CurrentOperationMode,
 )
+from nwp500.exceptions import Nwp500Error
 
 
 # Example 1: Multiple listeners for the same event
@@ -295,7 +296,7 @@ async def main():
 
         return True
 
-    except Exception as e:
+    except Nwp500Error as e:
         print(f"\n[ERROR] Error: {e}")
         import traceback
 

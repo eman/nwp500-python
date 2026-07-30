@@ -16,6 +16,7 @@ from nwp500 import (
     NavienAuthClient,
     NavienMqttClient,
 )
+from nwp500.exceptions import Nwp500Error
 
 
 async def example_basic_pattern():
@@ -109,7 +110,7 @@ async def example_with_mqtt():
             await mqtt_client.disconnect()
             print("✓ MQTT Disconnected")
 
-        except Exception as e:
+        except Nwp500Error as e:
             print(f"✗ MQTT error: {e}")
 
     print("✓ Context exited, session closed")

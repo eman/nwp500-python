@@ -21,6 +21,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "src"))
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from nwp500 import NavienAPIClient, NavienAuthClient, NavienMqttClient
+from nwp500.exceptions import Nwp500Error
 from nwp500.mqtt import MqttConnectionConfig
 
 # Configure logging
@@ -167,7 +168,7 @@ async def strategy_full_recreation(auth_client, device):
             mqtt_client = await create_and_connect()
             recovery_attempt = 0  # Reset on success
             logger.info("Successfully recreated MQTT client")
-        except Exception as e:
+        except Nwp500Error as e:
             logger.error(f"Failed to recreate MQTT client: {e}")
 
     try:
@@ -250,7 +251,7 @@ async def strategy_token_refresh(auth_client, device):
 
             recovery_attempt = 0  # Reset on success
 
-        except Exception as e:
+        except Nwp500Error as e:
             logger.error(f"Failed to refresh and reconnect: {e}")
 
     mqtt_client = NavienMqttClient(auth_client, config=config)
@@ -348,7 +349,7 @@ async def strategy_exponential_backoff(auth_client, device):
                 try:
                     if mqtt_client.is_connected:
                         await mqtt_client.disconnect()
-                except Exception as e:
+                except Nwp500Error as e:
                     logger.warning(f"Error disconnecting old client: {e}")
 
             # Create new client
@@ -365,7 +366,7 @@ async def strategy_exponential_backoff(auth_client, device):
             recovery_attempt = 0  # Reset on success
             logger.info("All subscriptions restored")
 
-        except Exception as e:
+        except Nwp500Error as e:
             logger.error(f"Recovery attempt failed: {e}")
 
     mqtt_client = NavienMqttClient(auth_client, config=config)
@@ -442,7 +443,7 @@ if __name__ == "__main__":
         asyncio.run(main())
     except KeyboardInterrupt:
         print("\n\n[WARNING]  Interrupted by user")
-    except Exception as e:
+    except Nwp500Error as e:
         print(f"\n[ERROR] Error: {e}")
         import traceback
 

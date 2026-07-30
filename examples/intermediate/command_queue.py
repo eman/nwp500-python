@@ -26,6 +26,7 @@ logging.basicConfig(
 )
 
 from nwp500.auth import NavienAuthClient
+from nwp500.exceptions import Nwp500Error
 from nwp500.mqtt import MqttConnectionConfig, NavienMqttClient
 
 
@@ -197,7 +198,7 @@ async def command_queue_demo():
 
         return True
 
-    except Exception as e:
+    except Nwp500Error as e:
         print(f"\n[ERROR] Error: {e}")
         import traceback
 

@@ -8,7 +8,8 @@ system for scheduling water heating.
 
 import asyncio
 import logging
-from nwp500 import NavienAuthClient, NavienAPIClient, NavienMqttClient
+
+from nwp500 import NavienAPIClient, NavienAuthClient, NavienMqttClient
 
 # Set up logging to see the water program configuration process
 logging.basicConfig(level=logging.INFO)

@@ -23,6 +23,7 @@ logging.basicConfig(
 )
 
 from nwp500.auth import NavienAuthClient
+from nwp500.exceptions import Nwp500Error
 from nwp500.mqtt import NavienMqttClient
 
 
@@ -93,7 +94,7 @@ async def test_mqtt_connection():
             print("=" * 60)
             return True
 
-    except Exception as e:
+    except Nwp500Error as e:
         print(f"\n[ERROR] Test FAILED: {e}")
         import traceback
 

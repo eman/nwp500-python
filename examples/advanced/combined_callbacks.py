@@ -32,6 +32,7 @@ if __name__ == "__main__":
 from nwp500.api_client import NavienAPIClient
 from nwp500.auth import NavienAuthClient
 from nwp500.enums import OnOffFlag
+from nwp500.exceptions import Nwp500Error
 from nwp500.models import DeviceFeature, DeviceStatus
 from nwp500.mqtt import NavienMqttClient
 
@@ -157,7 +158,7 @@ async def main():
                 await mqtt_client.disconnect()
                 print("\n[SUCCESS] Disconnected")
 
-            except Exception as e:
+            except Nwp500Error as e:
                 print(f"[ERROR] Error: {e}")
                 if mqtt_client.is_connected:
                     await mqtt_client.disconnect()
@@ -165,7 +166,7 @@ async def main():
 
         return 0
 
-    except Exception as e:
+    except Nwp500Error as e:
         print(f"[ERROR] Error: {e}")
         import traceback
 

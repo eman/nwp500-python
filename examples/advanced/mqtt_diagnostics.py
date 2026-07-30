@@ -94,8 +94,8 @@ class MqttDiagnosticsExample:
 
             except asyncio.CancelledError:
                 break
-            except Exception as e:
-                _logger.error(f"Error exporting diagnostics: {e}", exc_info=True)
+            except Exception:
+                _logger.exception("Error exporting diagnostics")
 
     async def monitor_connection_state(self, interval: float = 10.0) -> None:
         """
@@ -124,8 +124,8 @@ class MqttDiagnosticsExample:
 
             except asyncio.CancelledError:
                 break
-            except Exception as e:
-                _logger.error(f"Error monitoring state: {e}", exc_info=True)
+            except Exception:
+                _logger.exception("Error monitoring state")
 
     async def on_connection_drop(self, event) -> None:
         """Handle connection drop event."""
@@ -289,8 +289,8 @@ class MqttDiagnosticsExample:
 
                     _logger.info("Example complete")
 
-        except Exception as e:
-            _logger.error(f"Error during example: {e}", exc_info=True)
+        except Exception:
+            _logger.exception("Error during example")
             raise
 
 

@@ -26,6 +26,7 @@ from nwp500.auth import NavienAuthClient
 from nwp500.exceptions import (
     AuthenticationError,
     InvalidCredentialsError,
+    Nwp500Error,
 )
 
 
@@ -97,8 +98,8 @@ async def main():
             print(f"Error code: {e.code}")
         return 1
 
-    except Exception as e:
-        print(f"\n[ERROR] Unexpected error: {str(e)}")
+    except Nwp500Error as e:
+        print(f"\n[ERROR] Unexpected error: {e!s}")
         import traceback
 
         traceback.print_exc()

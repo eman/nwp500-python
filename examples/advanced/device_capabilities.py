@@ -26,6 +26,8 @@ logging.getLogger("nwp500.mqtt_client").setLevel(logging.INFO)
 logging.getLogger("nwp500.auth").setLevel(logging.INFO)
 logging.getLogger("nwp500.api_client").setLevel(logging.INFO)
 
+logger = logging.getLogger(__name__)
+
 # If running from examples directory, add parent to path
 if __name__ == "__main__":
     sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "src"))
@@ -39,7 +41,7 @@ from nwp500.mqtt import NavienMqttClient
 
 try:
     from mask import mask_mac  # type: ignore
-except Exception:
+except ImportError:
 
     def mask_mac(mac):  # pragma: no cover - fallback
         return "[REDACTED_MAC]"
@@ -254,9 +256,7 @@ async def main():
                 print("[SUCCESS] Disconnected successfully")
 
             except Exception:
-                import logging
-
-                logging.exception("MQTT error in device_feature_callback")
+                logger.exception("MQTT error in device_feature_callback")
 
                 if mqtt_client.is_connected:
                     await mqtt_client.disconnect()
@@ -276,9 +276,7 @@ async def main():
         return 1
 
     except Exception:
-        import logging
-
-        logging.exception("Unexpected error in device_feature_callback")
+        logger.exception("Unexpected error in device_feature_callback")
         return 1
 
 

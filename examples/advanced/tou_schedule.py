@@ -7,7 +7,7 @@ import sys
 from typing import Any
 
 from nwp500 import NavienAPIClient, NavienAuthClient, NavienMqttClient
-from nwp500.encoding import decode_week_bitfield, decode_price, build_tou_period
+from nwp500.encoding import build_tou_period, decode_price, decode_week_bitfield
 
 
 async def _wait_for_controller_serial(mqtt_client: NavienMqttClient, device) -> str:

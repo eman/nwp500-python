@@ -15,7 +15,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "src"))
 
 from nwp500.api_client import NavienAPIClient
 from nwp500.auth import NavienAuthClient
-from nwp500.exceptions import APIError, AuthenticationError
+from nwp500.exceptions import APIError, AuthenticationError, Nwp500Error
 
 # Setup logging
 logging.basicConfig(
@@ -72,7 +72,7 @@ async def test_api_client():
 
             try:
                 from mask import mask_any, mask_location  # type: ignore
-            except Exception:
+            except ImportError:
 
                 def mask_any(_):
                     return "[REDACTED]"
@@ -147,7 +147,7 @@ async def test_api_client():
                 # This might fail if TOU is not configured
                 print("[WARNING]  TOU info requires controller_id - skipping for now")
                 print("   (This endpoint requires device-specific configuration)")
-            except Exception as e:
+            except Nwp500Error as e:
                 print(f"[WARNING]  TOU info error: {e}")
             print()
 
@@ -191,7 +191,7 @@ async def test_api_client():
                 await client.get_device_info("invalid_mac", "invalid")
             except APIError as e:
                 print(f"[SUCCESS] APIError caught correctly: {e.message[:50]}...")
-            except Exception as e:
+            except Nwp500Error as e:
                 print(f"[WARNING]  Unexpected error type: {type(e).__name__}")
             print()
 
@@ -216,8 +216,8 @@ async def test_api_client():
         if e.code:
             print(f"   Code: {e.code}")
         return 1
-    except Exception as e:
-        print(f"[ERROR] Unexpected error: {str(e)}")
+    except Nwp500Error as e:
+        print(f"[ERROR] Unexpected error: {e!s}")
         import traceback
 
         traceback.print_exc()
@@ -256,8 +256,8 @@ async def test_convenience_function():
                 print(f"   - Device #{idx} found.")
         return 0
 
-    except Exception as e:
-        print(f"[ERROR] Error: {str(e)}")
+    except Nwp500Error as e:
+        print(f"[ERROR] Error: {e!s}")
         return 1
 
 

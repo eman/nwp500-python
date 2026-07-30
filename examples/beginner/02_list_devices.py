@@ -17,19 +17,22 @@ logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
 )
 
+logger = logging.getLogger(__name__)
+
 # If running from examples directory, add parent to path
 if __name__ == "__main__":
     sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "src"))
     sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+
+import re
 
 from nwp500 import NavienAPIClient
 from nwp500.auth import NavienAuthClient
 from nwp500.exceptions import (
     APIError,
     AuthenticationError,
+    Nwp500Error,
 )
-
-import re
 
 
 def mask_mac(mac: str) -> str:
@@ -72,7 +75,7 @@ async def example_basic_usage():
             # Display device information
             try:
                 from mask import mask_mac  # type: ignore
-            except Exception:
+            except ImportError:
                 # fallback helper if import fails when running examples directly
 
                 def mask_mac(mac: str) -> str:  # pragma: no cover - small fallback
@@ -81,7 +84,7 @@ async def example_basic_usage():
 
             try:
                 from mask import mask_any, mask_location  # type: ignore
-            except Exception:
+            except ImportError:
 
                 def mask_any(_):
                     return "[REDACTED]"
@@ -172,7 +175,7 @@ async def example_basic_usage():
 
     except Exception:
         # Avoid printing raw exception details to stdout in examples
-        logging.exception("Unexpected error in api_client_example")
+        logger.exception("Unexpected error in api_client_example")
         return 1
 
 
@@ -199,7 +202,7 @@ async def example_convenience_function():
 
             try:
                 from mask import mask_any, mask_location  # type: ignore
-            except Exception:
+            except ImportError:
 
                 def mask_any(_):
                     return "[REDACTED]"
@@ -218,8 +221,8 @@ async def example_convenience_function():
 
         return 0
 
-    except Exception as e:
-        print(f"[ERROR] Error: {str(e)}")
+    except Nwp500Error as e:
+        print(f"[ERROR] Error: {e!s}")
         return 1
 
 

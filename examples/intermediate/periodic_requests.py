@@ -7,11 +7,14 @@ both device info and device status requests at regular intervals.
 """
 
 import asyncio
+import logging
 import os
 import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "src"))
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+
+logger = logging.getLogger(__name__)
 
 from nwp500 import (
     DeviceFeature,
@@ -24,7 +27,7 @@ from nwp500 import (
 
 try:
     from mask import mask_mac  # type: ignore
-except Exception:
+except ImportError:
 
     def mask_mac(mac):  # pragma: no cover - fallback for examples
         return "[REDACTED_MAC]"
@@ -236,7 +239,5 @@ if __name__ == "__main__":
         print("\n\nInterrupted by user")
         sys.exit(0)
     except Exception:
-        import logging
-
-        logging.exception("Error running periodic_requests example")
+        logger.exception("Error running periodic_requests example")
         sys.exit(1)

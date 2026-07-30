@@ -37,6 +37,7 @@ from pathlib import Path
 from typing import Any
 
 from nwp500 import NavienAPIClient, NavienAuthClient, NavienMqttClient
+from nwp500.exceptions import Nwp500Error
 from nwp500.models import DeviceFeature
 from nwp500.mqtt.utils import redact, redact_topic
 from nwp500.topic_builder import MqttTopicBuilder
@@ -163,7 +164,7 @@ async def main() -> None:
                 try:
                     await mqtt_client.request_tou_settings(device, serial)
                     await asyncio.sleep(5)
-                except Exception as exc:
+                except Nwp500Error as exc:
                     print(f"  TOU request failed: {exc}")
 
         # --- Step 5: wait a bit more to catch any late-arriving messages ---

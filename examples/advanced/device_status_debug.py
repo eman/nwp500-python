@@ -18,6 +18,8 @@ logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
 )
 
+logger = logging.getLogger(__name__)
+
 # If running from examples directory, add parent to path
 if __name__ == "__main__":
     sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "src"))
@@ -31,7 +33,7 @@ from nwp500.mqtt import NavienMqttClient
 
 try:
     from mask import mask_mac  # type: ignore
-except Exception:
+except ImportError:
 
     def mask_mac(mac):  # pragma: no cover - fallback
         return "[REDACTED_MAC]"
@@ -79,7 +81,7 @@ async def main():
 
             try:
                 from mask import mask_any  # type: ignore
-            except Exception:
+            except ImportError:
 
                 def mask_any(_):
                     return "[REDACTED]"
@@ -177,9 +179,7 @@ async def main():
                 print("[SUCCESS] Disconnected successfully")
 
             except Exception:
-                import logging
-
-                logging.exception("MQTT error in device_status_callback_debug")
+                logger.exception("MQTT error in device_status_callback_debug")
 
                 if mqtt_client.is_connected:
                     await mqtt_client.disconnect()
@@ -199,9 +199,7 @@ async def main():
         return 1
 
     except Exception:
-        import logging
-
-        logging.exception("Unexpected error in device_status_callback_debug")
+        logger.exception("Unexpected error in device_status_callback_debug")
         return 1
 
 

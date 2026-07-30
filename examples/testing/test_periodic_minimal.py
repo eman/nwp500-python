@@ -6,7 +6,7 @@ Minimal test to verify periodic requests are working
 import asyncio
 import os
 import sys
-from datetime import datetime
+from datetime import UTC, datetime
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "src"))
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
@@ -18,6 +18,11 @@ from nwp500 import (
     NavienMqttClient,
     PeriodicRequestType,
 )
+
+
+def timestamp() -> str:
+    """Current local wall-clock time, for display alongside messages."""
+    return datetime.now(UTC).astimezone().strftime("%H:%M:%S")
 
 
 async def main():
@@ -53,9 +58,9 @@ async def main():
         """Typed callback for device status."""
         nonlocal message_count
         message_count += 1
-        timestamp = datetime.now().strftime("%H:%M:%S")
+        stamp = timestamp()
         unit = status.get_field_unit("dhw_temperature")
-        print(f"[{timestamp}] Status #{message_count}")
+        print(f"[{stamp}] Status #{message_count}")
         print(f"  Temperature: {status.dhw_temperature:.1f}{unit}")
         print(f"  Power: {status.current_inst_power:.1f}W")
 
@@ -65,9 +70,7 @@ async def main():
     await asyncio.sleep(2)  # Wait for subscription
 
     # Start periodic requests
-    print(
-        f"\n[{datetime.now().strftime('%H:%M:%S')}] Starting periodic status requests (every 10 seconds)..."
-    )
+    print(f"\n[{timestamp()}] Starting periodic status requests (every 10 seconds)...")
     await mqtt.start_periodic_requests(
         device=device,
         request_type=PeriodicRequestType.DEVICE_STATUS,
@@ -75,17 +78,17 @@ async def main():
     )
 
     # Monitor for 45 seconds (should get ~4 requests)
-    print(f"[{datetime.now().strftime('%H:%M:%S')}] Monitoring for 45 seconds...\n")
+    print(f"[{timestamp()}] Monitoring for 45 seconds...\n")
 
     for i in range(9):  # 9 x 5 = 45 seconds
         await asyncio.sleep(5)
-        timestamp = datetime.now().strftime("%H:%M:%S")
+        stamp = timestamp()
         print(
-            f"[{timestamp}] ... {(i + 1) * 5}s elapsed, messages received: {message_count}"
+            f"[{stamp}] ... {(i + 1) * 5}s elapsed, messages received: {message_count}"
         )
 
     # Cleanup
-    print(f"\n[{datetime.now().strftime('%H:%M:%S')}] Disconnecting...")
+    print(f"\n[{timestamp()}] Disconnecting...")
     await mqtt.disconnect()
     print(f"Total messages received: {message_count}")
 

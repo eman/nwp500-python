@@ -57,8 +57,7 @@ async def save_tokens_example():
         token_data = tokens.to_dict()
 
         # Save to file
-        with open(TOKEN_FILE, "w") as f:
-            json.dump(token_data, f, indent=2)
+        await asyncio.to_thread(TOKEN_FILE.write_text, json.dumps(token_data, indent=2))
 
         logger.info(f"[OK] Tokens saved to {TOKEN_FILE}")
         logger.info("You can now use --restore to skip authentication on future runs")
@@ -81,8 +80,7 @@ async def restore_tokens_example():
         )
 
     # Load saved tokens
-    with open(TOKEN_FILE) as f:
-        token_data = json.load(f)
+    token_data = json.loads(await asyncio.to_thread(TOKEN_FILE.read_text))
 
     logger.info(f"Loading tokens from {TOKEN_FILE}...")
 
@@ -116,8 +114,9 @@ async def restore_tokens_example():
         if tokens.issued_at != stored_tokens.issued_at:
             logger.info("Tokens were refreshed, updating stored copy...")
             token_data = tokens.to_dict()
-            with open(TOKEN_FILE, "w") as f:
-                json.dump(token_data, f, indent=2)
+            await asyncio.to_thread(
+                TOKEN_FILE.write_text, json.dumps(token_data, indent=2)
+            )
             logger.info(f"[OK] Updated tokens saved to {TOKEN_FILE}")
 
 

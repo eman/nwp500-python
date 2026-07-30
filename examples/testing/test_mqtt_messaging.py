@@ -13,9 +13,9 @@ import asyncio
 import json
 import logging
 import os
-import sys
 import re
-from datetime import datetime
+import sys
+from datetime import UTC, datetime
 
 # Setup detailed logging
 logging.basicConfig(
@@ -23,8 +23,11 @@ logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
 )
 
+logger = logging.getLogger(__name__)
+
 from nwp500.api_client import NavienAPIClient
 from nwp500.auth import NavienAuthClient
+from nwp500.exceptions import Nwp500Error
 from nwp500.mqtt import NavienMqttClient
 
 
@@ -50,7 +53,7 @@ async def test_mqtt_messaging():
 
     def message_handler(topic: str, message: dict):
         """Handle all incoming messages with detailed logging."""
-        timestamp = datetime.now().strftime("%H:%M:%S.%f")[:-3]
+        timestamp = datetime.now(UTC).astimezone().strftime("%H:%M:%S.%f")[:-3]
         messages_received.append(
             {"timestamp": timestamp, "topic": topic, "message": message}
         )
@@ -94,7 +97,7 @@ async def test_mqtt_messaging():
 
             try:
                 from mask import mask_any, mask_location  # type: ignore
-            except Exception:
+            except ImportError:
 
                 def mask_any(_):
                     return "[REDACTED]"
@@ -157,7 +160,7 @@ async def test_mqtt_messaging():
                     try:
                         # mask_any should be available from earlier import
                         from mask import mask_any  # type: ignore
-                    except Exception:
+                    except ImportError:
 
                         def mask_any(_):
                             return "[REDACTED]"
@@ -165,7 +168,7 @@ async def test_mqtt_messaging():
                     print(
                         f"   [WARNING] Failed to subscribe to topic. Device type: {mask_any(device_type)}"
                     )
-                    logging.debug(
+                    logger.debug(
                         "Subscribe failure for device_type=%s; topic name redacted for privacy",
                         device_type,
                         exc_info=True,
@@ -179,34 +182,34 @@ async def test_mqtt_messaging():
 
             # Command 1: Signal app connection
             print(
-                f"📤 [{datetime.now().strftime('%H:%M:%S')}] Signaling app connection..."
+                f"📤 [{datetime.now(UTC).astimezone().strftime('%H:%M:%S')}] Signaling app connection..."
             )
             try:
                 await mqtt_client.signal_app_connection(device)
                 print("   [SUCCESS] Sent")
-            except Exception as e:
+            except Nwp500Error as e:
                 print(f"   [ERROR] Error: {e}")
             await asyncio.sleep(3)
 
             # Command 2: Request device info
             print(
-                f"📤 [{datetime.now().strftime('%H:%M:%S')}] Requesting device info..."
+                f"📤 [{datetime.now(UTC).astimezone().strftime('%H:%M:%S')}] Requesting device info..."
             )
             try:
                 await mqtt_client.request_device_info(device)
                 print("   [SUCCESS] Sent")
-            except Exception as e:
+            except Nwp500Error as e:
                 print(f"   [ERROR] Error: {e}")
             await asyncio.sleep(5)
 
             # Command 3: Request device status
             print(
-                f"📤 [{datetime.now().strftime('%H:%M:%S')}] Requesting device status..."
+                f"📤 [{datetime.now(UTC).astimezone().strftime('%H:%M:%S')}] Requesting device status..."
             )
             try:
                 await mqtt_client.request_device_status(device)
                 print("   [SUCCESS] Sent")
-            except Exception as e:
+            except Nwp500Error as e:
                 print(f"   [ERROR] Error: {e}")
             await asyncio.sleep(5)
 
@@ -282,7 +285,7 @@ async def test_mqtt_messaging():
 
             return len(messages_received) > 0
 
-    except Exception as e:
+    except Nwp500Error as e:
         print(f"\n[ERROR] Test failed with error: {e}")
         import traceback
 

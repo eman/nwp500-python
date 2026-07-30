@@ -24,6 +24,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "src"))
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from nwp500 import NavienAPIClient, NavienAuthClient, NavienMqttClient
+from nwp500.exceptions import Nwp500Error
 from nwp500.mqtt import MqttConnectionConfig
 
 # Configure logging
@@ -76,7 +77,7 @@ class ResilientMqttClient:
         if self.mqtt_client and self.mqtt_client.is_connected:
             try:
                 await self.mqtt_client.disconnect()
-            except Exception as e:
+            except Nwp500Error as e:
                 logger.warning(f"Error disconnecting old client: {e}")
 
         # Create new client
@@ -150,7 +151,7 @@ class ResilientMqttClient:
             self.recovery_attempt = 0
             logger.info("[SUCCESS] Recovery successful!")
 
-        except Exception as e:
+        except Nwp500Error as e:
             logger.error(f"Recovery attempt failed: {e}")
             # The next reconnection_failed event will trigger another recovery attempt
         finally:
@@ -252,7 +253,7 @@ if __name__ == "__main__":
         asyncio.run(main())
     except KeyboardInterrupt:
         print("\n\n[WARNING]  Interrupted by user")
-    except Exception as e:
+    except Nwp500Error as e:
         print(f"\n[ERROR] Error: {e}")
         import traceback
 

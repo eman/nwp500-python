@@ -8,7 +8,8 @@ and receive confirmation of the power state change.
 
 import asyncio
 import logging
-from nwp500 import NavienAuthClient, NavienAPIClient, NavienMqttClient
+
+from nwp500 import NavienAPIClient, NavienAuthClient, NavienMqttClient
 
 # Set up logging to see the power control process
 logging.basicConfig(level=logging.INFO)

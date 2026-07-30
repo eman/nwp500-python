@@ -15,7 +15,7 @@ The energy data comes from the EMS (Energy Management System) API.
 import asyncio
 import os
 import sys
-from datetime import datetime
+from datetime import UTC, datetime
 
 from nwp500 import (
     EnergyUsageResponse,
@@ -23,6 +23,7 @@ from nwp500 import (
     NavienAuthClient,
     NavienMqttClient,
 )
+from nwp500.exceptions import Nwp500Error
 
 
 async def main():
@@ -135,7 +136,7 @@ async def main():
         print("[OK] Subscribed to energy usage responses")
 
         # Request energy usage for current month
-        now = datetime.now()
+        now = datetime.now(UTC).astimezone()
         current_year = now.year
         current_month = now.month
 
@@ -160,7 +161,7 @@ if __name__ == "__main__":
         asyncio.run(main())
     except KeyboardInterrupt:
         print("\n\nInterrupted by user")
-    except Exception as e:
+    except Nwp500Error as e:
         print(f"\n\nError: {e}")
         import traceback
 
