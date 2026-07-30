@@ -5,6 +5,9 @@ Changelog
 Unreleased
 ==========
 
+Version 9.2.1 (2026-07-30)
+==========================
+
 Added
 -----
 - **Confirmed reservation/TOU write helpers and canonical schedule
