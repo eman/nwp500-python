@@ -71,7 +71,7 @@ async def recirculation_example():
             await mqtt_client.set_recirculation_mode(device, 1)  # 1 = Always On
 
             # Wait for confirmation
-            for i in range(10):  # Wait up to 10 seconds
+            for _ in range(10):  # Wait up to 10 seconds
                 if mode_set:
                     logger.info("Recirculation mode set successfully!")
                     break
@@ -97,7 +97,7 @@ async def recirculation_example():
             await mqtt_client.trigger_recirculation_hot_button(device)
 
             # Wait for confirmation
-            for i in range(10):  # Wait up to 10 seconds
+            for _ in range(10):  # Wait up to 10 seconds
                 if hot_button_triggered:
                     logger.info("Hot button triggered successfully!")
                     break
@@ -123,7 +123,7 @@ async def recirculation_example():
             await mqtt_client.set_recirculation_mode(device, 2)  # 2 = Button Only
 
             # Wait for confirmation
-            for i in range(10):  # Wait up to 10 seconds
+            for _ in range(10):  # Wait up to 10 seconds
                 if button_only_set:
                     logger.info("Recirculation mode changed successfully!")
                     break

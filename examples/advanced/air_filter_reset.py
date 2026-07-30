@@ -73,7 +73,7 @@ async def air_filter_example():
             await mqtt_client.reset_air_filter(device)
 
             # Wait for confirmation
-            for i in range(10):  # Wait up to 10 seconds
+            for _ in range(10):  # Wait up to 10 seconds
                 if filter_reset_complete:
                     logger.info("Air filter timer reset successfully!")
                     break

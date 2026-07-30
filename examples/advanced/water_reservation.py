@@ -79,7 +79,7 @@ async def water_program_example():
             await mqtt_client.configure_reservation_water_program(device)
 
             # Wait for confirmation
-            for i in range(10):  # Wait up to 10 seconds
+            for _ in range(10):  # Wait up to 10 seconds
                 if water_program_enabled:
                     logger.info(
                         "Water program reservation mode configured successfully!"

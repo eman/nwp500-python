@@ -19,6 +19,7 @@ This will run for 1 hour, collecting diagnostics and exporting every 5 minutes.
 """
 
 import asyncio
+import contextlib
 import logging
 import os
 import signal
@@ -54,12 +55,14 @@ class MqttDiagnosticsExample:
         self.shutdown_event = asyncio.Event()
         self.output_dir = Path("mqtt_diagnostics_output")
         self.output_dir.mkdir(exist_ok=True)
+        # Held so the shutdown task isn't garbage collected mid-flight.
+        self._shutdown_task: asyncio.Task[None] | None = None
 
     def handle_shutdown(self) -> None:
         """Handle shutdown signal safely."""
         _logger.info("Shutting down gracefully...")
         # Schedule the shutdown event to be set (thread-safe)
-        asyncio.create_task(self._set_shutdown())
+        self._shutdown_task = asyncio.create_task(self._set_shutdown())
 
     async def _set_shutdown(self) -> None:
         """Set shutdown event (must be called from async context)."""
@@ -262,15 +265,15 @@ class MqttDiagnosticsExample:
                     export_task.cancel()
                     monitor_task.cancel()
 
-                    try:
+                    with contextlib.suppress(TimeoutError):
                         await asyncio.wait_for(
                             asyncio.gather(
-                                export_task, monitor_task, return_exceptions=True
+                                export_task,
+                                monitor_task,
+                                return_exceptions=True,
                             ),
                             timeout=5.0,
                         )
-                    except asyncio.TimeoutError:
-                        pass
 
                     # Final export
                     _logger.info("Exporting final diagnostics...")

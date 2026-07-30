@@ -72,7 +72,7 @@ async def power_control_example():
             await mqtt_client.set_power(device, power_on=False)
 
             # Wait for confirmation
-            for i in range(15):  # Wait up to 15 seconds
+            for _ in range(15):  # Wait up to 15 seconds
                 if power_off_complete:
                     logger.info("Device turned OFF successfully!")
                     break
@@ -101,7 +101,7 @@ async def power_control_example():
             await mqtt_client.set_power(device, power_on=True)
 
             # Wait for confirmation
-            for i in range(15):  # Wait up to 15 seconds
+            for _ in range(15):  # Wait up to 15 seconds
                 if power_on_complete:
                     logger.info("Device turned ON successfully!")
                     break

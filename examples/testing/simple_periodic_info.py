@@ -54,9 +54,8 @@ async def main():
 
     try:
         # Run until interrupted
-        while True:
-            await asyncio.sleep(1)
-    except (KeyboardInterrupt, asyncio.CancelledError):
+        await asyncio.Event().wait()
+    except KeyboardInterrupt, asyncio.CancelledError:
         print("\nStopping...")
     finally:
         await mqtt.disconnect()

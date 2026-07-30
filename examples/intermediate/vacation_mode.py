@@ -77,7 +77,7 @@ async def vacation_mode_example():
             await mqtt_client.set_vacation_days(device, vacation_days)
 
             # Wait for confirmation
-            for i in range(10):  # Wait up to 10 seconds
+            for _ in range(10):  # Wait up to 10 seconds
                 if vacation_set:
                     logger.info("Vacation mode set successfully!")
                     break

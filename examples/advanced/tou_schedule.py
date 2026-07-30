@@ -50,7 +50,7 @@ async def main() -> None:
         print("Requesting controller serial number via device info...")
         try:
             controller_serial = await _wait_for_controller_serial(mqtt_client, device)
-        except asyncio.TimeoutError:
+        except TimeoutError:
             print("Timed out waiting for device features")
             await mqtt_client.disconnect()
             return

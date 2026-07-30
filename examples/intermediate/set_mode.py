@@ -75,7 +75,7 @@ async def set_mode_example():
             await mqtt_client.set_dhw_mode(device, 3)
 
             # Wait for confirmation
-            for i in range(15):  # Wait up to 15 seconds
+            for _ in range(15):  # Wait up to 15 seconds
                 if mode_changed:
                     logger.info("Mode change confirmed!")
                     break

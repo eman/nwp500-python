@@ -181,7 +181,8 @@ async def main():
 
             # Connection state
             mqtt_client.on(
-                MqttClientEvents.CONNECTION_INTERRUPTED, on_connection_interrupted
+                MqttClientEvents.CONNECTION_INTERRUPTED,
+                on_connection_interrupted,
             )
             mqtt_client.on(MqttClientEvents.CONNECTION_RESUMED, on_connection_resumed)
             print("   [SUCCESS] Registered connection handlers")

@@ -1,5 +1,31 @@
-# Ruff configuration for examples directory
-# Inherits from main pyproject.toml but allows E402 for sys.path modifications
+# Ruff configuration for the examples directory.
+#
+# `extend` pulls in the rule selection from the root pyproject.toml so the
+# examples are held to the same standard as the library, from a single
+# source of truth. This matters: without `extend`, ruff ignores the project
+# configuration here and falls back to its own built-in default rule set,
+# which changes between ruff releases. That is exactly what happened when
+# ruff 0.16 broadened its defaults and CI failed on 113 errors that no one
+# had opted into.
+#
+# Deviations from the project rules belong below, each with a reason.
+extend = "../pyproject.toml"
+
+# Examples are read as much as run, and they are dense with long literal
+# output strings. They keep the wider limit they have always been
+# formatted at rather than the library's 80.
+line-length = 88
 
 [lint]
-extend-ignore = ["E402"]  # Allow imports after sys.path modifications in examples
+extend-ignore = [
+    # Long literal strings in prints and log messages that the formatter
+    # cannot split.
+    "E501",
+    # Every example bootstraps sys.path with os.path before importing
+    # nwp500, so it can run straight from a source checkout. os.path is
+    # the clearer idiom for that than pathlib. (The matching E402, for
+    # importing after the sys.path edit, comes from the root config's
+    # per-file-ignores for examples/**.)
+    "PTH118",
+    "PTH120",
+]

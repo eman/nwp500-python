@@ -67,7 +67,7 @@ async def example_basic_usage():
             try:
                 devices = await asyncio.wait_for(client.list_devices(), timeout=30.0)
                 print(f"[SUCCESS] Found {len(devices)} device(s)\n")
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 print("[ERROR] Request timed out while retrieving devices")
                 print("   The API server may be slow or unresponsive.")
                 return 1
@@ -78,7 +78,9 @@ async def example_basic_usage():
             except ImportError:
                 # fallback helper if import fails when running examples directly
 
-                def mask_mac(mac: str) -> str:  # pragma: no cover - small fallback
+                def mask_mac(
+                    mac: str,
+                ) -> str:  # pragma: no cover - small fallback
                     # Always return "[REDACTED_MAC]" regardless of input for safety
                     return "[REDACTED_MAC]"
 
@@ -131,7 +133,7 @@ async def example_basic_usage():
                     if detailed_info.location.latitude:
                         print("  Coordinates: (available, not shown for privacy)")
                     print()
-                except asyncio.TimeoutError:
+                except TimeoutError:
                     print(
                         "[WARNING]  Request timed out - API may be slow or unresponsive"
                     )
@@ -149,7 +151,7 @@ async def example_basic_usage():
                     for fw in firmware_list:
                         print(f"  SW Code: {fw.cur_sw_code}, Version: {fw.cur_version}")
                     print()
-                except asyncio.TimeoutError:
+                except TimeoutError:
                     print(
                         "[WARNING]  Request timed out - API may be slow or unresponsive"
                     )

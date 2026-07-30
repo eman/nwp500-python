@@ -86,7 +86,7 @@ async def set_dhw_temperature_example():
             await mqtt_client.set_dhw_temperature(device, target_temperature)
 
             # Wait for confirmation
-            for i in range(15):  # Wait up to 15 seconds
+            for _ in range(15):  # Wait up to 15 seconds
                 if temp_changed:
                     logger.info("Temperature change confirmed!")
                     break

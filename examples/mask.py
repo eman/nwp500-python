@@ -46,7 +46,7 @@ def mask_any(value: str | None) -> str:
             return "[REDACTED]"
         # Do not expose the string content in examples
         return "[REDACTED]"
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         # A broken __str__ still must not leak the underlying value.
         return "[REDACTED]"
 

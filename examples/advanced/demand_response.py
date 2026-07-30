@@ -73,7 +73,7 @@ async def demand_response_example():
             await mqtt_client.enable_demand_response(device)
 
             # Wait for confirmation
-            for i in range(10):  # Wait up to 10 seconds
+            for _ in range(10):  # Wait up to 10 seconds
                 if dr_enabled:
                     logger.info("Demand response participation enabled successfully!")
                     break
@@ -102,7 +102,7 @@ async def demand_response_example():
             await mqtt_client.disable_demand_response(device)
 
             # Wait for confirmation
-            for i in range(10):  # Wait up to 10 seconds
+            for _ in range(10):  # Wait up to 10 seconds
                 if dr_disabled:
                     logger.info("Demand response participation disabled successfully!")
                     break

@@ -121,7 +121,7 @@ async def main() -> None:
         try:
             await asyncio.wait_for(status_received.wait(), timeout=10)
             display_anti_legionella_status(latest_status, "INITIAL STATE")
-        except asyncio.TimeoutError:
+        except TimeoutError:
             print("Timeout waiting for status response")
             return
 
@@ -139,7 +139,7 @@ async def main() -> None:
         try:
             await asyncio.wait_for(status_received.wait(), timeout=10)
             display_anti_legionella_status(latest_status, "AFTER ENABLE")
-        except asyncio.TimeoutError:
+        except TimeoutError:
             print("Timeout waiting for status response after enable")
 
         print()
@@ -157,7 +157,7 @@ async def main() -> None:
         try:
             await asyncio.wait_for(status_received.wait(), timeout=10)
             display_anti_legionella_status(latest_status, "AFTER DISABLE")
-        except asyncio.TimeoutError:
+        except TimeoutError:
             print("Timeout waiting for status response after disable")
 
         print()
@@ -174,7 +174,7 @@ async def main() -> None:
         try:
             await asyncio.wait_for(status_received.wait(), timeout=10)
             display_anti_legionella_status(latest_status, "AFTER RE-ENABLE")
-        except asyncio.TimeoutError:
+        except TimeoutError:
             print("Timeout waiting for status response after re-enable")
 
         print()
