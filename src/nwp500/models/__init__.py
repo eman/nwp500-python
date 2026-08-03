@@ -41,7 +41,7 @@ from .status import (
     DeviceBool,
     DeviceStatus,
     Div10,
-    TenWhToWh,
+    EnergyCountToWh,
     TouOverride,
     TouStatus,
 )
@@ -58,7 +58,7 @@ __all__ = [
     "DeviceBool",
     "CapabilityFlag",
     "Div10",
-    "TenWhToWh",
+    "EnergyCountToWh",
     "TouStatus",
     "TouOverride",
     "VolumeCodeField",

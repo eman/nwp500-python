@@ -6,7 +6,7 @@ from .._base import NavienBaseModel
 from ..converters import (
     device_bool_to_python,
     div_10,
-    mul_10,
+    energy_count_to_wh,
     tou_override_to_python,
 )
 from ..enums import (
@@ -30,7 +30,7 @@ from ..unit_system import get_unit_system
 
 DeviceBool = Annotated[bool, BeforeValidator(device_bool_to_python)]
 Div10 = Annotated[float, BeforeValidator(div_10)]
-TenWhToWh = Annotated[float, BeforeValidator(mul_10)]
+EnergyCountToWh = Annotated[float, BeforeValidator(energy_count_to_wh)]
 TouStatus = Annotated[bool, BeforeValidator(bool)]
 TouOverride = Annotated[bool, BeforeValidator(tou_override_to_python)]
 
@@ -211,17 +211,29 @@ class DeviceStatus(NavienBaseModel):
             "False = device follows TOU schedule normally"
         )
     )
-    total_energy_capacity: TenWhToWh = Field(
-        description="Total energy capacity of the tank in Watt-hours",
+    full_recovery_energy: EnergyCountToWh = Field(
+        alias="totalEnergyCapacity",
+        description=(
+            "Energy required to heat the whole tank from the device's "
+            "reference temperature (dhw_temperature_min, 104.9 degF) up to "
+            "the current setpoint, in Watt-hours. This is NOT a fixed tank "
+            "size: it tracks the setpoint, rising about 143 Wh per 0.5 degC "
+            "of setpoint increase. Use it as the cost of a full recovery, "
+            "not as the tank's total heat content."
+        ),
         json_schema_extra={
             "unit_of_measurement": "Wh",
             "device_class": "energy",
         },
     )
-    available_energy_capacity: TenWhToWh = Field(
+    energy_to_setpoint: EnergyCountToWh = Field(
+        alias="availableEnergyCapacity",
         description=(
-            "Available energy capacity - "
-            "remaining hot water energy available in Watt-hours"
+            "Energy still NEEDED to bring the tank up to the setpoint, in "
+            "Watt-hours - a heating deficit, not stored energy. It falls as "
+            "the tank heats and reaches zero at the setpoint. Despite the "
+            "protocol name 'availableEnergyCapacity' it is the inverse of "
+            "available energy."
         ),
         json_schema_extra={
             "unit_of_measurement": "Wh",
@@ -383,7 +395,13 @@ class DeviceStatus(NavienBaseModel):
 
     # Raw temperature, flow, and volume fields
     dhw_temperature_raw: int = temperature_field(
-        "Current Domestic Hot Water (DHW) outlet temperature",
+        "Current DHW temperature. Despite the protocol calling this an "
+        "'outlet' temperature it is measured inside the tank, not in the "
+        "outlet pipe: it tracks tank_upper_temperature to within one "
+        "0.5 degC step, while tank_lower_temperature is uncorrelated. "
+        "Prefer tank_upper_temperature, which reports the same water at "
+        "0.1 degC resolution. The device has no sensor downstream of "
+        "itself, so this cannot measure water leaving the appliance",
         alias="dhwTemperature",
     )
     dhw_temperature_setting_raw: int = temperature_field(

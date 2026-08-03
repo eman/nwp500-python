@@ -215,8 +215,8 @@ The following fields have universal units that don't need conversion:
 **Electrical**
 
 - ``current_inst_power`` (Watts)
-- ``total_energy_capacity`` (Watt-hours)
-- ``available_energy_capacity`` (Watt-hours)
+- ``full_recovery_energy`` (Watt-hours)
+- ``energy_to_setpoint`` (Watt-hours)
 
 **Mechanical/Signal**
 

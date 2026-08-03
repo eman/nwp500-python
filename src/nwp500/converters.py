@@ -15,9 +15,31 @@ __all__ = [
     "device_bool_from_python",
     "tou_override_to_python",
     "div_10",
-    "mul_10",
+    "energy_count_to_wh",
+    "WH_PER_ENERGY_COUNT",
     "enum_validator",
 ]
+
+#: Watt-hours represented by one raw device energy count.
+#:
+#: The device reports ``totalEnergyCapacity`` and ``availableEnergyCapacity``
+#: as small integers in a fixed energy quantum. The quantum was determined
+#: empirically from 183 heating recoveries on a 65-gallon NWP500 by comparing
+#: the device's reported change against the tank's sensible-heat gain
+#: (mass x specific heat x temperature rise), which is independent of the
+#: heat pump's coefficient of performance:
+#:
+#: * measured quantum: 4.11 Wh/count (p10 3.47, p90 4.45)
+#: * the 2.8% excess over 4.0 is consistent with the tank holding slightly
+#:   less than its nominal 65 gallons, as is typical
+#: * cross-check: using 4 Wh/count the implied heat pump COP is 2.89
+#:   (p10 2.24, p90 3.46), a normal figure for a HPWH
+#:
+#: Library versions before 10.0 used 10 Wh/count, which overstated tank
+#: energy by 2.43x and implied a physically impossible COP of 7.0.
+#:
+#: See ``docs/explanation/tank-energy.rst`` for the full derivation.
+WH_PER_ENERGY_COUNT = 4.0
 
 
 def device_bool_to_python(value: Any) -> bool:
@@ -103,25 +125,26 @@ def div_10(value: Any) -> float:
     return float(value) / 10.0
 
 
-def mul_10(value: Any) -> float:
-    """Multiply numeric value by 10.0.
+def energy_count_to_wh(value: Any) -> float:
+    """Convert a raw device energy count to Watt-hours.
 
-    Used for energy capacity fields where the device reports in 10Wh units,
-    but we want to store standard Wh.
+    The device reports tank energy in a fixed quantum of
+    :data:`WH_PER_ENERGY_COUNT` Watt-hours per count, not in Watt-hours
+    directly. See that constant for how the quantum was measured.
 
     Args:
-        value: Numeric value to multiply.
+        value: Raw device energy count.
 
     Returns:
-        Value multiplied by 10.0.
+        Energy in Watt-hours.
 
     Example:
-        >>> mul_10(150)
-        1500.0
-        >>> mul_10(25.5)
-        255.0
+        >>> energy_count_to_wh(1580)
+        6320.0
+        >>> energy_count_to_wh(0)
+        0.0
     """
-    return float(value) * 10.0
+    return float(value) * WH_PER_ENERGY_COUNT
 
 
 def enum_validator(enum_class: type[Any]) -> Callable[[Any], Any]:

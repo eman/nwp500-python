@@ -5,6 +5,81 @@ Changelog
 Unreleased
 ==========
 
+**BREAKING CHANGES**: tank energy values were wrong in two independent
+ways - a 2.5x unit-scale error and two actively misleading field names -
+and both are corrected. Reported tank energy is now 2.5x smaller and two
+public field names are removed.
+
+Changed
+-------
+- **Energy unit scale corrected.** ``totalEnergyCapacity`` and ``availableEnergyCapacity`` were
+  scaled by 10 on the assumption the device reported 10 Wh units. It does
+  not. Measuring across 183 heating recoveries on a 65-gallon NWP500 -
+  comparing the device's reported change against the tank's sensible-heat
+  gain from its two thermistors, a comparison independent of heat-pump
+  efficiency - gives a quantum of 4.11 Wh/count (p10 3.47, p90 4.45). The
+  library now uses 4.0. An independent cross-check settles it: integrating
+  ``currentInstPower`` over the same recoveries, the corrected scale
+  implies a heat-pump COP of 2.89, while the old scale implied 7.02, which
+  is physically impossible. **Reported tank energy is now 2.5x smaller.**
+  Historical series logged from earlier versions need rescaling by 0.4 to
+  be comparable.
+
+- **Energy fields renamed.**
+  ``availableEnergyCapacity`` is not available energy - it is the energy
+  still *needed* to reach the setpoint. It falls as the tank heats and
+  reaches zero when the tank is fully charged, so code treating it as
+  stored energy had the signal backwards (regression against mean tank
+  temperature: negative slope, R-squared 0.93, zero crossing at the
+  setpoint). Likewise ``totalEnergyCapacity`` is not a fixed tank size but
+  the cost of a full recovery to the *current setpoint*, measured from the
+  device's own minimum setpoint of 104.9 degF; it moves by about 143 Wh
+  per 0.5 degC of setpoint change.
+
+  .. code-block:: python
+
+     # OLD (removed)
+     status.total_energy_capacity        # 15800.0
+     status.available_energy_capacity    # 11660.0
+
+     # NEW
+     status.full_recovery_energy         # 6320.0
+     status.energy_to_setpoint           # 4664.0
+
+  The protocol field names on the wire are unchanged. CLI rows are
+  relabelled from "Total Capacity"/"Available Capacity" to
+  "Full Recovery"/"Energy to Setpoint".
+
+Removed
+-------
+- **Misnamed energy fields**: removed ``DeviceStatus.total_energy_capacity``
+  and ``DeviceStatus.available_energy_capacity`` outright rather than
+  aliasing them, so a missed rename fails with ``AttributeError`` instead
+  of silently returning a number 2.5x too large. Use
+  ``full_recovery_energy`` and ``energy_to_setpoint``.
+
+- **Incorrect converter**: removed ``converters.mul_10``, which existed
+  only to apply the wrong 10 Wh scale. Use
+  ``converters.energy_count_to_wh`` and ``converters.WH_PER_ENERGY_COUNT``.
+
+Fixed
+-----
+- **Documentation contradicted itself and the code on energy capacity.**
+  Three incompatible descriptions were published: Watt-hours with no
+  conversion (protocol reference), Watt-hours with a x10 scale (the code),
+  and a 0-100 percentage (``how-to/track-energy.rst``,
+  ``reference/python_api/models.rst``, ``project/history.rst``). The
+  percentage claim was never true of any library version. All are now
+  consistent.
+- ``how-to/track-energy.rst`` documented four fields that do not exist on
+  ``DeviceStatus`` (``dhw_tank_upper_temp``, ``dhw_tank_lower_temp``,
+  ``comp_temp``, ``dhw_heatex_out_temp``); replaced with the real names.
+- ``dhwTemperature`` is documented as an outlet temperature but is
+  measured inside the tank: it tracks ``tankUpperTemperature`` to within
+  one 0.5 degC step, and the device has no sensor downstream of itself.
+- New ``docs/explanation/tank-energy.rst`` records what the two fields
+  actually measure and the calibration evidence behind the scale change.
+
 Version 9.2.1 (2026-07-30)
 ==========================
 

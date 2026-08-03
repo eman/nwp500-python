@@ -273,3 +273,41 @@ class TestReservationSchedule:
         )
         assert len(schedule.reservation) == 1
         assert schedule.reservation[0].week == 62
+
+
+class TestEnergyFields:
+    """The energy capacity fields were misnamed and mis-scaled.
+
+    See docs/explanation/tank-energy.rst: availableEnergyCapacity is a
+    heating deficit, not available energy, and the device quantum is
+    4 Wh/count rather than the 10 Wh assumed before 10.0.
+    """
+
+    def test_wire_aliases_still_parse(self, device_status_dict):
+        """The protocol field names are unchanged on the wire."""
+        status = DeviceStatus(**device_status_dict)
+        assert status.full_recovery_energy == pytest.approx(6320.0)
+        assert status.energy_to_setpoint == pytest.approx(4664.0)
+
+    def test_old_names_are_gone(self, device_status_dict):
+        """The misleading names are removed, not aliased.
+
+        Per the project's backward compatibility policy, renamed fields
+        are removed outright rather than kept as shims.
+        """
+        status = DeviceStatus(**device_status_dict)
+        assert not hasattr(status, "total_energy_capacity")
+        assert not hasattr(status, "available_energy_capacity")
+
+    def test_deficit_is_smaller_than_full_recovery(self, device_status_dict):
+        """A partly charged tank needs less than a full recovery costs."""
+        status = DeviceStatus(**device_status_dict)
+        assert status.energy_to_setpoint < status.full_recovery_energy
+
+    def test_protocol_dump_uses_wire_names(self, device_status_dict):
+        """Renaming the Python fields must not change what is sent."""
+        status = DeviceStatus(**device_status_dict)
+        dumped = status.to_protocol_dict()
+        assert "totalEnergyCapacity" in dumped
+        assert "availableEnergyCapacity" in dumped
+        assert "full_recovery_energy" not in dumped
