@@ -5,6 +5,120 @@ Changelog
 Unreleased
 ==========
 
+**BREAKING CHANGES**: tank energy values were wrong in two independent
+ways - a 2.5x unit-scale error and two actively misleading field names -
+and both are corrected. Reported tank energy is now 2.5x smaller and two
+public field names are removed.
+
+Changed
+-------
+- **Energy unit scale corrected.** ``totalEnergyCapacity`` and ``availableEnergyCapacity`` were
+  scaled by 10 on the assumption the device reported 10 Wh units. It does
+  not. Because ``totalEnergyCapacity`` is a whole-tank quantity, its slope
+  against the setpoint measures the quantum with no stratification
+  assumption: on a 65-gallon NWP500 that is 70.25 raw counts per Kelvin.
+  The field turns out to be bimodal - at a fixed setpoint it takes one of
+  two values exactly 2 degC apart - but both branches give the same slope
+  to within 0.2%, so the quantum is unaffected. Converting to Watt-hours needs a
+  water mass, and a "65 gallon" tank does not hold 65 gallons - so taking
+  the quantum to be round, as every other conversion in this protocol is,
+  4 Wh/count is the only candidate implying a water volume below the
+  nameplate (241.7 L). Two further checks agree: 183 individual heating
+  recoveries give 4.11 Wh/count by a noisier route, and integrating
+  ``currentInstPower`` over them implies a heat-pump COP of 2.89 at the new
+  scale against 7.02 at the old, the latter being physically impossible.
+  **Reported tank energy is now 2.5x smaller.**
+  Historical series logged from earlier versions need rescaling by 0.4 to
+  be comparable.
+
+- **Energy fields renamed.**
+  ``availableEnergyCapacity`` is not available energy - it is the energy
+  still *needed* to reach the setpoint. It falls as the tank heats and
+  reaches zero when the tank is fully charged, so code treating it as
+  stored energy had the signal backwards (regression against mean tank
+  temperature: negative slope, R-squared 0.93, zero crossing at the
+  setpoint). Likewise ``totalEnergyCapacity`` is not a fixed tank size but
+  the cost of a full recovery to the *current setpoint*, measured from the
+  device's own minimum setpoint of 104.9 degF; it moves by about 140 Wh
+  per 0.5 degC of setpoint change.
+
+  .. code-block:: python
+
+     # OLD (removed)
+     status.total_energy_capacity        # 15800.0
+     status.available_energy_capacity    # 11660.0
+
+     # NEW
+     status.full_recovery_energy         # 6320.0
+     status.energy_to_setpoint           # 4664.0
+
+  The protocol field names on the wire are unchanged. CLI rows are
+  relabelled from "Total Capacity"/"Available Capacity" to
+  "Full Recovery"/"Energy to Setpoint".
+
+Added
+-----
+- **``DeviceStatus.usable_energy``**: drawable energy in Watt-hours,
+  computed as ``full_recovery_energy - energy_to_setpoint``. Both raw
+  fields are measured from the setpoint, so neither is a state of charge;
+  subtracting them cancels the setpoint and leaves the tank's heat above
+  the device's minimum operating temperature (104.9 degF), which is about
+  the lowest temperature usable for a shower. Robust despite
+  ``full_recovery_energy`` being bimodal, since both fields shift
+  together: the implied tank temperature tracks the thermistor mean to a
+  standard deviation of 0.57 degF over 12275 samples. Rendered by the CLI
+  as "Usable Energy".
+
+Removed
+-------
+- **Misnamed energy fields**: removed ``DeviceStatus.total_energy_capacity``
+  and ``DeviceStatus.available_energy_capacity`` outright rather than
+  aliasing them, so a missed rename fails with ``AttributeError`` instead
+  of silently returning a number 2.5x too large. Use
+  ``full_recovery_energy`` and ``energy_to_setpoint``.
+
+- **Incorrect converter**: removed ``converters.mul_10``, which existed
+  only to apply the wrong 10 Wh scale. Use
+  ``converters.energy_count_to_wh`` and ``converters.WH_PER_ENERGY_COUNT``.
+
+Fixed
+-----
+- **Documentation contradicted itself and the code on energy capacity.**
+  Three incompatible descriptions were published: Watt-hours with no
+  conversion (protocol reference), Watt-hours with a x10 scale (the code),
+  and a 0-100 percentage (``how-to/track-energy.rst``,
+  ``reference/python_api/models.rst``, ``project/history.rst``). The
+  percentage claim was never true of any library version. All are now
+  consistent.
+- ``how-to/track-energy.rst`` documented four fields that do not exist on
+  ``DeviceStatus`` (``dhw_tank_upper_temp``, ``dhw_tank_lower_temp``,
+  ``comp_temp``, ``dhw_heatex_out_temp``); replaced with the real names.
+- ``dhwTemperature`` is documented as an outlet temperature but is
+  measured inside the tank: it tracks ``tankUpperTemperature`` to within
+  one 0.5 degC step, and the device has no sensor downstream of itself.
+  Navien's own app agrees, labelling it "DHW Temp." beside the tank
+  thermistors and showing ``dischargeTemperature`` separately.
+- ``docs/explanation/tank-energy.rst`` tabulated ``totalEnergyCapacity``
+  and ``availableEnergyCapacity`` at ten times their raw wire values,
+  under column headings naming the raw protocol fields. The series had
+  been logged through the pre-fix library, which multiplied by 10. The
+  prose beside the tables ("70.25 raw counts per Kelvin", "35 counts")
+  was already in true raw counts, so the page contradicted itself by
+  exactly the factor it exists to correct. Tables are now in raw counts;
+  1580 counts at a 145.4 degF setpoint matches the test fixtures and the
+  6320 Wh the CLI reports. No numeric conclusion changes.
+- ``docs/explanation/tank-energy.rst`` referred to a field
+  ``hpUpperOnTemperatureSetting``; the protocol name is
+  ``hpUpperOnTempSetting``.
+- The setpoint-per-0.5-degC figure is 140 Wh, not 143 Wh, which is what
+  the documented slope of 70.25 counts/K gives at 4 Wh/count. Corrected
+  in the changelog, the model field description and the protocol
+  reference.
+- New ``docs/explanation/tank-energy.rst`` records what the two fields
+  actually measure and the calibration evidence behind the scale change,
+  including that Navien's own NaviLink app (2.03.00, versionCode 141)
+  reads neither field, so no vendor-side corroboration exists.
+
 Version 9.2.1 (2026-07-30)
 ==========================
 

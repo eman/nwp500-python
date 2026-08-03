@@ -12,10 +12,11 @@ Note: touStatus field uses built-in bool() for standard 0/1 encoding
 import pytest
 
 from nwp500.converters import (
+    WH_PER_ENERGY_COUNT,
     device_bool_to_python,
     div_10,
+    energy_count_to_wh,
     enum_validator,
-    mul_10,
     tou_override_to_python,
 )
 from nwp500.enums import DhwOperationSetting, OnOffFlag
@@ -242,75 +243,77 @@ class TestDiv10Converter:
         assert result == pytest.approx(expected, abs=0.001)
 
 
-class TestMul10Converter:
-    """Test mul_10 converter (multiply by 10).
+class TestEnergyCountToWh:
+    """Test energy_count_to_wh converter.
 
-    Used for energy capacity fields where the device reports in 10Wh units,
-    but we want to store standard Wh.
-    Multiplies all input types (converts to float first if needed).
+    The device reports tank energy in a fixed quantum of
+    WH_PER_ENERGY_COUNT Watt-hours per raw count, measured from the slope
+    of totalEnergyCapacity against the setpoint on a 65-gallon NWP500
+    (70.25 counts per Kelvin) and corroborated at 4.11 Wh/count across
+    183 heating recoveries. Versions before 10.0 used 10 Wh/count,
+    overstating reported energy by 2.5x.
     """
 
     def test_zero(self):
-        """0 * 10 = 0.0."""
-        assert mul_10(0) == 0.0
+        """0 counts is 0 Wh."""
+        assert energy_count_to_wh(0) == 0.0
 
     def test_positive_value(self):
-        """100 * 10 = 1000.0."""
-        assert mul_10(100) == 1000.0
-
-    def test_negative_value(self):
-        """-50 * 10 = -500.0."""
-        assert mul_10(-50) == -500.0
-
-    def test_single_digit(self):
-        """5 * 10 = 50.0."""
-        assert mul_10(5) == 50.0
+        """100 counts at 4 Wh each is 400 Wh."""
+        assert energy_count_to_wh(100) == 100 * WH_PER_ENERGY_COUNT
 
     def test_float_input(self):
-        """50.5 * 10 = 505.0."""
-        assert mul_10(50.5) == 505.0
+        """Fractional counts scale linearly."""
+        assert energy_count_to_wh(50.5) == pytest.approx(
+            50.5 * WH_PER_ENERGY_COUNT
+        )
 
     def test_string_numeric(self):
-        """String '100' is converted to float and multiplied."""
-        result = mul_10("100")
-        assert result == pytest.approx(1000.0)
+        """String input is converted to float first."""
+        assert energy_count_to_wh("100") == pytest.approx(
+            100 * WH_PER_ENERGY_COUNT
+        )
 
-    def test_energy_capacity_example(self):
-        """Test with realistic energy capacity values from issue #70."""
-        # Device reports 1404.0 (10Wh units), should convert to 14040.0 Wh
-        device_value = 1404.0
-        expected_wh = 14040.0
-        assert mul_10(device_value) == expected_wh
+    def test_observed_full_recovery(self):
+        """A real reading: 1580 counts at a 145.4 degF setpoint.
 
-    def test_large_value(self):
-        """1000 * 10 = 10000.0."""
-        assert mul_10(1000) == 10000.0
+        1580 * 4 Wh = 6320 Wh. Sanity-check that against physics: the
+        device's reference is dhw_temperature_min (104.9 degF), so a full
+        recovery spans 22.5 K, and 6320 Wh implies
 
-    def test_very_small_value(self):
-        """0.1 * 10 = 1.0."""
-        assert mul_10(0.1) == 1.0
+            6320 Wh * 3.6 / (4.186 kJ/kg/K * 22.5 K) = 241.5 kg
 
-    def test_negative_small_value(self):
-        """-0.5 * 10 = -5.0."""
-        assert mul_10(-0.5) == -5.0
+        of water. That is just under the 246.05 kg a nominal 65 gallons
+        would weigh, which is expected - a "65 gallon" tank does not hold
+        65 gallons of water. Assuming nominal volume instead would give
+        6436 Wh and a quantum of 4.07, which is not a round number and so
+        is the less likely reading. See WH_PER_ENERGY_COUNT.
+        """
+        assert energy_count_to_wh(1580) == pytest.approx(6320.0)
+
+    def test_quantum_matches_physics(self):
+        """The quantum must stay within measurement scatter of 4.11 Wh.
+
+        Guards against a regression to the pre-10.0 value of 10, which
+        implied a heat-pump COP of 7.0.
+        """
+        assert 3.4 < WH_PER_ENERGY_COUNT < 4.5
+
+    def test_linearity(self):
+        """Conversion is linear, so sums are preserved."""
+        assert energy_count_to_wh(300) == pytest.approx(
+            energy_count_to_wh(100) + energy_count_to_wh(200)
+        )
 
     @pytest.mark.parametrize(
-        "input_value,expected",
-        [
-            (0, 0.0),
-            (10, 100.0),
-            (50, 500.0),
-            (100, 1000.0),
-            (1000, 10000.0),
-            (-100, -1000.0),
-            (1.5, 15.0),
-            (99.9, 999.0),
-        ],
+        "counts",
+        [0, 1, 10, 250, 1166, 1580, 1685],
     )
-    def test_known_values(self, input_value, expected):
-        """Test known mul_10 conversions for numeric types."""
-        result = mul_10(input_value)
-        assert result == pytest.approx(expected, abs=0.001)
+    def test_known_values(self, counts):
+        """Raw counts scale by exactly the documented quantum."""
+        assert energy_count_to_wh(counts) == pytest.approx(
+            counts * WH_PER_ENERGY_COUNT, abs=0.001
+        )
 
 
 class TestEnumValidator:

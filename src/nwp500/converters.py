@@ -15,9 +15,40 @@ __all__ = [
     "device_bool_from_python",
     "tou_override_to_python",
     "div_10",
-    "mul_10",
+    "energy_count_to_wh",
+    "WH_PER_ENERGY_COUNT",
     "enum_validator",
 ]
+
+#: Watt-hours represented by one raw device energy count.
+#:
+#: The device reports ``totalEnergyCapacity`` and ``availableEnergyCapacity``
+#: as small integers in a fixed energy quantum, not in Watt-hours.
+#:
+#: ``totalEnergyCapacity`` is a whole-tank quantity, so regressing it against
+#: the setpoint measures the quantum with no stratification assumption. On a
+#: 65-gallon NWP500 that slope is 70.25 raw counts per Kelvin of whole-tank
+#: rise. The field is bimodal - at a fixed setpoint it takes one of two
+#: values 2 degC apart - but both branches give the same slope to within
+#: 0.2%, so the quantum is unaffected.
+#:
+#: Converting to Watt-hours needs a water mass, and a "65 gallon" tank does
+#: not hold 65 gallons. Assuming instead that the quantum is round - as every
+#: other conversion in this protocol is - 4 Wh/count is the only candidate
+#: implying a water volume below the nameplate (241.7 L / 63.9 gal); 1/240
+#: kWh and 15 kJ both imply more water than the tank holds.
+#:
+#: Confirmed twice over:
+#:
+#: * 183 individual heating recoveries give 4.11 Wh/count (p10 3.47,
+#:   p90 4.45), agreeing to within 2% by a noisier route
+#: * the same recoveries imply a heat pump COP of 2.89 at 4 Wh/count
+#:
+#: Library versions before 10.0 used 10 Wh/count, which overstated reported
+#: tank energy by 2.5x and implied a physically impossible COP of 7.0.
+#:
+#: See ``docs/explanation/tank-energy.rst`` for the full derivation.
+WH_PER_ENERGY_COUNT = 4.0
 
 
 def device_bool_to_python(value: Any) -> bool:
@@ -103,25 +134,26 @@ def div_10(value: Any) -> float:
     return float(value) / 10.0
 
 
-def mul_10(value: Any) -> float:
-    """Multiply numeric value by 10.0.
+def energy_count_to_wh(value: Any) -> float:
+    """Convert a raw device energy count to Watt-hours.
 
-    Used for energy capacity fields where the device reports in 10Wh units,
-    but we want to store standard Wh.
+    The device reports tank energy in a fixed quantum of
+    :data:`WH_PER_ENERGY_COUNT` Watt-hours per count, not in Watt-hours
+    directly. See that constant for how the quantum was measured.
 
     Args:
-        value: Numeric value to multiply.
+        value: Raw device energy count.
 
     Returns:
-        Value multiplied by 10.0.
+        Energy in Watt-hours.
 
     Example:
-        >>> mul_10(150)
-        1500.0
-        >>> mul_10(25.5)
-        255.0
+        >>> energy_count_to_wh(1580)
+        6320.0
+        >>> energy_count_to_wh(0)
+        0.0
     """
-    return float(value) * 10.0
+    return float(value) * WH_PER_ENERGY_COUNT
 
 
 def enum_validator(enum_class: type[Any]) -> Callable[[Any], Any]:

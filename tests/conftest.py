@@ -38,8 +38,10 @@ def device_status_dict() -> dict[str, Any]:
         "touStatus": False,
         "drOverrideStatus": 0,
         "touOverrideStatus": False,
-        "totalEnergyCapacity": 0.0,
-        "availableEnergyCapacity": 0.0,
+        # Raw device energy counts, not Watt-hours: 1580 counts x 4 Wh
+        # = 6320 Wh full recovery, 1166 counts = 4664 Wh still needed.
+        "totalEnergyCapacity": 1580.0,
+        "availableEnergyCapacity": 1166.0,
         "recircOperationMode": 0,
         "recircPumpOperationStatus": 0,
         "recircHotBtnReady": 0,

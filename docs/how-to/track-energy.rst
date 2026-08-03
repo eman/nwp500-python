@@ -123,24 +123,35 @@ Request detailed daily energy usage data for specific months:
 Energy Capacity
 ---------------
 
-Monitor available stored energy:
+.. warning::
+   The device's two energy fields do **not** report stored energy, and
+   the names in the protocol are misleading. See
+   :doc:`../explanation/tank-energy` for the evidence.
+
+Monitor the tank's heating deficit:
 
 .. code:: python
 
    def on_status(status: DeviceStatus):
-       capacity = status.available_energy_capacity
-       print(f"Energy Capacity: {capacity}%")
-       
-       if capacity < 20:
-           print("Low energy - heating may be needed")
-       elif capacity > 80:
-           print("High energy - tank is hot")
+       needed = status.energy_to_setpoint
+       print(f"Energy still needed: {needed:.0f} Wh")
 
-| **Field:** ``available_energy_capacity``
-| **Type:** ``int``
-| **Units:** Percentage (0-100)
-| **Description:** Available energy in the tank as a percentage,
-  indicating how much hot water is available.
+       if needed < 200:
+           print("Tank is essentially fully charged")
+
+| **Field:** ``energy_to_setpoint`` (protocol: ``availableEnergyCapacity``)
+| **Type:** ``float``
+| **Units:** Watt-hours
+| **Description:** Energy the device still has to add to reach the
+  setpoint. It *falls* as the tank heats and reaches zero when charged.
+  Despite the protocol name, it is the inverse of available energy.
+
+| **Field:** ``full_recovery_energy`` (protocol: ``totalEnergyCapacity``)
+| **Type:** ``float``
+| **Units:** Watt-hours
+| **Description:** Cost of a full recovery to the *current setpoint*,
+  measured from the device reference temperature of 104.9 degF. It moves
+  with the setpoint, so it is not a fixed tank capacity.
 
 Temperature Monitoring
 ----------------------
@@ -172,10 +183,10 @@ Monitor individual heating component temperatures:
 .. code:: python
 
    def on_status(status: DeviceStatus):
-       print(f"Compressor Temp: {status.comp_temp}°F")
-       print(f"Upper Tank Temp: {status.dhw_tank_upper_temp}°F")
-       print(f"Lower Tank Temp: {status.dhw_tank_lower_temp}°F")
-       print(f"Heat Exchanger Out: {status.dhw_heatex_out_temp}°F")
+       print(f"Discharge Temp: {status.discharge_temperature}°F")
+       print(f"Upper Tank Temp: {status.tank_upper_temperature}°F")
+       print(f"Lower Tank Temp: {status.tank_lower_temperature}°F")
+       print(f"Ambient Temp: {status.ambient_temperature}°F")
 
 Complete Energy Monitoring Example
 ----------------------------------
@@ -228,8 +239,8 @@ Complete Energy Monitoring Example
                print(f"  Upper Heater: {status.heater1_running_minute_total / 60:.1f} hours")
                print(f"  Lower Heater: {status.heater2_running_minute_total / 60:.1f} hours")
                
-               # Energy capacity and temperature
-               print(f"\nEnergy Capacity: {status.available_energy_capacity}%")
+               # Heating deficit and temperature
+               print(f"\nEnergy to setpoint: {status.energy_to_setpoint:.0f} Wh")
                print(f"Water Temp: {status.dhw_temperature}°F "
                      f"(Target: {status.dhw_temperature_setting}°F)")
                
@@ -295,11 +306,13 @@ Cumulative Usage
 Energy Capacity
 ~~~~~~~~~~~~~~~
 
-=============================== ==== ===== =========================
-Field                           Type Units Description
-=============================== ==== ===== =========================
-``available_energy_capacity``   int  %     Available energy (0-100%)
-=============================== ==== ===== =========================
+========================== ===== ===== ==========================================
+Field                      Type  Units Description
+========================== ===== ===== ==========================================
+``energy_to_setpoint``     float Wh    Energy still **needed** to reach setpoint
+``full_recovery_energy``   float Wh    Cost of a full recovery to the setpoint
+``dhw_charge_per``         float %     Device's own charge estimate
+========================== ===== ===== ==========================================
 
 Temperature
 ~~~~~~~~~~~
@@ -308,11 +321,11 @@ Temperature
 Field                          Type  Units Description
 ============================== ===== ===== =================================
 ``dhw_temperature``            float °F    Current water temperature
-``dhw_temperature_setting``    int   °F    Target temperature setting
-``comp_temp``                  float °F    Heat pump compressor temperature
-``dhw_tank_upper_temp``        float °F    Upper tank temperature
-``dhw_tank_lower_temp``        float °F    Lower tank temperature
-``dhw_heatex_out_temp``        float °F    Heat exchanger outlet temperature
+``dhw_temperature_setting``    float °F    Target temperature setting
+``discharge_temperature``      float °F    Compressor discharge temperature
+``tank_upper_temperature``     float °F    Upper tank temperature
+``tank_lower_temperature``     float °F    Lower tank temperature
+``ambient_temperature``        float °F    Air intake temperature
 ============================== ===== ===== =================================
 
 Notes
@@ -323,11 +336,12 @@ Notes
 - Status updates are sent automatically by the device approximately
   every few seconds
 - Cumulative runtime values persist across device power cycles
-- Energy capacity calculation is based on temperature and usage patterns
+- The device's energy fields are heating *deficits*, not stored energy
 
 See Also
 --------
 
+- :doc:`../explanation/tank-energy` - What the energy fields really mean
 - :doc:`../reference/protocol/device_status` - Complete list of all status fields
 - :doc:`../reference/python_api/mqtt_client` - How to connect and subscribe to device updates
 - :doc:`../reference/protocol/mqtt_protocol` - Message format reference

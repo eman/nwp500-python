@@ -350,13 +350,26 @@ Power and Energy Fields
      - W
      - **Instantaneous power consumption**. Real-time measurement. Does **NOT** include electric heating element power draw. Heat pump only.
    * - ``totalEnergyCapacity``
-     - None (direct value)
+     - ``x 4`` (see note)
      - Wh
-     - **Tank energy capacity** at full charge. Theoretical maximum heat content. Useful for recovery time estimation.
+     - **Cost of a full recovery** to the *current setpoint*, measured from the device reference temperature (``dhwTemperatureMin``, 104.9 degF). Exposed as ``full_recovery_energy``. This is **not** a fixed tank capacity: it moves with the setpoint, by about 140 Wh per 0.5 degC on a 65-gallon tank.
    * - ``availableEnergyCapacity``
-     - None (direct value)
+     - ``x 4`` (see note)
      - Wh
-     - **Available energy in tank right now**. Indicates how much hot water capacity remains before next heating cycle. Lower value = lower DHW charge percentage.
+     - **Energy still needed to reach the setpoint** - a heating deficit, despite the name. Exposed as ``energy_to_setpoint``. It *falls* as the tank heats and reaches zero when the tank is fully charged, so it is the inverse of available energy.
+
+.. note::
+   **Energy quantum.** The two energy fields are raw counts in a fixed
+   quantum, not Watt-hours. Because ``totalEnergyCapacity`` is a
+   whole-tank quantity, regressing it against the setpoint measures the
+   quantum with no stratification assumption: on a 65-gallon NWP500 the
+   slope is 70.25 counts per Kelvin, and 4 Wh/count is the only round
+   candidate implying a water volume below the nameplate. Two further
+   checks agree -- 183 heating recoveries give 4.11 Wh/count by a
+   noisier route, and the same recoveries imply a heat-pump COP of 2.89.
+   The library uses 4.0. Versions before 10.0 used 10, which overstated
+   reported tank energy by 2.5x and implied a physically impossible COP
+   of 7.0. See :doc:`../../explanation/tank-energy`.
 
 .. note::
    ``currentInstPower`` excludes electric heating element power. If the heater is actively heating with electric elements, the actual power draw will be higher (typically +3755W @ 208V or +5000W @ 240V).
@@ -633,7 +646,7 @@ Practical Applications of Conversions
 
 Understanding these conversions helps with:
 
-1. **Energy Monitoring**: Combine ``totalEnergyCapacity``, ``availableEnergyCapacity``, and ``currentInstPower`` to estimate recovery times
+1. **Energy Monitoring**: Combine ``availableEnergyCapacity`` (the remaining heating deficit) with ``currentInstPower`` to estimate recovery times. Note this is a deficit, not stored energy -- see :doc:`../../explanation/tank-energy`
 2. **Efficiency Analysis**: Compare ``ambientTemperature`` against current COP (Coefficient of Performance) to verify expected efficiency
 3. **Fault Diagnosis**: Monitor ``dischargeTemperature`` and ``currentSuperHeat`` for refrigerant circuit health
 4. **Maintenance Scheduling**: Track ``airFilterAlarmElapsed`` and ``cumulatedOpTimeEvaFan`` for preventative maintenance

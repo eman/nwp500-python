@@ -273,3 +273,90 @@ class TestReservationSchedule:
         )
         assert len(schedule.reservation) == 1
         assert schedule.reservation[0].week == 62
+
+
+class TestEnergyFields:
+    """The energy capacity fields were misnamed and mis-scaled.
+
+    See docs/explanation/tank-energy.rst: availableEnergyCapacity is a
+    heating deficit, not available energy, and the device quantum is
+    4 Wh/count rather than the 10 Wh assumed before 10.0.
+    """
+
+    def test_wire_aliases_still_parse(self, device_status_dict):
+        """The protocol field names are unchanged on the wire."""
+        status = DeviceStatus(**device_status_dict)
+        assert status.full_recovery_energy == pytest.approx(6320.0)
+        assert status.energy_to_setpoint == pytest.approx(4664.0)
+
+    def test_old_names_are_gone(self, device_status_dict):
+        """The misleading names are removed, not aliased.
+
+        Per the project's backward compatibility policy, renamed fields
+        are removed outright rather than kept as shims.
+        """
+        status = DeviceStatus(**device_status_dict)
+        assert not hasattr(status, "total_energy_capacity")
+        assert not hasattr(status, "available_energy_capacity")
+
+    def test_deficit_is_smaller_than_full_recovery(self, device_status_dict):
+        """A partly charged tank needs less than a full recovery costs."""
+        status = DeviceStatus(**device_status_dict)
+        assert status.energy_to_setpoint < status.full_recovery_energy
+
+    def test_protocol_dump_uses_wire_names(self, device_status_dict):
+        """Renaming the Python fields must not change what is sent."""
+        status = DeviceStatus(**device_status_dict)
+        dumped = status.to_protocol_dict()
+        assert "totalEnergyCapacity" in dumped
+        assert "availableEnergyCapacity" in dumped
+        assert "full_recovery_energy" not in dumped
+
+
+class TestUsableEnergy:
+    """Drawable energy, derived by cancelling the setpoint."""
+
+    def test_is_the_difference(self, device_status_dict):
+        """Usable energy is full recovery minus the remaining deficit."""
+        status = DeviceStatus(**device_status_dict)
+        assert status.usable_energy == pytest.approx(
+            status.full_recovery_energy - status.energy_to_setpoint
+        )
+
+    def test_known_value(self, device_status_dict):
+        """1580 and 1166 raw counts at 4 Wh give 6320 - 4664 Wh."""
+        status = DeviceStatus(**device_status_dict)
+        assert status.usable_energy == pytest.approx(1656.0)
+
+    def test_zero_when_tank_at_reference(self, device_status_dict):
+        """A tank at the reference temperature has nothing drawable."""
+        d = dict(device_status_dict)
+        d["availableEnergyCapacity"] = d["totalEnergyCapacity"]
+        assert DeviceStatus(**d).usable_energy == 0.0
+
+    def test_clamped_below_reference(self, device_status_dict):
+        """Below the reference the result clamps rather than going negative."""
+        d = dict(device_status_dict)
+        d["availableEnergyCapacity"] = d["totalEnergyCapacity"] + 500
+        assert DeviceStatus(**d).usable_energy == 0.0
+
+    def test_independent_of_setpoint(self, device_status_dict):
+        """The setpoint cancels, so raising it must not change the result.
+
+        This is the property that makes usable_energy a state of charge
+        while the two raw fields are not: raising the setpoint inflates
+        both of them by the same amount.
+        """
+        base = DeviceStatus(**device_status_dict)
+        d = dict(device_status_dict)
+        bump = 200  # raw counts of extra setpoint headroom
+        d["totalEnergyCapacity"] += bump
+        d["availableEnergyCapacity"] += bump
+        assert DeviceStatus(**d).usable_energy == pytest.approx(
+            base.usable_energy
+        )
+
+    def test_excluded_from_protocol_dump(self, device_status_dict):
+        """Computed fields must never be sent back to the device."""
+        status = DeviceStatus(**device_status_dict)
+        assert "usable_energy" not in status.to_protocol_dict()
