@@ -28,7 +28,9 @@ __all__ = [
 #: ``totalEnergyCapacity`` is a whole-tank quantity, so regressing it against
 #: the setpoint measures the quantum with no stratification assumption. On a
 #: 65-gallon NWP500 that slope is 70.25 raw counts per Kelvin of whole-tank
-#: rise (R-squared 0.99999 over ten setpoints).
+#: rise. The field is bimodal - at a fixed setpoint it takes one of two
+#: values 2 degC apart - but both branches give the same slope to within
+#: 0.2%, so the quantum is unaffected.
 #:
 #: Converting to Watt-hours needs a water mass, and a "65 gallon" tank does
 #: not hold 65 gallons. Assuming instead that the quantum is round - as every

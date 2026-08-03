@@ -16,8 +16,10 @@ Changed
   scaled by 10 on the assumption the device reported 10 Wh units. It does
   not. Because ``totalEnergyCapacity`` is a whole-tank quantity, its slope
   against the setpoint measures the quantum with no stratification
-  assumption: on a 65-gallon NWP500 that is 70.25 raw counts per Kelvin
-  (R-squared 0.99999 over ten setpoints). Converting to Watt-hours needs a
+  assumption: on a 65-gallon NWP500 that is 70.25 raw counts per Kelvin.
+  The field turns out to be bimodal - at a fixed setpoint it takes one of
+  two values exactly 2 degC apart - but both branches give the same slope
+  to within 0.2%, so the quantum is unaffected. Converting to Watt-hours needs a
   water mass, and a "65 gallon" tank does not hold 65 gallons - so taking
   the quantum to be round, as every other conversion in this protocol is,
   4 Wh/count is the only candidate implying a water volume below the

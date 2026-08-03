@@ -32,8 +32,12 @@ The short version
      - Cost of a full recovery to the **current setpoint**. It moves
        whenever the setpoint moves.
 
-Both are raw counts of about 4 Wh each, not Watt-hours. Library versions
-before 10.0 multiplied by 10, overstating tank energy by 2.43x.
+Both are raw counts of 4 Wh each, not Watt-hours. Library versions before
+10.0 multiplied by 10, overstating tank energy by 2.5x.
+
+Both are also measured **from the setpoint**, so both describe potential
+rather than content: move the setpoint and both change while the water in
+the tank does not. Neither is a state of charge.
 
 Neither field tells you how much hot water you can actually draw. That
 depends on tank volume, the inlet temperature and the temperature you
@@ -50,9 +54,10 @@ Both fields fit a single two-parameter model:
    energy_to_setpoint    = k * (setpoint - tank_mean_temperature)
    full_recovery_energy  = k * (setpoint - reference_temperature)
 
-where ``reference_temperature`` is the device's own minimum setpoint,
-``dhwTemperatureMin`` (40.5 degC / 104.9 degF), and ``k`` is the tank's
-heat capacity.
+where ``k`` is the tank's heat capacity and ``reference_temperature`` is
+the device's own minimum setpoint, ``dhwTemperatureMin`` (40.5 degC /
+104.9 degF) - though only about two thirds of the time, see
+`Two branches`_.
 
 Two consequences follow, and both matter:
 
@@ -103,8 +108,11 @@ The 4 Wh quantum
 
 ``totalEnergyCapacity`` is a whole-tank quantity, so its slope against
 the setpoint measures the quantum without needing any assumption about
-how the tank stratifies. Pairing each setpoint with the ``total`` it
-produces, on a 65-gallon unit:
+how the tank stratifies.
+
+The device does not report a single ``total`` per setpoint - see
+`Two branches`_ below - so the table lists the most common value at each
+setpoint, which covers 68 % of samples:
 
 .. list-table::
    :header-rows: 1
@@ -134,9 +142,13 @@ produces, on a 65-gallon unit:
      - 148.1 degF
      - 16850
 
-An arithmetic sequence: least squares over those ten points gives
-**R-squared 0.99999** and a slope of **70.25 raw counts per Kelvin** of
-whole-tank temperature rise.
+An arithmetic sequence: least squares gives **R-squared 0.99999** and a
+slope of **70.25 raw counts per Kelvin** of whole-tank temperature rise.
+
+The slope is the robust part of this. The second branch, fitted
+separately, gives 389.81 units/degF against the primary's 390.56 - the
+same figure to within 0.2 %. Two independent populations agreeing on the
+slope is stronger evidence for the quantum than either alone.
 
 Converting that to Watt-hours needs a water mass, and this is where care
 is required: a "65 gallon" tank does not hold 65 gallons of water. Rather
@@ -205,32 +217,56 @@ reported energy and its own reported power. It cannot tell you what the
 quantum *is*, but it rules out the pre-10.0 value regardless of anything
 assumed elsewhere on this page.
 
-The reference temperature
--------------------------
+.. _two branches:
 
-This is the strongest result here, because it needs no physics at all.
-Extrapolating the setpoint regression above to ``total = 0`` gives:
+Two branches
+------------
+
+``totalEnergyCapacity`` is **not** a function of the setpoint alone. At a
+fixed setpoint it takes one of two values, flipping between them several
+times a day. Over four months at nine setpoints:
 
 .. list-table::
    :header-rows: 1
 
-   * - Quantity
-     - Value
-   * - Regression zero crossing
-     - **104.92 degF**
-   * - Device ``dhwTemperatureMin``
-     - **104.9 degF**
+   * - Branch
+     - Share
+     - Slope
+     - Zero crossing
+   * - Primary
+     - 68 %
+     - 390.56 units/degF
+     - **104.95 degF**
+   * - Secondary
+     - 32 %
+     - 389.81 units/degF
+     - **108.48 degF**
 
-Those agree to within a fiftieth of a degree, and the calculation uses
-only the device's own two numbers - no tank mass, no specific heat, no
-thermistor readings, no assumption about the quantum. It establishes
+The two are parallel, separated by a constant 1400-1410 units - exactly
+**2 degC** of setpoint - at every setpoint measured.
+
+The primary branch's zero crossing matches the device's
+``dhwTemperatureMin`` of 104.9 degF to within a twentieth of a degree,
+using only the device's own two numbers: no tank mass, no specific heat,
+no thermistors, no assumption about the quantum. On that branch,
 
 .. code:: text
 
    full_recovery_energy = k * (setpoint - dhwTemperatureMin)
 
-as fact rather than inference. The device measures a full recovery from
-its own minimum setpoint, not from the cold water inlet.
+The secondary branch behaves identically with a reference 2 degC higher,
+and **what selects between them is unknown**. The device's
+``hpUpperOnTemperatureSetting`` correlates with the choice - 104.9 degF
+when the primary is active, 143.4 degF when the secondary is - which
+would fit the device computing recovery cost from its own turn-on
+threshold, but only 22 paired samples were available and that is a lead
+rather than a finding.
+
+.. warning::
+   Because of this, do not derive the tank's heat capacity from a live
+   ``full_recovery_energy`` reading: landing on the wrong branch gives an
+   error of about 9 %. Use the slope, which is stable across both
+   branches, or compute stored energy from the thermistors directly.
 
 
 What ``dhwChargePer`` does
