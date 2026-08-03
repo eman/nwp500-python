@@ -25,6 +25,7 @@ Protocol Reference
 .. toctree::
    :maxdepth: 1
 
+   protocol/quick_reference
    protocol/rest_api
    protocol/mqtt_protocol
    protocol/device_status

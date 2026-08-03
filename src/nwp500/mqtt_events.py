@@ -224,7 +224,7 @@ class MqttClientEvents:
         print(f"Available events: {events}")
 
     See Also:
-        :doc:`../guides/event_system` - Comprehensive event handling guide
+        :doc:`/reference/python_api/events` - Comprehensive event handling guide
     """
 
     # Connection lifecycle events
