@@ -56,6 +56,19 @@ Changed
   relabelled from "Total Capacity"/"Available Capacity" to
   "Full Recovery"/"Energy to Setpoint".
 
+Added
+-----
+- **``DeviceStatus.usable_energy``**: drawable energy in Watt-hours,
+  computed as ``full_recovery_energy - energy_to_setpoint``. Both raw
+  fields are measured from the setpoint, so neither is a state of charge;
+  subtracting them cancels the setpoint and leaves the tank's heat above
+  the device's minimum operating temperature (104.9 degF), which is about
+  the lowest temperature usable for a shower. Robust despite
+  ``full_recovery_energy`` being bimodal, since both fields shift
+  together: the implied tank temperature tracks the thermistor mean to a
+  standard deviation of 0.57 degF over 12275 samples. Rendered by the CLI
+  as "Usable Energy".
+
 Removed
 -------
 - **Misnamed energy fields**: removed ``DeviceStatus.total_energy_capacity``

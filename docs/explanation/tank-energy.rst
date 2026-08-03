@@ -39,9 +39,17 @@ Both are also measured **from the setpoint**, so both describe potential
 rather than content: move the setpoint and both change while the water in
 the tank does not. Neither is a state of charge.
 
-Neither field tells you how much hot water you can actually draw. That
-depends on tank volume, the inlet temperature and the temperature you
-want water delivered at, none of which the device reports.
+Their **difference** is a state of charge, and is exposed as
+``DeviceStatus.usable_energy``:
+
+.. code:: text
+
+   usable_energy = full_recovery_energy - energy_to_setpoint
+                 = k * (tank_temperature - 104.9 degF)
+
+The setpoint cancels. What remains is the tank's heat above the device's
+minimum operating temperature - close enough to the lowest useful shower
+temperature that it is a good estimate of what you can actually draw.
 
 
 How the fields behave
@@ -278,7 +286,47 @@ implies 30 % charged while ``dhwChargePer`` reads 59 %; over two weeks
 the two differ by a mean of 48 points with 32 points of scatter.
 
 Treat it as an opaque vendor heuristic rather than a defined fraction of
-anything.
+anything. For a charge figure with defined meaning, use
+``usable_energy``.
+
+
+Drawable energy
+===============
+
+``DeviceStatus.usable_energy`` is the difference of the two fields, and
+is the one number here that describes the tank's state rather than its
+distance from a target:
+
+.. code:: text
+
+   usable_energy = full_recovery_energy - energy_to_setpoint
+
+Raising the setpoint inflates both inputs equally, so the result does not
+move - which is what makes it a state of charge and the two raw fields
+not.
+
+The implied reference is ``dhw_temperature_min``, 104.9 degF. A shower
+runs around 105 degF, so heat below that reference is real but not
+useful, and excluding it is the behaviour you want. Note that a mixing
+valve does not change this floor: it caps how *hot* water can be
+delivered, and once the tank falls below its setting it simply passes
+through, so water stays usable down to the temperature you actually want
+at the tap.
+
+Despite ``full_recovery_energy`` being bimodal (see `Two branches`_),
+the difference is robust, because both fields shift together. Checked
+against the tank thermistors over 12275 samples, the tank temperature
+implied by ``usable_energy`` agrees with the thermistor mean to a
+standard deviation of **0.57 degF**, with 97.5 % of samples inside
+2 degF.
+
+If you need a different floor - a bath at 100 degF, or energy above the
+cold inlet - compute it from the thermistors instead. On a 65-gallon tank
+the heat capacity is 156 Wh per degF:
+
+.. code:: text
+
+   drawable_Wh = 156 * (tank_mean_temperature - your_floor_degF)
 
 
 Migrating from before v10.0

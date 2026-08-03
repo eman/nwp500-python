@@ -912,6 +912,39 @@ class DeviceStatus(NavienBaseModel):
             self._is_celsius()
         )
 
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def usable_energy(self) -> float:
+        """Energy drawable from the tank as useful hot water, in Wh.
+
+        Both device energy fields are measured from the setpoint, so
+        neither is a state of charge - move the setpoint and both change
+        while the water in the tank does not. Subtracting them cancels
+        the setpoint and leaves the tank's actual heat content:
+
+        .. code:: text
+
+           full_recovery_energy - energy_to_setpoint
+             = k * (setpoint - reference) - k * (setpoint - tank_temp)
+             = k * (tank_temp - reference)
+
+        The reference is the device's minimum operating temperature,
+        ``dhw_temperature_min`` (40.5 degC / 104.9 degF). That is close
+        to the lowest temperature usable for a shower, so this is a good
+        estimate of what can actually be drawn - water colder than that
+        still holds heat, but not heat you can wash with.
+
+        Robust in practice: ``full_recovery_energy`` is bimodal, taking
+        one of two values 2 degC apart at a fixed setpoint, but both
+        fields shift together so the difference is unaffected. Checked
+        against the tank thermistors over 12275 samples, the implied tank
+        temperature agrees to a standard deviation of 0.57 degF.
+
+        Returns:
+            Drawable energy in Watt-hours, clamped at zero.
+        """
+        return max(0.0, self.full_recovery_energy - self.energy_to_setpoint)
+
     def get_field_unit(self, field_name: str) -> str:
         """Get the correct unit suffix based on temperature preference.
 

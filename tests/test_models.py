@@ -311,3 +311,52 @@ class TestEnergyFields:
         assert "totalEnergyCapacity" in dumped
         assert "availableEnergyCapacity" in dumped
         assert "full_recovery_energy" not in dumped
+
+
+class TestUsableEnergy:
+    """Drawable energy, derived by cancelling the setpoint."""
+
+    def test_is_the_difference(self, device_status_dict):
+        """Usable energy is full recovery minus the remaining deficit."""
+        status = DeviceStatus(**device_status_dict)
+        assert status.usable_energy == pytest.approx(
+            status.full_recovery_energy - status.energy_to_setpoint
+        )
+
+    def test_known_value(self, device_status_dict):
+        """1580 and 1166 raw counts at 4 Wh give 6320 - 4664 Wh."""
+        status = DeviceStatus(**device_status_dict)
+        assert status.usable_energy == pytest.approx(1656.0)
+
+    def test_zero_when_tank_at_reference(self, device_status_dict):
+        """A tank at the reference temperature has nothing drawable."""
+        d = dict(device_status_dict)
+        d["availableEnergyCapacity"] = d["totalEnergyCapacity"]
+        assert DeviceStatus(**d).usable_energy == 0.0
+
+    def test_clamped_below_reference(self, device_status_dict):
+        """Below the reference the result clamps rather than going negative."""
+        d = dict(device_status_dict)
+        d["availableEnergyCapacity"] = d["totalEnergyCapacity"] + 500
+        assert DeviceStatus(**d).usable_energy == 0.0
+
+    def test_independent_of_setpoint(self, device_status_dict):
+        """The setpoint cancels, so raising it must not change the result.
+
+        This is the property that makes usable_energy a state of charge
+        while the two raw fields are not: raising the setpoint inflates
+        both of them by the same amount.
+        """
+        base = DeviceStatus(**device_status_dict)
+        d = dict(device_status_dict)
+        bump = 200  # raw counts of extra setpoint headroom
+        d["totalEnergyCapacity"] += bump
+        d["availableEnergyCapacity"] += bump
+        assert DeviceStatus(**d).usable_energy == pytest.approx(
+            base.usable_energy
+        )
+
+    def test_excluded_from_protocol_dump(self, device_status_dict):
+        """Computed fields must never be sent back to the device."""
+        status = DeviceStatus(**device_status_dict)
+        assert "usable_energy" not in status.to_protocol_dict()
