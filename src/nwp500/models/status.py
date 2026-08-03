@@ -5,6 +5,7 @@ from pydantic import BeforeValidator, Field, computed_field
 from .._base import NavienBaseModel
 from ..converters import (
     device_bool_to_python,
+    device_tristate_to_python,
     div_10,
     energy_count_to_wh,
     tou_override_to_python,
@@ -29,6 +30,14 @@ from ..temperature import (
 from ..unit_system import get_unit_system
 
 DeviceBool = Annotated[bool, BeforeValidator(device_bool_to_python)]
+#: An on/off flag the device may decline to report. 0 becomes ``None``
+#: rather than ``False``, because the device reserves 0 to mean "unknown"
+#: and a fabricated OFF is worse than an absent value. Applied only to the
+#: fields the vendor's own client decodes through its on/off enum - see
+#: ``docs/explanation/unknown-values.rst``.
+DeviceTriState = Annotated[
+    bool | None, BeforeValidator(device_tristate_to_python)
+]
 Div10 = Annotated[float, BeforeValidator(div_10)]
 EnergyCountToWh = Annotated[float, BeforeValidator(energy_count_to_wh)]
 TouStatus = Annotated[bool, BeforeValidator(bool)]
@@ -268,7 +277,7 @@ class DeviceStatus(NavienBaseModel):
     did_reload: DeviceBool = Field(
         description="Indicates if the device has recently reloaded or restarted"
     )
-    operation_busy: DeviceBool = Field(
+    operation_busy: DeviceTriState = Field(
         description=(
             "Indicates if the device is currently performing heating operations"
         )
@@ -307,7 +316,7 @@ class DeviceStatus(NavienBaseModel):
             "Whether ECO (Energy Cut Off) high-temp safety limit is triggered"
         )
     )
-    comp_use: DeviceBool = Field(
+    comp_use: DeviceTriState = Field(
         description=(
             "Compressor usage status (True=On, False=Off). "
             "The compressor is the main component of the heat pump"
@@ -340,13 +349,13 @@ class DeviceStatus(NavienBaseModel):
             "Triggers error E799 if leak detected"
         )
     )
-    anti_legionella_use: DeviceBool = Field(
+    anti_legionella_use: DeviceTriState = Field(
         description=(
             "Whether anti-legionella function is enabled. "
             "Device periodically heats tank to prevent Legionella bacteria"
         )
     )
-    anti_legionella_operation_busy: DeviceBool = Field(
+    anti_legionella_operation_busy: DeviceTriState = Field(
         description=(
             "Whether the anti-legionella disinfection cycle "
             "is currently running"
@@ -362,13 +371,13 @@ class DeviceStatus(NavienBaseModel):
             "1=Heat Pump, 2=Electric Element, 3=Both simultaneously"
         )
     )
-    heat_upper_use: DeviceBool = Field(
+    heat_upper_use: DeviceTriState = Field(
         description=(
             "Upper electric heating element usage status. "
             "Power: 3,755W @ 208V or 5,000W @ 240V"
         )
     )
-    heat_lower_use: DeviceBool = Field(
+    heat_lower_use: DeviceTriState = Field(
         description=(
             "Lower electric heating element usage status. "
             "Power: 3,755W @ 208V or 5,000W @ 240V"
@@ -380,7 +389,7 @@ class DeviceStatus(NavienBaseModel):
             "Warning when water reaches potentially hazardous levels"
         )
     )
-    air_filter_alarm_use: DeviceBool = Field(
+    air_filter_alarm_use: DeviceTriState = Field(
         description=(
             "Air filter maintenance reminder enabled flag. "
             "Triggers alerts based on operating hours. Default: On"
@@ -389,7 +398,7 @@ class DeviceStatus(NavienBaseModel):
     recirc_operation_busy: DeviceBool = Field(
         description="Recirculation operation busy status"
     )
-    recirc_reservation_use: DeviceBool = Field(
+    recirc_reservation_use: DeviceTriState = Field(
         description="Recirculation reservation usage status"
     )
 

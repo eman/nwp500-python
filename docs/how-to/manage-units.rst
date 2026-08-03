@@ -239,7 +239,7 @@ Temperature Conversions
 
 **Celsius to Fahrenheit**
 
-.. code-block:: python
+.. code-block:: text
 
     fahrenheit = (celsius * 9/5) + 32
 
@@ -248,7 +248,7 @@ Temperature Conversions
 
 **Fahrenheit to Celsius**
 
-.. code-block:: python
+.. code-block:: text
 
     celsius = (fahrenheit - 32) * 5/9
 

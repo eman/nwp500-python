@@ -152,6 +152,6 @@ To upgrade to a specific version:
 Next Steps
 ==========
 
-* :doc:`quickstart` - Get started with your first script
+* :doc:`../tutorials/getting-started` - Get started with your first script
 * :doc:`configuration` - Configure credentials and options
 * :doc:`python_api/auth_client` - Learn about authentication

@@ -92,7 +92,13 @@ async def main():
                     print(f"  Mode: {status.operation_mode.name}")
                     print(f"  DHW Temp: {status.dhw_temperature:.1f}{unit}")
                     print(f"  DHW Charge: {status.dhw_charge_per:.1f}%")
-                    print(f"  Compressor: {'On' if status.comp_use else 'Off'}")
+                    # comp_use is tri-state: None means the device is not
+                    # reporting, which must not be shown as "Off".
+                    if status.comp_use is None:
+                        comp = "Unknown"
+                    else:
+                        comp = "On" if status.comp_use else "Off"
+                    print(f"  Compressor: {comp}")
 
                 # Callback for feature/capability info
                 def on_feature(feature: DeviceFeature):

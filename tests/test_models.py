@@ -1,3 +1,5 @@
+from typing import ClassVar
+
 import pytest
 
 from nwp500.models import (
@@ -273,6 +275,78 @@ class TestReservationSchedule:
         )
         assert len(schedule.reservation) == 1
         assert schedule.reservation[0].week == 62
+
+
+class TestTriStateFlags:
+    """Status flags the device may decline to report.
+
+    The device encodes these as 0 = UNKNOWN, 1 = OFF, 2 = ON. The vendor's
+    own client decodes exactly this set through ``KDEnum.MgppOnOFFFlag``,
+    declared ``UNKNOWN(0), OFF(1), ON(2)``, so 0 must not become False.
+    """
+
+    #: Fields the NaviLink app decodes through its on/off enum. Kept here so
+    #: the evidenced set is asserted rather than assumed.
+    TRISTATE_FIELDS = (
+        "operation_busy",
+        "comp_use",
+        "anti_legionella_use",
+        "anti_legionella_operation_busy",
+        "heat_upper_use",
+        "heat_lower_use",
+        "air_filter_alarm_use",
+        "recirc_reservation_use",
+    )
+
+    ALIASES: ClassVar[dict[str, str]] = {
+        "operation_busy": "operationBusy",
+        "comp_use": "compUse",
+        "anti_legionella_use": "antiLegionellaUse",
+        "anti_legionella_operation_busy": "antiLegionellaOperationBusy",
+        "heat_upper_use": "heatUpperUse",
+        "heat_lower_use": "heatLowerUse",
+        "air_filter_alarm_use": "airFilterAlarmUse",
+        "recirc_reservation_use": "recircReservationUse",
+    }
+
+    @pytest.mark.parametrize("field", TRISTATE_FIELDS)
+    def test_zero_becomes_none(self, default_status_data, field):
+        """0 surfaces as None rather than a fabricated OFF."""
+        data = dict(default_status_data)
+        data[self.ALIASES[field]] = 0
+        assert getattr(DeviceStatus(**data), field) is None
+
+    @pytest.mark.parametrize("field", TRISTATE_FIELDS)
+    def test_one_is_off(self, default_status_data, field):
+        """1 is a real OFF and stays False."""
+        data = dict(default_status_data)
+        data[self.ALIASES[field]] = 1
+        assert getattr(DeviceStatus(**data), field) is False
+
+    @pytest.mark.parametrize("field", TRISTATE_FIELDS)
+    def test_two_is_on(self, default_status_data, field):
+        """2 is a real ON and stays True."""
+        data = dict(default_status_data)
+        data[self.ALIASES[field]] = 2
+        assert getattr(DeviceStatus(**data), field) is True
+
+    def test_unknown_is_falsy_but_distinguishable(self, default_status_data):
+        """None is falsy, so naive `if flag:` keeps its old behaviour.
+
+        The migration risk is the opposite check: `if not flag` and
+        `flag is False` no longer mean the same thing.
+        """
+        data = dict(default_status_data)
+        data["compUse"] = 0
+        status = DeviceStatus(**data)
+        assert not status.comp_use
+        assert status.comp_use is not False
+
+    def test_capability_flags_are_unaffected(self, default_status_data):
+        """Plain DeviceBool status fields still collapse 0 to False."""
+        data = dict(default_status_data)
+        data["dhwUse"] = 0
+        assert DeviceStatus(**data).dhw_use is False
 
 
 class TestEnergyFields:

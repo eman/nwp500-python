@@ -13,6 +13,7 @@ from typing import Any
 __all__ = [
     "device_bool_to_python",
     "device_bool_from_python",
+    "device_tristate_to_python",
     "tou_override_to_python",
     "div_10",
     "energy_count_to_wh",
@@ -54,26 +55,81 @@ WH_PER_ENERGY_COUNT = 4.0
 def device_bool_to_python(value: Any) -> bool:
     """Convert device boolean representation to Python bool.
 
-    Device protocol uses: 1 = OFF/False, 2 = ON/True
+    Device protocol uses: 1 = OFF/False, 2 = ON/True, 0 = unknown/absent.
 
-    This design (using 1 and 2 instead of 0 and 1) is likely due to:
-    - 0 being reserved for null/uninitialized state
-    - 1 representing "off" in legacy firmware
-    - 2 representing "on" state
+    The 1/2 encoding is not arbitrary. The vendor's own client decodes these
+    fields through an enum declared ``UNKNOWN(0), OFF(1), ON(2)``, so 0 is a
+    reserved sentinel rather than a value.
+
+    This converter collapses 0 to ``False``, which is correct for **capability
+    flags** (:data:`~nwp500.models.feature.CapabilityFlag`): the NaviLink app
+    hides a feature's entire UI when its ``Use`` flag reads 0, so 0 there means
+    "this device does not have the feature" and ``False`` is faithful.
+
+    For **status flags**, where 0 means "the device is not reporting this right
+    now", collapsing to ``False`` invents an OFF the device never claimed. Use
+    :func:`device_tristate_to_python` for those.
 
     Args:
         value: Device value (typically 1 or 2).
 
     Returns:
-        Python boolean (1→False, 2→True).
+        Python boolean (1→False, 2→True, 0→False).
 
     Example:
         >>> device_bool_to_python(2)
         True
         >>> device_bool_to_python(1)
         False
+        >>> device_bool_to_python(0)
+        False
     """
     return bool(value == 2)
+
+
+def device_tristate_to_python(value: Any) -> bool | None:
+    """Convert a device on/off flag, preserving the device's unknown state.
+
+    Identical to :func:`device_bool_to_python` except that the protocol's
+    reserved 0 maps to ``None`` instead of being flattened into ``False``.
+
+    The device distinguishes three states and the library should not throw one
+    away. The NaviLink app decodes the affected status fields through
+    ``KDEnum.MgppOnOFFFlag``, which is declared ``UNKNOWN(0), OFF(1), ON(2)``;
+    two of the app's sibling enums render their zero as ``"-"`` and
+    ``"Not Applied"`` rather than as an off state.
+
+    ``None`` is the right shape for the downstream consumer too: Home Assistant
+    renders it as "Unknown" instead of recording a fabricated OFF into the
+    history database.
+
+    Note this applies only to flags the vendor itself decodes as an on/off
+    enum. It is **not** a general rule about zero - see
+    :func:`device_bool_to_python` for capability flags, and note that
+    temperature fields carry no sentinel at all.
+
+    Args:
+        value: Device value (0, 1 or 2).
+
+    Returns:
+        ``None`` when the device reports 0, otherwise 1→False, 2→True.
+
+    Example:
+        >>> device_tristate_to_python(2)
+        True
+        >>> device_tristate_to_python(1)
+        False
+        >>> device_tristate_to_python(0) is None
+        True
+    """
+    if value is None:
+        return None
+    try:
+        if int(value) == 0:
+            return None
+    except TypeError, ValueError:
+        return bool(value == 2)
+    return bool(int(value) == 2)
 
 
 def device_bool_from_python(value: bool) -> int:

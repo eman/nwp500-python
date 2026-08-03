@@ -49,6 +49,8 @@ build/*
 dist/*
 sdist/*
 docs/api/*
+docs/reference/api/*
+.obsidian/
 docs/_rst/*
 docs/_build/*
 cover/*
