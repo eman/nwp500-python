@@ -5,6 +5,56 @@ Changelog
 Unreleased
 ==========
 
+**BREAKING CHANGE**: nine status flags change type from ``bool`` to
+``bool | None`` so the device's "unknown" state is no longer reported as a
+definite OFF.
+
+Changed
+-------
+- **Status flags now preserve the device's unknown state.** The protocol
+  encodes these flags as ``0 = unknown, 1 = OFF, 2 = ON``, and the library
+  was collapsing 0 to ``False`` - inventing an OFF the device never claimed.
+  Confirmed against Navien's own NaviLink app (2.03.00, versionCode 141),
+  which decodes exactly this set of fields through an enum declared
+  ``UNKNOWN(0), OFF(1), ON(2)``; two sibling enums render their zero as
+  ``"-"`` and ``"Not Applied"`` rather than as an off state.
+
+  Affected: ``operation_busy``, ``comp_use``, ``anti_legionella_use``,
+  ``anti_legionella_operation_busy``, ``heat_upper_use``, ``heat_lower_use``,
+  ``air_filter_alarm_use``, ``recirc_reservation_use``.
+
+  ``None`` is falsy, so ``if status.comp_use:`` is unaffected. Code that
+  distinguishes ``is False`` from "not reported", or does arithmetic or
+  formatting on these fields, needs a ``None`` check. For Home Assistant
+  this is the wanted shape: ``None`` renders as "Unknown" instead of writing
+  a fabricated OFF into the recorder database.
+
+- ``OnOffFlag`` gains the vendor's ``UNKNOWN = 0`` member. It previously
+  started at ``OFF = 1``, leaving the device's reserved value unrepresented.
+
+- The CLI renders these flags as ``Unknown`` rather than ``No``.
+
+Added
+-----
+- ``converters.device_tristate_to_python`` and
+  ``models.status.DeviceTriState`` for flags the device may decline to
+  report. ``converters.device_bool_to_python`` is unchanged and remains
+  correct for capability flags.
+- New ``docs/explanation/unknown-values.rst`` recording which field families
+  use 0 as a sentinel and which do not, with the app evidence for each.
+
+Fixed
+-----
+- Documented that **temperature fields carry no sentinel at all**. The app
+  has no out-of-band constant (no ``0xFFFF``/``-999``/``-1``), no zero-guard
+  in any display path, and formats whatever arrives - so a temperature of
+  zero means zero. This closes a recurring source of bugs where zero-as-none
+  was applied to temperature converters and reported working sensors as
+  missing during cold-weather operation.
+- Documented that capability flags are a distinct case: the app hides a
+  feature's entire UI when its DID ``Use`` flag reads 0, so 0 there means
+  "not fitted" and the existing ``bool`` mapping is correct.
+
 Version 9.2.1 (2026-07-30)
 ==========================
 

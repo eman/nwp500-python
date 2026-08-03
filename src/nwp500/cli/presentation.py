@@ -29,6 +29,17 @@ def _format_number(value: Any) -> str:
     return str(value)
 
 
+def _yes_no_unknown(value: bool | None) -> str:
+    """Render a tri-state device flag.
+
+    ``None`` means the device reported its reserved 0 and is not claiming a
+    state, so it must not collapse to "No".
+    """
+    if value is None:
+        return "Unknown"
+    return "Yes" if value else "No"
+
+
 def _get_unit_suffix(
     field_name: str,
     model_class: Any = DeviceStatus,
@@ -119,7 +130,7 @@ def build_device_status_rows(device_status: Any) -> list[StatusRow]:
             (
                 "OPERATION STATUS",
                 "Busy",
-                "Yes" if device_status.operation_busy else "No",
+                _yes_no_unknown(device_status.operation_busy),
             )
         )
     if hasattr(device_status, "current_statenum"):

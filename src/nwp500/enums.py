@@ -19,8 +19,14 @@ class OnOffFlag(IntEnum):
 
     Used for: Power status, TOU status, recirculation status, vacation mode,
     anti-legionella, and many other boolean device settings.
+
+    ``UNKNOWN`` is the device's own sentinel, not a library invention. The
+    NaviLink app decodes these fields through an enum declared
+    ``UNKNOWN(0), OFF(1), ON(2)``, reserving 0 and starting real values at 1.
+    See :doc:`/explanation/unknown-values`.
     """
 
+    UNKNOWN = 0
     OFF = 1
     ON = 2
 

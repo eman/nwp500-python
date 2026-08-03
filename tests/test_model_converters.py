@@ -13,6 +13,7 @@ import pytest
 
 from nwp500.converters import (
     device_bool_to_python,
+    device_tristate_to_python,
     div_10,
     enum_validator,
     mul_10,
@@ -59,6 +60,65 @@ class TestDeviceBoolConverter:
     def test_float_off(self):
         """Float 1.0 is not equal to 2."""
         assert device_bool_to_python(1.0) is False
+
+    def test_zero_collapses_to_false_for_capability_flags(self):
+        """0 stays False here; that is correct for capability flags.
+
+        The NaviLink app hides a feature's entire UI when its DID ``Use``
+        flag reads 0, so for capabilities 0 means "device does not have
+        this" and False is faithful. Status flags use
+        device_tristate_to_python instead.
+        """
+        assert device_bool_to_python(0) is False
+
+
+class TestDeviceTriStateConverter:
+    """Test device_tristate_to_python converter.
+
+    The device encodes these flags as 0 = UNKNOWN, 1 = OFF, 2 = ON. The
+    vendor's own client decodes them through an enum declared
+    ``UNKNOWN(0), OFF(1), ON(2)``, so 0 is a reserved sentinel and must not
+    become False.
+    """
+
+    def test_unknown_value(self):
+        """Device value 0 converts to None, not False."""
+        assert device_tristate_to_python(0) is None
+
+    def test_off_value(self):
+        """Device value 1 converts to False."""
+        assert device_tristate_to_python(1) is False
+
+    def test_on_value(self):
+        """Device value 2 converts to True."""
+        assert device_tristate_to_python(2) is True
+
+    def test_none_passes_through(self):
+        """A missing value stays None rather than becoming False."""
+        assert device_tristate_to_python(None) is None
+
+    @pytest.mark.parametrize(
+        ("raw", "expected"),
+        [("0", None), ("1", False), ("2", True), (0.0, None), (2.0, True)],
+    )
+    def test_coerces_numeric_strings_and_floats(self, raw, expected):
+        """Unlike device_bool_to_python, this coerces before comparing.
+
+        device_bool_to_python compares with ``== 2`` and so reports False
+        for the string "2". That quirk is pinned by its own tests; this
+        converter does not reproduce it, because mapping a real ON to
+        False is exactly the failure mode it exists to prevent.
+        """
+        assert device_tristate_to_python(raw) is expected
+
+    def test_unparseable_value_does_not_raise(self):
+        """A non-numeric value falls back rather than blowing up."""
+        assert device_tristate_to_python("garbage") is False
+
+    def test_three_states_are_distinguishable(self):
+        """The whole point: 0, 1 and 2 map to three distinct results."""
+        results = [device_tristate_to_python(v) for v in (0, 1, 2)]
+        assert results == [None, False, True]
 
     def test_float_on(self):
         """Float 2.0 equals int 2 in Python."""
