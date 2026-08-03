@@ -254,4 +254,6 @@ The CLI renders these as ``Unknown`` rather than ``No``.
 See also
 ========
 
+- :doc:`tank-energy` - the other case where the protocol's own names
+  mislead, worked out from the same teardown
 - :doc:`../reference/protocol/data_conversions` - protocol field conversions

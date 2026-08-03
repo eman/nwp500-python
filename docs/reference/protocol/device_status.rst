@@ -76,7 +76,7 @@ This document lists the fields found in the ``status`` object of device status m
    * - ``dhwTemperature``
      - integer
      - °F
-     - Current Domestic Hot Water (DHW) outlet temperature.
+     - Current DHW temperature. **Measured inside the tank, not in the outlet pipe** despite the "outlet" naming: it tracks ``tankUpperTemperature`` to within one 0.5 °C step, while ``tankLowerTemperature`` is uncorrelated. Prefer ``tankUpperTemperature``, which reports the same water at 0.1 °C resolution. The device has no sensor downstream of itself.
      - HalfCelsiusToF
    * - ``dhwTemperatureSetting``
      - integer
@@ -451,13 +451,13 @@ This document lists the fields found in the ``status`` object of device status m
    * - ``totalEnergyCapacity``
      - integer
      - Wh
-     - Total energy capacity of the tank in Watt-hours.
-     - None
+     - Energy needed for a full recovery to the current setpoint, from the device reference temperature (104.9 degF). Tracks the setpoint rather than being a fixed tank size. Python name: ``full_recovery_energy``.
+     - ``x 4`` (energy quantum)
    * - ``availableEnergyCapacity``
      - integer
      - Wh
-     - Available energy capacity - remaining hot water energy available in Watt-hours.
-     - None
+     - Energy still **needed** to reach the setpoint - a heating deficit, not available energy. Falls to zero as the tank charges. Python name: ``energy_to_setpoint``.
+     - ``x 4`` (energy quantum)
 
 DHW Operation Setting Modes
 ----------------------------

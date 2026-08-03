@@ -129,7 +129,7 @@ Complete energy monitoring capabilities including historical data:
 - ``heater2RunningMinuteTotal``: Lower electric heater runtime
 
 **Energy Capacity (DeviceStatus):**
-- ``availableEnergyCapacity``: Available energy percentage (0-100%)
+- ``availableEnergyCapacity``: energy still needed to reach the setpoint, in Watt-hours (documented as a percentage at the time, which was wrong)
 - Heat pump and electric heater temperature thresholds
 
 **Historical Energy Usage (EMS API via MQTT):**

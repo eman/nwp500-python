@@ -202,9 +202,17 @@ Complete real-time device status with 100+ fields.
    **Power/Energy Fields:**
 
    * ``current_inst_power`` (float) - Current power consumption (Watts)
-   * ``total_energy_capacity`` (float) - Total energy capacity (%)
-   * ``available_energy_capacity`` (float) - Available energy (%)
+   * ``full_recovery_energy`` (float) - Energy needed to heat the whole tank from the device reference temperature to the current setpoint (Wh). Tracks the setpoint; not a fixed tank size.
+   * ``energy_to_setpoint`` (float) - Energy still **needed** to reach the setpoint (Wh). A deficit: it falls as the tank heats and reaches zero when fully charged.
    * ``dhw_charge_per`` (float) - DHW charge percentage
+
+   .. warning::
+      These replace ``total_energy_capacity`` and
+      ``available_energy_capacity``, which were **removed** in v10.0. The
+      old names were misleading -- ``available_energy_capacity`` is the
+      energy *needed*, not the energy available -- and both were scaled
+      2.5x too large. For energy you can actually draw, see
+      :doc:`../../explanation/tank-energy`.
 
    **Operation Mode Fields:**
 
@@ -276,7 +284,7 @@ Complete real-time device status with 100+ fields.
 
           # Power consumption
           print(f"Power: {status.current_inst_power}W")
-          print(f"Energy: {status.available_energy_capacity}%")
+          print(f"Energy still needed: {status.energy_to_setpoint} Wh")
 
           # Operation mode
           print(f"Mode: {status.dhw_operation_setting.name}")

@@ -383,19 +383,27 @@ def build_device_status_rows(device_status: Any) -> list[StatusRow]:
                 f"{_format_number(device_status.wh_electric_heater_power)}Wh",
             )
         )
+    if hasattr(device_status, "usable_energy"):
+        all_items.append(
+            (
+                "POWER & ENERGY",
+                "Usable Energy",
+                f"{_format_number(device_status.usable_energy)} Wh",
+            )
+        )
     _add_numeric_item(
         all_items,
         device_status,
-        "total_energy_capacity",
+        "full_recovery_energy",
         "POWER & ENERGY",
-        "Total Capacity",
+        "Full Recovery",
     )
     _add_numeric_item(
         all_items,
         device_status,
-        "available_energy_capacity",
+        "energy_to_setpoint",
         "POWER & ENERGY",
-        "Available Capacity",
+        "Energy to Setpoint",
     )
 
     # Fan Control

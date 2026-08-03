@@ -7,7 +7,7 @@ from ..converters import (
     device_bool_to_python,
     device_tristate_to_python,
     div_10,
-    mul_10,
+    energy_count_to_wh,
     tou_override_to_python,
 )
 from ..enums import (
@@ -39,7 +39,7 @@ DeviceTriState = Annotated[
     bool | None, BeforeValidator(device_tristate_to_python)
 ]
 Div10 = Annotated[float, BeforeValidator(div_10)]
-TenWhToWh = Annotated[float, BeforeValidator(mul_10)]
+EnergyCountToWh = Annotated[float, BeforeValidator(energy_count_to_wh)]
 TouStatus = Annotated[bool, BeforeValidator(bool)]
 TouOverride = Annotated[bool, BeforeValidator(tou_override_to_python)]
 
@@ -220,17 +220,29 @@ class DeviceStatus(NavienBaseModel):
             "False = device follows TOU schedule normally"
         )
     )
-    total_energy_capacity: TenWhToWh = Field(
-        description="Total energy capacity of the tank in Watt-hours",
+    full_recovery_energy: EnergyCountToWh = Field(
+        alias="totalEnergyCapacity",
+        description=(
+            "Energy required to heat the whole tank from the device's "
+            "reference temperature (dhw_temperature_min, 104.9 degF) up to "
+            "the current setpoint, in Watt-hours. This is NOT a fixed tank "
+            "size: it tracks the setpoint, rising about 140 Wh per 0.5 degC "
+            "of setpoint increase. Use it as the cost of a full recovery, "
+            "not as the tank's total heat content."
+        ),
         json_schema_extra={
             "unit_of_measurement": "Wh",
             "device_class": "energy",
         },
     )
-    available_energy_capacity: TenWhToWh = Field(
+    energy_to_setpoint: EnergyCountToWh = Field(
+        alias="availableEnergyCapacity",
         description=(
-            "Available energy capacity - "
-            "remaining hot water energy available in Watt-hours"
+            "Energy still NEEDED to bring the tank up to the setpoint, in "
+            "Watt-hours - a heating deficit, not stored energy. It falls as "
+            "the tank heats and reaches zero at the setpoint. Despite the "
+            "protocol name 'availableEnergyCapacity' it is the inverse of "
+            "available energy."
         ),
         json_schema_extra={
             "unit_of_measurement": "Wh",
@@ -392,7 +404,16 @@ class DeviceStatus(NavienBaseModel):
 
     # Raw temperature, flow, and volume fields
     dhw_temperature_raw: int = temperature_field(
-        "Current Domestic Hot Water (DHW) outlet temperature",
+        "Current DHW temperature. Despite the protocol calling this an "
+        "'outlet' temperature it is measured inside the tank, not in the "
+        "outlet pipe: it tracks tank_upper_temperature to within one "
+        "0.5 degC step, while tank_lower_temperature is uncorrelated. "
+        "Prefer tank_upper_temperature, which reports the same water at "
+        "0.1 degC resolution. The device has no sensor downstream of "
+        "itself, so this cannot measure water leaving the appliance. "
+        "Navien's own app agrees: it labels this 'DHW Temp.' alongside "
+        "the tank thermistors and shows dischargeTemperature separately "
+        "as 'Discharge Temp.'",
         alias="dhwTemperature",
     )
     dhw_temperature_setting_raw: int = temperature_field(
@@ -902,6 +923,39 @@ class DeviceStatus(NavienBaseModel):
         return HalfCelsius(self.freeze_protection_temp_max_raw).to_preferred(
             self._is_celsius()
         )
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def usable_energy(self) -> float:
+        """Energy drawable from the tank as useful hot water, in Wh.
+
+        Both device energy fields are measured from the setpoint, so
+        neither is a state of charge - move the setpoint and both change
+        while the water in the tank does not. Subtracting them cancels
+        the setpoint and leaves the tank's actual heat content:
+
+        .. code:: text
+
+           full_recovery_energy - energy_to_setpoint
+             = k * (setpoint - reference) - k * (setpoint - tank_temp)
+             = k * (tank_temp - reference)
+
+        The reference is the device's minimum operating temperature,
+        ``dhw_temperature_min`` (40.5 degC / 104.9 degF). That is close
+        to the lowest temperature usable for a shower, so this is a good
+        estimate of what can actually be drawn - water colder than that
+        still holds heat, but not heat you can wash with.
+
+        Robust in practice: ``full_recovery_energy`` is bimodal, taking
+        one of two values 2 degC apart at a fixed setpoint, but both
+        fields shift together so the difference is unaffected. Checked
+        against the tank thermistors over 12275 samples, the implied tank
+        temperature agrees to a standard deviation of 0.57 degF.
+
+        Returns:
+            Drawable energy in Watt-hours, clamped at zero.
+        """
+        return max(0.0, self.full_recovery_energy - self.energy_to_setpoint)
 
     def get_field_unit(self, field_name: str) -> str:
         """Get the correct unit suffix based on temperature preference.
