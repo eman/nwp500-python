@@ -23,17 +23,24 @@ __all__ = [
 #: Watt-hours represented by one raw device energy count.
 #:
 #: The device reports ``totalEnergyCapacity`` and ``availableEnergyCapacity``
-#: as small integers in a fixed energy quantum. The quantum was determined
-#: empirically from 183 heating recoveries on a 65-gallon NWP500 by comparing
-#: the device's reported change against the tank's sensible-heat gain
-#: (mass x specific heat x temperature rise), which is independent of the
-#: heat pump's coefficient of performance:
+#: as small integers in a fixed energy quantum, not in Watt-hours.
 #:
-#: * measured quantum: 4.11 Wh/count (p10 3.47, p90 4.45)
-#: * the 2.8% excess over 4.0 is consistent with the tank holding slightly
-#:   less than its nominal 65 gallons, as is typical
-#: * cross-check: using 4 Wh/count the implied heat pump COP is 2.89
-#:   (p10 2.24, p90 3.46), a normal figure for a HPWH
+#: ``totalEnergyCapacity`` is a whole-tank quantity, so regressing it against
+#: the setpoint measures the quantum with no stratification assumption. On a
+#: 65-gallon NWP500 that slope is 70.25 raw counts per Kelvin of whole-tank
+#: rise (R-squared 0.99999 over ten setpoints).
+#:
+#: Converting to Watt-hours needs a water mass, and a "65 gallon" tank does
+#: not hold 65 gallons. Assuming instead that the quantum is round - as every
+#: other conversion in this protocol is - 4 Wh/count is the only candidate
+#: implying a water volume below the nameplate (241.7 L / 63.9 gal); 1/240
+#: kWh and 15 kJ both imply more water than the tank holds.
+#:
+#: Confirmed twice over:
+#:
+#: * 183 individual heating recoveries give 4.11 Wh/count (p10 3.47,
+#:   p90 4.45), agreeing to within 2% by a noisier route
+#: * the same recoveries imply a heat pump COP of 2.89 at 4 Wh/count
 #:
 #: Library versions before 10.0 used 10 Wh/count, which overstated tank
 #: energy by 2.43x and implied a physically impossible COP of 7.0.

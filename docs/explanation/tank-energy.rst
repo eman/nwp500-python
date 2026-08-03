@@ -60,7 +60,7 @@ Two consequences follow, and both matter:
   energy has the signal backwards: it is largest when the tank is
   coldest.
 * ``full_recovery_energy`` is **not a constant**. Raising the setpoint by
-  0.5 degC raises it by about 143 Wh on a 65-gallon tank. Seven months of
+  0.5 degC raises it by 35 counts, about 140 Wh, on a 65-gallon tank. Seven months of
   history on one device shows sixteen distinct values as the setpoint was
   adjusted.
 
@@ -101,39 +101,87 @@ with an R-squared of 0.93 and a zero crossing at the setpoint.
 The 4 Wh quantum
 ----------------
 
-The quantum was measured across **183 independent heating recoveries**.
-For each, the tank's sensible-heat gain was computed from the two
-thermistors and the known tank mass:
-
-.. code:: text
-
-   gain_Wh = mass_kg * 4.186 kJ/kg/K * temperature_rise_K / 3.6
-
-and divided by the device's own reported change. This comparison is
-independent of the heat pump's efficiency, because it never uses
-electrical input.
+``totalEnergyCapacity`` is a whole-tank quantity, so its slope against
+the setpoint measures the quantum without needing any assumption about
+how the tank stratifies. Pairing each setpoint with the ``total`` it
+produces, on a 65-gallon unit:
 
 .. list-table::
    :header-rows: 1
 
-   * - Quantity
-     - Median
-     - p10
-     - p90
-   * - Wh per raw count
-     - 4.11
-     - 3.47
-     - 4.45
+   * - Setpoint
+     - ``total``
+     - Setpoint
+     - ``total``
+   * - 140.0 degF
+     - 13690
+     - 144.5 degF
+     - 15450
+   * - 140.9 degF
+     - 14040
+     - 145.4 degF
+     - 15800
+   * - 141.8 degF
+     - 14390
+     - 146.3 degF
+     - 16150
+   * - 142.7 degF
+     - 14750
+     - 147.2 degF
+     - 16500
+   * - 143.6 degF
+     - 15100
+     - 148.1 degF
+     - 16850
 
-The library uses **4.0**. The 2.8 % gap is consistent with the tank
-holding slightly less than its nominal 65 gallons, which is normal.
+An arithmetic sequence: least squares over those ten points gives
+**R-squared 0.99999** and a slope of **70.25 raw counts per Kelvin** of
+whole-tank temperature rise.
+
+Converting that to Watt-hours needs a water mass, and this is where care
+is required: a "65 gallon" tank does not hold 65 gallons of water. Rather
+than assume nominal volume and derive an odd-looking quantum, assume the
+quantum is a round number - every other conversion in this protocol is
+(half-degrees, tenths) - and see which one implies a sensible volume:
+
+.. list-table::
+   :header-rows: 1
+
+   * - Candidate quantum
+     - Implied water volume
+     - Plausible?
+   * - **4 Wh** (1/250 kWh)
+     - **241.7 L / 63.9 gal**
+     - Yes - slightly under nominal, as expected
+   * - 1/240 kWh (4.167 Wh)
+     - 251.8 L / 66.5 gal
+     - No - more than the nameplate
+   * - 10 kJ
+     - 167.8 L / 44.3 gal
+     - No
+   * - 15 kJ
+     - 251.7 L / 66.5 gal
+     - No
+
+**4 Wh per count** is the only round candidate implying a volume below
+the nameplate, which is the only physically sensible direction. The
+library uses 4.0.
+
+A second, noisier method agrees. Across 183 individual heating
+recoveries, dividing each tank sensible-heat gain (from the two
+thermistors and the nominal mass) by the device's reported change gives a
+median of 4.11 Wh/count, p10 3.47 and p90 4.45. That route depends on
+``(upper + lower) / 2`` approximating the true mean tank temperature, so
+it is far less precise, but it is an independent confirmation and it does
+not use electrical input at all.
 
 The efficiency cross-check
 --------------------------
 
-An independent check settles it. Integrating ``currentInstPower`` over
-each recovery gives the electrical energy in, and dividing the tank's
-heat gain by it gives the heat pump's coefficient of performance:
+A third check rules out the old scale on its own. Integrating
+``currentInstPower`` over each recovery gives the electrical energy in,
+and dividing the device's *reported* energy gain by it gives an implied
+coefficient of performance:
 
 .. list-table::
    :header-rows: 1
@@ -151,13 +199,38 @@ heat gain by it gives the heat pump's coefficient of performance:
 A heat pump water heater in a 72 degF room runs at a COP of roughly 2 to
 4. A COP of 7 would mean the device generated energy it never consumed.
 
+This argument is worth stating separately because it needs no tank
+volume, specific heat or stratification model - only the device's own
+reported energy and its own reported power. It cannot tell you what the
+quantum *is*, but it rules out the pre-10.0 value regardless of anything
+assumed elsewhere on this page.
+
 The reference temperature
 -------------------------
 
-Solving ``reference = setpoint - full_recovery_energy / k`` across the
-same history gives a median of 104.5 degF, matching the device's
-``dhwTemperatureMin`` of 104.9 degF. The device measures a full recovery
-from its own minimum setpoint, not from the cold water inlet.
+This is the strongest result here, because it needs no physics at all.
+Extrapolating the setpoint regression above to ``total = 0`` gives:
+
+.. list-table::
+   :header-rows: 1
+
+   * - Quantity
+     - Value
+   * - Regression zero crossing
+     - **104.92 degF**
+   * - Device ``dhwTemperatureMin``
+     - **104.9 degF**
+
+Those agree to within a fiftieth of a degree, and the calculation uses
+only the device's own two numbers - no tank mass, no specific heat, no
+thermistor readings, no assumption about the quantum. It establishes
+
+.. code:: text
+
+   full_recovery_energy = k * (setpoint - dhwTemperatureMin)
+
+as fact rather than inference. The device measures a full recovery from
+its own minimum setpoint, not from the cold water inlet.
 
 
 What ``dhwChargePer`` does

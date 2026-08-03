@@ -14,14 +14,18 @@ Changed
 -------
 - **Energy unit scale corrected.** ``totalEnergyCapacity`` and ``availableEnergyCapacity`` were
   scaled by 10 on the assumption the device reported 10 Wh units. It does
-  not. Measuring across 183 heating recoveries on a 65-gallon NWP500 -
-  comparing the device's reported change against the tank's sensible-heat
-  gain from its two thermistors, a comparison independent of heat-pump
-  efficiency - gives a quantum of 4.11 Wh/count (p10 3.47, p90 4.45). The
-  library now uses 4.0. An independent cross-check settles it: integrating
-  ``currentInstPower`` over the same recoveries, the corrected scale
-  implies a heat-pump COP of 2.89, while the old scale implied 7.02, which
-  is physically impossible. **Reported tank energy is now 2.5x smaller.**
+  not. Because ``totalEnergyCapacity`` is a whole-tank quantity, its slope
+  against the setpoint measures the quantum with no stratification
+  assumption: on a 65-gallon NWP500 that is 70.25 raw counts per Kelvin
+  (R-squared 0.99999 over ten setpoints). Converting to Watt-hours needs a
+  water mass, and a "65 gallon" tank does not hold 65 gallons - so taking
+  the quantum to be round, as every other conversion in this protocol is,
+  4 Wh/count is the only candidate implying a water volume below the
+  nameplate (241.7 L). Two further checks agree: 183 individual heating
+  recoveries give 4.11 Wh/count by a noisier route, and integrating
+  ``currentInstPower`` over them implies a heat-pump COP of 2.89 at the new
+  scale against 7.02 at the old, the latter being physically impossible.
+  **Reported tank energy is now 2.5x smaller.**
   Historical series logged from earlier versions need rescaling by 0.4 to
   be comparable.
 
