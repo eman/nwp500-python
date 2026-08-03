@@ -579,7 +579,7 @@ def build_device_status_rows(device_status: Any) -> list[StatusRow]:
             (
                 "ANTI-LEGIONELLA",
                 "Operation Busy",
-                "Yes" if device_status.anti_legionella_operation_busy else "No",
+                _yes_no_unknown(device_status.anti_legionella_operation_busy),
             )
         )
 

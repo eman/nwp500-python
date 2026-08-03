@@ -5,7 +5,7 @@ Changelog
 Unreleased
 ==========
 
-**BREAKING CHANGE**: nine status flags change type from ``bool`` to
+**BREAKING CHANGE**: eight status flags change type from ``bool`` to
 ``bool | None`` so the device's "unknown" state is no longer reported as a
 definite OFF.
 
@@ -32,7 +32,9 @@ Changed
 - ``OnOffFlag`` gains the vendor's ``UNKNOWN = 0`` member. It previously
   started at ``OFF = 1``, leaving the device's reserved value unrepresented.
 
-- The CLI renders these flags as ``Unknown`` rather than ``No``.
+- The CLI renders these flags as ``Unknown`` rather than ``No``. Both
+  affected rows are updated: "Busy" under OPERATION STATUS and
+  "Operation Busy" under ANTI-LEGIONELLA.
 
 Added
 -----

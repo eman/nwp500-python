@@ -112,8 +112,8 @@ What this library does
 ----------------------
 
 :class:`~nwp500.enums.OnOffFlag` carries the vendor's ``UNKNOWN = 0``
-member, and nine status fields - exactly the set the app decodes through
-``MgppOnOFFFlag`` - are typed
+member. The app decodes nine status fields through ``MgppOnOFFFlag``;
+eight of them exist here as flags and are typed
 :data:`~nwp500.models.status.DeviceTriState`, which maps 0 to ``None``:
 
 - ``operation_busy``
@@ -125,8 +125,8 @@ member, and nine status fields - exactly the set the app decodes through
 - ``air_filter_alarm_use``
 - ``recirc_reservation_use``
 
-(``drOverrideStatus`` is the ninth in the app, but this library exposes it
-as a raw ``int`` rather than a flag, so it is left alone.)
+The ninth is ``drOverrideStatus``, which this library exposes as a raw
+``int`` rather than a flag, so it is left alone.
 
 Every other flag keeps :data:`~nwp500.models.status.DeviceBool`.
 
@@ -219,7 +219,7 @@ per-field UI decision, not a converter-level rule.
 Migration
 =========
 
-Nine fields change type from ``bool`` to ``bool | None``. ``None`` is
+Eight fields change type from ``bool`` to ``bool | None``. ``None`` is
 falsy, so truthiness checks are unaffected:
 
 .. code:: python
