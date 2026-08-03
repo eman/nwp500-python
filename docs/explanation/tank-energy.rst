@@ -85,31 +85,39 @@ Deficit, not stored energy
 --------------------------
 
 During a heating recovery on a 65-gallon unit at a 140.9 degF setpoint,
-with the tank warming and no draws:
+with the tank warming and no draws. Each row is a mean over the samples
+in that temperature bin, so the counts are not whole numbers:
 
 .. list-table::
    :header-rows: 1
 
    * - Mean tank temp
      - Setpoint minus tank
-     - ``availableEnergyCapacity``
+     - mean ``availableEnergyCapacity``
      - ``dhwChargePer``
    * - 119.5 degF
      - 21.4 degF
-     - 8816
+     - 881.6
      - 54.5 %
    * - 127.4 degF
      - 13.5 degF
-     - 5300
+     - 530.0
      - 69.5 %
    * - 135.1 degF
      - 5.8 degF
-     - 2275
+     - 227.5
      - 85.7 %
 
 The field falls as the tank fills with heat. Regressed against mean tank
 temperature over two weeks of five-minute samples, the slope is negative
 with an R-squared of 0.93 and a zero crossing at the setpoint.
+
+The last two rows also check out against the tank's heat capacity of
+156 Wh/degF: 227.5 counts x 4 Wh = 910 Wh against 5.8 degF x 156 =
+905 Wh, and 530.0 counts = 2120 Wh against 13.5 degF x 156 = 2106 Wh.
+The coldest row runs about 6 % high, which is the stratification error
+in using ``(upper + lower) / 2`` as the mean tank temperature - it is
+worst when the tank is least mixed.
 
 The 4 Wh quantum
 ----------------
@@ -118,51 +126,57 @@ The 4 Wh quantum
 the setpoint measures the quantum without needing any assumption about
 how the tank stratifies.
 
-The device does not report a single ``total`` per setpoint - see
-`Two branches`_ below - so the table lists the most common value at each
-setpoint, which covers 68 % of samples:
+The device does not report a single ``totalEnergyCapacity`` per setpoint -
+see `Two branches`_ below - so the table lists the most common value at
+each setpoint, which covers 68 % of samples. Values are raw counts as
+they arrive on the wire:
 
 .. list-table::
    :header-rows: 1
 
    * - Setpoint
-     - ``total``
+     - ``totalEnergyCapacity``
      - Setpoint
-     - ``total``
+     - ``totalEnergyCapacity``
    * - 140.0 degF
-     - 13690
+     - 1369
      - 144.5 degF
-     - 15450
+     - 1545
    * - 140.9 degF
-     - 14040
+     - 1404
      - 145.4 degF
-     - 15800
+     - 1580
    * - 141.8 degF
-     - 14390
+     - 1439
      - 146.3 degF
-     - 16150
+     - 1615
    * - 142.7 degF
-     - 14750
+     - 1475
      - 147.2 degF
-     - 16500
+     - 1650
    * - 143.6 degF
-     - 15100
+     - 1510
      - 148.1 degF
-     - 16850
+     - 1685
 
 An arithmetic sequence: least squares gives **R-squared 0.99999** and a
 slope of **70.25 raw counts per Kelvin** of whole-tank temperature rise.
+The endpoints alone give the same figure: (1685 - 1369) / 4.5 K = 70.2.
 
 The slope is the robust part of this. The second branch, fitted
-separately, gives 389.81 units/degF against the primary's 390.56 - the
+separately, gives 38.98 counts/degF against the primary's 39.06 - the
 same figure to within 0.2 %. Two independent populations agreeing on the
 slope is stronger evidence for the quantum than either alone.
 
 Converting that to Watt-hours needs a water mass, and this is where care
-is required: a "65 gallon" tank does not hold 65 gallons of water. Rather
-than assume nominal volume and derive an odd-looking quantum, assume the
-quantum is a round number - every other conversion in this protocol is
-(half-degrees, tenths) - and see which one implies a sensible volume:
+is required: a "65 gallon" tank does not hold 65 gallons of water. The
+nameplate is an upper bound - the vendor's own app hard-codes it, mapping
+``volumeCode`` 1/2/3 to 189.2 L, **246.0 L** and 302.8 L (see `What the
+vendor app does with these fields`_) - and the water actually in the tank
+must come in under it. Rather than assume nominal volume and derive an
+odd-looking quantum, assume the quantum is a round number - every other
+conversion in this protocol is (half-degrees, tenths) - and see which one
+implies a sensible volume:
 
 .. list-table::
    :header-rows: 1
@@ -243,20 +257,21 @@ times a day. Over four months at nine setpoints:
      - Zero crossing
    * - Primary
      - 68 %
-     - 390.56 units/degF
+     - 39.06 counts/degF
      - **104.95 degF**
    * - Secondary
      - 32 %
-     - 389.81 units/degF
+     - 38.98 counts/degF
      - **108.48 degF**
 
-The two are parallel, separated by a constant 1400-1410 units - exactly
+The two are parallel, separated by a constant 140-141 counts - exactly
 **2 degC** of setpoint - at every setpoint measured.
 
 The primary branch's zero crossing matches the device's
-``dhwTemperatureMin`` of 104.9 degF to within a twentieth of a degree,
-using only the device's own two numbers: no tank mass, no specific heat,
-no thermistors, no assumption about the quantum. On that branch,
+``dhwTemperatureMin`` of 104.9 degF to within a twentieth of a degree -
+140.0 - 1369 / 39.06 = 104.95 degF - using only the device's own two
+numbers: no tank mass, no specific heat, no thermistors, no assumption
+about the quantum. On that branch,
 
 .. code:: text
 
@@ -264,7 +279,7 @@ no thermistors, no assumption about the quantum. On that branch,
 
 The secondary branch behaves identically with a reference 2 degC higher,
 and **what selects between them is unknown**. The device's
-``hpUpperOnTemperatureSetting`` correlates with the choice - 104.9 degF
+``hpUpperOnTempSetting`` correlates with the choice - 104.9 degF
 when the primary is active, 143.4 degF when the secondary is - which
 would fit the device computing recovery cost from its own turn-on
 threshold, but only 22 paired samples were available and that is a lead
@@ -285,9 +300,68 @@ two. On one device, ``energy_to_setpoint / full_recovery_energy``
 implies 30 % charged while ``dhwChargePer`` reads 59 %; over two weeks
 the two differ by a mean of 48 points with 32 points of scatter.
 
+It is nonetheless the number Navien shows its own users: the NaviLink app
+prints it unmodified as a percentage labelled "DHW Charge", with no
+client-side arithmetic of any kind. Whatever it means, it is computed on
+the device, and a user comparing the app against this library will see
+the app's figure and not the ratio above.
+
 Treat it as an opaque vendor heuristic rather than a defined fraction of
 anything. For a charge figure with defined meaning, use
 ``usable_energy``.
+
+
+.. _what the vendor app does with these fields:
+
+What the vendor app does with these fields
+==========================================
+
+Nothing. Navien's own NaviLink app never reads either field.
+
+Decompiling the current release - version 2.03.00, versionCode 141,
+published March 2026 - gives 8,101 Java sources, and neither
+``totalEnergyCapacity`` nor ``availableEnergyCapacity`` appears in any of
+them. Neither string appears in the raw dex string pool either, which
+rules out the names having been lost to obfuscation. The app's status
+model, ``KDResponseMgppStatus.Status``, declares about 140 fields -
+including ``dhwChargePer``, ``tankUpperTemperature``,
+``tankLowerTemperature``, ``currentInstPower`` and ``mixingRate`` - and
+neither energy field is among them. The app requests no field subset, so
+the device sends both and the app discards them on deserialization.
+
+As a control, ``dhwChargePer`` and ``tankUpperTemperature`` *are* present
+in the dex strings, so the absence of the other two is a real result and
+not a broken search.
+
+This matters for reading the rest of this page. There is no vendor label,
+no vendor scale factor and no vendor formula to check the conclusions
+above against - the evidence here is the only account of these two fields
+that exists. It also explains why the protocol names are so misleading:
+nothing Navien ships ever has to act on them.
+
+The app does corroborate the surrounding facts this page leans on:
+
+.. list-table::
+   :header-rows: 1
+   :widths: 40 60
+
+   * - What the app does
+     - What it confirms
+   * - ``MgppStatusFragment.getVolume()`` maps ``volumeCode`` 1/2/3 to
+       "50"/"65"/"80" gallons and 189.2/246.0/302.8 L, displayed under
+       the label "Volume"
+     - The nominal volume the quantum candidates are judged against is
+       the vendor's own figure, not an assumption of ours
+   * - ``MgppControlFragment.makeTempMap()`` reads
+       ``dhwTemperatureMin / 2.0f`` as degC before converting
+     - ``dhwTemperatureMin`` is in half-degrees C, so 40.5 degC /
+       104.9 degF is the exact value the regression lands on. The app
+       rounds for display and shows 105 degF
+   * - The status screen labels ``dhwTemperature`` "DHW Temp." next to
+       "Upper Temp." and "Lower Temp.", and gives ``dischargeTemperature``
+       a separate "Discharge Temp." row
+     - The vendor UI does not treat ``dhwTemperature`` as an outlet
+       reading, and reserves a different field for what leaves the unit
 
 
 Drawable energy

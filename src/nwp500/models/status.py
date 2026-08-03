@@ -217,7 +217,7 @@ class DeviceStatus(NavienBaseModel):
             "Energy required to heat the whole tank from the device's "
             "reference temperature (dhw_temperature_min, 104.9 degF) up to "
             "the current setpoint, in Watt-hours. This is NOT a fixed tank "
-            "size: it tracks the setpoint, rising about 143 Wh per 0.5 degC "
+            "size: it tracks the setpoint, rising about 140 Wh per 0.5 degC "
             "of setpoint increase. Use it as the cost of a full recovery, "
             "not as the tank's total heat content."
         ),
@@ -401,7 +401,10 @@ class DeviceStatus(NavienBaseModel):
         "0.5 degC step, while tank_lower_temperature is uncorrelated. "
         "Prefer tank_upper_temperature, which reports the same water at "
         "0.1 degC resolution. The device has no sensor downstream of "
-        "itself, so this cannot measure water leaving the appliance",
+        "itself, so this cannot measure water leaving the appliance. "
+        "Navien's own app agrees: it labels this 'DHW Temp.' alongside "
+        "the tank thermistors and shows dischargeTemperature separately "
+        "as 'Discharge Temp.'",
         alias="dhwTemperature",
     )
     dhw_temperature_setting_raw: int = temperature_field(

@@ -247,9 +247,11 @@ class TestEnergyCountToWh:
     """Test energy_count_to_wh converter.
 
     The device reports tank energy in a fixed quantum of
-    WH_PER_ENERGY_COUNT Watt-hours per raw count, measured empirically at
-    4.11 Wh/count across 183 heating recoveries on a 65-gallon NWP500.
-    Versions before 10.0 used 10 Wh/count, overstating energy by 2.43x.
+    WH_PER_ENERGY_COUNT Watt-hours per raw count, measured from the slope
+    of totalEnergyCapacity against the setpoint on a 65-gallon NWP500
+    (70.25 counts per Kelvin) and corroborated at 4.11 Wh/count across
+    183 heating recoveries. Versions before 10.0 used 10 Wh/count,
+    overstating reported energy by 2.5x.
     """
 
     def test_zero(self):

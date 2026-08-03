@@ -39,7 +39,7 @@ Changed
   temperature: negative slope, R-squared 0.93, zero crossing at the
   setpoint). Likewise ``totalEnergyCapacity`` is not a fixed tank size but
   the cost of a full recovery to the *current setpoint*, measured from the
-  device's own minimum setpoint of 104.9 degF; it moves by about 143 Wh
+  device's own minimum setpoint of 104.9 degF; it moves by about 140 Wh
   per 0.5 degC of setpoint change.
 
   .. code-block:: python
@@ -96,8 +96,28 @@ Fixed
 - ``dhwTemperature`` is documented as an outlet temperature but is
   measured inside the tank: it tracks ``tankUpperTemperature`` to within
   one 0.5 degC step, and the device has no sensor downstream of itself.
+  Navien's own app agrees, labelling it "DHW Temp." beside the tank
+  thermistors and showing ``dischargeTemperature`` separately.
+- ``docs/explanation/tank-energy.rst`` tabulated ``totalEnergyCapacity``
+  and ``availableEnergyCapacity`` at ten times their raw wire values,
+  under column headings naming the raw protocol fields. The series had
+  been logged through the pre-fix library, which multiplied by 10. The
+  prose beside the tables ("70.25 raw counts per Kelvin", "35 counts")
+  was already in true raw counts, so the page contradicted itself by
+  exactly the factor it exists to correct. Tables are now in raw counts;
+  1580 counts at a 145.4 degF setpoint matches the test fixtures and the
+  6320 Wh the CLI reports. No numeric conclusion changes.
+- ``docs/explanation/tank-energy.rst`` referred to a field
+  ``hpUpperOnTemperatureSetting``; the protocol name is
+  ``hpUpperOnTempSetting``.
+- The setpoint-per-0.5-degC figure is 140 Wh, not 143 Wh, which is what
+  the documented slope of 70.25 counts/K gives at 4 Wh/count. Corrected
+  in the changelog, the model field description and the protocol
+  reference.
 - New ``docs/explanation/tank-energy.rst`` records what the two fields
-  actually measure and the calibration evidence behind the scale change.
+  actually measure and the calibration evidence behind the scale change,
+  including that Navien's own NaviLink app (2.03.00, versionCode 141)
+  reads neither field, so no vendor-side corroboration exists.
 
 Version 9.2.1 (2026-07-30)
 ==========================

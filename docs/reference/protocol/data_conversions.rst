@@ -352,7 +352,7 @@ Power and Energy Fields
    * - ``totalEnergyCapacity``
      - ``x 4`` (see note)
      - Wh
-     - **Cost of a full recovery** to the *current setpoint*, measured from the device reference temperature (``dhwTemperatureMin``, 104.9 degF). Exposed as ``full_recovery_energy``. This is **not** a fixed tank capacity: it moves with the setpoint, by about 143 Wh per 0.5 degC on a 65-gallon tank.
+     - **Cost of a full recovery** to the *current setpoint*, measured from the device reference temperature (``dhwTemperatureMin``, 104.9 degF). Exposed as ``full_recovery_energy``. This is **not** a fixed tank capacity: it moves with the setpoint, by about 140 Wh per 0.5 degC on a 65-gallon tank.
    * - ``availableEnergyCapacity``
      - ``x 4`` (see note)
      - Wh
@@ -360,13 +360,16 @@ Power and Energy Fields
 
 .. note::
    **Energy quantum.** The two energy fields are raw counts in a fixed
-   quantum, not Watt-hours. The quantum was measured at 4.11 Wh/count
-   (p10 3.47, p90 4.45) across 183 heating recoveries on a 65-gallon
-   NWP500, by comparing the device's reported change against the tank's
-   sensible-heat gain -- a comparison independent of the heat pump's
-   efficiency. The library uses 4.0. Versions before 10.0 used 10, which
-   overstated tank energy by 2.43x and implied a physically impossible
-   heat-pump COP of 7.0. See :doc:`../../explanation/tank-energy`.
+   quantum, not Watt-hours. Because ``totalEnergyCapacity`` is a
+   whole-tank quantity, regressing it against the setpoint measures the
+   quantum with no stratification assumption: on a 65-gallon NWP500 the
+   slope is 70.25 counts per Kelvin, and 4 Wh/count is the only round
+   candidate implying a water volume below the nameplate. Two further
+   checks agree -- 183 heating recoveries give 4.11 Wh/count by a
+   noisier route, and the same recoveries imply a heat-pump COP of 2.89.
+   The library uses 4.0. Versions before 10.0 used 10, which overstated
+   reported tank energy by 2.5x and implied a physically impossible COP
+   of 7.0. See :doc:`../../explanation/tank-energy`.
 
 .. note::
    ``currentInstPower`` excludes electric heating element power. If the heater is actively heating with electric elements, the actual power draw will be higher (typically +3755W @ 208V or +5000W @ 240V).

@@ -44,8 +44,8 @@ __all__ = [
 #:   p90 4.45), agreeing to within 2% by a noisier route
 #: * the same recoveries imply a heat pump COP of 2.89 at 4 Wh/count
 #:
-#: Library versions before 10.0 used 10 Wh/count, which overstated tank
-#: energy by 2.43x and implied a physically impossible COP of 7.0.
+#: Library versions before 10.0 used 10 Wh/count, which overstated reported
+#: tank energy by 2.5x and implied a physically impossible COP of 7.0.
 #:
 #: See ``docs/explanation/tank-energy.rst`` for the full derivation.
 WH_PER_ENERGY_COUNT = 4.0
