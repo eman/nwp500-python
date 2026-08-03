@@ -275,9 +275,17 @@ class TestEnergyCountToWh:
     def test_observed_full_recovery(self):
         """A real reading: 1580 counts at a 145.4 degF setpoint.
 
-        The tank is 65 gallons and the device's reference temperature is
-        dhw_temperature_min (104.9 degF), so a full recovery spans 22.5 K:
-        246.05 kg * 4.186 kJ/kg/K * 22.5 K = 23170 kJ = 6436 Wh.
+        1580 * 4 Wh = 6320 Wh. Sanity-check that against physics: the
+        device's reference is dhw_temperature_min (104.9 degF), so a full
+        recovery spans 22.5 K, and 6320 Wh implies
+
+            6320 Wh * 3.6 / (4.186 kJ/kg/K * 22.5 K) = 241.5 kg
+
+        of water. That is just under the 246.05 kg a nominal 65 gallons
+        would weigh, which is expected - a "65 gallon" tank does not hold
+        65 gallons of water. Assuming nominal volume instead would give
+        6436 Wh and a quantum of 4.07, which is not a round number and so
+        is the less likely reading. See WH_PER_ENERGY_COUNT.
         """
         assert energy_count_to_wh(1580) == pytest.approx(6320.0)
 
