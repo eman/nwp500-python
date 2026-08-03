@@ -5,6 +5,9 @@ Changelog
 Unreleased
 ==========
 
+Version 9.3.0 (2026-08-03)
+==========================
+
 **BREAKING CHANGES**: two independent corrections land together.
 
 Tank energy values were wrong in two ways - a 2.5x unit-scale error and
