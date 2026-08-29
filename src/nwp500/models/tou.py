@@ -145,11 +145,12 @@ class TOUPeriod(NavienBaseModel):
 class TOUReservationSchedule(NavienBaseModel):
     """TOU schedule as returned by the MQTT ``tou/rd`` response topic.
 
-    This model matches the raw MQTT payload for both
-    :meth:`~nwp500.NavienMqttClient.request_tou_settings` read responses
-    and :meth:`~nwp500.NavienMqttClient.configure_tou_schedule` write
-    confirmations — both use ``CommandCode.TOU_RESERVATION`` and the
-    ``tou/rd`` response topic.
+    This model matches the raw MQTT payload the device sends to confirm a
+    :meth:`~nwp500.NavienMqttClient.configure_tou_schedule` write. The device
+    has no MQTT read for its TOU schedule - ``ctrl/tou/rd`` with
+    ``CommandCode.TOU_RESERVATION`` is the write - so this payload only ever
+    arrives as a write confirmation. To read the current schedule, use the
+    REST :meth:`~nwp500.NavienAPIClient.get_tou_info`.
 
     The payload structure is::
 

@@ -539,38 +539,6 @@ class MqttDeviceController:
             reservation=reservation_payload,
         )
 
-    async def request_tou_settings(
-        self,
-        device: Device,
-        controller_serial_number: str,
-    ) -> int:
-        """
-        Request current Time-of-Use schedule from the device.
-
-        Args:
-            device: Device object
-            controller_serial_number: Controller serial number
-
-        Returns:
-            Publish packet ID
-
-        Raises:
-            ValueError: If controller_serial_number is empty
-        """
-        if not controller_serial_number:
-            raise ParameterValidationError(
-                "controller_serial_number is required",
-                parameter="controller_serial_number",
-            )
-
-        return await self._send_command(
-            device=device,
-            command_code=CommandCode.TOU_RESERVATION,
-            topic_suffix="ctrl/tou/rd",
-            response_topic_suffix="tou/rd",
-            controllerSerialNumber=controller_serial_number,
-        )
-
     @requires_capability("program_reservation_use")
     async def set_tou_enabled(self, device: Device, enabled: bool) -> int:
         """Toggle Time-of-Use functionality."""

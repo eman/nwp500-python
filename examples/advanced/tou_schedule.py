@@ -119,10 +119,10 @@ async def main() -> None:
             enabled=True,
         )
 
-        print("Requesting current TOU settings for confirmation...")
-        await mqtt_client.request_tou_settings(device, controller_serial)
-
-        print("Waiting up to 15 seconds for TOU responses...")
+        # The device has no MQTT read for its TOU schedule; the write above
+        # is confirmed on the same tou/rd topic. To read the stored schedule
+        # back, use the REST API: api_client.get_tou_info(...).
+        print("Waiting up to 15 seconds for the TOU write confirmation...")
         await asyncio.sleep(15)
 
         print("Toggling TOU off for quick test...")

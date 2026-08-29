@@ -194,14 +194,15 @@ class DeviceSubscriptionsMixin:
         device: Device,
         callback: Callable[[TOUReservationSchedule], None],
     ) -> int:
-        """Subscribe to Time-of-Use schedule read responses with automatic
-        parsing.
+        """Subscribe to Time-of-Use schedule write confirmations with
+        automatic parsing.
 
         Subscribes to the ``tou/rd`` response topic for the given device.
         The callback receives a fully-parsed
-        :class:`~nwp500.models.TOUReservationSchedule` whenever the device
-        responds to a TOU read or configure request (triggered by
-        :meth:`request_tou_settings` or :meth:`configure_tou_schedule`).
+        :class:`~nwp500.models.TOUReservationSchedule` when the device
+        confirms a TOU write (triggered by :meth:`configure_tou_schedule`).
+        There is no MQTT read to subscribe to; to read the current schedule,
+        use the REST :meth:`~nwp500.NavienAPIClient.get_tou_info`.
 
         Args:
             device: Device whose TOU responses to receive.

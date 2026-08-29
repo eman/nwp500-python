@@ -8,7 +8,6 @@ updates by diffing captures taken before and after an update.
 
 Specifically captures:
   - Weekly reservations (rsv/rd)
-  - Time-of-Use schedule (tou/rd)
   - Device info (firmware versions, capabilities)
   - Device status (current operating state)
   - All other response/event topics (via wildcards)
@@ -37,7 +36,6 @@ from pathlib import Path
 from typing import Any
 
 from nwp500 import NavienAPIClient, NavienAuthClient, NavienMqttClient
-from nwp500.exceptions import Nwp500Error
 from nwp500.models import DeviceFeature
 from nwp500.mqtt.utils import redact, redact_topic
 from nwp500.topic_builder import MqttTopicBuilder
@@ -156,16 +154,9 @@ async def main() -> None:
         await mqtt_client.request_reservations(device)
         await asyncio.sleep(5)
 
-        # --- Step 4: request TOU schedule (requires controller serial number) ---
-        if device_feature and device_feature.program_reservation_use:
-            serial = device_feature.controller_serial_number
-            if serial:
-                print("Requesting TOU schedule...")
-                try:
-                    await mqtt_client.request_tou_settings(device, serial)
-                    await asyncio.sleep(5)
-                except Nwp500Error as exc:
-                    print(f"  TOU request failed: {exc}")
+        # No TOU step: the device has no MQTT read for its TOU schedule.
+        # ctrl/tou/rd carries the *write*, which a capture tool must not send.
+        # Read the schedule over REST instead (api_client.get_tou_info).
 
         # --- Step 5: wait a bit more to catch any late-arriving messages ---
         print("\nWaiting for any remaining messages...")

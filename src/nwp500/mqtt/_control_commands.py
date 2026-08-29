@@ -99,14 +99,6 @@ class DeviceControlCommandsMixin:
             device, controller_serial_number, periods, enabled=enabled
         )
 
-    async def request_tou_settings(
-        self, device: Device, controller_serial_number: str
-    ) -> int:
-        """Request the current TOU settings from the device."""
-        return await self._device_controller.request_tou_settings(
-            device, controller_serial_number
-        )
-
     async def set_tou_enabled(self, device: Device, enabled: bool) -> int:
         """Enable or disable Time-of-Use optimization."""
         return await self._device_controller.set_tou_enabled(device, enabled)

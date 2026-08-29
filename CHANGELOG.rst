@@ -5,6 +5,9 @@ Changelog
 Unreleased
 ==========
 
+**BREAKING CHANGE**: ``NavienMqttClient.request_tou_settings()`` is removed.
+It could never have worked.
+
 Added
 -----
 - **REST fields the cloud added since the models were written.**
@@ -25,6 +28,36 @@ Added
   known code becomes an ``ErrorCode`` member and only an unknown one stays a
   plain int) so an unrecognised code cannot make a whole listing unparseable. ``docs/openapi.yaml`` is
   updated to match.
+
+Removed
+-------
+- **``request_tou_settings()`` removed - the device has no MQTT read for its
+  TOU schedule.** The method published a ``CommandCode.TOU_RESERVATION``
+  message to ``ctrl/tou/rd`` carrying only ``controllerSerialNumber``, then
+  waited for a reply on ``res/tou/rd``. No reply ever comes: a live device
+  with TOU provisioned (``program_reservation_use`` true, a valid controller
+  serial, and a plan the REST API returns in full) stayed silent for 45
+  seconds. ``ctrl/tou/rd`` with that command code is the *write* - it is what
+  :meth:`~nwp500.NavienMqttClient.configure_tou_schedule` publishes and what
+  the vendor app publishes from its TOU editor
+  (``TouScheduleViewmodel.setPublishMgppControlTou``) - and the device answers
+  on ``res/tou/rd`` only to confirm such a write. The vendor app reads TOU
+  over REST, which is the only TOU read the protocol has.
+
+  Beyond returning nothing, the call published a write-shaped command with no
+  schedule attached. This device ignored it - ``touStatus`` was unchanged
+  across repeated calls - but a firmware that took it at face value could read
+  it as "store an empty TOU schedule".
+
+  **Migration**: use :meth:`~nwp500.NavienAPIClient.get_tou_info`, which
+  returns the stored plan - rate name, utility, ZIP code and the seasonal
+  pricing intervals. The read itself is pure REST; it is keyed by the
+  controller serial number, which only the MQTT device-info response
+  publishes, so fetch that once and cache it.
+  :meth:`~nwp500.NavienMqttClient.subscribe_tou_response` is unaffected and
+  still delivers write confirmations. Enabling and disabling TOU
+  (:meth:`~nwp500.NavienMqttClient.set_tou_enabled`, command codes
+  ``TOU_ON``/``TOU_OFF``) is a separate path and is unaffected.
 
 Fixed
 -----

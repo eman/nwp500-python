@@ -59,3 +59,16 @@ def test_encoding_helpers_importable_from_submodule():
     assert callable(decode_price)
     assert callable(encode_week_bitfield)
     assert callable(decode_week_bitfield)
+
+
+def test_mqtt_tou_read_is_gone():
+    """There is no MQTT read for the TOU schedule; ctrl/tou/rd is the write.
+
+    ``request_tou_settings`` published a TOU_RESERVATION control message with
+    no schedule and waited for a reply the device never sends. Reads go
+    through ``NavienAPIClient.get_tou_info``.
+    """
+    from nwp500 import NavienAPIClient, NavienMqttClient
+
+    assert not hasattr(NavienMqttClient, "request_tou_settings")
+    assert hasattr(NavienAPIClient, "get_tou_info")

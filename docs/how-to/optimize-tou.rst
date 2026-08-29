@@ -339,28 +339,38 @@ Enables or disables TOU operation without changing the schedule.
 * ``device``: Device object
 * ``enabled``: ``True`` to enable TOU, ``False`` to disable
 
-MQTT: Request TOU Settings
-~~~~~~~~~~~~~~~~~~~~~~~~~~
+REST: Read the Current TOU Schedule
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. code-block:: python
 
-    async def request_tou_settings(
-        device: Device,
-        controller_serial_number: str
-    ) -> None
+    async def get_tou_info(
+        mac_address: str,
+        additional_value: str,
+        controller_id: str,
+        user_type: str = "O",
+    ) -> TOUInfo
 
-Requests the current TOU configuration from the device.
+Returns the stored TOU plan: rate name, utility, ZIP code, and the seasonal
+schedule with its pricing intervals.
 
 **Parameters:**
 
-* ``device``: Device object
-* ``controller_serial_number``: Controller serial number
+* ``mac_address``: Device MAC address
+* ``additional_value``: Additional device identifier
+* ``controller_id``: Controller serial number. Only the MQTT device-info
+  response publishes it (``DeviceFeature.controller_serial_number``); it is a
+  hardware property, so fetch it once and cache it. See Example 3.
+* ``user_type``: User type (default ``"O"``)
 
-The device will respond on the topic:
+.. note::
 
-.. code-block:: text
-
-    cmd/{deviceType}/{deviceId}/res/tou/rd
+   There is no MQTT read for the TOU schedule. ``ctrl/tou/rd`` with
+   ``CommandCode.TOU_RESERVATION`` is the *write* - it is what
+   :meth:`~nwp500.NavienMqttClient.configure_tou_schedule` publishes, and what
+   the vendor app publishes from its TOU editor. The device replies on
+   ``cmd/{deviceType}/{clientId}/res/tou/rd`` to confirm such a write; it does
+   not answer a request that carries no schedule. Read the plan over REST.
 
 Building TOU Periods
 --------------------
@@ -527,7 +537,7 @@ Configure two rate periods - off-peak and peak pricing:
             await mqtt_client.subscribe_device_feature(device, capture_feature)
             await mqtt_client.request_device_info(device)
             feature = await asyncio.wait_for(feature_future, timeout=15)
-            controller_serial = feature.controllerSerialNumber
+            controller_serial = feature.controller_serial_number
             
             # Define off-peak period (midnight to 2 PM, weekdays)
             off_peak = build_tou_period(
@@ -651,58 +661,63 @@ Configure different rates for summer and winter:
 Example 3: Retrieve Current TOU Settings
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Query the device for its current TOU configuration:
+The stored TOU plan is read over the REST API. The read itself needs no MQTT
+connection, but it is keyed by the controller serial number, and the only
+place that is published is the MQTT device-info response. The serial is a
+hardware property that never changes, so fetch it once, keep it, and every
+later read is pure REST:
 
 .. code-block:: python
 
-    from nwp500.encoding import decode_week_bitfield, decode_price
+    import asyncio
+    from nwp500 import NavienAPIClient, NavienAuthClient, NavienMqttClient
+    from nwp500.encoding import decode_price, decode_week_bitfield
 
-    async def check_tou_settings():
+    async def get_controller_serial(auth_client, device) -> str:
+        """One-time lookup: the controller serial is only published over MQTT."""
+        mqtt_client = NavienMqttClient(auth_client)
+        await mqtt_client.connect()
+        try:
+            feature_future = asyncio.Future()
+
+            def capture_feature(feature):
+                if not feature_future.done():
+                    feature_future.set_result(feature)
+
+            await mqtt_client.subscribe_device_feature(device, capture_feature)
+            await mqtt_client.request_device_info(device)
+            feature = await asyncio.wait_for(feature_future, timeout=15)
+            return feature.controller_serial_number
+        finally:
+            await mqtt_client.disconnect()
+
+    async def check_tou_settings(controller_serial: str | None = None):
         async with NavienAuthClient("user@example.com", "password") as auth_client:
             api_client = NavienAPIClient(auth_client=auth_client)
             device = await api_client.get_first_device()
-            
-            mqtt_client = NavienMqttClient(auth_client)
-            await mqtt_client.connect()
-            
-            # ... get controller_serial (same as Example 1) ...
-            
-            # Set up response handler
-            response_topic = f"cmd/{device.device_info.device_type}/{mqtt_client.config.client_id}/res/tou/rd"
-            
-            def on_tou_response(topic: str, message: dict):
-                response = message.get("response", {})
-                enabled = response.get("reservationUse")
-                periods = response.get("reservation", [])
-                
-                print(f"TOU Enabled: {enabled}")
-                print(f"Number of periods: {len(periods)}")
-                
-                for i, period in enumerate(periods, 1):
-                    days = decode_week_bitfield(period.get("week", 0))
-                    price_min = decode_price(
-                        period.get("priceMin", 0),
-                        period.get("decimalPoint", 0)
-                    )
-                    price_max = decode_price(
-                        period.get("priceMax", 0),
-                        period.get("decimalPoint", 0)
-                    )
-                    
+
+            if controller_serial is None:
+                controller_serial = await get_controller_serial(auth_client, device)
+
+            tou_info = await api_client.get_tou_info(
+                mac_address=device.device_info.mac_address,
+                additional_value=device.device_info.additional_value,
+                controller_id=controller_serial,
+            )
+
+            print(f"Plan: {tou_info.name} ({tou_info.utility})")
+
+            # TOUSchedule.intervals holds the raw interval dicts
+            for season in tou_info.schedule:
+                for i, interval in enumerate(season.intervals, 1):
+                    days = decode_week_bitfield(interval["week"])
+                    dp = interval["decimalPoint"]
                     print(f"\nPeriod {i}:")
                     print(f"  Days: {', '.join(days)}")
-                    print(f"  Time: {period['startHour']:02d}:{period['startMinute']:02d} "
-                          f"- {period['endHour']:02d}:{period['endMinute']:02d}")
-                    print(f"  Price: ${price_min:.5f} - ${price_max:.5f}/kWh")
-            
-            await mqtt_client.subscribe(response_topic, on_tou_response)
-            
-            # Request current settings
-            await mqtt_client.request_tou_settings(device, controller_serial)
-            
-            # Wait for response
-            await asyncio.sleep(5)
-            await mqtt_client.disconnect()
+                    print(f"  Time: {interval['startHour']:02d}:{interval['startMinute']:02d} "
+                          f"- {interval['endHour']:02d}:{interval['endMinute']:02d}")
+                    print(f"  Price: ${decode_price(interval['priceMin'], dp):.5f} "
+                          f"- ${decode_price(interval['priceMax'], dp):.5f}/kWh")
 
     asyncio.run(check_tou_settings())
 
