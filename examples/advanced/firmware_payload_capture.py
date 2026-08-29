@@ -111,13 +111,16 @@ async def main() -> None:
 
         # --- Wildcard subscriptions to catch everything ---
 
-        # Everything under the device's own command path. This is where the
-        # device acknowledges control and query commands, on
-        # cmd/{type}/navilink-{mac}/{client_id}/res - status, device info and
-        # energy replies all land here, so a capture without this subscription
-        # misses most of the traffic. It also picks up requests and replies
-        # belonging to other clients on the same device (a Home Assistant
-        # integration, the vendor app), which is exactly what a capture wants.
+        # Everything under the device's own command path. The device
+        # acknowledges control and query commands on
+        # cmd/{type}/navilink-{mac}/{client_id}/res, which is where the status
+        # and device-info responses arrive, so a capture without this
+        # subscription misses them entirely. It also picks up the published
+        # requests themselves and the traffic of other clients on the same
+        # device (a Home Assistant integration, the vendor app), which is
+        # exactly what a capture wants. Query results that the device routes
+        # back to a client-keyed topic - reservations, energy usage - arrive
+        # under res_wildcard below instead.
         cmd_wildcard = MqttTopicBuilder.command_topic(device_type, mac, "#")
         # Query results routed back to this client specifically
         res_wildcard = MqttTopicBuilder.response_topic(device_type, client_id, "#")
