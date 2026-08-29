@@ -5,8 +5,13 @@ Changelog
 Unreleased
 ==========
 
-**BREAKING CHANGE**: ``NavienMqttClient.request_tou_settings()`` is removed.
-It could never have worked.
+Version 9.3.1 (2026-08-29)
+==========================
+
+``NavienMqttClient.request_tou_settings()`` is removed. Not a breaking
+change in practice: the device never answered it, so no caller can have
+been getting a schedule out of it. Code that still names the method will
+now fail with ``AttributeError`` rather than time out. See Removed below.
 
 Added
 -----
