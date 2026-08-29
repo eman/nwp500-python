@@ -662,15 +662,31 @@ async def energy(
 
     Use either --months for monthly summary or --month for daily breakdown.
     """
+    if month is not None and months is not None:
+        raise click.ClickException(
+            "Use either --month (daily breakdown) or --months "
+            "(monthly summary), not both"
+        )
     if month is not None:
         # Daily breakdown for a single month
         if month < 1 or month > 12:
             raise click.ClickException("Month must be between 1 and 12")
-        await handlers.handle_get_energy_request(mqtt, device, year, [month])
+        await handlers.handle_get_energy_request(
+            mqtt, device, year, [month], daily=True
+        )
     elif months is not None:
         # Monthly summary
-        month_list = [int(m.strip()) for m in months.split(",")]
-        await handlers.handle_get_energy_request(mqtt, device, year, month_list)
+        try:
+            month_list = [int(m.strip()) for m in months.split(",")]
+        except ValueError:
+            raise click.ClickException(
+                "--months must be a comma-separated list of months (e.g. 1,2,3)"
+            ) from None
+        if not month_list or any(m < 1 or m > 12 for m in month_list):
+            raise click.ClickException("Months must be between 1 and 12")
+        await handlers.handle_get_energy_request(
+            mqtt, device, year, month_list, daily=False
+        )
     else:
         raise click.ClickException(
             "Either --months (for monthly summary) or --month "

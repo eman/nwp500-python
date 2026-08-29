@@ -8,6 +8,7 @@ try:
     from nwp500.cli.handlers import (
         get_controller_serial_number,
         handle_device_info_request,
+        handle_get_energy_request,
         handle_set_dhw_temp_request,
         handle_set_mode_request,
         handle_status_request,
@@ -218,3 +219,68 @@ async def test_handle_status_request_raw_with_standard_key(
 
     captured = capsys.readouterr()
     assert "operationMode" in captured.out
+
+
+@pytest.fixture
+def energy_views(monkeypatch):
+    """Record which energy view a handler call renders."""
+    rendered = []
+    monkeypatch.setattr(
+        "nwp500.cli.handlers.print_energy_usage",
+        lambda response: rendered.append("monthly"),
+    )
+    monkeypatch.setattr(
+        "nwp500.cli.output_formatters.print_daily_energy_usage",
+        lambda response, year, month: rendered.append(f"daily:{month}"),
+    )
+    return rendered
+
+
+@pytest.fixture
+def energy_mqtt(mock_mqtt):
+    """MQTT mock that answers an energy usage request immediately."""
+
+    async def subscribe_and_invoke(device, callback):
+        callback(MagicMock())
+
+    mock_mqtt.subscribe_energy_usage = AsyncMock(
+        side_effect=subscribe_and_invoke
+    )
+    mock_mqtt.request_energy_usage = AsyncMock()
+    return mock_mqtt
+
+
+@pytest.mark.asyncio
+async def test_handle_get_energy_request_daily(
+    energy_mqtt, mock_device, energy_views
+):
+    """--month asks for the daily breakdown."""
+    await handle_get_energy_request(
+        energy_mqtt, mock_device, 2025, [5], daily=True
+    )
+
+    assert energy_views == ["daily:5"]
+
+
+@pytest.mark.asyncio
+async def test_handle_get_energy_request_single_month_summary(
+    energy_mqtt, mock_device, energy_views
+):
+    """A one-month --months list still gets the monthly summary."""
+    await handle_get_energy_request(
+        energy_mqtt, mock_device, 2025, [5], daily=False
+    )
+
+    assert energy_views == ["monthly"]
+
+
+@pytest.mark.asyncio
+async def test_handle_get_energy_request_multi_month_summary(
+    energy_mqtt, mock_device, energy_views
+):
+    """Multiple months get the monthly summary."""
+    await handle_get_energy_request(
+        energy_mqtt, mock_device, 2025, [1, 2, 3], daily=False
+    )
+
+    assert energy_views == ["monthly"]

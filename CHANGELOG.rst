@@ -5,6 +5,18 @@ Changelog
 Unreleased
 ==========
 
+Fixed
+-----
+- **CLI ``energy --months`` no longer duplicates ``--month`` output.**
+  ``handle_get_energy_request`` picked the view from the length of the
+  month list, so ``--months 5`` took the single-month branch and printed
+  the same daily breakdown as ``--month 5`` instead of the monthly
+  summary. The handler now takes an explicit ``daily`` flag set by the
+  option the user actually passed. ``energy`` also rejects ``--month``
+  and ``--months`` together rather than silently preferring ``--month``,
+  and validates the ``--months`` range and format the way ``--month``
+  already did.
+
 Version 9.3.0 (2026-08-03)
 ==========================
 
