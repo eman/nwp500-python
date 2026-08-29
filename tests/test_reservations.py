@@ -1,5 +1,6 @@
 """Tests for the nwp500.reservations public helpers."""
 
+import logging
 from typing import Any
 from unittest.mock import ANY, AsyncMock, MagicMock, patch
 
@@ -117,6 +118,26 @@ async def test_fetch_reservations_timeout(
     mock_mqtt.unsubscribe_reservation_response.assert_called_once_with(
         mock_device, ANY
     )
+
+
+@pytest.mark.asyncio
+async def test_fetch_reservations_redacts_mac_when_unsubscribe_fails(
+    mock_mqtt: MagicMock, mock_device: MagicMock, caplog: Any
+) -> None:
+    """The unsubscribe warning must not log the MAC address in the clear."""
+    mac = "0123456789ab"
+    mock_device.device_info.mac_address = mac
+    mock_mqtt.request_reservations = AsyncMock()  # never fires callback
+    mock_mqtt.unsubscribe_reservation_response = AsyncMock(
+        side_effect=RuntimeError("boom")
+    )
+
+    with caplog.at_level(logging.WARNING, logger="nwp500.reservations"):
+        await fetch_reservations(mock_mqtt, mock_device, timeout=0.01)
+
+    messages = [r.getMessage() for r in caplog.records]
+    assert any("Failed to unsubscribe" in m for m in messages)
+    assert not any(mac in m for m in messages)
 
 
 @pytest.mark.asyncio
