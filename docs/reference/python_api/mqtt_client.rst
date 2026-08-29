@@ -582,13 +582,6 @@ configure_tou_schedule()
 
    **Capability Required:** ``program_reservation_use``
 
-request_tou_settings()
-^^^^^^^^^^^^^^^^^^^^^^
-
-.. py:method:: request_tou_settings(device, controller_serial_number)
-
-   Request the current TOU schedule.
-
 subscribe_tou_response()
 ^^^^^^^^^^^^^^^^^^^^^^^^
 
@@ -597,9 +590,9 @@ subscribe_tou_response()
    Subscribe to parsed TOU schedule responses.
 
    The callback is invoked with a :class:`~nwp500.models.TOUReservationSchedule`
-   whenever the device responds to a :meth:`request_tou_settings` read or a
-   :meth:`configure_tou_schedule` write (both use the ``tou/rd`` response
-   topic).
+   when the device confirms a :meth:`configure_tou_schedule` write on the
+   ``tou/rd`` response topic. The device has no MQTT read for its TOU schedule;
+   to read the stored plan, use :meth:`~nwp500.NavienAPIClient.get_tou_info`.
 
    :param callback: Called with the parsed TOU schedule on each response.
    :type callback: Callable[[TOUReservationSchedule], None]
