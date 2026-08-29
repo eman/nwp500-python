@@ -358,7 +358,9 @@ schedule with its pricing intervals.
 
 * ``mac_address``: Device MAC address
 * ``additional_value``: Additional device identifier
-* ``controller_id``: Controller serial number
+* ``controller_id``: Controller serial number. Only the MQTT device-info
+  response publishes it (``DeviceFeature.controller_serial_number``); it is a
+  hardware property, so fetch it once and cache it. See Example 3.
 * ``user_type``: User type (default ``"O"``)
 
 .. note::
@@ -535,7 +537,7 @@ Configure two rate periods - off-peak and peak pricing:
             await mqtt_client.subscribe_device_feature(device, capture_feature)
             await mqtt_client.request_device_info(device)
             feature = await asyncio.wait_for(feature_future, timeout=15)
-            controller_serial = feature.controllerSerialNumber
+            controller_serial = feature.controller_serial_number
             
             # Define off-peak period (midnight to 2 PM, weekdays)
             off_peak = build_tou_period(
@@ -659,18 +661,43 @@ Configure different rates for summer and winter:
 Example 3: Retrieve Current TOU Settings
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Read the stored TOU plan over the REST API. No MQTT connection is needed:
+The stored TOU plan is read over the REST API. The read itself needs no MQTT
+connection, but it is keyed by the controller serial number, and the only
+place that is published is the MQTT device-info response. The serial is a
+hardware property that never changes, so fetch it once, keep it, and every
+later read is pure REST:
 
 .. code-block:: python
 
+    import asyncio
+    from nwp500 import NavienAPIClient, NavienAuthClient, NavienMqttClient
     from nwp500.encoding import decode_price, decode_week_bitfield
 
-    async def check_tou_settings():
+    async def get_controller_serial(auth_client, device) -> str:
+        """One-time lookup: the controller serial is only published over MQTT."""
+        mqtt_client = NavienMqttClient(auth_client)
+        await mqtt_client.connect()
+        try:
+            feature_future = asyncio.Future()
+
+            def capture_feature(feature):
+                if not feature_future.done():
+                    feature_future.set_result(feature)
+
+            await mqtt_client.subscribe_device_feature(device, capture_feature)
+            await mqtt_client.request_device_info(device)
+            feature = await asyncio.wait_for(feature_future, timeout=15)
+            return feature.controller_serial_number
+        finally:
+            await mqtt_client.disconnect()
+
+    async def check_tou_settings(controller_serial: str | None = None):
         async with NavienAuthClient("user@example.com", "password") as auth_client:
             api_client = NavienAPIClient(auth_client=auth_client)
             device = await api_client.get_first_device()
 
-            # ... get controller_serial (same as Example 1) ...
+            if controller_serial is None:
+                controller_serial = await get_controller_serial(auth_client, device)
 
             tou_info = await api_client.get_tou_info(
                 mac_address=device.device_info.mac_address,

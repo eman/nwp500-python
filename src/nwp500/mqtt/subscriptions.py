@@ -811,8 +811,8 @@ class MqttSubscriptionManager:
         device: Device,
         callback: Callable[[TOUReservationSchedule], None],
     ) -> int:
-        """Subscribe to Time-of-Use schedule read responses with automatic
-        parsing.
+        """Subscribe to Time-of-Use schedule write confirmations with
+        automatic parsing.
 
         Subscribes to the ``tou/rd`` response topic for the given device.
         The callback receives a fully-parsed

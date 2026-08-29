@@ -587,7 +587,7 @@ subscribe_tou_response()
 
 .. py:method:: subscribe_tou_response(device, callback)
 
-   Subscribe to parsed TOU schedule responses.
+   Subscribe to parsed TOU schedule write confirmations.
 
    The callback is invoked with a :class:`~nwp500.models.TOUReservationSchedule`
    when the device confirms a :meth:`configure_tou_schedule` write on the
