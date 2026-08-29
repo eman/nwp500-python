@@ -111,17 +111,27 @@ async def main() -> None:
 
         # --- Wildcard subscriptions to catch everything ---
 
-        # All response messages back to this client
+        # Everything under the device's own command path. This is where the
+        # device acknowledges control and query commands, on
+        # cmd/{type}/navilink-{mac}/{client_id}/res - status, device info and
+        # energy replies all land here, so a capture without this subscription
+        # misses most of the traffic. It also picks up requests and replies
+        # belonging to other clients on the same device (a Home Assistant
+        # integration, the vendor app), which is exactly what a capture wants.
+        cmd_wildcard = MqttTopicBuilder.command_topic(device_type, mac, "#")
+        # Query results routed back to this client specifically
         res_wildcard = MqttTopicBuilder.response_topic(device_type, client_id, "#")
         # All event messages pushed by the device
         evt_wildcard = MqttTopicBuilder.event_topic(device_type, mac, "#")
 
         print(
-            f"\nSubscribing to:\n  {redact_topic(res_wildcard)}\n"
+            f"\nSubscribing to:\n  {redact_topic(cmd_wildcard)}\n"
+            f"  {redact_topic(res_wildcard)}\n"
             f"  {redact_topic(evt_wildcard)}\n"
         )
         print("Captured topics:")
 
+        await mqtt_client.subscribe(cmd_wildcard, capture.record)
         await mqtt_client.subscribe(res_wildcard, capture.record)
         await mqtt_client.subscribe(evt_wildcard, capture.record)
 

@@ -88,6 +88,14 @@ Fixed
   ``docs/reference/protocol/device_features.rst``, which documented the
   wire spelling correctly all along.
 
+- **``firmware_payload_capture.py`` captured almost nothing.** Its wildcards
+  covered ``cmd/{type}/{client_id}/res/#`` and the event topic, but the device
+  acknowledges control and query commands on
+  ``cmd/{type}/navilink-{mac}/{client_id}/res`` - which neither pattern
+  matches - so device status, device info and energy replies were all missed.
+  A capture run recorded 2 payloads where it should have recorded 11. It now
+  also subscribes to ``cmd/{type}/navilink-{mac}/#``, which additionally picks
+  up traffic from other clients on the same device.
 Version 9.3.0 (2026-08-03)
 ==========================
 
