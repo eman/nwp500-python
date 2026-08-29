@@ -23,6 +23,16 @@ Fixed
   anyone without working credentials saw an authentication failure instead
   of the usage error. That catch-all now re-raises ``ClickException`` so any
   command can report a usage error as itself.
+- **``DeviceFeature.mixing_valve_use`` now reads the device's actual key.**
+  The field was aliased to ``mixingValveUse``, but the device sends
+  ``mixingValueUse`` - "Value", not "Valve" - and the base model ignores
+  unknown keys, so the field silently reported its ``False`` default on
+  every device regardless of whether a thermostatic mixing valve was
+  supported. The CLI's "Mixing Valve" capability row was wrong for the
+  same reason. The misspelling is Navien's own: it appears in the vendor
+  app's ``KDResponseMgppDid$Feature`` class and in
+  ``docs/reference/protocol/device_features.rst``, which documented the
+  wire spelling correctly all along.
 
 Version 9.3.0 (2026-08-03)
 ==========================

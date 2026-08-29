@@ -434,3 +434,52 @@ class TestUsableEnergy:
         """Computed fields must never be sent back to the device."""
         status = DeviceStatus(**device_status_dict)
         assert "usable_energy" not in status.to_protocol_dict()
+
+
+class TestDeviceFeatureWireAliases:
+    """Aliases must match the keys the device actually sends."""
+
+    #: Only the fields DeviceFeature requires; capability flags are optional.
+    MINIMAL_FEATURE: ClassVar[dict] = {
+        "countryCode": 3,
+        "modelTypeCode": 240,
+        "controlTypeCode": 1,
+        "volumeCode": 2,
+        "controllerSwVersion": 184877056,
+        "panelSwVersion": 0,
+        "wifiSwVersion": 34013184,
+        "controllerSwCode": 33556241,
+        "panelSwCode": 0,
+        "wifiSwCode": 268435985,
+        "recircSwVersion": 0,
+        "recircModelTypeCode": 0,
+        "controllerSerialNumber": "ABC123",
+        "dhwTemperatureSettingUse": 2,
+    }
+
+    def test_mixing_valve_reads_the_devices_misspelled_key(self):
+        """The device sends ``mixingValueUse`` (sic), not ``mixingValveUse``."""
+        from nwp500.models import DeviceFeature
+
+        feature = DeviceFeature.model_validate(
+            self.MINIMAL_FEATURE | {"mixingValueUse": 2}
+        )
+
+        assert feature.mixing_valve_use is True
+
+    def test_mixing_valve_ignores_the_corrected_spelling(self):
+        """``mixingValveUse`` is not a key the device ever sends."""
+        from nwp500.models import DeviceFeature
+
+        feature = DeviceFeature.model_validate(
+            self.MINIMAL_FEATURE | {"mixingValveUse": 2}
+        )
+
+        assert feature.mixing_valve_use is False
+
+    def test_mixing_valve_defaults_when_absent(self):
+        from nwp500.models import DeviceFeature
+
+        feature = DeviceFeature.model_validate(self.MINIMAL_FEATURE)
+
+        assert feature.mixing_valve_use is False
