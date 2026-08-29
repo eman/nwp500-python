@@ -4,9 +4,12 @@ import logging
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from click.testing import CliRunner
 
 try:
+    # click ships in the optional "cli" extra, not "testing", so it has to be
+    # imported inside the guard for this module to skip cleanly without it.
+    from click.testing import CliRunner
+
     from nwp500.cli.handlers import (
         get_controller_serial_number,
         handle_device_info_request,
