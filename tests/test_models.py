@@ -440,7 +440,7 @@ class TestDeviceFeatureWireAliases:
     """Aliases must match the keys the device actually sends."""
 
     #: Only the fields DeviceFeature requires; capability flags are optional.
-    MINIMAL_FEATURE: ClassVar[dict] = {
+    MINIMAL_FEATURE: ClassVar[dict[str, int | str]] = {
         "countryCode": 3,
         "modelTypeCode": 240,
         "controlTypeCode": 1,
