@@ -865,12 +865,16 @@ async def handle_tou_apply_request(
 
 
 async def handle_get_energy_request(
-    mqtt: NavienMqttClient, device: Device, year: int, months: list[int]
+    mqtt: NavienMqttClient,
+    device: Device,
+    year: int,
+    months: list[int],
+    daily: bool = False,
 ) -> None:
     """Request energy usage data.
 
-    If a single month is provided, shows daily breakdown.
-    If multiple months are provided, shows monthly summary.
+    If ``daily`` is set, shows the day-by-day breakdown for ``months[0]``.
+    Otherwise shows the monthly summary across the requested months.
     """
     try:
         res: Any = await _wait_for_response(
@@ -880,8 +884,8 @@ async def handle_get_energy_request(
             action_name="energy usage",
             timeout=15,
         )
-        # If single month requested, show daily breakdown
-        if len(months) == 1:
+        # Daily breakdown only when explicitly requested
+        if daily:
             from .output_formatters import print_daily_energy_usage
 
             print_daily_energy_usage(

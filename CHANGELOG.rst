@@ -5,6 +5,25 @@ Changelog
 Unreleased
 ==========
 
+Fixed
+-----
+- **CLI ``energy --months`` no longer duplicates ``--month`` output.**
+  ``handle_get_energy_request`` picked the view from the length of the
+  month list, so ``--months 5`` took the single-month branch and printed
+  the same daily breakdown as ``--month 5`` instead of the monthly
+  summary. The handler now takes an explicit ``daily`` flag set by the
+  option the user actually passed. ``energy`` also rejects ``--month``
+  and ``--months`` together rather than silently preferring ``--month``,
+  and validates the ``--months`` range and format the way ``--month``
+  already did. All of that validation now happens while Click parses the
+  arguments, so a bad invocation is a usage error (exit code 2) before any
+  authentication or MQTT connection is attempted - previously the command
+  body raised ``ClickException`` after connecting, where ``async_command``'s
+  catch-all reported it as an "Unexpected Error" with a traceback, and
+  anyone without working credentials saw an authentication failure instead
+  of the usage error. That catch-all now re-raises ``ClickException`` so any
+  command can report a usage error as itself.
+
 Version 9.3.0 (2026-08-03)
 ==========================
 

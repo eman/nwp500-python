@@ -1,13 +1,16 @@
 """Tests for CLI command handlers."""
 
-from unittest.mock import AsyncMock, MagicMock
+import logging
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from click.testing import CliRunner
 
 try:
     from nwp500.cli.handlers import (
         get_controller_serial_number,
         handle_device_info_request,
+        handle_get_energy_request,
         handle_set_dhw_temp_request,
         handle_set_mode_request,
         handle_status_request,
@@ -218,3 +221,218 @@ async def test_handle_status_request_raw_with_standard_key(
 
     captured = capsys.readouterr()
     assert "operationMode" in captured.out
+
+
+@pytest.fixture
+def energy_views(monkeypatch):
+    """Record which energy view a handler call renders."""
+    rendered = []
+    monkeypatch.setattr(
+        "nwp500.cli.handlers.print_energy_usage",
+        lambda response: rendered.append("monthly"),
+    )
+    monkeypatch.setattr(
+        "nwp500.cli.output_formatters.print_daily_energy_usage",
+        lambda response, year, month: rendered.append(f"daily:{month}"),
+    )
+    return rendered
+
+
+@pytest.fixture
+def energy_mqtt(mock_mqtt):
+    """MQTT mock that answers an energy usage request immediately."""
+
+    async def subscribe_and_invoke(device, callback):
+        callback(MagicMock())
+
+    mock_mqtt.subscribe_energy_usage = AsyncMock(
+        side_effect=subscribe_and_invoke
+    )
+    mock_mqtt.request_energy_usage = AsyncMock()
+    return mock_mqtt
+
+
+@pytest.mark.asyncio
+async def test_handle_get_energy_request_daily(
+    energy_mqtt, mock_device, energy_views
+):
+    """--month asks for the daily breakdown."""
+    await handle_get_energy_request(
+        energy_mqtt, mock_device, 2025, [5], daily=True
+    )
+
+    assert energy_views == ["daily:5"]
+
+
+@pytest.mark.asyncio
+async def test_handle_get_energy_request_single_month_summary(
+    energy_mqtt, mock_device, energy_views
+):
+    """A one-month --months list still gets the monthly summary."""
+    await handle_get_energy_request(
+        energy_mqtt, mock_device, 2025, [5], daily=False
+    )
+
+    assert energy_views == ["monthly"]
+
+
+@pytest.mark.asyncio
+async def test_handle_get_energy_request_multi_month_summary(
+    energy_mqtt, mock_device, energy_views
+):
+    """Multiple months get the monthly summary."""
+    await handle_get_energy_request(
+        energy_mqtt, mock_device, 2025, [1, 2, 3], daily=False
+    )
+
+    assert energy_views == ["monthly"]
+
+
+@pytest.fixture(autouse=True)
+def _restore_logging():
+    """Undo the logging setup the CLI group performs on every invocation.
+
+    ``cli()`` calls ``logging.basicConfig`` and pins the ``nwp500`` logger
+    to the verbosity flags, which would otherwise leak into later tests -
+    ``tests/test_utils.py`` asserts on DEBUG records and sees none once
+    this module has run.
+    """
+    nwp500_logger = logging.getLogger("nwp500")
+    levels = (logging.root.level, nwp500_logger.level)
+    handlers = list(logging.root.handlers)
+    yield
+    logging.root.setLevel(levels[0])
+    nwp500_logger.setLevel(levels[1])
+    logging.root.handlers[:] = handlers
+
+
+@pytest.fixture
+def energy_cli():
+    """Invoke the real ``energy`` command with the network stubbed out.
+
+    Returns a callable taking CLI args and giving back
+    ``(result, calls)``, where ``calls`` records what the command asked
+    :func:`handle_get_energy_request` for. This exercises the actual Click
+    options, so a wrong ``--month``/``--months`` mapping fails here even
+    though the handler-level tests above would still pass.
+    """
+    from nwp500.cli.__main__ import cli
+
+    def invoke(args):
+        calls = []
+
+        async def record(mqtt, device, year, months, daily=False):
+            calls.append({"year": year, "months": months, "daily": daily})
+
+        auth = MagicMock()
+        auth.__aenter__ = AsyncMock(return_value=auth)
+        auth.__aexit__ = AsyncMock(return_value=False)
+        auth.current_tokens = None
+        auth.user_email = "user@example.com"
+        api = MagicMock()
+        api.get_first_device = AsyncMock(return_value=MagicMock())
+        mqtt = MagicMock()
+        mqtt.connect = AsyncMock()
+        mqtt.disconnect = AsyncMock()
+
+        with (
+            patch("nwp500.cli.__main__.NavienAuthClient", return_value=auth),
+            patch("nwp500.cli.__main__.NavienAPIClient", return_value=api),
+            patch("nwp500.cli.__main__.NavienMqttClient", return_value=mqtt),
+            patch(
+                "nwp500.cli.__main__.load_tokens",
+                return_value=(None, "user@example.com"),
+            ),
+            patch(
+                "nwp500.cli.__main__._detect_unit_system",
+                AsyncMock(return_value="us_customary"),
+            ),
+            patch(
+                "nwp500.cli.handlers.handle_get_energy_request",
+                side_effect=record,
+            ),
+        ):
+            result = CliRunner().invoke(
+                cli,
+                args,
+                env={
+                    "NAVIEN_EMAIL": "user@example.com",
+                    "NAVIEN_PASSWORD": "secret",
+                },
+            )
+        return result, calls
+
+    return invoke
+
+
+class TestEnergyCommandDispatch:
+    """The option that was passed picks the view, not the month count."""
+
+    def test_month_asks_for_the_daily_breakdown(self, energy_cli):
+        result, calls = energy_cli(["energy", "--year", "2025", "--month", "5"])
+
+        assert result.exit_code == 0
+        assert calls == [{"year": 2025, "months": [5], "daily": True}]
+
+    def test_single_month_list_asks_for_the_summary(self, energy_cli):
+        """The regression: ``--months 5`` must not become a daily view."""
+        result, calls = energy_cli(
+            ["energy", "--year", "2025", "--months", "5"]
+        )
+
+        assert result.exit_code == 0
+        assert calls == [{"year": 2025, "months": [5], "daily": False}]
+
+    def test_month_list_asks_for_the_summary(self, energy_cli):
+        result, calls = energy_cli(
+            ["energy", "--year", "2025", "--months", "1,2,3"]
+        )
+
+        assert result.exit_code == 0
+        assert calls == [{"year": 2025, "months": [1, 2, 3], "daily": False}]
+
+    def test_months_tolerates_spaces(self, energy_cli):
+        result, calls = energy_cli(
+            ["energy", "--year", "2025", "--months", "1, 2, 3"]
+        )
+
+        assert result.exit_code == 0
+        assert calls == [{"year": 2025, "months": [1, 2, 3], "daily": False}]
+
+
+class TestEnergyCommandUsageErrors:
+    """Bad input is rejected while parsing, before any network work.
+
+    These invoke the CLI with no stubbing at all: if any of them reached
+    authentication, the test would hit the network instead of exiting 2.
+    """
+
+    @pytest.mark.parametrize(
+        ("args", "expected"),
+        [
+            (["--year", "2025", "--month", "13"], "13 is not in the range"),
+            (["--year", "2025", "--month", "0"], "0 is not in the range"),
+            (["--year", "2025", "--months", "abc"], "is not a month number"),
+            (["--year", "2025", "--months", "1,13"], "13 is not in the range"),
+            (["--year", "2025", "--months", ""], "is not a month number"),
+            (["--year", "2025"], "is required"),
+            (
+                ["--year", "2025", "--month", "5", "--months", "1,2"],
+                "not both",
+            ),
+        ],
+    )
+    def test_rejected_during_parsing(self, args, expected):
+        from nwp500.cli.__main__ import cli
+
+        result = CliRunner().invoke(
+            cli,
+            ["energy", *args],
+            env={
+                "NAVIEN_EMAIL": "user@example.com",
+                "NAVIEN_PASSWORD": "secret",
+            },
+        )
+
+        assert result.exit_code == 2, result.output
+        assert expected in result.output
