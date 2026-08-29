@@ -73,21 +73,25 @@ class TestDeviceListEntry:
         assert info.model_type_code is None
         assert info.installer_id is None
 
-    @pytest.mark.parametrize("code", [96, 326])
+    @pytest.mark.parametrize("code", [0, 96, 326])
     def test_known_error_code_becomes_an_enum(self, code):
+        """Not just ``== ErrorCode(code)``: an int compares equal to its
+        member, so only the type tells the two union branches apart."""
         payload = DEVICE_LIST_ENTRY | {"error": {"errorCode": code}}
 
-        device = Device.model_validate(payload)
+        error_code = Device.model_validate(payload).error.error_code
 
-        assert device.error.error_code == ErrorCode(code)
+        assert isinstance(error_code, ErrorCode)
+        assert error_code is ErrorCode(code)
 
     def test_unknown_error_code_does_not_break_the_response(self):
         """A code the enum doesn't know must not fail the whole listing."""
         payload = DEVICE_LIST_ENTRY | {"error": {"errorCode": 9999}}
 
-        device = Device.model_validate(payload)
+        error_code = Device.model_validate(payload).error.error_code
 
-        assert device.error.error_code == 9999
+        assert not isinstance(error_code, ErrorCode)
+        assert error_code == 9999
 
 
 class TestDeviceInfoEntry:

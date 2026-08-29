@@ -21,8 +21,9 @@ Added
   readable without an MQTT connection, including while the device is
   offline. Every new field is optional, so responses that omit them - such
   as ``/device/info``, which carries no ``error`` block - parse unchanged.
-  ``error_code`` is typed ``ErrorCode | int`` so an unrecognised code
-  cannot make a whole listing unparseable. ``docs/openapi.yaml`` is
+  ``error_code`` is typed ``ErrorCode | int`` (validated left to right, so a
+  known code becomes an ``ErrorCode`` member and only an unknown one stays a
+  plain int) so an unrecognised code cannot make a whole listing unparseable. ``docs/openapi.yaml`` is
   updated to match.
 
 Fixed

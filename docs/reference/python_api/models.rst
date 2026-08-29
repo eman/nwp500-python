@@ -109,7 +109,11 @@ remains readable while the device is offline.
 
       for device in devices:
           if device.error and device.error.error_code != ErrorCode.NO_ERROR:
-              print(f"{device.device_info.device_name}: {device.error.error_code.name}"
+              code = device.error.error_code
+              # A code the enum knows arrives as an ErrorCode; anything else
+              # falls back to a plain int, which has no .name.
+              label = code.name if isinstance(code, ErrorCode) else f"code {code}"
+              print(f"{device.device_info.device_name}: {label}"
                     f" at {device.error.error_occurred_time}")
 
 DescalingInfo
