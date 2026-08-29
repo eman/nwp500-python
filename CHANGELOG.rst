@@ -15,7 +15,14 @@ Fixed
   option the user actually passed. ``energy`` also rejects ``--month``
   and ``--months`` together rather than silently preferring ``--month``,
   and validates the ``--months`` range and format the way ``--month``
-  already did.
+  already did. All of that validation now happens while Click parses the
+  arguments, so a bad invocation is a usage error (exit code 2) before any
+  authentication or MQTT connection is attempted - previously the command
+  body raised ``ClickException`` after connecting, where ``async_command``'s
+  catch-all reported it as an "Unexpected Error" with a traceback, and
+  anyone without working credentials saw an authentication failure instead
+  of the usage error. That catch-all now re-raises ``ClickException`` so any
+  command can report a usage error as itself.
 
 Version 9.3.0 (2026-08-03)
 ==========================

@@ -143,6 +143,11 @@ def async_command(f: Any) -> Any:
                         await mqtt.disconnect()
                     return 0
 
+            except click.ClickException:
+                # A usage/config error a command raised deliberately. Let
+                # Click report it as itself; the catch-all below would
+                # otherwise log it as an "Unexpected Error" with a traceback.
+                raise
             except (
                 InvalidCredentialsError,
                 AuthenticationError,
@@ -639,14 +644,69 @@ async def tou_apply(
         _logger.error("API client not available")
 
 
-@cli.command()  # type: ignore[attr-defined]
+def _parse_months(
+    ctx: click.Context, param: click.Parameter, value: str | None
+) -> list[int] | None:
+    """Parse ``--months`` at parse time, so bad input is a usage error."""
+    if value is None:
+        return None
+    months = []
+    for raw in value.split(","):
+        try:
+            month = int(raw.strip())
+        except ValueError:
+            raise click.BadParameter(
+                f"{raw.strip()!r} is not a month number; expected a "
+                "comma-separated list like 1,2,3"
+            ) from None
+        if not 1 <= month <= 12:
+            raise click.BadParameter(f"{month} is not in the range 1-12")
+        months.append(month)
+    if not months:
+        raise click.BadParameter("at least one month is required")
+    return months
+
+
+class _EnergySelection(click.Command):
+    """Rejects an unusable --month/--months combination during parsing.
+
+    Cross-option checks have no natural home in a per-option callback, and
+    the command body is the wrong place: it runs inside ``async_command``,
+    after authentication and the MQTT connect, so a usage error there would
+    surface only to users whose credentials already work - and then as an
+    "Unexpected Error" traceback, because the wrapper's catch-all swallows
+    ``ClickException``.
+    """
+
+    def parse_args(self, ctx: click.Context, args: list[str]) -> list[str]:
+        rest = super().parse_args(ctx, args)
+        month, months = ctx.params.get("month"), ctx.params.get("months")
+        if month is not None and months is not None:
+            raise click.UsageError(
+                "Use either --month (daily breakdown) or --months "
+                "(monthly summary), not both",
+                ctx=ctx,
+            )
+        if month is None and months is None:
+            raise click.UsageError(
+                "Either --months (for monthly summary) or --month "
+                "(for daily breakdown) is required",
+                ctx=ctx,
+            )
+        return rest
+
+
+@cli.command(cls=_EnergySelection)  # type: ignore[attr-defined]
 @click.option("--year", type=int, required=True, help="Year to query")
 @click.option(
-    "--months", required=False, help="Comma-separated months (e.g. 1,2,3)"
+    "--months",
+    required=False,
+    callback=_parse_months,
+    help="Comma-separated months for a monthly summary (e.g. 1,2,3)",
 )
 @click.option(
     "--month",
-    type=int,
+    type=click.IntRange(1, 12),
     required=False,
     help="Show daily breakdown for a specific month (1-12)",
 )
@@ -655,42 +715,25 @@ async def energy(
     mqtt: NavienMqttClient,
     device: Any,
     year: int,
-    months: str | None,
+    months: list[int] | None,
     month: int | None,
 ) -> None:
     """Query historical energy usage.
 
     Use either --months for monthly summary or --month for daily breakdown.
+    Which option was passed decides the view, not how many months it names:
+    ``--months 5`` is a one-month summary, ``--month 5`` is a daily
+    breakdown of that month.
     """
-    if month is not None and months is not None:
-        raise click.ClickException(
-            "Use either --month (daily breakdown) or --months "
-            "(monthly summary), not both"
-        )
+    # _EnergySelection rejected every combination but these two during
+    # parsing, so exactly one of the options is set here.
     if month is not None:
-        # Daily breakdown for a single month
-        if month < 1 or month > 12:
-            raise click.ClickException("Month must be between 1 and 12")
         await handlers.handle_get_energy_request(
             mqtt, device, year, [month], daily=True
         )
     elif months is not None:
-        # Monthly summary
-        try:
-            month_list = [int(m.strip()) for m in months.split(",")]
-        except ValueError:
-            raise click.ClickException(
-                "--months must be a comma-separated list of months (e.g. 1,2,3)"
-            ) from None
-        if not month_list or any(m < 1 or m > 12 for m in month_list):
-            raise click.ClickException("Months must be between 1 and 12")
         await handlers.handle_get_energy_request(
-            mqtt, device, year, month_list, daily=False
-        )
-    else:
-        raise click.ClickException(
-            "Either --months (for monthly summary) or --month "
-            "(for daily breakdown) required"
+            mqtt, device, year, months, daily=False
         )
 
 
