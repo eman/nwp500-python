@@ -75,7 +75,9 @@ from nwp500.factory import (
 )
 from nwp500.models import (
     ConvertedTOUPlan,
+    DescalingInfo,
     Device,
+    DeviceErrorSummary,
     DeviceFeature,
     DeviceInfo,
     DeviceStatus,
@@ -147,6 +149,8 @@ __all__ = [
     "DeviceInfo",
     "Location",
     "Device",
+    "DeviceErrorSummary",
+    "DescalingInfo",
     "FirmwareInfo",
     "ReservationEntry",
     "ReservationSchedule",

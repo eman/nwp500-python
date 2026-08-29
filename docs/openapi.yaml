@@ -195,6 +195,14 @@ paths:
                             connected:
                               type: integer
                               example: 2
+                            modelTypeCode:
+                              type: integer
+                              nullable: true
+                              example: null
+                            installerId:
+                              type: string
+                              nullable: true
+                              example: null
                         location:
                           type: object
                           properties:
@@ -206,7 +214,29 @@ paths:
                               example: "Anytown"
                             address:
                               type: string
-                              example: "123 Main Street" 
+                              example: "123 Main Street"
+                        error:
+                          type: object
+                          description: Last recorded device fault.
+                          properties:
+                            errorCode:
+                              type: integer
+                              example: 0
+                            errorOccuredTime:
+                              type: string
+                              nullable: true
+                              example: "2025-12-07T11:58:02"
+                        descaling:
+                          type: object
+                          properties:
+                            descalingStartTime:
+                              type: string
+                              nullable: true
+                              example: null
+                            descalingEndTime:
+                              type: string
+                              nullable: true
+                              example: null
   /device/info:
     post:
       summary: Device Info

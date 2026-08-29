@@ -60,6 +60,10 @@ Complete device representation with info and location.
 
    * ``device_info`` (DeviceInfo) - Device identification and status
    * ``location`` (Location) - Physical location information
+   * ``error`` (DeviceErrorSummary, optional) - Last recorded fault. Returned by
+     ``/device/list`` only; ``None`` on a device fetched through ``/device/info``.
+   * ``descaling`` (DescalingInfo, optional) - Descaling window, if one is
+     scheduled or recorded
 
    **Example:**
 
@@ -80,6 +84,52 @@ Complete device representation with info and location.
           print(f"Location: {loc.city}, {loc.state}")
           print(f"Coords: {loc.latitude}, {loc.longitude}")
 
+DeviceErrorSummary
+------------------
+
+The device's last recorded fault, as reported by the REST API. Unlike
+``DeviceStatus.error_code`` this is readable without an MQTT connection, and
+remains readable while the device is offline.
+
+.. py:class:: DeviceErrorSummary
+
+   **Fields:**
+
+   * ``error_code`` (ErrorCode | int) - ``ErrorCode.NO_ERROR`` when there is no
+     recorded fault. A code the enum does not know is kept as a plain int rather
+     than failing the whole response.
+   * ``error_occurred_time`` (str, optional) - When the fault was recorded, as an
+     ISO-8601 string. Sent by the API under the misspelled key ``errorOccuredTime``.
+
+   **Example:**
+
+   .. code-block:: python
+
+      devices = await api.list_devices()
+
+      for device in devices:
+          if device.error and device.error.error_code != ErrorCode.NO_ERROR:
+              code = device.error.error_code
+              # A code the enum knows arrives as an ErrorCode; anything else
+              # falls back to a plain int, which has no .name.
+              label = code.name if isinstance(code, ErrorCode) else f"code {code}"
+              print(f"{device.device_info.device_name}: {label}"
+                    f" at {device.error.error_occurred_time}")
+
+DescalingInfo
+-------------
+
+Descaling window reported by the REST API.
+
+.. py:class:: DescalingInfo
+
+   **Fields:**
+
+   * ``descaling_start_time`` (str, optional) - Start of the descaling window
+   * ``descaling_end_time`` (str, optional) - End of the descaling window
+
+   Both are ``None`` on a device with no descaling scheduled or recorded.
+
 DeviceInfo
 ----------
 
@@ -99,6 +149,8 @@ Device identification and connection information.
    * ``device_name`` (str) - User-assigned device name
    * ``connected`` (int) - Connection status (2 = online, 0 = offline)
    * ``install_type`` (str, optional) - Installation type
+   * ``model_type_code`` (int, optional) - Model type code
+   * ``installer_id`` (str, optional) - Installer identifier
 
    **Example:**
 

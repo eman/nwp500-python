@@ -14,7 +14,9 @@ from ._converters import (
 )
 from .device import (
     ConnectionStatusField,
+    DescalingInfo,
     Device,
+    DeviceErrorSummary,
     DeviceInfo,
     FirmwareInfo,
     Location,
@@ -69,6 +71,8 @@ __all__ = [
     "DeviceInfo",
     "Location",
     "Device",
+    "DeviceErrorSummary",
+    "DescalingInfo",
     "FirmwareInfo",
     "TOUSchedule",
     "ConvertedTOUPlan",

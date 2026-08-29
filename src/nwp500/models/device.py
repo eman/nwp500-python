@@ -1,10 +1,10 @@
 from typing import Annotated, Self
 
-from pydantic import BeforeValidator
+from pydantic import BeforeValidator, Field
 
 from .._base import NavienBaseModel
 from ..converters import enum_validator
-from ..enums import ConnectionStatus, DeviceType
+from ..enums import ConnectionStatus, DeviceType, ErrorCode
 
 ConnectionStatusField = Annotated[
     ConnectionStatus, BeforeValidator(enum_validator(ConnectionStatus))
@@ -21,6 +21,8 @@ class DeviceInfo(NavienBaseModel):
     device_name: str = "Unknown"
     connected: ConnectionStatusField = ConnectionStatus.DISCONNECTED
     install_type: str | None = None
+    model_type_code: int | None = None
+    installer_id: str | None = None
 
 
 class Location(NavienBaseModel):
@@ -34,11 +36,53 @@ class Location(NavienBaseModel):
     altitude: float | None = None
 
 
+class DeviceErrorSummary(NavienBaseModel):
+    """Last device fault as reported by the REST API.
+
+    The cloud keeps this independently of the live MQTT status, so it is
+    readable without an MQTT connection - including while the device is
+    offline, where it reports the fault as of the last time the device
+    was heard from.
+    """
+
+    #: ``NO_ERROR`` when the device has no recorded fault. Typed to accept a
+    #: bare int as well, following ``device_type``, so a code the enum does
+    #: not know cannot make a whole ``/device/list`` response unparseable.
+    #:
+    #: ``union_mode`` matters here: pydantic's default smart union matches an
+    #: incoming int against the ``int`` branch exactly and never reaches the
+    #: enum, so every code - known or not - would stay a plain int. Trying the
+    #: branches left to right instead means a known code becomes an
+    #: ``ErrorCode`` member and only an unknown one falls through to ``int``.
+    error_code: ErrorCode | int = Field(
+        default=ErrorCode.NO_ERROR, union_mode="left_to_right"
+    )
+    #: Spelled "Occured" by the API; the Python name is spelled correctly.
+    error_occurred_time: str | None = Field(
+        default=None, alias="errorOccuredTime"
+    )
+
+
+class DescalingInfo(NavienBaseModel):
+    """Descaling window reported by the REST API.
+
+    Both timestamps are ``None`` on a device with no descaling scheduled
+    or recorded.
+    """
+
+    descaling_start_time: str | None = None
+    descaling_end_time: str | None = None
+
+
 class Device(NavienBaseModel):
     """Complete device information including location."""
 
     device_info: DeviceInfo
     location: Location
+    #: Present on ``/device/list``; absent from ``/device/info``.
+    error: DeviceErrorSummary | None = None
+    #: Present on both ``/device/list`` and ``/device/info``.
+    descaling: DescalingInfo | None = None
 
     def with_info(self, info: DeviceInfo) -> Self:
         """Return a new Device instance with updated DeviceInfo."""
