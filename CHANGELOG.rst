@@ -5,6 +5,26 @@ Changelog
 Unreleased
 ==========
 
+Added
+-----
+- **REST fields the cloud added since the models were written.**
+  ``/device/list`` now returns an ``error`` block (``errorCode``,
+  ``errorOccuredTime``) and the ``descaling`` block previously seen only
+  on ``/device/info``, and ``deviceInfo`` gained ``modelTypeCode`` and
+  ``installerId``. None of these were modelled, and ``NavienBaseModel``
+  ignores unknown keys, so all of them were silently discarded.
+  :class:`~nwp500.models.Device` gains optional ``error``
+  (:class:`~nwp500.models.DeviceErrorSummary`) and ``descaling``
+  (:class:`~nwp500.models.DescalingInfo`) sections, and
+  :class:`~nwp500.models.DeviceInfo` gains ``model_type_code`` and
+  ``installer_id``. ``error`` makes the device's last recorded fault
+  readable without an MQTT connection, including while the device is
+  offline. Every new field is optional, so responses that omit them - such
+  as ``/device/info``, which carries no ``error`` block - parse unchanged.
+  ``error_code`` is typed ``ErrorCode | int`` so an unrecognised code
+  cannot make a whole listing unparseable. ``docs/openapi.yaml`` is
+  updated to match.
+
 Fixed
 -----
 - **CLI ``energy --months`` no longer duplicates ``--month`` output.**
