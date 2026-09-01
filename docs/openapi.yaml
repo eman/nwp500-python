@@ -221,6 +221,7 @@ paths:
                           properties:
                             errorCode:
                               type: integer
+                              nullable: true
                               example: 0
                             errorOccuredTime:
                               type: string

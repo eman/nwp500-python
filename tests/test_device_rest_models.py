@@ -84,6 +84,25 @@ class TestDeviceListEntry:
         assert isinstance(error_code, ErrorCode)
         assert error_code is ErrorCode(code)
 
+    def test_null_error_code_does_not_break_the_response(self):
+        """The cloud sends ``"errorCode": null`` on some devices, which must
+        not fail the listing and so make the whole integration unusable."""
+        payload = DEVICE_LIST_ENTRY | {
+            "error": {"errorCode": None, "errorOccuredTime": None}
+        }
+
+        device = Device.model_validate(payload)
+
+        assert device.error is not None
+        assert device.error.error_code is None
+
+    def test_absent_error_code_is_not_reported(self):
+        """No code in the block reads the same as an explicit null: the
+        cloud has told us nothing, not that the device is fault-free."""
+        payload = DEVICE_LIST_ENTRY | {"error": {}}
+
+        assert Device.model_validate(payload).error.error_code is None
+
     def test_unknown_error_code_does_not_break_the_response(self):
         """A code the enum doesn't know must not fail the whole listing."""
         payload = DEVICE_LIST_ENTRY | {"error": {"errorCode": 9999}}
