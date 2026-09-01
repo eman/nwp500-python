@@ -375,11 +375,10 @@ def main() -> None:
 
     print("\n[OK] Version bump complete!")
     print("\nNext steps:")
-    print(f"  1. Push the tag:    git push origin v{new_version}")
-    print("     (also push the changelog commit: git push origin HEAD)")
-    print("  2. Build release:   make build")
-    print("  3. Test on TestPyPI: make publish-test")
-    print("  4. Publish to PyPI:  make publish")
+    print("  1. Push the changelog commit: git push origin HEAD")
+    print(f"  2. Push the tag:             git push origin v{new_version}")
+    print("\nThe tag triggers .github/workflows/release.yml, which runs the")
+    print("pre-release checks and publishes to PyPI. Do not publish by hand.")
 
 
 if __name__ == "__main__":

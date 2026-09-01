@@ -149,8 +149,9 @@ duplicate silently breaks that.
    ```
 
    The script will:
-   - Refuse to run unless the working directory is clean and in sync with
-     the remote
+   - Refuse to run unless the working directory is clean
+   - Refuse to run if the branch is behind its upstream (it warns, but
+     continues, if the branch is ahead or has no upstream)
    - Get the current version from git tags
    - Calculate the new version and validate the progression (prevents large
      jumps)
@@ -177,10 +178,12 @@ git tag -a vX.Y.Z -m "Release version X.Y.Z"
 git push origin vX.Y.Z
 ```
 
-**Warning**: Manual tagging bypasses the clean-tree, up-to-date and version
-progression checks, and does not touch the changelog - so the GitHub release
-notes will be empty unless you added the heading yourself. Use the version
-bump script instead.
+**Warning**: Manual tagging bypasses the clean-tree, not-behind-upstream and
+version progression checks, and does not touch the changelog - so unless you
+added the `Version X.Y.Z (YYYY-MM-DD)` heading yourself,
+`scripts/extract_changelog.py` finds no matching section and the GitHub release
+notes fall back to the bare line `Release X.Y.Z`. Use the version bump script
+instead.
 
 ### 5. The Release Runs Itself
 
@@ -188,7 +191,7 @@ Pushing a `v*` tag starts `.github/workflows/release.yml`, which is the only
 thing that publishes. In order, it:
 
 1. **Pre-release Checks** - `ruff check`, `ruff format --check`, and `pytest`
-   against an install of `.[testing]`
+   against an install of `-e ".[testing]"`
 2. **Build and Publish to PyPI** - `python -m build`, `twine check`, then
    `pypa/gh-action-pypi-publish` via PyPI trusted publishing (no API tokens
    are stored anywhere)
@@ -379,7 +382,7 @@ Two workflows already cover this:
 | Lint and Format Check | `tox -e lint` (`ruff check` and `ruff format --check`) |
 | Security Check | `ruff check --select S src/` |
 | Test on Python 3.14 | `tox -e default` - pytest and pyright, with the `cli` and `testing` extras |
-| Test without CLI extras | pytest against a `.[testing]`-only install, matching what `release.yml` does |
+| Test without CLI extras | pytest against an `-e ".[testing]"` install, matching what `release.yml` does |
 | Build Distribution | `python -m build` plus `twine check` |
 
 **`.github/workflows/release.yml`** - on a `v*` tag: pre-release checks, then
