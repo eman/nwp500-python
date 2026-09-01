@@ -72,11 +72,12 @@ jobs:
 
   test-without-cli-extras:
     # tox installs the cli extra, so the job above never exercises an
-    # install without click or rich. release.yml installs plain
-    # .[testing], and a test module importing click above its
-    # ImportError guard failed there and nowhere else, after the release
-    # tag was already pushed. This job runs the release workflow's
-    # install so that failure surfaces on the pull request instead.
+    # install without click or rich. release.yml installs
+    # -e ".[testing]", which has neither, and a test module importing
+    # click above its ImportError guard failed there and nowhere else,
+    # after the release tag was already pushed. This job runs the
+    # release workflow's install so that failure surfaces on the pull
+    # request instead.
     name: Test without CLI extras
     runs-on: ubuntu-latest
 
@@ -91,7 +92,7 @@ jobs:
       - name: Install project with testing extras only
         run: |
           python -m pip install --upgrade pip
-          python -m pip install '.[testing]'
+          python -m pip install -e ".[testing]"
 
       - name: Verify the CLI extras really are absent
         run: |
@@ -101,7 +102,7 @@ jobs:
           fi
 
       - name: Run tests
-        run: pytest
+        run: python -m pytest
 
   build:
     name: Build Distribution
