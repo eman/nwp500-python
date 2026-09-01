@@ -5,6 +5,9 @@ Changelog
 Unreleased
 ==========
 
+Version 9.3.2 (2026-09-01)
+==========================
+
 Fixed
 -----
 - **A null ``errorCode`` no longer makes ``/device/list`` unparseable.**
