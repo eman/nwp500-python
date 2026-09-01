@@ -95,9 +95,11 @@ remains readable while the device is offline.
 
    **Fields:**
 
-   * ``error_code`` (ErrorCode | int) - ``ErrorCode.NO_ERROR`` when there is no
-     recorded fault. A code the enum does not know is kept as a plain int rather
-     than failing the whole response.
+   * ``error_code`` (ErrorCode | int | None) - ``ErrorCode.NO_ERROR`` when the
+     device has no recorded fault, and ``None`` when the cloud reports no code
+     at all - it sends ``"errorCode": null`` on some devices, which is not the
+     same claim as "no error". A code the enum does not know is kept as a plain
+     int, so neither a null nor an unrecognised code fails the whole response.
    * ``error_occurred_time`` (str, optional) - When the fault was recorded, as an
      ISO-8601 string. Sent by the API under the misspelled key ``errorOccuredTime``.
 
@@ -108,8 +110,9 @@ remains readable while the device is offline.
       devices = await api.list_devices()
 
       for device in devices:
-          if device.error and device.error.error_code != ErrorCode.NO_ERROR:
-              code = device.error.error_code
+          code = device.error.error_code if device.error else None
+          # None is "the cloud told us nothing", not "no fault".
+          if code is not None and code != ErrorCode.NO_ERROR:
               # A code the enum knows arrives as an ErrorCode; anything else
               # falls back to a plain int, which has no .name.
               label = code.name if isinstance(code, ErrorCode) else f"code {code}"
