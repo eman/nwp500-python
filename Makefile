@@ -53,10 +53,11 @@ build: clean  ## Build distribution packages
 check-release: lint format-check test validate-version  ## Run all checks before release (lint, format check, tests, version validation)
 	@echo "✓ All checks passed! Ready for release."
 
-release: check-release build  ## Prepare and build a release (run checks, then build)
+release: check-release build  ## Run the release checks and build locally (does not publish)
 	@echo "✓ Release build complete!"
-	@echo "To publish to TestPyPI: make publish-test"
-	@echo "To publish to PyPI: make publish"
+	@echo "This built locally and published nothing."
+	@echo "To release: make version-bump BUMP=patch, then push main and the tag."
+	@echo "Pushing the tag is what publishes to PyPI. See RELEASE.md."
 
 publish-test:  ## Publish to TestPyPI
 	python -m twine check dist/*
