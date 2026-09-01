@@ -17,6 +17,16 @@ Fixed
   cloud reported no code, which is not the same claim as ``NO_ERROR``.
   Callers that treated the field as always-present should handle ``None``.
 
+Security
+--------
+- **MAC address no longer logged in the clear when a reservations
+  unsubscribe fails.** ``fetch_reservations`` logged
+  ``device_info.mac_address`` unredacted in its cleanup warning, while the
+  identical warning in ``update_reservations_confirmed`` a few lines below
+  passed it through ``redact_mac``. CodeQL flagged it as
+  ``py/clear-text-logging-sensitive-data`` (high). Both call sites now
+  redact.
+
 Version 9.3.1 (2026-08-29)
 ==========================
 

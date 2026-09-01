@@ -71,10 +71,12 @@ async def fetch_reservations(
         try:
             await mqtt.unsubscribe_reservation_response(device, on_schedule)
         except Exception:
+            from .mqtt.utils import redact_mac
+
             _logger.warning(
                 "Failed to unsubscribe reservations response handler for "
                 "device %s",
-                device.device_info.mac_address,
+                redact_mac(device.device_info.mac_address),
                 exc_info=True,
             )
 
