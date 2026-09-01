@@ -5,6 +5,28 @@ Changelog
 Unreleased
 ==========
 
+Fixed
+-----
+- **A null ``errorCode`` no longer makes ``/device/list`` unparseable.**
+  The cloud returns ``"error": {"errorCode": null}`` on some devices.
+  :class:`~nwp500.models.DeviceErrorSummary` typed the field
+  ``ErrorCode | int``, so validation of the whole listing failed and every
+  caller - including the Home Assistant integration, which could no longer
+  set up - lost the device entirely. ``error_code`` is now
+  ``ErrorCode | int | None`` and defaults to ``None``: a null means the
+  cloud reported no code, which is not the same claim as ``NO_ERROR``.
+  Callers that treated the field as always-present should handle ``None``.
+
+Security
+--------
+- **MAC address no longer logged in the clear when a reservations
+  unsubscribe fails.** ``fetch_reservations`` logged
+  ``device_info.mac_address`` unredacted in its cleanup warning, while the
+  identical warning in ``update_reservations_confirmed`` a few lines below
+  passed it through ``redact_mac``. CodeQL flagged it as
+  ``py/clear-text-logging-sensitive-data`` (high). Both call sites now
+  redact.
+
 Version 9.3.1 (2026-08-29)
 ==========================
 

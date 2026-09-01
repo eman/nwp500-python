@@ -196,12 +196,10 @@ paths:
                               type: integer
                               example: 2
                             modelTypeCode:
-                              type: integer
-                              nullable: true
+                              type: [integer, "null"]
                               example: null
                             installerId:
-                              type: string
-                              nullable: true
+                              type: [string, "null"]
                               example: null
                         location:
                           type: object
@@ -220,22 +218,19 @@ paths:
                           description: Last recorded device fault.
                           properties:
                             errorCode:
-                              type: integer
+                              type: [integer, "null"]
                               example: 0
                             errorOccuredTime:
-                              type: string
-                              nullable: true
+                              type: [string, "null"]
                               example: "2025-12-07T11:58:02"
                         descaling:
                           type: object
                           properties:
                             descalingStartTime:
-                              type: string
-                              nullable: true
+                              type: [string, "null"]
                               example: null
                             descalingEndTime:
-                              type: string
-                              nullable: true
+                              type: [string, "null"]
                               example: null
   /device/info:
     post:
@@ -311,23 +306,18 @@ paths:
                             type: number
                             example: -118.243683
                           altitude:
-                            type: object
-                            nullable: true
+                            type: [object, "null"]
                       installer:
                         type: object
                         properties:
                           installerId:
-                            type: object
-                            nullable: true
+                            type: [object, "null"]
                           installerFirstName:
-                            type: object
-                            nullable: true
+                            type: [object, "null"]
                           installerLastName:
-                            type: object
-                            nullable: true
+                            type: [object, "null"]
                           installerPhoneNumber:
-                            type: object
-                            nullable: true
+                            type: [object, "null"]
                       alarmInfo:
                         type: object
                         properties:
@@ -341,11 +331,9 @@ paths:
                         type: object
                         properties:
                           descalingStartTime:
-                            type: object
-                            nullable: true
+                            type: [object, "null"]
                           descalingEndTime:
-                            type: object
-                            nullable: true
+                            type: [object, "null"]
   /device/firmware/info:
     post:
       summary: Firmware Info
@@ -398,8 +386,7 @@ paths:
                               type: integer
                               example: 52
                             deviceGroup:
-                              type: object
-                              nullable: true
+                              type: [object, "null"]
                             curSwCode:
                               type: integer
                               example: 33556241
@@ -407,8 +394,7 @@ paths:
                               type: integer
                               example: 167837696
                             downloadedVersion:
-                              type: integer
-                              nullable: true
+                              type: [integer, "null"]
                               example: 0
   /device/tou:
     get:

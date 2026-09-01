@@ -45,17 +45,20 @@ class DeviceErrorSummary(NavienBaseModel):
     was heard from.
     """
 
-    #: ``NO_ERROR`` when the device has no recorded fault. Typed to accept a
-    #: bare int as well, following ``device_type``, so a code the enum does
-    #: not know cannot make a whole ``/device/list`` response unparseable.
+    #: ``NO_ERROR`` when the device has no recorded fault, and ``None`` when
+    #: the cloud reports no code at all - it sends ``"errorCode": null`` on
+    #: some devices, which is not the same claim as "no error". Typed to
+    #: accept a bare int as well, following ``device_type``, so neither a
+    #: null nor a code the enum does not know can make a whole
+    #: ``/device/list`` response unparseable.
     #:
     #: ``union_mode`` matters here: pydantic's default smart union matches an
     #: incoming int against the ``int`` branch exactly and never reaches the
     #: enum, so every code - known or not - would stay a plain int. Trying the
     #: branches left to right instead means a known code becomes an
     #: ``ErrorCode`` member and only an unknown one falls through to ``int``.
-    error_code: ErrorCode | int = Field(
-        default=ErrorCode.NO_ERROR, union_mode="left_to_right"
+    error_code: ErrorCode | int | None = Field(
+        default=None, union_mode="left_to_right"
     )
     #: Spelled "Occured" by the API; the Python name is spelled correctly.
     error_occurred_time: str | None = Field(
