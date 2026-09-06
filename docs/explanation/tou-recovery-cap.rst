@@ -31,7 +31,8 @@ The short version
      - ``tank_lower_temperature`` finishes 1.9 degC (3.42 degF) below
        ``hp_lower_off_temp_setting``
    * - Precondition
-     - ``tou_status`` True **and** ``tou_override_status`` False
+     - An expensive TOU period in force, un-overridden. ``tou_status``
+       alone is **not** the test - see below.
    * - Frequency
      - 59 of 333 recoveries (18 %) over 260 days
 
@@ -64,7 +65,7 @@ offset in the control logic rather than a proportional effect or a
 seasonal one. The long tail beyond 8 degF is ordinary interruption -
 a draw starting mid-recovery, a mode change - and is unrelated.
 
-``tou_status`` separates the two populations completely:
+``tou_status`` looks like a clean separator, and is not one:
 
 .. list-table::
    :header-rows: 1
@@ -90,6 +91,38 @@ a draw starting mid-recovery, a mode change - and is unrelated.
 All 59 ran in ``HEAT_PUMP`` mode throughout, so this is not
 ``ENERGY_SAVER`` or ``VACATION`` behaviour.
 
+But read that table carefully: 98 cycles reached the setpoint with
+``tou_status`` True. **The flag only reports that TOU scheduling is
+enabled.** It says nothing about whether the recovery ran inside an
+expensive period, and the cap bites only when it did - outside one, an
+enabled schedule does nothing at all.
+
+The device marks a period itself. While inside one it applies non-zero
+``*_diff_temp_setting`` offsets and reverts them at the end; on the unit
+measured this toggles at 21:00 and 04:00 UTC daily. Using that as the
+in-period test, among ``tou_status`` True cycles:
+
+.. list-table::
+   :header-rows: 1
+   :widths: 34 22 22 22
+
+   * - At cycle end
+     - Capped
+     - Reached
+     - Other
+   * - Inside a period
+     - **42 (62 %)**
+     - 12
+     - 14
+   * - Outside a period
+     - 16 (12 %)
+     - 86
+     - 34
+
+Test it at the moment the cycle *ended*, not when it began: a recovery
+that starts off-peak and runs into a period is still capped, and testing
+the start catches 17 of 59 against 43 testing the end.
+
 Two plausible explanations were tested and **refuted**:
 
 - *The upper zone satisfied its own cut-out first.* No -
@@ -103,12 +136,13 @@ Two plausible explanations were tested and **refuted**:
 What is not yet established
 ===========================
 
-``tou_status`` being True is **necessary but not sufficient**. 98 cycles
-that did reach the setpoint also had ``tou_status`` True, so a further
-condition decides whether the cap binds on a given recovery. The most
-likely candidate is whether the TOU period's own energy budget was
-constraining at that moment, but this has not been confirmed against the
-schedule the device was holding.
+Being inside a period is a strong predictor but not a deterministic one:
+12 cycles reached the setpoint from inside one, and 16 were capped from
+outside. Some of that is the marker's own resolution - it is sampled at
+the cycle end, and a period boundary crossed mid-recovery is not captured
+- but it has not been reconciled against the schedule the device was
+actually holding, which ``configure_tou_schedule_confirmed`` can read
+back.
 
 The 90 % figure has been observed on one unit under one TOU schedule. It
 is not known whether the ceiling is fixed in firmware, derived from the
