@@ -201,7 +201,19 @@ class DeviceStatus(NavienBaseModel):
     tou_status: TouStatus = Field(
         description=(
             "Time of Use (TOU) scheduling enabled. "
-            "True = TOU is active/enabled, False = TOU is disabled"
+            "True = TOU is active/enabled, False = TOU is disabled. "
+            "This reports only that scheduling is enabled - NOT that an "
+            "expensive period is currently in force, which is what "
+            "actually changes behaviour. Inside a period the device caps "
+            "a heat-pump recovery at about 90% dhw_charge_per, finishing "
+            "~1.9 degC below hp_lower_off_temp_setting rather than "
+            "reaching it, so code that waits for the setpoint will wait "
+            "forever; outside one an enabled schedule does nothing. The "
+            "device marks a period by applying non-zero "
+            "*_diff_temp_setting offsets. See the 'TOU Recovery Cap' "
+            "explanation page. This field emits sub-second 'unknown' "
+            "blips on reconnect; a low change count means the state was "
+            "held, not that data was lost."
         )
     )
     dr_override_status: int = Field(

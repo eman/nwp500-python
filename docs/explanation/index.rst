@@ -10,4 +10,5 @@ Understanding-oriented deep dives into the library's design and advanced feature
    advanced-features
    architecture
    tank-energy
+   tou-recovery-cap
    unknown-values
