@@ -6,6 +6,7 @@ Wire samples come from live captures against an NWP500
 
 import asyncio
 import concurrent.futures
+import importlib.util
 import json
 from typing import Any
 from unittest.mock import MagicMock
@@ -473,6 +474,72 @@ class TestSubscriptionLifecycle:
         assert manager.subscriptions == {}
 
     @pytest.mark.asyncio
+    async def test_replies_for_another_device_are_ignored(self):
+        """Client-keyed reply topics are shared by every device a client
+        queries; each typed callback must only see its own device."""
+        manager = _manager()
+        first = _device("aaaaaaaaaaaa")
+        second = _device("bbbbbbbbbbbb")
+        got_first: list[Any] = []
+        got_second: list[Any] = []
+
+        await manager.subscribe_energy_usage_monthly(first, got_first.append)
+        await manager.subscribe_energy_usage_monthly(second, got_second.append)
+
+        topic = "cmd/52/test-client/res/energy-usage-monthly-query/rd"
+        await _deliver(
+            manager,
+            topic,
+            {
+                "response": {
+                    **MONTHLY_RESPONSE,
+                    "macAddress": "BB:BB:BB:BB:BB:BB",
+                }
+            },
+        )
+        assert got_first == []
+        assert len(got_second) == 1
+
+        # A reply that names no device still reaches everyone.
+        anonymous = {
+            k: v for k, v in MONTHLY_RESPONSE.items() if k != "macAddress"
+        }
+        await _deliver(manager, topic, {"response": anonymous})
+        assert len(got_first) == 1
+        assert len(got_second) == 2
+
+        # Unsubscribing one device's callback leaves the other in place.
+        await manager.unsubscribe_energy_usage_monthly(first, got_first.append)
+        assert topic in manager.subscriptions
+        await _deliver(manager, topic, {"response": anonymous})
+        assert len(got_first) == 1
+        assert len(got_second) == 3
+
+    @pytest.mark.asyncio
+    async def test_firmware_commit_reply_subscription(self):
+        manager = _manager()
+        device = _device()
+        received: list[Any] = []
+
+        await manager.subscribe_firmware_commit_response(
+            device, received.append
+        )
+
+        topic = "cmd/52/25004/0/test-client/res/commit-ota"
+        assert topic in manager.subscriptions
+        await _deliver(
+            manager,
+            topic,
+            {"response": {"macAddress": "04786332fca0", "commitOta": {}}},
+        )
+        assert received == [{"macAddress": "04786332fca0", "commitOta": {}}]
+
+        await manager.unsubscribe_firmware_commit_response(
+            device, received.append
+        )
+        assert topic not in manager.subscriptions
+
+    @pytest.mark.asyncio
     async def test_typed_response_subscriptions_record_the_device(self):
         """Regression: only wildcard subscriptions recorded the device, so a
         client using only energy or diagnostics subscriptions sent no
@@ -485,6 +552,13 @@ class TestSubscriptionLifecycle:
         assert manager.subscribed_devices == [device]
 
 
+requires_cli = pytest.mark.skipif(
+    importlib.util.find_spec("click") is None,
+    reason="CLI extras (click, rich) not installed",
+)
+
+
+@requires_cli
 class TestYearlyEnergyReport:
     def test_each_year_totals_its_own_months(self):
         """Regression: every year's summary showed the device's lifetime

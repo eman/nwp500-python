@@ -128,7 +128,12 @@ Request suffixes
 The reservation read and the recirculation read also produce a second
 reply on the suffix without ``/rd`` (``res/rsv``, ``res/recirc-rsv``)
 carrying the schedule as a packed hex string instead of a JSON list. The
-library accepts both.
+typed subscriptions listen on the ``/rd`` JSON topics; the schedule models
+also parse the hex form for anyone subscribing to the other topic.
+
+Every reply seen so far carries the device's ``macAddress``. Client-keyed
+reply topics are shared by every device a client queries, so the typed
+subscriptions ignore replies whose ``macAddress`` names another device.
 
 Message Structure
 =================

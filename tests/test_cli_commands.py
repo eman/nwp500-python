@@ -449,6 +449,8 @@ class TestEnergyCommandUsageErrors:
             (["--years", "abc"], "is not a year"),
             (["--years", ""], "is not a year"),
             (["--years", "0"], "not in the range"),
+            (["--year", "1999", "--month", "1"], "not in the range"),
+            (["--year", "2100", "--months", "1,2"], "not in the range"),
             (["--years", "2025,99999"], "not in the range"),
         ],
     )
@@ -686,6 +688,18 @@ class TestParseTimeValidation:
                 "hour=99",
             ),
             (["recirc-schedule", "set", "not json"], "not valid JSON"),
+            (
+                [
+                    "recirc-schedule",
+                    "set",
+                    '[{"week": 124, "hour": 6, "min": 0, "param": 255}]',
+                ],
+                "param must be -1",
+            ),
+            (
+                ["recirc-schedule", "set", '[{"week": 124, "bogus": 1}]'],
+                "expected enable, week, hour, min, mode, param",
+            ),
             (["recirc-schedule", "set", '{"week": 124}'], "JSON array"),
             (
                 ["recirc-schedule", "set", '[{"week": 124, "hour": 6}]'],

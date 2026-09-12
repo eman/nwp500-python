@@ -47,6 +47,9 @@ Added
   sends whenever it leaves a device. No reply to it has been observed.
 - ``MqttConnectionConfig.send_session_end_on_disconnect`` (default
   ``True``) controls whether ``disconnect()`` sends it.
+- ``subscribe_firmware_commit_response()`` receives the reply to
+  ``commit_firmware_update()``, which is requested on the app-form
+  ``res/commit-ota`` topic that no other subscription covers.
 - **Controls with app builder cases that had no method:**
   ``set_vacation_duration(days)`` (``goout-day``; the app has a builder
   case but no screen that calls it; verified live to change the day count
@@ -88,10 +91,13 @@ Changed
   only the rows shown, and the lifetime total is printed once under its
   own heading. (The response's ``total`` is lifetime whatever is
   requested; checked live.)
-- ``set_air_filter_life()`` rejects non-integer hours, and the energy
-  queries reject years outside 2000-2099 (``--years`` also drops
-  duplicates). ``filter-life`` and ``--years`` reject bad input before
-  connecting.
+- **Parameter validation.** ``set_air_filter_life()``,
+  ``set_vacation_duration()`` and the daily, monthly and hourly energy
+  queries reject non-integers (including ``True`` and floats) and
+  out-of-range values; years must be 2000-2099 and ``--years`` drops
+  duplicates. ``filter-life``, ``--year`` and ``--years`` reject bad
+  input before connecting. ``request_energy_usage()`` now rejects an
+  empty month list.
 
 Fixed
 -----
@@ -108,6 +114,11 @@ Fixed
   registered for more than one device-wildcard subscription (status,
   feature, firmware info), unsubscribing one removed whichever handler
   came first. Handlers are now matched on subscription kind as well.
+- **Query replies could reach another device's callback.** Client-keyed
+  reply topics are shared by every device a client queries, so with two
+  devices subscribed a reservation, energy, TOU, diagnostics or
+  recirculation reply reached both callbacks. Typed subscriptions now
+  ignore replies whose ``macAddress`` names a different device.
 - Recirculation read-backs in hex carry the unused ``param`` as ``0xFF``
   and in JSON as ``-1``; the model normalizes to ``-1`` so the two compare
   equal.

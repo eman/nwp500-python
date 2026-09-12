@@ -190,6 +190,27 @@ class DeviceSubscriptionsMixin:
             device, callback
         )
 
+    async def subscribe_firmware_commit_response(
+        self,
+        device: Device,
+        callback: Callable[[dict[str, Any]], None],
+    ) -> int:
+        """Subscribe to firmware commit replies (raw ``response`` object)."""
+        return await self._delegate_subscription(
+            "subscribe_firmware_commit_response", device, callback
+        )
+
+    async def unsubscribe_firmware_commit_response(
+        self,
+        device: Device,
+        callback: Callable[[dict[str, Any]], None],
+    ) -> None:
+        """Unsubscribe a specific firmware commit reply callback."""
+        if not self._connected or not self._subscription_manager:
+            return
+        manager = self._subscription_manager
+        await manager.unsubscribe_firmware_commit_response(device, callback)
+
     async def subscribe_firmware_download_info(
         self,
         device: Device,

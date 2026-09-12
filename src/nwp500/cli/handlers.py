@@ -1037,7 +1037,7 @@ def parse_recirculation_schedule_json(
         if unknown:
             raise ValueError(
                 f"entry {index} has unknown keys {', '.join(unknown)}; "
-                "expected enable, week, hour, min, mode"
+                "expected enable, week, hour, min, mode, param"
             )
         for key in ("week", "hour", "min"):
             if key not in entry:
@@ -1045,6 +1045,9 @@ def parse_recirculation_schedule_json(
         for key, value in entry.items():
             if not isinstance(value, int) or isinstance(value, bool):
                 raise ValueError(f"entry {index}: {key} must be an integer")
+        # Checked before model_validate, which maps a read-back's 255 to -1.
+        if entry.get("param", -1) != -1:
+            raise ValueError(f"entry {index}: param must be -1 if given")
         parsed.append(RecirculationScheduleEntry.model_validate(entry))
     schedule = RecirculationSchedule(
         reservationUse=2 if enabled else 1, reservation=parsed

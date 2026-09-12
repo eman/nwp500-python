@@ -270,7 +270,8 @@ class RecirculationSchedule(NavienBaseModel):
     with 16777231 on ``st/recirc-rsv/rd``. Same envelope as
     :class:`ReservationSchedule`: ``reservationUse`` (2=on, 1=off) plus a
     ``reservation`` list. Read-backs arrive both as a JSON list and, on the
-    legacy ``res/recirc-rsv`` topic, as a hex string; both are accepted.
+    legacy ``res/recirc-rsv`` topic, as a hex string; the model parses
+    both, though the typed subscription listens on the ``/rd`` topic only.
     """
 
     reservation_use: int = Field(default=0, alias="reservationUse")

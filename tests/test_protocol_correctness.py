@@ -282,6 +282,40 @@ class TestQueryPayloads:
         assert request["day"] == [3]
 
     @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        ("month", "days"),
+        [(9.5, [1]), (True, [1]), (9, [1.5]), (9, [True])],
+    )
+    async def test_hourly_energy_query_rejects_non_integers(
+        self, mock_device, month, days
+    ):
+        controller, publish = _make_controller()
+        with pytest.raises(ParameterValidationError):
+            await controller.request_energy_usage_hourly(
+                mock_device, 2026, month, days
+            )
+        publish.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        ("year", "months", "error"),
+        [
+            (1999, [1], RangeValidationError),
+            (2026, [13], RangeValidationError),
+            (2026, [], ParameterValidationError),
+            (2026, [True], ParameterValidationError),
+            (2026.0, [1], ParameterValidationError),
+        ],
+    )
+    async def test_daily_energy_query_validates(
+        self, mock_device, year, months, error
+    ):
+        controller, publish = _make_controller()
+        with pytest.raises(error):
+            await controller.request_energy_usage(mock_device, year, months)
+        publish.assert_not_awaited()
+
+    @pytest.mark.asyncio
     async def test_hourly_energy_query_validates(self, mock_device):
         controller, publish = _make_controller()
         with pytest.raises(RangeValidationError):
@@ -363,6 +397,16 @@ class TestControlPayloads:
         assert request["mode"] == "goout-day"
         assert request["param"] == [7]
         assert request["paramStr"] == ""
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("days", [True, 7.0])
+    async def test_vacation_duration_rejects_non_integers(
+        self, mock_device, days
+    ):
+        controller, publish = _make_controller()
+        with pytest.raises(ParameterValidationError):
+            await controller.set_vacation_duration(mock_device, days)
+        publish.assert_not_awaited()
 
     @pytest.mark.asyncio
     async def test_vacation_duration_range(self, mock_device):

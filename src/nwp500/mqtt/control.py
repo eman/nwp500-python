@@ -714,6 +714,15 @@ class MqttDeviceController:
                 months=[7, 8, 9]
             )
         """
+        self._validate_int("year", year)
+        self._validate_range("year", year, MIN_ENERGY_YEAR, MAX_ENERGY_YEAR)
+        if not months:
+            raise ParameterValidationError(
+                "At least one month is required", parameter="months"
+            )
+        for month in months:
+            self._validate_int("month", month)
+            self._validate_range("month", month, 1, 12)
         return await self._send_command(
             device=device,
             command_code=CommandCode.ENERGY_USAGE_QUERY,
@@ -785,12 +794,14 @@ class MqttDeviceController:
         """
         self._validate_int("year", year)
         self._validate_range("year", year, MIN_ENERGY_YEAR, MAX_ENERGY_YEAR)
+        self._validate_int("month", month)
         self._validate_range("month", month, 1, 12)
         if not days:
             raise ParameterValidationError(
                 "At least one day is required", parameter="days"
             )
         for day in days:
+            self._validate_int("day", day)
             self._validate_range("day", day, 1, 31)
         return await self._send_command(
             device=device,
@@ -1023,6 +1034,7 @@ class MqttDeviceController:
         Returns:
             Publish packet ID
         """
+        self._validate_int("days", days)
         self._validate_range("days", days, 1, 30)
         return await self._mode_command(
             device, CommandCode.GOOUT_DAY, "goout-day", [days]

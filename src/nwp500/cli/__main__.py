@@ -871,7 +871,12 @@ class _EnergySelection(click.Command):
 
 
 @cli.command(cls=_EnergySelection)  # type: ignore[attr-defined]
-@click.option("--year", type=int, required=False, help="Year to query")
+@click.option(
+    "--year",
+    type=click.IntRange(MIN_ENERGY_YEAR, MAX_ENERGY_YEAR),
+    required=False,
+    help="Year to query",
+)
 @click.option(
     "--months",
     required=False,

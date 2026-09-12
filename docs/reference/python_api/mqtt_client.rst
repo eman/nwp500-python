@@ -366,6 +366,13 @@ subscribe_device()
 Control Methods
 ---------------
 
+.. note::
+
+   Query replies arrive on a topic shared by every device the client
+   queries. Typed ``subscribe_*`` callbacks only receive replies whose
+   ``macAddress`` matches the device they were registered for; a reply
+   that names no device is delivered to all of them.
+
 Capability Checking
 ^^^^^^^^^^^^^^^^^^^
 
@@ -735,6 +742,18 @@ subscribe_firmware_download_info()
    :param callback: Called with :class:`~nwp500.models.FirmwareDownloadInfo`
    :type callback: Callable[[FirmwareDownloadInfo], None]
 
+subscribe_firmware_commit_response()
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+.. py:method:: subscribe_firmware_commit_response(device, callback)
+
+   Subscribe to the reply to :meth:`commit_firmware_update`. Its shape has
+   not been observed, so the callback receives the raw ``response``
+   object.
+
+   :param callback: Called with the reply's ``response`` dict
+   :type callback: Callable[[dict], None]
+
 end_session()
 ^^^^^^^^^^^^^
 
@@ -751,9 +770,10 @@ commit_firmware_update()
 .. py:method:: commit_firmware_update(device, payload)
 
    Commit a previously downloaded firmware update. Publishes on
-   ``ctrl/commit-ota`` with the reply requested on ``res/commit-ota``, as
-   the NaviLink app's firmware screen does. Not exercised against a
-   device.
+   ``ctrl/commit-ota`` with the reply requested on the app-form
+   ``res/commit-ota`` topic, as the NaviLink app's firmware screen does.
+   Subscribe with :meth:`subscribe_firmware_commit_response` first to
+   receive that reply. Not exercised against a device.
 
    :param payload: OTA commit payload identifying the component and version
    :type payload: OtaCommitPayload

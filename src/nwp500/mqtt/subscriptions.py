@@ -55,6 +55,29 @@ _KIND_FEATURE = "device_feature"
 _KIND_FIRMWARE = "firmware_download_info"
 
 
+def _response_kind(topic: str, mac: str) -> str:
+    """Kind tag for a typed response handler: one per topic and device."""
+    return f"{topic}#{_normalize_mac(mac)}"
+
+
+def _normalize_mac(mac: str) -> str:
+    return "".join(ch for ch in mac.lower() if ch.isalnum())
+
+
+def _same_device(data: Any, message: dict[str, Any], mac: str) -> bool:
+    """Whether a response is for ``mac``, or carries no device to check."""
+    reported = None
+    if isinstance(data, dict):
+        reported = cast(dict[str, Any], data).get("macAddress")
+    if reported is None:
+        response = message.get("response")
+        if isinstance(response, dict):
+            reported = cast(dict[str, Any], response).get("macAddress")
+    if not isinstance(reported, str) or not reported:
+        return True
+    return _normalize_mac(reported) == _normalize_mac(mac)
+
+
 class MqttSubscriptionManager:
     """
     Manages MQTT subscriptions, topic matching, and message routing.
@@ -565,6 +588,7 @@ class MqttSubscriptionManager:
         topic_suffix: str | None = None,
         parse: Callable[[dict[str, Any]], Any] | None = None,
         kind: str | None = None,
+        only_mac: str | None = None,
     ) -> Callable[[str, dict[str, Any]], None]:
         """Generic factory for MQTT message handlers.
 
@@ -582,6 +606,11 @@ class MqttSubscriptionManager:
             kind: Subscription kind tag. Unsubscribe matches on it as
                 well as on the callback, so one callback registered for
                 two kinds on the same topic is removed from the right one.
+            only_mac: If set, responses whose ``macAddress`` names a
+                different device are ignored. Client-keyed reply topics are
+                shared by every device a client queries, so without this a
+                reply for one device would reach callbacks registered for
+                another. Replies without a ``macAddress`` are delivered.
         """
 
         def handler(topic: str, message: dict[str, Any]) -> None:
@@ -590,6 +619,8 @@ class MqttSubscriptionManager:
             try:
                 data = get_response_data(message, key)
                 if not data:
+                    return
+                if only_mac and not _same_device(data, message, only_mac):
                     return
 
                 parsed = parse(data) if parse else model.model_validate(data)
@@ -667,8 +698,15 @@ class MqttSubscriptionManager:
         Also records ``device`` so ``disconnect()`` sends it ``st/end``.
         """
         topic = self._query_response_topic(device, suffix, app_form)
-        handler = self._make_handler(model, callback, parse=parse, kind=topic)
-        self._devices[device.device_info.mac_address] = device
+        mac = device.device_info.mac_address
+        handler = self._make_handler(
+            model,
+            callback,
+            parse=parse,
+            kind=_response_kind(topic, mac),
+            only_mac=mac,
+        )
+        self._devices[mac] = device
         return await self.subscribe(topic, handler)
 
     async def _unsubscribe_response(
@@ -681,7 +719,11 @@ class MqttSubscriptionManager:
     ) -> None:
         """Remove a typed callback registered by :meth:`_subscribe_response`."""
         topic = self._query_response_topic(device, suffix, app_form)
-        await self._unsubscribe_callback(topic, callback, topic)
+        await self._unsubscribe_callback(
+            topic,
+            callback,
+            _response_kind(topic, device.device_info.mac_address),
+        )
 
     def _query_response_topic(
         self, device: Device, suffix: str, app_form: bool = False
@@ -851,6 +893,38 @@ class MqttSubscriptionManager:
         """Unsubscribe a specific firmware download info callback."""
         await self._unsubscribe_callback(
             self._device_wildcard(device), callback, _KIND_FIRMWARE
+        )
+
+    async def subscribe_firmware_commit_response(
+        self,
+        device: Device,
+        callback: Callable[[dict[str, Any]], None],
+    ) -> int:
+        """Subscribe to firmware commit replies (``res/commit-ota``).
+
+        Pairs with
+        :meth:`~nwp500.NavienMqttClient.commit_firmware_update`, which asks
+        for the reply on the app-form topic as the NaviLink app does. The
+        reply's shape has not been observed, so the callback receives the
+        raw ``response`` object.
+        """
+        return await self._subscribe_response(
+            device,
+            "commit-ota",
+            dict,
+            callback,
+            app_form=True,
+            parse=lambda data: data,
+        )
+
+    async def unsubscribe_firmware_commit_response(
+        self,
+        device: Device,
+        callback: Callable[[dict[str, Any]], None],
+    ) -> None:
+        """Unsubscribe a specific firmware commit reply callback."""
+        await self._unsubscribe_response(
+            device, "commit-ota", callback, app_form=True
         )
 
     async def subscribe_reservation_response(

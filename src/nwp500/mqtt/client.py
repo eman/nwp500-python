@@ -914,7 +914,6 @@ class NavienMqttClient(
             if not (self._connected and manager.is_connected):
                 _logger.debug("Connection lost; skipping remaining st/end")
                 return
-            mac = device.device_info.mac_address
             topic, payload = self._device_controller.build_session_end(device)
             try:
                 await asyncio.wait_for(
@@ -922,9 +921,9 @@ class NavienMqttClient(
                     timeout=_SESSION_END_TIMEOUT,
                 )
             except (MqttError, AwsCrtError, RuntimeError, TimeoutError) as e:
-                _logger.debug(
-                    f"st/end for {redact_mac(mac)} not delivered: {e}"
-                )
+                # Log only the error type: exception text can carry the
+                # topic, which contains the device MAC.
+                _logger.debug("st/end not delivered: %s", type(e).__name__)
 
     async def subscribe(
         self,
