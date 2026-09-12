@@ -872,6 +872,11 @@ class DailyEnergyReport:
     lifetime: EnergyTotals | None = None
 
 
+def build_lifetime_totals(energy_response: Any) -> EnergyTotals:
+    """The device's lifetime total from any energy response."""
+    return _build_totals(energy_response.total)
+
+
 def _build_totals(total: Any) -> EnergyTotals:
     """Build neutral totals from an EnergyUsageTotal model."""
     return EnergyTotals(

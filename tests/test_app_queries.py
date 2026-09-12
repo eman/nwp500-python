@@ -267,6 +267,17 @@ class TestRecirculationScheduleModel:
         with pytest.raises(ValidationError):
             RecirculationScheduleEntry.model_validate(entry)
 
+    @pytest.mark.parametrize("param", [255.0, True])
+    def test_param_normalization_does_not_bypass_strictness(self, param):
+        """Regression: the before-validator mapped 255.0 to -1, so a float
+        param passed the strict check."""
+        from pydantic import ValidationError
+
+        with pytest.raises(ValidationError):
+            RecirculationScheduleEntry.model_validate(
+                {"week": 124, "hour": 6, "min": 0, "param": param}
+            )
+
     def test_reservation_use_is_strict(self):
         from pydantic import ValidationError
 
@@ -647,6 +658,28 @@ class TestYearlyEnergyReport:
         output_formatters.print_yearly_energy_usage(res, [2025, 2026])
 
         assert calls == ["year:2025", "year:2026", "lifetime"]
+
+    def test_lifetime_printed_when_no_requested_year_has_data(
+        self, monkeypatch
+    ):
+        """Regression: with every requested year missing from the reply, the
+        lifetime total was never printed."""
+        from nwp500.cli import output_formatters
+
+        calls: list[str] = []
+        formatter = MagicMock()
+        formatter.print_info.side_effect = lambda message: calls.append("info")
+        formatter.print_lifetime_energy.side_effect = lambda t: calls.append(
+            f"lifetime:{t.total_usage_wh}"
+        )
+        monkeypatch.setattr(
+            output_formatters, "get_formatter", lambda: formatter
+        )
+
+        res = EnergyUsageResponse.model_validate(MONTHLY_RESPONSE)
+        output_formatters.print_yearly_energy_usage(res, [2020])
+
+        assert calls == ["info", f"lifetime:{1266585 + 146337}"]
 
 
 class _FakeSdkConnection:

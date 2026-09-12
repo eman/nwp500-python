@@ -23,6 +23,7 @@ from .presentation import (
     build_diagnostics_rows,
     build_energy_report,
     build_firmware_download_rows,
+    build_lifetime_totals,
     build_recirculation_schedule_rows,
     build_yearly_energy_report,
 )
@@ -99,16 +100,15 @@ def print_yearly_energy_usage(energy_response: Any, years: list[int]) -> None:
         years: Years to show, in order
     """
     formatter = get_formatter()
-    lifetime = None
     for year in years:
         report = build_yearly_energy_report(energy_response, year)
         if report is None:
             formatter.print_info(f"No monthly energy data available for {year}")
             continue
         formatter.print_yearly_energy_table(report)
-        lifetime = report.lifetime
-    if lifetime is not None:
-        formatter.print_lifetime_energy(lifetime)
+    # Printed even when no requested year had data: every response carries
+    # the lifetime total.
+    formatter.print_lifetime_energy(build_lifetime_totals(energy_response))
 
 
 def print_diagnostics(diagnostics: Any) -> None:

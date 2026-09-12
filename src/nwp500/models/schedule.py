@@ -224,8 +224,14 @@ class RecirculationScheduleEntry(NavienBaseModel):
     @field_validator("param", mode="before")
     @classmethod
     def _unsigned_byte_param(cls, value: Any) -> Any:
-        """Map the hex read-back's unsigned 0xFF to the app's ``-1``."""
-        return -1 if value == 255 else value
+        """Map the hex read-back's unsigned 0xFF to the app's ``-1``.
+
+        Only a real ``int`` is normalized; a float such as ``255.0`` (or a
+        bool) passes through unchanged so the strict check rejects it.
+        """
+        if type(value) is int and value == 255:
+            return -1
+        return value
 
     @computed_field  # type: ignore[prop-decorator]
     @property
