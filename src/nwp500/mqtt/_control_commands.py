@@ -140,10 +140,6 @@ class DeviceControlCommandsMixin:
         controller = self._device_controller
         return await controller.request_recirculation_schedule(device)
 
-    async def end_session(self, device: Device) -> int:
-        """Tell the device the client is done with it (``st/end``)."""
-        return await self._device_controller.end_session(device)
-
     async def signal_app_connection(self, device: Device) -> int:
         """Signal that the app has connected."""
         return await self._device_controller.signal_app_connection(device)

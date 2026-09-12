@@ -907,23 +907,52 @@ class NavienMqttClient(
         """
         if not self.config.send_session_end_on_disconnect:
             return
-        manager = self._connection_manager
-        if not self._subscription_manager or not manager:
+        if not self._subscription_manager:
             return
         for device in self._subscription_manager.subscribed_devices:
-            if not (self._connected and manager.is_connected):
+            if not self._session_end_possible():
                 _logger.debug("Connection lost; skipping remaining st/end")
                 return
-            topic, payload = self._device_controller.build_session_end(device)
             try:
                 await asyncio.wait_for(
-                    manager.publish(topic, payload),
+                    self._publish_session_end(device),
                     timeout=_SESSION_END_TIMEOUT,
                 )
             except (MqttError, AwsCrtError, RuntimeError, TimeoutError) as e:
                 # Log only the error type: exception text can carry the
                 # topic, which contains the device MAC.
                 _logger.debug("st/end not delivered: %s", type(e).__name__)
+
+    def _session_end_possible(self) -> bool:
+        manager = self._connection_manager
+        return bool(self._connected and manager and manager.is_connected)
+
+    async def _publish_session_end(self, device: Device) -> int:
+        """Publish ``st/end`` directly to the connection, never queued."""
+        manager = self._connection_manager
+        if not manager or not self._session_end_possible():
+            raise MqttNotConnectedError("Not connected to MQTT broker")
+        topic, payload = self._device_controller.build_session_end(device)
+        return await manager.publish(topic, payload)
+
+    async def end_session(self, device: Device) -> int:
+        """Tell the device the client is done with it (``st/end``).
+
+        The NaviLink app sends this whenever it leaves a device screen; no
+        reply to it has been observed. :meth:`disconnect` sends it
+        automatically for every subscribed device, so call this directly
+        only when you stop using one device while staying connected.
+
+        Unlike other commands it is never queued while disconnected: a
+        session end replayed after a reconnect would end the new session.
+
+        Returns:
+            Publish packet ID
+
+        Raises:
+            MqttNotConnectedError: If the client is not connected.
+        """
+        return await self._publish_session_end(device)
 
     async def subscribe(
         self,

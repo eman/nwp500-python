@@ -38,13 +38,19 @@ Added
   connecting (known keys only, integers in range, at most 20 entries).
   The read was verified live on a unit that reports recirculation
   scheduling but has no pump (empty, disabled schedule); the write and
-  its echo are unverified.
+  its echo are unverified. The CLI reports a write as updated only when
+  the echo matches what was written. ``RecirculationSchedule`` and
+  ``RecirculationScheduleEntry`` fields are strict integers, so ``True``
+  or ``6.0`` is rejected instead of coerced.
 - **Firmware download info.** ``request_firmware_download_info()`` /
   ``subscribe_firmware_download_info()`` and ``nwp-cli firmware info``
   return :class:`~nwp500.models.FirmwareDownloadInfo`. The device replies
   on its own topic rather than a client-keyed one. Verified live.
 - **Session end.** ``end_session()`` sends the ``st/end`` query the app
   sends whenever it leaves a device. No reply to it has been observed.
+  Unlike other commands it is never queued while disconnected (it raises
+  ``MqttNotConnectedError``), since a session end replayed after a
+  reconnect would end the new session.
 - ``MqttConnectionConfig.send_session_end_on_disconnect`` (default
   ``True``) controls whether ``disconnect()`` sends it.
 - ``subscribe_firmware_commit_response()`` receives the reply to

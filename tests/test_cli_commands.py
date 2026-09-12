@@ -1,6 +1,7 @@
 """Tests for CLI command handlers."""
 
 import logging
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -765,21 +766,109 @@ class TestNoAnswer:
 
     @pytest.mark.asyncio
     async def test_recirculation_write_without_echo(
-        self, mock_mqtt, mock_device, monkeypatch, capsys
+        self, mock_mqtt, mock_device, capsys
     ):
         from nwp500.cli import handlers
 
-        async def no_answer(*args, **kwargs):
-            raise TimeoutError
-
-        monkeypatch.setattr(handlers, "_wait_for_response", no_answer)
+        mock_mqtt.subscribe_recirculation_schedule_response = AsyncMock()
+        mock_mqtt.unsubscribe_recirculation_schedule_response = AsyncMock()
+        mock_mqtt.configure_recirculation_schedule = AsyncMock()
 
         await handlers.handle_set_recirculation_schedule_request(
             mock_mqtt,
             mock_device,
             '[{"week": 124, "hour": 6, "min": 0}]',
             enabled=True,
+            timeout=0.01,
         )
 
         out = capsys.readouterr().out
         assert "sent, but the device did not echo it" in out
+        mock_mqtt.unsubscribe_recirculation_schedule_response.assert_awaited_once()
+
+
+_RECIRC_MATCHING: dict[str, Any] = {
+    "reservationUse": 2,
+    "reservation": [
+        {
+            "enable": 2,
+            "week": 124,
+            "hour": 6,
+            "min": 0,
+            "mode": 2,
+            "param": -1,
+        }
+    ],
+}
+_RECIRC_STALE: dict[str, Any] = {"reservationUse": 1, "reservation": []}
+
+
+class TestRecirculationWriteConfirmation:
+    """A write is confirmed only by an echo matching what was written."""
+
+    @staticmethod
+    def _mqtt_replying(mock_mqtt, replies):
+        from nwp500.models import RecirculationSchedule
+
+        callbacks = []
+
+        async def subscribe(device, callback):
+            callbacks.append(callback)
+
+        async def configure(device, schedule):
+            for reply in replies:
+                callbacks[0](RecirculationSchedule.model_validate(reply))
+
+        mock_mqtt.subscribe_recirculation_schedule_response = AsyncMock(
+            side_effect=subscribe
+        )
+        mock_mqtt.unsubscribe_recirculation_schedule_response = AsyncMock()
+        mock_mqtt.configure_recirculation_schedule = AsyncMock(
+            side_effect=configure
+        )
+        return mock_mqtt
+
+    WRITTEN = '[{"week": 124, "hour": 6, "min": 0, "mode": 2}]'
+
+    @pytest.mark.asyncio
+    async def test_matching_echo_confirms(self, mock_mqtt, mock_device, capsys):
+        from nwp500.cli import handlers
+
+        mqtt = self._mqtt_replying(mock_mqtt, [_RECIRC_MATCHING])
+        await handlers.handle_set_recirculation_schedule_request(
+            mqtt, mock_device, self.WRITTEN, enabled=True, timeout=0.5
+        )
+
+        out = capsys.readouterr().out
+        assert "Recirculation schedule updated" in out
+        mqtt.unsubscribe_recirculation_schedule_response.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_stale_reply_then_match_confirms(
+        self, mock_mqtt, mock_device, capsys
+    ):
+        from nwp500.cli import handlers
+
+        mqtt = self._mqtt_replying(mock_mqtt, [_RECIRC_STALE, _RECIRC_MATCHING])
+        await handlers.handle_set_recirculation_schedule_request(
+            mqtt, mock_device, self.WRITTEN, enabled=True, timeout=0.5
+        )
+
+        assert "Recirculation schedule updated" in capsys.readouterr().out
+
+    @pytest.mark.asyncio
+    async def test_mismatched_reply_is_not_success(
+        self, mock_mqtt, mock_device, capsys
+    ):
+        """Regression: the first reply was printed as success even when it
+        was the device's previous schedule."""
+        from nwp500.cli import handlers
+
+        mqtt = self._mqtt_replying(mock_mqtt, [_RECIRC_STALE])
+        await handlers.handle_set_recirculation_schedule_request(
+            mqtt, mock_device, self.WRITTEN, enabled=True, timeout=0.01
+        )
+
+        out = capsys.readouterr().out
+        assert "updated" not in out
+        assert "does not match" in out

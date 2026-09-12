@@ -762,7 +762,11 @@ end_session()
    Send the session-end query (``st/end``). No reply to it has been
    observed. :meth:`disconnect` sends it automatically for every
    subscribed device; call it directly only when you stop using one
-   device while staying connected.
+   device while staying connected. Unlike other commands it is never
+   queued while disconnected, since a session end replayed after a
+   reconnect would end the new session.
+
+   :raises MqttNotConnectedError: If the client is not connected.
 
 commit_firmware_update()
 ^^^^^^^^^^^^^^^^^^^^^^^^

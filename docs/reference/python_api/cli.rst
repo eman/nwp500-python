@@ -553,8 +553,10 @@ confirmed on a unit with recirculation.
 
 The JSON is checked before connecting: at most 20 entries, only the keys
 above, integers in range. After a write the command waits for the device
-to echo the schedule; that echo is unverified, so if none arrives it
-reports the schedule as sent but unconfirmed and suggests
+to echo the schedule and reports success only if the echo matches what
+was written. If the device reports a different schedule, that schedule is
+shown as not confirmed. The echo itself is unverified, so if none arrives
+the command reports the schedule as sent but unconfirmed and suggests
 ``recirc-schedule get``.
 
 **Output:** The schedule as read back or echoed by the device.
@@ -610,8 +612,9 @@ one year, or a per-month breakdown of whole years.
 
 Exactly one of ``--months``, ``--month`` or ``--years`` must be given.
 
-**Output:** Lifetime totals followed by a per-period table showing heat
-pump versus electric heating.
+**Output:** For each requested period, a summary of that period's totals
+and a table showing heat pump versus electric heating, then the device's
+lifetime total once at the end.
 
 tou
 ^^^

@@ -205,12 +205,14 @@ class RecirculationScheduleEntry(NavienBaseModel):
     recirculation fitted.
     """
 
-    enable: int = 2
-    week: int = 0
-    hour: int = 0
-    min: int = 0
-    mode: int = 2
-    param: int = -1
+    # Strict: a bool or float must not be coerced into a protocol integer
+    # and slip past write validation.
+    enable: int = Field(default=2, strict=True)
+    week: int = Field(default=0, strict=True)
+    hour: int = Field(default=0, strict=True)
+    min: int = Field(default=0, strict=True)
+    mode: int = Field(default=2, strict=True)
+    param: int = Field(default=-1, strict=True)
 
     model_config = ConfigDict(
         alias_generator=None,
@@ -274,7 +276,7 @@ class RecirculationSchedule(NavienBaseModel):
     both, though the typed subscription listens on the ``/rd`` topic only.
     """
 
-    reservation_use: int = Field(default=0, alias="reservationUse")
+    reservation_use: int = Field(default=0, alias="reservationUse", strict=True)
     reservation: list[RecirculationScheduleEntry] = Field(default_factory=list)
 
     model_config = ConfigDict(

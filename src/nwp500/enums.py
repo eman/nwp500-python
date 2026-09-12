@@ -363,7 +363,9 @@ class CommandCode(IntEnum):
     COOLING_MODE = 33554460  # mode "cooling-mode", param [mode]
     WATER_FILTER_RESET = 33554461  # mode "water-filter-reset"
     PRE_FILTER_RESET = 33554462  # mode "pre-filter-reset"
-    COND_FAULT_RESET = 33554463  # mode "cond-fault-reset"; installer-level
+
+    # Condenser fault reset (reset_condenser_fault); installer-level in app
+    COND_FAULT_RESET = 33554463  # mode "cond-fault-reset"
 
     # Control Commands - Vacation/Away
     GOOUT_DAY = 33554466  # Set vacation mode duration (days)

@@ -24,6 +24,7 @@ from nwp500.models import (
     EnergyUsageResponse,
     FirmwareDownloadInfo,
     RecirculationSchedule,
+    RecirculationScheduleEntry,
 )
 from nwp500.mqtt import NavienMqttClient
 from nwp500.mqtt.subscriptions import MqttSubscriptionManager
@@ -249,6 +250,30 @@ class TestRecirculationScheduleModel:
         )
         assert from_hex.reservation[0].param == -1
         assert from_hex.canonical() == from_json.canonical()
+
+    @pytest.mark.parametrize(
+        "entry",
+        [
+            {"enable": True, "week": 124, "hour": 6, "min": 0},
+            {"week": 124, "hour": 6.0, "min": 0},
+            {"week": "124", "hour": 6, "min": 0},
+        ],
+    )
+    def test_entry_fields_are_strict(self, entry):
+        """Regression: Pydantic coerced True and 6.0 to ints, so they passed
+        write validation and were published."""
+        from pydantic import ValidationError
+
+        with pytest.raises(ValidationError):
+            RecirculationScheduleEntry.model_validate(entry)
+
+    def test_reservation_use_is_strict(self):
+        from pydantic import ValidationError
+
+        with pytest.raises(ValidationError):
+            RecirculationSchedule.model_validate(
+                {"reservationUse": True, "reservation": []}
+            )
 
     def test_canonical_is_order_independent(self):
         a = RecirculationSchedule.model_validate(
@@ -805,6 +830,31 @@ class TestSessionEndOnDisconnect:
         await client.disconnect()
 
         assert sdk.disconnect_calls == 1
+
+    @pytest.mark.asyncio
+    async def test_public_end_session_is_never_queued(self):
+        """Regression: end_session() went through publish(), which queues
+        while disconnected and would replay st/end after a reconnect."""
+        from nwp500.exceptions import MqttNotConnectedError
+
+        sdk = _FakeSdkConnection()
+        client = _connected_client(sdk, [])
+        client._connected = False
+
+        with pytest.raises(MqttNotConnectedError):
+            await client.end_session(_device())
+
+        assert client.queued_commands_count == 0
+        assert sdk.published == []
+
+    @pytest.mark.asyncio
+    async def test_public_end_session_publishes_when_connected(self):
+        sdk = _FakeSdkConnection()
+        client = _connected_client(sdk, [])
+
+        await client.end_session(_device())
+
+        assert sdk.published == ["cmd/52/navilink-04786332fca0/st/end"]
 
     @pytest.mark.asyncio
     async def test_no_subscription_manager(self):

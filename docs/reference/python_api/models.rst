@@ -524,7 +524,8 @@ wire fields match :class:`ReservationEntry`.
    * ``pump_on`` (bool)
 
    The ``mode``/``param`` semantics are inferred from the app and not
-   confirmed on a unit with recirculation fitted.
+   confirmed on a unit with recirculation fitted. All six fields are
+   strict integers: ``True`` or ``6.0`` is rejected rather than coerced.
 
 RecirculationSchedule
 ---------------------

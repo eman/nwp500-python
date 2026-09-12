@@ -1064,13 +1064,18 @@ async def handle_set_recirculation_schedule_request(
     device: Device,
     schedule_json: str,
     enabled: bool,
+    timeout: float = 10.0,
 ) -> None:
-    """Write the recirculation pump schedule and print the device's echo.
+    """Write the recirculation pump schedule and confirm it from the echo.
 
     See :func:`parse_recirculation_schedule_json` for the input format.
-    The write asks for an echo on ``recirc-rsv/rd``; that echo has not been
-    observed on a unit with recirculation, so a missing echo is reported as
-    "sent, not confirmed" rather than as a failure.
+    The write asks for the schedule back on ``recirc-rsv/rd``. Success is
+    reported only when a reply's canonical form matches what was written,
+    so a stale reply (from an earlier write or a concurrent read) or a
+    schedule the device stored differently is not mistaken for
+    confirmation. The echo has not been observed on a unit with
+    recirculation, so no reply at all is reported as sent but unconfirmed
+    rather than as a failure.
     """
     try:
         schedule = parse_recirculation_schedule_json(schedule_json, enabled)
@@ -1079,20 +1084,45 @@ async def handle_set_recirculation_schedule_request(
         _formatter.print_error(str(e), title="Invalid Schedule")
         return
 
+    expected = schedule.canonical()
+    confirmed: asyncio.Future[RecirculationSchedule] = (
+        asyncio.get_running_loop().create_future()
+    )
+    last_seen: list[RecirculationSchedule] = []
+
+    def on_schedule(reply: RecirculationSchedule) -> None:
+        last_seen.append(reply)
+        if not confirmed.done() and reply.canonical() == expected:
+            confirmed.set_result(reply)
+
     try:
-        echoed: Any = await _wait_for_response(
-            mqtt.subscribe_recirculation_schedule_response,
-            device,
-            lambda: mqtt.configure_recirculation_schedule(device, schedule),
-            action_name="recirculation schedule update",
+        await mqtt.subscribe_recirculation_schedule_response(
+            device, on_schedule
         )
-        _formatter.print_success("Recirculation schedule updated")
-        print_recirculation_schedule(echoed)
-    except TimeoutError:
-        _formatter.print_info(
-            "Recirculation schedule sent, but the device did not echo it "
-            "back. Run 'recirc-schedule get' to check what it stored."
-        )
+        try:
+            await mqtt.configure_recirculation_schedule(device, schedule)
+            stored = await asyncio.wait_for(confirmed, timeout=timeout)
+            _formatter.print_success("Recirculation schedule updated")
+            print_recirculation_schedule(stored)
+        except TimeoutError:
+            if last_seen:
+                _formatter.print_error(
+                    "The device replied with a schedule that does not match "
+                    "the one written. It may have rejected or changed it; "
+                    "the last schedule it reported is shown below.",
+                    title="Recirculation Schedule Not Confirmed",
+                )
+                print_recirculation_schedule(last_seen[-1])
+            else:
+                _formatter.print_info(
+                    "Recirculation schedule sent, but the device did not "
+                    "echo it back. Run 'recirc-schedule get' to check what "
+                    "it stored."
+                )
+        finally:
+            await mqtt.unsubscribe_recirculation_schedule_response(
+                device, on_schedule
+            )
     except (ValidationError, DeviceError, Nwp500Error) as e:
         _logger.error(f"Error updating recirculation schedule: {e}")
         _formatter.print_error(str(e), title="Recirculation Schedule")
