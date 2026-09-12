@@ -261,8 +261,8 @@ This document lists the fields found in the ``status`` object of device status m
    * - ``currentInletTemperature``
      - float
      - °F
-     - Current inlet temperature.
-     - ``raw / 10.0``
+     - Cold water inlet temperature. The NWP500 always reports 0 here and the NaviLink app never displays it for this model; see :doc:`/explanation/unknown-values`.
+     - HalfCelsiusToF
    * - ``currentStatenum``
      - integer
      - None
