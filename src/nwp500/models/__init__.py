@@ -21,6 +21,12 @@ from .device import (
     FirmwareInfo,
     Location,
 )
+from .diagnostics import (
+    DeviceDiagnostics,
+    DiagnosticsComponentCounters,
+    DiagnosticsDhwUsage,
+    DiagnosticsEventCounters,
+)
 from .energy import (
     EnergyUsageBase,
     EnergyUsageDay,
@@ -29,6 +35,7 @@ from .energy import (
     MonthlyEnergyData,
 )
 from .feature import CapabilityFlag, DeviceFeature, VolumeCodeField
+from .firmware import FirmwareDownloadEntry, FirmwareDownloadInfo
 from .mqtt_models import MqttCommand, MqttRequest
 from .schedule import (
     OtaCommitPayload,
@@ -36,8 +43,6 @@ from .schedule import (
     RecirculationScheduleEntry,
     ReservationEntry,
     ReservationSchedule,
-    WeeklyReservationEntry,
-    WeeklyReservationSchedule,
 )
 from .status import (
     DeviceBool,
@@ -81,11 +86,15 @@ __all__ = [
     "TOUReservationSchedule",
     "ReservationEntry",
     "ReservationSchedule",
-    "WeeklyReservationEntry",
-    "WeeklyReservationSchedule",
     "RecirculationScheduleEntry",
     "RecirculationSchedule",
     "OtaCommitPayload",
+    "DeviceDiagnostics",
+    "DiagnosticsComponentCounters",
+    "DiagnosticsDhwUsage",
+    "DiagnosticsEventCounters",
+    "FirmwareDownloadEntry",
+    "FirmwareDownloadInfo",
     "DeviceStatus",
     "DeviceFeature",
     "MqttRequest",

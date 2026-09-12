@@ -20,7 +20,11 @@ from .presentation import (
     build_daily_energy_report,
     build_device_info_rows,
     build_device_status_rows,
+    build_diagnostics_rows,
     build_energy_report,
+    build_firmware_download_rows,
+    build_recirculation_schedule_rows,
+    build_yearly_energy_report,
 )
 from .rich_output import get_formatter
 
@@ -81,6 +85,64 @@ def print_daily_energy_usage(
         )
         return
     formatter.print_daily_energy_table(report)
+
+
+def print_yearly_energy_usage(energy_response: Any, years: list[int]) -> None:
+    """Print each requested year of a monthly energy query via Rich.
+
+    Each year gets its own summary (totals of that year's months) and
+    per-month table; the device's lifetime total is printed once at the
+    end.
+
+    Args:
+        energy_response: EnergyUsageResponse from the monthly query
+        years: Years to show, in order
+    """
+    formatter = get_formatter()
+    lifetime = None
+    for year in years:
+        report = build_yearly_energy_report(energy_response, year)
+        if report is None:
+            formatter.print_info(f"No monthly energy data available for {year}")
+            continue
+        formatter.print_yearly_energy_table(report)
+        lifetime = report.lifetime
+    if lifetime is not None:
+        formatter.print_lifetime_energy(lifetime)
+
+
+def print_diagnostics(diagnostics: Any) -> None:
+    """Print installer diagnostics counters via Rich.
+
+    Args:
+        diagnostics: DeviceDiagnostics object
+    """
+    get_formatter().print_status_table(
+        build_diagnostics_rows(diagnostics), title="DEVICE DIAGNOSTICS"
+    )
+
+
+def print_firmware_download_info(info: Any) -> None:
+    """Print firmware download info via Rich.
+
+    Args:
+        info: FirmwareDownloadInfo object
+    """
+    get_formatter().print_status_table(
+        build_firmware_download_rows(info), title="FIRMWARE DOWNLOAD INFO"
+    )
+
+
+def print_recirculation_schedule(schedule: Any) -> None:
+    """Print a recirculation schedule via Rich.
+
+    Args:
+        schedule: RecirculationSchedule object
+    """
+    get_formatter().print_status_table(
+        build_recirculation_schedule_rows(schedule),
+        title="RECIRCULATION SCHEDULE",
+    )
 
 
 def write_status_to_csv(file_path: str, status: DeviceStatus) -> None:

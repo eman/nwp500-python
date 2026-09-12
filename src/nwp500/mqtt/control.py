@@ -9,12 +9,21 @@ This module handles all device control operations including:
 - Anti-Legionella configuration
 - Reservation scheduling
 - Time-of-Use (TOU) configuration
-- Energy usage queries
+- Energy usage queries (daily, monthly, hourly)
+- Installer diagnostics and firmware download info queries
+- Session end (sent automatically on disconnect)
 - App connection signaling
 - Demand response control
 - Air filter maintenance
 - Vacation mode configuration
 - Recirculation pump control and scheduling
+
+Every command here has a matching case in the NaviLink app's request
+builder (``SendRequestMgppData.java``); a few of those cases (goout-day,
+demand response, intelligent mode, water program) have no screen that
+calls them. Codes the app's enum declares with no builder case (OTA check,
+WiFi reset/reconnect, freeze protection temperature, smart diagnostic,
+weekly reservation) have no method.
 """
 
 import logging
@@ -38,7 +47,6 @@ from ..models import (
     DeviceFeature,
     OtaCommitPayload,
     RecirculationSchedule,
-    WeeklyReservationSchedule,
     preferred_to_half_celsius,
 )
 from ..topic_builder import MqttTopicBuilder
@@ -46,6 +54,70 @@ from ..topic_builder import MqttTopicBuilder
 __author__ = "Emmanuel Levijarvi"
 
 _logger = logging.getLogger(__name__)
+
+#: Year bounds accepted by the energy queries.
+MIN_ENERGY_YEAR = 2000
+MAX_ENERGY_YEAR = 2099
+
+#: Most recirculation schedule entries the NaviLink app lets a user create
+#: (``BottomSheetDialogWeeklyMgpp``).
+MAX_RECIRCULATION_ENTRIES = 20
+
+
+def _is_int(value: Any) -> bool:
+    return isinstance(value, int) and not isinstance(value, bool)
+
+
+def validate_recirculation_schedule(schedule: RecirculationSchedule) -> None:
+    """Check a recirculation schedule before it is written to the device.
+
+    The model itself accepts any integers so that device read-backs always
+    parse; writes are held to the ranges the app's editor can produce.
+
+    Raises:
+        ParameterValidationError: On too many entries, a non-integer field,
+            or a field outside its range: ``reservationUse`` and ``enable``
+            1-2, ``week`` a day bitfield (2-254, bit 0 clear), ``hour``
+            0-23, ``min`` 0-59, ``mode`` 1-2, ``param`` -1.
+    """
+
+    def fail(message: str, parameter: str, value: Any) -> None:
+        raise ParameterValidationError(
+            message, parameter=parameter, value=value
+        )
+
+    if schedule.reservation_use not in (1, 2):
+        fail(
+            "reservation_use must be 1 (off) or 2 (on)",
+            "reservation_use",
+            schedule.reservation_use,
+        )
+    if len(schedule.reservation) > MAX_RECIRCULATION_ENTRIES:
+        fail(
+            f"at most {MAX_RECIRCULATION_ENTRIES} entries are allowed",
+            "reservation",
+            len(schedule.reservation),
+        )
+    for index, entry in enumerate(schedule.reservation, start=1):
+        checks: list[tuple[str, int, bool]] = [
+            ("enable", entry.enable, entry.enable in (1, 2)),
+            (
+                "week",
+                entry.week,
+                0 < entry.week <= 254 and entry.week % 2 == 0,
+            ),
+            ("hour", entry.hour, 0 <= entry.hour <= 23),
+            ("min", entry.min, 0 <= entry.min <= 59),
+            ("mode", entry.mode, entry.mode in (1, 2)),
+            ("param", entry.param, entry.param == -1),
+        ]
+        for name, value, ok in checks:
+            if not ok:
+                fail(
+                    f"entry {index}: {name}={value} is out of range",
+                    f"reservation[{index}].{name}",
+                    value,
+                )
 
 
 class MqttDeviceController:
@@ -265,6 +337,13 @@ class MqttDeviceController:
                 max_val,
             )
 
+    def _validate_int(self, field: str, val: Any) -> None:
+        """Reject non-integers (including bool and float) for a field."""
+        if not _is_int(val):
+            raise ParameterValidationError(
+                f"{field} must be an integer", parameter=field, value=val
+            )
+
     async def _get_device_features(
         self, device: Device
     ) -> DeviceFeature | None:
@@ -289,6 +368,7 @@ class MqttDeviceController:
         command_code: int,
         topic_suffix: str = "ctrl",
         response_topic_suffix: str | None = None,
+        response_form: str = "client",
         **payload_kwargs: Any,
     ) -> int:
         """
@@ -299,10 +379,40 @@ class MqttDeviceController:
             command_code: Command code to use
             topic_suffix: Suffix for the command topic
             response_topic_suffix: Optional suffix for custom response topic
+            response_form: Which response topic shape to request when
+                ``response_topic_suffix`` is set: ``"client"`` for
+                ``cmd/{dt}/{client_id}/res/{suffix}``, ``"app"`` for the
+                NaviLink app's ``cmd/{dt}/{homeSeq}/{userSeq}/{client_id}/
+                res/{suffix}`` (the cloud only decodes some replies for this
+                shape), ``"device"`` for ``cmd/{dt}/navilink-{mac}/res/
+                {suffix}``.
             **payload_kwargs: Additional fields for the request payload
 
         Returns:
             Publish packet ID
+        """
+        topic, command = self._prepare_command(
+            device,
+            command_code,
+            topic_suffix=topic_suffix,
+            response_topic_suffix=response_topic_suffix,
+            response_form=response_form,
+            **payload_kwargs,
+        )
+        return await self._publish(topic, command)
+
+    def _prepare_command(
+        self,
+        device: Device,
+        command_code: int,
+        topic_suffix: str = "ctrl",
+        response_topic_suffix: str | None = None,
+        response_form: str = "client",
+        **payload_kwargs: Any,
+    ) -> tuple[str, dict[str, Any]]:
+        """Build the publish topic and envelope for a device command.
+
+        Same arguments as :meth:`_send_command`, without publishing.
         """
         device_id = device.device_info.mac_address
         device_type_int = device.device_info.device_type
@@ -323,11 +433,32 @@ class MqttDeviceController:
         command["requestTopic"] = topic
 
         if response_topic_suffix:
-            command["responseTopic"] = MqttTopicBuilder.response_topic(
-                device_type_str, self._client_id, response_topic_suffix
+            command["responseTopic"] = self._response_topic(
+                device, response_topic_suffix, response_form
             )
 
-        return await self._publish(topic, command)
+        return topic, command
+
+    def _response_topic(
+        self, device: Device, suffix: str, form: str = "client"
+    ) -> str:
+        """Build the response topic for a query in the requested form."""
+        device_type_str = str(device.device_info.device_type)
+        if form == "app":
+            return MqttTopicBuilder.app_response_topic(
+                device_type_str,
+                device.device_info.home_seq,
+                0,
+                self._client_id,
+                suffix,
+            )
+        if form == "device":
+            return MqttTopicBuilder.device_response_topic(
+                device_type_str, device.device_info.mac_address, suffix
+            )
+        return MqttTopicBuilder.response_topic(
+            device_type_str, self._client_id, suffix
+        )
 
     async def request_device_status(self, device: Device) -> int:
         """
@@ -456,7 +587,7 @@ class MqttDeviceController:
         Returns:
             Publish packet ID
         """
-        # See docs/protocol/mqtt_protocol.rst "Reservation Management" for the
+        # See docs/reference/protocol/mqtt_protocol.rst "Reservations" for the
         # command code (16777226) and the reservation object fields
         # (enable, week, hour, min, mode, param).
         reservation_use = device_bool_from_python(enabled)
@@ -512,7 +643,7 @@ class MqttDeviceController:
         Raises:
             ValueError: If controller_serial_number is empty or periods is empty
         """
-        # See docs/protocol/mqtt_protocol.rst "TOU (Time of Use) Settings" for
+        # See docs/reference/protocol/mqtt_protocol.rst "Time-of-Use" for
         # the command code (33554439) and TOU period fields
         # (season, week, startHour, startMinute, endHour, endMinute,
         #  priceMin, priceMax, decimalPoint).
@@ -592,6 +723,190 @@ class MqttDeviceController:
             year=year,
         )
 
+    async def request_energy_usage_monthly(
+        self, device: Device, years: list[int]
+    ) -> int:
+        """
+        Request per-month energy usage for whole years.
+
+        The NaviLink app sends this for the previous and current year. The
+        response has one ``usage`` entry per year (``month`` absent) whose
+        ``data`` list holds twelve per-month items, plus lifetime totals.
+
+        Args:
+            device: Device object
+            years: Years to query (e.g. ``[2025, 2026]``), each between
+                2000 and 2099. Duplicates are dropped.
+
+        Returns:
+            Publish packet ID
+
+        Raises:
+            ParameterValidationError: If ``years`` is empty or holds a
+                non-integer.
+            RangeValidationError: If a year is out of range.
+        """
+        if not years:
+            raise ParameterValidationError(
+                "At least one year is required", parameter="years"
+            )
+        unique_years = list(dict.fromkeys(years))
+        for year in unique_years:
+            self._validate_int("year", year)
+            self._validate_range("year", year, MIN_ENERGY_YEAR, MAX_ENERGY_YEAR)
+        return await self._send_command(
+            device=device,
+            command_code=CommandCode.ENERGY_USAGE_MONTHLY_QUERY,
+            topic_suffix="st/energy-usage-monthly-query/rd",
+            response_topic_suffix="energy-usage-monthly-query/rd",
+            year=unique_years,
+        )
+
+    async def request_energy_usage_hourly(
+        self, device: Device, year: int, month: int, days: list[int]
+    ) -> int:
+        """
+        Request per-hour energy usage for specific days.
+
+        Mirrors the NaviLink app's hourly query. The NWP500 firmware tested
+        never answered this query (four attempts, both response-topic
+        forms), so treat a timeout as the expected outcome on that model.
+        Subscribe with ``subscribe_energy_usage_hourly`` to receive a reply
+        if the device supports it.
+
+        Args:
+            device: Device object
+            year: Year to query
+            month: Month to query (1-12)
+            days: Days of the month to query
+
+        Returns:
+            Publish packet ID
+        """
+        self._validate_int("year", year)
+        self._validate_range("year", year, MIN_ENERGY_YEAR, MAX_ENERGY_YEAR)
+        self._validate_range("month", month, 1, 12)
+        if not days:
+            raise ParameterValidationError(
+                "At least one day is required", parameter="days"
+            )
+        for day in days:
+            self._validate_range("day", day, 1, 31)
+        return await self._send_command(
+            device=device,
+            command_code=CommandCode.ENERGY_USAGE_HOURLY_QUERY,
+            topic_suffix="st/energy-usage-hourly-query/rd",
+            response_topic_suffix="energy-usage-hourly-query/rd",
+            year=year,
+            month=month,
+            day=list(days),
+        )
+
+    async def request_diagnostics(self, device: Device) -> int:
+        """
+        Request the installer diagnostics counters.
+
+        Sends DIAGNOSTICS_REQUEST (16777228) on ``st/td/rd``. The device
+        replies with packed hex; the NaviLink cloud decodes it into JSON on
+        ``res/td/rd`` only when the response topic has the app's
+        five-segment form, which this method requests. Subscribe with
+        ``subscribe_diagnostics`` to receive a
+        :class:`~nwp500.models.DeviceDiagnostics`.
+
+        In the app this screen is installer-only, but the gate is in the
+        app; a consumer account's unit answers.
+
+        Args:
+            device: Device object
+
+        Returns:
+            Publish packet ID
+        """
+        return await self._send_command(
+            device=device,
+            command_code=CommandCode.DIAGNOSTICS_REQUEST,
+            topic_suffix="st/td/rd",
+            response_topic_suffix="td/rd",
+            response_form="app",
+        )
+
+    async def request_firmware_download_info(self, device: Device) -> int:
+        """
+        Request the firmware download (OTA) information.
+
+        Sends FIRMWARE_DOWNLOAD_INFO_REQUEST (16777227) on
+        ``st/dl-sw-info``. The device answers on its own topic
+        ``cmd/{dt}/navilink-{mac}/res/dl-sw-info``; subscribe with
+        ``subscribe_firmware_download_info``.
+
+        Args:
+            device: Device object
+
+        Returns:
+            Publish packet ID
+        """
+        return await self._send_command(
+            device=device,
+            command_code=CommandCode.FIRMWARE_DOWNLOAD_INFO_REQUEST,
+            topic_suffix="st/dl-sw-info",
+            response_topic_suffix="dl-sw-info",
+            response_form="device",
+        )
+
+    @requires_capability("recirc_reservation_use")
+    async def request_recirculation_schedule(self, device: Device) -> int:
+        """
+        Request the recirculation pump schedule from the device.
+
+        Sends RECIRC_RESERVATION_READ (16777231) on ``st/recirc-rsv/rd``.
+        Subscribe with ``subscribe_recirculation_schedule_response``.
+
+        Args:
+            device: Device object
+
+        Returns:
+            Publish packet ID
+        """
+        return await self._send_command(
+            device=device,
+            command_code=CommandCode.RECIRC_RESERVATION_READ,
+            topic_suffix="st/recirc-rsv/rd",
+            response_topic_suffix="recirc-rsv/rd",
+        )
+
+    async def end_session(self, device: Device) -> int:
+        """
+        Tell the device the client is done with it.
+
+        Sends SESSION_END (16777218) on ``st/end``. The NaviLink app sends
+        this whenever it leaves a device screen. No reply to it has been
+        observed. :meth:`~nwp500.NavienMqttClient.disconnect` sends it
+        automatically for every device the client subscribed to, unless
+        ``MqttConnectionConfig.send_session_end_on_disconnect`` is off.
+
+        Args:
+            device: Device object
+
+        Returns:
+            Publish packet ID
+        """
+        topic, command = self.build_session_end(device)
+        return await self._publish(topic, command)
+
+    def build_session_end(self, device: Device) -> tuple[str, dict[str, Any]]:
+        """Build the ``st/end`` topic and envelope without publishing.
+
+        Used by ``NavienMqttClient.disconnect()``, which publishes it
+        straight to the connection so it can never be queued for a later
+        connect.
+        """
+        return self._prepare_command(
+            device,
+            CommandCode.SESSION_END,
+            topic_suffix="st/end",
+            response_topic_suffix="end",
+        )
+
     async def signal_app_connection(self, device: Device) -> int:
         """
         Signal that the app has connected.
@@ -625,42 +940,92 @@ class MqttDeviceController:
             device, CommandCode.AIR_FILTER_RESET, "air-filter-reset"
         )
 
-    @requires_capability("holiday_use")
-    async def set_vacation_days(self, device: Device, days: int) -> int:
-        """Set vacation/away mode duration (1-30 days)."""
-        return await self.set_dhw_mode(
-            device, DhwOperationSetting.VACATION.value, vacation_days=days
-        )
+    async def set_air_filter_life(self, device: Device, hours: int) -> int:
+        """Set the air filter service interval.
 
-    @requires_capability("program_reservation_use")
-    async def update_weekly_reservation(
-        self, device: Device, schedule: WeeklyReservationSchedule
-    ) -> int:
-        """Configure the weekly temperature reservation schedule.
-
-        Sends the complete weekly schedule to the device using command
-        code RESERVATION_WEEKLY (33554438).
+        Sends AIR_FILTER_LIFE (33554474, mode ``air-filter-life``). The
+        NaviLink app offers 0 (alarm off) or 1000-10000 evaporator-fan
+        hours in 500-hour steps and sends ``hours / 500`` as the parameter;
+        the device reports the interval back as ``air_filter_alarm_period``
+        in hours (verified live: sending 3000 reads back as 3000).
 
         Args:
-            device: Device to configure
-            schedule: Weekly reservation schedule with entries for each
-                time slot
+            device: Device object
+            hours: 0 to disable the alarm, or 1000-10000 in steps of 500
+
+        Returns:
+            Publish packet ID
+
+        Raises:
+            ParameterValidationError: If ``hours`` is not one of the
+                app's accepted values.
+        """
+        if not _is_int(hours) or (
+            hours != 0 and not (1000 <= hours <= 10000 and hours % 500 == 0)
+        ):
+            raise ParameterValidationError(
+                "hours must be 0 or between 1000 and 10000 in steps of 500",
+                parameter="hours",
+                value=hours,
+            )
+        return await self._mode_command(
+            device,
+            CommandCode.AIR_FILTER_LIFE,
+            "air-filter-life",
+            [hours // 500],
+        )
+
+    async def reset_condenser_fault(self, device: Device) -> int:
+        """Clear a condenser fault.
+
+        Sends COND_FAULT_RESET (33554463, mode ``cond-fault-reset``). The
+        NaviLink app exposes this on the status screen to installer
+        accounts only; the gate is in the app. A consumer account's unit
+        acknowledges the command with a status object (verified live; no
+        fault was present, so the clearing effect itself is unverified).
+
+        Args:
+            device: Device object
 
         Returns:
             Publish packet ID
         """
-        # Match the documented request shape used by update_reservations():
-        # reservationUse at the request level and reservation as a flat
-        # list of raw protocol entries. Dumping the schedule model as-is
-        # would double-nest the payload and leak computed display fields
-        # (formatted times, unit-converted temperatures) to the device.
-        return await self._send_command(
-            device=device,
-            command_code=CommandCode.RESERVATION_WEEKLY,
-            reservationUse=schedule.reservation_use,
-            reservation=[
-                entry.to_protocol_dict() for entry in schedule.reservation
-            ],
+        return await self._mode_command(
+            device, CommandCode.COND_FAULT_RESET, "cond-fault-reset"
+        )
+
+    @requires_capability("holiday_use")
+    async def set_vacation_days(self, device: Device, days: int) -> int:
+        """Enter vacation mode for ``days`` days (1-30).
+
+        Sends ``dhw-mode`` with ``[5, days]``, which is what the NaviLink
+        app's vacation flow does. To change the day count without changing
+        the operation mode, see :meth:`set_vacation_duration`.
+        """
+        return await self.set_dhw_mode(
+            device, DhwOperationSetting.VACATION.value, vacation_days=days
+        )
+
+    @requires_capability("holiday_use")
+    async def set_vacation_duration(self, device: Device, days: int) -> int:
+        """Set the vacation day count without changing the operation mode.
+
+        Sends GOOUT_DAY (33554466, mode ``goout-day``) with ``[days]``.
+        The app's request builder has a case for it but no screen calls
+        it. Verified live: the device updates ``vacation_day_setting`` and
+        leaves ``dhw_operation_setting`` unchanged. Use
+        :meth:`set_vacation_days` to actually enter vacation mode.
+
+        Args:
+            device: Device object
+            days: Vacation duration in days (1-30)
+
+        Returns:
+            Publish packet ID
+        """
+        self._validate_range("days", days, 1, 30)
+        return await self._mode_command(
+            device, CommandCode.GOOUT_DAY, "goout-day", [days]
         )
 
     @requires_capability("program_reservation_use")
@@ -676,23 +1041,38 @@ class MqttDeviceController:
         device: Device,
         schedule: RecirculationSchedule,
     ) -> int:
-        """Configure the recirculation pump timed schedule.
+        """Configure the recirculation pump schedule.
+
+        Sends RECIR_RESERVATION (33554440) on ``ctrl/recirc-rsv/rd`` with
+        the same ``reservationUse``/``reservation`` envelope the app uses,
+        and asks for the schedule back on ``recirc-rsv/rd`` (see
+        ``subscribe_recirculation_schedule_response``). That echo has not
+        been observed on a unit with a recirculation pump.
 
         Args:
             device: Device to configure
-            schedule: Recirculation schedule with one or more time window
-                entries
+            schedule: Recirculation schedule entries
 
         Returns:
             Publish packet ID
+
+        Raises:
+            ParameterValidationError: If the schedule has more than 20
+                entries or an entry has an out-of-range field (see
+                :func:`validate_recirculation_schedule`).
         """
-        # Send a flat list of raw protocol entries; dumping the schedule
-        # model as-is would nest the payload as schedule.schedule and
+        validate_recirculation_schedule(schedule)
+        # Flat list of raw protocol entries; dumping the model as-is would
         # leak computed display fields to the device.
         return await self._send_command(
             device=device,
             command_code=CommandCode.RECIR_RESERVATION,
-            schedule=[entry.to_protocol_dict() for entry in schedule.schedule],
+            topic_suffix="ctrl/recirc-rsv/rd",
+            response_topic_suffix="recirc-rsv/rd",
+            reservationUse=schedule.reservation_use,
+            reservation=[
+                entry.to_protocol_dict() for entry in schedule.reservation
+            ],
         )
 
     @requires_capability("recirculation_use")
@@ -710,29 +1090,16 @@ class MqttDeviceController:
             device, CommandCode.RECIR_HOT_BTN, "recirc-hotbtn", [1]
         )
 
-    async def check_firmware_update(self, device: Device) -> int:
-        """Check for available over-the-air firmware updates.
-
-        Sends the OTA_CHECK command (33554443) to query whether a firmware
-        update is available. The device responds on the control ack topic.
-
-        Args:
-            device: Device to check for updates
-
-        Returns:
-            Publish packet ID
-        """
-        return await self._mode_command(
-            device, CommandCode.OTA_CHECK, "ota-check"
-        )
-
     async def commit_firmware_update(
         self, device: Device, payload: OtaCommitPayload
     ) -> int:
         """Commit a previously downloaded firmware update.
 
         Sends the OTA_COMMIT command (33554442) with a special
-        ``commitOta`` structure (not the standard mode/param format).
+        ``commitOta`` structure (not the standard mode/param format) on
+        ``ctrl/commit-ota``, asking for the reply on ``res/commit-ota`` in
+        the app's reply-topic form, as the NaviLink app's firmware screen
+        does (``setPublishMgppControlOTA``).
 
         Args:
             device: Device to update
@@ -745,111 +1112,10 @@ class MqttDeviceController:
         return await self._send_command(
             device=device,
             command_code=CommandCode.OTA_COMMIT,
+            topic_suffix="ctrl/commit-ota",
+            response_topic_suffix="commit-ota",
+            response_form="app",
             commitOta=payload.model_dump(by_alias=True),
-        )
-
-    async def reconnect_wifi(self, device: Device) -> int:
-        """Trigger a WiFi reconnection on the device.
-
-        Sends the WIFI_RECONNECT command (33554446). Useful when the
-        device has lost its WiFi connection and needs to re-associate.
-
-        Args:
-            device: Device to reconnect
-
-        Returns:
-            Publish packet ID
-        """
-        return await self._mode_command(
-            device, CommandCode.WIFI_RECONNECT, "wifi-reconnect"
-        )
-
-    async def reset_wifi(self, device: Device) -> int:
-        """Reset WiFi settings to factory defaults.
-
-        Sends the WIFI_RESET command (33554447). This will clear stored
-        WiFi credentials and require re-provisioning the device.
-
-        .. warning::
-            This operation clears all stored WiFi credentials. The device
-            will need to be re-provisioned to reconnect to the network.
-
-        Args:
-            device: Device to reset
-
-        Returns:
-            Publish packet ID
-        """
-        return await self._mode_command(
-            device, CommandCode.WIFI_RESET, "wifi-reset"
-        )
-
-    @requires_capability("freeze_protection_use")
-    async def set_freeze_protection_temperature(
-        self, device: Device, temperature: float
-    ) -> int:
-        """Set the freeze protection activation temperature.
-
-        Sends the FREZ_TEMP command (33554451). The device activates
-        freeze protection heating when the ambient temperature drops
-        below this threshold.
-
-        Args:
-            device: Device to configure
-            temperature: Activation temperature in the user's preferred unit
-                (°C if unit system is metric, °F otherwise). Validated
-                against the device's reported
-                ``freeze_protection_temp_min``/``freeze_protection_temp_max``
-                feature limits (typically around 35-45°F / 1.7-7.2°C, but
-                this can vary by device).
-
-        Returns:
-            Publish packet ID
-
-        Raises:
-            DeviceCapabilityError: If the device does not support freeze
-                protection, or its features are not available so the
-                temperature range cannot be validated.
-            RangeValidationError: If temperature is outside the device's
-                supported freeze protection range.
-        """
-        features = await self._get_device_features(device)
-        if features is None:
-            raise DeviceCapabilityError(
-                "freeze_protection_use",
-                (
-                    "Device features not available. "
-                    "Unable to validate temperature range."
-                ),
-            )
-
-        self._validate_range(
-            "temperature",
-            temperature,
-            features.freeze_protection_temp_min,
-            features.freeze_protection_temp_max,
-        )
-
-        raw = preferred_to_half_celsius(temperature)
-        return await self._mode_command(
-            device, CommandCode.FREZ_TEMP, "frez-temp", [raw]
-        )
-
-    async def run_smart_diagnostic(self, device: Device) -> int:
-        """Trigger the smart diagnostic routine on the device.
-
-        Sends the SMART_DIAGNOSTIC command (33554455). The diagnostic
-        result is reflected in the ``smart_diagnostic`` field of the next
-        :class:`~nwp500.models.DeviceStatus` update.
-
-        Args:
-            device: Device to diagnose
-
-        Returns:
-            Publish packet ID
-        """
-        return await self._mode_command(
-            device, CommandCode.SMART_DIAGNOSTIC, "smart-diagnostic"
         )
 
     async def enable_intelligent_scheduling(self, device: Device) -> int:

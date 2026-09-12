@@ -5,7 +5,7 @@ This module handles all subscription-related operations including:
 - Low-level subscribe/unsubscribe operations
 - Topic pattern matching with MQTT wildcards
 - Message routing and handler management
-- Typed subscriptions (status, feature, energy)
+- Typed subscriptions (status, feature, energy, schedules, diagnostics)
 - State change detection and event emission
 """
 
@@ -23,13 +23,14 @@ from ..events import EventEmitter
 from ..exceptions import MqttNotConnectedError
 from ..models import (
     Device,
+    DeviceDiagnostics,
     DeviceFeature,
     DeviceStatus,
     EnergyUsageResponse,
+    FirmwareDownloadInfo,
     RecirculationSchedule,
     ReservationSchedule,
     TOUReservationSchedule,
-    WeeklyReservationSchedule,
 )
 from ..mqtt_events import (
     FeatureReceivedEvent,
@@ -47,6 +48,11 @@ if TYPE_CHECKING:
 __author__ = "Emmanuel Levijarvi"
 
 _logger = logging.getLogger(__name__)
+
+# Kind tags for handlers registered under the device wildcard topic.
+_KIND_STATUS = "device_status"
+_KIND_FEATURE = "device_feature"
+_KIND_FIRMWARE = "firmware_download_info"
 
 
 class MqttSubscriptionManager:
@@ -99,10 +105,19 @@ class MqttSubscriptionManager:
         # Per-device state change detection
         self._state_tracker = DeviceStateTracker(event_emitter)
 
+        # Devices passed to any subscription, keyed by MAC. disconnect()
+        # sends each one an st/end, as the NaviLink app does.
+        self._devices: dict[str, Device] = {}
+
     @property
     def subscriptions(self) -> dict[str, QoS]:
         """Get current subscriptions."""
         return self._subscriptions.copy()
+
+    @property
+    def subscribed_devices(self) -> list[Device]:
+        """Devices passed to any device or typed-response subscription."""
+        return list(self._devices.values())
 
     def update_connection(self, connection: Any) -> None:
         """
@@ -495,6 +510,7 @@ class MqttSubscriptionManager:
         response_topic = MqttTopicBuilder.command_topic(
             device_type, device_id, "#"
         )
+        self._devices[device_id] = device
         return await self.subscribe(response_topic, callback)
 
     async def subscribe_device_status(
@@ -515,7 +531,12 @@ class MqttSubscriptionManager:
             )
 
         handler = self._make_handler(
-            DeviceStatus, callback, "status", post_parse, device_mac=device_mac
+            DeviceStatus,
+            callback,
+            "status",
+            post_parse,
+            device_mac=device_mac,
+            kind=_KIND_STATUS,
         )
         return await self.subscribe_device(device=device, callback=handler)
 
@@ -523,19 +544,16 @@ class MqttSubscriptionManager:
         self, device: Device, callback: Callable[[DeviceStatus], None]
     ) -> None:
         """Unsubscribe a specific device status callback."""
-        device_id = device.device_info.mac_address
-        device_type = str(device.device_info.device_type)
-        topic = MqttTopicBuilder.command_topic(device_type, device_id, "#")
+        await self._unsubscribe_callback(
+            self._device_wildcard(device), callback, _KIND_STATUS
+        )
 
-        target_handler = None
-        if topic in self._message_handlers:
-            for h in self._message_handlers[topic]:
-                if getattr(h, "_original_callback", None) == callback:
-                    target_handler = h
-                    break
-
-        if target_handler:
-            await self.unsubscribe(topic, target_handler)
+    def _device_wildcard(self, device: Device) -> str:
+        return MqttTopicBuilder.command_topic(
+            str(device.device_info.device_type),
+            device.device_info.mac_address,
+            "#",
+        )
 
     def _make_handler(
         self,
@@ -544,16 +562,37 @@ class MqttSubscriptionManager:
         key: str | None = None,
         post_parse: Callable[[Any], None] | None = None,
         device_mac: str | None = None,
+        topic_suffix: str | None = None,
+        parse: Callable[[dict[str, Any]], Any] | None = None,
+        kind: str | None = None,
     ) -> Callable[[str, dict[str, Any]], None]:
-        """Generic factory for MQTT message handlers."""
+        """Generic factory for MQTT message handlers.
+
+        Args:
+            model: Pydantic model to validate the response data with.
+            callback: Receives the parsed model.
+            key: Response sub-key to extract (``None`` for the whole
+                ``response`` object).
+            post_parse: Optional side effect run before ``callback``.
+            device_mac: If set, stamped onto ``parsed.mac_address``.
+            topic_suffix: If set, messages whose topic does not end with
+                it are ignored. Lets a handler registered under the device
+                wildcard pick out one response topic.
+            parse: Optional replacement for ``model.model_validate``.
+            kind: Subscription kind tag. Unsubscribe matches on it as
+                well as on the callback, so one callback registered for
+                two kinds on the same topic is removed from the right one.
+        """
 
         def handler(topic: str, message: dict[str, Any]) -> None:
+            if topic_suffix and not topic.endswith(topic_suffix):
+                return
             try:
                 data = get_response_data(message, key)
                 if not data:
                     return
 
-                parsed = model.model_validate(data)
+                parsed = parse(data) if parse else model.model_validate(data)
                 if device_mac and hasattr(parsed, "mac_address"):
                     parsed.mac_address = device_mac
 
@@ -572,6 +611,7 @@ class MqttSubscriptionManager:
                 )
 
         cast(Any, handler)._original_callback = callback
+        cast(Any, handler)._subscription_kind = kind
         return handler
 
     async def subscribe_device_feature(
@@ -600,6 +640,7 @@ class MqttSubscriptionManager:
             "feature",
             post_parse,
             device_mac=device_mac,
+            kind=_KIND_FEATURE,
         )
         return await self.subscribe_device(device=device, callback=handler)
 
@@ -607,19 +648,70 @@ class MqttSubscriptionManager:
         self, device: Device, callback: Callable[[DeviceFeature], None]
     ) -> None:
         """Unsubscribe a specific device feature callback."""
-        device_id = device.device_info.mac_address
+        await self._unsubscribe_callback(
+            self._device_wildcard(device), callback, _KIND_FEATURE
+        )
+
+    async def _subscribe_response(
+        self,
+        device: Device,
+        suffix: str,
+        model: Any,
+        callback: Callable[[Any], None],
+        *,
+        app_form: bool = False,
+        parse: Callable[[dict[str, Any]], Any] | None = None,
+    ) -> int:
+        """Subscribe a typed callback to a client-keyed query response topic.
+
+        Also records ``device`` so ``disconnect()`` sends it ``st/end``.
+        """
+        topic = self._query_response_topic(device, suffix, app_form)
+        handler = self._make_handler(model, callback, parse=parse, kind=topic)
+        self._devices[device.device_info.mac_address] = device
+        return await self.subscribe(topic, handler)
+
+    async def _unsubscribe_response(
+        self,
+        device: Device,
+        suffix: str,
+        callback: Callable[[Any], None],
+        *,
+        app_form: bool = False,
+    ) -> None:
+        """Remove a typed callback registered by :meth:`_subscribe_response`."""
+        topic = self._query_response_topic(device, suffix, app_form)
+        await self._unsubscribe_callback(topic, callback, topic)
+
+    def _query_response_topic(
+        self, device: Device, suffix: str, app_form: bool = False
+    ) -> str:
         device_type = str(device.device_info.device_type)
-        topic = MqttTopicBuilder.command_topic(device_type, device_id, "#")
+        if app_form:
+            return MqttTopicBuilder.app_response_topic(
+                device_type,
+                device.device_info.home_seq,
+                0,
+                self._client_id,
+                suffix,
+            )
+        return MqttTopicBuilder.response_topic(
+            device_type, self._client_id, suffix
+        )
 
-        if topic not in self._message_handlers:
-            return
-
-        # Find the specific internal handler that wraps this callback
+    async def _unsubscribe_callback(
+        self, topic: str, callback: Callable[[Any], None], kind: str
+    ) -> None:
+        """Remove the ``kind`` handler wrapping ``callback`` on ``topic``."""
         target_handler = None
-        for h in self._message_handlers[topic]:
-            if getattr(h, "_original_callback", None) == callback:
-                target_handler = h
-                break
+        if topic in self._message_handlers:
+            for h in self._message_handlers[topic]:
+                if (
+                    getattr(h, "_original_callback", None) == callback
+                    and getattr(h, "_subscription_kind", None) == kind
+                ):
+                    target_handler = h
+                    break
 
         if target_handler:
             await self.unsubscribe(topic, target_handler)
@@ -629,14 +721,10 @@ class MqttSubscriptionManager:
         device: Device,
         callback: Callable[[EnergyUsageResponse], None],
     ) -> int:
-        """Subscribe to energy usage responses with automatic parsing."""
-        handler = self._make_handler(EnergyUsageResponse, callback)
-        topic = MqttTopicBuilder.response_topic(
-            str(device.device_info.device_type),
-            self._client_id,
-            "energy-usage-daily-query/rd",
+        """Subscribe to daily energy usage responses with automatic parsing."""
+        return await self._subscribe_response(
+            device, "energy-usage-daily-query/rd", EnergyUsageResponse, callback
         )
-        return await self.subscribe(topic, handler)
 
     async def unsubscribe_energy_usage(
         self,
@@ -644,21 +732,126 @@ class MqttSubscriptionManager:
         callback: Callable[[EnergyUsageResponse], None],
     ) -> None:
         """Unsubscribe a specific energy usage callback."""
-        topic = MqttTopicBuilder.response_topic(
-            str(device.device_info.device_type),
-            self._client_id,
-            "energy-usage-daily-query/rd",
+        await self._unsubscribe_response(
+            device, "energy-usage-daily-query/rd", callback
         )
 
-        target_handler = None
-        if topic in self._message_handlers:
-            for h in self._message_handlers[topic]:
-                if getattr(h, "_original_callback", None) == callback:
-                    target_handler = h
-                    break
+    async def subscribe_energy_usage_monthly(
+        self,
+        device: Device,
+        callback: Callable[[EnergyUsageResponse], None],
+    ) -> int:
+        """Subscribe to monthly energy usage responses.
 
-        if target_handler:
-            await self.unsubscribe(topic, target_handler)
+        Pairs with
+        :meth:`~nwp500.NavienMqttClient.request_energy_usage_monthly`. Each
+        ``usage`` entry is a year whose ``data`` holds twelve months.
+        """
+        return await self._subscribe_response(
+            device,
+            "energy-usage-monthly-query/rd",
+            EnergyUsageResponse,
+            callback,
+        )
+
+    async def unsubscribe_energy_usage_monthly(
+        self,
+        device: Device,
+        callback: Callable[[EnergyUsageResponse], None],
+    ) -> None:
+        """Unsubscribe a specific monthly energy usage callback."""
+        await self._unsubscribe_response(
+            device, "energy-usage-monthly-query/rd", callback
+        )
+
+    async def subscribe_energy_usage_hourly(
+        self,
+        device: Device,
+        callback: Callable[[EnergyUsageResponse], None],
+    ) -> int:
+        """Subscribe to hourly energy usage responses.
+
+        Pairs with
+        :meth:`~nwp500.NavienMqttClient.request_energy_usage_hourly`. The
+        NWP500 firmware tested never answered that query.
+        """
+        return await self._subscribe_response(
+            device,
+            "energy-usage-hourly-query/rd",
+            EnergyUsageResponse,
+            callback,
+        )
+
+    async def unsubscribe_energy_usage_hourly(
+        self,
+        device: Device,
+        callback: Callable[[EnergyUsageResponse], None],
+    ) -> None:
+        """Unsubscribe a specific hourly energy usage callback."""
+        await self._unsubscribe_response(
+            device, "energy-usage-hourly-query/rd", callback
+        )
+
+    async def subscribe_diagnostics(
+        self,
+        device: Device,
+        callback: Callable[[DeviceDiagnostics], None],
+    ) -> int:
+        """Subscribe to installer diagnostics responses (``td/rd``).
+
+        Pairs with :meth:`~nwp500.NavienMqttClient.request_diagnostics`.
+        The cloud publishes the decoded JSON on the app-form response topic
+        only, so that is the topic subscribed here.
+        """
+        return await self._subscribe_response(
+            device,
+            "td/rd",
+            DeviceDiagnostics,
+            callback,
+            app_form=True,
+            parse=DeviceDiagnostics.from_response,
+        )
+
+    async def unsubscribe_diagnostics(
+        self,
+        device: Device,
+        callback: Callable[[DeviceDiagnostics], None],
+    ) -> None:
+        """Unsubscribe a specific diagnostics callback."""
+        await self._unsubscribe_response(
+            device, "td/rd", callback, app_form=True
+        )
+
+    async def subscribe_firmware_download_info(
+        self,
+        device: Device,
+        callback: Callable[[FirmwareDownloadInfo], None],
+    ) -> int:
+        """Subscribe to firmware download info responses (``dl-sw-info``).
+
+        Pairs with
+        :meth:`~nwp500.NavienMqttClient.request_firmware_download_info`.
+        The device answers on its own topic, which the device wildcard
+        subscription already covers, so this registers a filtered handler
+        there rather than a new broker subscription.
+        """
+        handler = self._make_handler(
+            FirmwareDownloadInfo,
+            callback,
+            topic_suffix="/res/dl-sw-info",
+            kind=_KIND_FIRMWARE,
+        )
+        return await self.subscribe_device(device=device, callback=handler)
+
+    async def unsubscribe_firmware_download_info(
+        self,
+        device: Device,
+        callback: Callable[[FirmwareDownloadInfo], None],
+    ) -> None:
+        """Unsubscribe a specific firmware download info callback."""
+        await self._unsubscribe_callback(
+            self._device_wildcard(device), callback, _KIND_FIRMWARE
+        )
 
     async def subscribe_reservation_response(
         self,
@@ -679,13 +872,9 @@ class MqttSubscriptionManager:
         Returns:
             Publish packet ID from the MQTT subscribe call.
         """
-        handler = self._make_handler(ReservationSchedule, callback)
-        topic = MqttTopicBuilder.response_topic(
-            str(device.device_info.device_type),
-            self._client_id,
-            "rsv/rd",
+        return await self._subscribe_response(
+            device, "rsv/rd", ReservationSchedule, callback
         )
-        return await self.subscribe(topic, handler)
 
     async def unsubscribe_reservation_response(
         self,
@@ -693,81 +882,23 @@ class MqttSubscriptionManager:
         callback: Callable[[ReservationSchedule], None],
     ) -> None:
         """Unsubscribe a specific reservation response callback."""
-        topic = MqttTopicBuilder.response_topic(
-            str(device.device_info.device_type),
-            self._client_id,
-            "rsv/rd",
-        )
-
-        target_handler = None
-        if topic in self._message_handlers:
-            for h in self._message_handlers[topic]:
-                if getattr(h, "_original_callback", None) == callback:
-                    target_handler = h
-                    break
-
-        if target_handler:
-            await self.unsubscribe(topic, target_handler)
-
-    async def subscribe_weekly_reservation_response(
-        self,
-        device: Device,
-        callback: Callable[[WeeklyReservationSchedule], None],
-    ) -> int:
-        """Subscribe to weekly reservation read responses.
-
-        Subscribes to the ``rsv-weekly/rd`` response topic for the given
-        device. The callback receives a
-        :class:`~nwp500.models.WeeklyReservationSchedule`
-        whenever the device responds to a weekly reservation read request.
-
-        Args:
-            device: Device whose weekly reservation responses to receive.
-            callback: Called with the parsed schedule on each response.
-
-        Returns:
-            Publish packet ID from the MQTT subscribe call.
-        """
-        handler = self._make_handler(WeeklyReservationSchedule, callback)
-        topic = MqttTopicBuilder.response_topic(
-            str(device.device_info.device_type),
-            self._client_id,
-            "rsv-weekly/rd",
-        )
-        return await self.subscribe(topic, handler)
-
-    async def unsubscribe_weekly_reservation_response(
-        self,
-        device: Device,
-        callback: Callable[[WeeklyReservationSchedule], None],
-    ) -> None:
-        """Unsubscribe a specific weekly reservation callback."""
-        topic = MqttTopicBuilder.response_topic(
-            str(device.device_info.device_type),
-            self._client_id,
-            "rsv-weekly/rd",
-        )
-
-        target_handler = None
-        if topic in self._message_handlers:
-            for h in self._message_handlers[topic]:
-                if getattr(h, "_original_callback", None) == callback:
-                    target_handler = h
-                    break
-
-        if target_handler:
-            await self.unsubscribe(topic, target_handler)
+        await self._unsubscribe_response(device, "rsv/rd", callback)
 
     async def subscribe_recirculation_schedule_response(
         self,
         device: Device,
         callback: Callable[[RecirculationSchedule], None],
     ) -> int:
-        """Subscribe to recirculation schedule read responses.
+        """Subscribe to recirculation schedule responses.
 
-        Subscribes to the ``recirc-rsv/rd`` response topic for the given device.
-        The callback receives a :class:`~nwp500.models.RecirculationSchedule`
-        whenever the device responds to a recirculation schedule read request.
+        Subscribes to the ``recirc-rsv/rd`` response topic for the given
+        device. The callback receives a
+        :class:`~nwp500.models.RecirculationSchedule` when the device
+        answers
+        :meth:`~nwp500.NavienMqttClient.request_recirculation_schedule` or,
+        if it sends one (unverified), echoes a
+        :meth:`~nwp500.NavienMqttClient.configure_recirculation_schedule`
+        write.
 
         Args:
             device: Device whose recirculation schedule responses to receive.
@@ -776,13 +907,9 @@ class MqttSubscriptionManager:
         Returns:
             Publish packet ID from the MQTT subscribe call.
         """
-        handler = self._make_handler(RecirculationSchedule, callback)
-        topic = MqttTopicBuilder.response_topic(
-            str(device.device_info.device_type),
-            self._client_id,
-            "recirc-rsv/rd",
+        return await self._subscribe_response(
+            device, "recirc-rsv/rd", RecirculationSchedule, callback
         )
-        return await self.subscribe(topic, handler)
 
     async def unsubscribe_recirculation_schedule_response(
         self,
@@ -790,21 +917,7 @@ class MqttSubscriptionManager:
         callback: Callable[[RecirculationSchedule], None],
     ) -> None:
         """Unsubscribe a specific recirculation schedule callback."""
-        topic = MqttTopicBuilder.response_topic(
-            str(device.device_info.device_type),
-            self._client_id,
-            "recirc-rsv/rd",
-        )
-
-        target_handler = None
-        if topic in self._message_handlers:
-            for h in self._message_handlers[topic]:
-                if getattr(h, "_original_callback", None) == callback:
-                    target_handler = h
-                    break
-
-        if target_handler:
-            await self.unsubscribe(topic, target_handler)
+        await self._unsubscribe_response(device, "recirc-rsv/rd", callback)
 
     async def subscribe_tou_response(
         self,
@@ -829,13 +942,9 @@ class MqttSubscriptionManager:
         Returns:
             Publish packet ID from the MQTT subscribe call.
         """
-        handler = self._make_handler(TOUReservationSchedule, callback)
-        topic = MqttTopicBuilder.response_topic(
-            str(device.device_info.device_type),
-            self._client_id,
-            "tou/rd",
+        return await self._subscribe_response(
+            device, "tou/rd", TOUReservationSchedule, callback
         )
-        return await self.subscribe(topic, handler)
 
     async def unsubscribe_tou_response(
         self,
@@ -843,24 +952,11 @@ class MqttSubscriptionManager:
         callback: Callable[[TOUReservationSchedule], None],
     ) -> None:
         """Unsubscribe a specific TOU response callback."""
-        topic = MqttTopicBuilder.response_topic(
-            str(device.device_info.device_type),
-            self._client_id,
-            "tou/rd",
-        )
-
-        target_handler = None
-        if topic in self._message_handlers:
-            for h in self._message_handlers[topic]:
-                if getattr(h, "_original_callback", None) == callback:
-                    target_handler = h
-                    break
-
-        if target_handler:
-            await self.unsubscribe(topic, target_handler)
+        await self._unsubscribe_response(device, "tou/rd", callback)
 
     def clear_subscriptions(self) -> None:
         """Clear all subscription tracking (called on disconnect)."""
         self._subscriptions.clear()
         self._message_handlers.clear()
         self._state_tracker.clear()
+        self._devices.clear()

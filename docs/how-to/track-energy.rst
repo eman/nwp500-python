@@ -84,41 +84,69 @@ Track total runtime for each heating component:
 Historical Energy Usage
 -----------------------
 
-Request detailed daily energy usage data for specific months:
+The device answers two history queries: per-day usage for given months
+(the daily query) and per-month usage for whole years (the monthly
+query). Both reply with the same :class:`~nwp500.models.EnergyUsageResponse`;
+``total`` is the device's lifetime total in either case.
 
 .. code:: python
 
    from nwp500 import NavienMqttClient, EnergyUsageResponse
-   
+
    def on_energy_usage(energy: EnergyUsageResponse):
-       print(f"Total Usage: {energy.total.total_usage} Wh")
+       print(f"Lifetime: {energy.total.total_usage} Wh")
        print(f"Heat Pump: {energy.total.heat_pump_percentage:.1f}%")
        print(f"Electric: {energy.total.heat_element_percentage:.1f}%")
-       
-       # Daily breakdown
-       for day in energy.daily:
-           print(f"Day {day.day}: {day.total_usage} Wh")
-   
-   # Subscribe to energy usage responses
+
+       # Daily breakdown of each requested month
+       for month in energy.usage:
+           for day_num, day in enumerate(month.data, start=1):
+               print(f"{month.year}-{month.month:02d}-{day_num:02d}: "
+                     f"{day.total_usage} Wh")
+
    await mqtt_client.subscribe_energy_usage(device, on_energy_usage)
-   
+
    # Request energy usage for September 2025
    await mqtt_client.request_energy_usage(device, year=2025, months=[9])
-   
+
    # Request multiple months
    await mqtt_client.request_energy_usage(device, year=2025, months=[7, 8, 9])
 
+The monthly query returns one ``usage`` entry per year with ``month``
+unset and twelve ``data`` items:
+
+.. code:: python
+
+   def on_monthly(energy: EnergyUsageResponse):
+       year = energy.get_year_data(2026)
+       if year:
+           for month_num, month in enumerate(year.data, start=1):
+               print(f"2026-{month_num:02d}: {month.total_usage} Wh")
+
+   await mqtt_client.subscribe_energy_usage_monthly(device, on_monthly)
+   await mqtt_client.request_energy_usage_monthly(device, years=[2025, 2026])
+
 **Methods:**
 
-- ``request_energy_usage(device, year, months)``: Request historical data
-- ``subscribe_energy_usage(device, callback)``: Subscribe to energy usage responses
+- ``request_energy_usage(device, year, months)`` /
+  ``subscribe_energy_usage(device, callback)``: per-day data
+- ``request_energy_usage_monthly(device, years)`` /
+  ``subscribe_energy_usage_monthly(device, callback)``: per-month data
+- ``request_energy_usage_hourly(device, year, month, days)`` /
+  ``subscribe_energy_usage_hourly(device, callback)``: the app's per-hour
+  query, which the NWP500 tested never answered
 
 **Response Fields:**
 
-- ``total.total_usage`` (int): Total energy consumption in Wh
+- ``total.total_usage`` (int): Lifetime energy consumption in Wh
 - ``total.heat_pump_percentage`` (float): Percentage from heat pump
 - ``total.heat_element_percentage`` (float): Percentage from electric heaters
-- ``daily`` (list): Daily breakdown of usage per day
+- ``usage`` (list): One entry per requested month or year; each has
+  ``year``, ``month`` (``None`` for the monthly query) and ``data``
+
+CLI: ``nwp-cli energy --year 2025 --month 9`` (daily breakdown),
+``nwp-cli energy --year 2025 --months 7,8,9`` (monthly summary) and
+``nwp-cli energy --years 2025,2026`` (per-month for whole years).
 
 Energy Capacity
 ---------------

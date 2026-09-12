@@ -56,9 +56,11 @@ Examples include:
 * :meth:`nwp500.mqtt.client.NavienMqttClient.subscribe_device_status`
 * :meth:`nwp500.mqtt.client.NavienMqttClient.subscribe_device_feature`
 * :meth:`nwp500.mqtt.client.NavienMqttClient.subscribe_energy_usage`
+* :meth:`nwp500.mqtt.client.NavienMqttClient.subscribe_energy_usage_monthly`
 * :meth:`nwp500.mqtt.client.NavienMqttClient.subscribe_reservation_response`
-* :meth:`nwp500.mqtt.client.NavienMqttClient.subscribe_weekly_reservation_response`
 * :meth:`nwp500.mqtt.client.NavienMqttClient.subscribe_recirculation_schedule_response`
+* :meth:`nwp500.mqtt.client.NavienMqttClient.subscribe_diagnostics`
+* :meth:`nwp500.mqtt.client.NavienMqttClient.subscribe_firmware_download_info`
 
 Client event subscriptions
 --------------------------

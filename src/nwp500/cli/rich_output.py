@@ -151,13 +151,18 @@ class OutputFormatter:
         """Initialize the formatter."""
         self.console = Console()
 
-    def print_status_table(self, items: list[tuple[str, str, str]]) -> None:
+    def print_status_table(
+        self,
+        items: list[tuple[str, str, str]],
+        title: str = "DEVICE STATUS",
+    ) -> None:
         """Print status items as a formatted table.
 
         Args:
             items: List of (category, label, value) tuples
+            title: Table title
         """
-        self._print_status_rich(items)
+        self._print_status_rich(items, title)
 
     def print_energy_table(self, report: EnergyReport) -> None:
         """Print an energy usage report (summary + monthly breakdown).
@@ -165,9 +170,13 @@ class OutputFormatter:
         Args:
             report: Neutral energy report from :mod:`.presentation`
         """
-        self._print_energy_summary(report.totals, "ENERGY USAGE REPORT")
+        self._print_energy_summary(
+            report.totals, "ENERGY USAGE - REQUESTED MONTHS"
+        )
         if report.months:
             self._print_energy_rich(report.months)
+        if report.lifetime is not None:
+            self.print_lifetime_energy(report.lifetime)
 
     def print_daily_energy_table(self, report: DailyEnergyReport) -> None:
         """Print a daily energy usage report (summary + daily breakdown).
@@ -187,6 +196,33 @@ class OutputFormatter:
             report.totals, f"DAILY ENERGY USAGE - {month_str}"
         )
         self._print_daily_energy_rich(report.days)
+        if report.lifetime is not None:
+            self.print_lifetime_energy(report.lifetime)
+
+    def print_yearly_energy_table(self, report: DailyEnergyReport) -> None:
+        """Print one year of the monthly query (summary + per-month rows).
+
+        The device's lifetime total is not printed here, so a multi-year
+        query can print it once with :meth:`print_lifetime_energy`.
+
+        Args:
+            report: Neutral report from
+                :func:`.presentation.build_yearly_energy_report`
+        """
+        self._print_energy_summary(
+            report.totals, f"MONTHLY ENERGY USAGE - {report.year}"
+        )
+        self._print_daily_energy_rich(
+            report.days, title="MONTHLY BREAKDOWN", column="Month"
+        )
+
+    def print_lifetime_energy(self, totals: EnergyTotals) -> None:
+        """Print the device's lifetime energy total.
+
+        Every energy response carries it, and it is the same whatever
+        periods were requested.
+        """
+        self._print_energy_summary(totals, "DEVICE LIFETIME TOTAL")
 
     def print_error(
         self,
@@ -443,17 +479,21 @@ class OutputFormatter:
 
     # Rich implementations
 
-    def _print_status_rich(self, items: list[tuple[str, str, str]]) -> None:
+    def _print_status_rich(
+        self,
+        items: list[tuple[str, str, str]],
+        title: str = "DEVICE STATUS",
+    ) -> None:
         """Rich-enhanced status output."""
         assert self.console is not None
 
-        table = cast(Any, Table)(title="DEVICE STATUS", show_header=False)
+        table = cast(Any, Table)(title=title, show_header=False)
 
         if not items:
             # Preserve the previous empty-status header rendering.
             width = 44
             print("=" * width)
-            print("DEVICE STATUS")
+            print(title)
             print("=" * width)
             print("=" * width)
             return
@@ -567,12 +607,17 @@ class OutputFormatter:
         bar = "█" * filled + "░" * (width - filled)
         return f"[{bar}]"
 
-    def _print_daily_energy_rich(self, days: list[EnergyPeriodRow]) -> None:
-        """Rich-enhanced daily energy breakdown."""
+    def _print_daily_energy_rich(
+        self,
+        days: list[EnergyPeriodRow],
+        title: str = "DAILY BREAKDOWN",
+        column: str = "Day",
+    ) -> None:
+        """Rich-enhanced per-period energy breakdown."""
         assert self.console is not None
 
-        table = cast(Any, Table)(title="DAILY BREAKDOWN", show_header=True)
-        table.add_column("Day", style="cyan", width=6)
+        table = cast(Any, Table)(title=title, show_header=True)
+        table.add_column(column, style="cyan", width=max(6, len(column) + 6))
         table.add_column(
             "Total kWh", style="magenta", justify="right", width=12
         )

@@ -580,94 +580,61 @@ Important Notes
 Weekly Reservations
 ===================
 
-``update_weekly_reservation()`` configures a separate weekly reservation payload
-using :class:`~nwp500.models.WeeklyReservationSchedule`. This is useful when you
-want to send the whole weekly program as one typed object.
-
-.. code-block:: python
-
-   from nwp500 import (
-       WeeklyReservationEntry,
-       WeeklyReservationSchedule,
-   )
-   from nwp500.encoding import build_reservation_entry
-
-   morning = WeeklyReservationEntry.model_validate(
-       build_reservation_entry(
-           enabled=True,
-           days=["MO", "TU", "WE", "TH", "FR"],
-           hour=6,
-           minute=0,
-           mode_id=4,
-           temperature=60.0,
-       )
-   )
-
-   day = WeeklyReservationEntry.model_validate(
-       build_reservation_entry(
-           enabled=True,
-           days=["MO", "TU", "WE", "TH", "FR"],
-           hour=9,
-           minute=0,
-           mode_id=3,
-           temperature=50.0,
-       )
-   )
-
-   schedule = WeeklyReservationSchedule(
-       reservationUse=2,
-       reservation=[morning, day],
-   )
-
-   await mqtt.update_weekly_reservation(device, schedule)
-
-You can also subscribe to weekly reservation responses with
-:meth:`nwp500.mqtt.client.NavienMqttClient.subscribe_weekly_reservation_response`.
+The NaviLink app's "weekly" schedule screen is the reservation program
+above: it writes with ``update_reservations()`` on ``ctrl/rsv/rd`` and
+reads with ``request_reservations()``. There is no separate weekly
+command. (The app's enum declares a ``RESERVATION_WEEKLY`` code, but
+nothing sends it; the ``update_weekly_reservation()`` method that earlier
+library versions built on it was removed.)
 
 Recirculation Scheduling
 ========================
 
 Recirculation schedules are represented by
 :class:`~nwp500.models.RecirculationSchedule` and
-:class:`~nwp500.models.RecirculationScheduleEntry`.
+:class:`~nwp500.models.RecirculationScheduleEntry`. The app builds these
+entries with the same fields as a reservation entry: a day bitfield, a
+time, and ``mode`` as the entry's on/off toggle (``2`` pump on, ``1``
+pump off). The write goes to ``ctrl/recirc-rsv/rd`` and asks for the
+schedule back on ``recirc-rsv/rd``; the read is
+``request_recirculation_schedule()``. Both are gated on the
+``recirc_reservation_use`` capability, which a unit can report without
+having a recirculation pump fitted. Writes are limited to 20 entries with
+in-range fields.
 
 .. code-block:: python
 
    from nwp500 import RecirculationSchedule, RecirculationScheduleEntry
 
    schedule = RecirculationSchedule(
-       schedule=[
-           RecirculationScheduleEntry(
-               enable=2,
-               week=124,  # Mon-Fri
-               start_hour=6,
-               start_min=0,
-               end_hour=8,
-               end_min=30,
-               mode=2,
-           ),
-           RecirculationScheduleEntry(
-               enable=2,
-               week=130,  # Sat-Sun
-               start_hour=7,
-               start_min=0,
-               end_hour=9,
-               end_min=0,
-               mode=2,
-           ),
-       ]
+       reservationUse=2,
+       reservation=[
+           # Mon-Fri: pump on at 06:00, off at 08:30
+           RecirculationScheduleEntry(enable=2, week=124, hour=6, min=0, mode=2),
+           RecirculationScheduleEntry(enable=2, week=124, hour=8, min=30, mode=1),
+           # Sat-Sun: pump on at 07:00, off at 09:00
+           RecirculationScheduleEntry(enable=2, week=130, hour=7, min=0, mode=2),
+           RecirculationScheduleEntry(enable=2, week=130, hour=9, min=0, mode=1),
+       ],
    )
 
-   await mqtt.configure_recirculation_schedule(device, schedule)
-
-   def on_recirculation(schedule):
-       for entry in schedule.schedule:
-           print(entry.start_time, entry.end_time, entry.mode_name)
+   def on_recirculation(schedule: RecirculationSchedule) -> None:
+       print("enabled" if schedule.enabled else "disabled")
+       for entry in schedule.reservation:
+           print(entry.days, entry.time, "on" if entry.pump_on else "off")
 
    await mqtt.subscribe_recirculation_schedule_response(device, on_recirculation)
+   await mqtt.configure_recirculation_schedule(device, schedule)
+   await mqtt.request_recirculation_schedule(device)              # read back
+
+The ``mode``/``param`` semantics and the write echo are inferred from the
+app and have not been confirmed on a unit with recirculation fitted.
 
 Use :meth:`nwp500.mqtt.client.NavienMqttClient.set_recirculation_mode` to switch
 between always-on, button, schedule, and temperature modes.
+
+CLI: ``nwp-cli recirc-schedule get`` and
+``nwp-cli recirc-schedule set '<json array of entries>'``.
 
 Intelligent Scheduling
 ======================

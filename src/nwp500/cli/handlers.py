@@ -21,7 +21,12 @@ from nwp500.exceptions import (
     RangeValidationError,
     ValidationError,
 )
-from nwp500.models import ReservationSchedule
+from nwp500.models import (
+    RecirculationSchedule,
+    RecirculationScheduleEntry,
+    ReservationSchedule,
+)
+from nwp500.mqtt.control import validate_recirculation_schedule
 from nwp500.mqtt.utils import get_response_data, redact_serial
 from nwp500.reservations import (
     add_reservation,
@@ -35,8 +40,12 @@ from nwp500.unit_system import get_unit_system
 from .output_formatters import (
     print_device_info,
     print_device_status,
+    print_diagnostics,
     print_energy_usage,
+    print_firmware_download_info,
     print_json,
+    print_recirculation_schedule,
+    print_yearly_energy_usage,
 )
 from .rich_output import get_formatter
 
@@ -897,6 +906,205 @@ async def handle_get_energy_request(
         _logger.error(f"Error getting energy data: {e}")
 
 
+async def handle_get_energy_monthly_request(
+    mqtt: NavienMqttClient, device: Device, years: list[int]
+) -> None:
+    """Request per-month energy usage for whole years and print each year."""
+    try:
+        res: Any = await _wait_for_response(
+            mqtt.subscribe_energy_usage_monthly,
+            device,
+            lambda: mqtt.request_energy_usage_monthly(device, years),
+            action_name="monthly energy usage",
+            timeout=15,
+        )
+        print_yearly_energy_usage(
+            cast(EnergyUsageResponse, res), list(dict.fromkeys(years))
+        )
+    except TimeoutError:
+        _print_no_answer("monthly energy usage")
+    except (ValidationError, Nwp500Error) as e:
+        _logger.error(f"Error getting energy data: {e}")
+        _formatter.print_error(str(e), title="Monthly Energy Usage")
+    except Exception as e:
+        _logger.error(f"Error getting energy data: {e}")
+
+
+async def handle_diagnostics_request(
+    mqtt: NavienMqttClient, device: Device, output_json: bool = False
+) -> None:
+    """Request the installer diagnostics counters and print them."""
+    try:
+        diagnostics: Any = await _wait_for_response(
+            mqtt.subscribe_diagnostics,
+            device,
+            lambda: mqtt.request_diagnostics(device),
+            action_name="diagnostics",
+            timeout=15,
+        )
+        if output_json:
+            print_json(diagnostics.model_dump())
+        else:
+            print_diagnostics(diagnostics)
+    except TimeoutError:
+        _print_no_answer("diagnostics")
+    except Nwp500Error as e:
+        _logger.error(f"Error getting diagnostics: {e}")
+        _formatter.print_error(str(e), title="Diagnostics")
+    except Exception as e:
+        _logger.error(f"Error getting diagnostics: {e}")
+
+
+async def handle_firmware_download_info_request(
+    mqtt: NavienMqttClient, device: Device, output_json: bool = False
+) -> None:
+    """Request the firmware download (OTA) information and print it."""
+    try:
+        info: Any = await _wait_for_response(
+            mqtt.subscribe_firmware_download_info,
+            device,
+            lambda: mqtt.request_firmware_download_info(device),
+            action_name="firmware download info",
+        )
+        if output_json:
+            print_json(info.model_dump())
+        else:
+            print_firmware_download_info(info)
+    except TimeoutError:
+        _print_no_answer("firmware download info")
+    except Nwp500Error as e:
+        _logger.error(f"Error getting firmware download info: {e}")
+        _formatter.print_error(str(e), title="Firmware Download Info")
+    except Exception as e:
+        _logger.error(f"Error getting firmware download info: {e}")
+
+
+async def handle_get_recirculation_schedule_request(
+    mqtt: NavienMqttClient, device: Device, output_json: bool = False
+) -> None:
+    """Request the recirculation pump schedule and print it."""
+    try:
+        schedule: Any = await _wait_for_response(
+            mqtt.subscribe_recirculation_schedule_response,
+            device,
+            lambda: mqtt.request_recirculation_schedule(device),
+            action_name="recirculation schedule",
+        )
+        if output_json:
+            print_json(schedule.model_dump())
+        else:
+            print_recirculation_schedule(schedule)
+    except TimeoutError:
+        _print_no_answer("recirculation schedule")
+    except (DeviceError, Nwp500Error) as e:
+        _logger.error(f"Error getting recirculation schedule: {e}")
+        _formatter.print_error(str(e), title="Recirculation Schedule")
+    except Exception as e:
+        _logger.error(f"Error getting recirculation schedule: {e}")
+
+
+RECIRCULATION_ENTRY_KEYS = frozenset(
+    {"enable", "week", "hour", "min", "mode", "param"}
+)
+
+
+def parse_recirculation_schedule_json(
+    schedule_json: str, enabled: bool
+) -> RecirculationSchedule:
+    """Parse and validate a CLI recirculation schedule.
+
+    ``schedule_json`` is a JSON array of objects with ``enable`` (2/1),
+    ``week`` (day bitfield), ``hour``, ``min`` and ``mode`` (2 = pump on,
+    1 = pump off); ``param`` may be given but must be ``-1``. Unknown keys
+    are rejected rather than ignored, so an entry in another format cannot
+    silently become an all-default entry.
+
+    Raises:
+        ValueError: With a user-facing message on malformed input.
+    """
+    try:
+        entries = json.loads(schedule_json)
+    except json.JSONDecodeError as e:
+        raise ValueError(f"not valid JSON: {e.msg}") from None
+    if not isinstance(entries, list):
+        raise ValueError("schedule must be a JSON array of entries")
+    parsed: list[RecirculationScheduleEntry] = []
+    for index, raw in enumerate(cast(list[Any], entries), start=1):
+        if not isinstance(raw, dict):
+            raise ValueError(f"entry {index} must be a JSON object")
+        entry = cast(dict[str, Any], raw)
+        unknown = sorted(set(entry) - RECIRCULATION_ENTRY_KEYS)
+        if unknown:
+            raise ValueError(
+                f"entry {index} has unknown keys {', '.join(unknown)}; "
+                "expected enable, week, hour, min, mode"
+            )
+        for key in ("week", "hour", "min"):
+            if key not in entry:
+                raise ValueError(f"entry {index} is missing {key!r}")
+        for key, value in entry.items():
+            if not isinstance(value, int) or isinstance(value, bool):
+                raise ValueError(f"entry {index}: {key} must be an integer")
+        parsed.append(RecirculationScheduleEntry.model_validate(entry))
+    schedule = RecirculationSchedule(
+        reservationUse=2 if enabled else 1, reservation=parsed
+    )
+    try:
+        validate_recirculation_schedule(schedule)
+    except ValidationError as e:
+        raise ValueError(str(e)) from None
+    return schedule
+
+
+async def handle_set_recirculation_schedule_request(
+    mqtt: NavienMqttClient,
+    device: Device,
+    schedule_json: str,
+    enabled: bool,
+) -> None:
+    """Write the recirculation pump schedule and print the device's echo.
+
+    See :func:`parse_recirculation_schedule_json` for the input format.
+    The write asks for an echo on ``recirc-rsv/rd``; that echo has not been
+    observed on a unit with recirculation, so a missing echo is reported as
+    "sent, not confirmed" rather than as a failure.
+    """
+    try:
+        schedule = parse_recirculation_schedule_json(schedule_json, enabled)
+    except ValueError as e:
+        _logger.error(f"Invalid schedule: {e}")
+        _formatter.print_error(str(e), title="Invalid Schedule")
+        return
+
+    try:
+        echoed: Any = await _wait_for_response(
+            mqtt.subscribe_recirculation_schedule_response,
+            device,
+            lambda: mqtt.configure_recirculation_schedule(device, schedule),
+            action_name="recirculation schedule update",
+        )
+        _formatter.print_success("Recirculation schedule updated")
+        print_recirculation_schedule(echoed)
+    except TimeoutError:
+        _formatter.print_info(
+            "Recirculation schedule sent, but the device did not echo it "
+            "back. Run 'recirc-schedule get' to check what it stored."
+        )
+    except (ValidationError, DeviceError, Nwp500Error) as e:
+        _logger.error(f"Error updating recirculation schedule: {e}")
+        _formatter.print_error(str(e), title="Recirculation Schedule")
+    except Exception as e:
+        _logger.error(f"Error updating recirculation schedule: {e}")
+
+
+def _print_no_answer(what: str) -> None:
+    """Report a query the device did not answer in time."""
+    _formatter.print_error(
+        f"The device did not answer the {what} request in time.",
+        title="No Response",
+    )
+
+
 async def handle_reset_air_filter_request(
     mqtt: NavienMqttClient, device: Device
 ) -> None:
@@ -910,6 +1118,34 @@ async def handle_reset_air_filter_request(
     )
 
 
+async def handle_set_air_filter_life_request(
+    mqtt: NavienMqttClient, device: Device, hours: int
+) -> None:
+    """Set the air filter service interval."""
+    await _handle_command_with_status_feedback(
+        mqtt,
+        device,
+        lambda: mqtt.set_air_filter_life(device, hours),
+        "setting air filter life",
+        f"Air filter life set to {hours} hours"
+        if hours
+        else "Air filter alarm disabled",
+    )
+
+
+async def handle_reset_condenser_fault_request(
+    mqtt: NavienMqttClient, device: Device
+) -> None:
+    """Clear a condenser fault."""
+    await _handle_command_with_status_feedback(
+        mqtt,
+        device,
+        lambda: mqtt.reset_condenser_fault(device),
+        "resetting condenser fault",
+        "Condenser fault reset sent",
+    )
+
+
 async def handle_set_vacation_days_request(
     mqtt: NavienMqttClient, device: Device, days: int
 ) -> None:
@@ -920,6 +1156,19 @@ async def handle_set_vacation_days_request(
         lambda: mqtt.set_vacation_days(device, days),
         "setting vacation days",
         f"Vacation days set to {days}",
+    )
+
+
+async def handle_set_vacation_duration_request(
+    mqtt: NavienMqttClient, device: Device, days: int
+) -> None:
+    """Set the vacation day count without entering vacation mode."""
+    await _handle_command_with_status_feedback(
+        mqtt,
+        device,
+        lambda: mqtt.set_vacation_duration(device, days),
+        "setting vacation duration",
+        f"Vacation duration set to {days} days",
     )
 
 

@@ -54,7 +54,7 @@ Command Line Arguments
 Token Caching
 -------------
 
-The CLI automatically caches authentication tokens in ``~/.navien_tokens.json``
+The CLI automatically caches authentication tokens in ``~/.nwp500_tokens.json``
 to avoid repeated sign-ins. Tokens are refreshed automatically when expired.
 
 Global Options
@@ -74,11 +74,13 @@ Global Options
 
 .. option:: -v, --verbose
 
-   Enable verbose logging output (log level: INFO).
+   Enable verbose logging output (log level: INFO). Repeat the flag
+   (``-vv``) for DEBUG output, which includes every MQTT publish.
 
-.. option:: -vv, --very-verbose
+.. option:: --unit-system [metric|us_customary]
 
-   Enable very verbose logging output (log level: DEBUG).
+   Unit system for temperatures and flow rates. When omitted the CLI reads
+   the device's own temperature preference and matches it.
 
 Commands
 ========
@@ -293,6 +295,19 @@ Enable vacation mode for N days (reduces water heating to minimize energy use).
 
 **Output:** Confirmation message and updated device status.
 
+vacation-duration
+^^^^^^^^^^^^^^^^^
+
+Set the vacation day count (1-30) without entering vacation mode. Sends
+the NaviLink app's ``goout-day`` command; the device updates its vacation
+day setting and leaves the operation mode unchanged.
+
+.. code-block:: bash
+
+   python3 -m nwp500.cli vacation-duration 7
+
+**Output:** Confirmation message and updated device status.
+
 hot-button
 ^^^^^^^^^^
 
@@ -348,6 +363,65 @@ Reset air filter maintenance timer.
    python3 -m nwp500.cli reset-filter
 
 **Output:** Confirmation message.
+
+filter-life
+^^^^^^^^^^^
+
+Set the air filter service interval in evaporator-fan hours: ``0`` to
+disable the alarm, otherwise 1000 to 10000 in steps of 500 (the values
+the NaviLink app offers).
+
+.. code-block:: bash
+
+   python3 -m nwp500.cli filter-life 3000
+
+**Output:** Confirmation message and updated device status
+(``air_filter_alarm_period`` shows the new interval).
+
+reset-condenser-fault
+^^^^^^^^^^^^^^^^^^^^^
+
+Clear a condenser fault. The NaviLink app exposes this to installer
+accounts only; the gate is in the app. A consumer account's unit
+acknowledges the command.
+
+.. code-block:: bash
+
+   python3 -m nwp500.cli reset-condenser-fault
+
+**Output:** Confirmation message and updated device status.
+
+diagnostics
+^^^^^^^^^^^
+
+Show the installer diagnostics counters: lifetime heat pump and element
+energy, days since installation, fault event counts, demand-response
+operation times, hot-water draw statistics and component run times and
+start counts.
+
+.. code-block:: bash
+
+   python3 -m nwp500.cli diagnostics
+
+   # Raw model as JSON
+   python3 -m nwp500.cli diagnostics --json
+
+**Output:** One table with three sections (lifetime, hot water use,
+components). Energies
+are in Wh and run times in hours; the remaining counters have no
+documented unit.
+
+firmware
+^^^^^^^^
+
+Firmware update information.
+
+.. code-block:: bash
+
+   # Downloadable firmware components (one all-zero entry when nothing
+   # is pending)
+   python3 -m nwp500.cli firmware info
+   python3 -m nwp500.cli firmware info --json
 
 water-program
 ^^^^^^^^^^^^^^
@@ -452,13 +526,47 @@ Manage anti-legionella disinfection cycles.
    nwp-cli anti-legionella status
 
 
+recirc-schedule
+^^^^^^^^^^^^^^^
+
+Read or write the recirculation pump schedule. Requires the
+``recirc_reservation_use`` capability.
+
+.. code-block:: bash
+
+   # Read the schedule
+   python3 -m nwp500.cli recirc-schedule get
+   python3 -m nwp500.cli recirc-schedule get --json
+
+   # Write a schedule: pump on Mon-Fri at 06:00, off at 08:30
+   python3 -m nwp500.cli recirc-schedule set \
+       '[{"enable": 2, "week": 124, "hour": 6, "min": 0, "mode": 2},
+         {"enable": 2, "week": 124, "hour": 8, "min": 30, "mode": 1}]'
+
+   # Write it disabled
+   python3 -m nwp500.cli recirc-schedule set --disabled '[...]'
+
+Each entry has ``enable`` (2 on, 1 off), ``week`` (day bitfield, Sunday
+128 down to Saturday 2), ``hour``, ``min`` and ``mode`` (2 pump on, 1 pump
+off). The mode semantics are inferred from the NaviLink app and not
+confirmed on a unit with recirculation.
+
+The JSON is checked before connecting: at most 20 entries, only the keys
+above, integers in range. After a write the command waits for the device
+to echo the schedule; that echo is unverified, so if none arrives it
+reports the schedule as sent but unconfirmed and suggests
+``recirc-schedule get``.
+
+**Output:** The schedule as read back or echoed by the device.
+
 Energy & Utility Commands
 --------------------------
 
 energy
 ^^^^^^
 
-Query historical energy usage data by month or daily breakdown.
+Query historical energy usage: a monthly summary or daily breakdown for
+one year, or a per-month breakdown of whole years.
 
 .. code-block:: bash
 
@@ -471,45 +579,39 @@ Query historical energy usage data by month or daily breakdown.
    # Get daily breakdown for October 2024
    python3 -m nwp500.cli energy --year 2024 --month 10
 
-   # Get full year summary
-   python3 -m nwp500.cli energy --year 2024 --months 1,2,3,4,5,6,7,8,9,10,11,12
+   # Get every month of 2025 and 2026 (the device's monthly query)
+   python3 -m nwp500.cli energy --years 2025,2026
 
 **Syntax:**
 
 .. code-block:: bash
 
    python3 -m nwp500.cli energy --year <year> [--months <month-list> | --month <month>]
+   python3 -m nwp500.cli energy --years <year-list>
 
 **Options:**
 
 .. option:: --year YEAR
 
-   Year to query (e.g., 2024). **Required.**
+   Year to query (e.g., 2024). Required with ``--months`` or ``--month``.
 
 .. option:: --months MONTHS
 
-   Comma-separated list of months (1-12) for monthly summary. Use either
-   ``--months`` OR ``--month``, not both.
+   Comma-separated list of months (1-12) for monthly summary.
 
 .. option:: --month MONTH
 
-   Show daily breakdown for a specific month (1-12). Use either ``--month``
-   OR ``--months``, not both.
+   Show daily breakdown for a specific month (1-12).
 
-**Output:** Energy usage breakdown by heat pump vs. electric heating.
+.. option:: --years YEARS
 
-**Example Output:**
+   Comma-separated list of years for a per-month breakdown of each whole
+   year. Cannot be combined with the other options.
 
-.. code-block:: json
+Exactly one of ``--months``, ``--month`` or ``--years`` must be given.
 
-   {
-     "total_wh": 1234567,
-     "heat_pump_wh": 932098,
-     "heat_pump_hours": 245,
-     "electric_wh": 302469,
-     "electric_hours": 67,
-     "by_day": []
-   }
+**Output:** Lifetime totals followed by a per-period table showing heat
+pump versus electric heating.
 
 tou
 ^^^
@@ -537,6 +639,10 @@ Configure time-of-use (TOU) pricing schedule.
 **Output (get):** Utility name, schedule name, ZIP code, and pricing intervals.
 
 **Output (set):** Confirmation message and updated device status.
+
+The group also has ``tou rates``, ``tou plan`` and ``tou apply`` for
+looking up and applying OpenEI rate plans; run ``nwp-cli tou --help``
+for their options and see :doc:`../../how-to/optimize-tou`.
 
 dr
 ^^
@@ -716,7 +822,7 @@ Authentication Errors
        status
 
    # Clear cached tokens
-   rm ~/.navien_tokens.json
+   rm ~/.nwp500_tokens.json
 
 Connection Issues
 -----------------

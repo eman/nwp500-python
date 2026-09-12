@@ -16,7 +16,6 @@ if TYPE_CHECKING:
         Device,
         OtaCommitPayload,
         RecirculationSchedule,
-        WeeklyReservationSchedule,
     )
 
 __author__ = "Emmanuel Levijarvi"
@@ -111,6 +110,40 @@ class DeviceControlCommandsMixin:
             device, year, months
         )
 
+    async def request_energy_usage_monthly(
+        self, device: Device, years: list[int]
+    ) -> int:
+        """Request per-month energy usage for whole years."""
+        return await self._device_controller.request_energy_usage_monthly(
+            device, years
+        )
+
+    async def request_energy_usage_hourly(
+        self, device: Device, year: int, month: int, days: list[int]
+    ) -> int:
+        """Request per-hour energy usage for specific days."""
+        return await self._device_controller.request_energy_usage_hourly(
+            device, year, month, days
+        )
+
+    async def request_diagnostics(self, device: Device) -> int:
+        """Request the installer diagnostics counters."""
+        return await self._device_controller.request_diagnostics(device)
+
+    async def request_firmware_download_info(self, device: Device) -> int:
+        """Request the firmware download (OTA) information."""
+        controller = self._device_controller
+        return await controller.request_firmware_download_info(device)
+
+    async def request_recirculation_schedule(self, device: Device) -> int:
+        """Request the recirculation pump schedule from the device."""
+        controller = self._device_controller
+        return await controller.request_recirculation_schedule(device)
+
+    async def end_session(self, device: Device) -> int:
+        """Tell the device the client is done with it (``st/end``)."""
+        return await self._device_controller.end_session(device)
+
     async def signal_app_connection(self, device: Device) -> int:
         """Signal that the app has connected."""
         return await self._device_controller.signal_app_connection(device)
@@ -128,16 +161,20 @@ class DeviceControlCommandsMixin:
         return await self._device_controller.reset_air_filter(device)
 
     async def set_vacation_days(self, device: Device, days: int) -> int:
-        """Set vacation/away mode duration (1-30 days)."""
+        """Enter vacation mode for ``days`` days (1-30)."""
         return await self._device_controller.set_vacation_days(device, days)
 
-    async def update_weekly_reservation(
-        self, device: Device, schedule: WeeklyReservationSchedule
-    ) -> int:
-        """Configure the weekly temperature reservation schedule."""
-        return await self._device_controller.update_weekly_reservation(
-            device, schedule
-        )
+    async def set_vacation_duration(self, device: Device, days: int) -> int:
+        """Set the vacation day count without changing the operation mode."""
+        return await self._device_controller.set_vacation_duration(device, days)
+
+    async def set_air_filter_life(self, device: Device, hours: int) -> int:
+        """Set the air filter service interval (0 or 1000-10000 hours)."""
+        return await self._device_controller.set_air_filter_life(device, hours)
+
+    async def reset_condenser_fault(self, device: Device) -> int:
+        """Clear a condenser fault (installer-level in the app)."""
+        return await self._device_controller.reset_condenser_fault(device)
 
     async def configure_reservation_water_program(self, device: Device) -> int:
         """Enable/configure water program reservation mode."""
@@ -164,10 +201,6 @@ class DeviceControlCommandsMixin:
             device
         )
 
-    async def check_firmware_update(self, device: Device) -> int:
-        """Check for available over-the-air firmware updates."""
-        return await self._device_controller.check_firmware_update(device)
-
     async def commit_firmware_update(
         self, device: Device, payload: OtaCommitPayload
     ) -> int:
@@ -175,26 +208,6 @@ class DeviceControlCommandsMixin:
         return await self._device_controller.commit_firmware_update(
             device, payload
         )
-
-    async def reconnect_wifi(self, device: Device) -> int:
-        """Trigger a WiFi reconnection on the device."""
-        return await self._device_controller.reconnect_wifi(device)
-
-    async def reset_wifi(self, device: Device) -> int:
-        """Reset WiFi settings to factory defaults."""
-        return await self._device_controller.reset_wifi(device)
-
-    async def set_freeze_protection_temperature(
-        self, device: Device, temperature: float
-    ) -> int:
-        """Set the freeze protection activation temperature."""
-        return await self._device_controller.set_freeze_protection_temperature(
-            device, temperature
-        )
-
-    async def run_smart_diagnostic(self, device: Device) -> int:
-        """Trigger the smart diagnostic routine on the device."""
-        return await self._device_controller.run_smart_diagnostic(device)
 
     async def enable_intelligent_scheduling(self, device: Device) -> int:
         """Enable intelligent/adaptive heating mode."""

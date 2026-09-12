@@ -2,8 +2,10 @@
 Device Maintenance
 ==================
 
-Maintenance commands let you handle firmware updates, connectivity recovery,
-freeze protection, and onboard diagnostics from MQTT.
+Maintenance commands cover firmware update information, the installer
+diagnostics counters, air filter service intervals and fault resets. All
+of them mirror what the NaviLink app sends; the CLI equivalents are noted
+with each one.
 
 .. contents:: On This Page
    :local:
@@ -12,104 +14,122 @@ freeze protection, and onboard diagnostics from MQTT.
 Before You Start
 ================
 
-Many maintenance operations are device-specific. Request device features first so
-you can inspect capability flags and supported temperature ranges.
+Some maintenance operations are gated on device capabilities. Request
+device features first so the client can inspect capability flags.
 
 .. code-block:: python
 
    await mqtt.subscribe_device_feature(device, lambda feature: print(feature))
    await mqtt.request_device_info(device)
 
-Firmware OTA Updates
-====================
+Installer Diagnostics
+=====================
 
-Use firmware OTA when the device has already downloaded or advertised an update.
-The workflow is asynchronous:
+The NaviLink app's installer screen shows lifetime counters the device
+keeps: heat pump and element energy, days since installation, fault
+event counts, demand-response operation times, hot-water draw statistics
+and component run times and start counts. The gate is in the app, so a
+consumer account's unit answers the query.
 
-1. Call :meth:`nwp500.mqtt.client.NavienMqttClient.check_firmware_update`
-2. Wait for the device's response on its control response topic
-3. If an update is available, call
-   :meth:`nwp500.mqtt.client.NavienMqttClient.commit_firmware_update`
-   with an :class:`~nwp500.models.OtaCommitPayload`
+.. code-block:: python
+
+   from nwp500 import DeviceDiagnostics
+
+   def on_diagnostics(diag: DeviceDiagnostics) -> None:
+       ts, ta = diag.ts_data, diag.ta_data
+       print(f"Installed {ts.days_since_installation} days ago")
+       print(f"Heat pump: {ts.cumulated_pwr_hp} Wh over "
+             f"{ta.cumulated_op_time_comp} h, {ta.cumulated_op_num_comp} starts")
+       print(f"Condensate overflows: {ts.cumulated_occ_num_con_ovr_flow}")
+
+   await mqtt.subscribe_diagnostics(device, on_diagnostics)
+   await mqtt.request_diagnostics(device)
+
+The two energies are watt-hours and ``cumulated_op_time_*`` values are
+hours (both cross-checked against the energy query); the remaining
+counters have no documented unit. See
+:class:`~nwp500.models.DeviceDiagnostics` for every field.
+
+CLI: ``nwp-cli diagnostics`` (add ``--json`` for the raw model).
+
+Firmware Download Information
+=============================
+
+The device reports which firmware components it has downloaded for an
+over-the-air update. A unit with nothing pending reports one all-zero
+entry.
+
+.. code-block:: python
+
+   from nwp500 import FirmwareDownloadInfo
+
+   def on_firmware(info: FirmwareDownloadInfo) -> None:
+       for entry in info.download_sw_info:
+           print(entry.component_name, entry.sw_version, entry.status)
+
+   await mqtt.subscribe_firmware_download_info(device, on_firmware)
+   await mqtt.request_firmware_download_info(device)
+
+To apply a downloaded update, call
+:meth:`nwp500.mqtt.client.NavienMqttClient.commit_firmware_update` with an
+:class:`~nwp500.models.OtaCommitPayload` naming the component code and
+version from the entry above.
 
 .. warning::
 
-   Committing firmware reboots the device. Heating and MQTT connectivity will be
-   interrupted until the upgrade completes.
+   Committing firmware reboots the device. Heating and MQTT connectivity
+   will be interrupted until the upgrade completes.
 
 .. code-block:: python
 
    from nwp500 import OtaCommitPayload
 
-   def on_message(topic, message):
-       print(topic)
-       print(message)
-
-   await mqtt.subscribe_device(device, on_message)
-   await mqtt.check_firmware_update(device)
-
-   # After confirming the component code/version from the async response:
    payload = OtaCommitPayload(swCode=1, swVersion=1234)
    await mqtt.commit_firmware_update(device, payload)
 
-WiFi Management
-===============
+CLI: ``nwp-cli firmware info``.
 
-Two commands cover WiFi recovery:
+Air Filter
+==========
 
-* :meth:`nwp500.mqtt.client.NavienMqttClient.reconnect_wifi` performs a soft
-  reconnect using the currently stored credentials.
-* :meth:`nwp500.mqtt.client.NavienMqttClient.reset_wifi` clears WiFi settings and
-  returns the device to an unprovisioned state.
-
-.. warning::
-
-   ``reset_wifi()`` is effectively a factory reset for network settings. You will
-   need to reconfigure the device in the Navien app afterward.
+The air filter timer is reset after cleaning or replacing the filter. The
+service interval is set in evaporator-fan hours: ``0`` disables the alarm,
+otherwise 1000 to 10000 hours in 500-hour steps, which are the values the
+NaviLink app offers. The device reports the interval back as
+``DeviceStatus.air_filter_alarm_period``.
 
 .. code-block:: python
 
-   # Try this first when the device drops off WiFi
-   await mqtt.reconnect_wifi(device)
+   await mqtt.set_air_filter_life(device, 3000)
+   await mqtt.reset_air_filter(device)
 
-   # Use only when credentials or provisioning are broken
-   await mqtt.reset_wifi(device)
+CLI: ``nwp-cli filter-life 3000`` and ``nwp-cli reset-filter``.
 
-Freeze Protection
-=================
+Condenser Fault Reset
+=====================
 
-Freeze protection is available on devices that expose the
-``freeze_protection_use`` capability. The threshold is specified in the user's
-preferred temperature unit and converted automatically.
-
-The implementation documentation describes a typical supported range of
-35-45 °F (about 1.7-7.2 °C). You can also inspect
-``DeviceFeature.freeze_protection_temp_min`` and
-``DeviceFeature.freeze_protection_temp_max`` after requesting device info.
+Clears a condenser fault. The NaviLink app exposes this on its status
+screen to installer accounts only; the gate is in the app. A consumer
+account's unit acknowledges the command; the clearing effect could not be
+observed because no fault was present.
 
 .. code-block:: python
 
-   # Fahrenheit example
-   await mqtt.set_freeze_protection_temperature(device, 40.0)
+   await mqtt.reset_condenser_fault(device)
 
-Smart Diagnostics
-=================
+CLI: ``nwp-cli reset-condenser-fault``.
 
-Smart diagnostics are available on devices that expose the
-``smart_diagnostic_use`` capability. Triggering the diagnostic tells the device
-to run its onboard self-check routine.
+Commands the App Never Sends
+============================
 
-The result is reflected in the next
-:class:`~nwp500.models.DeviceStatus` update via the ``smart_diagnostic`` field.
-
-.. code-block:: python
-
-   def on_status(status):
-       print(f"Diagnostic status: {status.smart_diagnostic}")
-
-   await mqtt.subscribe_device_status(device, on_status)
-   await mqtt.run_smart_diagnostic(device)
-   await mqtt.request_device_status(device)
+The NaviLink app's command enum also declares an OTA check, WiFi reconnect
+and reset, a freeze-protection temperature and a smart diagnostic trigger,
+but its request builder has no case for any of them, so no NaviLink client
+publishes those codes and their payloads are unknown. Earlier versions of
+this library sent made-up payloads for them; those methods were removed.
+The freeze-protection range and the smart diagnostic result remain
+readable from :class:`~nwp500.models.DeviceFeature` and
+:class:`~nwp500.models.DeviceStatus`.
 
 Related Documentation
 =====================

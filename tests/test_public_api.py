@@ -72,3 +72,62 @@ def test_mqtt_tou_read_is_gone():
 
     assert not hasattr(NavienMqttClient, "request_tou_settings")
     assert hasattr(NavienAPIClient, "get_tou_info")
+
+
+def test_invented_mqtt_commands_are_gone():
+    """Commands the NaviLink app declares but never sends were removed.
+
+    The app's request builder has no case for OTA check, WiFi reset or
+    reconnect, freeze protection temperature or smart diagnostic, and it
+    writes its weekly schedule with ``update_reservations`` on
+    ``ctrl/rsv/rd``, never with 33554438. The library's methods for those
+    sent made-up payloads.
+    """
+    from nwp500 import NavienMqttClient
+
+    removed = [
+        "check_firmware_update",
+        "reconnect_wifi",
+        "reset_wifi",
+        "set_freeze_protection_temperature",
+        "run_smart_diagnostic",
+        "update_weekly_reservation",
+        "subscribe_weekly_reservation_response",
+        "unsubscribe_weekly_reservation_response",
+    ]
+    still_present = [n for n in removed if hasattr(NavienMqttClient, n)]
+    assert still_present == []
+    assert not hasattr(nwp500, "WeeklyReservationSchedule")
+    assert not hasattr(nwp500, "WeeklyReservationEntry")
+
+
+def test_app_queries_and_controls_are_exposed():
+    """Every query and control the NaviLink app sends has a client method."""
+    from nwp500 import NavienMqttClient
+
+    expected = [
+        "request_diagnostics",
+        "subscribe_diagnostics",
+        "request_energy_usage_monthly",
+        "subscribe_energy_usage_monthly",
+        "request_energy_usage_hourly",
+        "subscribe_energy_usage_hourly",
+        "request_recirculation_schedule",
+        "request_firmware_download_info",
+        "subscribe_firmware_download_info",
+        "end_session",
+        "set_vacation_duration",
+        "set_air_filter_life",
+        "reset_condenser_fault",
+    ]
+    missing = [n for n in expected if not hasattr(NavienMqttClient, n)]
+    assert missing == []
+    for name in (
+        "DeviceDiagnostics",
+        "DiagnosticsEventCounters",
+        "DiagnosticsDhwUsage",
+        "DiagnosticsComponentCounters",
+        "FirmwareDownloadInfo",
+        "FirmwareDownloadEntry",
+    ):
+        assert name in nwp500.__all__

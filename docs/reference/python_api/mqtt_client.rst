@@ -167,7 +167,15 @@ disconnect()
 
    Disconnect from MQTT broker and cleanup all resources.
 
-   Stops all periodic tasks, unsubscribes from topics, and closes connection.
+   Stops all periodic tasks, sends the session-end query (``st/end``) to
+   every device passed to a ``subscribe_*`` method, as the NaviLink app
+   does when it leaves a device, then closes the connection. The
+   session-end publishes go straight to the connection (never into the
+   offline command queue), stop if the connection drops, are bounded by a
+   short timeout, and never fail the disconnect. Set
+   ``MqttConnectionConfig(send_session_end_on_disconnect=False)`` to skip
+   them; their effect on other clients connected to the same device is
+   not known.
 
    **Example:**
 
@@ -375,8 +383,8 @@ can validate support and ranges before sending commands.
 
 Common capability flags include ``power_use``, ``dhw_use``,
 ``dhw_temperature_setting_use``, ``program_reservation_use``,
-``recirculation_use``, ``recirc_reservation_use``, ``freeze_protection_use``,
-and ``smart_diagnostic_use``.
+``recirculation_use``, ``recirc_reservation_use``, ``holiday_use``,
+``anti_legionella_setting_use`` and ``dr_setting_use``.
 
 set_power()
 ^^^^^^^^^^^
@@ -446,7 +454,20 @@ set_vacation_days()
 
 .. py:method:: set_vacation_days(device, days)
 
-   Convenience wrapper for vacation mode.
+   Enter vacation mode for ``days`` days (1-30). Sends ``dhw-mode`` with
+   ``[5, days]``, which is what the NaviLink app's vacation flow does.
+
+   **Capability Required:** ``holiday_use``
+
+set_vacation_duration()
+^^^^^^^^^^^^^^^^^^^^^^^
+
+.. py:method:: set_vacation_duration(device, days)
+
+   Set the vacation day count (1-30) without changing the operation mode.
+   Sends the app's ``goout-day`` command (33554466). Verified live: the
+   device updates ``vacation_day_setting`` and leaves the operation mode
+   unchanged.
 
    **Capability Required:** ``holiday_use``
 
@@ -499,28 +520,6 @@ subscribe_reservation_response()
    :param callback: Called with :class:`~nwp500.models.ReservationSchedule`
    :type callback: Callable[[ReservationSchedule], None]
 
-update_weekly_reservation()
-^^^^^^^^^^^^^^^^^^^^^^^^^^^
-
-.. py:method:: update_weekly_reservation(device, schedule)
-
-   Send a typed weekly reservation schedule.
-
-   **Capability Required:** ``program_reservation_use``
-
-   :param schedule: Weekly reservation schedule payload
-   :type schedule: WeeklyReservationSchedule
-
-subscribe_weekly_reservation_response()
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-
-.. py:method:: subscribe_weekly_reservation_response(device, callback)
-
-   Subscribe to parsed weekly reservation responses.
-
-   :param callback: Called with :class:`~nwp500.models.WeeklyReservationSchedule`
-   :type callback: Callable[[WeeklyReservationSchedule], None]
-
 configure_reservation_water_program()
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
@@ -535,19 +534,38 @@ configure_recirculation_schedule()
 
 .. py:method:: configure_recirculation_schedule(device, schedule)
 
-   Configure the timed recirculation schedule.
+   Write the recirculation pump schedule. Publishes RECIR_RESERVATION
+   (33554440) on ``ctrl/recirc-rsv/rd`` with the app's
+   ``reservationUse``/``reservation`` envelope and asks for the written
+   schedule back on ``recirc-rsv/rd``. That echo is unverified (the only
+   unit tested has no recirculation pump). The schedule is checked
+   before sending: at most 20 entries, ``enable`` and ``mode`` 1-2,
+   ``week`` a day bitfield, ``hour`` 0-23, ``min`` 0-59, ``param`` -1.
+
+   :raises ParameterValidationError: If the schedule fails those checks.
 
    **Capability Required:** ``recirc_reservation_use``
 
    :param schedule: Recirculation schedule payload
    :type schedule: RecirculationSchedule
 
+request_recirculation_schedule()
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+.. py:method:: request_recirculation_schedule(device)
+
+   Read the recirculation pump schedule (``st/recirc-rsv/rd``). The reply
+   arrives via :meth:`subscribe_recirculation_schedule_response`.
+
+   **Capability Required:** ``recirc_reservation_use``
+
 subscribe_recirculation_schedule_response()
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 .. py:method:: subscribe_recirculation_schedule_response(device, callback)
 
-   Subscribe to parsed recirculation schedule responses.
+   Subscribe to parsed recirculation schedule responses: the reply to a
+   read, and the echo of a write if the device sends one.
 
    :param callback: Called with :class:`~nwp500.models.RecirculationSchedule`
    :type callback: Callable[[RecirculationSchedule], None]
@@ -628,25 +646,114 @@ subscribe_energy_usage()
 
 .. py:method:: subscribe_energy_usage(device, callback)
 
-   Subscribe to parsed energy usage responses.
+   Subscribe to parsed daily energy usage responses.
 
    :param callback: Called with :class:`~nwp500.models.EnergyUsageResponse`
    :type callback: Callable[[EnergyUsageResponse], None]
 
-check_firmware_update()
+request_energy_usage_monthly()
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+.. py:method:: request_energy_usage_monthly(device, years)
+
+   Request per-month energy usage for whole years. The NaviLink app sends
+   this for the previous and current year. Each ``usage`` entry of the
+   response is a year (``month`` is ``None``) whose ``data`` holds twelve
+   months; see :meth:`~nwp500.models.EnergyUsageResponse.get_year_data`.
+
+   :param years: Years to query, e.g. ``[2025, 2026]``; each 2000-2099,
+     duplicates dropped
+   :type years: list[int]
+
+subscribe_energy_usage_monthly()
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+.. py:method:: subscribe_energy_usage_monthly(device, callback)
+
+   Subscribe to parsed monthly energy usage responses.
+
+   :param callback: Called with :class:`~nwp500.models.EnergyUsageResponse`
+   :type callback: Callable[[EnergyUsageResponse], None]
+
+request_energy_usage_hourly()
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+.. py:method:: request_energy_usage_hourly(device, year, month, days)
+
+   Request per-hour energy usage for specific days, as the NaviLink app
+   does. The NWP500 firmware tested never answered this query, so expect
+   a timeout on that model.
+
+subscribe_energy_usage_hourly()
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+.. py:method:: subscribe_energy_usage_hourly(device, callback)
+
+   Subscribe to parsed hourly energy usage responses.
+
+   :param callback: Called with :class:`~nwp500.models.EnergyUsageResponse`
+   :type callback: Callable[[EnergyUsageResponse], None]
+
+request_diagnostics()
+^^^^^^^^^^^^^^^^^^^^^
+
+.. py:method:: request_diagnostics(device)
+
+   Request the installer diagnostics counters (``st/td/rd``): lifetime
+   energy and fault counters, hot-water draw statistics and component run
+   times. The NaviLink cloud decodes the device's packed reply into JSON
+   only for the app-form reply topic, which this method requests. The
+   app shows this screen to installer accounts only, but the gate is in
+   the app and a consumer account's unit answers.
+
+subscribe_diagnostics()
 ^^^^^^^^^^^^^^^^^^^^^^^
 
-.. py:method:: check_firmware_update(device)
+.. py:method:: subscribe_diagnostics(device, callback)
 
-   Trigger an OTA firmware availability check. The response arrives
-   asynchronously on the device's MQTT response topic.
+   Subscribe to parsed diagnostics responses.
+
+   :param callback: Called with :class:`~nwp500.models.DeviceDiagnostics`
+   :type callback: Callable[[DeviceDiagnostics], None]
+
+request_firmware_download_info()
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+.. py:method:: request_firmware_download_info(device)
+
+   Request the downloadable firmware (OTA) information
+   (``st/dl-sw-info``). The device answers on its own topic, which the
+   device wildcard subscription covers.
+
+subscribe_firmware_download_info()
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+.. py:method:: subscribe_firmware_download_info(device, callback)
+
+   Subscribe to parsed firmware download info responses.
+
+   :param callback: Called with :class:`~nwp500.models.FirmwareDownloadInfo`
+   :type callback: Callable[[FirmwareDownloadInfo], None]
+
+end_session()
+^^^^^^^^^^^^^
+
+.. py:method:: end_session(device)
+
+   Send the session-end query (``st/end``). No reply to it has been
+   observed. :meth:`disconnect` sends it automatically for every
+   subscribed device; call it directly only when you stop using one
+   device while staying connected.
 
 commit_firmware_update()
 ^^^^^^^^^^^^^^^^^^^^^^^^
 
 .. py:method:: commit_firmware_update(device, payload)
 
-   Commit a previously downloaded firmware update.
+   Commit a previously downloaded firmware update. Publishes on
+   ``ctrl/commit-ota`` with the reply requested on ``res/commit-ota``, as
+   the NaviLink app's firmware screen does. Not exercised against a
+   device.
 
    :param payload: OTA commit payload identifying the component and version
    :type payload: OtaCommitPayload
@@ -654,44 +761,6 @@ commit_firmware_update()
    .. warning::
 
       The device reboots when a firmware commit is applied.
-
-reconnect_wifi()
-^^^^^^^^^^^^^^^^
-
-.. py:method:: reconnect_wifi(device)
-
-   Ask the device to reconnect to WiFi using its current configuration.
-
-reset_wifi()
-^^^^^^^^^^^^
-
-.. py:method:: reset_wifi(device)
-
-   Clear the stored WiFi configuration.
-
-   .. warning::
-
-      After ``reset_wifi()``, the device must be provisioned again.
-
-set_freeze_protection_temperature()
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-
-.. py:method:: set_freeze_protection_temperature(device, temperature)
-
-   Set the freeze-protection threshold in the current unit system.
-
-   Available on devices that expose ``freeze_protection_use``.
-
-run_smart_diagnostic()
-^^^^^^^^^^^^^^^^^^^^^^
-
-.. py:method:: run_smart_diagnostic(device)
-
-   Trigger the device's smart diagnostic routine.
-
-   Available on devices that expose ``smart_diagnostic_use``.
-
-   The result appears in the next ``DeviceStatus.smart_diagnostic`` update.
 
 enable_intelligent_scheduling()
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -728,12 +797,27 @@ reset_air_filter()
 
    Reset the air-filter maintenance timer.
 
-signal_app_connection()
+set_air_filter_life()
+^^^^^^^^^^^^^^^^^^^^^
+
+.. py:method:: set_air_filter_life(device, hours)
+
+   Set the air filter service interval: ``0`` to disable the alarm, or
+   1000 to 10000 evaporator-fan hours in 500-hour steps (the values the
+   NaviLink app offers). The device reports it back as
+   ``DeviceStatus.air_filter_alarm_period``.
+
+   :raises ParameterValidationError: If ``hours`` is not an accepted value.
+
+reset_condenser_fault()
 ^^^^^^^^^^^^^^^^^^^^^^^
 
-.. py:method:: signal_app_connection(device)
+.. py:method:: reset_condenser_fault(device)
 
-   Publish an app-connection heartbeat event to the device.
+   Clear a condenser fault. The NaviLink app exposes this to installer
+   accounts only; the gate is in the app. A consumer account's unit
+   acknowledges the command; the clearing effect was not observable
+   because no fault was present.
 
 Periodic Request Methods
 ------------------------

@@ -147,7 +147,9 @@ def main():
         print(f"  • {e.name}")
 
     print("\n" + "=" * 70)
-    print("For complete error code reference, see docs/protocol/error_codes.rst")
+    print(
+        "For complete error code reference, see docs/reference/protocol/error_codes.rst"
+    )
     print("=" * 70)
 
 
