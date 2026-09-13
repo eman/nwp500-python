@@ -441,7 +441,7 @@ The app's enum also declares OTA Check (33554443), WiFi Reconnect
 (33554446), WiFi Reset (33554447), Freeze Protection Temperature
 (33554451) and Smart Diagnostic (33554455). Its request builder has no
 case for any of them, so no NaviLink client ever publishes these codes and
-their payloads are unknown. Versions of this library before 10.0 sent
+their payloads are unknown. Versions of this library before 9.4 sent
 made-up ``mode`` strings for them; those methods were removed.
 
 Cooling Mode (33554460), Water Filter Reset (33554461) and Pre-Filter
