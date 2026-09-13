@@ -798,8 +798,14 @@ def build_device_info_rows(device_feature: Any) -> list[StatusRow]:
     return all_items
 
 
-def format_month_label(year: int, month: int) -> str:
-    """Return a display label for a year/month pair."""
+def format_month_label(year: int, month: int | None) -> str:
+    """Return a display label for a year/month pair.
+
+    A ``None`` month (a monthly-query entry, which covers a whole year)
+    is labelled with the year alone.
+    """
+    if month is None:
+        return str(year)
     if 1 <= month <= 12:
         return f"{month_name[month]} {year}"
     return f"Month {month} {year}"
@@ -839,20 +845,36 @@ class EnergyPeriodRow:
 
 @dataclass
 class EnergyReport:
-    """Aggregated energy usage grouped by month."""
+    """Aggregated energy usage grouped by month.
+
+    ``totals`` covers only the requested periods. ``lifetime`` is the
+    device's own running total from the response, which is the same
+    whatever periods are requested.
+    """
 
     totals: EnergyTotals
     months: list[EnergyPeriodRow] = field(default_factory=list)
+    lifetime: EnergyTotals | None = None
 
 
 @dataclass
 class DailyEnergyReport:
-    """Aggregated daily energy usage for a single month."""
+    """Aggregated per-period energy usage for one month or one year.
+
+    ``totals`` covers only the rows in ``days``; ``lifetime`` is the
+    device's running total (see :class:`EnergyReport`).
+    """
 
     year: int
     month: int
     totals: EnergyTotals
     days: list[EnergyPeriodRow] = field(default_factory=list)
+    lifetime: EnergyTotals | None = None
+
+
+def build_lifetime_totals(energy_response: Any) -> EnergyTotals:
+    """The device's lifetime total from any energy response."""
+    return _build_totals(energy_response.total)
 
 
 def _build_totals(total: Any) -> EnergyTotals:
@@ -869,6 +891,25 @@ def _build_totals(total: Any) -> EnergyTotals:
     )
 
 
+def _totals_from_rows(rows: list[EnergyPeriodRow]) -> EnergyTotals:
+    """Sum period rows into totals covering just those periods."""
+    hp_wh = sum(r.heat_pump_wh for r in rows)
+    he_wh = sum(r.heat_element_wh for r in rows)
+    hp_time = sum(r.heat_pump_time for r in rows)
+    he_time = sum(r.heat_element_time for r in rows)
+    hp_pct, he_pct = _percentages(hp_wh, he_wh, hp_wh + he_wh)
+    return EnergyTotals(
+        total_usage_wh=hp_wh + he_wh,
+        heat_pump_usage_wh=hp_wh,
+        heat_pump_percentage=hp_pct,
+        heat_element_usage_wh=he_wh,
+        heat_element_percentage=he_pct,
+        total_time_hours=hp_time + he_time,
+        heat_pump_time_hours=hp_time,
+        heat_element_time_hours=he_time,
+    )
+
+
 def _percentages(hp_wh: int, he_wh: int, total_wh: int) -> tuple[float, float]:
     """Return heat-pump/heat-element share of total usage as percentages."""
     hp_pct = (hp_wh / total_wh * 100) if total_wh > 0 else 0.0
@@ -877,13 +918,16 @@ def _percentages(hp_wh: int, he_wh: int, total_wh: int) -> tuple[float, float]:
 
 
 def build_energy_report(energy_response: Any) -> EnergyReport:
-    """Aggregate an energy response into neutral monthly rows.
+    """Aggregate an energy response into neutral period rows.
+
+    Each ``usage`` entry becomes one row: a month for the daily query, a
+    whole year for the monthly query (its ``month`` is ``None``).
 
     Args:
         energy_response: EnergyUsageResponse object
 
     Returns:
-        EnergyReport with totals and one row per month.
+        EnergyReport with totals and one row per usage entry.
     """
     months: list[EnergyPeriodRow] = []
     for month_data in energy_response.usage:
@@ -909,7 +953,9 @@ def build_energy_report(energy_response: Any) -> EnergyReport:
             )
         )
     return EnergyReport(
-        totals=_build_totals(energy_response.total), months=months
+        totals=_totals_from_rows(months),
+        months=months,
+        lifetime=_build_totals(energy_response.total),
     )
 
 
@@ -951,6 +997,203 @@ def build_daily_energy_report(
     return DailyEnergyReport(
         year=year,
         month=month,
-        totals=_build_totals(energy_response.total),
+        totals=_totals_from_rows(days),
         days=days,
+        lifetime=_build_totals(energy_response.total),
     )
+
+
+def build_yearly_energy_report(
+    energy_response: Any, year: int
+) -> DailyEnergyReport | None:
+    """Aggregate one year of a monthly-query response into per-month rows.
+
+    Reuses :class:`DailyEnergyReport` with ``month`` set to ``0`` and one
+    row per calendar month, labelled by month name.
+
+    Args:
+        energy_response: EnergyUsageResponse from the monthly query
+        year: Year to select
+
+    Returns:
+        DailyEnergyReport, or ``None`` if the year has no data.
+    """
+    year_data = energy_response.get_year_data(year)
+    if not year_data or not year_data.data:
+        return None
+
+    rows: list[EnergyPeriodRow] = []
+    for month_num, month_data in enumerate(year_data.data, start=1):
+        total_wh = month_data.total_usage
+        hp_wh = month_data.heat_pump_usage
+        he_wh = month_data.heat_element_usage
+        hp_pct, he_pct = _percentages(hp_wh, he_wh, total_wh)
+        label = month_name[month_num] if month_num <= 12 else str(month_num)
+        rows.append(
+            EnergyPeriodRow(
+                label=label,
+                total_wh=total_wh,
+                heat_pump_wh=hp_wh,
+                heat_element_wh=he_wh,
+                heat_pump_time=month_data.heat_pump_time,
+                heat_element_time=month_data.heat_element_time,
+                heat_pump_percentage=hp_pct,
+                heat_element_percentage=he_pct,
+            )
+        )
+    return DailyEnergyReport(
+        year=year,
+        month=0,
+        totals=_totals_from_rows(rows),
+        days=rows,
+        lifetime=_build_totals(energy_response.total),
+    )
+
+
+def build_diagnostics_rows(diagnostics: Any) -> list[StatusRow]:
+    """Build presentation-neutral rows for installer diagnostics.
+
+    Labels follow the NaviLink app's installer screen. All values are raw
+    device counters; ``cumulated_op_time_*`` are hours and the two
+    ``cumulated_pwr_*`` values are watt-hours (both cross-checked against
+    the energy query), everything else is a count with no documented unit.
+
+    Args:
+        diagnostics: DeviceDiagnostics object
+
+    Returns:
+        List of (section, label, value) tuples.
+    """
+    ts = diagnostics.ts_data
+    td = diagnostics.td_data
+    ta = diagnostics.ta_data
+    lifetime = "LIFETIME"
+    dhw = "HOT WATER USE"
+    parts = "COMPONENTS"
+    return [
+        (lifetime, "Heat pump energy", f"{ts.cumulated_pwr_hp:,} Wh"),
+        (lifetime, "Heating element energy", f"{ts.cumulated_pwr_he:,} Wh"),
+        (lifetime, "Days since installation", str(ts.days_since_installation)),
+        (lifetime, "ECO events", str(ts.cumulated_occ_num_eco)),
+        (lifetime, "Dry-fire events", str(ts.cumulated_occ_num_dry_fire)),
+        (
+            lifetime,
+            "Freeze-protection burns",
+            str(ts.num_of_frost_protect_burn),
+        ),
+        (
+            lifetime,
+            "Condensate overflow events",
+            str(ts.cumulated_occ_num_con_ovr_flow),
+        ),
+        (lifetime, "Water leak events", str(ts.cumulated_occ_num_wtr_ovr_flow)),
+        (lifetime, "DR shed time", str(ts.cumulated_op_time_dr_shed)),
+        (lifetime, "DR load-up time", str(ts.cumulated_op_time_dr_load_up)),
+        (
+            lifetime,
+            "DR advanced load-up time",
+            str(ts.cumulated_op_time_dr_adv_load_up),
+        ),
+        (lifetime, "DR critical peak time", str(ts.cumulated_op_time_dr_cpp)),
+        (
+            lifetime,
+            "DR grid emergency time",
+            str(ts.cumulated_op_time_dr_grid_emg),
+        ),
+        (
+            lifetime,
+            "High discharge temp events",
+            str(ts.cumulated_occ_num_ab_dis_tmp),
+        ),
+        (lifetime, "Heat pump errors", str(ts.cumulated_occ_num_hpo)),
+        (
+            lifetime,
+            "Abnormal suction temp events",
+            str(ts.cumulated_occ_num_ab_suc_tmp),
+        ),
+        (
+            lifetime,
+            "Abnormal discharge+suction events",
+            str(ts.cumulated_occ_num_ab_dis_suc_tmp),
+        ),
+        (dhw, "Draws", str(td.num_of_dhw_use)),
+        (dhw, "Total flow", str(td.dhw_use_total_flow)),
+        (dhw, "Total time", str(td.dhw_use_total_time)),
+        (dhw, "Long draws", str(td.num_of_long_dhw_use)),
+        (dhw, "Long-draw flow", str(td.long_dhw_use_total_flow)),
+        (dhw, "Long-draw time", str(td.long_dhw_use_total_time)),
+        (dhw, "Short draws", str(td.num_of_short_dhw_use)),
+        (dhw, "Average recovery time", str(td.average_recovery_time)),
+        (parts, "Compressor run time", f"{ta.cumulated_op_time_comp} h"),
+        (parts, "Compressor starts", str(ta.cumulated_op_num_comp)),
+        (parts, "Evaporator fan run time", f"{ta.cumulated_op_time_eva_fan} h"),
+        (parts, "Evaporator fan starts", str(ta.cumulated_op_num_eva_fan)),
+        (parts, "EEV steps", str(ta.cumulated_op_step_eev)),
+        (parts, "Upper element run time", f"{ta.cumulated_op_time_uhe} h"),
+        (parts, "Upper element starts", str(ta.cumulated_op_num_uhe)),
+        (parts, "Lower element run time", f"{ta.cumulated_op_time_lhe} h"),
+        (parts, "Lower element starts", str(ta.cumulated_op_num_lhe)),
+        (parts, "Shut-off valve cycles", str(ta.cumulated_op_num_shut_off_vv)),
+        (parts, "Mixing valve steps", str(ta.mixing_valve_op_total_step)),
+        (
+            parts,
+            "Mixing valve average rate",
+            str(ta.mixing_valve_op_avg_mixing_rate),
+        ),
+        (
+            parts,
+            "Recirculation pump run time",
+            f"{ta.cumulated_op_time_recirc_pump} h",
+        ),
+        (
+            parts,
+            "Recirculation pump starts",
+            str(ta.cumulated_op_num_recirc_pump),
+        ),
+    ]
+
+
+def build_firmware_download_rows(info: Any) -> list[StatusRow]:
+    """Build presentation-neutral rows for firmware download info.
+
+    Args:
+        info: FirmwareDownloadInfo object
+
+    Returns:
+        One section per downloadable component.
+    """
+    rows: list[StatusRow] = []
+    if not info.download_sw_info:
+        rows.append(("FIRMWARE DOWNLOAD", "Entries", "none"))
+        return rows
+    for index, entry in enumerate(info.download_sw_info, start=1):
+        section = f"FIRMWARE DOWNLOAD {index}"
+        rows.append((section, "Component", entry.component_name))
+        rows.append((section, "Component code", str(entry.sw_code)))
+        rows.append((section, "Version", str(entry.sw_version)))
+        rows.append((section, "OTA mode", str(entry.ota_mode)))
+        rows.append((section, "Status", str(entry.status)))
+    return rows
+
+
+def build_recirculation_schedule_rows(schedule: Any) -> list[StatusRow]:
+    """Build presentation-neutral rows for a recirculation schedule.
+
+    Args:
+        schedule: RecirculationSchedule object
+
+    Returns:
+        A header section plus one section per entry.
+    """
+    header = "RECIRCULATION SCHEDULE"
+    rows: list[StatusRow] = [
+        (header, "Enabled", "Yes" if schedule.enabled else "No"),
+        (header, "Entries", str(len(schedule.reservation))),
+    ]
+    for index, entry in enumerate(schedule.reservation, start=1):
+        section = f"ENTRY {index}"
+        rows.append((section, "Active", "Yes" if entry.enabled else "No"))
+        rows.append((section, "Days", ", ".join(entry.days) or "none"))
+        rows.append((section, "Time", entry.time))
+        rows.append((section, "Pump", "On" if entry.pump_on else "Off"))
+    return rows

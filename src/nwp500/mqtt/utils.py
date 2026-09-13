@@ -216,6 +216,12 @@ class MqttConnectionConfig:
             command to still be sent when the connection is restored;
             older commands are discarded instead of being replayed to
             the appliance. ``None`` disables expiry.
+
+        send_session_end_on_disconnect: Publish the ``st/end`` session-end
+            query to each subscribed device when ``disconnect()`` is
+            called, as the NaviLink app does when it leaves a device. Its
+            effect on other clients connected to the same device is not
+            known; turn it off to disconnect without it.
     """
 
     endpoint: str = AWS_IOT_ENDPOINT
@@ -241,6 +247,9 @@ class MqttConnectionConfig:
     enable_command_queue: bool = True
     max_queued_commands: int = 100
     max_queued_command_age: float | None = 300.0  # seconds
+
+    # Session end
+    send_session_end_on_disconnect: bool = True
 
     def __post_init__(self) -> None:
         """Generate client ID if not provided and validate settings."""

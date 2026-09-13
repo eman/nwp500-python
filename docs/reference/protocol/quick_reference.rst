@@ -109,34 +109,57 @@ User-selected heating mode preference.
 MQTT Topics
 -----------
 
-Control Topic
-^^^^^^^^^^^^^
+Every request is published to a device-keyed topic; replies land on the
+topic named in the request envelope.
 
-``cmd/RTU50E-H/{deviceId}/ctrl``
+.. list-table::
+   :header-rows: 1
+   :widths: 45 55
 
-Sends JSON commands to the device.
-
-Status Topic
-^^^^^^^^^^^^
-
-``cmd/RTU50E-H/{deviceId}/st``
-
-Receives JSON status updates from the device.
+   * - Topic
+     - Purpose
+   * - ``cmd/52/navilink-{mac}/ctrl``
+     - Control commands (mode/param payloads)
+   * - ``cmd/52/navilink-{mac}/st``, ``.../st/did``
+     - Status and device info requests (replies on the control ack topic)
+   * - ``cmd/52/navilink-{mac}/st/{query}/rd``
+     - Queries (``rsv``, ``recirc-rsv``, ``td``, ``energy-usage-*-query``)
+   * - ``cmd/52/navilink-{mac}/st/dl-sw-info``
+     - Firmware download info request
+   * - ``cmd/52/navilink-{mac}/st/end``
+     - Session end (no reply observed)
+   * - ``cmd/52/navilink-{mac}/{clientId}/res``
+     - Control acknowledgement carrying a status object
+   * - ``cmd/52/{clientId}/res/{query}/rd``
+     - Replies to ``rsv``, ``recirc-rsv`` and the energy queries
+   * - ``cmd/52/{homeSeq}/{userSeq}/{clientId}/res/td/rd``
+     - Diagnostics reply (decoded JSON only for this topic form)
+   * - ``cmd/52/navilink-{mac}/res/dl-sw-info``
+     - Firmware download info reply (device-keyed)
+   * - ``evt/52/navilink-{mac}/app-connection``
+     - App connection event
 
 Message Format
 --------------
 
-All MQTT payloads are JSON-formatted strings:
+All MQTT payloads are JSON envelopes around a ``request`` object:
 
 .. code-block:: json
 
     {
-      "header": {
-        "msg_id": "1",
-        "cloud_msg_type": "0x1"
-      },
-      "body": {
-        // Message-specific fields
+      "clientID": "navien-client-1996271a",
+      "sessionID": "1759355471479",
+      "protocolVersion": 2,
+      "requestTopic": "cmd/52/navilink-04786332fca0/ctrl",
+      "responseTopic": "cmd/52/navilink-04786332fca0/navien-client-1996271a/res",
+      "request": {
+        "command": 33554464,
+        "deviceType": 52,
+        "macAddress": "04786332fca0",
+        "additionalValue": "5322",
+        "mode": "dhw-temperature",
+        "param": [120],
+        "paramStr": ""
       }
     }
 
@@ -149,15 +172,24 @@ Common Command Codes
 
    * - Code
      - Command
-     - Body Fields
-   * - **0x11**
-     - Set DHW Temperature
-     - ``dhwSetTempH``, ``dhwSetTempL``
-   * - **0x21**
-     - Set Operation Mode
-     - ``dhwOperationSetting``
-   * - **0x31**
-     - Set Power
-     - ``power``
+     - Payload
+   * - **16777219**
+     - Status request
+     - none (topic ``st``)
+   * - **16777217**
+     - Device info request
+     - none (topic ``st/did``)
+   * - **33554434** / **33554433**
+     - Power on / off
+     - ``mode`` ``power-on`` / ``power-off``
+   * - **33554437**
+     - Set operation mode
+     - ``mode`` ``dhw-mode``, ``param`` ``[mode]`` (``[5, days]`` for vacation)
+   * - **33554464**
+     - Set DHW temperature
+     - ``mode`` ``dhw-temperature``, ``param`` ``[half-degrees C]``
+   * - **16777228**
+     - Installer diagnostics
+     - none (topic ``st/td/rd``)
 
 See :doc:`mqtt_protocol` for full command details.

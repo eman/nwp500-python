@@ -1,8 +1,10 @@
 """Regression tests for protocol correctness fixes.
 
 Covers:
-- Weekly reservation / recirculation schedule payload shape (no double
-  nesting, no computed display fields leaked to the device)
+- Recirculation schedule payload shape and topic (the app's
+  reservationUse/reservation envelope on ctrl/recirc-rsv/rd)
+- Query payloads and response topics for every st/ query
+- Control payloads for goout-day, air-filter-life and cond-fault-reset
 - Command queue ordering on failed flush and stale-command expiry
 - Negative-temperature ASYMMETRIC Fahrenheit conversion
 - Freeze protection default raw values
@@ -16,12 +18,13 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from nwp500.encoding import build_tou_period, encode_price
+from nwp500.enums import CommandCode
 from nwp500.events import EventEmitter
+from nwp500.exceptions import ParameterValidationError, RangeValidationError
 from nwp500.models.schedule import (
     RecirculationSchedule,
     RecirculationScheduleEntry,
-    WeeklyReservationEntry,
-    WeeklyReservationSchedule,
+    ReservationEntry,
 )
 from nwp500.models.status import DeviceStatus
 from nwp500.mqtt.command_queue import MqttCommandQueue
@@ -69,80 +72,93 @@ class TestSchedulePayloads:
     """Schedule commands must send flat, raw protocol payloads."""
 
     @pytest.mark.asyncio
-    async def test_weekly_reservation_payload_shape(self, mock_device):
-        """Regression: the schedule model was dumped as-is, double-nesting
-        the payload (request.reservation.reservation) and leaking computed
-        display fields — including a unit-converted temperature alongside
-        the raw half-Celsius param — to the device."""
-        controller, publish = _make_controller()
-
-        schedule = WeeklyReservationSchedule(
-            reservationUse=2,
-            reservation=[
-                WeeklyReservationEntry(
-                    enable=2, week=84, hour=6, min=30, mode=3, param=120
-                )
-            ],
-        )
-
-        await controller.update_weekly_reservation(mock_device, schedule)
-
-        publish.assert_awaited_once()
-        _topic, command = publish.await_args.args
-
-        # Flat shape matching update_reservations()
-        request = command["request"]
-        assert request["reservationUse"] == 2
-        entries = request["reservation"]
-        assert isinstance(entries, list)
-        assert entries[0] == {
-            "enable": 2,
-            "week": 84,
-            "hour": 6,
-            "min": 30,
-            "mode": 3,
-            "param": 120,
-        }
-
-    @pytest.mark.asyncio
     async def test_recirculation_schedule_payload_shape(self, mock_device):
-        """Regression: payload was nested as schedule.schedule with
-        computed fields (start_time, days, mode_name...) included."""
+        """The app publishes RECIR_RESERVATION on ctrl/recirc-rsv/rd with
+        the same reservationUse/reservation envelope as the weekly
+        schedule. The library used to publish {"schedule": [...]} on the
+        bare ctrl topic, which the device never answered."""
         controller, publish = _make_controller()
 
         schedule = RecirculationSchedule(
-            schedule=[
+            reservationUse=2,
+            reservation=[
                 RecirculationScheduleEntry(
-                    enable=2,
-                    week=84,
-                    startHour=6,
-                    startMin=0,
-                    endHour=8,
-                    endMin=30,
-                    mode=2,
+                    enable=2, week=84, hour=6, min=0, mode=2
                 )
-            ]
+            ],
         )
 
         await controller.configure_recirculation_schedule(mock_device, schedule)
 
         publish.assert_awaited_once()
-        _topic, command = publish.await_args.args
+        topic, command = publish.await_args.args
 
-        entries = command["request"]["schedule"]
-        assert isinstance(entries, list)
-        assert entries[0] == {
-            "enable": 2,
-            "week": 84,
-            "startHour": 6,
-            "startMin": 0,
-            "endHour": 8,
-            "endMin": 30,
-            "mode": 2,
-        }
+        assert topic == "cmd/52/navilink-aa:bb:cc:dd:ee:ff/ctrl/recirc-rsv/rd"
+        assert (
+            command["responseTopic"] == "cmd/52/test-client/res/recirc-rsv/rd"
+        )
+        request = command["request"]
+        assert request["command"] == CommandCode.RECIR_RESERVATION
+        assert request["reservationUse"] == 2
+        assert "schedule" not in request
+        assert request["reservation"] == [
+            {
+                "enable": 2,
+                "week": 84,
+                "hour": 6,
+                "min": 0,
+                "mode": 2,
+                "param": -1,
+            }
+        ]
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        ("field", "value"),
+        [
+            ("hour", 99),
+            ("min", -5),
+            ("min", 60),
+            ("week", 1000),
+            ("week", 0),
+            ("week", 63),
+            ("enable", 7),
+            ("mode", 9),
+            ("param", 0),
+        ],
+    )
+    async def test_recirculation_schedule_rejects_out_of_range_entries(
+        self, mock_device, field, value
+    ):
+        controller, publish = _make_controller()
+        entry = {"enable": 2, "week": 124, "hour": 6, "min": 0, "mode": 2}
+        entry[field] = value
+        schedule = RecirculationSchedule.model_validate(
+            {"reservationUse": 2, "reservation": [entry]}
+        )
+
+        with pytest.raises(ParameterValidationError):
+            await controller.configure_recirculation_schedule(
+                mock_device, schedule
+            )
+        publish.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_recirculation_schedule_caps_entries(self, mock_device):
+        controller, publish = _make_controller()
+        entry = {"enable": 2, "week": 124, "hour": 6, "min": 0, "mode": 2}
+        schedule = RecirculationSchedule.model_validate(
+            {"reservationUse": 2, "reservation": [entry] * 21}
+        )
+
+        with pytest.raises(ParameterValidationError):
+            await controller.configure_recirculation_schedule(
+                mock_device, schedule
+            )
+        publish.assert_not_awaited()
 
     def test_to_protocol_dict_excludes_computed_fields(self):
-        entry = WeeklyReservationEntry(
+        entry = ReservationEntry(
             enable=2, week=84, hour=6, min=30, mode=3, param=120
         )
         protocol = entry.to_protocol_dict()
@@ -158,6 +174,287 @@ class TestSchedulePayloads:
         display = entry.model_dump()
         assert "temperature" in display
         assert "days" in display
+
+    def test_recirculation_entry_to_protocol_dict_is_raw(self):
+        entry = RecirculationScheduleEntry(enable=2, week=84, hour=6, min=0)
+        assert entry.to_protocol_dict() == {
+            "enable": 2,
+            "week": 84,
+            "hour": 6,
+            "min": 0,
+            "mode": 2,
+            "param": -1,
+        }
+        assert "pump_on" in entry.model_dump()
+
+
+class TestQueryPayloads:
+    """Every st/ query publishes the app's topic, code and reply topic."""
+
+    @pytest.mark.asyncio
+    async def test_diagnostics_uses_app_form_response_topic(self, mock_device):
+        """The cloud only decodes the td/rd hex into JSON when the reply
+        topic has the app's five-segment form; the sequence numbers are
+        not checked, so home_seq from the device info and 0 are used."""
+        mock_device.device_info.home_seq = 25004
+        controller, publish = _make_controller()
+
+        await controller.request_diagnostics(mock_device)
+
+        topic, command = publish.await_args.args
+        assert topic == "cmd/52/navilink-aa:bb:cc:dd:ee:ff/st/td/rd"
+        assert command["request"]["command"] == 16777228
+        assert (
+            command["responseTopic"] == "cmd/52/25004/0/test-client/res/td/rd"
+        )
+
+    @pytest.mark.asyncio
+    async def test_firmware_download_info_uses_device_topic(self, mock_device):
+        """The device answers dl-sw-info on its own topic, not a client one."""
+        controller, publish = _make_controller()
+
+        await controller.request_firmware_download_info(mock_device)
+
+        topic, command = publish.await_args.args
+        assert topic == "cmd/52/navilink-aa:bb:cc:dd:ee:ff/st/dl-sw-info"
+        assert command["request"]["command"] == 16777227
+        assert (
+            command["responseTopic"]
+            == "cmd/52/navilink-aa:bb:cc:dd:ee:ff/res/dl-sw-info"
+        )
+
+    @pytest.mark.asyncio
+    async def test_monthly_energy_query(self, mock_device):
+        controller, publish = _make_controller()
+
+        await controller.request_energy_usage_monthly(mock_device, [2025, 2026])
+
+        topic, command = publish.await_args.args
+        assert topic.endswith("/st/energy-usage-monthly-query/rd")
+        assert command["responseTopic"] == (
+            "cmd/52/test-client/res/energy-usage-monthly-query/rd"
+        )
+        request = command["request"]
+        assert request["command"] == 16777226
+        assert request["year"] == [2025, 2026]
+        assert "month" not in request
+
+    @pytest.mark.asyncio
+    async def test_monthly_energy_query_dedupes_years(self, mock_device):
+        controller, publish = _make_controller()
+
+        await controller.request_energy_usage_monthly(
+            mock_device, [2026, 2025, 2026]
+        )
+
+        _topic, command = publish.await_args.args
+        assert command["request"]["year"] == [2026, 2025]
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("years", [[0], [-1], [99999], [1999]])
+    async def test_monthly_energy_query_rejects_out_of_range_years(
+        self, mock_device, years
+    ):
+        controller, publish = _make_controller()
+        with pytest.raises(RangeValidationError):
+            await controller.request_energy_usage_monthly(mock_device, years)
+        publish.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_monthly_energy_query_rejects_empty_years(self, mock_device):
+        controller, publish = _make_controller()
+        with pytest.raises(ParameterValidationError):
+            await controller.request_energy_usage_monthly(mock_device, [])
+        publish.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_hourly_energy_query(self, mock_device):
+        controller, publish = _make_controller()
+
+        await controller.request_energy_usage_hourly(mock_device, 2026, 9, [3])
+
+        topic, command = publish.await_args.args
+        assert topic.endswith("/st/energy-usage-hourly-query/rd")
+        request = command["request"]
+        assert request["command"] == 16777224
+        assert request["year"] == 2026
+        assert request["month"] == 9
+        assert request["day"] == [3]
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        ("month", "days"),
+        [(9.5, [1]), (True, [1]), (9, [1.5]), (9, [True])],
+    )
+    async def test_hourly_energy_query_rejects_non_integers(
+        self, mock_device, month, days
+    ):
+        controller, publish = _make_controller()
+        with pytest.raises(ParameterValidationError):
+            await controller.request_energy_usage_hourly(
+                mock_device, 2026, month, days
+            )
+        publish.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        ("year", "months", "error"),
+        [
+            (1999, [1], RangeValidationError),
+            (2026, [13], RangeValidationError),
+            (2026, [], ParameterValidationError),
+            (2026, [True], ParameterValidationError),
+            (2026.0, [1], ParameterValidationError),
+        ],
+    )
+    async def test_daily_energy_query_validates(
+        self, mock_device, year, months, error
+    ):
+        controller, publish = _make_controller()
+        with pytest.raises(error):
+            await controller.request_energy_usage(mock_device, year, months)
+        publish.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_hourly_energy_query_validates(self, mock_device):
+        controller, publish = _make_controller()
+        with pytest.raises(RangeValidationError):
+            await controller.request_energy_usage_hourly(
+                mock_device, 2026, 13, [1]
+            )
+        with pytest.raises(ParameterValidationError):
+            await controller.request_energy_usage_hourly(
+                mock_device, 2026, 9, []
+            )
+        publish.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_recirculation_schedule_read(self, mock_device):
+        controller, publish = _make_controller()
+
+        await controller.request_recirculation_schedule(mock_device)
+
+        topic, command = publish.await_args.args
+        assert topic.endswith("/st/recirc-rsv/rd")
+        assert command["request"]["command"] == 16777231
+        assert (
+            command["responseTopic"] == "cmd/52/test-client/res/recirc-rsv/rd"
+        )
+
+    @pytest.mark.asyncio
+    async def test_end_session(self, mock_device):
+        controller, publish = _make_controller()
+
+        await controller.end_session(mock_device)
+
+        topic, command = publish.await_args.args
+        assert topic == "cmd/52/navilink-aa:bb:cc:dd:ee:ff/st/end"
+        assert command["request"]["command"] == 16777218
+        assert command["responseTopic"] == "cmd/52/test-client/res/end"
+
+
+class TestControlPayloads:
+    """Mode/param payloads match the app's request builder."""
+
+    @pytest.mark.asyncio
+    async def test_ota_commit_uses_commit_ota_topics(self, mock_device):
+        """The app publishes OTA_COMMIT on ctrl/commit-ota and asks for the
+        reply on res/commit-ota in its five-segment topic form."""
+        from nwp500.models import OtaCommitPayload
+
+        mock_device.device_info.home_seq = 25004
+        controller, publish = _make_controller()
+
+        await controller.commit_firmware_update(
+            mock_device, OtaCommitPayload(swCode=1, swVersion=7)
+        )
+
+        topic, command = publish.await_args.args
+        assert topic == "cmd/52/navilink-aa:bb:cc:dd:ee:ff/ctrl/commit-ota"
+        assert command["responseTopic"] == (
+            "cmd/52/25004/0/test-client/res/commit-ota"
+        )
+        assert command["request"]["commitOta"] == {"swCode": 1, "swVersion": 7}
+
+    @pytest.mark.asyncio
+    async def test_air_filter_life_rejects_non_integers(self, mock_device):
+        controller, publish = _make_controller()
+        with pytest.raises(ParameterValidationError):
+            await controller.set_air_filter_life(mock_device, 3000.0)
+        with pytest.raises(ParameterValidationError):
+            await controller.set_air_filter_life(mock_device, True)
+        publish.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_vacation_duration_sends_goout_day(self, mock_device):
+        controller, publish = _make_controller()
+
+        await controller.set_vacation_duration(mock_device, 7)
+
+        _topic, command = publish.await_args.args
+        request = command["request"]
+        assert request["command"] == CommandCode.GOOUT_DAY
+        assert request["mode"] == "goout-day"
+        assert request["param"] == [7]
+        assert request["paramStr"] == ""
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("days", [True, 7.0])
+    async def test_vacation_duration_rejects_non_integers(
+        self, mock_device, days
+    ):
+        controller, publish = _make_controller()
+        with pytest.raises(ParameterValidationError):
+            await controller.set_vacation_duration(mock_device, days)
+        publish.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_vacation_duration_range(self, mock_device):
+        controller, publish = _make_controller()
+        with pytest.raises(RangeValidationError):
+            await controller.set_vacation_duration(mock_device, 31)
+        publish.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        ("hours", "param"), [(0, 0), (1000, 2), (3000, 6), (10000, 20)]
+    )
+    async def test_air_filter_life_sends_hours_over_500(
+        self, mock_device, hours, param
+    ):
+        """The app's picker offers 0 or 1000-10000 h in 500 h steps and
+        sends hours / 500 on the wire."""
+        controller, publish = _make_controller()
+
+        await controller.set_air_filter_life(mock_device, hours)
+
+        _topic, command = publish.await_args.args
+        request = command["request"]
+        assert request["command"] == CommandCode.AIR_FILTER_LIFE
+        assert request["mode"] == "air-filter-life"
+        assert request["param"] == [param]
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("hours", [500, 1250, 12000, -500])
+    async def test_air_filter_life_rejects_values_off_the_picker(
+        self, mock_device, hours
+    ):
+        controller, publish = _make_controller()
+        with pytest.raises(ParameterValidationError):
+            await controller.set_air_filter_life(mock_device, hours)
+        publish.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_condenser_fault_reset(self, mock_device):
+        controller, publish = _make_controller()
+
+        await controller.reset_condenser_fault(mock_device)
+
+        _topic, command = publish.await_args.args
+        request = command["request"]
+        assert request["command"] == 33554463
+        assert request["mode"] == "cond-fault-reset"
+        assert request["param"] == []
 
 
 def _queue(max_age: float | None = 300.0) -> MqttCommandQueue:
@@ -347,82 +644,6 @@ class TestDemandResponseCapabilityGate:
 
         await controller.disable_demand_response(mock_device)
         publish.assert_awaited_once()
-
-
-class TestFreezeProtectionTemperatureValidation:
-    """set_freeze_protection_temperature must validate against device limits."""
-
-    @pytest.mark.asyncio
-    async def test_rejects_out_of_range_temperature(self, mock_device):
-        from nwp500.exceptions import RangeValidationError
-
-        controller, publish = _make_controller()
-        controller._get_device_features = AsyncMock(
-            return_value=MagicMock(
-                freeze_protection_use=True,
-                freeze_protection_temp_min=35.0,
-                freeze_protection_temp_max=45.0,
-            )
-        )
-
-        with pytest.raises(RangeValidationError):
-            await controller.set_freeze_protection_temperature(
-                mock_device, 60.0
-            )
-        publish.assert_not_awaited()
-
-    @pytest.mark.asyncio
-    async def test_accepts_in_range_temperature(self, mock_device):
-        controller, publish = _make_controller()
-        controller._get_device_features = AsyncMock(
-            return_value=MagicMock(
-                freeze_protection_use=True,
-                freeze_protection_temp_min=35.0,
-                freeze_protection_temp_max=45.0,
-            )
-        )
-
-        await controller.set_freeze_protection_temperature(mock_device, 40.0)
-        publish.assert_awaited_once()
-
-    @pytest.mark.asyncio
-    async def test_raises_capability_error_when_features_unavailable(
-        self, mock_device
-    ):
-        from nwp500.exceptions import DeviceCapabilityError
-
-        controller, publish = _make_controller()
-        controller._get_device_features = AsyncMock(return_value=None)
-
-        with pytest.raises(DeviceCapabilityError):
-            await controller.set_freeze_protection_temperature(
-                mock_device, 40.0
-            )
-        publish.assert_not_awaited()
-
-    @pytest.mark.asyncio
-    async def test_blocked_when_device_lacks_freeze_protection(
-        self, mock_device
-    ):
-        """Regression: a device that doesn't support freeze protection at
-        all (freeze_protection_use=False) must not receive the command,
-        even if the requested temperature would otherwise be in-range."""
-        from nwp500.exceptions import DeviceCapabilityError
-
-        controller, publish = _make_controller()
-        controller._get_device_features = AsyncMock(
-            return_value=MagicMock(
-                freeze_protection_use=False,
-                freeze_protection_temp_min=35.0,
-                freeze_protection_temp_max=45.0,
-            )
-        )
-
-        with pytest.raises(DeviceCapabilityError):
-            await controller.set_freeze_protection_temperature(
-                mock_device, 40.0
-            )
-        publish.assert_not_awaited()
 
 
 class TestErrorCodeChangeEvents:

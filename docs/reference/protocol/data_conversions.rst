@@ -85,9 +85,9 @@ DHW (Domestic Hot Water) Temperatures
      - °F
      - **User-configured target temperature** for DHW delivery. Adjustable range: 95-150°F. Default: 120°F. This is the setpoint users configure in the app.
    * - ``currentInletTemperature``
-     - div_10
+     - HalfCelsiusToF
      - °F
-     - **Cold water inlet temperature** to the water heater. Affects heating performance and recovery time. Typically 40-80°F depending on season and location.
+     - **Cold water inlet temperature** to the water heater. The NWP500 always reports 0 here (32°F after conversion) and the NaviLink app never displays it for this model, so treat it as unavailable; see :doc:`/explanation/unknown-values`.
    * - ``dhwTargetTemperatureSetting``
      - HalfCelsiusToF
      - °F

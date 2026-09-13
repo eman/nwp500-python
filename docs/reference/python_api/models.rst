@@ -496,89 +496,114 @@ Full programmed reservation schedule used by ``request_reservations()`` and
    * ``enabled`` (bool)
    * :meth:`model_validate` - Parse a raw MQTT response payload
 
-WeeklyReservationEntry
-----------------------
+RecirculationScheduleEntry
+--------------------------
 
-A single entry in the weekly reservation schedule used by
-:meth:`nwp500.mqtt.client.NavienMqttClient.update_weekly_reservation`.
+A single recirculation pump schedule entry. The NaviLink app builds these
+with the same ``Reservation`` class as the temperature schedule, so the
+wire fields match :class:`ReservationEntry`.
 
-.. py:class:: WeeklyReservationEntry
+.. py:class:: RecirculationScheduleEntry
 
    **Raw Fields:**
 
    * ``enable`` (int) - Device boolean (``2`` enabled, ``1`` disabled)
    * ``week`` (int) - Weekday bitfield
-   * ``hour`` (int) - Scheduled hour (0-23)
-   * ``min`` (int) - Scheduled minute (0-59)
-   * ``mode`` (int) - DHW operation mode ID
-   * ``param`` (int) - Temperature encoded in half-degrees Celsius
+   * ``hour`` (int) - Hour (0-23)
+   * ``min`` (int) - Minute (0-59)
+   * ``mode`` (int) - In the app's schedule editor, the entry's on/off
+     toggle (``2`` pump on, ``1`` pump off)
+   * ``param`` (int) - Unused for recirculation; the app sends ``-1``. The
+     hex read-back's ``0xFF`` is normalized to ``-1``.
 
    **Computed Properties:**
 
    * ``enabled`` (bool)
    * ``days`` (list[str])
    * ``time`` (str)
-   * ``temperature`` (float)
-   * ``unit`` (str)
-   * ``mode_name`` (str)
+   * ``pump_on`` (bool)
 
-WeeklyReservationSchedule
--------------------------
-
-Full weekly reservation schedule.
-
-.. py:class:: WeeklyReservationSchedule
-
-   **Fields:**
-
-   * ``reservation_use`` (int) - Device boolean for global enable/disable state
-   * ``reservation`` (list[WeeklyReservationEntry]) - Weekly schedule entries
-
-   **Computed Properties / Methods:**
-
-   * ``enabled`` (bool)
-   * :meth:`model_validate` - Parse a raw MQTT response payload
-
-RecirculationScheduleEntry
---------------------------
-
-A single recirculation pump schedule entry.
-
-.. py:class:: RecirculationScheduleEntry
-
-   **Fields:**
-
-   * ``enable`` (int) - Device boolean (``2`` enabled, ``1`` disabled)
-   * ``week`` (int) - Weekday bitfield
-   * ``start_hour`` (int) - Start hour (0-23)
-   * ``start_min`` (int) - Start minute (0-59)
-   * ``end_hour`` (int) - End hour (0-23)
-   * ``end_min`` (int) - End minute (0-59)
-   * ``mode`` (int) - Recirculation mode ID
-
-   **Computed Properties:**
-
-   * ``enabled`` (bool)
-   * ``days`` (list[str])
-   * ``start_time`` (str)
-   * ``end_time`` (str)
-   * ``mode_name`` (str)
+   The ``mode``/``param`` semantics are inferred from the app and not
+   confirmed on a unit with recirculation fitted. All six fields are
+   strict integers: ``True`` or ``6.0`` is rejected rather than coerced.
 
 RecirculationSchedule
 ---------------------
 
 Full recirculation schedule used by
-:meth:`nwp500.mqtt.client.NavienMqttClient.configure_recirculation_schedule`.
+:meth:`nwp500.mqtt.client.NavienMqttClient.configure_recirculation_schedule`
+and returned by
+:meth:`nwp500.mqtt.client.NavienMqttClient.request_recirculation_schedule`.
 
 .. py:class:: RecirculationSchedule
 
    **Fields:**
 
-   * ``schedule`` (list[RecirculationScheduleEntry]) - Scheduled recirculation windows
+   * ``reservation_use`` (int) - Device boolean for global enable/disable state
+   * ``reservation`` (list[RecirculationScheduleEntry]) - Schedule entries
 
-   **Methods:**
+   **Computed Properties / Methods:**
 
-   * :meth:`model_validate` - Parse a raw MQTT response payload
+   * ``enabled`` (bool)
+   * :meth:`canonical` - Order-independent representation for comparing a
+     write against its echo
+   * :meth:`model_validate` - Parse a raw MQTT response payload (JSON list
+     or the legacy hex string)
+
+DeviceDiagnostics
+-----------------
+
+Decoded installer diagnostics returned by
+:meth:`nwp500.mqtt.client.NavienMqttClient.request_diagnostics`. Build it
+from a raw ``res/td/rd`` response with :meth:`DeviceDiagnostics.from_response`.
+
+.. py:class:: DeviceDiagnostics
+
+   **Fields:**
+
+   * ``type_of_td`` (int)
+   * ``ts_data`` (:class:`DiagnosticsEventCounters`) - Lifetime energy
+     (``cumulated_pwr_hp``/``cumulated_pwr_he`` in Wh), ``days_since_installation``,
+     fault event counters and demand-response operation times
+   * ``td_data`` (:class:`DiagnosticsDhwUsage`) - Hot-water draw counts,
+     flow, time and ``average_recovery_time``
+   * ``ta_data`` (:class:`DiagnosticsComponentCounters`) - Run time in hours
+     (``cumulated_op_time_*``) and start counts (``cumulated_op_num_*``) for
+     the compressor, evaporator fan, upper and lower elements,
+     recirculation pump and inverter stages, plus EEV and mixing valve steps
+
+   Every field is a raw integer. The two energies and the compressor and
+   upper-element run times were cross-checked against the energy query;
+   the other counters have no documented unit. Vendor misspellings on the
+   wire (``numOffRostProtectBurn``, ``avrageRecoveryTime``, ``numOfdhwUse``,
+   ``mixingValveOpAvgMixinGrate``) map to correctly spelled field names.
+
+FirmwareDownloadInfo
+--------------------
+
+Reply to
+:meth:`nwp500.mqtt.client.NavienMqttClient.request_firmware_download_info`.
+
+.. py:class:: FirmwareDownloadInfo
+
+   **Fields:**
+
+   * ``download_sw_info`` (list[FirmwareDownloadEntry]) - One entry per
+     downloadable component; a unit with no pending update reports one
+     all-zero entry
+
+.. py:class:: FirmwareDownloadEntry
+
+   **Fields:**
+
+   * ``sw_code`` (int) - Firmware component code
+   * ``ota_mode`` (int)
+   * ``sw_version`` (int)
+   * ``status`` (int)
+
+   **Computed Properties:**
+
+   * ``component_name`` (str) - From :class:`~nwp500.enums.FirmwareType`
 
 OtaCommitPayload
 ----------------
@@ -607,18 +632,21 @@ Energy Models
 EnergyUsageResponse
 -------------------
 
-Complete energy usage response with daily breakdown.
+Reply to the daily, monthly and hourly energy queries.
 
 .. py:class:: EnergyUsageResponse
 
    **Fields:**
 
-   * ``device_type`` (int) - Device type
-   * ``mac_address`` (str) - Device MAC
-   * ``additional_value`` (str) - Additional identifier
-   * ``type_of_usage`` (int) - Usage type code
-   * ``total`` (EnergyUsageTotal) - Total usage summary
-   * ``usage`` (list[MonthlyEnergyData]) - Monthly data with daily breakdown
+   * ``type_of_usage`` (int | None) - Reported by the device (``1`` for the
+     daily and monthly queries)
+   * ``total`` (EnergyUsageTotal) - Lifetime totals
+   * ``usage`` (list[MonthlyEnergyData]) - One entry per requested period
+
+   **Methods:**
+
+   * :meth:`get_month_data` (year, month) - Entry from a daily query
+   * :meth:`get_year_data` (year) - Entry from a monthly query
 
    **Example:**
 
@@ -665,22 +693,28 @@ Summary totals for energy usage.
 MonthlyEnergyData
 -----------------
 
-Energy data for one month with daily breakdown.
+One ``usage`` entry. The daily query returns one per requested month with
+``month`` set and one ``data`` item per day; the monthly query returns one
+per requested year with ``month`` absent and twelve ``data`` items.
 
 .. py:class:: MonthlyEnergyData
 
    **Fields:**
 
    * ``year`` (int) - Year
-   * ``month`` (int) - Month (1-12)
-   * ``data`` (list[EnergyUsageData]) - Daily data (index 0 = day 1)
+   * ``month`` (int | None) - Month (1-12) for the daily query, ``None``
+     for the monthly query
+   * ``day`` (int | None) - Declared by the app for the hourly query, which
+     the NWP500 did not answer in testing
+   * ``data`` (list[EnergyUsageDay]) - Per-day or per-month items
+     (index 0 = day 1 or January)
 
-EnergyUsageData
----------------
+EnergyUsageDay
+--------------
 
-Energy data for a single day.
+Energy data for a single day (or month, in a monthly-query entry).
 
-.. py:class:: EnergyUsageData
+.. py:class:: EnergyUsageDay
 
    **Fields:**
 
@@ -688,6 +722,8 @@ Energy data for a single day.
    * ``heat_pump_usage`` (int) - Heat pump usage (Wh)
    * ``heat_element_time`` (int) - Heat element time (hours)
    * ``heat_pump_time`` (int) - Heat pump time (hours)
+   * ``ep_usage`` (int), ``water_usage`` (int) - Declared in the app's model;
+     the NWP500 does not report them (always ``0``)
 
    **Computed Properties:**
 

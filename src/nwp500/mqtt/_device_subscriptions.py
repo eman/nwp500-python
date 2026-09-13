@@ -16,13 +16,14 @@ from .subscriptions import MqttSubscriptionManager
 if TYPE_CHECKING:
     from ..models import (
         Device,
+        DeviceDiagnostics,
         DeviceFeature,
         DeviceStatus,
         EnergyUsageResponse,
+        FirmwareDownloadInfo,
         RecirculationSchedule,
         ReservationSchedule,
         TOUReservationSchedule,
-        WeeklyReservationSchedule,
     )
 
 __author__ = "Emmanuel Levijarvi"
@@ -123,6 +124,114 @@ class DeviceSubscriptionsMixin:
             device, callback
         )
 
+    async def subscribe_energy_usage_monthly(
+        self,
+        device: Device,
+        callback: Callable[[EnergyUsageResponse], None],
+    ) -> int:
+        """Subscribe to monthly energy usage query responses."""
+        return await self._delegate_subscription(
+            "subscribe_energy_usage_monthly", device, callback
+        )
+
+    async def unsubscribe_energy_usage_monthly(
+        self,
+        device: Device,
+        callback: Callable[[EnergyUsageResponse], None],
+    ) -> None:
+        """Unsubscribe a specific monthly energy usage callback."""
+        if not self._connected or not self._subscription_manager:
+            return
+        await self._subscription_manager.unsubscribe_energy_usage_monthly(
+            device, callback
+        )
+
+    async def subscribe_energy_usage_hourly(
+        self,
+        device: Device,
+        callback: Callable[[EnergyUsageResponse], None],
+    ) -> int:
+        """Subscribe to hourly energy usage query responses."""
+        return await self._delegate_subscription(
+            "subscribe_energy_usage_hourly", device, callback
+        )
+
+    async def unsubscribe_energy_usage_hourly(
+        self,
+        device: Device,
+        callback: Callable[[EnergyUsageResponse], None],
+    ) -> None:
+        """Unsubscribe a specific hourly energy usage callback."""
+        if not self._connected or not self._subscription_manager:
+            return
+        await self._subscription_manager.unsubscribe_energy_usage_hourly(
+            device, callback
+        )
+
+    async def subscribe_diagnostics(
+        self,
+        device: Device,
+        callback: Callable[[DeviceDiagnostics], None],
+    ) -> int:
+        """Subscribe to installer diagnostics (``td/rd``) responses."""
+        return await self._delegate_subscription(
+            "subscribe_diagnostics", device, callback
+        )
+
+    async def unsubscribe_diagnostics(
+        self,
+        device: Device,
+        callback: Callable[[DeviceDiagnostics], None],
+    ) -> None:
+        """Unsubscribe a specific diagnostics callback."""
+        if not self._connected or not self._subscription_manager:
+            return
+        await self._subscription_manager.unsubscribe_diagnostics(
+            device, callback
+        )
+
+    async def subscribe_firmware_commit_response(
+        self,
+        device: Device,
+        callback: Callable[[dict[str, Any]], None],
+    ) -> int:
+        """Subscribe to firmware commit replies (raw ``response`` object)."""
+        return await self._delegate_subscription(
+            "subscribe_firmware_commit_response", device, callback
+        )
+
+    async def unsubscribe_firmware_commit_response(
+        self,
+        device: Device,
+        callback: Callable[[dict[str, Any]], None],
+    ) -> None:
+        """Unsubscribe a specific firmware commit reply callback."""
+        if not self._connected or not self._subscription_manager:
+            return
+        manager = self._subscription_manager
+        await manager.unsubscribe_firmware_commit_response(device, callback)
+
+    async def subscribe_firmware_download_info(
+        self,
+        device: Device,
+        callback: Callable[[FirmwareDownloadInfo], None],
+    ) -> int:
+        """Subscribe to firmware download info (``dl-sw-info``) responses."""
+        return await self._delegate_subscription(
+            "subscribe_firmware_download_info", device, callback
+        )
+
+    async def unsubscribe_firmware_download_info(
+        self,
+        device: Device,
+        callback: Callable[[FirmwareDownloadInfo], None],
+    ) -> None:
+        """Unsubscribe a specific firmware download info callback."""
+        if not self._connected or not self._subscription_manager:
+            return
+        manager = self._subscription_manager
+        await manager.unsubscribe_firmware_download_info(device, callback)
+
     async def subscribe_reservation_response(
         self,
         device: Device,
@@ -144,27 +253,6 @@ class DeviceSubscriptionsMixin:
         await self._subscription_manager.unsubscribe_reservation_response(
             device, callback
         )
-
-    async def subscribe_weekly_reservation_response(
-        self,
-        device: Device,
-        callback: Callable[[WeeklyReservationSchedule], None],
-    ) -> int:
-        """Subscribe to weekly reservation read responses."""
-        return await self._delegate_subscription(
-            "subscribe_weekly_reservation_response", device, callback
-        )
-
-    async def unsubscribe_weekly_reservation_response(
-        self,
-        device: Device,
-        callback: Callable[[WeeklyReservationSchedule], None],
-    ) -> None:
-        """Unsubscribe a specific weekly reservation callback."""
-        if not self._connected or not self._subscription_manager:
-            return
-        manager = self._subscription_manager
-        await manager.unsubscribe_weekly_reservation_response(device, callback)
 
     async def subscribe_recirculation_schedule_response(
         self,

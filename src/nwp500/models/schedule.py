@@ -1,15 +1,41 @@
 from typing import Any, cast
 
-from pydantic import ConfigDict, Field, computed_field, model_validator
+from pydantic import (
+    ConfigDict,
+    Field,
+    computed_field,
+    field_validator,
+    model_validator,
+)
 
 from .._base import NavienBaseModel
 from ..enums import (
     DHW_OPERATION_SETTING_TEXT,
     DhwOperationSetting,
-    RecirculationMode,
 )
 from ..unit_system import get_unit_system
 from ._converters import reservation_param_to_preferred
+
+
+def _decode_hex_reservation_field(data: Any) -> Any:
+    """Decode a hex-encoded ``reservation`` string into an entry list.
+
+    Device read-backs deliver the schedule as a hex string on the legacy
+    response topic and as a JSON list on the ``/rd`` topic; both shapes are
+    accepted. Used as a ``mode="before"`` validator by every schedule model.
+    """
+    if isinstance(data, dict):
+        d = cast(dict[str, Any], data).copy()
+        raw = d.get("reservation", "")
+        if isinstance(raw, str):
+            if raw:
+                from ..encoding import decode_reservation_hex
+
+                d["reservation"] = decode_reservation_hex(raw)
+            else:
+                d["reservation"] = []
+        return d
+    return data
 
 
 class ReservationEntry(NavienBaseModel):
@@ -125,18 +151,7 @@ class ReservationSchedule(NavienBaseModel):
     @classmethod
     def _decode_hex_reservation(cls, data: Any) -> Any:
         """Decode hex-encoded reservation string into entry list."""
-        if isinstance(data, dict):
-            d = cast(dict[str, Any], data).copy()
-            raw = d.get("reservation", "")
-            if isinstance(raw, str):
-                if raw:
-                    from ..encoding import decode_reservation_hex
-
-                    d["reservation"] = decode_reservation_hex(raw)
-                else:
-                    d["reservation"] = []
-            return d
-        return data
+        return _decode_hex_reservation_field(data)
 
     @computed_field  # type: ignore[prop-decorator]
     @property
@@ -164,38 +179,59 @@ class ReservationSchedule(NavienBaseModel):
         )
 
 
-class WeeklyReservationEntry(NavienBaseModel):
-    """A single entry in a weekly temperature reservation schedule.
+class RecirculationScheduleEntry(NavienBaseModel):
+    """A single entry in the recirculation pump schedule.
 
-    Similar to :class:`ReservationEntry` but used with the RESERVATION_WEEKLY
-    command (33554438), which configures a separate weekly temperature schedule
-    independent of the timed reservation system.
+    Used with the RECIR_RESERVATION command (33554440), published on
+    ``ctrl/recirc-rsv/rd`` and read back with RECIRC_RESERVATION_READ
+    (16777231) on ``st/recirc-rsv/rd``. The NaviLink app builds these
+    entries with the same ``Reservation`` class as the temperature
+    schedule, so the wire fields are identical to
+    :class:`ReservationEntry`:
 
-    The raw protocol fields mirror the standard reservation format:
         - enable: 2=enabled, 1=disabled (device boolean)
         - week: bitfield of active days (Sun=bit7, Mon=bit6, ..., Sat=bit1)
         - hour: 0-23
         - min: 0-59
-        - mode: DHW operation mode ID (1-6)
-        - param: temperature in half-degrees Celsius
+        - mode: in the app's schedule editor this is the on/off toggle for
+          the entry (2=pump on, 1=pump off)
+        - param: unused for recirculation; the app constructs entries
+          with ``-1``. The hex read-back carries it as the byte ``0xFF``,
+          which is normalized to ``-1`` so both read-back forms compare
+          equal.
 
-    Unit-aware note:
-        The ``temperature`` and ``unit`` computed fields read the
-        *process-wide* unit-system preference via
-        :func:`nwp500.unit_system.get_unit_system` at access time, not at
-        construction time. Changing the preference with
-        :func:`nwp500.unit_system.set_unit_system` therefore affects values
-        read from already-constructed instances, and the preference is shared
-        across every async task and thread rather than being context-local
-        (see issue #103).
+    The ``mode``/``param`` semantics are inferred from the app's shared
+    schedule dialog and have not been confirmed against a unit with
+    recirculation fitted.
     """
 
-    enable: int = 2
-    week: int = 0
-    hour: int = 0
-    min: int = 0
-    mode: int = 1
-    param: int = 0
+    # Strict: a bool or float must not be coerced into a protocol integer
+    # and slip past write validation.
+    enable: int = Field(default=2, strict=True)
+    week: int = Field(default=0, strict=True)
+    hour: int = Field(default=0, strict=True)
+    min: int = Field(default=0, strict=True)
+    mode: int = Field(default=2, strict=True)
+    param: int = Field(default=-1, strict=True)
+
+    model_config = ConfigDict(
+        alias_generator=None,
+        populate_by_name=True,
+        extra="ignore",
+        use_enum_values=False,
+    )
+
+    @field_validator("param", mode="before")
+    @classmethod
+    def _unsigned_byte_param(cls, value: Any) -> Any:
+        """Map the hex read-back's unsigned 0xFF to the app's ``-1``.
+
+        Only a real ``int`` is normalized; a float such as ``255.0`` (or a
+        bool) passes through unchanged so the strict check rejects it.
+        """
+        if type(value) is int and value == 255:
+            return -1
+        return value
 
     @computed_field  # type: ignore[prop-decorator]
     @property
@@ -219,38 +255,35 @@ class WeeklyReservationEntry(NavienBaseModel):
 
     @computed_field  # type: ignore[prop-decorator]
     @property
-    def temperature(self) -> float:
-        """Temperature in the user's preferred unit."""
-        return reservation_param_to_preferred(self.param)
+    def pump_on(self) -> bool:
+        """Whether the entry switches the pump on (mode 2) or off (mode 1)."""
+        return self.mode == 2
 
-    @computed_field  # type: ignore[prop-decorator]
-    @property
-    def unit(self) -> str:
-        """Temperature unit symbol."""
-        return "°C" if get_unit_system() == "metric" else "°F"
-
-    @computed_field  # type: ignore[prop-decorator]
-    @property
-    def mode_name(self) -> str:
-        """Human-readable operation mode name."""
-        try:
-            return DHW_OPERATION_SETTING_TEXT.get(
-                DhwOperationSetting(self.mode), f"Unknown ({self.mode})"
-            )
-        except ValueError:
-            return f"Unknown ({self.mode})"
+    def canonical_key(self) -> tuple[int, int, int, int, int, int]:
+        """Raw protocol fields as a stable, hashable tuple."""
+        return (
+            self.enable,
+            self.week,
+            self.hour,
+            self.min,
+            self.mode,
+            self.param,
+        )
 
 
-class WeeklyReservationSchedule(NavienBaseModel):
-    """Complete weekly reservation schedule (RESERVATION_WEEKLY command).
+class RecirculationSchedule(NavienBaseModel):
+    """Complete recirculation pump schedule (RECIR_RESERVATION command).
 
-    Used with command code 33554438 to configure a temperature schedule
-    that repeats weekly. Accepts the same hex-encoded format as the
-    standard reservation schedule.
+    Written with command code 33554440 on ``ctrl/recirc-rsv/rd`` and read
+    with 16777231 on ``st/recirc-rsv/rd``. Same envelope as
+    :class:`ReservationSchedule`: ``reservationUse`` (2=on, 1=off) plus a
+    ``reservation`` list. Read-backs arrive both as a JSON list and, on the
+    legacy ``res/recirc-rsv`` topic, as a hex string; the model parses
+    both, though the typed subscription listens on the ``/rd`` topic only.
     """
 
-    reservation_use: int = Field(default=0, alias="reservationUse")
-    reservation: list[WeeklyReservationEntry] = Field(default_factory=list)
+    reservation_use: int = Field(default=0, alias="reservationUse", strict=True)
+    reservation: list[RecirculationScheduleEntry] = Field(default_factory=list)
 
     model_config = ConfigDict(
         alias_generator=None,
@@ -263,105 +296,20 @@ class WeeklyReservationSchedule(NavienBaseModel):
     @classmethod
     def _decode_hex_reservation(cls, data: Any) -> Any:
         """Decode hex-encoded reservation string into entry list."""
-        if isinstance(data, dict):
-            d = cast(dict[str, Any], data).copy()
-            raw = d.get("reservation", "")
-            if isinstance(raw, str):
-                if raw:
-                    from ..encoding import decode_reservation_hex
-
-                    d["reservation"] = decode_reservation_hex(raw)
-                else:
-                    d["reservation"] = []
-            return d
-        return data
+        return _decode_hex_reservation_field(data)
 
     @computed_field  # type: ignore[prop-decorator]
     @property
     def enabled(self) -> bool:
-        """Whether the weekly reservation system is globally enabled.
-
-        Device bool convention: 2=on, 1=off.
-        """
+        """Whether the recirculation schedule is globally enabled."""
         return self.reservation_use == 2
 
-
-class RecirculationScheduleEntry(NavienBaseModel):
-    """A single entry in a recirculation pump schedule.
-
-    Used with the RECIR_RESERVATION command (33554444) to set timed
-    recirculation cycles. Each entry defines a time window and pump mode.
-
-    Fields:
-        - enable: 2=enabled, 1=disabled (device boolean)
-        - week: bitfield of active days (Sun=bit7, Mon=bit6, ..., Sat=bit1)
-        - start_hour: 0-23
-        - start_min: 0-59
-        - end_hour: 0-23
-        - end_min: 0-59
-        - mode: recirculation mode
-          (1=Constant, 2=Timer, 3=Temperature, 4=Sensor)
-    """
-
-    enable: int = 2
-    week: int = 0
-    start_hour: int = Field(default=0, alias="startHour")
-    start_min: int = Field(default=0, alias="startMin")
-    end_hour: int = Field(default=0, alias="endHour")
-    end_min: int = Field(default=0, alias="endMin")
-    mode: int = 1
-
-    model_config = ConfigDict(
-        alias_generator=None,
-        populate_by_name=True,
-        extra="ignore",
-        use_enum_values=False,
-    )
-
-    @computed_field  # type: ignore[prop-decorator]
-    @property
-    def enabled(self) -> bool:
-        """Whether this entry is active (device bool: 2=on, 1=off)."""
-        return self.enable == 2
-
-    @computed_field  # type: ignore[prop-decorator]
-    @property
-    def days(self) -> list[str]:
-        """Weekday names for this entry."""
-        from ..encoding import decode_week_bitfield
-
-        return decode_week_bitfield(self.week)
-
-    @computed_field  # type: ignore[prop-decorator]
-    @property
-    def start_time(self) -> str:
-        """Formatted start time string (HH:MM)."""
-        return f"{self.start_hour:02d}:{self.start_min:02d}"
-
-    @computed_field  # type: ignore[prop-decorator]
-    @property
-    def end_time(self) -> str:
-        """Formatted end time string (HH:MM)."""
-        return f"{self.end_hour:02d}:{self.end_min:02d}"
-
-    @computed_field  # type: ignore[prop-decorator]
-    @property
-    def mode_name(self) -> str:
-        """Human-readable recirculation mode name."""
-        try:
-            return RecirculationMode(self.mode).name.replace("_", " ").title()
-        except ValueError:
-            return f"Unknown ({self.mode})"
-
-
-class RecirculationSchedule(NavienBaseModel):
-    """Complete recirculation pump schedule (RECIR_RESERVATION command).
-
-    Used with command code 33554444 to configure timed recirculation
-    pump operation windows.
-    """
-
-    schedule: list[RecirculationScheduleEntry] = Field(default_factory=list)
+    def canonical(self) -> tuple[bool, tuple[tuple[int, ...], ...]]:
+        """Order-independent representation for read-back comparison."""
+        return (
+            self.enabled,
+            tuple(sorted(entry.canonical_key() for entry in self.reservation)),
+        )
 
 
 class OtaCommitPayload(NavienBaseModel):

@@ -28,6 +28,7 @@ from nwp500.exceptions import (
     TokenRefreshError,
     ValidationError,
 )
+from nwp500.mqtt.control import MAX_ENERGY_YEAR, MIN_ENERGY_YEAR
 from nwp500.unit_system import UnitSystemType
 
 from . import handlers
@@ -67,6 +68,28 @@ async def _detect_unit_system(
             "Timed out detecting unit system, defaulting to us_customary"
         )
         return "us_customary"
+
+
+def _parse_filter_hours(
+    ctx: click.Context, param: click.Parameter, value: int
+) -> int:
+    """Reject filter intervals the device does not accept, before connecting."""
+    if value != 0 and not (1000 <= value <= 10000 and value % 500 == 0):
+        raise click.BadParameter(
+            f"{value} is not accepted; use 0 or 1000-10000 in steps of 500"
+        )
+    return value
+
+
+def _parse_recirc_schedule(
+    ctx: click.Context, param: click.Parameter, value: str
+) -> str:
+    """Validate the recirculation schedule JSON before connecting."""
+    try:
+        handlers.parse_recirculation_schedule_json(value, enabled=True)
+    except ValueError as e:
+        raise click.BadParameter(str(e)) from None
+    return value
 
 
 def async_command(f: Any) -> Any:
@@ -276,6 +299,94 @@ async def reset_filter(mqtt: NavienMqttClient, device: Any) -> None:
 
 
 @cli.command()  # type: ignore[attr-defined]
+@click.argument("hours", type=int, callback=_parse_filter_hours)
+@async_command
+async def filter_life(mqtt: NavienMqttClient, device: Any, hours: int) -> None:
+    """Set the air filter service interval in fan hours.
+
+    HOURS is 0 to disable the alarm, or 1000-10000 in steps of 500 (the
+    values the NaviLink app offers).
+    """
+    await handlers.handle_set_air_filter_life_request(mqtt, device, hours)
+
+
+@cli.command()  # type: ignore[attr-defined]
+@click.option("--json", "output_json", is_flag=True, help="Output raw JSON")
+@async_command
+async def diagnostics(
+    mqtt: NavienMqttClient, device: Any, output_json: bool = False
+) -> None:
+    """Show the installer diagnostics counters.
+
+    Lifetime energy and fault counters, hot-water draw statistics and
+    component run times, as shown on the NaviLink app's installer screen.
+    """
+    await handlers.handle_diagnostics_request(mqtt, device, output_json)
+
+
+@cli.command()  # type: ignore[attr-defined]
+@async_command
+async def reset_condenser_fault(mqtt: NavienMqttClient, device: Any) -> None:
+    """Clear a condenser fault (installer-level in the NaviLink app)."""
+    await handlers.handle_reset_condenser_fault_request(mqtt, device)
+
+
+@cli.group()  # type: ignore[attr-defined]
+def firmware() -> None:
+    """Firmware update information."""
+    pass
+
+
+@firmware.command("info")  # type: ignore[attr-defined]
+@click.option("--json", "output_json", is_flag=True, help="Output raw JSON")
+@async_command
+async def firmware_info(
+    mqtt: NavienMqttClient, device: Any, output_json: bool = False
+) -> None:
+    """Show downloadable firmware (OTA) information."""
+    await handlers.handle_firmware_download_info_request(
+        mqtt, device, output_json
+    )
+
+
+@cli.group()  # type: ignore[attr-defined]
+def recirc_schedule() -> None:
+    """Manage the recirculation pump schedule."""
+    pass
+
+
+@recirc_schedule.command("get")  # type: ignore[attr-defined]
+@click.option("--json", "output_json", is_flag=True, help="Output raw JSON")
+@async_command
+async def recirc_schedule_get(
+    mqtt: NavienMqttClient, device: Any, output_json: bool = False
+) -> None:
+    """Read the recirculation pump schedule from the device."""
+    await handlers.handle_get_recirculation_schedule_request(
+        mqtt, device, output_json
+    )
+
+
+@recirc_schedule.command("set")  # type: ignore[attr-defined]
+@click.argument("json_str", metavar="JSON", callback=_parse_recirc_schedule)
+@click.option("--disabled", is_flag=True, help="Write the schedule disabled")
+@async_command
+async def recirc_schedule_set(
+    mqtt: NavienMqttClient, device: Any, json_str: str, disabled: bool
+) -> None:
+    """Write the recirculation pump schedule.
+
+    JSON is an array of up to 20 entries, for example Monday-Friday
+    at 06:00: {"enable": 2, "week": 124, "hour": 6, "min": 0, "mode": 2}.
+    week is the day bitfield (Sun=128, Mon=64 ... Sat=2), mode 2 switches
+    the pump on and 1 off.
+    """
+    await handlers.handle_set_recirculation_schedule_request(
+        mqtt, device, json_str, enabled=not disabled
+    )
+
+
+@cli.command()  # type: ignore[attr-defined]
 @async_command
 async def water_program(mqtt: NavienMqttClient, device: Any) -> None:
     """Enable water program reservation scheduling mode."""
@@ -325,6 +436,20 @@ async def temp(mqtt: NavienMqttClient, device: Any, value: float) -> None:
 async def vacation(mqtt: NavienMqttClient, device: Any, days: int) -> None:
     """Enable vacation mode for N days."""
     await handlers.handle_set_vacation_days_request(mqtt, device, days)
+
+
+@cli.command()  # type: ignore[attr-defined]
+@click.argument("days", type=click.IntRange(1, 30))
+@async_command
+async def vacation_duration(
+    mqtt: NavienMqttClient, device: Any, days: int
+) -> None:
+    """Set the vacation day count without entering vacation mode.
+
+    Sends the app's goout-day command. Use ``vacation`` to enter vacation
+    mode for a number of days.
+    """
+    await handlers.handle_set_vacation_duration_request(mqtt, device, days)
 
 
 @cli.command()  # type: ignore[attr-defined]
@@ -667,8 +792,37 @@ def _parse_months(
     return months
 
 
+def _parse_years(
+    ctx: click.Context, param: click.Parameter, value: str | None
+) -> list[int] | None:
+    """Parse ``--years`` at parse time, so bad input is a usage error.
+
+    Years must fall in the range the library accepts; duplicates are
+    dropped, keeping the first occurrence.
+    """
+    if value is None:
+        return None
+    years: list[int] = []
+    for raw in value.split(","):
+        try:
+            year = int(raw.strip())
+        except ValueError:
+            raise click.BadParameter(
+                f"{raw.strip()!r} is not a year; expected a comma-separated "
+                "list like 2025,2026"
+            ) from None
+        if not MIN_ENERGY_YEAR <= year <= MAX_ENERGY_YEAR:
+            raise click.BadParameter(
+                f"{year} is not in the range "
+                f"{MIN_ENERGY_YEAR}-{MAX_ENERGY_YEAR}"
+            )
+        if year not in years:
+            years.append(year)
+    return years
+
+
 class _EnergySelection(click.Command):
-    """Rejects an unusable --month/--months combination during parsing.
+    """Rejects an unusable --month/--months/--years combination during parsing.
 
     Cross-option checks have no natural home in a per-option callback, and
     the command body is the wrong place: it runs inside ``async_command``,
@@ -681,23 +835,48 @@ class _EnergySelection(click.Command):
     def parse_args(self, ctx: click.Context, args: list[str]) -> list[str]:
         rest = super().parse_args(ctx, args)
         month, months = ctx.params.get("month"), ctx.params.get("months")
-        if month is not None and months is not None:
+        years, year = ctx.params.get("years"), ctx.params.get("year")
+        chosen = [
+            name
+            for name, value in (
+                ("--month", month),
+                ("--months", months),
+                ("--years", years),
+            )
+            if value is not None
+        ]
+        if len(chosen) > 1:
             raise click.UsageError(
-                "Use either --month (daily breakdown) or --months "
-                "(monthly summary), not both",
+                "Use only one of --month (daily breakdown), --months "
+                "(monthly summary) or --years (per-month for whole years), "
+                f"not {' and '.join(chosen)}",
                 ctx=ctx,
             )
-        if month is None and months is None:
+        if not chosen:
             raise click.UsageError(
-                "Either --months (for monthly summary) or --month "
-                "(for daily breakdown) is required",
+                "One of --months (monthly summary), --month (daily "
+                "breakdown) or --years (whole years) is required",
                 ctx=ctx,
+            )
+        if years is not None and year is not None:
+            raise click.UsageError(
+                "--years already names the years; do not pass --year",
+                ctx=ctx,
+            )
+        if years is None and year is None:
+            raise click.UsageError(
+                "--year is required with --month or --months", ctx=ctx
             )
         return rest
 
 
 @cli.command(cls=_EnergySelection)  # type: ignore[attr-defined]
-@click.option("--year", type=int, required=True, help="Year to query")
+@click.option(
+    "--year",
+    type=click.IntRange(MIN_ENERGY_YEAR, MAX_ENERGY_YEAR),
+    required=False,
+    help="Year to query",
+)
 @click.option(
     "--months",
     required=False,
@@ -710,28 +889,38 @@ class _EnergySelection(click.Command):
     required=False,
     help="Show daily breakdown for a specific month (1-12)",
 )
+@click.option(
+    "--years",
+    required=False,
+    callback=_parse_years,
+    help="Comma-separated years for a per-month breakdown (e.g. 2025,2026)",
+)
 @async_command
 async def energy(
     mqtt: NavienMqttClient,
     device: Any,
-    year: int,
+    year: int | None,
     months: list[int] | None,
     month: int | None,
+    years: list[int] | None,
 ) -> None:
     """Query historical energy usage.
 
-    Use either --months for monthly summary or --month for daily breakdown.
-    Which option was passed decides the view, not how many months it names:
-    ``--months 5`` is a one-month summary, ``--month 5`` is a daily
-    breakdown of that month.
+    Use --year with --months for a monthly summary or --month for a daily
+    breakdown, or --years alone for a per-month breakdown of whole years
+    (the device's monthly query). Which option was passed decides the
+    view, not how many months it names: ``--months 5`` is a one-month
+    summary, ``--month 5`` is a daily breakdown of that month.
     """
-    # _EnergySelection rejected every combination but these two during
+    # _EnergySelection rejected every combination but these during
     # parsing, so exactly one of the options is set here.
-    if month is not None:
+    if years is not None:
+        await handlers.handle_get_energy_monthly_request(mqtt, device, years)
+    elif month is not None and year is not None:
         await handlers.handle_get_energy_request(
             mqtt, device, year, [month], daily=True
         )
-    elif months is not None:
+    elif months is not None and year is not None:
         await handlers.handle_get_energy_request(
             mqtt, device, year, months, daily=False
         )

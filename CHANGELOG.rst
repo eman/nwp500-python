@@ -5,6 +5,161 @@ Changelog
 Unreleased
 ==========
 
+This release realigns the MQTT command set with what the NaviLink app
+actually sends. The app (version 2.03.00) was decompiled and its request
+builder compared with the library; every query it sends now has a
+method, six commands it never sends were removed, and the recirculation
+schedule write was corrected. Breaking changes are listed under
+*Removed* and *Changed*.
+
+Added
+-----
+- **Installer diagnostics query.** ``request_diagnostics()`` /
+  ``subscribe_diagnostics()`` and the ``nwp-cli diagnostics`` command
+  return the lifetime counters the app's installer screen shows: heat
+  pump and element energy, days since installation, fault event counts,
+  demand-response operation times, hot-water draw statistics and
+  component run times and start counts, as
+  :class:`~nwp500.models.DeviceDiagnostics`. The device answers the
+  ``st/td/rd`` query with packed hex; the NaviLink cloud decodes it into
+  JSON only when the reply topic has the app's five-segment form, so the
+  library requests that form. Verified live: the energies and compressor
+  and element run times match the energy query's lifetime totals.
+- **Monthly energy query.** ``request_energy_usage_monthly()`` /
+  ``subscribe_energy_usage_monthly()`` and ``nwp-cli energy --years``
+  return one entry per year with twelve per-month items. Verified live.
+- **Hourly energy query.** ``request_energy_usage_hourly()`` /
+  ``subscribe_energy_usage_hourly()`` send the app's per-hour query. The
+  NWP500 tested never answered it in four attempts, so it has no CLI
+  command.
+- **Recirculation schedule read.** ``request_recirculation_schedule()``
+  and ``nwp-cli recirc-schedule get``; the write is exposed as
+  ``nwp-cli recirc-schedule set``, which checks the JSON before
+  connecting (known keys only, integers in range, at most 20 entries).
+  The read was verified live on a unit that reports recirculation
+  scheduling but has no pump (empty, disabled schedule); the write and
+  its echo are unverified. The CLI reports a write as updated only when
+  the echo matches what was written. ``RecirculationSchedule`` and
+  ``RecirculationScheduleEntry`` fields are strict integers, so ``True``
+  or ``6.0`` is rejected instead of coerced.
+- **Firmware download info.** ``request_firmware_download_info()`` /
+  ``subscribe_firmware_download_info()`` and ``nwp-cli firmware info``
+  return :class:`~nwp500.models.FirmwareDownloadInfo`. The device replies
+  on its own topic rather than a client-keyed one. Verified live.
+- **Session end.** ``end_session()`` sends the ``st/end`` query the app
+  sends whenever it leaves a device. No reply to it has been observed.
+  Unlike other commands it is never queued while disconnected (it raises
+  ``MqttNotConnectedError``), since a session end replayed after a
+  reconnect would end the new session.
+- ``MqttConnectionConfig.send_session_end_on_disconnect`` (default
+  ``True``) controls whether ``disconnect()`` sends it.
+- ``subscribe_firmware_commit_response()`` receives the reply to
+  ``commit_firmware_update()``, which is requested on the app-form
+  ``res/commit-ota`` topic that no other subscription covers.
+- **Controls with app builder cases that had no method:**
+  ``set_vacation_duration(days)`` (``goout-day``; the app has a builder
+  case but no screen that calls it; verified live to change the day count
+  without changing the operation mode),
+  ``set_air_filter_life(hours)`` (``air-filter-life``; the wire value is
+  hours divided by 500, matching the app's 0 or 1000-10000 picker;
+  verified live) and ``reset_condenser_fault()`` (``cond-fault-reset``,
+  installer-level in the app; acknowledged live, clearing effect not
+  observable without a fault). CLI: ``vacation-duration``,
+  ``filter-life``, ``reset-condenser-fault``.
+- **Command codes** for every member of the app's ``DeviceControlMGPP``
+  enum, with the declared-but-never-sent ones annotated.
+- ``EnergyUsageResponse.type_of_usage``, ``get_year_data()``,
+  ``MonthlyEnergyData.day`` and ``EnergyUsageDay.ep_usage`` /
+  ``water_usage`` (declared by the app; not reported by the NWP500).
+
+Changed
+-------
+- **Recirculation schedule models take the app's entry shape** (breaking).
+  :class:`~nwp500.models.RecirculationScheduleEntry` is now
+  ``enable``/``week``/``hour``/``min``/``mode``/``param`` like a
+  reservation entry (``mode`` is the entry's pump on/off toggle in the
+  app's editor) and :class:`~nwp500.models.RecirculationSchedule` carries
+  ``reservation_use`` plus ``reservation`` instead of ``schedule``. The
+  previous start/end window fields were not what the device accepts.
+- ``MonthlyEnergyData.month`` is optional: monthly-query entries have no
+  month.
+- **``NavienMqttClient.disconnect()`` now sends ``st/end``** to every
+  device that was passed to any subscription, as the NaviLink app does
+  when it leaves a device. The publishes go straight to the connection,
+  never into the offline command queue, stop if the connection drops,
+  are bounded by a short timeout and never fail the disconnect. What it
+  does to other clients connected to the same device (for example a Home
+  Assistant integration) is not known; turn it off with
+  ``MqttConnectionConfig(send_session_end_on_disconnect=False)``.
+- **CLI energy summaries total the requested periods.** ``energy
+  --month``, ``--months`` and ``--years`` printed the device's lifetime
+  total under a per-month or per-year heading. Each summary now covers
+  only the rows shown, and the lifetime total is printed once under its
+  own heading. (The response's ``total`` is lifetime whatever is
+  requested; checked live.)
+- **Parameter validation.** ``set_air_filter_life()``,
+  ``set_vacation_duration()`` and the daily, monthly and hourly energy
+  queries reject non-integers (including ``True`` and floats) and
+  out-of-range values; years must be 2000-2099 and ``--years`` drops
+  duplicates. ``filter-life``, ``--year`` and ``--years`` reject bad
+  input before connecting. ``request_energy_usage()`` now rejects an
+  empty month list.
+
+Fixed
+-----
+- **``configure_recirculation_schedule()`` published to the wrong topic
+  with the wrong keys.** It sent ``{"schedule": [...]}`` on the bare
+  ``ctrl`` topic; the app publishes RECIR_RESERVATION on
+  ``ctrl/recirc-rsv/rd`` with ``reservationUse`` and ``reservation`` and
+  asks for the echo on ``recirc-rsv/rd``.
+- **``commit_firmware_update()`` published to the bare ``ctrl`` topic.**
+  The app publishes OTA_COMMIT on ``ctrl/commit-ota`` and asks for the
+  reply on ``res/commit-ota``; the library now does the same. Not
+  exercised against a device.
+- **Unsubscribing could remove the wrong handler.** When one callback was
+  registered for more than one device-wildcard subscription (status,
+  feature, firmware info), unsubscribing one removed whichever handler
+  came first. Handlers are now matched on subscription kind as well.
+- **Query replies could reach another device's callback.** Client-keyed
+  reply topics are shared by every device a client queries, so with two
+  devices subscribed a reservation, energy, TOU, diagnostics or
+  recirculation reply reached both callbacks. Typed subscriptions now
+  ignore replies whose ``macAddress`` names a different device.
+- Recirculation read-backs in hex carry the unused ``param`` as ``0xFF``
+  and in JSON as ``-1``; the model normalizes to ``-1`` so the two compare
+  equal.
+- **Protocol documentation** rewritten from the decompiled request
+  builder and live captures: real topic structure, the anti-legionella
+  modes (``anti-leg-on [days]`` / ``anti-leg-off``, not
+  ``anti-legionella-setting``), the message example that paired the
+  weekly-reservation code with ``dhw-temperature``, the undocumented
+  16777226 reservation write, response shapes for every query, and the
+  quick reference's invented ``header``/``body`` format with 0x11/0x21/0x31
+  codes that never existed. Stale ``docs/protocol/`` paths in code
+  comments and docstrings now point at ``docs/reference/protocol/``.
+- ``models/schedule.py`` docstrings cited 33554444 (the hot button) for
+  the recirculation reservation; it is 33554440.
+- CLI reference: token cache path is ``~/.nwp500_tokens.json``, ``-vv``
+  is a repeated ``-v`` (there was no ``--very-verbose``), and the
+  ``--unit-system`` option and ``tou rates``/``plan``/``apply`` commands
+  are documented.
+
+Removed
+-------
+- **Six MQTT commands the NaviLink app never sends** (breaking):
+  ``check_firmware_update()``, ``reconnect_wifi()``, ``reset_wifi()``,
+  ``set_freeze_protection_temperature()``, ``run_smart_diagnostic()`` and
+  ``update_weekly_reservation()`` with
+  ``subscribe_weekly_reservation_response()`` and the
+  ``WeeklyReservationEntry`` / ``WeeklyReservationSchedule`` models. The
+  app's enum declares the first five codes but its request builder has
+  no case for them, so the library's ``ota-check``, ``wifi-reconnect``,
+  ``wifi-reset``, ``frez-temp`` and ``smart-diagnostic`` mode strings were
+  invented. The app's weekly schedule is the ordinary reservation
+  program: it writes with 16777226 on ``ctrl/rsv/rd``
+  (``update_reservations()``), never with 33554438 or a ``rsv-weekly/rd``
+  topic. The ``CommandCode`` members stay, annotated as declared only.
+
 Version 9.3.2 (2026-09-01)
 ==========================
 
@@ -129,6 +284,7 @@ Fixed
   other clients on the same device. Query results the device routes back to a
   client-keyed topic, such as reservations and energy usage, were already
   covered by the existing response wildcard.
+
 Version 9.3.0 (2026-08-03)
 ==========================
 

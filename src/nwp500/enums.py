@@ -4,7 +4,8 @@ This module contains enumerations for the Navien device protocol. These
 enums define valid values for device control commands, status fields, and
 capabilities.
 
-See docs/protocol/quick_reference.rst for comprehensive protocol details.
+See docs/reference/protocol/quick_reference.rst for comprehensive protocol
+details.
 """
 
 from enum import IntEnum, StrEnum
@@ -303,15 +304,29 @@ class CommandCode(IntEnum):
     - Control commands (33554xxx): Change device settings
 
     All commands and their expected payloads are documented in
-    docs/protocol/mqtt_protocol.rst under the "Control Messages" section.
+    docs/reference/protocol/mqtt_protocol.rst.
+
+    Every member mirrors the NaviLink app's ``DeviceControlMGPP`` enum.
+    Members marked *declared only* exist in the app's enum but have no
+    code path that sends them; their payloads are unknown and the library
+    provides no method for them.
     """
 
     # Query Commands (Information Retrieval)
-    DEVICE_INFO_REQUEST = 16777217  # Request device feature information
-    STATUS_REQUEST = 16777219  # Request current device status
-    RESERVATION_READ = 16777222  # Read current reservation schedule
-    ENERGY_USAGE_QUERY = 16777225  # Query energy usage history
-    RESERVATION_MANAGEMENT = 16777226  # Update/manage reservation schedules
+    DEVICE_INFO_REQUEST = 16777217  # st/did: device feature information
+    SESSION_END = 16777218  # st/end: app sends this when leaving a device
+    STATUS_REQUEST = 16777219  # st: current device status
+    RESERVATION_READ = 16777222  # st/rsv/rd: read the reservation schedule
+    ENERGY_USAGE_HOURLY_QUERY = 16777224  # st/energy-usage-hourly-query/rd
+    ENERGY_USAGE_QUERY = 16777225  # st/energy-usage-daily-query/rd
+    RESERVATION_MANAGEMENT = 16777226  # ctrl/rsv/rd: write the schedule
+    # The monthly energy query shares 16777226 with RESERVATION_MANAGEMENT;
+    # the topic tells them apart. As an IntEnum alias its ``.name`` resolves
+    # to RESERVATION_MANAGEMENT.
+    ENERGY_USAGE_MONTHLY_QUERY = 16777226  # st/energy-usage-monthly-query/rd
+    FIRMWARE_DOWNLOAD_INFO_REQUEST = 16777227  # st/dl-sw-info
+    DIAGNOSTICS_REQUEST = 16777228  # st/td/rd: installer diagnostics
+    RECIRC_RESERVATION_READ = 16777231  # st/recirc-rsv/rd
 
     # Control Commands - Power
     POWER_OFF = 33554433  # Turn device off
@@ -322,26 +337,35 @@ class CommandCode(IntEnum):
     DHW_TEMPERATURE = 33554464  # Set DHW temperature
 
     # Control Commands - Scheduling
-    RESERVATION_WEEKLY = 33554438  # Configure weekly temperature schedule
-    TOU_RESERVATION = 33554439  # Configure Time-of-Use schedule
-    RECIR_RESERVATION = 33554440  # Configure recirculation schedule
+    RESERVATION_WEEKLY = 33554438  # declared only; the app's weekly
+    #   schedule is written with RESERVATION_MANAGEMENT on ctrl/rsv/rd
+    TOU_RESERVATION = 33554439  # ctrl/tou/rd: Time-of-Use schedule
+    RECIR_RESERVATION = 33554440  # ctrl/recirc-rsv/rd: recirculation schedule
     RESERVATION_WATER_PROGRAM = 33554441  # Configure hot water program
 
     # Control Commands - Firmware/OTA
     OTA_COMMIT = 33554442  # Commit OTA firmware update
-    OTA_CHECK = 33554443  # Check for OTA firmware updates
+    OTA_CHECK = 33554443  # declared only
 
     # Control Commands - Recirculation
     RECIR_HOT_BTN = 33554444  # Trigger recirculation hot button
     RECIR_MODE = 33554445  # Set recirculation mode
 
     # Control Commands - WiFi
-    WIFI_RECONNECT = 33554446  # Reconnect WiFi
-    WIFI_RESET = 33554447  # Reset WiFi settings
+    WIFI_RECONNECT = 33554446  # declared only
+    WIFI_RESET = 33554447  # declared only
 
     # Control Commands - Special Functions
-    FREZ_TEMP = 33554451  # Set freeze protection temperature
-    SMART_DIAGNOSTIC = 33554455  # Trigger smart diagnostics
+    FREZ_TEMP = 33554451  # declared only
+    SMART_DIAGNOSTIC = 33554455  # declared only
+
+    # Other MGPP product lines (hydronic units); no NWP500 method
+    COOLING_MODE = 33554460  # mode "cooling-mode", param [mode]
+    WATER_FILTER_RESET = 33554461  # mode "water-filter-reset"
+    PRE_FILTER_RESET = 33554462  # mode "pre-filter-reset"
+
+    # Condenser fault reset (reset_condenser_fault); installer-level in app
+    COND_FAULT_RESET = 33554463  # mode "cond-fault-reset"
 
     # Control Commands - Vacation/Away
     GOOUT_DAY = 33554466  # Set vacation mode duration (days)
@@ -468,7 +492,7 @@ class ErrorCode(IntEnum):
     Error codes indicate specific faults detected by the device's
     diagnostic system. Most errors are Level 1, allowing continued
     operation with reduced functionality.
-    See docs/protocol/error_codes.rst for complete troubleshooting guide.
+    See docs/reference/protocol/error_codes.rst for the troubleshooting guide.
     """
 
     NO_ERROR = 0

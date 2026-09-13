@@ -3,7 +3,10 @@ MQTT Protocol
 ======================
 
 This document describes the MQTT protocol used for real-time communication
-with Navien NWP500 devices via AWS IoT Core.
+with Navien NWP500 devices via AWS IoT Core. Everything here was taken from
+the NaviLink Android app's request builder (``SendRequestMgppData.java``,
+version 2.03.00) and confirmed against captured traffic and live queries to
+an NWP500 wherever a capture exists; the exceptions are marked.
 
 .. warning::
    This document describes the underlying MQTT protocol. Most users should use the
@@ -13,41 +16,124 @@ with Navien NWP500 devices via AWS IoT Core.
 Overview
 ========
 
-**Protocol:** MQTT 3.1.1 over WebSockets  
-**Broker:** AWS IoT Core  
-**Authentication:** AWS SigV4 with temporary credentials  
+**Protocol:** MQTT 3.1.1 over WebSockets
+**Broker:** AWS IoT Core
+**Authentication:** AWS SigV4 with temporary credentials
 **Message Format:** JSON
 
 Topic Structure
 ===============
 
-Topics follow a hierarchical structure:
-
-Command Topics
---------------
-
-.. code-block:: text
-
-   cmd/{deviceType}/{homeSeq}/{userSeq}/{clientId}/ctrl            # Control commands
-   cmd/{deviceType}/{homeSeq}/{userSeq}/{clientId}/st              # Status requests
-   cmd/{deviceType}/{homeSeq}/{userSeq}/{clientId}/res/{type}      # Responses
-
-Event Topics
-------------
+Requests are published to a device-keyed topic. Where the reply arrives
+depends on the request: control commands are acknowledged with a status
+object on the control ack topic, while queries name their own
+``responseTopic`` in the envelope and the device (or the NaviLink cloud)
+publishes there.
 
 .. code-block:: text
 
-   evt/{deviceType}/{homeSeq}/{userSeq}/app-connection  # App connection signal
+   cmd/{deviceType}/navilink-{mac}/{suffix}                  # every request
+   cmd/{deviceType}/navilink-{mac}/{clientId}/res            # control ack
+   cmd/{deviceType}/{clientId}/res/{suffix}                  # query reply
+   cmd/{deviceType}/{homeSeq}/{userSeq}/{clientId}/res/{suffix}
+                                                             # query reply,
+                                                             # app form
+   cmd/{deviceType}/navilink-{mac}/res/dl-sw-info            # device-keyed
+                                                             # reply
+   evt/{deviceType}/navilink-{mac}/app-connection            # event
 
 **Variables:**
 
 * ``{deviceType}`` - Device type code (52 for NWP500)
-* ``{homeSeq}`` - Unique home/location identifier (assigned by Navien cloud system).
-  Groups devices within the same home/installation and ensures messages are routed to the
-  correct location. Retrieved from ``DeviceInfo.home_seq`` in the REST API.
-* ``{userSeq}`` - Unique user identifier for the account
+* ``{mac}`` - Device MAC address without separators
 * ``{clientId}`` - MQTT client ID
-* ``{type}`` - Response type (status, info, energy-usage, etc.)
+* ``{homeSeq}``, ``{userSeq}`` - The NaviLink app builds its reply topics with
+  the home and user sequence numbers from the REST API. The cloud does not
+  check the values; it keys one behaviour (the ``td/rd`` JSON decode below)
+  on the five-segment *shape*. The library passes ``DeviceInfo.home_seq``
+  and ``0``.
+
+Request suffixes
+----------------
+
+.. list-table::
+   :header-rows: 1
+   :widths: 34 12 30 24
+
+   * - Request suffix
+     - Code
+     - Reply
+     - Notes
+   * - ``st``
+     - 16777219
+     - control ack (status object)
+     - device status
+   * - ``st/did``
+     - 16777217
+     - control ack (feature object)
+     - device features
+   * - ``st/end``
+     - 16777218
+     - none observed
+     - session end
+   * - ``st/rsv/rd``
+     - 16777222
+     - ``res/rsv/rd``
+     - reservation schedule read
+   * - ``st/recirc-rsv/rd``
+     - 16777231
+     - ``res/recirc-rsv/rd``
+     - recirculation schedule read
+   * - ``st/td/rd``
+     - 16777228
+     - ``res/td/rd`` (app form only)
+     - installer diagnostics
+   * - ``st/dl-sw-info``
+     - 16777227
+     - device-keyed ``res/dl-sw-info``
+     - firmware download info
+   * - ``st/energy-usage-daily-query/rd``
+     - 16777225
+     - ``res/energy-usage-daily-query/rd``
+     - per-day energy
+   * - ``st/energy-usage-monthly-query/rd``
+     - 16777226
+     - ``res/energy-usage-monthly-query/rd``
+     - per-month energy
+   * - ``st/energy-usage-hourly-query/rd``
+     - 16777224
+     - ``res/energy-usage-hourly-query/rd``
+     - per-hour energy (unanswered)
+   * - ``ctrl``
+     - 33554433 ...
+     - control ack
+     - mode/param controls
+   * - ``ctrl/rsv/rd``
+     - 16777226
+     - ``res/rsv/rd``
+     - reservation schedule write
+   * - ``ctrl/recirc-rsv/rd``
+     - 33554440
+     - ``res/recirc-rsv/rd``
+     - recirculation schedule write
+   * - ``ctrl/tou/rd``
+     - 33554439
+     - ``res/tou/rd``
+     - Time-of-Use schedule write
+   * - ``ctrl/commit-ota``
+     - 33554442
+     - ``res/commit-ota`` (app form)
+     - firmware commit (not exercised)
+
+The reservation read and the recirculation read also produce a second
+reply on the suffix without ``/rd`` (``res/rsv``, ``res/recirc-rsv``)
+carrying the schedule as a packed hex string instead of a JSON list. The
+typed subscriptions listen on the ``/rd`` JSON topics; the schedule models
+also parse the hex form for anyone subscribing to the other topic.
+
+Every reply seen so far carries the device's ``macAddress``. Client-keyed
+reply topics are shared by every device a client queries, so the typed
+subscriptions ignore replies whose ``macAddress`` names another device.
 
 Message Structure
 =================
@@ -57,16 +143,16 @@ All MQTT messages are JSON with this structure:
 .. code-block:: json
 
    {
-     "clientID": "client-12345",
+     "clientID": "navien-client-1996271a",
      "sessionID": "session-67890",
-     "requestTopic": "cmd/52/25004/3456/client-12345/ctrl",
-     "responseTopic": "cmd/52/25004/3456/client-12345/res/status/rd",
+     "requestTopic": "cmd/52/navilink-04786332fca0/ctrl",
+     "responseTopic": "cmd/52/navilink-04786332fca0/navien-client-1996271a/res",
      "protocolVersion": 2,
      "request": {
-       "command": 33554438,
+       "command": 33554464,
        "deviceType": 52,
        "macAddress": "04786332fca0",
-       "additionalValue": "...",
+       "additionalValue": "5322",
        "mode": "dhw-temperature",
        "param": [120],
        "paramStr": ""
@@ -77,8 +163,8 @@ All MQTT messages are JSON with this structure:
 
 * ``clientID`` - MQTT client identifier
 * ``sessionID`` - Session identifier for tracking
-* ``requestTopic`` - Topic where command was sent (note: includes homeSeq and userSeq)
-* ``responseTopic`` - Topic to subscribe for responses
+* ``requestTopic`` - Topic the request is published to
+* ``responseTopic`` - Topic the reply should be published to
 * ``protocolVersion`` - Protocol version (always 2)
 * ``request`` - Command payload (see below)
 
@@ -88,10 +174,10 @@ Request Object
 .. code-block:: json
 
    {
-     "command": 33554438,
+     "command": 33554464,
      "deviceType": 52,
      "macAddress": "04786332fca0",
-     "additionalValue": "...",
+     "additionalValue": "5322",
      "mode": "dhw-temperature",
      "param": [120],
      "paramStr": ""
@@ -103,17 +189,26 @@ Request Object
 * ``deviceType`` (int) - Device type (52 for NWP500)
 * ``macAddress`` (str) - Device MAC address
 * ``additionalValue`` (str) - Additional device identifier
-* ``mode`` (str, optional) - Operation mode for control commands
-* ``param`` (array, optional) - Command parameters
-* ``paramStr`` (str) - Parameter string
-* ``month`` (array, optional) - Months for energy queries
-* ``year`` (int, optional) - Year for energy queries
+* ``mode`` (str) - Control commands only: the command's mode string
+* ``param`` (array) - Control commands only: integer parameters
+* ``paramStr`` (str) - Control commands only: always ``""``
+* ``year``, ``month``, ``day`` - Energy queries only (see below)
+* ``reservationUse``, ``reservation`` - Schedule writes only
+* ``controllerSerialNumber`` - TOU schedule write only
+* ``commitOta`` - OTA commit only
+
+Queries carry no ``mode``/``param``/``paramStr``.
 
 Command Codes
 =============
 
-Status and Info Requests
--------------------------
+The codes mirror the app's ``DeviceControlMGPP`` enum. Codes marked
+*declared only* exist in that enum but the app has no code path that
+sends them; their payloads are unknown and the library has no method for
+them.
+
+Queries
+-------
 
 .. list-table::
    :header-rows: 1
@@ -125,20 +220,36 @@ Status and Info Requests
    * - Device Info Request
      - 16777217
      - Request device features/capabilities
+   * - Session End
+     - 16777218
+     - Sent when a client is done with a device
    * - Device Status Request
      - 16777219
      - Request current device status
    * - Reservation Read
      - 16777222
      - Read reservation schedule
-   * - Energy Usage Query
+   * - Energy Usage Hourly Query
+     - 16777224
+     - Per-hour energy for given days (the NWP500 tested never answered)
+   * - Energy Usage Daily Query
      - 16777225
-     - Query energy usage data
+     - Per-day energy for given months
+   * - Reservation Update / Energy Usage Monthly Query
+     - 16777226
+     - One code, two requests; the topic tells them apart
+   * - Firmware Download Info
+     - 16777227
+     - Downloadable firmware components
+   * - Diagnostics
+     - 16777228
+     - Installer diagnostics counters
+   * - Recirculation Schedule Read
+     - 16777231
+     - Read recirculation pump schedule
 
 Control Commands
 ----------------
-
-These commands control device operation, settings, and special functions.
 
 Power Control
 ~~~~~~~~~~~~~
@@ -184,15 +295,16 @@ Scheduling and Reservations
    * - Command
      - Code
      - Description
-   * - Update Weekly Reservations
+   * - Weekly Reservation
      - 33554438
-     - Configure weekly temperature schedule
+     - *Declared only.* The app writes its weekly schedule with 16777226 on
+       ``ctrl/rsv/rd``
    * - Configure TOU Schedule
      - 33554439
-     - Configure Time-of-Use pricing schedule
+     - Configure Time-of-Use pricing schedule (``ctrl/tou/rd``)
    * - Configure Recirculation Schedule
      - 33554440
-     - Configure recirculation pump schedule
+     - Configure recirculation pump schedule (``ctrl/recirc-rsv/rd``)
    * - Configure Water Program (Reservation Mode)
      - 33554441
      - Enable/configure water program reservation mode
@@ -241,15 +353,9 @@ Special Functions
    * - Command
      - Code
      - Description
-   * - Set Freeze Protection Temperature
-     - 33554451
-     - Configure freeze protection activation temperature
-   * - Trigger Smart Diagnostic
-     - 33554455
-     - Run smart diagnostic routine
-   * - Set Vacation Days
+   * - Set Vacation Duration
      - 33554466
-     - Configure vacation mode duration
+     - Set the vacation day count (``goout-day``)
    * - Disable Intelligent Mode
      - 33554467
      - Turn off intelligent/adaptive heating
@@ -306,7 +412,10 @@ Maintenance
      - Reset air filter maintenance timer
    * - Set Air Filter Life
      - 33554474
-     - Configure air filter replacement interval
+     - Configure air filter service interval
+   * - Reset Condenser Fault
+     - 33554463
+     - Clear a condenser fault (installer-level in the app)
 
 Firmware Updates
 ~~~~~~~~~~~~~~~~
@@ -323,24 +432,22 @@ Firmware Updates
      - Commit pending firmware update
    * - Check for OTA Updates
      - 33554443
-     - Check for available firmware updates
+     - *Declared only*
 
-WiFi Management
-~~~~~~~~~~~~~~~
+Declared but never sent
+~~~~~~~~~~~~~~~~~~~~~~~
 
-.. list-table::
-   :header-rows: 1
-   :widths: 40 20 40
+The app's enum also declares OTA Check (33554443), WiFi Reconnect
+(33554446), WiFi Reset (33554447), Freeze Protection Temperature
+(33554451) and Smart Diagnostic (33554455). Its request builder has no
+case for any of them, so no NaviLink client ever publishes these codes and
+their payloads are unknown. Versions of this library before 9.4 sent
+made-up ``mode`` strings for them; those methods were removed.
 
-   * - Command
-     - Code
-     - Description
-   * - Reconnect WiFi
-     - 33554446
-     - Trigger WiFi reconnection
-   * - Reset WiFi
-     - 33554447
-     - Reset WiFi settings
+Cooling Mode (33554460), Water Filter Reset (33554461) and Pre-Filter
+Reset (33554462) are real MGPP commands (``cooling-mode [n]``,
+``water-filter-reset []``, ``pre-filter-reset []``) but belong to the
+hydronic product line's screens, not the NWP500.
 
 Control Command Details
 =======================
@@ -404,7 +511,8 @@ When mode is 5 (VACATION), a second parameter specifies number of days:
    }
 
 .. note::
-   Vacation mode is the only DHW mode that requires two parameters.
+   Vacation mode is the only DHW mode that requires two parameters. This is
+   how the app enters vacation mode; see also ``goout-day`` below.
 
 DHW Temperature
 ---------------
@@ -419,7 +527,7 @@ DHW Temperature
    }
 
 .. important::
-   Temperature values are encoded in **half-degrees Celsius**. 
+   Temperature values are encoded in **half-degrees Celsius**.
    Use formula: ``fahrenheit = (param / 2.0) * 9/5 + 32``
    For 140°F, send ``param=120`` (which is 60°C × 2).
    Valid range: Device-specific (see device features for ``dhw_temperature_min`` and ``dhw_temperature_max``).
@@ -427,27 +535,29 @@ DHW Temperature
 Anti-Legionella
 ---------------
 
-**Enable (7-day cycle):**
+**Enable with a 7-day cycle (command 33554472):**
 
 .. code-block:: json
 
    {
      "command": 33554472,
-     "mode": "anti-legionella-setting",
-     "param": [2, 7],
+     "mode": "anti-leg-on",
+     "param": [7],
      "paramStr": ""
    }
 
-**Disable:**
+**Disable (command 33554471):**
 
 .. code-block:: json
 
    {
      "command": 33554471,
-     "mode": "anti-legionella-setting",
-     "param": [1],
+     "mode": "anti-leg-off",
+     "param": [],
      "paramStr": ""
    }
+
+Both mode strings appear in captured app traffic.
 
 TOU Enable/Disable
 ------------------
@@ -492,13 +602,8 @@ Enable/configure water program reservation mode.
      "paramStr": ""
    }
 
-.. note::
-   This command enables or configures the water program reservation system.
-
-Vacation Mode
--------------
-
-Set vacation/away mode for extended periods.
+Vacation Duration
+-----------------
 
 **Set Vacation Days (command 33554466):**
 
@@ -507,12 +612,18 @@ Set vacation/away mode for extended periods.
    {
      "command": 33554466,
      "mode": "goout-day",
-     "param": [7]
+     "param": [7],
+     "paramStr": ""
    }
 
 .. note::
-   Vacation days parameter: Number of days (e.g., 7). Device will operate in 
-   energy-saving mode to minimize consumption during absence.
+   The app's builder sets only ``mode`` and ``param`` for this command;
+   the library sends ``paramStr`` as well, which the device accepts.
+   Verified live: ``vacationDaySetting`` changes and
+   ``dhwOperationSetting`` does not. The app has a builder case for this
+   command but no screen that calls it (the same is true of the demand
+   response and intelligent-mode commands); it enters vacation mode
+   through ``dhw-mode [5, days]``.
 
 Intelligent/Adaptive Mode
 --------------------------
@@ -588,9 +699,6 @@ Control recirculation pump operation.
      "paramStr": ""
    }
 
-.. note::
-   The param array contains a parameter (typically 1 to activate).
-
 **Set Recirculation Mode (command 33554445):**
 
 .. code-block:: json
@@ -609,12 +717,36 @@ Control recirculation pump operation.
 * 3 = Schedule (follow configured schedule)
 * 4 = Temperature (activate when pipe temp drops)
 
-**Note:** The param array contains a single integer parameter passed to the function.
+Recirculation Schedule Write
+----------------------------
+
+Published on ``cmd/52/navilink-{mac}/ctrl/recirc-rsv/rd`` with
+``responseTopic`` ``.../res/recirc-rsv/rd``, where the app expects the
+written schedule back. That echo has not been observed, because the only
+unit tested has no recirculation pump. Same envelope as the reservation
+write; the entries use the reservation entry fields. The app's editor
+allows at most 20 entries.
+
+.. code-block:: json
+
+   {
+     "command": 33554440,
+     "deviceType": 52,
+     "macAddress": "04786332fca0",
+     "additionalValue": "5322",
+     "reservationUse": 2,
+     "reservation": [
+       {"enable": 2, "week": 62, "hour": 6, "min": 0, "mode": 2, "param": -1}
+     ]
+   }
+
+In the app's schedule editor ``mode`` is the entry's on/off toggle
+(2 = pump on, 1 = pump off) and ``param`` is left at ``-1``. These
+semantics are inferred from the app and not confirmed on a unit with
+recirculation.
 
 Air Filter Maintenance
 ----------------------
-
-Manage air filter maintenance for heat pump models.
 
 **Reset Air Filter Timer (command 33554473):**
 
@@ -634,83 +766,46 @@ Manage air filter maintenance for heat pump models.
    {
      "command": 33554474,
      "mode": "air-filter-life",
-     "param": [180],
+     "param": [6],
      "paramStr": ""
    }
 
 .. note::
-   Air filter life parameter: days between cleanings/replacements (typically 90-180 days)
+   The parameter is the service interval in evaporator-fan hours divided
+   by 500. The app offers 0 (alarm off) or 1000 to 10000 hours in 500-hour
+   steps, so the wire value is 0 or 2 to 20; the example above is 3000
+   hours. The device reports the interval back as ``airFilterAlarmPeriod``
+   in hours (verified live).
 
-Freeze Protection
------------------
+Condenser Fault Reset
+---------------------
 
-Configure freeze protection settings.
-
-**Set Freeze Protection Temperature (command 33554451):**
+**Reset Condenser Fault (command 33554463):**
 
 .. code-block:: json
 
    {
-     "command": 33554451
+     "command": 33554463,
+     "mode": "cond-fault-reset",
+     "param": [],
+     "paramStr": ""
    }
 
 .. note::
-   This command is defined in the enum but payload structure not found in 
-   decompiled code. May require additional parameters or use default payload.
-
-Smart Diagnostics
------------------
-
-Run smart diagnostic routine.
-
-**Trigger Smart Diagnostic (command 33554455):**
-
-.. code-block:: json
-
-   {
-     "command": 33554455
-   }
-
-.. note::
-   This command is defined in the enum but payload structure not found in 
-   decompiled code. May require additional parameters or use default payload.
-
-WiFi Management
----------------
-
-Control WiFi connectivity.
-
-**Reconnect WiFi (command 33554446):**
-
-.. code-block:: json
-
-   {
-     "command": 33554446
-   }
-
-**Reset WiFi Settings (command 33554447):**
-
-.. code-block:: json
-
-   {
-     "command": 33554447
-   }
-
-.. warning::
-   WiFi reset will clear stored credentials and require re-provisioning.
-
-.. note::
-   These commands are defined in the enum but payload structures not found in 
-   decompiled code. They likely use minimal/default payloads.
+   The app shows this only to installer accounts; the gate is in the app.
+   A consumer account's unit acknowledges it with a status object; no
+   fault was present when tested, so the clearing effect is unverified.
 
 Firmware Updates
 ----------------
 
-Manage over-the-air firmware updates.
-
 **Commit Update (command 33554442):**
 
-This command uses a special RequestControlOta structure:
+Published on ``cmd/52/navilink-{mac}/ctrl/commit-ota`` with the reply
+requested on ``res/commit-ota`` in the app's five-segment topic form
+(``setPublishMgppControlOTA`` in the app). It uses a special
+RequestControlOta structure. Not exercised against a device, since it
+would install firmware.
 
 .. code-block:: json
 
@@ -730,19 +825,89 @@ This command uses a special RequestControlOta structure:
    - swVersion: Version number to commit
    - This command does not use the standard mode/param/paramStr structure
 
-Energy Usage Query
-------------------
+Query Details
+=============
+
+Energy Usage Queries
+--------------------
+
+**Daily (command 16777225, suffix** ``st/energy-usage-daily-query/rd`` **):**
 
 .. code-block:: json
 
    {
      "command": 16777225,
-     "mode": "energy-usage-daily-query",
-     "param": [],
-     "paramStr": "",
+     "deviceType": 52,
+     "macAddress": "04786332fca0",
+     "additionalValue": "5322",
      "year": 2024,
      "month": [10, 11, 12]
    }
+
+**Monthly (command 16777226, suffix** ``st/energy-usage-monthly-query/rd`` **):**
+
+.. code-block:: json
+
+   {
+     "command": 16777226,
+     "deviceType": 52,
+     "macAddress": "04786332fca0",
+     "additionalValue": "5322",
+     "year": [2025, 2026]
+   }
+
+**Hourly (command 16777224, suffix** ``st/energy-usage-hourly-query/rd`` **):**
+
+.. code-block:: json
+
+   {
+     "command": 16777224,
+     "deviceType": 52,
+     "macAddress": "04786332fca0",
+     "additionalValue": "5322",
+     "year": 2026,
+     "month": 9,
+     "day": [11]
+   }
+
+The hourly query is what the app sends, but the NWP500 tested did not
+answer it in four attempts with both reply-topic forms.
+
+Diagnostics (command 16777228)
+------------------------------
+
+Published on ``st/td/rd`` with no extra fields. The device answers on
+``res/td`` with packed little-endian hex strings; the NaviLink cloud
+decodes them and republishes JSON on ``res/td/rd``, but only when the
+``responseTopic`` has the app's five-segment form. Request accordingly:
+
+.. code-block:: json
+
+   {
+     "responseTopic": "cmd/52/25004/0/navien-client-1996271a/res/td/rd",
+     "request": {
+       "command": 16777228,
+       "deviceType": 52,
+       "macAddress": "04786332fca0",
+       "additionalValue": "5322"
+     }
+   }
+
+Firmware Download Info (command 16777227)
+-----------------------------------------
+
+Published on ``st/dl-sw-info``. The device answers on its own topic
+``cmd/52/navilink-{mac}/res/dl-sw-info`` regardless of the requested
+``responseTopic``; the device wildcard subscription receives it.
+
+Session End (command 16777218)
+------------------------------
+
+Published on ``st/end`` with no extra fields whenever the app leaves a
+device screen. No reply to it has been observed. The library sends it
+from ``disconnect()`` for every subscribed device unless
+``MqttConnectionConfig.send_session_end_on_disconnect`` is off; its effect
+on other clients connected to the same device is not known.
 
 Response Messages
 =================
@@ -750,21 +915,25 @@ Response Messages
 Status Response
 ---------------
 
+Control commands and ``st`` are acknowledged on
+``cmd/52/navilink-{mac}/{clientId}/res``:
+
 .. code-block:: json
 
    {
-     "clientID": "client-12345",
+     "clientID": "navilink-04786332fca0",
      "sessionID": "session-67890",
      "requestTopic": "...",
      "responseTopic": "...",
      "response": {
-       "command": 16777219,
        "deviceType": 52,
-       "macAddress": "...",
+       "macAddress": "04786332fca0",
+       "additionalValue": "5322",
        "status": {
-         "dhw_temperature": 120,
-         "dhw_temperature_setting": 120,
-         "current_inst_power": 450,
+         "command": 67108883,
+         "dhwTemperature": 120,
+         "dhwTemperatureSetting": 120,
+         "currentInstPower": 450,
          "operationMode": 64,
          "dhwOperationSetting": 3,
          "operationBusy": 2,
@@ -791,11 +960,11 @@ Feature/Info Response
    {
      "response": {
        "feature": {
-         "controller_serial_number": "ABC123",
-         "controller_sw_version": 184614912,
-         "dhw_temperature_min": 75,
-         "dhw_temperature_max": 130,
-         "energy_usage_use": 1
+         "controllerSerialNumber": "ABC123",
+         "controllerSwVersion": 184614912,
+         "dhwTemperatureMin": 75,
+         "dhwTemperatureMax": 130,
+         "energyUsageUse": 2
        }
      }
    }
@@ -805,26 +974,160 @@ See :doc:`device_features` for complete field reference.
 Energy Usage Response
 ---------------------
 
+Daily and monthly queries share one shape. Each ``usage`` entry is a
+requested period; for the daily query it carries ``month`` and one
+``data`` item per day, for the monthly query ``month`` is absent and
+``data`` holds twelve months. ``total`` is the device's lifetime total:
+it is identical whichever year, month or years are requested (checked
+live with 2025 alone, 2026 alone, both, and one month).
+
 .. code-block:: json
 
    {
      "response": {
-       "typeOfUsage": "daily",
-       "year": 2024,
-       "data": [
+       "deviceType": 52,
+       "macAddress": "04786332fca0",
+       "additionalValue": "5322",
+       "typeOfUsage": 1,
+       "total": {"heUsage": 146337, "hpUsage": 1266585, "heTime": 35, "hpTime": 3124},
+       "usage": [
          {
-           "heUsage": 1200,
-           "hpUsage": 3500,
-           "heTime": 2,
-           "hpTime": 8
+           "year": 2026,
+           "data": [
+             {"heUsage": 34473, "hpUsage": 163228, "heTime": 9, "hpTime": 412}
+           ]
          }
-       ],
-       "total": {
-         "heUsage": 1200,
-         "hpUsage": 3500
+       ]
+     }
+   }
+
+Usage values are watt-hours; times are hours. The app's model also
+declares ``epUsage`` and ``waterUsage`` per item and ``day`` per entry,
+which the NWP500 does not send.
+
+Diagnostics Response
+--------------------
+
+On ``res/td/rd`` (app-form reply topic only):
+
+.. code-block:: json
+
+   {
+     "response": {
+       "deviceType": 52,
+       "macAddress": "04786332fca0",
+       "additionalValue": "5322",
+       "typeOfTD": 2,
+       "data": {
+         "tsData": {
+           "cumulatedPwrHp": 1266585,
+           "cumulatedPwrHe": 146337,
+           "daysSinceInstallation": 359,
+           "cumulatedOccNumEco": 0,
+           "cumulatedOccNumDryFire": 0,
+           "numOffRostProtectBurn": 0,
+           "cumulatedOccNumConOvrFlow": 3,
+           "cumulatedOccNumWtrOvrFlow": 0,
+           "cumulatedOpTimeDrShed": 0,
+           "cumulatedOpTimeDrLoadUp": 0,
+           "cumulatedOpTimeDrAdvLoadUp": 0,
+           "cumulatedOpTimeDrCpp": 0,
+           "cumulatedOpTimeDrGridEmg": 0,
+           "cumulatedOccNumAbDisTmp": 0,
+           "cumulatedOccNumHpo": 0,
+           "cumulatedOccNumAbSucTmp": 0,
+           "cumulatedOccNumAbDisSucTmp": 0
+         },
+         "tcData": {},
+         "tdData": {
+           "numOfdhwUse": 0,
+           "dhwUseTotalFlow": 0,
+           "dhwUseTotalTime": 0,
+           "numOfLongDhwUse": 0,
+           "longDhwUseTotalFlow": 0,
+           "longDhwUseTotalTime": 0,
+           "numOfShortDhwUse": 0,
+           "avrageRecoveryTime": 0
+         },
+         "taData": {
+           "cumulatedOpTimeComp": 3124,
+           "cumulatedOpNumComp": 757,
+           "cumulatedOpTimeEvaFan": 3138,
+           "cumulatedOpNumEvaFan": 794,
+           "cumulatedOpStepEev": 1102,
+           "cumulatedOpTimeUhe": 35,
+           "cumulatedOpNumUhe": 375,
+           "cumulatedOpTimeLhe": 0,
+           "cumulatedOpNumLhe": 20,
+           "cumulatedOpNumShutOffVv": 0,
+           "mixingValveOpTotalStep": 0,
+           "mixingValveOpAvgMixinGrate": 0,
+           "cumulatedOpNumRecircPump": 0,
+           "cumulatedOpTimeRecircPump": 0,
+           "cumulatedOpTimeInvComp1": 0,
+           "cumulatedOpTimeInvComp2": 0,
+           "cumulatedOpTimeInvComp3": 0,
+           "cumulatedOpTimeInvComp4": 0
+         }
        }
      }
    }
+
+The raw ``res/td`` message carries the same values as hex strings
+(``tsData``: two little-endian ``uint32`` energies followed by ``uint16``
+counters; ``taData`` and ``tdData``: ``uint32`` arrays in the key order
+above). ``cumulatedPwrHp``/``cumulatedPwrHe`` equal the energy query's
+lifetime totals and ``cumulatedOpTimeComp``/``cumulatedOpTimeUhe`` equal
+its lifetime ``hpTime``/``heTime``, which fixes their units as watt-hours
+and hours. The remaining counters have no documented unit. The misspelled
+keys are the vendor's.
+
+Firmware Download Info Response
+-------------------------------
+
+On ``cmd/52/navilink-{mac}/res/dl-sw-info``. A unit with no pending
+update reports one all-zero entry:
+
+.. code-block:: json
+
+   {
+     "response": {
+       "deviceType": 52,
+       "macAddress": "04786332fca0",
+       "additionalValue": "5322",
+       "downloadSwInfo": [
+         {"swCode": 0, "otaMode": 0, "swVersion": 0, "status": 0}
+       ]
+     }
+   }
+
+Reservation and Recirculation Schedule Responses
+------------------------------------------------
+
+On ``res/rsv/rd`` and ``res/recirc-rsv/rd``:
+
+.. code-block:: json
+
+   {
+     "response": {
+       "deviceType": 52,
+       "macAddress": "04786332fca0",
+       "additionalValue": "5322",
+       "reservationUse": 1,
+       "reservation": []
+     }
+   }
+
+The same schedule is also republished on ``res/rsv`` / ``res/recirc-rsv``
+with ``reservation`` as a hex string of six bytes per entry
+(``enable, week, hour, min, mode, param``).
+
+TOU Response
+------------
+
+The TOU write is echoed on ``res/tou/rd`` with the written
+``reservationUse`` and ``reservation`` list. There is no MQTT read; use
+the REST API to read the schedule.
 
 Connection Flow
 ===============
@@ -837,29 +1140,30 @@ Connection Flow
 
    Connect to AWS IoT endpoint using WebSocket with AWS SigV4 auth.
 
-3. **Signal App Connection**
+3. **Subscribe to Responses**
 
-   Publish to ``evt/52/{deviceId}/app-connection``:
+   Subscribe to ``cmd/52/navilink-{mac}/#`` for control acks, pushed
+   status and the device-keyed replies, and to ``cmd/52/{clientId}/res/#``
+   for query replies.
+
+4. **Signal App Connection**
+
+   Publish to ``evt/52/navilink-{mac}/app-connection``:
 
    .. code-block:: json
 
       {
-        "clientID": "client-12345",
-        "sessionID": "session-67890",
-        "event": "app-connection"
+        "clientID": "navien-client-1996271a",
+        "timestamp": "2026-09-12T16:00:00Z"
       }
-
-4. **Subscribe to Responses**
-
-   Subscribe to ``cmd/52/{clientId}/res/#``
 
 5. **Send Commands / Requests**
 
-   Publish commands to appropriate control/status topics.
+   Publish to the request suffixes listed above.
 
-6. **Receive Responses**
+6. **End the session**
 
-   Process responses via subscribed topics.
+   Publish ``st/end`` before disconnecting.
 
 Example: Request Status
 =======================
@@ -868,39 +1172,36 @@ Example: Request Status
 
 .. code-block:: text
 
-   Topic: cmd/52/my-client-id/res/status/rd
+   Topic: cmd/52/navilink-04786332fca0/#
    QoS: 1
 
 **2. Publish Request:**
 
 .. code-block:: text
 
-   Topic: cmd/52/04786332fca0/st/rd
+   Topic: cmd/52/navilink-04786332fca0/st
    QoS: 1
    Payload:
 
 .. code-block:: json
 
    {
-     "clientID": "my-client-id",
+     "clientID": "navien-client-1996271a",
      "sessionID": "my-session-id",
-     "requestTopic": "cmd/52/04786332fca0/st/rd",
-     "responseTopic": "cmd/52/my-client-id/res/status/rd",
+     "requestTopic": "cmd/52/navilink-04786332fca0/st",
+     "responseTopic": "cmd/52/navilink-04786332fca0/navien-client-1996271a/res",
      "protocolVersion": 2,
      "request": {
        "command": 16777219,
        "deviceType": 52,
        "macAddress": "04786332fca0",
-       "additionalValue": "...",
-       "mode": "",
-       "param": [],
-       "paramStr": ""
+       "additionalValue": "5322"
      }
    }
 
 **3. Receive Response:**
 
-Response arrives on subscribed topic with device status.
+The status object arrives on the control ack topic.
 
 Python Implementation
 =====================
@@ -913,7 +1214,7 @@ this protocol.
 .. code-block:: python
 
    from nwp500 import NavienMqttClient
-   
+
    # Client handles all protocol details
    mqtt = NavienMqttClient(auth)
    await mqtt.connect()
