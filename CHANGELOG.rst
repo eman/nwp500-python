@@ -5,6 +5,9 @@ Changelog
 Unreleased
 ==========
 
+Version 9.4.0 (2026-09-12)
+==========================
+
 This release realigns the MQTT command set with what the NaviLink app
 actually sends. The app (version 2.03.00) was decompiled and its request
 builder compared with the library; every query it sends now has a
