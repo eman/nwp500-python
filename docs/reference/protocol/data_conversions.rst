@@ -367,7 +367,7 @@ Power and Energy Fields
    candidate implying a water volume below the nameplate. Two further
    checks agree -- 183 heating recoveries give 4.11 Wh/count by a
    noisier route, and the same recoveries imply a heat-pump COP of 2.89.
-   The library uses 4.0. Versions before 10.0 used 10, which overstated
+   The library uses 4.0. Versions before 9.3.0 used 10, which overstated
    reported tank energy by 2.5x and implied a physically impossible COP
    of 7.0. See :doc:`../../explanation/tank-energy`.
 
