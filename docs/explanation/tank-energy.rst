@@ -3,7 +3,7 @@ Tank Energy
 ===========
 
 The NWP500 reports two energy figures, ``totalEnergyCapacity`` and
-``availableEnergyCapacity``. Both names mislead, and before v10.0 this
+``availableEnergyCapacity``. Both names mislead, and before v9.3.0 this
 library also scaled them wrongly. This page explains what they
 actually measure and shows the evidence for the correction.
 
@@ -33,7 +33,7 @@ The short version
        whenever the setpoint moves.
 
 Both are raw counts of 4 Wh each, not Watt-hours. Library versions before
-10.0 multiplied by 10, overstating tank energy by 2.5x.
+9.3.0 multiplied by 10, overstating tank energy by 2.5x.
 
 Both are also measured **from the setpoint**, so both describe potential
 rather than content: move the setpoint and both change while the water in
@@ -226,7 +226,7 @@ coefficient of performance:
    * - 4 Wh/count (corrected)
      - 2.89
      - Normal for a heat pump water heater
-   * - 10 Wh/count (pre-10.0)
+   * - 10 Wh/count (pre-9.3.0)
      - 7.02
      - Physically impossible
 
@@ -236,7 +236,7 @@ A heat pump water heater in a 72 degF room runs at a COP of roughly 2 to
 This argument is worth stating separately because it needs no tank
 volume, specific heat or stratification model - only the device's own
 reported energy and its own reported power. It cannot tell you what the
-quantum *is*, but it rules out the pre-10.0 value regardless of anything
+quantum *is*, but it rules out the pre-9.3.0 value regardless of anything
 assumed elsewhere on this page.
 
 .. _two branches:
@@ -403,8 +403,8 @@ the heat capacity is 156 Wh per degF:
    drawable_Wh = 156 * (tank_mean_temperature - your_floor_degF)
 
 
-Migrating from before v10.0
-===========================
+Migrating from before v9.3.0
+============================
 
 .. list-table::
    :header-rows: 1
@@ -429,7 +429,7 @@ rename that is missed fails immediately with ``AttributeError`` instead
 of silently returning a number 2.5x too large.
 
 If you logged these values historically, the stored series needs
-rescaling by 0.4 to be comparable with values from v10.0 onward.
+rescaling by 0.4 to be comparable with values from v9.3.0 onward.
 
 
 See also

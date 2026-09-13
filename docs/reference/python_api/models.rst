@@ -263,7 +263,7 @@ Complete real-time device status with 100+ fields.
 
    .. warning::
       These replace ``total_energy_capacity`` and
-      ``available_energy_capacity``, which were **removed** in v10.0. The
+      ``available_energy_capacity``, which were **removed** in v9.3.0. The
       old names were misleading -- ``available_energy_capacity`` is the
       energy *needed*, not the energy available -- and both were scaled
       2.5x too large. For energy you can actually draw, see
