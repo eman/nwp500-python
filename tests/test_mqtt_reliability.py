@@ -231,6 +231,45 @@ class TestReconnectLoopExceptionHandling:
         assert all(d <= config.max_reconnect_delay for d in sleeps)
         assert all(d > 0 for d in sleeps)
 
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("deep", [False, True])
+    async def test_successful_reconnect_resets_attempt_count(self, deep):
+        """Regression: a quick or deep reconnect makes a new connection, so
+        on_connection_resumed never fires and the counter kept growing
+        across interruptions, lengthening each later backoff."""
+        connected = False
+        attempts = []
+
+        async def reconnect():
+            nonlocal connected
+            attempts.append(1)
+            # Fail the first try of each interruption, then succeed.
+            if len(attempts) % 2 == 0:
+                connected = True
+                return
+            raise MqttNotConnectedError("down")
+
+        kwargs = {"deep_reconnect_func": reconnect} if deep else {}
+        config = _fast_config(
+            max_reconnect_attempts=-1,
+            deep_reconnect_threshold=1,
+        )
+        handler = _make_handler(
+            config,
+            lambda: connected,
+            reconnect,
+            **kwargs,
+        )
+        handler.enable()
+
+        for _ in range(3):
+            connected = False
+            await handler._reconnect_with_backoff()
+            assert connected
+            assert handler.attempt_count == 0
+
+        assert len(attempts) == 6
+
 
 class TestDisconnectDuringInterruption:
     """disconnect() must fully shut down even when not connected."""
