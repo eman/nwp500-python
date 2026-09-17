@@ -1,4 +1,4 @@
-.PHONY: help install install-dev lint format test clean build release check-release ci-lint ci-format ci-check version-bump validate-version
+.PHONY: help install install-dev lint format test test-cov require-python clean build release check-release ci-lint ci-format ci-check version-bump validate-version
 
 help:  ## Show this help message
 	@echo 'Usage: make [target]'
@@ -35,11 +35,19 @@ ci-format:  ## Run formatting exactly as CI does (via tox format)
 ci-check: ci-lint  ## Run the same checks as CI (ensures local/CI consistency)
 	@echo "🎉 All CI checks passed locally!"
 
-test:  ## Run tests with pytest
-	pytest
+# The package declares python_requires = >=3.14 and uses 3.14 syntax, but
+# that floor is only enforced when installing - running pytest against the
+# source tree happens on whatever interpreter is active. Fail with a clear
+# message instead of a SyntaxError in every test module.
+require-python:
+	@python3 -c 'import sys; raise SystemExit(0 if sys.version_info >= (3, 14) else 1)' \
+		|| { echo "Python 3.14+ required, found $$(python3 -V 2>&1). Activate the project environment."; exit 1; }
 
-test-cov:  ## Run tests with coverage report
-	pytest --cov=nwp500 --cov-report=html --cov-report=term-missing
+test: require-python  ## Run tests with pytest
+	python3 -m pytest
+
+test-cov: require-python  ## Run tests with coverage report
+	python3 -m pytest --cov=nwp500 --cov-report=html --cov-report=term-missing
 
 clean:  ## Remove build artifacts and cache files
 	rm -rf build dist *.egg-info .eggs
