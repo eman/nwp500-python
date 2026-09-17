@@ -40,7 +40,12 @@ from ..mqtt_events import (
 from ..topic_builder import MqttTopicBuilder
 from .state_tracker import DeviceStateTracker
 from .types import QoS, to_awscrt_qos
-from .utils import get_response_data, redact_topic, topic_matches_pattern
+from .utils import (
+    get_response_data,
+    redact_mac,
+    redact_topic,
+    topic_matches_pattern,
+)
 
 if TYPE_CHECKING:
     from ..device_info_cache import MqttDeviceInfoCache
@@ -614,13 +619,45 @@ class MqttSubscriptionManager:
         """
 
         def handler(topic: str, message: dict[str, Any]) -> None:
+            # Every branch that declines a message says so at debug level.
+            # Silence here is expensive to diagnose: a caller watching for a
+            # reply that never reaches its callback cannot tell a dropped
+            # message from one the cloud never sent, and the two want
+            # opposite fixes. The logs are the only evidence either way.
+            #
+            # Each log is guarded: redact_topic runs a dozen regexes, and
+            # these branches are the normal case for a handler registered
+            # under the device wildcard, which sees every message for that
+            # device and keeps only its own.
             if topic_suffix and not topic.endswith(topic_suffix):
+                if _logger.isEnabledFor(logging.DEBUG):
+                    _logger.debug(
+                        "Ignoring a message on %s: the topic does not end "
+                        "with %r, which this handler requires",
+                        redact_topic(topic),
+                        topic_suffix,
+                    )
                 return
             try:
                 data = get_response_data(message, key)
                 if not data:
+                    if _logger.isEnabledFor(logging.DEBUG):
+                        _logger.debug(
+                            "Ignoring a message on %s: no %s data to parse "
+                            "as %s",
+                            redact_topic(topic),
+                            f"{key!r}" if key else "response",
+                            model.__name__,
+                        )
                     return
                 if only_mac and not _same_device(data, message, only_mac):
+                    if _logger.isEnabledFor(logging.DEBUG):
+                        _logger.debug(
+                            "Ignoring a message on %s: it names another "
+                            "device, not %s",
+                            redact_topic(topic),
+                            redact_mac(only_mac),
+                        )
                     return
 
                 parsed = parse(data) if parse else model.model_validate(data)
