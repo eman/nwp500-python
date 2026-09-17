@@ -347,6 +347,13 @@ class MqttReconnectionHandler:
                     f"Error during reconnection attempt: {e}", exc_info=True
                 )
 
+        # A successful quick or deep reconnect builds a new connection, so
+        # the SDK never calls on_connection_resumed for it. Reset the
+        # counter here, or every later interruption starts with a longer
+        # backoff and an earlier deep reconnect than the first one did.
+        if self._is_connected_func():
+            self._reconnect_attempts = 0
+
         # Check final state: report failure when retries are exhausted
         # (limited mode) or a fatal error stopped the loop.
         attempts_exhausted = (

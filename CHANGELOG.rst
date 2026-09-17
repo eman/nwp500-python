@@ -5,6 +5,17 @@ Changelog
 Unreleased
 ==========
 
+Fixed
+-----
+- **The reconnect attempt counter never reset after a successful quick or
+  deep reconnect.** Both build a new connection, so the SDK never calls
+  ``on_connection_resumed``, the only place the counter was reset. Each
+  later interruption started where the last one stopped: its first delay
+  was longer and it reached the deep-reconnect threshold sooner. A
+  long-running client saw the first delay grow from about 1 s to 12 s
+  over five daily AWS IoT disconnects. The counter now resets whenever the
+  backoff loop ends connected.
+
 Version 9.4.0 (2026-09-12)
 ==========================
 
