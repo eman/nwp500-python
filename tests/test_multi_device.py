@@ -1,3 +1,4 @@
+import logging
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -241,3 +242,77 @@ def test_make_handler_injects_mac():
     parsed = callback_called[0]
     assert isinstance(parsed, DeviceStatus)
     assert parsed.mac_address == mac
+
+
+def _manager() -> MqttSubscriptionManager:
+    return MqttSubscriptionManager(
+        connection=MagicMock(),
+        client_id="test_client",
+        event_emitter=MagicMock(),
+        schedule_coroutine=MagicMock(),
+    )
+
+
+@pytest.mark.parametrize(
+    ("kwargs", "topic", "message", "expected"),
+    [
+        (
+            {"topic_suffix": "st/rsv"},
+            "cmd/52/client/res/td/rd",
+            {"response": {"reservation": []}},
+            "does not end with",
+        ),
+        (
+            {"key": "status"},
+            "cmd/52/client/res/st",
+            {"response": {}},
+            "no 'status' data to parse",
+        ),
+        (
+            {"key": "status", "only_mac": "00:11:22:33:44:55"},
+            "cmd/52/client/res/st",
+            {"status": {"macAddress": "aa:bb:cc:dd:ee:ff"}},
+            "names another device",
+        ),
+    ],
+    ids=["topic-suffix", "no-data", "other-device"],
+)
+def test_a_declined_message_says_why(kwargs, topic, message, expected, caplog):
+    """Every branch that drops a message logs its reason.
+
+    Silence here cost real diagnosis time: a reply that never reaches its
+    callback looks identical to one the cloud never sent, and the two want
+    opposite fixes.
+    """
+    delivered = []
+    handler = _manager()._make_handler(
+        model=DeviceStatus, callback=delivered.append, **kwargs
+    )
+
+    with caplog.at_level(logging.DEBUG, logger="nwp500.mqtt.subscriptions"):
+        handler(topic, message)
+
+    assert delivered == []
+    assert any(expected in r.getMessage() for r in caplog.records), caplog.text
+
+
+def test_a_message_for_this_device_is_still_delivered(caplog):
+    """The mac filter accepts its own device, and says nothing about it."""
+    mac = "00:11:22:33:44:55"
+    delivered = []
+    handler = _manager()._make_handler(
+        model=DeviceStatus,
+        callback=delivered.append,
+        key="status",
+        only_mac=mac,
+        parse=lambda data: data,
+    )
+
+    with caplog.at_level(logging.DEBUG, logger="nwp500.mqtt.subscriptions"):
+        handler(
+            "cmd/52/client/res/st",
+            {"response": {"status": {"macAddress": mac, "command": 0}}},
+        )
+
+    assert len(delivered) == 1
+    assert "Ignoring" not in caplog.text

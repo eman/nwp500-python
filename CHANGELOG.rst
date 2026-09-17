@@ -5,6 +5,17 @@ Changelog
 Unreleased
 ==========
 
+Changed
+-------
+- **A dropped response message now says why it was dropped.** The typed
+  response handlers declined a message in three places without a word: a
+  topic that does not end in the required suffix, a payload with no data
+  under the expected key, and a reply whose ``macAddress`` names another
+  device. A caller watching for a reply that never reached its callback
+  could not tell a dropped message from one the cloud never published, and
+  the two want opposite fixes. Each branch now logs its reason at DEBUG,
+  with the topic and MAC redacted as elsewhere.
+
 Version 9.4.1 (2026-09-17)
 ==========================
 
