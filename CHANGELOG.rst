@@ -5,6 +5,9 @@ Changelog
 Unreleased
 ==========
 
+Version 9.4.1 (2026-09-17)
+==========================
+
 Fixed
 -----
 - **The reconnect attempt counter never reset after a successful quick or
