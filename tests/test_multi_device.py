@@ -6,6 +6,7 @@ import pytest
 from nwp500.enums import CurrentOperationMode
 from nwp500.events import EventEmitter
 from nwp500.models import DeviceFeature, DeviceStatus
+from nwp500.mqtt import subscriptions as subscriptions_module
 from nwp500.mqtt.state_tracker import DeviceStateTracker
 from nwp500.mqtt.subscriptions import MqttSubscriptionManager
 from nwp500.mqtt_events import (
@@ -294,6 +295,79 @@ def test_a_declined_message_says_why(kwargs, topic, message, expected, caplog):
 
     assert delivered == []
     assert any(expected in r.getMessage() for r in caplog.records), caplog.text
+
+
+def test_a_declined_message_never_logs_a_raw_identifier(caplog):
+    """The reason is logged; the MAC in it is not.
+
+    These lines carry a topic and a MAC straight from the wire, so the
+    redaction is the whole reason they are safe to emit at all.
+    """
+    mac = "04786332fca0"
+    other = "aabbccddeeff"
+    topic = f"cmd/52/navilink-{mac}/st/td/rd"
+    delivered = []
+    handler = _manager()._make_handler(
+        model=DeviceStatus,
+        callback=delivered.append,
+        key="status",
+        only_mac=mac,
+        parse=lambda data: data,
+    )
+
+    with caplog.at_level(logging.DEBUG, logger="nwp500.mqtt.subscriptions"):
+        handler(topic, {"status": {"macAddress": other, "command": 0}})
+
+    assert delivered == []
+    assert "names another device" in caplog.text
+    assert mac not in caplog.text
+    assert other not in caplog.text
+    assert "REDACTED" in caplog.text
+
+
+@pytest.mark.parametrize(
+    ("level", "redactions"),
+    [(logging.INFO, 0), (logging.DEBUG, 1)],
+    ids=["debug-off", "debug-on"],
+)
+def test_declining_a_message_redacts_only_when_debug_is_on(
+    level, redactions, monkeypatch
+):
+    """The guard, not just the log level.
+
+    redact_topic is a dozen regexes, and a handler registered under the
+    device wildcard declines most of what it sees, so an unguarded call
+    would run them on the normal dispatch path for nothing.
+    """
+    calls = []
+    real = subscriptions_module.redact_topic
+
+    def counting_redact_topic(topic):
+        calls.append(topic)
+        return real(topic)
+
+    monkeypatch.setattr(
+        subscriptions_module, "redact_topic", counting_redact_topic
+    )
+    # setLevel, not the attribute: isEnabledFor caches its answer, and
+    # only setLevel invalidates that cache.
+    logger = subscriptions_module._logger
+    original_level = logger.level
+    logger.setLevel(level)
+    monkeypatch.setattr(logger, "propagate", False)
+
+    handler = _manager()._make_handler(
+        model=DeviceStatus,
+        callback=lambda parsed: None,
+        key="status",
+        topic_suffix="st/rsv",
+    )
+    try:
+        handler("cmd/52/client/res/td/rd", {"status": {"command": 0}})
+    finally:
+        logger.setLevel(original_level)
+
+    assert len(calls) == redactions
 
 
 def test_a_message_for_this_device_is_still_delivered(caplog):

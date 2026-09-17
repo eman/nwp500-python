@@ -14,7 +14,9 @@ Changed
   device. A caller watching for a reply that never reached its callback
   could not tell a dropped message from one the cloud never published, and
   the two want opposite fixes. Each branch now logs its reason at DEBUG,
-  with the topic and MAC redacted as elsewhere.
+  with the topic and MAC redacted as elsewhere, and guarded by
+  ``isEnabledFor`` so the redaction regexes do not run on the normal
+  dispatch path when debug logging is off.
 
 Version 9.4.1 (2026-09-17)
 ==========================
