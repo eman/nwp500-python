@@ -5,6 +5,9 @@ Changelog
 Unreleased
 ==========
 
+Version 9.4.2 (2026-09-17)
+==========================
+
 Changed
 -------
 - **A dropped response message now says why it was dropped.** The typed
