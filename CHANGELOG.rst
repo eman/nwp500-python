@@ -5,6 +5,25 @@ Changelog
 Unreleased
 ==========
 
+Documentation
+-------------
+- **New: what the heating elements actually do**
+  (``docs/explanation/heating-elements.rst``). The four
+  ``he*TempSetting`` fields do not describe when an element runs: in
+  Electric and High Demand the on and off settings are the same value,
+  and every ``he*DiffTempSetting`` reads 0. Measured on one unit by
+  commanding the modes and watching, the upper element starts **1.0 degC
+  below the setpoint** - bracketed by a descending sweep, off at 0.3 and
+  0.8 degC and on within one poll at 1.0 and 1.2 - and that differential
+  is published nowhere in the status message. Also documents Energy
+  Saver's entry behaviour (the element engages although
+  ``heUpperOnTempSetting`` rests 33 degC below the tank), Electric's
+  upper-to-lower handover and the upper probe **falling** 1.9 degC while
+  the lower element runs, measured element power of 5,219 W against the
+  5,000 W rating, and that a mode write may not take effect while a TOU
+  window is in force. ``device_status.rst``'s Heating Elements notes now
+  point at it.
+
 Version 9.4.2 (2026-09-17)
 ==========================
 
