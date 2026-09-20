@@ -12,10 +12,12 @@ Documentation
   ``he*TempSetting`` fields do not describe when an element runs: in
   Electric and High Demand the on and off settings are the same value,
   and every ``he*DiffTempSetting`` reads 0. Measured on one unit by
-  commanding the modes and watching, the upper element starts **1.0 degC
-  below the setpoint** - bracketed by a descending sweep, off at 0.3 and
-  0.8 degC and on within one poll at 1.0 and 1.2 - and that differential
-  is published nowhere in the status message. Also documents Energy
+  commanding the modes and watching, the start differential is
+  **mode-dependent**: ``ENERGY_SAVER`` needs **1.0 degC** below the
+  setpoint (off at 0.3 and 0.8, on within one poll at 1.0 and 1.2),
+  while ``ELECTRIC`` starts as soon as the zone is under the setpoint
+  at all (off only with the tank above it, on at 0.3). Neither
+  differential is published anywhere in the status message. Also documents Energy
   Saver's entry behaviour (the element engages although
   ``heUpperOnTempSetting`` rests 33 degC below the tank), Electric's
   upper-to-lower handover and the upper probe **falling** 1.9 degC while

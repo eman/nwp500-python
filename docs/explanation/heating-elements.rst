@@ -32,9 +32,11 @@ The short version
    * - Observation
      - Value
    * - Element start differential
-     - The upper element starts once the zone is **1.0 degC (1.8 degF)**
-       below the setpoint. Bracketed: off at 0.3 and 0.8 degC, on within
-       one 10-second poll at 1.0 and 1.2.
+     - **Mode-dependent.** In ``ENERGY_SAVER`` the upper element starts
+       once the zone is **1.0 degC (1.8 degF)** below the setpoint. In
+       ``ELECTRIC`` it starts as soon as the zone is under the setpoint
+       at all - the boundary is inside 0.3 degC, at or below the probe's
+       own resolution. Both are bracketed by runs on either side.
    * - Where that differential is published
      - **Nowhere.** ``heUpperOnDiffTempSetting`` and its three siblings
        read 0 on this unit while the behaviour above holds.
@@ -44,8 +46,9 @@ The short version
        40.5 degC (104.9 degF), the device minimum.
    * - Energy Saver on entry
      - Switching into ``ENERGY_SAVER`` engages the upper element even
-       though ``heUpperOnTempSetting`` rests 33 degC below the tank. The
-       same 1.0 degC differential applies.
+       though ``heUpperOnTempSetting`` rests 33 degC below the tank -
+       an entry effect rather than that thermostat, and the reason its
+       differential differs from Electric's.
    * - Electric ordering
      - Upper element to the setpoint, then the lower element, never
        both, as the protocol reference already states. The handover
@@ -62,9 +65,12 @@ The short version
 The start differential
 ======================
 
-Four runs in ``ENERGY_SAVER``, each holding a fixed deficit and watching
-for two minutes. The setpoint quantises to 0.5 degC, so the deficit is
-set by choosing a setpoint step relative to the tank.
+Two modes, two different answers. Each run holds a fixed deficit and
+watches for one to two minutes; the setpoint quantises to 0.5 degC, so
+the deficit is set by choosing a setpoint step relative to the tank.
+
+``ENERGY_SAVER``
+----------------
 
 .. list-table::
    :header-rows: 1
@@ -90,9 +96,40 @@ So the boundary lies in (0.8, 1.0] degC, and 1.0 degC is the device's
 own storage granularity - settings are held in half-degree Celsius
 steps - which makes a one-degree differential the natural parameter.
 
-Two further runs put the element on at 2.0 degC (3.6 degF) and 5.2 degC
-(9.4 degF) short, in ``ENERGY_SAVER`` and ``ELECTRIC`` respectively, so
+A further run put the element on at 2.0 degC (3.6 degF) short, so
 nothing above the boundary has been seen to decline.
+
+``ELECTRIC``
+------------
+
+.. list-table::
+   :header-rows: 1
+   :widths: 30 30 40
+
+   * - Deficit below setpoint
+     - Upper element
+     - Poll at which it engaged
+   * - 0.6 degC **above** the setpoint
+     - **off** for the whole watch
+     - n/a
+   * - 0.3 degC (0.54 degF)
+     - **on**
+     - first poll after the mode landed
+   * - 0.4 degC (0.72 degF)
+     - **on**
+     - first poll after the mode landed
+
+**The two modes do not share a threshold.** At the same 0.3 degC
+deficit, ``ELECTRIC`` runs the element and ``ENERGY_SAVER`` does not.
+Electric's boundary is inside (0, 0.3] degC - at or below the tank
+probe's own 0.1 degC resolution - which is what the thermostat reading
+of its settings predicts, since it parks ``heUpperOnTempSetting`` at the
+setpoint. Energy Saver's 1.0 degC is an entry effect and a different
+mechanism.
+
+``HIGH_DEMAND`` shares Electric's settings and has been seen to start an
+element at 5.2 degC short, but no run has approached its boundary; the
+thermostat reading is an assumption there.
 
 **The differential is not in the protocol.** A ``status --raw`` taken
 between these runs shows::
@@ -194,17 +231,15 @@ see issue #141 for the documentation fix covering that.
 Limits
 ======
 
-One unit, one supply voltage, 2026-09-19 and 2026-09-20, ten bounded
-runs in all. Specifically **not** established:
+One unit, one supply voltage, 2026-09-19 and 2026-09-20, thirteen
+bounded runs in all. Specifically **not** established:
 
-* whether ``ELECTRIC`` and ``HIGH_DEMAND`` share the 1.0 degC
-  differential. Both have been seen to start an element at 1.0 degC or
-  more, but neither has been tested below it; only ``ENERGY_SAVER`` has
-  the negative observations that make the bracket a bracket.
+* ``HIGH_DEMAND``'s boundary. It shares Electric's settings and starts
+  an element well above the boundary, but no run has approached it.
 * what engages the element **later** in an Energy Saver stint, as
   opposed to on entry.
 * anything about runs longer than six minutes.
-* whether the differential is firmware-dependent. The unit reported
+* whether either differential is firmware-dependent. The unit reported
   ``heUpperOnDiffTempSetting`` as 0 throughout; if another unit reports
   it as non-zero, that field is the better answer and this page is a
   description of one firmware's default.
