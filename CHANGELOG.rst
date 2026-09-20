@@ -33,10 +33,14 @@ Documentation
   ON setting tracks the setpoint, re-engages a median 2.1 degC *below*
   it. So entry is the exception and the reference description is the
   rule; ``data_conversions.rst``'s warning now says which applies when.
-  A measurement note with it: this unit's element binary sensors assert
-  one-minute elements the meter never sees (9 of 112 apparent starts
-  drew under 750 W), so element starts must be corroborated against the
-  power reading.
+  A sampling note with it: the element runs in two very different
+  lengths. Of 128 raw upper-element runs, 31 lasted under a minute
+  (median 9 s) and carry 0.8 kWh across nine months against 97.9 kWh
+  for the other 97 - real elements, but they heat nothing. Because
+  ``currentPower`` samples at a median 30 s, a one-minute-resampled
+  power series can miss one entirely, making a 5.5 kW element look like
+  0.5 kW. Resample power with a maximum, and filter on duration or
+  energy when predicting recovery.
 
   Also documents Energy Saver's entry behaviour (the element engages
   although ``heUpperOnTempSetting`` rests 33 degC below the tank), Electric's

@@ -288,13 +288,28 @@ So a consumer needs both halves:
 .. warning::
 
    These mid-stint figures come from **recorded history, not commanded
-   runs**, and they carry a measurement hazard worth repeating. This
-   unit's element binary sensors assert one-minute elements the power
-   meter does not see: 9 of 112 apparent upper-element starts drew
-   500-750 W or less, against 5.1-5.6 kW for a real one, while every
-   run of two minutes or more was genuine. Counting element starts from
-   those sensors alone overstates them. Every figure above is
-   corroborated against the whole-unit power reading.
+   runs**, and they carry a sampling hazard worth repeating - one that
+   bit us.
+
+   **The element runs in two very different lengths.** Of 128 raw
+   upper-element runs on this unit, 31 (24 %) lasted **under a minute**
+   - median 9 s, some as short as 2 s - and 97 ran a median 8 minutes.
+   The short ones are real elements at full power, but they carry
+   **0.8 kWh across nine months** against 97.9 kWh for the rest, and a
+   20-second burst moves the upper probe about 0.1 degC, below its own
+   0.1 degC resolution. They heat nothing.
+
+   They are also easy to lose or to misread. ``currentPower`` samples
+   at a median 30 s, with 24 % of gaps over a minute, so **a
+   one-minute-resampled power series can miss a sub-minute burst
+   entirely** - taking the last sample at or before each minute makes a
+   real 5.5 kW element look like 0.5 kW. Resample power with a
+   **maximum** over the interval, or work from the raw edges, and
+   corroborate a run's duration rather than a single aligned sample.
+
+   For predicting recovery, filter on **duration or energy**, not on
+   the flag and not on one power reading: it is the sustained runs that
+   heat the tank.
 
 
 Electric: the handover, and what happens to the upper zone
