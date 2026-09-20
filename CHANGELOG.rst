@@ -9,7 +9,8 @@ Documentation
 -------------
 - **New: what the heating elements actually do**
   (``docs/explanation/heating-elements.rst``). The four
-  ``he*TempSetting`` fields do not describe when an element runs: in
+  ``he*TempSetting`` fields describe the thermostat, and **on entry to
+  a mode the thermostat is not what runs the element**: in
   Electric and High Demand the on and off settings are the same value,
   and every ``he*DiffTempSetting`` reads 0. Measured on one unit by
   commanding the modes and watching, the start differential is
@@ -22,9 +23,23 @@ Documentation
   are **entry** thresholds, not thermostats: in High Demand's steady
   state this unit's history has the element on in 1 of 47 minutes
   0.2-0.3 degC short and 168 of 169 more than 2.2 degC short.
-  Neither differential is published anywhere in the status message. Also documents Energy
-  Saver's entry behaviour (the element engages although
-  ``heUpperOnTempSetting`` rests 33 degC below the tank), Electric's
+  Neither differential is published anywhere in the status message.
+
+  **Later in a stint the published thermostat is right.** From one
+  unit's recorded history, 17 of 23 mid-stint upper-element starts in
+  ``ENERGY_SAVER`` have the probe in the 39.4-41.1 degC band where
+  ``heUpperOnTempSetting`` rests, a median 0.2 degC below the field -
+  the element comes on as the probe reaches it. ``HIGH_DEMAND``, whose
+  ON setting tracks the setpoint, re-engages a median 2.1 degC *below*
+  it. So entry is the exception and the reference description is the
+  rule; ``data_conversions.rst``'s warning now says which applies when.
+  A measurement note with it: this unit's element binary sensors assert
+  one-minute elements the meter never sees (9 of 112 apparent starts
+  drew under 750 W), so element starts must be corroborated against the
+  power reading.
+
+  Also documents Energy Saver's entry behaviour (the element engages
+  although ``heUpperOnTempSetting`` rests 33 degC below the tank), Electric's
   upper-to-lower handover and the upper probe **falling** 1.9 degC while
   the lower element runs, measured element power of 5,219 W against the
   5,000 W rating, and that a mode write may not take effect while a TOU

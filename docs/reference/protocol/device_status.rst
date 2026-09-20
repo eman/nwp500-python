@@ -739,13 +739,16 @@ Technical Notes
 * Elements do not operate simultaneously in Electric mode - upper first,
   then lower, with the handover in a single status message
 * Heating elements activate for freeze protection when tank < 43°F (6°C)
-* The ``he*TempSetting`` fields do **not** describe when an element
-  runs: in Electric and High Demand the on and off settings are equal
-  and every ``he*DiffTempSetting`` reads 0. The measured start
-  differential is **mode-dependent** - at most 0.3 degC in
-  ``ELECTRIC``, within (0.2, 0.7] degC in ``HIGH_DEMAND``, and within
-  (0.8, 1.0] degC in ``ENERGY_SAVER``, all measured on entry to the
-  mode. See :doc:`/explanation/heating-elements`.
+* The ``he*TempSetting`` fields do **not** describe what happens on
+  **entry** to a mode: in Electric and High Demand the on and off
+  settings are equal and every ``he*DiffTempSetting`` reads 0. The
+  measured entry differential is **mode-dependent** - at most 0.3 degC
+  in ``ELECTRIC``, within (0.2, 0.7] degC in ``HIGH_DEMAND``, and
+  within (0.8, 1.0] degC in ``ENERGY_SAVER``.
+* **Later in a stint they do.** ``ENERGY_SAVER`` re-engages the upper
+  element as the probe reaches ``heUpperOnTempSetting``;
+  ``HIGH_DEMAND`` re-engages about 2.1 degC below it. See
+  :doc:`/explanation/heating-elements`.
 
 **Heat Pump Specifications:**
 

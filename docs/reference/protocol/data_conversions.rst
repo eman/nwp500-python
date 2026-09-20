@@ -166,18 +166,26 @@ Electric heating elements are controlled via thermostat ranges. Two sensors (upp
 
 .. warning::
 
-   **These fields do not predict when an element runs.** The
-   descriptions below are the protocol's own semantics for each field.
-   Measured against the device, they do not hold: in ``ELECTRIC`` and
-   ``HIGH_DEMAND`` the ON and OFF settings are **the same value** (no
-   hysteresis at all, which cannot be how the device behaves), in
-   ``HEAT_PUMP`` and ``ENERGY_SAVER`` the ON setting rests at the
-   40.5 degC device minimum while the element still runs, and **every**
-   ``he*DiffTempSetting`` reads 0 rather than the 2-5 degF below.
+   **These fields describe the thermostat, and the thermostat is not
+   the whole story.** Measured against the device:
 
-   The differential the device actually uses is mode-dependent and is
-   published nowhere in the status message. See
-   :doc:`/explanation/heating-elements` for the measured values.
+   - **Later in a stint the descriptions below hold.** In
+     ``ENERGY_SAVER`` the upper element comes on as the probe reaches
+     ``heUpperOnTempSetting``, exactly as described.
+   - **On entry to a mode they do not.** Switching into an element mode
+     engages the element on a mode-dependent differential of its own,
+     while in ``HEAT_PUMP`` and ``ENERGY_SAVER`` the ON setting is
+     sitting 33 degC below the tank. That differential is published
+     nowhere.
+   - In ``ELECTRIC`` and ``HIGH_DEMAND`` the ON and OFF settings are
+     **the same value** - no hysteresis at all, which cannot be how the
+     device behaves - and ``HIGH_DEMAND`` re-engages about 2.1 degC
+     *below* its ON setting.
+   - **Every** ``he*DiffTempSetting`` reads 0 on a 9.x-firmware unit
+     rather than the 2-5 degF described below.
+
+   See :doc:`/explanation/heating-elements` for the measured values and
+   which rule applies when.
 
 .. list-table::
    :header-rows: 1
