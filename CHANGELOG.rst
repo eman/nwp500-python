@@ -16,7 +16,10 @@ Documentation
   **mode-dependent**, and all three modes are bracketed by runs on
   either side: ``ELECTRIC`` and ``HIGH_DEMAND`` need about **0.3 degC**
   below the setpoint, ``ENERGY_SAVER`` needs **1.0 degC**. At 0.7 degC
-  short, High Demand runs the element and Energy Saver does not.
+  short, High Demand runs the element and Energy Saver does not. These
+  are **entry** thresholds, not thermostats: in High Demand's steady
+  state this unit's history has the element on in 1 of 47 minutes
+  0.2-0.3 degC short and 168 of 169 more than 2.2 degC short.
   Neither differential is published anywhere in the status message. Also documents Energy
   Saver's entry behaviour (the element engages although
   ``heUpperOnTempSetting`` rests 33 degC below the tank), Electric's

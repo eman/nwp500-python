@@ -53,8 +53,9 @@ The short version
        both, as the protocol reference already states. The handover
        takes one poll.
    * - Element power
-     - 5,219 W upper, 5,200 W lower, metered with the compressor off.
-       The reference gives 5,000 W at 240 V.
+     - 5,200-5,242 W over three measurements (two upper, one lower),
+       metered with the compressor off. The reference gives 5,000 W at
+       240 V.
    * - Zone coupling
      - While the lower element runs, the **upper** probe falls about
        1.9 degC (3.4 degF) before recovering. The zones are not
@@ -152,7 +153,7 @@ Putting the three together
    * - ``ELECTRIC``
      - 0.6 degC above setpoint
      - 0.3, 0.4 degC
-     - (0, 0.3] degC
+     - at most 0.3 degC [#electric]_
    * - ``HIGH_DEMAND``
      - 0.2 degC
      - 0.7 degC
@@ -162,11 +163,26 @@ Putting the three together
      - 1.0, 1.2 degC
      - (0.8, 1.0] degC
 
-**Electric and High Demand can share one threshold; Energy Saver cannot
-join them.** The first two brackets overlap only in (0.2, 0.3] degC,
+**These are entry thresholds, not thermostats.** Every run measured what
+happens within a poll of switching *into* a mode. In ``HIGH_DEMAND``'s
+steady state this unit's history has the upper element on in 1 of 47
+minutes 0.2-0.3 degC short and 168 of 169 minutes more than 2.2 degC
+short - so a stint already running re-engages on something much larger
+than the entry figure. Do not use one for the other.
+
+.. [#electric] Electric's own negative is 0.6 degC *above* the setpoint,
+   so nothing was observed between there and 0.3 below it. Its lower
+   edge comes from High Demand's negative, which itself held for only
+   53 seconds as the tank drifted through it.
+
+**Electric and High Demand can share one entry threshold; Energy Saver
+cannot join them.** The first two brackets overlap only in (0.2, 0.3] degC,
 which is consistent with their identical ``heUpperOnTempSetting``
 handling. Energy Saver's band does not intersect either: at 0.7 degC
-short, High Demand runs the element and Energy Saver does not.
+short, High Demand runs the element and Energy Saver does not. One
+caveat on that comparison: the Energy Saver runs had the compressor
+running and the others did not, so mode is not the only difference
+between them.
 
 A consumer wanting one number per mode can take **0.3 degC** for
 Electric and High Demand and **1.0 degC** for Energy Saver. Both are the
@@ -184,9 +200,10 @@ between these runs shows::
    "heLowerOffDiffTempSetting": 0,
 
 A consumer that wants to predict when an element will run therefore
-cannot read it from the status message; it has to assume the 1.0 degC
-above, and treat a tank within that of the setpoint as a case where the
-device may go either way.
+cannot read it from the status message; it has to assume the per-mode
+figures above - 0.3 degC for ``ELECTRIC`` and ``HIGH_DEMAND``, 1.0 degC
+for ``ENERGY_SAVER`` - and treat a tank inside the corresponding
+bracket as a case where the device may go either way.
 
 
 What the on-setting does and does not tell you
@@ -196,8 +213,8 @@ What the on-setting does and does not tell you
 
 * In ``ELECTRIC`` and ``HIGH_DEMAND`` it equals ``heUpperOffTempSetting``
   and both equal the DHW setpoint. Taken literally that is a thermostat
-  with no hysteresis at all, which cannot be how the device behaves; the
-  1.0 degC differential above is what it does instead.
+  with no hysteresis at all, which cannot be how the device behaves; on
+  entry to those modes the measured differential is 0.3 degC.
 * In ``HEAT_PUMP`` and ``ENERGY_SAVER`` it rests at 40.5 degC, the
   device minimum, which is 33 degC below a normally charged tank.
 
@@ -238,7 +255,8 @@ Element power
 Metered at the whole-unit power reading with the compressor off, so it
 is the element alone:
 
-* upper element: 5,219 W (5,205-5,242 over 33 samples)
+* upper element: 5,219 W on one run (5,205-5,242 over 33 samples) and
+  5,242 W on a second
 * lower element: 5,200 W
 
 The reference gives 3,755 W at 208 V or 5,000 W at 240 V. The measured
