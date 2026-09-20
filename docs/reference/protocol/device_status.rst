@@ -735,8 +735,17 @@ Technical Notes
 **Heating Elements:**
 
 * Upper and lower heating elements: 3,755W @ 208V or 5,000W @ 240V
-* Elements do not operate simultaneously in Electric mode
+  (measured 5,219 W upper / 5,200 W lower on one 240 V unit)
+* Elements do not operate simultaneously in Electric mode - upper first,
+  then lower, with the handover in a single status message
 * Heating elements activate for freeze protection when tank < 43°F (6°C)
+* The ``he*TempSetting`` fields do **not** describe when an element
+  runs: in Electric and High Demand the on and off settings are equal
+  and every ``he*DiffTempSetting`` reads 0. The measured start
+  differential is **mode-dependent** - at most 0.3 degC in
+  ``ELECTRIC``, within (0.2, 0.7] degC in ``HIGH_DEMAND``, and within
+  (0.8, 1.0] degC in ``ENERGY_SAVER``, all measured on entry to the
+  mode. See :doc:`/explanation/heating-elements`.
 
 **Heat Pump Specifications:**
 

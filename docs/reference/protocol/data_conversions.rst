@@ -164,6 +164,21 @@ Heating Element Control Temperatures
 
 Electric heating elements are controlled via thermostat ranges. Two sensors (upper and lower tank) allow two-stage heating:
 
+.. warning::
+
+   **These fields do not predict when an element runs.** The
+   descriptions below are the protocol's own semantics for each field.
+   Measured against the device, they do not hold: in ``ELECTRIC`` and
+   ``HIGH_DEMAND`` the ON and OFF settings are **the same value** (no
+   hysteresis at all, which cannot be how the device behaves), in
+   ``HEAT_PUMP`` and ``ENERGY_SAVER`` the ON setting rests at the
+   40.5 degC device minimum while the element still runs, and **every**
+   ``he*DiffTempSetting`` reads 0 rather than the 2-5 degF below.
+
+   The differential the device actually uses is mode-dependent and is
+   published nowhere in the status message. See
+   :doc:`/explanation/heating-elements` for the measured values.
+
 .. list-table::
    :header-rows: 1
    :widths: 30 10 15 45
@@ -191,7 +206,7 @@ Electric heating elements are controlled via thermostat ranges. Two sensors (upp
    * - ``heUpperOnDiffTempSetting``
      - div_10_celsius_delta
      - °F
-     - **Upper element differential** (ON-OFF hysteresis width). Temperature delta to prevent rapid cycling. Typically 2-5°F. This is a DELTA value, not an absolute temperature (0 delta = 0°F difference).
+     - **Upper element differential** (ON-OFF hysteresis width). Temperature delta to prevent rapid cycling. Nominally 2-5°F, but **measured as 0 on a 9.x-firmware unit in every mode**, while the device nonetheless applied a differential - see the warning above. This is a DELTA value, not an absolute temperature (0 delta = 0°F difference).
    * - ``heUpperOffDiffTempSetting``
      - div_10_celsius_delta
      - °F
