@@ -10,12 +10,17 @@ off settings are **the same value**, and every ``he*DiffTempSetting``
 reads 0. The device nevertheless has a differential, and this page
 gives the measured one.
 
-Everything here was measured on one unit by commanding the modes and
-watching, not inferred from historical logs. That distinction matters:
-two earlier values for the start threshold came from "the smallest
-deficit ever seen to start an element" in a passive record, and both
-were wrong, because such a figure measures where the tank happened to
-sit rather than where the device decides.
+**The start thresholds** here were measured on one unit by commanding
+the modes and watching - not inferred from historical logs. That
+distinction matters: two earlier values came from "the smallest deficit
+ever seen to start an element" in a passive record, and both were wrong,
+because such a figure measures where the tank happened to sit rather
+than where the device decides.
+
+Two things on this page are *not* from commanded runs, and are labelled
+where they appear: High Demand's **steady-state** re-engagement, which
+is this unit's history, and the mid-stint behaviour it is contrasted
+with. Everything else is a bounded run.
 
 .. contents::
    :local:
@@ -32,10 +37,12 @@ The short version
    * - Observation
      - Value
    * - Element start differential
-     - **Mode-dependent.** ``ENERGY_SAVER`` needs **1.0 degC
-       (1.8 degF)** below the setpoint. ``ELECTRIC`` and ``HIGH_DEMAND``
-       need about **0.3 degC (0.54 degF)**. All three are bracketed by
-       runs on either side.
+     - **Mode-dependent, one bracket per mode.** ``ELECTRIC`` at most
+       **0.3 degC (0.54 degF)** below the setpoint; ``HIGH_DEMAND``
+       somewhere in **(0.2, 0.7] degC** ((0.36, 1.26] degF);
+       ``ENERGY_SAVER`` in **(0.8, 1.0] degC** ((1.44, 1.80] degF).
+       Each bracket has a run on either side of it - except Electric's
+       lower edge, whose only negative sits *above* the setpoint.
    * - Where that differential is published
      - **Nowhere.** ``heUpperOnDiffTempSetting`` and its three siblings
        read 0 on this unit while the behaviour above holds.
@@ -45,9 +52,11 @@ The short version
        40.5 degC (104.9 degF), the device minimum.
    * - Energy Saver on entry
      - Switching into ``ENERGY_SAVER`` engages the upper element even
-       though ``heUpperOnTempSetting`` rests 33 degC below the tank -
-       an entry effect rather than that thermostat, and the reason its
-       differential differs from Electric's.
+       though ``heUpperOnTempSetting`` rests 33 degC below the tank, so
+       whatever drives it, that field is not it. Its bracket also sits
+       higher than the other two modes'. Why the two differ is **not**
+       established: the Energy Saver runs had the compressor running
+       and the others did not.
    * - Electric ordering
      - Upper element to the setpoint, then the lower element, never
        both, as the protocol reference already states. The handover
@@ -65,9 +74,10 @@ The short version
 The start differential
 ======================
 
-Two modes, two different answers. Each run holds a fixed deficit and
-watches for one to two minutes; the setpoint quantises to 0.5 degC, so
-the deficit is set by choosing a setpoint step relative to the tank.
+Three modes, three brackets, and no two of them the same width. Each
+run holds a fixed deficit and watches for one to two minutes; the
+setpoint quantises to 0.5 degC, so the deficit is set by choosing a
+setpoint step relative to the tank.
 
 ``ENERGY_SAVER``
 ----------------
@@ -171,23 +181,31 @@ short - so a stint already running re-engages on something much larger
 than the entry figure. Do not use one for the other.
 
 .. [#electric] Electric's own negative is 0.6 degC *above* the setpoint,
-   so nothing was observed between there and 0.3 below it. Its lower
-   edge comes from High Demand's negative, which itself held for only
-   53 seconds as the tank drifted through it.
+   so nothing at all was observed between there and 0.3 below it. Its
+   bracket is open at the bottom: no run has shown Electric declining
+   to heat a tank that is short of the setpoint by any amount.
 
-**Electric and High Demand can share one entry threshold; Energy Saver
-cannot join them.** The first two brackets overlap only in (0.2, 0.3] degC,
-which is consistent with their identical ``heUpperOnTempSetting``
-handling. Energy Saver's band does not intersect either: at 0.7 degC
+**Electric and High Demand may share one entry threshold. That is an
+inference, not a measurement.** Their brackets overlap in
+(0.2, 0.3] degC and the two modes handle ``heUpperOnTempSetting``
+identically, which is a real argument for one number covering both -
+but High Demand has never been watched between 0.2 and 0.7 degC, so
+nothing here measures where its boundary falls inside that span.
+Energy Saver's band does not intersect either of them: at 0.7 degC
 short, High Demand runs the element and Energy Saver does not. One
-caveat on that comparison: the Energy Saver runs had the compressor
-running and the others did not, so mode is not the only difference
-between them.
+caveat on that last comparison: the Energy Saver runs had the
+compressor running and the others did not, so mode is not the only
+difference between them.
 
-A consumer wanting one number per mode can take **0.3 degC** for
-Electric and High Demand and **1.0 degC** for Energy Saver. Both are the
-top of their bracket, which is the value consistent with every
-observation.
+A consumer wanting one number per mode should take the **top of that
+mode's own bracket** - 0.3 degC for ``ELECTRIC``, **0.7 degC** for
+``HIGH_DEMAND``, 1.0 degC for ``ENERGY_SAVER``. Each is the **smallest
+deficit at which that mode was seen to start an element**, so assuming
+it contradicts no observation of that mode - where anything lower
+contradicts that mode's own negative. Borrowing Electric's 0.3 degC for High Demand predicts an
+element at, say, 0.4 degC short that High Demand has never been seen to
+run; if your consumer is deciding whether hot water will be ready,
+that is the expensive direction to be wrong in.
 
 **The differential is not in the protocol.** A ``status --raw`` taken
 between these runs shows::
@@ -201,9 +219,10 @@ between these runs shows::
 
 A consumer that wants to predict when an element will run therefore
 cannot read it from the status message; it has to assume the per-mode
-figures above - 0.3 degC for ``ELECTRIC`` and ``HIGH_DEMAND``, 1.0 degC
-for ``ENERGY_SAVER`` - and treat a tank inside the corresponding
-bracket as a case where the device may go either way.
+figures above - 0.3 degC for ``ELECTRIC``, 0.7 for ``HIGH_DEMAND``,
+1.0 for ``ENERGY_SAVER`` - and treat a tank inside the corresponding
+bracket as a case where the device may go either way. High Demand's
+bracket is the widest, so that "either way" span is widest there too.
 
 
 What the on-setting does and does not tell you
@@ -214,7 +233,8 @@ What the on-setting does and does not tell you
 * In ``ELECTRIC`` and ``HIGH_DEMAND`` it equals ``heUpperOffTempSetting``
   and both equal the DHW setpoint. Taken literally that is a thermostat
   with no hysteresis at all, which cannot be how the device behaves; on
-  entry to those modes the measured differential is 0.3 degC.
+  entry the measured differential is at most 0.3 degC in Electric and
+  within (0.2, 0.7] degC in High Demand.
 * In ``HEAT_PUMP`` and ``ENERGY_SAVER`` it rests at 40.5 degC, the
   device minimum, which is 33 degC below a normally charged tank.
 
@@ -225,6 +245,10 @@ mode with the tank 1.0 degC or more short brought the element on within
 one poll in both runs tested, and ``heUpperOnTempSetting`` dropped from
 the setpoint to 40.5 degC in the *same* status message. Watching that
 field for an explanation of the element will not find one.
+
+That is as far as the observation goes. It does not explain *why*
+Energy Saver's bracket sits higher than Electric's; the runs differ in
+compressor state as well as mode, and nothing here separates the two.
 
 
 Electric: the handover, and what happens to the upper zone
@@ -264,8 +288,10 @@ figure is 4 % above the 240 V rating on this unit, which is one unit at
 one supply voltage - a nudge for anyone integrating energy, not a
 correction to the specification.
 
-For the record, the upper zone rose at 0.89 degC/min (1.61 degF/min)
-end to end over 5.8 minutes on a 63.2 gal tank, and the lower zone at
+For the record, the upper zone rose at 0.87-0.89 degC/min
+(1.56-1.61 degF/min) end to end over 5.8 minutes on a 63.2 gal tank -
+the spread is sampling resolution, the higher figure from 10-second
+polls and the lower from a one-minute grid - and the lower zone at
 0.66-0.86 degC/min depending on where the fit starts; the probe lags the
 element for the first 40-60 seconds, which is most of the difference.
 Those are tank-specific and are offered as an order of magnitude only.
@@ -291,11 +317,15 @@ see issue #141 for the documentation fix covering that.
 Limits
 ======
 
-One unit, one supply voltage, 2026-09-19 and 2026-09-20, thirteen
-bounded runs in all. Specifically **not** established:
+One unit, one supply voltage, 2026-09-19 and 2026-09-20. **Twenty-two**
+bounded runs in all: thirteen on the elements and the thresholds, nine
+on mode writes and reservation entries under TOU. Specifically **not**
+established:
 
-* ``HIGH_DEMAND``'s boundary. It shares Electric's settings and starts
-  an element well above the boundary, but no run has approached it.
+* **where inside (0.2, 0.7] degC ``HIGH_DEMAND``'s boundary falls.** It
+  has a run on each side, so it is bracketed - but that bracket is more
+  than twice Electric's width, and one run at 0.4 degC would halve it.
+  Until then, whether the two modes share a threshold is unresolved.
 * what engages the element **later** in an Energy Saver stint, as
   opposed to on entry.
 * anything about runs longer than six minutes.

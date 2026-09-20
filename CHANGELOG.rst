@@ -13,10 +13,12 @@ Documentation
   Electric and High Demand the on and off settings are the same value,
   and every ``he*DiffTempSetting`` reads 0. Measured on one unit by
   commanding the modes and watching, the start differential is
-  **mode-dependent**, and all three modes are bracketed by runs on
-  either side: ``ELECTRIC`` and ``HIGH_DEMAND`` need about **0.3 degC**
-  below the setpoint, ``ENERGY_SAVER`` needs **1.0 degC**. At 0.7 degC
-  short, High Demand runs the element and Energy Saver does not. These
+  **mode-dependent**, one bracket per mode: ``ELECTRIC`` at most
+  **0.3 degC** below the setpoint, ``HIGH_DEMAND`` within
+  **(0.2, 0.7] degC**, ``ENERGY_SAVER`` within **(0.8, 1.0] degC**.
+  Whether the first two share one threshold is an open question, not a
+  finding. At 0.7 degC short, High Demand runs the element and Energy
+  Saver does not. These
   are **entry** thresholds, not thermostats: in High Demand's steady
   state this unit's history has the element on in 1 of 47 minutes
   0.2-0.3 degC short and 168 of 169 more than 2.2 degC short.
