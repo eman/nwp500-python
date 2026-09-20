@@ -32,11 +32,10 @@ The short version
    * - Observation
      - Value
    * - Element start differential
-     - **Mode-dependent.** In ``ENERGY_SAVER`` the upper element starts
-       once the zone is **1.0 degC (1.8 degF)** below the setpoint. In
-       ``ELECTRIC`` it starts as soon as the zone is under the setpoint
-       at all - the boundary is inside 0.3 degC, at or below the probe's
-       own resolution. Both are bracketed by runs on either side.
+     - **Mode-dependent.** ``ENERGY_SAVER`` needs **1.0 degC
+       (1.8 degF)** below the setpoint. ``ELECTRIC`` and ``HIGH_DEMAND``
+       need about **0.3 degC (0.54 degF)**. All three are bracketed by
+       runs on either side.
    * - Where that differential is published
      - **Nowhere.** ``heUpperOnDiffTempSetting`` and its three siblings
        read 0 on this unit while the behaviour above holds.
@@ -119,17 +118,60 @@ nothing above the boundary has been seen to decline.
      - **on**
      - first poll after the mode landed
 
-**The two modes do not share a threshold.** At the same 0.3 degC
-deficit, ``ELECTRIC`` runs the element and ``ENERGY_SAVER`` does not.
-Electric's boundary is inside (0, 0.3] degC - at or below the tank
-probe's own 0.1 degC resolution - which is what the thermostat reading
-of its settings predicts, since it parks ``heUpperOnTempSetting`` at the
-setpoint. Energy Saver's 1.0 degC is an entry effect and a different
-mechanism.
+``HIGH_DEMAND``
+---------------
 
-``HIGH_DEMAND`` shares Electric's settings and has been seen to start an
-element at 5.2 degC short, but no run has approached its boundary; the
-thermostat reading is an assumption there.
+.. list-table::
+   :header-rows: 1
+   :widths: 30 30 40
+
+   * - Deficit below setpoint
+     - Upper element
+     - Poll at which it engaged
+   * - 0.2 degC (0.36 degF)
+     - **off** for the whole watch
+     - n/a
+   * - 0.7 degC (1.26 degF)
+     - **on**
+     - first poll after the mode landed
+
+``heUpperOnTempSetting`` moved to the new setpoint in the same status
+message the mode landed in, as it does in Electric.
+
+Putting the three together
+--------------------------
+
+.. list-table::
+   :header-rows: 1
+   :widths: 24 26 24 26
+
+   * - Mode
+     - Element off at
+     - Element on at
+     - Bracket
+   * - ``ELECTRIC``
+     - 0.6 degC above setpoint
+     - 0.3, 0.4 degC
+     - (0, 0.3] degC
+   * - ``HIGH_DEMAND``
+     - 0.2 degC
+     - 0.7 degC
+     - (0.2, 0.7] degC
+   * - ``ENERGY_SAVER``
+     - 0.3, 0.8 degC
+     - 1.0, 1.2 degC
+     - (0.8, 1.0] degC
+
+**Electric and High Demand can share one threshold; Energy Saver cannot
+join them.** The first two brackets overlap only in (0.2, 0.3] degC,
+which is consistent with their identical ``heUpperOnTempSetting``
+handling. Energy Saver's band does not intersect either: at 0.7 degC
+short, High Demand runs the element and Energy Saver does not.
+
+A consumer wanting one number per mode can take **0.3 degC** for
+Electric and High Demand and **1.0 degC** for Energy Saver. Both are the
+top of their bracket, which is the value consistent with every
+observation.
 
 **The differential is not in the protocol.** A ``status --raw`` taken
 between these runs shows::
