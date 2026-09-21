@@ -425,8 +425,9 @@ Whether the device queues the command or accepts it and masks the
 read-back is undetermined. Either way, **confirm a mode write by reading
 the mode back, and do not treat an unconfirmed one as failed.**
 
-Reservation entries are a separate case and fire normally in a window;
-see issue #141 for the documentation fix covering that.
+Reservation entries are a separate case. Their target temperature
+applies normally in a window, and only their mode is held back; see
+:ref:`reservations and mode writes during a tou window`.
 
 
 Limits
