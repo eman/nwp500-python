@@ -171,7 +171,7 @@ This document lists the fields found in the ``status`` object of device status m
    * - ``currentInstPower``
      - integer
      - W
-     - Current instantaneous power consumption in Watts. Does not include heating element power when active.
+     - Current instantaneous power consumption of the whole unit in Watts, heating elements included. On a 240 V NWP500-65 it reads about 410 W with only the compressor running, about 5.1 kW with only an element, and about 5.5 kW with both. See *Power and Energy Fields* in :doc:`data_conversions`.
      - None
    * - ``shutOffValveUse``
      - bool
