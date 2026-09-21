@@ -89,7 +89,10 @@ Documentation
   caps at ``full_recovery_energy`` once ``energy_to_setpoint`` hits 0,
   up to about 3.6 degF short of the setpoint, and under-reads by up to
   561 Wh. The page and the ``usable_energy`` docstring now say so and
-  recommend the thermistors in that case. (#140)
+  recommend the thermistors in that case. The ``full_recovery_energy``
+  and ``energy_to_setpoint`` descriptions in the model, the protocol
+  reference, the API reference and ``track-energy.rst`` now note the
+  window too. (#140)
 
 Version 9.4.2 (2026-09-17)
 ==========================

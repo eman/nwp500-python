@@ -50,6 +50,8 @@ Their **difference** is a state of charge, and is exposed as
 The setpoint cancels. What remains is the tank's heat above the device's
 minimum operating temperature - close enough to the lowest useful shower
 temperature that it is a good estimate of what you can actually draw.
+The exception is a Time-of-Use window near the setpoint, where it can
+under-read by up to about 560 Wh; see `Drawable energy`_.
 
 
 How the fields behave
@@ -64,8 +66,10 @@ Both fields fit a single two-parameter model:
 
 where ``k`` is the tank's heat capacity and ``reference_temperature`` is
 the device's own minimum setpoint, ``dhwTemperatureMin`` (40.5 degC /
-104.9 degF) - though only about two thirds of the time, see
-`Two branches`_.
+104.9 degF) - except during a Time-of-Use window that raises
+``hpUpperOnTempSetting``. Then both fields measure to a target 2 degC
+below the setpoint, which puts ``full_recovery_energy``'s reference
+2 degC higher; see `Two branches`_.
 
 Two consequences follow, and both matter:
 

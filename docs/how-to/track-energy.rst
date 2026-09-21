@@ -172,14 +172,19 @@ Monitor the tank's heating deficit:
 | **Units:** Watt-hours
 | **Description:** Energy the device still has to add to reach the
   setpoint. It *falls* as the tank heats and reaches zero when charged.
-  Despite the protocol name, it is the inverse of available energy.
+  During a TOU window that raises ``hp_upper_on_temp_setting``, it
+  reaches zero about 2 degC short of the setpoint, so the tank is not yet
+  fully charged. Despite the protocol name, it is the inverse of
+  available energy.
 
 | **Field:** ``full_recovery_energy`` (protocol: ``totalEnergyCapacity``)
 | **Type:** ``float``
 | **Units:** Watt-hours
 | **Description:** Cost of a full recovery to the *current setpoint*,
-  measured from the device reference temperature of 104.9 degF. It moves
-  with the setpoint, so it is not a fixed tank capacity.
+  measured from the device reference temperature of 104.9 degF, or
+  2 degC higher during a TOU window that raises
+  ``hp_upper_on_temp_setting``. It moves with the setpoint, so it is not
+  a fixed tank capacity. See :doc:`../explanation/tank-energy`.
 
 Temperature Monitoring
 ----------------------

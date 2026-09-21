@@ -240,7 +240,9 @@ class DeviceStatus(NavienBaseModel):
             "the current setpoint, in Watt-hours. This is NOT a fixed tank "
             "size: it tracks the setpoint, rising about 140 Wh per 0.5 degC "
             "of setpoint increase. Use it as the cost of a full recovery, "
-            "not as the tank's total heat content."
+            "not as the tank's total heat content. During a TOU window that "
+            "raises hp_upper_on_temp_setting, the reference is 2 degC "
+            "higher (about 108.5 degF)."
         ),
         json_schema_extra={
             "unit_of_measurement": "Wh",
@@ -252,9 +254,10 @@ class DeviceStatus(NavienBaseModel):
         description=(
             "Energy still NEEDED to bring the tank up to the setpoint, in "
             "Watt-hours - a heating deficit, not stored energy. It falls as "
-            "the tank heats and reaches zero at the setpoint. Despite the "
-            "protocol name 'availableEnergyCapacity' it is the inverse of "
-            "available energy."
+            "the tank heats and reaches zero at the setpoint - or, during a "
+            "TOU window that raises hp_upper_on_temp_setting, about 2 degC "
+            "short of it. Despite the protocol name 'availableEnergyCapacity' "
+            "it is the inverse of available energy."
         ),
         json_schema_extra={
             "unit_of_measurement": "Wh",

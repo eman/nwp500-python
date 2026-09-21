@@ -376,11 +376,11 @@ Power and Energy Fields
    * - ``totalEnergyCapacity``
      - ``x 4`` (see note)
      - Wh
-     - **Cost of a full recovery** to the *current setpoint*, measured from the device reference temperature (``dhwTemperatureMin``, 104.9 degF). Exposed as ``full_recovery_energy``. This is **not** a fixed tank capacity: it moves with the setpoint, by about 140 Wh per 0.5 degC on a 65-gallon tank.
+     - **Cost of a full recovery** to the *current setpoint*, measured from the device reference temperature (``dhwTemperatureMin``, 104.9 degF). Exposed as ``full_recovery_energy``. This is **not** a fixed tank capacity: it moves with the setpoint, by about 140 Wh per 0.5 degC on a 65-gallon tank. During a TOU window that raises ``hpUpperOnTempSetting``, the reference is 2 degC higher (about 108.5 degF); see :ref:`two branches`.
    * - ``availableEnergyCapacity``
      - ``x 4`` (see note)
      - Wh
-     - **Energy still needed to reach the setpoint** - a heating deficit, despite the name. Exposed as ``energy_to_setpoint``. It *falls* as the tank heats and reaches zero when the tank is fully charged, so it is the inverse of available energy.
+     - **Energy still needed to reach the setpoint** - a heating deficit, despite the name. Exposed as ``energy_to_setpoint``. It *falls* as the tank heats and reaches zero when the tank is fully charged, so it is the inverse of available energy. During a TOU window that raises ``hpUpperOnTempSetting``, it reaches zero about 2 degC short of the setpoint.
 
 .. note::
    **Energy quantum.** The two energy fields are raw counts in a fixed

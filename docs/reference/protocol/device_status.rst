@@ -451,12 +451,12 @@ This document lists the fields found in the ``status`` object of device status m
    * - ``totalEnergyCapacity``
      - integer
      - Wh
-     - Energy needed for a full recovery to the current setpoint, from the device reference temperature (104.9 degF). Tracks the setpoint rather than being a fixed tank size. Python name: ``full_recovery_energy``.
+     - Energy needed for a full recovery to the current setpoint, from the device reference temperature (104.9 degF). Tracks the setpoint rather than being a fixed tank size. During a TOU window that raises ``hpUpperOnTempSetting``, the reference is 2 degC higher. Python name: ``full_recovery_energy``.
      - ``x 4`` (energy quantum)
    * - ``availableEnergyCapacity``
      - integer
      - Wh
-     - Energy still **needed** to reach the setpoint - a heating deficit, not available energy. Falls to zero as the tank charges. Python name: ``energy_to_setpoint``.
+     - Energy still **needed** to reach the setpoint - a heating deficit, not available energy. Falls to zero as the tank charges; during a TOU window that raises ``hpUpperOnTempSetting``, about 2 degC short of the setpoint. Python name: ``energy_to_setpoint``.
      - ``x 4`` (energy quantum)
 
 DHW Operation Setting Modes
