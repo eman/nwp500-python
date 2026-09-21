@@ -276,8 +276,8 @@ class DeviceStatus(NavienBaseModel):
     recirc_error_status: int = Field(description="Recirculation error status")
     current_inst_power: float = Field(
         description=(
-            "Current instantaneous power consumption in Watts. "
-            "Does not include heating element power when active"
+            "Current instantaneous power consumption of the whole unit "
+            "in Watts, including heating element power when active"
         ),
         json_schema_extra={
             "unit_of_measurement": "W",

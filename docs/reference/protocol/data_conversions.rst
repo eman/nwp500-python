@@ -372,7 +372,7 @@ Power and Energy Fields
    * - ``currentInstPower``
      - None (direct value)
      - W
-     - **Instantaneous power consumption**. Real-time measurement. Does **NOT** include electric heating element power draw. Heat pump only.
+     - **Instantaneous power consumption** of the whole unit, electric heating elements included. Real-time measurement.
    * - ``totalEnergyCapacity``
      - ``x 4`` (see note)
      - Wh
@@ -396,7 +396,22 @@ Power and Energy Fields
    of 7.0. See :doc:`../../explanation/tank-energy`.
 
 .. note::
-   ``currentInstPower`` excludes electric heating element power. If the heater is actively heating with electric elements, the actual power draw will be higher (typically +3755W @ 208V or +5000W @ 240V).
+   ``currentInstPower`` **includes** electric heating element power.
+   Earlier versions of this page said the opposite. One NWP500-65 on
+   240 V, recorded minute by minute from 2025-12-28 to 2026-09-18 against
+   ``compUse``, ``heatUpperUse`` and ``heatLowerUse``, reads:
+
+   * compressor only: median 410 W (101,326 minutes)
+   * upper element only: median 5,191 W (105 minutes)
+   * lower element only: median 5,092 W (76 minutes)
+   * compressor and upper element: median 5,488 W (979 minutes)
+
+   Element-only minutes read the element's 240 V rating, not zero, and
+   compressor-plus-element reads about the sum. The tank's heat gain
+   agrees: divided by this reading it gives 2.8-3.1 with the compressor
+   alone (the COP in :doc:`../../explanation/tank-energy`) and about 1.2
+   with the lower element alone. Other models and 208 V supplies have not
+   been checked.
 
 System Status and Performance Fields
 ------------------------------------

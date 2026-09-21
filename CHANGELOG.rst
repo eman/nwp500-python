@@ -60,6 +60,14 @@ Documentation
   5,000 W rating, and that a mode write may not take effect while a TOU
   window is in force. ``device_status.rst``'s Heating Elements notes now
   point at it.
+- **currentInstPower includes the heating elements.** The field
+  table and *Power and Energy Fields* in the protocol reference, and the
+  ``current_inst_power`` field description, said it excludes element
+  power; ``track-energy.rst`` said it includes it. On a 240 V NWP500-65
+  it includes it: element-only minutes read about 5.1 kW, compressor
+  and element together about 5.5 kW, and the tank's heat gain agrees.
+  All four now say so, with the measurement and its limits (one model,
+  240 V only). (#139)
 
 Version 9.4.2 (2026-09-17)
 ==========================
