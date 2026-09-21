@@ -240,7 +240,9 @@ class DeviceStatus(NavienBaseModel):
             "the current setpoint, in Watt-hours. This is NOT a fixed tank "
             "size: it tracks the setpoint, rising about 140 Wh per 0.5 degC "
             "of setpoint increase. Use it as the cost of a full recovery, "
-            "not as the tank's total heat content."
+            "not as the tank's total heat content. During a TOU window that "
+            "raises hp_upper_on_temp_setting, the reference is 2 degC "
+            "higher (about 108.5 degF)."
         ),
         json_schema_extra={
             "unit_of_measurement": "Wh",
@@ -252,9 +254,10 @@ class DeviceStatus(NavienBaseModel):
         description=(
             "Energy still NEEDED to bring the tank up to the setpoint, in "
             "Watt-hours - a heating deficit, not stored energy. It falls as "
-            "the tank heats and reaches zero at the setpoint. Despite the "
-            "protocol name 'availableEnergyCapacity' it is the inverse of "
-            "available energy."
+            "the tank heats and reaches zero at the setpoint - or, during a "
+            "TOU window that raises hp_upper_on_temp_setting, about 2 degC "
+            "short of it. Despite the protocol name 'availableEnergyCapacity' "
+            "it is the inverse of available energy."
         ),
         json_schema_extra={
             "unit_of_measurement": "Wh",
@@ -958,11 +961,18 @@ class DeviceStatus(NavienBaseModel):
         estimate of what can actually be drawn - water colder than that
         still holds heat, but not heat you can wash with.
 
-        Robust in practice: ``full_recovery_energy`` is bimodal, taking
-        one of two values 2 degC apart at a fixed setpoint, but both
-        fields shift together so the difference is unaffected. Checked
-        against the tank thermistors over 12275 samples, the implied tank
+        Usually robust: ``full_recovery_energy`` is bimodal, taking one
+        of two values 2 degC apart at a fixed setpoint, but both fields
+        shift together so the difference is unaffected. Checked against
+        the tank thermistors over 12275 samples, the implied tank
         temperature agrees to a standard deviation of 0.57 degF.
+
+        The exception is a Time-of-Use window, when
+        ``hp_upper_on_temp_setting`` is raised to about the setpoint.
+        There ``energy_to_setpoint`` reaches 0 while the tank is still up
+        to about 2 degC short. This value then equals
+        ``full_recovery_energy`` and under-reads by up to about 560 Wh on
+        a 65-gallon tank. In that case, use the thermistors.
 
         Returns:
             Drawable energy in Watt-hours, clamped at zero.

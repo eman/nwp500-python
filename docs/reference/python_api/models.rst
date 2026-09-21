@@ -257,8 +257,8 @@ Complete real-time device status with 100+ fields.
    **Power/Energy Fields:**
 
    * ``current_inst_power`` (float) - Current power consumption (Watts)
-   * ``full_recovery_energy`` (float) - Energy needed to heat the whole tank from the device reference temperature to the current setpoint (Wh). Tracks the setpoint; not a fixed tank size.
-   * ``energy_to_setpoint`` (float) - Energy still **needed** to reach the setpoint (Wh). A deficit: it falls as the tank heats and reaches zero when fully charged.
+   * ``full_recovery_energy`` (float) - Energy needed to heat the whole tank from the device reference temperature to the current setpoint (Wh). Tracks the setpoint; not a fixed tank size. The reference is 2 degC higher during a TOU window that raises ``hp_upper_on_temp_setting``.
+   * ``energy_to_setpoint`` (float) - Energy still **needed** to reach the setpoint (Wh). A deficit: it falls as the tank heats and reaches zero when fully charged, or about 2 degC short of that during a TOU window that raises ``hp_upper_on_temp_setting``.
    * ``dhw_charge_per`` (float) - DHW charge percentage
 
    .. warning::

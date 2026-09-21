@@ -50,6 +50,8 @@ Their **difference** is a state of charge, and is exposed as
 The setpoint cancels. What remains is the tank's heat above the device's
 minimum operating temperature - close enough to the lowest useful shower
 temperature that it is a good estimate of what you can actually draw.
+The exception is a Time-of-Use window near the setpoint, where it can
+under-read by up to about 560 Wh; see `Drawable energy`_.
 
 
 How the fields behave
@@ -64,8 +66,10 @@ Both fields fit a single two-parameter model:
 
 where ``k`` is the tank's heat capacity and ``reference_temperature`` is
 the device's own minimum setpoint, ``dhwTemperatureMin`` (40.5 degC /
-104.9 degF) - though only about two thirds of the time, see
-`Two branches`_.
+104.9 degF) - except during a Time-of-Use window that raises
+``hpUpperOnTempSetting``. Then both fields measure to a target 2 degC
+below the setpoint, which puts ``full_recovery_energy``'s reference
+2 degC higher; see `Two branches`_.
 
 Two consequences follow, and both matter:
 
@@ -277,13 +281,34 @@ about the quantum. On that branch,
 
    full_recovery_energy = k * (setpoint - dhwTemperatureMin)
 
-The secondary branch behaves identically with a reference 2 degC higher,
-and **what selects between them is unknown**. The device's
-``hpUpperOnTempSetting`` correlates with the choice - 104.9 degF
-when the primary is active, 143.4 degF when the secondary is - which
-would fit the device computing recovery cost from its own turn-on
-threshold, but only 22 paired samples were available and that is a lead
-rather than a finding.
+The secondary branch behaves identically with a reference 2 degC higher.
+
+**What selects it is the upper heat-pump turn-on setting,**
+``hpUpperOnTempSetting``. On one 240 V NWP500-65
+in ``HEAT_PUMP`` mode, over 50,819 one-minute samples from 2026-08-14 to
+2026-09-19, the setting separates the branches with no exceptions:
+
+.. list-table::
+   :header-rows: 1
+
+   * - ``hpUpperOnTempSetting``
+     - Minutes
+     - Reference implied by ``setpoint - full_recovery_energy / 156``
+   * - 104.9 degF
+     - 40,578
+     - 104.88 degF (p5-p95 104.88-104.90)
+   * - Raised to about the setpoint
+     - 10,241
+     - **108.49 degF** (p5-p95 108.49-108.50)
+
+The raised setting is the device's afternoon Time-of-Use window. It
+appears around the 14:00-16:00 period boundaries and falls back around
+19:00-21:00. ``energy_to_setpoint`` moves with it: inside the window it
+reads ``156 * (setpoint - tank_mean) - 556`` Wh, where the -556 Wh is the
+2 degC offset, still within 12 Wh. Both fields are referenced 2 degC
+lower during the window. That matches the 1.9 degC shortfall in
+:doc:`tou-recovery-cap`, so the fields appear to measure against the
+device's TOU-reduced target.
 
 .. warning::
    Because of this, do not derive the tank's heat capacity from a live
@@ -387,14 +412,33 @@ delivered, and once the tank falls below its setting it simply passes
 through, so water stays usable down to the temperature you actually want
 at the tap.
 
-Despite ``full_recovery_energy`` being bimodal (see `Two branches`_),
-the difference is robust, because both fields shift together. Checked
+``full_recovery_energy`` is bimodal (see `Two branches`_), but both
+fields shift together, so the difference is usually unaffected. Checked
 against the tank thermistors over 12275 samples, the tank temperature
 implied by ``usable_energy`` agrees with the thermistor mean to a
 standard deviation of **0.57 degF**, with 97.5 % of samples inside
 2 degF.
 
-If you need a different floor - a bath at 100 degF, or energy above the
+**There is one exception: near the setpoint during a TOU window.** In
+that window ``energy_to_setpoint`` is referenced 2 degC lower, so it
+reaches its floor of 0 while the tank is still up to about 3.6 degF
+short of the setpoint. From there ``usable_energy`` equals
+``full_recovery_energy`` and stops rising as the tank heats. On the unit
+above:
+
+* 3,682 minutes fell inside the window with ``energy_to_setpoint`` at 0.
+  In every one of them, ``usable_energy`` equalled
+  ``full_recovery_energy``.
+* The shortfall against ``156 * (tank_mean - 104.9)`` had a median of
+  224 Wh and a maximum of 561 Wh, about one branch offset (3.6 degF).
+* At 8 of 64 branch flips at a fixed setpoint, ``usable_energy`` jumped by
+  the full offset within 5 seconds.
+
+Outside the window, ``usable_energy`` matched the two-probe mean to a
+standard deviation of 0.25 degF. If ``hpUpperOnTempSetting`` is raised
+and ``energy_to_setpoint`` reads 0, use the thermistors instead.
+
+For that case, or if you need a different floor - a bath at 100 degF, or energy above the
 cold inlet - compute it from the thermistors instead. On a 65-gallon tank
 the heat capacity is 156 Wh per degF:
 

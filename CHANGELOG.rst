@@ -78,6 +78,21 @@ Documentation
   priority table and Important Notes are corrected, and a new section
   gives the measurements and their limits. ``heating-elements.rst`` now
   links to it instead of to the issue. (#141)
+- **tank-energy: what selects the second branch, and where usable_energy
+  under-reads.** ``tank-energy.rst`` left open what selects
+  ``full_recovery_energy``'s second branch. On one NWP500-65 over 50,819
+  ``HEAT_PUMP`` minutes, ``hpUpperOnTempSetting`` separates the branches
+  with no exceptions: 104.9 degF on the primary, raised to about the
+  setpoint during the afternoon TOU window on the secondary.
+  ``energy_to_setpoint`` shifts by the same 2 degC. Because of that,
+  ``usable_energy`` is not always robust to the branch. In the window it
+  caps at ``full_recovery_energy`` once ``energy_to_setpoint`` hits 0,
+  up to about 3.6 degF short of the setpoint, and under-reads by up to
+  561 Wh. The page and the ``usable_energy`` docstring now say so and
+  recommend the thermistors in that case. The ``full_recovery_energy``
+  and ``energy_to_setpoint`` descriptions in the model, the protocol
+  reference, the API reference and ``track-energy.rst`` now note the
+  window too. (#140)
 
 Version 9.4.2 (2026-09-17)
 ==========================
