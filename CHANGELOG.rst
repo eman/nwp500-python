@@ -9,7 +9,8 @@ Documentation
 -------------
 - **New: what the heating elements actually do**
   (``docs/explanation/heating-elements.rst``). The four
-  ``he*TempSetting`` fields do not describe when an element runs: in
+  ``he*TempSetting`` fields describe the thermostat, and **on entry to
+  a mode the thermostat is not what runs the element**: in
   Electric and High Demand the on and off settings are the same value,
   and every ``he*DiffTempSetting`` reads 0. Measured on one unit by
   commanding the modes and watching, the start differential is
@@ -22,9 +23,38 @@ Documentation
   are **entry** thresholds, not thermostats: in High Demand's steady
   state this unit's history has the element on in 1 of 47 minutes
   0.2-0.3 degC short and 168 of 169 more than 2.2 degC short.
-  Neither differential is published anywhere in the status message. Also documents Energy
-  Saver's entry behaviour (the element engages although
-  ``heUpperOnTempSetting`` rests 33 degC below the tank), Electric's
+  Neither differential is published anywhere in the status message.
+
+  **Later in a stint it depends on the mode.** From one
+  unit's recorded history, 17 of 23 mid-stint upper-element starts in
+  ``ENERGY_SAVER`` have the probe in the 39.4-41.1 degC band where
+  ``heUpperOnTempSetting`` rests, a median 0.2 degC below the field -
+  the element comes on as the probe reaches it. ``HIGH_DEMAND``, whose
+  ON setting tracks the setpoint, re-engages a median 2.1 degC *below*
+  it, which the field does not describe. So in ``ENERGY_SAVER`` entry is
+  the exception and the reference description is the rule; in
+  ``HIGH_DEMAND`` it is not; ``ELECTRIC`` is uncharacterised.
+  ``data_conversions.rst``'s warning now says which applies when.
+  A sampling note with it: the element runs in two very different
+  lengths. Of 115 upper-element runs over eight months, 20 lasted under
+  a minute (median 16 s), carrying 0.6 kWh against 93 kWh for the rest.
+  They are real elements, and not negligible to the probe - a 20 s burst
+  is ~0.3 degC. Because ``currentPower`` samples at a median 30 s, a
+  one-minute-resampled power series can miss one entirely, making a
+  5.5 kW element look like 0.5 kW. Resample power with a maximum.
+
+  Confirmed on the device, one unit, 2026-09-21: in ``ENERGY_SAVER``
+  the upper element engages near ``heUpperOnTempSetting`` rather than a
+  fixed gap below the setpoint (setpoint lowered to 42.0 degC; a gap
+  predicted 22 degC; it engaged at 39.8, three times). It then runs to
+  ~0.9 degC under the setpoint-tracking ``heUpperOffTempSetting``, not
+  to a fixed point. Raising the setpoint in that mode starts the element
+  through the entry rule. And ``heUpperOnTempSetting`` rests at 40.5
+  degC reliably only in ``ENERGY_SAVER`` - in ``HEAT_PUMP`` about half
+  the time.
+
+  Also documents Energy Saver's entry behaviour (the element engages
+  although ``heUpperOnTempSetting`` rests 33 degC below the tank), Electric's
   upper-to-lower handover and the upper probe **falling** 1.9 degC while
   the lower element runs, measured element power of 5,219 W against the
   5,000 W rating, and that a mode write may not take effect while a TOU

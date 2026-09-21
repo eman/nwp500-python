@@ -4,11 +4,22 @@ The Heating Elements
 
 The NWP500 publishes four element thermostat settings -
 ``heUpperOnTempSetting``, ``heUpperOffTempSetting`` and their lower-zone
-pair - plus a differential for each. Read literally they do not describe
-when the elements actually run: in Electric and High Demand the on and
-off settings are **the same value**, and every ``he*DiffTempSetting``
-reads 0. The device nevertheless has a differential, and this page
-gives the measured one.
+pair - plus a differential for each. Read literally they describe a
+thermostat, and how far that holds depends on the mode and the moment:
+
+* **On entry to any element mode they do not** describe when the element
+  runs. It engages on a mode-dependent differential of its own, published
+  nowhere - the start thresholds below.
+* **Later in a stint, in** ``ENERGY_SAVER`` **they do**: the element
+  engages as the probe reaches ``heUpperOnTempSetting``. That is from this
+  unit's history and confirmed by a commanded run.
+* **Later in a stint, in** ``HIGH_DEMAND`` **they do not**: it re-engages
+  about 2.1 degC below its ON setting. That is from history only.
+  ``ELECTRIC`` is uncharacterised.
+
+The fields also look wrong as a thermostat taken literally: in Electric
+and High Demand the on and off settings are **the same value**, and every
+``he*DiffTempSetting`` reads 0.
 
 **The start thresholds** here were measured on one unit by commanding
 the modes and watching - not inferred from historical logs. That
@@ -48,15 +59,23 @@ The short version
        read 0 on this unit while the behaviour above holds.
    * - ``heUpperOnTempSetting`` by mode
      - ``ELECTRIC`` and ``HIGH_DEMAND``: the setpoint, same as
-       ``heUpperOffTempSetting``. ``HEAT_PUMP`` and ``ENERGY_SAVER``:
-       40.5 degC (104.9 degF), the device minimum.
+       ``heUpperOffTempSetting``. ``ENERGY_SAVER``: 40.5 degC
+       (104.9 degF), the device minimum, in 96 % of recorded minutes on
+       this unit. ``HEAT_PUMP``: 40.5 degC only about **half** the time;
+       the rest are other values that match the current setpoint only
+       6 % of the time. Why is not known.
    * - Energy Saver on entry
      - Switching into ``ENERGY_SAVER`` engages the upper element even
        though ``heUpperOnTempSetting`` rests 33 degC below the tank, so
-       whatever drives it, that field is not it. Its bracket also sits
-       higher than the other two modes'. Why the two differ is **not**
-       established: the Energy Saver runs had the compressor running
-       and the others did not.
+       **on entry** that field is not what drives it. Its bracket also
+       sits higher than the other two modes'. Why the two differ is
+       **not** established: the Energy Saver runs had the compressor
+       running and the others did not.
+   * - Energy Saver later in a stint
+     - Different rule. The element re-engages **as the upper probe
+       reaches** ``heUpperOnTempSetting`` - the field working exactly
+       as this reference describes it. Entry is the exception, not the
+       rule.
    * - Electric ordering
      - Upper element to the setpoint, then the lower element, never
        both, as the protocol reference already states. The handover
@@ -235,20 +254,116 @@ What the on-setting does and does not tell you
   with no hysteresis at all, which cannot be how the device behaves; on
   entry the measured differential is at most 0.3 degC in Electric and
   within (0.2, 0.7] degC in High Demand.
-* In ``HEAT_PUMP`` and ``ENERGY_SAVER`` it rests at 40.5 degC, the
-  device minimum, which is 33 degC below a normally charged tank.
+* In ``ENERGY_SAVER`` it rests at 40.5 degC, the device minimum, which
+  is 33 degC below a normally charged tank. An earlier version of this
+  page said the same of ``HEAT_PUMP``; on this unit that holds in only
+  48.5 % of Heat Pump minutes. The rest are other values - 63.0 degC
+  most often - which equal the *current* setpoint in only 6 % of Heat
+  Pump minutes, so this is not the field tracking the setpoint; it may
+  be holding a value over from an earlier mode. Do not rely on it in
+  Heat Pump mode.
 
-The second case is the one that misleads. In ``ENERGY_SAVER`` the upper
-element **does** run, and it runs with the on-setting far below the tank
-- so the element is not being driven by that field. Switching into the
-mode with the tank 1.0 degC or more short brought the element on within
-one poll in both runs tested, and ``heUpperOnTempSetting`` dropped from
-the setpoint to 40.5 degC in the *same* status message. Watching that
-field for an explanation of the element will not find one.
+The second case misleads **on entry only**. Switching into
+``ENERGY_SAVER`` with the tank 1.0 degC or more short brought the upper
+element on within one poll in both runs tested, while
+``heUpperOnTempSetting`` dropped from the setpoint to 40.5 degC in the
+*same* status message - 33 degC below the probe. For that moment the
+field explains nothing.
 
-That is as far as the observation goes. It does not explain *why*
+That is as far as the entry observation goes. It does not explain *why*
 Energy Saver's bracket sits higher than Electric's; the runs differ in
 compressor state as well as mode, and nothing here separates the two.
+
+**Later in the same stint the field is exactly what drives the
+element.** In 23 mid-stint upper-element starts in ``ENERGY_SAVER``
+drawn from one unit's recorded history, **17 have the upper probe
+between 39.4 and 41.1 degC** - the band ``heUpperOnTempSetting`` rests
+in for this mode - and where the field itself is recorded the median
+start is **0.2 degC below it**. The element comes on as the probe
+reaches the on-setting, which is what this reference has said all
+along.
+
+**Confirmed on the device.** The history above cannot prove it on its
+own: with the setpoint fixed for almost the whole record, "at the
+on-setting" and "a fixed gap below the setpoint" are the same
+prediction. So the setpoint was lowered to 42.0 degC and the unit left
+in ``ENERGY_SAVER``. With the on-setting still at 40.5 degC, a fixed gap
+would have put the element near 22 degC; it came on three times with
+the upper probe reading **39.8 degC**. Two cautions: all three came
+while water was moving through the tank, and readings of 40.4, 40.1 and
+40.0 degC did not trigger, so on this probe the working threshold may
+sit a little under the published 40.5.
+
+``HIGH_DEMAND`` behaves differently, and this is the clearest statement
+of the difference on this page. There ``heUpperOnTempSetting`` tracks
+the setpoint, and 12 mid-stint starts came a median **2.1 degC below
+it**, none in the 39.4-41.1 degC band. That differential is real and is
+published nowhere.
+
+So a consumer needs both halves:
+
+.. list-table::
+   :header-rows: 1
+   :widths: 26 37 37
+
+   * - Mode
+     - On entry
+     - Later in the stint
+   * - ``ENERGY_SAVER``
+     - element on, on-setting irrelevant (1.0 degC below setpoint)
+     - element on **near** ``heUpperOnTempSetting``
+   * - ``HIGH_DEMAND``
+     - element on, (0.2, 0.7] degC below setpoint
+     - element on ~2.1 degC **below** ``heUpperOnTempSetting``
+
+Three more behaviours, from the same commanded run. Each is one unit
+and one morning; the counts are given so they can be weighed.
+
+* **The element runs to the setpoint, not to a fixed point.** It
+  stopped about 0.9 degC under ``heUpperOffTempSetting``, which follows
+  the setpoint. At a 42.0 degC setpoint that was 41.1 degC; historical
+  runs at a 60.5 degC setpoint stop around 59. Only the *engagement*
+  point is fixed.
+* **Raising the setpoint in** ``ENERGY_SAVER`` **starts the element.**
+  With the tank at 41.7 degC, a setpoint raise to 61.0 degC switched the
+  heat source to heat pump plus element in the same second (n = 1). It
+  is the entry rule again, triggered by the setpoint rather than a mode
+  change. A controller writing setpoints in this mode can start a 5 kW
+  element.
+* **Every engagement came with water moving through the tank** — one
+  shower and two runs of a recirculation pump on a cooled loop, which
+  the tank experiences as draws. Whether movement is *required*, or the
+  temperature alone suffices, is not separable from these.
+
+.. warning::
+
+   These mid-stint figures come from **recorded history, not commanded
+   runs**, and they carry a sampling hazard worth repeating - one that
+   bit us.
+
+   **The element runs in two very different lengths.** Of 115 raw
+   upper-element runs on this unit over eight months, 20 (17 %) lasted
+   **under a minute** - median 16 s - and 95 ran a median 8 minutes.
+   The short ones are real elements at full power. They carry little
+   energy - 0.6 kWh across the record against 93 kWh for the rest -
+   but they are not negligible to the probe: a 20-second burst raises
+   the upper zone about 0.3 degC, three quanta of its 0.1 degC
+   resolution, and measured bursts of 41-58 s moved it 0.7-1.5 degC.
+   *(An earlier version said they "heat nothing", from dividing by the
+   whole tank's heat capacity rather than the upper zone's - three
+   times too large.)*
+
+   They are also easy to lose or to misread. ``currentPower`` samples
+   at a median 30 s, with 24 % of gaps over a minute, so **a
+   one-minute-resampled power series can miss a sub-minute burst
+   entirely** - taking the last sample at or before each minute makes a
+   real 5.5 kW element look like 0.5 kW. Resample power with a
+   **maximum** over the interval, or work from the raw edges, and
+   corroborate a run's duration rather than a single aligned sample.
+
+   For predicting recovery, filter on **duration or energy**, not on
+   the flag and not on one power reading: it is the sustained runs that
+   heat the tank.
 
 
 Electric: the handover, and what happens to the upper zone
@@ -326,8 +441,9 @@ established:
   has a run on each side, so it is bracketed - but that bracket is more
   than twice Electric's width, and one run at 0.4 degC would halve it.
   Until then, whether the two modes share a threshold is unresolved.
-* what engages the element **later** in an Energy Saver stint, as
-  opposed to on entry.
+* **Electric's** behaviour later in a stint. Energy Saver's and High
+  Demand's are described above from history; Electric has only two
+  mid-stint starts on record, which characterises nothing.
 * anything about runs longer than six minutes.
 * whether either differential is firmware-dependent. The unit reported
   ``heUpperOnDiffTempSetting`` as 0 throughout; if another unit reports
