@@ -34,13 +34,22 @@ Documentation
   it. So entry is the exception and the reference description is the
   rule; ``data_conversions.rst``'s warning now says which applies when.
   A sampling note with it: the element runs in two very different
-  lengths. Of 128 raw upper-element runs, 31 lasted under a minute
-  (median 9 s) and carry 0.8 kWh across nine months against 97.9 kWh
-  for the other 97 - real elements, but they heat nothing. Because
-  ``currentPower`` samples at a median 30 s, a one-minute-resampled
-  power series can miss one entirely, making a 5.5 kW element look like
-  0.5 kW. Resample power with a maximum, and filter on duration or
-  energy when predicting recovery.
+  lengths. Of 115 upper-element runs over eight months, 20 lasted under
+  a minute (median 16 s), carrying 0.6 kWh against 93 kWh for the rest.
+  They are real elements, and not negligible to the probe - a 20 s burst
+  is ~0.3 degC. Because ``currentPower`` samples at a median 30 s, a
+  one-minute-resampled power series can miss one entirely, making a
+  5.5 kW element look like 0.5 kW. Resample power with a maximum.
+
+  Confirmed on the device, one unit, 2026-09-21: in ``ENERGY_SAVER``
+  the upper element engages near ``heUpperOnTempSetting`` rather than a
+  fixed gap below the setpoint (setpoint lowered to 42.0 degC; a gap
+  predicted 22 degC; it engaged at 39.8, three times). It then runs to
+  ~0.9 degC under the setpoint-tracking ``heUpperOffTempSetting``, not
+  to a fixed point. Raising the setpoint in that mode starts the element
+  through the entry rule. And ``heUpperOnTempSetting`` rests at 40.5
+  degC reliably only in ``ENERGY_SAVER`` - in ``HEAT_PUMP`` about half
+  the time.
 
   Also documents Energy Saver's entry behaviour (the element engages
   although ``heUpperOnTempSetting`` rests 33 degC below the tank), Electric's

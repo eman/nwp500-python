@@ -48,8 +48,11 @@ The short version
        read 0 on this unit while the behaviour above holds.
    * - ``heUpperOnTempSetting`` by mode
      - ``ELECTRIC`` and ``HIGH_DEMAND``: the setpoint, same as
-       ``heUpperOffTempSetting``. ``HEAT_PUMP`` and ``ENERGY_SAVER``:
-       40.5 degC (104.9 degF), the device minimum.
+       ``heUpperOffTempSetting``. ``ENERGY_SAVER``: 40.5 degC
+       (104.9 degF), the device minimum, in 96 % of recorded minutes on
+       this unit. ``HEAT_PUMP``: 40.5 degC only about **half** the time;
+       the rest are other values that match the current setpoint only
+       6 % of the time. Why is not known.
    * - Energy Saver on entry
      - Switching into ``ENERGY_SAVER`` engages the upper element even
        though ``heUpperOnTempSetting`` rests 33 degC below the tank, so
@@ -240,8 +243,14 @@ What the on-setting does and does not tell you
   with no hysteresis at all, which cannot be how the device behaves; on
   entry the measured differential is at most 0.3 degC in Electric and
   within (0.2, 0.7] degC in High Demand.
-* In ``HEAT_PUMP`` and ``ENERGY_SAVER`` it rests at 40.5 degC, the
-  device minimum, which is 33 degC below a normally charged tank.
+* In ``ENERGY_SAVER`` it rests at 40.5 degC, the device minimum, which
+  is 33 degC below a normally charged tank. An earlier version of this
+  page said the same of ``HEAT_PUMP``; on this unit that holds in only
+  48.5 % of Heat Pump minutes. The rest are other values - 63.0 degC
+  most often - which equal the *current* setpoint in only 6 % of Heat
+  Pump minutes, so this is not the field tracking the setpoint; it may
+  be holding a value over from an earlier mode. Do not rely on it in
+  Heat Pump mode.
 
 The second case misleads **on entry only**. Switching into
 ``ENERGY_SAVER`` with the tank 1.0 degC or more short brought the upper
@@ -263,6 +272,17 @@ start is **0.2 degC below it**. The element comes on as the probe
 reaches the on-setting, which is what this reference has said all
 along.
 
+**Confirmed on the device.** The history above cannot prove it on its
+own: with the setpoint fixed for almost the whole record, "at the
+on-setting" and "a fixed gap below the setpoint" are the same
+prediction. So the setpoint was lowered to 42.0 degC and the unit left
+in ``ENERGY_SAVER``. With the on-setting still at 40.5 degC, a fixed gap
+would have put the element near 22 degC; it came on three times with
+the upper probe reading **39.8 degC**. Two cautions: all three came
+while water was moving through the tank, and readings of 40.4, 40.1 and
+40.0 degC did not trigger, so on this probe the working threshold may
+sit a little under the published 40.5.
+
 ``HIGH_DEMAND`` behaves differently, and this is the clearest statement
 of the difference on this page. There ``heUpperOnTempSetting`` tracks
 the setpoint, and 12 mid-stint starts came a median **2.1 degC below
@@ -280,10 +300,29 @@ So a consumer needs both halves:
      - Later in the stint
    * - ``ENERGY_SAVER``
      - element on, on-setting irrelevant (1.0 degC below setpoint)
-     - element on **at** ``heUpperOnTempSetting``
+     - element on **near** ``heUpperOnTempSetting``
    * - ``HIGH_DEMAND``
      - element on, (0.2, 0.7] degC below setpoint
      - element on ~2.1 degC **below** ``heUpperOnTempSetting``
+
+Three more behaviours, from the same commanded run. Each is one unit
+and one morning; the counts are given so they can be weighed.
+
+* **The element runs to the setpoint, not to a fixed point.** It
+  stopped about 0.9 degC under ``heUpperOffTempSetting``, which follows
+  the setpoint. At a 42.0 degC setpoint that was 41.1 degC; historical
+  runs at a 60.5 degC setpoint stop around 59. Only the *engagement*
+  point is fixed.
+* **Raising the setpoint in** ``ENERGY_SAVER`` **starts the element.**
+  With the tank at 41.7 degC, a setpoint raise to 61.0 degC switched the
+  heat source to heat pump plus element in the same second (n = 1). It
+  is the entry rule again, triggered by the setpoint rather than a mode
+  change. A controller writing setpoints in this mode can start a 5 kW
+  element.
+* **Every engagement came with water moving through the tank** — one
+  shower and two runs of a recirculation pump on a cooled loop, which
+  the tank experiences as draws. Whether movement is *required*, or the
+  temperature alone suffices, is not separable from these.
 
 .. warning::
 
@@ -291,13 +330,17 @@ So a consumer needs both halves:
    runs**, and they carry a sampling hazard worth repeating - one that
    bit us.
 
-   **The element runs in two very different lengths.** Of 128 raw
-   upper-element runs on this unit, 31 (24 %) lasted **under a minute**
-   - median 9 s, some as short as 2 s - and 97 ran a median 8 minutes.
-   The short ones are real elements at full power, but they carry
-   **0.8 kWh across nine months** against 97.9 kWh for the rest, and a
-   20-second burst moves the upper probe about 0.1 degC, below its own
-   0.1 degC resolution. They heat nothing.
+   **The element runs in two very different lengths.** Of 115 raw
+   upper-element runs on this unit over eight months, 20 (17 %) lasted
+   **under a minute** - median 16 s - and 95 ran a median 8 minutes.
+   The short ones are real elements at full power. They carry little
+   energy - 0.6 kWh across the record against 93 kWh for the rest -
+   but they are not negligible to the probe: a 20-second burst raises
+   the upper zone about 0.3 degC, three quanta of its 0.1 degC
+   resolution, and measured bursts of 41-58 s moved it 0.7-1.5 degC.
+   *(An earlier version said they "heat nothing", from dividing by the
+   whole tank's heat capacity rather than the upper zone's - three
+   times too large.)*
 
    They are also easy to lose or to misread. ``currentPower`` samples
    at a median 30 s, with 24 % of gaps over a minute, so **a
