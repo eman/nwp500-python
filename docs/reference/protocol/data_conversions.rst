@@ -169,18 +169,19 @@ Electric heating elements are controlled via thermostat ranges. Two sensors (upp
    **These fields describe the thermostat, and the thermostat is not
    the whole story.** Measured against the device:
 
-   - **Later in a stint the descriptions below hold.** In
-     ``ENERGY_SAVER`` the upper element comes on as the probe reaches
-     ``heUpperOnTempSetting``, exactly as described.
+   - **Later in a stint it depends on the mode.** In ``ENERGY_SAVER``
+     the upper element comes on as the probe reaches
+     ``heUpperOnTempSetting``, as described below. In ``HIGH_DEMAND`` it
+     does not: it re-engages about 2.1 degC *below* its ON setting.
+     ``ELECTRIC`` is uncharacterised.
    - **On entry to a mode they do not.** Switching into an element mode
      engages the element on a mode-dependent differential of its own,
-     while in ``HEAT_PUMP`` and ``ENERGY_SAVER`` the ON setting is
-     sitting 33 degC below the tank. That differential is published
+     while in ``ENERGY_SAVER`` the ON setting is sitting 33 degC below
+     the tank. That differential is published
      nowhere.
    - In ``ELECTRIC`` and ``HIGH_DEMAND`` the ON and OFF settings are
      **the same value** - no hysteresis at all, which cannot be how the
-     device behaves - and ``HIGH_DEMAND`` re-engages about 2.1 degC
-     *below* its ON setting.
+     device behaves.
    - **Every** ``he*DiffTempSetting`` reads 0 on a 9.x-firmware unit
      rather than the 2-5 degF described below.
 

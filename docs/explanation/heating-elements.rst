@@ -4,11 +4,22 @@ The Heating Elements
 
 The NWP500 publishes four element thermostat settings -
 ``heUpperOnTempSetting``, ``heUpperOffTempSetting`` and their lower-zone
-pair - plus a differential for each. Read literally they do not describe
-when the elements actually run: in Electric and High Demand the on and
-off settings are **the same value**, and every ``he*DiffTempSetting``
-reads 0. The device nevertheless has a differential, and this page
-gives the measured one.
+pair - plus a differential for each. Read literally they describe a
+thermostat, and how far that holds depends on the mode and the moment:
+
+* **On entry to any element mode they do not** describe when the element
+  runs. It engages on a mode-dependent differential of its own, published
+  nowhere - the start thresholds below.
+* **Later in a stint, in** ``ENERGY_SAVER`` **they do**: the element
+  engages as the probe reaches ``heUpperOnTempSetting``. That is from this
+  unit's history and confirmed by a commanded run.
+* **Later in a stint, in** ``HIGH_DEMAND`` **they do not**: it re-engages
+  about 2.1 degC below its ON setting. That is from history only.
+  ``ELECTRIC`` is uncharacterised.
+
+The fields also look wrong as a thermostat taken literally: in Electric
+and High Demand the on and off settings are **the same value**, and every
+``he*DiffTempSetting`` reads 0.
 
 **The start thresholds** here were measured on one unit by commanding
 the modes and watching - not inferred from historical logs. That

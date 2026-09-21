@@ -745,10 +745,11 @@ Technical Notes
   measured entry differential is **mode-dependent** - at most 0.3 degC
   in ``ELECTRIC``, within (0.2, 0.7] degC in ``HIGH_DEMAND``, and
   within (0.8, 1.0] degC in ``ENERGY_SAVER``.
-* **Later in a stint they do.** ``ENERGY_SAVER`` re-engages the upper
-  element as the probe reaches ``heUpperOnTempSetting``;
-  ``HIGH_DEMAND`` re-engages about 2.1 degC below it. See
-  :doc:`/explanation/heating-elements`.
+* **Later in a stint it depends on the mode.** ``ENERGY_SAVER``
+  re-engages the upper element as the probe reaches
+  ``heUpperOnTempSetting``, as the field describes. ``HIGH_DEMAND`` does
+  not: it re-engages about 2.1 degC below it. ``ELECTRIC`` is
+  uncharacterised. See :doc:`/explanation/heating-elements`.
 
 **Heat Pump Specifications:**
 

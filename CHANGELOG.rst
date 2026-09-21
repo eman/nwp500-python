@@ -25,14 +25,16 @@ Documentation
   0.2-0.3 degC short and 168 of 169 more than 2.2 degC short.
   Neither differential is published anywhere in the status message.
 
-  **Later in a stint the published thermostat is right.** From one
+  **Later in a stint it depends on the mode.** From one
   unit's recorded history, 17 of 23 mid-stint upper-element starts in
   ``ENERGY_SAVER`` have the probe in the 39.4-41.1 degC band where
   ``heUpperOnTempSetting`` rests, a median 0.2 degC below the field -
   the element comes on as the probe reaches it. ``HIGH_DEMAND``, whose
   ON setting tracks the setpoint, re-engages a median 2.1 degC *below*
-  it. So entry is the exception and the reference description is the
-  rule; ``data_conversions.rst``'s warning now says which applies when.
+  it, which the field does not describe. So in ``ENERGY_SAVER`` entry is
+  the exception and the reference description is the rule; in
+  ``HIGH_DEMAND`` it is not; ``ELECTRIC`` is uncharacterised.
+  ``data_conversions.rst``'s warning now says which applies when.
   A sampling note with it: the element runs in two very different
   lengths. Of 115 upper-element runs over eight months, 20 lasted under
   a minute (median 16 s), carrying 0.6 kWh against 93 kWh for the rest.
