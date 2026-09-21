@@ -26,7 +26,9 @@ Overview
      - Time-based (daily/weekly)
      - Mode/Temperature changes
      - Medium
-     - TOU and Vacation suspend reservations
+     - Vacation suspends reservations; reservations override TOU
+       (target temperature only, see `Reservations and mode writes
+       during a TOU window`_)
    * - TOU
      - Time + Price periods
      - Heating behavior optimization
@@ -574,7 +576,11 @@ Important Notes
   checks every minute.
 * If the device is powered off, reservations will not execute.
 * Reservations persist through power cycles and internet outages.
-* Reservations are suspended when vacation mode or TOU is active.
+* Reservations are suspended when vacation mode is active.
+* Reservations execute normally during TOU periods. However, an entry's
+  **mode** does not take effect while a TOU window is in force; only its
+  target temperature does. See `Reservations and mode writes during a
+  TOU window`_.
 
 
 Weekly Reservations
@@ -735,6 +741,50 @@ The device supports up to 16 TOU periods. Typical setups:
 * **Simple**: 3–4 periods (off-peak, shoulder, on-peak)
 * **Moderate**: 6–8 periods (split by season and weekday/weekend)
 * **Complex**: 12–16 periods (full seasonal tariff)
+
+.. _reservations and mode writes during a tou window:
+
+Reservations and mode writes during a TOU window
+------------------------------------------------
+
+A TOU window does **not** suspend reservations. It does hold back mode
+changes, whether they come from a reservation entry or from
+``set_operation_mode()``.
+
+This was measured on one NWP500 on 2026-09-20, inside an active peak
+window. TOU was enabled, ``tou_status`` was on, and the device's own
+in-window marker was present: ``hp_upper_on_temp_setting`` raised to
+the setpoint and ``hp_lower_off_diff_temp_setting`` non-zero.
+
+* **A reservation entry's temperature applies on schedule.** An entry for
+  19:01 local with ``mode_id=1`` and a 146.3 degF target was written
+  with ``update_reservations(..., enabled=True)``. The setpoint moved
+  from 141.8 degF to 146.3 degF at the scheduled minute. A second entry
+  the same evening did the same.
+* **A reservation entry's mode does not.** The same entry with
+  ``mode_id=3`` (Energy Saver) moved the setpoint at its scheduled minute.
+  ``dhw_operation_setting`` stayed ``HEAT_PUMP`` for the 4.5 minutes
+  observed.
+* **A direct mode write is held, not discarded.** ``set_operation_mode()``
+  to Energy Saver produced no error and no change for two minutes. About
+  11 seconds after TOU was switched off, it took effect with nothing
+  else commanded, and the upper element came on.
+
+So the priority is Vacation > Reservations > TOU for the target
+temperature. A mode change issued in a window may apply later, when the
+window is lifted. That includes one that looked like it failed, and it
+can start a heating element. **Confirm a mode write by reading
+``dhw_operation_setting`` back, and do not treat an unconfirmed one as
+failed.** See also :doc:`../explanation/heating-elements`.
+
+**Limits.** These results come from one device, one evening and a peak
+window only; the shoulder period was not tested. The reservation result
+comes from two runs. Two cases are untested:
+
+* an entry scheduled after a window ends;
+* whether a held mode survives to the window's natural end. Every
+  release observed came from switching TOU off manually within about two
+  minutes.
 
 Example: Summer 3-Period Schedule
 ---------------------------------

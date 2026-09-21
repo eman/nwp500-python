@@ -68,6 +68,16 @@ Documentation
   and element together about 5.5 kW, and the tank's heat gain agrees.
   All four now say so, with the measurement and its limits (one model,
   240 V only). (#139)
+- **TOU does not suspend reservations.** ``schedule-operation.rst``
+  said twice that it does, and its own priority table said otherwise. On
+  one NWP500, inside an active peak window, a reservation entry moved the
+  setpoint at its scheduled minute, twice. What the window holds back is
+  the entry's **mode**, as it does a direct ``set_operation_mode()``.
+  The mode is held, not discarded: a mode written in the window took
+  effect when TOU was switched off, and the upper element came on. The
+  priority table and Important Notes are corrected, and a new section
+  gives the measurements and their limits. ``heating-elements.rst`` now
+  links to it instead of to the issue. (#141)
 
 Version 9.4.2 (2026-09-17)
 ==========================
