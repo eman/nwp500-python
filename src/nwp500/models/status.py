@@ -958,11 +958,18 @@ class DeviceStatus(NavienBaseModel):
         estimate of what can actually be drawn - water colder than that
         still holds heat, but not heat you can wash with.
 
-        Robust in practice: ``full_recovery_energy`` is bimodal, taking
-        one of two values 2 degC apart at a fixed setpoint, but both
-        fields shift together so the difference is unaffected. Checked
-        against the tank thermistors over 12275 samples, the implied tank
+        Usually robust: ``full_recovery_energy`` is bimodal, taking one
+        of two values 2 degC apart at a fixed setpoint, but both fields
+        shift together so the difference is unaffected. Checked against
+        the tank thermistors over 12275 samples, the implied tank
         temperature agrees to a standard deviation of 0.57 degF.
+
+        The exception is a Time-of-Use window, when
+        ``hp_upper_on_temp_setting`` is raised to about the setpoint.
+        There ``energy_to_setpoint`` reaches 0 while the tank is still up
+        to about 2 degC short. This value then equals
+        ``full_recovery_energy`` and under-reads by up to about 560 Wh on
+        a 65-gallon tank. In that case, use the thermistors.
 
         Returns:
             Drawable energy in Watt-hours, clamped at zero.
