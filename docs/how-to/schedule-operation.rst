@@ -751,7 +751,8 @@ A TOU window does **not** suspend reservations. It does hold back mode
 changes, whether they come from a reservation entry or from
 ``set_operation_mode()``.
 
-This was measured on one NWP500 on 2026-09-20, inside an active peak
+This was measured on one NWP500 on the evening of 2026-09-19 (local
+time), inside an active peak
 window. TOU was enabled, ``tou_status`` was on, and the device's own
 in-window marker was present: ``hp_upper_on_temp_setting`` raised to
 the setpoint and ``hp_lower_off_diff_temp_setting`` non-zero.
@@ -777,40 +778,43 @@ can start a heating element. **Confirm a mode write by reading
 ``dhw_operation_setting`` back, and do not treat an unconfirmed one as
 failed.** See also :doc:`../explanation/heating-elements`.
 
-**Measured since (2026-09-20 and 2026-09-21), on the same unit:**
+**Measured since, on the same unit** (local dates and times):
 
 * **An entry scheduled after a window ends fires on its minute.** On
-  2026-09-21, after the peak, an entry lowering the setpoint from 141.8 to
-  137.3 degF took effect at its scheduled minute. With the upper tank at
-  135.5 degF it also started a recovery at once. See
-  :doc:`../explanation/what-starts-a-recovery`.
+  2026-09-21 at 21:43, 43 minutes after the window closed, an entry
+  lowering the setpoint from 141.8 to 137.3 degF took effect at its
+  scheduled minute. The device called for heat in the same poll. This is
+  one run. See :doc:`../explanation/what-starts-a-recovery`.
 * **A held mode survives to the window's natural end.** Energy Saver
-  commanded inside the peak on 2026-09-20 took effect at 21:00:01 local,
-  one second after the peak ended and about three hours after it was held,
-  with nothing commanded in between. ``dhw_operation_setting`` and the
-  Energy Saver element setting changed together at that moment. A mode
-  that looked failed in a window can therefore start a heating element
-  hours later.
+  commanded at 17:48 on 2026-09-20, inside the peak, took effect at
+  21:00:01, one second after the peak ended, with nothing commanded in
+  between. ``dhw_operation_setting`` and the Energy Saver element setting
+  changed together at that moment. A mode that looked failed in a window
+  can therefore take effect hours later. Here the tank was 18.7 degF above
+  its setpoint when it did, so nothing heated; with the tank short, it
+  could start an element.
 * **Writing** ``HEAT_PUMP`` **over a held mode withdraws it.** On
   2026-09-21, inside the peak, Energy Saver was held for 2 minutes,
-  ``HEAT_PUMP`` was written over it, and TOU was then switched off. Energy
-  Saver never took effect: not in the 91 seconds TOU stayed off (the
-  2026-09-20 control, a held Energy Saver with nothing written over it,
-  took effect 11 seconds after the same release), and not in the hour
-  after. So a controller that changes its mind inside a window should
-  write the mode it now wants, rather than leave the held one to land.
-* **Turning TOU back on drops a running element mode.** In the run
-  observed, switching TOU on while Energy Saver was running took the
-  device out of it.
+  ``HEAT_PUMP`` was written over it, and TOU was then switched off for
+  about 90 seconds. Energy Saver never took effect, neither while TOU was
+  off nor in the hour after. The control, on 2026-09-19, was a held Energy
+  Saver with nothing written over it; it took effect 11 seconds after the
+  same release. So a controller that changes its mind inside a window
+  should write the mode it now wants, rather than leave the held one to
+  land.
+* **Turning TOU back on inside a window drops a running element mode.** On
+  2026-09-19, switching TOU on while Energy Saver was running took the
+  device out of it within about 11 seconds. This is one run.
 * ``dhw_operation_setting`` **reports the configured mode, not activity.**
-  It read ``ENERGY_SAVER`` on landing both with the tank 0.36 degF below
-  its setpoint and with it 18.7 degF above.
+  It has read ``ENERGY_SAVER`` on a mode taking effect both with the tank
+  0.36 degF below its setpoint (from the unit's April history) and 18.7
+  degF above it (the landing above).
 
 **Limits.** These results come from one device, a few evenings and peak
-windows only; the shoulder period was not tested. Each result above comes
-from one or two runs. Whether a held mode is held by the device or
-accepted and masked in the read-back is not settled. Either way, writing
-the wanted mode over it leaves nothing pending.
+windows only; the shoulder period was not tested. Each result comes from
+one or two runs. It is not settled whether the device holds a mode or
+accepts it and masks the read-back. Either way, writing the wanted mode
+over it leaves nothing pending.
 
 Example: Summer 3-Period Schedule
 ---------------------------------
