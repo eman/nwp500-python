@@ -13,3 +13,4 @@ Understanding-oriented deep dives into the library's design and advanced feature
    tank-energy
    tou-recovery-cap
    unknown-values
+   what-starts-a-recovery

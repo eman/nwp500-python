@@ -7,6 +7,24 @@ Unreleased
 
 Documentation
 -------------
+- **New: what starts a recovery**
+  (``docs/explanation/what-starts-a-recovery.rst``). The lower-tank
+  turn-on setting is only one trigger. Measured on one unit: the lower
+  setting reads 104.9 degF at every setpoint and never follows it; inside
+  a TOU window ``hp_upper_on_temp_setting`` equals the setpoint, so the
+  upper probe can start a cycle; and **a control write re-evaluates**. A
+  setpoint write leaving the upper tank below the new setpoint started
+  the compressor within 2 minutes in 112 of 117 writes (a median 30 s
+  later), lowerings included, and 46 of 81 mode writes did the same. A
+  mid-cycle setpoint drop stops the compressor within 5 s. A lowered
+  setpoint holds off the in-window upper trigger but not a draw-driven
+  start. It includes traps for anyone re-deriving this from history.
+- **TOU window: two open cases measured.** In
+  ``docs/how-to/schedule-operation.rst``: an entry scheduled after a
+  window fires on its minute; a mode held in a window takes effect when
+  the window ends naturally (one second after, about three hours later);
+  writing ``HEAT_PUMP`` over a held mode withdraws it; and turning TOU
+  back on drops a running element mode.
 - **New: what the heating elements actually do**
   (``docs/explanation/heating-elements.rst``). The four
   ``he*TempSetting`` fields describe the thermostat, and **on entry to

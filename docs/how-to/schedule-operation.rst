@@ -777,14 +777,40 @@ can start a heating element. **Confirm a mode write by reading
 ``dhw_operation_setting`` back, and do not treat an unconfirmed one as
 failed.** See also :doc:`../explanation/heating-elements`.
 
-**Limits.** These results come from one device, one evening and a peak
-window only; the shoulder period was not tested. The reservation result
-comes from two runs. Two cases are untested:
+**Measured since (2026-09-20 and 2026-09-21), on the same unit:**
 
-* an entry scheduled after a window ends;
-* whether a held mode survives to the window's natural end. Every
-  release observed came from switching TOU off manually within about two
-  minutes.
+* **An entry scheduled after a window ends fires on its minute.** On
+  2026-09-21, after the peak, an entry lowering the setpoint from 141.8 to
+  137.3 degF took effect at its scheduled minute. With the upper tank at
+  135.5 degF it also started a recovery at once. See
+  :doc:`../explanation/what-starts-a-recovery`.
+* **A held mode survives to the window's natural end.** Energy Saver
+  commanded inside the peak on 2026-09-20 took effect at 21:00:01 local,
+  one second after the peak ended and about three hours after it was held,
+  with nothing commanded in between. ``dhw_operation_setting`` and the
+  Energy Saver element setting changed together at that moment. A mode
+  that looked failed in a window can therefore start a heating element
+  hours later.
+* **Writing** ``HEAT_PUMP`` **over a held mode withdraws it.** On
+  2026-09-21, inside the peak, Energy Saver was held for 2 minutes,
+  ``HEAT_PUMP`` was written over it, and TOU was then switched off. Energy
+  Saver never took effect: not in the 91 seconds TOU stayed off (the
+  2026-09-20 control, a held Energy Saver with nothing written over it,
+  took effect 11 seconds after the same release), and not in the hour
+  after. So a controller that changes its mind inside a window should
+  write the mode it now wants, rather than leave the held one to land.
+* **Turning TOU back on drops a running element mode.** In the run
+  observed, switching TOU on while Energy Saver was running took the
+  device out of it.
+* ``dhw_operation_setting`` **reports the configured mode, not activity.**
+  It read ``ENERGY_SAVER`` on landing both with the tank 0.36 degF below
+  its setpoint and with it 18.7 degF above.
+
+**Limits.** These results come from one device, a few evenings and peak
+windows only; the shoulder period was not tested. Each result above comes
+from one or two runs. Whether a held mode is held by the device or
+accepted and masked in the read-back is not settled. Either way, writing
+the wanted mode over it leaves nothing pending.
 
 Example: Summer 3-Period Schedule
 ---------------------------------
