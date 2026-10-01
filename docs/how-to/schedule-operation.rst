@@ -358,6 +358,16 @@ multiple entries at once:
        device, reservations, enabled=True
    )
 
+``update_reservations()`` and ``update_reservations_confirmed()`` check
+every raw entry before anything is sent, and raise
+:class:`~nwp500.exceptions.ParameterValidationError` or
+:class:`~nwp500.exceptions.RangeValidationError` on a bad one. Each
+``param`` must lie within the setpoint range the heater reports in its
+feature data (``dhw_temperature_min_raw`` to ``dhw_temperature_max_raw``,
+both in half-degrees Celsius like ``param``). The heater clamps an
+out-of-range setpoint itself; the check makes a bad entry fail early and
+clearly instead.
+
 **Disable reservations** (entries are preserved on the device):
 
 .. code-block:: python

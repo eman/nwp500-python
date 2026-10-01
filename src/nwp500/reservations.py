@@ -17,6 +17,7 @@ from typing import TYPE_CHECKING, Any
 from .converters import device_bool_from_python
 from .encoding import build_reservation_entry, encode_week_bitfield
 from .models import ReservationEntry, ReservationSchedule
+from .mqtt.control import validate_reservation_entries
 
 if TYPE_CHECKING:
     from .models import Device
@@ -119,7 +120,22 @@ async def update_reservations_confirmed(
         what was just written. This avoids resolving on a stale/unrelated
         ``rsv/rd`` message (e.g. from a concurrent read or a previous
         write) that happens to arrive in the same window.
+
+        Entries are checked before anything is sent; see
+        :func:`nwp500.mqtt.control.validate_reservation_entries`.
+
+    Raises:
+        ParameterValidationError: If an entry has a missing or non-integer
+            field, or a bad ``enable`` or ``week``.
+        RangeValidationError: If an entry's ``hour``, ``min`` or ``mode``
+            is out of range, or its ``param`` is outside the device's
+            setpoint range.
     """
+    # Structural checks first, so a bad entry neither subscribes nor builds
+    # a coerced expectation (``ReservationEntry`` turns ``True`` into 1).
+    # The setpoint range is checked by ``update_reservations`` against the
+    # device's feature data, still before anything is published.
+    validate_reservation_entries(reservations)
     expected = ReservationSchedule(
         reservationUse=device_bool_from_python(enabled),
         reservation=[ReservationEntry(**entry) for entry in reservations],

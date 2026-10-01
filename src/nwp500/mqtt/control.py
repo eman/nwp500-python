@@ -27,7 +27,7 @@ weekly reservation) have no method.
 """
 
 import logging
-from collections.abc import Awaitable, Callable, Sequence
+from collections.abc import Awaitable, Callable, Mapping, Sequence
 from datetime import UTC, datetime
 from typing import Any
 
@@ -118,6 +118,120 @@ def validate_recirculation_schedule(schedule: RecirculationSchedule) -> None:
                     f"reservation[{index}].{name}",
                     value,
                 )
+
+
+RESERVATION_ENTRY_FIELDS = ("enable", "week", "hour", "min", "mode", "param")
+# DhwOperationSetting ids are contiguous (1-6), so a range check covers them.
+_DHW_MODE_MIN = min(DhwOperationSetting)
+_DHW_MODE_MAX = max(DhwOperationSetting)
+
+
+def validate_reservation_entries(
+    reservations: Sequence[Mapping[str, Any]],
+    features: DeviceFeature | None = None,
+) -> None:
+    """Check raw reservation entries before they are written to the device.
+
+    :class:`~nwp500.models.ReservationEntry` accepts any integers so that
+    device read-backs always parse; writes are held to what the device
+    accepts. Each entry must carry the six protocol fields as plain
+    integers (a ``bool`` or ``float`` is rejected): ``enable`` 1 (off) or
+    2 (on), ``week`` a day bitfield (2-254, bit 0 clear), ``hour`` 0-23,
+    ``min`` 0-59 and ``mode`` a :class:`~nwp500.enums.DhwOperationSetting`
+    id.
+
+    ``param`` is the setpoint in half-degrees Celsius. With ``features``
+    it must lie within the range the heater reports,
+    ``dhw_temperature_min_raw`` to ``dhw_temperature_max_raw``; without
+    them, only within the single byte the protocol carries (0-255).
+
+    Args:
+        reservations: Raw entry dicts, as passed to ``update_reservations``.
+        features: The device's feature data, for its setpoint limits.
+
+    Raises:
+        ParameterValidationError: On a missing field, a non-integer field,
+            or a bad ``enable`` or ``week``.
+        RangeValidationError: On ``hour``, ``min``, ``mode`` or ``param``
+            outside its range.
+    """
+    for index, entry in enumerate(reservations, start=1):
+        _check_reservation_entry(index, entry)
+    if features is not None:
+        _check_reservation_setpoints(reservations, features)
+
+
+def _check_reservation_entry(index: int, entry: Mapping[str, Any]) -> None:
+    """Check one entry's fields, except ``param`` against device limits."""
+    for name in RESERVATION_ENTRY_FIELDS:
+        if name not in entry:
+            raise ParameterValidationError(
+                f"entry {index}: missing field {name!r}",
+                parameter=f"reservation[{index}].{name}",
+            )
+        if not _is_int(entry[name]):
+            raise ParameterValidationError(
+                f"entry {index}: {name} must be an integer",
+                parameter=f"reservation[{index}].{name}",
+                value=entry[name],
+            )
+
+    enable = entry["enable"]
+    if enable not in (1, 2):
+        raise ParameterValidationError(
+            f"entry {index}: enable must be 1 (off) or 2 (on), got {enable}",
+            parameter=f"reservation[{index}].enable",
+            value=enable,
+        )
+    week = entry["week"]
+    if not (0 < week <= 254 and week % 2 == 0):
+        raise ParameterValidationError(
+            f"entry {index}: week={week} is not a day bitfield "
+            "(Sun=128 .. Sat=2, at least one day, bit 0 clear)",
+            parameter=f"reservation[{index}].week",
+            value=week,
+        )
+
+    ranges = [
+        ("hour", 0, 23),
+        ("min", 0, 59),
+        ("mode", int(_DHW_MODE_MIN), int(_DHW_MODE_MAX)),
+        ("param", 0, 255),
+    ]
+    for name, low, high in ranges:
+        value = entry[name]
+        if not low <= value <= high:
+            raise RangeValidationError(
+                f"entry {index}: {name} must be between {low} and {high}, "
+                f"got {value}",
+                field=f"reservation[{index}].{name}",
+                value=value,
+                min_value=low,
+                max_value=high,
+            )
+
+
+def _check_reservation_setpoints(
+    reservations: Sequence[Mapping[str, Any]], features: DeviceFeature
+) -> None:
+    """Hold each entry's ``param`` to the setpoint range the heater reports.
+
+    Both ``param`` and the feature limits are half-degrees Celsius, so they
+    compare without conversion.
+    """
+    low = features.dhw_temperature_min_raw
+    high = features.dhw_temperature_max_raw
+    for index, entry in enumerate(reservations, start=1):
+        param = entry["param"]
+        if not low <= param <= high:
+            raise RangeValidationError(
+                f"entry {index}: param={param} (half-degrees C) is outside "
+                f"the device's setpoint range {low}-{high}",
+                field=f"reservation[{index}].param",
+                value=param,
+                min_value=low,
+                max_value=high,
+            )
 
 
 class MqttDeviceController:
@@ -569,6 +683,27 @@ class MqttDeviceController:
             [preferred_to_half_celsius(temperature)],
         )
 
+    async def _get_reservation_limits(self, device: Device) -> DeviceFeature:
+        """Fetch the feature data that carries the device's setpoint range.
+
+        Mirrors :func:`~nwp500.command_decorators.requires_capability`: a
+        failed fetch (a feature-response timeout, a lost connection) is
+        reported as :class:`DeviceCapabilityError`, like a missing result.
+        """
+        capability = "dhw_temperature_setting_use"
+        message = "Unable to validate reservation temperatures"
+        try:
+            features = await self._get_device_features(device)
+        except DeviceCapabilityError:
+            raise
+        except Exception as e:
+            raise DeviceCapabilityError(capability, f"{message}: {e!s}") from e
+        if features is None:
+            raise DeviceCapabilityError(
+                capability, f"{message}: device features not available."
+            )
+        return features
+
     async def update_reservations(
         self,
         device: Device,
@@ -579,6 +714,11 @@ class MqttDeviceController:
         """
         Update programmed reservations for temperature/mode changes.
 
+        Every entry is checked before anything is sent (see
+        :func:`validate_reservation_entries`). Each ``param`` is held to
+        the setpoint range the heater reports in its feature data, which is
+        requested from the device if it is not cached yet.
+
         Args:
             device: Device object
             reservations: List of reservation entries
@@ -586,7 +726,21 @@ class MqttDeviceController:
 
         Returns:
             Publish packet ID
+
+        Raises:
+            ParameterValidationError: If an entry has a missing or
+                non-integer field, or a bad ``enable`` or ``week``.
+            RangeValidationError: If an entry's ``hour``, ``min`` or
+                ``mode`` is out of range, or its ``param`` is outside the
+                device's setpoint range.
+            DeviceCapabilityError: If the device's feature data, and so
+                its setpoint range, is not available.
         """
+        validate_reservation_entries(reservations)
+        if reservations:
+            features = await self._get_reservation_limits(device)
+            _check_reservation_setpoints(reservations, features)
+
         # See docs/reference/protocol/mqtt_protocol.rst "Reservations" for the
         # command code (16777226) and the reservation object fields
         # (enable, week, hour, min, mode, param).
