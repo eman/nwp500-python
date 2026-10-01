@@ -5,6 +5,27 @@ Changelog
 Unreleased
 ==========
 
+Changed
+-------
+- **Raw reservation writes are now validated** (#148).
+  ``update_reservations()`` and ``update_reservations_confirmed()`` sent
+  their entry dicts unchecked, so an unknown mode such as 7, an hour of 99
+  or a setpoint of 200 (100 degC) went to the device as-is. A Python
+  ``True`` for ``enable`` was worse: the confirmed helper read it as 1,
+  which means disabled. Every entry is now checked before anything is
+  sent, with the same rules as ``build_reservation_entry()``: the six
+  protocol fields present and plain integers, ``enable`` 1 or 2, ``week``
+  a day bitfield, ``hour`` 0-23, ``min`` 0-59 and ``mode`` a
+  ``DhwOperationSetting`` id. ``param`` is held to the setpoint range the
+  heater reports in its feature data (``dhw_temperature_min_raw`` to
+  ``dhw_temperature_max_raw``), which is requested if it is not cached;
+  clearing the schedule with an empty list needs none. A bad entry raises
+  ``ParameterValidationError`` or ``RangeValidationError``, and missing
+  feature data raises ``DeviceCapabilityError``. Callers that wrote
+  entries outside these ranges and relied on the heater to clamp them now
+  get an error instead. The checks are also available on their own as
+  ``nwp500.mqtt.control.validate_reservation_entries()``.
+
 Documentation
 -------------
 - **New: what starts a recovery**

@@ -490,6 +490,24 @@ update_reservations()
    :type reservations: Sequence[dict[str, Any]]
    :param enabled: Global reservation enable flag
    :type enabled: bool
+   :raises ParameterValidationError: If an entry is missing a field, has a
+      non-integer field (a ``bool`` or ``float`` is rejected), an ``enable``
+      other than ``1``/``2``, or a ``week`` that is not a day bitfield
+      (``2``-``254``, bit 0 clear)
+   :raises RangeValidationError: If an entry's ``hour`` is outside
+      ``0``-``23``, ``min`` outside ``0``-``59``, ``mode`` not a
+      :class:`~nwp500.enums.DhwOperationSetting` id (``1``-``6``), or
+      ``param`` outside the setpoint range the device reports
+      (``dhw_temperature_min_raw``-``dhw_temperature_max_raw``, in
+      half-degrees Celsius)
+   :raises DeviceCapabilityError: If the device's feature data is not
+      available, so its setpoint range is unknown
+
+   Every entry is checked before anything is sent. The setpoint range
+   comes from the device's feature data, which is requested if it is not
+   cached; an empty list needs no feature data. The same checks are
+   available on their own as
+   :func:`nwp500.mqtt.control.validate_reservation_entries`.
 
    **Example:**
 
