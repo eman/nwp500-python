@@ -252,6 +252,29 @@ class TestControllerUpdateReservations:
         publish.assert_not_awaited()
 
     @pytest.mark.asyncio
+    async def test_feature_fetch_timeout_raises_capability_error(
+        self, mock_device: MagicMock
+    ) -> None:
+        """A cache miss whose device-info request times out uses the real
+        fetch path, which raises RuntimeError; the write reports it as a
+        capability error, as the capability decorator does."""
+        publish = AsyncMock(return_value=1)
+        controller = MqttDeviceController(
+            client_id="test-client",
+            session_id="test-session",
+            publish_func=publish,
+        )
+        ensure_info = AsyncMock(return_value=False)  # feature reply timed out
+        controller.set_ensure_device_info_callback(ensure_info)
+
+        with pytest.raises(DeviceCapabilityError) as exc:
+            await controller.update_reservations(mock_device, [_entry()])
+
+        assert isinstance(exc.value.__cause__, RuntimeError)
+        ensure_info.assert_awaited_once_with(mock_device)
+        publish.assert_not_awaited()
+
+    @pytest.mark.asyncio
     async def test_empty_schedule_needs_no_features(
         self, mock_device: MagicMock
     ) -> None:

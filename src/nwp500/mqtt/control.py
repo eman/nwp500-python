@@ -683,6 +683,27 @@ class MqttDeviceController:
             [preferred_to_half_celsius(temperature)],
         )
 
+    async def _get_reservation_limits(self, device: Device) -> DeviceFeature:
+        """Fetch the feature data that carries the device's setpoint range.
+
+        Mirrors :func:`~nwp500.command_decorators.requires_capability`: a
+        failed fetch (a feature-response timeout, a lost connection) is
+        reported as :class:`DeviceCapabilityError`, like a missing result.
+        """
+        capability = "dhw_temperature_setting_use"
+        message = "Unable to validate reservation temperatures"
+        try:
+            features = await self._get_device_features(device)
+        except DeviceCapabilityError:
+            raise
+        except Exception as e:
+            raise DeviceCapabilityError(capability, f"{message}: {e!s}") from e
+        if features is None:
+            raise DeviceCapabilityError(
+                capability, f"{message}: device features not available."
+            )
+        return features
+
     async def update_reservations(
         self,
         device: Device,
@@ -717,15 +738,7 @@ class MqttDeviceController:
         """
         validate_reservation_entries(reservations)
         if reservations:
-            features = await self._get_device_features(device)
-            if features is None:
-                raise DeviceCapabilityError(
-                    "dhw_temperature_setting_use",
-                    (
-                        "Device features not available. "
-                        "Unable to validate reservation temperatures."
-                    ),
-                )
+            features = await self._get_reservation_limits(device)
             _check_reservation_setpoints(reservations, features)
 
         # See docs/reference/protocol/mqtt_protocol.rst "Reservations" for the
