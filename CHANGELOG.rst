@@ -5,6 +5,9 @@ Changelog
 Unreleased
 ==========
 
+Version 9.4.3 (2026-10-01)
+==========================
+
 Changed
 -------
 - **Raw reservation writes are now validated** (#148).
