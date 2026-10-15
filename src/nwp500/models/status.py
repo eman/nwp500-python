@@ -909,14 +909,14 @@ class DeviceStatus(NavienBaseModel):
     @computed_field  # type: ignore[prop-decorator]
     @property
     def target_super_heat(self) -> float:
-        return DeciCelsius(self.target_super_heat_raw).to_preferred(
+        return DeciCelsiusDelta(self.target_super_heat_raw).to_preferred(
             self._is_celsius()
         )
 
     @computed_field  # type: ignore[prop-decorator]
     @property
     def current_super_heat(self) -> float:
-        return DeciCelsius(self.current_super_heat_raw).to_preferred(
+        return DeciCelsiusDelta(self.current_super_heat_raw).to_preferred(
             self._is_celsius()
         )
 

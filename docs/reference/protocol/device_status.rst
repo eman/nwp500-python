@@ -150,9 +150,9 @@ This document lists the fields found in the ``status`` object of device status m
      - DeciCelsiusToF
    * - ``targetSuperHeat``
      - integer
-     - °F
-     - Target superheat value - the desired temperature difference ensuring complete refrigerant vaporization.
-     - DeciCelsiusToF
+     - °F (difference)
+     - Target superheat value - the desired temperature difference ensuring complete refrigerant vaporization. A difference, so °F is ``raw / 10.0 * 9/5`` with no +32 offset.
+     - ``raw / 10.0`` (°C), ``raw / 10.0 * 9/5`` (°F)
    * - ``compUse``
      - bool
      - None
@@ -305,9 +305,9 @@ This document lists the fields found in the ``status`` object of device status m
      - None
    * - ``currentSuperHeat``
      - integer
-     - °F
-     - Current superheat value - actual temperature difference between suction and evaporator temperatures.
-     - DeciCelsiusToF
+     - °F (difference)
+     - Current superheat value - actual temperature difference between suction and evaporator temperatures. A difference, so °F is ``raw / 10.0 * 9/5`` with no +32 offset.
+     - ``raw / 10.0`` (°C), ``raw / 10.0 * 9/5`` (°F)
    * - ``heatUpperUse``
      - bool
      - None
