@@ -64,8 +64,11 @@ class DiagnosticsEventCounters(NavienBaseModel):
 class DiagnosticsDhwUsage(NavienBaseModel):
     """Hot water draw statistics (wire object ``tdData``).
 
-    All zero on the unit this was verified against, so the units of the
-    flow and time fields are unknown.
+    Units are the NaviLink app's labels on its diagnostics screen, which
+    shows these values unconverted in either unit setting: ``*_total_flow``
+    in litres, ``*_total_time`` in hours, ``average_recovery_time`` in
+    minutes, and ``num_of_*`` as counts. All zero, draw counts included, on
+    the unit this was checked against.
     """
 
     #: The wire key is ``numOfdhwUse`` (lowercase ``dhw``).

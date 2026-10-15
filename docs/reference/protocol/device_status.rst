@@ -289,10 +289,10 @@ This document lists the fields found in the ``status`` object of device status m
      - Second DHW temperature reading.
      - HalfCelsiusToF
    * - ``currentDhwFlowRate``
-     - float
-     - GPM
-     - Current DHW flow rate in Gallons Per Minute.
-     - ``raw / 10.0``
+     - integer
+     - LPM or GPM
+     - Current DHW flow rate. The raw value is tenths of a litre per minute in either ``temperatureType``; see :ref:`flow-rate-fields`.
+     - ``raw / 10.0`` (LPM), ``raw / 10.0 / 3.785`` (GPM)
    * - ``mixingRate``
      - integer
      - %
@@ -345,9 +345,9 @@ This document lists the fields found in the ``status`` object of device status m
      - None
    * - ``cumulatedDhwFlowRate``
      - integer
-     - gallons
-     - Cumulative DHW flow - total gallons of hot water delivered since installation.
-     - None
+     - L or gal
+     - Cumulative DHW flow - total hot water delivered since installation, in whole litres; see :ref:`flow-rate-fields`.
+     - ``raw`` (L), ``raw / 3.785`` (gal)
    * - ``touStatus``
      - integer
      - None

@@ -5,6 +5,29 @@ Changelog
 Unreleased
 ==========
 
+Documentation
+-------------
+- **Flow-rate units corrected** (#154). The protocol reference said
+  ``currentDhwFlowRate`` and ``recircDhwFlowRate`` were tenths of a GPM and
+  ``cumulatedDhwFlowRate`` was gallons, while the properties treated them as
+  tenths of an LPM and as litres. The properties are right. Navien's
+  NaviLink app (2.01.02, decompiled) shows ``currentDhwFlowRate`` as
+  ``raw / 10`` LPM in Celsius and ``raw / 3.785 / 10`` GPM in Fahrenheit.
+  The NWP500 manual lists the panel's water-flow reading in LPM even though
+  the panel defaults to GPM. The app's diagnostics screen shows the heater's
+  hot-water volume totals in whole litres in either setting. Flow rates are
+  0.1 LPM and the cumulative counter is whole litres in both unit systems.
+  ``device_status.rst``, ``data_conversions.rst`` and ``mqtt_protocol.rst``
+  now say so, and ``DiagnosticsDhwUsage`` documents its units (litres, hours,
+  minutes, counts) instead of calling them unknown. ``unknown-values.rst``
+  notes that on the unit checked, ``cumulatedDhwFlowRate`` and every draw
+  counter read 0 after 392 days in use, so a 0 there does not mean no water
+  was used. Library output is unchanged. The raw fields no longer carry a
+  fixed ``"GPM"`` or ``"gal"`` ``unit_of_measurement``, which contradicted
+  their raw units. ``get_field_unit()``, which was already driven by
+  ``device_class``, returns the same units as before. New tests pin both
+  flow properties to the app's formula in each unit system.
+
 Version 9.4.3 (2026-10-01)
 ==========================
 

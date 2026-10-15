@@ -120,10 +120,50 @@ def test_flow_rate_conversion(device_status_dict: dict[str, Any]):
     assert status_c.current_dhw_flow_rate == 10.0  # Should be LPM
 
 
+@pytest.mark.parametrize("raw", [0, 1, 7, 25, 68, 95, 132, 300])
+@pytest.mark.parametrize(
+    ("alias", "attr"),
+    [
+        ("currentDhwFlowRate", "current_dhw_flow_rate"),
+        ("recircDhwFlowRate", "recirc_dhw_flow_rate"),
+    ],
+)
+def test_flow_rate_matches_navilink_app(
+    device_status_dict: dict[str, Any], raw: int, alias: str, attr: str
+):
+    """Flow rates decode the way the NaviLink app shows them (#154).
+
+    The app's status screen (2.01.02, MgppStatusFragment) shows
+    currentDhwFlowRate as raw / 10.0 "LPM" in Celsius and as
+    raw / 3.785 / 10.0 "GPM" in Fahrenheit: the raw value is 0.1 LPM in
+    either unit system, not 0.1 GPM. recircDhwFlowRate is never shown by the
+    app and is assumed to share the encoding.
+    """
+    c_data = device_status_dict.copy()
+    c_data["temperatureType"] = 1  # CELSIUS
+    c_data[alias] = raw
+    status_c = DeviceStatus.model_validate(c_data)
+    assert getattr(status_c, attr) == pytest.approx(raw / 10.0)
+    assert status_c.get_field_unit(attr) == " LPM"
+
+    f_data = device_status_dict.copy()
+    f_data["temperatureType"] = 2  # FAHRENHEIT
+    f_data[alias] = raw
+    status_f = DeviceStatus.model_validate(f_data)
+    assert getattr(status_f, attr) == pytest.approx(
+        raw / 3.785 / 10.0, abs=0.01
+    )
+    assert status_f.get_field_unit(attr) == " GPM"
+
+
 def test_volume_conversion(device_status_dict: dict[str, Any]):
-    """Test volume conversion (Liters <-> Gallons)."""
+    """cumulatedDhwFlowRate is whole litres in either unit system (#154).
+
+    The app never parses this field. The firmware keeps its other hot-water
+    volume totals (tdData dhwUseTotalFlow) in whole litres, shown by the app
+    with a fixed "Liter" label.
+    """
     # Case 1: Fahrenheit (Imperial) -> Gallons
-    # Assumption: Raw value is in Liters (Metric Native)
     # 100 Liters * 0.264172 = 26.4172 Gallons
     f_data = device_status_dict.copy()
     f_data["temperatureType"] = 2  # FAHRENHEIT
