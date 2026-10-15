@@ -43,7 +43,7 @@ The device uses several encoding schemes to minimize transmission overhead:
    - Purpose: Represents temperature DIFFERENCES/DELTAS, not absolute temperatures
    - Unlike absolute temperature conversion, no +32 offset is applied when converting to Fahrenheit
    - Example: Raw 5 → 0.5°C delta → 0.9°F delta (NOT 32.9°F)
-   - Used for: Heat pump on/off differential, heating element on/off differential
+   - Used for: Heat pump on/off differential, heating element on/off differential, target and current superheat
 
 4. **Boolean Encoding** (device_bool)
    - Applied to all status flags
@@ -145,13 +145,13 @@ These temperatures monitor the heat pump refrigerant circuit health and performa
      - °F
      - **Ambient air temperature** measured at heat pump inlet. Directly affects system performance. At freezing (32°F), heat pump efficiency drops significantly.
    * - ``targetSuperHeat``
-     - DeciCelsiusToF
-     - °F
-     - **Target superheat setpoint**. Desired temperature difference between suction and evaporator ensuring complete refrigerant vaporization. Typically 10-20°F.
+     - div_10_celsius_delta
+     - °F (difference)
+     - **Target superheat setpoint**. Desired temperature difference between suction and evaporator ensuring complete refrigerant vaporization. A difference, so no +32 offset in °F: raw 50 is 5.0°C or 9.0°F. Reads raw 50 constantly on the unit these docs were checked against.
    * - ``currentSuperHeat``
-     - DeciCelsiusToF
-     - °F
-     - **Measured superheat value**. Actual temperature difference. Deviation from target indicates EEV (Electronic Expansion Valve) control issues.
+     - div_10_celsius_delta
+     - °F (difference)
+     - **Measured superheat value**. Actual temperature difference, converted like ``targetSuperHeat``. Deviation from target indicates EEV (Electronic Expansion Valve) control issues.
 
 **Refrigerant Circuit Diagnostics**:
 - If ``currentSuperHeat >> targetSuperHeat``: EEV may be stuck open (undercharge symptoms)

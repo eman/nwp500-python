@@ -156,6 +156,35 @@ def test_flow_rate_matches_navilink_app(
     assert status_f.get_field_unit(attr) == " GPM"
 
 
+@pytest.mark.parametrize(
+    ("alias", "attr"),
+    [
+        ("targetSuperHeat", "target_super_heat"),
+        ("currentSuperHeat", "current_super_heat"),
+    ],
+)
+@pytest.mark.parametrize(
+    ("temperature_type", "expected"),
+    [(1, 5.0), (2, 9.0)],  # CELSIUS, FAHRENHEIT
+)
+def test_superheat_is_a_difference(
+    device_status_dict: dict[str, Any],
+    alias: str,
+    attr: str,
+    temperature_type: int,
+    expected: float,
+):
+    """Superheat converts as a difference, without the +32 offset (#153).
+
+    Raw 50 is 5.0 degC of superheat, which is 9.0 degF, not 41.0 degF.
+    """
+    data = device_status_dict.copy()
+    data["temperatureType"] = temperature_type
+    data[alias] = 50
+    status = DeviceStatus.model_validate(data)
+    assert getattr(status, attr) == expected
+
+
 def test_volume_conversion(device_status_dict: dict[str, Any]):
     """cumulatedDhwFlowRate is whole litres in either unit system (#154).
 

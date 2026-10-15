@@ -5,6 +5,19 @@ Changelog
 Unreleased
 ==========
 
+Changed
+-------
+- **Superheat is converted as a difference** (#153).
+  ``DeviceStatus.target_super_heat`` and ``current_super_heat`` converted
+  their raw tenths of a degree Celsius as absolute temperatures, so in
+  Fahrenheit they added 32. Superheat is a temperature difference (suction
+  minus evaporator), so they now use ``DeciCelsiusDelta``, as the
+  ``*_diff_temp_setting`` properties already do. Raw 50 now reads 9.0 degF
+  instead of 41.0 degF. **Behaviour change:** every Fahrenheit value drops
+  by 32, so stored or charted Fahrenheit superheat from earlier versions is
+  32 degF too high. Celsius values are unchanged. The protocol docs now
+  describe both fields as differences.
+
 Documentation
 -------------
 - **Flow-rate units corrected** (#154). The protocol reference said
