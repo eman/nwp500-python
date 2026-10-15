@@ -143,7 +143,7 @@ These temperatures monitor the heat pump refrigerant circuit health and performa
    * - ``ambientTemperature``
      - DeciCelsiusToF
      - °F
-     - **Ambient air temperature** measured at heat pump inlet. Directly affects system performance. At freezing (32°F), heat pump efficiency drops significantly.
+     - **Ambient air temperature** around the unit. The heat pump runs only between 41°F (5°C) and 113°F (45°C); outside that range the front panel shows "Operation Prevention in Progress" (User's Information Manual, section 3.13.1).
    * - ``targetSuperHeat``
      - div_10_celsius_delta
      - °F (difference)
@@ -157,7 +157,7 @@ These temperatures monitor the heat pump refrigerant circuit health and performa
 - If ``currentSuperHeat >> targetSuperHeat``: EEV may be stuck open (undercharge symptoms)
 - If ``currentSuperHeat << targetSuperHeat``: EEV may be stuck closed (overcharge symptoms)
 - If ``dischargeTemperature`` extremely high (>200°F): System may be in bypass protection
-- If ``ambientTemperature`` below 32°F: Heat pump COP (efficiency) significantly reduced
+- If ``ambientTemperature`` is below 41°F or above 113°F: the heat pump does not run
 
 Heating Element Control Temperatures
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -564,7 +564,7 @@ Vacation and Scheduling Fields
    * - ``vacationDaySetting``
      - None (direct value)
      - days
-     - **User-configured vacation duration** (0-99 days). When vacation mode activated, heating suspends for this period. Resumption scheduled 9 hours before end.
+     - **User-configured vacation duration** (1-99 days; the front panel shows 0 as Off). When vacation mode activated, heating suspends for this period. Resumption scheduled 9 hours before end.
    * - ``vacationDayElapsed``
      - None (direct value)
      - days
@@ -582,9 +582,9 @@ Vacation and Scheduling Fields
      - See values below
      - **Time-of-Use (TOU) schedule status**. 0 = inactive/disabled, 1 = active/enabled. Controls heating based on electricity rate periods.
    * - ``drEventStatus``
-     - None (direct value)
-     - Bitfield
-     - **Demand Response event status** (CTA-2045). Each bit represents a DR signal. 0=no active events, non-zero=DR commands active.
+     - enum
+     - ``DREvent``
+     - **Demand Response event status** (CTA-2045). An enumerated value, not a bitfield: 0 = Not Applied, 1 = Run Normal, 2 = Shed, 3 = Load Up, 4 = Advanced Load Up, 5 = CPE / Grid Emergency. Matches the NaviLink app's ``HPWHDREvent``.
    * - ``drOverrideStatus``
      - None (direct value)
      - See explanation
@@ -747,4 +747,4 @@ See Also
 * :doc:`error_codes` - Error code reference for fault diagnosis
 * :doc:`../../how-to/track-energy` - Using energy data for optimization
 * :doc:`../../how-to/optimize-tou` - TOU scheduling and rate optimization
-* :doc:`../../explanation/advanced-features` - Weather-responsive heating, demand response, and tank stratification
+* :doc:`../../explanation/what-starts-a-recovery` - How the tank sensors and settings trigger heating

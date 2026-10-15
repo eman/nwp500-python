@@ -157,7 +157,7 @@ class DeviceControlCommandsMixin:
         return await self._device_controller.reset_air_filter(device)
 
     async def set_vacation_days(self, device: Device, days: int) -> int:
-        """Enter vacation mode for ``days`` days (1-30)."""
+        """Enter vacation mode for ``days`` days (1-99)."""
         return await self._device_controller.set_vacation_days(device, days)
 
     async def set_vacation_duration(self, device: Device, days: int) -> int:

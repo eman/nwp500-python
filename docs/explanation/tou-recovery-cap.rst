@@ -130,7 +130,10 @@ Two plausible explanations were tested and **refuted**:
   only 2 of 137 unreached cycles, against 179 of 196 reached ones. The
   upper probe finishes short too, by a median of 4.5 degF.
 - *The device terminates on outlet temperature.* No -
-  ``dhw_outlet_temperature`` reached the setpoint on only 2 of 136.
+  ``dhw_temperature`` reached the setpoint on only 2 of 136. This is the
+  field the protocol calls the outlet temperature (Home Assistant names
+  it "DHW outlet temperature"); it is read inside the tank, and the
+  heater has no sensor in the outlet pipe.
 
 
 What is not yet established

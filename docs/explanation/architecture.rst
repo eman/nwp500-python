@@ -77,5 +77,5 @@ The library implements an asynchronous event system. You can subscribe to variou
 See Also
 ========
 
-* :doc:`advanced-features` - Deep dive into TOU, reservations, and more.
+* :doc:`what-starts-a-recovery` - What triggers a heating cycle, measured on a real unit.
 * :doc:`../reference/protocol/mqtt_protocol` - Low-level details of the MQTT messaging.

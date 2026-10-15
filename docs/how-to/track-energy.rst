@@ -61,25 +61,36 @@ Know which heating components are currently active:
 Cumulative Usage Statistics
 ---------------------------
 
-Track total runtime for each heating component:
+Device status does not carry lifetime run times. The installer
+diagnostics query does, already in hours:
 
 .. code:: python
 
-   def on_status(status: DeviceStatus):
-       # Convert minutes to hours
-       comp_hours = status.comp_running_minute_total / 60
-       heater1_hours = status.heater1_running_minute_total / 60
-       heater2_hours = status.heater2_running_minute_total / 60
-       
-       print(f"Heat Pump Runtime: {comp_hours:.1f} hours")
-       print(f"Upper Heater Runtime: {heater1_hours:.1f} hours")
-       print(f"Lower Heater Runtime: {heater2_hours:.1f} hours")
+   from nwp500 import DeviceDiagnostics
 
-**Fields:**
+   def on_diagnostics(diag: DeviceDiagnostics):
+       ta = diag.ta_data
+       print(f"Heat Pump Runtime: {ta.cumulated_op_time_comp} hours "
+             f"({ta.cumulated_op_num_comp} starts)")
+       print(f"Upper Heater Runtime: {ta.cumulated_op_time_uhe} hours "
+             f"({ta.cumulated_op_num_uhe} starts)")
+       print(f"Lower Heater Runtime: {ta.cumulated_op_time_lhe} hours "
+             f"({ta.cumulated_op_num_lhe} starts)")
 
-- ``comp_running_minute_total`` (int): Total heat pump compressor runtime in minutes
-- ``heater1_running_minute_total`` (int): Total upper electric heater runtime in minutes
-- ``heater2_running_minute_total`` (int): Total lower electric heater runtime in minutes
+   await mqtt_client.subscribe_diagnostics(device, on_diagnostics)
+   await mqtt_client.request_diagnostics(device)
+
+**Fields** (on ``DeviceDiagnostics.ta_data``):
+
+- ``cumulated_op_time_comp`` (int): Total compressor runtime in hours
+- ``cumulated_op_time_uhe`` (int): Total upper element runtime in hours
+- ``cumulated_op_time_lhe`` (int): Total lower element runtime in hours
+- ``cumulated_op_num_comp``, ``cumulated_op_num_uhe``,
+  ``cumulated_op_num_lhe`` (int): Start counts
+
+The compressor and upper element hours match the energy query's lifetime
+``hpTime`` and ``heTime``. See :doc:`maintenance` for the rest of the
+diagnostics response.
 
 Historical Energy Usage
 -----------------------
@@ -266,12 +277,6 @@ Complete Energy Monitoring Example
                else:
                    print("Active: None (Standby)")
                
-               # Cumulative runtime
-               print(f"\nCumulative Runtime:")
-               print(f"  Heat Pump: {status.comp_running_minute_total / 60:.1f} hours")
-               print(f"  Upper Heater: {status.heater1_running_minute_total / 60:.1f} hours")
-               print(f"  Lower Heater: {status.heater2_running_minute_total / 60:.1f} hours")
-               
                # Heating deficit and temperature
                print(f"\nEnergy to setpoint: {status.energy_to_setpoint:.0f} Wh")
                print(f"Water Temp: {status.dhw_temperature}°F "
@@ -322,15 +327,18 @@ Power Consumption
 Cumulative Usage
 ~~~~~~~~~~~~~~~~
 
+From :class:`~nwp500.models.DeviceDiagnostics` (``ta_data``), not from
+device status:
+
 +--------------------------------+------------+--------------+---------------------------+
 | Field                          | Type       | Units        | Description               |
 +================================+============+==============+===========================+
-| ``comp_running_minute_total``  | int        | minutes      | Total heat pump runtime   |
+| ``cumulated_op_time_comp``     | int        | hours        | Total heat pump runtime   |
 +--------------------------------+------------+--------------+---------------------------+
-| ``heater1_running_minute_total`` | int      | minutes      | Total upper heater        |
+| ``cumulated_op_time_uhe``      | int        | hours        | Total upper heater        |
 |                                |            |              | runtime                   |
 +--------------------------------+------------+--------------+---------------------------+
-| ``heater2_running_minute_total`` | int      | minutes      | Total lower heater        |
+| ``cumulated_op_time_lhe``      | int        | hours        | Total lower heater        |
 |                                |            |              | runtime                   |
 +--------------------------------+------------+--------------+---------------------------+
 

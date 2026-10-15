@@ -859,8 +859,11 @@ Example: Summer 3-Period Schedule
 Vacation Mode
 =============
 
-Vacation mode suspends heating for up to 99 days while maintaining
-critical functions.
+Vacation mode suspends heating for 1–99 days while maintaining
+critical functions. The range is the front panel's (User's Information
+Manual, section 3.4.5) and the NaviLink app's, and
+:meth:`~nwp500.mqtt.client.NavienMqttClient.set_vacation_days` accepts the
+same.
 
 Behavior
 --------
@@ -870,12 +873,15 @@ When vacation mode is active:
 1. **Heating suspended** — no heat pump or electric heating cycles.
 2. **Freeze protection** — still active. If temperature drops below
    43 °F (6 °C), electric heating activates briefly.
-3. **Anti-legionella** — still runs on schedule.
+3. **Anti-seize** — still runs. The manual lists freeze protection and
+   anti-seize as examples of the minimal operations that continue; it
+   does not say whether an anti-legionella cycle runs during vacation.
 4. **Automatic resumption** — heating resumes 9 hours before the
    vacation end date.
 5. **Other schedules suspended** — reservations and TOU are paused.
 
-Duration: 0–99 days (0 = disabled, resumes immediately).
+Duration: 1–99 days. The device reports ``vacation_day_setting`` 0 when
+no vacation is set.
 
 When to Use
 -----------
@@ -897,17 +903,19 @@ When to Use
 Anti-Legionella
 ===============
 
-Anti-legionella periodically heats water to 70 °C (158 °F) for
-disinfection. This is a mandatory safety feature that runs even during
-vacation mode.
+Anti-legionella periodically heats the tank to 140 °F (60 °C) to prevent
+Legionella bacteria. It is off by default. When enabled, it runs every 7
+days by default, adjustable from 1 to 30 days (User's Information Manual,
+section 3.14.2, and the installer settings menu). A mixing valve must be
+installed, because the tank water reaches scalding temperature.
 
 CLI Usage
 ---------
 
 .. code-block:: bash
 
-   # Enable with a 14-day cycle
-   nwp-cli anti-legionella enable --period 14
+   # Enable with the default 7-day cycle
+   nwp-cli anti-legionella enable --period 7
 
    # Disable
    nwp-cli anti-legionella disable
@@ -918,22 +926,10 @@ CLI Usage
 Period Configuration
 --------------------
 
-.. list-table::
-   :header-rows: 1
-   :widths: 25 75
-
-   * - Period (days)
-     - Use Case
-   * - 1–3
-     - High-contamination risk environments
-   * - 7
-     - High-risk installations or hard-water areas
-   * - 14
-     - Standard residential (default)
-   * - 30
-     - Commercial buildings with annual testing
-   * - 90
-     - Well-maintained commercial systems with water treatment
+The period is 1–30 days, and the library rejects anything
+else. The factory default is 7 days. Navien's manuals give no guidance on
+choosing a different period; follow local code or the advice of whoever
+is responsible for the water system.
 
 Risk Factors
 ------------

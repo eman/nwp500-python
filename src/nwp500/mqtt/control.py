@@ -626,7 +626,9 @@ class MqttDeviceController:
                     "Vacation mode requires vacation_days",
                     parameter="vacation_days",
                 )
-            self._validate_range("vacation_days", vacation_days, 1, 30)
+            # 1-99 days: the NaviLink app's vacation picker and the
+            # front panel (User's Information Manual 3.4.5) both allow 99.
+            self._validate_range("vacation_days", vacation_days, 1, 99)
             param = [mode_id, vacation_days]
         else:
             param = [mode_id]
@@ -1161,7 +1163,7 @@ class MqttDeviceController:
 
     @requires_capability("holiday_use")
     async def set_vacation_days(self, device: Device, days: int) -> int:
-        """Enter vacation mode for ``days`` days (1-30).
+        """Enter vacation mode for ``days`` days (1-99).
 
         Sends ``dhw-mode`` with ``[5, days]``, which is what the NaviLink
         app's vacation flow does. To change the day count without changing
@@ -1183,13 +1185,13 @@ class MqttDeviceController:
 
         Args:
             device: Device object
-            days: Vacation duration in days (1-30)
+            days: Vacation duration in days (1-99)
 
         Returns:
             Publish packet ID
         """
         self._validate_int("days", days)
-        self._validate_range("days", days, 1, 30)
+        self._validate_range("days", days, 1, 99)
         return await self._mode_command(
             device, CommandCode.GOOUT_DAY, "goout-day", [days]
         )

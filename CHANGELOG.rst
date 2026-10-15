@@ -17,9 +17,49 @@ Changed
   by 32, so stored or charted Fahrenheit superheat from earlier versions is
   32 degF too high. Celsius values are unchanged. The protocol docs now
   describe both fields as differences.
+- **Vacation accepts 1-99 days** (#155). ``set_dhw_mode()`` (vacation),
+  ``set_vacation_days()`` and ``set_vacation_duration()`` rejected anything
+  over 30 days. The NaviLink app's vacation picker and the front panel
+  (User's Information Manual, section 3.4.5) both offer 1-99, so the
+  library now accepts the same. The ``vacation`` and
+  ``vacation-duration`` CLI commands follow.
 
 Documentation
 -------------
+- **Docs that contradicted the code or the vendor's sources** (#155). Each
+  now has one value with its source:
+
+  - The mode-ID table in ``device_features.rst`` numbered Energy Saver 2,
+    High Demand 3 and Electric 4. The IDs are Electric 2, Energy Saver 3,
+    High Demand 4, as in ``DhwOperationSetting`` and the NaviLink app's
+    ``MgppOperationMode``.
+  - ``track-energy.rst`` used ``comp_running_minute_total`` and
+    ``heater1/2_running_minute_total``, which do not exist. Lifetime run
+    times come from the diagnostics query, in hours
+    (``DeviceDiagnostics.ta_data.cumulated_op_time_comp``, ``_uhe``,
+    ``_lhe``).
+  - ``currentHeatUse`` is the ``HeatSource`` enum (0-3), not a bool.
+  - ``drEventStatus`` is the ``DREvent`` enum, not a bitfield.
+  - ``tou-recovery-cap.rst`` named ``dhw_outlet_temperature``, Home
+    Assistant's name for ``dhw_temperature``.
+  - Vacation is 1-99 days; the docs said 0-99 in some places, and the
+    library said 1-30.
+  - Anti-legionella heats to 140 degF (60 degC), defaults to a 7-day
+    period, is adjustable from 1 to 30 days and ships disabled (User's
+    Information Manual, section 3.14.2). The scheduling how-to said 158
+    degF, a 14-day default, periods up to 90 days and "mandatory".
+  - ``dhwTemperatureMin`` is the installer's minimum operation
+    temperature: 95-113 degF, factory default 95 degF. 104.9 degF was one
+    unit's setting, not a contradiction.
+  - ``ambientTemperature`` is the air around the unit, per the manual;
+    neither "intake" nor "outlet" is sourced. The heat pump runs only
+    between 41 and 113 degF.
+  - ``docs/explanation/advanced-features.rst`` is removed. Its weather
+    thresholds, COP figures, DR bitfield, stratification tables and code
+    sample were unsourced or wrong, and the sourced material is covered
+    by the protocol reference, ``what-starts-a-recovery`` and
+    ``tank-energy``.
+
 - **Flow-rate units corrected** (#154). The protocol reference said
   ``currentDhwFlowRate`` and ``recircDhwFlowRate`` were tenths of a GPM and
   ``cumulatedDhwFlowRate`` was gallons, while the properties treated them as

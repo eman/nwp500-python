@@ -420,10 +420,10 @@ set_dhw_mode()
 
    :param mode_id: One of the DHW operation mode IDs
    :type mode_id: int
-   :param vacation_days: Required for vacation mode; valid range ``1``-``30``
+   :param vacation_days: Required for vacation mode; valid range ``1``-``99``
    :type vacation_days: int or None
    :raises ParameterValidationError: If vacation mode is missing ``vacation_days``
-   :raises RangeValidationError: If ``vacation_days`` is outside ``1``-``30``
+   :raises RangeValidationError: If ``vacation_days`` is outside ``1``-``99``
 
 set_dhw_temperature()
 ^^^^^^^^^^^^^^^^^^^^^
@@ -461,7 +461,7 @@ set_vacation_days()
 
 .. py:method:: set_vacation_days(device, days)
 
-   Enter vacation mode for ``days`` days (1-30). Sends ``dhw-mode`` with
+   Enter vacation mode for ``days`` days (1-99). Sends ``dhw-mode`` with
    ``[5, days]``, which is what the NaviLink app's vacation flow does.
 
    **Capability Required:** ``holiday_use``
@@ -471,7 +471,7 @@ set_vacation_duration()
 
 .. py:method:: set_vacation_duration(device, days)
 
-   Set the vacation day count (1-30) without changing the operation mode.
+   Set the vacation day count (1-99) without changing the operation mode.
    Sends the app's ``goout-day`` command (33554466). Verified live: the
    device updates ``vacation_day_setting`` and leaves the operation mode
    unchanged.

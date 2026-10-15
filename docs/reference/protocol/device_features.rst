@@ -91,7 +91,7 @@ The DeviceFeature data contains device capabilities, configuration, and firmware
    * - ``holidayUse``
      - int
      - Boolean
-     - Vacation mode support (2=supported, 1=not supported) - energy-saving mode for 0-99 days with minimal operations
+     - Vacation mode support (2=supported, 1=not supported) - energy-saving mode for 1-99 days with minimal operations
      - None
    * - ``programReservationUse``
      - int
@@ -111,7 +111,7 @@ The DeviceFeature data contains device capabilities, configuration, and firmware
    * - ``dhwTemperatureMin``
      - int
      - °F
-     - Minimum DHW temperature setting: 95°F (35°C) - safety and efficiency lower limit
+     - Lower end of the setpoint range: the installer's *minimum operation temperature*, settable from 95°F (35°C) to 113°F (45°C), factory default 95°F (User's Information Manual, section 3.3). The device reports the current setting, for example 81 (40.5°C, 104.9°F) on the unit these docs were checked against.
      - HalfCelsiusToF
    * - ``dhwTemperatureMax``
      - int
@@ -212,7 +212,7 @@ The DeviceFeature data contains device capabilities, configuration, and firmware
 Operation Mode Support Matrix
 -----------------------------
 
-The NWP500 supports five primary operation modes as indicated by the capability flags:
+The NWP500 supports five primary operation modes as indicated by the capability flags. The mode IDs are ``DhwOperationSetting`` values, which match the NaviLink app's ``MgppOperationMode``; descriptions follow the User's Information Manual, section 3.4.
 
 .. list-table::
    :header-rows: 1
@@ -227,21 +227,21 @@ The NWP500 supports five primary operation modes as indicated by the capability 
      - ``heatpumpUse``
      - **Most Efficient** - Uses only the heat pump compressor and evaporator. Longest recovery time but highest energy efficiency. Performance varies with ambient temperature and humidity.
    * - 2
-     - Energy Saver (Default)
-     - ``energySaverUse``
-     - **Balanced Efficiency** - Hybrid mode combining heat pump with backup electric elements. Factory default setting balances efficiency with reasonable recovery time.
-   * - 3
-     - High Demand
-     - ``highDemandUse``
-     - **Fastest Recovery** - Hybrid mode prioritizing speed over efficiency. Uses heat pump plus more frequent electric element operation for maximum hot water supply.
-   * - 4
      - Electric Only
      - ``electricUse``
-     - **Emergency/Service Mode** - Uses only 3,755W heating elements (upper and lower, not simultaneously). Least efficient but operates in all conditions. Auto-reverts after 72 hours.
+     - **Least Efficient, Shortest Recovery** - Uses only the 3,755 W upper and lower heating elements, which do not run simultaneously. Reverts to the previous mode after 72 hours.
+   * - 3
+     - Energy Saver (Default)
+     - ``energySaverUse``
+     - **Balanced Efficiency** - Hybrid mode: the heat pump is the primary source and the elements shorten recovery. The factory default.
+   * - 4
+     - High Demand
+     - ``highDemandUse``
+     - **Fastest Hybrid Recovery** - Hybrid mode that uses the elements more often than Energy Saver to shorten recovery further.
    * - 5
      - Vacation
      - ``holidayUse``
-     - **Maximum Energy Savings** - Suspends normal heating for 0-99 days. Only freeze protection and anti-seize operations continue. Heating resumes 9 hours before vacation end.
+     - **Maximum Energy Savings** - Suspends normal heating for 1-99 days. Only freeze protection and anti-seize operations continue. Heating resumes 9 hours before vacation end.
 
 Hardware Specifications from Manual Cross-Reference
 ---------------------------------------------------

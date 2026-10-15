@@ -146,7 +146,7 @@ This document lists the fields found in the ``status`` object of device status m
    * - ``ambientTemperature``
      - integer
      - °F
-     - Ambient air temperature measured at the heat pump air intake.
+     - Ambient air temperature around the unit. The heat pump runs only between 41°F (5°C) and 113°F (45°C) (User's Information Manual, section 3.13.1).
      - DeciCelsiusToF
    * - ``targetSuperHeat``
      - integer
@@ -254,10 +254,10 @@ This document lists the fields found in the ``status`` object of device status m
      - Whether the error buzzer is enabled.
      - Converted from integer (1=OFF, 2=ON) to bool
    * - ``currentHeatUse``
-     - bool
+     - integer
      - None
-     - Current heat usage.
-     - Converted from integer (1=OFF, 2=ON) to bool
+     - Heat source currently running: 0 = none/unknown, 1 = heat pump, 2 = electric element, 3 = both. Matches the NaviLink app's ``HPWHHeatSource``.
+     - ``HeatSource`` enum
    * - ``currentInletTemperature``
      - float
      - °F
@@ -497,7 +497,7 @@ The ``dhwOperationSetting`` field is an integer that maps to the following modes
      - VACATION
      - None
      - Very High
-     - Suspends heating to save energy during absences (0-99 days). Only minimal operations like freeze protection and anti-seize are performed. Heating resumes 9 hours before the vacation period ends.
+     - Suspends heating to save energy during absences (1-99 days). Only minimal operations like freeze protection and anti-seize are performed. Heating resumes 9 hours before the vacation period ends.
    * - 6
      - POWER_OFF
      - None
