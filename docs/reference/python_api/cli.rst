@@ -298,7 +298,7 @@ Enable vacation mode for N days (reduces water heating to minimize energy use).
 vacation-duration
 ^^^^^^^^^^^^^^^^^
 
-Set the vacation day count (1-30) without entering vacation mode. Sends
+Set the vacation day count (1-99) without entering vacation mode. Sends
 the NaviLink app's ``goout-day`` command; the device updates its vacation
 day setting and leaves the operation mode unchanged.
 

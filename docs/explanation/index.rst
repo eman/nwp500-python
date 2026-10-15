@@ -7,7 +7,6 @@ Understanding-oriented deep dives into the library's design and advanced feature
 .. toctree::
    :maxdepth: 1
 
-   advanced-features
    architecture
    heating-elements
    tank-energy

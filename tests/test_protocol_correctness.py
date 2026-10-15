@@ -409,10 +409,34 @@ class TestControlPayloads:
         publish.assert_not_awaited()
 
     @pytest.mark.asyncio
-    async def test_vacation_duration_range(self, mock_device):
+    @pytest.mark.parametrize("days", [0, 100])
+    async def test_vacation_duration_range(self, mock_device, days):
         controller, publish = _make_controller()
         with pytest.raises(RangeValidationError):
-            await controller.set_vacation_duration(mock_device, 31)
+            await controller.set_vacation_duration(mock_device, days)
+        publish.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("days", [1, 31, 99])
+    async def test_vacation_days_accept_1_to_99(self, mock_device, days):
+        """The app's vacation picker and the front panel both offer 1-99
+        days (#155); the library used to stop at 30."""
+        controller, publish = _make_controller()
+
+        await controller.set_vacation_days(mock_device, days)
+        _topic, command = publish.await_args.args
+        assert command["request"]["param"] == [5, days]
+
+        await controller.set_vacation_duration(mock_device, days)
+        _topic, command = publish.await_args.args
+        assert command["request"]["param"] == [days]
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("days", [0, 100])
+    async def test_vacation_days_range(self, mock_device, days):
+        controller, publish = _make_controller()
+        with pytest.raises(RangeValidationError):
+            await controller.set_vacation_days(mock_device, days)
         publish.assert_not_awaited()
 
     @pytest.mark.asyncio

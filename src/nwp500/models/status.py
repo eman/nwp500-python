@@ -607,7 +607,9 @@ class DeviceStatus(NavienBaseModel):
         alias="evaporatorTemperature",
     )
     ambient_temperature_raw: int = temperature_field(
-        "Ambient air temperature measured at the heat pump air intake",
+        "Ambient air temperature around the unit (the manual's ambient "
+        "air temperature sensor). The heat pump runs only between "
+        "41 degF (5 degC) and 113 degF (45 degC)",
         alias="ambientTemperature",
     )
     target_super_heat_raw: int = temperature_field(
