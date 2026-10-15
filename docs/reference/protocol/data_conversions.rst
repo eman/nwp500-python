@@ -34,8 +34,8 @@ The device uses several encoding schemes to minimize transmission overhead:
    - Applied to decimal precision values
    - Formula: ``displayed_value = raw_value / 10.0``
    - Purpose: Preserve decimal precision in integer storage
-   - Common for flow rates
-   - Example: Raw 125 → 12.5 GPM
+   - Common for flow rates, which the device sends in 0.1 LPM in either unit system (see :ref:`flow-rate-fields`)
+   - Example: Raw 125 → 12.5 LPM
 
 3.5. **Temperature Delta (Decicelsius)** (div_10_celsius_delta)
    - Applied to differential temperature settings (heat pump and element hysteresis)
@@ -334,29 +334,49 @@ For systems with recirculation pumps (optional feature):
      - **Recirculation target temperature**. What temperature to maintain in the recirculation line.
 
 
+.. _flow-rate-fields:
+
 Flow Rate Fields
 ----------------
 
+The device sends flow rates in metric units in either ``temperatureType``.
+The library returns LPM when the device is set to Celsius and GPM when it
+is set to Fahrenheit, converting with 1 GPM = 3.785 LPM.
+
 .. list-table::
    :header-rows: 1
-   :widths: 25 10 15 50
+   :widths: 25 15 15 45
 
    * - Field
-     - Conversion
+     - Raw unit
      - Display Unit
      - Description
    * - ``currentDhwFlowRate``
-     - div_10
-     - GPM
-     - **Current hot water flow rate** at outlet. Measured in real-time. Typical range: 0-5 GPM for fixtures. 0 when no water being drawn.
+     - 0.1 LPM
+     - LPM or GPM
+     - **Current hot water flow rate** at outlet. 0 when no water is being drawn. ``raw / 10`` is LPM; ``raw / 10 / 3.785`` is GPM.
    * - ``recircDhwFlowRate``
-     - div_10
-     - GPM
-     - **Recirculation loop flow rate**. Circulation pump speed. Typical range: 1-3 GPM to maintain temperature without excessive energy use.
+     - 0.1 LPM (inferred)
+     - LPM or GPM
+     - **Recirculation loop flow rate**. Decoded the same way as ``currentDhwFlowRate``.
    * - ``cumulatedDhwFlowRate``
-     - None (direct value)
-     - gallons
-     - **Total hot water delivered since installation**. Cumulative counter - never decreases. Useful for usage tracking and diagnostics.
+     - litres (unverified)
+     - L or gal
+     - **Total hot water delivered since installation**. Cumulative counter. The library treats the raw value as whole litres. Some units always report 0 here.
+
+**Evidence.** Navien's NaviLink Android app (version 2.01.02, decompiled)
+decodes ``currentDhwFlowRate`` on its status screen as ``raw / 10.0`` with the
+label "LPM" when the device is set to Celsius, and as ``raw / 3.785 / 10.0``
+with the label "GPM" when it is set to Fahrenheit. The raw value is therefore
+tenths of a litre per minute in both unit settings.
+
+The app parses ``recircDhwFlowRate`` but never displays it, so its unit is
+inferred from its sibling field. The app does not parse
+``cumulatedDhwFlowRate`` at all, so neither its unit nor its scale has been
+confirmed. A different accumulated hot-water total, which the app shows on
+its energy screen, is decoded as tenths of a litre. Treat the litre reading
+of ``cumulatedDhwFlowRate`` as provisional until it is checked against a
+measured draw.
 
 Power and Energy Fields
 -----------------------

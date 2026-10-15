@@ -5,6 +5,25 @@ Changelog
 Unreleased
 ==========
 
+Documentation
+-------------
+- **Flow-rate units corrected** (#154). The protocol reference said
+  ``currentDhwFlowRate`` and ``recircDhwFlowRate`` were tenths of a GPM and
+  ``cumulatedDhwFlowRate`` was gallons, while the properties treated them as
+  tenths of an LPM and as litres. The properties are right for the current
+  flow: Navien's NaviLink app (2.01.02, decompiled) shows
+  ``currentDhwFlowRate`` as ``raw / 10`` LPM in Celsius and
+  ``raw / 3.785 / 10`` GPM in Fahrenheit, so the raw value is 0.1 LPM in
+  both unit systems. ``device_status.rst`` and ``data_conversions.rst`` now
+  say so. The app never displays ``recircDhwFlowRate``, so its unit is
+  inferred from the current flow. It never parses ``cumulatedDhwFlowRate``,
+  so the litre reading is documented as unverified. Library output is
+  unchanged. The raw fields no longer carry a fixed ``"GPM"`` or ``"gal"``
+  ``unit_of_measurement``, which contradicted their raw units; use
+  ``get_field_unit()``, which was already driven by ``device_class`` and
+  returns the same units as before. New tests pin both flow properties to
+  the app's formula in each unit system.
+
 Version 9.4.3 (2026-10-01)
 ==========================
 
