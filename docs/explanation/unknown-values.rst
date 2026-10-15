@@ -203,12 +203,22 @@ getters on the status model with no UI call site:
 
 ``outsideTemperature``, ``mixingRate``, ``currentInletTemperature``,
 ``dhwTemperature2``, ``recircTemperature``, ``recircFaucetTemperature``,
-``heLowerOnTempSetting``.
+``recircDhwFlowRate``, ``heLowerOnTempSetting``.
+
+``cumulatedDhwFlowRate`` goes further: the app's status model does not
+declare it at all.
 
 Observing that one of these "is always 0" in a capture is not evidence
 that 0 is a sentinel. It is equally consistent with the sensor being
 absent, the feature being unfitted, or the field being unused on this
 model. The app makes no determination, so neither does this library.
+
+``cumulatedDhwFlowRate`` is the clearest case. On the unit these docs were
+checked against it reads 0 after 392 days in service, and so does every
+draw counter in the diagnostics response, the draw count ``numOfdhwUse``
+included, although the heater was in regular use. The firmware on that
+unit is not keeping draw accounting, so its 0 does not mean that no water
+has been used.
 
 The one place the app does treat a numeric zero as "not configured" is
 ``airFilterAlarmPeriod``, and it handles it by substituting a different

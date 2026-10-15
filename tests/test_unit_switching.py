@@ -157,9 +157,13 @@ def test_flow_rate_matches_navilink_app(
 
 
 def test_volume_conversion(device_status_dict: dict[str, Any]):
-    """Test volume conversion (Liters <-> Gallons)."""
+    """cumulatedDhwFlowRate is whole litres in either unit system (#154).
+
+    The app never parses this field. The firmware keeps its other hot-water
+    volume totals (tdData dhwUseTotalFlow) in whole litres, shown by the app
+    with a fixed "Liter" label.
+    """
     # Case 1: Fahrenheit (Imperial) -> Gallons
-    # Assumption: Raw value is in Liters (Metric Native)
     # 100 Liters * 0.264172 = 26.4172 Gallons
     f_data = device_status_dict.copy()
     f_data["temperatureType"] = 2  # FAHRENHEIT

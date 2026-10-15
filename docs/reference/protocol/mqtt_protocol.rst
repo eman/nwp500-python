@@ -1079,8 +1079,12 @@ counters; ``taData`` and ``tdData``: ``uint32`` arrays in the key order
 above). ``cumulatedPwrHp``/``cumulatedPwrHe`` equal the energy query's
 lifetime totals and ``cumulatedOpTimeComp``/``cumulatedOpTimeUhe`` equal
 its lifetime ``hpTime``/``heTime``, which fixes their units as watt-hours
-and hours. The remaining counters have no documented unit. The misspelled
-keys are the vendor's.
+and hours. The app's diagnostics screen labels the ``tdData`` values without
+converting them: ``dhwUseTotalFlow`` and ``longDhwUseTotalFlow`` in litres,
+``dhwUseTotalTime`` and ``longDhwUseTotalTime`` in hours,
+``avrageRecoveryTime`` in minutes, and the ``numOf*`` fields as counts. The
+remaining counters have no documented unit. The misspelled keys are the
+vendor's.
 
 Firmware Download Info Response
 -------------------------------

@@ -356,27 +356,40 @@ is set to Fahrenheit, converting with 1 GPM = 3.785 LPM.
      - LPM or GPM
      - **Current hot water flow rate** at outlet. 0 when no water is being drawn. ``raw / 10`` is LPM; ``raw / 10 / 3.785`` is GPM.
    * - ``recircDhwFlowRate``
-     - 0.1 LPM (inferred)
+     - 0.1 LPM
      - LPM or GPM
      - **Recirculation loop flow rate**. Decoded the same way as ``currentDhwFlowRate``.
    * - ``cumulatedDhwFlowRate``
-     - litres (unverified)
+     - litres
      - L or gal
-     - **Total hot water delivered since installation**. Cumulative counter. The library treats the raw value as whole litres. Some units always report 0 here.
+     - **Total hot water delivered since installation**. Cumulative counter in whole litres. ``raw`` is litres; ``raw / 3.785`` is gallons.
 
-**Evidence.** Navien's NaviLink Android app (version 2.01.02, decompiled)
-decodes ``currentDhwFlowRate`` on its status screen as ``raw / 10.0`` with the
-label "LPM" when the device is set to Celsius, and as ``raw / 3.785 / 10.0``
-with the label "GPM" when it is set to Fahrenheit. The raw value is therefore
-tenths of a litre per minute in both unit settings.
+**Evidence.** Three first-party sources agree that the NWP500 measures and
+counts water in metric units, whatever the display setting:
 
-The app parses ``recircDhwFlowRate`` but never displays it, so its unit is
-inferred from its sibling field. The app does not parse
-``cumulatedDhwFlowRate`` at all, so neither its unit nor its scale has been
-confirmed. A different accumulated hot-water total, which the app shows on
-its energy screen, is decoded as tenths of a litre. Treat the litre reading
-of ``cumulatedDhwFlowRate`` as provisional until it is checked against a
-measured draw.
+- Navien's NaviLink Android app (version 2.01.02, decompiled) decodes
+  ``currentDhwFlowRate`` on its status screen as ``raw / 10.0`` with the label
+  "LPM" when the device is set to Celsius, and as ``raw / 3.785 / 10.0`` with
+  the label "GPM" when it is set to Fahrenheit. The raw value is tenths of a
+  litre per minute in both settings.
+- The NWP500 User's Information Manual lists the front panel's Status
+  Information item "Water Flow" as "Current water flow of the tank (LPM)",
+  although the panel's default display units are °F and GPM.
+- The app's installer diagnostics screen shows the heater's hot-water volume
+  totals (``dhwUseTotalFlow`` and ``longDhwUseTotalFlow`` in the
+  ``res/td/rd`` response) as the raw value with a fixed "Liter" label, in
+  either unit setting. The firmware keeps its volume totals in whole litres.
+
+The app parses ``recircDhwFlowRate`` but never displays it, and it does not
+parse ``cumulatedDhwFlowRate`` at all. Their units follow the firmware's
+convention above: tenths of a litre per minute for a rate, whole litres for
+a total.
+
+On the unit these docs were checked against, ``cumulatedDhwFlowRate`` and
+every draw counter in the diagnostics response, including the draw count
+``numOfdhwUse``, read 0 after 392 days in service. That unit does not keep
+draw accounting, so a 0 here does not mean that no water has been used. See
+:doc:`/explanation/unknown-values`.
 
 Power and Energy Fields
 -----------------------

@@ -346,7 +346,7 @@ This document lists the fields found in the ``status`` object of device status m
    * - ``cumulatedDhwFlowRate``
      - integer
      - L or gal
-     - Cumulative DHW flow - total hot water delivered since installation. Treated as litres, which is unverified; see :ref:`flow-rate-fields`.
+     - Cumulative DHW flow - total hot water delivered since installation, in whole litres; see :ref:`flow-rate-fields`.
      - ``raw`` (L), ``raw / 3.785`` (gal)
    * - ``touStatus``
      - integer

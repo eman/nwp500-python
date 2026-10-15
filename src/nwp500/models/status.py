@@ -192,7 +192,7 @@ class DeviceStatus(NavienBaseModel):
         description=(
             "Cumulative DHW flow - "
             "total volume of hot water delivered since installation "
-            "(raw: litres, unverified)"
+            "(raw: litres)"
         ),
         json_schema_extra={
             "device_class": "water",
@@ -577,8 +577,7 @@ class DeviceStatus(NavienBaseModel):
     recirc_dhw_flow_rate_raw: int = Field(
         alias="recircDhwFlowRate",
         description=(
-            "Recirculation DHW flow rate (raw: 0.1 LPM, inferred from "
-            "currentDhwFlowRate)"
+            "Recirculation DHW flow rate (raw: 0.1 LPM in either unit system)"
         ),
         json_schema_extra={
             "device_class": "flow_rate",
