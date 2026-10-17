@@ -436,7 +436,24 @@ class TestSubscribeAppConnection:
         assert event.device_mac == MAC
         assert event.client_id == "navilink-phone"
         assert event.connected is False
-        assert event.event is received[0]
+        assert event.event == received[0]
+
+    @pytest.mark.asyncio
+    async def test_two_callbacks_emit_the_event_once(self):
+        manager, events = self._emitting_manager()
+        first: list[AppConnectionEvent] = []
+        second: list[AppConnectionEvent] = []
+        await manager.subscribe_app_connection(_device(), first.append)
+        await manager.subscribe_app_connection(_device(), second.append)
+
+        await manager._dispatch_message(
+            TOPIC, json.dumps(_app_message(0)).encode()
+        )
+        await asyncio.sleep(0)
+
+        assert len(first) == 1
+        assert len(second) == 1
+        assert len(events) == 1
 
     @pytest.mark.asyncio
     async def test_own_announcement_is_delivered_with_client_id(self):

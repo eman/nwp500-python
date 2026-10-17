@@ -631,7 +631,7 @@ async def test_ensure_valid_token_aws_credentials_expired():
         ),
         patch.object(
             client,
-            "secured_sign_in",
+            "_secured_sign_in_unlocked",
             new=AsyncMock(side_effect=AuthenticationError("rejected")),
         ),
         patch.object(client, "sign_in", new_callable=AsyncMock) as mock_sign_in,
@@ -1093,7 +1093,7 @@ async def test_context_manager_with_expired_aws_credentials():
         ),
         patch.object(
             NavienAuthClient,
-            "secured_sign_in",
+            "_secured_sign_in_unlocked",
             new=AsyncMock(side_effect=AuthenticationError("rejected")),
         ),
         patch.object(

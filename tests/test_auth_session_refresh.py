@@ -12,6 +12,7 @@ Covers:
 
 from __future__ import annotations
 
+import asyncio
 from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -276,6 +277,42 @@ class TestRefreshSession:
 
 class TestSecuredSignIn:
     @pytest.mark.asyncio
+    async def test_waits_for_an_in_flight_session_refresh(self):
+        """Secured sign-in takes the refresh lock, so it cannot interleave
+        with a session refresh and have that refresh merge stale tokens
+        over the newly issued ones."""
+        client = _client(_aws_expired_tokens())
+        release = asyncio.Event()
+        order: list[str] = []
+
+        async def slow_refresh():
+            order.append("refresh-start")
+            await release.wait()
+            order.append("refresh-end")
+            return client.current_tokens
+
+        async def secured():
+            order.append("secured")
+            return MagicMock(tokens=client.current_tokens)
+
+        with (
+            patch.object(client, "_refresh_session_unlocked", new=slow_refresh),
+            patch.object(client, "_secured_sign_in_unlocked", new=secured),
+        ):
+            refresh_task = asyncio.create_task(client.refresh_session())
+            await asyncio.sleep(0)
+            assert order == ["refresh-start"]
+
+            secured_task = asyncio.create_task(client.secured_sign_in())
+            await asyncio.sleep(0)
+            assert "secured" not in order  # blocked on the refresh lock
+
+            release.set()
+            await asyncio.gather(refresh_task, secured_task)
+
+        assert order == ["refresh-start", "refresh-end", "secured"]
+
+    @pytest.mark.asyncio
     async def test_success_replaces_auth_response(self):
         client = _client(_aws_expired_tokens())
         old_access = client.current_tokens.access_token
@@ -341,7 +378,7 @@ class TestEnsureValidTokenFallbackOrder:
     def _patch_chain(self, client, *, refresh, secured, sign_in):
         return (
             patch.object(client, "_refresh_session_unlocked", new=refresh),
-            patch.object(client, "secured_sign_in", new=secured),
+            patch.object(client, "_secured_sign_in_unlocked", new=secured),
             patch.object(client, "sign_in", new=sign_in),
         )
 
@@ -516,7 +553,7 @@ class TestReAuthenticate:
         sign_in = AsyncMock()
 
         with (
-            patch.object(client, "secured_sign_in", new=secured),
+            patch.object(client, "_secured_sign_in_unlocked", new=secured),
             patch.object(client, "sign_in", new=sign_in),
         ):
             result = await client.re_authenticate()
@@ -532,7 +569,7 @@ class TestReAuthenticate:
         sign_in = AsyncMock(return_value=fresh)
 
         with (
-            patch.object(client, "secured_sign_in", new=secured),
+            patch.object(client, "_secured_sign_in_unlocked", new=secured),
             patch.object(client, "sign_in", new=sign_in),
         ):
             result = await client.re_authenticate()
@@ -548,7 +585,7 @@ class TestReAuthenticate:
         sign_in = AsyncMock(return_value=fresh)
 
         with (
-            patch.object(client, "secured_sign_in", new=secured),
+            patch.object(client, "_secured_sign_in_unlocked", new=secured),
             patch.object(client, "sign_in", new=sign_in),
         ):
             await client.re_authenticate()

@@ -788,6 +788,10 @@ class NavienAuthClient:
         this for auto-login and falls back to the password only if it
         fails.
 
+        Serialized with ``refresh_token()`` and ``refresh_session()`` by the
+        refresh lock, so an in-flight refresh cannot merge stale tokens over
+        the ones this call receives.
+
         Returns:
             AuthenticationResponse containing user info and tokens
 
@@ -795,6 +799,11 @@ class NavienAuthClient:
             AuthenticationError: If there is no access token, the server
                 rejects the token, or the response cannot be parsed
         """
+        async with self._refresh_lock:
+            return await self._secured_sign_in_unlocked()
+
+    async def _secured_sign_in_unlocked(self) -> AuthenticationResponse:
+        """Perform the secured sign-in. Caller must hold _refresh_lock."""
         current = self.current_tokens
         if not current or not current.access_token:
             raise AuthenticationError(
@@ -893,7 +902,7 @@ class NavienAuthClient:
                 )
 
             try:
-                return (await self.secured_sign_in()).tokens
+                return (await self._secured_sign_in_unlocked()).tokens
             except AuthenticationError as e:
                 last_error = e
                 _logger.warning("Secured sign-in failed: %s", e)
