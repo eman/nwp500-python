@@ -5,6 +5,22 @@ Changelog
 Unreleased
 ==========
 
+Added
+-----
+- **Bluetooth LE access to the controller** (``nwp500.ble``, optional
+  ``ble`` extra). The NWP500 exposes a GATT service that carries the
+  controller's native class-code protocol once the heater is put in pairing
+  mode (hold Back and Power for five seconds; it advertises as ``HPWH1``).
+  The package frames and parses those packets (header, class code, address,
+  CRC-16/MODBUS), scans for the heater, and reads data classes with a
+  matched request/reply client; ``python -m nwp500.ble scan`` and
+  ``python -m nwp500.ble read`` dump the blocks. Checked on a unit: it
+  answers status, error history, four diagnostics counters, the stored
+  192-byte TOU plan, device info, the controller serial numbers and a
+  software-data block; the boiler parameter classes 51-54 do not answer, so
+  installer parameters are not reachable yet. ``write_block()`` exists for
+  the eventual parameter write and is marked experimental.
+
 Changed
 -------
 - **Superheat is converted as a difference** (#153).
