@@ -234,3 +234,14 @@ async def test_write_block_sends_write_command():
 def test_client_requires_address_or_transport():
     with pytest.raises(ValueError):
         NavienBleClient()
+
+
+def test_device_info_min_operation_temperature():
+    # DID byte 17 = Min Operation Temp in half-degrees C; 81 -> 40.5C / 104.9F
+    data = bytearray(58)
+    data[21] = 240  # model type (HPWH)
+    data[17] = 81
+    info = DeviceInfo.parse(bytes(data))
+    assert info.min_operation_temperature_raw == 81
+    assert round(info.min_operation_temperature(celsius=True), 1) == 40.5
+    assert round(info.min_operation_temperature(), 1) == 104.9

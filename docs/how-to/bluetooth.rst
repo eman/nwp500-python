@@ -55,7 +55,16 @@ parameter classes 51-54 that the service app uses on boilers, with any
 expected length or sub-address, so its installer parameters live behind
 a class the heat-pump-specific service app knows and this library does
 not yet. :data:`nwp500.ble.NWP500_RESPONDING_CLASSES` lists the
-responding set.
+responding set. Every one of them is read-only: writing a block's own bytes
+back is answered as a read (:data:`nwp500.ble.NWP500_WRITABLE_CLASSES` is
+empty). The boiler parameter classes 51-54 are not implemented on this
+controller at all.
+
+Min Operation Temp is readable but not writable here: it is DID byte 17
+(:meth:`~nwp500.ble.DeviceInfo.min_operation_temperature`), confirmed equal
+to the device's ``heatMinOpTemperature`` over MQTT. The writable parameter
+class is selected from a per-model table the service app downloads from
+Navien's server, so it is not reachable from this interface alone.
 
 The address byte is ignored by every answering class except ``TOU_PLAN``,
 where it is a record index: the stored plan is twelve 16-byte records and a

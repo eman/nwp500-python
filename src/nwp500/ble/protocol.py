@@ -113,6 +113,16 @@ NWP500_RESPONDING_CLASSES: frozenset[int] = frozenset(
     {17, 32, 38, 39, 40, 41, 170, 210, 240, 243, 244}
 )
 
+#: Of the classes an NWP500 answers, which accept a write (command 16).
+#: Checked 2026-10-16 by writing each block's own bytes back and reading the
+#: reply code: every readable class echoes a *read* response, so none is
+#: writable over this interface. The boiler parameter classes 51-54 do not
+#: respond to reads or writes at all on this controller. The writable
+#: parameter class is selected from the per-model table the service app
+#: downloads from Navien's server; it is not one of the classes below and
+#: cannot be found by safe probing.
+NWP500_WRITABLE_CLASSES: frozenset[int] = frozenset()
+
 
 def crc16(data: bytes) -> int:
     """CRC-16/MODBUS: reflected polynomial 0xA001, initial value 0xFFFF.
@@ -262,6 +272,23 @@ class DeviceInfo:
     raw: bytes
 
     LENGTH = 58
+
+    @property
+    def min_operation_temperature_raw(self) -> int:
+        """Minimum heat-pump operation temperature, half-degrees Celsius.
+
+        DID byte 17. Verified on an NWP500 to equal the device's
+        ``heatMinOpTemperature`` as reported over MQTT (both 81 = 40.5 C =
+        104.9 F on 2026-10-16). The installer range is 95-113 F (35-45 C).
+        This block is read-only over Bluetooth; writing it back is echoed as
+        a read, so this field can be read here but not set here.
+        """
+        return self.hot_water_temp_min
+
+    def min_operation_temperature(self, celsius: bool = False) -> float:
+        """Minimum operation temperature in F (default) or C."""
+        c = self.min_operation_temperature_raw / 2
+        return c if celsius else c * 9 / 5 + 32
 
     @classmethod
     def parse(cls, data: bytes) -> DeviceInfo:
