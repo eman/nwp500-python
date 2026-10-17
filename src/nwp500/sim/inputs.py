@@ -15,15 +15,17 @@ Units:
   season masks as the device encodes them, and modes as
   ``DhwOperationSetting`` values (1 Heat Pump, 2 Electric, 3 Energy
   Saver, 4 High Demand, 5 Vacation, 6 Power Off).
-- Instants are timezone-aware. ``Scenario.tz`` is the zone the
-  schedules' local times are laid out in.
+- Instants are timezone-aware, and held in UTC (``Instant``).
+  ``Scenario.tz`` is the zone the schedules' local times are laid out
+  in.
 """
 
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from typing import Annotated, Self
 from zoneinfo import ZoneInfo
 
 from pydantic import (
+    AfterValidator,
     AwareDatetime,
     BaseModel,
     ConfigDict,
@@ -41,6 +43,18 @@ VACATION = 5
 POWER_OFF = 6
 
 Mode = Annotated[int, Field(ge=HEAT_PUMP, le=POWER_OFF)]
+
+
+def _utc(at: datetime) -> datetime:
+    return at.astimezone(UTC)
+
+
+#: An aware instant, held in UTC: the same instant given in any zone is
+#: the same value, and a span added to it is elapsed time, not the wall
+#: clock's (a local start across a daylight-saving change would gain or
+#: lose an hour). The schedules' local times are laid out in
+#: ``Scenario.tz``.
+type Instant = Annotated[AwareDatetime, AfterValidator(_utc)]
 Mask = Annotated[int, Field(ge=0, le=0xFFFF)]
 
 
@@ -58,7 +72,7 @@ class HeaterState(_Value):
     compressor_running: bool = False
     #: Whether a heating element is on, and since when (None: unknown).
     element_running: bool = False
-    element_running_since: AwareDatetime | None = None
+    element_running_since: Instant | None = None
 
 
 class Settings(_Value):
@@ -80,9 +94,9 @@ class History(_Value):
 
     #: When the compressor last stopped: the restart lockout runs from
     #: it. None: no lockout is in force at the start.
-    compressor_stopped_at: AwareDatetime | None = None
+    compressor_stopped_at: Instant | None = None
     #: When the tank last heated, by the compressor or an element.
-    heated_at: AwareDatetime | None = None
+    heated_at: Instant | None = None
 
 
 class ReservationEntry(_Value):
@@ -130,7 +144,7 @@ class Schedules(_Value):
 
 
 #: An ambient reading: the instant and the air temperature, °F.
-AmbientPoint = tuple[AwareDatetime, float]
+AmbientPoint = tuple[Instant, float]
 
 
 def _when(reading: tuple[datetime, float]) -> datetime:
@@ -167,7 +181,7 @@ class Draw(_Value):
     line counts them, at ``at``. The tank gives up the hot share through
     the mixing valve (``DrawParams``) and refills at the inlet."""
 
-    at: AwareDatetime
+    at: Instant
     gallons: Annotated[float, Field(gt=0.0)]
 
 
@@ -177,8 +191,8 @@ class DrawWindow(_Value):
     at its onset, and whether the delivered water ran cold over it
     (``SimulationResult.windows``). Its edges are read exactly."""
 
-    start: AwareDatetime
-    end: AwareDatetime
+    start: Instant
+    end: Instant
     #: Delivered gallons the window is expected to draw, if known: the
     #: result's ``margin_gal`` is the deliverable gallons less it.
     expected_gal: Annotated[float, Field(ge=0.0)] | None = None
@@ -201,7 +215,7 @@ class Write(_Value):
     """A setpoint or mode write at an instant, as an app or an
     integration makes it."""
 
-    at: AwareDatetime
+    at: Instant
     setpoint_f: float | None = None
     mode: Mode | None = None
     id: str | None = None
@@ -230,7 +244,7 @@ class Scenario(_Value):
     is drawn from it and what it is told, from ``start`` for
     ``horizon``."""
 
-    start: AwareDatetime
+    start: Instant
     horizon: timedelta
     #: The IANA zone the schedules' local times are in.
     tz: str

@@ -75,6 +75,7 @@ lifts it, is the physics': the controller reads the tank at each event
 (``trigger_ahead``, ``upper_on_crossing``, ``judge_cap``).
 """
 
+import math
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta
@@ -1406,16 +1407,14 @@ def trigger_ahead(
     landed, the lower zone 5.4 °F under the setting). Nor at the instant
     a recovery ended: the trigger reads the tank it left at its target.
     A trigger inside the restart lockout starts when the lockout ends."""
-    on = settings.hp_lower_on_f
-    if (
-        on is None
-        or settings.heating_disabled
-        or state.mode.in_force == ELECTRIC
-    ):
+    if settings.heating_disabled or state.mode.in_force == ELECTRIC:
         return None, ()
+    # No lower threshold disables the lower trigger alone: the upper
+    # zone's at a TOU window's opening does not read it.
+    on = settings.hp_lower_on_f
     at, trigger, held = heater_start(
         trajectory,
-        on,
+        -math.inf if on is None else on,
         impulses,
         windows=settings.tou_windows,
         setpoint_f=state.setpoint_f,

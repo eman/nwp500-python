@@ -806,3 +806,31 @@ class TestTheDeliveredLine:
             gal = booked_deliverable(b, upper, 95.0, p).gal
             below = delivery_temp_f(b, upper, p) < DEPLETION_THRESHOLD_F
             assert below == (gal == 0.0), (upper, tenth, gal)
+
+
+class TestTheReviewOfDepletion:
+    def test_a_draw_at_the_windows_onset_counts_its_cold_side(self):
+        """110 °F before the onset, 100 °F just after a draw there, 110
+        °F at the window's end: the dip past the tolerance is the
+        window's."""
+        from datetime import UTC, datetime, timedelta
+
+        from nwp500.sim.engine import PathPoint
+
+        t0 = datetime(2026, 10, 4, 19, tzinfo=UTC)
+        points = [
+            PathPoint(t0, 110.0, 100.0, 140.0, False, 0.0),
+            PathPoint(t0, 100.0, 95.0, 140.0, False, 0.0),
+            PathPoint(
+                t0 + timedelta(minutes=5), 110.0, 100.0, 140.0, False, 0.0
+            ),
+        ]
+        judged = rd.depletion(
+            points,
+            t0,
+            t0 + timedelta(minutes=5),
+            [p.upper_f for p in points],
+            P,
+        )
+        assert judged.min_f == 100.0
+        assert judged.depleted

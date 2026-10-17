@@ -121,3 +121,45 @@ def test_a_result_is_plain_json():
         h.stop for h in result.heating
     ]
     assert doc["defaults_used"] == list(result.defaults_used)
+
+
+def test_a_default_is_still_a_default_after_a_round_trip():
+    """A field left out is written as left out, so the replayed answer
+    names the same defaults."""
+    s = _scenario().model_copy(
+        update={"environment": Environment(ambient_f=66.0)}
+    )
+    doc = scenario_to_document(s)
+    assert "humidity" not in doc["scenario"]["environment"]
+    back, _ = scenario_from_document(json.dumps(doc))
+    assert back == s
+    params = default_params()
+    assert (
+        simulate(back, params).defaults_used
+        == simulate(s, params).defaults_used
+    )
+    assert any(
+        d.startswith("humidity=") for d in simulate(back, params).defaults_used
+    )
+
+
+def test_a_horizon_is_elapsed_time_across_a_clock_change():
+    """Midnight 2026-11-01 in Los Angeles plus three hours is 03:00 UTC
+    later by three hours, though the wall clock falls back an hour; the
+    same instant given in UTC is the same scenario."""
+    from zoneinfo import ZoneInfo
+
+    local = datetime(2026, 11, 1, 0, 0, tzinfo=ZoneInfo("America/Los_Angeles"))
+    s = _scenario().model_copy(update={"commands": Commands()})
+    at_local = Scenario.model_validate(
+        s.model_dump() | {"start": local, "horizon": timedelta(hours=3)}
+    )
+    at_utc = Scenario.model_validate(
+        s.model_dump()
+        | {"start": local.astimezone(UTC), "horizon": timedelta(hours=3)}
+    )
+    assert at_local == at_utc
+    assert at_local.until - at_local.start == timedelta(hours=3)
+    assert (at_local.until.timestamp() - local.timestamp()) == 3 * 3600
+    back, _ = scenario_from_document(json.dumps(scenario_to_document(at_local)))
+    assert back.until == at_local.until

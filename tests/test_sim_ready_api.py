@@ -347,3 +347,29 @@ class TestTheSetpointRange:
                 commands=Commands(writes=(Write(at=at(1.0), setpoint_f=f),))
             )
             assert simulate(s, params).simulation.points
+
+
+class TestWithoutALowerThreshold:
+    def test_the_upper_trigger_at_a_tou_opening_still_starts_it(self, params):
+        """No ``hp_lower_on`` disables the lower trigger only: a tank far
+        short at a window's opening still starts on its own."""
+        s = _scenario(
+            state=HeaterState(upper_f=120.0, lower_f=115.0),
+            settings=Settings(setpoint_f=140.9, hp_lower_on_f=None),
+            schedules=_peak_now(),
+        )
+        r = simulate(s, params)
+        assert r.heating
+        assert r.heating[0].start.trigger == "upper_at_tou_open"
+        t = standby(
+            s.state,
+            s.environment,
+            Loads(),
+            params,
+            start=T0,
+            until=at(3.0),
+            settings=s.settings,
+            schedules=s.schedules,
+        )
+        assert t.trigger == "upper_at_tou_open"
+        assert t.lower_margin_f is None

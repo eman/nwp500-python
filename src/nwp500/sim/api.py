@@ -10,8 +10,9 @@ named in the result's ``reasons``, and every default used in its
 ``defaults_used``.
 """
 
+import math
 from collections.abc import Mapping, Sequence
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from types import MappingProxyType
 from typing import Any
 from zoneinfo import ZoneInfo
@@ -507,6 +508,7 @@ def standby(
     opening, with the lower trigger held as the heater holds it), and
     how far above ``hp_lower_on`` the coast leaves the lower zone.
     ``schedules`` brings the TOU windows, their local times in ``tz``."""
+    start, until = _instant(start), _instant(until)
     if until <= start:
         raise ValueError("until must be after start")
     history = history if history is not None else History()
@@ -545,9 +547,10 @@ def standby(
     starts_at = trigger = None
     held = False
     margin: float | None = None
-    if settings is not None and settings.hp_lower_on_f is not None:
+    if settings is not None:
+        on = settings.hp_lower_on_f
         last = coast.points[-1]
-        margin = last.lower_f - settings.hp_lower_on_f
+        margin = None if on is None else last.lower_f - on
         mode, disabled = _engine_mode(settings.mode)
         windows = (
             tou_windows(schedules.tou_periods, ZoneInfo(tz), start, until)
@@ -557,7 +560,8 @@ def standby(
         if not disabled:
             starts_at, trigger, held = heater_start(
                 [(p.at, p.upper_f, p.lower_f) for p in coast.points],
-                settings.hp_lower_on_f,
+                # None: no lower trigger, the TOU-opening one still.
+                -math.inf if on is None else on,
                 coast.impulses,
                 windows=windows,
                 setpoint_f=settings.setpoint_f,
@@ -601,6 +605,7 @@ def element_mode(
     ``switch_back_after_minutes`` ends the stint early. ``reachable``
     says whether a mode write can take at ``at``: not while heating is
     disabled, nor inside a TOU window (``schedules``, in ``tz``)."""
+    at = _instant(at)
     named = ENGINE_MODE.get(mode)
     if named is None or named == "heat_pump":
         raise ValueError(
@@ -643,6 +648,14 @@ def element_mode(
         reachable=reason is None,
         unreachable_reason=reason,
     )
+
+
+def _instant(at: datetime) -> datetime:
+    """``at`` in UTC, as the scenario's instants are held; a naive one is
+    refused."""
+    if at.tzinfo is None or at.utcoffset() is None:
+        raise ValueError(f"{at.isoformat()} has no time zone")
+    return at.astimezone(UTC)
 
 
 def _ambient_at(environment: Environment, at: datetime) -> float:

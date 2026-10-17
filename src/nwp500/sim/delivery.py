@@ -481,10 +481,12 @@ def depletion(
     ]
     first = _state_before(series, a)
     path = [(a, first[0] if first is not None else values[0])]
+    # The elements at ``a`` too: a draw at the onset is a step there,
+    # and its cold side is the window's.
     path += [
         (pt.at, v)
         for pt, v in zip(points, values, strict=True)
-        if a < pt.at < b
+        if a <= pt.at < b
     ]
     last = _state_before(series, b)
     if b > a and last is not None:

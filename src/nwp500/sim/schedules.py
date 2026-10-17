@@ -4,9 +4,13 @@ reservations' firings.
 **TOU windows.** The heater holds its recoveries in the window its TOU
 schedule prices highest (``docs/explanation/tou-recovery-cap.rst``).
 For each group of periods sharing a season and week mask, every run of
-contiguous periods at the group's highest price is a window, and a run
-that ends at 23:59 is joined to one starting at 00:00, so a peak across
-midnight is one window. A group with one price has no window. Whether
+contiguous periods at the group's highest price (each price decoded at
+its own ``decimal_point``) is a window on each date both masks select.
+A group with one price has no window. The dated windows are then
+joined where one ends as the next begins, so a peak across midnight is
+one window only when the masks select both dates: Friday's weekday
+peak does not run into Saturday morning, nor Monday morning's begin on
+a Sunday night. Whether
 TOU is on is a switch of its own (``Schedules.tou_enabled``), not part
 of the periods.
 
@@ -48,8 +52,8 @@ def month_bit(day: date) -> int:
 @dataclass(frozen=True)
 class TouRule:
     """A daily window on the days both masks select: from ``opens`` to
-    ``closes`` (exclusive), local; a ``closes`` at or before ``opens``
-    ends the next day."""
+    ``closes`` (exclusive), local, within the day; a ``closes`` of 00:00
+    is the day's end."""
 
     season_mask: int
     week_mask: int
@@ -73,7 +77,8 @@ def tou_rules(periods: Iterable[TouPeriod]) -> tuple[TouRule, ...]:
     rules: list[TouRule] = []
     for (season, week), group in groups.items():
         group = sorted(group, key=_start)
-        prices = [float(p.price_max) for p in group]
+        # Decoded, each at its own scale: 1000 at 4 places is 0.10.
+        prices = [p.price_max / 10**p.decimal_point for p in group]
         top = max(prices)
         if top == min(prices):
             continue
@@ -91,9 +96,6 @@ def tou_rules(periods: Iterable[TouPeriod]) -> tuple[TouRule, ...]:
             else:
                 runs.append((k, k))
         spans = [(_start(group[a]), _end(group[b]) + 1) for a, b in runs]
-        wraps = len(spans) > 1 and spans[0][0] == 0 and spans[-1][1] == 24 * 60
-        if wraps:
-            spans = [*spans[1:-1], (spans[-1][0], spans[0][1])]
         rules.extend(
             TouRule(
                 season,
@@ -124,12 +126,14 @@ def tou_windows(
     end: datetime,
 ) -> tuple[Window, ...]:
     """The TOU windows ``periods`` define that overlap ``[start, end]``,
-    as UTC instants, with the local times in ``tz``. Starts a day early
-    so a window open across midnight is found."""
+    as UTC instants, with the local times in ``tz``: each rule laid out
+    on the dates its masks select, from a day before ``start`` to a day
+    after ``end`` so a window across either edge is whole, and then
+    joined where one ends as the next begins."""
     rules = tou_rules(periods)
-    out: list[Window] = []
+    dated: list[Window] = []
     day = start.astimezone(tz).date() - timedelta(days=1)
-    last = end.astimezone(tz).date()
+    last = end.astimezone(tz).date() + timedelta(days=1)
     while day <= last:
         for opens_at, closes_at in _spans_on(rules, day):
             opens = datetime.combine(day, opens_at, tz)
@@ -137,10 +141,15 @@ def tou_windows(
                 day + timedelta(days=1) if closes_at <= opens_at else day
             )
             closes = datetime.combine(close_day, closes_at, tz)
-            if closes > start and opens <= end:
-                out.append((opens.astimezone(UTC), closes.astimezone(UTC)))
+            dated.append((opens.astimezone(UTC), closes.astimezone(UTC)))
         day += timedelta(days=1)
-    return tuple(sorted(out))
+    joined: list[Window] = []
+    for opens, closes in sorted(dated):
+        if joined and opens <= joined[-1][1]:
+            joined[-1] = (joined[-1][0], max(joined[-1][1], closes))
+        else:
+            joined.append((opens, closes))
+    return tuple(w for w in joined if w[1] > start and w[0] <= end)
 
 
 @dataclass(frozen=True)

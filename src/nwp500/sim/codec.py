@@ -41,7 +41,9 @@ def scenario_to_document(
     """``scenario``, and ``params`` when given, as a document."""
     doc: dict[str, Any] = {
         "schema_version": SCHEMA_VERSION,
-        "scenario": scenario.model_dump(mode="json"),
+        # Only what was given: a default left out is still a default
+        # when the document is read back, and ``defaults_used`` says so.
+        "scenario": scenario.model_dump(mode="json", exclude_unset=True),
     }
     if params is not None:
         doc["params"] = params_to_document(params)

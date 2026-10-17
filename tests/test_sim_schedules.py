@@ -238,3 +238,41 @@ class TestReservationFirings:
 )
 def test_a_half_celsius_setpoint_in_fahrenheit(half_c: int, f: float):
     assert half_c_to_f(half_c) == pytest.approx(f)
+
+
+class TestTheReviewOfTheWindows:
+    def test_prices_are_compared_decoded(self):
+        """1000 at four places is 0.10; 20 at two is 0.20: the 0.20
+        period is the peak, whatever the encoded integers say."""
+        cheap = _period(0, 15, 1000).model_copy(update={"decimal_point": 4})
+        dear = _period(16, 23, 20).model_copy(update={"decimal_point": 2})
+        (w,) = tou_windows(
+            [cheap, dear], LA, _local(2026, 10, 5, 12), _local(2026, 10, 5, 18)
+        )
+        assert w == (
+            _local(2026, 10, 5, 16).astimezone(UTC),
+            _local(2026, 10, 6, 0).astimezone(UTC),
+        )
+
+    def test_a_peak_across_midnight_joins_only_dates_the_masks_select(self):
+        """Weekday peaks 00:00-05:59 and 22:00-23:59: Monday morning has
+        its window, and Friday night's does not run into Saturday."""
+        periods = [
+            _period(0, 5, 5, week=WEEKDAYS),
+            _period(6, 21, 1, week=WEEKDAYS),
+            _period(22, 23, 5, week=WEEKDAYS),
+            _period(0, 23, 1, week=WEEKEND),
+        ]
+        # Sunday 2026-10-04 to Monday 2026-10-12.
+        got = tou_windows(
+            periods, LA, _local(2026, 10, 4), _local(2026, 10, 12, 23)
+        )
+        local = [(a.astimezone(LA), b.astimezone(LA)) for a, b in got]
+        assert local[0] == (_local(2026, 10, 5, 0), _local(2026, 10, 5, 6))
+        assert (_local(2026, 10, 5, 22), _local(2026, 10, 6, 6)) in local
+        assert (_local(2026, 10, 9, 22), _local(2026, 10, 10, 0)) in local
+        assert not any(
+            a.weekday() in (5, 6) or (b.weekday() == 5 and b.hour > 0)
+            for a, b in local
+        )
+        assert (_local(2026, 10, 12, 0), _local(2026, 10, 12, 6)) in local
