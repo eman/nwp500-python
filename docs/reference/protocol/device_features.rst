@@ -111,7 +111,7 @@ The DeviceFeature data contains device capabilities, configuration, and firmware
    * - ``dhwTemperatureMin``
      - int
      - °F
-     - Lower end of the setpoint range: the installer's *minimum operation temperature*, settable from 95°F (35°C) to 113°F (45°C), factory default 95°F (User's Information Manual, section 3.3). The device reports the current setting, for example 81 (40.5°C, 104.9°F) on the unit these docs were checked against.
+     - Lower end of the setpoint range: the installer's *minimum operation temperature*, settable from 95°F (35°C) to 113°F (45°C), factory default 95°F (User's Information Manual, section 3.3). The device reports the current setting, for example 81 (40.5°C, 104.9°F) on the unit these docs were checked against. Read-only remotely (no MQTT or Bluetooth command sets it); changed from the front-panel Installer Menu or Navien's service tool.
      - HalfCelsiusToF
    * - ``dhwTemperatureMax``
      - int

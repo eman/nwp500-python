@@ -436,7 +436,7 @@ This document lists the fields found in the ``status`` object of device status m
    * - ``heatMinOpTemperature``
      - float
      - °F
-     - Minimum heat pump operation temperature. Lowest tank temperature setpoint allowed in the current operating mode (95-113°F, default 95°F). When set, users can only set the target tank temperature at or above this threshold.
+     - Minimum heat pump operation temperature. Lowest tank temperature setpoint allowed in the current operating mode (95-113°F, default 95°F). When set, users can only set the target tank temperature at or above this threshold. **Read-only remotely:** no MQTT or Bluetooth command sets it; it is changed from the front-panel Installer Menu or Navien's service tool.
      - HalfCelsiusToF
    * - ``drOverrideStatus``
      - integer
