@@ -152,9 +152,32 @@ def assess(
     element_params: ElementParams | None = None,
     book_params: BookParams | None = None,
 ) -> dict[str, Any]:
-    """The readiness answer as a mapping (``time_to_ready`` types it):
-    the tank now, the bath and its time to ready by mode, the showers,
-    and the reasons."""
+    """The readiness answer as a mapping (``time_to_ready`` types it).
+
+    Its keys: ``generated_at`` (``now``), ``valid_until`` (``now`` plus
+    ``valid_s``), ``status`` (``low_confidence`` with any reason, else
+    ``ok``), ``reasons``, ``line_f`` (``ReadinessParams.line_f``),
+    ``tank_upper_f`` and ``tank_lower_f`` (two decimals),
+    ``deliverable_gal``; ``bath``: ``volume_gal``, ``volume_source``
+    (``bath_source``), ``ready``, ``margin_gal``, ``ready_in_minutes``,
+    ``ready_at`` and ``by_mode`` (one row per ``MODES``: ``mode``,
+    ``reachable_now``, ``ready_in_minutes``, ``ready_at``,
+    ``energy_kwh``, ``reasons``); ``showers``: ``volume_gal``,
+    ``volume_source`` (``shower_source``), ``ready_for`` and
+    ``ready_for_whole``.
+
+    ``reasons`` begins with ``ALWAYS``, then, as they apply:
+    ``no_heat_book`` or ``heat_book_aged``; ``inlet_temp_modelled``
+    (a book, and ``inlet_measured`` False); ``bath_volume_inferred``
+    (``bath_source`` ``configured``); ``shower_volume_default``;
+    ``thermocline_unlocated``; ``capped_at_observed_volume``;
+    ``colder_than_all_evidence``; ``bath_ready_within_estimate_error``
+    (a book's error band) or ``bath_ready_within_probe_resolution``
+    (without one); ``draw_in_progress``; ``element_running``;
+    ``tou_window_in_force``; and, the bath not ready,
+    ``heating_not_scheduled``, ``time_to_ready_unavailable``,
+    ``heating_not_triggered``, ``bath_waits_for_tou_window_end`` or
+    ``bath_not_reached_by_full_recovery``."""
     p = params or ReadinessParams()
     bp = book_params or BookParams()
     score = _scorer(booked, tank, p, setpoint_f, bp)

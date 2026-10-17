@@ -75,6 +75,32 @@ Added
     ``domain_volume_gal``); a write or a written reservation outside the
     setpoint range the simulation runs is refused.
 
+  **Behaviour notes.** Answers that a client carrying an earlier copy of
+  this engine will see change at the switch:
+
+  - When no ``RecoveryModel`` answers (none given, or it declines) and
+    the physics integration stops at its bound short of the target,
+    there is no recovery and ``simulate`` raises ``SimulationError``.
+    The bound is no longer served as a duration.
+  - A recovery's reasons keep the served recovery's own (a truncated
+    integration, a model's diagnostics) beside ``recovery_low_confidence``.
+  - ``mode_recovery``'s ``upper_end_f`` is the zone's own temperature
+    when the element does not start or has nothing to do.
+  - A draw during a recovery honours ``draws_on`` and is priced on the
+    configured tank, not the 63.2 gal default.
+  - No ``hp_lower_on`` disables only the lower trigger; the upper
+    zone's at a TOU window's opening still starts the heater.
+  - A draw at a draw window's onset counts its cold side when the window
+    is judged.
+  - TOU prices are compared decoded at their own ``decimal_point``; each
+    period is laid out on the dates its day and season masks select
+    before windows that touch are joined across midnight.
+  - Scenario instants are held in UTC, so a horizon is elapsed time
+    across a daylight-saving change; a scenario document keeps which
+    fields were left to their defaults.
+  - ``sim.book.SpanLoss`` lets a client charge a loss the book does not
+    model; without one, the book charges none.
+
 Changed
 -------
 - **Superheat is converted as a difference** (#153).

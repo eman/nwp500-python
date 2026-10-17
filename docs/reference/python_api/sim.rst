@@ -136,11 +136,11 @@ Hot water and the heat book
       draw_domain_judgement, EXAMPLE_EVIDENCE, with_example_evidence
 
 .. automodule:: nwp500.sim.ready
-   :members: Recovery, TankNow, showers_ready_for, whole_showers
+   :members: assess, Recovery, TankNow, showers_ready_for, whole_showers
 
 .. automodule:: nwp500.sim.book
-   :members: Booked, BookedHeatLedger, full_tank_book, full_tank,
-      walk_booked, BookedPath
+   :members: Booked, BookedHeatLedger, SpanLoss, full_tank_book,
+      full_tank, walk_booked, loss_ceiling_btu, BookedPath
 
 
 Documents

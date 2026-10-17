@@ -92,10 +92,10 @@ from __future__ import annotations
 import itertools
 import math
 from bisect import bisect_left, bisect_right
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass, field, replace
 from datetime import datetime
-from typing import cast
+from typing import Protocol, cast
 
 from nwp500.sim.engine import Draw, HeatingInterval, PathPoint
 from nwp500.sim.extensions import (
@@ -579,6 +579,30 @@ def zone_cannot_move(
 Run = tuple[datetime, datetime]
 
 
+class SpanLoss(Protocol):
+    """A loss of heat the book does not model, a client's own: water the
+    installation circulates through its own plumbing, say. The walk
+    cuts its spans at ``edges``, charges ``loss`` over each span, and
+    treats a disturbed span as not quiet, so the tank does not
+    re-anchor across it; the engine's bound on what the walk can charge
+    (``loss_ceiling_btu``) adds ``bound``. None of it is called without
+    one (``walk_booked``'s ``extra``)."""
+
+    def edges(self, start: datetime, end: datetime) -> Iterable[datetime]:
+        """Instants within ``[start, end]`` where the loss starts or
+        stops, which the walk must stop at."""
+        ...
+
+    def loss(self, start: datetime, end: datetime) -> tuple[float, bool]:
+        """Heat lost over ``[start, end)``, BTU, and whether the tank is
+        disturbed then (not quiet)."""
+        ...
+
+    def bound(self, start: datetime, end: datetime) -> float:
+        """The most ``loss`` can charge over ``[start, end]``, BTU."""
+        ...
+
+
 @dataclass(frozen=True)
 class WalkCarry:
     """Where a walk stood on reaching an instant, before its rules there
@@ -664,6 +688,7 @@ def walk_booked(
     carry: WalkCarry | None = None,
     keep: datetime | None = None,
     withheld: Sequence[Run] = (),
+    extra: SpanLoss | None = None,
 ) -> BookedPath:
     """``start`` walked along ``points`` with the book's own terms.
 
@@ -688,6 +713,9 @@ def walk_booked(
     heat (the engine's ``withheld_windows``): the compressor or
     element runs there and adds nothing to the book, as it adds nothing
     to the zones. It is still running, so the tank is not quiet there.
+
+    ``extra`` is a client's own loss (``SpanLoss``): charged over each
+    span, and a span it disturbs is not quiet.
     """
     p = p or BookParams()
     if carry is not None:
@@ -719,6 +747,8 @@ def walk_booked(
         cuts.update(x for x in (h.start.at, h.end) if t0 < x < t1)
     for a, b in withheld:
         cuts.update(x for x in (a, b) if t0 < x < t1)
+    if extra is not None:
+        cuts.update(x for x in extra.edges(t0, t1) if t0 < x < t1)
     instants = sorted(cuts)
     by_instant: dict[datetime, float] = {}
     for at, gal in draws:
@@ -759,6 +789,11 @@ def walk_booked(
     ]
     # Heat into the bottom: what lifts the lower zone (``projected_release``).
     bottom_heats = [x[0] > 0.0 for x in inflow]
+    # A client's own loss over each span, and whether it disturbs it.
+    extras = [
+        extra.loss(a, b) if extra is not None else (0.0, False)
+        for a, b in spans
+    ]
 
     state = start
     before: list[Booked] = []
@@ -789,7 +824,7 @@ def walk_booked(
             kept = WalkCarry(
                 at, state, clean, drawn_yet, prev_heat, prev_bottom
             )
-        busy_next = k < len(spans) and heats[k]
+        busy_next = k < len(spans) and (heats[k] or extras[k][1])
         disturbed = by_instant.get(at, 0.0) > 0.0 or busy_next
         if prev_heat and not (k < len(spans) and heats[k]):
             clean = True
@@ -823,6 +858,9 @@ def walk_booked(
         bottom, top = inflow[k]
         upper, lower = zones(mid)
         lost = standby_btu(hours, upper, lower, ambient_at(mid), p)
+        lost += extras[k][0]
+        if extras[k][1]:
+            clean = False
         if heats[k]:
             clean = False
         state = state.heated(bottom, top, p).lost(lost)
@@ -844,13 +882,16 @@ def loss_ceiling_btu(
     b: datetime,
     upper_f: float,
     p: BookParams | None = None,
+    *,
+    extra: SpanLoss | None = None,
 ) -> float:
-    """The most the walk can charge for standby over ``[a, b]`` with no
-    zone hotter than ``upper_f``: standby from it to the coldest
-    ambient (``walk_booked``'s term, bounded)."""
+    """The most the walk can charge over ``[a, b]`` with no zone hotter
+    than ``upper_f``: standby from it to the coldest ambient
+    (``walk_booked``'s term, bounded), and a client's own loss's bound."""
     p = p or BookParams()
     hours = max(0.0, (b - a).total_seconds() / 3600.0)
-    return p.ua_btu_per_h_f * max(0.0, upper_f - _COLDEST_AMBIENT_F) * hours
+    standby = p.ua_btu_per_h_f * max(0.0, upper_f - _COLDEST_AMBIENT_F) * hours
+    return standby + (extra.bound(a, b) if extra is not None else 0.0)
 
 
 def _stopped_full(h: HeatingInterval) -> bool:
@@ -886,8 +927,8 @@ class BookedHeatLedger:
     Built per simulation: the book at the walk's start, the ambient the
     compressor and standby run to, the line and the fall rate the upper
     zone is taken down on (``ReadinessParams.line_f``,
-    ``fall_f_per_gal``), and the windows over which heat is credited
-    none."""
+    ``fall_f_per_gal``), the windows over which heat is credited none,
+    and a client's own loss (``SpanLoss``), if any."""
 
     start: Booked
     ambient_at: Callable[[datetime], float]
@@ -895,6 +936,7 @@ class BookedHeatLedger:
     withheld: Sequence[Run] = ()
     line_f: float = DEPLETION_THRESHOLD_F
     fall_f_per_gal: float = FALL_F_PER_GAL
+    extra: SpanLoss | None = None
 
     @property
     def zones(self) -> LedgerZones:
@@ -926,14 +968,15 @@ class BookedHeatLedger:
             carry=carry,
             keep=keep,
             withheld=self.withheld,
+            extra=self.extra,
         )
 
     def loss_bound(
         self, start: datetime, end: datetime, upper_f: float
     ) -> float:
-        """The most the walk can charge for standby over
-        ``[start, end]`` (``loss_ceiling_btu``)."""
-        return loss_ceiling_btu(start, end, upper_f, self.p)
+        """The most the walk can charge over ``[start, end]``
+        (``loss_ceiling_btu``)."""
+        return loss_ceiling_btu(start, end, upper_f, self.p, extra=self.extra)
 
     def after_draw(self, q: DrawTaken) -> AfterDraw:
         """The book walked along the path to the draws at ``q.at``, as

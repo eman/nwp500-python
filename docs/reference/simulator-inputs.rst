@@ -406,6 +406,14 @@ draw. Start one only from what you know:
    * - A ``Booked`` from your own record
      - You meter the hot water and keep a book of the tank's heat.
 
+A loss the book does not model, water an installation circulates
+through its own plumbing say, comes in through ``sim.book.SpanLoss``:
+its ``edges`` (where it starts and stops), its ``loss`` over each span
+and whether that span disturbs the tank (no re-anchor across it), and
+its ``bound``. Build the ledger with it and pass that instead of the
+book: ``simulate(scenario, params,
+ledger=BookedHeatLedger(book, ambient_at, params.book, extra=loss))``.
+
 Once started, the walk re-anchors whenever the simulated tank comes
 back full: a recovery the heater ends itself, or quiet after one with
 the zones within ``book.uniform_band_f``. A ``Booked`` whose

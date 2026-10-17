@@ -17,7 +17,9 @@ pytest.importorskip("pandas")
 
 from nwp500.sim.book import (
     Booked,
+    BookedHeatLedger,
     compressor_btu,
+    loss_ceiling_btu,
     standby_btu,
     walk_booked,
 )
@@ -346,3 +348,112 @@ class TestAWithheldWindow:
         )
         for at in (m(30), m(45), m(60)):
             assert path.before(at).anchor_age_h == AFTER_BATH.anchor_age_h
+
+
+class Circulation:
+    """A client's own loss (``SpanLoss``): ``btu_per_min`` while a run
+    is on, which disturbs the tank."""
+
+    def __init__(
+        self, runs: Sequence[tuple[datetime, datetime]], btu_per_min=318.0
+    ):
+        self.runs = list(runs)
+        self.rate = btu_per_min
+
+    def edges(self, start: datetime, end: datetime) -> list[datetime]:
+        return [x for r in self.runs for x in r]
+
+    def loss(self, a: datetime, b: datetime) -> tuple[float, bool]:
+        on = any(r0 <= a < r1 for r0, r1 in self.runs)
+        minutes = (b - a).total_seconds() / 60.0
+        return (self.rate * minutes if on else 0.0, on)
+
+    def bound(self, a: datetime, b: datetime) -> float:
+        return self.rate * sum(
+            max(0.0, (min(r1, b) - max(r0, a)).total_seconds() / 60.0)
+            for r0, r1 in self.runs
+        )
+
+
+def walk_with(points, extra, **kw):
+    return walk_booked(
+        kw.pop("start", AFTER_BATH),
+        points,
+        list(kw.pop("heat", ())),
+        list(kw.pop("draws", ())),
+        lambda _: 65.0,
+        extra=extra,
+    )
+
+
+class TestAClientsOwnLoss:
+    """The book charges a loss it does not model through ``SpanLoss``:
+    over each span, a disturbed span is not quiet, and the bound adds
+    it."""
+
+    def test_its_heat_is_charged_over_its_spans(self):
+        quiet = walk(flat(0, 60)).states[-1].heat_btu
+        run = Circulation([(m(10), m(20))])
+        charged = walk_with(flat(0, 60), run).states[-1].heat_btu
+        assert quiet - charged == pytest.approx(318.0 * 10)
+
+    def test_a_disturbed_span_does_not_re_anchor(self):
+        points = [*flat(0, 60), *flat(90, 120, upper=140.0, lower=139.5)]
+        end = walk_with(
+            points, Circulation([(m(90), m(94))]), heat=[heating(0, 90)]
+        ).states[-1]
+        assert end.cold_gal > 0.0
+
+    def test_it_anchors_as_the_heating_ends_before_a_later_run(self):
+        """The book anchors on the first quiet step after a recovery; a
+        run starting ten minutes later does not undo it."""
+        points = [*flat(0, 60), *flat(90, 120, upper=140.0, lower=139.5)]
+        path = walk_with(
+            points, Circulation([(m(100), m(110))]), heat=[heating(0, 90)]
+        )
+        assert path.states[2].cold_gal == 0.0
+        assert path.states[2].heat_btu == pytest.approx(
+            8.34 * EP.tank_gal * (139.75 - 70.0)
+        )
+
+    def test_the_bound_adds_it(self):
+        run = Circulation([(m(10), m(20)), (m(50), m(70))])
+        standby = loss_ceiling_btu(m(0), m(60), 140.0)
+        assert loss_ceiling_btu(m(0), m(60), 140.0, extra=run) == pytest.approx(
+            standby + 318.0 * 20
+        )
+        ledger = BookedHeatLedger(AFTER_BATH, lambda _: 65.0, extra=run)
+        assert ledger.loss_bound(m(0), m(60), 140.0) == pytest.approx(
+            standby + 318.0 * 20
+        )
+
+    def test_resumed_at_every_instant_it_is_still_the_whole_walk(self):
+        points, heat, draws = busy_day()
+        run = Circulation([(m(a), m(a + 6)) for a in (100, 380, 610, 880)])
+        start = replace(AFTER_BATH, cold_seen=True)
+        whole = walk_with(points, run, heat=heat, draws=draws, start=start)
+        carry = None
+        for pt in points[::7]:
+            prefix = [p for p in points if p.at <= pt.at]
+            first = walk_booked(
+                start,
+                prefix,
+                heat,
+                [d for d in draws if d[0] <= pt.at],
+                lambda _: 65.0,
+                carry=carry,
+                keep=pt.at,
+                extra=run,
+            )
+            carry = first.carry
+            rest = walk_booked(
+                start,
+                points,
+                heat,
+                draws,
+                lambda _: 65.0,
+                carry=carry,
+                extra=run,
+            )
+            j = next(k for k, p in enumerate(points) if p.at == pt.at)
+            assert rest.states == whole.states[j:]
