@@ -194,6 +194,26 @@ class TestRecoveries:
         assert row.delta_t_lower == 45.0
         assert row.reached
 
+    def test_the_air_falls_back_to_the_last_reading(self):
+        h = recovery_history([(2, 160, 100.0)])
+        start = T0 + timedelta(hours=2)
+        h.loc[start:, "heater_air_f"] = np.nan
+        h.loc[start, "heater_air_f"] = 61.0
+        h.loc[
+            start + timedelta(minutes=30) - timedelta(minutes=5) : start
+            + timedelta(minutes=30),
+            "lower_f",
+        ] = 95.0
+        (row,) = cal.recoveries(h).itertuples()
+        # The coldest snapshot has no air after it: the reading before.
+        assert row.start_time == start + timedelta(minutes=30)
+        assert row.t_amb_mean == 61.0
+
+    def test_a_cycle_without_air_is_no_recovery(self):
+        h = recovery_history([(2, 100, 100.0)])
+        h["heater_air_f"] = np.nan
+        assert cal.recoveries(h).empty
+
     def test_the_snapshots(self):
         start = T0
         assert cal._snapshots(start, start + timedelta(minutes=14)) == []

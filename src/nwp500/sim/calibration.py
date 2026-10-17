@@ -675,10 +675,16 @@ def recoveries(
             continue
         inside = (index >= start) & (index <= end)
         reached = bool(np.any(lower_f[inside] >= target - REACHED_TOLERANCE_F))
+        # A snapshot reads the cycle's own samples, [start, end): the last
+        # at or before it, else the cycle's first.
+        cycle = (index >= start) & (index < end)
+        if not cycle.any():
+            continue
+        c_seconds, c_air = seconds[cycle], air_f[cycle]
         best: dict[str, object] | None = None
         for at in _snapshots(start, end):
-            lower = _asof(lower_f, seconds, at)
-            upper = _asof(upper_f, seconds, at)
+            lower = _asof(lower_f[cycle], c_seconds, at)
+            upper = _asof(upper_f[cycle], c_seconds, at)
             if lower is None or upper is None or target - lower <= 0.0:
                 continue
             minutes = (end - at).total_seconds() / 60.0
@@ -689,14 +695,24 @@ def recoveries(
                 and minutes <= MAX_RECOVERY_LABEL_MINUTES
             ):
                 continue
+            # The air from the snapshot to the end, else at the snapshot;
+            # none in the whole cycle and the next coldest snapshot can do
+            # no better.
+            tail = c_air[c_seconds >= at.timestamp()]
+            tail = tail[np.isfinite(tail)]
+            air_mean = (
+                float(np.mean(tail))
+                if len(tail)
+                else _asof(c_air, c_seconds, at)
+            )
+            if air_mean is None:
+                continue
             # The snapshot with the coldest lower probe, the earliest of
             # equals: a draw that takes the probe below where it started
             # moves the row to after it.
             if best is not None and lower >= cast(float, best["t_start_lower"]):
                 continue
-            tail = (index >= at) & (index <= end)
-            air_in = air_f[tail][np.isfinite(air_f[tail])]
-            humidity = _asof(humidity_pct, seconds, at)
+            humidity = _asof(humidity_pct[cycle], c_seconds, at)
             best = {
                 "start_time": at,
                 "end_time": end,
@@ -705,9 +721,7 @@ def recoveries(
                 "t_start_upper": upper,
                 "stratification_gap": upper - lower,
                 "delta_t_lower": target - lower,
-                "t_amb_mean": (
-                    float(np.mean(air_in)) if len(air_in) else float("nan")
-                ),
+                "t_amb_mean": air_mean,
                 "h_amb_start": 50.0 if humidity is None else humidity,
                 "reached": reached,
             }
