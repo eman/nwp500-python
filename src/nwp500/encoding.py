@@ -411,7 +411,8 @@ def build_reservation_entry(
         days: Collection of weekday names or indices
         hour: Hour (0-23)
         minute: Minute (0-59)
-        mode_id: DHW operation mode ID (1-6, see DhwOperationSetting)
+        mode_id: Reservation mode ID (1-5, see ReservationMode: 1 Heat Pump,
+            2 Electric, 3 Energy Saver, 4 High Demand, 5 Power Off)
         temperature: Target temperature in the user's preferred unit
             (Celsius or Fahrenheit based on global context).
             Automatically converted to half-degrees Celsius for the device.
@@ -485,13 +486,13 @@ def build_reservation_entry(
             min_value=0,
             max_value=59,
         )
-    if not 1 <= mode_id <= 6:
+    if not 1 <= mode_id <= 5:
         raise RangeValidationError(
-            "mode_id must be between 1 and 6 (see DhwOperationSetting)",
+            "mode_id must be between 1 and 5 (see ReservationMode)",
             field="mode_id",
             value=mode_id,
             min_value=1,
-            max_value=6,
+            max_value=5,
         )
     if not min_temp <= temperature <= max_temp:
         raise RangeValidationError(

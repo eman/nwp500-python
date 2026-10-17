@@ -112,9 +112,15 @@ Use ``MqttClientEvents`` constants to avoid typos and get IDE autocomplete:
    def on_error(event):
        print(f"Error: {event.error_code}")
 
+   def on_control_failed(event):
+       # The device refused a command (no ack is sent for it); fail code 2
+       # means the previous DHW control was too recent: wait and resend.
+       print(f"Command rejected: {event.reason}")
+
    mqtt_client.on(MqttClientEvents.TEMPERATURE_CHANGED, on_temp_change)
    mqtt_client.on(MqttClientEvents.HEATING_STARTED, on_heating_start)
    mqtt_client.on(MqttClientEvents.ERROR_DETECTED, on_error)
+   mqtt_client.on(MqttClientEvents.CONTROL_FAILED, on_control_failed)
 
    for event_name in MqttClientEvents.get_all_events():
        print(f"  - {event_name}")

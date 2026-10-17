@@ -555,6 +555,7 @@ class TestActivelyReconnectingFlag:
             client._auth_client.ensure_valid_token = AsyncMock()
             client._auth_client.current_tokens.refresh_token = "ref"
             client._auth_client.refresh_token = AsyncMock()
+            client._auth_client.refresh_session = AsyncMock()
             client._subscription_manager = None
             await client._deep_reconnect()
 
@@ -585,6 +586,7 @@ class TestActivelyReconnectingFlag:
             client._auth_client.ensure_valid_token = AsyncMock()
             client._auth_client.current_tokens.refresh_token = "ref"
             client._auth_client.refresh_token = AsyncMock()
+            client._auth_client.refresh_session = AsyncMock()
             with pytest.raises(AwsCrtError):
                 await client._deep_reconnect()
 

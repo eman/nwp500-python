@@ -186,7 +186,11 @@ class DeviceControlCommandsMixin:
         )
 
     async def set_recirculation_mode(self, device: Device, mode: int) -> int:
-        """Set recirculation pump operation mode (1-4)."""
+        """Set recirculation pump operation mode.
+
+        ``mode``: 1 = always on, 2 = weekly schedule, 3 = hot button only,
+        4 = no recirculation (:class:`~nwp500.enums.RecirculationMode`).
+        """
         return await self._device_controller.set_recirculation_mode(
             device, mode
         )

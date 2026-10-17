@@ -458,7 +458,11 @@ async def vacation_duration(
 )
 @async_command
 async def recirc(mqtt: NavienMqttClient, device: Any, mode_val: str) -> None:
-    """Set recirculation pump mode (1-4)."""
+    """Set recirculation pump mode.
+
+    1 = always on, 2 = weekly schedule, 3 = hot button only,
+    4 = no recirculation.
+    """
     await handlers.handle_set_recirculation_mode_request(
         mqtt, device, int(mode_val)
     )

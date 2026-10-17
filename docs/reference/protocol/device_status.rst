@@ -48,6 +48,11 @@ This document lists the fields found in the ``status`` object of device status m
      - None
      - Sub error code providing additional error details. See ERROR_CODES.rst for details.
      - None
+   * - ``minorCode``
+     - integer
+     - None
+     - Secondary alarm code, shown by the NaviLink app as ``R%03d`` alongside ``errorCode``. 0 = none. 101 is the one code the app lets the user reset from its alarm screen. Exposed as ``DeviceStatus.minor_code``.
+     - None
    * - ``operationMode``
      - CurrentOperationMode
      - None
@@ -196,7 +201,7 @@ This document lists the fields found in the ``status`` object of device status m
    * - ``drEventStatus``
      - integer
      - None
-     - Demand Response (DR) event status. Indicates if utility DR commands are active (CTA-2045).
+     - Demand Response (DR) event status (CTA-2045), the ``DREvent`` enum: 0 = Not Applied, 1 = Run Normal, 2 = Shed, 3 = Load Up, 4 = Advanced Load Up, 5 = CPE, 6 = Grid Emergency.
      - None
    * - ``vacationDaySetting``
      - integer
@@ -236,7 +241,7 @@ This document lists the fields found in the ``status`` object of device status m
    * - ``dhwOperationSetting``
      - DhwOperationSetting
      - None
-     - User's configured DHW operation mode preference. This field uses the ``DhwOperationSetting`` enum (separate from ``CurrentOperationMode``) and contains command mode values (1=HEAT_PUMP, 2=ELECTRIC, 3=ENERGY_SAVER, 4=HIGH_DEMAND, 5=VACATION, 6=POWER_OFF). When the device is powered off via the power-off command, this field will show 6 (POWER_OFF). This is how to distinguish between "powered off" vs "on but in standby". See the Operation Modes section below for details.
+     - User's configured DHW operation mode preference. This field uses the ``DhwOperationSetting`` enum (separate from ``CurrentOperationMode``) and contains command mode values (1=HEAT_PUMP, 2=ELECTRIC, 3=ENERGY_SAVER, 4=HIGH_DEMAND, 5=VACATION, 6=POWER_OFF); the device may also report 0 (STANDBY), which cannot be sent. When the device is powered off via the power-off command, this field will show 6 (POWER_OFF). This is how to distinguish between "powered off" vs "on but in standby". See the Operation Modes section below for details.
      - None
    * - ``temperatureType``
      - integer
@@ -336,12 +341,12 @@ This document lists the fields found in the ``status`` object of device status m
    * - ``airFilterAlarmElapsed``
      - integer
      - hours
-     - Operating hours elapsed since last air filter maintenance reset. Track this to schedule preventative replacement.
+     - Reported but never read by the NaviLink app; semantics unconfirmed. Remaining filter life comes from ``cumulatedOpTimeEvaFan``.
      - None
    * - ``cumulatedOpTimeEvaFan``
      - integer
      - hours
-     - Cumulative operation time of the evaporator fan since installation.
+     - Evaporator fan run time since the last air-filter reset. The NaviLink app shows remaining filter life as ``airFilterAlarmPeriod - cumulatedOpTimeEvaFan`` (``DeviceStatus.air_filter_remaining_hours``). The lifetime total is the diagnostics field of the same name.
      - None
    * - ``cumulatedDhwFlowRate``
      - integer
@@ -441,7 +446,7 @@ This document lists the fields found in the ``status`` object of device status m
    * - ``drOverrideStatus``
      - integer
      - None
-     - Demand Response override status. User can override DR commands for up to 72 hours.
+     - Demand Response override flag in the device's on/off convention: 0 = unknown, 1 = off, 2 = on ("DR applied" in the NaviLink app). Not an hour count. ``DeviceStatus.dr_override_active`` is True when it is 2.
      - None
    * - ``touOverrideStatus``
      - integer

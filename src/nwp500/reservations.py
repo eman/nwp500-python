@@ -196,7 +196,7 @@ async def add_reservation(
             6 = Sunday.
         hour: Hour of the day in 24-hour format (0–23).
         minute: Minute of the hour (0–59).
-        mode: DHW operation mode (1–6).
+        mode: Reservation mode (1–5, see ``ReservationMode``).
         temperature: Target temperature in the user's preferred unit.
 
     Raises:
@@ -209,8 +209,8 @@ async def add_reservation(
         raise ValueError(f"Hour must be between 0 and 23, got {hour}")
     if not 0 <= minute <= 59:
         raise ValueError(f"Minute must be between 0 and 59, got {minute}")
-    if not 1 <= mode <= 6:
-        raise ValueError(f"Mode must be between 1 and 6, got {mode}")
+    if not 1 <= mode <= 5:
+        raise ValueError(f"Mode must be between 1 and 5, got {mode}")
 
     reservation_entry = build_reservation_entry(
         enabled=enabled,
@@ -306,7 +306,8 @@ async def update_reservation(
             :func:`add_reservation`).
         hour: Replace the hour (0–23), or ``None`` to keep current.
         minute: Replace the minute (0–59), or ``None`` to keep current.
-        mode: Replace the mode (1–6), or ``None`` to keep current.
+        mode: Replace the mode (1–5, see ``ReservationMode``), or ``None``
+            to keep current.
         temperature: Replace the temperature (in the user's preferred unit),
             or ``None`` to keep the existing raw ``param`` value unchanged.
 
@@ -332,8 +333,8 @@ async def update_reservation(
         raise ValueError(f"Hour must be between 0 and 23, got {hour}")
     if minute is not None and not 0 <= minute <= 59:
         raise ValueError(f"Minute must be between 0 and 59, got {minute}")
-    if mode is not None and not 1 <= mode <= 6:
-        raise ValueError(f"Mode must be between 1 and 6, got {mode}")
+    if mode is not None and not 1 <= mode <= 5:
+        raise ValueError(f"Mode must be between 1 and 5, got {mode}")
 
     existing = schedule.reservation[index - 1]
 

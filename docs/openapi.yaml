@@ -42,6 +42,59 @@ paths:
           content:
             application/json:
               schema:
+                $ref: '#/components/schemas/SignInResponse'
+  /user/secured-sign-in:
+    post:
+      summary: Secured Sign-In
+      description: |
+        Re-authenticates with an existing access token instead of a password
+        and returns a full sign-in response (user info, JWT tokens and AWS
+        credentials). The NaviLink app uses it to restore a session without
+        prompting for credentials. The access token goes in the
+        `Authorization` header as on every other authenticated call.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [userId]
+              properties:
+                userId:
+                  type: string
+                  example: user@example.com
+      responses:
+        '200':
+          description: Successful authentication; identical to /user/sign-in
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SignInResponse'
+  /auth/session/refresh:
+    post:
+      summary: Refresh AWS Session Credentials
+      description: |
+        Issues fresh AWS (MQTT) session credentials for the signed-in user
+        without rotating the JWT tokens. The access token goes in the
+        `Authorization` header. Every field of `data` is optional; the
+        NaviLink app only stores the ones present.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [userId]
+              properties:
+                userId:
+                  type: string
+                  example: user@example.com
+      responses:
+        '200':
+          description: New AWS session credentials
+          content:
+            application/json:
+              schema:
                 type: object
                 properties:
                   code:
@@ -53,49 +106,15 @@ paths:
                   data:
                     type: object
                     properties:
-                      userInfo:
-                        type: object
-                        properties:
-                          userType:
-                            type: string
-                            example: "O"
-                          userFirstName:
-                            type: string
-                            example: "John"
-                          userLastName:
-                            type: string
-                            example: "Doe"
-                          userStatus:
-                            type: string
-                            example: "NORMAL"
-                          userSeq:
-                            type: integer
-                            example: 36283
-                      legal:
-                        type: array
-                        items:
-                          type: object
-                      token:
-                        type: object
-                        properties:
-                          idToken:
-                            type: string
-                          accessToken:
-                            type: string
-                          refreshToken:
-                            type: string
-                          authenticationExpiresIn:
-                            type: integer
-                            example: 3600
-                          accessKeyId:
-                            type: string
-                          secretKey:
-                            type: string
-                          sessionToken:
-                            type: string
-                          authorizationExpiresIn:
-                            type: integer
-                            example: 3600
+                      accessKeyId:
+                        type: string
+                      secretKey:
+                        type: string
+                      sessionToken:
+                        type: string
+                      authorizationExpiresIn:
+                        type: integer
+                        example: 3600
   /auth/refresh:
     post:
       summary: Refresh Token
@@ -309,24 +328,18 @@ paths:
                             type: [object, "null"]
                       installer:
                         type: object
+                        description: Installer linked to the device; every field null when there is none.
                         properties:
                           installerId:
-                            type: [object, "null"]
+                            type: [string, "null"]
                           installerFirstName:
-                            type: [object, "null"]
+                            type: [string, "null"]
                           installerLastName:
-                            type: [object, "null"]
+                            type: [string, "null"]
                           installerPhoneNumber:
-                            type: [object, "null"]
+                            type: [string, "null"]
                       alarmInfo:
-                        type: object
-                        properties:
-                          isEtcAlarm:
-                            type: integer
-                            example: 1
-                          isErrorAlarm:
-                            type: integer
-                            example: 1
+                        $ref: '#/components/schemas/PushSettings'
                       descaling:
                         type: object
                         properties:
@@ -387,6 +400,15 @@ paths:
                               example: 52
                             deviceGroup:
                               type: [object, "null"]
+                              description: Null for a stand-alone unit.
+                              properties:
+                                groupSeq:
+                                  type: integer
+                                unitNum:
+                                  type: integer
+                            deviceGroupUnitNo:
+                              type: integer
+                              description: Unit number within the group; the app reads this and deviceGroup.unitNum.
                             curSwCode:
                               type: integer
                               example: 33556241
@@ -641,6 +663,115 @@ paths:
                             type: integer
                           controllerId:
                             type: string
+    delete:
+      summary: Remove TOU Rate Plan
+      description: |
+        Removes the TOU rate plan from a device. The NaviLink app serialises
+        the same request object it sends to PUT and appends it to the URL as
+        a query string (a DELETE carries no body). It sends `controllerId`
+        for a plan registered over Bluetooth (`registerPath` = `bt`) and
+        `macAddress`/`additionalValue` otherwise.
+      parameters:
+        - name: userId
+          in: query
+          required: true
+          schema:
+            type: string
+          example: "user@example.com"
+        - name: userType
+          in: query
+          required: true
+          schema:
+            type: string
+          example: "O"
+        - name: registerPath
+          in: query
+          schema:
+            type: string
+          example: "wifi"
+          description: wifi or bt
+        - name: sourceType
+          in: query
+          schema:
+            type: string
+          example: "openei"
+        - name: macAddress
+          in: query
+          schema:
+            type: string
+          example: "04786332fca0"
+          description: WiFi-registered plan
+        - name: additionalValue
+          in: query
+          schema:
+            type: string
+          example: "5322"
+          description: WiFi-registered plan
+        - name: controllerId
+          in: query
+          schema:
+            type: string
+          example: "56496061BT22230408"
+          description: Bluetooth-registered plan
+      responses:
+        '200':
+          description: Rate plan removed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SimpleResponse'
+  /device/tou/manufacture-id:
+    get:
+      summary: Get Manufacture ID
+      description: |
+        Returns the manufacture ID the TOU service holds for a device. The
+        NaviLink app treats `"000000000000000"` as not available. The app
+        serialises its request object and appends it as a query string.
+      parameters:
+        - name: userId
+          in: query
+          required: true
+          schema:
+            type: string
+          example: "user@example.com"
+        - name: macAddress
+          in: query
+          required: true
+          schema:
+            type: string
+          example: "04786332fca0"
+        - name: additionalValue
+          in: query
+          required: true
+          schema:
+            type: string
+          example: "5322"
+        - name: controllerId
+          in: query
+          required: true
+          schema:
+            type: string
+          example: "56496061BT22230408"
+      responses:
+        '200':
+          description: Manufacture ID
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: integer
+                    example: 200
+                  msg:
+                    type: string
+                    example: SUCCESS
+                  data:
+                    type: object
+                    properties:
+                      manufactureId:
+                        type: string
+                        example: "6760E2532669023"
   /device/tou/convert:
     post:
       summary: Convert OpenEI Rate Plans to Device Format
@@ -751,6 +882,33 @@ paths:
           content:
             application/json:
               schema:
+                $ref: '#/components/schemas/SimpleResponse'
+  /app/version:
+    post:
+      summary: App Version Check
+      description: |
+        Latest and minimum supported NaviLink app versions. Called by the
+        app's splash screen before sign-in, so it sends no `Authorization`
+        header. When the backend is down for maintenance it answers 403
+        with `data.serverCheckText` carrying the notice to display.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                os:
+                  type: string
+                  example: "A"
+                  description: Platform; the app sends "A" (Android)
+      responses:
+        '200':
+          description: App versions
+          content:
+            application/json:
+              schema:
                 type: object
                 properties:
                   code:
@@ -759,8 +917,699 @@ paths:
                   msg:
                     type: string
                     example: SUCCESS
+                  data:
+                    type: object
+                    properties:
+                      appVersion:
+                        type: string
+                        example: "2.04.00"
+                      appForceVersion:
+                        type: string
+                        example: "2.00.00"
+        '403':
+          description: Backend under maintenance
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: integer
+                    example: 403
+                  msg:
+                    type: string
+                  data:
+                    type: object
+                    properties:
+                      serverCheckText:
+                        type: string
+                        description: Maintenance notice; literal "\n" sequences mark line breaks.
+  /user/info:
+    post:
+      summary: User Profile
+      description: |
+        The signed-in user's profile: the sign-in response's `userInfo`
+        plus phone number and e-mail. The app treats a null `userLastName`
+        as an empty string.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [userId]
+              properties:
+                userId:
+                  type: string
+                  example: "user@example.com"
+      responses:
+        '200':
+          description: User profile
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: integer
+                    example: 200
+                  msg:
+                    type: string
+                    example: SUCCESS
+                  data:
+                    type: object
+                    properties:
+                      userType:
+                        type: string
+                        example: "O"
+                      userFirstName:
+                        type: string
+                        example: "Jane"
+                      userLastName:
+                        type: [string, "null"]
+                      userPhoneNumber:
+                        type: [string, "null"]
+                        example: "5551234"
+                      userSeq:
+                        type: integer
+                        example: 36283
+                      userEmail:
+                        type: string
+                        example: "user@example.com"
+  /user/get-push-settings:
+    post:
+      summary: Get Push Settings
+      description: |
+        Which push notifications are enabled for one device. Flags are
+        **1 = on, 2 = off** (the app sends `isChecked() ? 1 : 2`), the
+        reverse of the device's own on/off flags.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserDeviceRequest'
+      responses:
+        '200':
+          description: Push settings
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: integer
+                    example: 200
+                  msg:
+                    type: string
+                    example: SUCCESS
+                  data:
+                    $ref: '#/components/schemas/PushSettings'
+  /user/set-push-settings:
+    post:
+      summary: Set Push Settings
+      description: |
+        Enables or disables push notifications for one device. Any flag
+        may be omitted; the app leaves `isDescalingAlarm` out for a member
+        account.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: '#/components/schemas/UserDeviceRequest'
+                - $ref: '#/components/schemas/PushSettings'
+      responses:
+        '200':
+          description: Push settings updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SimpleResponse'
+  /device/change-info:
+    post:
+      summary: Update Device Info
+      description: |
+        Renames a device or updates its installation type and location.
+        The app omits `installType` when empty, omits `location` unless at
+        least one of state/city/address is set, and inside it leaves out
+        empty strings and zero coordinates.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [userId, deviceInfo]
+              properties:
+                userId:
+                  type: string
+                  example: "user@example.com"
+                deviceInfo:
+                  type: object
+                  required: [macAddress, additionalValue, deviceType, deviceName]
+                  properties:
+                    macAddress:
+                      type: string
+                      example: "04786332fca0"
+                    additionalValue:
+                      type: string
+                      example: "5322"
+                    deviceType:
+                      type: integer
+                      example: 52
+                    deviceName:
+                      type: string
+                      example: "Garage Heater"
+                    installType:
+                      type: string
+                      example: "R"
+                location:
+                  type: object
+                  properties:
+                    state:
+                      type: string
+                    city:
+                      type: string
+                    address:
+                      type: string
+                    latitude:
+                      type: number
+                    longitude:
+                      type: number
+                    altitude:
+                      type: number
+      responses:
+        '200':
+          description: Device updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SimpleResponse'
+  /device/simple-list:
+    post:
+      summary: Simple Device List
+      description: |
+        A trimmed device list. The app sends `targetUserId` equal to the
+        signed-in user for its product-management screen, and an owner's ID
+        when an installer views that owner's devices.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [userId, targetUserId, offset, count]
+              properties:
+                userId:
+                  type: string
+                  example: "user@example.com"
+                targetUserId:
+                  type: string
+                  example: "user@example.com"
+                offset:
+                  type: integer
+                  example: 0
+                count:
+                  type: integer
+                  example: 20
+      responses:
+        '200':
+          description: Device list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: integer
+                    example: 200
+                  msg:
+                    type: string
+                    example: SUCCESS
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        macAddress:
+                          type: string
+                          example: "04786332fca0"
+                        additionalValue:
+                          type: string
+                          example: "5322"
+                        deviceType:
+                          type: integer
+                          example: 52
+                        modelTypeCode:
+                          type: [integer, "null"]
+                        deviceName:
+                          type: string
+                          example: "NWP500"
+  /device/error/list:
+    post:
+      summary: Device Error History
+      description: |
+        Faults the cloud has recorded for a device. The app calls this only
+        from its installer error-list screen and sends the signed-in user's
+        ID as `installerId`; whether an owner's ID is accepted is untested.
+        Pages are keyed by the last entry's `errorOccuredTime`, sent back as
+        `continuousKey` (omitted on the first page).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [installerId, macAddress, additionalValue, count]
+              properties:
+                installerId:
+                  type: string
+                  example: "installer@example.com"
+                macAddress:
+                  type: string
+                  example: "04786332fca0"
+                additionalValue:
+                  type: string
+                  example: "5322"
+                continuousKey:
+                  type: integer
+                  format: int64
+                  example: 1733572682000
+                  description: errorOccuredTime of the last entry of the previous page
+                count:
+                  type: integer
+                  example: 20
+      responses:
+        '200':
+          description: Error history
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: integer
+                    example: 200
+                  msg:
+                    type: string
+                    example: SUCCESS
+                  data:
+                    type: object
+                    properties:
+                      timeZone:
+                        type: string
+                        example: "America/Los_Angeles"
+                      errorInfo:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            channelNumber:
+                              type: integer
+                              example: 1
+                            unitType:
+                              type: integer
+                              example: 1
+                            errorCode:
+                              type: integer
+                              example: 96
+                            subError:
+                              type: integer
+                              example: 0
+                            errorOccuredTime:
+                              type: integer
+                              format: int64
+                              example: 1733572682000
+                              description: Epoch milliseconds
+  /device/filter/change-info:
+    post:
+      summary: Record Air Filter Replacement
+      description: Records the date the air filter was replaced.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MaintenanceDateRequest'
+      responses:
+        '200':
+          description: Recorded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SimpleResponse'
+  /device/cip/change-info:
+    post:
+      summary: Record CIP Service
+      description: Records the date a CIP (clean-in-place / descaling) service was done.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MaintenanceDateRequest'
+      responses:
+        '200':
+          description: Recorded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SimpleResponse'
+  /device/filter/history:
+    post:
+      summary: Air Filter Replacement History
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MaintenanceHistoryRequest'
+      responses:
+        '200':
+          description: History
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MaintenanceHistoryResponse'
+  /device/cip/history:
+    post:
+      summary: CIP Service History
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MaintenanceHistoryRequest'
+      responses:
+        '200':
+          description: History
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MaintenanceHistoryResponse'
+  /device/preferences/format:
+    get:
+      summary: Get Display Preferences
+      description: |
+        Unit display preferences stored for a device. The app serialises its
+        request object and appends it to the URL as a query string, and uses
+        the first entry of the returned list.
+      parameters:
+        - name: macAddress
+          in: query
+          required: true
+          schema:
+            type: string
+          example: "04786332fca0"
+        - name: additionalValue
+          in: query
+          required: true
+          schema:
+            type: string
+          example: "5322"
+        - name: modelTypeCode
+          in: query
+          schema:
+            type: integer
+          example: 1
+          description: From the device feature; omitted when unknown
+      responses:
+        '200':
+          description: Display preferences
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: integer
+                    example: 200
+                  msg:
+                    type: string
+                    example: SUCCESS
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/DisplayPreferences'
+    post:
+      summary: Set Display Preferences
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              allOf:
+                - type: object
+                  required: [macAddress, additionalValue]
+                  properties:
+                    macAddress:
+                      type: string
+                      example: "04786332fca0"
+                    additionalValue:
+                      type: string
+                      example: "5322"
+                - $ref: '#/components/schemas/DisplayPreferences'
+      responses:
+        '200':
+          description: Preferences stored
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SimpleResponse'
+  /firmware/info:
+    post:
+      summary: Firmware Image Detail
+      description: |
+        Describes one firmware image by the `curSwCode`/`curVersion` (or
+        `downloadedVersion`) pair from /device/firmware/info. The app shows
+        `description` on its update screen and `runTime` as the estimated
+        update duration in minutes (new in NaviLink 2.04.00).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [swCode, swVersion]
+              properties:
+                swCode:
+                  type: integer
+                  example: 33556241
+                swVersion:
+                  type: integer
+                  example: 167837696
+      responses:
+        '200':
+          description: Firmware detail
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: integer
+                    example: 200
+                  msg:
+                    type: string
+                    example: SUCCESS
+                  data:
+                    type: object
+                    properties:
+                      description:
+                        type: string
+                      modelNumber:
+                        type: integer
+                      modelType:
+                        type: integer
+                      productFamily:
+                        type: integer
+                      registerAt:
+                        type: integer
+                        format: int64
+                        example: 1700000000000
+                      runTime:
+                        type: integer
+                        example: 15
+                        description: Estimated update duration in minutes
+                      swCode:
+                        type: integer
+                        example: 33556241
+                      swVersion:
+                        type: integer
+                        example: 167837696
 components:
   schemas:
+    SimpleResponse:
+      type: object
+      description: Response envelope of an endpoint that returns no data.
+      properties:
+        code:
+          type: integer
+          example: 200
+        msg:
+          type: string
+          example: SUCCESS
+    SignInResponse:
+      type: object
+      description: Returned by /user/sign-in and /user/secured-sign-in.
+      properties:
+        code:
+          type: integer
+          example: 200
+        msg:
+          type: string
+          example: SUCCESS
+        data:
+          type: object
+          properties:
+            userInfo:
+              type: object
+              properties:
+                userType:
+                  type: string
+                  example: "O"
+                userFirstName:
+                  type: string
+                  example: "John"
+                userLastName:
+                  type: string
+                  example: "Doe"
+                userStatus:
+                  type: string
+                  example: "NORMAL"
+                userSeq:
+                  type: integer
+                  example: 36283
+            legal:
+              type: array
+              items:
+                type: object
+            token:
+              type: object
+              properties:
+                idToken:
+                  type: string
+                accessToken:
+                  type: string
+                refreshToken:
+                  type: string
+                authenticationExpiresIn:
+                  type: integer
+                  example: 3600
+                accessKeyId:
+                  type: string
+                secretKey:
+                  type: string
+                sessionToken:
+                  type: string
+                authorizationExpiresIn:
+                  type: integer
+                  example: 3600
+    UserDeviceRequest:
+      type: object
+      required: [userId, macAddress, additionalValue]
+      properties:
+        userId:
+          type: string
+          example: "user@example.com"
+        macAddress:
+          type: string
+          example: "04786332fca0"
+        additionalValue:
+          type: string
+          example: "5322"
+    PushSettings:
+      type: object
+      description: "Push-notification flags: 1 = on, 2 = off (reverse of the device's on/off flags). A flag the cloud does not report is absent."
+      properties:
+        isErrorAlarm:
+          type: integer
+          enum: [1, 2]
+          example: 1
+        isDescalingAlarm:
+          type: integer
+          enum: [1, 2]
+          example: 1
+        isEtcAlarm:
+          type: integer
+          enum: [1, 2]
+          example: 1
+    MaintenanceDateRequest:
+      type: object
+      required: [userId, macAddress, additionalValue, deviceType, maintenanceDate]
+      properties:
+        userId:
+          type: string
+          example: "user@example.com"
+        macAddress:
+          type: string
+          example: "04786332fca0"
+        additionalValue:
+          type: string
+          example: "5322"
+        deviceType:
+          type: integer
+          example: 52
+        maintenanceDate:
+          type: string
+          example: "2025-3-7"
+          description: "YYYY-M-D without zero padding: the app concatenates its date picker's integers."
+    MaintenanceHistoryRequest:
+      type: object
+      required: [userId, offset, count, macAddress, additionalValue]
+      properties:
+        userId:
+          type: string
+          example: "user@example.com"
+        offset:
+          type: integer
+          example: 0
+        count:
+          type: integer
+          example: 20
+        macAddress:
+          type: string
+          example: "04786332fca0"
+        additionalValue:
+          type: string
+          example: "5322"
+    MaintenanceHistoryResponse:
+      type: object
+      properties:
+        code:
+          type: integer
+          example: 200
+        msg:
+          type: string
+          example: SUCCESS
+        data:
+          type: array
+          items:
+            type: object
+            properties:
+              maintenanceDate:
+                type: string
+                example: "2025-3-7"
+              registerAt:
+                type: integer
+                description: Read as an integer by the app; unit undocumented.
+    DisplayPreferences:
+      type: object
+      properties:
+        modelTypeCode:
+          type: integer
+          example: 1
+        pressureDisplayFormat:
+          type: string
+          enum: [P, M]
+          example: "P"
+          description: P = psi, M = metric
+        temperatureDisplayFormat:
+          type: string
+          enum: [F, C]
+          example: "F"
     TOUInterval:
       type: object
       properties:

@@ -520,11 +520,11 @@ Safety and Diagnostic Fields
    * - ``airFilterAlarmElapsed``
      - None (direct value)
      - hours
-     - **Hours elapsed since last air filter maintenance reset**. Resets to 0 when maintenance is performed. Track this to schedule preventative replacement.
+     - **Reported but not used by the NaviLink app**, which never reads it. Its semantics are unconfirmed; do not rely on it for filter life.
    * - ``cumulatedOpTimeEvaFan``
      - None (direct value)
      - hours
-     - **Total evaporator fan runtime since installation**. Diagnostic indicator of system usage and fan wear.
+     - **Evaporator fan run time since the last air-filter reset**. The NaviLink app computes remaining filter life as ``airFilterAlarmPeriod - cumulatedOpTimeEvaFan`` hours (shown in days as ``ceil(hours / 24)``); ``DeviceStatus.air_filter_remaining_hours`` does the same. The lifetime fan total is the diagnostics field of the same name.
    * - ``wtrOvrSensorUse``
      - device_bool
      - Boolean
@@ -584,11 +584,11 @@ Vacation and Scheduling Fields
    * - ``drEventStatus``
      - enum
      - ``DREvent``
-     - **Demand Response event status** (CTA-2045). An enumerated value, not a bitfield: 0 = Not Applied, 1 = Run Normal, 2 = Shed, 3 = Load Up, 4 = Advanced Load Up, 5 = CPE / Grid Emergency. Matches the NaviLink app's ``HPWHDREvent``.
+     - **Demand Response event status** (CTA-2045). An enumerated value, not a bitfield: 0 = Not Applied, 1 = Run Normal, 2 = Shed, 3 = Load Up, 4 = Advanced Load Up, 5 = CPE (Customer Peak Event), 6 = Grid Emergency. The NaviLink app's ``HPWHDREvent`` declares both CPE and Grid Emergency with id 5 but decodes the field by array position, so raw 6 is Grid Emergency.
    * - ``drOverrideStatus``
      - None (direct value)
-     - See explanation
-     - **User override of Demand Response** (up to 72 hours). 0=no override. Non-zero value indicates override active.
+     - 0 / 1 / 2
+     - **Demand Response override flag**, in the device's on/off convention: 0 = unknown, 1 = off, 2 = on. The NaviLink app decodes it with its on/off enum and shows "DR applied" when it is 2. It is not an hour count. ``DeviceStatus.dr_override_active`` is True when it is 2.
    * - ``touOverrideStatus``
      - None (direct value)
      - See explanation
@@ -621,6 +621,10 @@ Network and Diagnostic Fields
      - None (direct value)
      - Error code
      - **Secondary error code** providing additional fault details. Paired with errorCode for diagnostics.
+   * - ``minorCode``
+     - None (direct value)
+     - Alarm code
+     - **Secondary alarm code**, shown by the NaviLink app as ``R%03d`` next to the error code. 0 = none; 101 is the one code the app lets the user reset.
 
 Advanced Technical Fields
 -------------------------
@@ -721,7 +725,7 @@ Understanding these conversions helps with:
 1. **Energy Monitoring**: Combine ``availableEnergyCapacity`` (the remaining heating deficit) with ``currentInstPower`` to estimate recovery times. Note this is a deficit, not stored energy -- see :doc:`../../explanation/tank-energy`
 2. **Efficiency Analysis**: Compare ``ambientTemperature`` against current COP (Coefficient of Performance) to verify expected efficiency
 3. **Fault Diagnosis**: Monitor ``dischargeTemperature`` and ``currentSuperHeat`` for refrigerant circuit health
-4. **Maintenance Scheduling**: Track ``airFilterAlarmElapsed`` and ``cumulatedOpTimeEvaFan`` for preventative maintenance
+4. **Maintenance Scheduling**: Track ``cumulatedOpTimeEvaFan`` against ``airFilterAlarmPeriod`` (``DeviceStatus.air_filter_remaining_hours``) for preventative maintenance
 5. **User Experience**: Use ``dhwChargePer`` to show users remaining hot water in tank; correlate with ``currentInstPower`` to show recovery ETA
 
 
