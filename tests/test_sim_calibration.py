@@ -182,6 +182,25 @@ class TestRecoveries:
         assert row.h_amb_start == 50.0
         assert row.reached
 
+    def test_a_dip_below_the_start_moves_the_row_after_it(self):
+        h = recovery_history([(2, 160, 100.0)])
+        # A draw takes the lower probe to 95 °F around the 30-minute
+        # snapshot; it then recovers to the target by the end.
+        dip = T0 + timedelta(hours=2, minutes=30)
+        h.loc[dip - timedelta(minutes=5) : dip, "lower_f"] = 95.0
+        (row,) = cal.recoveries(h).itertuples()
+        assert row.start_time == dip
+        assert row.duration_minutes == 130.0
+        assert row.delta_t_lower == 45.0
+        assert row.reached
+
+    def test_the_snapshots(self):
+        start = T0
+        assert cal._snapshots(start, start + timedelta(minutes=14)) == []
+        assert cal._snapshots(start, start + timedelta(minutes=75)) == [
+            start + timedelta(minutes=m) for m in (0, 30, 60)
+        ]
+
     def test_one_stopped_short_is_not_reached(self):
         h = recovery_history([(2, 100, 100.0)])
         h.loc[h["compressor_on"], "lower_f"] -= 3.4

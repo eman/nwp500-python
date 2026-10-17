@@ -563,6 +563,11 @@ INTERRUPTED_WINDOW = (timedelta(minutes=-2), timedelta(minutes=1))
 MIN_MINUTES_PER_F = 2.0
 MAX_MINUTES_PER_F = 20.0
 MAX_RECOVERY_LABEL_MINUTES = 600.0
+#: A recovery is read every ``SNAPSHOT_EVERY`` while at least
+#: ``SNAPSHOT_MIN_REMAINING`` of it remains, and fitted from the reading
+#: with the coldest lower probe, timed from there.
+SNAPSHOT_EVERY = timedelta(minutes=30)
+SNAPSHOT_MIN_REMAINING = timedelta(minutes=15)
 
 
 def _asof(
@@ -586,6 +591,18 @@ def _floats(history: pd.DataFrame, name: str) -> np.ndarray:
     return history[name].to_numpy(dtype=float, na_value=np.nan)
 
 
+def _snapshots(start: datetime, end: datetime) -> list[datetime]:
+    """Where a recovery is read from: its start, then every
+    ``SNAPSHOT_EVERY`` while at least ``SNAPSHOT_MIN_REMAINING`` of it
+    remains (none for a shorter one)."""
+    out: list[datetime] = []
+    offset = timedelta(0)
+    while end - (start + offset) >= SNAPSHOT_MIN_REMAINING:
+        out.append(start + offset)
+        offset += SNAPSHOT_EVERY
+    return out
+
+
 def recoveries(
     history: pd.DataFrame, *, air: str = "heater_air_f"
 ) -> pd.DataFrame:
@@ -597,13 +614,20 @@ def recoveries(
     (``MIN_MINUTES_PER_F`` to ``MAX_MINUTES_PER_F``, at most
     ``MAX_RECOVERY_LABEL_MINUTES``).
 
-    Each row: ``start_time``, ``end_time``, ``duration_minutes`` (the
-    compressor's run), ``t_start_lower``, ``t_start_upper`` and
-    ``stratification_gap`` at the start, ``delta_t_lower`` (the target
+    A recovery is read from snapshots (``SNAPSHOT_EVERY``), each
+    screened as above, and the one with the coldest lower probe is its
+    row, its duration the time from there to the end: a draw that takes
+    the probe below where it started moves the row to after the draw.
+    Without a dip that is the start.
+
+    Each row: ``start_time`` (the snapshot's), ``end_time``,
+    ``duration_minutes`` (the compressor's run from the snapshot),
+    ``t_start_lower``, ``t_start_upper`` and ``stratification_gap`` at
+    the snapshot, ``delta_t_lower`` (the target in force at the start
     less the lower probe), ``t_amb_mean`` (the mean of the ``air``
-    column over the run: the heater's own reading by default, a sensor's
-    with ``air="air_f"``), ``h_amb_start`` where the history has
-    humidity, and ``reached`` (the lower probe came within
+    column from the snapshot to the end: the heater's own reading by
+    default, a sensor's with ``air="air_f"``), ``h_amb_start`` where the
+    history has humidity, and ``reached`` (the lower probe came within
     ``REACHED_TOLERANCE_F`` of the target before the run ended).
     Only reached recoveries teach a duration: the heater stops some
     short by design, and those never reach the instant the fit models.
@@ -641,18 +665,8 @@ def recoveries(
         span = (index >= start - PRE_RECOVERY_LOOKBACK) & (index <= end)
         if element[span].any() or excluded[span].any():
             continue
-        lower = _asof(lower_f, seconds, start)
-        upper = _asof(upper_f, seconds, start)
         target = _asof(target_f, seconds, start)
-        if lower is None or upper is None or target is None:
-            continue
-        if target - lower <= 0.0:
-            continue
-        minutes = (end - start).total_seconds() / 60.0
-        if not (
-            MIN_MINUTES_PER_F <= minutes / (target - lower) <= MAX_MINUTES_PER_F
-            and minutes <= MAX_RECOVERY_LABEL_MINUTES
-        ):
+        if target is None:
             continue
         before, after = INTERRUPTED_WINDOW
         at_end = energy_wh[(index >= end + before) & (index <= end + after)]
@@ -660,24 +674,45 @@ def recoveries(
         if len(at_end) and at_end[-1] > INTERRUPTED_WH:
             continue
         inside = (index >= start) & (index <= end)
-        air_in = air_f[inside][np.isfinite(air_f[inside])]
-        air_mean = float(np.mean(air_in)) if len(air_in) else float("nan")
-        humidity = _asof(humidity_pct, seconds, start)
-        probe = lower_f[inside]
-        rows.append(
-            {
-                "start_time": start,
+        reached = bool(np.any(lower_f[inside] >= target - REACHED_TOLERANCE_F))
+        best: dict[str, object] | None = None
+        for at in _snapshots(start, end):
+            lower = _asof(lower_f, seconds, at)
+            upper = _asof(upper_f, seconds, at)
+            if lower is None or upper is None or target - lower <= 0.0:
+                continue
+            minutes = (end - at).total_seconds() / 60.0
+            if not (
+                MIN_MINUTES_PER_F
+                <= minutes / (target - lower)
+                <= MAX_MINUTES_PER_F
+                and minutes <= MAX_RECOVERY_LABEL_MINUTES
+            ):
+                continue
+            # The snapshot with the coldest lower probe, the earliest of
+            # equals: a draw that takes the probe below where it started
+            # moves the row to after it.
+            if best is not None and lower >= cast(float, best["t_start_lower"]):
+                continue
+            tail = (index >= at) & (index <= end)
+            air_in = air_f[tail][np.isfinite(air_f[tail])]
+            humidity = _asof(humidity_pct, seconds, at)
+            best = {
+                "start_time": at,
                 "end_time": end,
                 "duration_minutes": minutes,
                 "t_start_lower": lower,
                 "t_start_upper": upper,
                 "stratification_gap": upper - lower,
                 "delta_t_lower": target - lower,
-                "t_amb_mean": air_mean,
+                "t_amb_mean": (
+                    float(np.mean(air_in)) if len(air_in) else float("nan")
+                ),
                 "h_amb_start": 50.0 if humidity is None else humidity,
-                "reached": bool(np.any(probe >= target - REACHED_TOLERANCE_F)),
+                "reached": reached,
             }
-        )
+        if best is not None:
+            rows.append(best)
     return pd.DataFrame(rows, columns=columns)
 
 
