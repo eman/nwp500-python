@@ -57,6 +57,10 @@ a class the heat-pump-specific service app knows and this library does
 not yet. :data:`nwp500.ble.NWP500_RESPONDING_CLASSES` lists the
 responding set.
 
+The address byte is ignored by every answering class except ``TOU_PLAN``,
+where it is a record index: the stored plan is twelve 16-byte records and a
+read at address *N* returns the plan from record *N* on.
+
 From Python:
 
 .. code-block:: python
