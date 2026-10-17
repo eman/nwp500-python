@@ -154,7 +154,11 @@ def default_params(volume_code: int = VOLUME_65) -> HeaterParams:
 
 def site_example_params(volume_code: int = VOLUME_65) -> HeaterParams:
     """One NWP500-65 installation's parameters, its mixing valve
-    (``SITE_VALVE``) included, as fitted; the 50 and 80 gal models scale
+    (``SITE_VALVE``) and circulation (``SITE_CIRCULATION``) included: a
+    snapshot of its fit of 2026-10-11. Several of its values move with
+    every refit there (the circulation's displaced volume and flow, the
+    compressor and power fits), so read it as an example, not as that
+    installation's current state. The 50 and 80 gal models scale
     its tank volume by nominal size (the tank's, and the heat book's
     count of it), and nothing else."""
     nominal = dict(NOMINAL_GAL)
