@@ -110,6 +110,13 @@ Added
     (``Loads.circulation``, ``sim_adapters.circulation`` for a weekly
     schedule) charged as flowing draws and to the heat book while they
     run, on ``HeaterParams.circulation``; with none, nothing is charged.
+  - The air where the heater stands, from the heater alone and a public
+    forecast: ``sim_adapters.location_air_reading`` (the heater's own
+    reading, only while the compressor runs) and
+    ``sim_adapters.location_air`` (an outdoor forecast projected by
+    ``sim.location_air``, anchored to that reading, with ``fit`` for
+    one's own model). ``time_to_ready`` and ``next_recovery`` take a
+    ``RecoveryModel``.
 
 Changed
 -------

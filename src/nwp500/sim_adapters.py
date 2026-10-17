@@ -79,6 +79,11 @@ from nwp500.sim import (
     default_params,
 )
 from nwp500.sim import full_tank_book as sim_full_tank_book
+from nwp500.sim.location_air import (
+    SITE_LOCATION_AIR,
+    LocationAirModel,
+)
+from nwp500.sim.location_air import project as project_location_air
 from nwp500.sim.schedules import weekly_runs
 from nwp500.temperature import DeciCelsius, HalfCelsius, Temperature
 from nwp500.unit_system import get_unit_system
@@ -267,8 +272,10 @@ def environment(
 ) -> Environment:
     """Where the heater sits. ``ambient`` is the air at the heater, in
     the preferred unit: one value, or ``(instant, value)`` readings such
-    as a forecast. Without it, ``status``'s own reading of the air at its
-    intake now (``ambient_temperature_raw``) holds for the whole span.
+    as ``location_air``'s projection. Without it, ``status``'s own
+    reading of the air at its intake now (``ambient_temperature_raw``)
+    holds for the whole span; while the compressor is idle that reading
+    is the cabinet's, about 5 °F warm (``location_air_reading``).
     ``humidity`` is %RH; ``inlet`` the mains water, in the preferred
     unit. Each left out is the simulator's default, which its result
     names in ``defaults_used``."""
@@ -458,3 +465,41 @@ def circulation(
         CirculationRun(start=a, end=b)
         for a, b in weekly_runs(entries, ZoneInfo(tz), start, until)
     )
+
+
+def location_air_reading(status: DeviceStatus) -> float | None:
+    """The air where the heater stands, from its own sensor, in the
+    preferred unit: only while the compressor runs, when the evaporator
+    fan draws that air past it (within about 0.35 °F at one
+    installation). None while idle, when it reads the cabinet, about
+    5 °F warm."""
+    if not status.comp_use:
+        return None
+    return temperature(
+        _from_device(DeciCelsius(status.ambient_temperature_raw))
+    )
+
+
+def location_air(
+    outdoor: Iterable[tuple[datetime, float]],
+    *,
+    start: datetime,
+    until: datetime,
+    anchor: tuple[datetime, float] | None = None,
+    model: LocationAirModel = SITE_LOCATION_AIR,
+) -> tuple[tuple[datetime, float], ...]:
+    """The air where the heater stands from ``start`` to ``until``,
+    projected from an ``outdoor`` forecast by ``model``
+    (``sim.location_air``), every 10 minutes, in the preferred unit:
+    ``environment(ambient=...)`` takes it. ``anchor``, a reading and its
+    instant (``location_air_reading``'s, when the compressor last ran),
+    moves the projection through it. ``model`` defaults to one
+    installation's; fit your own with ``sim.location_air.fit``."""
+    air = project_location_air(
+        model,
+        [(at, _to_sim(v)) for at, v in outdoor],
+        start,
+        until,
+        anchor=None if anchor is None else (anchor[0], _to_sim(anchor[1])),
+    )
+    return tuple((at, temperature(v)) for at, v in air)

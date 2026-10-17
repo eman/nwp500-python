@@ -476,22 +476,42 @@ Make the answer better
 Each of these replaces a default with a fact:
 
 **The air ahead of time.** The device reports the air at its intake
-now. Pass readings or a forecast instead; they are interpolated
-between, and held past the last one. The humidity and the mains water
-temperature are not reported at all:
+now, and only while the compressor runs is that the air the heater
+stands in: idle, it reads its own cabinet, about 5 degF warm. Project
+the air from an outdoor forecast instead, anchored to the last reading
+taken while the compressor ran:
 
 .. code-block:: python
 
-   start = scenario.start
+   reading = sa.location_air_reading(status)  # None while idle
+   air = sa.location_air(
+       outdoor_forecast,               # [(instant, temperature), ...]
+       start=scenario.start,
+       until=scenario.until,
+       anchor=None if reading is None else (scenario.start, reading),
+   )
    environment = sa.environment(
-       ambient=[
-           (start, 66.0),
-           (start + timedelta(hours=6), 61.5),
-           (start + timedelta(hours=12), 70.0),
-       ],
-       humidity=45.0,  # %RH
+       ambient=air,
+       humidity=45.0,  # %RH; the heater does not report it
        inlet=58.0,     # the mains temperature, if you know it
    )
+
+The model, ``air = damping x outdoor(t - lag) + offset``, defaults to
+one installation's (0.638, 2 h, +24.5 degF). Fit your own
+from the heater's running-compressor readings and the outdoor air's
+history over the same time, from a public weather service, say:
+
+.. code-block:: python
+
+   from nwp500.sim import location_air
+
+   fitted = location_air.fit(running_readings, outdoor_history)
+   print(fitted.model, fitted.r)
+   air = sa.location_air(outdoor_forecast, start=..., until=...,
+                         anchor=..., model=fitted.model)
+
+Any readings or forecast of your own work too: they are interpolated
+between, and held past the last one.
 
 **Hot water drawn.** The heater does not report draw volume, so give
 the draws you expect (a forecast) or the ones a flow meter recorded,

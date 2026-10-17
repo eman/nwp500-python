@@ -308,7 +308,11 @@ The environment: ``Environment``
      - The air at the heater's intake: one value for the whole span, or
        ``(instant, degF)`` readings. ``DeviceStatus.ambient_temperature_raw``
        (0.1 degC) is the device's reading now
-       (``sim_adapters.environment(status)``). **Not reported ahead of
+       (``sim_adapters.environment(status)``): the air the heater stands
+       in only while the compressor runs (within about 0.35 degF at one
+       installation), its cabinet while idle (about 5 degF warm).
+       ``sim_adapters.location_air`` projects the air from an outdoor
+       forecast, anchored to a running reading (``sim.location_air``). **Not reported ahead of
        time**: for the hours to come, pass a forecast or a sensor's
        readings. Readings are interpolated onto a 10-minute grid from an
        hour before ``start`` to 12 hours past the end, and held past

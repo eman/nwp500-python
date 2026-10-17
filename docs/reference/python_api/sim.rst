@@ -135,6 +135,14 @@ Hot water and the heat book
       zone_delivery_f, delivery_along, depletion, draw_windows,
       draw_domain_judgement, EXAMPLE_EVIDENCE, with_example_evidence
 
+.. automodule:: nwp500.sim.circulation
+   :members: Circulation, CirculationDraws, CirculationLoss, merge_runs,
+      run_draws, RUN_GAP
+
+.. automodule:: nwp500.sim.location_air
+   :members: LocationAirModel, SITE_LOCATION_AIR, project, fit,
+      FittedLocationAir
+
 .. automodule:: nwp500.sim.ready
    :members: assess, Recovery, TankNow, showers_ready_for, whole_showers
 
