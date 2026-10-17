@@ -736,6 +736,27 @@ stand in for what that fit had:
 - the front's base is the calibrated draw response chained from each
   draw's onset probes, rather than a full replay's lower zone.
 
+With circulation's own telemetry (its running samples, flow and return
+line temperature), fit its terms too:
+
+.. code-block:: python
+
+   runs = calibration.measure_runs(running, flow=pump_flow,
+                                   return_f=return_line, upper_f=upper,
+                                   air_f=air, compressor=compressor_runs)
+   circulation = replace(
+       params.circulation,
+       displaced_gal=calibration.fit_displaced_gal(runs),
+       flow_gpm=calibration.recent_flow_gpm(runs, until),
+   )
+
+Each run's heat is measured as its flow times the drop from the upper
+zone to the return line. Runs with the compressor on are left out. The
+displaced volume is the one that prices those runs best.
+``recent_flow_gpm`` is the median run flow over the last 14 days, since
+the flow is a setting that moves in steps. Either is None when the runs
+cannot say.
+
 The mixing fit reads gallons left before ``zone_empty_btu``, so refit
 that first. The settle fit reads the front's place and width, so refit
 those before it. The delivered water's lag (one bath's measurement) and

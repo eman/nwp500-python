@@ -40,6 +40,7 @@ Each fit reports what it saw and what it left out
 parameters' values when it had the evidence to.
 """
 
+import bisect
 import math
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field, replace
@@ -52,6 +53,7 @@ from scipy.optimize import OptimizeResult, minimize, minimize_scalar
 
 from nwp500.sim.book import Booked, full_tank, house_gpm, is_full
 from nwp500.sim.book import Step as BookStep
+from nwp500.sim.circulation import RUN_GAP
 from nwp500.sim.circulation import displaced_gal as circulation_displaced_gal
 from nwp500.sim.decay import draw_step
 from nwp500.sim.heating_trajectory import path_cop
@@ -2575,3 +2577,232 @@ def fit_front_settle(
         mae_held=_settle_err(te, best),
         interval=tuple(np.percentile(picks, [2.5, 50, 97.5])),  # type: ignore[arg-type]
     )
+
+
+# ── circulation: what each run took, and the volume it displaces ────
+
+#: A reading of the circulation's flow or its return line older than
+#: this at a running sample is no reading of it.
+RETURN_MAX_AGE = timedelta(minutes=5)
+#: Fewer runs than this and no displaced volume is fitted.
+MIN_RUNS_TO_FIT = 20
+#: Physically admissible displaced volumes, gallons, and the grid that
+#: brackets the fit before it is refined (about 0.1 gal a step).
+DISPLACED_BOUNDS = (0.5, 25.0)
+DISPLACED_GRID_POINTS = 250
+#: How far back the circulation's recent flow is measured, and how many
+#: runs in that window it needs.
+RECENT_FLOW_WINDOW = timedelta(days=14)
+MIN_RUNS_FOR_FLOW = 5
+#: How far from a measured run its flow still prices another run.
+RUN_FLOW_WITHIN = timedelta(days=1)
+
+
+@dataclass(frozen=True)
+class MeasuredRun:
+    """One circulation run with the compressor off, and the heat it took
+    measured: its flow times the drop from the upper zone to the return
+    line, the median over its running samples, times its minutes."""
+
+    start: datetime
+    end: datetime
+    minutes: float
+    btu: float | None
+    flow_gpm: float | None
+    upper_f: float | None
+    air_f: float | None
+
+
+def _held_at(
+    rows: Sequence[tuple[datetime, float]],
+    at: Sequence[datetime],
+    max_age: timedelta | None = None,
+) -> list[float | None]:
+    """The reading in force at each of ``at`` (the last at or before
+    it), none past ``max_age``."""
+    times = [t for t, _ in rows]
+    out: list[float | None] = []
+    for t in at:
+        i = bisect.bisect_right(times, t) - 1
+        if i < 0 or (max_age is not None and t - times[i] > max_age):
+            out.append(None)
+        else:
+            out.append(rows[i][1])
+    return out
+
+
+def measure_runs(
+    running: Sequence[datetime],
+    *,
+    flow: Sequence[tuple[datetime, float]],
+    return_f: Sequence[tuple[datetime, float]],
+    upper_f: Sequence[tuple[datetime, float]],
+    air_f: Sequence[tuple[datetime, float]] = (),
+    compressor: Sequence[tuple[datetime, datetime]] = (),
+) -> list[MeasuredRun]:
+    """Each circulation run, from the instants a sample read it running
+    (``running``) clustered within ``circulation.RUN_GAP``, and those that
+    overlap a compressor run (``compressor``) left out. Its heat: the
+    flow (gal/min) and the return line (degF), each fresh within
+    ``RETURN_MAX_AGE`` of a running sample, against the upper zone in
+    force then; its upper zone the first reading in it, its air the
+    median of those in it."""
+    on = sorted(running)
+    clusters: list[list[datetime]] = []
+    for t in on:
+        if clusters and t - clusters[-1][1] <= RUN_GAP:
+            clusters[-1][1] = t
+        else:
+            clusters.append([t, t])
+    flow, return_f = sorted(flow), sorted(return_f)
+    upper_f, air_f = sorted(upper_f), sorted(air_f)
+    out: list[MeasuredRun] = []
+    for a, b in ((c[0], c[1]) for c in clusters if c[1] > c[0]):
+        if any(not (b <= s or e <= a) for s, e in compressor):
+            continue
+        samples = [t for t in on if a <= t <= b]
+        ups = _held_at(upper_f, samples)
+        rets = _held_at(return_f, samples, RETURN_MAX_AGE)
+        flows = _held_at(flow, samples, RETURN_MAX_AGE)
+        q = [
+            f * 60.0 * WATER_BTU_PER_GAL_F * (u - r)
+            for u, r, f in zip(ups, rets, flows, strict=True)
+            if u is not None and r is not None and f is not None
+        ]
+        fresh_flow = [
+            f
+            for u, r, f in zip(ups, rets, flows, strict=True)
+            if u is not None and r is not None and f is not None
+        ]
+        minutes = (b - a).total_seconds() / 60.0
+        q_median = float(np.median(q)) if q else None
+        first_up = next((v for t, v in upper_f if a <= t <= b), None)
+        airs = [v for t, v in air_f if a <= t <= b]
+        out.append(
+            MeasuredRun(
+                start=a,
+                end=b,
+                minutes=minutes,
+                btu=None if q_median is None else q_median * minutes / 60.0,
+                flow_gpm=float(np.median(fresh_flow)) if fresh_flow else None,
+                upper_f=first_up,
+                air_f=float(np.median(airs)) if airs else None,
+            )
+        )
+    return out
+
+
+def run_heat_btu(
+    minutes: float,
+    upper_f: float,
+    air_f: float,
+    displaced: float,
+    flow_gpm: float,
+) -> float:
+    """The heat a run takes for its displaced volume: the gallons it
+    displaces (``circulation.displaced_gal``) at the upper zone less the
+    air, never negative."""
+    if displaced <= 0.0 or minutes <= 0.0 or flow_gpm <= 0.0:
+        return 0.0
+    gal = circulation_displaced_gal(minutes, displaced, flow_gpm)
+    return max(0.0, gal * WATER_BTU_PER_GAL_F * (upper_f - air_f))
+
+
+def fit_displaced_gal(runs: Sequence[MeasuredRun]) -> float | None:
+    """``CirculationParams.displaced_gal``: the volume minimising the
+    mean absolute error of ``run_heat_btu`` against each run's measured
+    heat, at its own flow. The objective goes flat past the largest
+    displaced volume in the runs, so it is bracketed on a grid over
+    ``DISPLACED_BOUNDS`` first and refined inside the winning interval.
+    None with fewer than ``MIN_RUNS_TO_FIT`` usable runs, or a fit pinned
+    on a bound (the runs do not constrain it)."""
+    usable = [
+        (
+            r.minutes,
+            r.upper_f or 0.0,
+            r.air_f or 0.0,
+            r.flow_gpm or 0.0,
+            r.btu or 0.0,
+        )
+        for r in runs
+    ]
+    usable = [
+        u for u in usable if u[0] > 0 and u[3] > 0 and u[4] > 0 and u[1] > u[2]
+    ]
+    if len(usable) < MIN_RUNS_TO_FIT:
+        return None
+
+    def mae(volume: float) -> float:
+        return sum(
+            abs(run_heat_btu(m, up, air, volume, f) - measured)
+            for m, up, air, f, measured in usable
+        ) / len(usable)
+
+    lo, hi = DISPLACED_BOUNDS
+    grid = np.linspace(lo, hi, DISPLACED_GRID_POINTS)
+    scores = [mae(float(v)) for v in grid]
+    best = int(np.argmin(scores))
+    found = cast(
+        OptimizeResult,
+        minimize_scalar(
+            mae,
+            bounds=(
+                float(grid[max(best - 1, 0)]),
+                float(grid[min(best + 1, len(grid) - 1)]),
+            ),
+            method="bounded",
+        ),
+    )
+    volume = float(found.x)
+    if mae(float(grid[best])) < mae(volume):
+        volume = float(grid[best])
+    if not lo * 1.01 < volume < hi * 0.99:
+        return None
+    return volume
+
+
+def recent_flow_gpm(
+    runs: Sequence[MeasuredRun],
+    until: datetime,
+    window: timedelta = RECENT_FLOW_WINDOW,
+) -> float | None:
+    """``CirculationParams.flow_gpm``: the median of the runs' own
+    median flows over the ``window`` before ``until``, the flow being a
+    setting that moves in steps. None with fewer than
+    ``MIN_RUNS_FOR_FLOW``."""
+    flows = sorted(
+        r.flow_gpm
+        for r in runs
+        if r.flow_gpm is not None
+        and r.flow_gpm > 0.0
+        and until - window <= r.start <= until
+    )
+    if len(flows) < MIN_RUNS_FOR_FLOW:
+        return None
+    mid = len(flows) // 2
+    if len(flows) % 2:
+        return flows[mid]
+    return (flows[mid - 1] + flows[mid]) / 2.0
+
+
+def flow_lookup(
+    runs: Sequence[MeasuredRun], within: timedelta = RUN_FLOW_WITHIN
+) -> Callable[[datetime], float | None]:
+    """The flow a past run ran at: the measured run nearest it in time,
+    within ``within``; None when none is near enough."""
+    known = sorted(
+        (r.start, r.flow_gpm)
+        for r in runs
+        if r.flow_gpm is not None and r.flow_gpm > 0.0
+    )
+    starts = [t for t, _ in known]
+
+    def flow_at(at: datetime) -> float | None:
+        i = bisect.bisect_left(starts, at)
+        near = [known[j] for j in (i - 1, i) if 0 <= j < len(known)]
+        best = min(near, key=lambda r: abs(r[0] - at), default=None)
+        if best is None or abs(best[0] - at) > within:
+            return None
+        return best[1]
+
+    return flow_at

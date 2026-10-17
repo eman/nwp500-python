@@ -213,3 +213,75 @@ class TestTheDrawResponseFits:
         (draw,) = cal.long_draws(walk)
         assert draw[0] == t[10] and draw[1] == t[59]
         assert draw[2] == pytest.approx(13.8)
+
+
+class TestCirculationFits:
+    def _runs(self, displaced: float, n: int = 30) -> list:
+        rng = np.random.default_rng(4)
+        out = []
+        for k in range(n):
+            minutes = float(rng.uniform(1, 12))
+            flow = float(rng.uniform(1.0, 2.2))
+            upper, air = 130.0, 65.0
+            start = T0 + timedelta(hours=6 * k)
+            out.append(
+                cal.MeasuredRun(
+                    start=start,
+                    end=start + timedelta(minutes=minutes),
+                    minutes=minutes,
+                    btu=cal.run_heat_btu(minutes, upper, air, displaced, flow),
+                    flow_gpm=flow,
+                    upper_f=upper,
+                    air_f=air,
+                )
+            )
+        return out
+
+    def test_the_displaced_volume_is_found(self):
+        assert cal.fit_displaced_gal(self._runs(6.0)) == pytest.approx(
+            6.0, abs=0.05
+        )
+
+    def test_too_few_runs_or_a_pinned_fit_is_none(self):
+        assert cal.fit_displaced_gal(self._runs(6.0, n=10)) is None
+        # Every run saturated far past the bounds: unconstrained.
+        assert cal.fit_displaced_gal(self._runs(40.0)) is None
+
+    def test_the_recent_flow_and_the_lookup(self):
+        runs = self._runs(6.0)
+        until = runs[-1].start
+        flows = sorted(
+            r.flow_gpm for r in runs if until - timedelta(days=14) <= r.start
+        )
+        assert cal.recent_flow_gpm(runs, until) == pytest.approx(
+            float(np.median(flows))
+        )
+        at = runs[3].start + timedelta(minutes=20)
+        assert cal.flow_lookup(runs)(at) == runs[3].flow_gpm
+        assert cal.flow_lookup(runs)(at + timedelta(days=30)) is None
+
+    def test_a_run_is_measured_from_its_samples(self):
+        a = T0
+        running = [a + timedelta(seconds=30 * i) for i in range(21)]
+        run = cal.measure_runs(
+            running,
+            flow=[(t, 2.0) for t in running],
+            return_f=[(t, 115.0) for t in running],
+            upper_f=[(a - timedelta(minutes=1), 130.0)],
+            air_f=[(a + timedelta(minutes=2), 66.0)],
+        )
+        (r,) = run
+        assert r.minutes == 10.0
+        assert r.btu == pytest.approx(2.0 * 60 * 8.34 * 15.0 * 10 / 60)
+        assert (r.flow_gpm, r.air_f) == (2.0, 66.0)
+        assert r.upper_f is None  # no upper reading inside the run
+        assert (
+            cal.measure_runs(
+                running,
+                flow=[],
+                return_f=[],
+                upper_f=[],
+                compressor=[(a, a + timedelta(minutes=1))],
+            )
+            == []
+        )

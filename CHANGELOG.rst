@@ -166,6 +166,10 @@ Added
     circulation runs took, and the draws just before it
     (``metered_withdrawn``, ``metered_lead``; ``calibrate(draws=,
     circulation=)``), as the model's fit did.
+    Circulation's terms from its own telemetry: each run's measured heat
+    (``measure_runs``), the displaced volume that prices them
+    (``fit_displaced_gal``), its recent flow and the flow a past run ran
+    at (``recent_flow_gpm``, ``flow_lookup``), as the model fitted them.
     The book's response to a draw, fitted on the record's long draws by
     the procedures its values were fitted with: the cold front's place
     and width (``fit_front``), the lower zone's settling after a draw
