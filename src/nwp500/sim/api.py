@@ -91,6 +91,7 @@ from nwp500.sim.schedules import (
 )
 from nwp500.sim.tank_physics import TankPhysics
 from nwp500.sim.tou_triggers import heater_start, in_window
+from nwp500.sim.units import BTU_PER_WH
 
 #: The engine's name for each mode it models.
 ENGINE_MODE: Mapping[int, HeaterMode] = MappingProxyType(
@@ -150,6 +151,12 @@ def _circulation(loads: Loads) -> Circulation | None:
     )
 
 
+#: A served recovery less confident than this says
+#: ``recovery_low_confidence``: only a ``RecoveryModel``'s can be, the
+#: physics alone answering with full confidence.
+LOW_CONFIDENCE_FLOOR = 0.6
+
+
 def _physics(
     params: HeaterParams,
     environment: Environment,
@@ -200,6 +207,7 @@ def _physics(
         tau_gap_hours=tau,
         draw_inlet_temp_f=environment.inlet_f,
         recovery_model=model,
+        low_confidence_floor=LOW_CONFIDENCE_FLOOR,
     )
 
 
@@ -620,6 +628,8 @@ def standby(
                 setpoint_f=settings.setpoint_f,
                 mode=mode,
             )
+    flowing = physics.flowing_draws
+    circulating = isinstance(flowing, CirculationDraws)
     return Trace(
         points=tuple(coast.points),
         defaults_used=tuple(defaults),
@@ -629,6 +639,14 @@ def standby(
         lower_margin_f=margin,
         reasons=tuple(reasons),
         draw_out_of_domain_at=out_of_domain_at,
+        draw_volume_gal=coast.draw_volume_gal if draws else None,
+        draw_heat_wh=coast.draw_heat_btu / BTU_PER_WH if draws else None,
+        circulation_minutes=flowing.minutes if circulating else None,
+        circulation_heat_wh=(
+            coast.flowing_heat_btu / BTU_PER_WH if circulating else None
+        ),
+        ambient_mean_f=coast.ambient_mean_f,
+        hours=(until - start).total_seconds() / 3600.0,
     )
 
 
@@ -725,6 +743,34 @@ def _ambient_at(environment: Environment, at: datetime) -> float:
     return sampler.at(at)
 
 
+def _coast_loss(
+    s: Scenario, params: HeaterParams, start: datetime, air: float
+) -> tuple[float, float]:
+    """What the tank loses coasting from now to ``start``, in the book's
+    frame: standby to the air now (the book's own term), the heat
+    circulation's runs take over exactly the coast, and the delivered
+    gallons drawn on it, which the book takes through the valve and puts
+    back cold."""
+    now = s.start
+    if start <= now:
+        return 0.0, 0.0
+    hours = (start - now).total_seconds() / 3600.0
+    lost = standby_btu(
+        hours, s.state.upper_f, s.state.lower_f, air, params.book_terms()
+    )
+    to_start = standby(
+        s.state,
+        s.environment,
+        s.loads,
+        params,
+        start=now,
+        until=start,
+        history=s.history,
+    )
+    circulated = (to_start.circulation_heat_wh or 0.0) * BTU_PER_WH
+    return lost + circulated, to_start.draw_volume_gal or 0.0
+
+
 def next_recovery(
     scenario: Scenario,
     params: HeaterParams,
@@ -741,9 +787,10 @@ def next_recovery(
     the coast's alone. ``not_scheduled`` while heating is disabled;
     ``unavailable`` when the walk cannot be completed.
 
-    The coast's loss, in the book's frame, is standby to the air now and
-    the draws before the start; the recovery's heat into the book is the
-    book's compressor term by the air now."""
+    The coast's loss, in the book's frame, is standby to the air now,
+    the heat circulation takes over the coast, and the draws before the
+    start; the recovery's heat into the book is the book's compressor
+    term by the air now."""
     s = scenario
     _, disabled = _engine_mode(s.settings.mode)
     if disabled:
@@ -768,13 +815,7 @@ def next_recovery(
             if state is None:
                 return Recovery("unavailable")
             upper, lower = state
-            hours = (start - now).total_seconds() / 3600.0
-            coast_btu = standby_btu(
-                hours, s.state.upper_f, s.state.lower_f, air, bp
-            )
-            coast_gal = sum(
-                d.gallons for d in s.loads.draws if now <= d.at < start
-            )
+            coast_btu, coast_gal = _coast_loss(s, params, start, air)
         heat = simulate(
             s.model_copy(
                 update={
@@ -812,6 +853,11 @@ def next_recovery(
     )
 
 
+#: The share of a book's steps that measured the inlet for its
+#: conversion to count as measured.
+INLET_MEASURED_SHARE = 0.9
+
+
 def time_to_ready(
     scenario: Scenario,
     params: HeaterParams,
@@ -820,6 +866,7 @@ def time_to_ready(
     bath_gal: float | None = None,
     shower_gal: float | None = None,
     drawing: bool = False,
+    inlet_measured: bool = False,
     recovery: RecoveryModel | None = None,
 ) -> Readiness:
     """Hot water at ``scenario.start`` and ahead: deliverable gallons
@@ -832,7 +879,12 @@ def time_to_ready(
     without it the answer is the full-tank floor's or the evidence's.
     ``bath_gal`` and ``shower_gal`` default to
     ``ReadinessParams.bath_gal`` and ``shower_gal``, named in
-    ``defaults_used``. ``drawing``: water is being drawn now. The
+    ``defaults_used``. ``drawing``: water is being drawn now.
+    ``inlet_measured``: the book converts heat to gallons at an inlet
+    measured at the mains (a probe's plateau over a long draw); without
+    it, or a book whose steps measured the inlet at least
+    ``INLET_MEASURED_SHARE`` of the time, a booked answer says
+    ``inlet_temp_modelled``. The
     recovery is the next one (``next_recovery``), its duration served
     by ``recovery`` when given (``extensions.RecoveryModel``) and by
     physics alone otherwise, which runs short on long recoveries (the
@@ -895,7 +947,10 @@ def time_to_ready(
         valid_s=0.0,
         setpoint_f=s.settings.setpoint_f,
         booked=book,
-        inlet_measured=True,
+        inlet_measured=book is not None
+        and (
+            inlet_measured or book.inlet_measured_share >= INLET_MEASURED_SHARE
+        ),
         params=p,
         element_params=params.element,
         book_params=params.book_terms(),

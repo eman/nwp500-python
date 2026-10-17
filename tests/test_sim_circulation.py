@@ -18,6 +18,7 @@ pd = pytest.importorskip("pandas")
 from nwp500 import sim_adapters as sa  # noqa: E402
 from nwp500.sim import (  # noqa: E402
     CirculationRun,
+    Draw,
     Environment,
     HeaterParams,
     HeaterState,
@@ -165,6 +166,24 @@ class TestThroughTheAPI:
         quiet = standby(*args, Loads(), params, start=T0, until=at(6))
         circulated = standby(*args, s.loads, params, start=T0, until=at(6))
         assert circulated.points[-1].lower_f < quiet.points[-1].lower_f
+
+    def test_standby_reports_what_they_and_the_draws_took(self, params):
+        s = _scenario()
+        args = (s.state, s.environment)
+        quiet = standby(*args, Loads(), params, start=T0, until=at(6))
+        assert quiet.circulation_minutes is None
+        assert quiet.draw_volume_gal is None and quiet.hours == 6.0
+        assert quiet.ambient_mean_f == pytest.approx(68.0)
+        loads = s.loads.model_copy(
+            update={"draws": (Draw(at=at(2), gallons=3.0),)}
+        )
+        both = standby(*args, loads, params, start=T0, until=at(6))
+        assert both.circulation_minutes is not None
+        assert both.circulation_minutes > 0
+        assert both.circulation_heat_wh is not None
+        assert both.circulation_heat_wh > 0
+        assert both.draw_volume_gal == pytest.approx(3.0)
+        assert both.draw_heat_wh is not None and both.draw_heat_wh > 0
 
     def test_it_is_the_core_walked_with_the_runs(self, params):
         """The API's runs are the core's flowing draws: the same walk

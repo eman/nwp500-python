@@ -990,9 +990,13 @@ class _Engine:
         def settle(at: datetime, lower: float) -> float:
             return max(lower - settled_by(at), min(lower, floor))
 
-        return Coast(
-            [replace(p, lower_f=settle(p.at, p.lower_f)) for p in coast.points],
-            [
+        return replace(
+            coast,
+            points=[
+                replace(p, lower_f=settle(p.at, p.lower_f))
+                for p in coast.points
+            ],
+            impulses=[
                 Impulse(
                     i.at,
                     settle(i.at, i.lower_before),

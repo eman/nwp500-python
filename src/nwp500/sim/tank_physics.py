@@ -83,10 +83,17 @@ class Point:
 
 @dataclass(frozen=True)
 class Coast:
-    """A standby segment: the path and its extraction drops."""
+    """A standby segment: the path and its extraction drops, and what
+    it took (``decay.DecayProjection``'s): the delivered gallons drawn
+    and the heat they carried off, the heat the flowing draws
+    (circulation) took, and the mean air over it."""
 
     points: list[Point]
     impulses: list[Impulse] = field(default_factory=list)
+    draw_volume_gal: float = 0.0
+    draw_heat_btu: float = 0.0
+    flowing_heat_btu: float = 0.0
+    ambient_mean_f: float | None = None
 
 
 @dataclass(frozen=True)
@@ -329,6 +336,10 @@ class TankPhysics:
         return Coast(
             [Point(at, up, lo) for at, up, lo in decay.trajectory],
             decay.impulses,
+            draw_volume_gal=decay.draw_volume_gal,
+            draw_heat_btu=decay.draw_heat_btu,
+            flowing_heat_btu=decay.flowing_heat_btu,
+            ambient_mean_f=decay.t_amb_mean,
         )
 
     def _predict(

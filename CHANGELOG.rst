@@ -130,6 +130,13 @@ Added
     with what it rested on (held-out error, windows used, a fit pinned
     on a bound). An element run counts as busy in the quiet test, not
     only the compressor and hot water in use.
+  - ``time_to_ready`` says ``inlet_temp_modelled`` when a booked answer
+    converts at an inlet nobody measured (``inlet_measured=``, or a
+    book whose steps measured it); ``next_recovery``'s coast loses the
+    heat circulation takes on it as well as standby; a served recovery
+    under 0.6 confidence says ``recovery_low_confidence``. ``standby``
+    reports the gallons drawn and the heat they took, circulation's
+    minutes and heat, and the mean air over the coast.
 
 Changed
 -------

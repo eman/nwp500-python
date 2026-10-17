@@ -145,6 +145,42 @@ class TestNextRecovery:
         assert 0.0 < before < 12.8
         assert r.coast_draw_gal == pytest.approx(before)
 
+    def test_circulation_on_the_coast_is_its_loss(self, params):
+        """The source's coast lost circulation's heat over it as well as
+        standby; the port's charged standby alone."""
+        from nwp500.sim import CirculationRun
+
+        quiet = next_recovery(_scenario(), params)
+        start = T0 + timedelta(minutes=quiet.start_minute)
+        runs = (CirculationRun(start=at(0.5), end=at(1.0)),)
+        s = _scenario(loads=Loads(circulation=runs))
+        circulated = next_recovery(s, params)
+        until = T0 + timedelta(minutes=circulated.start_minute)
+        trace = standby(
+            s.state,
+            s.environment,
+            s.loads,
+            params,
+            start=T0,
+            until=until,
+            history=s.history,
+        )
+        assert trace.circulation_heat_wh is not None
+        assert trace.circulation_heat_wh > 0.0
+        from nwp500.sim.book import standby_btu
+
+        assert circulated.coast_btu == pytest.approx(
+            standby_btu(
+                (until - T0).total_seconds() / 3600.0,
+                s.state.upper_f,
+                s.state.lower_f,
+                68.0,
+                params.book_terms(),
+            )
+            + trace.circulation_heat_wh * 3.412141633
+        )
+        assert start > at(1.0)
+
     def test_no_trigger_within_a_day_is_idle(self, params):
         s = _scenario(
             state=HeaterState(upper_f=140.0, lower_f=139.0),
@@ -199,6 +235,23 @@ class TestTimeToReady:
         r = time_to_ready(s, params, book=book)
         assert "no_heat_book" not in r.reasons
         assert r.deliverable_gal == pytest.approx(53.1, abs=0.05)
+
+    def test_a_booked_answer_says_when_its_inlet_was_modelled(self, params):
+        """The third review of #162's port audit: the flag was always
+        set, so a book converting at a default inlet never said so."""
+        s = _scenario(state=HeaterState(upper_f=140.5, lower_f=139.6))
+        book = full_tank_book(140.5, 139.6, params.book)
+        assert (
+            "inlet_temp_modelled" in time_to_ready(s, params, book=book).reasons
+        )
+        measured = time_to_ready(s, params, book=book, inlet_measured=True)
+        assert "inlet_temp_modelled" not in measured.reasons
+        recorded = replace(book, inlet_measured_share=0.95)
+        assert "inlet_temp_modelled" not in (
+            time_to_ready(s, params, book=recorded).reasons
+        )
+        # Without a book there is no conversion to flag.
+        assert "inlet_temp_modelled" not in time_to_ready(s, params).reasons
 
     def test_standing_and_sourcing_reasons_are_left_out(self, params):
         r = time_to_ready(_scenario(), params)
@@ -380,18 +433,34 @@ class TestWithoutALowerThreshold:
 class _Fixed:
     """A recovery model that serves a fixed duration."""
 
-    def __init__(self, minutes: float) -> None:
+    def __init__(self, minutes: float, confidence: float = 1.0) -> None:
         self.minutes = minutes
+        self.confidence = confidence
 
     def duration(self, ctx: Any) -> Any:
         from nwp500.sim.recovery import ModelDuration
 
         return ModelDuration(
-            minutes=self.minutes, start_hold_minutes=0.0, confidence=1.0
+            minutes=self.minutes,
+            start_hold_minutes=0.0,
+            confidence=self.confidence,
         )
 
 
 class TestARecoveryModel:
+    def test_a_low_confidence_answer_says_so(self, params):
+        """The source flagged a served recovery under 0.6; the port's
+        floor was 0, so nothing could."""
+        s = _scenario(
+            state=HeaterState(
+                upper_f=128.0, lower_f=112.0, compressor_running=True
+            )
+        )
+        sure = simulate(s, params, recovery=_Fixed(90.0))
+        unsure = simulate(s, params, recovery=_Fixed(90.0, confidence=0.4))
+        assert "recovery_low_confidence" in unsure.reasons
+        assert "recovery_low_confidence" not in sure.reasons
+
     def test_it_serves_the_next_recoverys_duration(self, params):
         s = _scenario(
             state=HeaterState(

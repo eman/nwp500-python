@@ -156,6 +156,19 @@ class Trace:
     reasons: tuple[str, ...] = ()
     #: As ``SimulationResult.draw_out_of_domain_at``.
     draw_out_of_domain_at: datetime | None = None
+    #: The delivered gallons drawn over the coast, and the heat they
+    #: carried off the tank, Wh (after the mixing valve); None with no
+    #: draws given.
+    draw_volume_gal: float | None = None
+    draw_heat_wh: float | None = None
+    #: The minutes circulation ran over the coast and the heat it took
+    #: from the zones, Wh; None with no circulation given (an empty run
+    #: list is known-quiet: 0).
+    circulation_minutes: float | None = None
+    circulation_heat_wh: float | None = None
+    #: The mean air at the heater over the coast, °F, and its length.
+    ambient_mean_f: float | None = None
+    hours: float = 0.0
 
 
 @dataclass(frozen=True)
