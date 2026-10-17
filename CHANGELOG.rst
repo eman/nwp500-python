@@ -100,6 +100,9 @@ Added
     fields were left to their defaults.
   - ``sim.book.SpanLoss`` lets a client charge a loss the book does not
     model; without one, the book charges none.
+  - Circulation runs within 10 minutes of each other are one run over
+    the whole schedule, so a coast boundary between them no longer
+    charges each its own displaced volume.
   - ``default_params()`` has no mixing valve; ``site_example_params()``
     is the installation the values were fitted at, its valve included
     (``with_valve``, ``SITE_VALVE``). The core's draw functions default
