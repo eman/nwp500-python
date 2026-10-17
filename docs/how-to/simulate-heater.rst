@@ -698,10 +698,10 @@ to a day apart. Each pair's booked heat is checked against the probes':
    empty, crossings = calibration.empty_point(book, p, fit.loss_btu_per_gal)
    zone = calibration.zone_empty_point(book, p, fit.loss_btu_per_gal)
 
-``error_btu_from_bands`` reads the error bands off ``bands``. The aged
-band is the 18 to 24 h p90, rounded up to 100 BTU. The fresh one is the
-largest p90 within ``max_anchor_age_h``, a rule by analogy: the
-example's 3,000 was read off its bands by eye. ``cold_lower_cap(draws,
+``book_error_btu(book, p, fit.loss_btu_per_gal)`` gives the book's
+error bands: the 90th percentile of its error pooled over re-anchors an
+hour to ``max_anchor_age_h`` apart, and the 18 to 24 h band's past it,
+each rounded up to 100 BTU. ``cold_lower_cap(draws,
 cutoff_f)`` is the evidence's cap after a cold lower zone. The cutoff
 itself, and the bath's volume, are yours to set: measure a bath by
 filling one to your usual level at the hot side's meter.
@@ -740,6 +740,35 @@ a TOU window opens. The TOU switch's changes are kept too. A write into
 Vacation or Power Off cannot be simulated and is named in
 ``r.reasons``. The record holds no schedule, so give the heater's own,
 read with this library.
+
+
+Compare it with what the heater did
+-----------------------------------
+
+``sa.observe`` reads the same record for what actually happened over a
+range, in the simulation's terms:
+
+.. code-block:: python
+
+   seen = sa.observe(recorded, start=yesterday_6pm, end=yesterday_11pm,
+                     now=now)
+   for s in seen.starts:
+       print(s.at, s.cause, s.trigger, s.counted)
+
+``seen.starts`` are the compressor's starts. Each start's ``cause`` is a
+recorded write (``write_at`` says which) or the heater's own trigger:
+the lower zone at its start threshold, the upper zone short as a TOU
+window opens, the lower zone as one closes, or the heater dropping an
+element mode. ``counted`` merges starts less than 30 minutes apart.
+``seen.sources`` are when the compressor and each element ran; an
+element counts only where the heater's power shows it running.
+``seen.slots`` are the energy per 10 minutes from the heater's own
+power; ``seen.modes`` are the mode in force and whether the heat source
+the heater reported showed it in effect. ``seen.gaps`` are where a
+signal's record was missing, and a start a missing record could explain
+gets no ``cause``. Set them beside the replay's ``result.heating``
+(each interval's start, with its cause and trigger) and
+``result.energy_by_slot()``.
 
 
 Save and replay a scenario

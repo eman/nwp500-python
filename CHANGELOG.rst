@@ -142,6 +142,16 @@ Added
     ``HeaterState.energy_to_setpoint_wh`` carry what they need, filled
     by the adapters; ``recovery`` says ``not_scheduled`` in Vacation and
     Power Off.
+  - What the heater did over a range, from its record, as the model
+    reads it: ``sim.record.Record`` (each signal's change rows, its
+    writes and the heater's own drops, TOU switches and window edges,
+    starts with elements corroborated by power;
+    ``sim_adapters.record``), ``sim.attribution`` (why each recorded
+    start happened) and ``sim.observed`` (modes and whether each was in
+    effect, when each source ran, counted and attributed starts, energy
+    per slot, the delivered temperature, and the record's gaps;
+    ``sim_adapters.observe``). ``replay`` reads its writes from the same
+    record.
   - The readiness evidence and the heat book's own terms from a metered
     record (``sim.calibration``, ``sim_adapters.draw_frame``): clean
     draws and their demonstrated volumes reduced to the frontier, with a
@@ -149,7 +159,9 @@ Added
     the book's compressor rate, its slope with the air, standby UA and
     circulation's loss fitted on re-anchors of full tanks
     (``RecordedBook``, ``fit_book_terms``), its error by anchor age, and
-    the empty points in the book's frame and the drawable one.
+    the empty points in the book's frame and the drawable one, and the
+    error bands (``book_error_btu``: the p90 pooled over anchors an hour
+    to 18 h old, and the 18-24 h band's, each rounded up to 100 BTU).
   - The heat book from a recorded history, as the model kept it:
     ``sim.book.Step``, ``book_steps`` (the anchor on a quiet full tank
     after a recovery, or a recovery's end during a draw; every step

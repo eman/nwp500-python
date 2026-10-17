@@ -158,12 +158,23 @@ Hot water and the heat book
       fit_compressor, CompressorFit, clean_draws, CleanDraw, crossing,
       demonstrated, frontier, capacity, held_out, fit_evidence,
       EvidenceFit, cold_lower_cap, RecordedBook, fit_book_terms, BookFit,
-      book_error_bands, error_btu_from_bands, empty_point,
+      book_error_bands, book_error_btu, empty_point,
       zone_empty_point, withheld_btu, fit_power, PowerFit, fit_power_scale,
       fit_cop_scale, solve_cop_fit, solve_cop_scale, draw_free_withdrawn,
       path_to_end, with_power, snapshots, recoveries, quiet_windows,
       busy_intervals, fit_window, fit_ua_law, fit_gap_tau, with_standby,
       with_compressor
+
+.. automodule:: nwp500.sim.record
+   :members: Record, RecordedWrite, Recorded, RecordedStarts, corroborator
+
+.. automodule:: nwp500.sim.attribution
+   :members: attribute, Attributed, WRITE_EVIDENCE, LOWER_SLACK_F,
+      UPPER_SLACK_F
+
+.. automodule:: nwp500.sim.observed
+   :members: observe, Observed, ModeInterval, SetpointInterval,
+      SourceInterval, Start, Slot, Gap, count_starts, effective
 
 .. automodule:: nwp500.sim.ready
    :members: assess, Recovery, TankNow, showers_ready_for, whole_showers

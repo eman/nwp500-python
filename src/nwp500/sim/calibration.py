@@ -1695,25 +1695,26 @@ def empty_point(
     )
 
 
-def error_btu_from_bands(
-    bands: Sequence[tuple[tuple[int, int], int, float, float, float]],
-    max_anchor_age_h: float,
+def book_error_btu(
+    book: RecordedBook, p: BookParams, loss_btu_per_gal: float
 ) -> tuple[float | None, float | None]:
-    """``(error_btu, aged_error_btu)`` from ``book_error_bands``: the
-    aged band is the 18-24 h band's p90, rounded up to 100 BTU, as it
-    was set. The fresh one is the largest band p90 within
-    ``max_anchor_age_h``, rounded up the same way: a rule by analogy
-    (the shipped 3,000 was a round figure read off the bands, not
-    computed)."""
+    """``(error_btu, aged_error_btu)``, each rounded up to 100 BTU: the
+    90th percentile of the book's error pooled over every re-anchor
+    pair from an hour to ``max_anchor_age_h`` old, the error being flat
+    over that span; and the 18-24 h band's (``book_error_bands``), past
+    it. None where there are no pairs."""
 
     def up(x: float) -> float:
         return math.ceil(x / 100.0) * 100.0
 
-    fresh = [b[4] for b in bands if b[0][1] <= max_anchor_age_h]
-    aged = [b[4] for b in bands if b[0] == (18, 24)]
+    pairs = book.reanchors(p.history_h)
+    age = np.array([(b - a) * book.seconds / 3600 for a, b in pairs])
+    err = np.abs(book.errors(p, loss_btu_per_gal, pairs))
+    fresh = err[(age >= 1) & (age <= p.max_anchor_age_h)] if len(err) else err
+    aged = err[(age >= 18) & (age < 24)] if len(err) else err
     return (
-        up(max(fresh)) if fresh else None,
-        up(aged[0]) if aged else None,
+        up(float(np.percentile(fresh, 90))) if len(fresh) else None,
+        up(float(np.percentile(aged, 90))) if len(aged) else None,
     )
 
 

@@ -99,15 +99,6 @@ class TestTheEvidence:
 
 
 class TestTheBooksTerms:
-    def test_the_error_rule(self):
-        bands = [
-            ((1, 6), 10, 1000.0, 50.0, 2400.0),
-            ((12, 18), 8, 1500.0, 90.0, 3296.0),
-            ((18, 24), 9, 3000.0, 900.0, 4098.0),
-        ]
-        assert cal.error_btu_from_bands(bands, 18.0) == (3300.0, 4100.0)
-        assert cal.error_btu_from_bands([], 18.0) == (None, None)
-
     def test_re_anchors_need_an_hour_between(self):
         p = BookParams()
 
@@ -139,3 +130,8 @@ class TestTheBooksTerms:
         assert pair[1] - pair[0] > hour
         (err,) = book.errors(p, 0.0, [pair])
         assert np.isfinite(err)
+        fresh, aged = cal.book_error_btu(book, p, 0.0)
+        # One pair two hours apart: the fresh band is its error, rounded
+        # up to 100 BTU; no pair is 18-24 h old.
+        assert fresh == np.ceil(abs(err) / 100) * 100
+        assert aged is None

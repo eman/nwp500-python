@@ -88,19 +88,15 @@ from nwp500.sim import (
 from nwp500.sim import full_tank_book as sim_full_tank_book
 from nwp500.sim.book import AMBIENT_DEFAULT_F, book_steps
 from nwp500.sim.book import Step as BookStep
-from nwp500.sim.inputs import (
-    ELECTRIC,
-    ENERGY_SAVER,
-    HEAT_PUMP,
-    HIGH_DEMAND,
-    POWER_OFF,
-    VACATION,
-)
+from nwp500.sim.inputs import POWER_OFF, VACATION
 from nwp500.sim.location_air import (
     SITE_LOCATION_AIR,
     LocationAirModel,
 )
 from nwp500.sim.location_air import project as project_location_air
+from nwp500.sim.observed import Observed
+from nwp500.sim.observed import observe as observe_record
+from nwp500.sim.record import Record
 from nwp500.sim.schedules import weekly_runs
 from nwp500.temperature import DeciCelsius, HalfCelsius, Temperature
 from nwp500.unit_system import get_unit_system
@@ -661,15 +657,6 @@ TANK_MAX_AGE = timedelta(hours=2)
 COMPRESSOR_LOOKBACK = timedelta(days=1)
 #: How far back an element's or a setting's last state is looked for.
 STATUS_LOOKBACK = timedelta(days=7)
-#: A setpoint change smaller than this is no write, °F.
-SAME_F = 0.05
-#: A drop to Heat Pump within this of TOU switching on or a window
-#: opening is the heater's own, not a write.
-DROP_WITHIN = timedelta(seconds=5)
-#: The upper start threshold at rest; raised above this, a TOU window
-#: is in force (the setting's half-degree step on top).
-_RAISED_ABOVE_F = 104.9 + 0.9
-_ELEMENT_MODES = frozenset({ELECTRIC, ENERGY_SAVER, HIGH_DEMAND})
 
 
 @dataclass(frozen=True)
@@ -703,6 +690,76 @@ def _air(status: DeviceStatus) -> Environment:
     return environment(status)
 
 
+def record(readings: Iterable[tuple[datetime, DeviceStatus]]) -> Record:
+    """A heater's record (``sim.record.Record``) from the statuses it
+    reported and when: each signal's value at each status, kept only
+    where it changed. A value then holds until its next row, as the
+    record's readers take it."""
+    rows = sorted(
+        ((t.astimezone(UTC), s) for t, s in readings), key=lambda r: r[0]
+    )
+
+    def changes(
+        f: Callable[[DeviceStatus], float],
+    ) -> tuple[tuple[datetime, float], ...]:
+        out: list[tuple[datetime, float]] = []
+        for t, s in rows:
+            v = f(s)
+            if not out or out[-1][1] != v:
+                out.append((t, v))
+        return tuple(out)
+
+    def on(flag: object) -> float:
+        return 1.0 if flag else 0.0
+
+    return Record(
+        compressor=changes(lambda s: on(s.comp_use)),
+        upper_element=changes(lambda s: on(s.heat_upper_use)),
+        lower_element=changes(lambda s: on(s.heat_lower_use)),
+        power_w=changes(lambda s: float(s.current_inst_power)),
+        mode=changes(lambda s: float(int(s.dhw_operation_setting))),
+        setpoint_f=changes(
+            lambda s: _from_device(HalfCelsius(s.dhw_temperature_setting_raw))
+        ),
+        heat_source=changes(lambda s: float(int(s.current_heat_use))),
+        upper_f=changes(
+            lambda s: _from_device(DeciCelsius(s.tank_upper_temperature_raw))
+        ),
+        lower_f=changes(
+            lambda s: _from_device(DeciCelsius(s.tank_lower_temperature_raw))
+        ),
+        hp_lower_on_f=changes(
+            lambda s: _from_device(HalfCelsius(s.hp_lower_on_temp_setting_raw))
+        ),
+        hp_upper_on_f=changes(
+            lambda s: _from_device(HalfCelsius(s.hp_upper_on_temp_setting_raw))
+        ),
+        tou=changes(lambda s: on(s.tou_status)),
+    )
+
+
+def observe(
+    readings: Iterable[tuple[datetime, DeviceStatus]],
+    *,
+    start: datetime,
+    end: datetime,
+    now: datetime,
+) -> Observed:
+    """What the heater did over ``[start, end)`` (``sim.observed``),
+    from the statuses it reported: modes and whether each was in
+    effect, when each source ran, the compressor's starts with why and
+    whether each counts, the energy per slot from its own power, the
+    delivered temperature, and where its record was missing. Nothing
+    after ``now`` is claimed; ``start`` and ``end`` on the 10-minute
+    slot grid."""
+    return observe_record(
+        record(readings),
+        start.astimezone(UTC),
+        end.astimezone(UTC),
+        now=now.astimezone(UTC),
+    )
+
+
 def replay(
     readings: Iterable[tuple[datetime, DeviceStatus]],
     *,
@@ -728,8 +785,8 @@ def replay(
     - the TOU switch's changes over the span (``Schedules.tou_switches``);
     - with ``writes``, every recorded change of the setpoint or the mode
       over the span as a write, but the heater's own drop to Heat Pump
-      at a window's opening (within ``DROP_WITHIN`` of TOU switching on
-      or its upper threshold rising).
+      at a window's opening (within ``sim.record.DROP_WITHIN`` of TOU
+      switching on or its upper threshold rising).
 
     ``schedules`` brings the TOU periods and reservations (the
     heater's own, read with this library: the record has none); its
@@ -773,63 +830,22 @@ def replay(
             "element_running_since": upper_edge if upper_on else None,
         }
     )
-    span = [(t, s) for t, s in rows if at < t < until]
-    switches: list[tuple[datetime, bool]] = []
-    tou = bool(now.tou_status)
-    for t, s in span:
-        if bool(s.tou_status) != tou:
-            tou = bool(s.tou_status)
-            switches.append((t, tou))
+    rec = record(rows)
+    switches = rec.tou_switches(at, until)
     base = schedules if schedules is not None else Schedules()
     reasons: list[str] = []
     recorded: list[Write] = []
     if writes:
-        # TOU switching on, or the upper threshold rising, from
-        # ``DROP_WITHIN`` before the span to as long after it.
-        near = [
-            (t, s)
-            for t, s in rows
-            if at - DROP_WITHIN < t < until + DROP_WITHIN
-        ]
-        prior = [s for t, s in rows if t <= at - DROP_WITHIN]
-        openings: list[datetime] = []
-        if prior:
-            was_on = bool(prior[-1].tou_status)
-            raised = (
-                _from_device(
-                    HalfCelsius(prior[-1].hp_upper_on_temp_setting_raw)
-                )
-                > _RAISED_ABOVE_F
-            )
-            for t, s in near:
-                on = bool(s.tou_status)
-                up = (
-                    _from_device(HalfCelsius(s.hp_upper_on_temp_setting_raw))
-                    > _RAISED_ABOVE_F
-                )
-                if (on and not was_on) or (up and not raised):
-                    openings.append(t)
-                was_on, raised = on, up
-        mode = int(now.dhw_operation_setting)
-        setpoint = _from_device(HalfCelsius(now.dhw_temperature_setting_raw))
-        for t, s in span:
-            new_mode = int(s.dhw_operation_setting)
-            if new_mode != mode:
-                dropped = (
-                    new_mode == HEAT_PUMP
-                    and mode in _ELEMENT_MODES
-                    and any(abs(e - t) <= DROP_WITHIN for e in openings)
-                )
-                if not dropped:
-                    if new_mode in (VACATION, POWER_OFF):
-                        reasons.append("recorded_write_not_modelled")
-                    else:
-                        recorded.append(Write(at=t, mode=new_mode))
-                mode = new_mode
-            new_sp = _from_device(HalfCelsius(s.dhw_temperature_setting_raw))
-            if abs(new_sp - setpoint) > SAME_F:
-                recorded.append(Write(at=t, setpoint_f=new_sp))
-                setpoint = new_sp
+        for w in rec.writes(at, until):
+            if w.dropped:
+                continue
+            if w.mode is not None:
+                if w.mode in (VACATION, POWER_OFF):
+                    reasons.append("recorded_write_not_modelled")
+                else:
+                    recorded.append(Write(at=w.at, mode=w.mode))
+            if w.setpoint_f is not None:
+                recorded.append(Write(at=w.at, setpoint_f=w.setpoint_f))
     scenario = Scenario(
         start=at,
         horizon=until - at,
