@@ -321,6 +321,7 @@ def simulate(
     recovery: RecoveryModel | None = None,
     book: Booked | None = None,
     ledger: HeatLedger | None = None,
+    tou_windows_in_force: Sequence[tuple[datetime, datetime]] | None = None,
 ) -> SimulationResult:
     """Walk ``scenario`` from its start to its end on ``params``.
 
@@ -337,6 +338,11 @@ def simulate(
     delivery is the upper zone's, and ``reasons`` says
     ``no_heat_book``. ``ledger`` is any other ``extensions.HeatLedger``
     in its place.
+
+    ``tou_windows_in_force`` are the TOU windows the heater keeps, in
+    place of the schedule's (``marked_windows``: the heater's own marker
+    over a recovery running now). With TOU on and no periods to lay out,
+    ``reasons`` says ``tou_schedule_unknown`` and no window is kept.
 
     Raises ``engine.SimulationError`` when the walk cannot be completed.
     """
@@ -366,6 +372,10 @@ def simulate(
         if tou_on
         else ()
     )
+    if tou_windows_in_force is not None:
+        windows = tuple(tou_windows_in_force)
+    elif tou_on and not s.schedules.tou_periods:
+        reasons.append("tou_schedule_unknown")
     mode, disabled = _engine_mode(s.settings.mode)
     if s.settings.hp_lower_on_f is None:
         defaults.append("hp_lower_on_f=None (no lower-zone start)")
@@ -693,7 +703,8 @@ def element_mode(
     heat pump's minutes for the lower zone (``recovery`` gives them);
     ``switch_back_after_minutes`` ends the stint early. ``reachable``
     says whether a mode write can take at ``at``: not while heating is
-    disabled, nor inside a TOU window (``schedules``, in ``tz``)."""
+    disabled, nor inside a TOU window: the heater's own marker
+    (``tou_marked``), else ``schedules``, in ``tz``."""
     at = _instant(at)
     named = ENGINE_MODE.get(mode)
     if named is None or named == "heat_pump":
@@ -715,21 +726,26 @@ def element_mode(
     )
     _, disabled = _engine_mode(settings.mode)
     reason: str | None = None
+    # The heater's own marker decides, as the model's did; the schedule
+    # only where it is not known.
+    marked = tou_marked(settings)
+    if marked is None:
+        marked = (
+            schedules is not None
+            and schedules.tou_enabled
+            and in_window(
+                at,
+                tou_windows(
+                    schedules.tou_periods,
+                    ZoneInfo(tz),
+                    at,
+                    at + timedelta(minutes=1),
+                ),
+            )
+        )
     if disabled:
         reason = "heating_disabled"
-    elif (
-        schedules is not None
-        and schedules.tou_enabled
-        and in_window(
-            at,
-            tou_windows(
-                schedules.tou_periods,
-                ZoneInfo(tz),
-                at,
-                at + timedelta(minutes=1),
-            ),
-        )
-    ):
+    elif marked:
         reason = "tou_window_in_force"
     return ElementModeResult(
         starts_at=at,
@@ -759,6 +775,25 @@ def _ambient_at(environment: Environment, at: datetime) -> float:
         )
     )
     return sampler.at(at)
+
+
+def _scheduled(
+    s: Scenario, start: datetime, end: datetime
+) -> list[tuple[datetime, datetime]] | None:
+    """The schedule's TOU windows over ``[start, end]``: none with TOU
+    off; None, not known, with it on and no periods to lay out."""
+    on = (
+        s.commands.tou_enabled
+        if s.commands.tou_enabled is not None
+        else s.schedules.tou_enabled
+    )
+    if not on:
+        return []
+    if not s.schedules.tou_periods:
+        return None
+    return list(
+        tou_windows(s.schedules.tou_periods, ZoneInfo(s.tz), start, end)
+    )
 
 
 def _coast_loss(
@@ -834,6 +869,7 @@ def next_recovery(
                 return Recovery("unavailable")
             upper, lower = state
             coast_btu, coast_gal = _coast_loss(s, params, start, air)
+        end = start + _RECOVERY_ROOM
         heat = simulate(
             s.model_copy(
                 update={
@@ -852,6 +888,13 @@ def next_recovery(
             ),
             params,
             recovery=recovery,
+            tou_windows_in_force=marked_windows(
+                now,
+                tou_marked(s.settings),
+                start,
+                end,
+                _scheduled(s, start, end),
+            ),
         )
     except SimulationError:
         return Recovery("unavailable")
@@ -917,22 +960,19 @@ def time_to_ready(
     if shower_gal is None:
         shower_gal = p.shower_gal
         defaults.append(f"shower_gal={shower_gal}")
-    tz = ZoneInfo(s.tz)
-    windows = (
-        tou_windows(s.schedules.tou_periods, tz, s.start, s.start)
-        if (
-            s.commands.tou_enabled
-            if s.commands.tou_enabled is not None
-            else s.schedules.tou_enabled
-        )
-        else ()
-    )
+    # In a TOU window now: the heater's own marker, as the model read
+    # it; the schedule's only where the marker is not known.
+    marked = tou_marked(s.settings)
+    if marked is None:
+        defaults.append("tou_window=schedule (hp_upper_on_f unknown)")
+        scheduled = _scheduled(s, s.start, s.start)
+        marked = scheduled is not None and in_window(s.start, scheduled)
     tank = TankNow(
         upper_f=s.state.upper_f,
         lower_f=s.state.lower_f,
         drawing=drawing,
         element_on=s.state.element_running,
-        tou_window=in_window(s.start, windows),
+        tou_window=marked,
         ambient_f=_ambient_at(s.environment, s.start),
         compressor_on=s.state.compressor_running,
     )
@@ -1006,6 +1046,57 @@ def counter_measures_to_setpoint(
         and hp_upper_on_f <= DEVICE_REFERENCE_F + _REFERENCE_SLACK_F
         and hp_upper_on_f <= target_f - _RAISED_MARGIN_F
     )
+
+
+#: How long the heater's own TOU marker may trail a scheduled edge: its
+#: upper threshold moved 1-18 s after the window's edges at one
+#: installation.
+TOU_MARKER_LAG = timedelta(seconds=60)
+
+
+def tou_marked(settings: Settings) -> bool | None:
+    """Whether the heater itself marks a TOU window in force now: its
+    upper start threshold raised to about the setpoint
+    (``Settings.hp_upper_on_f``). It sees what the schedule cannot (an
+    override, a window it skipped). None when the threshold is not
+    known."""
+    if settings.hp_upper_on_f is None:
+        return None
+    return not counter_measures_to_setpoint(
+        settings.hp_upper_on_f, settings.setpoint_f
+    )
+
+
+def marked_windows(
+    now: datetime,
+    marked: bool | None,
+    start: datetime,
+    end: datetime,
+    scheduled: Sequence[tuple[datetime, datetime]] | None,
+) -> list[tuple[datetime, datetime]]:
+    """The TOU windows over a recovery ``[start, end]``: the schedule's
+    (None: not known), with the heater's own marker (``tou_marked``)
+    overriding it only for a recovery running now and away from a
+    scheduled edge, which the marker trails (``TOU_MARKER_LAG``): a
+    scheduled window the heater does not mark is dropped, and one it
+    marks that the schedule lacks covers the recovery. A later recovery
+    is the schedule's alone. With no schedule, the window marked now
+    stands in."""
+    cover = (min(now, start), end + timedelta(minutes=1))
+    if scheduled is None:
+        return [cover] if marked else []
+    windows = list(scheduled)
+    if (
+        marked is None
+        or start > now
+        or any(abs(now - edge) <= TOU_MARKER_LAG for w in windows for edge in w)
+    ):
+        return windows
+    if marked and not in_window(now, windows):
+        return sorted([*windows, (now, end + timedelta(minutes=1))])
+    if not marked:
+        return [w for w in windows if not w[0] <= now < w[1]]
+    return windows
 
 
 def forecast(

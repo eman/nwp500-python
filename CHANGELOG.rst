@@ -142,6 +142,12 @@ Added
     ``HeaterState.energy_to_setpoint_wh`` carry what they need, filled
     by the adapters; ``recovery`` says ``not_scheduled`` in Vacation and
     Power Off.
+  - The heater's own TOU marker (``Settings.hp_upper_on_f`` raised):
+    ``time_to_ready`` and ``element_mode`` read "in a window now" from
+    it, and ``next_recovery`` lets it override the schedule for a
+    recovery running now (``api.marked_windows``), as the model did;
+    ``simulate(tou_windows_in_force=)`` takes the windows to keep, and
+    TOU on with no periods says ``tou_schedule_unknown``.
   - ``time_to_ready`` says ``inlet_temp_modelled`` when a booked answer
     converts at an inlet nobody measured (``inlet_measured=``, or a
     book whose steps measured it); ``next_recovery``'s coast loses the

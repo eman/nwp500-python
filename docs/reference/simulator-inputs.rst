@@ -212,9 +212,14 @@ Built by ``sim_adapters.settings(status)``.
      - None
      - ``DeviceStatus.hp_upper_on_temp_setting_raw`` (half degC): the
        upper thermistor's start threshold, which a TOU window raises to
-       about the setpoint. ``forecast`` reads it to tell whether the
-       energy count is measured to the setpoint; unknown counts as
-       raised.
+       about the setpoint: the heater's own mark that a window is in
+       force, which sees an override or a skipped window the schedule
+       cannot. ``time_to_ready`` and ``element_mode`` read "in a window
+       now" from it, ``next_recovery`` lets it override the schedule
+       for a recovery running now (away from a scheduled edge), and
+       ``forecast`` reads it to tell whether the energy count is
+       measured to the setpoint. Without it they fall back to the
+       schedule, named in ``defaults_used``.
 
 
 History: ``History``

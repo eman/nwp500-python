@@ -212,7 +212,11 @@ class TestTimeToReady:
         r = time_to_ready(s, params)
         assert r.bath.ready
         assert {m.ready_in_minutes for m in r.bath.by_mode} == {0.0}
-        assert r.defaults_used == ("bath_gal=28.7", "shower_gal=12.0")
+        assert r.defaults_used == (
+            "bath_gal=28.7",
+            "shower_gal=12.0",
+            "tou_window=schedule (hp_upper_on_f unknown)",
+        )
         assert r.showers.ready_for_whole == 3
 
     def test_a_short_tank_has_a_time_in_each_mode(self, params):
@@ -227,7 +231,10 @@ class TestTimeToReady:
             < rows["heat_pump"].ready_in_minutes
         )
         assert r.recovery.outcome == "ok"
-        assert r.defaults_used == ("shower_gal=12.0",)
+        assert r.defaults_used == (
+            "shower_gal=12.0",
+            "tou_window=schedule (hp_upper_on_f unknown)",
+        )
 
     def test_with_a_book_the_booked_heat_answers(self, params):
         s = _scenario(state=HeaterState(upper_f=140.5, lower_f=139.6))
@@ -482,3 +489,70 @@ class TestARecoveryModel:
         assert fast.bath.ready_in_minutes is not None
         assert slow.bath.ready_in_minutes is not None
         assert fast.bath.ready_in_minutes < slow.bath.ready_in_minutes
+
+
+RESTING, RAISED = 104.0, 139.5
+
+
+class TestTheHeatersOwnTouMarker:
+    """The heater raises its upper start threshold to about the setpoint
+    while a TOU window is in force; the model read that before the
+    schedule."""
+
+    def test_raised_is_in_force(self):
+        from nwp500.sim.api import tou_marked
+
+        assert tou_marked(Settings(setpoint_f=140.9, hp_upper_on_f=RAISED))
+        assert not tou_marked(Settings(setpoint_f=140.9, hp_upper_on_f=RESTING))
+        assert tou_marked(Settings(setpoint_f=140.9)) is None
+
+    def test_it_caps_a_running_recovery_the_schedule_misses(self, params):
+        running = HeaterState(
+            upper_f=128.0, lower_f=100.0, compressor_running=True
+        )
+        plain = next_recovery(_scenario(state=running), params)
+        marked = next_recovery(
+            _scenario(
+                state=running,
+                settings=Settings(
+                    setpoint_f=140.9, hp_lower_on_f=105.0, hp_upper_on_f=RAISED
+                ),
+            ),
+            params,
+        )
+        assert not plain.tou_capped and marked.tou_capped
+
+    def test_resting_lifts_a_scheduled_window_off_it(self, params):
+        """An override: the schedule says peak, the heater does not."""
+        s = _scenario(
+            state=HeaterState(
+                upper_f=128.0, lower_f=100.0, compressor_running=True
+            ),
+            schedules=_peak_now(),
+            settings=Settings(
+                setpoint_f=140.9, hp_lower_on_f=105.0, hp_upper_on_f=RESTING
+            ),
+        )
+        assert not next_recovery(s, params).tou_capped
+
+    def test_readiness_and_the_element_modes_follow_it(self, params):
+        raised = Settings(
+            setpoint_f=140.9, hp_lower_on_f=105.0, hp_upper_on_f=RAISED
+        )
+        r = time_to_ready(_scenario(settings=raised), params)
+        assert not any(d.startswith("tou_window=") for d in r.defaults_used)
+        e = element_mode(
+            HeaterState(upper_f=120.0, lower_f=100.0),
+            raised,
+            params,
+            mode=3,
+            at=T0,
+        )
+        assert e.unreachable_reason == "tou_window_in_force"
+
+    def test_tou_on_with_no_periods_is_unknown(self, params):
+        s = _scenario(schedules=Schedules(tou_enabled=True))
+        assert "tou_schedule_unknown" in simulate(s, params).reasons
+        assert (
+            "tou_schedule_unknown" not in simulate(_scenario(), params).reasons
+        )
