@@ -100,6 +100,12 @@ Added
     fields were left to their defaults.
   - ``sim.book.SpanLoss`` lets a client charge a loss the book does not
     model; without one, the book charges none.
+  - ``default_params()`` has no mixing valve; ``site_example_params()``
+    is the installation the values were fitted at, its valve included
+    (``with_valve``, ``SITE_VALVE``). The core's draw functions default
+    to no valve as well. Each parameter says whether it describes the
+    heater or the installation (``scope_of``), and the frame it was
+    fitted in (``note_of``).
 
 Changed
 -------

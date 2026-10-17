@@ -27,7 +27,8 @@ import pandas as pd
 from nwp500.sim.params import UA_REF_DELTA_T_F, TankParams
 from nwp500.sim.physics.draw import (
     DEFAULT_INLET_TEMP_F,
-    LEGACY_TMV_DELIVERY_F,
+    NO_VALVE_INTERCEPT_F,
+    NO_VALVE_SLOPE,
     delivery_temp_f,
     draw_energy_btu,
     gap_opened_f,
@@ -234,8 +235,8 @@ def project_decay(
     draws: Iterable[Draw | tuple[datetime, float]] | None = None,
     draw_observability: float | None = None,
     draw_inlet_temp_f: float = DEFAULT_INLET_TEMP_F,
-    tmv_delivery_intercept_f: float = LEGACY_TMV_DELIVERY_F,
-    tmv_delivery_slope: float = 0.0,
+    tmv_delivery_intercept_f: float = NO_VALVE_INTERCEPT_F,
+    tmv_delivery_slope: float = NO_VALVE_SLOPE,
     draw_gap_open_f_per_gal: float = 0.0,
     draw_lower: bool = True,
     lower_gate_f: float = 0.0,
@@ -857,8 +858,8 @@ def draw_step(
     *,
     draw_observability: float,
     draw_inlet_temp_f: float = DEFAULT_INLET_TEMP_F,
-    tmv_delivery_intercept_f: float = LEGACY_TMV_DELIVERY_F,
-    tmv_delivery_slope: float = 0.0,
+    tmv_delivery_intercept_f: float = NO_VALVE_INTERCEPT_F,
+    tmv_delivery_slope: float = NO_VALVE_SLOPE,
     draw_gap_open_f_per_gal: float = 0.0,
     tank: TankParams = TankParams(),
 ) -> tuple[float, float]:

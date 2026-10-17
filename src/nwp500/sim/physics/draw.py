@@ -145,6 +145,12 @@ DEFAULT_INLET_TEMP_F = 72.4
 DEFAULT_TMV_DELIVERY_INTERCEPT_F = 53.56
 DEFAULT_TMV_DELIVERY_SLOPE = 0.485
 
+#: No mixing valve: the tap gets the tank's own water, the one delivery
+#: with no fitted numbers in it, and every function's default here. The
+#: line above is one installation's valve, set through ``DrawParams``.
+NO_VALVE_INTERCEPT_F = 0.0
+NO_VALVE_SLOPE = 1.0
+
 #: The constant delivery the first calibration assumed. Parameters
 #: saved before the measured law have no delivery fields and load as
 #: intercept 128, slope 0, so rolling back to them reverts the
@@ -177,14 +183,16 @@ DEFAULT_DOMAIN_VOLUME_GAL = (1.0, 41.6)
 
 def delivery_temp_f(
     t_upper_f: float,
-    intercept_f: float = DEFAULT_TMV_DELIVERY_INTERCEPT_F,
-    slope: float = DEFAULT_TMV_DELIVERY_SLOPE,
+    intercept_f: float = NO_VALVE_INTERCEPT_F,
+    slope: float = NO_VALVE_SLOPE,
 ) -> float:
     """What the mixing valve delivers with the upper zone at ``t_upper_f``.
 
-    Linear in tank temperature, per the gauge-cam plateaus. ``slope =
-    0`` gives the constant ``intercept_f``, which is how the older
-    constant 128 °F is expressed.
+    Linear in tank temperature, per the gauge-cam plateaus at the
+    installation the ``DEFAULT_TMV_*`` line comes from. ``slope = 0``
+    gives the constant ``intercept_f``, which is how the older constant
+    128 °F is expressed; the default, intercept 0 and slope 1, is no
+    valve.
     """
     return intercept_f + slope * t_upper_f
 

@@ -6,14 +6,24 @@ from pathlib import Path
 
 import pytest
 
-from nwp500.sim.defaults import default_params
+from nwp500.sim.defaults import (
+    NO_VALVE,
+    SITE_VALVE,
+    default_params,
+    site_example_params,
+    with_valve,
+)
 from nwp500.sim.params import (
     DEFAULT,
     FITTED,
+    HEATER,
+    INSTALLATION,
     MEASURED,
+    note_of,
     params_from_document,
     params_to_document,
     provenance_of,
+    scope_of,
     unknown_fields,
 )
 
@@ -89,7 +99,74 @@ def test_a_fitted_document_writes_back_as_it_was():
     assert params_from_document(written) == params_from_document(doc)
 
 
-def test_the_65s_defaults_are_that_fitted_model():
+def test_the_site_example_is_that_fitted_model():
     assert params_from_document(json.loads(FITTED_DOC.read_text())) == (
-        default_params()
+        site_example_params()
     )
+
+
+def test_the_default_is_the_site_without_its_mixing_valve():
+    d, site = default_params(), site_example_params()
+    assert (d.draw.delivery_intercept_f, d.draw.delivery_slope) == NO_VALVE
+    book = d.book_terms()
+    assert (book.delivery_intercept_f, book.delivery_slope) == NO_VALVE
+    site_book = site.book_terms()
+    assert (site_book.delivery_intercept_f, site_book.delivery_slope) == (
+        SITE_VALVE
+    )
+    assert with_valve(d, SITE_VALVE) == site
+
+
+def test_one_valve_drives_the_draw_and_the_book():
+    p = replace(
+        default_params(),
+        draw=replace(default_params().draw, delivery_intercept_f=50.0),
+    )
+    assert p.book_terms().delivery_intercept_f == 50.0
+    assert p.book_terms().delivery_slope == 1.0
+
+
+def test_without_a_valve_every_gallon_is_tank_water():
+    """The same tank delivers fewer gallons through no valve: each one is
+    all tank water."""
+    from nwp500.sim import HeaterState, Settings, full_tank_book, readiness
+
+    state, settings = (
+        HeaterState(upper_f=140.5, lower_f=139.6),
+        Settings(setpoint_f=140.9),
+    )
+    gal = {}
+    for name, p in (
+        ("none", default_params()),
+        ("site", site_example_params()),
+    ):
+        book = full_tank_book(140.5, 139.6, p.book_terms())
+        gal[name] = readiness(state, settings, p, book=book).gal
+    assert 0.0 < gal["none"] < gal["site"] / 1.2
+
+
+@pytest.mark.parametrize(
+    ("part", "name", "scope"),
+    [
+        ("tank", "volume_gal", HEATER),
+        ("controller", "restart_lockout_s", HEATER),
+        ("element", "upper_f_per_min", HEATER),
+        ("draw", "observability", INSTALLATION),
+        ("draw", "inlet_temp_f", INSTALLATION),
+        ("draw", "delivery_slope", INSTALLATION),
+        ("book", "empty_btu", INSTALLATION),
+        ("readiness", "delivered_lag_gal", INSTALLATION),
+        ("readiness", "dip_f", HEATER),
+    ],
+)
+def test_each_parameter_says_what_it_describes(part, name, scope):
+    p = default_params()
+    assert scope_of(getattr(p, part), name) == scope
+
+
+def test_the_fitted_frames_are_noted():
+    p = default_params()
+    assert "where the heater stands" in (note_of(p.loss, "ua_btu_hr_f") or "")
+    assert "recoveries" in (note_of(p.compressor, "compressor_constant") or "")
+    assert "mixing valve" in (note_of(p.draw, "observability") or "")
+    assert note_of(p.tank, "volume_gal") is None

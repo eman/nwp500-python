@@ -17,9 +17,9 @@ import pytest
 
 pytest.importorskip("pandas")
 
-from nwp500.sim import delivery as rd
-from nwp500.sim.book import (
+from _sim_site import (
     DEPLETION_THRESHOLD_F,
+    EP,
     Booked,
     compressor_btu,
     deliverable_from_heat,
@@ -35,13 +35,14 @@ from nwp500.sim.book import (
     zone_after_draw_f,
     zone_mixed_f,
 )
-from nwp500.sim.params import BookParams, ReadinessParams
+
+from nwp500.sim import delivery as rd
+from nwp500.sim.params import ReadinessParams
 from nwp500.sim.physics.draw import (
     settled_lower_f,
     unsettled_after_f,
 )
 
-EP = BookParams()
 TANK_BTU_PER_F = 8.34 * EP.tank_gal
 EVIDENCE = rd.EXAMPLE_EVIDENCE
 OBSERVED_MAX_GAL = rd.observed_max_gal(EVIDENCE)
@@ -58,16 +59,18 @@ FULL = (150.0, 150.0)
 
 
 def deliverable(upper, lower, p=None, **kw):
-    return rd.deliverable(upper, lower, P if p is None else p, **kw)
+    return rd.deliverable(upper, lower, P if p is None else p, ep=EP, **kw)
 
 
 def booked_deliverable(booked, upper, lower, p=None):
-    return rd.booked_deliverable(booked, upper, lower, P if p is None else p)
+    return rd.booked_deliverable(
+        booked, upper, lower, P if p is None else p, EP
+    )
 
 
 def delivery_temp_f(booked, upper, p=None, *, lower_f=None):
     return rd.delivery_temp_f(
-        booked, upper, P if p is None else p, lower_f=lower_f
+        booked, upper, P if p is None else p, EP, lower_f=lower_f
     )
 
 

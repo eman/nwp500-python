@@ -17,7 +17,9 @@ pandas and scipy).
   ready for;
 - ``element_mode(state, settings, params, mode=..., at=...)``: a
   recovery in an element mode;
-- ``default_params(volume_code)``: the parameters of one NWP500-65,
+- ``default_params(volume_code)``: one NWP500-65's parameters with no
+  mixing valve; ``site_example_params`` that installation whole, valve
+  included (``with_valve`` sets one); the parameters of one NWP500-65,
   with the tank volume scaled for the 50 and 80 gal models.
 
 ``nwp500.sim_adapters`` builds a scenario's parts from the library's
@@ -34,7 +36,13 @@ from nwp500.sim.api import (
     time_to_ready,
 )
 from nwp500.sim.book import Booked, full_tank_book
-from nwp500.sim.defaults import default_params
+from nwp500.sim.defaults import (
+    NO_VALVE,
+    SITE_VALVE,
+    default_params,
+    site_example_params,
+    with_valve,
+)
 from nwp500.sim.delivery import Deliverable, DrawWindowResult
 from nwp500.sim.inputs import (
     Commands,
@@ -66,6 +74,8 @@ from nwp500.sim.result import (
 )
 
 __all__ = (
+    "NO_VALVE",
+    "SITE_VALVE",
     "BathReady",
     "BookParams",
     "Booked",
@@ -100,6 +110,8 @@ __all__ = (
     "readiness",
     "recovery",
     "simulate",
+    "site_example_params",
     "standby",
     "time_to_ready",
+    "with_valve",
 )

@@ -26,10 +26,10 @@ from nwp500.sim import (  # noqa: E402
     Loads,
     Scenario,
     Settings,
-    default_params,
     full_tank_book,
     readiness,
     simulate,
+    site_example_params,
 )
 from nwp500.sim.book import BookedHeatLedger  # noqa: E402
 from nwp500.sim.codec import (  # noqa: E402
@@ -70,7 +70,9 @@ BIG_WINDOW = DrawWindow(start=at(0.5), end=at(1.0), expected_gal=75.0)
 
 @pytest.fixture(scope="module")
 def params() -> HeaterParams:
-    return default_params()
+    """One installation's parameters, its mixing valve included: the
+    numbers below are that site's."""
+    return site_example_params()
 
 
 @pytest.fixture(autouse=True)
@@ -121,7 +123,7 @@ def _by_hand(params: HeaterParams, s: Scenario, book: Any) -> Any:
         stopped_at=s.history.compressor_stopped_at,
         heated_at=s.history.heated_at,
         controller=params.controller,
-        ledger=BookedHeatLedger(book, physics.ambient.at, params.book),
+        ledger=BookedHeatLedger(book, physics.ambient.at, params.book_terms()),
     )
 
 
@@ -165,11 +167,11 @@ class TestTheBookInASimulation:
         draws = [(d.at, d.gallons) for d in s.loads.draws]
         r = simulate(s, params)
         assert list(r.delivery) == delivery_along(
-            r.points, draws, None, params.readiness, params.book
+            r.points, draws, None, params.readiness, params.book_terms()
         )
         b = simulate(s, params, book=full_tank_book(*FULL, params.book))
         assert list(b.delivery) == delivery_along(
-            b.points, draws, b.booked, params.readiness, params.book
+            b.points, draws, b.booked, params.readiness, params.book_terms()
         )
         assert len(b.delivery) == len(b.points)
 

@@ -8,9 +8,15 @@ targeted device runs and the engineering constants the fit assumes
 nominal size, and nothing else: their compressor, elements, jacket loss
 and controller are the 65's until one of them is measured.
 
-The fit is one unit's, in one place: its heat loss reflects the air
-around that tank, and its draw response the draws of one household.
-A caller with its own calibration passes its own ``HeaterParams``.
+The fit is one unit's, in one place, and part of it describes that
+place rather than the heater (``params.Scope``): the draw terms were
+fitted through its mixing valve, on its mains and its household's
+draws. ``site_example_params`` is that installation whole;
+``default_params`` is the same heater with **no mixing valve**, the one
+draw setting with no fitted numbers in it, which errs the safe way for
+a valve owner who leaves it unset (every gallon charged as tank water,
+depletion called early). A caller with its own calibration, or a
+valve, passes its own ``HeaterParams``.
 """
 
 from dataclasses import replace
@@ -33,6 +39,13 @@ VOLUME_80 = 3
 
 #: Nominal gallons by ``volume_code``.
 NOMINAL_GAL = ((VOLUME_50, 50.0), (VOLUME_65, 65.0), (VOLUME_80, 80.0))
+
+#: One installation's thermostatic mixing valve: delivered water at
+#: 53.56 + 0.485 × the upper zone, °F, never above the tank. Measured
+#: from five plateaus at a gauge on its outlet, 2026-09-16/17.
+SITE_VALVE = (53.56, 0.485)
+#: No mixing valve: the tap gets the tank's own water.
+NO_VALVE = (0.0, 1.0)
 
 
 def _nwp500_65() -> HeaterParams:
@@ -103,15 +116,39 @@ def _nwp500_65() -> HeaterParams:
     )
 
 
+def with_valve(
+    params: HeaterParams, valve: tuple[float, float]
+) -> HeaterParams:
+    """``params`` with the mixing valve ``(intercept_f, slope)``:
+    delivered water at ``intercept_f + slope × upper``, never above the
+    tank; ``NO_VALVE`` for none. The draw terms' line, which the book
+    takes too (``HeaterParams.book_terms``)."""
+    intercept, slope = valve
+    return replace(
+        params,
+        draw=replace(
+            params.draw, delivery_intercept_f=intercept, delivery_slope=slope
+        ),
+    )
+
+
 def default_params(volume_code: int = VOLUME_65) -> HeaterParams:
     """The default parameters for a tank of ``volume_code`` (the
-    device's: 1 for 50 gal, 2 for 65, 3 for 80). The 65's are as
-    fitted; the others scale its tank volume by nominal size (the
-    tank's, and the heat book's count of it), and nothing else."""
+    device's: 1 for 50 gal, 2 for 65, 3 for 80): ``site_example_params``
+    with no mixing valve (``NO_VALVE``). Every other installation term
+    is still that site's, and labelled so (``params.scope_of``)."""
+    return with_valve(site_example_params(volume_code), NO_VALVE)
+
+
+def site_example_params(volume_code: int = VOLUME_65) -> HeaterParams:
+    """One NWP500-65 installation's parameters, its mixing valve
+    (``SITE_VALVE``) included, as fitted; the 50 and 80 gal models scale
+    its tank volume by nominal size (the tank's, and the heat book's
+    count of it), and nothing else."""
     nominal = dict(NOMINAL_GAL)
     if volume_code not in nominal:
         raise ValueError(f"unknown volume_code {volume_code!r}")
-    base = _nwp500_65()
+    base = with_valve(_nwp500_65(), SITE_VALVE)
     if volume_code == VOLUME_65:
         return base
     scale = nominal[volume_code] / nominal[VOLUME_65]

@@ -514,7 +514,7 @@ the re-anchors of one NWP500-65's metered record: its compressor,
 element and standby heat, the empty point, how the upper zone mixes
 down through a draw and where the lower probe reads the cold front.
 Its ``delivery_intercept_f`` and ``delivery_slope`` are the mixing
-valve's line, as ``draw``'s: set them together.
+valve's line, which the simulator takes from ``draw``'s.
 
 
 The draw range
@@ -538,7 +538,15 @@ whether it was ``measured``, ``fitted`` or an engineering ``default``
 (``nwp500.sim.params.provenance_of``).
 
 ``default_params(volume_code)`` takes ``DeviceFeature.volume_code``
-(``sim_adapters.params(feature)`` passes it):
+(``sim_adapters.params(feature)`` passes it). It has **no mixing
+valve**; ``site_example_params`` is the installation the values were
+fitted at, its valve included, and ``with_valve(params, (intercept_f,
+slope))`` sets a valve's delivery line, delivered water at ``intercept +
+slope x upper zone``, never above the tank. ``NO_VALVE`` is ``(0, 1)``;
+``SITE_VALVE`` that installation's ``(53.56, 0.485)``. The book reads
+the same line (``HeaterParams.book_terms``). Each field says whether it
+describes the heater or the installation (``params.scope_of``) and,
+where it matters, the frame it was fitted in (``params.note_of``):
 
 .. list-table::
    :header-rows: 1
@@ -553,7 +561,8 @@ whether it was ``measured``, ``fitted`` or an engineering ``default``
        50 gal nominal.
    * - 2
      - NWP500-65
-     - Fitted on one NWP500-65 at 240 V, 2026-10-11.
+     - Fitted on one NWP500-65 at 240 V, 2026-10-11, at one
+       installation; without its mixing valve.
    * - 3
      - NWP500-80
      - The 65's, with the tank volume (``tank`` and ``book``) scaled to

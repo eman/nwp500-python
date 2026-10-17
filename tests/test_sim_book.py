@@ -15,7 +15,8 @@ import pytest
 
 pytest.importorskip("pandas")
 
-from nwp500.sim.book import (
+from _sim_site import (
+    EP,
     Booked,
     BookedHeatLedger,
     compressor_btu,
@@ -23,12 +24,11 @@ from nwp500.sim.book import (
     standby_btu,
     walk_booked,
 )
+
 from nwp500.sim.controller import Source, Start, StopReason
 from nwp500.sim.engine import Draw, HeatingInterval, PathPoint
-from nwp500.sim.params import BookParams
 
 T0 = datetime(2026, 9, 26, 12, 0, tzinfo=UTC)
-EP = BookParams()
 #: After a bath: 30 gal of inlet water at the bottom, 10 gal drawable.
 PER_GAL = 8.34 * (53.56 + 0.485 * 130.0 - 70.0)
 AFTER_BATH = Booked(

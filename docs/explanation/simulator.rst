@@ -192,19 +192,52 @@ Parameters and their defaults
 =============================
 
 ``HeaterParams`` holds every fitted or device constant, in parts: tank,
-loss, compressor, power, element, draw and controller. Each field
-records where its value came from (``params.provenance_of``):
-``measured`` on the heater by a targeted run, ``fitted`` from its
-record, or an engineering ``default``.
+loss, compressor, power, element, draw, controller, readiness and the
+book. Each field records where its value came from
+(``params.provenance_of``): ``measured`` on the heater by a targeted
+run, ``fitted`` from its record, or an engineering ``default``; and
+what it describes (``params.scope_of``): the **heater**, an NWP500's
+own tank, compressor, elements and firmware, or the **installation**,
+its plumbing (a mixing valve, circulation), its mains and its
+household's draws. ``params.note_of`` names the frame a value was
+fitted in where it matters: a sensor it was fitted against, hardware it
+was fitted through.
 
-``default_params(volume_code)`` returns one NWP500-65's parameters, as
-fitted on 2026-10-11 from 240 V operation. The 50 and 80 gal models
-get the same parameters with the tank's volume scaled by nominal size,
-and nothing else: their compressors, elements and jacket loss have not
-been measured. The fit belongs to one tank in one place, so its standby
-loss reflects the air around that tank and its draw response one
-household's draws. A caller with its own calibration passes its own
-``HeaterParams``.
+The values come from one NWP500-65, fitted on 2026-10-11 from 240 V
+operation at one installation. ``site_example_params(volume_code)`` is
+that installation whole, its thermostatic mixing valve included.
+``default_params(volume_code)`` is the same with **no mixing valve**:
+the one draw setting with no fitted numbers in it, and the one that
+errs the safe way for a valve owner who leaves it unset (every gallon
+charged as tank water, so depletion is called early, never late). An
+installation with a valve sets its line (``with_valve``). The 50 and
+80 gal models get the same parameters with the tank's volume scaled by
+nominal size, and nothing else: their compressors, elements and jacket
+loss have not been measured.
+
+What carries to another installation, and what does not:
+
+- **The heater's terms** (tank, element power and rates, controller
+  thresholds, the stratification time constant, input power) were
+  measured on one unit and are expected to hold for the model.
+- **The standby loss and the compressor terms** were fitted against a
+  sensor of the air where the heater stands. The heater's own
+  ``ambient_temperature`` reads that air within about 0.35 degF while
+  the compressor runs and about 5 degF warm while it is idle, so give
+  the simulator the running readings, or a forecast anchored to one.
+  The compressor terms were fitted with that installation's draws and
+  circulation runs inside its recoveries, so a recovery without them
+  comes out a little long.
+- **The draw terms** (observability, the gap a draw opens, the inlet
+  temperature) were fitted together through that installation's mixing
+  valve, on its mains and its household's metered draws. Change them
+  together, or not at all. The **book's** and **readiness's** terms are
+  that installation's too, and its evidence over-promises on an
+  installation without a valve.
+- **Circulation** (the gate, the pool, the return water's share) acts
+  only when a circulation schedule is given.
+
+A caller with its own calibration passes its own ``HeaterParams``.
 
 Every default an answer relied on is listed in ``defaults_used``
 (the humidity, the inlet temperature, a missing lockout or heating

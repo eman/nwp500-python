@@ -324,7 +324,7 @@ def full_tank_book(
     return sim_full_tank_book(
         _from_device(DeciCelsius(status.tank_upper_temperature_raw)),
         _from_device(DeciCelsius(status.tank_lower_temperature_raw)),
-        params.book,
+        params.book_terms(),
         inlet_f=None if inlet is None else _to_sim(inlet),
     )
 

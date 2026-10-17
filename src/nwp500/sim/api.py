@@ -314,13 +314,13 @@ def simulate(
         ledger = BookedHeatLedger(
             book,
             physics.ambient.at,
-            params.book,
+            params.book_terms(),
             line_f=params.readiness.line_f,
             fall_f_per_gal=params.readiness.fall_f_per_gal,
         )
     if ledger is None:
         reasons.append("no_heat_book")
-    elif book is not None and book.aged(params.book):
+    elif book is not None and book.aged(params.book_terms()):
         reasons.append("heat_book_aged")
     draws = [(d.at, d.gallons) for d in s.loads.draws]
     sim = walk(
@@ -358,7 +358,7 @@ def simulate(
         else None
     )
     delivery = delivery_along(
-        sim.points, draws, walked, params.readiness, params.book
+        sim.points, draws, walked, params.readiness, params.book_terms()
     )
     out_of_domain_at: datetime | None = None
     if draws:
@@ -383,12 +383,12 @@ def simulate(
                 delivery,
                 booked=walked,
                 band_btu=(
-                    book.error_band_btu(params.book)
-                    if book is not None and book.aged(params.book)
+                    book.error_band_btu(params.book_terms())
+                    if book is not None and book.aged(params.book_terms())
                     else 0.0
                 ),
                 p=params.readiness,
-                ep=params.book,
+                ep=params.book_terms(),
             )
         ),
         booked=walked,
@@ -416,13 +416,17 @@ def readiness(
     heating = state.compressor_running or state.element_running
     if book is not None:
         return booked_deliverable(
-            book, state.upper_f, state.lower_f, params.readiness, params.book
+            book,
+            state.upper_f,
+            state.lower_f,
+            params.readiness,
+            params.book_terms(),
         )
     return deliverable(
         state.upper_f,
         state.lower_f,
         params.readiness,
-        ep=params.book,
+        ep=params.book_terms(),
         setpoint_f=settings.setpoint_f,
         heating=heating,
     )
@@ -690,7 +694,7 @@ def next_recovery(scenario: Scenario, params: HeaterParams) -> Recovery:
         return Recovery("not_scheduled")
     now = s.start
     air = _ambient_at(s.environment, now)
-    bp = params.book
+    bp = params.book_terms()
     start, upper, lower = now, s.state.upper_f, s.state.lower_f
     coast_btu = coast_gal = 0.0
     try:
@@ -805,13 +809,15 @@ def time_to_ready(
         compressor_on=s.state.compressor_running,
     )
     now_gal = (
-        booked_deliverable(book, tank.upper_f, tank.lower_f, p, params.book)
+        booked_deliverable(
+            book, tank.upper_f, tank.lower_f, p, params.book_terms()
+        )
         if book is not None
         else deliverable(
             tank.upper_f,
             tank.lower_f,
             p,
-            ep=params.book,
+            ep=params.book_terms(),
             setpoint_f=s.settings.setpoint_f,
             heating=tank.heating,
         )
@@ -834,6 +840,6 @@ def time_to_ready(
         inlet_measured=True,
         params=p,
         element_params=params.element,
-        book_params=params.book,
+        book_params=params.book_terms(),
     )
     return typed(answer, s.start, recovery, defaults)

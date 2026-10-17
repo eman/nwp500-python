@@ -14,6 +14,8 @@ import pytest
 
 pytest.importorskip("pandas")
 
+from _sim_site import EP
+
 from nwp500.sim import delivery as rd
 from nwp500.sim.params import ElementParams, ReadinessParams
 from nwp500.sim.ready import (
@@ -37,7 +39,7 @@ FULL = (150.0, 150.0)
 
 
 def deliverable(upper, lower, p=None, **kw):
-    return rd.deliverable(upper, lower, P if p is None else p, **kw)
+    return rd.deliverable(upper, lower, P if p is None else p, ep=EP, **kw)
 
 
 def _tank(upper=FULL[0], lower=FULL[1], **kw) -> TankNow:
@@ -54,6 +56,7 @@ def _assess(tank, recovery=Recovery("unavailable"), **kw):
         "valid_s": 900.0,
         "params": P,
         "element_params": ElementParams(),
+        "book_params": EP,
     }
     return _port_assess(NOW, tank, recovery, **{**args, **kw})
 

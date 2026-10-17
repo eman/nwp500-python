@@ -28,11 +28,11 @@ from nwp500.sim import (
     Settings,
     TouPeriod,
     Write,
-    default_params,
     element_mode,
     full_tank_book,
     next_recovery,
     simulate,
+    site_example_params,
     standby,
     time_to_ready,
 )
@@ -48,7 +48,9 @@ def at(h: float) -> datetime:
 
 @pytest.fixture(scope="module")
 def params() -> HeaterParams:
-    return default_params()
+    """One installation's parameters, its mixing valve included: the
+    numbers below are that site's."""
+    return site_example_params()
 
 
 def _scenario(**kw: Any) -> Scenario:

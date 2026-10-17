@@ -17,6 +17,8 @@ from nwp500.sim.physics.draw import (
 from nwp500.sim.units import WATER_BTU_PER_GAL_F
 
 DELIVERY = 128.0
+#: The installation's mixing valve the delivery line was measured at.
+SITE = (DEFAULT_TMV_DELIVERY_INTERCEPT_F, DEFAULT_TMV_DELIVERY_SLOPE)
 COLD = 60.0
 
 
@@ -127,7 +129,7 @@ class TestCalibration:
         draw's heat by a fifth: that is why a calibration's `k` and its
         inlet move together."""
         probe = 72.4
-        t_del = delivery_temp_f(139.0)
+        t_del = delivery_temp_f(139.0, *SITE)
         heat = draw_energy_btu(1.0, 139.0, t_del, probe, DEFAULT_OBSERVABILITY)
         assert heat == pytest.approx(257.0, rel=0.02)
         front = DEFAULT_GAP_OPEN_F_PER_GAL * withdrawn_gal(
@@ -150,7 +152,9 @@ class TestCalibration:
             (139.5, 121.8),
             (138.2, 120.4),
         ):
-            assert delivery_temp_f(t_upper) == pytest.approx(plateau, abs=1.5)
+            assert delivery_temp_f(t_upper, *SITE) == pytest.approx(
+                plateau, abs=1.5
+            )
 
     def test_the_pair_reproduces_the_measured_per_gallon_response(self):
         """The observability is fitted *against a reference inlet*,
@@ -166,7 +170,7 @@ class TestCalibration:
         measured = draw_energy_btu(
             1.0,
             139.0,
-            delivery_temp_f(139.0),
+            delivery_temp_f(139.0, *SITE),
             DEFAULT_INLET_TEMP_F,
             DEFAULT_OBSERVABILITY,
         )
