@@ -347,6 +347,17 @@ Draws: ``Loads``
        and the deliverable gallons at each onset, the margin over
        ``expected_gal``, and whether the delivered water ran cold
        (``SimulationResult.windows``). Their edges are read exactly.
+   * - ``circulation``
+     - ``CirculationRun(start, end)``
+     - An installation's circulation of hot water through its own
+       plumbing, as runs: a weekly schedule laid out by
+       ``sim_adapters.circulation``, a record, or a run on demand. None,
+       the default, is no circulation. Needs
+       ``HeaterParams.circulation`` (`Circulation`_).
+   * - ``circulation_known_until``
+     - instant
+     - The runs are known for a span starting by this instant, and not
+       after it, where nothing is charged. None: known throughout.
 
 
 Commands: ``Commands``
@@ -376,6 +387,43 @@ heater does on its own.
    * - ``tou_enabled``
      - None
      - The TOU switch, set at the start. None keeps the heater's.
+
+
+Circulation
+===========
+
+Some installations circulate hot water from the tank around their
+plumbing on a schedule, so a tap runs hot sooner. A run takes heat only
+while it runs. Give its runs in ``Loads.circulation`` and its terms in
+``HeaterParams.circulation`` (``CirculationParams``); with no runs,
+nothing is charged.
+
+.. list-table::
+   :header-rows: 1
+   :widths: 24 76
+
+   * - Field
+     - What it is
+   * - ``displaced_gal``
+     - Gallons a run displaces before hot water comes back: an
+       effective volume, fitted together with the air the return
+       cools to between runs.
+   * - ``flow_gpm``
+     - The flow a run is priced at.
+   * - ``loss_btu_per_gal``
+     - The heat book's loss per gallon circulated while a run is on: the
+       pipe's own loss.
+
+Each run is a flowing draw of ``min(flow x minutes, displaced_gal)``
+gallons, its water returning at the air where the heater stands; runs
+closer than 10 minutes are one run, as ``displaced_gal`` was fitted.
+With a heat book, a run also costs the book ``loss_btu_per_gal`` per
+gallon circulated, and the book does not re-anchor across it.
+``DrawParams.lower_gate_f``, ``pool_f_per_hour`` and
+``ungated_observability`` shape how the return reaches the lower probe;
+they act only with circulation. None of these has a default: they
+describe one installation's plumbing. ``site_example_params`` carries
+one installation's (6.2746 gal, 1.397 gal/min, 159 BTU/gal).
 
 
 The heat book: ``book``

@@ -519,6 +519,24 @@ stream and record when each changed:
        heated_at=last_heating_end,
    )
 
+**Circulation.** If your installation circulates hot water on a
+schedule, give the runs and what each takes
+(:doc:`/reference/simulator-inputs`):
+
+.. code-block:: python
+
+   from dataclasses import replace
+
+   runs = sa.circulation(
+       [(["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"],
+         "06:00", "07:00")],
+       tz=scenario.tz, start=scenario.start, until=scenario.until,
+   )
+   circulating = scenario.model_copy(update={"loads": sim.Loads(
+       circulation=runs)})
+   mine = replace(params, circulation=sim.CirculationParams(
+       displaced_gal=5.0, flow_gpm=1.5, loss_btu_per_gal=150.0))
+
 **The heat book.** Start one when you know the tank is full and
 quiet (``sa.full_tank_book``), or from your own record, and pass it as
 ``book=``: draws then take the zones down as the tank empties.

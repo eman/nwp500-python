@@ -45,6 +45,7 @@ from nwp500.sim.defaults import (
 )
 from nwp500.sim.delivery import Deliverable, DrawWindowResult
 from nwp500.sim.inputs import (
+    CirculationRun,
     Commands,
     Draw,
     DrawWindow,
@@ -59,7 +60,12 @@ from nwp500.sim.inputs import (
     TouPeriod,
     Write,
 )
-from nwp500.sim.params import BookParams, HeaterParams, ReadinessParams
+from nwp500.sim.params import (
+    BookParams,
+    CirculationParams,
+    HeaterParams,
+    ReadinessParams,
+)
 from nwp500.sim.ready import (
     BathReady,
     ModeReady,
@@ -74,6 +80,8 @@ from nwp500.sim.result import (
 )
 
 __all__ = (
+    "CirculationParams",
+    "CirculationRun",
     "NO_VALVE",
     "SITE_VALVE",
     "BathReady",

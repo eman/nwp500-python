@@ -106,6 +106,10 @@ Added
     to no valve as well. Each parameter says whether it describes the
     heater or the installation (``scope_of``), and the frame it was
     fitted in (``note_of``).
+  - Circulation (``sim.circulation``): an installation's runs
+    (``Loads.circulation``, ``sim_adapters.circulation`` for a weekly
+    schedule) charged as flowing draws and to the heat book while they
+    run, on ``HeaterParams.circulation``; with none, nothing is charged.
 
 Changed
 -------

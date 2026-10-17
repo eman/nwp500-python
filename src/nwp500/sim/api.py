@@ -25,7 +25,13 @@ from nwp500.sim.book import (
     hp_btu_per_h,
     standby_btu,
 )
+from nwp500.sim.circulation import (
+    Circulation,
+    CirculationDraws,
+    CirculationLoss,
+)
 from nwp500.sim.decay import AmbientSampler
+from nwp500.sim.defaults import SITE_CIRCULATION
 from nwp500.sim.delivery import (
     Deliverable,
     _state_before,  # pyright: ignore[reportPrivateUsage]
@@ -134,6 +140,16 @@ def _ambient_frame(
     return pd.DataFrame({"ambient_f": values}, index=stamps)
 
 
+def _circulation(loads: Loads) -> Circulation | None:
+    """The scenario's circulation as the core's, or None."""
+    if loads.circulation is None:
+        return None
+    return Circulation(
+        tuple((r.start, r.end) for r in loads.circulation),
+        loads.circulation_known_until,
+    )
+
+
 def _physics(
     params: HeaterParams,
     environment: Environment,
@@ -143,6 +159,7 @@ def _physics(
     draws_on: bool,
     model: RecoveryModel | None,
     defaults: list[str],
+    circulation: Circulation | None = None,
 ) -> TankPhysics:
     tau = params.tank.stratification_gap_tau_h
     if tau is None:
@@ -154,11 +171,32 @@ def _physics(
         defaults.append(f"humidity={environment.humidity}")
     if environment.inlet_f is None:
         defaults.append(f"inlet_f={params.draw.inlet_temp_f}")
+    frame = _ambient_frame(environment, start, until)
+    flowing: CirculationDraws | None = None
+    if circulation is not None:
+        terms = params.circulation
+        if terms is None:
+            raise ValueError(
+                "circulation runs need HeaterParams.circulation: what each "
+                "run displaces, its flow and the book's loss per gallon"
+            )
+        if terms == SITE_CIRCULATION:
+            defaults.append(
+                "circulation=one installation's (CirculationParams)"
+            )
+        flowing = CirculationDraws(
+            circulation,
+            terms.displaced_gal,
+            terms.flow_gpm,
+            # The return comes back at the air where the heater stands.
+            AmbientSampler(frame).at,
+        )
     return TankPhysics(
         params,
-        _ambient_frame(environment, start, until),
+        frame,
         environment.humidity,
         draws_on=draws_on,
+        flowing_draws=flowing,
         tau_gap_hours=tau,
         draw_inlet_temp_f=environment.inlet_f,
         recovery_model=model,
@@ -285,6 +323,7 @@ def simulate(
     tz = ZoneInfo(s.tz)
     reasons: list[str] = []
     defaults: list[str] = []
+    circulation = _circulation(s.loads)
     physics = _physics(
         params,
         s.environment,
@@ -293,6 +332,7 @@ def simulate(
         draws_on=bool(s.loads.draws),
         model=recovery,
         defaults=defaults,
+        circulation=circulation,
     )
     tou_on = (
         s.commands.tou_enabled
@@ -311,12 +351,20 @@ def simulate(
     entries = _entries(s, tz, reasons)
     raw = _raw_writes(s, reasons)
     if ledger is None and book is not None:
+        terms = params.circulation
         ledger = BookedHeatLedger(
             book,
             physics.ambient.at,
             params.book_terms(),
             line_f=params.readiness.line_f,
             fall_f_per_gal=params.readiness.fall_f_per_gal,
+            extra=(
+                CirculationLoss(
+                    circulation.runs, terms.flow_gpm, terms.loss_btu_per_gal
+                )
+                if circulation is not None and terms is not None
+                else None
+            ),
         )
     if ledger is None:
         reasons.append("no_heat_book")
@@ -527,6 +575,7 @@ def standby(
         draws_on=bool(loads.draws),
         model=None,
         defaults=defaults,
+        circulation=_circulation(loads),
     )
     draws = [(d.at, d.gallons) for d in loads.draws if start <= d.at < until]
     coast = physics.coast(

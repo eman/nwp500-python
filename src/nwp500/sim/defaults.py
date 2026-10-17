@@ -22,6 +22,7 @@ valve, passes its own ``HeaterParams``.
 from dataclasses import replace
 
 from nwp500.sim.params import (
+    CirculationParams,
     CompressorParams,
     ControllerParams,
     DrawParams,
@@ -46,6 +47,13 @@ NOMINAL_GAL = ((VOLUME_50, 50.0), (VOLUME_65, 65.0), (VOLUME_80, 80.0))
 SITE_VALVE = (53.56, 0.485)
 #: No mixing valve: the tap gets the tank's own water.
 NO_VALVE = (0.0, 1.0)
+
+#: The installation's circulation: 6.2746 gal displaced per run (fitted
+#: per retrain), 1.397 gal/min (the median over the 14 days before it),
+#: and the book's 159 BTU per gallon circulated.
+SITE_CIRCULATION = CirculationParams(
+    displaced_gal=6.2746, flow_gpm=1.397, loss_btu_per_gal=159.0
+)
 
 
 def _nwp500_65() -> HeaterParams:
@@ -135,9 +143,13 @@ def with_valve(
 def default_params(volume_code: int = VOLUME_65) -> HeaterParams:
     """The default parameters for a tank of ``volume_code`` (the
     device's: 1 for 50 gal, 2 for 65, 3 for 80): ``site_example_params``
-    with no mixing valve (``NO_VALVE``). Every other installation term
-    is still that site's, and labelled so (``params.scope_of``)."""
-    return with_valve(site_example_params(volume_code), NO_VALVE)
+    with no mixing valve (``NO_VALVE``) and no circulation. Every other
+    installation term is still that site's, and labelled so
+    (``params.scope_of``)."""
+    return replace(
+        with_valve(site_example_params(volume_code), NO_VALVE),
+        circulation=None,
+    )
 
 
 def site_example_params(volume_code: int = VOLUME_65) -> HeaterParams:
@@ -148,7 +160,10 @@ def site_example_params(volume_code: int = VOLUME_65) -> HeaterParams:
     nominal = dict(NOMINAL_GAL)
     if volume_code not in nominal:
         raise ValueError(f"unknown volume_code {volume_code!r}")
-    base = with_valve(_nwp500_65(), SITE_VALVE)
+    base = replace(
+        with_valve(_nwp500_65(), SITE_VALVE),
+        circulation=SITE_CIRCULATION,
+    )
     if volume_code == VOLUME_65:
         return base
     scale = nominal[volume_code] / nominal[VOLUME_65]

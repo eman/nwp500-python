@@ -998,6 +998,26 @@ class BookParams:
 
 
 @dataclass(frozen=True, kw_only=True)
+class CirculationParams:
+    """An installation's circulation of hot water through its own
+    plumbing (``sim.circulation``): what each run takes. No defaults:
+    they describe one installation's plumbing, and nothing measured
+    carries to another; ``site_example_params`` has one's."""
+
+    #: Gallons a run displaces before hot water comes back: an effective
+    #: volume, fitted with the return's cooling to the air between runs,
+    #: so refit it and the air it returns at together.
+    displaced_gal: float = field(metadata=_p(FITTED, "gal", INSTALLATION))
+    #: The flow a run is priced at, gal/min.
+    flow_gpm: float = field(metadata=_p(MEASURED, "gal/min", INSTALLATION))
+    #: The book's loss per gallon circulated while a run is on, BTU/gal:
+    #: the pipe's own loss, unsaturated.
+    loss_btu_per_gal: float = field(
+        metadata=_p(FITTED, "BTU/gal", INSTALLATION)
+    )
+
+
+@dataclass(frozen=True, kw_only=True)
 class HeaterParams:
     """Every parameter the simulation runs on, as one frozen value."""
 
@@ -1010,6 +1030,8 @@ class HeaterParams:
     controller: ControllerParams
     readiness: ReadinessParams = field(default_factory=ReadinessParams)
     book: BookParams = field(default_factory=BookParams)
+    #: None: no circulation, or none described.
+    circulation: CirculationParams | None = None
 
     def book_terms(self) -> BookParams:
         """``book`` with the mixing valve's line taken from ``draw``: one
@@ -1037,8 +1059,12 @@ PARTS: Mapping[str, type] = MappingProxyType(
         "controller": ControllerParams,
         "readiness": ReadinessParams,
         "book": BookParams,
+        "circulation": CirculationParams,
     }
 )
+
+#: Parts that may be absent: None, not their defaults.
+OPTIONAL_PARTS = frozenset({"circulation"})
 
 
 def _plain(value: Any) -> Any:
@@ -1055,6 +1081,8 @@ def params_to_document(params: HeaterParams) -> dict[str, Any]:
     doc: dict[str, Any] = {"schema": PARAMS_SCHEMA}
     for name in PARTS:
         part = getattr(params, name)
+        if part is None:
+            continue
         doc[name] = {
             f.name: _plain(getattr(part, f.name)) for f in fields(part)
         }
@@ -1088,6 +1116,8 @@ def params_from_document(doc: Mapping[str, Any]) -> HeaterParams:
         )
     parts: dict[str, Any] = {}
     for name, cls in PARTS.items():
+        if name in OPTIONAL_PARTS and doc.get(name) is None:
+            continue
         given = doc.get(name, {})
         if not isinstance(given, Mapping):
             raise ValueError(f"part {name!r} is not an object")

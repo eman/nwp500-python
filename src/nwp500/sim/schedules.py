@@ -189,3 +189,33 @@ def reservation_firings(
 def half_c_to_f(half_c: int) -> float:
     """A device setpoint in half-degrees Celsius, in °F."""
     return half_c / 2.0 * 9 / 5 + 32
+
+
+def weekly_runs(
+    entries: Iterable[tuple[int, time, time]],
+    tz: ZoneInfo,
+    start: datetime,
+    end: datetime,
+) -> list[Window]:
+    """A weekly schedule's runs overlapping ``[start, end)``, UTC: each
+    entry ``(week_mask, starts, ends)`` runs from local ``starts`` to
+    ``ends`` on every day the mask selects (the device's mask: Sunday
+    bit 7 ... Saturday bit 1); an ``ends`` at or before ``starts`` ends
+    the next day. A circulation schedule laid out as instants
+    (``Loads.circulation``)."""
+    out: list[Window] = []
+    day = start.astimezone(tz).date() - timedelta(days=1)
+    last = end.astimezone(tz).date()
+    rules = list(entries)
+    while day <= last:
+        for mask, starts, ends in rules:
+            if not mask & week_bit(day):
+                continue
+            opens = datetime.combine(day, starts, tz)
+            close_day = day + timedelta(days=1) if ends <= starts else day
+            closes = datetime.combine(close_day, ends, tz)
+            run = (opens.astimezone(UTC), closes.astimezone(UTC))
+            if run[1] > start and run[0] < end:
+                out.append(run)
+        day += timedelta(days=1)
+    return sorted(out)

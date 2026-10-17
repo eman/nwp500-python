@@ -204,11 +204,35 @@ class DrawWindow(_Value):
         return self
 
 
+class CirculationRun(_Value):
+    """A run of an installation's circulation of hot water through its
+    own plumbing (``sim.circulation``)."""
+
+    start: Instant
+    end: Instant
+
+    @model_validator(mode="after")
+    def _ordered(self) -> Self:
+        if self.end <= self.start:
+            raise ValueError("a circulation run ends after it starts")
+        return self
+
+
 class Loads(_Value):
-    """The water drawn over the span, and the windows to judge."""
+    """The water drawn over the span, the windows to judge, and any
+    circulation."""
 
     draws: tuple[Draw, ...] = ()
     windows: tuple[DrawWindow, ...] = ()
+    #: The installation's circulation runs, as instants (a weekly
+    #: schedule laid out by ``sim_adapters.circulation``, a record, or a
+    #: run on demand); they need ``HeaterParams.circulation``. None: no
+    #: circulation, and nothing is charged. An empty tuple is a circuit
+    #: known to be quiet.
+    circulation: tuple[CirculationRun, ...] | None = None
+    #: The runs are known for a span starting by this instant, and not
+    #: after it (nothing charged there). None: known throughout.
+    circulation_known_until: Instant | None = None
 
 
 class Write(_Value):

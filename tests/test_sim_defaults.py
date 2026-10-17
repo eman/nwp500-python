@@ -8,6 +8,7 @@ import pytest
 
 from nwp500.sim.defaults import (
     NO_VALVE,
+    SITE_CIRCULATION,
     SITE_VALVE,
     default_params,
     site_example_params,
@@ -100,9 +101,12 @@ def test_a_fitted_document_writes_back_as_it_was():
 
 
 def test_the_site_example_is_that_fitted_model():
+    """The document carries no circulation (its bundle keeps that
+    apart); the site example adds the installation's."""
     assert params_from_document(json.loads(FITTED_DOC.read_text())) == (
-        site_example_params()
+        replace(site_example_params(), circulation=None)
     )
+    assert site_example_params().circulation == SITE_CIRCULATION
 
 
 def test_the_default_is_the_site_without_its_mixing_valve():
@@ -114,7 +118,8 @@ def test_the_default_is_the_site_without_its_mixing_valve():
     assert (site_book.delivery_intercept_f, site_book.delivery_slope) == (
         SITE_VALVE
     )
-    assert with_valve(d, SITE_VALVE) == site
+    assert d.circulation is None
+    assert with_valve(d, SITE_VALVE) == replace(site, circulation=None)
 
 
 def test_one_valve_drives_the_draw_and_the_book():

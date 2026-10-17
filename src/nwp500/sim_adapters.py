@@ -46,10 +46,11 @@ Example::
 
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, time
 from typing import Any
+from zoneinfo import ZoneInfo
 
-from nwp500.encoding import build_reservation_entry
+from nwp500.encoding import build_reservation_entry, encode_week_bitfield
 from nwp500.models import (
     DeviceFeature,
     DeviceStatus,
@@ -60,6 +61,7 @@ from nwp500.models import (
 )
 from nwp500.sim import (
     Booked,
+    CirculationRun,
     Draw,
     DrawWindow,
     Environment,
@@ -77,6 +79,7 @@ from nwp500.sim import (
     default_params,
 )
 from nwp500.sim import full_tank_book as sim_full_tank_book
+from nwp500.sim.schedules import weekly_runs
 from nwp500.temperature import DeciCelsius, HalfCelsius, Temperature
 from nwp500.unit_system import get_unit_system
 
@@ -428,4 +431,30 @@ def path(
             temperature(p.setpoint_f),
         )
         for p in result.path
+    )
+
+
+def _local_time(value: time | str) -> time:
+    return value if isinstance(value, time) else time.fromisoformat(value)
+
+
+def circulation(
+    schedule: Iterable[tuple[Iterable[str | int], time | str, time | str]],
+    *,
+    tz: str,
+    start: datetime,
+    until: datetime,
+) -> tuple[CirculationRun, ...]:
+    """An installation's weekly circulation schedule as the runs between
+    ``start`` and ``until`` (``Loads.circulation``): each entry
+    ``(days, starts, ends)``, the days as names or indices (Monday 0),
+    the local times as ``time`` or ``"HH:MM"`` in ``tz``; an ``ends`` at
+    or before ``starts`` ends the next day."""
+    entries = [
+        (encode_week_bitfield(days), _local_time(a), _local_time(b))
+        for days, a, b in schedule
+    ]
+    return tuple(
+        CirculationRun(start=a, end=b)
+        for a, b in weekly_runs(entries, ZoneInfo(tz), start, until)
     )
