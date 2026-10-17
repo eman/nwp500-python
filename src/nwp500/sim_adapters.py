@@ -88,6 +88,7 @@ from nwp500.sim import (
 from nwp500.sim import full_tank_book as sim_full_tank_book
 from nwp500.sim.book import AMBIENT_DEFAULT_F, book_steps
 from nwp500.sim.book import Step as BookStep
+from nwp500.sim.cold_supply import ColdSupply, ColdSupplyParams, plateau_t_cold
 from nwp500.sim.inputs import POWER_OFF, VACATION
 from nwp500.sim.location_air import (
     SITE_LOCATION_AIR,
@@ -1139,4 +1140,37 @@ def draw_frame(
             ],
         },
         index=pd.DatetimeIndex(grid),
+    )
+
+
+def cold_supply(
+    probe: Iterable[tuple[datetime, float]],
+    *,
+    at: datetime,
+    flow: Iterable[tuple[datetime, float]],
+    ticks: Iterable[datetime] | None = None,
+    circulation: Iterable[tuple[datetime, datetime]] = (),
+) -> ColdSupply:
+    """The mains as of ``at`` from an inlet probe's ``probe`` readings
+    over recent long draws (``sim.cold_supply``), the probe and the
+    meter's ``flow`` (per minute) in the preferred units. ``ticks`` are
+    the instants water was drawn; by default, each flow reading at or
+    above the draw line. ``circulation`` are its runs (none for an
+    installation without). The estimate is degF: pass it on as
+    ``environment(inlet=temperature(...))`` or with ``on_the_mains``."""
+    readings = [(t.astimezone(UTC), _to_sim(v)) for t, v in probe]
+    flows = sorted((t.astimezone(UTC), _volume_to_sim(v)) for t, v in flow)
+    p = ColdSupplyParams()
+    drawn = (
+        [t.astimezone(UTC) for t in ticks]
+        if ticks is not None
+        else [t for t, v in flows if v >= p.draw_gpm]
+    )
+    return plateau_t_cold(
+        readings,
+        drawn,
+        [(a.astimezone(UTC), b.astimezone(UTC)) for a, b in circulation],
+        at.astimezone(UTC),
+        p,
+        flow=flows,
     )

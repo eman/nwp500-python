@@ -142,6 +142,10 @@ Added
     ``HeaterState.energy_to_setpoint_wh`` carry what they need, filled
     by the adapters; ``recovery`` says ``not_scheduled`` in Vacation and
     Power Off.
+  - The mains from an inlet probe (``sim.cold_supply``,
+    ``sim_adapters.cold_supply``): the median plateau of recent long
+    draws with circulation off and the meter reading flow, from minute 9
+    of each; ``on_the_mains`` converts a book's gallons at it.
   - What the heater did over a range, from its record, as the model
     reads it: ``sim.record.Record`` (each signal's change rows, its
     writes and the heater's own drops, TOU switches and window edges,

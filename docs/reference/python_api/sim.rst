@@ -171,6 +171,9 @@ Hot water and the heat book
       busy_intervals, fit_window, fit_ua_law, fit_gap_tau, with_standby,
       with_compressor
 
+.. automodule:: nwp500.sim.cold_supply
+   :members: plateau_t_cold, ColdSupply, ColdSupplyParams, on_the_mains
+
 .. automodule:: nwp500.sim.record
    :members: Record, RecordedWrite, Recorded, RecordedStarts, corroborator
 

@@ -610,6 +610,25 @@ heater's statuses, book the tank's heat from the record and pass it as
 Without a meter, start one only when you know the tank is full and
 quiet (``sa.full_tank_book``).
 
+With an inlet probe on the cold supply, convert the book's gallons at
+the mains rather than at the probe's own median, which at rest reads
+the air around the pipe:
+
+.. code-block:: python
+
+   from nwp500.sim.cold_supply import on_the_mains
+
+   cold = sa.cold_supply(inlet_probe, at=now, flow=meter_flow,
+                         circulation=runs)
+   book, measured = on_the_mains(book, cold)
+   readiness = sim.time_to_ready(scenario, params, book=book,
+                                 inlet_measured=measured)
+
+The mains is the median plateau of the long draws (11 minutes or more,
+with circulation off) over the last 72 hours, read from minute 9 of each
+draw, once the probe has passed the stagnant pipe. There is none
+without such a draw, and the book keeps its own inlet.
+
 **Your installation's readiness terms.** The pipe to your fixture, the
 line you call hot, your own draws: ``ReadinessParams``
 (:doc:`/reference/simulator-inputs`).
