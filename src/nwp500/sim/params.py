@@ -15,6 +15,10 @@ or a module constant:
   mixing valve or flowing from it, and its inflow;
 - ``ControllerParams``: the numbers of the firmware's rules for when
   the compressor starts and stops (``sim/controller.py``).
+- ``ReadinessParams``: what counts as hot water at the tap, and how
+  the delivered water follows the upper probe (``sim.delivery``);
+- ``BookParams``: the heat book, the tank's heat by bookkeeping
+  (``sim.book``).
 
 Every field carries its ``Provenance`` and the unit it is in, in the
 dataclass field's ``metadata`` (``provenance_of``, ``unit_of``).
@@ -635,6 +639,156 @@ class ElementParams:
             )
 
 
+#: An evidence draw (``ReadinessParams.evidence``): the upper and lower
+#: probes before it, °F, and the delivered gallons it gave before the
+#: upper probe crossed the line.
+EvidenceDraw = tuple[float, float, float]
+
+
+@dataclass(frozen=True, kw_only=True)
+class ReadinessParams:
+    """What counts as hot water at the tap, and how the delivered water
+    follows the upper probe (``sim.delivery``).
+
+    Most of these describe an installation, not the heater: the pipe
+    between the heater and the tap, the mixing valve and the household's
+    draws. The defaults were measured at one NWP500-65's installation;
+    each field says on how much. Measure your own where you can
+    (the simulator reference's *Readiness* section says how).
+    """
+
+    #: Delivered water below this is not hot, °F: the line every answer
+    #: is drawn at. A choice, not a measurement. ``book.empty_btu`` and
+    #: an ``evidence`` set were measured at their line, so changing it
+    #: means measuring them again.
+    line_f: float = field(default=105.0, metadata=_p(DEFAULT, "°F"))
+    #: Delivered gallons the tap still gets at or above the line once
+    #: the upper probe has crossed it: the water between the probe and
+    #: the tap, which the rising cold front reaches after the probe.
+    #: Mostly the installation's pipe run to the fixture. Measured once
+    #: (n = 1), at one bath's tub spout: 7.3 gal at the spout and 5.3 at
+    #: a gauge on the valve outlet; the lower, rounded down. 0 answers
+    #: at the probe itself.
+    delivered_lag_gal: float = field(default=5.0, metadata=_p(MEASURED, "gal"))
+    #: How fast the delivered water falls per delivered gallon once it
+    #: has crossed the line, °F/gal; also the rate the heat book's
+    #: upper zone falls at past its empty point. From two crossings,
+    #: 1.6 at the probe and 1.83-2.07 at a spout; the faster kept.
+    fall_f_per_gal: float = field(default=2.0, metadata=_p(MEASURED, "°F/gal"))
+    #: At or below this lower-probe reading the thermocline cannot be
+    #: placed between the probes: the largest drops on the record start
+    #: here.
+    cold_lower_cutoff_f: float = field(default=100.0, metadata=_p(FITTED, "°F"))
+    #: The answer's cap there, from ``evidence`` only (a heat book is
+    #: not capped): the least any draw from such a state gave before the
+    #: upper probe reached 110 °F, three draws, rounded down.
+    cold_lower_cap_gal: float = field(default=6.5, metadata=_p(MEASURED, "gal"))
+    #: Both probes within this of the setpoint, or above it: a tank the
+    #: heater has brought to its target, which has the full-tank floor.
+    full_setpoint_band_f: float = field(default=2.0, metadata=_p(DEFAULT, "°F"))
+    #: What the full-tank floor takes off the tank's heat, in delivered
+    #: gallons: the most cold water from earlier draws was found hiding
+    #: under the lower probe of a tank that read full, over 2,505
+    #: five-minute samples with the setpoint near 141 °F.
+    full_hidden_gal: float = field(default=13.5, metadata=_p(FITTED, "gal"))
+    #: A draw's transient dip that is not running out: the delivered
+    #: water may fall this far below the line, for this long, before the
+    #: draw counts as cold (the NWP500's upper probe dips about 3.4 °F for
+    #: about 3 min during a draw).
+    dip_f: float = field(default=3.4, metadata=_p(MEASURED, "°F"))
+    dip_min: float = field(default=3.0, metadata=_p(MEASURED, "min"))
+    #: Draws that show how much a tank in a given state delivers before
+    #: the upper probe crosses ``line_f``: the readiness answer without a
+    #: heat book. Each is ``(upper_f, lower_f, gallons)``, reduced to its
+    #: frontier. None by default: they are a household's own record.
+    #: ``sim.delivery.EXAMPLE_EVIDENCE`` is one installation's.
+    evidence: tuple[EvidenceDraw, ...] = field(
+        default=(), metadata=_p(MEASURED, "°F, °F, gal")
+    )
+
+    def __post_init__(self) -> None:
+        # A document carries the draws as lists; the value holds tuples,
+        # so one read back equals the one written.
+        object.__setattr__(
+            self,
+            "evidence",
+            tuple(
+                (float(u), float(lo), float(g)) for u, lo, g in self.evidence
+            ),
+        )
+
+
+@dataclass(frozen=True, kw_only=True)
+class BookParams:
+    """The heat book (``sim.book``): the tank's heat by bookkeeping, and
+    where in the tank it lies, which a draw reads to move the zones.
+
+    Its own parameter set, fitted on the re-anchors of one NWP500-65's
+    metered record (where the tank became full again and its booked heat
+    could be checked against the probes), and not a copy of the other
+    parts: it carries its own compressor, element and standby terms.
+    """
+
+    #: The tank, gallons, as the book counts it.
+    tank_gal: float = field(default=63.2, metadata=_p(DEFAULT, "gal"))
+    #: Compressor heat into the tank at a 65 °F ambient, and its slope.
+    hp_btu_per_h: float = field(default=4252.0, metadata=_p(FITTED, "BTU/h"))
+    hp_btu_per_h_per_f: float = field(
+        default=76.1, metadata=_p(FITTED, "BTU/h/°F")
+    )
+    element_w: float = field(default=5148.0, metadata=_p(MEASURED, "W"))
+    #: Standby loss per °F of tank mean over the ambient.
+    ua_btu_per_h_f: float = field(default=2.88, metadata=_p(FITTED, "BTU/h/°F"))
+    #: The reference the book counts heat above, and the inlet it
+    #: assumes where none is given; ``empty_btu`` was fitted in this
+    #: frame.
+    reference_f: float = field(default=70.0, metadata=_p(DEFAULT, "°F"))
+    inlet_default_f: float = field(default=70.0, metadata=_p(DEFAULT, "°F"))
+    #: The mixing valve's delivery line, intercept + slope × upper zone,
+    #: as ``DrawParams.delivery_intercept_f`` and ``delivery_slope``:
+    #: set them together.
+    delivery_intercept_f: float = field(
+        default=53.56, metadata=_p(FITTED, "°F")
+    )
+    delivery_slope: float = field(default=0.485, metadata=_p(FITTED, "1"))
+    #: Booked heat above the reference when the upper probe reaches the
+    #: line (``ReadinessParams.line_f``): the median of five drawdowns,
+    #: 14,219-19,590 BTU.
+    empty_btu: float = field(default=16169.0, metadata=_p(FITTED, "BTU"))
+    #: The same point refit so it centres those crossings rather than
+    #: catching them all early: where a draw takes the upper zone
+    #: across the line. Readiness and the delivery keep ``empty_btu``.
+    zone_empty_btu: float = field(default=12636.0, metadata=_p(FITTED, "BTU"))
+    #: How the upper zone falls through a draw before that point, as the
+    #: water above the rising front mixes:
+    #: ``zone_mix_f_per_gal · exp(-left / zone_mix_gal)`` °F per
+    #: delivered gallon, ``left`` the gallons before ``zone_empty_btu``.
+    #: Fitted on 112 draws of 15 gal or more.
+    zone_mix_f_per_gal: float = field(
+        default=1.25, metadata=_p(FITTED, "°F/gal")
+    )
+    zone_mix_gal: float = field(default=14.0, metadata=_p(FITTED, "gal"))
+    #: Where the lower probe reads the cold region, tank gallons from
+    #: the bottom, and the width of the front it reads through. Fitted
+    #: on 316 draws of 5 gal or more.
+    lower_probe_gal: float = field(default=25.0, metadata=_p(FITTED, "gal"))
+    front_width_gal: float = field(default=32.0, metadata=_p(FITTED, "gal"))
+    #: The lower probe's settling after a draw, minutes (time constant).
+    front_settle_min: float = field(default=300.0, metadata=_p(FITTED, "min"))
+    #: The book's 90th-percentile error within ``max_anchor_age_h`` of
+    #: its anchor, and past it.
+    error_btu: float = field(default=3000.0, metadata=_p(FITTED, "BTU"))
+    aged_error_btu: float = field(default=4100.0, metadata=_p(FITTED, "BTU"))
+    #: Both probes within this of each other: a full tank, the book's
+    #: anchor, once it has been quiet since a heating ended.
+    uniform_band_f: float = field(default=1.5, metadata=_p(FITTED, "°F"))
+    #: An anchor younger than this is fresh.
+    max_anchor_age_h: float = field(default=18.0, metadata=_p(FITTED, "h"))
+    #: The cold region a draw leaves rejoins the hot water once the heat
+    #: landing in it takes it past this.
+    cold_release_f: float = field(default=100.0, metadata=_p(FITTED, "°F"))
+
+
 @dataclass(frozen=True, kw_only=True)
 class HeaterParams:
     """Every parameter the simulation runs on, as one frozen value."""
@@ -646,6 +800,8 @@ class HeaterParams:
     element: ElementParams
     draw: DrawParams
     controller: ControllerParams
+    readiness: ReadinessParams = field(default_factory=ReadinessParams)
+    book: BookParams = field(default_factory=BookParams)
 
 
 #: The document's schema: its name, and a version that moves only when
@@ -662,17 +818,29 @@ PARTS: Mapping[str, type] = MappingProxyType(
         "element": ElementParams,
         "draw": DrawParams,
         "controller": ControllerParams,
+        "readiness": ReadinessParams,
+        "book": BookParams,
     }
 )
 
 
+def _plain(value: Any) -> Any:
+    """A field's value as JSON holds it: a tuple as a list."""
+    if isinstance(value, tuple):
+        return [_plain(v) for v in value]  # pyright: ignore[reportUnknownVariableType]
+    return value
+
+
 def params_to_document(params: HeaterParams) -> dict[str, Any]:
     """``params`` as a document: ``schema``, and each part an object of
-    its fields' values, as they are (``None``, a bool, a number)."""
+    its fields' values, as they are (``None``, a bool, a number, a list
+    for a tuple)."""
     doc: dict[str, Any] = {"schema": PARAMS_SCHEMA}
     for name in PARTS:
         part = getattr(params, name)
-        doc[name] = {f.name: getattr(part, f.name) for f in fields(part)}
+        doc[name] = {
+            f.name: _plain(getattr(part, f.name)) for f in fields(part)
+        }
     return doc
 
 

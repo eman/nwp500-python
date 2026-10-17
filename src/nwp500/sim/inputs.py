@@ -171,10 +171,30 @@ class Draw(_Value):
     gallons: Annotated[float, Field(gt=0.0)]
 
 
+class DrawWindow(_Value):
+    """A span the caller expects water to be drawn in, a shower or a
+    bath, which the result judges: the tank and the deliverable gallons
+    at its onset, and whether the delivered water ran cold over it
+    (``SimulationResult.windows``). Its edges are read exactly."""
+
+    start: AwareDatetime
+    end: AwareDatetime
+    #: Delivered gallons the window is expected to draw, if known: the
+    #: result's ``margin_gal`` is the deliverable gallons less it.
+    expected_gal: Annotated[float, Field(ge=0.0)] | None = None
+
+    @model_validator(mode="after")
+    def _ordered(self) -> Self:
+        if self.end <= self.start:
+            raise ValueError("a draw window ends after it starts")
+        return self
+
+
 class Loads(_Value):
-    """The water drawn over the span."""
+    """The water drawn over the span, and the windows to judge."""
 
     draws: tuple[Draw, ...] = ()
+    windows: tuple[DrawWindow, ...] = ()
 
 
 class Write(_Value):

@@ -7,7 +7,8 @@ their offset, the horizon an ISO 8601 duration. Parsing takes a
 ``str`` (JSON) or a mapping; reading and writing files is the caller's.
 
 A result document holds what the walk answered: the path, the heating
-intervals, the writes and mode writes, the modes, the reasons and the
+intervals, the writes and mode writes, the modes, the delivery
+temperature along the path, the draw windows, the reasons and the
 defaults used, with instants as ISO 8601 strings and floats as they
 are.
 """
@@ -82,6 +83,8 @@ def result_to_document(result: SimulationResult) -> dict[str, Any]:
         "start": result.start.isoformat(),
         "until": result.until.isoformat(),
         **{k: _plain(whole[k]) for k in RESULT_FIELDS},
+        "delivery": list(result.delivery),
+        "windows": [_plain(dataclasses.asdict(w)) for w in result.windows],
         "reasons": list(result.reasons),
         "defaults_used": list(result.defaults_used),
     }

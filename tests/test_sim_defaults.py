@@ -24,7 +24,8 @@ def test_the_65_round_trips_as_a_document():
 def test_other_sizes_scale_the_tank_volume_only(code: int, gal: float):
     base, other = default_params(2), default_params(code)
     assert other.tank.volume_gal == pytest.approx(63.2 * gal / 65.0)
-    assert replace(other, tank=base.tank) == base
+    assert other.book.tank_gal == pytest.approx(63.2 * gal / 65.0)
+    assert replace(other, tank=base.tank, book=base.book) == base
 
 
 def test_an_unknown_size_is_refused():

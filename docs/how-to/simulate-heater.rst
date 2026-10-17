@@ -319,6 +319,70 @@ draws. Use it for "how cold will it be by morning?":
          f"upper {last.upper:.1f}{unit}, lower {last.lower:.1f}{unit}")
 
 
+Ask how much hot water is left
+==============================
+
+``readiness`` answers in delivered gallons: what the tap can get before
+the water falls below the line (105 degF by default).
+
+.. code-block:: python
+
+   d = sim.readiness(sa.heater_state(status), sa.settings(status), params)
+   print(f"{sa.volume(d.gal):.0f} {sa.volume_unit()} ({d.basis})")
+
+Two probes can say how much is left only when the tank is full, so
+without more to go on the answer is a full tank's (a floor that allows
+for cold water hiding under the lower probe) or 0. Give it more:
+
+- **A heat book**, if you know the tank has been quiet since a recovery
+  ended (``basis`` becomes ``energy``):
+
+  .. code-block:: python
+
+     book = sa.full_tank_book(status, params)  # nothing drawn since it heated
+     d = sim.readiness(
+         sa.heater_state(status), sa.settings(status), params, book=book
+     )
+
+- **Evidence**: draws from your own record of how much a tank in a
+  given state delivered (``ReadinessParams.evidence``,
+  :doc:`/reference/simulator-inputs`).
+
+The gallons count the water in the pipe to your fixture
+(``ReadinessParams.delivered_lag_gal``). The default is one bath's at
+one installation; set your own.
+
+
+Judge a shower or a bath
+========================
+
+Give the draws and the window they fall in; the result says whether
+the tank could supply it:
+
+.. code-block:: python
+
+   start = scenario.start + timedelta(hours=12)
+   bath = scenario.model_copy(update={"loads": sa.loads(
+       [(start + timedelta(minutes=i), 2.5) for i in range(16)],  # 40 gal
+       windows=[(start, start + timedelta(minutes=20), 40.0)],
+   )})
+   r = sim.simulate(bath, params, book=book)
+   w = r.windows[0]
+   print(w.deliverable_gal, w.margin_gal, w.depleted, w.delivery_min_f)
+
+``deliverable_gal`` and ``margin_gal`` are the tank at the window's
+onset against the gallons expected; ``depleted`` says the delivered
+water fell more than 3.4 degF below the line, or stayed below it more
+than 3 minutes (the heater's own dip during a draw is not running out).
+
+Pass a ``book`` for ``depleted`` to mean anything. Without one, each
+draw moves the zones by its calibrated response, which holds the upper
+zone up even through a draw that empties the tank, so the delivery does
+not fall; ``reasons`` says ``no_heat_book``, and ``margin_gal`` is then
+the answer to read. ``result.delivery`` and ``sa.path(result)`` give the
+delivered temperature along the whole walk.
+
+
 Make the answer better
 ======================
 
@@ -367,6 +431,14 @@ stream and record when each changed:
        compressor_stopped_at=last_compressor_stop,
        heated_at=last_heating_end,
    )
+
+**The heat book.** Start one when you know the tank is full and
+quiet (``sa.full_tank_book``), or from your own record, and pass it as
+``book=``: draws then take the zones down as the tank empties.
+
+**Your installation's readiness terms.** The pipe to your fixture, the
+line you call hot, your own draws: ``ReadinessParams``
+(:doc:`/reference/simulator-inputs`).
 
 **Your heater's own parameters.** The defaults are one NWP500-65's.
 With your own calibration, build a ``HeaterParams`` or load one from a

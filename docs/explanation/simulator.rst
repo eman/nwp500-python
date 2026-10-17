@@ -5,8 +5,8 @@ The Heater Simulator
 ``nwp500.sim`` is a physics simulation of the NWP500. Given the heater's
 state, its schedules, the air where it sits and the hot water drawn from
 it, it predicts the tank's two thermistors over time, when and why the
-heater starts heating and with which source, and the electricity it
-uses. It also evaluates commands before they are sent: setpoint and mode
+heater starts heating and with which source, the electricity it uses,
+how much hot water the tank can deliver, and whether a draw runs cold. It also evaluates commands before they are sent: setpoint and mode
 writes, a new reservation schedule, TOU on or off.
 
 It is optional. Install it with the ``sim`` extra
@@ -112,6 +112,32 @@ according to how stratified the tank is.
 - reservations fire in their minute; Vacation and Power Off start no
   heating.
 
+**The heat book.** Two probes cannot say how much hot water is left
+once the hot/cold boundary sits between them; they can when the tank is
+full. The book (``sim.book``) starts from a full tank and books the
+heat from there: out by each draw through the mixing valve and by
+standby, in from the compressor and the elements, with a draw's cold
+water kept as a region at the bottom, where the heat pump's heat lands
+and is held back until the region rejoins the hot water. At each draw
+it moves the zones the probes would show: the upper zone falls as the
+water above the rising front mixes and, once the booked heat is spent,
+to the line and below; the lower zone follows the front past its probe.
+Without a book each draw moves the zones by its calibrated response
+only, which is what the probes show on an ordinary draw and holds the
+upper zone up through one that empties the tank. The library starts a
+book only from what the caller knows: probes reading full can hide the
+cold water of a recent draw.
+
+**Hot water at the tap** (``sim.delivery``). Deliverable gallons are the
+water past the mixing valve before the delivered water falls below the
+line (105 degF by default), from the book's heat above its empty point.
+The probe is not at the tap: the delivered water crosses the line some
+gallons after the upper probe does, the water above it and in the pipe
+to the fixture, so every answer carries that lag. Without a book, the
+answer is a full tank's floor, or evidence from the caller's own
+draws. A draw window runs cold when the delivered water falls more than
+the heater's own transient dip below the line, or stays below it longer.
+
 
 Inputs
 ======
@@ -202,6 +228,10 @@ Entry points
 ``standby(state, environment, loads, params, start=..., until=...)``
    The tank coasting with no heating: jacket loss and draws.
 
+``readiness(state, settings, params, book=...)``
+   "How much hot water is left?": deliverable gallons now, and what the
+   answer rests on.
+
 A ``RecoveryModel`` can replace each heat-pump recovery's duration with
 a learned one, and a ``HeatLedger`` can track booked heat from a flow
 meter; both are protocols in ``sim.extensions``. With neither, the
@@ -217,7 +247,14 @@ Measured on one NWP500-65:
   error about 28 min (18 %); about 13 min for a deficit under 15 degF,
   and about 45 min past 35 degF;
 - recorded compressor starts reproduced: 35 of 47;
-- daily energy: 10.8 % high.
+- daily energy: 10.8 % high;
+- the heat book against the tank's re-anchors, fitted February-June and
+  scored July-September: mean absolute error 1,987 BTU (about 5 gal),
+  flat to 18 h after an anchor and about double beyond;
+- the five recorded crossings of the line: all caught, 0.8-12.7 gal
+  early (in sample); draws of 5 gal or more that did not cross, called
+  empty before they ended: 14 of 446 (3.1 %);
+- the outlet lag: one measurement (5.3-7.3 gal, 5.0 used).
 
 The library makes no claim beyond these until they are measured again.
 
@@ -232,7 +269,9 @@ What it cannot know
 - **Supply voltage.** Element power is the fitted 240 V figure.
 - **The air at the heater ahead of time.** The ambient is an input: the
   device reports the air at its intake now, not what it will be.
-
-Hot-water readiness (how many gallons the tank can deliver now) and
-which draws would run cold are not modelled yet. Both need a validated
-two-zone readiness model.
+- **The book's starting point.** The heater reports the probes, not
+  how much of the tank is cold water from the last draw. A book starts
+  from the caller's knowledge, or not at all.
+- **The installation.** The pipe to the fixture, the mixing valve's
+  setting and the household's draws are the installation's: the
+  readiness defaults are one installation's (``ReadinessParams``).

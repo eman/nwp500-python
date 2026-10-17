@@ -24,7 +24,11 @@ Entry points
 
 .. autofunction:: nwp500.sim.standby
 
+.. autofunction:: nwp500.sim.readiness
+
 .. autofunction:: nwp500.sim.default_params
+
+.. autofunction:: nwp500.sim.full_tank_book
 
 
 Scenario
@@ -60,6 +64,9 @@ Scenario
 .. autoclass:: nwp500.sim.Draw
    :members:
 
+.. autoclass:: nwp500.sim.DrawWindow
+   :members:
+
 .. autoclass:: nwp500.sim.Commands
    :members:
 
@@ -79,6 +86,12 @@ Results
 .. autoclass:: nwp500.sim.Trace
    :members:
 
+.. autoclass:: nwp500.sim.DrawWindowResult
+   :members:
+
+.. autoclass:: nwp500.sim.Deliverable
+   :members:
+
 
 Parameters
 ==========
@@ -88,8 +101,22 @@ Parameters
 
 .. automodule:: nwp500.sim.params
    :members: TankParams, LossParams, CompressorParams, PowerParams,
-      ElementParams, DrawParams, ControllerParams, Provenance,
-      provenance_of, unit_of, params_to_document, params_from_document
+      ElementParams, DrawParams, ControllerParams, ReadinessParams,
+      BookParams, Provenance, provenance_of, unit_of, params_to_document,
+      params_from_document
+
+
+Hot water and the heat book
+===========================
+
+.. automodule:: nwp500.sim.delivery
+   :members: deliverable, booked_deliverable, delivery_temp_f,
+      zone_delivery_f, delivery_along, depletion, draw_windows,
+      EXAMPLE_EVIDENCE, with_example_evidence
+
+.. automodule:: nwp500.sim.book
+   :members: Booked, BookedHeatLedger, full_tank_book, full_tank,
+      walk_booked, BookedPath
 
 
 Documents

@@ -18,7 +18,15 @@ from zoneinfo import ZoneInfo
 
 import pandas as pd
 
+from nwp500.sim.book import Booked, BookedHeatLedger
 from nwp500.sim.decay import AmbientSampler
+from nwp500.sim.delivery import (
+    Deliverable,
+    booked_deliverable,
+    deliverable,
+    delivery_along,
+    draw_windows,
+)
 from nwp500.sim.engine import Entry, Heater, RawWrite
 from nwp500.sim.engine import simulate as walk
 from nwp500.sim.extensions import HeatLedger, RecoveryModel
@@ -186,14 +194,24 @@ def simulate(
     params: HeaterParams,
     *,
     recovery: RecoveryModel | None = None,
+    book: Booked | None = None,
     ledger: HeatLedger | None = None,
 ) -> SimulationResult:
     """Walk ``scenario`` from its start to its end on ``params``.
 
     ``recovery`` replaces the physics duration of each heat-pump
-    recovery with its own (``extensions.RecoveryModel``); ``ledger``
-    tracks booked heat along the path (``extensions.HeatLedger``). With
-    neither, the physics alone is served.
+    recovery with its own (``extensions.RecoveryModel``).
+
+    ``book`` is the tank's booked heat at the start (``sim.book``): from
+    the caller's own record, or ``book.full_tank_book`` when they know
+    the tank has been quiet since a recovery ended. With it, the walk
+    carries the book (``book.BookedHeatLedger``): a draw that spends the
+    booked heat takes the upper zone down, the lower zone follows the
+    cold front, and the delivery and the draw windows read the book.
+    Without it the zones take each draw's calibrated response and the
+    delivery is the upper zone's, and ``reasons`` says
+    ``no_heat_book``. ``ledger`` is any other ``extensions.HeatLedger``
+    in its place.
 
     Raises ``engine.SimulationError`` when the walk cannot be completed.
     """
@@ -226,6 +244,19 @@ def simulate(
     _history_defaults(s.state, s.history, defaults)
     entries = _entries(s, tz, reasons)
     raw = _raw_writes(s, reasons)
+    if ledger is None and book is not None:
+        ledger = BookedHeatLedger(
+            book,
+            physics.ambient.at,
+            params.book,
+            line_f=params.readiness.line_f,
+            fall_f_per_gal=params.readiness.fall_f_per_gal,
+        )
+    if ledger is None:
+        reasons.append("no_heat_book")
+    elif book is not None and book.aged(params.book):
+        reasons.append("heat_book_aged")
+    draws = [(d.at, d.gallons) for d in s.loads.draws]
     sim = walk(
         start=s.start,
         upper_f=s.state.upper_f,
@@ -242,7 +273,10 @@ def simulate(
         ),
         physics=physics,
         entries=entries,
-        draws=[(d.at, d.gallons) for d in s.loads.draws],
+        draws=draws,
+        # A window's edges, so its onset and its end are read exactly
+        # rather than across the coast's 10-minute grid.
+        marks=[at for w in s.loads.windows for at in (w.start, w.end)],
         startup_wh=params.power.startup_wh,
         element_running=s.state.element_running,
         element_running_since=s.state.element_running_since,
@@ -252,12 +286,69 @@ def simulate(
         ledger=ledger,
         controller=params.controller,
     )
+    walked = (
+        ledger.walk(sim.points, sim.heating, draws)
+        if isinstance(ledger, BookedHeatLedger)
+        else None
+    )
+    delivery = delivery_along(
+        sim.points, draws, walked, params.readiness, params.book
+    )
     return SimulationResult(
         start=s.start,
         until=s.until,
         simulation=sim,
         reasons=(*_unique(reasons), *_unique(sim.reasons)),
         defaults_used=tuple(defaults),
+        delivery=tuple(delivery),
+        windows=tuple(
+            draw_windows(
+                sim,
+                [(w.start, w.end, w.expected_gal) for w in s.loads.windows],
+                delivery,
+                booked=walked,
+                band_btu=(
+                    book.error_band_btu(params.book)
+                    if book is not None and book.aged(params.book)
+                    else 0.0
+                ),
+                p=params.readiness,
+                ep=params.book,
+            )
+        ),
+        booked=walked,
+    )
+
+
+def readiness(
+    state: HeaterState,
+    settings: Settings,
+    params: HeaterParams,
+    *,
+    book: Booked | None = None,
+) -> Deliverable:
+    """How much hot water the tank can deliver now, in delivered gallons
+    at the line (``ReadinessParams.line_f``), and what the answer rests
+    on (``sim.delivery``).
+
+    With ``book``, the tank's booked heat answers (``basis`` ``energy``).
+    Without it, the evidence in ``params.readiness.evidence`` (none by
+    default) and the full-tank floor answer (``evidence``): a tank at
+    its setpoint and not heating has the floor; any other state needs
+    evidence, and reads 0 with ``colder_than_evidence`` without it.
+    """
+    heating = state.compressor_running or state.element_running
+    if book is not None:
+        return booked_deliverable(
+            book, state.upper_f, state.lower_f, params.readiness, params.book
+        )
+    return deliverable(
+        state.upper_f,
+        state.lower_f,
+        params.readiness,
+        ep=params.book,
+        setpoint_f=settings.setpoint_f,
+        heating=heating,
     )
 
 

@@ -106,7 +106,8 @@ def _nwp500_65() -> HeaterParams:
 def default_params(volume_code: int = VOLUME_65) -> HeaterParams:
     """The default parameters for a tank of ``volume_code`` (the
     device's: 1 for 50 gal, 2 for 65, 3 for 80). The 65's are as
-    fitted; the others scale its tank volume by nominal size."""
+    fitted; the others scale its tank volume by nominal size (the
+    tank's, and the heat book's count of it), and nothing else."""
     nominal = dict(NOMINAL_GAL)
     if volume_code not in nominal:
         raise ValueError(f"unknown volume_code {volume_code!r}")
@@ -117,4 +118,5 @@ def default_params(volume_code: int = VOLUME_65) -> HeaterParams:
     return replace(
         base,
         tank=replace(base.tank, volume_gal=base.tank.volume_gal * scale),
+        book=replace(base.book, tank_gal=base.book.tank_gal * scale),
     )

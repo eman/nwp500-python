@@ -17,7 +17,9 @@ works in the library's preferred units and never in the simulator's:
   °C and litres with ``set_unit_system("metric")``, °F and gallons
   otherwise, as ``preferred_to_half_celsius`` reads it.
 - ``temperature``, ``volume`` and ``path`` give a result's values back
-  in the preferred unit.
+  in the preferred unit: ``path`` the tank and the delivered water
+  along it, ``volume`` the deliverable gallons of ``sim.delivery`` and
+  of a draw window.
 
 A reservation's setpoint stays in the device's half-degrees Celsius.
 
@@ -57,7 +59,9 @@ from nwp500.models import (
     TOUReservationSchedule,
 )
 from nwp500.sim import (
+    Booked,
     Draw,
+    DrawWindow,
     Environment,
     HeaterParams,
     HeaterState,
@@ -72,6 +76,7 @@ from nwp500.sim import (
     Write,
     default_params,
 )
+from nwp500.sim import full_tank_book as sim_full_tank_book
 from nwp500.temperature import DeciCelsius, HalfCelsius, Temperature
 from nwp500.unit_system import get_unit_system
 
@@ -273,11 +278,42 @@ def environment(
 # ── what a caller supplies, in the preferred units ──────────────────
 
 
-def loads(draws: Iterable[tuple[datetime, float]]) -> Loads:
+def loads(
+    draws: Iterable[tuple[datetime, float]],
+    windows: Iterable[tuple[datetime, datetime, float | None]] = (),
+) -> Loads:
     """Hot water drawn: ``(instant, volume)`` pairs, the volume in the
-    preferred unit as a meter on the delivered (mixed) line counts it."""
+    preferred unit as a meter on the delivered (mixed) line counts it;
+    and the windows to judge, ``(start, end, expected volume or None)``
+    (``sim.DrawWindow``)."""
     return Loads(
-        draws=tuple(Draw(at=at, gallons=_volume_to_sim(v)) for at, v in draws)
+        draws=tuple(Draw(at=at, gallons=_volume_to_sim(v)) for at, v in draws),
+        windows=tuple(
+            DrawWindow(
+                start=a,
+                end=b,
+                expected_gal=None if v is None else _volume_to_sim(v),
+            )
+            for a, b, v in windows
+        ),
+    )
+
+
+def full_tank_book(
+    status: DeviceStatus,
+    params: HeaterParams,
+    *,
+    inlet: float | None = None,
+) -> Booked:
+    """The heat book anchored on ``status``'s tank as full
+    (``sim.full_tank_book``), for a caller who knows it has been quiet
+    since a heating ended: a recovery finished and nothing drawn since.
+    ``inlet`` is the mains water, in the preferred unit."""
+    return sim_full_tank_book(
+        _from_device(DeciCelsius(status.tank_upper_temperature_raw)),
+        _from_device(DeciCelsius(status.tank_lower_temperature_raw)),
+        params.book,
+        inlet_f=None if inlet is None else _to_sim(inlet),
     )
 
 
@@ -340,6 +376,9 @@ class TankReading:
     lower: float
     #: The setpoint in force; None for a ``Trace``, which has none.
     setpoint: float | None
+    #: The delivered water's temperature; None but for a
+    #: ``SimulationResult`` (``SimulationResult.delivery``).
+    delivery: float | None = None
 
 
 def path(
@@ -353,9 +392,22 @@ def path(
             )
             for p in result.points
         )
-    points = (
-        result.points if isinstance(result, SimulationResult) else result.path
-    )
+    if isinstance(result, SimulationResult):
+        delivery: list[float | None] = (
+            list(result.delivery)
+            if result.delivery
+            else [None] * len(result.points)
+        )
+        return tuple(
+            TankReading(
+                p.at,
+                temperature(p.upper_f),
+                temperature(p.lower_f),
+                temperature(p.setpoint_f),
+                None if d is None else temperature(d),
+            )
+            for p, d in zip(result.points, delivery, strict=True)
+        )
     return tuple(
         TankReading(
             p.at,
@@ -363,5 +415,5 @@ def path(
             temperature(p.lower_f),
             temperature(p.setpoint_f),
         )
-        for p in points
+        for p in result.path
     )

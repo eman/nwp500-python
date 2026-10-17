@@ -341,6 +341,12 @@ Draws: ``Loads``
        instant, more than 0. **Not reported**: the heater does not
        measure draw volume, so these are a forecast or a flow meter's
        record. With none, the tank only loses heat through its jacket.
+   * - ``windows``
+     - ``DrawWindow(start, end, expected_gal=None)``
+     - Spans to judge, a shower or a bath: the result gives the tank
+       and the deliverable gallons at each onset, the margin over
+       ``expected_gal``, and whether the delivered water ran cold
+       (``SimulationResult.windows``). Their edges are read exactly.
 
 
 Commands: ``Commands``
@@ -372,6 +378,124 @@ heater does on its own.
      - The TOU switch, set at the start. None keeps the heater's.
 
 
+The heat book: ``book``
+=======================
+
+``simulate(scenario, params, book=...)`` takes the tank's booked heat at
+the start (``sim.Booked``): how much heat the tank holds above a 70 degF
+reference and where a draw's cold water lies. With it, a draw that
+spends the booked heat takes the upper zone down and the lower zone
+follows the cold front; without it, each draw moves the zones by its
+calibrated response only, which holds the upper zone up through a draw
+that empties the tank, and ``reasons`` says ``no_heat_book``.
+
+The heater cannot tell you the starting book, and the library does not
+guess it: two probes read a full tank over the cold water of a recent
+draw. Start one only from what you know:
+
+.. list-table::
+   :header-rows: 1
+   :widths: 40 60
+
+   * - Start
+     - When
+   * - ``sim.full_tank_book(upper_f, lower_f, params.book)``, or
+       ``sim_adapters.full_tank_book(status, params)``
+     - The tank has been quiet since a recovery ended: it finished, and
+       nothing has been drawn since. The book's own anchor.
+   * - A ``Booked`` from your own record
+     - You meter the hot water and keep a book of the tank's heat.
+
+Once started, the walk re-anchors whenever the simulated tank comes
+back full: a recovery the heater ends itself, or quiet after one with
+the zones within ``book.uniform_band_f``. A ``Booked`` whose
+``anchor_age_h`` is past ``book.max_anchor_age_h`` is aged:
+``reasons`` says ``heat_book_aged`` and a window's margin comes off by
+the book's error band.
+
+
+Readiness: ``ReadinessParams``
+==============================
+
+``params.readiness`` says what counts as hot water at the tap and how
+the delivered water follows the upper probe. Most of it describes the
+**installation**, not the heater: the pipe to the fixture, the mixing
+valve and the household's draws. The defaults were measured at one
+NWP500-65's installation; measure your own where you can.
+
+.. list-table::
+   :header-rows: 1
+   :widths: 22 11 67
+
+   * - Field
+     - Default
+     - What it is, and how it was measured
+   * - ``line_f``
+     - 105 degF
+     - Delivered water below this is not hot. A choice. ``book.empty_btu``
+       and any ``evidence`` were measured at their line, so move it and
+       measure them again.
+   * - ``delivered_lag_gal``
+     - 5.0 gal
+     - Gallons the tap still gets at or above the line after the upper
+       probe has crossed it: the water above the probe and in the pipe
+       to the fixture. **Provisional, n = 1**: one bath, 7.3 gal at the
+       tub spout and 5.3 at a gauge on the valve outlet, the lower kept.
+       To measure yours: draw a bath from a full tank, logging the upper
+       probe and the water at the tap; it is the gallons between the
+       two crossing the line. 0 answers at the probe.
+   * - ``fall_f_per_gal``
+     - 2.0 degF/gal
+     - How fast the delivered water falls per gallon once it has
+       crossed the line; also the rate the book's upper zone falls past
+       its empty point. Two crossings, 1.6 at the probe and 1.83-2.07 at
+       a spout; the faster kept.
+   * - ``cold_lower_cutoff_f``
+     - 100 degF
+     - At or below this lower-probe reading the hot/cold boundary cannot
+       be placed between the probes: the answer says
+       ``thermocline_unlocated``.
+   * - ``cold_lower_cap_gal``
+     - 6.5 gal
+     - The cap on an evidence answer there (a book is never capped): the
+       least any of three draws from such a state gave before the upper
+       probe reached 110 degF.
+   * - ``full_setpoint_band_f``
+     - 2.0 degF
+     - Both probes this close to the setpoint, or above it, is a tank
+       the heater has brought to its target: it has the full-tank floor.
+   * - ``full_hidden_gal``
+     - 13.5 gal
+     - What the full-tank floor takes off for cold water from earlier
+       draws hiding under a lower probe that reads full: the most a book
+       found, over 2,505 samples with the setpoint near 141 degF.
+   * - ``dip_f``, ``dip_min``
+     - 3.4 degF, 3.0 min
+     - The transient dip during a draw that is not running out: a
+       window is cold only if the delivery falls further below the line,
+       or stays below it longer. The NWP500's upper probe's.
+   * - ``evidence``
+     - none
+     - Draws from your own record: ``(upper_f, lower_f, gallons)``, the
+       probes before a draw with the heat pump and elements off and the
+       gallons it delivered before the upper probe crossed the line,
+       reduced to its frontier. The answer without a book for a tank
+       that is not full. ``sim.delivery.EXAMPLE_EVIDENCE`` is one
+       installation's 19-draw frontier, which
+       ``with_example_evidence`` sets (at a 105 degF line only).
+
+Without a book or evidence, ``readiness`` has an answer only for a full
+tank (the floor); any other state reads 0 with
+``colder_than_evidence``.
+
+``params.book`` (``BookParams``) holds the book's own terms, fitted on
+the re-anchors of one NWP500-65's metered record: its compressor,
+element and standby heat, the empty point, how the upper zone mixes
+down through a draw and where the lower probe reads the cold front.
+Its ``delivery_intercept_f`` and ``delivery_slope`` are the mixing
+valve's line, as ``draw``'s: set them together.
+
+
 Parameters: ``HeaterParams``
 ============================
 
@@ -391,13 +515,15 @@ whether it was ``measured``, ``fitted`` or an engineering ``default``
      - Parameters
    * - 1
      - NWP500-50
-     - The 65's, with the tank volume scaled to 50 gal nominal.
+     - The 65's, with the tank volume (``tank`` and ``book``) scaled to
+       50 gal nominal.
    * - 2
      - NWP500-65
      - Fitted on one NWP500-65 at 240 V, 2026-10-11.
    * - 3
      - NWP500-80
-     - The 65's, with the tank volume scaled to 80 gal nominal.
+     - The 65's, with the tank volume (``tank`` and ``book``) scaled to
+       80 gal nominal.
 
 Any other code raises ``ValueError``. The defaults belong to one tank
 in one place: its jacket loss reflects the air around that tank, its
@@ -432,8 +558,10 @@ Errors
 
 ``ValueError`` (or pydantic's ``ValidationError``)
    An input out of range, an unknown field, a naive instant, an
-   unknown zone, a write outside the span, an unknown ``volume_code``,
-   or parameters missing ``stratification_gap_tau_h``.
+   unknown zone, a write outside the span, a draw window that does not
+   end after it starts, an unknown ``volume_code``, parameters missing
+   ``stratification_gap_tau_h``, or ``with_example_evidence`` at a
+   line other than 105 degF.
 ``nwp500.sim.engine.SimulationError``
    The walk could not be completed: most often a heat-pump recovery
    the parameters cannot predict, or one past the integrator's

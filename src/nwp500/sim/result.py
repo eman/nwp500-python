@@ -7,9 +7,11 @@ gave and every default the answer used, so a caller can tell an input
 it gave from one it was assumed.
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 
+from nwp500.sim.book import BookedPath
+from nwp500.sim.delivery import DrawWindowResult
 from nwp500.sim.engine import (
     HeatingInterval,
     ModeInterval,
@@ -36,6 +38,16 @@ class SimulationResult:
     reasons: tuple[str, ...]
     #: Each default the answer used, as ``name=value``.
     defaults_used: tuple[str, ...]
+    #: The delivered water's temperature at each element of ``points``,
+    #: °F: the booked state's with a heat book, the upper zone's on the
+    #: same delivered line without one (``sim.delivery``).
+    delivery: tuple[float, ...] = ()
+    #: The scenario's draw windows as the walk found them
+    #: (``Loads.windows``).
+    windows: tuple[DrawWindowResult, ...] = ()
+    #: The heat book at each element of ``points``, when the walk had
+    #: one (``sim.book``).
+    booked: BookedPath | None = field(default=None, repr=False)
 
     @property
     def points(self) -> list[PathPoint]:

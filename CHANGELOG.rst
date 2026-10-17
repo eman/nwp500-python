@@ -49,8 +49,19 @@ Added
     model and its accuracy (``docs/explanation/simulator.rst``); and the
     API reference.
 
-  Hot-water readiness and draws that would run cold are not modelled
-  yet.
+  - Hot water at the tap: ``nwp500.sim.readiness(state, settings,
+    params)`` gives deliverable gallons now; ``Loads.windows`` judge a
+    shower or a bath (deliverable gallons and margin at the onset, and
+    whether the delivered water ran cold); ``SimulationResult.delivery``
+    is the delivered temperature along the walk (``sim.delivery``).
+  - The heat book (``sim.book``): the tank's heat by bookkeeping, walked
+    through the simulation as the engine's ``HeatLedger`` so a draw that
+    spends it takes the zones down. Started from the caller's knowledge
+    (``full_tank_book``) or their own record, never guessed from the
+    probes.
+  - ``HeaterParams`` gains ``readiness`` (the line, the outlet lag, the
+    fall rate, the dip tolerance, evidence) and ``book`` parts, with one
+    installation's measured defaults and their provenance.
 
 Changed
 -------
