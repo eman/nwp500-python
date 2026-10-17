@@ -566,9 +566,45 @@ line you call hot, your own draws: ``ReadinessParams``
 (:doc:`/reference/simulator-inputs`).
 
 **Your heater's own parameters.** The defaults are one NWP500-65's.
-With your own calibration, build a ``HeaterParams`` or load one from a
-document (``nwp500.sim.params.params_from_document``) and pass it
-instead of ``sa.params(feature)``.
+Fit your own from what your heater reported: record each status and
+when it arrived (a few weeks, through quiet nights and full
+recoveries), give the air where it stands over the same time, and
+calibrate:
+
+.. code-block:: python
+
+   from nwp500.sim import calibration
+
+   history = sa.history(
+       recorded,                 # [(instant, DeviceStatus), ...]
+       air=air_over_the_record,  # a sensor's, or sa.location_air(...)
+   )
+   fitted = calibration.calibrate(history, sa.params(feature))
+   print(fitted.standby.ua_ref, fitted.standby.n_quiet)
+   print(fitted.compressor)      # None: too few recoveries
+   params = fitted.params
+
+Two fits run, each only where the record holds the evidence for it,
+and each says what it used:
+
+- **Standby loss**: the jacket's loss law, and how fast the zones
+  mix, from windows of 3 hours or more with no heating and no hot water
+  in use (45 minutes after either). It needs ``air``.
+- **The compressor**: its constant and the evaporator's approach, from
+  heat-pump recoveries that reached their target, against the loss
+  just fitted. The air over a recovery is the heater's own reading,
+  taken while its compressor runs. With 10 recoveries or more, the
+  latest fifth is held out, and ``heldout_mae_minutes`` says how well
+  the fit predicts recoveries it did not see. A fit that lands on a
+  bound is reported (``hit_bounds``) and not applied.
+
+A part without the evidence keeps the value it had. A meter's draws
+and the circulation's runs, where you record them, make the quiet test
+exact (``sa.history(..., drawing=..., circulating=...)``): the heater's
+own "hot water in use" flag also fires on circulation.
+
+Save the parameters (``nwp500.sim.params.params_to_document``) and load
+them with ``params_from_document``.
 
 
 Save and replay a scenario

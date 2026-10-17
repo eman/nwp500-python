@@ -143,6 +143,12 @@ Hot water and the heat book
    :members: LocationAirModel, SITE_LOCATION_AIR, project, fit,
       FittedLocationAir
 
+.. automodule:: nwp500.sim.calibration
+   :members: calibrate, Calibration, fit_standby, StandbyFit, StandbyWindow,
+      fit_compressor, CompressorFit, recoveries, quiet_windows,
+      busy_intervals, fit_window, fit_ua_law, fit_gap_tau, with_standby,
+      with_compressor
+
 .. automodule:: nwp500.sim.ready
    :members: assess, Recovery, TankNow, showers_ready_for, whole_showers
 

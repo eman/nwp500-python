@@ -47,10 +47,13 @@ Example::
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from datetime import datetime, time
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from zoneinfo import ZoneInfo
 
+import numpy as np
+
 from nwp500.encoding import build_reservation_entry, encode_week_bitfield
+from nwp500.enums import CurrentOperationMode, ErrorCode, HeatSource
 from nwp500.models import (
     DeviceFeature,
     DeviceStatus,
@@ -87,6 +90,9 @@ from nwp500.sim.location_air import project as project_location_air
 from nwp500.sim.schedules import weekly_runs
 from nwp500.temperature import DeciCelsius, HalfCelsius, Temperature
 from nwp500.unit_system import get_unit_system
+
+if TYPE_CHECKING:
+    import pandas as pd
 
 # ── units ───────────────────────────────────────────────────────────
 # The simulator's core takes °F and US gallons. Every conversion to or
@@ -503,3 +509,109 @@ def location_air(
         anchor=None if anchor is None else (anchor[0], _to_sim(anchor[1])),
     )
     return tuple((at, temperature(v)) for at, v in air)
+
+
+# ── for calibration ─────────────────────────────────────────────────
+
+
+def _hybrid(status: DeviceStatus) -> bool:
+    return status.operation_mode in (
+        CurrentOperationMode.HYBRID_EFFICIENCY_MODE,
+        CurrentOperationMode.HYBRID_BOOST_MODE,
+    )
+
+
+def _interval_column(
+    index: pd.DatetimeIndex, spans: Iterable[tuple[datetime, datetime]]
+) -> list[bool]:
+    spans = list(spans)
+    return [any(a <= t < b for a, b in spans) for t in index]
+
+
+def history(
+    readings: Iterable[tuple[datetime, DeviceStatus]],
+    *,
+    air: Iterable[tuple[datetime, float]] | None = None,
+    humidity: Iterable[tuple[datetime, float]] | None = None,
+    drawing: Iterable[tuple[datetime, datetime]] | None = None,
+    circulating: Iterable[tuple[datetime, datetime]] | None = None,
+) -> pd.DataFrame:
+    """A heater's history as ``sim.calibration`` takes it, from the
+    statuses it reported and when (``readings``, any order).
+
+    Everything a status carries is read from it: the probes, what is
+    heating, ``dhw_use``, the lower probe's stop threshold, what rules a
+    sample out of a heat-pump recovery, the energy still to heat, and
+    the heater's own air
+    reading while its compressor runs. What it does not carry is the
+    caller's, in the preferred unit:
+
+    - ``air``: the air where the heater stands, interpolated in time onto
+      the readings (a sensor's, or ``location_air``'s projection); the
+      standby fit needs it;
+    - ``humidity``: that air's relative humidity, %;
+    - ``drawing``, ``circulating``: the spans a meter saw water drawn and
+      a circulation pump ran, where an installation records them.
+    """
+    import pandas as pd
+
+    rows = sorted(readings, key=lambda r: r[0])
+    index = pd.DatetimeIndex([at for at, _ in rows]).tz_convert("UTC")
+    frame = pd.DataFrame(
+        {
+            "upper_f": [
+                _from_device(DeciCelsius(s.tank_upper_temperature_raw))
+                for _, s in rows
+            ],
+            "lower_f": [
+                _from_device(DeciCelsius(s.tank_lower_temperature_raw))
+                for _, s in rows
+            ],
+            "compressor_on": [bool(s.comp_use) for _, s in rows],
+            "element_on": [
+                bool(s.heat_upper_use)
+                or bool(s.heat_lower_use)
+                or s.current_heat_use
+                in (HeatSource.HEATELEMENT, HeatSource.HEATPUMP_HEATELEMENT)
+                for _, s in rows
+            ],
+            "dhw_in_use": [bool(s.dhw_use) for _, s in rows],
+            "target_f": [
+                _from_device(HalfCelsius(s.hp_lower_off_temp_setting_raw))
+                for _, s in rows
+            ],
+            "excluded": [
+                _hybrid(s)
+                or bool(s.anti_legionella_operation_busy)
+                or s.error_code != ErrorCode.NO_ERROR
+                for _, s in rows
+            ],
+            "energy_to_setpoint_wh": [
+                float(s.energy_to_setpoint) for _, s in rows
+            ],
+            "heater_air_f": [
+                _from_device(DeciCelsius(s.ambient_temperature_raw))
+                if s.comp_use
+                else float("nan")
+                for _, s in rows
+            ],
+        },
+        index=index,
+    )
+    seconds = [t.timestamp() for t in index]
+    for name, series in (("air_f", air), ("humidity_pct", humidity)):
+        if series is None:
+            continue
+        points = sorted(series, key=lambda r: r[0])
+        if not points:
+            continue
+        to = _to_sim if name == "air_f" else float
+        frame[name] = np.interp(
+            seconds,
+            [at.timestamp() for at, _ in points],
+            [to(v) for _, v in points],
+        )
+    for name, spans in (("drawing", drawing), ("circulating", circulating)):
+        if spans is not None:
+            frame[name] = _interval_column(index, spans)
+    return frame

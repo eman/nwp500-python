@@ -120,6 +120,14 @@ Added
     ``sim.location_air``, anchored to that reading, with ``fit`` for
     one's own model). ``time_to_ready`` and ``next_recovery`` take a
     ``RecoveryModel``.
+  - Calibration from the heater's own record (``sim.calibration``,
+    ``sim_adapters.history`` to build one from ``DeviceStatus``
+    readings): the standby loss law and the zones' mixing constant from
+    quiet windows, then the compressor constant and evaporator approach
+    from heat-pump recoveries that reached their target, each reported
+    with what it rested on (held-out error, windows used, a fit pinned
+    on a bound). An element run counts as busy in the quiet test, not
+    only the compressor and hot water in use.
 
 Changed
 -------
