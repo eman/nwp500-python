@@ -17,7 +17,7 @@ Every mode is scored by the same deliverable rule on a one-minute grid.
 import itertools
 import math
 from collections.abc import Callable, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timedelta
 from typing import Any, Literal
 
@@ -104,6 +104,27 @@ class Recovery:
     #: adds heat at this rate from its start to its end: the book's own
     #: term, not the physics' apparent-frame stored energy.
     hp_btu_per_h: float = 0.0
+
+
+def recovery_as_of(rec: Recovery, then: datetime, now: datetime) -> Recovery:
+    """``rec``, computed at ``then``, as seen from ``now``: for a
+    caller that keeps a recovery and reuses it. ``points`` are absolute
+    instants, but ``start_minute``, ``coast_btu`` and ``coast_draw_gal``
+    run from the instant it was computed. Reused unchanged, the start
+    comes ``now - then`` minutes late and the whole coast is charged
+    again, though the book at ``now`` already holds what has happened:
+    time to ready runs late by up to the age of the copy kept. The
+    remaining coast keeps its pro-rata share."""
+    elapsed = (now - then).total_seconds() / 60.0
+    if rec.outcome != "ok" or elapsed <= 0.0 or rec.start_minute <= 0.0:
+        return rec
+    remaining = max(0.0, rec.start_minute - elapsed)
+    return replace(
+        rec,
+        start_minute=remaining,
+        coast_btu=rec.coast_btu * remaining / rec.start_minute,
+        coast_draw_gal=rec.coast_draw_gal * remaining / rec.start_minute,
+    )
 
 
 #: The modes time to ready is reported for (``BathReady.by_mode``), in

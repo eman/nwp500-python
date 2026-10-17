@@ -838,6 +838,23 @@ rate taken end to end on the grid (``fit_element_rates``) comes out
 lower because the lag is inside it. ``day_ci`` is the 90 % interval
 the measurements report, bootstrapped over local days.
 
+Plan with the heater's facts
+============================
+
+A scheduler plans with ``sim.profile.heater_profile(params.tank)``.
+It lists the modes and the energy each one uses, the setpoint range
+and step, the depletion threshold and the tank's volume, all as the
+simulation runs them. ``profile.revision`` changes only when one of
+those facts changes, so re-read the profile when the revision moves.
+A plan reaches the heater as what a control integration writes:
+reservation entries (``Commands.reservations``) and writes
+(``Commands.writes``).
+
+To keep a ``next_recovery`` answer and reuse it later, age it with
+``sim.recovery_as_of(rec, computed_at, now)``. Otherwise its start
+comes late and the part of the coast that has already happened is
+charged a second time.
+
 Replay a day the heater lived
 =============================
 

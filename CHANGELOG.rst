@@ -142,6 +142,10 @@ Added
     ``HeaterState.energy_to_setpoint_wh`` carry what they need, filled
     by the adapters; ``recovery`` says ``not_scheduled`` in Vacation and
     Power Off.
+  - The heater's profile (``sim.profile``): its modes and their energy,
+    setpoint range and step, depletion threshold and tank, under a
+    revision digest; and ``recovery_as_of``, a kept recovery aged to
+    now.
   - The element terms from a heater's raw record (``sim.calibration``):
     the upper probe's lag and rate as one line from clean stints
     (``element_stints``, ``fit_element_lag``), where each element

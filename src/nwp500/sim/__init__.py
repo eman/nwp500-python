@@ -73,6 +73,7 @@ from nwp500.sim.ready import (
     ModeReady,
     Readiness,
     ShowersReady,
+    recovery_as_of,
 )
 from nwp500.sim.result import (
     ActiveCycle,
@@ -128,6 +129,7 @@ __all__ = (
     "simulate",
     "site_example_params",
     "standby",
+    "recovery_as_of",
     "time_to_ready",
     "with_valve",
 )
