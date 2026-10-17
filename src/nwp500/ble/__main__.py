@@ -1,0 +1,124 @@
+"""``python -m nwp500.ble``: scan for the heater and dump its data blocks."""
+
+from __future__ import annotations
+
+import argparse
+import asyncio
+import json
+import sys
+from pathlib import Path
+
+from . import ClassCode, NavienBleClient, scan
+
+
+def _class_name(code: int) -> str:
+    try:
+        return ClassCode(code).name
+    except ValueError:
+        return str(code)
+
+
+def _parse_class(text: str) -> tuple[int, int | None]:
+    name, _, length = text.partition(":")
+    code = (
+        ClassCode[name.upper()]
+        if name.upper() in ClassCode.__members__
+        else int(name)
+    )
+    return int(code), (int(length) if length else None)
+
+
+async def _scan(args: argparse.Namespace) -> int:
+    found = await scan(args.seconds)
+    if not found:
+        print(
+            "No heater advertising. "
+            "Hold Back + Power for 5 s to enter pairing mode."
+        )
+        return 1
+    for address, name, rssi in sorted(found, key=lambda t: -t[2]):
+        print(f"{address}  rssi={rssi}  {name}")
+    return 0
+
+
+async def _read(args: argparse.Namespace) -> int:
+    address = args.address
+    if not address:
+        found = await scan(args.seconds)
+        if not found:
+            print(
+                "No heater advertising. "
+                "Hold Back + Power for 5 s to enter pairing mode."
+            )
+            return 1
+        address, name, _ = max(found, key=lambda t: t[2])
+        print(f"using {name} at {address}")
+    results: list[dict[str, object]] = []
+    async with NavienBleClient(address) as ble:
+        if args.classes:
+            targets = [_parse_class(c) for c in args.classes]
+        else:
+            targets = [
+                (int(c), None)
+                for c in (
+                    ClassCode.DID,
+                    ClassCode.MSCD,
+                    ClassCode.SPID,
+                    ClassCode.SPLD,
+                    ClassCode.SPHD,
+                    ClassCode.SPD,
+                )
+            ]
+        for code, length in targets:
+            try:
+                pkt = await ble.read(code, length)
+            except (TimeoutError, ValueError) as e:
+                print(f"{_class_name(code)}: {e or 'no reply'}")
+                continue
+            print(
+                f"{pkt.class_name:6} len={len(pkt.data):3} "
+                f"crc_ok={pkt.crc_ok} {pkt.data.hex()}"
+            )
+            results.append(
+                {
+                    "class": pkt.class_code,
+                    "name": pkt.class_name,
+                    "data": pkt.data.hex(),
+                    "crc_ok": pkt.crc_ok,
+                }
+            )
+        for raw in ble.unparsed_notifications:
+            print("unparsed notification:", raw.hex())
+    if args.out:
+        await asyncio.to_thread(
+            Path(args.out).write_text, json.dumps(results, indent=1)
+        )
+        print("saved", args.out)
+    return 0
+
+
+def main(argv: list[str] | None = None) -> int:
+    p = argparse.ArgumentParser(
+        prog="python -m nwp500.ble", description=__doc__
+    )
+    sub = p.add_subparsers(dest="cmd", required=True)
+    s = sub.add_parser("scan", help="list heaters in pairing mode")
+    s.add_argument("--seconds", type=float, default=10.0)
+    s.set_defaults(func=_scan)
+    r = sub.add_parser("read", help="read data blocks (read-only)")
+    r.add_argument("--address", help="device address; scans when omitted")
+    r.add_argument(
+        "--seconds", type=float, default=15.0, help="scan time when no address"
+    )
+    r.add_argument("--out", help="write the blocks as JSON here")
+    r.add_argument(
+        "classes", nargs="*", help="CLASS[:LEN], e.g. SPD:59 or 240:58"
+    )
+    r.set_defaults(func=_read)
+    args = p.parse_args(argv)
+    result: int = asyncio.run(args.func(args))
+    return result
+
+
+if __name__ == "__main__":
+    sys.exit(main())
