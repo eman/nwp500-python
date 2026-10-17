@@ -46,7 +46,7 @@ Example::
 
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
-from datetime import datetime, time
+from datetime import UTC, datetime, time, timedelta
 from typing import TYPE_CHECKING, Any
 from zoneinfo import ZoneInfo
 
@@ -65,14 +65,17 @@ from nwp500.models import (
 from nwp500.sim import (
     Booked,
     CirculationRun,
+    Commands,
     Draw,
     DrawWindow,
     Environment,
     HeaterParams,
     HeaterState,
+    History,
     Loads,
     RecoveryResult,
     ReservationEntry,
+    Scenario,
     Schedules,
     Settings,
     SimulationResult,
@@ -82,6 +85,14 @@ from nwp500.sim import (
     default_params,
 )
 from nwp500.sim import full_tank_book as sim_full_tank_book
+from nwp500.sim.inputs import (
+    ELECTRIC,
+    ENERGY_SAVER,
+    HEAT_PUMP,
+    HIGH_DEMAND,
+    POWER_OFF,
+    VACATION,
+)
 from nwp500.sim.location_air import (
     SITE_LOCATION_AIR,
     LocationAirModel,
@@ -635,3 +646,202 @@ def history(
         if spans is not None:
             frame[name] = _interval_column(index, spans)
     return frame
+
+
+# ── a past scenario, from the statuses the heater reported ─────────
+
+#: A tank reading older than this at the instant is no state to start
+#: from.
+TANK_MAX_AGE = timedelta(hours=2)
+#: How far back the compressor's edge is looked for: a recovery runs
+#: hours and the restart lockout minutes.
+COMPRESSOR_LOOKBACK = timedelta(days=1)
+#: How far back an element's or a setting's last state is looked for.
+STATUS_LOOKBACK = timedelta(days=7)
+#: A setpoint change smaller than this is no write, °F.
+SAME_F = 0.05
+#: A drop to Heat Pump within this of TOU switching on or a window
+#: opening is the heater's own, not a write.
+DROP_WITHIN = timedelta(seconds=5)
+#: The upper start threshold at rest; raised above this, a TOU window
+#: is in force (the setting's half-degree step on top).
+_RAISED_ABOVE_F = 104.9 + 0.9
+_ELEMENT_MODES = frozenset({ELECTRIC, ENERGY_SAVER, HIGH_DEMAND})
+
+
+@dataclass(frozen=True)
+class Replay:
+    """A past scenario built from what the heater reported, and what
+    could not be put in it (``recorded_write_not_modelled``: a write
+    into Vacation or Power Off, for which the simulator holds no
+    rule)."""
+
+    scenario: Scenario
+    reasons: tuple[str, ...]
+
+
+def _last_edge(
+    rows: list[tuple[datetime, bool]],
+) -> tuple[bool, datetime | None]:
+    """A sampled state's last value, and when it took it: the first
+    sample of its last run; None when every sample has it (the change
+    is before them)."""
+    if not rows:
+        return False, None
+    i = len(rows) - 1
+    while i > 0 and rows[i - 1][1] == rows[-1][1]:
+        i -= 1
+    return rows[-1][1], rows[i][0] if i > 0 else None
+
+
+def _air(status: DeviceStatus) -> Environment:
+    """``environment(status)``, for a function whose own parameter is
+    named so."""
+    return environment(status)
+
+
+def replay(
+    readings: Iterable[tuple[datetime, DeviceStatus]],
+    *,
+    at: datetime,
+    until: datetime,
+    tz: str,
+    schedules: Schedules | None = None,
+    environment: Environment | None = None,
+    loads: Loads | None = None,
+    writes: bool = True,
+) -> Replay:
+    """The scenario from ``at`` to ``until`` as the heater stood: each
+    from the last status at or before ``at`` (``readings``, ``(instant,
+    status)``, any order), as the model's replay read its record.
+
+    - the tank, what is heating, the settings and the TOU switch: the
+      status in force at ``at``, which must be within ``TANK_MAX_AGE``;
+    - when the compressor last stopped (for the restart lockout), and
+      when the tank last heated: its last off-edge within
+      ``COMPRESSOR_LOOKBACK``, and the elements' within
+      ``STATUS_LOOKBACK``, an edge being the first status after the
+      change (a sampled record knows no closer);
+    - the TOU switch's changes over the span (``Schedules.tou_switches``);
+    - with ``writes``, every recorded change of the setpoint or the mode
+      over the span as a write, but the heater's own drop to Heat Pump
+      at a window's opening (within ``DROP_WITHIN`` of TOU switching on
+      or its upper threshold rising).
+
+    ``schedules`` brings the TOU periods and reservations (the
+    heater's own, read with this library: the record has none); its
+    switch and switches are the record's. ``environment`` defaults to
+    the heater's own air reading at ``at``.
+    """
+    at, until = at.astimezone(UTC), until.astimezone(UTC)
+    if until <= at:
+        raise ValueError("until must be after at")
+    rows = sorted(
+        ((t.astimezone(UTC), s) for t, s in readings), key=lambda r: r[0]
+    )
+    before = [(t, s) for t, s in rows if t <= at]
+    if not before or at - before[-1][0] > TANK_MAX_AGE:
+        raise ValueError(f"no status within {TANK_MAX_AGE} before at")
+    now = before[-1][1]
+    comp = [
+        (t, bool(s.comp_use))
+        for t, s in before
+        if t >= at - COMPRESSOR_LOOKBACK
+    ]
+    running, edge = _last_edge(comp)
+    stopped = None if running else edge
+    recent = [(t, s) for t, s in before if t >= at - STATUS_LOOKBACK]
+    upper_on, upper_edge = _last_edge(
+        [(t, bool(s.heat_upper_use)) for t, s in recent]
+    )
+    lower_on, lower_edge = _last_edge(
+        [(t, bool(s.heat_lower_use)) for t, s in recent]
+    )
+    heated: datetime | None = None
+    if running or upper_on or lower_on:
+        heated = at
+    elif stopped is not None:
+        heated = max(
+            [stopped, *(e for e in (upper_edge, lower_edge) if e is not None)]
+        )
+    state = heater_state(now).model_copy(
+        update={
+            "compressor_running": running,
+            "element_running_since": upper_edge if upper_on else None,
+        }
+    )
+    span = [(t, s) for t, s in rows if at < t < until]
+    switches: list[tuple[datetime, bool]] = []
+    tou = bool(now.tou_status)
+    for t, s in span:
+        if bool(s.tou_status) != tou:
+            tou = bool(s.tou_status)
+            switches.append((t, tou))
+    base = schedules if schedules is not None else Schedules()
+    reasons: list[str] = []
+    recorded: list[Write] = []
+    if writes:
+        # TOU switching on, or the upper threshold rising, from
+        # ``DROP_WITHIN`` before the span to as long after it.
+        near = [
+            (t, s)
+            for t, s in rows
+            if at - DROP_WITHIN < t < until + DROP_WITHIN
+        ]
+        prior = [s for t, s in rows if t <= at - DROP_WITHIN]
+        openings: list[datetime] = []
+        if prior:
+            was_on = bool(prior[-1].tou_status)
+            raised = (
+                _from_device(
+                    HalfCelsius(prior[-1].hp_upper_on_temp_setting_raw)
+                )
+                > _RAISED_ABOVE_F
+            )
+            for t, s in near:
+                on = bool(s.tou_status)
+                up = (
+                    _from_device(HalfCelsius(s.hp_upper_on_temp_setting_raw))
+                    > _RAISED_ABOVE_F
+                )
+                if (on and not was_on) or (up and not raised):
+                    openings.append(t)
+                was_on, raised = on, up
+        mode = int(now.dhw_operation_setting)
+        setpoint = _from_device(HalfCelsius(now.dhw_temperature_setting_raw))
+        for t, s in span:
+            new_mode = int(s.dhw_operation_setting)
+            if new_mode != mode:
+                dropped = (
+                    new_mode == HEAT_PUMP
+                    and mode in _ELEMENT_MODES
+                    and any(abs(e - t) <= DROP_WITHIN for e in openings)
+                )
+                if not dropped:
+                    if new_mode in (VACATION, POWER_OFF):
+                        reasons.append("recorded_write_not_modelled")
+                    else:
+                        recorded.append(Write(at=t, mode=new_mode))
+                mode = new_mode
+            new_sp = _from_device(HalfCelsius(s.dhw_temperature_setting_raw))
+            if abs(new_sp - setpoint) > SAME_F:
+                recorded.append(Write(at=t, setpoint_f=new_sp))
+                setpoint = new_sp
+    scenario = Scenario(
+        start=at,
+        horizon=until - at,
+        tz=tz,
+        state=state,
+        settings=settings(now),
+        history=History(compressor_stopped_at=stopped, heated_at=heated),
+        schedules=base.model_copy(
+            update={
+                "tou_enabled": bool(now.tou_status),
+                "tou_switches": tuple(switches),
+            }
+        ),
+        environment=environment if environment is not None else _air(now),
+        loads=loads if loads is not None else Loads(),
+        commands=Commands(writes=tuple(recorded)),
+    )
+    return Replay(scenario, tuple(dict.fromkeys(reasons)))

@@ -279,6 +279,12 @@ tou_enabled=...)``.
      - False
      - ``DeviceStatus.tou_status``; with a ``TOUReservationSchedule``,
        its own ``enabled``.
+   * - ``tou_switches``
+     - none
+     - The TOU switch's changes over the span, ``(instant, on)``, as
+       the heater recorded them (``sim_adapters.replay``): a window is
+       in force only while the switch is on. The switch at the start is
+       ``tou_enabled``.
 
 A ``ReservationEntry`` is one entry as the device stores it:
 

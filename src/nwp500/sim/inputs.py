@@ -153,6 +153,11 @@ class Schedules(_Value):
     tou_periods: tuple[TouPeriod, ...] = ()
     #: Whether TOU is on.
     tou_enabled: bool = False
+    #: The TOU switch's changes over the span, ``(at, on)``, as the
+    #: heater recorded them (``sim_adapters.replay``): a window is in
+    #: force only while it is on. The switch at the start is
+    #: ``tou_enabled`` (or ``Commands.tou_enabled``).
+    tou_switches: tuple[tuple[Instant, bool], ...] = ()
 
 
 #: An ambient reading: the instant and the air temperature, °F.

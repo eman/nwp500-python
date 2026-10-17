@@ -142,6 +142,12 @@ Added
     ``HeaterState.energy_to_setpoint_wh`` carry what they need, filled
     by the adapters; ``recovery`` says ``not_scheduled`` in Vacation and
     Power Off.
+  - ``sim_adapters.replay``: a past scenario from the statuses the
+    heater reported, as the model's replay read its record: the state
+    then, the compressor's last stop and the last heating from their
+    edges, the recorded setpoint and mode changes as writes (but the
+    heater's own drop to Heat Pump at a window), and the TOU switch's
+    changes (``Schedules.tou_switches``, which the walk applies).
   - The heater's own TOU marker (``Settings.hp_upper_on_f`` raised):
     ``time_to_ready`` and ``element_mode`` read "in a window now" from
     it, and ``next_recovery`` lets it override the schedule for a

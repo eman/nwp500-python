@@ -104,7 +104,7 @@ from nwp500.sim.tank_physics import (
     TankPhysics,
     ambient_window_mean,
 )
-from nwp500.sim.tou_triggers import heater_start, in_window
+from nwp500.sim.tou_triggers import heater_start, in_window, while_enabled
 from nwp500.sim.units import BTU_PER_WH
 
 #: The engine's name for each mode it models.
@@ -367,14 +367,23 @@ def simulate(
         if s.commands.tou_enabled is not None
         else s.schedules.tou_enabled
     )
-    windows = (
-        tou_windows(s.schedules.tou_periods, tz, s.start, s.until)
-        if tou_on
+    switches = s.schedules.tou_switches
+    windows: tuple[tuple[datetime, datetime], ...] = (
+        tuple(
+            while_enabled(
+                tou_windows(s.schedules.tou_periods, tz, s.start, s.until),
+                tou_on,
+                switches,
+            )
+        )
+        if tou_on or any(on for _, on in switches)
         else ()
     )
     if tou_windows_in_force is not None:
         windows = tuple(tou_windows_in_force)
-    elif tou_on and not s.schedules.tou_periods:
+    elif (tou_on or any(on for _, on in switches)) and not (
+        s.schedules.tou_periods
+    ):
         reasons.append("tou_schedule_unknown")
     mode, disabled = _engine_mode(s.settings.mode)
     if s.settings.hp_lower_on_f is None:
@@ -642,8 +651,16 @@ def standby(
         margin = None if on is None else last.lower_f - on
         mode, disabled = _engine_mode(settings.mode)
         windows = (
-            tou_windows(schedules.tou_periods, ZoneInfo(tz), start, until)
-            if schedules is not None and schedules.tou_enabled
+            while_enabled(
+                tou_windows(schedules.tou_periods, ZoneInfo(tz), start, until),
+                schedules.tou_enabled,
+                schedules.tou_switches,
+            )
+            if schedules is not None
+            and (
+                schedules.tou_enabled
+                or any(on for _, on in schedules.tou_switches)
+            )
             else ()
         )
         if not disabled:
@@ -787,12 +804,15 @@ def _scheduled(
         if s.commands.tou_enabled is not None
         else s.schedules.tou_enabled
     )
-    if not on:
+    switches = s.schedules.tou_switches
+    if not on and not any(sw for _, sw in switches):
         return []
     if not s.schedules.tou_periods:
         return None
-    return list(
-        tou_windows(s.schedules.tou_periods, ZoneInfo(s.tz), start, end)
+    return while_enabled(
+        tou_windows(s.schedules.tou_periods, ZoneInfo(s.tz), start, end),
+        on,
+        switches,
     )
 
 

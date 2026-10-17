@@ -648,6 +648,35 @@ Save the parameters (``nwp500.sim.params.params_to_document``) and load
 them with ``params_from_document``.
 
 
+Replay a day the heater lived
+=============================
+
+Record each status and when it arrived, and the simulator can be held
+to what the heater did. ``sa.replay`` builds the scenario as of a past
+instant from the record:
+
+.. code-block:: python
+
+   r = sa.replay(
+       recorded,                 # [(instant, DeviceStatus), ...]
+       at=yesterday_6pm,
+       until=yesterday_11pm,
+       tz="America/Los_Angeles",
+       schedules=sa.schedules(tou=tou_info, reservations=reservations),
+       environment=sa.environment(ambient=air_then),
+   )
+   result = sim.simulate(r.scenario, params)
+
+The tank, what was heating and the settings are the last status at or
+before ``at``. When the compressor last stopped and when the tank last
+heated come from the record's edges. Every setpoint or mode change
+over the span is a write, except the heater's own drop to Heat Pump as
+a TOU window opens. The TOU switch's changes are kept too. A write into
+Vacation or Power Off cannot be simulated and is named in
+``r.reasons``. The record holds no schedule, so give the heater's own,
+read with this library.
+
+
 Save and replay a scenario
 ==========================
 
