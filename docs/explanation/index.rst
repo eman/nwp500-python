@@ -10,6 +10,7 @@ Understanding-oriented deep dives into the library's design and advanced feature
    architecture
    heating-elements
    tank-energy
+   simulator
    tou-recovery-cap
    unknown-values
    what-starts-a-recovery

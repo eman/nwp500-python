@@ -19,8 +19,29 @@ Added
   reads no clock and holds no module state, and ``import nwp500`` does
   not load it. An import-linter contract in ``tox -e lint`` keeps it
   from importing the MQTT or REST clients, aiohttp, the AWS IoT SDK or
-  ``logging``. Scenario inputs, adapters from ``DeviceStatus`` and the
-  schedules, the result types and the docs follow in a later change.
+  ``logging``.
+- **The simulator's API** (#150, second part).
+
+  - ``nwp500.sim.simulate(scenario, params)`` walks a frozen
+    ``Scenario``: the heater's state, settings, history, schedules,
+    environment, draws and the commands under evaluation.
+  - ``recovery()`` answers "when will the tank be hot?", and
+    ``standby()`` projects the tank coasting.
+  - The TOU periods become the windows the heater holds, and the
+    reservations become firings, with the local times in the
+    scenario's zone (``sim.schedules``).
+  - Results name every default they used.
+  - ``default_params(volume_code)`` carries one NWP500-65's parameters,
+    with the tank volume scaled for the 50 and 80 gal models.
+  - ``sim.codec`` reads and writes scenarios as JSON documents.
+  - ``nwp500.sim_adapters`` builds the inputs from ``DeviceStatus``,
+    ``DeviceFeature``, ``ReservationSchedule`` and ``TOUInfo``, reading
+    the raw fields so the unit preference cannot change them.
+  - Docs: an explanation page (``docs/explanation/simulator.rst``) and
+    a reference page.
+
+  Hot-water readiness and draws that would run cold are not modelled
+  yet.
 
 Changed
 -------
