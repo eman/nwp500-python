@@ -5,7 +5,8 @@ Simulator
 The optional heater simulator, ``nwp500.sim``, and the adapters that
 build its inputs from the library's models, ``nwp500.sim_adapters``.
 :doc:`/explanation/simulator` explains the model, its inputs and its
-accuracy.
+accuracy; :doc:`/how-to/simulate-heater` shows how to use it, and
+:doc:`/reference/simulator-inputs` lists every input.
 
 Install it with the ``sim`` extra:
 

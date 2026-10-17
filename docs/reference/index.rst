@@ -43,3 +43,4 @@ General Reference
    enumerations
    installation
    configuration
+   simulator-inputs

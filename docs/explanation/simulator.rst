@@ -13,6 +13,10 @@ It is optional. Install it with the ``sim`` extra
 (``pip install nwp500-python[sim]``), which adds numpy, pandas and
 scipy. ``import nwp500`` does not load it.
 
+:doc:`/how-to/simulate-heater` walks through using it, from fetching
+the heater's data to evaluating a change, and
+:doc:`/reference/simulator-inputs` lists every input it takes.
+
 .. contents::
    :local:
    :depth: 2
@@ -150,7 +154,8 @@ schedules keep the device's units. The adapters read the raw fields
 preference (:doc:`/how-to/manage-units`) cannot change a scenario.
 
 ``sim.codec`` writes a scenario, with or without its parameters, as a
-JSON document, and reads one back.
+JSON document, and reads one back. :doc:`/reference/simulator-inputs`
+gives each field's unit, default and source.
 
 
 Parameters and their defaults

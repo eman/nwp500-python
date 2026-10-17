@@ -37,8 +37,12 @@ Added
   - ``nwp500.sim_adapters`` builds the inputs from ``DeviceStatus``,
     ``DeviceFeature``, ``ReservationSchedule`` and ``TOUInfo``, reading
     the raw fields so the unit preference cannot change them.
-  - Docs: an explanation page (``docs/explanation/simulator.rst``) and
-    a reference page.
+  - Docs: a how-to (``docs/how-to/simulate-heater.rst``), from fetching
+    the heater's data to evaluating a change before sending it; a
+    reference of every input, its unit, default and source
+    (``docs/reference/simulator-inputs.rst``); an explanation of the
+    model and its accuracy (``docs/explanation/simulator.rst``); and the
+    API reference.
 
   Hot-water readiness and draws that would run cold are not modelled
   yet.
