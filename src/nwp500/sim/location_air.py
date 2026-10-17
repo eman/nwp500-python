@@ -29,7 +29,7 @@ a weather station there: an example, not a default.
 
 from collections.abc import Sequence
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 
 import numpy as np
 
@@ -55,7 +55,11 @@ class LocationAirModel:
             raise ValueError("no outdoor readings")
         xs = np.array([t.timestamp() for t, _ in series])
         ys = np.array([v for _, v in series])
-        lagged = np.array([(t - self.lag).timestamp() for t in when])
+        # In elapsed time: a lag off a local wall clock would gain or
+        # lose an hour across a daylight-saving change.
+        lagged = np.array(
+            [(t.astimezone(UTC) - self.lag).timestamp() for t in when]
+        )
         return [
             float(v)
             for v in self.damping * np.interp(lagged, xs, ys) + self.offset_f
@@ -84,6 +88,11 @@ def project(
     ``step``, by ``model`` on the ``outdoor`` forecast, moved to pass
     through ``anchor`` (a reading and its instant) when given: the
     readings ``Environment.ambient_f`` takes."""
+    if step <= timedelta(0):
+        raise ValueError("step must be positive")
+    # The grid in elapsed time, UTC: a local wall clock skips or repeats
+    # an hour at a daylight-saving change.
+    start, end = start.astimezone(UTC), end.astimezone(UTC)
     if end < start:
         raise ValueError("end must not be before start")
     when: list[datetime] = []

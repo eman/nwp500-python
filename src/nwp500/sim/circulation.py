@@ -119,8 +119,10 @@ class Circulation:
 @dataclass
 class CirculationDraws:
     """The runs over each coast as flowing draws, for ``TankPhysics``'s
-    ``flowing_draws``: each coast's runs merged among themselves and
-    handed over whole. ``minutes`` adds up the on-time of every coast
+    ``flowing_draws``: the whole schedule merged first, then each merged
+    run that overlaps a coast handed over whole, so a run is one run
+    whichever coasts it spans (the core charges each coast its share, on
+    the run's own clock). ``minutes`` adds up the on-time of every coast
     asked, for whether a run was charged."""
 
     circulation: Circulation
@@ -134,12 +136,17 @@ class CirculationDraws:
         if self.displaced <= 0.0:
             return []
         runs = self.circulation.over(start, end)
+        if runs is None:
+            return []
         if end > start:
-            for run_start, run_end in runs or ():
+            for run_start, run_end in runs:
                 overlap = min(end, run_end) - max(start, run_start)
                 self.minutes += max(0.0, overlap.total_seconds() / 60.0)
+        # Merged over the whole schedule, not this coast's share of it:
+        # two runs a coast boundary falls between are still one run, and
+        # one displaced volume.
         return run_draws(
-            merge_runs(runs or []),
+            merge_runs(self.circulation.runs),
             start,
             end,
             self.displaced,

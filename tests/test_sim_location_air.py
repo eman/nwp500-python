@@ -140,3 +140,65 @@ class TestTheAdapters:
         )
         env = sa.environment(ambient=air_f)
         assert env.ambient_f[0][1] == pytest.approx(air_f[0][1])  # type: ignore[index]
+
+
+LA = __import__("zoneinfo").ZoneInfo("America/Los_Angeles")
+
+
+class TestElapsedTime:
+    """The second review of #162: the grid and the lag in elapsed time,
+    so local and UTC instants are the same projection."""
+
+    @pytest.mark.parametrize("step", [timedelta(0), timedelta(minutes=-10)])
+    def test_a_step_must_be_positive(self, step):
+        with pytest.raises(ValueError, match="positive"):
+            project(
+                SITE_LOCATION_AIR,
+                _outdoor(),
+                T0,
+                T0 + timedelta(hours=1),
+                step=step,
+            )
+
+    @pytest.mark.parametrize(
+        ("start", "end"),
+        [
+            # Fall back: the 01:00 hour happens twice.
+            (
+                datetime(2026, 11, 1, 0, 0, tzinfo=LA),
+                datetime(2026, 11, 1, 3, 0, tzinfo=LA),
+            ),
+            # Spring forward: 02:00-03:00 never happens.
+            (
+                datetime(2026, 3, 8, 0, 0, tzinfo=LA),
+                datetime(2026, 3, 8, 4, 0, tzinfo=LA),
+            ),
+        ],
+    )
+    def test_a_local_span_is_its_utc_span(self, start, end):
+        outdoor = [
+            (start.astimezone(UTC) + timedelta(hours=h), 50.0 + h)
+            for h in range(-4, 8)
+        ]
+        local = project(SITE_LOCATION_AIR, outdoor, start, end)
+        utc = project(
+            SITE_LOCATION_AIR,
+            outdoor,
+            start.astimezone(UTC),
+            end.astimezone(UTC),
+        )
+        assert local == utc
+        span = (end.astimezone(UTC) - start.astimezone(UTC)) / timedelta(
+            minutes=10
+        )
+        assert len(local) == int(span) + 1
+
+    def test_the_lag_is_elapsed_time(self):
+        when = datetime(2026, 11, 1, 2, 0, tzinfo=LA)
+        outdoor = [
+            (when.astimezone(UTC) + timedelta(hours=h), 50.0 + h)
+            for h in range(-4, 4)
+        ]
+        assert SITE_LOCATION_AIR.at(outdoor, [when]) == SITE_LOCATION_AIR.at(
+            outdoor, [when.astimezone(UTC)]
+        )
