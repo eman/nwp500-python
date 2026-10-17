@@ -26,6 +26,12 @@ Entry points
 
 .. autofunction:: nwp500.sim.readiness
 
+.. autofunction:: nwp500.sim.time_to_ready
+
+.. autofunction:: nwp500.sim.next_recovery
+
+.. autofunction:: nwp500.sim.element_mode
+
 .. autofunction:: nwp500.sim.default_params
 
 .. autofunction:: nwp500.sim.full_tank_book
@@ -92,6 +98,21 @@ Results
 .. autoclass:: nwp500.sim.Deliverable
    :members:
 
+.. autoclass:: nwp500.sim.Readiness
+   :members:
+
+.. autoclass:: nwp500.sim.BathReady
+   :members:
+
+.. autoclass:: nwp500.sim.ModeReady
+   :members:
+
+.. autoclass:: nwp500.sim.ShowersReady
+   :members:
+
+.. autoclass:: nwp500.sim.ElementModeResult
+   :members:
+
 
 Parameters
 ==========
@@ -112,7 +133,10 @@ Hot water and the heat book
 .. automodule:: nwp500.sim.delivery
    :members: deliverable, booked_deliverable, delivery_temp_f,
       zone_delivery_f, delivery_along, depletion, draw_windows,
-      EXAMPLE_EVIDENCE, with_example_evidence
+      draw_domain_judgement, EXAMPLE_EVIDENCE, with_example_evidence
+
+.. automodule:: nwp500.sim.ready
+   :members: Recovery, TankNow, showers_ready_for, whole_showers
 
 .. automodule:: nwp500.sim.book
    :members: Booked, BookedHeatLedger, full_tank_book, full_tank,

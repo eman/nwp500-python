@@ -232,6 +232,21 @@ Entry points
    "How much hot water is left?": deliverable gallons now, and what the
    answer rests on.
 
+``time_to_ready(scenario, params, bath_gal=..., book=...)``
+   "When can I run a bath?": ready now or not, the margin, the time to
+   ready and its energy in each heating mode, and the showers the tank
+   is ready for. The heat pump's time follows the recovery the heater
+   runs next (``next_recovery``): from its own trigger on the coast to
+   it, with the TOU cap judged where the recovery ends.
+
+``element_mode(state, settings, params, mode=..., at=...)``
+   One recovery in an element mode, from the element model.
+
+``standby`` with ``settings`` also says when the heater would start
+itself on the coast and why; every walk with draws says when a draw
+would fall outside the range the draw terms were fitted over
+(``draw_out_of_domain``).
+
 A ``RecoveryModel`` can replace each heat-pump recovery's duration with
 a learned one, and a ``HeatLedger`` can track booked heat from a flow
 meter; both are protocols in ``sim.extensions``. With neither, the
@@ -245,7 +260,14 @@ Measured on one NWP500-65:
 
 - a heat-pump recovery's duration, from physics alone: mean absolute
   error about 28 min (18 %); about 13 min for a deficit under 15 degF,
-  and about 45 min past 35 degF;
+  and about 45 min past 35 degF. Physics alone runs short on long
+  recoveries: cold starts come out about 55 min short, and past about
+  180 min it under-predicts; under about 60 min it is the better
+  estimate. The source this was ported from serves a recovery model
+  trained on its heater's record on top of the physics, and has no
+  physics-only mode for readiness's time to ready; the library serves
+  physics alone, through ``RecoveryModel`` for a caller with a model of
+  their own;
 - recorded compressor starts reproduced: 35 of 47;
 - daily energy: 10.8 % high;
 - the heat book against the tank's re-anchors, fitted February-June and

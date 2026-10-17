@@ -474,6 +474,19 @@ NWP500-65's installation; measure your own where you can.
      - The transient dip during a draw that is not running out: a
        window is cold only if the delivery falls further below the line,
        or stays below it longer. The NWP500's upper probe's.
+   * - ``probe_resolution_f``
+     - 1.0 degF
+     - A probe error this size either way that would flip "the bath is
+       ready" puts ``bath_ready_within_probe_resolution`` in
+       ``time_to_ready``'s reasons.
+   * - ``bath_gal``
+     - 28.7 gal
+     - The bath ``time_to_ready`` judges when none is given: the larger
+       of two hot-only fills to one household's usual bath level, read
+       on a meter (22.4 and 28.7 gal). The level is a choice; set yours.
+   * - ``shower_gal``
+     - 12.0 gal
+     - A shower, when none is given. Assumed, not measured.
    * - ``evidence``
      - none
      - Draws from your own record: ``(upper_f, lower_f, gallons)``, the
@@ -494,6 +507,19 @@ element and standby heat, the empty point, how the upper zone mixes
 down through a draw and where the lower probe reads the cold front.
 Its ``delivery_intercept_f`` and ``delivery_slope`` are the mixing
 valve's line, as ``draw``'s: set them together.
+
+
+The draw range
+==============
+
+``params.draw.domain_upper_f`` (122.2-147.9 degF) and
+``domain_volume_gal`` (1.0-41.6 gal) are the range the draw terms were
+fitted over: the upper zone before a draw, across 508 episodes, and a
+draw's own volume. The delivery line was measured only over 123.8-139.5
+degF, so the top of the band already extrapolates it. When a walk would
+draw outside either (its largest draw, at any instant of its path),
+``reasons`` says ``draw_out_of_domain`` and ``draw_out_of_domain_at`` is
+the first instant from which it stays out. ``None`` skips a range.
 
 
 Parameters: ``HeaterParams``
@@ -558,8 +584,11 @@ Errors
 
 ``ValueError`` (or pydantic's ``ValidationError``)
    An input out of range, an unknown field, a naive instant, an
-   unknown zone, a write outside the span, a draw window that does not
-   end after it starts, an unknown ``volume_code``, parameters missing
+   unknown zone, a write outside the span, a write or a written
+   reservation whose setpoint is outside the range the simulation runs
+   (104.9-149.9 degF; the device's own limits are its
+   ``DeviceFeature``'s), a draw window that does not end after it
+   starts, an element mode that runs no element, an unknown ``volume_code``, parameters missing
    ``stratification_gap_tau_h``, or ``with_example_evidence`` at a
    line other than 105 degF.
 ``nwp500.sim.engine.SimulationError``

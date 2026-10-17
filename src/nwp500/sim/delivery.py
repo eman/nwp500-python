@@ -87,7 +87,12 @@ from nwp500.sim.book import (
 )
 from nwp500.sim.book import delivery_f as tank_delivery_f
 from nwp500.sim.engine import Draw, HeatingInterval, PathPoint, Simulation
-from nwp500.sim.params import BookParams, EvidenceDraw, ReadinessParams
+from nwp500.sim.params import (
+    BookParams,
+    DrawParams,
+    EvidenceDraw,
+    ReadinessParams,
+)
 from nwp500.sim.units import WATER_BTU_PER_GAL_F
 
 
@@ -668,3 +673,26 @@ def draw_windows(
             )
         )
     return out
+
+
+def draw_domain_judgement(
+    draw: DrawParams,
+    walk: Sequence[tuple[datetime, float]],
+    volume_gal: float,
+) -> tuple[bool, datetime | None]:
+    """The draw-range judgement over a projection's instants: whether a
+    draw of ``volume_gal`` (the largest the projection draws) would lie
+    outside the range the draw terms were fitted over at any instant of
+    ``walk`` (``(at, upper_f)``), and the bound: the first instant from
+    which every later one is out of range too, so a draw anywhere from
+    it to the end is extrapolated. None when the walk ends in range: a
+    start above the band that decays into it is out at the start, and
+    naming the start would end a phase at zero length though its draws,
+    later, are in range."""
+    out = [draw.out_of_domain(up, volume_gal) for _, up in walk]
+    bound: datetime | None = None
+    for (at, _), is_out in zip(reversed(walk), reversed(out), strict=True):
+        if not is_out:
+            break
+        bound = at
+    return any(out), bound

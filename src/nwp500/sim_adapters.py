@@ -109,6 +109,18 @@ def _volume_to_sim(value: float) -> float:
     return value / _L_PER_GAL if _metric() else value
 
 
+def to_sim_temperature(value: float) -> float:
+    """A temperature in the preferred unit, in the simulator's (°F): for
+    any input the builders below do not take."""
+    return _to_sim(value)
+
+
+def to_sim_volume(value: float) -> float:
+    """A volume in the preferred unit, in the simulator's (US gallons):
+    ``time_to_ready``'s ``bath_gal`` and ``shower_gal``, say."""
+    return _volume_to_sim(value)
+
+
 def temperature(value_f: float) -> float:
     """A temperature from the simulator (a ``*_f`` field) in the
     preferred unit."""

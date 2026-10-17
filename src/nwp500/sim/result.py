@@ -22,6 +22,7 @@ from nwp500.sim.engine import (
     energy_by_slot,
     energy_by_source,
 )
+from nwp500.sim.physics.element import ModePlan
 from nwp500.sim.tank_physics import Point
 
 
@@ -48,6 +49,11 @@ class SimulationResult:
     #: The heat book at each element of ``points``, when the walk had
     #: one (``sim.book``).
     booked: BookedPath | None = field(default=None, repr=False)
+    #: With ``draw_out_of_domain`` in ``reasons``: the first instant from
+    #: which the largest draw would be outside the draw terms' fitted
+    #: range to the end (``DrawParams.domain_upper_f``); None when the
+    #: walk ends in range.
+    draw_out_of_domain_at: datetime | None = None
 
     @property
     def points(self) -> list[PathPoint]:
@@ -132,7 +138,36 @@ class RecoveryResult:
 
 @dataclass(frozen=True)
 class Trace:
-    """The tank coasting, with no heating: standby loss and draws."""
+    """The tank coasting, with no heating: standby loss and draws, and,
+    given the settings, when the heater would start itself."""
 
     points: tuple[Point, ...]
     defaults_used: tuple[str, ...]
+    #: When the heater's own trigger fires on the coast, and which; None
+    #: when it does not before the end, or without settings.
+    starts_at: datetime | None = None
+    trigger: str | None = None
+    #: The lower trigger was held (the upper zone at the setpoint, or a
+    #: TOU window), which moved or dropped the start.
+    start_held: bool = False
+    #: The lower zone at the end less ``hp_lower_on``, °F: how far above
+    #: its start threshold the coast leaves it; None without settings.
+    lower_margin_f: float | None = None
+    reasons: tuple[str, ...] = ()
+    #: As ``SimulationResult.draw_out_of_domain_at``.
+    draw_out_of_domain_at: datetime | None = None
+
+
+@dataclass(frozen=True)
+class ElementModeResult:
+    """A recovery projected in an element mode from an instant
+    (``physics.element.mode_plan``), and whether a mode write can take
+    then."""
+
+    starts_at: datetime
+    plan: ModePlan
+    #: False while heating is disabled (Vacation, Power Off) or a TOU
+    #: window is in force, when a mode write may not take effect.
+    reachable: bool
+    #: Why not, when not.
+    unreachable_reason: str | None = None

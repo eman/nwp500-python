@@ -251,6 +251,39 @@ class DrawParams:
     #: ungated charge (``lower_gate_f = 0.0``, parameters from before
     #: the lower-zone law).
     ungated_observability: float = field(metadata=_p(FITTED, "1"))
+    #: The range the draw terms were fitted over: the upper zone before
+    #: a draw, °F (508 episodes spanning 122.2-147.9; the delivery line
+    #: was measured only over 123.8-139.5, so the top of the band
+    #: already extrapolates it), and a draw's own volume, gallons. A
+    #: walk with a draw outside either says ``draw_out_of_domain``.
+    #: None skips that range.
+    domain_upper_f: tuple[float, float] | None = field(
+        default=(122.2, 147.9), metadata=_p(MEASURED, "°F")
+    )
+    domain_volume_gal: tuple[float, float] | None = field(
+        default=(1.0, 41.6), metadata=_p(MEASURED, "gal")
+    )
+
+    def __post_init__(self) -> None:
+        # A document carries the ranges as lists.
+        for name in ("domain_upper_f", "domain_volume_gal"):
+            v = getattr(self, name)
+            if v is not None:
+                low, high = v
+                object.__setattr__(self, name, (float(low), float(high)))
+
+    def out_of_domain(self, upper_f: float, volume_gal: float) -> bool:
+        """Whether a draw of ``volume_gal`` (its own volume, never a
+        rate times a mean) from an upper zone at ``upper_f`` lies
+        outside the range the draw terms were fitted over; both bounds
+        are inclusive."""
+        for value, bounds in (
+            (upper_f, self.domain_upper_f),
+            (volume_gal, self.domain_volume_gal),
+        ):
+            if bounds is not None and not bounds[0] <= value <= bounds[1]:
+                return True
+        return False
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -697,6 +730,19 @@ class ReadinessParams:
     #: about 3 min during a draw).
     dip_f: float = field(default=3.4, metadata=_p(MEASURED, "°F"))
     dip_min: float = field(default=3.0, metadata=_p(MEASURED, "min"))
+    #: How far a probe reading can be off and still describe the same
+    #: tank: the element's own decisions sit 1.4 °F from the probe's. A
+    #: bath answer that a probe error this size would flip says
+    #: ``bath_ready_within_probe_resolution``.
+    probe_resolution_f: float = field(default=1.0, metadata=_p(MEASURED, "°F"))
+    #: The bath readiness is judged against, delivered gallons: the
+    #: larger of two hot-only fills to one household's usual bath level,
+    #: read on a meter (22.4 and 28.7 gal). The level is a household's
+    #: choice; set your own.
+    bath_gal: float = field(default=28.7, metadata=_p(MEASURED, "gal"))
+    #: A shower, delivered gallons, when the caller has no forecast of
+    #: its own. Assumed, not measured.
+    shower_gal: float = field(default=12.0, metadata=_p(DEFAULT, "gal"))
     #: Draws that show how much a tank in a given state delivers before
     #: the upper probe crosses ``line_f``: the readiness answer without a
     #: heat book. Each is ``(upper_f, lower_f, gallons)``, reduced to its

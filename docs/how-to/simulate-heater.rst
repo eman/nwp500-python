@@ -318,6 +318,30 @@ draws. Use it for "how cold will it be by morning?":
    print(f"{last.at.astimezone(local):%H:%M}: "
          f"upper {last.upper:.1f}{unit}, lower {last.lower:.1f}{unit}")
 
+Pass the settings, and the TOU schedule if there is one, and it also
+says when the heater would start itself on that coast, and why:
+
+.. code-block:: python
+
+   trace = sim.standby(
+       sa.heater_state(status),
+       sa.environment(status),
+       sim.Loads(),
+       params,
+       start=scenario.start,
+       until=scenario.start + timedelta(hours=10),
+       settings=sa.settings(status),
+       schedules=scenario.schedules,
+       tz=scenario.tz,
+   )
+   print(trace.starts_at, trace.trigger, trace.start_held, trace.lower_margin_f)
+
+``trigger`` is ``lower`` (the lower zone reached ``hp_lower_on``),
+``upper_at_tou_open`` or ``lower_at_tou_close``; ``start_held`` says a
+TOU window or a hot upper zone held the lower trigger back.
+``lower_margin_f`` is how far above ``hp_lower_on`` the coast leaves the
+lower zone.
+
 
 Ask how much hot water is left
 ==============================
@@ -351,6 +375,69 @@ for cold water hiding under the lower probe) or 0. Give it more:
 The gallons count the water in the pipe to your fixture
 (``ReadinessParams.delivered_lag_gal``). The default is one bath's at
 one installation; set your own.
+
+
+Ask when a bath will be ready
+=============================
+
+``time_to_ready`` answers for a scenario's start: whether the tank can
+run a bath now, and if not how long until it can, in the heat pump and
+in each element mode, with the electricity to get there; and how many
+showers it is ready for.
+
+.. code-block:: python
+
+   r = sim.time_to_ready(
+       scenario,
+       params,
+       bath_gal=sa.to_sim_volume(40.0),  # your bath, in your unit
+       book=book,                        # if you have one
+   )
+   print(r.bath.ready, r.bath.margin_gal, r.bath.ready_in_minutes)
+   for m in r.bath.by_mode:
+       print(f"{m.mode:<12} {m.ready_in_minutes} min, {m.energy_kwh} kWh"
+             f"{'' if m.reachable_now else ' (not reachable now)'}")
+   print(r.showers.ready_for_whole, "showers;", r.reasons)
+
+The heat pump's time follows the recovery the heater runs next
+(``r.recovery``): from now if the compressor runs, else from its own
+trigger on the coast to it, under the scenario's draws, with the TOU
+cap applied where the recovery ends. An element mode is not reachable
+inside a TOU window, nor anything while heating is disabled. The bath
+defaults to ``ReadinessParams.bath_gal`` (28.7 gal, one household's),
+the shower to 12 gal; ``defaults_used`` says when they were used.
+
+The recovery is the core's physics alone. It runs short on long
+recoveries (:doc:`/explanation/simulator`), so a long time to ready is
+an underestimate.
+
+
+Try an element mode
+===================
+
+``element_mode`` projects one recovery in Energy Saver (3), High
+Demand (4) or Electric (2): how fast the upper zone comes up, the
+element's running time and energy, and the tank when you switch back.
+
+.. code-block:: python
+
+   e = sim.element_mode(
+       sa.heater_state(status),
+       sa.settings(status),
+       params,
+       mode=4,                      # High Demand
+       at=scenario.start,
+       schedules=scenario.schedules,
+       tz=scenario.tz,
+       switch_back_after_minutes=30,
+   )
+   print(e.reachable, e.unreachable_reason)
+   print(e.plan.upper_setpoint_minutes, e.plan.element_kwh)
+
+``reachable`` is False inside a TOU window, where a mode write may not
+take, and while heating is disabled. To see the whole day with the
+mode in force, simulate a mode write instead (`Evaluate a change before
+sending it`_).
 
 
 Judge a shower or a bath

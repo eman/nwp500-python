@@ -18,16 +18,30 @@ from zoneinfo import ZoneInfo
 
 import pandas as pd
 
-from nwp500.sim.book import Booked, BookedHeatLedger
+from nwp500.sim.book import (
+    Booked,
+    BookedHeatLedger,
+    hp_btu_per_h,
+    standby_btu,
+)
 from nwp500.sim.decay import AmbientSampler
 from nwp500.sim.delivery import (
     Deliverable,
+    _state_before,  # pyright: ignore[reportPrivateUsage]
     booked_deliverable,
     deliverable,
     delivery_along,
+    draw_domain_judgement,
     draw_windows,
 )
-from nwp500.sim.engine import Entry, Heater, RawWrite
+from nwp500.sim.engine import (
+    HEATER_SETPOINT_MAX_F,
+    HEATER_SETPOINT_MIN_F,
+    Entry,
+    Heater,
+    RawWrite,
+    SimulationError,
+)
 from nwp500.sim.engine import simulate as walk
 from nwp500.sim.extensions import HeatLedger, RecoveryModel
 from nwp500.sim.inputs import (
@@ -44,14 +58,32 @@ from nwp500.sim.inputs import (
     Settings,
 )
 from nwp500.sim.params import HeaterParams
-from nwp500.sim.physics.element import HeaterMode
-from nwp500.sim.result import RecoveryResult, SimulationResult, Trace
+from nwp500.sim.physics.element import (
+    DEVICE_MODE,
+    ElementMode,
+    HeaterMode,
+    mode_plan,
+)
+from nwp500.sim.ready import (
+    Readiness,
+    Recovery,
+    TankNow,
+    assess,
+    typed,
+)
+from nwp500.sim.result import (
+    ElementModeResult,
+    RecoveryResult,
+    SimulationResult,
+    Trace,
+)
 from nwp500.sim.schedules import (
     half_c_to_f,
     reservation_firings,
     tou_windows,
 )
 from nwp500.sim.tank_physics import TankPhysics
+from nwp500.sim.tou_triggers import heater_start, in_window
 
 #: The engine's name for each mode it models.
 ENGINE_MODE: Mapping[int, HeaterMode] = MappingProxyType(
@@ -71,6 +103,12 @@ AMBIENT_AFTER = timedelta(hours=12)
 
 #: How far ``recovery`` looks for a heating interval.
 RECOVERY_HORIZON = timedelta(hours=24)
+
+#: How far ahead ``time_to_ready`` looks for the heater's own trigger;
+#: beyond it the heat pump's time is None (``heating_not_triggered``).
+TRIGGER_HORIZON = timedelta(hours=24)
+#: Room for a recovery after its start: past the integrator's 30 h bound.
+_RECOVERY_ROOM = timedelta(hours=31)
 
 
 def _ambient_frame(
@@ -175,6 +213,32 @@ def _entries(
     return out
 
 
+def _check_setpoints(scenario: Scenario) -> None:
+    """Refuse a write or a written reservation whose setpoint is outside
+    the range the simulation can run (``HEATER_SETPOINT_MIN_F`` to
+    ``_MAX_F``); the device's own limits are its feature's."""
+    asked = [
+        (f"write at {w.at.isoformat()}", w.setpoint_f)
+        for w in scenario.commands.writes
+        if w.setpoint_f is not None
+    ]
+    asked += [
+        (f"reservation {i}", half_c_to_f(e.setpoint_half_c))
+        for i, e in enumerate(scenario.commands.reservations or ())
+    ]
+    for what, f in asked:
+        if (
+            not HEATER_SETPOINT_MIN_F - 1e-6
+            <= f
+            <= HEATER_SETPOINT_MAX_F + 1e-6
+        ):
+            raise ValueError(
+                f"{what}: setpoint {f:.1f} °F is outside the range the "
+                f"simulation runs, {HEATER_SETPOINT_MIN_F}-"
+                f"{HEATER_SETPOINT_MAX_F} °F"
+            )
+
+
 def _raw_writes(scenario: Scenario, reasons: list[str]) -> list[RawWrite]:
     out: list[RawWrite] = []
     for w in scenario.commands.writes:
@@ -216,6 +280,7 @@ def simulate(
     Raises ``engine.SimulationError`` when the walk cannot be completed.
     """
     s = scenario
+    _check_setpoints(s)
     tz = ZoneInfo(s.tz)
     reasons: list[str] = []
     defaults: list[str] = []
@@ -294,6 +359,15 @@ def simulate(
     delivery = delivery_along(
         sim.points, draws, walked, params.readiness, params.book
     )
+    out_of_domain_at: datetime | None = None
+    if draws:
+        any_out, out_of_domain_at = draw_domain_judgement(
+            params.draw,
+            [(p.at, p.upper_f) for p in sim.points],
+            max(g for _, g in draws),
+        )
+        if any_out:
+            reasons.append("draw_out_of_domain")
     return SimulationResult(
         start=s.start,
         until=s.until,
@@ -317,6 +391,7 @@ def simulate(
             )
         ),
         booked=walked,
+        draw_out_of_domain_at=out_of_domain_at,
     )
 
 
@@ -419,9 +494,19 @@ def standby(
     start: datetime,
     until: datetime,
     history: History | None = None,
+    settings: Settings | None = None,
+    schedules: Schedules | None = None,
+    tz: str = "UTC",
 ) -> Trace:
     """The tank coasting from ``start`` to ``until`` with no heating:
-    jacket loss and the draws in ``loads``."""
+    jacket loss and the draws in ``loads``.
+
+    With ``settings``, also when the heater would start itself on that
+    coast (``tou_triggers.heater_start``: the lower zone reaching
+    ``hp_lower_on``, or the upper zone far short at a TOU window's
+    opening, with the lower trigger held as the heater holds it), and
+    how far above ``hp_lower_on`` the coast leaves the lower zone.
+    ``schedules`` brings the TOU windows, their local times in ``tz``."""
     if until <= start:
         raise ValueError("until must be after start")
     history = history if history is not None else History()
@@ -437,12 +522,305 @@ def standby(
         model=None,
         defaults=defaults,
     )
+    draws = [(d.at, d.gallons) for d in loads.draws if start <= d.at < until]
     coast = physics.coast(
         start,
         state.upper_f,
         state.lower_f,
         until,
-        [(d.at, d.gallons) for d in loads.draws if start <= d.at < until],
+        draws,
         heated_at=history.heated_at,
     )
-    return Trace(points=tuple(coast.points), defaults_used=tuple(defaults))
+    reasons: list[str] = []
+    out_of_domain_at: datetime | None = None
+    if draws:
+        any_out, out_of_domain_at = draw_domain_judgement(
+            params.draw,
+            [(start, state.upper_f)]
+            + [(p.at, p.upper_f) for p in coast.points],
+            max(g for _, g in draws),
+        )
+        if any_out:
+            reasons.append("draw_out_of_domain")
+    starts_at = trigger = None
+    held = False
+    margin: float | None = None
+    if settings is not None and settings.hp_lower_on_f is not None:
+        last = coast.points[-1]
+        margin = last.lower_f - settings.hp_lower_on_f
+        mode, disabled = _engine_mode(settings.mode)
+        windows = (
+            tou_windows(schedules.tou_periods, ZoneInfo(tz), start, until)
+            if schedules is not None and schedules.tou_enabled
+            else ()
+        )
+        if not disabled:
+            starts_at, trigger, held = heater_start(
+                [(p.at, p.upper_f, p.lower_f) for p in coast.points],
+                settings.hp_lower_on_f,
+                coast.impulses,
+                windows=windows,
+                setpoint_f=settings.setpoint_f,
+                mode=mode,
+            )
+    return Trace(
+        points=tuple(coast.points),
+        defaults_used=tuple(defaults),
+        starts_at=starts_at,
+        trigger=trigger,
+        start_held=held,
+        lower_margin_f=margin,
+        reasons=tuple(reasons),
+        draw_out_of_domain_at=out_of_domain_at,
+    )
+
+
+def element_mode(
+    state: HeaterState,
+    settings: Settings,
+    params: HeaterParams,
+    *,
+    mode: int,
+    at: datetime,
+    schedules: Schedules | None = None,
+    tz: str = "UTC",
+    ready_upper_f: float | None = None,
+    hp_lower_minutes: float | None = None,
+    switch_back_after_minutes: float | None = None,
+    slot_minutes: float = 10.0,
+) -> ElementModeResult:
+    """A recovery in an element mode from ``at``: "what if I switch to
+    Energy Saver, High Demand or Electric?", how fast, at what energy,
+    and the tank when the mode is switched back
+    (``physics.element.mode_plan``). ``mode`` is a ``DhwOperationSetting``
+    value, 2, 3 or 4.
+
+    ``ready_upper_f`` is an upper-zone temperature that counts as ready;
+    ``hp_lower_minutes``, in High Demand and Energy Saver, the
+    heat pump's minutes for the lower zone (``recovery`` gives them);
+    ``switch_back_after_minutes`` ends the stint early. ``reachable``
+    says whether a mode write can take at ``at``: not while heating is
+    disabled, nor inside a TOU window (``schedules``, in ``tz``)."""
+    named = ENGINE_MODE.get(mode)
+    if named is None or named == "heat_pump":
+        raise ValueError(
+            f"mode {mode} runs no element: 2 Electric, 3 Energy Saver or "
+            "4 High Demand"
+        )
+    device: ElementMode = DEVICE_MODE[named]  # type: ignore[assignment]
+    plan = mode_plan(
+        device,
+        state.upper_f,
+        state.lower_f,
+        settings.setpoint_f,
+        ready_upper_f=ready_upper_f,
+        hp_lower_minutes=hp_lower_minutes,
+        switch_back_after_minutes=switch_back_after_minutes,
+        slot_minutes=slot_minutes,
+        params=params.element,
+    )
+    _, disabled = _engine_mode(settings.mode)
+    reason: str | None = None
+    if disabled:
+        reason = "heating_disabled"
+    elif (
+        schedules is not None
+        and schedules.tou_enabled
+        and in_window(
+            at,
+            tou_windows(
+                schedules.tou_periods,
+                ZoneInfo(tz),
+                at,
+                at + timedelta(minutes=1),
+            ),
+        )
+    ):
+        reason = "tou_window_in_force"
+    return ElementModeResult(
+        starts_at=at,
+        plan=plan,
+        reachable=reason is None,
+        unreachable_reason=reason,
+    )
+
+
+def _ambient_at(environment: Environment, at: datetime) -> float:
+    """The air at the heater at ``at``, °F, from ``environment``."""
+    a = environment.ambient_f
+    if not isinstance(a, tuple):
+        return float(a)
+    sampler = AmbientSampler(
+        pd.DataFrame(
+            {"ambient_f": [v for _, v in a]},
+            index=pd.DatetimeIndex([t for t, _ in a]),
+        )
+    )
+    return sampler.at(at)
+
+
+def next_recovery(scenario: Scenario, params: HeaterParams) -> Recovery:
+    """The heat-pump recovery the heater runs next, as ``time_to_ready``
+    scores it: from now if the compressor runs; else the tank coasts,
+    under the scenario's draws, to the heater's own first compressor
+    start within ``TRIGGER_HORIZON`` (``idle`` without one), and the
+    recovery runs from the tank there, draw-free, in Heat Pump, with
+    the TOU cap judged where it ends. ``not_scheduled`` while heating
+    is disabled; ``unavailable`` when the walk cannot be completed.
+
+    The coast's loss, in the book's frame, is standby to the air now and
+    the draws before the start; the recovery's heat into the book is the
+    book's compressor term by the air now."""
+    s = scenario
+    _, disabled = _engine_mode(s.settings.mode)
+    if disabled:
+        return Recovery("not_scheduled")
+    now = s.start
+    air = _ambient_at(s.environment, now)
+    bp = params.book
+    start, upper, lower = now, s.state.upper_f, s.state.lower_f
+    coast_btu = coast_gal = 0.0
+    try:
+        if not s.state.compressor_running:
+            coast = simulate(
+                s.model_copy(update={"horizon": TRIGGER_HORIZON}), params
+            )
+            first = next(
+                (h for h in coast.heating if h.source == "compressor"), None
+            )
+            if first is None:
+                return Recovery("idle")
+            start = first.start.at
+            state = _state_before(coast.points, start)
+            if state is None:
+                return Recovery("unavailable")
+            upper, lower = state
+            hours = (start - now).total_seconds() / 3600.0
+            coast_btu = standby_btu(
+                hours, s.state.upper_f, s.state.lower_f, air, bp
+            )
+            coast_gal = sum(
+                d.gallons for d in s.loads.draws if now <= d.at < start
+            )
+        heat = simulate(
+            s.model_copy(
+                update={
+                    "start": start,
+                    "horizon": _RECOVERY_ROOM,
+                    "state": HeaterState(
+                        upper_f=upper, lower_f=lower, compressor_running=True
+                    ),
+                    "settings": s.settings.model_copy(
+                        update={"mode": HEAT_PUMP}
+                    ),
+                    "history": History(),
+                    "loads": Loads(),
+                    "commands": s.commands.model_copy(update={"writes": ()}),
+                }
+            ),
+            params,
+        )
+    except SimulationError:
+        return Recovery("unavailable")
+    if not heat.heating:
+        return Recovery("unavailable")
+    h = heat.heating[0]
+    points = [p for p in heat.points if p.at <= h.end]
+    return Recovery(
+        "ok",
+        [(p.at, p.upper_f, p.lower_f) for p in points],
+        tou_capped=h.capped,
+        input_wh=[p.input_wh or 0.0 for p in points],
+        start_minute=(start - now).total_seconds() / 60.0,
+        coast_btu=coast_btu,
+        coast_draw_gal=coast_gal,
+        hp_btu_per_h=hp_btu_per_h(air, bp),
+    )
+
+
+def time_to_ready(
+    scenario: Scenario,
+    params: HeaterParams,
+    *,
+    book: Booked | None = None,
+    bath_gal: float | None = None,
+    shower_gal: float | None = None,
+    drawing: bool = False,
+) -> Readiness:
+    """Hot water at ``scenario.start`` and ahead: deliverable gallons
+    now, whether the tank can run a bath of ``bath_gal`` and when it
+    can, in the heat pump and in each element mode, with the energy to
+    get there, and how many showers of ``shower_gal`` it is ready for
+    (``sim.ready``).
+
+    ``book`` is the tank's booked heat now, as for ``simulate``;
+    without it the answer is the full-tank floor's or the evidence's.
+    ``bath_gal`` and ``shower_gal`` default to
+    ``ReadinessParams.bath_gal`` and ``shower_gal``, named in
+    ``defaults_used``. ``drawing``: water is being drawn now. The
+    recovery is the next one (``next_recovery``), served by physics
+    alone: with no trained recovery model it is the core's physics
+    recovery, which runs short on long recoveries (the simulator
+    explanation's *Accuracy*).
+    """
+    s = scenario
+    p = params.readiness
+    defaults: list[str] = []
+    if bath_gal is None:
+        bath_gal = p.bath_gal
+        defaults.append(f"bath_gal={bath_gal}")
+    if shower_gal is None:
+        shower_gal = p.shower_gal
+        defaults.append(f"shower_gal={shower_gal}")
+    tz = ZoneInfo(s.tz)
+    windows = (
+        tou_windows(s.schedules.tou_periods, tz, s.start, s.start)
+        if (
+            s.commands.tou_enabled
+            if s.commands.tou_enabled is not None
+            else s.schedules.tou_enabled
+        )
+        else ()
+    )
+    tank = TankNow(
+        upper_f=s.state.upper_f,
+        lower_f=s.state.lower_f,
+        drawing=drawing,
+        element_on=s.state.element_running,
+        tou_window=in_window(s.start, windows),
+        ambient_f=_ambient_at(s.environment, s.start),
+        compressor_on=s.state.compressor_running,
+    )
+    now_gal = (
+        booked_deliverable(book, tank.upper_f, tank.lower_f, p, params.book)
+        if book is not None
+        else deliverable(
+            tank.upper_f,
+            tank.lower_f,
+            p,
+            ep=params.book,
+            setpoint_f=s.settings.setpoint_f,
+            heating=tank.heating,
+        )
+    )
+    # The recovery is only needed when the bath is not ready now.
+    recovery = Recovery("unavailable")
+    if now_gal.gal < round(bath_gal, 1):
+        recovery = next_recovery(s, params)
+    answer = assess(
+        s.start,
+        tank,
+        recovery,
+        bath_gal=round(bath_gal, 1),
+        bath_source="configured",
+        shower_gal=shower_gal,
+        shower_source="default",
+        valid_s=0.0,
+        setpoint_f=s.settings.setpoint_f,
+        booked=book,
+        inlet_measured=True,
+        params=p,
+        element_params=params.element,
+        book_params=params.book,
+    )
+    return typed(answer, s.start, recovery, defaults)

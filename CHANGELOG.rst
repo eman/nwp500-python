@@ -62,6 +62,18 @@ Added
   - ``HeaterParams`` gains ``readiness`` (the line, the outlet lag, the
     fall rate, the dip tolerance, evidence) and ``book`` parts, with one
     installation's measured defaults and their provenance.
+  - Time to ready: ``nwp500.sim.time_to_ready(scenario, params)`` says
+    whether the tank can run a bath, when it can in the heat pump and
+    in each element mode with the energy to get there, and how many
+    showers it is ready for, along the recovery the heater runs next
+    (``next_recovery``) (``sim.ready``).
+  - ``standby(..., settings=)`` says when the heater would start itself
+    on the coast and why; ``element_mode`` projects a recovery in an
+    element mode.
+  - A walk with draws outside the range the draw terms were fitted over
+    says ``draw_out_of_domain`` (``DrawParams.domain_upper_f``,
+    ``domain_volume_gal``); a write or a written reservation outside the
+    setpoint range the simulation runs is refused.
 
 Changed
 -------
