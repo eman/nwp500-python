@@ -491,6 +491,9 @@ back as ``continuousKey`` (omitted on the first page).
 
 **Authentication Required:** Yes
 
+Installer accounts only: an owner account receives
+``404 COMMON_NOT_AUTHORIZED`` (checked live).
+
 **Request Body:**
 
 .. code-block:: json
@@ -597,6 +600,12 @@ request object and appends it to the URL as a query string.
 
 **Authentication Required:** Yes
 
+.. note::
+
+   Not accepted for the NWP500: the cloud answers ``400 COMMON_BAD_REQUEST``
+   for device type 52 whatever the parameters (checked live). The app only
+   calls this for the IoT-module hydro unit (device type 8).
+
 **Query Parameters:**
 
 * ``macAddress`` (string, required)
@@ -630,6 +639,12 @@ POST /device/preferences/format
 Store the display preferences.
 
 **Request Body:**
+
+.. note::
+
+   Not accepted for the NWP500: the cloud answers ``400 COMMON_BAD_REQUEST``
+   for device type 52 whatever the parameters (checked live). The app only
+   calls this for the IoT-module hydro unit (device type 8).
 
 .. code-block:: json
 
@@ -678,6 +693,10 @@ The manufacture ID the TOU service holds for a device. The app shows
 "N/A" when it is ``"000000000000000"``.
 
 **Authentication Required:** Yes
+
+``controllerId`` is the controller serial number from the device feature
+(the same value ``GET /device/tou`` takes); any other value returns
+``500 INTERNAL_SERVER_ERROR``.
 
 **Query Parameters:** ``userId``, ``macAddress``, ``additionalValue``,
 ``controllerId`` (all strings, required)

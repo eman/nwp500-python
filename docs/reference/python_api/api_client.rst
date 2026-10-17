@@ -229,6 +229,9 @@ get_error_history()
    To fetch the next page pass the last entry's ``error_occurred_time`` as
    ``continuous_key``.
 
+   Installer accounts only: an owner account receives
+   ``404 COMMON_NOT_AUTHORIZED`` (checked live).
+
    :return: List of DeviceErrorHistoryEntry objects
    :rtype: list[DeviceErrorHistoryEntry]
 
@@ -380,6 +383,10 @@ get_manufacture_id()
    :return: Manufacture ID
    :rtype: str
 
+   ``controller_id`` is ``DeviceFeature.controller_serial_number``, the
+   same value ``get_tou_info()`` takes; any other value returns
+   ``500 INTERNAL_SERVER_ERROR``.
+
 Push Notification Methods
 --------------------------
 
@@ -484,6 +491,12 @@ get_display_preferences()
    :return: List of DisplayPreferences objects
    :rtype: list[DisplayPreferences]
 
+   .. note::
+
+      Not accepted for the NWP500 (``400 COMMON_BAD_REQUEST`` for device
+      type 52, checked live); the app only uses it for the IoT-module hydro
+      unit (device type 8).
+
 set_display_preferences()
 ^^^^^^^^^^^^^^^^^^^^^^^^^
 
@@ -495,6 +508,11 @@ set_display_preferences()
 
    :return: True on success
    :rtype: bool
+
+   .. note::
+
+      Not accepted for the NWP500 (``400 COMMON_BAD_REQUEST`` for device
+      type 52, checked live).
 
 Account and App Methods
 -----------------------

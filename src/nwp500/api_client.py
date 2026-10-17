@@ -395,7 +395,7 @@ class NavienAPIClient:
         Args:
             mac_address: Device MAC address
             additional_value: Additional device identifier
-            controller_id: Controller ID
+            controller_id: Controller serial number from the device feature
             user_type: User type (default: "O")
 
         Returns:
@@ -644,6 +644,11 @@ class NavienAPIClient:
 
         Sends ``GET /device/tou/manufacture-id``. The NaviLink app treats
         ``"000000000000000"`` as "not available".
+
+        ``controller_id`` is the controller serial number reported in the
+        device feature (``DeviceFeature.controller_serial_number``), the
+        same value ``get_tou_info()`` takes. Any other value makes the cloud
+        answer ``500 INTERNAL_SERVER_ERROR``.
 
         Args:
             mac_address: Device MAC address
@@ -963,6 +968,11 @@ class NavienAPIClient:
         Sends ``GET /device/preferences/format``. The cloud answers with
         a list; the NaviLink app uses the first entry.
 
+        Not accepted for the NWP500: the cloud answers
+        ``400 COMMON_BAD_REQUEST`` for device type 52 whatever the
+        parameters (checked live). The app only calls it for the
+        IoT-module hydro unit (device type 8).
+
         Args:
             mac_address: Device MAC address
             additional_value: Additional device identifier
@@ -1010,6 +1020,11 @@ class NavienAPIClient:
         Sends ``POST /device/preferences/format``. The NaviLink app writes
         ``"F"``/``"C"`` for temperature and ``"P"`` (psi)/``"M"`` (metric)
         for pressure.
+
+        Not accepted for the NWP500: the cloud answers
+        ``400 COMMON_BAD_REQUEST`` for device type 52 whatever the
+        parameters (checked live). The app only calls it for the
+        IoT-module hydro unit (device type 8).
 
         Args:
             mac_address: Device MAC address
@@ -1119,9 +1134,10 @@ class NavienAPIClient:
 
         Sends ``POST /device/error/list``. The NaviLink app calls this from
         its installer-only error list and sends the signed-in user's ID as
-        ``installerId``; whether the backend accepts an owner's ID there is
-        untested. Pass ``continuous_key`` (the last entry's
-        ``error_occurred_time``) to fetch the next page.
+        ``installerId``. An owner account is rejected with
+        ``404 COMMON_NOT_AUTHORIZED`` (checked live), so this only works
+        when signed in as the device's installer. Pass ``continuous_key``
+        (the last entry's ``error_occurred_time``) to fetch the next page.
 
         Args:
             mac_address: Device MAC address

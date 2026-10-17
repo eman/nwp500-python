@@ -14,12 +14,13 @@ Added
   ``get_filter_history()`` / ``get_cip_history()`` (the cloud's maintenance
   log; dates are sent ``YYYY-M-D`` without zero padding, as the app does),
   ``get_display_preferences()`` / ``set_display_preferences()``
-  (``/device/preferences/format``), ``get_user_profile()`` (``/user/info``),
+  (``/device/preferences/format``; the cloud rejects it for the NWP500,
+  the app only uses it for the IoT-module hydro unit), ``get_user_profile()`` (``/user/info``),
   ``get_firmware_detail()`` (``/firmware/info``; ``run_time`` is the
   estimated update time in minutes), ``delete_tou()``
   (``DELETE /device/tou``), ``get_manufacture_id()``,
-  ``get_error_history()`` (``/device/error/list``; the app sends the
-  installer ID, an owner ID is untested), ``update_device_info()``
+  ``get_error_history()`` (``/device/error/list``; installer accounts
+  only, an owner account gets ``COMMON_NOT_AUTHORIZED``), ``update_device_info()``
   (``/device/change-info``), ``list_simple_devices()`` and
   ``get_app_version()`` (unauthenticated; a 403 maintenance notice is
   returned as ``server_check_text``). New models: ``PushSettings``,
