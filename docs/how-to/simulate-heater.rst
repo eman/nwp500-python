@@ -808,6 +808,36 @@ the heat hidden from a full tank's probes (a maximum over the record,
 not a fit) stay installation values.
 
 
+Fit the elements
+================
+
+The element terms (``ElementParams``) come from the heater's raw
+change rows (``sim_adapters.record``). They are never read from a
+one-minute grid, which can move an edge by as much as the lag being
+measured:
+
+.. code-block:: python
+
+   from nwp500.sim import calibration as cal
+
+   record = sim_adapters.record(readings)
+   stints = cal.element_stints(record, draws=meter_draws,
+                               circulation=circulation_runs, tz=tz)
+   lag = cal.fit_element_lag(stints)          # upper_dead_time_min, upper_f_per_min
+   off = cal.element_off_points(record, tz=tz)  # where each element stops
+   power = cal.element_power(record, off)       # W per metered stint
+   rates = cal.fit_element_rates(cal.element_grid(record, draws=meter_draws))
+
+``meter_draws`` and ``circulation_runs`` are ``(start, end)`` spans
+from your meter and your circulation. A stint is left out when a draw
+or a circulation run falls within 5 minutes before it, up to its
+first rise. Without a meter no stint counts as draw-free, and the lag
+fit is left with the stints that ended cleanly. The upper probe's lag
+and rate are fitted as one line, run minutes = lag + rise / rate. The
+rate taken end to end on the grid (``fit_element_rates``) comes out
+lower because the lag is inside it. ``day_ci`` is the 90 % interval
+the measurements report, bootstrapped over local days.
+
 Replay a day the heater lived
 =============================
 

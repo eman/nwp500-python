@@ -142,6 +142,13 @@ Added
     ``HeaterState.energy_to_setpoint_wh`` carry what they need, filled
     by the adapters; ``recovery`` says ``not_scheduled`` in Vacation and
     Power Off.
+  - The element terms from a heater's raw record (``sim.calibration``):
+    the upper probe's lag and rate as one line from clean stints
+    (``element_stints``, ``fit_element_lag``), where each element
+    switches off and what it draws per metered stint
+    (``element_off_points``, ``element_power``), and the zones' rates
+    and element power on the one-minute grid (``element_grid``,
+    ``fit_element_rates``), each with day-bootstrap intervals.
   - Draws from a weekly draw forecast (``sim.draw_forecast``): an issue
     checked whole, its expected draws (rate x per-draw mean, the
     per-draw volume kept), the heater's draw windows, and the worst case

@@ -46,6 +46,7 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta
 from typing import Any, cast
+from zoneinfo import ZoneInfo
 
 import numpy as np
 import pandas as pd
@@ -57,6 +58,7 @@ from nwp500.sim.circulation import RUN_GAP
 from nwp500.sim.circulation import displaced_gal as circulation_displaced_gal
 from nwp500.sim.decay import draw_step
 from nwp500.sim.heating_trajectory import path_cop
+from nwp500.sim.inputs import ELECTRIC, ENERGY_SAVER, HIGH_DEMAND
 from nwp500.sim.params import (
     UA_MIN_DELTA_T_F,
     UA_REF_DELTA_T_F,
@@ -68,6 +70,7 @@ from nwp500.sim.params import (
 )
 from nwp500.sim.physics.compressor import PhysicsPath, predict_physics_detailed
 from nwp500.sim.physics.draw import delivery_temp_f, draw_energy_btu
+from nwp500.sim.record import Record
 from nwp500.sim.units import BTU_PER_WH, WATER_BTU_PER_GAL_F
 
 #: An interval: its start and its end.
@@ -2806,3 +2809,549 @@ def flow_lookup(
         return best[1]
 
     return flow_at
+
+
+# ── the elements: their lag, rate, off point and power ──────────────
+#
+# As the element terms were measured, from raw rows (the change rows of
+# ``sim.record.Record``), never a one-minute grid, which moves an edge
+# by up to a minute and is the size of what is measured.
+
+#: The probe's step and how long a stint must run, °F and s.
+PROBE_STEP_F = 0.18
+MIN_STINT_S = 60.0
+#: No draw or circulation from this long before a stint to its rise.
+STINT_DRAW_GUARD = timedelta(minutes=5)
+#: A probe read more than this before an edge was still moving, s.
+FRESH_READ_S = 6.0
+#: A stint metered for power runs at least this long, s.
+MIN_POWER_STINT_S = 90.0
+_ELEMENT_FIT_MODES = (ENERGY_SAVER, HIGH_DEMAND, ELECTRIC)
+
+
+def _stints(
+    rows: Sequence[tuple[datetime, float]],
+) -> list[tuple[datetime, datetime]]:
+    """An on/off signal's runs ``(on, off)``, from its change rows."""
+    out: list[tuple[datetime, datetime]] = []
+    on: datetime | None = None
+    prev: bool | None = None
+    for t, v in rows:
+        cur = v > 0
+        if cur == prev:
+            continue
+        prev = cur
+        if cur and on is None:
+            on = t
+        elif not cur and on is not None:
+            out.append((on, t))
+            on = None
+    return out
+
+
+def _asof_row(
+    rows: Sequence[tuple[datetime, float]], t: datetime
+) -> float | None:
+    times = [x for x, _ in rows]
+    i = bisect.bisect_right(times, t) - 1
+    return rows[i][1] if i >= 0 else None
+
+
+def _changes(rows: Sequence[tuple[datetime, float]]) -> list[datetime]:
+    """When a signal changed (its rows after the first that differ)."""
+    return [
+        rows[i][0] for i in range(1, len(rows)) if rows[i][1] != rows[i - 1][1]
+    ]
+
+
+def _local_day(t: datetime, tz: str) -> str:
+    return f"{t.astimezone(ZoneInfo(tz)):%Y-%m-%d}"
+
+
+def element_stints(
+    record: Record,
+    *,
+    draws: Sequence[tuple[datetime, datetime]] | None = None,
+    circulation: Sequence[tuple[datetime, datetime]] = (),
+    tz: str = "UTC",
+    held_out_from: datetime | None = None,
+) -> pd.DataFrame:
+    """Every upper-element stint, read from raw rows: the probe as of
+    its on-edge, the first rise at least a probe step above it that the
+    probe holds to the off-edge (``lat_s``), less the probe's reporting
+    cadence while rising (``dead_min``), its run, rise and coast after
+    the off-edge, and what screens it:
+
+    - ``start_clean``: a run of ``MIN_STINT_S`` or more, a held rise,
+      and neither the mode nor the setpoint changed before the rise;
+    - ``end_clean``: the mode it started in at the off-edge, no mode
+      change to 30 s past it, and a probe read within ``FRESH_READ_S``
+      of it;
+    - ``draw``: a meter's draw (``draws``) or a circulation run within
+      ``STINT_DRAW_GUARD`` before it to its rise; ``draw_known`` from
+      the meter's first draw (no ``draws``: never known).
+
+    ``day`` is the local day in ``tz``; ``held_out`` from
+    ``held_out_from``."""
+    up = list(record.upper_f)
+    ut = [t for t, _ in up]
+    uv = np.array([v for _, v in up])
+    mode_ch, sp_ch = _changes(record.mode), _changes(record.setpoint_f)
+    known_from = min((a for a, _ in draws), default=None) if draws else None
+    rows: list[dict[str, Any]] = []
+    for on, off in _stints(record.upper_element):
+        i0 = bisect.bisect_right(ut, on) - 1
+        if i0 < 0:
+            continue
+        u_on = float(uv[i0])
+        horizon = max(off, on + timedelta(minutes=3))
+        lo, hi = bisect.bisect_right(ut, on), bisect.bisect_right(ut, horizon)
+        t_in, v_in = ut[lo:hi], uv[lo:hi]
+        first = held = None
+        for k in range(len(t_in)):
+            if v_in[k] < u_on + PROBE_STEP_F - 0.01:
+                continue
+            first = first if first is not None else t_in[k]
+            later = [
+                v for t, v in zip(t_in[k:], v_in[k:], strict=True) if t <= off
+            ]
+            if all(v > u_on + 0.01 for v in later):
+                held = t_in[k]
+                break
+        until = held if held is not None else horizon
+        rising = [t for t in ut if until <= t <= off]
+        gaps = (
+            np.diff([t.timestamp() for t in rising])
+            if len(rising) > 1
+            else np.array([])
+        )
+        gaps = gaps[gaps > 1.0]
+        guard = on - STINT_DRAW_GUARD
+        circulated = any(a < until and b > guard for a, b in circulation)
+        drawn = draws is not None and any(
+            a < until and b > guard for a, b in draws
+        )
+        i_off = bisect.bisect_right(ut, off) - 1
+        after = [v for t, v in up if off < t <= off + timedelta(minutes=5)]
+        mode_on = _asof_row(record.mode, on)
+        rows.append(
+            {
+                "on": on,
+                "off": off,
+                "mode": None if mode_on is None else int(mode_on),
+                "run_min": (off - on).total_seconds() / 60,
+                "u_on": u_on,
+                "lat_s": (held - on).total_seconds()
+                if held is not None
+                else np.nan,
+                "cad_s": float(np.median(gaps)) if len(gaps) >= 2 else np.nan,
+                "start_clean": bool(
+                    (off - on).total_seconds() >= MIN_STINT_S
+                    and held is not None
+                    and not any(on < c <= until for c in mode_ch)
+                    and not any(on < c <= until for c in sp_ch)
+                ),
+                "draw_known": known_from is not None and on >= known_from,
+                "draw": bool(circulated or drawn),
+                "end_clean": bool(
+                    mode_on == _asof_row(record.mode, off)
+                    and not any(
+                        on < c < off + timedelta(seconds=30) for c in mode_ch
+                    )
+                    and (off - ut[i_off]).total_seconds() <= FRESH_READ_S
+                ),
+                "u_off": float(uv[i_off]),
+                "peak": max(after) if after else np.nan,
+            }
+        )
+    r = pd.DataFrame(rows)
+    if r.empty:
+        return r
+    month = [f"{t:%Y-%m}" for t in r["on"]]
+    r["cad_s"] = r["cad_s"].fillna(
+        r.groupby(month)["cad_s"].transform("median")
+    )
+    r["dead_min"] = (r["lat_s"] - r["cad_s"]) / 60
+    r["rise"] = r["u_off"] - r["u_on"]
+    r["coast"] = r["peak"] - r["u_off"]
+    r["day"] = [_local_day(t, tz) for t in r["on"]]
+    r["held_out"] = [
+        held_out_from is not None and t >= held_out_from for t in r["on"]
+    ]
+    return r
+
+
+def _theil_sen(x: np.ndarray, y: np.ndarray) -> tuple[float, float]:
+    """Intercept and slope; pairs closer than 0.5 °F in rise left out,
+    their slopes being mostly the probe's step."""
+    i, j = np.triu_indices(len(x), 1)
+    far = np.abs(x[j] - x[i]) > 0.5
+    slope = float(np.median((y[j] - y[i])[far] / (x[j] - x[i])[far]))
+    return float(np.median(y - slope * x)), slope
+
+
+@dataclass(frozen=True)
+class ElementLagFit:
+    """``ElementParams.upper_dead_time_min`` and ``upper_f_per_min``:
+    run minutes = lag + rise / rate, a Theil-Sen line over the stints
+    that started and ended clean with no draw recorded, and 90 % day
+    bootstrap intervals."""
+
+    upper_dead_time_min: float
+    upper_f_per_min: float
+    lag_interval: tuple[float, float]
+    rate_interval: tuple[float, float]
+    n: int
+
+
+def fit_element_lag(
+    stints: pd.DataFrame, *, n_boot: int = 2000, seed: int = 252
+) -> ElementLagFit | None:
+    """The upper element's lag and rate from ``element_stints``: those
+    clean at both ends, rising, without a recorded draw, the held-out
+    ones left out. None with fewer than four distinct rises."""
+    if stints.empty:
+        return None
+    ran = stints[
+        stints["start_clean"]
+        & stints["end_clean"]
+        & (stints["rise"] > 0)
+        & ~(stints["draw_known"] & stints["draw"])
+    ]
+    q = ran[~ran["held_out"]]
+    x = np.asarray(q["rise"], dtype=float)
+    y = np.asarray(q["run_min"], dtype=float)
+    if len(np.unique(x)) < 4:
+        return None
+    lag, slope = _theil_sen(x, y)
+    rng = np.random.default_rng(seed)
+    days = np.asarray(q["day"])
+    uniq = np.unique(days)
+    lags, rates = [], []
+    for _ in range(n_boot):
+        pick = np.concatenate(
+            [np.flatnonzero(days == k) for k in rng.choice(uniq, len(uniq))]
+        )
+        if len(np.unique(x[pick])) < 4:
+            continue
+        a, b = _theil_sen(x[pick], y[pick])
+        lags.append(a)
+        rates.append(1 / b)
+    return ElementLagFit(
+        upper_dead_time_min=lag,
+        upper_f_per_min=1 / slope,
+        lag_interval=tuple(np.quantile(lags, [0.05, 0.95])),  # type: ignore[arg-type]
+        rate_interval=tuple(np.quantile(rates, [0.05, 0.95])),  # type: ignore[arg-type]
+        n=len(q),
+    )
+
+
+def element_off_points(record: Record, *, tz: str = "UTC") -> pd.DataFrame:
+    """Every element off-edge: the zone's probe and the setpoint as of
+    it (``deficit``, setpoint less probe), how old the probe's read was
+    (``age_s``), the coast (its peak in 5 min less the setpoint), and
+    ``clean``: no mode change from 90 s before to 30 s after the edge,
+    the mode it started in, and no setpoint change during it."""
+    mode_ch, sp_ch = _changes(record.mode), _changes(record.setpoint_f)
+    rows: list[dict[str, Any]] = []
+    for which, flags, probe in (
+        ("upper", record.upper_element, list(record.upper_f)),
+        ("lower", record.lower_element, list(record.lower_f)),
+    ):
+        for on, off in _stints(flags):
+            pre = [(t, v) for t, v in probe if t <= off]
+            after = [
+                v for t, v in probe if off < t <= off + timedelta(minutes=5)
+            ]
+            sp = _asof_row(record.setpoint_f, off)
+            mode_on = _asof_row(record.mode, on)
+            mode_off = _asof_row(record.mode, off)
+            near_off = any(
+                off - timedelta(seconds=90) < c < off + timedelta(seconds=30)
+                for c in mode_ch
+            )
+            sp_moved = any(on < c < off + timedelta(seconds=30) for c in sp_ch)
+            rows.append(
+                {
+                    "which": which,
+                    "on": on,
+                    "off": off,
+                    "mode": None if mode_on is None else int(mode_on),
+                    "setpoint": np.nan if sp is None else sp,
+                    "probe_off": pre[-1][1] if pre else np.nan,
+                    "age_s": (off - pre[-1][0]).total_seconds()
+                    if pre
+                    else np.nan,
+                    "peak5": max(after) if after else np.nan,
+                    "clean": bool(
+                        mode_on == mode_off and not near_off and not sp_moved
+                    ),
+                }
+            )
+    r = pd.DataFrame(rows)
+    if r.empty:
+        return r
+    r["deficit"] = r["setpoint"] - r["probe_off"]
+    r["coast"] = r["peak5"] - r["setpoint"]
+    r["day"] = [_local_day(t, tz) for t in r["on"]]
+    return r
+
+
+def day_ci(
+    x: np.ndarray, days: np.ndarray, *, n_boot: int = 4000, seed: int = 252
+) -> tuple[float, float, float]:
+    """The median and its 90 % interval over a bootstrap of local
+    days (stints on one day share a tank and often a test)."""
+    rng = np.random.default_rng(seed)
+    u = np.unique(days)
+    b = [
+        np.median(np.concatenate([x[days == k] for k in rng.choice(u, len(u))]))
+        for _ in range(n_boot)
+    ]
+    return (
+        float(np.median(x)),
+        float(np.quantile(b, 0.05)),
+        float(np.quantile(b, 0.95)),
+    )
+
+
+def element_power(record: Record, off_points: pd.DataFrame) -> pd.DataFrame:
+    """Each metered stint's mean power (``off_points``' stints of
+    ``MIN_POWER_STINT_S`` or more with the other element off), the power
+    held between reports and back-filled to the on-edge from its first
+    inside, on a 1 s clock: ``net_w`` less the compressor's share where
+    it co-ran (its median report with the compressor on and no element
+    in the 10 min after), ``alone_w`` over the compressor-off seconds
+    (a minute of them or more)."""
+    w = list(record.power_w)
+    rows: list[dict[str, Any]] = []
+    for _, s in off_points.iterrows():
+        on, off = cast(datetime, s["on"]), cast(datetime, s["off"])
+        if (off - on).total_seconds() < MIN_POWER_STINT_S:
+            continue
+        first = math.ceil(on.timestamp())
+        clock = [
+            datetime.fromtimestamp(x, tz=on.tzinfo)
+            for x in range(first, math.floor(off.timestamp()) + 1)
+        ]
+        other = (
+            record.lower_element
+            if s["which"] == "upper"
+            else record.upper_element
+        )
+        if any((v := _asof_row(other, t)) is not None and v > 0 for t in clock):
+            continue
+        inside = [(t, v) for t, v in w if on <= t < off]
+        if len(inside) < 2:
+            continue
+        pw = np.array(
+            [
+                inside[0][1] if t < inside[0][0] else (_asof_row(w, t) or 0.0)
+                for t in clock
+            ]
+        )
+        comp = np.array(
+            [
+                (v := _asof_row(record.compressor, t)) is not None and v > 0
+                for t in clock
+            ]
+        )
+        after = [(t, v) for t, v in w if off < t <= off + timedelta(minutes=10)]
+        quiet = [
+            v
+            for t, v in after
+            if ((c := _asof_row(record.compressor, t)) is not None and c > 0)
+            and not (
+                (
+                    (u := _asof_row(record.upper_element, t)) is not None
+                    and u > 0
+                )
+                or (
+                    (lo := _asof_row(record.lower_element, t)) is not None
+                    and lo > 0
+                )
+            )
+        ]
+        comp_w = float(np.median(quiet)) if quiet else float("nan")
+        if comp.any() and not comp_w < 1000:
+            continue
+        net = pw - np.where(comp, comp_w if comp.any() else 0.0, 0.0)
+        alone = pw[~comp]
+        rows.append(
+            {
+                "on": on,
+                "which": s["which"],
+                "net_w": float(net.mean()),
+                "alone_w": float(alone.mean()) if len(alone) >= 60 else np.nan,
+                "day": s["day"],
+            }
+        )
+    return pd.DataFrame(rows)
+
+
+def element_grid(
+    record: Record, *, draws: Sequence[tuple[datetime, datetime]] | None = None
+) -> pd.DataFrame:
+    """The record held on a one-minute grid, from the later of the
+    power's and the mode's first rows to the power's last: which element
+    is on (``which``, the upper first), the compressor, the probes, the
+    setpoint, the mode, the power within 5 min, and ``draw`` (a minute a
+    metered draw touched, its start floored and its end ceiled) with
+    ``draw_known`` from the first draw's minute (no ``draws``: never)."""
+    if not record.power_w or not record.mode:
+        return pd.DataFrame()
+    first = max(record.power_w[0][0], record.mode[0][0])
+    t0 = math.ceil(first.timestamp() / 60) * 60
+    t1 = math.floor(record.power_w[-1][0].timestamp() / 60) * 60
+    tz = first.tzinfo
+    grid = [datetime.fromtimestamp(x, tz=tz) for x in range(t0, t1 + 1, 60)]
+
+    def held(rows: Sequence[tuple[datetime, float]]) -> list[float]:
+        return [
+            np.nan if (v := _asof_row(rows, t)) is None else v for t in grid
+        ]
+
+    power_times = [t for t, _ in record.power_w]
+
+    def power_at(t: datetime) -> float:
+        i = bisect.bisect_right(power_times, t) - 1
+        if i < 0 or t - power_times[i] > timedelta(minutes=5):
+            return np.nan
+        return record.power_w[i][1]
+
+    g = pd.DataFrame(
+        {
+            "mode": held(record.mode),
+            "C": [v > 0 for v in held(record.compressor)],
+            "U": [v > 0 for v in held(record.upper_element)],
+            "L": [v > 0 for v in held(record.lower_element)],
+            "upper": held(record.upper_f),
+            "lower": held(record.lower_f),
+            "setpoint": held(record.setpoint_f),
+            "W": [power_at(t) for t in grid],
+        },
+        index=pd.DatetimeIndex(grid),
+    )
+    drawn = np.zeros(len(grid), dtype=bool)
+    stamps = np.array([t.timestamp() for t in grid])
+    for a, b in draws or ():
+        lo = math.floor(a.timestamp() / 60) * 60
+        hi = math.ceil(b.timestamp() / 60) * 60
+        drawn |= (stamps >= lo) & (stamps <= hi)
+    g["draw"] = drawn
+    g["draw_known"] = (
+        stamps >= math.floor(min(a for a, _ in draws).timestamp() / 60) * 60
+        if draws
+        else np.zeros(len(grid), dtype=bool)
+    )
+    g["which"] = np.where(g["U"], "upper", np.where(g["L"], "lower", "-"))
+    return g
+
+
+def element_runs(
+    grid: pd.DataFrame,
+    modes: tuple[int, ...] = _ELEMENT_FIT_MODES,
+) -> pd.DataFrame:
+    """One row per run of a single element on ``element_grid``: three
+    grid minutes or more in one of ``modes``, its zone's rise over its
+    **elapsed** minutes (n samples span n - 1), and ``draw`` (None
+    where draws were not yet known). Grouped on which element is on,
+    so an Electric sequence's upper then lower runs are two."""
+    which = grid["which"]
+    on = which != "-"
+    rid = (which != which.shift()).cumsum()
+    rows: list[dict[str, Any]] = []
+    for _, d in grid[on].groupby(rid[on]):
+        col = {k: list(d[k]) for k in d.columns}
+        mode = col["mode"][0]
+        if len(d) < 3 or mode not in modes:
+            continue
+        zone = "upper" if col["which"][0] == "upper" else "lower"
+        index = cast(pd.DatetimeIndex, d.index)
+        rows.append(
+            {
+                "start": index[0],
+                "mode": int(mode),
+                "which": col["which"][0],
+                "elapsed_min": (index[-1] - index[0]).total_seconds() / 60.0,
+                "rise": col[zone][-1] - col[zone][0],
+                "start_probe": col[zone][0],
+                "setpoint": col["setpoint"][0],
+                "draw": any(col["draw"]) if all(col["draw_known"]) else None,
+            }
+        )
+    r = pd.DataFrame(rows)
+    if r.empty:
+        return r
+    r["rate"] = r["rise"] / r["elapsed_min"]
+    r["deficit"] = r["setpoint"] - r["start_probe"]
+    return r
+
+
+@dataclass(frozen=True)
+class ElementRateFit:
+    """``ElementParams.element_w`` (the median power with an element and
+    no compressor on, in High Demand or Electric), ``upper_f_per_min``
+    and ``lower_f_per_min`` (each zone's median run rate, every mode
+    pooled, runs with a known draw left out), and their 90 % bootstrap
+    intervals. A rate is None without a run."""
+
+    element_w: float | None
+    upper_f_per_min: float | None
+    lower_f_per_min: float | None
+    element_w_interval: tuple[float, float] | None
+    upper_interval: tuple[float, float] | None
+    lower_interval: tuple[float, float] | None
+    runs: int
+
+
+def fit_element_rates(
+    grid: pd.DataFrame, *, n_boot: int = 2000, seed: int = 252
+) -> ElementRateFit:
+    """The element's power and the zones' rates from ``element_grid``
+    (see ``ElementRateFit``). The upper rate measured end to end on the
+    grid sits below ``fit_element_lag``'s, its lag counted in it."""
+    rng = np.random.default_rng(seed)
+
+    def ci(values: np.ndarray) -> tuple[float, tuple[float, float]]:
+        boots = [
+            np.median(rng.choice(values, size=len(values), replace=True))
+            for _ in range(n_boot)
+        ]
+        return float(np.median(values)), (
+            float(np.quantile(boots, 0.05)),
+            float(np.quantile(boots, 0.95)),
+        )
+
+    w = w_ci = None
+    if not grid.empty:
+        alone = grid.loc[
+            (grid["U"] | grid["L"])
+            & ~grid["C"]
+            & grid["mode"].isin([HIGH_DEMAND, ELECTRIC]),
+            "W",
+        ].dropna()
+        if len(alone):
+            w, w_ci = ci(np.asarray(alone, dtype=float))
+    r = element_runs(grid) if not grid.empty else pd.DataFrame()
+    out: dict[str, tuple[float, tuple[float, float]] | None] = {}
+    for which in ("upper", "lower"):
+        x = (
+            np.asarray(
+                r.loc[(r["draw"] != True) & (r["which"] == which), "rate"],  # noqa: E712
+                dtype=float,
+            )
+            if not r.empty
+            else np.array([])
+        )
+        out[which] = ci(x) if len(x) else None
+    up, lo = out["upper"], out["lower"]
+    return ElementRateFit(
+        element_w=w,
+        upper_f_per_min=None if up is None else up[0],
+        lower_f_per_min=None if lo is None else lo[0],
+        element_w_interval=w_ci,
+        upper_interval=None if up is None else up[1],
+        lower_interval=None if lo is None else lo[1],
+        runs=len(r),
+    )
