@@ -644,7 +644,7 @@ _SNAPSHOT_COLUMNS = (
 )
 
 #: Circulation runs closer than this in a cycle are one run, as the
-#: loop's displaced volume was fitted (``circulation.RUN_GAP``).
+#: circulation's displaced volume was fitted (``circulation.RUN_GAP``).
 _RUN_GAP = timedelta(minutes=10)
 
 
@@ -1123,7 +1123,7 @@ def metered_withdrawn(params: HeaterParams) -> Withdrawn:
     upper zone; each run through the circulation's displaced volume at
     the upper zone at its start, less the air, times
     ``DrawParams.ungated_observability`` (the probes' share of the
-    loop's heat). None when either record is missing, when draws
+    circulation's heat). None when either record is missing, when draws
     happened and the draw term is off, or when circulation ran and the
     installation has no circulation terms: an unknown withdrawal is not
     a zero one."""
