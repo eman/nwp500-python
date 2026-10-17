@@ -1005,7 +1005,8 @@ class AmbientSampler:
 
         # DatetimeIndex, not the bare Index the attribute is typed as —
         # subtracting a datetime from the latter has no defined result
-        # type.
+        # type. Indexing one returns the bare type again, hence the
+        # rewraps below.
         idx = pd.DatetimeIndex(series.index)
         values = series["ambient_f"].to_numpy(dtype=float)
 
@@ -1019,7 +1020,7 @@ class AmbientSampler:
         # through `searchsorted`.
         usable = np.isfinite(values) & ~pd.isna(idx)
         if not usable.all():
-            idx, values = idx[usable], values[usable]
+            idx, values = pd.DatetimeIndex(idx[usable]), values[usable]
             if len(idx) == 0:
                 return
 
@@ -1039,7 +1040,7 @@ class AmbientSampler:
             # Stable, so duplicate timestamps keep their input order
             # and the tie below resolves the same way twice.
             order = np.argsort(idx.to_numpy(), kind="stable")
-            idx, values = idx[order], values[order]
+            idx, values = pd.DatetimeIndex(idx[order]), values[order]
 
         # Seconds from the first sample, never raw integer timestamps.
         # `DatetimeIndex.asi8` is *resolution-dependent* — pandas 2

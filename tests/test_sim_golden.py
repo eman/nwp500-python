@@ -6,10 +6,16 @@ core's own physics (``TankPhysics`` on the parameters in
 model and no flowing draws, so every input is data in this file. What
 the engine returns is held as its outputs (the path, the heating
 intervals, the writes and mode writes as they landed, and the modes),
-every float to the bit, with a readable summary and a digest per field,
-so a moved answer names the fields that moved.
+every float rounded to ``PLACES`` decimals, with a readable summary and
+a digest per field, so a moved answer names the fields that moved.
 
-The comparison is exact, with no tolerance. ``NWP500_SIM_GOLDEN_REGEN=1``
+The rounding is not a tolerance for a changed answer. numpy picks its
+SIMD kernels by CPU, so the same wheel can differ in the last bit from
+one machine to the next, and over a walk of thousands of steps those
+bits reach the path. Six decimals of a degree or a watt-hour is far
+below anything the model resolves and far above that drift.
+
+The comparison of the rounded answer is exact. ``NWP500_SIM_GOLDEN_REGEN=1``
 rewrites the held answer of each case that runs: that is a decision to
 state in the pull request (which cases moved, by how much, and why the
 new answer is right), never a way to make a red test green.
@@ -52,6 +58,8 @@ T0 = datetime(2026, 10, 4, 19, 0, tzinfo=UTC)
 TOU = ((datetime(2026, 10, 4, 23, 0, tzinfo=UTC), T0 + timedelta(hours=9)),)
 #: The engine's outputs that are held.
 OUTPUTS = ("points", "heating", "writes", "mode_writes", "modes")
+#: Decimal places every held float is rounded to.
+PLACES = 6
 
 
 def at(h: float) -> datetime:
@@ -228,11 +236,23 @@ def _digest(value: Any) -> str:
     return hashlib.sha256(_canonical(value).encode()).hexdigest()
 
 
+def _rounded(value: Any) -> Any:
+    """``value`` with every float rounded to ``PLACES``, and ``-0.0``
+    held as ``0.0``."""
+    if isinstance(value, float):
+        return round(value, PLACES) + 0.0
+    if isinstance(value, dict):
+        return {k: _rounded(v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_rounded(v) for v in value]
+    return value
+
+
 def _outputs(simulation: Simulation) -> dict[str, Any]:
-    """``simulation``'s held outputs as JSON holds them, every float to
-    the bit."""
+    """``simulation``'s held outputs as JSON holds them, every float
+    rounded to ``PLACES``."""
     whole = dataclasses.asdict(simulation)
-    return {k: json.loads(_canonical(whole[k])) for k in OUTPUTS}
+    return {k: _rounded(json.loads(_canonical(whole[k]))) for k in OUTPUTS}
 
 
 def _summary(body: dict[str, Any]) -> dict[str, Any]:
