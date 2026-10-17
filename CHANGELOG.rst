@@ -5,6 +5,23 @@ Changelog
 Unreleased
 ==========
 
+Added
+-----
+- **An optional heater simulator, ``nwp500.sim``** (#150, first part). The
+  core of a physics simulation of the NWP500: an R-134a compressor model
+  coupled to a two-zone tank, standby loss, the heating elements, draws,
+  and the heater's own controller (start triggers, the TOU hold and
+  recovery cap, the restart lockout, reservation entries, setpoint and
+  mode writes), walked as events by ``nwp500.sim.engine.simulate()``. It
+  is a port of an engine checked against recorded data from one
+  NWP500-65, and returns the same answers to the last bit. Install it
+  with the ``sim`` extra (numpy, pandas, scipy). It performs no I/O,
+  reads no clock and holds no module state, and ``import nwp500`` does
+  not load it. An import-linter contract in ``tox -e lint`` keeps it
+  from importing the MQTT or REST clients, aiohttp, the AWS IoT SDK or
+  ``logging``. Scenario inputs, adapters from ``DeviceStatus`` and the
+  schedules, the result types and the docs follow in a later change.
+
 Changed
 -------
 - **Superheat is converted as a difference** (#153).
