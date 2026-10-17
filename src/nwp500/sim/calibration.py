@@ -21,6 +21,8 @@ Its columns, °F where a temperature:
   (``hp_lower_off_temp_setting``), what a recovery heats to;
 - ``excluded``: a sample no heat-pump recovery may span (a hybrid
   mode, an anti-legionella cycle, an error);
+- ``power_w``: what the heater draws (``current_inst_power``), each
+  report held until the next, for the power fits;
 - ``energy_to_setpoint_wh``: the heater's own deficit to its setpoint
   (``DeviceStatus.energy_to_setpoint``), to tell a recovery cut short
   from one that finished;
@@ -38,15 +40,17 @@ Each fit reports what it saw and what it left out
 parameters' values when it had the evidence to.
 """
 
-from collections.abc import Sequence
+import math
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta
-from typing import cast
+from typing import Any, cast
 
 import numpy as np
 import pandas as pd
 from scipy.optimize import OptimizeResult, minimize, minimize_scalar
 
+from nwp500.sim.heating_trajectory import path_cop
 from nwp500.sim.params import (
     UA_MIN_DELTA_T_F,
     UA_REF_DELTA_T_F,
@@ -54,7 +58,8 @@ from nwp500.sim.params import (
     HeaterParams,
     LossParams,
 )
-from nwp500.sim.physics.compressor import predict_physics_detailed
+from nwp500.sim.physics.compressor import PhysicsPath, predict_physics_detailed
+from nwp500.sim.units import BTU_PER_WH
 
 #: An interval: its start and its end.
 Interval = tuple[datetime, datetime]
@@ -603,49 +608,90 @@ def _snapshots(start: datetime, end: datetime) -> list[datetime]:
     return out
 
 
-def recoveries(
+#: Draws this long before a recovery leave its start reading short of
+#: their cold water: a cycle is draw-free only with none from this long
+#: before it to its end.
+DRAW_LEAD = timedelta(minutes=30)
+
+_SNAPSHOT_COLUMNS = (
+    "cycle",
+    "offset_minutes",
+    "start_time",
+    "end_time",
+    "duration_minutes",
+    "t_start_lower",
+    "t_start_upper",
+    "stratification_gap",
+    "delta_t_lower",
+    "t_amb_mean",
+    "h_amb_start",
+    "reached",
+    "metered_input_wh",
+    "t_lower_end",
+    "t_upper_end",
+    "draw_free",
+)
+
+
+def _energy_wh(
+    watts: np.ndarray, seconds: np.ndarray, start: datetime, end: datetime
+) -> float | None:
+    """A power series' step integral over ``[start, end]``, Wh, each
+    reading held until the next; with none in force at ``start``, the
+    first after it back-filled to it (the compressor's first report).
+    None with no reading, which is not zero energy."""
+    ok = np.isfinite(watts)
+    w, t = watts[ok], seconds[ok]
+    a, b = start.timestamp(), end.timestamp()
+    if b <= a or not len(w):
+        return None
+    before = t <= a
+    inside = (t > a) & (t < b)
+    if before.any():
+        first = float(w[before][-1])
+        times, values = t[inside], w[inside]
+    elif inside.any():
+        first = float(w[inside][0])
+        times, values = t[inside][1:], w[inside][1:]
+    else:
+        return None
+    edges = np.concatenate(([a], times, [b]))
+    levels = np.concatenate(([first], values))
+    return float(np.sum(levels * np.diff(edges)) / 3600.0)
+
+
+def snapshots(
     history: pd.DataFrame, *, air: str = "heater_air_f"
 ) -> pd.DataFrame:
-    """The history's heat-pump recoveries, as ``fit_compressor`` takes
-    them: each compressor run with no element, no hybrid mode, no
-    anti-legionella cycle and no error from ``PRE_RECOVERY_LOOKBACK``
-    before it to its end, a target above the lower probe at its start,
-    not cut short (``INTERRUPTED_WH``), and a plausible rate
-    (``MIN_MINUTES_PER_F`` to ``MAX_MINUTES_PER_F``, at most
-    ``MAX_RECOVERY_LABEL_MINUTES``).
+    """The history's heat-pump recoveries, each read from snapshots: its
+    start, then every ``SNAPSHOT_EVERY`` while ``SNAPSHOT_MIN_REMAINING``
+    of it remains. The fits take their rows from here.
 
-    A recovery is read from snapshots (``SNAPSHOT_EVERY``), each
-    screened as above, and the one with the coldest lower probe is its
-    row, its duration the time from there to the end: a draw that takes
-    the probe below where it started moves the row to after the draw.
-    Without a dip that is the start.
+    A recovery is each compressor run with no element, no hybrid mode,
+    no anti-legionella cycle and no error from ``PRE_RECOVERY_LOOKBACK``
+    before it to its end, and not cut short (``INTERRUPTED_WH``). A
+    snapshot is kept with a target above its lower probe, a plausible
+    rate (``MIN_MINUTES_PER_F`` to ``MAX_MINUTES_PER_F``, at most
+    ``MAX_RECOVERY_LABEL_MINUTES``) and the air somewhere in its cycle.
 
-    Each row: ``start_time`` (the snapshot's), ``end_time``,
-    ``duration_minutes`` (the compressor's run from the snapshot),
-    ``t_start_lower``, ``t_start_upper`` and ``stratification_gap`` at
-    the snapshot, ``delta_t_lower`` (the target in force at the start
-    less the lower probe), ``t_amb_mean`` (the mean of the ``air``
-    column from the snapshot to the end: the heater's own reading by
-    default, a sensor's with ``air="air_f"``), ``h_amb_start`` where the
-    history has humidity, and ``reached`` (the lower probe came within
-    ``REACHED_TOLERANCE_F`` of the target before the run ended).
-    Only reached recoveries teach a duration: the heater stops some
-    short by design, and those never reach the instant the fit models.
+    Each row reads the cycle's own samples, ``[start, end)``: the last
+    at or before the snapshot, else the cycle's first. Its columns:
+    ``cycle`` and ``offset_minutes``; ``start_time`` (the snapshot's),
+    ``end_time``, ``duration_minutes`` (the compressor's run from the
+    snapshot); ``t_start_lower``, ``t_start_upper`` and
+    ``stratification_gap`` at the snapshot; ``delta_t_lower`` (the target
+    in force at the start less the lower probe); ``t_amb_mean`` (the
+    ``air`` column's mean from the snapshot to the end, else its reading
+    at the snapshot: the heater's own by default, a sensor's with
+    ``air="air_f"``); ``h_amb_start`` (50 without humidity); ``reached``
+    (the lower probe came within ``REACHED_TOLERANCE_F`` of the target
+    before the run ended); ``metered_input_wh`` (``power_w`` integrated
+    from the snapshot to the end, None without it); ``t_lower_end``,
+    ``t_upper_end`` (the probes at the end); and ``draw_free`` (no water
+    in use from ``DRAW_LEAD`` before the start to the end).
     """
-    columns = [
-        "start_time",
-        "end_time",
-        "duration_minutes",
-        "t_start_lower",
-        "t_start_upper",
-        "stratification_gap",
-        "delta_t_lower",
-        "t_amb_mean",
-        "h_amb_start",
-        "reached",
-    ]
     if history.empty:
-        return pd.DataFrame(columns=columns)
+        return pd.DataFrame(columns=list(_SNAPSHOT_COLUMNS))
     when = _instants(history)
     index = pd.DatetimeIndex(history.index)
     seconds = np.array([t.timestamp() for t in when])
@@ -653,6 +699,7 @@ def recoveries(
     target_f, air_f = _floats(history, "target_f"), _floats(history, air)
     humidity_pct = _floats(history, "humidity_pct")
     energy_wh = _floats(history, "energy_to_setpoint_wh")
+    power_w = _floats(history, "power_w")
     on = history["compressor_on"].fillna(False).astype(bool).to_numpy()
     element = history["element_on"].fillna(False).astype(bool).to_numpy()
     excluded = (
@@ -660,8 +707,13 @@ def recoveries(
         if "excluded" in history.columns
         else np.zeros(len(history), dtype=bool)
     )
+    tier1 = [c for c in ("drawing", "circulating") if c in history.columns]
+    water = np.zeros(len(history), dtype=bool)
+    for column in tier1 or ["dhw_in_use"]:
+        if column in history.columns:
+            water |= history[column].fillna(False).astype(bool).to_numpy()
     rows: list[dict[str, object]] = []
-    for start, end in _on_intervals(when, on):
+    for n, (start, end) in enumerate(_on_intervals(when, on)):
         span = (index >= start - PRE_RECOVERY_LOOKBACK) & (index <= end)
         if element[span].any() or excluded[span].any():
             continue
@@ -675,13 +727,14 @@ def recoveries(
             continue
         inside = (index >= start) & (index <= end)
         reached = bool(np.any(lower_f[inside] >= target - REACHED_TOLERANCE_F))
-        # A snapshot reads the cycle's own samples, [start, end): the last
-        # at or before it, else the cycle's first.
         cycle = (index >= start) & (index < end)
         if not cycle.any():
             continue
         c_seconds, c_air = seconds[cycle], air_f[cycle]
-        best: dict[str, object] | None = None
+        lower_end = _asof(lower_f[cycle], c_seconds, end)
+        upper_end = _asof(upper_f[cycle], c_seconds, end)
+        lead = (index >= start - DRAW_LEAD) & (index <= end)
+        draw_free = not water[lead].any()
         for at in _snapshots(start, end):
             lower = _asof(lower_f[cycle], c_seconds, at)
             upper = _asof(upper_f[cycle], c_seconds, at)
@@ -695,9 +748,7 @@ def recoveries(
                 and minutes <= MAX_RECOVERY_LABEL_MINUTES
             ):
                 continue
-            # The air from the snapshot to the end, else at the snapshot;
-            # none in the whole cycle and the next coldest snapshot can do
-            # no better.
+            # The air from the snapshot to the end, else at the snapshot.
             tail = c_air[c_seconds >= at.timestamp()]
             tail = tail[np.isfinite(tail)]
             air_mean = (
@@ -707,27 +758,49 @@ def recoveries(
             )
             if air_mean is None:
                 continue
-            # The snapshot with the coldest lower probe, the earliest of
-            # equals: a draw that takes the probe below where it started
-            # moves the row to after it.
-            if best is not None and lower >= cast(float, best["t_start_lower"]):
-                continue
             humidity = _asof(humidity_pct[cycle], c_seconds, at)
-            best = {
-                "start_time": at,
-                "end_time": end,
-                "duration_minutes": minutes,
-                "t_start_lower": lower,
-                "t_start_upper": upper,
-                "stratification_gap": upper - lower,
-                "delta_t_lower": target - lower,
-                "t_amb_mean": air_mean,
-                "h_amb_start": 50.0 if humidity is None else humidity,
-                "reached": reached,
-            }
-        if best is not None:
-            rows.append(best)
-    return pd.DataFrame(rows, columns=columns)
+            rows.append(
+                {
+                    "cycle": n,
+                    "offset_minutes": (at - start).total_seconds() / 60.0,
+                    "start_time": at,
+                    "end_time": end,
+                    "duration_minutes": minutes,
+                    "t_start_lower": lower,
+                    "t_start_upper": upper,
+                    "stratification_gap": upper - lower,
+                    "delta_t_lower": target - lower,
+                    "t_amb_mean": air_mean,
+                    "h_amb_start": 50.0 if humidity is None else humidity,
+                    "reached": reached,
+                    "metered_input_wh": _energy_wh(
+                        power_w[cycle], c_seconds, at, end
+                    ),
+                    "t_lower_end": lower_end,
+                    "t_upper_end": upper_end,
+                    "draw_free": draw_free,
+                }
+            )
+    return pd.DataFrame(rows, columns=list(_SNAPSHOT_COLUMNS))
+
+
+def recoveries(
+    history: pd.DataFrame, *, air: str = "heater_air_f"
+) -> pd.DataFrame:
+    """One row per recovery, as ``fit_compressor`` takes them: of a
+    cycle's ``snapshots``, the one with the coldest lower probe (the
+    earliest of equals), timed from there. A draw that takes the probe
+    below where it started moves the row to after the draw; without a
+    dip it is the start. Only reached recoveries teach a duration: the
+    heater stops some short by design, and those never reach the
+    instant the fit models."""
+    rows = snapshots(history, air=air)
+    if rows.empty:
+        return rows
+    order = rows.sort_values(
+        ["cycle", "t_start_lower", "offset_minutes"], kind="stable"
+    )
+    return order.groupby("cycle", sort=True).head(1).reset_index(drop=True)
 
 
 def with_standby(params: HeaterParams, fit: StandbyFit) -> HeaterParams:
@@ -758,6 +831,333 @@ def with_compressor(params: HeaterParams, fit: CompressorFit) -> HeaterParams:
     )
 
 
+# ── power and COP, against the heater's own power readings ───────────
+
+#: Fewer cycles than this and neither power fit is made.
+MIN_POWER_EVENTS = 10
+#: Shorter cycles are the meter's resolution, Wh.
+MIN_COP_METERED_WH = 300.0
+#: The lift (tank mean less the air, °F) the COP's lift term is
+#: referred to, and the coefficients tried, per °F.
+COP_LIFT_REF_F = 62.0
+COP_LIFT_GRID = tuple(i * 0.0005 for i in range(61))
+
+
+def _starts(rows: pd.DataFrame) -> pd.DataFrame:
+    """Each cycle's first snapshot: the power fits read a cycle whole."""
+    if rows.empty:
+        return rows
+    first = rows.loc[rows["offset_minutes"] == 0.0]
+    return first.drop_duplicates(subset=["cycle"])
+
+
+def _records(frame: pd.DataFrame) -> list[dict[str, Any]]:
+    """A frame's rows as plain mappings."""
+    return cast(list[dict[str, Any]], frame.to_dict("records"))
+
+
+def path_to_end(
+    row: Mapping[str, Any], params: HeaterParams
+) -> PhysicsPath | None:
+    """The integrator's path over the lift a cycle made: to where its
+    lower probe got (``t_lower_end``), not its target, so a cycle cut
+    short is compared over the heating it did. None when nothing was
+    heated or the walk did not finish."""
+    start = float(row["t_start_lower"])
+    target = start + float(row["delta_t_lower"])
+    end = row.get("t_lower_end")
+    if end is not None and not pd.isna(end):
+        if float(end) <= start:
+            return None
+        target = min(target, float(end))
+    gap = row.get("stratification_gap")
+    result = predict_physics_detailed(
+        t_start_lower=start,
+        hp_lower_off=target,
+        t_amb_mean=float(row["t_amb_mean"]),
+        compressor_constant=params.compressor.compressor_constant,
+        evap_approach_f=params.compressor.evap_approach_f,
+        compressor=params.compressor,
+        loss=params.loss,
+        h_amb_start=float(row.get("h_amb_start", 50.0)),
+        ua_btu_hr_f=params.loss.ua_btu_hr_f,
+        ua_exponent=params.loss.ua_exponent,
+        ua_ref_delta_t=params.loss.ua_ref_delta_t_f,
+        stratification_gap=0.0 if gap is None else float(gap),
+        two_zone=params.compressor.two_zone,
+        record_path=True,
+    )
+    if not result.converged or result.path is None or result.minutes <= 0.0:
+        return None
+    return result.path
+
+
+@dataclass(frozen=True)
+class PowerFit:
+    """Input power and apparent COP against the heater's own readings.
+
+    ``power_scale``: metered energy over the integrator's mean power for
+    each cycle's real duration, a ratio of sums. ``cop_scale``,
+    ``startup_wh`` and ``cop_lift_coeff``: ``metered = startup + heat /
+    (scale x COP x exp(-coeff (lift - COP_LIFT_REF_F)))``, the heat what
+    the tank kept. None where too few cycles carried the figures.
+    """
+
+    power_scale: float | None
+    n_power: int
+    cop_scale: float | None
+    startup_wh: float | None
+    cop_lift_coeff: float | None
+    lead_share: float | None
+    n_cop: int
+
+
+def fit_power_scale(
+    rows: pd.DataFrame, params: HeaterParams
+) -> tuple[float | None, int]:
+    """``(metered / modelled, cycles)``: each cycle charged at the
+    integrator's own mean power for its real duration, so both sides
+    are energy over the same clock. ``(None, n)`` with fewer than
+    ``MIN_POWER_EVENTS``."""
+    metered_total = modelled_total = 0.0
+    n = 0
+    for row in _records(_starts(rows)):
+        raw = row["metered_input_wh"]
+        if raw is None or pd.isna(raw):
+            continue
+        metered = float(raw)
+        if not math.isfinite(metered) or metered <= 0.0:
+            continue
+        path = path_to_end(row, params)
+        real_minutes = float(row["duration_minutes"])
+        if path is None or not real_minutes > 0.0:
+            continue
+        physics_minutes = path.elapsed_s[-1] / 60.0
+        power_w = path.input_btu[-1] / BTU_PER_WH / (physics_minutes / 60)
+        modelled = power_w * real_minutes / 60
+        if not math.isfinite(modelled) or modelled <= 0.0:
+            continue
+        metered_total += metered
+        modelled_total += modelled
+        n += 1
+    if n < MIN_POWER_EVENTS or modelled_total <= 0.0:
+        return None, n
+    return metered_total / modelled_total, n
+
+
+def solve_cop_scale(
+    heat_wh: np.ndarray,
+    modelled_cop: np.ndarray,
+    metered_wh: np.ndarray,
+    lead_wh: np.ndarray | None = None,
+) -> tuple[float, float, float] | None:
+    """``(scale, startup_wh, lead_share)`` for ``metered = startup +
+    (heat + lead_share x lead) / (scale x COP)``, by least squares
+    weighted ``1 / metered``; ``startup`` at least 0, ``lead_share`` in
+    [0, 1]."""
+    h, c, e = (
+        np.asarray(v, dtype=float) for v in (heat_wh, modelled_cop, metered_wh)
+    )
+    x_lead = np.zeros_like(h) if lead_wh is None else np.asarray(lead_wh, float)
+    w = np.sqrt(1.0 / e)
+
+    def solve(
+        intercept: bool, share: float | None
+    ) -> tuple[float, float, float] | None:
+        # share None: fitted; a number: held there.
+        heat = h + (0.0 if share is None else share) * x_lead
+        cols = [heat / c]
+        if share is None:
+            cols.append(x_lead / c)
+        if intercept:
+            cols.insert(0, np.ones_like(h))
+        coef, *_ = np.linalg.lstsq(
+            np.column_stack(cols) * w[:, None], e * w, rcond=None
+        )
+        startup = float(coef[0]) if intercept else 0.0
+        inv = float(coef[1 if intercept else 0])
+        if not inv > 0.0:
+            return None
+        got = share if share is not None else float(coef[-1]) / inv
+        return 1.0 / inv, startup, got
+
+    fits_lead = bool(np.any(x_lead > 0.0))
+    for intercept in (True, False):
+        solved = solve(intercept, None if fits_lead else 0.0)
+        if solved is None:
+            return None
+        if fits_lead and not 0.0 <= solved[2] <= 1.0:
+            solved = solve(intercept, min(1.0, max(0.0, solved[2])))
+            if solved is None:
+                return None
+        if solved[1] >= 0.0:
+            return solved
+    return None
+
+
+def solve_cop_fit(
+    heat_wh: Sequence[float],
+    modelled_cop: Sequence[float],
+    metered_wh: Sequence[float],
+    lead_wh: Sequence[float] | None,
+    lift_f: Sequence[float],
+) -> tuple[float, float, float, float] | None:
+    """``(scale, startup_wh, lead_share, lift_coeff)``: ``solve_cop_scale``
+    at each ``COP_LIFT_GRID`` coefficient, the least weighted squared
+    error in the meter kept."""
+    c0 = np.asarray(modelled_cop, dtype=float)
+    lift = np.asarray(lift_f, dtype=float)
+    e = np.asarray(metered_wh, dtype=float)
+    h = np.asarray(heat_wh, dtype=float)
+    x_lead = np.zeros_like(h) if lead_wh is None else np.asarray(lead_wh, float)
+    best: tuple[float, tuple[float, float, float, float]] | None = None
+    for gamma in COP_LIFT_GRID:
+        c = c0 * np.exp(-gamma * (lift - COP_LIFT_REF_F))
+        solved = solve_cop_scale(h, c, e, x_lead)
+        if solved is None:
+            continue
+        a, startup, share = solved
+        pred = startup + (h + share * x_lead) / (a * c)
+        sse = float((((pred - e) ** 2) / e).sum())
+        if best is None or sse < best[0]:
+            best = (sse, (a, startup, share, gamma))
+    return None if best is None else best[1]
+
+
+#: The heat a cycle's draws and circulation took, Wh: None when it is
+#: not known, which rules the cycle out (an unknown withdrawal is not a
+#: zero one).
+Withdrawn = Callable[[Mapping[str, Any]], float | None]
+
+
+def draw_free_withdrawn(row: Mapping[str, Any]) -> float | None:
+    """Without a meter: nothing withdrawn from a cycle with no water in
+    use from ``DRAW_LEAD`` before it to its end, and unknown otherwise."""
+    return 0.0 if bool(row.get("draw_free")) else None
+
+
+def fit_cop_scale(
+    rows: pd.DataFrame,
+    params: HeaterParams,
+    *,
+    withdrawn: Withdrawn = draw_free_withdrawn,
+    lead: Withdrawn | None = None,
+) -> tuple[tuple[float, float, float, float] | None, int]:
+    """``((scale, startup_wh, lead_share, lift_coeff), cycles)`` for the
+    apparent COP, the heat a cycle stored (the full tank's mass times
+    the rise of the probes' mean) plus what ``withdrawn`` says draws
+    took during it, and ``lead`` those just before it, whose cold water
+    the start reading had not yet seen. ``(None, n)`` with fewer than
+    ``MIN_POWER_EVENTS``.
+
+    Without a meter the default keeps only the cycles no water was
+    drawn around: the heat drawn during a cycle is otherwise missing
+    from its heat and pulls the scale low.
+    """
+    needed = [
+        "metered_input_wh",
+        "t_start_lower",
+        "t_start_upper",
+        "t_lower_end",
+        "t_upper_end",
+    ]
+    if not set(needed) <= set(rows.columns):
+        return None, 0
+    wh_per_f = params.tank.thermal_mass_btu_f / BTU_PER_WH
+    heat: list[float] = []
+    before: list[float] = []
+    cop: list[float] = []
+    metered_wh: list[float] = []
+    lift: list[float] = []
+    for row in _records(_starts(rows)):
+        if any(row[c] is None or pd.isna(row[c]) for c in needed):
+            continue
+        metered = float(row["metered_input_wh"])
+        if metered < MIN_COP_METERED_WH:
+            continue
+        stored = wh_per_f * (
+            (float(row["t_lower_end"]) + float(row["t_upper_end"])) / 2
+            - (float(row["t_start_lower"]) + float(row["t_start_upper"])) / 2
+        )
+        # No screen on what was stored: that would select on the outcome
+        # being fitted.
+        took = withdrawn(row)
+        if took is None or not math.isfinite(took):
+            continue
+        lead_wh = 0.0 if lead is None else lead(row)
+        if lead_wh is None or not math.isfinite(lead_wh):
+            continue
+        path = path_to_end(row, params)
+        if path is None:
+            continue
+        modelled = path_cop(
+            path,
+            0.0,
+            path.elapsed_s[-1],
+            params.compressor.two_zone,
+            float(row["t_start_upper"]),
+        )
+        if modelled is None or not math.isfinite(modelled) or modelled <= 0:
+            continue
+        air = row.get("t_amb_mean")
+        if air is None or pd.isna(air):
+            continue
+        mean = (
+            float(row["t_lower_end"])
+            + float(row["t_upper_end"])
+            + float(row["t_start_lower"])
+            + float(row["t_start_upper"])
+        ) / 4
+        heat.append(stored + took)
+        before.append(lead_wh)
+        cop.append(modelled)
+        metered_wh.append(metered)
+        lift.append(mean - float(air))
+    n = len(heat)
+    if n < MIN_POWER_EVENTS:
+        return None, n
+    return solve_cop_fit(heat, cop, metered_wh, before, lift), n
+
+
+def fit_power(
+    rows: pd.DataFrame,
+    params: HeaterParams,
+    *,
+    withdrawn: Withdrawn = draw_free_withdrawn,
+    lead: Withdrawn | None = None,
+) -> PowerFit:
+    """Both power fits on ``snapshots`` rows, every cycle whether or not
+    it reached its target (a capped cycle is as good a sample of heat
+    per Wh as any), on ``params``' compressor and loss."""
+    scale, n_power = fit_power_scale(rows, params)
+    cop, n_cop = fit_cop_scale(rows, params, withdrawn=withdrawn, lead=lead)
+    return PowerFit(
+        power_scale=scale,
+        n_power=n_power,
+        cop_scale=None if cop is None else cop[0],
+        startup_wh=None if cop is None else cop[1],
+        cop_lift_coeff=None if cop is None else cop[3],
+        lead_share=None if cop is None else cop[2],
+        n_cop=n_cop,
+    )
+
+
+def with_power(params: HeaterParams, fit: PowerFit) -> HeaterParams:
+    """``params`` with the power fit's values where it had them."""
+    power = params.power
+    if fit.power_scale is not None:
+        power = replace(power, power_scale=fit.power_scale)
+    if fit.cop_scale is not None:
+        power = replace(
+            power,
+            cop_scale=fit.cop_scale,
+            startup_wh=cast(float, fit.startup_wh),
+            cop_lift_coeff=cast(float, fit.cop_lift_coeff),
+            cop_lift_ref_f=COP_LIFT_REF_F,
+        )
+    return replace(params, power=power)
+
+
 @dataclass(frozen=True)
 class Calibration:
     """A heater's calibration: the parameters, and the fits behind them
@@ -766,6 +1166,9 @@ class Calibration:
     params: HeaterParams
     standby: StandbyFit
     compressor: CompressorFit | None
+    #: None when the compressor was not fitted or is pinned on a bound:
+    #: power is scaled against the compressor the simulation will run.
+    power: PowerFit | None
     #: The recoveries found, reached or not.
     recoveries: pd.DataFrame = field(repr=False)
 
@@ -775,18 +1178,28 @@ def calibrate(
     base: HeaterParams,
     *,
     recovery_air: str = "heater_air_f",
+    withdrawn: Withdrawn = draw_free_withdrawn,
+    lead: Withdrawn | None = None,
 ) -> Calibration:
     """``base`` refitted on ``history``: the standby loss law and the
     gap's time constant from its quiet windows, then the compressor on
     its reached recoveries, against the loss just fitted (as the
-    simulation will run it). A part without the evidence keeps
-    ``base``'s value; a compressor fit pinned on a bound is reported but
-    not applied."""
+    simulation will run it), then input power and COP against the
+    ``power_w`` readings, on that compressor. A part without the
+    evidence keeps ``base``'s value; a compressor fit pinned on a bound
+    is reported but not applied, and no power is fitted on it.
+    ``withdrawn`` and ``lead`` give the COP fit the heat a meter saw
+    drawn (``fit_cop_scale``); without them it keeps draw-free
+    cycles."""
     standby = fit_standby(history, base.tank.thermal_mass_btu_f)
     params = with_standby(base, standby)
+    rows = snapshots(history, air=recovery_air)
     found = recoveries(history, air=recovery_air)
-    reached = found.loc[found["reached"].astype(bool)]
+    reached = found.loc[found["reached"].astype(bool)] if len(found) else found
     compressor = fit_compressor(reached, params.compressor, params.loss)
-    if compressor is not None:
+    power = None
+    if compressor is not None and not compressor.hit_bounds:
         params = with_compressor(params, compressor)
-    return Calibration(params, standby, compressor, found)
+        power = fit_power(rows, params, withdrawn=withdrawn, lead=lead)
+        params = with_power(params, power)
+    return Calibration(params, standby, compressor, power, found)

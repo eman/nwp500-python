@@ -124,7 +124,9 @@ Added
     ``sim_adapters.history`` to build one from ``DeviceStatus``
     readings): the standby loss law and the zones' mixing constant from
     quiet windows, then the compressor constant and evaporator approach
-    from heat-pump recoveries that reached their target, each reported
+    from heat-pump recoveries that reached their target, then input
+    power and apparent COP against the heater's own power readings, each
+    reported
     with what it rested on (held-out error, windows used, a fit pinned
     on a bound). An element run counts as busy in the quiet test, not
     only the compressor and hot water in use.

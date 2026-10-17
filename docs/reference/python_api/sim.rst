@@ -145,7 +145,9 @@ Hot water and the heat book
 
 .. automodule:: nwp500.sim.calibration
    :members: calibrate, Calibration, fit_standby, StandbyFit, StandbyWindow,
-      fit_compressor, CompressorFit, recoveries, quiet_windows,
+      fit_compressor, CompressorFit, fit_power, PowerFit, fit_power_scale,
+      fit_cop_scale, solve_cop_fit, solve_cop_scale, draw_free_withdrawn,
+      path_to_end, with_power, snapshots, recoveries, quiet_windows,
       busy_intervals, fit_window, fit_ua_law, fit_gap_tau, with_standby,
       with_compressor
 

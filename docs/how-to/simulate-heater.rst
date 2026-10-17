@@ -584,7 +584,7 @@ calibrate:
    print(fitted.compressor)      # None: too few recoveries
    params = fitted.params
 
-Two fits run, each only where the record holds the evidence for it,
+Three fits run, each only where the record holds the evidence for it,
 and each says what it used:
 
 - **Standby loss**: the jacket's loss law, and how fast the zones
@@ -597,6 +597,13 @@ and each says what it used:
   latest fifth is held out, and ``heldout_mae_minutes`` says how well
   the fit predicts recoveries it did not see. A fit that lands on a
   bound is reported (``hit_bounds``) and not applied.
+- **Power and COP** (``fitted.power``): the heater's own power readings
+  against the compressor just fitted, over 10 cycles or more. Input
+  power is scaled as a ratio of sums. The apparent COP gets a level, a
+  start-up cost in Wh and a lift term. Without a meter, the COP uses
+  only cycles with no hot water in use from 30 minutes before them to
+  their end; with one, pass ``withdrawn=`` the heat drawn during each
+  cycle.
 
 A part without the evidence keeps the value it had. A meter's draws
 and the circulation's runs, where you record them, make the quiet test

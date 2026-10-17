@@ -541,7 +541,8 @@ def history(
 
     Everything a status carries is read from it: the probes, what is
     heating, ``dhw_use``, the lower probe's stop threshold, what rules a
-    sample out of a heat-pump recovery, the energy still to heat, and
+    sample out of a heat-pump recovery, the power it draws, the energy
+    still to heat, and
     the heater's own air
     reading while its compressor runs. What it does not carry is the
     caller's, in the preferred unit:
@@ -586,6 +587,7 @@ def history(
                 or s.error_code != ErrorCode.NO_ERROR
                 for _, s in rows
             ],
+            "power_w": [float(s.current_inst_power) for _, s in rows],
             "energy_to_setpoint_wh": [
                 float(s.energy_to_setpoint) for _, s in rows
             ],

@@ -5,6 +5,7 @@ The fits are held to their source by the parity check run with the
 port; these hold what each recovers, screens and reports.
 """
 
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -324,6 +325,7 @@ class TestCalibrate:
         assert got.compressor is None
         assert got.standby.ua_ref is None
         assert got.params == base
+        assert got.power is None
         assert len(got.recoveries) == 1
 
 
@@ -343,6 +345,7 @@ class TestTheHistoryAdapter:
         assert list(h.index) == [T0, T0 + timedelta(minutes=1)]
         first, second = h.iloc[0], h.iloc[1]
         assert first.upper_f == pytest.approx(95.0)
+        assert first.power_w == on.current_inst_power
         assert first.target_f == pytest.approx(140.0)
         assert first.compressor_on and first.dhw_in_use
         assert first.heater_air_f == pytest.approx(68.0)
@@ -367,3 +370,104 @@ class TestTheHistoryAdapter:
         )
         assert list(h["drawing"]) == [False, True, True, False]
         assert not h["circulating"].any()
+
+
+def power_rows(n: int, params) -> pd.DataFrame:
+    """``n`` cycles' first snapshots, metered from the integrator itself
+    at a power scale of 0.55 and a COP scale of 1.3 with 150 Wh of
+    start-up, no lift term."""
+    rng = np.random.default_rng(3)
+    rows = pd.DataFrame(
+        {
+            "cycle": range(n),
+            "offset_minutes": 0.0,
+            "t_start_lower": rng.uniform(80, 120, n),
+            "t_start_upper": rng.uniform(122, 136, n),
+            "t_amb_mean": rng.uniform(50, 80, n),
+            "h_amb_start": 50.0,
+            "draw_free": True,
+        }
+    )
+    rows["delta_t_lower"] = 140.0 - rows["t_start_lower"]
+    rows["stratification_gap"] = rows["t_start_upper"] - rows["t_start_lower"]
+    rows["t_lower_end"] = 140.0
+    rows["t_upper_end"] = 140.0
+    rows["duration_minutes"] = rows["delta_t_lower"] * 2.5
+    return rows
+
+
+class TestPower:
+    def _fitted(self):
+        base = default_params()
+        return replace(
+            base,
+            compressor=replace(
+                base.compressor,
+                compressor_constant=0.08,
+                evap_approach_f=12.0,
+                two_zone=True,
+            ),
+        )
+
+    def test_the_energy_integral_holds_each_reading(self):
+        s = np.array([0.0, 600.0, 1200.0]) + T0.timestamp()
+        w = np.array([400.0, 500.0, 300.0])
+        end = T0 + timedelta(minutes=30)
+        # 10 min at 400, 10 at 500, 10 at 300.
+        assert cal._energy_wh(w, s, T0, end) == pytest.approx(200.0)
+        # No reading before the start: the first is back-filled to it.
+        late = T0 - timedelta(minutes=5)
+        assert cal._energy_wh(w, s, late, end) == pytest.approx(
+            400 * 15 / 60 + 500 * 10 / 60 + 300 * 10 / 60
+        )
+        assert cal._energy_wh(np.array([]), np.array([]), T0, end) is None
+
+    def test_the_power_scale_is_a_ratio_of_sums(self):
+        params = self._fitted()
+        rows = power_rows(12, params)
+        modelled = []
+        for row in rows.to_dict("records"):
+            path = cal.path_to_end(row, params)
+            assert path is not None
+            minutes = path.elapsed_s[-1] / 60
+            watts = path.input_btu[-1] / 3.412141633 / (minutes / 60)
+            modelled.append(watts * row["duration_minutes"] / 60)
+        rows["metered_input_wh"] = 0.55 * np.array(modelled)
+        scale, n = cal.fit_power_scale(rows, params)
+        assert scale == pytest.approx(0.55)
+        assert n == 12
+        assert cal.fit_power_scale(rows.head(9), params) == (None, 9)
+
+    def test_the_cop_recovers_its_scale_and_start_up(self):
+        params = self._fitted()
+        rows = power_rows(14, params)
+        wh_per_f = params.tank.thermal_mass_btu_f / 3.412141633
+        metered = []
+        for row in rows.to_dict("records"):
+            path = cal.path_to_end(row, params)
+            cop = cal.path_cop(
+                path, 0.0, path.elapsed_s[-1], True, row["t_start_upper"]
+            )
+            heat = wh_per_f * (
+                140.0 - (row["t_start_lower"] + row["t_start_upper"]) / 2
+            )
+            metered.append(150.0 + heat / (1.3 * cop))
+        rows["metered_input_wh"] = metered
+        (scale, startup, share, lift), n = cal.fit_cop_scale(rows, params)
+        assert scale == pytest.approx(1.3, rel=1e-6)
+        assert startup == pytest.approx(150.0, rel=1e-6)
+        assert lift == 0.0 and share == 0.0 and n == 14
+
+    def test_without_a_meter_only_draw_free_cycles_count(self):
+        params = self._fitted()
+        rows = power_rows(14, params)
+        rows["metered_input_wh"] = 1000.0
+        rows.loc[rows.index[:5], "draw_free"] = False
+        assert cal.fit_cop_scale(rows, params) == (None, 9)
+
+    def test_the_fit_applies_where_it_had_the_evidence(self):
+        base = default_params()
+        fit = cal.PowerFit(0.6, 12, None, None, None, None, 4)
+        got = cal.with_power(base, fit)
+        assert got.power.power_scale == 0.6
+        assert got.power.cop_scale == base.power.cop_scale
