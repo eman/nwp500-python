@@ -52,6 +52,7 @@ from scipy.optimize import OptimizeResult, minimize, minimize_scalar
 
 from nwp500.sim.book import Booked, full_tank, house_gpm, is_full
 from nwp500.sim.book import Step as BookStep
+from nwp500.sim.circulation import displaced_gal as circulation_displaced_gal
 from nwp500.sim.decay import draw_step
 from nwp500.sim.heating_trajectory import path_cop
 from nwp500.sim.params import (
@@ -64,6 +65,7 @@ from nwp500.sim.params import (
     LossParams,
 )
 from nwp500.sim.physics.compressor import PhysicsPath, predict_physics_detailed
+from nwp500.sim.physics.draw import delivery_temp_f, draw_energy_btu
 from nwp500.sim.units import BTU_PER_WH, WATER_BTU_PER_GAL_F
 
 #: An interval: its start and its end.
@@ -635,7 +637,71 @@ _SNAPSHOT_COLUMNS = (
     "t_lower_end",
     "t_upper_end",
     "draw_free",
+    "draw_gal",
+    "draw_t_upper",
+    "draw_lead_gal",
+    "circulation_runs",
 )
+
+#: Circulation runs closer than this in a cycle are one run, as the
+#: loop's displaced volume was fitted (``circulation.RUN_GAP``).
+_RUN_GAP = timedelta(minutes=10)
+
+
+def _in_cycle(
+    draws: Sequence[tuple[datetime, float]] | None,
+    circulation: Sequence[tuple[datetime, datetime]] | None,
+    upper: np.ndarray,
+    seconds: np.ndarray,
+    at: datetime,
+    end: datetime,
+) -> dict[str, object]:
+    """A snapshot's metered draws and circulation runs: the delivered
+    gallons from ``at`` to ``end`` and the volume-weighted upper zone
+    they left at, those in the ``DRAW_LEAD`` before ``at``, and each run
+    over the span (merged within ``_RUN_GAP``) as ``(minutes, the upper
+    zone at its start)``. None for what was not given: an unrecorded
+    meter or circulation is not an idle one."""
+    out: dict[str, object] = {
+        "draw_gal": None,
+        "draw_t_upper": None,
+        "draw_lead_gal": None,
+        "circulation_runs": None,
+    }
+
+    def upper_at(t: datetime) -> float | None:
+        return _asof(upper, seconds, t)
+
+    if draws is not None:
+        window = [(t, g) for t, g in draws if at <= t <= end]
+        gal = float(sum(g for _, g in window))
+        out["draw_gal"] = gal
+        if gal > 0.0:
+            weighted = [(upper_at(t), g) for t, g in window]
+            out["draw_t_upper"] = (
+                sum(u * g for u, g in weighted if u is not None) / gal
+            )
+        out["draw_lead_gal"] = float(
+            sum(g for t, g in draws if at - DRAW_LEAD <= t < at)
+        )
+    if circulation is not None:
+        runs = sorted(
+            (max(a, at), min(b, end))
+            for a, b in circulation
+            if a < end and b > at
+        )
+        merged: list[tuple[datetime, datetime]] = []
+        for a, b in runs:
+            if merged and a - merged[-1][1] <= _RUN_GAP:
+                merged[-1] = (merged[-1][0], b)
+            else:
+                merged.append((a, b))
+        out["circulation_runs"] = tuple(
+            ((b - a).total_seconds() / 60.0, u)
+            for a, b in merged
+            if b > a and (u := upper_at(a)) is not None
+        )
+    return out
 
 
 def _energy_wh(
@@ -666,7 +732,11 @@ def _energy_wh(
 
 
 def snapshots(
-    history: pd.DataFrame, *, air: str = "heater_air_f"
+    history: pd.DataFrame,
+    *,
+    air: str = "heater_air_f",
+    draws: Sequence[tuple[datetime, float]] | None = None,
+    circulation: Sequence[tuple[datetime, datetime]] | None = None,
 ) -> pd.DataFrame:
     """The history's heat-pump recoveries, each read from snapshots: its
     start, then every ``SNAPSHOT_EVERY`` while ``SNAPSHOT_MIN_REMAINING``
@@ -692,8 +762,11 @@ def snapshots(
     (the lower probe came within ``REACHED_TOLERANCE_F`` of the target
     before the run ended); ``metered_input_wh`` (``power_w`` integrated
     from the snapshot to the end, None without it); ``t_lower_end``,
-    ``t_upper_end`` (the probes at the end); and ``draw_free`` (no water
-    in use from ``DRAW_LEAD`` before the start to the end).
+    ``t_upper_end`` (the probes at the end); ``draw_free`` (no water
+    in use from ``DRAW_LEAD`` before the start to the end); and, with a
+    meter's ``draws`` (``(instant, delivered gallons)``) and
+    ``circulation``'s runs, what was drawn and circulated over the
+    snapshot (``_in_cycle``), which ``metered_withdrawn`` prices.
     """
     if history.empty:
         return pd.DataFrame(columns=list(_SNAPSHOT_COLUMNS))
@@ -784,6 +857,14 @@ def snapshots(
                     "t_lower_end": lower_end,
                     "t_upper_end": upper_end,
                     "draw_free": draw_free,
+                    **_in_cycle(
+                        draws,
+                        circulation,
+                        upper_f[cycle],
+                        c_seconds,
+                        at,
+                        end,
+                    ),
                 }
             )
     return pd.DataFrame(rows, columns=list(_SNAPSHOT_COLUMNS))
@@ -1035,6 +1116,87 @@ def solve_cop_fit(
 Withdrawn = Callable[[Mapping[str, Any]], float | None]
 
 
+def metered_withdrawn(params: HeaterParams) -> Withdrawn:
+    """With a meter: the apparent heat a cycle's draws and circulation
+    took (``snapshots``' ``draw_gal`` and ``circulation_runs``), Wh.
+    Draws through the calibrated draw term at their volume-weighted
+    upper zone; each run through the circulation's displaced volume at
+    the upper zone at its start, less the air, times
+    ``DrawParams.ungated_observability`` (the probes' share of the
+    loop's heat). None when either record is missing, when draws
+    happened and the draw term is off, or when circulation ran and the
+    installation has no circulation terms: an unknown withdrawal is not
+    a zero one."""
+    d, c = params.draw, params.circulation
+
+    def withdrawn(row: Mapping[str, Any]) -> float | None:
+        gal, runs = row.get("draw_gal"), row.get("circulation_runs")
+        if gal is None or runs is None or pd.isna(gal):
+            return None
+        btu = 0.0
+        if runs:
+            if c is None or c.displaced_gal <= 0.0:
+                return None
+            air = row.get("t_amb_mean")
+            if air is None or pd.isna(air):
+                return None
+            for minutes, upper in runs:
+                displaced = circulation_displaced_gal(
+                    minutes, c.displaced_gal, c.flow_gpm
+                )
+                btu += d.ungated_observability * max(
+                    0.0, displaced * WATER_BTU_PER_GAL_F * (upper - float(air))
+                )
+        if float(gal) > 0.0:
+            upper = row.get("draw_t_upper")
+            if d.observability is None or upper is None or pd.isna(upper):
+                return None
+            btu += draw_energy_btu(
+                float(gal),
+                float(upper),
+                delivery_temp_f(
+                    float(upper), d.delivery_intercept_f, d.delivery_slope
+                ),
+                d.inlet_temp_f,
+                d.observability,
+            )
+        return btu / BTU_PER_WH
+
+    return withdrawn
+
+
+def metered_lead(params: HeaterParams) -> Withdrawn:
+    """With a meter: the apparent heat of the draws in the ``DRAW_LEAD``
+    before a cycle, Wh, at the upper zone at its start, whose cold water
+    the start reading had not yet seen. None when the record is missing,
+    or when draws happened and the draw term is off."""
+    d = params.draw
+
+    def lead(row: Mapping[str, Any]) -> float | None:
+        gal = row.get("draw_lead_gal")
+        if gal is None or pd.isna(gal):
+            return None
+        if float(gal) <= 0.0:
+            return 0.0
+        upper = row.get("t_start_upper")
+        if d.observability is None or upper is None or pd.isna(upper):
+            return None
+        return (
+            draw_energy_btu(
+                float(gal),
+                float(upper),
+                delivery_temp_f(
+                    float(upper), d.delivery_intercept_f, d.delivery_slope
+                ),
+                d.inlet_temp_f,
+                d.observability,
+            )
+            / BTU_PER_WH
+        )
+
+    return lead
+
+
 def draw_free_withdrawn(row: Mapping[str, Any]) -> float | None:
     """Without a meter: nothing withdrawn from a cycle with no water in
     use from ``DRAW_LEAD`` before it to its end, and unknown otherwise."""
@@ -1183,8 +1345,10 @@ def calibrate(
     base: HeaterParams,
     *,
     recovery_air: str = "heater_air_f",
-    withdrawn: Withdrawn = draw_free_withdrawn,
+    withdrawn: Withdrawn | None = None,
     lead: Withdrawn | None = None,
+    draws: Sequence[tuple[datetime, float]] | None = None,
+    circulation: Sequence[tuple[datetime, datetime]] | None = None,
 ) -> Calibration:
     """``base`` refitted on ``history``: the standby loss law and the
     gap's time constant from its quiet windows, then the compressor on
@@ -1193,18 +1357,29 @@ def calibrate(
     ``power_w`` readings, on that compressor. A part without the
     evidence keeps ``base``'s value; a compressor fit pinned on a bound
     is reported but not applied, and no power is fitted on it.
-    ``withdrawn`` and ``lead`` give the COP fit the heat a meter saw
-    drawn (``fit_cop_scale``); without them it keeps draw-free
-    cycles."""
+    With a meter's ``draws`` (``(instant, delivered gallons)``) and
+    ``circulation``'s runs (an empty list for none), the COP fit prices
+    the heat each cycle's draws and runs took (``metered_withdrawn``,
+    ``metered_lead``); without them it keeps draw-free cycles.
+    ``withdrawn`` and ``lead`` replace either."""
     standby = fit_standby(history, base.tank.thermal_mass_btu_f)
     params = with_standby(base, standby)
-    rows = snapshots(history, air=recovery_air)
+    rows = snapshots(
+        history, air=recovery_air, draws=draws, circulation=circulation
+    )
     found = recoveries(history, air=recovery_air)
     reached = found.loc[found["reached"].astype(bool)] if len(found) else found
     compressor = fit_compressor(reached, params.compressor, params.loss)
     power = None
     if compressor is not None and not compressor.hit_bounds:
         params = with_compressor(params, compressor)
+        metered = draws is not None and circulation is not None
+        if withdrawn is None:
+            withdrawn = (
+                metered_withdrawn(params) if metered else draw_free_withdrawn
+            )
+        if lead is None and metered:
+            lead = metered_lead(params)
         power = fit_power(rows, params, withdrawn=withdrawn, lead=lead)
         params = with_power(params, power)
     return Calibration(params, standby, compressor, power, found)

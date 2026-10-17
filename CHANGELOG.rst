@@ -162,6 +162,10 @@ Added
     the empty points in the book's frame and the drawable one, and the
     error bands (``book_error_btu``: the p90 pooled over anchors an hour
     to 18 h old, and the 18-24 h band's, each rounded up to 100 BTU).
+    With a meter, the COP fit prices the heat each cycle's draws and
+    circulation runs took, and the draws just before it
+    (``metered_withdrawn``, ``metered_lead``; ``calibrate(draws=,
+    circulation=)``), as the model's fit did.
     The book's response to a draw, fitted on the record's long draws by
     the procedures its values were fitted with: the cold front's place
     and width (``fit_front``), the lower zone's settling after a draw

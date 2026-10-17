@@ -651,8 +651,10 @@ and each says what it used:
   power is scaled as a ratio of sums. The apparent COP gets a level, a
   start-up cost in Wh and a lift term. Without a meter, the COP uses
   only cycles with no hot water in use from 30 minutes before them to
-  their end; with one, pass ``withdrawn=`` the heat drawn during each
-  cycle.
+  their end. With one, pass its draws and the circulation's runs,
+  ``calibrate(..., draws=[(instant, gallons), ...],
+  circulation=[(start, end), ...])`` (an empty list for none), and every
+  cycle counts, the heat its draws and runs took priced in.
 
 A part without the evidence keeps the value it had. A meter's draws
 and the circulation's runs, where you record them, make the quiet test

@@ -164,6 +164,7 @@ Hot water and the heat book
       SettleFit, mixing_frame, fit_zone_mix, ZoneMixFit, fit_power,
       PowerFit, fit_power_scale,
       fit_cop_scale, solve_cop_fit, solve_cop_scale, draw_free_withdrawn,
+      metered_withdrawn, metered_lead,
       path_to_end, with_power, snapshots, recoveries, quiet_windows,
       busy_intervals, fit_window, fit_ua_law, fit_gap_tau, with_standby,
       with_compressor
