@@ -64,6 +64,10 @@ Complete device representation with info and location.
      ``/device/list`` only; ``None`` on a device fetched through ``/device/info``.
    * ``descaling`` (DescalingInfo, optional) - Descaling window, if one is
      scheduled or recorded
+   * ``installer`` (DeviceInstaller, optional) - Installer linked to the
+     device. Returned by ``/device/info`` only.
+   * ``alarm_info`` (PushSettings, optional) - Push-notification flags.
+     Returned by ``/device/info`` only.
 
    **Example:**
 
@@ -132,6 +136,43 @@ Descaling window reported by the REST API.
    * ``descaling_end_time`` (str, optional) - End of the descaling window
 
    Both are ``None`` on a device with no descaling scheduled or recorded.
+
+DeviceInstaller
+---------------
+
+The installer linked to a device, from ``/device/info``.
+
+.. py:class:: DeviceInstaller
+
+   **Fields:**
+
+   * ``installer_id`` (str, optional)
+   * ``installer_first_name`` (str, optional)
+   * ``installer_last_name`` (str, optional)
+   * ``installer_phone_number`` (str, optional)
+
+   Every field is ``None`` on a device registered without an installer.
+
+PushSettings
+------------
+
+Push-notification preferences for one device, from
+``/user/get-push-settings`` and the ``alarmInfo`` block of ``/device/info``.
+
+.. py:class:: PushSettings
+
+   **Fields:**
+
+   * ``is_error_alarm`` (bool, optional) - Notify on device faults
+   * ``is_descaling_alarm`` (bool, optional) - Notify when descaling is due;
+     the cloud omits it for member accounts
+   * ``is_etc_alarm`` (bool, optional) - Other notifications
+
+   On the wire each flag is **1 = on, 2 = off** - the reverse of the
+   device's own on/off flags - and 0 or a missing key means the cloud did
+   not report it, which reads as ``None`` rather than a fabricated off.
+   ``to_request_dict()`` encodes the flags back for
+   ``/user/set-push-settings``, leaving out the ``None`` ones.
 
 DeviceInfo
 ----------
@@ -213,7 +254,12 @@ Firmware version information.
    * ``cur_sw_code`` (int) - Current software code
    * ``cur_version`` (int) - Current version number
    * ``downloaded_version`` (int, optional) - Downloaded update version
-   * ``device_group`` (str, optional) - Device group
+   * ``device_group`` (FirmwareDeviceGroup | str, optional) - Group
+     membership, ``None`` for a stand-alone unit. The NaviLink app reads an
+     object with ``group_seq`` and ``unit_num``; a bare string is still
+     accepted.
+   * ``device_group_unit_no`` (int, optional) - Unit number within the
+     group, when sent at the top level
 
    **Example:**
 
@@ -229,6 +275,141 @@ Firmware version information.
               print(f"  [WARNING]  Update available: {fw.downloaded_version}")
           else:
               print(f"  [OK] Up to date")
+
+FirmwareDetail
+--------------
+
+Description of one firmware image, from
+:meth:`~nwp500.NavienAPIClient.get_firmware_detail`.
+
+.. py:class:: FirmwareDetail
+
+   **Fields:**
+
+   * ``description`` (str, optional) - Release notes shown by the app
+   * ``model_number``, ``model_type``, ``product_family`` (int)
+   * ``register_at`` (int) - When the image was registered, epoch
+     milliseconds
+   * ``run_time`` (int) - Estimated update duration in minutes (new in
+     NaviLink 2.04.00)
+   * ``sw_code``, ``sw_version`` (int) - The pair the image was looked up by
+
+DisplayPreferences
+------------------
+
+Unit display preferences stored by the cloud, from
+:meth:`~nwp500.NavienAPIClient.get_display_preferences`.
+
+.. py:class:: DisplayPreferences
+
+   **Fields:**
+
+   * ``model_type_code`` (int, optional)
+   * ``pressure_display_format`` (str, optional) - ``"P"`` (psi) or ``"M"``
+     (metric)
+   * ``temperature_display_format`` (str, optional) - ``"F"`` or ``"C"``
+
+   Those four letters are the only values the NaviLink app compares
+   against or writes.
+
+SimpleDevice
+------------
+
+One entry of :meth:`~nwp500.NavienAPIClient.list_simple_devices`.
+
+.. py:class:: SimpleDevice
+
+   **Fields:**
+
+   * ``mac_address`` (str)
+   * ``additional_value`` (str)
+   * ``device_type`` (DeviceType | int)
+   * ``model_type_code`` (int, optional)
+   * ``device_name`` (str)
+
+DeviceErrorHistoryEntry
+-----------------------
+
+One recorded fault from :meth:`~nwp500.NavienAPIClient.get_error_history`.
+
+.. py:class:: DeviceErrorHistoryEntry
+
+   **Fields:**
+
+   * ``channel_number`` (int)
+   * ``unit_type`` (int)
+   * ``error_code`` (ErrorCode | int | None) - A known code arrives as an
+     ``ErrorCode``; an unknown one is kept as an int (see
+     :class:`DeviceErrorSummary`)
+   * ``sub_error`` (int)
+   * ``error_occurred_time`` (int, optional) - Epoch milliseconds, sent by
+     the API as ``errorOccuredTime``. Pass the last entry's value back as
+     ``continuous_key`` for the next page.
+   * ``occurred_at`` (datetime, property) - ``error_occurred_time`` as an
+     aware UTC datetime
+
+Maintenance Models
+==================
+
+MaintenanceHistoryEntry
+-----------------------
+
+One recorded air-filter or CIP replacement, from
+:meth:`~nwp500.NavienAPIClient.get_filter_history` and
+:meth:`~nwp500.NavienAPIClient.get_cip_history`.
+
+.. py:class:: MaintenanceHistoryEntry
+
+   **Fields:**
+
+   * ``maintenance_date`` (str) - The date the owner entered, as the cloud
+     returns it (``YYYY-M-D``, no zero padding)
+   * ``register_at`` (int, optional) - When the record was created. The
+     NaviLink app reads it as an integer; its unit is not documented.
+
+The matching request helper ``format_maintenance_date(date)`` renders a
+:class:`datetime.date` the way the app sends it (``2025-3-7``).
+
+Account Models
+==============
+
+UserProfile
+-----------
+
+The signed-in user's profile, from
+:meth:`~nwp500.NavienAPIClient.get_user_profile`. A superset of
+:class:`nwp500.auth.UserInfo`, which the sign-in response carries.
+
+.. py:class:: UserProfile
+
+   **Fields:**
+
+   * ``user_type`` (str) - ``"O"`` owner, ``"M"`` member, or an installer
+     type
+   * ``user_first_name`` (str)
+   * ``user_last_name`` (str, optional) - ``None`` from the cloud reads as
+     ``""`` in ``full_name``, as in the app
+   * ``user_phone_number`` (str, optional)
+   * ``user_seq`` (int)
+   * ``user_email`` (str)
+   * ``full_name`` (str, property)
+
+AppVersionInfo
+--------------
+
+Answer to :meth:`~nwp500.NavienAPIClient.get_app_version`.
+
+.. py:class:: AppVersionInfo
+
+   **Fields:**
+
+   * ``app_version`` (str, optional) - Latest NaviLink release
+   * ``app_force_version`` (str, optional) - Oldest release the cloud still
+     serves
+   * ``server_check_text`` (str, optional) - Maintenance notice, present
+     only when the cloud answered 403
+   * ``is_under_maintenance`` (bool, property) - ``server_check_text`` is
+     set
 
 Status Models
 =============
@@ -775,6 +956,8 @@ Seasonal TOU schedule.
    **Fields:**
 
    * ``season`` (int) - Season identifier/months
+   * ``nickname`` (str, optional) - Season label carried by the NaviLink
+     app's schedule object; absent from most responses
    * ``intervals`` (list[dict]) - Time intervals with pricing tiers
 
 MQTT Models

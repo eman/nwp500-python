@@ -210,7 +210,6 @@ The following fields have universal units that don't need conversion:
 - ``vacation_day_setting`` (days)
 - ``vacation_day_elapsed`` (days)
 - ``cumulated_op_time_eva_fan`` (hours)
-- ``dr_override_status`` (hours)
 
 **Electrical**
 

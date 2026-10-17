@@ -5,14 +5,31 @@ This module provides an async HTTP client for device management and control.
 """
 
 import logging
+from datetime import date
 from typing import Any, Self
 
 import aiohttp
 
 from .auth import NavienAuthClient
 from .config import API_BASE_URL
+from .enums import DeviceType
 from .exceptions import APIError, AuthenticationError, TokenRefreshError
-from .models import ConvertedTOUPlan, Device, FirmwareInfo, TOUInfo
+from .models import (
+    AppVersionInfo,
+    ConvertedTOUPlan,
+    Device,
+    DeviceErrorHistoryEntry,
+    DisplayPreferences,
+    FirmwareDetail,
+    FirmwareInfo,
+    Location,
+    MaintenanceHistoryEntry,
+    PushSettings,
+    SimpleDevice,
+    TOUInfo,
+    UserProfile,
+    format_maintenance_date,
+)
 from .unit_system import UnitSystemType
 
 __author__ = "Emmanuel Levijarvi"
@@ -95,6 +112,27 @@ class NavienAPIClient:
     def _session(self) -> aiohttp.ClientSession | None:
         """The session used for requests, resolved dynamically."""
         return self._session_override or self._auth_client.session
+
+    def _require_user_email(self) -> str:
+        """The signed-in user's e-mail, or raise if there is none."""
+        user_email = self._auth_client.user_email
+        if not user_email:
+            raise AuthenticationError("Must authenticate first")
+        return user_email
+
+    def _user_type(self) -> str:
+        """The signed-in user's type, defaulting to owner (``"O"``).
+
+        The sign-in response carries ``userInfo.userType`` (``"O"`` owner,
+        ``"M"`` member, or an installer type) and the NaviLink app sends
+        that value on the TOU endpoints. It is empty when the auth client
+        restored a session without a sign-in response.
+        """
+        user = self._auth_client.current_user
+        user_type = getattr(user, "user_type", None) if user else None
+        if isinstance(user_type, str) and user_type:
+            return user_type
+        return "O"
 
     async def __aenter__(self) -> Self:
         """Enter async context manager."""
@@ -357,7 +395,7 @@ class NavienAPIClient:
         Args:
             mac_address: Device MAC address
             additional_value: Additional device identifier
-            controller_id: Controller ID
+            controller_id: Controller serial number from the device feature
             user_type: User type (default: "O")
 
         Returns:
@@ -412,6 +450,11 @@ class NavienAPIClient:
         Raises:
             APIError: If API request fails
             AuthenticationError: If not authenticated
+
+        Note:
+            ``userType`` is taken from the signed-in user's sign-in
+            response (``auth_client.current_user.user_type``) and falls
+            back to ``"O"`` (owner) when that is unavailable.
         """
         if not self._auth_client.user_email:
             raise AuthenticationError("Must authenticate first")
@@ -424,7 +467,7 @@ class NavienAPIClient:
                 "sourceType": source_type,
                 "sourceVersion": source_version,
                 "userId": self._auth_client.user_email,
-                "userType": "O",
+                "userType": self._user_type(),
             },
         )
 
@@ -534,6 +577,772 @@ class NavienAPIClient:
 
         _logger.info("Push token updated successfully")
         return True
+
+    async def delete_tou(
+        self,
+        mac_address: str,
+        additional_value: str,
+        register_path: str = "wifi",
+        source_type: str = "openei",
+        controller_id: str | None = None,
+        user_type: str | None = None,
+    ) -> bool:
+        """
+        Remove the TOU rate plan from a device.
+
+        Sends ``DELETE /device/tou``. The NaviLink app serialises the same
+        ``TouRequest`` it uses for ``PUT`` and appends it to the URL as a
+        query string (a DELETE carries no body), so this method passes the
+        fields as query parameters.
+
+        The app identifies the device by ``controllerId`` when the plan was
+        registered over Bluetooth (``registerPath == "bt"``) and by
+        ``macAddress``/``additionalValue`` otherwise; both are sent here
+        when ``controller_id`` is given.
+
+        Args:
+            mac_address: Device MAC address
+            additional_value: Additional device identifier
+            register_path: How the plan was registered, ``"wifi"`` or
+                ``"bt"`` (default: "wifi")
+            source_type: Data source type (default: "openei")
+            controller_id: Controller ID, required for a ``"bt"`` plan
+            user_type: User type; defaults to the signed-in user's type
+                (see :meth:`convert_tou`)
+
+        Returns:
+            True if successful
+
+        Raises:
+            APIError: If API request fails
+            AuthenticationError: If not authenticated
+        """
+        user_email = self._require_user_email()
+
+        await self._make_request(
+            "DELETE",
+            "/device/tou",
+            params={
+                "additionalValue": additional_value,
+                "controllerId": controller_id,
+                "macAddress": mac_address,
+                "registerPath": register_path,
+                "sourceType": source_type,
+                "userId": user_email,
+                "userType": user_type or self._user_type(),
+            },
+        )
+
+        _logger.info("Removed TOU rate plan from device")
+        return True
+
+    async def get_manufacture_id(
+        self, mac_address: str, additional_value: str, controller_id: str
+    ) -> str:
+        """
+        Look up the manufacture ID the TOU service knows for a device.
+
+        Sends ``GET /device/tou/manufacture-id``. The NaviLink app treats
+        ``"000000000000000"`` as "not available".
+
+        ``controller_id`` is the controller serial number reported in the
+        device feature (``DeviceFeature.controller_serial_number``), the
+        same value ``get_tou_info()`` takes. Any other value makes the cloud
+        answer ``500 INTERNAL_SERVER_ERROR``.
+
+        Args:
+            mac_address: Device MAC address
+            additional_value: Additional device identifier
+            controller_id: Controller ID
+
+        Returns:
+            The manufacture ID string
+
+        Raises:
+            APIError: If API request fails
+            AuthenticationError: If not authenticated
+        """
+        user_email = self._require_user_email()
+
+        response = await self._make_request(
+            "GET",
+            "/device/tou/manufacture-id",
+            params={
+                "additionalValue": additional_value,
+                "controllerId": controller_id,
+                "macAddress": mac_address,
+                "userId": user_email,
+            },
+        )
+
+        data = response.get("data") or {}
+        manufacture_id = str(data.get("manufactureId", ""))
+
+        _logger.info("Retrieved manufacture ID for device")
+        return manufacture_id
+
+    # Push notification settings
+
+    async def get_push_settings(
+        self, mac_address: str, additional_value: str = ""
+    ) -> PushSettings:
+        """
+        Read which push notifications are enabled for a device.
+
+        Sends ``POST /user/get-push-settings``.
+
+        Args:
+            mac_address: Device MAC address
+            additional_value: Additional device identifier (optional)
+
+        Returns:
+            PushSettings with each flag True (on), False (off) or None
+            (not reported)
+
+        Raises:
+            APIError: If API request fails
+            AuthenticationError: If not authenticated
+        """
+        user_email = self._require_user_email()
+
+        response = await self._make_request(
+            "POST",
+            "/user/get-push-settings",
+            json_data={
+                "userId": user_email,
+                "macAddress": mac_address,
+                "additionalValue": additional_value,
+            },
+        )
+
+        settings = PushSettings.model_validate(response.get("data") or {})
+
+        _logger.info("Retrieved push settings for device")
+        return settings
+
+    async def set_push_settings(
+        self,
+        mac_address: str,
+        additional_value: str = "",
+        *,
+        error_alarm: bool | None = None,
+        descaling_alarm: bool | None = None,
+        etc_alarm: bool | None = None,
+    ) -> bool:
+        """
+        Enable or disable push notifications for a device.
+
+        Sends ``POST /user/set-push-settings``. Flags are encoded 1 (on)
+        or 2 (off); a flag left ``None`` is omitted from the request, as
+        the NaviLink app does for a member account's descaling flag.
+
+        Args:
+            mac_address: Device MAC address
+            additional_value: Additional device identifier (optional)
+            error_alarm: Notify on device faults
+            descaling_alarm: Notify when descaling is due
+            etc_alarm: Other notifications
+
+        Returns:
+            True if successful
+
+        Raises:
+            APIError: If API request fails
+            AuthenticationError: If not authenticated
+        """
+        user_email = self._require_user_email()
+
+        flags = PushSettings(
+            is_error_alarm=error_alarm,
+            is_descaling_alarm=descaling_alarm,
+            is_etc_alarm=etc_alarm,
+        ).to_request_dict()
+
+        await self._make_request(
+            "POST",
+            "/user/set-push-settings",
+            json_data={
+                "userId": user_email,
+                "macAddress": mac_address,
+                "additionalValue": additional_value,
+                **flags,
+            },
+        )
+
+        _logger.info("Updated push settings for device")
+        return True
+
+    # Maintenance records
+
+    async def _record_maintenance(
+        self,
+        kind: str,
+        mac_address: str,
+        additional_value: str,
+        device_type: DeviceType | int,
+        maintenance_date: date,
+    ) -> bool:
+        user_email = self._require_user_email()
+
+        await self._make_request(
+            "POST",
+            f"/device/{kind}/change-info",
+            json_data={
+                "userId": user_email,
+                "macAddress": mac_address,
+                "additionalValue": additional_value,
+                "deviceType": int(device_type),
+                "maintenanceDate": format_maintenance_date(maintenance_date),
+            },
+        )
+
+        _logger.info("Recorded %s replacement on %s", kind, maintenance_date)
+        return True
+
+    async def record_filter_change(
+        self,
+        mac_address: str,
+        additional_value: str,
+        maintenance_date: date,
+        device_type: DeviceType | int = DeviceType.NPF700_WIFI,
+    ) -> bool:
+        """
+        Record the date the air filter was replaced.
+
+        Sends ``POST /device/filter/change-info``. The date is formatted
+        ``YYYY-M-D`` without zero padding, as the NaviLink app sends it.
+        This only updates the cloud's maintenance log; to reset the
+        device's own filter timer use
+        :meth:`nwp500.NavienMqttClient.reset_air_filter`.
+
+        Args:
+            mac_address: Device MAC address
+            additional_value: Additional device identifier
+            maintenance_date: Date of the replacement
+            device_type: Device type code (default: NWP500)
+
+        Returns:
+            True if successful
+
+        Raises:
+            APIError: If API request fails
+            AuthenticationError: If not authenticated
+        """
+        return await self._record_maintenance(
+            "filter",
+            mac_address,
+            additional_value,
+            device_type,
+            maintenance_date,
+        )
+
+    async def record_cip_change(
+        self,
+        mac_address: str,
+        additional_value: str,
+        maintenance_date: date,
+        device_type: DeviceType | int = DeviceType.NPF700_WIFI,
+    ) -> bool:
+        """
+        Record the date a CIP (clean-in-place / descaling) service was done.
+
+        Sends ``POST /device/cip/change-info``; see
+        :meth:`record_filter_change` for the date format.
+
+        Args:
+            mac_address: Device MAC address
+            additional_value: Additional device identifier
+            maintenance_date: Date of the service
+            device_type: Device type code (default: NWP500)
+
+        Returns:
+            True if successful
+
+        Raises:
+            APIError: If API request fails
+            AuthenticationError: If not authenticated
+        """
+        return await self._record_maintenance(
+            "cip", mac_address, additional_value, device_type, maintenance_date
+        )
+
+    async def _get_maintenance_history(
+        self,
+        kind: str,
+        mac_address: str,
+        additional_value: str,
+        offset: int,
+        count: int,
+    ) -> list[MaintenanceHistoryEntry]:
+        user_email = self._require_user_email()
+
+        response = await self._make_request(
+            "POST",
+            f"/device/{kind}/history",
+            json_data={
+                "userId": user_email,
+                "offset": offset,
+                "count": count,
+                "macAddress": mac_address,
+                "additionalValue": additional_value,
+            },
+        )
+
+        entries = [
+            MaintenanceHistoryEntry.model_validate(item)
+            for item in response.get("data") or []
+        ]
+
+        _logger.info("Retrieved %d %s history entries", len(entries), kind)
+        return entries
+
+    async def get_filter_history(
+        self,
+        mac_address: str,
+        additional_value: str,
+        offset: int = 0,
+        count: int = 20,
+    ) -> list[MaintenanceHistoryEntry]:
+        """
+        List recorded air-filter replacements.
+
+        Sends ``POST /device/filter/history``.
+
+        Args:
+            mac_address: Device MAC address
+            additional_value: Additional device identifier
+            offset: Pagination offset (default: 0)
+            count: Number of entries to return (default: 20)
+
+        Returns:
+            List of MaintenanceHistoryEntry objects
+
+        Raises:
+            APIError: If API request fails
+            AuthenticationError: If not authenticated
+        """
+        return await self._get_maintenance_history(
+            "filter", mac_address, additional_value, offset, count
+        )
+
+    async def get_cip_history(
+        self,
+        mac_address: str,
+        additional_value: str,
+        offset: int = 0,
+        count: int = 20,
+    ) -> list[MaintenanceHistoryEntry]:
+        """
+        List recorded CIP (descaling) services.
+
+        Sends ``POST /device/cip/history``.
+
+        Args:
+            mac_address: Device MAC address
+            additional_value: Additional device identifier
+            offset: Pagination offset (default: 0)
+            count: Number of entries to return (default: 20)
+
+        Returns:
+            List of MaintenanceHistoryEntry objects
+
+        Raises:
+            APIError: If API request fails
+            AuthenticationError: If not authenticated
+        """
+        return await self._get_maintenance_history(
+            "cip", mac_address, additional_value, offset, count
+        )
+
+    # Display preferences
+
+    async def get_display_preferences(
+        self,
+        mac_address: str,
+        additional_value: str,
+        model_type_code: int | None = None,
+    ) -> list[DisplayPreferences]:
+        """
+        Read the unit display preferences stored for a device.
+
+        Sends ``GET /device/preferences/format``. The cloud answers with
+        a list; the NaviLink app uses the first entry.
+
+        Not accepted for the NWP500: the cloud answers
+        ``400 COMMON_BAD_REQUEST`` for device type 52 whatever the
+        parameters (checked live). The app only calls it for the
+        IoT-module hydro unit (device type 8).
+
+        Args:
+            mac_address: Device MAC address
+            additional_value: Additional device identifier
+            model_type_code: Model type code from the device feature
+                (omitted when None)
+
+        Returns:
+            List of DisplayPreferences objects
+
+        Raises:
+            APIError: If API request fails
+            AuthenticationError: If not authenticated
+        """
+        self._require_user_email()
+
+        response = await self._make_request(
+            "GET",
+            "/device/preferences/format",
+            params={
+                "additionalValue": additional_value,
+                "macAddress": mac_address,
+                "modelTypeCode": model_type_code,
+            },
+        )
+
+        preferences = [
+            DisplayPreferences.model_validate(item)
+            for item in response.get("data") or []
+        ]
+
+        _logger.info("Retrieved %d display preference(s)", len(preferences))
+        return preferences
+
+    async def set_display_preferences(
+        self,
+        mac_address: str,
+        additional_value: str,
+        pressure_display_format: str,
+        temperature_display_format: str,
+        model_type_code: int | None = None,
+    ) -> bool:
+        """
+        Store the unit display preferences for a device.
+
+        Sends ``POST /device/preferences/format``. The NaviLink app writes
+        ``"F"``/``"C"`` for temperature and ``"P"`` (psi)/``"M"`` (metric)
+        for pressure.
+
+        Not accepted for the NWP500: the cloud answers
+        ``400 COMMON_BAD_REQUEST`` for device type 52 whatever the
+        parameters (checked live). The app only calls it for the
+        IoT-module hydro unit (device type 8).
+
+        Args:
+            mac_address: Device MAC address
+            additional_value: Additional device identifier
+            pressure_display_format: ``"P"`` or ``"M"``
+            temperature_display_format: ``"F"`` or ``"C"``
+            model_type_code: Model type code from the device feature
+                (omitted when None)
+
+        Returns:
+            True if successful
+
+        Raises:
+            APIError: If API request fails
+            AuthenticationError: If not authenticated
+        """
+        self._require_user_email()
+
+        await self._make_request(
+            "POST",
+            "/device/preferences/format",
+            json_data={
+                "additionalValue": additional_value,
+                "macAddress": mac_address,
+                "modelTypeCode": model_type_code,
+                "pressureDisplayFormat": pressure_display_format,
+                "temperatureDisplayFormat": temperature_display_format,
+            },
+        )
+
+        _logger.info("Updated display preferences for device")
+        return True
+
+    # Account
+
+    async def get_user_profile(self) -> UserProfile:
+        """
+        Fetch the signed-in user's profile.
+
+        Sends ``POST /user/info``.
+
+        Returns:
+            UserProfile object
+
+        Raises:
+            APIError: If API request fails
+            AuthenticationError: If not authenticated
+        """
+        user_email = self._require_user_email()
+
+        response = await self._make_request(
+            "POST", "/user/info", json_data={"userId": user_email}
+        )
+
+        profile = UserProfile.model_validate(response.get("data") or {})
+
+        _logger.info("Retrieved profile for %s", profile.user_email)
+        return profile
+
+    # Firmware catalogue
+
+    async def get_firmware_detail(
+        self, sw_code: int, sw_version: int
+    ) -> FirmwareDetail:
+        """
+        Describe a firmware image by its code and version.
+
+        Sends ``POST /firmware/info``. The NaviLink app passes
+        ``cur_sw_code`` with ``downloaded_version`` (when one is pending and
+        differs from the current one) or ``cur_version`` from
+        :class:`~nwp500.models.FirmwareInfo`.
+
+        Args:
+            sw_code: Firmware component code
+            sw_version: Firmware version number
+
+        Returns:
+            FirmwareDetail object
+
+        Raises:
+            APIError: If API request fails
+            AuthenticationError: If not authenticated
+        """
+        response = await self._make_request(
+            "POST",
+            "/firmware/info",
+            json_data={"swCode": sw_code, "swVersion": sw_version},
+        )
+
+        detail = FirmwareDetail.model_validate(response.get("data") or {})
+
+        _logger.info("Retrieved firmware detail for code %s", sw_code)
+        return detail
+
+    # Fault history
+
+    async def get_error_history(
+        self,
+        mac_address: str,
+        additional_value: str,
+        continuous_key: int | None = None,
+        count: int = 20,
+        installer_id: str | None = None,
+    ) -> list[DeviceErrorHistoryEntry]:
+        """
+        List the faults the cloud has recorded for a device.
+
+        Sends ``POST /device/error/list``. The NaviLink app calls this from
+        its installer-only error list and sends the signed-in user's ID as
+        ``installerId``. An owner account is rejected with
+        ``404 COMMON_NOT_AUTHORIZED`` (checked live), so this only works
+        when signed in as the device's installer. Pass ``continuous_key``
+        (the last entry's ``error_occurred_time``) to fetch the next page.
+
+        Args:
+            mac_address: Device MAC address
+            additional_value: Additional device identifier
+            continuous_key: Pagination cursor (epoch ms of the last entry)
+            count: Number of entries to return (default: 20)
+            installer_id: Installer ID (default: the signed-in user)
+
+        Returns:
+            List of DeviceErrorHistoryEntry objects
+
+        Raises:
+            APIError: If API request fails
+            AuthenticationError: If not authenticated
+        """
+        user_email = self._require_user_email()
+
+        response = await self._make_request(
+            "POST",
+            "/device/error/list",
+            json_data={
+                "installerId": installer_id or user_email,
+                "macAddress": mac_address,
+                "additionalValue": additional_value,
+                "continuousKey": continuous_key or None,
+                "count": count,
+            },
+        )
+
+        data = response.get("data") or {}
+        entries = [
+            DeviceErrorHistoryEntry.model_validate(item)
+            for item in data.get("errorInfo") or []
+        ]
+
+        _logger.info("Retrieved %d error history entries", len(entries))
+        return entries
+
+    # Device registration details
+
+    async def update_device_info(
+        self,
+        mac_address: str,
+        additional_value: str,
+        device_name: str,
+        device_type: DeviceType | int = DeviceType.NPF700_WIFI,
+        install_type: str | None = None,
+        location: Location | None = None,
+    ) -> bool:
+        """
+        Rename a device or update its installation details.
+
+        Sends ``POST /device/change-info``. Following the NaviLink app,
+        ``installType`` is omitted when empty, the ``location`` object is
+        omitted when it has no state, city or address, and within it empty
+        strings and zero coordinates are left out.
+
+        Args:
+            mac_address: Device MAC address
+            additional_value: Additional device identifier
+            device_name: New device name
+            device_type: Device type code (default: NWP500)
+            install_type: Installation type, e.g. ``"R"`` (optional)
+            location: New location (optional)
+
+        Returns:
+            True if successful
+
+        Raises:
+            APIError: If API request fails
+            AuthenticationError: If not authenticated
+        """
+        user_email = self._require_user_email()
+
+        device_info: dict[str, Any] = {
+            "macAddress": mac_address,
+            "additionalValue": additional_value,
+            "deviceType": int(device_type),
+            "deviceName": device_name,
+        }
+        if install_type:
+            device_info["installType"] = install_type
+
+        body: dict[str, Any] = {"userId": user_email, "deviceInfo": device_info}
+
+        if location and (location.state or location.city or location.address):
+            # The app drops empty strings and 0.0 coordinates.
+            body["location"] = {
+                key: value
+                for key, value in (
+                    ("state", location.state),
+                    ("city", location.city),
+                    ("address", location.address),
+                    ("latitude", location.latitude),
+                    ("longitude", location.longitude),
+                    ("altitude", location.altitude),
+                )
+                if value
+            }
+
+        await self._make_request("POST", "/device/change-info", json_data=body)
+
+        _logger.info("Updated device info for %s", device_name)
+        return True
+
+    async def list_simple_devices(
+        self,
+        target_user_id: str | None = None,
+        offset: int = 0,
+        count: int = 20,
+    ) -> list[SimpleDevice]:
+        """
+        List devices in the trimmed ``/device/simple-list`` form.
+
+        The NaviLink app uses this for its product-management list (with
+        ``targetUserId`` equal to the signed-in user) and for an installer
+        viewing an owner's devices (``targetUserId`` = the owner).
+
+        Args:
+            target_user_id: Whose devices to list (default: the signed-in
+                user)
+            offset: Pagination offset (default: 0)
+            count: Number of devices to return (default: 20)
+
+        Returns:
+            List of SimpleDevice objects
+
+        Raises:
+            APIError: If API request fails
+            AuthenticationError: If not authenticated
+        """
+        user_email = self._require_user_email()
+
+        response = await self._make_request(
+            "POST",
+            "/device/simple-list",
+            json_data={
+                "userId": user_email,
+                "targetUserId": target_user_id or user_email,
+                "offset": offset,
+                "count": count,
+            },
+        )
+
+        devices = [
+            SimpleDevice.model_validate(item)
+            for item in response.get("data") or []
+        ]
+
+        _logger.info("Retrieved %d device(s) (simple list)", len(devices))
+        return devices
+
+    # App
+
+    async def get_app_version(self, os: str = "A") -> AppVersionInfo:
+        """
+        Query the NaviLink app versions the cloud expects.
+
+        Sends ``POST /app/version`` **without** authentication, as the app
+        does on its splash screen before sign-in. A 403 whose data carries
+        ``serverCheckText`` is a maintenance notice and is returned as an
+        :class:`~nwp500.models.AppVersionInfo` with
+        ``server_check_text`` set; any other failure raises.
+
+        Args:
+            os: Platform code; the app sends ``"A"`` (Android)
+
+        Returns:
+            AppVersionInfo object
+
+        Raises:
+            APIError: If the request fails for a reason other than a
+                maintenance notice
+        """
+        url = f"{self.base_url}/app/version"
+        session = self._session
+        if session is None:
+            raise APIError(
+                "No active session available. The auth client session "
+                "has been closed."
+            )
+
+        _logger.debug(f"POST {url}")
+        try:
+            async with session.post(url, json={"os": os}) as response:
+                response_data: dict[str, Any] = await response.json()
+        except aiohttp.ClientError as e:
+            _logger.error(f"Network error: {e}")
+            raise APIError(f"Network error: {e!s}") from e
+
+        code = response_data.get("code", response.status)
+        data = response_data.get("data") or {}
+
+        if code == 200:
+            return AppVersionInfo.model_validate(data)
+
+        if code == 403 and isinstance(data, dict) and "serverCheckText" in data:
+            _logger.warning("Navien cloud reports maintenance")
+            return AppVersionInfo.model_validate(data)
+
+        msg = response_data.get("msg", "")
+        _logger.error(f"API error: {code} - {msg}")
+        raise APIError(
+            f"API request failed: {msg}", code=code, response=response_data
+        )
 
     # Convenience methods
 

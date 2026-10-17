@@ -25,6 +25,7 @@ if TYPE_CHECKING:
         ReservationSchedule,
         TOUReservationSchedule,
     )
+    from ..models.mqtt_models import AppConnectionEvent, ControlFailResponse
 
 __author__ = "Emmanuel Levijarvi"
 __copyright__ = "Emmanuel Levijarvi"
@@ -231,6 +232,81 @@ class DeviceSubscriptionsMixin:
             return
         manager = self._subscription_manager
         await manager.unsubscribe_firmware_download_info(device, callback)
+
+    async def subscribe_control_fail_response(
+        self,
+        device: Device,
+        callback: Callable[[ControlFailResponse], None],
+    ) -> int:
+        """Subscribe to control failures (``res/ctrl-fail``).
+
+        The callback receives a parsed
+        :class:`~nwp500.models.mqtt_models.ControlFailResponse` whenever
+        the device rejects a control command. ``failCode`` 2 means the
+        DHW control interval was exceeded (send the command again later);
+        other codes are not interpreted by the NaviLink app. The
+        ``control_failed`` client event fires for every device
+        subscription without this call; this adds a plain callback.
+
+        Args:
+            device: Device whose control failures to receive.
+            callback: Called with the parsed message on each failure.
+
+        Returns:
+            Publish packet ID from the MQTT subscribe call.
+        """
+        return await self._delegate_subscription(
+            "subscribe_control_fail_response", device, callback
+        )
+
+    async def unsubscribe_control_fail_response(
+        self,
+        device: Device,
+        callback: Callable[[ControlFailResponse], None],
+    ) -> None:
+        """Unsubscribe a specific control failure callback."""
+        if not self._connected or not self._subscription_manager:
+            return
+        await self._subscription_manager.unsubscribe_control_fail_response(
+            device, callback
+        )
+
+    async def subscribe_app_connection(
+        self,
+        device: Device,
+        callback: Callable[[AppConnectionEvent], None],
+    ) -> int:
+        """Subscribe to app-connection events for a device.
+
+        Delivers each message on
+        ``evt/{deviceType}/navilink-{mac}/app-connection`` as a parsed
+        :class:`~nwp500.models.mqtt_models.AppConnectionEvent`: another
+        client announcing itself (``connected`` True) or the broker
+        publishing a dropped client's Last-Will (``connected`` False).
+        The ``app_connection_received`` client event is emitted as well.
+
+        Args:
+            device: Device whose app-connection events to receive.
+            callback: Called with the parsed event on each message.
+
+        Returns:
+            Publish packet ID from the MQTT subscribe call.
+        """
+        return await self._delegate_subscription(
+            "subscribe_app_connection", device, callback
+        )
+
+    async def unsubscribe_app_connection(
+        self,
+        device: Device,
+        callback: Callable[[AppConnectionEvent], None],
+    ) -> None:
+        """Unsubscribe a specific app-connection callback."""
+        if not self._connected or not self._subscription_manager:
+            return
+        await self._subscription_manager.unsubscribe_app_connection(
+            device, callback
+        )
 
     async def subscribe_reservation_response(
         self,

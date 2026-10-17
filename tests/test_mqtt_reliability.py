@@ -410,6 +410,11 @@ class TestQueueFlushAfterReconnect:
                 "refresh_token",
                 new=AsyncMock(),
             ),
+            patch.object(
+                mock_auth_client,
+                "refresh_session",
+                new=AsyncMock(),
+            ),
             patch(
                 "nwp500.mqtt.client.MqttConnection",
                 return_value=new_manager,
@@ -419,6 +424,90 @@ class TestQueueFlushAfterReconnect:
 
         assert client._connected is True
         client._command_queue.send_all.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_deep_reconnect_renews_aws_session_after_token_refresh(
+        self, mock_auth_client
+    ):
+        """After the forced token refresh, deep reconnect also renews the
+        AWS SigV4 credentials, as the app does on an MQTT auth failure:
+        AWS IoT can reject credentials before they are locally expired."""
+        from nwp500.mqtt import NavienMqttClient
+
+        client = NavienMqttClient(mock_auth_client)
+        client._connected = False
+        client._loop = asyncio.get_running_loop()
+        client._connection_manager = None
+
+        new_manager = MagicMock()
+        new_manager.connect = AsyncMock(return_value=True)
+        new_manager.connection = MagicMock()
+
+        calls: list[str] = []
+
+        async def fake_refresh_token(token):
+            calls.append("refresh_token")
+
+        async def fake_refresh_session():
+            calls.append("refresh_session")
+
+        with (
+            patch.object(
+                mock_auth_client, "refresh_token", new=fake_refresh_token
+            ),
+            patch.object(
+                mock_auth_client, "refresh_session", new=fake_refresh_session
+            ),
+            patch.object(
+                mock_auth_client, "re_authenticate", new=AsyncMock()
+            ) as reauth,
+            patch(
+                "nwp500.mqtt.client.MqttConnection",
+                return_value=new_manager,
+            ),
+        ):
+            await client._deep_reconnect()
+
+        assert calls == ["refresh_token", "refresh_session"]
+        reauth.assert_not_awaited()
+        assert client._connected is True
+
+    @pytest.mark.asyncio
+    async def test_deep_reconnect_reauths_when_session_refresh_fails(
+        self, mock_auth_client
+    ):
+        """A failed session refresh takes the same re-authentication path
+        as a failed token refresh (the fixture stores credentials)."""
+        from nwp500.mqtt import NavienMqttClient
+
+        client = NavienMqttClient(mock_auth_client)
+        client._connected = False
+        client._loop = asyncio.get_running_loop()
+        client._connection_manager = None
+
+        new_manager = MagicMock()
+        new_manager.connect = AsyncMock(return_value=True)
+        new_manager.connection = MagicMock()
+
+        with (
+            patch.object(mock_auth_client, "refresh_token", new=AsyncMock()),
+            patch.object(
+                mock_auth_client,
+                "refresh_session",
+                new=AsyncMock(side_effect=TokenRefreshError("rejected")),
+            ),
+            patch.object(
+                mock_auth_client, "re_authenticate", new=AsyncMock()
+            ) as reauth,
+            patch(
+                "nwp500.mqtt.client.MqttConnection",
+                return_value=new_manager,
+            ),
+        ):
+            await client._deep_reconnect()
+
+        reauth.assert_awaited_once()
+        assert client._connected is True
 
 
 class TestPeriodicLoopResilience:

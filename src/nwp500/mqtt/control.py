@@ -28,7 +28,6 @@ weekly reservation) have no method.
 
 import logging
 from collections.abc import Awaitable, Callable, Mapping, Sequence
-from datetime import UTC, datetime
 from typing import Any
 
 from ..command_decorators import requires_capability
@@ -36,7 +35,7 @@ from ..config import MQTT_PROTOCOL_VERSION
 from ..converters import device_bool_from_python
 from ..device_capabilities import MqttDeviceCapabilityChecker
 from ..device_info_cache import MqttDeviceInfoCache
-from ..enums import CommandCode, DhwOperationSetting
+from ..enums import CommandCode, DhwOperationSetting, ReservationMode
 from ..exceptions import (
     DeviceCapabilityError,
     ParameterValidationError,
@@ -49,6 +48,7 @@ from ..models import (
     RecirculationSchedule,
     preferred_to_half_celsius,
 )
+from ..models.mqtt_models import AppConnectionEvent
 from ..topic_builder import MqttTopicBuilder
 
 __author__ = "Emmanuel Levijarvi"
@@ -121,9 +121,11 @@ def validate_recirculation_schedule(schedule: RecirculationSchedule) -> None:
 
 
 RESERVATION_ENTRY_FIELDS = ("enable", "week", "hour", "min", "mode", "param")
-# DhwOperationSetting ids are contiguous (1-6), so a range check covers them.
-_DHW_MODE_MIN = min(DhwOperationSetting)
-_DHW_MODE_MAX = max(DhwOperationSetting)
+# Schedule entries carry ReservationMode. 0 (NOT_RESERVATION) marks an
+# unused slot and is never written; the writable ids are contiguous (1-5),
+# so a range check covers them.
+_RESERVATION_MODE_MIN = ReservationMode.HEAT_PUMP
+_RESERVATION_MODE_MAX = ReservationMode.POWER_OFF
 
 
 def validate_reservation_entries(
@@ -137,8 +139,9 @@ def validate_reservation_entries(
     accepts. Each entry must carry the six protocol fields as plain
     integers (a ``bool`` or ``float`` is rejected): ``enable`` 1 (off) or
     2 (on), ``week`` a day bitfield (2-254, bit 0 clear), ``hour`` 0-23,
-    ``min`` 0-59 and ``mode`` a :class:`~nwp500.enums.DhwOperationSetting`
-    id.
+    ``min`` 0-59 and ``mode`` a :class:`~nwp500.enums.ReservationMode` id
+    from ``HEAT_PUMP`` (1) to ``POWER_OFF`` (5); ``NOT_RESERVATION`` (0)
+    marks an unused slot and is not accepted.
 
     ``param`` is the setpoint in half-degrees Celsius. With ``features``
     it must lie within the range the heater reports,
@@ -195,7 +198,7 @@ def _check_reservation_entry(index: int, entry: Mapping[str, Any]) -> None:
     ranges = [
         ("hour", 0, 23),
         ("min", 0, 59),
-        ("mode", int(_DHW_MODE_MIN), int(_DHW_MODE_MAX)),
+        ("mode", int(_RESERVATION_MODE_MIN), int(_RESERVATION_MODE_MAX)),
         ("param", 0, 255),
     ]
     for name, low, high in ranges:
@@ -1076,20 +1079,57 @@ class MqttDeviceController:
 
     async def signal_app_connection(self, device: Device) -> int:
         """
-        Signal that the app has connected.
-        ...
-        """
-        device_id = device.device_info.mac_address
-        device_type = str(device.device_info.device_type)
-        topic = MqttTopicBuilder.event_topic(
-            device_type, device_id, "app-connection"
-        )
-        message = {
-            "clientID": self._client_id,
-            "timestamp": (datetime.now(UTC).isoformat().replace("+00:00", "Z")),
-        }
+        Announce this client's presence on the app-connection topic.
 
+        Publishes the NaviLink app's ``RequestLastWill`` shape with
+        ``event.connection.status`` 1 on
+        ``evt/{deviceType}/navilink-{mac}/app-connection``. The same shape
+        with status 0 is what the broker publishes as a Last-Will when a
+        client drops (see ``MqttConnectionConfig.last_will_device``).
+
+        The app itself only registers the Last-Will; it does not publish
+        a status 1 announcement, and NaviLink 2.04 does not subscribe to
+        the topic for the NWP500, so this is read only by other library
+        clients that use ``subscribe_app_connection()``.
+
+        Args:
+            device: Device object
+
+        Returns:
+            Publish packet ID
+        """
+        topic, message = self.build_app_connection(device, connected=True)
         return await self._publish(topic, message)
+
+    def build_app_connection(
+        self, device: Device, *, connected: bool
+    ) -> tuple[str, dict[str, Any]]:
+        """Build the app-connection topic and payload without publishing.
+
+        Args:
+            device: Device object
+            connected: ``True`` for a connect announcement (status 1),
+                ``False`` for the Last-Will payload (status 0).
+
+        Returns:
+            ``(topic, payload)`` as :class:`~nwp500.models.mqtt_models.
+            AppConnectionEvent` renders it.
+        """
+        info = device.device_info
+        topic = MqttTopicBuilder.app_connection_topic(
+            str(info.device_type), info.mac_address
+        )
+        event = AppConnectionEvent.build(
+            client_id=self._client_id,
+            session_id=self._session_id,
+            topic=topic,
+            mac_address=info.mac_address,
+            device_type=int(info.device_type),
+            additional_value=info.additional_value,
+            model_type_code=info.model_type_code,
+            connected=connected,
+        )
+        return topic, event.to_payload()
 
     @requires_capability("dr_setting_use")
     async def enable_demand_response(self, device: Device) -> int:
@@ -1245,7 +1285,11 @@ class MqttDeviceController:
 
     @requires_capability("recirculation_use")
     async def set_recirculation_mode(self, device: Device, mode: int) -> int:
-        """Set recirculation pump operation mode (1-4)."""
+        """Set recirculation pump operation mode.
+
+        ``mode``: 1 = always on, 2 = weekly schedule, 3 = hot button only,
+        4 = no recirculation (:class:`~nwp500.enums.RecirculationMode`).
+        """
         self._validate_range("mode", mode, 1, 4)
         return await self._mode_command(
             device, CommandCode.RECIR_MODE, "recirc-mode", [mode]

@@ -772,6 +772,46 @@ subscribe_firmware_commit_response()
    :param callback: Called with the reply's ``response`` dict
    :type callback: Callable[[dict], None]
 
+subscribe_control_fail_response()
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+.. py:method:: subscribe_control_fail_response(device, callback)
+
+   Subscribe to control failures (``res/ctrl-fail``). The device
+   publishes one when it refuses a control command instead of
+   acknowledging it on the control ack topic. The callback receives the
+   parsed :class:`~nwp500.models.mqtt_models.ControlFailResponse`,
+   envelope included: ``client_id`` says whose command failed and
+   ``fail_code`` why. The only code the NaviLink app interprets is
+   :attr:`~nwp500.models.mqtt_models.ControlFailCode.DHW_CONTROL_INTERVAL_EXCEEDED`
+   (2): the previous DHW control was too recent, so wait and resend.
+
+   The ``control_failed`` client event
+   (:class:`~nwp500.mqtt_events.ControlFailedEvent`) fires for every
+   device subscription without this call; use this method when you want a
+   plain callback. It registers under the device wildcard, so it adds no
+   broker subscription.
+
+   :param callback: Called with :class:`~nwp500.models.mqtt_models.ControlFailResponse`
+   :type callback: Callable[[ControlFailResponse], None]
+
+   **Example:**
+
+   .. code-block:: python
+
+      def on_control_failed(failure):
+          print(f"{failure.mac_address}: {failure.reason}")
+
+      await mqtt.subscribe_control_fail_response(device, on_control_failed)
+
+unsubscribe_control_fail_response()
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+.. py:method:: unsubscribe_control_fail_response(device, callback)
+
+   Remove a callback registered with
+   :meth:`subscribe_control_fail_response`.
+
 end_session()
 ^^^^^^^^^^^^^
 
@@ -933,7 +973,15 @@ signal_app_connection()
 
 .. py:method:: signal_app_connection(device)
 
-   Signal that an application has connected (recommended at startup).
+   Announce this client's presence on
+   ``evt/{deviceType}/navilink-{mac}/app-connection``. The payload is
+   the NaviLink app's ``RequestLastWill`` shape with
+   ``event.connection.status`` 1 (see
+   :class:`~nwp500.models.mqtt_models.AppConnectionEvent`); the
+   Last-Will registered through ``last_will_device`` is the same message
+   with status 0. The app itself only registers the will and, for the
+   NWP500, does not subscribe to the topic, so this is read by other
+   library clients using :meth:`subscribe_app_connection`. Optional.
 
    :param device: Device object
    :type device: Device
@@ -946,6 +994,60 @@ signal_app_connection()
 
       await mqtt.connect()
       await mqtt.signal_app_connection(device)
+
+Last-Will (``last_will_device``)
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Set ``MqttConnectionConfig.last_will_device`` to register an MQTT
+Last-Will, as the NaviLink app does. The broker publishes it on the
+device's ``app-connection`` topic with ``event.connection.status`` 0 if
+the connection is lost without a DISCONNECT, so other clients watching
+the topic learn this one dropped. A will names one topic, so one device;
+every rebuilt connection (reconnects included) carries it again. A
+graceful :meth:`disconnect` does not trigger it.
+
+.. code-block:: python
+
+   from nwp500 import MqttConnectionConfig, NavienMqttClient
+
+   device = await api.get_first_device()
+   mqtt = NavienMqttClient(auth, MqttConnectionConfig(last_will_device=device))
+   await mqtt.connect()
+
+subscribe_app_connection()
+^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+.. py:method:: subscribe_app_connection(device, callback)
+
+   Subscribe to ``evt/{deviceType}/navilink-{mac}/app-connection`` and
+   receive each message as a parsed
+   :class:`~nwp500.models.mqtt_models.AppConnectionEvent`: another
+   client announcing itself (``connected`` True) or the broker publishing
+   a dropped client's Last-Will (``connected`` False). The
+   ``app_connection_received`` client event
+   (:class:`~nwp500.mqtt_events.AppConnectionReceivedEvent`) is emitted
+   as well. This client's own announcement is delivered too; compare
+   ``client_id`` with :attr:`client_id` to skip it.
+
+   :param callback: Called with :class:`~nwp500.models.mqtt_models.AppConnectionEvent`
+   :type callback: Callable[[AppConnectionEvent], None]
+
+   **Example:**
+
+   .. code-block:: python
+
+      def on_presence(event):
+          state = "connected" if event.connected else "dropped"
+          print(f"{event.client_id} {state} from {event.mac_address}")
+
+      await mqtt.subscribe_app_connection(device, on_presence)
+
+unsubscribe_app_connection()
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+.. py:method:: unsubscribe_app_connection(device, callback)
+
+   Remove a callback registered with :meth:`subscribe_app_connection`.
 
 subscribe(), unsubscribe(), publish()
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^

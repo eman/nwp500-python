@@ -7,7 +7,10 @@ to and from :class:`awscrt.mqtt.QoS`, keeping ``awscrt`` an implementation
 detail that could be swapped for a different MQTT transport in the future.
 """
 
+import json
+from dataclasses import dataclass, field
 from enum import IntEnum
+from typing import Any
 
 from awscrt import mqtt
 
@@ -48,3 +51,34 @@ def to_awscrt_qos(qos: QoS) -> mqtt.QoS:
 def from_awscrt_qos(qos: mqtt.QoS) -> QoS:
     """Translate an :class:`awscrt.mqtt.QoS` to a library :class:`QoS`."""
     return QoS(int(qos))
+
+
+@dataclass(frozen=True, slots=True)
+class MqttWill:
+    """An MQTT Last-Will message, registered with the CONNECT packet.
+
+    The broker publishes it if the connection is lost without a
+    DISCONNECT. The NaviLink app registers one on the device's
+    ``app-connection`` event topic.
+
+    Attributes:
+        topic: Topic the broker publishes the will on.
+        payload: JSON object to publish.
+        qos: Quality of Service of that publish.
+        retain: Whether the broker retains the will message.
+    """
+
+    topic: str
+    payload: dict[str, Any] = field(default_factory=dict)
+    qos: QoS = QoS.AT_LEAST_ONCE
+    retain: bool = False
+
+
+def to_awscrt_will(will: MqttWill) -> mqtt.Will:
+    """Translate a library :class:`MqttWill` to :class:`awscrt.mqtt.Will`."""
+    return mqtt.Will(
+        topic=will.topic,
+        qos=to_awscrt_qos(will.qos),
+        payload=json.dumps(will.payload).encode("utf-8"),
+        retain=will.retain,
+    )

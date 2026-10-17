@@ -136,8 +136,10 @@ topic named in the request envelope.
      - Diagnostics reply (decoded JSON only for this topic form)
    * - ``cmd/52/navilink-{mac}/res/dl-sw-info``
      - Firmware download info reply (device-keyed)
+   * - ``cmd/52/navilink-{mac}/res/ctrl-fail``
+     - Control failure; ``failCode`` 2 = DHW control interval exceeded
    * - ``evt/52/navilink-{mac}/app-connection``
-     - App connection event
+     - App connection event; also the Last-Will topic (``connection.status`` 0)
 
 Message Format
 --------------

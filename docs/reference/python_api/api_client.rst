@@ -15,10 +15,12 @@ Overview
 The API client provides:
 
 * Device discovery and listing
-* Device information queries
-* Firmware version checking
-* Time-of-Use (TOU) schedule queries
-* Push notification management
+* Device information queries and renaming
+* Firmware version checking and firmware image details
+* Time-of-Use (TOU) schedule queries, conversion, application and removal
+* Push notification settings
+* Maintenance log (air filter and CIP replacement dates)
+* Display preferences, fault history, user profile, app version check
 
 All methods are async and require an authenticated :doc:`auth_client`.
 
@@ -162,6 +164,84 @@ get_device_info()
       print(f"Model: {device.device_info.device_type}")
       print(f"Location: {device.location.city}")
 
+      # /device/info also carries the installer and push flags
+      if device.installer and device.installer.installer_id:
+          print(f"Installer: {device.installer.installer_first_name}")
+      if device.alarm_info:
+          print(f"Fault alerts on: {device.alarm_info.is_error_alarm}")
+
+update_device_info()
+^^^^^^^^^^^^^^^^^^^^
+
+.. py:method:: update_device_info(mac_address, additional_value, device_name, device_type=DeviceType.NPF700_WIFI, install_type=None, location=None)
+
+   Rename a device or update its installation type and location
+   (``POST /device/change-info``). Following the NaviLink app,
+   ``install_type`` is omitted when empty, ``location`` is sent only when
+   it has a state, city or address, and empty strings and zero
+   coordinates inside it are left out.
+
+   :param device_name: New device name
+   :type device_name: str
+   :param install_type: Installation type, e.g. ``"R"``
+   :type install_type: str or None
+   :param location: New location
+   :type location: Location or None
+   :return: True on success
+   :rtype: bool
+
+   **Example:**
+
+   .. code-block:: python
+
+      from nwp500 import Location
+
+      await api.update_device_info(
+          mac, additional_value, "Garage Heater",
+          location=Location(state="California", city="Anytown",
+                            address="123 Main Street"),
+      )
+
+list_simple_devices()
+^^^^^^^^^^^^^^^^^^^^^
+
+.. py:method:: list_simple_devices(target_user_id=None, offset=0, count=20)
+
+   The trimmed device list from ``POST /device/simple-list``: identifiers,
+   type and name only. ``target_user_id`` defaults to the signed-in user;
+   the NaviLink app passes an owner's ID when an installer views that
+   owner's devices.
+
+   :return: List of SimpleDevice objects
+   :rtype: list[SimpleDevice]
+
+get_error_history()
+^^^^^^^^^^^^^^^^^^^
+
+.. py:method:: get_error_history(mac_address, additional_value, continuous_key=None, count=20, installer_id=None)
+
+   Faults the cloud has recorded for a device (``POST /device/error/list``),
+   readable while the device is offline. The NaviLink app calls this only
+   from its installer screens and sends the signed-in user's ID as
+   ``installerId``; this method does the same by default. Whether the
+   backend accepts an owner's ID there is untested.
+
+   To fetch the next page pass the last entry's ``error_occurred_time`` as
+   ``continuous_key``.
+
+   Installer accounts only: an owner account receives
+   ``404 COMMON_NOT_AUTHORIZED`` (checked live).
+
+   :return: List of DeviceErrorHistoryEntry objects
+   :rtype: list[DeviceErrorHistoryEntry]
+
+   **Example:**
+
+   .. code-block:: python
+
+      for fault in await api.get_error_history(mac, additional_value):
+          print(fault.occurred_at, fault.error_code, fault.sub_error)
+
 Firmware Methods
 ----------------
 
@@ -199,6 +279,33 @@ get_firmware_info()
       
       # Get firmware for specific device
       fw_info = await api.get_firmware_info(mac_address="04786332fca0")
+
+get_firmware_detail()
+^^^^^^^^^^^^^^^^^^^^^
+
+.. py:method:: get_firmware_detail(sw_code, sw_version)
+
+   Describe a firmware image (``POST /firmware/info``) by the
+   ``cur_sw_code``/``cur_version`` pair - or ``downloaded_version`` when an
+   update is pending - from :class:`~nwp500.models.FirmwareInfo`. The
+   NaviLink app shows ``description`` on its update screen and ``run_time``
+   as the estimated update time in minutes.
+
+   :param sw_code: Firmware component code
+   :type sw_code: int
+   :param sw_version: Firmware version number
+   :type sw_version: int
+   :return: Firmware image description
+   :rtype: FirmwareDetail
+
+   **Example:**
+
+   .. code-block:: python
+
+      for fw in await api.get_firmware_info(mac, additional_value):
+          pending = fw.downloaded_version or fw.cur_version
+          detail = await api.get_firmware_detail(fw.cur_sw_code, pending)
+          print(detail.description, f"~{detail.run_time} min")
 
 Time-of-Use Methods
 -------------------
@@ -242,30 +349,199 @@ get_tou_info()
           for interval in schedule.intervals:
               print(f"  {interval}")
 
+convert_tou() / update_tou()
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+See :doc:`../../how-to/optimize-tou` for the OpenEI conversion and
+apply workflow. ``convert_tou`` sends the signed-in user's ``userType``
+from the sign-in response (``auth.current_user.user_type``) and falls
+back to ``"O"`` (owner) when that is not available.
+
+delete_tou()
+^^^^^^^^^^^^
+
+.. py:method:: delete_tou(mac_address, additional_value, register_path="wifi", source_type="openei", controller_id=None, user_type=None)
+
+   Remove the TOU rate plan from a device (``DELETE /device/tou``). The
+   request fields travel as a query string, as the NaviLink app sends
+   them. Pass ``register_path="bt"`` and the ``controller_id`` for a plan
+   that was registered over Bluetooth. ``user_type`` defaults to the
+   signed-in user's type.
+
+   :return: True on success
+   :rtype: bool
+
+get_manufacture_id()
+^^^^^^^^^^^^^^^^^^^^
+
+.. py:method:: get_manufacture_id(mac_address, additional_value, controller_id)
+
+   The manufacture ID the TOU service holds for a device
+   (``GET /device/tou/manufacture-id``). The NaviLink app treats
+   ``"000000000000000"`` as "not available".
+
+   :return: Manufacture ID
+   :rtype: str
+
+   ``controller_id`` is ``DeviceFeature.controller_serial_number``, the
+   same value ``get_tou_info()`` takes; any other value returns
+   ``500 INTERNAL_SERVER_ERROR``.
+
 Push Notification Methods
 --------------------------
 
-update_push_token()
+get_push_settings()
 ^^^^^^^^^^^^^^^^^^^
 
-.. py:method:: update_push_token(device_token, device_type="ios")
+.. py:method:: get_push_settings(mac_address, additional_value="")
 
-   Update push notification token.
+   Which push notifications are enabled for a device
+   (``POST /user/get-push-settings``).
 
-   :param device_token: Firebase/APNs device token
-   :type device_token: str
-   :param device_type: Device type ("ios" or "android")
-   :type device_type: str
+   :return: Flags, each ``True`` (on), ``False`` (off) or ``None`` (not
+            reported)
+   :rtype: PushSettings
+
+set_push_settings()
+^^^^^^^^^^^^^^^^^^^
+
+.. py:method:: set_push_settings(mac_address, additional_value="", *, error_alarm=None, descaling_alarm=None, etc_alarm=None)
+
+   Enable or disable push notifications (``POST /user/set-push-settings``).
+   A flag left ``None`` is omitted from the request, as the NaviLink app
+   does for a member account's descaling flag. On the wire 1 is on and 2
+   is off - the reverse of the device's on/off flags - which the
+   library handles for you.
+
+   :return: True on success
+   :rtype: bool
 
    **Example:**
 
    .. code-block:: python
 
-      # Register for push notifications
-      await api.update_push_token(
-          device_token="your_firebase_token",
-          device_type="android"
-      )
+      settings = await api.get_push_settings(mac, additional_value)
+      if not settings.is_error_alarm:
+          await api.set_push_settings(mac, additional_value, error_alarm=True)
+
+update_push_token()
+^^^^^^^^^^^^^^^^^^^
+
+.. py:method:: update_push_token(push_token, model_name="Python Client", app_version="1.0.0", os="Python", os_version="3.8+")
+
+   Register a push notification token (``POST /app/update-push-token``).
+
+   :param push_token: Firebase device token
+   :type push_token: str
+
+   **Example:**
+
+   .. code-block:: python
+
+      await api.update_push_token("your_firebase_token", os="android")
+
+Maintenance Log Methods
+-----------------------
+
+The cloud keeps a log of when the air filter was replaced and when a CIP
+(clean-in-place / descaling) service was done. These are records only;
+to reset the device's own filter timer use
+:meth:`nwp500.NavienMqttClient.reset_air_filter`. See
+:doc:`../../how-to/maintenance`.
+
+record_filter_change() / record_cip_change()
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+.. py:method:: record_filter_change(mac_address, additional_value, maintenance_date, device_type=DeviceType.NPF700_WIFI)
+.. py:method:: record_cip_change(mac_address, additional_value, maintenance_date, device_type=DeviceType.NPF700_WIFI)
+
+   Record a replacement date (``POST /device/filter/change-info`` and
+   ``POST /device/cip/change-info``). The date is sent as ``YYYY-M-D``
+   without zero padding, exactly as the NaviLink app formats it.
+
+   :param maintenance_date: Date of the replacement
+   :type maintenance_date: datetime.date
+   :return: True on success
+   :rtype: bool
+
+get_filter_history() / get_cip_history()
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+.. py:method:: get_filter_history(mac_address, additional_value, offset=0, count=20)
+.. py:method:: get_cip_history(mac_address, additional_value, offset=0, count=20)
+
+   List the recorded dates (``POST /device/filter/history`` and
+   ``POST /device/cip/history``).
+
+   :return: List of MaintenanceHistoryEntry objects
+   :rtype: list[MaintenanceHistoryEntry]
+
+Display Preference Methods
+--------------------------
+
+get_display_preferences()
+^^^^^^^^^^^^^^^^^^^^^^^^^
+
+.. py:method:: get_display_preferences(mac_address, additional_value, model_type_code=None)
+
+   Unit display preferences the cloud stores for a device
+   (``GET /device/preferences/format``). The cloud answers with a list;
+   the NaviLink app uses the first entry.
+
+   :return: List of DisplayPreferences objects
+   :rtype: list[DisplayPreferences]
+
+   .. note::
+
+      Not accepted for the NWP500 (``400 COMMON_BAD_REQUEST`` for device
+      type 52, checked live); the app only uses it for the IoT-module hydro
+      unit (device type 8).
+
+set_display_preferences()
+^^^^^^^^^^^^^^^^^^^^^^^^^
+
+.. py:method:: set_display_preferences(mac_address, additional_value, pressure_display_format, temperature_display_format, model_type_code=None)
+
+   Store the display preferences (``POST /device/preferences/format``).
+   The NaviLink app writes ``"F"``/``"C"`` for temperature and ``"P"``
+   (psi)/``"M"`` (metric) for pressure.
+
+   :return: True on success
+   :rtype: bool
+
+   .. note::
+
+      Not accepted for the NWP500 (``400 COMMON_BAD_REQUEST`` for device
+      type 52, checked live).
+
+Account and App Methods
+-----------------------
+
+get_user_profile()
+^^^^^^^^^^^^^^^^^^
+
+.. py:method:: get_user_profile()
+
+   The signed-in user's profile (``POST /user/info``): type, name, phone
+   number, sequence number and e-mail.
+
+   :return: User profile
+   :rtype: UserProfile
+
+get_app_version()
+^^^^^^^^^^^^^^^^^
+
+.. py:method:: get_app_version(os="A")
+
+   The NaviLink app versions the cloud expects (``POST /app/version``),
+   sent **without** authentication as the app does on its splash screen.
+   When the backend is down for maintenance the cloud answers 403 with a
+   notice, which is returned as
+   :class:`~nwp500.models.AppVersionInfo` with ``server_check_text`` set
+   (``is_under_maintenance`` is ``True``) instead of raising.
+
+   :return: App version information
+   :rtype: AppVersionInfo
 
 Properties
 ----------

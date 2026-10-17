@@ -1,4 +1,5 @@
-from typing import Annotated, Self
+from datetime import UTC, datetime
+from typing import Annotated, Any, Self
 
 from pydantic import BeforeValidator, Field
 
@@ -9,6 +10,42 @@ from ..enums import ConnectionStatus, DeviceType, ErrorCode
 ConnectionStatusField = Annotated[
     ConnectionStatus, BeforeValidator(enum_validator(ConnectionStatus))
 ]
+
+
+def push_flag_to_python(value: Any) -> bool | None:
+    """Convert a push-notification flag to a tri-state Python bool.
+
+    The ``/user/get-push-settings`` and ``/device/info`` ``alarmInfo`` flags
+    use the **opposite** encoding to the device's on/off flags: the NaviLink
+    app sends ``isChecked() ? 1 : 2``, so 1 is *on* and 2 is *off*. 0 is
+    "not reported" (the app omits a 0 from the request body) and maps to
+    ``None`` rather than a fabricated off, following
+    :func:`nwp500.converters.device_tristate_to_python`.
+    """
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        return value
+    try:
+        number = int(value)
+    except TypeError, ValueError:
+        return None
+    if number == 1:
+        return True
+    if number == 2:
+        return False
+    return None
+
+
+def python_to_push_flag(value: bool | None) -> int | None:
+    """Inverse of :func:`push_flag_to_python`: True→1, False→2, None→None."""
+    if value is None:
+        return None
+    return 1 if value else 2
+
+
+#: A push-notification flag: 1=on, 2=off, 0/absent=unknown (``None``).
+PushFlag = Annotated[bool | None, BeforeValidator(push_flag_to_python)]
 
 
 class DeviceInfo(NavienBaseModel):
@@ -77,6 +114,45 @@ class DescalingInfo(NavienBaseModel):
     descaling_end_time: str | None = None
 
 
+class DeviceInstaller(NavienBaseModel):
+    """Installer linked to a device, from ``/device/info``.
+
+    Every field is ``None`` on a device registered without an installer.
+    """
+
+    installer_id: str | None = None
+    installer_first_name: str | None = None
+    installer_last_name: str | None = None
+    installer_phone_number: str | None = None
+
+
+class PushSettings(NavienBaseModel):
+    """Push-notification preferences for one device.
+
+    Returned by ``/user/get-push-settings`` and embedded in ``/device/info``
+    as ``alarmInfo``. Each flag is sent as 1 (on) or 2 (off); ``None``
+    means the cloud did not report it. The descaling flag is omitted for
+    member (``userType`` ``"M"``) accounts.
+    """
+
+    is_error_alarm: PushFlag = None
+    is_descaling_alarm: PushFlag = None
+    is_etc_alarm: PushFlag = None
+
+    def to_request_dict(self) -> dict[str, int]:
+        """Flags encoded as the API expects (1=on, 2=off), unset ones omitted.
+
+        Mirrors the NaviLink app, which leaves a key out of
+        ``/user/set-push-settings`` when its value is 0.
+        """
+        encoded = {
+            "isErrorAlarm": python_to_push_flag(self.is_error_alarm),
+            "isDescalingAlarm": python_to_push_flag(self.is_descaling_alarm),
+            "isEtcAlarm": python_to_push_flag(self.is_etc_alarm),
+        }
+        return {k: v for k, v in encoded.items() if v is not None}
+
+
 class Device(NavienBaseModel):
     """Complete device information including location."""
 
@@ -86,10 +162,25 @@ class Device(NavienBaseModel):
     error: DeviceErrorSummary | None = None
     #: Present on both ``/device/list`` and ``/device/info``.
     descaling: DescalingInfo | None = None
+    #: Present on ``/device/info``; absent from ``/device/list``.
+    installer: DeviceInstaller | None = None
+    #: Push-notification flags; present on ``/device/info`` only.
+    alarm_info: PushSettings | None = None
 
     def with_info(self, info: DeviceInfo) -> Self:
         """Return a new Device instance with updated DeviceInfo."""
         return self.model_copy(update={"device_info": info})
+
+
+class FirmwareDeviceGroup(NavienBaseModel):
+    """Firmware group membership reported by ``/device/firmware/info``.
+
+    The NaviLink app reads ``deviceGroup`` as an object with ``groupSeq``
+    and ``unitNum``; the cloud sends ``null`` for a stand-alone unit.
+    """
+
+    group_seq: int | None = None
+    unit_num: int | None = None
 
 
 class FirmwareInfo(NavienBaseModel):
@@ -101,4 +192,86 @@ class FirmwareInfo(NavienBaseModel):
     cur_sw_code: int = 0
     cur_version: int = 0
     downloaded_version: int | None = None
-    device_group: str | None = None
+    #: An object per the app's parser. A bare string is still accepted
+    #: because earlier docs showed one; ``None`` for a stand-alone unit.
+    device_group: FirmwareDeviceGroup | str | None = None
+    #: Unit number within the group, sent at the top level by some
+    #: responses (the app reads both this and ``deviceGroup.unitNum``).
+    device_group_unit_no: int | None = None
+
+
+class FirmwareDetail(NavienBaseModel):
+    """Description of one firmware image, from ``POST /firmware/info``.
+
+    Looked up by the ``swCode``/``swVersion`` pair that
+    :class:`FirmwareInfo` reports; the NaviLink app shows ``description``
+    on its update screen and ``run_time`` as the estimated update time.
+    """
+
+    description: str | None = None
+    model_number: int = 0
+    model_type: int = 0
+    product_family: int = 0
+    #: When the image was registered, as the cloud sends it (epoch
+    #: milliseconds).
+    register_at: int = 0
+    #: Estimated update duration in minutes (added in NaviLink 2.04.00).
+    run_time: int = 0
+    sw_code: int = 0
+    sw_version: int = 0
+
+
+class DisplayPreferences(NavienBaseModel):
+    """Unit display preferences from ``/device/preferences/format``.
+
+    The NaviLink app compares ``temperatureDisplayFormat`` against ``"F"``
+    (the other value it writes is ``"C"``) and ``pressureDisplayFormat``
+    against ``"P"`` (psi; the alternative it writes is ``"M"``).
+    """
+
+    model_type_code: int | None = None
+    #: ``"P"`` (psi) or ``"M"`` (metric).
+    pressure_display_format: str | None = None
+    #: ``"F"`` or ``"C"``.
+    temperature_display_format: str | None = None
+
+
+class SimpleDevice(NavienBaseModel):
+    """One entry of ``POST /device/simple-list``.
+
+    A trimmed device record: identifiers, type and name only. The app uses
+    it for the product-management list and for an installer viewing an
+    owner's devices.
+    """
+
+    mac_address: str = ""
+    additional_value: str = ""
+    device_type: DeviceType | int = DeviceType.NPF700_WIFI
+    model_type_code: int | None = None
+    device_name: str = ""
+
+
+class DeviceErrorHistoryEntry(NavienBaseModel):
+    """One recorded fault from ``POST /device/error/list``."""
+
+    channel_number: int = 0
+    unit_type: int = 0
+    #: See :attr:`DeviceErrorSummary.error_code` for why this is a
+    #: left-to-right union.
+    error_code: ErrorCode | int | None = Field(
+        default=None, union_mode="left_to_right"
+    )
+    sub_error: int = 0
+    #: Epoch milliseconds. Spelled "Occured" by the API; the Python name is
+    #: spelled correctly. The app passes the last entry's value back as
+    #: ``continuousKey`` to fetch the next page.
+    error_occurred_time: int | None = Field(
+        default=None, alias="errorOccuredTime"
+    )
+
+    @property
+    def occurred_at(self) -> datetime | None:
+        """``error_occurred_time`` as an aware UTC datetime."""
+        if self.error_occurred_time is None:
+            return None
+        return datetime.fromtimestamp(self.error_occurred_time / 1000, tz=UTC)

@@ -255,14 +255,16 @@ Each reservation entry has these fields:
    Minute (0–59).
 
 ``mode`` (integer)
-   DHW operation mode:
+   Reservation mode (``ReservationMode``):
 
    * ``1`` — Heat Pump Only
    * ``2`` — Electric Heater Only
    * ``3`` — Energy Saver (Eco)
    * ``4`` — High Demand
-   * ``5`` — Vacation Mode
-   * ``6`` — Power Off
+   * ``5`` — Power Off
+
+   There is no vacation reservation mode; use ``set_dhw_mode()`` or the
+   ``vacation`` CLI command for vacation.
 
 ``param`` (integer)
    Target temperature in **half-degrees Celsius**:
@@ -561,12 +563,12 @@ Common Patterns
        ),
    ]
 
-**Vacation automation:**
+**Weekend power-off:**
 
 .. code-block:: python
 
    reservations = [
-       # Friday 8 PM: Enter vacation mode
+       # Friday 8 PM: Power off for the weekend
        build_reservation_entry(
            enabled=True, days=["FR"],
            hour=20, minute=0, mode_id=5, temperature=50.0

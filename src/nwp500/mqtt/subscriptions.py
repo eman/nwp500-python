@@ -32,12 +32,19 @@ from ..models import (
     ReservationSchedule,
     TOUReservationSchedule,
 )
+from ..models.mqtt_models import AppConnectionEvent, ControlFailResponse
 from ..mqtt_events import (
+    AppConnectionReceivedEvent,
+    ControlFailedEvent,
     FeatureReceivedEvent,
     MqttClientEvents,
     StatusReceivedEvent,
 )
-from ..topic_builder import MqttTopicBuilder
+from ..topic_builder import (
+    APP_CONNECTION_SUFFIX,
+    CONTROL_FAIL_SUFFIX,
+    MqttTopicBuilder,
+)
 from .state_tracker import DeviceStateTracker
 from .types import QoS, to_awscrt_qos
 from .utils import (
@@ -58,6 +65,20 @@ _logger = logging.getLogger(__name__)
 _KIND_STATUS = "device_status"
 _KIND_FEATURE = "device_feature"
 _KIND_FIRMWARE = "firmware_download_info"
+_KIND_CONTROL_FAIL = "control_fail_response"
+_KIND_APP_CONNECTION = "app_connection"
+
+#: Topic tail of a control failure, under the device wildcard.
+_CONTROL_FAIL_TAIL = f"/res/{CONTROL_FAIL_SUFFIX}"
+_APP_CONNECTION_TAIL = f"/{APP_CONNECTION_SUFFIX}"
+
+
+def _validation_summary(e: ValidationError) -> str:
+    """Describe a validation failure without echoing the input values."""
+    return "; ".join(
+        f"{'.'.join(str(p) for p in err['loc'])}: {err['type']}"
+        for err in e.errors(include_input=False)
+    )
 
 
 def _response_kind(topic: str, mac: str) -> str:
@@ -206,6 +227,16 @@ class MqttSubscriptionManager:
         if _logger.isEnabledFor(logging.DEBUG):
             _logger.debug("Received message on topic: %s", redact_topic(topic))
 
+        # A rejected control command is announced on the device wildcard,
+        # which every device subscription covers, so the event is raised
+        # here for all of them rather than from one typed subscription.
+        if topic.endswith(_CONTROL_FAIL_TAIL):
+            self._emit_control_failed(topic, message)
+        # App-connection events (announcements and Last-Wills) are raised
+        # once per message here, not once per registered callback.
+        if topic.startswith("evt/") and topic.endswith(_APP_CONNECTION_TAIL):
+            self._emit_app_connection(topic, message)
+
         # Call registered handlers that match this topic.
         # Iterate over snapshots so handlers can subscribe/unsubscribe
         # (mutating the registries) during dispatch.
@@ -223,6 +254,72 @@ class MqttSubscriptionManager:
                             "Error in message handler for %s",
                             redact_topic(topic),
                         )
+
+    def _emit_control_failed(self, topic: str, message: dict[str, Any]) -> None:
+        """Parse a ``res/ctrl-fail`` message and emit ``control_failed``.
+
+        Runs on the event loop from :meth:`_dispatch_message`. A message
+        that does not parse is logged and dropped; typed callbacks
+        registered with :meth:`subscribe_control_fail_response` are
+        unaffected either way, as they run in the handler loop.
+        """
+        try:
+            parsed = ControlFailResponse.model_validate(message)
+        except ValidationError as e:
+            _logger.warning(
+                "Unparseable control failure on %s: %s",
+                redact_topic(topic),
+                _validation_summary(e),
+            )
+            return
+        own = parsed.client_id == self._client_id
+        _logger.warning(
+            "Control command rejected on %s%s: %s (failCode %s)",
+            redact_topic(topic),
+            " from this client" if own else " from another client",
+            parsed.reason,
+            int(parsed.fail_code),
+        )
+        self._schedule_coroutine(
+            self._event_emitter.emit(
+                MqttClientEvents.CONTROL_FAILED,
+                ControlFailedEvent(
+                    device_mac=parsed.mac_address,
+                    fail_code=parsed.fail_code,
+                    reason=parsed.reason,
+                    own_command=own,
+                    response=parsed,
+                ),
+            )
+        )
+
+    def _emit_app_connection(self, topic: str, message: dict[str, Any]) -> None:
+        """Parse an ``app-connection`` message and emit the client event.
+
+        Runs on the event loop from :meth:`_dispatch_message`, once per
+        message however many typed callbacks are registered. A message
+        that does not parse is logged and dropped.
+        """
+        try:
+            event = AppConnectionEvent.model_validate(message)
+        except ValidationError as e:
+            _logger.warning(
+                "Unparseable app-connection event on %s: %s",
+                redact_topic(topic),
+                _validation_summary(e),
+            )
+            return
+        self._schedule_coroutine(
+            self._event_emitter.emit(
+                MqttClientEvents.APP_CONNECTION_RECEIVED,
+                AppConnectionReceivedEvent(
+                    device_mac=event.mac_address,
+                    client_id=event.client_id,
+                    connected=event.connected,
+                    event=event,
+                ),
+            )
+        )
 
     @staticmethod
     def _consume_abandoned_future(
@@ -594,6 +691,7 @@ class MqttSubscriptionManager:
         parse: Callable[[dict[str, Any]], Any] | None = None,
         kind: str | None = None,
         only_mac: str | None = None,
+        whole_message: bool = False,
     ) -> Callable[[str, dict[str, Any]], None]:
         """Generic factory for MQTT message handlers.
 
@@ -602,6 +700,11 @@ class MqttSubscriptionManager:
             callback: Receives the parsed model.
             key: Response sub-key to extract (``None`` for the whole
                 ``response`` object).
+            whole_message: If set, the model is validated against the
+                whole message, envelope included, instead of the
+                ``response`` object (``key`` is then ignored). For
+                messages whose envelope carries meaning, such as the
+                ``clientID`` of a control failure.
             post_parse: Optional side effect run before ``callback``.
             device_mac: If set, stamped onto ``parsed.mac_address``.
             topic_suffix: If set, messages whose topic does not end with
@@ -639,7 +742,11 @@ class MqttSubscriptionManager:
                     )
                 return
             try:
-                data = get_response_data(message, key)
+                data = (
+                    message
+                    if whole_message
+                    else get_response_data(message, key)
+                )
                 if not data:
                     if _logger.isEnabledFor(logging.DEBUG):
                         _logger.debug(
@@ -675,7 +782,12 @@ class MqttSubscriptionManager:
                 AttributeError,
             ) as e:
                 _logger.warning(
-                    f"Error parsing {model.__name__} on {topic}: {e}"
+                    "Error parsing %s on %s: %s",
+                    model.__name__,
+                    redact_topic(topic),
+                    _validation_summary(e)
+                    if isinstance(e, ValidationError)
+                    else type(e).__name__,
                 )
 
         cast(Any, handler)._original_callback = callback
@@ -930,6 +1042,104 @@ class MqttSubscriptionManager:
         """Unsubscribe a specific firmware download info callback."""
         await self._unsubscribe_callback(
             self._device_wildcard(device), callback, _KIND_FIRMWARE
+        )
+
+    async def subscribe_control_fail_response(
+        self,
+        device: Device,
+        callback: Callable[[ControlFailResponse], None],
+    ) -> int:
+        """Subscribe to control failures (``res/ctrl-fail``).
+
+        The device announces a rejected control command on its own
+        topic, which the device wildcard subscription already covers, so
+        this registers a filtered handler there rather than a new broker
+        subscription. The callback receives the parsed
+        :class:`~nwp500.models.mqtt_models.ControlFailResponse`, envelope
+        included, since its ``clientID`` says whose command failed.
+
+        The ``control_failed`` client event is emitted for every device
+        subscription whether or not this method is called; use this for
+        a plain callback.
+
+        Args:
+            device: Device whose control failures to receive.
+            callback: Called with the parsed message on each failure.
+
+        Returns:
+            Publish packet ID from the MQTT subscribe call.
+        """
+        handler = self._make_handler(
+            ControlFailResponse,
+            callback,
+            topic_suffix=_CONTROL_FAIL_TAIL,
+            kind=_KIND_CONTROL_FAIL,
+            whole_message=True,
+        )
+        return await self.subscribe_device(device=device, callback=handler)
+
+    async def unsubscribe_control_fail_response(
+        self,
+        device: Device,
+        callback: Callable[[ControlFailResponse], None],
+    ) -> None:
+        """Unsubscribe a specific control failure callback."""
+        await self._unsubscribe_callback(
+            self._device_wildcard(device), callback, _KIND_CONTROL_FAIL
+        )
+
+    async def subscribe_app_connection(
+        self,
+        device: Device,
+        callback: Callable[[AppConnectionEvent], None],
+    ) -> int:
+        """Subscribe to app-connection events for a device.
+
+        Subscribes to ``evt/{deviceType}/navilink-{mac}/app-connection``,
+        where clients announce themselves
+        (:meth:`~nwp500.NavienMqttClient.signal_app_connection`,
+        ``connection.status`` 1) and where the broker publishes a dropped
+        client's Last-Will (``MqttConnectionConfig.last_will_device``,
+        status 0). The callback receives the parsed
+        :class:`~nwp500.models.mqtt_models.AppConnectionEvent`. The
+        ``app_connection_received`` client event is emitted once per
+        message, however many callbacks are registered.
+
+        This client's own announcement is delivered too. The topic is
+        not a device session, so the device is not sent ``st/end`` on
+        disconnect on account of this subscription alone.
+
+        Args:
+            device: Device whose app-connection events to receive.
+            callback: Called with the parsed event on each message.
+
+        Returns:
+            Publish packet ID from the MQTT subscribe call.
+        """
+        topic = self._app_connection_topic(device)
+
+        handler = self._make_handler(
+            AppConnectionEvent,
+            callback,
+            kind=_KIND_APP_CONNECTION,
+            whole_message=True,
+        )
+        return await self.subscribe(topic, handler)
+
+    async def unsubscribe_app_connection(
+        self,
+        device: Device,
+        callback: Callable[[AppConnectionEvent], None],
+    ) -> None:
+        """Unsubscribe a specific app-connection callback."""
+        await self._unsubscribe_callback(
+            self._app_connection_topic(device), callback, _KIND_APP_CONNECTION
+        )
+
+    def _app_connection_topic(self, device: Device) -> str:
+        return MqttTopicBuilder.app_connection_topic(
+            str(device.device_info.device_type),
+            device.device_info.mac_address,
         )
 
     async def subscribe_firmware_commit_response(

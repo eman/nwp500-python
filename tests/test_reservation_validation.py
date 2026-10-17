@@ -101,7 +101,7 @@ class TestValidateReservationEntries:
             [
                 _entry(),
                 _entry(enable=1, week=2, hour=0, min=0, mode=1),
-                _entry(week=254, hour=23, min=59, mode=6),
+                _entry(week=254, hour=23, min=59, mode=5),
             ],
             _features(),
         )
@@ -145,8 +145,8 @@ class TestValidateReservationEntries:
             ("hour", 24, 0, 23),
             ("min", -1, 0, 59),
             ("min", 60, 0, 59),
-            ("mode", 0, 1, 6),
-            ("mode", 7, 1, 6),
+            ("mode", 0, 1, 5),
+            ("mode", 6, 1, 5),
             ("param", -1, 0, 255),
             ("param", 256, 0, 255),
         ],

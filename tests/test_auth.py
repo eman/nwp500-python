@@ -621,9 +621,21 @@ async def test_ensure_valid_token_aws_credentials_expired():
         tokens=tokens,
     )
 
-    with patch.object(
-        client, "sign_in", new_callable=AsyncMock
-    ) as mock_sign_in:
+    # Session refresh and secured sign-in are tried first (see
+    # test_auth_session_refresh.py); the password is the last resort.
+    with (
+        patch.object(
+            client,
+            "_refresh_session_unlocked",
+            new=AsyncMock(side_effect=TokenRefreshError("rejected")),
+        ),
+        patch.object(
+            client,
+            "_secured_sign_in_unlocked",
+            new=AsyncMock(side_effect=AuthenticationError("rejected")),
+        ),
+        patch.object(client, "sign_in", new_callable=AsyncMock) as mock_sign_in,
+    ):
         mock_sign_in.return_value = AuthenticationResponse(
             user_info=UserInfo(
                 user_type="test",
@@ -1071,9 +1083,23 @@ async def test_context_manager_with_expired_aws_credentials():
         authorization_expires_in=3600,
     )
 
-    with patch.object(
-        NavienAuthClient, "sign_in", new_callable=AsyncMock
-    ) as mock_sign_in:
+    # Session refresh and secured sign-in are tried first (see
+    # test_auth_session_refresh.py); the password is the last resort.
+    with (
+        patch.object(
+            NavienAuthClient,
+            "_refresh_session_unlocked",
+            new=AsyncMock(side_effect=TokenRefreshError("rejected")),
+        ),
+        patch.object(
+            NavienAuthClient,
+            "_secured_sign_in_unlocked",
+            new=AsyncMock(side_effect=AuthenticationError("rejected")),
+        ),
+        patch.object(
+            NavienAuthClient, "sign_in", new_callable=AsyncMock
+        ) as mock_sign_in,
+    ):
         mock_sign_in.return_value = AuthenticationResponse(
             user_info=UserInfo(
                 user_type="test",

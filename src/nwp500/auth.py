@@ -5,10 +5,14 @@ This module provides authentication functionality for the Navien Smart Control
 REST API, including sign-in, token management, and token refresh capabilities.
 
 The API uses JWT (JSON Web Tokens) for authentication with the following flow:
+
 1. Sign in with email and password
-2. Receive idToken, accessToken, and refreshToken
-3. Use accessToken as Bearer token in subsequent requests
-4. Refresh tokens when accessToken expires
+2. Receive idToken, accessToken, refreshToken and AWS (SigV4) credentials
+3. Send the raw accessToken in the ``authorization`` header
+4. Refresh the JWT with ``/auth/refresh`` when accessToken expires
+5. Renew the AWS credentials with ``/auth/session/refresh`` (or, failing
+   that, ``/user/secured-sign-in``) when they expire, so a password
+   sign-in is only needed as a last resort
 """
 
 import asyncio
@@ -28,7 +32,13 @@ from pydantic import (
 )
 
 from ._base import NavienBaseModel
-from .config import API_BASE_URL, REFRESH_ENDPOINT, SIGN_IN_ENDPOINT
+from .config import (
+    API_BASE_URL,
+    REFRESH_ENDPOINT,
+    SECURED_SIGN_IN_ENDPOINT,
+    SESSION_REFRESH_ENDPOINT,
+    SIGN_IN_ENDPOINT,
+)
 from .exceptions import (
     AuthenticationError,
     InvalidCredentialsError,
@@ -81,11 +91,15 @@ class AuthTokens(NavienBaseModel):
 
     # Calculated fields
     issued_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    # Set when the AWS credentials were renewed separately from the JWT
+    # (``/auth/session/refresh``), so their expiry is not computed from
+    # the JWT's ``issued_at``. ``None`` means they share ``issued_at``.
+    aws_credentials_issued_at: datetime | None = None
 
     _expires_at: datetime = PrivateAttr()
     _aws_expires_at: datetime | None = PrivateAttr(default=None)
 
-    @field_validator("issued_at", mode="before")
+    @field_validator("issued_at", "aws_credentials_issued_at", mode="before")
     @classmethod
     def _normalize_issued_at_tz(cls, v: Any) -> Any:
         """Assume UTC for timezone-naive datetimes.
@@ -93,6 +107,8 @@ class AuthTokens(NavienBaseModel):
         Handles old stored tokens that may not have timezone info,
         whether provided as a datetime object or an ISO 8601 string.
         """
+        if v is None:
+            return None
         if isinstance(v, str) and not v.endswith("Z"):
             # Check for a timezone offset (+HH:MM or -HH:MM) in the time
             # portion only (after the 'T' separator), so that date-part hyphens
@@ -139,7 +155,8 @@ class AuthTokens(NavienBaseModel):
         )
         # Calculate AWS credentials expiration if available
         if self.authorization_expires_in:
-            self._aws_expires_at = self.issued_at + timedelta(
+            aws_issued_at = self.aws_credentials_issued_at or self.issued_at
+            self._aws_expires_at = aws_issued_at + timedelta(
                 seconds=self.authorization_expires_in
             )
         else:
@@ -161,8 +178,9 @@ class AuthTokens(NavienBaseModel):
         """Check if AWS credentials have expired.
 
         AWS credentials have a separate expiration time from JWT tokens.
-        If AWS credentials are expired, a full re-authentication is needed
-        since the token refresh endpoint doesn't provide new AWS credentials.
+        The JWT refresh endpoint doesn't provide new AWS credentials; they
+        are renewed with ``NavienAuthClient.refresh_session()`` (or a
+        secured/password sign-in).
 
         Returns:
             True if AWS credentials are expired, False if expiration time is
@@ -197,12 +215,11 @@ class AuthTokens(NavienBaseModel):
         to maintain the correct expiration time when restoring tokens.
         """
         data = self.model_dump()
-        # Ensure issued_at is serialized in a format that model_validate can
-        # parse
-        if isinstance(data.get("issued_at"), datetime):
-            data["issued_at"] = (
-                data["issued_at"].strftime("%Y-%m-%dT%H:%M:%S.%f") + "Z"
-            )
+        # Ensure timestamps are serialized in a format that model_validate
+        # can parse
+        for key in ("issued_at", "aws_credentials_issued_at"):
+            if isinstance(data.get(key), datetime):
+                data[key] = data[key].strftime("%Y-%m-%dT%H:%M:%S.%f") + "Z"
         return data
 
 
@@ -373,10 +390,9 @@ class NavienAuthClient:
                 tokens = self._auth_response.tokens
                 # If tokens are expired, refresh or re-authenticate
                 if tokens.are_aws_credentials_expired:
-                    _logger.info(
-                        "Stored AWS credentials expired, re-authenticating..."
-                    )
-                    await self.sign_in(self._user_id, self._password)
+                    _logger.info("Stored AWS credentials expired, renewing...")
+                    async with self._refresh_lock:
+                        await self._renew_aws_credentials_unlocked()
                 elif tokens.is_expired:
                     _logger.info("Stored JWT token expired, refreshing...")
                     try:
@@ -458,7 +474,9 @@ class NavienAuthClient:
         _logger.info(f"Attempting sign-in for user: {user_id}")
 
         try:
-            async with self._session.post(url, json=payload) as response:
+            async with self._session.post(
+                url, json=payload, headers=self._default_headers()
+            ) as response:
                 response_data = await response.json()
 
                 # Check for error responses
@@ -567,7 +585,9 @@ class NavienAuthClient:
         _logger.info("Attempting to refresh access token")
 
         try:
-            async with self._session.post(url, json=payload) as response:
+            async with self._session.post(
+                url, json=payload, headers=self._default_headers()
+            ) as response:
                 response_data = await response.json()
 
                 code = response_data.get("code", response.status)
@@ -618,7 +638,13 @@ class NavienAuthClient:
                         new_tokens.authorization_expires_in = (
                             old_tokens.authorization_expires_in
                         )
-                        # Also preserve the AWS expiration timestamp
+                        # Also preserve the AWS expiration timestamp. The
+                        # issued_at field survives serialization, so a
+                        # restored token keeps the right AWS expiry too.
+                        new_tokens.aws_credentials_issued_at = (
+                            old_tokens.aws_credentials_issued_at
+                            or old_tokens.issued_at
+                        )
                         cast(Any, new_tokens)._aws_expires_at = cast(
                             Any, old_tokens
                         )._aws_expires_at
@@ -644,13 +670,306 @@ class NavienAuthClient:
             _logger.error(f"Failed to parse refresh response: {e}")
             raise TokenRefreshError(f"Invalid response format: {e!s}") from e
 
+    async def refresh_session(self) -> AuthTokens:
+        """
+        Renew the AWS (SigV4) credentials without a full sign-in.
+
+        Posts the current access token to ``/auth/session/refresh``. The
+        response carries only the AWS credential fields (``accessKeyId``,
+        ``secretKey``, ``sessionToken``, ``authorizationExpiresIn``); any
+        field the server omits keeps its stored value, as the NaviLink app
+        does. The JWT tokens are untouched.
+
+        Serialized with ``refresh_token()`` on the same lock so concurrent
+        callers cannot stampede the endpoint.
+
+        Returns:
+            The updated AuthTokens (also stored as the current tokens)
+
+        Raises:
+            AuthenticationError: If there is no access token to send
+            TokenRefreshError: If the server rejects the request or the
+                response contains no credentials
+        """
+        async with self._refresh_lock:
+            return await self._refresh_session_unlocked()
+
+    _TOKEN_KEYS: tuple[tuple[str, str], ...] = (
+        ("idToken", "id_token"),
+        ("accessToken", "access_token"),
+        ("refreshToken", "refresh_token"),
+        ("authenticationExpiresIn", "authentication_expires_in"),
+        ("accessKeyId", "access_key_id"),
+        ("secretKey", "secret_key"),
+        ("sessionToken", "session_token"),
+        ("authorizationExpiresIn", "authorization_expires_in"),
+    )
+    _AWS_KEYS = frozenset({"access_key_id", "secret_key", "session_token"})
+
+    @classmethod
+    def _merge_token_fields(
+        cls, current: AuthTokens, data: dict[str, Any]
+    ) -> tuple[AuthTokens, set[str]]:
+        """Overlay the token fields the server sent onto ``current``.
+
+        Only keys present and non-empty in ``data`` are overwritten, as
+        the app does. A renewed access token re-stamps ``issued_at``;
+        renewed AWS credentials re-stamp ``aws_credentials_issued_at``
+        without touching the JWT's expiry.
+
+        Returns:
+            The merged tokens and the set of snake-case fields updated.
+        """
+        updates: dict[str, Any] = {}
+        for camel, snake in cls._TOKEN_KEYS:
+            if camel in data and data[camel] not in (None, ""):
+                updates[snake] = data[camel]
+        merged = current.model_dump()
+        merged.update(updates)
+        now = datetime.now(UTC)
+        if "access_token" in updates:
+            merged["issued_at"] = now
+        if updates.keys() & cls._AWS_KEYS:
+            merged["aws_credentials_issued_at"] = now
+        return AuthTokens.model_validate(merged), set(updates)
+
+    async def _refresh_session_unlocked(self) -> AuthTokens:
+        """Perform the session refresh. Caller must hold _refresh_lock."""
+        current = self.current_tokens
+        if not current or not current.access_token:
+            raise AuthenticationError(
+                "No access token available for session refresh"
+            )
+        await self._ensure_session()
+
+        if self._session is None:
+            raise AuthenticationError("Session not initialized")
+
+        url = f"{self.base_url}{SESSION_REFRESH_ENDPOINT}"
+        payload = {"userId": self._user_email or self._user_id}
+
+        _logger.info("Attempting to refresh AWS session credentials")
+
+        try:
+            async with self._session.post(
+                url, json=payload, headers=self.get_auth_headers()
+            ) as response:
+                response_data = await response.json()
+
+                code = response_data.get("code", response.status)
+                msg = response_data.get("msg", "")
+
+                if code != 200 or not response.ok:
+                    _logger.error(f"Session refresh failed: {code} - {msg}")
+                    raise TokenRefreshError(
+                        f"Failed to refresh session: {msg}",
+                        status_code=code,
+                        response=response_data,
+                    )
+
+                data = response_data.get("data") or {}
+                if not isinstance(data, dict):
+                    raise ValueError("'data' is not an object")
+
+                # Overwrite only the keys the server sent (mirrors the app).
+                new_tokens, updated = self._merge_token_fields(current, data)
+                if not updated & self._AWS_KEYS:
+                    raise TokenRefreshError(
+                        "Session refresh response contained no AWS credentials",
+                        status_code=code,
+                        response=response_data,
+                    )
+
+                if self._auth_response:
+                    self._auth_response.tokens = new_tokens
+
+                _logger.info("Successfully refreshed AWS session credentials")
+                return new_tokens
+
+        except aiohttp.ClientError as e:
+            _logger.error(f"Network error during session refresh: {e}")
+            raise TokenRefreshError(
+                f"Network error: {e!s}",
+                retriable=True,
+            ) from e
+        except (KeyError, ValueError, json.JSONDecodeError) as e:
+            _logger.error(f"Failed to parse session refresh response: {e}")
+            raise TokenRefreshError(f"Invalid response format: {e!s}") from e
+
+    async def secured_sign_in(self) -> AuthenticationResponse:
+        """
+        Sign in again with the stored access token instead of the password.
+
+        Posts to ``/user/secured-sign-in`` with the current access token in
+        the ``authorization`` header and ``{"userId": <email>}`` as the body.
+        The response carries user info, legal notices and a ``token``
+        object. Only the token fields the server sends are overwritten;
+        in practice that is the AWS credentials, so the current JWT access
+        and refresh tokens are kept. The app uses this on auto-login and
+        falls back to the password only if it fails.
+
+        Serialized with ``refresh_token()`` and ``refresh_session()`` by the
+        refresh lock, so an in-flight refresh cannot merge stale tokens over
+        the ones this call receives.
+
+        Returns:
+            AuthenticationResponse containing user info and tokens
+
+        Raises:
+            AuthenticationError: If there is no access token, the server
+                rejects the token, or the response cannot be parsed
+        """
+        async with self._refresh_lock:
+            return await self._secured_sign_in_unlocked()
+
+    async def _secured_sign_in_unlocked(self) -> AuthenticationResponse:
+        """Perform the secured sign-in. Caller must hold _refresh_lock."""
+        current = self.current_tokens
+        if not current or not current.access_token:
+            raise AuthenticationError(
+                "No access token available for secured sign-in"
+            )
+        await self._ensure_session()
+
+        if self._session is None:
+            raise AuthenticationError("Session not initialized")
+
+        user_id = self._user_email or self._user_id
+        url = f"{self.base_url}{SECURED_SIGN_IN_ENDPOINT}"
+        payload = {"userId": user_id}
+
+        _logger.info(f"Attempting secured sign-in for user: {user_id}")
+
+        try:
+            async with self._session.post(
+                url, json=payload, headers=self.get_auth_headers()
+            ) as response:
+                response_data = await response.json()
+
+                code = response_data.get("code", response.status)
+                msg = response_data.get("msg", "")
+
+                if code != 200 or not response.ok:
+                    _logger.error(f"Secured sign-in failed: {code} - {msg}")
+                    raise AuthenticationError(
+                        f"Secured sign-in failed: {msg}",
+                        status_code=code,
+                        response=response_data,
+                    )
+
+                data = response_data.get("data") or {}
+                if not isinstance(data, dict):
+                    raise ValueError("'data' is not an object")
+                token_data = data.get("token") or data.get("tokens") or {}
+                if not isinstance(token_data, dict):
+                    raise ValueError("'token' is not an object")
+
+                new_tokens, updated = self._merge_token_fields(
+                    current, token_data
+                )
+                if not updated:
+                    raise AuthenticationError(
+                        "Secured sign-in response contained no tokens",
+                        status_code=code,
+                        response=response_data,
+                    )
+
+                auth_response = AuthenticationResponse(
+                    user_info=UserInfo.model_validate(
+                        data.get("userInfo") or {}
+                    ),
+                    tokens=new_tokens,
+                    legal=list(data.get("legal") or []),
+                    code=code,
+                    msg=msg or "SUCCESS",
+                )
+                self._auth_response = auth_response
+                self._user_email = user_id
+
+                _logger.info(
+                    "Successfully re-authenticated user via secured "
+                    "sign-in: %s",
+                    auth_response.user_info.full_name,
+                )
+                _logger.debug(
+                    "Token expires in: %s",
+                    auth_response.tokens.time_until_expiry,
+                )
+
+                return auth_response
+
+        except aiohttp.ClientError as e:
+            _logger.error(f"Network error during secured sign-in: {e}")
+            raise AuthenticationError(
+                f"Network error: {e!s}",
+                retriable=True,
+            ) from e
+        except (KeyError, ValueError, json.JSONDecodeError) as e:
+            _logger.error(f"Failed to parse secured sign-in response: {e}")
+            raise AuthenticationError(f"Invalid response format: {e!s}") from e
+
+    async def _renew_aws_credentials_unlocked(self) -> AuthTokens:
+        """Obtain fresh AWS credentials. Caller must hold _refresh_lock.
+
+        Tries, in order, the cheapest renewal that can succeed:
+
+        1. ``/auth/session/refresh`` with the current access token
+           (refreshing the JWT first if it has expired)
+        2. ``/user/secured-sign-in`` with the current access token
+        3. ``/user/sign-in`` with the stored password (last resort)
+
+        Steps 1 and 2 are skipped when there is no access token. Step 3
+        is skipped when no password is stored; the last error is then
+        re-raised.
+        """
+        last_error: AuthenticationError | None = None
+        tokens = self.current_tokens
+
+        if tokens and tokens.access_token:
+            if tokens.is_expired and tokens.refresh_token:
+                # Both endpoints need a live access token.
+                try:
+                    tokens = await self._refresh_token_unlocked()
+                except TokenRefreshError as e:
+                    last_error = e
+                    _logger.warning(
+                        "JWT refresh before session refresh failed: %s", e
+                    )
+
+            try:
+                return await self._refresh_session_unlocked()
+            except AuthenticationError as e:
+                last_error = e
+                _logger.warning(
+                    "Session refresh failed: %s. Trying secured sign-in...", e
+                )
+
+            try:
+                return (await self._secured_sign_in_unlocked()).tokens
+            except AuthenticationError as e:
+                last_error = e
+                _logger.warning("Secured sign-in failed: %s", e)
+
+        if not self.has_stored_credentials:
+            if last_error is not None:
+                raise last_error
+            raise AuthenticationError(
+                "Cannot renew AWS credentials: no access token and no "
+                "stored credentials"
+            )
+
+        _logger.info("Falling back to password sign-in for AWS credentials")
+        return (await self.sign_in(self._user_id, self._password)).tokens
+
     async def re_authenticate(self) -> AuthenticationResponse:
         """
-        Re-authenticate using stored credentials.
+        Re-authenticate using the stored access token or credentials.
 
-        This is a convenience method that uses the stored user_id and password
-        from initialization to perform a fresh sign-in. Useful for recovering
-        from expired tokens or connection issues.
+        Tries ``secured_sign_in()`` first when a non-expired access token
+        is held, so the password is only sent if the token is rejected.
+        Falls back to a fresh password sign-in using the user_id and
+        password from initialization. Useful for recovering from expired
+        tokens or connection issues.
 
         Returns:
             AuthenticationResponse with fresh tokens and user info
@@ -669,6 +988,18 @@ class NavienAuthClient:
                 "Credentials must be provided during initialization."
             )
 
+        tokens = self.current_tokens
+        if tokens and tokens.access_token and not tokens.is_expired:
+            try:
+                _logger.info("Re-authenticating with stored access token")
+                return await self.secured_sign_in()
+            except AuthenticationError as e:
+                _logger.warning(
+                    "Secured sign-in failed: %s. Falling back to password "
+                    "sign-in...",
+                    e,
+                )
+
         _logger.info("Re-authenticating with stored credentials")
         return await self.sign_in(self._user_id, self._password)
 
@@ -677,8 +1008,10 @@ class NavienAuthClient:
         Ensure we have a valid access token, refreshing if necessary.
 
         This method checks both JWT token and AWS credentials expiration.
-        If AWS credentials are expired, it triggers a full re-authentication
-        since the token refresh endpoint doesn't provide new AWS credentials.
+        An expired JWT is refreshed with ``refresh_token()``. Expired AWS
+        credentials are renewed with ``refresh_session()``, then
+        ``secured_sign_in()``, and only as a last resort a password
+        ``sign_in()``.
 
         Returns:
             Valid AuthTokens or None if not authenticated
@@ -702,11 +1035,8 @@ class NavienAuthClient:
                     return None
                 tokens = self._auth_response.tokens
                 if tokens.are_aws_credentials_expired:
-                    _logger.info(
-                        "AWS credentials expired, re-authenticating..."
-                    )
-                    # Re-authenticate to get fresh AWS credentials
-                    await self.sign_in(self._user_id, self._password)
+                    _logger.info("AWS credentials expired, renewing...")
+                    await self._renew_aws_credentials_unlocked()
                 return (
                     self._auth_response.tokens if self._auth_response else None
                 )
@@ -782,6 +1112,18 @@ class NavienAuthClient:
             await self._session.close()
             self._session = None
 
+    @staticmethod
+    def _default_headers() -> dict[str, str]:
+        """Headers sent on every request, authenticated or not.
+
+        The NaviLink app sends its User-Agent on sign-in and refresh calls
+        too, so the library identifies itself on those as well.
+        """
+        return {
+            "User-Agent": f"nwp500-python/{__version__}",
+            "Content-Type": "application/json",
+        }
+
     def get_auth_headers(self) -> dict[str, str]:
         """
         Get headers for authenticated requests.
@@ -795,10 +1137,7 @@ class NavienAuthClient:
             'authorization').
             This is different from standard Bearer token authentication.
         """
-        headers = {
-            "User-Agent": f"nwp500-python/{__version__}",
-            "Content-Type": "application/json",
-        }
+        headers = self._default_headers()
 
         # IMPORTANT: Use lowercase 'authorization' and raw token (no 'Bearer '
         # prefix)

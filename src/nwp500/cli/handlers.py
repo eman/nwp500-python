@@ -1209,7 +1209,7 @@ async def handle_set_recirculation_mode_request(
     mqtt: NavienMqttClient, device: Device, mode: int
 ) -> None:
     """Set recirculation pump mode."""
-    mode_map = {1: "ALWAYS", 2: "BUTTON", 3: "SCHEDULE", 4: "TEMPERATURE"}
+    mode_map = {1: "ALWAYS_ON", 2: "WEEKLY", 3: "HOT_BUTTON_ONLY", 4: "OFF"}
     mode_name = mode_map.get(mode, str(mode))
     status = await _handle_command_with_status_feedback(
         mqtt,

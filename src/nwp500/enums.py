@@ -58,8 +58,13 @@ class DhwOperationSetting(IntEnum):
     heating mode the device should use when it needs to heat water. These
     values appear in the dhw_operation_setting field and are set via user
     commands.
+
+    Mirrors the NaviLink app's ``MgppOperationMode``. ``STANDBY`` (0) is a
+    status-only value: the app tests for it but never sends it, and the
+    ``dhw-mode`` command accepts 1-6 only.
     """
 
+    STANDBY = 0  # Status only; reported, never sent
     HEAT_PUMP = 1  # Heat Pump Only - most efficient, slowest recovery
     ELECTRIC = 2  # Electric Only - least efficient, fastest recovery
     ENERGY_SAVER = 3  # Hybrid: Efficiency - balanced, good default
@@ -101,6 +106,11 @@ class DREvent(IntEnum):
 
     Allows utilities to manage grid load by signaling water heaters
     to reduce consumption (shed) or pre-heat (load up) before peak periods.
+
+    The NaviLink app's ``HPWHDREvent`` declares both ``CPE`` and
+    ``GRID_ENERGY`` with id 5, but decodes ``drEventStatus`` by array
+    position (``values()[raw]``), so raw 5 renders "CPE" and raw 6 renders
+    "Grid Emergency". The members here follow the raw values.
     """
 
     UNKNOWN = 0  # Not Applied
@@ -108,7 +118,8 @@ class DREvent(IntEnum):
     SHED = 2  # Load shedding - reduce power
     LOADUP = 3  # Pre-heat before expected high demand
     LOADUP_ADV = 4  # Advanced load-up strategy
-    CPE = 5  # Customer peak event / Grid emergency
+    CPE = 5  # Customer peak event
+    GRID_EMERGENCY = 6  # Grid emergency
 
 
 class WaterLevel(IntEnum):
@@ -133,13 +144,36 @@ class FilterChange(IntEnum):
 
 
 class RecirculationMode(IntEnum):
-    """Recirculation pump operation mode."""
+    """Recirculation pump operation mode.
+
+    Mirrors the NaviLink app's ``MgppRecirculationOperationMode``, which
+    both sends these ids with the ``recirc-mode`` command and decodes the
+    ``recircOperationMode`` status field through them. ``ALWAYS`` is kept
+    as an alias of ``ALWAYS_ON``.
+    """
 
     UNKNOWN = 0
-    ALWAYS = 1  # Pump always runs
-    BUTTON = 2  # Manual activation only
-    SCHEDULE = 3  # Runs on configured schedule
-    TEMPERATURE = 4  # Activates when pipe temp drops
+    ALWAYS_ON = 1  # "Always on": pump runs continuously
+    ALWAYS = 1  # Alias of ALWAYS_ON (earlier name)
+    WEEKLY = 2  # "Weekly": follows the recirculation schedule
+    HOT_BUTTON_ONLY = 3  # "HotButton only": runs only on the hot button
+    OFF = 4  # "No recirculation"
+
+
+class ReservationMode(IntEnum):
+    """Operation mode carried by a weekly-schedule (reservation) entry.
+
+    Mirrors the NaviLink app's ``MgppReservationMode``. The ids 1-4 match
+    :class:`DhwOperationSetting`, but 5 is ``POWER_OFF`` here (there is no
+    vacation entry in the schedule) and 0 marks an unused slot.
+    """
+
+    NOT_RESERVATION = 0
+    HEAT_PUMP = 1
+    ELECTRIC = 2
+    ENERGY_SAVER = 3
+    HIGH_DEMAND = 4
+    POWER_OFF = 5
 
 
 class DHWControlTypeFlag(IntEnum):
@@ -278,20 +312,34 @@ class UnitType(IntEnum):
     CAS_NVW = 15  # Cascading NVW system
     NHB_H = 16  # High-efficiency NHB
     CAS_NHB_H = 17  # Cascading NHB-H system
-    NFB_700 = 20  # Fire-tube boiler 700 series
-    CAS_NFB_700 = 21  # Cascading NFB700 system
+    NFB_700 = 20  # Fire-tube boiler 700 series (NFB700-C)
+    CAS_NFB_700 = 21  # Cascading NFB700-C system
+    NCB700 = 22  # NCB700 combi-boiler
+    NFB700_H = 24  # NFB700-H fire-tube boiler
+    CAS_NFB700_H = 25  # Cascading NFB700-H system
     TWC = 257  # Tankless water heater (commercial)
     NPF = 513  # Heat pump water heater
+    NPF_SYSTEM = 514  # Heat pump water heater system
 
 
 class DeviceType(IntEnum):
-    """Communication device type."""
+    """Communication device type.
+
+    Mirrors the NaviLink app's ``deviceType`` enum. The NWP500 reports 52,
+    which the app names ``DefineData.HPWH_MODEL`` (heat pump water
+    heater); ``HPWH`` is the matching alias. ``NPF700_MAIN``/``NPF700_SUB``
+    are kept as aliases of the app's ``NFB700_*`` names.
+    """
 
     NAVILINK = 1  # Standard NaviLink WiFi module
     NAVILINK_LIGHT = 2  # Light version NaviLink module
-    NPF700_MAIN = 50  # NPF700 main controller
-    NPF700_SUB = 51  # NPF700 sub-controller
-    NPF700_WIFI = 52  # NPF700 WiFi module
+    IOT_MODULE = 8  # "IOT Module"
+    NFB700_MAIN = 50  # NFB700 main controller
+    NPF700_MAIN = 50  # Alias of NFB700_MAIN (earlier name)
+    NFB700_SUB = 51  # NFB700 sub-controller
+    NPF700_SUB = 51  # Alias of NFB700_SUB (earlier name)
+    NPF700_WIFI = 52  # NWP500 heat pump water heater (app: HPWH_MODEL)
+    HPWH = 52  # Alias of NPF700_WIFI
 
 
 class CommandCode(IntEnum):
@@ -409,6 +457,7 @@ class FirmwareType(IntEnum):
 
 
 DHW_OPERATION_SETTING_TEXT = {
+    DhwOperationSetting.STANDBY: "Standby",
     DhwOperationSetting.HEAT_PUMP: "Heat Pump",
     DhwOperationSetting.ELECTRIC: "Electric",
     DhwOperationSetting.ENERGY_SAVER: "Energy Saver",
@@ -438,14 +487,24 @@ DR_EVENT_TEXT = {
     DREvent.LOADUP: "Load Up",
     DREvent.LOADUP_ADV: "Advance Load Up",
     DREvent.CPE: "Customer Peak Event",
+    DREvent.GRID_EMERGENCY: "Grid Emergency",
 }
 
 RECIRC_MODE_TEXT = {
     RecirculationMode.UNKNOWN: "Unknown",
-    RecirculationMode.ALWAYS: "Always",
-    RecirculationMode.BUTTON: "Button",
-    RecirculationMode.SCHEDULE: "Schedule",
-    RecirculationMode.TEMPERATURE: "Temperature",
+    RecirculationMode.ALWAYS_ON: "Always On",
+    RecirculationMode.WEEKLY: "Weekly",
+    RecirculationMode.HOT_BUTTON_ONLY: "Hot Button Only",
+    RecirculationMode.OFF: "No Recirculation",
+}
+
+RESERVATION_MODE_TEXT = {
+    ReservationMode.NOT_RESERVATION: "Not Reserved",
+    ReservationMode.HEAT_PUMP: "Heat Pump",
+    ReservationMode.ELECTRIC: "Electric",
+    ReservationMode.ENERGY_SAVER: "Energy Saver",
+    ReservationMode.HIGH_DEMAND: "High Demand",
+    ReservationMode.POWER_OFF: "Power Off",
 }
 
 TOU_RATE_TEXT = {

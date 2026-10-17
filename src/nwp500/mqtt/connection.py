@@ -21,7 +21,14 @@ from ..exceptions import (
     MqttCredentialsError,
     MqttNotConnectedError,
 )
-from .types import MqttConnectionHandle, QoS, to_awscrt_qos
+from .types import (
+    MqttConnectionHandle,
+    MqttWill,
+    QoS,
+    to_awscrt_qos,
+    to_awscrt_will,
+)
+from .utils import redact_topic
 
 if TYPE_CHECKING:
     from ..auth import NavienAuthClient
@@ -55,6 +62,7 @@ class MqttConnection:
         on_connection_resumed: (
             Callable[[MqttConnectionHandle, Any, Any | None], None] | None
         ) = None,
+        will: MqttWill | None = None,
     ):
         """
         Initialize connection manager.
@@ -64,6 +72,9 @@ class MqttConnection:
             auth_client: Authenticated Navien auth client with AWS credentials
             on_connection_interrupted: Callback for connection interruption
             on_connection_resumed: Callback for connection resumption
+            will: Optional Last-Will the broker publishes if this
+                connection is lost without a DISCONNECT. Sent with the
+                CONNECT packet, so it must be known before :meth:`connect`.
 
         Raises:
             ValueError: If auth client not authenticated or missing AWS
@@ -91,10 +102,16 @@ class MqttConnection:
         self._connected = False
         self._on_connection_interrupted = on_connection_interrupted
         self._on_connection_resumed = on_connection_resumed
+        self._will = will
 
         _logger.info(
             f"Initialized connection manager with client ID: {config.client_id}"
         )
+
+    @property
+    def will(self) -> MqttWill | None:
+        """The Last-Will registered with the CONNECT packet, if any."""
+        return self._will
 
     @staticmethod
     def _consume_abandoned_future(
@@ -220,6 +237,13 @@ class MqttConnection:
             credentials_provider = await asyncio.to_thread(
                 self._create_credentials_provider
             )
+            builder_kwargs: dict[str, Any] = {}
+            if self._will is not None:
+                builder_kwargs["will"] = to_awscrt_will(self._will)
+                _logger.debug(
+                    "Registering Last-Will on %s",
+                    redact_topic(self._will.topic),
+                )
             self._connection = await asyncio.to_thread(
                 mqtt_connection_builder.websockets_with_default_aws_signing,
                 endpoint=self.config.endpoint,
@@ -230,6 +254,7 @@ class MqttConnection:
                 keep_alive_secs=self.config.keep_alive_secs,
                 on_connection_interrupted=self._on_connection_interrupted,
                 on_connection_resumed=self._on_connection_resumed,
+                **builder_kwargs,
             )
 
             # Connect
