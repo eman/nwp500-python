@@ -43,8 +43,8 @@ Authentication Flow
 3. **Use Token** - Include ``accessToken`` in ``authorization`` header
 4. **Refresh** - POST ``refreshToken`` to ``/auth/refresh`` before expiry
 5. **Renew AWS credentials** - POST to ``/auth/session/refresh`` (AWS
-   credentials only) or ``/user/secured-sign-in`` (full token set) with the
-   access token; the password is only needed if both fail
+   credentials only) or ``/user/secured-sign-in`` (user info plus, in practice, the
+   same AWS credential fields) with the access token; the password is only needed if both fail
 
 Token Lifetimes
 ---------------

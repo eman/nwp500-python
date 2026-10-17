@@ -694,6 +694,45 @@ class NavienAuthClient:
         async with self._refresh_lock:
             return await self._refresh_session_unlocked()
 
+    _TOKEN_KEYS: tuple[tuple[str, str], ...] = (
+        ("idToken", "id_token"),
+        ("accessToken", "access_token"),
+        ("refreshToken", "refresh_token"),
+        ("authenticationExpiresIn", "authentication_expires_in"),
+        ("accessKeyId", "access_key_id"),
+        ("secretKey", "secret_key"),
+        ("sessionToken", "session_token"),
+        ("authorizationExpiresIn", "authorization_expires_in"),
+    )
+    _AWS_KEYS = frozenset({"access_key_id", "secret_key", "session_token"})
+
+    @classmethod
+    def _merge_token_fields(
+        cls, current: AuthTokens, data: dict[str, Any]
+    ) -> tuple[AuthTokens, set[str]]:
+        """Overlay the token fields the server sent onto ``current``.
+
+        Only keys present and non-empty in ``data`` are overwritten, as
+        the app does. A renewed access token re-stamps ``issued_at``;
+        renewed AWS credentials re-stamp ``aws_credentials_issued_at``
+        without touching the JWT's expiry.
+
+        Returns:
+            The merged tokens and the set of snake-case fields updated.
+        """
+        updates: dict[str, Any] = {}
+        for camel, snake in cls._TOKEN_KEYS:
+            if camel in data and data[camel] not in (None, ""):
+                updates[snake] = data[camel]
+        merged = current.model_dump()
+        merged.update(updates)
+        now = datetime.now(UTC)
+        if "access_token" in updates:
+            merged["issued_at"] = now
+        if updates.keys() & cls._AWS_KEYS:
+            merged["aws_credentials_issued_at"] = now
+        return AuthTokens.model_validate(merged), set(updates)
+
     async def _refresh_session_unlocked(self) -> AuthTokens:
         """Perform the session refresh. Caller must hold _refresh_lock."""
         current = self.current_tokens
@@ -733,32 +772,13 @@ class NavienAuthClient:
                     raise ValueError("'data' is not an object")
 
                 # Overwrite only the keys the server sent (mirrors the app).
-                updates: dict[str, Any] = {}
-                for camel, snake in (
-                    ("accessKeyId", "access_key_id"),
-                    ("secretKey", "secret_key"),
-                    ("sessionToken", "session_token"),
-                    ("authorizationExpiresIn", "authorization_expires_in"),
-                ):
-                    if camel in data and data[camel] not in (None, ""):
-                        updates[snake] = data[camel]
-
-                if not any(
-                    k in updates
-                    for k in ("access_key_id", "secret_key", "session_token")
-                ):
+                new_tokens, updated = self._merge_token_fields(current, data)
+                if not updated & self._AWS_KEYS:
                     raise TokenRefreshError(
                         "Session refresh response contained no AWS credentials",
                         status_code=code,
                         response=response_data,
                     )
-
-                merged = current.model_dump()
-                merged.update(updates)
-                # The AWS credentials were issued now; the JWT keeps its
-                # own issued_at so its expiry is unchanged.
-                merged["aws_credentials_issued_at"] = datetime.now(UTC)
-                new_tokens = AuthTokens.model_validate(merged)
 
                 if self._auth_response:
                     self._auth_response.tokens = new_tokens
@@ -782,11 +802,11 @@ class NavienAuthClient:
 
         Posts to ``/user/secured-sign-in`` with the current access token in
         the ``authorization`` header and ``{"userId": <email>}`` as the body.
-        The response has the same shape as a password sign-in (user info,
-        a full token set including AWS credentials, legal notices) and
-        replaces the current authentication state. The NaviLink app uses
-        this for auto-login and falls back to the password only if it
-        fails.
+        The response carries user info, legal notices and a ``token``
+        object. Only the token fields the server sends are overwritten;
+        in practice that is the AWS credentials, so the current JWT access
+        and refresh tokens are kept. The app uses this on auto-login and
+        falls back to the password only if it fails.
 
         Serialized with ``refresh_token()`` and ``refresh_session()`` by the
         refresh lock, so an in-flight refresh cannot merge stale tokens over
@@ -837,8 +857,31 @@ class NavienAuthClient:
                         response=response_data,
                     )
 
-                auth_response = AuthenticationResponse.model_validate(
-                    response_data
+                data = response_data.get("data") or {}
+                if not isinstance(data, dict):
+                    raise ValueError("'data' is not an object")
+                token_data = data.get("token") or data.get("tokens") or {}
+                if not isinstance(token_data, dict):
+                    raise ValueError("'token' is not an object")
+
+                new_tokens, updated = self._merge_token_fields(
+                    current, token_data
+                )
+                if not updated:
+                    raise AuthenticationError(
+                        "Secured sign-in response contained no tokens",
+                        status_code=code,
+                        response=response_data,
+                    )
+
+                auth_response = AuthenticationResponse(
+                    user_info=UserInfo.model_validate(
+                        data.get("userInfo") or {}
+                    ),
+                    tokens=new_tokens,
+                    legal=list(data.get("legal") or []),
+                    code=code,
+                    msg=msg or "SUCCESS",
                 )
                 self._auth_response = auth_response
                 self._user_email = user_id

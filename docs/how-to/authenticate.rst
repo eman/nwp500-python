@@ -131,8 +131,9 @@ library follows the NaviLink app and tries, in order:
    access token; returns new AWS credentials only. If the JWT has also
    expired it is refreshed first so the access token is live.
 2. ``secured_sign_in()`` - ``POST /user/secured-sign-in`` with the access
-   token; returns a full token set (JWT and AWS credentials) like a
-   password sign-in.
+   token; returns user info plus whatever token fields the server issues.
+   Observed live, that is the AWS credentials only, so the JWT access and
+   refresh tokens are kept.
 3. ``sign_in()`` with the stored password, only if both of the above fail.
 
 ``ensure_valid_token()`` (called by the API and MQTT clients) and the

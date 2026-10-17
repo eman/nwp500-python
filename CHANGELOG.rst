@@ -35,8 +35,9 @@ Added
   with the access token and updates only the AWS credential fields the
   server returns, as the app does when the MQTT connection fails with an
   auth error. ``secured_sign_in()`` posts to ``/user/secured-sign-in`` with
-  the access token and returns a full token set, which the app uses for
-  auto-login. When the AWS credentials expire, ``ensure_valid_token()``, the
+  the access token and overlays whatever token fields come back (observed
+  live: the AWS credentials only; the JWTs are kept), which the app uses
+  for auto-login. When the AWS credentials expire, ``ensure_valid_token()``, the
   context manager's stored-token check and ``re_authenticate()`` now try
   session refresh, then secured sign-in, and only then the password sign-in.
   The MQTT client's deep reconnect calls ``refresh_session()`` after the

@@ -192,10 +192,11 @@ secured_sign_in()
    Sign in again using the stored access token instead of the password.
 
    Posts ``{"userId": <email>}`` to ``/user/secured-sign-in`` with the
-   current access token in the ``authorization`` header. The response has
-   the same shape as ``sign_in()`` (user info, full token set with AWS
-   credentials, legal notices) and replaces the current authentication
-   state. This is what the NaviLink app uses for auto-login.
+   current access token in the ``authorization`` header. The response
+   carries user info, legal notices and a ``token`` object; only the token
+   fields the server sends are overwritten. Observed live, the ``token``
+   object holds the AWS credentials only, so the JWT access and refresh
+   tokens are kept. This is what the NaviLink app uses for auto-login.
 
    :return: Authentication response with user info and tokens
    :rtype: AuthenticationResponse

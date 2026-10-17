@@ -339,6 +339,67 @@ class TestSecuredSignIn:
         assert kwargs["headers"]["User-Agent"] == f"nwp500-python/{__version__}"
 
     @pytest.mark.asyncio
+    async def test_live_shape_keeps_jwt_and_refresh_token(self):
+        """The cloud's secured-sign-in ``token`` object carries only the AWS
+        credentials (observed live 2026-10-16). The JWT access and refresh
+        tokens must survive, or every later REST call gets a 401 with no
+        way to refresh."""
+        current = _aws_expired_tokens()
+        client = _client(current)
+        _mock_post(
+            client,
+            {
+                "code": 200,
+                "msg": "SUCCESS",
+                "data": {
+                    "userInfo": {
+                        "userType": "O",
+                        "userFirstName": "Jane",
+                        "userLastName": "Doe",
+                        "userStatus": "ACTIVE",
+                        "userSeq": 1,
+                    },
+                    "legal": [{"legalType": "TS", "version": "1.0.0"}],
+                    "token": {
+                        "accessKeyId": "new_key",
+                        "secretKey": "new_secret",
+                        "sessionToken": "new_session",
+                        "authorizationExpiresIn": 3600,
+                    },
+                },
+            },
+        )
+
+        response = await client.secured_sign_in()
+
+        tokens = response.tokens
+        assert tokens.access_token == current.access_token
+        assert tokens.refresh_token == current.refresh_token
+        assert tokens.id_token == current.id_token
+        assert tokens.issued_at == current.issued_at
+        assert tokens.access_key_id == "new_key"
+        assert tokens.session_token == "new_session"
+        assert tokens.aws_credentials_issued_at is not None
+        assert not tokens.are_aws_credentials_expired
+        assert response.user_info.full_name == "Jane Doe"
+        assert len(response.legal) == 1
+        assert client.current_tokens is tokens
+
+    @pytest.mark.asyncio
+    async def test_response_without_tokens_raises(self):
+        client = _client(_aws_expired_tokens())
+        _mock_post(
+            client,
+            {
+                "code": 200,
+                "msg": "SUCCESS",
+                "data": {"userInfo": {}, "token": {}},
+            },
+        )
+        with pytest.raises(AuthenticationError, match="no tokens"):
+            await client.secured_sign_in()
+
+    @pytest.mark.asyncio
     @pytest.mark.parametrize("status", [401, 403])
     async def test_http_error_maps_to_authentication_error(self, status):
         client = _client(_aws_expired_tokens())
@@ -360,7 +421,10 @@ class TestSecuredSignIn:
     @pytest.mark.asyncio
     async def test_malformed_response_raises(self):
         client = _client(_aws_expired_tokens())
-        _mock_post(client, {"code": 200, "msg": "SUCCESS", "data": {}})
+        _mock_post(
+            client,
+            {"code": 200, "msg": "SUCCESS", "data": {"token": "not-an-object"}},
+        )
 
         with pytest.raises(AuthenticationError, match="Invalid response"):
             await client.secured_sign_in()

@@ -65,7 +65,11 @@ paths:
                   example: user@example.com
       responses:
         '200':
-          description: Successful authentication; identical to /user/sign-in
+          description: >-
+            Successful authentication. Same envelope as /user/sign-in, but the
+            `token` object has been observed to carry only the AWS credential
+            fields (accessKeyId, secretKey, sessionToken,
+            authorizationExpiresIn); clients keep any JWT fields not returned.
           content:
             application/json:
               schema:
