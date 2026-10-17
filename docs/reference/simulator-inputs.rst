@@ -160,6 +160,14 @@ Built by ``sim_adapters.heater_state(status)``.
        ``heat_upper_use`` or ``heat_lower_use`` turned on. It leaves
        the element the rest of its dead time; with None, the dead time
        is taken as past.
+   * - ``energy_to_setpoint_wh``
+     - Wh
+     - None
+     - ``DeviceStatus.energy_to_setpoint``: the heater's own count of
+       the energy still needed to reach its target. ``forecast`` reads
+       a zero count as "already ready" outside a TOU window. Leave it
+       None for a tank state you made up: the count is the heater's
+       own tank's.
 
 
 Settings: ``Settings``
@@ -192,6 +200,21 @@ Built by ``sim_adapters.settings(status)``.
        heater never starts on the lower zone, its usual trigger
        (:doc:`/explanation/what-starts-a-recovery`); the adapter always
        fills it.
+   * - ``hp_lower_off_f``
+     - degF
+     - None
+     - ``DeviceStatus.hp_lower_off_temp_setting_raw`` (half degC): the
+       lower thermistor's compressor stop threshold, the target
+       ``forecast`` and ``active_cycle`` heat the lower zone to. Without
+       it they heat to the setpoint, named in ``defaults_used``.
+   * - ``hp_upper_on_f``
+     - degF
+     - None
+     - ``DeviceStatus.hp_upper_on_temp_setting_raw`` (half degC): the
+       upper thermistor's start threshold, which a TOU window raises to
+       about the setpoint. ``forecast`` reads it to tell whether the
+       energy count is measured to the setpoint; unknown counts as
+       raised.
 
 
 History: ``History``

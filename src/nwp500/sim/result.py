@@ -9,6 +9,7 @@ it gave from one it was assumed.
 
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
+from typing import Any
 
 from nwp500.sim.book import BookedPath
 from nwp500.sim.delivery import DrawWindowResult
@@ -134,6 +135,76 @@ class RecoveryResult:
         if self.ready_at is None:
             return None
         return (self.ready_at - self.at).total_seconds() / 60.0
+
+
+@dataclass(frozen=True)
+class Forecast:
+    """When a heat-pump recovery must start to have the tank ready at a
+    target time (``api.forecast``), and the recovery itself.
+
+    ``status``: ``ok``; ``partial_charge`` (a lower-zone target was
+    asked for); ``low_confidence`` (a model served it under
+    ``LOW_CONFIDENCE_FLOOR``); ``infeasible`` (it cannot be ready in
+    time: it starts now, ``ready_at`` is when it ends, and
+    ``shortfall_minutes`` how late); ``no_heating_required`` (the tank is
+    already at its target); ``not_scheduled`` (heating is disabled:
+    ``duration_minutes`` stands alone, with no start or end).
+    """
+
+    status: str
+    start_at: datetime | None
+    ready_at: datetime | None
+    duration_minutes: float
+    confidence: float
+    #: The lower zone's target the recovery heats to, °F.
+    target_f: float
+    feasible: bool
+    shortfall_minutes: float | None
+    #: The integrator's own duration beside a model's; None when the
+    #: physics is not usable as an estimate.
+    physics_estimate_minutes: float | None
+    #: What served the duration: ``physics``, ``model`` or
+    #: ``no_heating_required``.
+    estimator: str
+    #: The tank where the recovery starts, °F, and the heater's own
+    #: energy count then (None unless read live).
+    upper_f_at_start: float
+    lower_f_at_start: float
+    energy_to_setpoint_wh: float | None
+    #: A zero counter inside a TOU window: the heater has met its
+    #: reduced target and will not heat until the window closes, so the
+    #: recovery is a counterfactual.
+    tou_capped: bool
+    #: The heating path with its electricity, stored heat and COP per
+    #: interval (``heating_trajectory.HeatingPoint``); None when none
+    #: can be published.
+    trajectory: tuple[Any, ...] | None
+    #: The electricity a compressor start spends before the tank gains
+    #: anything, Wh; 0 when it has already started; None without a
+    #: fitted COP.
+    startup_energy_wh: float | None
+    reasons: tuple[str, ...]
+    defaults_used: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class ActiveCycle:
+    """What is left of the recovery the compressor is running
+    (``api.active_cycle``). ``status`` is ``heating``, or
+    ``not_heating`` when the compressor is off (nothing else is set)."""
+
+    status: str
+    ready_at: datetime | None = None
+    remaining_minutes: float | None = None
+    #: The integrator's own remaining time, with the live evaporator
+    #: coil standing in for its approach estimate when given; None when
+    #: the physics is not usable.
+    physics_remaining_minutes: float | None = None
+    lower_f: float | None = None
+    target_f: float | None = None
+    confidence: float | None = None
+    reasons: tuple[str, ...] = ()
+    defaults_used: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)

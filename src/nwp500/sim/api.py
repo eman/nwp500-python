@@ -30,7 +30,7 @@ from nwp500.sim.circulation import (
     CirculationDraws,
     CirculationLoss,
 )
-from nwp500.sim.decay import AmbientSampler
+from nwp500.sim.decay import AmbientSampler, compute_start_time
 from nwp500.sim.defaults import SITE_CIRCULATION
 from nwp500.sim.delivery import (
     Deliverable,
@@ -51,6 +51,7 @@ from nwp500.sim.engine import (
 )
 from nwp500.sim.engine import simulate as walk
 from nwp500.sim.extensions import HeatLedger, RecoveryModel
+from nwp500.sim.heating_trajectory import HeatingPoint, build_heating_trajectory
 from nwp500.sim.inputs import (
     ELECTRIC,
     ENERGY_SAVER,
@@ -65,6 +66,7 @@ from nwp500.sim.inputs import (
     Settings,
 )
 from nwp500.sim.params import HeaterParams
+from nwp500.sim.physics.compressor import predict_physics_detailed
 from nwp500.sim.physics.element import (
     DEVICE_MODE,
     ElementMode,
@@ -78,8 +80,16 @@ from nwp500.sim.ready import (
     assess,
     typed,
 )
+from nwp500.sim.recovery import (
+    PHYSICS_TRUNCATED,
+    RecoveryContext,
+    physics_recovery,
+)
+from nwp500.sim.recovery import recovery as serve_recovery
 from nwp500.sim.result import (
+    ActiveCycle,
     ElementModeResult,
+    Forecast,
     RecoveryResult,
     SimulationResult,
     Trace,
@@ -89,7 +99,11 @@ from nwp500.sim.schedules import (
     reservation_firings,
     tou_windows,
 )
-from nwp500.sim.tank_physics import TankPhysics
+from nwp500.sim.tank_physics import (
+    REFINE_TOL_MINUTES,
+    TankPhysics,
+    ambient_window_mean,
+)
 from nwp500.sim.tou_triggers import heater_start, in_window
 from nwp500.sim.units import BTU_PER_WH
 
@@ -533,7 +547,11 @@ def recovery(
     first = result.heating[0] if result.heating else None
     reasons = list(result.reasons)
     if first is None:
-        reasons.append("no_recovery_within_horizon")
+        # Heating disabled (Vacation, Power Off) is why, when it is.
+        _, disabled = _engine_mode(settings.mode)
+        reasons.append(
+            "not_scheduled" if disabled else "no_recovery_within_horizon"
+        )
         path = tuple(result.points)
     else:
         path = tuple(p for p in result.points if p.at <= first.end)
@@ -956,3 +974,366 @@ def time_to_ready(
         book_params=params.book_terms(),
     )
     return typed(answer, s.start, nxt, defaults)
+
+
+# ── ready by a time ─────────────────────────────────────────────────
+
+#: How far ahead a forecast's target may be: the coast walks 10-minute
+#: steps to it.
+FORECAST_HORIZON = timedelta(hours=168)
+#: The fixed point's passes, start against the coast to it.
+_FORECAST_PASSES = 3
+#: The device's minimum setpoint (40.5 °C): its upper start threshold
+#: rests here except while a TOU window raises it to about the setpoint.
+DEVICE_REFERENCE_F = 104.9
+#: Half a degree C: the threshold is reported in 0.5 °C steps.
+_REFERENCE_SLACK_F = 0.9
+#: A raised upper threshold also sits at least this far above resting.
+_RAISED_MARGIN_F = 5.0
+
+
+def counter_measures_to_setpoint(
+    hp_upper_on_f: float | None, target_f: float
+) -> bool:
+    """Whether the heater's energy count (``energy_to_setpoint``) is
+    measured to ``target_f``: only while its upper start threshold
+    rests (no TOU window raising it), when a zero count agrees with the
+    probes. Inside a window the heater counts to its TOU cap, about
+    2 °C lower, and an unknown threshold is taken as raised, so the
+    probes decide."""
+    return (
+        hp_upper_on_f is not None
+        and hp_upper_on_f <= DEVICE_REFERENCE_F + _REFERENCE_SLACK_F
+        and hp_upper_on_f <= target_f - _RAISED_MARGIN_F
+    )
+
+
+def forecast(
+    state: HeaterState,
+    settings: Settings,
+    environment: Environment,
+    params: HeaterParams,
+    *,
+    at: datetime,
+    target_time: datetime,
+    target_f: float | None = None,
+    target_lower_f: float | None = None,
+    loads: Loads | None = None,
+    history: History | None = None,
+    model: RecoveryModel | None = None,
+) -> Forecast:
+    """When a heat-pump recovery must start for the tank to be ready at
+    ``target_time``, from ``state`` at ``at``: the tank coasts to the
+    start (jacket loss, and circulation's runs in ``loads``; no draws),
+    the recovery runs from there to the lower zone's target, and the
+    start is refined to ``target_time`` less that duration, to a fixed
+    point, the tank at the start projected to exactly it.
+
+    The target is ``target_lower_f`` (a partial charge), else
+    ``target_f``, else the heater's own stop threshold
+    (``Settings.hp_lower_off_f``), else the setpoint, named in
+    ``defaults_used``. With no target asked for, a zero energy count
+    (``HeaterState.energy_to_setpoint_wh``) outside a TOU window, or a
+    lower zone already at the target, needs no heating; a zero count
+    inside one marks the recovery ``tou_capped``. ``model`` serves the
+    duration (``extensions.RecoveryModel``); physics alone otherwise.
+    """
+    origin, target = _instant(at), _instant(target_time)
+    if target > origin + FORECAST_HORIZON:
+        raise ValueError(
+            "target_time is more than "
+            f"{FORECAST_HORIZON.total_seconds() / 3600:.0f} h ahead"
+        )
+    history = history if history is not None else History()
+    loads = loads if loads is not None else Loads()
+    defaults: list[str] = []
+    partial = target_lower_f is not None
+    override = target_f is not None or partial
+    if target_lower_f is not None:
+        goal = target_lower_f
+    elif target_f is not None:
+        goal = target_f
+    elif settings.hp_lower_off_f is not None:
+        goal = settings.hp_lower_off_f
+    else:
+        goal = settings.setpoint_f
+        defaults.append("hp_lower_off_f=setpoint_f")
+    energy = state.energy_to_setpoint_wh
+    counted = (
+        energy is not None
+        and energy <= 0
+        and counter_measures_to_setpoint(settings.hp_upper_on_f, goal)
+    )
+    tou_capped = (
+        not override and energy is not None and energy <= 0 and not counted
+    )
+    _, disabled = _engine_mode(settings.mode)
+    if (not override and counted) or state.lower_f >= goal:
+        return Forecast(
+            status="no_heating_required",
+            start_at=origin,
+            ready_at=origin,
+            duration_minutes=0.0,
+            confidence=1.0,
+            target_f=goal,
+            feasible=True,
+            shortfall_minutes=None,
+            physics_estimate_minutes=None,
+            estimator="no_heating_required",
+            upper_f_at_start=state.upper_f,
+            lower_f_at_start=state.lower_f,
+            energy_to_setpoint_wh=energy,
+            tou_capped=False,
+            trajectory=(
+                HeatingPoint(origin, state.upper_f, state.lower_f, 0.0, 0.0),
+            ),
+            startup_energy_wh=None,
+            reasons=(),
+            defaults_used=tuple(defaults),
+        )
+    physics = _physics(
+        params,
+        environment,
+        origin,
+        max(target, origin) + timedelta(hours=6),
+        draws_on=False,
+        model=model,
+        defaults=defaults,
+        circulation=_circulation(loads),
+    )
+
+    def coast_to(when: datetime) -> tuple[float, float, float | None]:
+        """The tank coasted to ``when``, and the mean air over it."""
+        coast = physics.coast(
+            origin,
+            state.upper_f,
+            state.lower_f,
+            when,
+            [],
+            heated_at=history.heated_at,
+        )
+        last = coast.points[-1]
+        return last.upper_f, last.lower_f, coast.ambient_mean_f
+
+    def predict(when: datetime, heat_minutes: float) -> Any:
+        upper, lower, coast_air = coast_to(when)
+        amb = physics.ambient.at(when)
+        mean = ambient_window_mean(
+            physics.series, when, when + timedelta(minutes=heat_minutes)
+        )
+        # No air sample inside the recovery's window (the first pass's
+        # is an instant): the coast's mean, as the forecast's was.
+        fallback = coast_air if coast_air is not None else amb
+        t_amb_mean = mean if mean is not None else fallback
+        served = serve_recovery(
+            RecoveryContext(
+                t_start_lower=lower,
+                t_start_upper=upper,
+                target_f=goal,
+                t_amb_start=amb,
+                t_amb_mean=t_amb_mean,
+                h_amb_start=environment.humidity,
+                start_hold_minutes=0.0,
+                draw_load=0.0,
+                physics=physics_recovery(
+                    t_start_lower=lower,
+                    t_start_upper=upper,
+                    target_f=goal,
+                    t_amb_mean=t_amb_mean,
+                    h_amb_start=environment.humidity,
+                    compressor=params.compressor,
+                    loss=params.loss,
+                    usable=physics.physics_usable,
+                    record_path=True,
+                    tank=params.tank,
+                ),
+            ),
+            model=model,
+        )
+        return served, (upper, lower)
+
+    served, tank = predict(target, 0.0)
+    if served is None:
+        raise SimulationError("the recovery could not be computed")
+    decayed_to = target
+    for _ in range(_FORECAST_PASSES):
+        when = max(compute_start_time(target, served.minutes), origin)
+        if when >= target:
+            break
+        refined, refined_tank = predict(when, served.minutes)
+        if refined is None:
+            break
+        converged = abs(refined.minutes - served.minutes) <= REFINE_TOL_MINUTES
+        served, tank, decayed_to = refined, refined_tank, when
+        if converged:
+            break
+    start_at = compute_start_time(target, served.minutes)
+    feasible = start_at >= origin
+    shortfall: float | None = None
+    ready_at = target
+    if not feasible:
+        shortfall = (origin - start_at).total_seconds() / 60.0
+        start_at = origin
+        ready_at = origin + timedelta(minutes=served.minutes)
+    if decayed_to != start_at:
+        tank = coast_to(start_at)[:2]
+    upper_s, lower_s = tank
+    status = "partial_charge" if partial else "ok"
+    if not feasible:
+        status = "infeasible"
+    elif not partial and served.confidence < LOW_CONFIDENCE_FLOOR:
+        status = "low_confidence"
+    scheduled_start: datetime | None = start_at
+    scheduled_ready: datetime | None = ready_at
+    if disabled:
+        status = "not_scheduled"
+        scheduled_start = scheduled_ready = None
+        shortfall = None
+        feasible = False
+    power = params.power
+    trajectory: tuple[HeatingPoint, ...] | None = None
+    if scheduled_start is not None and served.path is not None:
+        trajectory = tuple(
+            build_heating_trajectory(
+                served.path,
+                served_minutes=served.minutes,
+                start_at=scheduled_start,
+                t_upper_start=upper_s,
+                t_lower_start=lower_s,
+                two_zone=params.compressor.two_zone,
+                power_scale=power.power_scale,
+                cop_scale=power.cop_scale,
+                cop_lift_coeff=power.cop_lift_coeff,
+                cop_lift_ref_f=power.cop_lift_ref_f,
+                t_amb=served.context.t_amb_mean,
+                hold_minutes=served.start_hold_minutes,
+                tank=params.tank,
+            )
+        )
+    startup: float | None = None
+    if trajectory is not None and power.cop_scale is not None:
+        startup = power.startup_wh
+        if scheduled_start is not None and (
+            scheduled_start <= origin and state.compressor_running
+        ):
+            startup = 0.0
+    return Forecast(
+        status=status,
+        start_at=scheduled_start,
+        ready_at=scheduled_ready,
+        duration_minutes=served.minutes,
+        confidence=served.confidence,
+        target_f=goal,
+        feasible=feasible,
+        shortfall_minutes=shortfall,
+        physics_estimate_minutes=served.physics.estimate,
+        estimator="physics" if served.model is None else "model",
+        upper_f_at_start=upper_s,
+        lower_f_at_start=lower_s,
+        energy_to_setpoint_wh=energy,
+        tou_capped=tou_capped,
+        trajectory=trajectory,
+        startup_energy_wh=startup,
+        reasons=tuple(_unique(served.reasons)),
+        defaults_used=tuple(defaults),
+    )
+
+
+def active_cycle(
+    state: HeaterState,
+    settings: Settings,
+    environment: Environment,
+    params: HeaterParams,
+    *,
+    at: datetime,
+    evaporator_f: float | None = None,
+    model: RecoveryModel | None = None,
+) -> ActiveCycle:
+    """What is left of the recovery the compressor is running at
+    ``at``: the lower zone from where it is to its target
+    (``Settings.hp_lower_off_f``, else the setpoint), at the air now,
+    served by ``model`` when given. Beside it, the integrator's own
+    remaining time, with ``evaporator_f`` (the coil's live reading,
+    ``sim_adapters.evaporator_f``) in place of its approach estimate:
+    the coil is cooled by the running refrigerant, so it is the
+    operating point. A truncated integration says
+    ``physics_truncated``."""
+    at = _instant(at)
+    if not state.compressor_running:
+        return ActiveCycle(status="not_heating")
+    defaults: list[str] = []
+    if settings.hp_lower_off_f is not None:
+        goal = settings.hp_lower_off_f
+    else:
+        goal = settings.setpoint_f
+        defaults.append("hp_lower_off_f=setpoint_f")
+    if "humidity" not in environment.model_fields_set:
+        defaults.append(f"humidity={environment.humidity}")
+    air = _ambient_at(environment, at)
+    # As the core's: a positive compressor constant is calibrated.
+    usable = params.compressor.compressor_constant > 0.0
+    served = serve_recovery(
+        RecoveryContext(
+            t_start_lower=state.lower_f,
+            t_start_upper=state.upper_f,
+            target_f=goal,
+            t_amb_start=air,
+            # The cycle is under way: the air now stands for its mean.
+            t_amb_mean=air,
+            h_amb_start=environment.humidity,
+            start_hold_minutes=0.0,
+            draw_load=0.0,
+            physics=physics_recovery(
+                t_start_lower=state.lower_f,
+                t_start_upper=state.upper_f,
+                target_f=goal,
+                t_amb_mean=air,
+                h_amb_start=environment.humidity,
+                compressor=params.compressor,
+                loss=params.loss,
+                usable=usable,
+                tank=params.tank,
+            ),
+        ),
+        model=model,
+    )
+    if served is None:
+        raise SimulationError("the recovery could not be computed")
+    reasons = list(served.reasons)
+    physics_minutes: float | None = None
+    if usable:
+        try:
+            result = predict_physics_detailed(
+                t_start_lower=state.lower_f,
+                hp_lower_off=goal,
+                t_amb_mean=air,
+                compressor_constant=params.compressor.compressor_constant,
+                evap_approach_f=params.compressor.evap_approach_f,
+                compressor=params.compressor,
+                loss=params.loss,
+                h_amb_start=environment.humidity,
+                t_evap_override=evaporator_f,
+                ua_btu_hr_f=params.loss.ua_btu_hr_f,
+                ua_exponent=params.loss.ua_exponent,
+                ua_ref_delta_t=params.loss.ua_ref_delta_t_f,
+                stratification_gap=state.upper_f - state.lower_f,
+                two_zone=params.compressor.two_zone,
+                tank=params.tank,
+            )
+            if not math.isnan(result.minutes):
+                physics_minutes = result.minutes
+            if not result.converged:
+                reasons.append(PHYSICS_TRUNCATED)
+        except Exception:
+            physics_minutes = None
+    return ActiveCycle(
+        status="heating",
+        ready_at=at + timedelta(minutes=served.minutes),
+        remaining_minutes=served.minutes,
+        physics_remaining_minutes=physics_minutes,
+        lower_f=state.lower_f,
+        target_f=goal,
+        confidence=served.confidence,
+        reasons=tuple(_unique(reasons)),
+        defaults_used=tuple(defaults),
+    )

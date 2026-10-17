@@ -130,6 +130,18 @@ Added
     with what it rested on (held-out error, windows used, a fit pinned
     on a bound). An element run counts as busy in the quiet test, not
     only the compressor and hot water in use.
+  - ``forecast``: when a recovery must start to have the tank ready at
+    a time, and whether it can (``feasible``, ``shortfall_minutes``),
+    to the heater's own stop threshold or a partial charge, with
+    ``no_heating_required`` (the lower zone at its target, or a zero
+    energy count outside a TOU window), ``not_scheduled``, and the
+    trajectory's electricity, stored heat and COP.
+    ``active_cycle``: what is left of a running recovery, its physics
+    estimate on the evaporator coil's live reading.
+    ``Settings.hp_lower_off_f``, ``hp_upper_on_f`` and
+    ``HeaterState.energy_to_setpoint_wh`` carry what they need, filled
+    by the adapters; ``recovery`` says ``not_scheduled`` in Vacation and
+    Power Off.
   - ``time_to_ready`` says ``inlet_temp_modelled`` when a booked answer
     converts at an inlet nobody measured (``inlet_measured=``, or a
     book whose steps measured it); ``next_recovery``'s coast loses the

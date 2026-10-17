@@ -161,19 +161,21 @@ def volume_unit() -> str:
 
 def heater_state(status: DeviceStatus) -> HeaterState:
     """The tank and what is heating it: both thermistors (0.1 °C
-    resolution), the compressor, and either element."""
+    resolution), the compressor, either element, and the heater's own
+    count of the energy still to heat."""
     return HeaterState(
         upper_f=_from_device(DeciCelsius(status.tank_upper_temperature_raw)),
         lower_f=_from_device(DeciCelsius(status.tank_lower_temperature_raw)),
         compressor_running=bool(status.comp_use),
         element_running=bool(status.heat_upper_use)
         or bool(status.heat_lower_use),
+        energy_to_setpoint_wh=float(status.energy_to_setpoint),
     )
 
 
 def settings(status: DeviceStatus) -> Settings:
-    """The setpoint, the operation mode and the lower-zone start
-    threshold."""
+    """The setpoint, the operation mode, the lower zone's start and stop
+    thresholds, and the upper zone's start threshold."""
     return Settings(
         setpoint_f=_from_device(
             HalfCelsius(status.dhw_temperature_setting_raw)
@@ -181,6 +183,12 @@ def settings(status: DeviceStatus) -> Settings:
         mode=int(status.dhw_operation_setting),
         hp_lower_on_f=_from_device(
             HalfCelsius(status.hp_lower_on_temp_setting_raw)
+        ),
+        hp_lower_off_f=_from_device(
+            HalfCelsius(status.hp_lower_off_temp_setting_raw)
+        ),
+        hp_upper_on_f=_from_device(
+            HalfCelsius(status.hp_upper_on_temp_setting_raw)
         ),
     )
 
@@ -471,6 +479,16 @@ def circulation(
         CirculationRun(start=a, end=b)
         for a, b in weekly_runs(entries, ZoneInfo(tz), start, until)
     )
+
+
+def evaporator_f(status: DeviceStatus) -> float | None:
+    """The evaporator coil's live reading, °F, for
+    ``sim.active_cycle``: only while the compressor runs, when the
+    running refrigerant cools it to the operating point; None
+    otherwise."""
+    if not status.comp_use:
+        return None
+    return _from_device(DeciCelsius(status.evaporator_temperature_raw))
 
 
 def location_air_reading(status: DeviceStatus) -> float | None:

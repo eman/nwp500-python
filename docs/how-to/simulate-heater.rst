@@ -440,6 +440,40 @@ mode in force, simulate a mode write instead (`Evaluate a change before
 sending it`_).
 
 
+Have it ready by a time
+=======================
+
+When must a heat-pump recovery start for the tank to be hot at 7 am,
+and is there time? ``forecast`` coasts the tank to the start, runs the
+recovery from there, and moves the start until the two agree:
+
+.. code-block:: python
+
+   f = sim.forecast(
+       sa.heater_state(status),
+       sa.settings(status),
+       environment,
+       params,
+       at=now,
+       target_time=tomorrow_7am,
+   )
+   print(f.status, f.start_at, f.ready_at, f.duration_minutes)
+
+``status`` is ``ok``; ``infeasible`` when it cannot be ready in time
+(it starts now, ``ready_at`` is when it would finish, and
+``shortfall_minutes`` is how late); ``no_heating_required`` when the
+tank is already there; or ``not_scheduled`` in Vacation or Power Off.
+The target is the heater's own stop threshold
+(``hp_lower_off_temp_setting``); pass ``target_lower_f=`` for a
+partial charge. With a fitted COP, ``f.trajectory`` carries the
+electricity, the heat stored and the COP along the way, and
+``f.startup_energy_wh`` the cost of the compressor's start.
+
+While the compressor runs, ``sim.active_cycle`` says what is left of
+the recovery under way. Pass ``evaporator_f=sa.evaporator_f(status)``
+so its physics estimate uses the coil's live reading.
+
+
 Judge a shower or a bath
 ========================
 

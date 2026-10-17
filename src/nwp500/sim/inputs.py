@@ -73,6 +73,10 @@ class HeaterState(_Value):
     #: Whether a heating element is on, and since when (None: unknown).
     element_running: bool = False
     element_running_since: Instant | None = None
+    #: The heater's own count of the energy still needed to reach its
+    #: recovery target (``DeviceStatus.energy_to_setpoint``), Wh; None:
+    #: not read (an injected state's is never its own).
+    energy_to_setpoint_wh: float | None = None
 
 
 class Settings(_Value):
@@ -86,6 +90,14 @@ class Settings(_Value):
     #: (``hp_lower_on_temp_setting``), °F. None: the heater starts no
     #: recovery on the lower zone.
     hp_lower_on_f: float | None = None
+    #: The lower thermistor's compressor stop threshold
+    #: (``hp_lower_off_temp_setting``), °F: what a heat-pump recovery
+    #: heats the lower zone to. None: not known.
+    hp_lower_off_f: float | None = None
+    #: The upper thermistor's compressor start threshold
+    #: (``hp_upper_on_temp_setting``), °F: raised to about the setpoint
+    #: while a TOU window is in force. None: not known.
+    hp_upper_on_f: float | None = None
 
 
 class History(_Value):

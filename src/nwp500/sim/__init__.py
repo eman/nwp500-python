@@ -27,7 +27,9 @@ models; ``sim.codec`` reads and writes scenarios as JSON documents.
 """
 
 from nwp500.sim.api import (
+    active_cycle,
     element_mode,
+    forecast,
     next_recovery,
     readiness,
     recovery,
@@ -73,7 +75,9 @@ from nwp500.sim.ready import (
     ShowersReady,
 )
 from nwp500.sim.result import (
+    ActiveCycle,
     ElementModeResult,
+    Forecast,
     RecoveryResult,
     SimulationResult,
     Trace,
@@ -101,6 +105,8 @@ __all__ = (
     "Commands",
     "Readiness",
     "ReadinessParams",
+    "ActiveCycle",
+    "Forecast",
     "RecoveryResult",
     "ReservationEntry",
     "Scenario",
@@ -114,6 +120,8 @@ __all__ = (
     "default_params",
     "element_mode",
     "full_tank_book",
+    "active_cycle",
+    "forecast",
     "next_recovery",
     "readiness",
     "recovery",

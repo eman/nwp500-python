@@ -30,6 +30,10 @@ Entry points
 
 .. autofunction:: nwp500.sim.next_recovery
 
+.. autofunction:: nwp500.sim.forecast
+
+.. autofunction:: nwp500.sim.active_cycle
+
 .. autofunction:: nwp500.sim.element_mode
 
 .. autofunction:: nwp500.sim.default_params
@@ -90,6 +94,12 @@ Results
    :members:
 
 .. autoclass:: nwp500.sim.Trace
+   :members:
+
+.. autoclass:: nwp500.sim.Forecast
+   :members:
+
+.. autoclass:: nwp500.sim.ActiveCycle
    :members:
 
 .. autoclass:: nwp500.sim.DrawWindowResult
