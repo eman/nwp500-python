@@ -99,6 +99,10 @@ dummy-variable-rgx = "^(_+|(_+[a-zA-Z0-9_]*[a-zA-Z0-9]+?))$"
 "examples/**/*.py" = ["E402", "S105", "S106"]  # S105/S106: example mock credentials
 # Ignore assert_used in CLI rich output (acceptable for non-library code)
 "src/nwp500/cli/rich_output.py" = ["S101"]
+# The simulator is a port that must stay bit-identical to the engine it
+# came from: its asserts state invariants, and its defaults are frozen
+# dataclass instances, so neither is rewritten to satisfy a lint.
+"src/nwp500/sim/**/*.py" = ["S101", "B008"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["nwp500"]
