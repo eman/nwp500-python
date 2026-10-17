@@ -725,14 +725,21 @@ def _ambient_at(environment: Environment, at: datetime) -> float:
     return sampler.at(at)
 
 
-def next_recovery(scenario: Scenario, params: HeaterParams) -> Recovery:
+def next_recovery(
+    scenario: Scenario,
+    params: HeaterParams,
+    *,
+    recovery: RecoveryModel | None = None,
+) -> Recovery:
     """The heat-pump recovery the heater runs next, as ``time_to_ready``
     scores it: from now if the compressor runs; else the tank coasts,
     under the scenario's draws, to the heater's own first compressor
     start within ``TRIGGER_HORIZON`` (``idle`` without one), and the
     recovery runs from the tank there, draw-free, in Heat Pump, with
-    the TOU cap judged where it ends. ``not_scheduled`` while heating
-    is disabled; ``unavailable`` when the walk cannot be completed.
+    the TOU cap judged where it ends. ``recovery`` serves that
+    recovery's duration (``extensions.RecoveryModel``); the trigger is
+    the coast's alone. ``not_scheduled`` while heating is disabled;
+    ``unavailable`` when the walk cannot be completed.
 
     The coast's loss, in the book's frame, is standby to the air now and
     the draws before the start; the recovery's heat into the book is the
@@ -785,6 +792,7 @@ def next_recovery(scenario: Scenario, params: HeaterParams) -> Recovery:
                 }
             ),
             params,
+            recovery=recovery,
         )
     except SimulationError:
         return Recovery("unavailable")
@@ -812,6 +820,7 @@ def time_to_ready(
     bath_gal: float | None = None,
     shower_gal: float | None = None,
     drawing: bool = False,
+    recovery: RecoveryModel | None = None,
 ) -> Readiness:
     """Hot water at ``scenario.start`` and ahead: deliverable gallons
     now, whether the tank can run a bath of ``bath_gal`` and when it
@@ -824,10 +833,10 @@ def time_to_ready(
     ``bath_gal`` and ``shower_gal`` default to
     ``ReadinessParams.bath_gal`` and ``shower_gal``, named in
     ``defaults_used``. ``drawing``: water is being drawn now. The
-    recovery is the next one (``next_recovery``), served by physics
-    alone: with no trained recovery model it is the core's physics
-    recovery, which runs short on long recoveries (the simulator
-    explanation's *Accuracy*).
+    recovery is the next one (``next_recovery``), its duration served
+    by ``recovery`` when given (``extensions.RecoveryModel``) and by
+    physics alone otherwise, which runs short on long recoveries (the
+    simulator explanation's *Accuracy*).
     """
     s = scenario
     p = params.readiness
@@ -872,13 +881,13 @@ def time_to_ready(
         )
     )
     # The recovery is only needed when the bath is not ready now.
-    recovery = Recovery("unavailable")
+    nxt = Recovery("unavailable")
     if now_gal.gal < round(bath_gal, 1):
-        recovery = next_recovery(s, params)
+        nxt = next_recovery(s, params, recovery=recovery)
     answer = assess(
         s.start,
         tank,
-        recovery,
+        nxt,
         bath_gal=round(bath_gal, 1),
         bath_source="configured",
         shower_gal=shower_gal,
@@ -891,4 +900,4 @@ def time_to_ready(
         element_params=params.element,
         book_params=params.book_terms(),
     )
-    return typed(answer, s.start, recovery, defaults)
+    return typed(answer, s.start, nxt, defaults)

@@ -375,3 +375,41 @@ class TestWithoutALowerThreshold:
         )
         assert t.trigger == "upper_at_tou_open"
         assert t.lower_margin_f is None
+
+
+class _Fixed:
+    """A recovery model that serves a fixed duration."""
+
+    def __init__(self, minutes: float) -> None:
+        self.minutes = minutes
+
+    def duration(self, ctx: Any) -> Any:
+        from nwp500.sim.recovery import ModelDuration
+
+        return ModelDuration(
+            minutes=self.minutes, start_hold_minutes=0.0, confidence=1.0
+        )
+
+
+class TestARecoveryModel:
+    def test_it_serves_the_next_recoverys_duration(self, params):
+        s = _scenario(
+            state=HeaterState(
+                upper_f=128.0, lower_f=100.0, compressor_running=True
+            )
+        )
+        r = next_recovery(s, params, recovery=_Fixed(90.0))
+        end = r.points[-1][0]
+        assert (end - T0).total_seconds() / 60.0 == pytest.approx(90.0)
+
+    def test_time_to_ready_follows_it(self, params):
+        s = _scenario(
+            state=HeaterState(
+                upper_f=128.0, lower_f=100.0, compressor_running=True
+            )
+        )
+        fast = time_to_ready(s, params, bath_gal=20.0, recovery=_Fixed(60.0))
+        slow = time_to_ready(s, params, bath_gal=20.0, recovery=_Fixed(240.0))
+        assert fast.bath.ready_in_minutes is not None
+        assert slow.bath.ready_in_minutes is not None
+        assert fast.bath.ready_in_minutes < slow.bath.ready_in_minutes
