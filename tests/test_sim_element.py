@@ -89,6 +89,13 @@ class TestWhenTheElementDoesNotStart:
         assert r.upper_ready_minutes == 0.0
         assert r.element_minutes == 0.0
 
+    @pytest.mark.parametrize("t_upper", [137.0, 141.0])
+    def test_the_zone_ends_where_it_was(self, t_upper: float):
+        """Off, or with nothing to do, the element moves nothing: the
+        zone neither reaches the setpoint nor cools to it."""
+        r = mode_recovery("HIGH_DEMAND", t_upper, 120.0, 140.0, params=P)
+        assert r.upper_end_f == t_upper
+
     def test_a_target_above_the_setpoint_is_never_reached(self):
         """The element stops at the setpoint, so 145 never arrives."""
         r = mode_recovery(

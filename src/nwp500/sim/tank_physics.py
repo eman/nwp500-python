@@ -418,7 +418,9 @@ class TankPhysics:
         if p is None:
             return None
         power = self.params.power
-        reasons: tuple[str, ...] = (
+        # The served recovery's own reasons (a truncated integration,
+        # a model's diagnostics), and this tank's confidence flag.
+        reasons: tuple[str, ...] = (*p.reasons,) + (
             ("recovery_low_confidence",)
             if p.confidence < self.low_confidence_floor
             else ()
@@ -475,7 +477,8 @@ class TankPhysics:
         self, at: datetime, upper_f: float, lower_f: float, gal: float
     ) -> tuple[float, float]:
         d = self.params.draw
-        if d.observability is None:
+        # As in ``coast``: with draws off, a draw does not move the tank.
+        if not self.draws_on or d.observability is None:
             return upper_f, lower_f
         return draw_step(
             upper_f,
@@ -486,4 +489,5 @@ class TankPhysics:
             tmv_delivery_intercept_f=d.delivery_intercept_f,
             tmv_delivery_slope=d.delivery_slope,
             draw_gap_open_f_per_gal=d.gap_open_f_per_gal,
+            tank=self.params.tank,
         )

@@ -185,8 +185,9 @@ class ModeRecovery:
     upper_element_minutes: float | None
     #: Where the upper zone ends up, and when: the setpoint, or, with a
     #: dead time too short to carry the whole off deficit in transit,
-    #: Energy Saver's off point plus that coast (``coast_f``).  Minutes
-    #: None when the element does not start.
+    #: Energy Saver's off point plus that coast (``coast_f``).  Where it
+    #: started when the element has nothing to do or does not start;
+    #: minutes None when it does not start.
     upper_end_f: float
     upper_end_minutes: float | None
     full_minutes: float | None
@@ -333,8 +334,9 @@ def mode_recovery(
     dead = p.upper_dead_time_min
     off_at = setpoint - upper_off_deficit_f(mode, p)
     #: Where the upper zone ends: the setpoint, or Energy Saver's off
-    #: point plus its coast, which a short run leaves below it.
-    top = setpoint
+    #: point plus its coast, which a short run leaves below it. Where it
+    #: is now when the element has nothing to do or does not start.
+    top = t_upper
     if t_upper >= setpoint:
         # Nothing for the element to do.
         upper_min: float | None = 0.0

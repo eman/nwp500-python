@@ -227,11 +227,12 @@ def recovery(
     """The served recovery for ``ctx``: ``model``'s duration given the
     physics, or the physics alone with no model or when it declines.
     None when there is neither: no model's answer and no usable
-    physics estimate."""
+    physics estimate. A truncated integration is not one: its minutes
+    are the bound, and nothing reached the target."""
     answer = model.duration(ctx) if model is not None else None
     physics = ctx.physics
     if answer is None:
-        if physics.estimate is None:
+        if physics.estimate is None or physics.truncated:
             return None
         # Physics is calibrated on whole durations, hold and all, so it
         # gets no start hold added (as when a model hands off to it).
@@ -239,7 +240,7 @@ def recovery(
             minutes=physics.estimate,
             start_hold_minutes=0.0,
             confidence=1.0,
-            reasons=(PHYSICS_TRUNCATED,) if physics.truncated else (),
+            reasons=(),
             context=ctx,
             path=(
                 physics.path
@@ -251,7 +252,12 @@ def recovery(
         minutes=answer.minutes,
         start_hold_minutes=answer.start_hold_minutes,
         confidence=answer.confidence,
-        reasons=answer.reasons,
+        # The model answered from a truncated integration: say so.
+        reasons=(
+            (*answer.reasons, PHYSICS_TRUNCATED)
+            if physics.truncated and PHYSICS_TRUNCATED not in answer.reasons
+            else answer.reasons
+        ),
         context=ctx,
         path=(
             physics.path
