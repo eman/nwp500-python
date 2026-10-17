@@ -95,6 +95,7 @@ from bisect import bisect_left, bisect_right
 from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass, field, replace
 from datetime import datetime
+from statistics import median
 from typing import Protocol, cast
 
 from nwp500.sim.engine import Draw, HeatingInterval, PathPoint
@@ -106,7 +107,7 @@ from nwp500.sim.extensions import (
     Stand,
     UpperAhead,
 )
-from nwp500.sim.params import BookParams
+from nwp500.sim.params import BookParams, CirculationParams
 from nwp500.sim.tank_physics import point_at
 from nwp500.sim.units import WATER_BTU_PER_GAL_F
 
@@ -158,6 +159,171 @@ def is_full(upper_f: float, lower_f: float, p: BookParams) -> bool:
     """Both probes within ``uniform_band_f``: with the heater just
     finished and nothing moving since, the book's anchor."""
     return abs(upper_f - lower_f) <= p.uniform_band_f
+
+
+#: The air a recorded step stands in when none was recorded, °F.
+AMBIENT_DEFAULT_F = 65.0
+
+
+@dataclass(frozen=True)
+class Step:
+    """One interval of a recorded history, ``seconds`` long: what the
+    book reads of it (``Booked.step``, ``book_steps``)."""
+
+    seconds: float
+    upper_f: float
+    lower_f: float
+    #: The household flow meter's reading, gal/min (0 without a meter:
+    #: no draw is booked).
+    flow_gpm: float
+    compressor_on: bool
+    element_on: bool
+    ambient_f: float
+    inlet_f: float
+    #: Circulation running, and its own flow, gal/min.
+    circulating: bool = False
+    circulation_gpm: float = 0.0
+    #: Whether ``inlet_f`` was measured (an inlet probe).
+    inlet_measured: bool = False
+    #: The element on is the lower one, whose heat lands at the bottom
+    #: as the compressor's does; otherwise the upper, at the top.
+    lower_element: bool = False
+    #: Circulation's flow over the span ``flow_gpm`` was read over, 0
+    #: where it was off: a meter's figure over a trailing window still
+    #: holds a run for a while after it stops. None: ``circulation_gpm``
+    #: while circulating, else none.
+    circulation_in_meter_gpm: float | None = None
+
+
+def house_gpm(s: Step, circulation: CirculationParams | None = None) -> float:
+    """The household's flow: the meter less the share of it that is
+    circulation (``CirculationParams.meter_share`` of its own flow),
+    never below 0."""
+    share = 0.0 if circulation is None else circulation.meter_share
+    if s.circulation_in_meter_gpm is not None:
+        return max(0.0, s.flow_gpm - share * s.circulation_in_meter_gpm)
+    if s.circulating:
+        return max(0.0, s.flow_gpm - share * s.circulation_gpm)
+    return s.flow_gpm
+
+
+def circulated_btu(gal: float, circulation: CirculationParams | None) -> float:
+    """Heat circulation takes for the gallons it circulates."""
+    return 0.0 if circulation is None else circulation.loss_btu_per_gal * gal
+
+
+def step_heat_btu(
+    s: Step, p: BookParams, circulation: CirculationParams | None = None
+) -> float:
+    """Heat into the tank over one step, BTU; negative when it loses."""
+    h = s.seconds / 3600.0
+    heat = 0.0
+    if s.compressor_on:
+        heat += compressor_btu(h, s.ambient_f, p)
+    if s.element_on:
+        heat += element_btu(h, p)
+    house = house_gpm(s, circulation)
+    if house > p.draw_gpm:
+        heat -= draw_btu(house * s.seconds / 60.0, s.upper_f, s.inlet_f, p)
+    if s.circulating:
+        heat -= circulated_btu(
+            s.circulation_gpm * s.seconds / 60.0, circulation
+        )
+    heat -= standby_btu(h, s.upper_f, s.lower_f, s.ambient_f, p)
+    return heat
+
+
+def inlet_now_f(steps: Sequence[Step], p: BookParams) -> float:
+    """The inlet a draw would meet, for the conversion from heat to
+    gallons: the median of the measured readings over the last
+    ``inlet_window_s``, not the last one (a probe on the pipe wanders
+    with the air at rest, about a 14 % swing in the gallons at a hot
+    tank). The last step's value without one measured, and
+    ``inlet_default_f`` with no steps."""
+    if not steps:
+        return p.inlet_default_f
+    window: list[float] = []
+    elapsed = 0.0
+    for s in reversed(steps):
+        if s.inlet_measured:
+            window.append(s.inlet_f)
+        elapsed += s.seconds
+        if elapsed >= p.inlet_window_s:
+            break
+    if not window:
+        return steps[-1].inlet_f
+    return float(median(window))
+
+
+def _busy(
+    s: Step, p: BookParams, circulation: CirculationParams | None
+) -> tuple[bool, bool]:
+    """(heating, disturbed): heat going in; water moving or
+    circulating."""
+    heating = s.compressor_on or s.element_on
+    disturbed = house_gpm(s, circulation) > p.draw_gpm or s.circulating
+    return heating, disturbed
+
+
+def book_steps(
+    steps: Sequence[Step],
+    p: BookParams | None = None,
+    circulation: CirculationParams | None = None,
+) -> Booked | None:
+    """The heat now, booked from a recorded history's last anchor: a
+    full tank (``is_full``), uniform and quiet, after a recovery ends
+    with no draw and no circulation since. A recovery that ends while
+    water or circulation moves anchors at its end, uniform there, the
+    movement booked from its start; the quiet steps after such a draw
+    do not anchor (the probes then read the draw's cold water as full).
+    None with no anchor within ``history_h``; older than
+    ``max_anchor_age_h`` the book is ``aged``."""
+    p = p or BookParams()
+    anchor = None
+    book_from = 0
+    clean = False
+    was_heating = was_disturbed = False
+    moving_since = 0
+    for i, st in enumerate(steps):
+        heating, disturbed = _busy(st, p, circulation)
+        full = is_full(st.upper_f, st.lower_f, p)
+        if disturbed and not was_disturbed:
+            moving_since = i
+        if heating:
+            clean = False
+        elif was_heating:
+            clean = True
+            if disturbed and full:
+                anchor, book_from = i, moving_since
+        if disturbed:
+            clean = False
+        was_heating, was_disturbed = heating, disturbed
+        if clean and not heating and full:
+            anchor, book_from = i, i + 1
+    if anchor is None:
+        return None
+    age_h = sum(s.seconds for s in steps[anchor + 1 :]) / 3600.0
+    if age_h > p.history_h:
+        return None
+    a = steps[anchor]
+    b = full_tank(a.upper_f, a.lower_f, p.inlet_default_f, p)
+    # The movement's part before the recovery ended: its hot water left
+    # and its cold water lies below the probes, which read the heat that
+    # went in meanwhile at the anchor already.
+    for s in steps[book_from:anchor]:
+        b = b.step(
+            replace(s, compressor_on=False, element_on=False), p, circulation
+        )
+    for s in steps[max(book_from, anchor) :]:
+        b = b.step(s, p, circulation)
+    since = steps[anchor:]
+    share = sum(1 for s in since if s.inlet_measured) / len(since)
+    return replace(
+        b,
+        anchor_age_h=age_h,
+        inlet_f=inlet_now_f(since, p),
+        inlet_measured_share=share,
+    )
 
 
 def full_tank(
@@ -309,6 +475,36 @@ class Booked:
         return replace(
             self, cold_gal=0.0, cold_f=p.reference_f, cold_seen=False
         )
+
+    def step(
+        self,
+        s: Step,
+        p: BookParams | None = None,
+        circulation: CirculationParams | None = None,
+    ) -> Booked:
+        """One recorded step: ``step_heat_btu``'s terms, placed."""
+        p = p or BookParams()
+        h = s.seconds / 3600.0
+        b = replace(self, inlet_f=s.inlet_f)
+        house = house_gpm(s, circulation)
+        drawing = house > p.draw_gpm
+        if drawing:
+            b = b.drawn(house * s.seconds / 60.0, s.upper_f, p)
+        b = b.observed(s.lower_f, p, drawing=drawing)
+        bottom = compressor_btu(h, s.ambient_f, p) if s.compressor_on else 0.0
+        top = 0.0
+        if s.element_on:
+            if s.lower_element:
+                bottom += element_btu(h, p)
+            else:
+                top = element_btu(h, p)
+        b = b.heated(bottom, top, p)
+        lost = standby_btu(h, s.upper_f, s.lower_f, s.ambient_f, p)
+        if s.circulating:
+            lost += circulated_btu(
+                s.circulation_gpm * s.seconds / 60.0, circulation
+            )
+        return replace(b.lost(lost), inlet_f=self.inlet_f)
 
     def deliverable_gal(
         self, upper_f: float, p: BookParams | None = None

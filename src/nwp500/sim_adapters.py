@@ -44,7 +44,8 @@ Example::
     result = sim.simulate(scenario, sa.params(feature))
 """
 
-from collections.abc import Iterable, Mapping
+import itertools
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime, time, timedelta
 from typing import TYPE_CHECKING, Any
@@ -85,6 +86,8 @@ from nwp500.sim import (
     default_params,
 )
 from nwp500.sim import full_tank_book as sim_full_tank_book
+from nwp500.sim.book import AMBIENT_DEFAULT_F, book_steps
+from nwp500.sim.book import Step as BookStep
 from nwp500.sim.inputs import (
     ELECTRIC,
     ENERGY_SAVER,
@@ -845,3 +848,202 @@ def replay(
         commands=Commands(writes=tuple(recorded)),
     )
     return Replay(scenario, tuple(dict.fromkeys(reasons)))
+
+
+# ── the heat book, from a recorded history ─────────────────────────
+
+#: The grid a recorded history is booked on, seconds.
+BOOK_GRID_S = 10
+#: How long a flow reading holds (the household meter's, circulation's).
+FLOW_HOLD = timedelta(seconds=60)
+#: How long an inlet probe's reading holds.
+INLET_HOLD = timedelta(hours=1)
+#: The longest the meter may be silent in a booked window: a gap would
+#: read as a quiet full tank, a false anchor.
+METER_MAX_GAP = timedelta(hours=1)
+
+
+def _held(
+    readings: Sequence[tuple[datetime, float]],
+    grid: Sequence[datetime],
+    hold: timedelta | None,
+) -> list[float | None]:
+    """The reading in force at each instant of ``grid``, no older than
+    ``hold``; None where there is none."""
+    out: list[float | None] = []
+    i = -1
+    for t in grid:
+        while i + 1 < len(readings) and readings[i + 1][0] <= t:
+            i += 1
+        if i < 0 or (hold is not None and t - readings[i][0] > hold):
+            out.append(None)
+        else:
+            out.append(readings[i][1])
+    return out
+
+
+def book_steps_from_history(
+    readings: Iterable[tuple[datetime, DeviceStatus]],
+    *,
+    start: datetime,
+    end: datetime,
+    flow: Iterable[tuple[datetime, float]] = (),
+    circulation: Iterable[tuple[datetime, datetime]] = (),
+    circulation_flow: Iterable[tuple[datetime, float]] = (),
+    inlet: Iterable[tuple[datetime, float]] = (),
+    air: Iterable[tuple[datetime, float]] = (),
+    params: HeaterParams | None = None,
+) -> list[BookStep]:
+    """A recorded history on the book's grid (``BOOK_GRID_S``), from
+    ``start`` to ``end``: the heater's statuses (the probes, the
+    compressor, either element) held until the next; the household
+    meter's ``flow`` and ``circulation_flow`` held ``FLOW_HOLD``, 0
+    past it; ``inlet`` (a probe) held ``INLET_HOLD``; ``air`` held
+    until the next (the book's default without it). Flows are per
+    minute and temperatures in the preferred units.
+
+    A step inside a ``circulation`` run is circulating at its last flow
+    reading, this run's or an earlier one's; with none yet, the meter's
+    over ``CirculationParams.meter_share`` (all of it circulation), else
+    the circulation's priced flow."""
+    p = (params if params is not None else default_params()).book_terms()
+    terms = None if params is None else params.circulation
+    start, end = start.astimezone(UTC), end.astimezone(UTC)
+    grid: list[datetime] = []
+    t = start
+    while t < end:
+        grid.append(t)
+        t += timedelta(seconds=BOOK_GRID_S)
+    statuses = sorted(
+        ((t.astimezone(UTC), s) for t, s in readings), key=lambda r: r[0]
+    )
+
+    def series(
+        rows: Iterable[tuple[datetime, float]], to: Any
+    ) -> list[tuple[datetime, float]]:
+        return sorted(
+            ((t.astimezone(UTC), to(v)) for t, v in rows), key=lambda r: r[0]
+        )
+
+    def of(
+        f: Callable[[DeviceStatus], float],
+    ) -> list[tuple[datetime, float]]:
+        return [(t, f(s)) for t, s in statuses]
+
+    upper = _held(
+        of(lambda s: _from_device(DeciCelsius(s.tank_upper_temperature_raw))),
+        grid,
+        None,
+    )
+    lower = _held(
+        of(lambda s: _from_device(DeciCelsius(s.tank_lower_temperature_raw))),
+        grid,
+        None,
+    )
+    comp = _held(of(lambda s: float(bool(s.comp_use))), grid, None)
+    up_el = _held(of(lambda s: float(bool(s.heat_upper_use))), grid, None)
+    lo_el = _held(of(lambda s: float(bool(s.heat_lower_use))), grid, None)
+    meter = _held(series(flow, _volume_to_sim), grid, FLOW_HOLD)
+    run_flow = _held(series(circulation_flow, _volume_to_sim), grid, FLOW_HOLD)
+    probe = _held(series(inlet, _to_sim), grid, INLET_HOLD)
+    amb = _held(series(air, _to_sim), grid, None)
+    runs = sorted(
+        (a.astimezone(UTC), b.astimezone(UTC)) for a, b in circulation
+    )
+    steps: list[BookStep] = []
+    settled: float | None = None
+    for i, at in enumerate(grid):
+        u, lo, a_f, in_f = upper[i], lower[i], amb[i], probe[i]
+        if u is None or lo is None:
+            continue
+        m = meter[i] or 0.0
+        on = any(a <= at < b for a, b in runs)
+        gpm = 0.0
+        if on:
+            if run_flow[i] is not None:
+                settled = run_flow[i]
+            if settled is not None:
+                gpm = settled
+            elif terms is not None and terms.meter_share > 0.0:
+                gpm = m / terms.meter_share
+            elif terms is not None:
+                gpm = terms.flow_gpm
+        steps.append(
+            BookStep(
+                seconds=float(BOOK_GRID_S),
+                upper_f=u,
+                lower_f=lo,
+                flow_gpm=m,
+                compressor_on=bool(comp[i]),
+                element_on=bool(up_el[i]) or bool(lo_el[i]),
+                ambient_f=a_f if a_f is not None else AMBIENT_DEFAULT_F,
+                inlet_f=in_f if in_f is not None else p.inlet_default_f,
+                circulating=on,
+                circulation_gpm=gpm,
+                inlet_measured=in_f is not None,
+                lower_element=bool(lo_el[i]),
+            )
+        )
+    return steps
+
+
+def book_from_history(
+    readings: Iterable[tuple[datetime, DeviceStatus]],
+    params: HeaterParams,
+    *,
+    at: datetime,
+    flow: Iterable[tuple[datetime, float]],
+    circulation: Iterable[tuple[datetime, datetime]] = (),
+    circulation_flow: Iterable[tuple[datetime, float]] = (),
+    inlet: Iterable[tuple[datetime, float]] = (),
+    air: Iterable[tuple[datetime, float]] = (),
+) -> Booked | None:
+    """The tank's booked heat at ``at`` from what was recorded before
+    it (``book.book_steps``), for ``simulate`` and ``time_to_ready``'s
+    ``book=``: from the last ``max_anchor_age_h`` when that holds an
+    anchor, else from the last ``history_h``, aged. None with no anchor
+    in either.
+
+    ``flow`` is the household meter's flow (per minute, the preferred
+    volume) and must report at rest too: a silence over
+    ``METER_MAX_GAP`` in the window is refused, since it would read as a
+    quiet full tank. ``circulation`` are its runs, with
+    ``circulation_flow`` its own flow; ``inlet`` an inlet probe's
+    readings; ``air`` the air where the heater stands. Draws are what
+    the meter reads less circulation's share of it
+    (``CirculationParams.meter_share``)."""
+    at = at.astimezone(UTC)
+    rows = list(readings)
+    flows = sorted((t.astimezone(UTC), v) for t, v in flow)
+    runs = list(circulation)
+    run_flow = list(circulation_flow)
+    probe = list(inlet)
+    airs = list(air)
+    p = params.book_terms()
+
+    def booked(hours: float) -> Booked | None:
+        start = at - timedelta(hours=hours)
+        beats = [start, *(t for t, _ in flows if start <= t <= at), at]
+        gap = max(b - a for a, b in itertools.pairwise(beats))
+        if gap > METER_MAX_GAP:
+            raise ValueError(
+                f"the meter was silent for {gap}; the history is incomplete"
+            )
+        return book_steps(
+            book_steps_from_history(
+                rows,
+                start=start,
+                end=at,
+                flow=flows,
+                circulation=runs,
+                circulation_flow=run_flow,
+                inlet=probe,
+                air=airs,
+                params=params,
+            ),
+            p,
+            params.circulation,
+        )
+
+    found = booked(p.max_anchor_age_h)
+    return found if found is not None else booked(p.history_h)

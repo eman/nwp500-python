@@ -591,9 +591,24 @@ schedule, give the runs and what each takes
    mine = replace(params, circulation=sim.CirculationParams(
        displaced_gal=5.0, flow_gpm=1.5, loss_btu_per_gal=150.0))
 
-**The heat book.** Start one when you know the tank is full and
-quiet (``sa.full_tank_book``), or from your own record, and pass it as
+**The heat book.** With a hot-water flow meter and a record of the
+heater's statuses, book the tank's heat from the record and pass it as
 ``book=``: draws then take the zones down as the tank empties.
+
+.. code-block:: python
+
+   book = sa.book_from_history(
+       recorded,              # [(instant, DeviceStatus), ...]
+       params,
+       at=now,
+       flow=meter_flow,       # [(instant, flow per minute), ...]
+       circulation=runs,      # [(start, end), ...], if you circulate
+       circulation_flow=pump_flow,
+   )
+   readiness = sim.time_to_ready(scenario, params, book=book)
+
+Without a meter, start one only when you know the tank is full and
+quiet (``sa.full_tank_book``).
 
 **Your installation's readiness terms.** The pipe to your fixture, the
 line you call hot, your own draws: ``ReadinessParams``

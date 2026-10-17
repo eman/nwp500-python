@@ -142,6 +142,16 @@ Added
     ``HeaterState.energy_to_setpoint_wh`` carry what they need, filled
     by the adapters; ``recovery`` says ``not_scheduled`` in Vacation and
     Power Off.
+  - The heat book from a recorded history, as the model kept it:
+    ``sim.book.Step``, ``book_steps`` (the anchor on a quiet full tank
+    after a recovery, or a recovery's end during a draw; every step
+    booked from it; the inlet the median of 3 h of a probe), and
+    ``sim_adapters.book_from_history``, which grids the heater's
+    statuses, a hot-water meter's flow, circulation's runs and flow and
+    an inlet probe onto 10 s steps and books 18 h, else 72 h aged.
+    ``CirculationParams.meter_share`` is the share of a run's flow the
+    meter also reads; ``BookParams`` gains ``history_h``, ``draw_gpm``
+    and ``inlet_window_s``.
   - ``sim_adapters.replay``: a past scenario from the statuses the
     heater reported, as the model's replay read its record: the state
     then, the compressor's last stop and the last heating from their

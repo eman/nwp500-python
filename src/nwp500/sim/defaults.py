@@ -52,7 +52,12 @@ NO_VALVE = (0.0, 1.0)
 #: per retrain), 1.397 gal/min (the median over the 14 days before it),
 #: and the book's 159 BTU per gallon circulated.
 SITE_CIRCULATION = CirculationParams(
-    displaced_gal=6.2746, flow_gpm=1.397, loss_btu_per_gal=159.0
+    displaced_gal=6.2746,
+    flow_gpm=1.397,
+    loss_btu_per_gal=159.0,
+    # Its meter reads a run at 0.81 of the run's own flow (median of 47
+    # runs).
+    meter_share=0.81,
 )
 
 

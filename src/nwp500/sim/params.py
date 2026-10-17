@@ -995,6 +995,22 @@ class BookParams:
     cold_release_f: float = field(
         default=100.0, metadata=_p(FITTED, "°F", INSTALLATION)
     )
+    #: How old an anchor a book from a recorded history still carries,
+    #: aged: a coverage bound, not a fit.
+    history_h: float = field(
+        default=72.0, metadata=_p(DEFAULT, "h", INSTALLATION)
+    )
+    #: The household flow that is a draw, gal/min.
+    draw_gpm: float = field(
+        default=0.3, metadata=_p(DEFAULT, "gal/min", INSTALLATION)
+    )
+    #: How far back a recorded book reads the inlet for its conversion
+    #: to gallons: a probe on the pipe wanders with the air at rest, and
+    #: the median over this window steadies the answer without lagging
+    #: the mains.
+    inlet_window_s: float = field(
+        default=10800.0, metadata=_p(DEFAULT, "s", INSTALLATION)
+    )
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -1014,6 +1030,13 @@ class CirculationParams:
     #: the pipe's own loss, unsaturated.
     loss_btu_per_gal: float = field(
         metadata=_p(FITTED, "BTU/gal", INSTALLATION)
+    )
+    #: The share of a run's own flow a household flow meter also reads,
+    #: for the heat book from a recorded history (``book.house_gpm``):
+    #: 0 for a meter the circulation does not pass. Re-measure it when
+    #: the plumbing or the meter changes.
+    meter_share: float = field(
+        default=0.0, metadata=_p(MEASURED, "1", INSTALLATION)
     )
 
 

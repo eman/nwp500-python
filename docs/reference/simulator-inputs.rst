@@ -451,6 +451,10 @@ nothing is charged.
    * - ``loss_btu_per_gal``
      - The heat book's loss per gallon circulated while a run is on: the
        pipe's own loss.
+   * - ``meter_share``
+     - The share of a run's own flow a household flow meter also reads
+       (default 0, a meter the circulation does not pass). A book from
+       a recorded history takes it off the meter to find the draws.
 
 Each run is a flowing draw of ``min(flow x minutes, displaced_gal)``
 gallons, its water returning at the air where the heater stands; runs
@@ -489,8 +493,32 @@ draw. Start one only from what you know:
        ``sim_adapters.full_tank_book(status, params)``
      - The tank has been quiet since a recovery ended: it finished, and
        nothing has been drawn since. The book's own anchor.
+   * - ``sim_adapters.book_from_history(recorded, params, at=...,
+       flow=...)``
+     - You record the heater's statuses and meter the hot water: the
+       book is walked from the last time the record shows the tank
+       full and quiet after a recovery (below).
    * - A ``Booked`` from your own record
-     - You meter the hot water and keep a book of the tank's heat.
+     - You keep a book of the tank's heat some other way.
+
+``book_from_history`` grids the record onto 10-second steps: the
+statuses (the probes, the compressor, either element) held until the
+next; the meter's ``flow`` and the circulation's own
+``circulation_flow`` held 60 s; an ``inlet`` probe's readings held an
+hour; the ``air`` held until the next. It anchors on the latest step
+the tank reads full (``book.uniform_band_f``) with nothing heating,
+after a recovery and before anything was drawn or circulated; a
+recovery that ends during a draw anchors at its end. Then it books
+every step from the anchor: the heat pump's and the elements' heat in,
+standby and circulation out, and each draw (the meter less
+``CirculationParams.meter_share`` of a run's flow, above
+``book.draw_gpm``) through the mixing valve. It reads the last 18 hours
+(``book.max_anchor_age_h``) and, without an anchor there, the last 72
+(``book.history_h``), aged. The inlet it converts gallons at is the
+median of the probe's readings over the last 3 hours
+(``book.inlet_window_s``), the default without one. The meter must
+report at rest too: a silence over an hour in the window is refused,
+since it would read as a quiet full tank.
 
 A loss the book does not model, water an installation circulates
 through its own plumbing say, comes in through ``sim.book.SpanLoss``:

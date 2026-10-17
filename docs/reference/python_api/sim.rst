@@ -166,7 +166,8 @@ Hot water and the heat book
 
 .. automodule:: nwp500.sim.book
    :members: Booked, BookedHeatLedger, SpanLoss, full_tank_book,
-      full_tank, walk_booked, loss_ceiling_btu, BookedPath
+      full_tank, walk_booked, loss_ceiling_btu, BookedPath, Step,
+      book_steps, house_gpm, step_heat_btu, inlet_now_f
 
 
 Documents
