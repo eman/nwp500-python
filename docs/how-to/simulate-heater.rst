@@ -558,6 +558,31 @@ counted on the delivered (mixed) line:
        (start + timedelta(hours=13), 20.0),
    ])
 
+From a weekly draw forecast (a forecaster learned from your meter, as
+``sim.draw_forecast.ForecastSlot`` per 10-minute slot), lay out the
+draws it expects instead:
+
+.. code-block:: python
+
+   from nwp500.sim import draw_forecast
+
+   if draw_forecast.check_issue(slots) is None:
+       profile = draw_forecast.draw_profile(slots, scenario.start,
+                                            scenario.until)
+       loads, withheld = draw_forecast.forecast_loads(
+           profile, scenario.start, worst_case=True)
+       result = sim.simulate(scenario.model_copy(update={"loads": loads}),
+                             params, book=book, withheld_windows=withheld)
+
+Each expected draw is a slot's rate times its per-draw mean, a
+fraction of a shower in most slots. It keeps that per-draw volume, so
+it is judged against the draws the parameters were fitted on, not
+against its own fraction. Each of the heater's draw windows opens up to
+an hour before its first likely long draw. With ``worst_case``, each
+window's long draws come first, back to back from its opening, and no
+recovery is credited until they are done. ``result.windows`` then says
+whether the tank held through each.
+
 Put them in a scenario with
 ``scenario.model_copy(update={"environment": environment, "loads": loads})``.
 

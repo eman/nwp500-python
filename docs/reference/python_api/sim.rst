@@ -171,6 +171,11 @@ Hot water and the heat book
       busy_intervals, fit_window, fit_ua_law, fit_gap_tau, with_standby,
       with_compressor
 
+.. automodule:: nwp500.sim.draw_forecast
+   :members: ForecastSlot, check_issue, draw_profile, DrawProfile,
+      ExpectedDraw, heater_draw_windows, ForecastWindow, draws_first,
+      forecast_loads
+
 .. automodule:: nwp500.sim.cold_supply
    :members: plateau_t_cold, ColdSupply, ColdSupplyParams, on_the_mains
 

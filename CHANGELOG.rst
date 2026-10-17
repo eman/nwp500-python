@@ -142,6 +142,13 @@ Added
     ``HeaterState.energy_to_setpoint_wh`` carry what they need, filled
     by the adapters; ``recovery`` says ``not_scheduled`` in Vacation and
     Power Off.
+  - Draws from a weekly draw forecast (``sim.draw_forecast``): an issue
+    checked whole, its expected draws (rate x per-draw mean, the
+    per-draw volume kept), the heater's draw windows, and the worst case
+    of each window's long draws first (``forecast_loads``,
+    ``simulate(withheld_windows=)``). A draw's domain is now judged by
+    its per-draw volume where it carries one (``Draw.per_draw_gal``),
+    not its fractional expectation.
   - The mains from an inlet probe (``sim.cold_supply``,
     ``sim_adapters.cold_supply``): the median plateau of recent long
     draws with circulation off and the meter reading flow, from minute 9

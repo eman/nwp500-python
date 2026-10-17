@@ -200,6 +200,10 @@ class Draw(_Value):
 
     at: Instant
     gallons: Annotated[float, Field(gt=0.0)]
+    #: For an expected draw (``sim.draw_forecast``), whose ``gallons``
+    #: is fractional, the slot's own per-draw volume: what the draw's
+    #: domain is judged against. None: ``gallons`` itself.
+    per_draw_gal: Annotated[float, Field(gt=0.0)] | None = None
 
 
 class DrawWindow(_Value):

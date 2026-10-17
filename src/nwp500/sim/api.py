@@ -57,6 +57,7 @@ from nwp500.sim.inputs import (
     ENERGY_SAVER,
     HEAT_PUMP,
     HIGH_DEMAND,
+    Draw,
     Environment,
     HeaterState,
     History,
@@ -322,6 +323,7 @@ def simulate(
     book: Booked | None = None,
     ledger: HeatLedger | None = None,
     tou_windows_in_force: Sequence[tuple[datetime, datetime]] | None = None,
+    withheld_windows: Sequence[tuple[datetime, datetime]] = (),
 ) -> SimulationResult:
     """Walk ``scenario`` from its start to its end on ``params``.
 
@@ -338,6 +340,11 @@ def simulate(
     delivery is the upper zone's, and ``reasons`` says
     ``no_heat_book``. ``ledger`` is any other ``extensions.HeatLedger``
     in its place.
+
+    ``withheld_windows`` are spans over which a recovery is credited no
+    heat, as the worst case of a draw window's long draws coming first
+    (``draw_forecast.draws_first``): the engine runs a recovery out
+    uncredited over them, and the book holds them back.
 
     ``tou_windows_in_force`` are the TOU windows the heater keeps, in
     place of the schedule's (``marked_windows``: the heater's own marker
@@ -399,6 +406,7 @@ def simulate(
             params.book_terms(),
             line_f=params.readiness.line_f,
             fall_f_per_gal=params.readiness.fall_f_per_gal,
+            withheld=sorted(withheld_windows),
             extra=(
                 CirculationLoss(
                     circulation.runs, terms.flow_gpm, terms.loss_btu_per_gal
@@ -440,6 +448,7 @@ def simulate(
         heated_at=s.history.heated_at,
         ledger=ledger,
         controller=params.controller,
+        withheld_windows=sorted(withheld_windows),
     )
     walked = (
         ledger.walk(sim.points, sim.heating, draws)
@@ -454,7 +463,7 @@ def simulate(
         any_out, out_of_domain_at = draw_domain_judgement(
             params.draw,
             [(p.at, p.upper_f) for p in sim.points],
-            max(g for _, g in draws),
+            _largest_draw(s.loads.draws),
         )
         if any_out:
             reasons.append("draw_out_of_domain")
@@ -518,6 +527,15 @@ def readiness(
         ep=params.book_terms(),
         setpoint_f=settings.setpoint_f,
         heating=heating,
+    )
+
+
+def _largest_draw(draws: Sequence[Draw]) -> float:
+    """The largest draw a domain is judged against: each one's own
+    per-draw volume where it is an expected draw, else its gallons."""
+    return max(
+        d.per_draw_gal if d.per_draw_gal is not None else d.gallons
+        for d in draws
     )
 
 
@@ -638,7 +656,7 @@ def standby(
             params.draw,
             [(start, state.upper_f)]
             + [(p.at, p.upper_f) for p in coast.points],
-            max(g for _, g in draws),
+            _largest_draw([d for d in loads.draws if start <= d.at < until]),
         )
         if any_out:
             reasons.append("draw_out_of_domain")
