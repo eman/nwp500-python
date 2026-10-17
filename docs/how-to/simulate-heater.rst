@@ -706,11 +706,39 @@ cutoff_f)`` is the evidence's cap after a cold lower zone. The cutoff
 itself, and the bath's volume, are yours to set: measure a bath by
 filling one to your usual level at the hot side's meter.
 
-The zones' mixing, the cold front's width and where the lower probe
-sits in it, the front's settling, the delivered water's lag and the
-heat hidden from the probes of a full tank have no fit here. They stay
-installation values (``BookParams``, ``ReadinessParams``), with their
-provenance.
+How a draw moves the zones is fitted on the record's long draws too,
+the book walked continuously over it (``book_walk``):
+
+.. code-block:: python
+
+   walk = calibration.book_walk(book, zone_empty_btu=p.zone_empty_btu)
+   draws = calibration.long_draws(walk)
+   split = since + (until - since) * 0.7   # the later draws are held out
+   front = calibration.fit_front(
+       calibration.front_frame(walk, draws, params, split=split))
+   settle = calibration.fit_front_settle(
+       calibration.settle_tails(walk, draws, params, split=split))
+   mix = calibration.fit_zone_mix(
+       calibration.mixing_frame(walk, draws, split=split))
+
+``front`` is where the lower probe sits in the cold front and how wide
+the front is (``lower_probe_gal``, ``front_width_gal``). ``settle`` is
+how fast the lower zone settles after a draw (``front_settle_min``).
+``mix`` is how the upper zone falls through a long draw
+(``zone_mix_f_per_gal``, ``zone_mix_gal``). Each reports its error on
+the training and held-out draws and a day bootstrap's interval, and
+each fit's procedure is the one its value was fitted with. Two inputs
+stand in for what that fit had:
+
+- the long draws are the record's own runs of household flow;
+- the front's base is the calibrated draw response chained from each
+  draw's onset probes, rather than a full replay's lower zone.
+
+The mixing fit reads gallons left before ``zone_empty_btu``, so refit
+that first. The settle fit reads the front's place and width, so refit
+those before it. The delivered water's lag (one bath's measurement) and
+the heat hidden from a full tank's probes (a maximum over the record,
+not a fit) stay installation values.
 
 
 Replay a day the heater lived
