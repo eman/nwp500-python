@@ -50,16 +50,20 @@ import numpy as np
 import pandas as pd
 from scipy.optimize import OptimizeResult, minimize, minimize_scalar
 
+from nwp500.sim.book import Booked, house_gpm
+from nwp500.sim.book import Step as BookStep
 from nwp500.sim.heating_trajectory import path_cop
 from nwp500.sim.params import (
     UA_MIN_DELTA_T_F,
     UA_REF_DELTA_T_F,
+    BookParams,
+    CirculationParams,
     CompressorParams,
     HeaterParams,
     LossParams,
 )
 from nwp500.sim.physics.compressor import PhysicsPath, predict_physics_detailed
-from nwp500.sim.units import BTU_PER_WH
+from nwp500.sim.units import BTU_PER_WH, WATER_BTU_PER_GAL_F
 
 #: An interval: its start and its end.
 Interval = tuple[datetime, datetime]
@@ -1203,3 +1207,554 @@ def calibrate(
         power = fit_power(rows, params, withdrawn=withdrawn, lead=lead)
         params = with_power(params, power)
     return Calibration(params, standby, compressor, power, found)
+
+
+# ── readiness evidence, from metered draws ─────────────────────────
+
+#: The grid the metered draws are read on, seconds.
+DRAW_GRID_S = 5
+#: Flow gaps shorter than this are one draw, seconds.
+DRAW_JOIN_S = 60
+#: A draw is followed this long for the lagging upper probe, which is
+#: also how far a crossing is credited back, seconds.
+DRAW_TAIL_S = 90
+#: No flow, no circulation and no element this long before a draw, or
+#: its starting state is still moving, seconds.
+DRAW_SETTLE_S = 120
+#: The smallest draw kept, delivered gallons.
+MIN_DRAW_GAL = 5.0
+
+
+@dataclass(frozen=True)
+class CleanDraw:
+    """One metered draw with circulation and both elements off through
+    it and a settled start: the tank before it, and the upper probe
+    against the gallons delivered (``vd``, cumulative, per grid step)."""
+
+    start: datetime
+    u0: float
+    l0: float
+    gal: float
+    #: The median flow while drawing, gal/min.
+    gpm: float
+    #: The compressor ran through it or the settle before it.
+    hp: bool
+    u: np.ndarray = field(repr=False)
+    vd: np.ndarray = field(repr=False)
+
+
+def clean_draws(
+    frame: pd.DataFrame, *, draw_gpm: float = 0.3
+) -> list[CleanDraw]:
+    """The clean draws in ``frame``: a ``DRAW_GRID_S`` grid with
+    ``flow_gpm`` (the household meter's), ``circulating``, ``upper_f``,
+    ``lower_f``, ``compressor_on`` and ``element_on``.
+
+    A draw is a run of steps above ``draw_gpm``, gaps under
+    ``DRAW_JOIN_S`` joined; kept with ``MIN_DRAW_GAL`` or more, no
+    circulation through it, no element through it or the
+    ``DRAW_SETTLE_S`` before it, no flow or circulation in that settle,
+    and both probes known. Each is followed ``DRAW_TAIL_S`` for the
+    lagging probe, stopping at the next draw and carrying none of its
+    flow."""
+    if frame.empty:
+        return []
+    flow = frame["flow_gpm"].to_numpy(dtype=float)
+    circ = frame["circulating"].fillna(False).astype(bool).to_numpy()
+    up = frame["upper_f"].to_numpy(dtype=float)
+    lo = frame["lower_f"].to_numpy(dtype=float)
+    comp = frame["compressor_on"].fillna(False).astype(bool).to_numpy()
+    elem = frame["element_on"].fillna(False).astype(bool).to_numpy()
+    when = _instants(frame)
+    wet = np.where(flow > draw_gpm)[0]
+    if not len(wet):
+        return []
+    breaks = np.where(np.diff(wet) > DRAW_JOIN_S // DRAW_GRID_S)[0]
+    starts = np.r_[wet[0], wet[breaks + 1]]
+    ends = np.r_[wet[breaks], wet[-1]]
+    settle = DRAW_SETTLE_S // DRAW_GRID_S
+    tail = DRAW_TAIL_S // DRAW_GRID_S
+    out: list[CleanDraw] = []
+    for k, (s, e) in enumerate(zip(starts, ends, strict=True)):
+        if s < settle:
+            continue
+        nxt = starts[k + 1] if k + 1 < len(starts) else len(frame)
+        w = slice(s, min(e + 1 + tail, nxt))
+        pre = slice(s - settle, s)
+        flow_w = flow[w].copy()
+        flow_w[e + 1 - s :] = 0.0  # the tail is this draw's, not the next
+        gal_step = flow_w * DRAW_GRID_S / 60.0
+        if gal_step.sum() < MIN_DRAW_GAL or circ[s : e + 1].any():
+            continue
+        if elem[w].any() or elem[pre].any() or np.isnan(up[w]).any():
+            continue
+        if (flow[pre] > draw_gpm).any() or circ[pre].any():
+            continue
+        body = flow[s : e + 1]
+        out.append(
+            CleanDraw(
+                start=when[s],
+                u0=float(up[pre][-1]),
+                l0=float(lo[pre][-1]),
+                gal=float(gal_step.sum()),
+                gpm=float(np.median(body[body > draw_gpm])),
+                hp=bool(comp[w].any() or comp[pre].any()),
+                u=up[w],
+                vd=np.cumsum(gal_step),
+            )
+        )
+    return out
+
+
+def crossing(d: CleanDraw, below: float) -> tuple[float, bool]:
+    """Gallons credited before the upper probe fell to ``below``, and
+    whether it did: credited back by the probe's lag
+    (``DRAW_TAIL_S``); a draw that never crossed is credited whole."""
+    idx = np.where(d.u <= below)[0]
+    if not len(idx):
+        return d.gal, False
+    j = idx[0] - DRAW_TAIL_S // DRAW_GRID_S
+    return (float(d.vd[j]) if j >= 0 else 0.0), True
+
+
+def demonstrated(d: CleanDraw, line_f: float = 105.0) -> float:
+    """Delivered gallons credited before the upper probe crossed
+    ``line_f`` (strictly below it)."""
+    return crossing(d, line_f - 1e-9)[0]
+
+
+Evidence = tuple[tuple[float, float, float], ...]
+
+
+def frontier(points: Sequence[tuple[float, float, float]]) -> Evidence:
+    """``(upper, lower, gallons)`` points less every one another beats
+    from a no-better state: it can never be the answer, since the other
+    always qualifies too. Sorted."""
+    keep = []
+    for i, (u, lo, g) in enumerate(points):
+        beaten = any(
+            j != i
+            and u2 <= u
+            and l2 <= lo
+            and g2 >= g
+            and (u2, l2, g2) != (u, lo, g)
+            for j, (u2, l2, g2) in enumerate(points)
+        )
+        if not beaten:
+            keep.append((u, lo, g))
+    return tuple(sorted(set(keep)))
+
+
+def capacity(u: float, lo: float, evidence: Evidence) -> float:
+    """The most a no-better state in ``evidence`` delivered."""
+    return max(
+        (g for u2, l2, g in evidence if u2 <= u and l2 <= lo), default=0.0
+    )
+
+
+@dataclass(frozen=True)
+class EvidenceFit:
+    """The readiness evidence from metered draws, and how it holds up:
+    built from the first 70 % of the heat-pump-off draws, how many of
+    the rest crossed the line before the volume it promised them."""
+
+    evidence: Evidence
+    n_draws: int
+    n_quiet: int
+    held_out_crossed: int
+    held_out_over: int
+
+
+def held_out(
+    draws: Sequence[CleanDraw], line_f: float = 105.0
+) -> tuple[int, int, list[float]]:
+    """Evidence from the first 70 % of ``draws``; of the rest, how many
+    crossed ``line_f``, how many crossed before the volume promised them,
+    and by how much."""
+    n = int(len(draws) * 0.7)
+    early = tuple(
+        (d.u0, d.l0, crossing(d, line_f - 1e-9)[0]) for d in draws[:n]
+    )
+    crossed = over = 0
+    excess: list[float] = []
+    for d in draws[n:]:
+        got, did = crossing(d, line_f - 1e-9)
+        if not did:
+            continue
+        crossed += 1
+        promised = capacity(d.u0, d.l0, early)
+        if got < promised:
+            over += 1
+            excess.append(promised - got)
+    return crossed, over, excess
+
+
+def fit_evidence(
+    draws: Sequence[CleanDraw],
+    *,
+    line_f: float = 105.0,
+) -> EvidenceFit:
+    """The evidence from ``clean_draws``: the frontier of the
+    heat-pump-off draws' demonstrated volumes (``ReadinessParams.
+    evidence``) and its held-out check. A bath's volume is measured (a
+    fill to the household's level, at the hot side's meter), not
+    fitted: ``ReadinessParams.bath_gal``."""
+    quiet = [d for d in draws if not d.hp]
+    points = [(d.u0, d.l0, demonstrated(d, line_f)) for d in quiet]
+    crossed, over, _ = held_out(quiet, line_f)
+    return EvidenceFit(
+        evidence=frontier(points),
+        n_draws=len(draws),
+        n_quiet=len(quiet),
+        held_out_crossed=crossed,
+        held_out_over=over,
+    )
+
+
+def cold_lower_cap(
+    draws: Sequence[CleanDraw],
+    cutoff_f: float,
+    *,
+    near_f: float = 110.0,
+    from_f: float = 115.0,
+) -> float | None:
+    """The evidence's cap after a cold lower zone
+    (``ReadinessParams.cold_lower_cap_gal``): of the draws from a lower
+    probe at or below ``cutoff_f`` that started at ``from_f`` or more and
+    took the upper probe to ``near_f``, the smallest volume credited
+    before it did, rounded down to half a gallon. None without one.
+    ``cutoff_f`` itself (``cold_lower_cutoff_f``) is read off the drops by
+    lower-probe band, a judgement, not a fit."""
+    hits = [
+        crossing(d, near_f)[0]
+        for d in draws
+        if d.l0 <= cutoff_f and d.u0 >= from_f and crossing(d, near_f)[1]
+    ]
+    return math.floor(min(hits) * 2) / 2 if hits else None
+
+
+# ── the heat book's own terms, from re-anchors on full tanks ────────
+
+
+class RecordedBook:
+    """A recorded history booked from each of its quiet anchors, for
+    fitting the book's terms (``fit_book_terms``): ``steps`` on a
+    contiguous ``sim_adapters.BOOK_GRID_S`` grid. Its anchors are the
+    quiet ones only (a full tank, nothing heating, after a clean
+    recovery): a recovery ending mid-draw is no place to check the book
+    against the probes. Draws are priced at the book's reference, the
+    inlet assumed rather than fitted."""
+
+    def __init__(
+        self,
+        steps: Sequence[BookStep],
+        p: BookParams,
+        circulation: CirculationParams | None = None,
+        *,
+        start: datetime,
+    ) -> None:
+        self.steps = list(steps)
+        #: The first step's instant: the grid is contiguous from it.
+        self.start = start
+        self.p = p
+        self.circulation = circulation
+        self.seconds = self.steps[0].seconds if self.steps else 10.0
+        per_step = self.seconds / 60.0
+        self.u = np.array([s.upper_f for s in self.steps])
+        self.l = np.array([s.lower_f for s in self.steps])
+        self.air = np.array([s.ambient_f for s in self.steps])
+        house = np.array([house_gpm(s, circulation) for s in self.steps])
+        self.draw = np.where(house > p.draw_gpm, house * per_step, 0.0)
+        self.circulated = np.array(
+            [
+                s.circulation_gpm * per_step if s.circulating else 0.0
+                for s in self.steps
+            ]
+        )
+        self.comp = np.array([s.compressor_on for s in self.steps], dtype=bool)
+        self.el = np.array([s.element_on for s in self.steps], dtype=bool)
+        heating = self.comp | self.el
+        disturbed = (self.draw > 0) | (self.circulated > 0)
+        clean = np.zeros(len(self.steps), dtype=bool)
+        c = was = False
+        for i in range(len(self.steps)):
+            if heating[i]:
+                c = False
+            elif was:
+                c = True
+            if disturbed[i]:
+                c = False
+            clean[i] = c
+            was = bool(heating[i])
+        self.anchors = np.where(
+            clean & ~heating & (np.abs(self.u - self.l) <= p.uniform_band_f)
+        )[0]
+        last = np.full(len(self.steps), np.nan)
+        last[self.anchors] = self.anchors
+        self.last = pd.Series(last).ffill().to_numpy()
+
+    def cum(self, p: BookParams, loss_btu_per_gal: float) -> np.ndarray:
+        """The booked heat's running sum from the first step, BTU."""
+        h = self.seconds / 3600.0
+        delivered = np.minimum(
+            self.u, p.delivery_intercept_f + p.delivery_slope * self.u
+        )
+        e = (
+            self.comp
+            * (p.hp_btu_per_h + p.hp_btu_per_h_per_f * (self.air - 65.0))
+            * h
+            + self.el * p.element_w * BTU_PER_WH_BOOK * h
+            - self.draw
+            * WATER_BTU_PER_GAL_F
+            * np.clip(delivered - p.reference_f, 0, None)
+            - loss_btu_per_gal * self.circulated
+            - p.ua_btu_per_h_f
+            * np.clip((self.u + self.l) / 2 - self.air, 0, None)
+            * h
+        )
+        return np.concatenate([[0.0], np.cumsum(np.nan_to_num(e))])
+
+    def at(self, i: int) -> datetime:
+        """Step ``i``'s instant."""
+        return self.start + timedelta(seconds=i * self.seconds)
+
+    def probe_heat(self, p: BookParams) -> np.ndarray:
+        """The heat the probes read, BTU above the reference."""
+        return (
+            WATER_BTU_PER_GAL_F
+            * p.tank_gal
+            * ((self.u + self.l) / 2 - p.reference_f)
+        )
+
+    def heat(
+        self, p: BookParams, loss_btu_per_gal: float
+    ) -> tuple[np.ndarray, np.ndarray]:
+        """The booked heat at every step from its latest quiet anchor,
+        and that anchor's age, hours; NaN before the first."""
+        cum, ep = self.cum(p, loss_btu_per_gal), self.probe_heat(p)
+        ok = ~np.isnan(self.last)
+        la = np.where(ok, self.last, 0).astype(int)
+        n = np.arange(len(self.steps))
+        e = np.where(ok, ep[la] + cum[n] - cum[la], np.nan)
+        return e, np.where(ok, (n - la) * self.seconds / 3600.0, np.nan)
+
+    def reanchors(self, max_h: float = 24.0) -> list[tuple[int, int]]:
+        """Pairs of anchors an hour or more apart and at most ``max_h``:
+        where the book can be checked against the probes."""
+        hour = int(3600 / self.seconds)
+        if not len(self.anchors):
+            return []
+        a = self.anchors[np.r_[True, np.diff(self.anchors) > hour]]
+        out = []
+        for x in a[1:]:
+            prev = self.last[x - 1]
+            if not np.isnan(prev) and (
+                1 <= (x - prev) * self.seconds / 3600 <= max_h
+            ):
+                out.append((int(prev), int(x)))
+        return out
+
+    def errors(
+        self,
+        p: BookParams,
+        loss_btu_per_gal: float,
+        pairs: Sequence[tuple[int, int]],
+    ) -> np.ndarray:
+        """The book less the probes at each pair's second anchor, BTU."""
+        cum, ep = self.cum(p, loss_btu_per_gal), self.probe_heat(p)
+        return np.array(
+            [ep[a0] + cum[a1] - cum[a0] - ep[a1] for a0, a1 in pairs]
+        )
+
+
+#: BTU per Wh, at the rounding the book was fitted with.
+BTU_PER_WH_BOOK = 3.412
+
+
+@dataclass(frozen=True)
+class BookFit:
+    """The book's terms fitted on re-anchors, and how well they hold."""
+
+    hp_btu_per_h: float
+    hp_btu_per_h_per_f: float
+    ua_btu_per_h_f: float
+    loss_btu_per_gal: float
+    n_pairs: int
+    mae_btu: float
+    mean_btu: float
+
+
+def fit_book_terms(
+    book: RecordedBook,
+    pairs: Sequence[tuple[int, int]],
+    base: BookParams,
+    loss_btu_per_gal: float = 0.0,
+) -> BookFit:
+    """The compressor's heat rate and its slope with the air, the
+    standby UA and circulation's loss per gallon minimising the mean
+    absolute error at ``pairs`` (Nelder-Mead from three starts, within
+    plausible bounds)."""
+
+    def terms(x: np.ndarray) -> BookParams:
+        return replace(
+            base,
+            hp_btu_per_h=float(x[0]),
+            hp_btu_per_h_per_f=float(x[1]),
+            ua_btu_per_h_f=float(x[2]),
+        )
+
+    def loss(x: np.ndarray) -> float:
+        if not (2000 < x[0] < 9000 and -50 <= x[1] <= 200):
+            return 1e12
+        if not (0 <= x[2] <= 20 and 0 <= x[3] <= 500):
+            return 1e12
+        return float(np.mean(np.abs(book.errors(terms(x), float(x[3]), pairs))))
+
+    best = None
+    for x0 in ([4300, 130, 4, 50], [3800, 80, 5, 150], [4800, 0, 3, 0]):
+        r = minimize(loss, x0, method="Nelder-Mead", options={"maxiter": 3000})
+        if best is None or r.fun < best.fun:
+            best = r
+    assert best is not None
+    x = best.x
+    err = book.errors(terms(x), float(x[3]), pairs)
+    return BookFit(
+        hp_btu_per_h=float(x[0]),
+        hp_btu_per_h_per_f=float(x[1]),
+        ua_btu_per_h_f=float(x[2]),
+        loss_btu_per_gal=float(x[3]),
+        n_pairs=len(pairs),
+        mae_btu=float(np.mean(np.abs(err))) if len(err) else float("nan"),
+        mean_btu=float(np.mean(err)) if len(err) else float("nan"),
+    )
+
+
+#: The anchor-age bands the book's error is read in, hours.
+ERROR_BANDS_H = ((1, 6), (6, 12), (12, 18), (18, 24), (24, 36), (36, 72))
+
+
+def book_error_bands(
+    book: RecordedBook,
+    p: BookParams,
+    loss_btu_per_gal: float,
+) -> list[tuple[tuple[int, int], int, float, float, float]]:
+    """The book's error on re-anchors up to ``history_h`` apart, by
+    anchor age: ``((lo, hi), n, MAE, mean, p90 of |error|)``. Long pairs
+    are quiet spans by construction (no full tank between), so their
+    error reads low."""
+    pairs = book.reanchors(p.history_h)
+    err = book.errors(p, loss_btu_per_gal, pairs)
+    age = np.array([(b - a) * book.seconds / 3600 for a, b in pairs])
+    out = []
+    for lo_, hi_ in ERROR_BANDS_H:
+        m = (age >= lo_) & (age < hi_)
+        if not m.any():
+            continue
+        out.append(
+            (
+                (lo_, hi_),
+                int(m.sum()),
+                float(np.mean(np.abs(err[m]))),
+                float(np.mean(err[m])),
+                float(np.percentile(np.abs(err[m]), 90)),
+            )
+        )
+    return out
+
+
+def empty_point(
+    book: RecordedBook,
+    p: BookParams,
+    loss_btu_per_gal: float,
+    *,
+    line_f: float = 105.0,
+    core_h: float = 12.0,
+) -> tuple[float | None, list[tuple[datetime, float, float]]]:
+    """The heat left when a drawdown first takes the upper probe below
+    ``line_f``: each such crossing with a draw in the 10 minutes before
+    it, an anchor within 24 h, and an hour since the last; the median of
+    those with an anchor within ``core_h`` (``BookParams.empty_btu``),
+    and every crossing as ``(when, anchor age h, heat BTU)``."""
+    heat, age = book.heat(p, loss_btu_per_gal)
+    below = book.u < line_f
+    lead = int(600 / book.seconds)
+    events: list[tuple[datetime, int, float, float]] = []
+    for s_ in np.where(below[1:] & ~below[:-1])[0] + 1:
+        if np.isnan(heat[s_]) or age[s_] > 24:
+            continue
+        if book.draw[max(0, s_ - lead) : s_ + 1].sum() == 0:
+            continue
+        at = book.at(int(s_))
+        if events and (at - events[-1][0]).total_seconds() < 3600:
+            continue
+        events.append((at, int(s_), float(age[s_]), float(heat[s_])))
+    core = [e[3] for e in events if e[2] <= core_h]
+    return (
+        float(np.median(core)) if core else None,
+        [(t, a, h) for t, _, a, h in events],
+    )
+
+
+def error_btu_from_bands(
+    bands: Sequence[tuple[tuple[int, int], int, float, float, float]],
+    max_anchor_age_h: float,
+) -> tuple[float | None, float | None]:
+    """``(error_btu, aged_error_btu)`` from ``book_error_bands``: the
+    aged band is the 18-24 h band's p90, rounded up to 100 BTU, as it
+    was set. The fresh one is the largest band p90 within
+    ``max_anchor_age_h``, rounded up the same way: a rule by analogy
+    (the shipped 3,000 was a round figure read off the bands, not
+    computed)."""
+
+    def up(x: float) -> float:
+        return math.ceil(x / 100.0) * 100.0
+
+    fresh = [b[4] for b in bands if b[0][1] <= max_anchor_age_h]
+    aged = [b[4] for b in bands if b[0] == (18, 24)]
+    return (
+        up(max(fresh)) if fresh else None,
+        up(aged[0]) if aged else None,
+    )
+
+
+def withheld_btu(
+    book: RecordedBook, p: BookParams, inlet_f: float | None = None
+) -> np.ndarray:
+    """The cold region's withheld heat at every step: ``Booked.step``
+    walked from each quiet anchor, as a served book walks it."""
+    anchor = np.zeros(len(book.steps), dtype=bool)
+    anchor[book.anchors] = True
+    ref = p.reference_f if inlet_f is None else inlet_f
+    out = np.zeros(len(book.steps))
+    b = Booked(0.0, 0.0, ref, cold_f=p.reference_f)
+    for i, st in enumerate(book.steps):
+        if anchor[i]:
+            b = Booked(0.0, 0.0, ref, cold_f=p.reference_f)
+        if math.isnan(st.upper_f) or math.isnan(st.lower_f):
+            out[i] = out[i - 1] if i else 0.0
+            continue
+        b = b.step(replace(st, inlet_f=ref), p, book.circulation)
+        out[i] = b.withheld_btu(p)
+    return out
+
+
+def zone_empty_point(
+    book: RecordedBook,
+    p: BookParams,
+    loss_btu_per_gal: float,
+    *,
+    line_f: float = 105.0,
+    core_h: float = 12.0,
+) -> float | None:
+    """``empty_point`` in the drawable frame (``BookParams.
+    zone_empty_btu``): the median, at the same core crossings, of the
+    booked heat less what the cold region withholds."""
+    _, events = empty_point(book, p, loss_btu_per_gal, line_f=line_f)
+    heat, _ = book.heat(p, loss_btu_per_gal)
+    placed = heat - withheld_btu(book, p)
+    core = [
+        placed[int((t - book.start).total_seconds() / book.seconds)]
+        for t, a, _ in events
+        if a <= core_h
+    ]
+    return float(np.median(core)) if core else None

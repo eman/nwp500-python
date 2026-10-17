@@ -662,6 +662,56 @@ own "hot water in use" flag also fires on circulation.
 Save the parameters (``nwp500.sim.params.params_to_document``) and load
 them with ``params_from_document``.
 
+**With a hot-water meter**, fit the readiness evidence and the heat
+book's own terms from the record too. The evidence comes from the
+clean draws: circulation and both elements off, and a settled start.
+Each draw's volume delivered before the upper probe crossed 105 degF
+becomes a point, and the points another beats from a no-better state
+are dropped:
+
+.. code-block:: python
+
+   from dataclasses import replace
+
+   frame = sa.draw_frame(recorded, start=since, end=until, flow=meter_flow,
+                         circulation=runs)
+   draws = calibration.clean_draws(frame)
+   evidence = calibration.fit_evidence(draws)
+   print(evidence.n_quiet, evidence.held_out_crossed, evidence.held_out_over)
+
+The book's terms are fitted on pairs of anchors on full tanks an hour
+to a day apart. Each pair's booked heat is checked against the probes':
+
+.. code-block:: python
+
+   p = params.book_terms()
+   steps = sa.book_steps_from_history(
+       recorded, start=since, end=until, flow=meter_flow, air=air,
+       circulation=runs, circulation_flow=pump_flow, params=params,
+   )
+   book = calibration.RecordedBook(steps, p, params.circulation, start=since)
+   fit = calibration.fit_book_terms(book, book.reanchors(), p)
+   p = replace(p, hp_btu_per_h=fit.hp_btu_per_h,
+               hp_btu_per_h_per_f=fit.hp_btu_per_h_per_f,
+               ua_btu_per_h_f=fit.ua_btu_per_h_f)
+   bands = calibration.book_error_bands(book, p, fit.loss_btu_per_gal)
+   empty, crossings = calibration.empty_point(book, p, fit.loss_btu_per_gal)
+   zone = calibration.zone_empty_point(book, p, fit.loss_btu_per_gal)
+
+``error_btu_from_bands`` reads the error bands off ``bands``. The aged
+band is the 18 to 24 h p90, rounded up to 100 BTU. The fresh one is the
+largest p90 within ``max_anchor_age_h``, a rule by analogy: the
+example's 3,000 was read off its bands by eye. ``cold_lower_cap(draws,
+cutoff_f)`` is the evidence's cap after a cold lower zone. The cutoff
+itself, and the bath's volume, are yours to set: measure a bath by
+filling one to your usual level at the hot side's meter.
+
+The zones' mixing, the cold front's width and where the lower probe
+sits in it, the front's settling, the delivered water's lag and the
+heat hidden from the probes of a full tank have no fit here. They stay
+installation values (``BookParams``, ``ReadinessParams``), with their
+provenance.
+
 
 Replay a day the heater lived
 =============================

@@ -1047,3 +1047,80 @@ def book_from_history(
 
     found = booked(p.max_anchor_age_h)
     return found if found is not None else booked(p.history_h)
+
+
+def draw_frame(
+    readings: Iterable[tuple[datetime, DeviceStatus]],
+    *,
+    start: datetime,
+    end: datetime,
+    flow: Iterable[tuple[datetime, float]],
+    circulation: Iterable[tuple[datetime, datetime]] = (),
+) -> pd.DataFrame:
+    """A metered record on ``sim.calibration``'s draw grid
+    (``DRAW_GRID_S``), for ``clean_draws``: the household meter's
+    ``flow`` (per minute, the preferred volume) held ``FLOW_HOLD``, 0
+    past it; the probes, the compressor and either element held until
+    the next status; ``circulating`` inside a ``circulation`` run."""
+    import pandas as pd
+
+    from nwp500.sim.calibration import DRAW_GRID_S
+
+    start, end = start.astimezone(UTC), end.astimezone(UTC)
+    grid: list[datetime] = []
+    t = start
+    while t <= end:
+        grid.append(t)
+        t += timedelta(seconds=DRAW_GRID_S)
+    statuses = sorted(
+        ((t.astimezone(UTC), s) for t, s in readings), key=lambda r: r[0]
+    )
+
+    def of(
+        f: Callable[[DeviceStatus], float],
+    ) -> list[float | None]:
+        return _held([(t, f(s)) for t, s in statuses], grid, None)
+
+    meter = _held(
+        sorted((t.astimezone(UTC), _volume_to_sim(v)) for t, v in flow),
+        grid,
+        FLOW_HOLD,
+    )
+    runs = sorted(
+        (a.astimezone(UTC), b.astimezone(UTC)) for a, b in circulation
+    )
+    nan = float("nan")
+    return pd.DataFrame(
+        {
+            "flow_gpm": [m if m is not None else 0.0 for m in meter],
+            "circulating": [any(a <= g < b for a, b in runs) for g in grid],
+            "upper_f": [
+                nan if v is None else v
+                for v in of(
+                    lambda s: _from_device(
+                        DeciCelsius(s.tank_upper_temperature_raw)
+                    )
+                )
+            ],
+            "lower_f": [
+                nan if v is None else v
+                for v in of(
+                    lambda s: _from_device(
+                        DeciCelsius(s.tank_lower_temperature_raw)
+                    )
+                )
+            ],
+            "compressor_on": [
+                bool(v) for v in of(lambda s: float(bool(s.comp_use)))
+            ],
+            "element_on": [
+                bool(a) or bool(b)
+                for a, b in zip(
+                    of(lambda s: float(bool(s.heat_upper_use))),
+                    of(lambda s: float(bool(s.heat_lower_use))),
+                    strict=True,
+                )
+            ],
+        },
+        index=pd.DatetimeIndex(grid),
+    )

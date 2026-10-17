@@ -142,6 +142,14 @@ Added
     ``HeaterState.energy_to_setpoint_wh`` carry what they need, filled
     by the adapters; ``recovery`` says ``not_scheduled`` in Vacation and
     Power Off.
+  - The readiness evidence and the heat book's own terms from a metered
+    record (``sim.calibration``, ``sim_adapters.draw_frame``): clean
+    draws and their demonstrated volumes reduced to the frontier, with a
+    time-ordered held-out check, and the cap after a cold lower zone;
+    the book's compressor rate, its slope with the air, standby UA and
+    circulation's loss fitted on re-anchors of full tanks
+    (``RecordedBook``, ``fit_book_terms``), its error by anchor age, and
+    the empty points in the book's frame and the drawable one.
   - The heat book from a recorded history, as the model kept it:
     ``sim.book.Step``, ``book_steps`` (the anchor on a quiet full tank
     after a recovery, or a recovery's end during a draw; every step
