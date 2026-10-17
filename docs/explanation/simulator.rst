@@ -51,7 +51,7 @@ models:
            tou=tou_info,                       # TOUInfo
            tou_enabled=status.tou_status,
        ),
-       environment=sim.Environment(ambient_f=68.0),
+       environment=sa.environment(status),
    )
    result = sim.simulate(scenario, sa.params(feature))  # DeviceFeature
 
@@ -64,7 +64,7 @@ A "what if" is a copy of the scenario with one part changed:
 
    eco = scenario.model_copy(
        update={"commands": sim.Commands(
-           writes=(sim.Write(at=scenario.start, mode=3),),  # Energy Saver
+           writes=(sa.write(scenario.start, mode=3),),  # Energy Saver
        )}
    )
    print(sim.simulate(eco, sa.params(feature)).input_wh)
@@ -148,10 +148,14 @@ A ``Scenario`` is a frozen value made of parts:
      - Setpoint and mode writes at instants, a reservation schedule
        written at the start, and the TOU switch set at the start.
 
-Temperatures are in degF, the unit the physics were fitted in;
-schedules keep the device's units. The adapters read the raw fields
+The simulator's fields are in degF and US gallons, the units the
+physics were fitted in; schedules keep the device's units.
+``sim_adapters`` is the boundary: it reads the device's raw fields
 (``*_raw``), never the converted properties, so the process-wide unit
-preference (:doc:`/how-to/manage-units`) cannot change a scenario.
+preference (:doc:`/how-to/manage-units`) cannot change a scenario, and
+it takes what a caller supplies and gives back a result's values in
+that preference. A core in other units would change the adapters'
+conversions and nothing a caller writes.
 
 ``sim.codec`` writes a scenario, with or without its parameters, as a
 JSON document, and reads one back. :doc:`/reference/simulator-inputs`

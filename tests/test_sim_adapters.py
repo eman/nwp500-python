@@ -1,6 +1,7 @@
 """Building the simulator's inputs from the library's models
 (``nwp500.sim_adapters``)."""
 
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import pytest
@@ -15,7 +16,16 @@ from nwp500.models import (
     TOUInfo,
     TOUReservationSchedule,
 )
-from nwp500.sim import default_params
+from nwp500.sim import (
+    Environment,
+    HeaterState,
+    Loads,
+    Scenario,
+    Settings,
+    default_params,
+    simulate,
+    standby,
+)
 from nwp500.unit_system import reset_unit_system, set_unit_system
 
 FEATURE: dict[str, Any] = {
@@ -215,3 +225,122 @@ class TestTheSchedules:
             20,
             59,
         )
+
+
+T0 = datetime(2026, 10, 4, 19, 0, tzinfo=UTC)
+
+
+class TestThePreferredUnits:
+    """What a caller supplies, and what it reads back, is in the
+    library's preferred units; the scenario is the same either way."""
+
+    def _metric(self) -> tuple[Any, ...]:
+        set_unit_system("metric")
+        return (
+            sa.environment(
+                ambient=((T0, 20.0), (T0 + timedelta(hours=6), 15.0)),
+                humidity=40.0,
+                inlet=10.0,
+            ),
+            sa.loads([(T0, 37.85411784)]),
+            sa.write(T0, setpoint=60.0, mode=3, id="w"),
+            sa.reservation_entry(
+                days=["Monday"], hour=6, minute=0, mode=4, temperature=60.0
+            ),
+        )
+
+    def _us(self) -> tuple[Any, ...]:
+        set_unit_system("us_customary")
+        return (
+            sa.environment(
+                ambient=((T0, 68.0), (T0 + timedelta(hours=6), 59.0)),
+                humidity=40.0,
+                inlet=50.0,
+            ),
+            sa.loads([(T0, 10.0)]),
+            sa.write(T0, setpoint=140.0, mode=3, id="w"),
+            sa.reservation_entry(
+                days=["Monday"], hour=6, minute=0, mode=4, temperature=140.0
+            ),
+        )
+
+    def test_metric_and_us_inputs_build_the_same_parts(self):
+        metric, us = self._metric(), self._us()
+        env_m, env_u = metric[0], us[0]
+        assert [v for _, v in env_m.ambient_f] == pytest.approx(
+            [v for _, v in env_u.ambient_f]
+        )
+        assert env_m.inlet_f == pytest.approx(env_u.inlet_f)
+        assert env_m.humidity == env_u.humidity == 40.0
+        assert metric[1].draws[0].gallons == pytest.approx(10.0)
+        assert us[1].draws[0].gallons == 10.0
+        assert metric[2].setpoint_f == pytest.approx(us[2].setpoint_f)
+        assert metric[3] == us[3]
+        assert metric[3].week == 64
+        assert metric[3].setpoint_half_c == 120
+
+    def test_with_no_preference_inputs_are_fahrenheit(self):
+        set_unit_system(None)
+        assert sa.write(T0, setpoint=140.0).setpoint_f == 140.0
+        assert sa.temperature_unit() == "°F"
+        assert sa.volume_unit() == "gal"
+
+    def test_the_ambient_from_the_status_ignores_the_preference(
+        self, device_status_dict: dict[str, Any]
+    ):
+        s = DeviceStatus.model_validate(
+            device_status_dict | {"ambientTemperature": 200}  # 20.0 degC
+        )
+        for units in ("metric", "us_customary", None):
+            set_unit_system(units)  # type: ignore[arg-type]
+            assert sa.environment(s).ambient_f == pytest.approx(68.0)
+
+    def test_an_ambient_or_a_status_is_needed(self):
+        with pytest.raises(ValueError, match="ambient"):
+            sa.environment()
+
+    def test_left_out_is_the_simulators_default(self):
+        env = sa.environment(ambient=20.0)
+        assert "humidity" not in env.model_fields_set
+        assert env.inlet_f is None
+
+    @pytest.mark.parametrize(
+        ("units", "temp", "vol", "symbols"),
+        [
+            ("metric", 60.0, 37.85411784, ("°C", "L")),
+            ("us_customary", 140.0, 10.0, ("°F", "gal")),
+        ],
+    )
+    def test_results_come_back_in_the_preferred_units(
+        self, units: Any, temp: float, vol: float, symbols: tuple[str, str]
+    ):
+        set_unit_system(units)
+        assert sa.temperature(140.0) == pytest.approx(temp)
+        assert sa.volume(10.0) == pytest.approx(vol)
+        assert (sa.temperature_unit(), sa.volume_unit()) == symbols
+
+    def test_the_path_in_the_preferred_units(self):
+        state = HeaterState(upper_f=131.0, lower_f=113.0)
+        env = Environment(ambient_f=68.0)
+        params = default_params()
+        result = simulate(
+            Scenario(
+                start=T0,
+                horizon=timedelta(hours=2),
+                tz="UTC",
+                state=state,
+                settings=Settings(setpoint_f=140.0, hp_lower_on_f=105.0),
+                environment=env,
+            ),
+            params,
+        )
+        trace = standby(
+            state, env, Loads(), params, start=T0, until=T0 + timedelta(hours=2)
+        )
+        set_unit_system("metric")
+        first = sa.path(result)[0]
+        assert (first.upper, first.lower) == pytest.approx((55.0, 45.0))
+        assert first.setpoint == pytest.approx(60.0)
+        assert len(sa.path(result)) == len(result.points)
+        assert sa.path(trace)[0].setpoint is None
+        assert sa.path(trace)[0].upper == pytest.approx(55.0)

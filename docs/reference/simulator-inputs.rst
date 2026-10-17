@@ -22,9 +22,11 @@ Conventions
    * - Quantity
      - Convention
    * - Temperatures
-     - degF, the unit the physics were fitted in: the tank, the
-       setpoint, the ambient and the inlet. The adapters convert the
-       device's raw fields, whatever unit system the process has set.
+     - degF in the simulator's own fields (``*_f``), the unit the
+       physics were fitted in: the tank, the setpoint, the ambient and
+       the inlet. ``sim_adapters`` reads the device's raw fields, and
+       takes and gives back caller values in the preferred unit
+       (`Units at the boundary`_).
    * - Reservation setpoints
      - Half-degrees Celsius, as the device stores them (the entry's
        ``param``): 120 is 60 degC.
@@ -41,16 +43,55 @@ Conventions
        Instants in a result are aware too: convert them with
        ``astimezone``.
    * - Volumes
-     - US gallons.
+     - US gallons in the simulator's own fields; the preferred unit
+       through ``sim_adapters``.
 
 Every input is validated when it is built. An unknown field, a value
 out of range or a naive instant raises pydantic's
 ``ValidationError``, a ``ValueError``.
 
-The **Source** column below says where a value comes from. A library
+The tables below give the simulator's own fields and units. The
+**Source** column says where a value comes from. A library
 field is filled by the adapter named; "not reported" means the heater
 does not report it, so the caller supplies it or the default is used.
 Every default an answer used is named in its ``defaults_used``.
+
+
+Units at the boundary
+=====================
+
+``nwp500.sim`` works in degF and US gallons. ``nwp500.sim_adapters`` is
+where units are crossed, so a caller works in the library's preferred
+units (:doc:`/how-to/manage-units`): degC and litres after
+``set_unit_system("metric")``, degF and gallons otherwise.
+
+.. list-table::
+   :header-rows: 1
+   :widths: 40 60
+
+   * - Adapter
+     - Units
+   * - ``heater_state``, ``settings``, ``environment(status)``
+     - Read the device's raw fields: the same status gives the same
+       values whatever unit is preferred.
+   * - ``environment(ambient=..., inlet=...)``
+     - The air and the mains water in the preferred unit; humidity in
+       %RH.
+   * - ``loads([(instant, volume), ...])``
+     - Draws in the preferred volume unit.
+   * - ``write(at, setpoint=..., mode=...)``
+     - The setpoint in the preferred unit.
+   * - ``reservation_entry(days=..., temperature=...)``
+     - The temperature in the preferred unit, range-checked as
+       ``build_reservation_entry`` checks it for the device.
+   * - ``path(result)``
+     - The tank along a ``SimulationResult``, ``RecoveryResult`` or
+       ``Trace``, in the preferred unit.
+   * - ``temperature(value_f)``, ``volume(value_gal)``
+     - Any other value a result holds, in the preferred unit, and
+       ``temperature_unit()``, ``volume_unit()`` its symbol.
+
+The simulator's fields can also be set directly, in degF and gallons.
 
 
 The span
@@ -266,7 +307,8 @@ The environment: ``Environment``
      - required
      - The air at the heater's intake: one value for the whole span, or
        ``(instant, degF)`` readings. ``DeviceStatus.ambient_temperature_raw``
-       (0.1 degC) is the device's reading now. **Not reported ahead of
+       (0.1 degC) is the device's reading now
+       (``sim_adapters.environment(status)``). **Not reported ahead of
        time**: for the hours to come, pass a forecast or a sensor's
        readings. Readings are interpolated onto a 10-minute grid from an
        hour before ``start`` to 12 hours past the end, and held past

@@ -36,7 +36,12 @@ Added
   - ``sim.codec`` reads and writes scenarios as JSON documents.
   - ``nwp500.sim_adapters`` builds the inputs from ``DeviceStatus``,
     ``DeviceFeature``, ``ReservationSchedule`` and ``TOUInfo``, reading
-    the raw fields so the unit preference cannot change them.
+    the raw fields so the unit preference cannot change them. It is
+    where units are crossed: ``environment``, ``loads``, ``write`` and
+    ``reservation_entry`` take a caller's values in the preferred units
+    (degC and litres under ``metric``), and ``path``, ``temperature``
+    and ``volume`` give a result's back in them. The simulator itself
+    works in degF and US gallons.
   - Docs: a how-to (``docs/how-to/simulate-heater.rst``), from fetching
     the heater's data to evaluating a change before sending it; a
     reference of every input, its unit, default and source

@@ -105,18 +105,14 @@ Build a scenario
 ================
 
 ``nwp500.sim_adapters`` turns those models into a scenario's parts.
-The parts it cannot fill are the ones the heater does not report: the
-time zone its schedules are in, and the air temperature ahead of time.
+The one it cannot fill is the time zone the heater's schedules are in,
+which the heater does not report.
 
 .. code-block:: python
 
    from datetime import UTC, datetime, timedelta
 
    from nwp500 import sim, sim_adapters as sa
-   from nwp500.temperature import DeciCelsius
-
-   # The device's reading of the air at its intake, now.
-   ambient_now = DeciCelsius(status.ambient_temperature_raw).to_fahrenheit()
 
    scenario = sim.Scenario(
        start=datetime.now(UTC),
@@ -129,13 +125,36 @@ time zone its schedules are in, and the air temperature ahead of time.
            tou=tou,
            tou_enabled=status.tou_status,
        ),
-       environment=sim.Environment(ambient_f=ambient_now),
+       environment=sa.environment(status),  # the air at the heater now
    )
    params = sa.params(feature)  # the defaults for this tank size
 
-``start`` must be timezone-aware. The adapters read the raw fields, so
-the result is the same whichever unit system the process has set
-(:doc:`manage-units`).
+``start`` must be timezone-aware. ``sa.environment(status)`` holds the
+device's reading of the air at its intake for the whole span; a
+forecast does better (`Make the answer better`_).
+
+
+Work in your units
+==================
+
+The simulator itself takes degF and US gallons: its fields end in
+``_f`` and ``gallons``. Go through ``sim_adapters`` and you never touch
+them; it converts at the boundary, in the library's preferred units
+(:doc:`manage-units`):
+
+- The device's fields are read raw, so the same status builds the same
+  scenario whatever unit system is set.
+- What you supply is in the preferred unit: degC and litres after
+  ``set_unit_system("metric")``, degF and gallons otherwise.
+  ``sa.environment(ambient=..., inlet=...)``, ``sa.loads``, ``sa.write``
+  and ``sa.reservation_entry`` take it.
+- ``sa.path(result)`` gives the tank along a result in the preferred
+  unit, and ``sa.temperature(value)`` and ``sa.volume(value)`` convert
+  any other value a result holds. ``sa.temperature_unit()`` and
+  ``sa.volume_unit()`` give the symbols.
+
+The examples below work in either unit system; the numbers shown are
+in degF.
 
 
 Run it and read the answer
@@ -160,6 +179,11 @@ Run it and read the answer
    for slot, wh in result.energy_by_slot():
        print(slot, wh)
 
+   unit = sa.temperature_unit()
+   for r in sa.path(result)[::30]:
+       print(f"{r.at.astimezone(local):%H:%M} "
+             f"upper {r.upper:.1f}{unit}, lower {r.lower:.1f}{unit}")
+
 What a result holds:
 
 ``result.heating``
@@ -171,8 +195,9 @@ What a result holds:
    TOU cap ended it, and ``capped`` is true), ``write``, ``mode`` or
    ``horizon``. ``input_wh`` is its electricity.
 ``result.points``
-   The tank along the walk: ``upper_f``, ``lower_f``, the setpoint, the
-   mode, and whether it is heating.
+   The tank along the walk, in degF: ``upper_f``, ``lower_f``, the
+   setpoint, the mode, and whether it is heating. ``sa.path(result)``
+   gives the temperatures in the preferred unit.
 ``result.writes`` and ``result.mode_writes``
    Every setpoint write and reservation firing, and every mode write, as
    it landed: fired, skipped, held by a TOU window, or withdrawn.
@@ -208,7 +233,7 @@ A scenario is a frozen value, so a "what if" is a copy with its
 
    # A setpoint and a mode write, at an instant.
    eco = scenario.model_copy(update={"commands": sim.Commands(
-       writes=(sim.Write(at=at, mode=3, setpoint_f=130.0),),  # Energy Saver
+       writes=(sa.write(at, setpoint=130.0, mode=3),),  # Energy Saver
    )})
 
    # TOU switched off at the start.
@@ -217,12 +242,13 @@ A scenario is a frozen value, so a "what if" is a copy with its
    )})
 
    # A different reservation schedule, written at the start: weekdays
-   # (Monday-Friday, mask 124) at 05:30, High Demand at 60 degC.
+   # at 05:30, High Demand at 140.
+   weekdays = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"]
    early = scenario.model_copy(update={"commands": sim.Commands(
        reservations=(
-           sim.ReservationEntry(
-               week=124, hour=5, minute=30,
-               mode=4, setpoint_half_c=120,  # High Demand
+           sa.reservation_entry(
+               days=weekdays, hour=5, minute=30,
+               mode=4, temperature=140.0,  # High Demand
            ),
        ),
    )})
@@ -232,11 +258,10 @@ A scenario is a frozen value, so a "what if" is a copy with its
        print(name, sim.simulate(s, params).input_wh - base, "Wh")
 
 Modes are ``DhwOperationSetting`` values: 1 Heat Pump, 2 Electric,
-3 Energy Saver, 4 High Demand, 5 Vacation, 6 Power Off. A ``Write``
-must fall inside the scenario's span. Reservation entries keep the
-device's units, as the device stores them: the setpoint in half-degrees
-Celsius (``setpoint_half_c=120`` is 60 degC, 140 degF) and the device's
-day mask (:doc:`schedule-operation`).
+3 Energy Saver, 4 High Demand, 5 Vacation, 6 Power Off. A write must
+fall inside the scenario's span. ``sa.reservation_entry`` builds an
+entry as ``build_reservation_entry`` builds one for the device
+(:doc:`schedule-operation`), with the same range check.
 
 A heater already in Vacation or Power Off starts no heating. A write or
 reservation that switches to either is not modelled: it is left out,
@@ -256,7 +281,7 @@ next one the heater will start, with no draws.
    r = sim.recovery(
        sa.heater_state(status),
        sa.settings(status),
-       sim.Environment(ambient_f=ambient_now),
+       sa.environment(status),
        params,
        at=datetime.now(UTC),
        schedules=scenario.schedules,  # TOU holds and caps a recovery
@@ -269,8 +294,8 @@ next one the heater will start, with no draws.
              f"in {r.minutes:.0f} min ({r.interval.stop})")
 
 ``ready_at`` is when that interval ends. A recovery the TOU cap stops
-ends about 3.6 degF short of the setpoint, and its ``stop`` says
-``cap`` (:doc:`/explanation/tou-recovery-cap`).
+ends about 3.6 degF (2 degC) short of the setpoint, and its ``stop``
+says ``cap`` (:doc:`/explanation/tou-recovery-cap`).
 
 
 Watch the tank coast
@@ -283,15 +308,15 @@ draws. Use it for "how cold will it be by morning?":
 
    trace = sim.standby(
        sa.heater_state(status),
-       sim.Environment(ambient_f=ambient_now),
+       sa.environment(status),
        sim.Loads(),
        params,
        start=datetime.now(UTC),
        until=datetime.now(UTC) + timedelta(hours=10),
    )
-   last = trace.points[-1]
+   last = sa.path(trace)[-1]
    print(f"{last.at.astimezone(local):%H:%M}: "
-         f"upper {last.upper_f:.1f}, lower {last.lower_f:.1f}")
+         f"upper {last.upper:.1f}{unit}, lower {last.lower:.1f}{unit}")
 
 
 Make the answer better
@@ -300,31 +325,36 @@ Make the answer better
 Each of these replaces a default with a fact:
 
 **The air ahead of time.** The device reports the air at its intake
-now. Pass readings or a forecast instead of one value; they are
-interpolated between, and held past the last one:
+now. Pass readings or a forecast instead; they are interpolated
+between, and held past the last one. The humidity and the mains water
+temperature are not reported at all:
 
 .. code-block:: python
 
-   environment = sim.Environment(
-       ambient_f=(
+   start = scenario.start
+   environment = sa.environment(
+       ambient=[
            (start, 66.0),
            (start + timedelta(hours=6), 61.5),
            (start + timedelta(hours=12), 70.0),
-       ),
-       humidity=45.0,
-       inlet_f=58.0,  # the mains temperature, if you know it
+       ],
+       humidity=45.0,  # %RH
+       inlet=58.0,     # the mains temperature, if you know it
    )
 
 **Hot water drawn.** The heater does not report draw volume, so give
-the draws you expect (a forecast) or the ones a flow meter recorded.
-Gallons are counted on the delivered (mixed) line:
+the draws you expect (a forecast) or the ones a flow meter recorded,
+counted on the delivered (mixed) line:
 
 .. code-block:: python
 
-   loads = sim.Loads(draws=(
-       sim.Draw(at=start + timedelta(hours=1), gallons=12.0),
-       sim.Draw(at=start + timedelta(hours=13), gallons=20.0),
-   ))
+   loads = sa.loads([
+       (start + timedelta(hours=1), 12.0),
+       (start + timedelta(hours=13), 20.0),
+   ])
+
+Put them in a scenario with
+``scenario.model_copy(update={"environment": environment, "loads": loads})``.
 
 **History.** Without it the simulator assumes no restart lockout is in
 force and that it does not know when the tank last heated. Track

@@ -5,11 +5,21 @@ module is the bridge. Each function takes what a client already fetched
 (a ``DeviceStatus``, a ``DeviceFeature``, a ``ReservationSchedule``, a
 ``TOUInfo``) and returns a scenario part. Nothing here does I/O.
 
-Temperatures are read from the raw fields (``*_raw``), never the
-converted properties, which follow the process-wide unit preference
-(``nwp500.unit_system``): a reservation's setpoint stays in the device's
-half-degrees Celsius, and every other temperature becomes °F, the
-simulator's unit.
+The simulator takes °F and US gallons, whatever unit system the
+process has set. This module is where units are crossed, so a caller
+works in the library's preferred units and never in the simulator's:
+
+- The device's own fields are read raw (``*_raw``), never through the
+  converted properties, whose unit follows the preference: the same
+  status always builds the same scenario.
+- What a caller supplies (the ambient, the inlet, a write's setpoint, a
+  reservation's temperature, a draw's volume) is in the preferred unit:
+  °C and litres with ``set_unit_system("metric")``, °F and gallons
+  otherwise, as ``preferred_to_half_celsius`` reads it.
+- ``temperature``, ``volume`` and ``path`` give a result's values back
+  in the preferred unit.
+
+A reservation's setpoint stays in the device's half-degrees Celsius.
 
 Example::
 
@@ -27,14 +37,17 @@ Example::
             tou=tou_info,
             tou_enabled=status.tou_status,
         ),
-        environment=sim.Environment(ambient_f=68.0),
+        environment=sa.environment(status),
     )
     result = sim.simulate(scenario, sa.params(feature))
 """
 
 from collections.abc import Iterable, Mapping
+from dataclasses import dataclass
+from datetime import datetime
 from typing import Any
 
+from nwp500.encoding import build_reservation_entry
 from nwp500.models import (
     DeviceFeature,
     DeviceStatus,
@@ -44,23 +57,83 @@ from nwp500.models import (
     TOUReservationSchedule,
 )
 from nwp500.sim import (
+    Draw,
+    Environment,
     HeaterParams,
     HeaterState,
+    Loads,
+    RecoveryResult,
     ReservationEntry,
     Schedules,
     Settings,
+    SimulationResult,
     TouPeriod,
+    Trace,
+    Write,
     default_params,
 )
-from nwp500.temperature import DeciCelsius, HalfCelsius
+from nwp500.temperature import DeciCelsius, HalfCelsius, Temperature
+from nwp500.unit_system import get_unit_system
+
+# ── units ───────────────────────────────────────────────────────────
+# The simulator's core takes °F and US gallons. Every conversion to or
+# from them is in this section: a core in other units changes these
+# functions and nothing else.
+
+#: Litres in a US gallon.
+_L_PER_GAL = 3.785411784
+
+
+def _metric() -> bool:
+    """Whether the preferred units are metric."""
+    return get_unit_system() == "metric"
+
+
+def _from_device(t: Temperature) -> float:
+    """A device temperature in the simulator's unit."""
+    return t.to_fahrenheit()
+
+
+def _to_sim(value: float) -> float:
+    """A temperature in the preferred unit, in the simulator's."""
+    return value * 9 / 5 + 32 if _metric() else value
+
+
+def _volume_to_sim(value: float) -> float:
+    """A volume in the preferred unit, in the simulator's."""
+    return value / _L_PER_GAL if _metric() else value
+
+
+def temperature(value_f: float) -> float:
+    """A temperature from the simulator (a ``*_f`` field) in the
+    preferred unit."""
+    return (value_f - 32) * 5 / 9 if _metric() else value_f
+
+
+def volume(value_gal: float) -> float:
+    """A volume from the simulator (US gallons) in the preferred unit."""
+    return value_gal * _L_PER_GAL if _metric() else value_gal
+
+
+def temperature_unit() -> str:
+    """The preferred temperature unit's symbol."""
+    return "°C" if _metric() else "°F"
+
+
+def volume_unit() -> str:
+    """The preferred volume unit's symbol."""
+    return "L" if _metric() else "gal"
+
+
+# ── from the device ─────────────────────────────────────────────────
 
 
 def heater_state(status: DeviceStatus) -> HeaterState:
     """The tank and what is heating it: both thermistors (0.1 °C
     resolution), the compressor, and either element."""
     return HeaterState(
-        upper_f=DeciCelsius(status.tank_upper_temperature_raw).to_fahrenheit(),
-        lower_f=DeciCelsius(status.tank_lower_temperature_raw).to_fahrenheit(),
+        upper_f=_from_device(DeciCelsius(status.tank_upper_temperature_raw)),
+        lower_f=_from_device(DeciCelsius(status.tank_lower_temperature_raw)),
         compressor_running=bool(status.comp_use),
         element_running=bool(status.heat_upper_use)
         or bool(status.heat_lower_use),
@@ -71,13 +144,13 @@ def settings(status: DeviceStatus) -> Settings:
     """The setpoint, the operation mode and the lower-zone start
     threshold."""
     return Settings(
-        setpoint_f=HalfCelsius(
-            status.dhw_temperature_setting_raw
-        ).to_fahrenheit(),
+        setpoint_f=_from_device(
+            HalfCelsius(status.dhw_temperature_setting_raw)
+        ),
         mode=int(status.dhw_operation_setting),
-        hp_lower_on_f=HalfCelsius(
-            status.hp_lower_on_temp_setting_raw
-        ).to_fahrenheit(),
+        hp_lower_on_f=_from_device(
+            HalfCelsius(status.hp_lower_on_temp_setting_raw)
+        ),
     )
 
 
@@ -162,4 +235,133 @@ def schedules(
         ),
         tou_periods=() if tou is None else tou_periods(tou),
         tou_enabled=tou_enabled,
+    )
+
+
+def environment(
+    status: DeviceStatus | None = None,
+    *,
+    ambient: float | Iterable[tuple[datetime, float]] | None = None,
+    humidity: float | None = None,
+    inlet: float | None = None,
+) -> Environment:
+    """Where the heater sits. ``ambient`` is the air at the heater, in
+    the preferred unit: one value, or ``(instant, value)`` readings such
+    as a forecast. Without it, ``status``'s own reading of the air at its
+    intake now (``ambient_temperature_raw``) holds for the whole span.
+    ``humidity`` is %RH; ``inlet`` the mains water, in the preferred
+    unit. Each left out is the simulator's default, which its result
+    names in ``defaults_used``."""
+    if ambient is None:
+        if status is None:
+            raise ValueError("give ambient, or a status to read it from")
+        ambient_f: float | tuple[tuple[datetime, float], ...] = _from_device(
+            DeciCelsius(status.ambient_temperature_raw)
+        )
+    elif isinstance(ambient, int | float):
+        ambient_f = _to_sim(float(ambient))
+    else:
+        ambient_f = tuple((at, _to_sim(v)) for at, v in ambient)
+    kw: dict[str, Any] = {"ambient_f": ambient_f}
+    if humidity is not None:
+        kw["humidity"] = humidity
+    if inlet is not None:
+        kw["inlet_f"] = _to_sim(inlet)
+    return Environment(**kw)
+
+
+# ── what a caller supplies, in the preferred units ──────────────────
+
+
+def loads(draws: Iterable[tuple[datetime, float]]) -> Loads:
+    """Hot water drawn: ``(instant, volume)`` pairs, the volume in the
+    preferred unit as a meter on the delivered (mixed) line counts it."""
+    return Loads(
+        draws=tuple(Draw(at=at, gallons=_volume_to_sim(v)) for at, v in draws)
+    )
+
+
+def write(
+    at: datetime,
+    *,
+    setpoint: float | None = None,
+    mode: int | None = None,
+    id: str | None = None,
+) -> Write:
+    """A setpoint or mode write at ``at``, the setpoint in the preferred
+    unit; ``mode`` a ``DhwOperationSetting`` value."""
+    return Write(
+        at=at,
+        setpoint_f=None if setpoint is None else _to_sim(setpoint),
+        mode=mode,
+        id=id,
+    )
+
+
+def reservation_entry(
+    *,
+    days: Iterable[str | int],
+    hour: int,
+    minute: int,
+    mode: int,
+    temperature: float,
+    enabled: bool = True,
+) -> ReservationEntry:
+    """A reservation entry as ``build_reservation_entry`` builds one for
+    the device: ``days`` as names or indices (Monday 0), ``temperature``
+    in the preferred unit and range-checked as it is for the device."""
+    e = build_reservation_entry(
+        enabled=enabled,
+        days=days,
+        hour=hour,
+        minute=minute,
+        mode_id=mode,
+        temperature=temperature,
+    )
+    return ReservationEntry(
+        enabled=e["enable"] == 2,
+        week=e["week"],
+        hour=e["hour"],
+        minute=e["min"],
+        mode=e["mode"],
+        setpoint_half_c=e["param"],
+    )
+
+
+# ── results, in the preferred units ─────────────────────────────────
+
+
+@dataclass(frozen=True)
+class TankReading:
+    """The tank at an instant, in the preferred unit."""
+
+    at: datetime
+    upper: float
+    lower: float
+    #: The setpoint in force; None for a ``Trace``, which has none.
+    setpoint: float | None
+
+
+def path(
+    result: SimulationResult | RecoveryResult | Trace,
+) -> tuple[TankReading, ...]:
+    """The tank along a result's path, in the preferred unit."""
+    if isinstance(result, Trace):
+        return tuple(
+            TankReading(
+                p.at, temperature(p.upper_f), temperature(p.lower_f), None
+            )
+            for p in result.points
+        )
+    points = (
+        result.points if isinstance(result, SimulationResult) else result.path
+    )
+    return tuple(
+        TankReading(
+            p.at,
+            temperature(p.upper_f),
+            temperature(p.lower_f),
+            temperature(p.setpoint_f),
+        )
+        for p in points
     )
