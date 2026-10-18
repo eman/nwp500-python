@@ -8,7 +8,6 @@ from typing import Any
 import pytest
 
 from nwp500 import status_history
-from nwp500.cli.recording import Recorder
 from nwp500.models import DeviceStatus
 
 AT = datetime(2026, 10, 18, 14, 30, tzinfo=UTC)
@@ -76,8 +75,17 @@ def _message(status: dict[str, Any]) -> dict[str, Any]:
     return {"response": {"status": status}}
 
 
+@pytest.fixture
+def Recorder() -> Any:
+    """The recorder, which needs the CLI's extras; the format does not."""
+    pytest.importorskip("click")
+    from nwp500.cli.recording import Recorder
+
+    return Recorder
+
+
 class TestTheRecorder:
-    def test_it_writes_a_line_per_status(self, device_status_dict):
+    def test_it_writes_a_line_per_status(self, Recorder, device_status_dict):
         out = io.StringIO()
         record = Recorder(out, clock=lambda: AT)
         record("cmd/52/navilink-x/st", _message(device_status_dict))
@@ -87,14 +95,14 @@ class TestTheRecorder:
         assert [at for at, _ in readings] == [AT, AT]
 
     def test_it_keeps_the_raw_payload_but_not_the_address(
-        self, device_status_dict
+        self, Recorder, device_status_dict
     ):
         out = io.StringIO()
         raw = device_status_dict | {"macAddress": "aa:bb"}
         Recorder(out, clock=lambda: AT)("topic", _message(raw))
         assert json.loads(out.getvalue())["status"] == device_status_dict
 
-    def test_other_messages_are_ignored(self):
+    def test_other_messages_are_ignored(self, Recorder):
         out = io.StringIO()
         record = Recorder(out, clock=lambda: AT)
         record("topic", {"response": {"feature": {"volumeCode": 3}}})
@@ -102,14 +110,14 @@ class TestTheRecorder:
         assert record.written == 0
         assert out.getvalue() == ""
 
-    def test_a_status_that_does_not_parse_is_skipped(self, caplog):
+    def test_a_status_that_does_not_parse_is_skipped(self, Recorder, caplog):
         out = io.StringIO()
         record = Recorder(out, clock=lambda: AT)
         record("topic", _message({"dhwUse": 1}))
         assert record.written == 0
         assert "does not parse" in caplog.text
 
-    def test_the_default_clock_is_utc(self, device_status_dict):
+    def test_the_default_clock_is_utc(self, Recorder, device_status_dict):
         out = io.StringIO()
         Recorder(out)("topic", _message(device_status_dict))
         ((at, _),) = status_history.read([out.getvalue()])
