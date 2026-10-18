@@ -27,6 +27,110 @@ clients or their dependencies (aiohttp, the AWS IoT SDK), so a service
 that only simulates never starts them.
 
 
+From the command line
+=====================
+
+``nwp-cli simulate`` needs the ``cli`` and ``sim`` extras
+(``pip install 'nwp500-python[cli,sim]'``). Without the ``sim`` extra
+it stops with a one-line install hint.
+
+**From the heater as it is now.** With no scenario, the heater and its
+schedules are read from the device, the air is the heater's own
+reading, and the walk runs 24 hours from now:
+
+.. code-block:: bash
+
+   nwp-cli simulate run
+   nwp-cli simulate run --hours 8 --ambient 60 --inlet 55
+
+The table lists each heating interval (what started it, its source,
+its target, why it stopped and its energy), the energy by source, how
+much hot water the tank can deliver at the start, the draw windows and
+which of them ran cold, the reasons the answer may be less than it
+seems, and every default it used. ``--format json`` prints the whole
+result document (``codec.result_to_document``), and ``--format csv``
+the tank along the path, one row per point.
+
+**From a scenario file.** ``snapshot`` writes the heater and its
+schedules now as a scenario document, with the default parameters for
+its tank size. Edit it and replay it as often as you like; with
+``--scenario`` and no ``--live``, nothing is read from the device and
+no account is needed:
+
+.. code-block:: bash
+
+   nwp-cli simulate snapshot -o now.json
+   nwp-cli simulate run --scenario now.json
+
+A snapshot is one instant: it records nothing over time.
+``examples/simulator/scenario.json`` is a scenario to start from.
+
+**The heater now, with some of it changed.** With ``--live`` as well,
+the device is read and the scenario document is laid over it: an
+object merges field by field, and anything else (a list, a number)
+replaces what the device gave. This document lowers the setpoint and
+keeps the rest of the heater as it is:
+
+.. code-block:: json
+
+   {"schema_version": 1, "scenario": {"settings": {"setpoint_f": 125.0}}}
+
+.. code-block:: bash
+
+   nwp-cli simulate run --live --scenario lower.json
+
+**Each part is chosen on its own:** a flag first, then the scenario
+document, then the device.
+
+.. list-table::
+   :header-rows: 1
+   :widths: 30 70
+
+   * - Flag
+     - Sets
+   * - ``--start ISO``
+     - The start, an ISO 8601 instant with its offset. Default: the
+       scenario's, then now.
+   * - ``--hours N``
+     - The horizon. Default: the scenario's, then 24.
+   * - ``--tz ZONE``
+     - The IANA zone of the schedules' local times, which the heater
+       does not report. Default: the scenario's, then this machine's.
+   * - ``--ambient T``, ``--inlet T``
+     - The air at the heater and the mains water, in your unit
+       (``--unit-system``, or the heater's own when it is read).
+   * - ``--environment FILE``
+     - An ``Environment`` document, in place of ``--ambient``: air
+       readings over time, humidity, the inlet.
+   * - ``--draws FILE``
+     - A ``Loads`` document: the draws, the windows to judge, and any
+       circulation.
+   * - ``--plan FILE``
+     - A ``Commands`` document: setpoint and mode writes, a reservation
+       schedule, the TOU switch.
+   * - ``--params FILE``
+     - A ``HeaterParams`` document (``params.params_to_document``), such
+       as your own fitted ones. Default: the scenario's ``params``,
+       then the defaults for the heater's tank size, then the 65 gal
+       defaults (said on stderr).
+
+The files are the simulator's own documents, in its units (°F, US
+gallons), with the fields :doc:`/reference/simulator-inputs` lists. A
+plan that lowers the setpoint at 22:00 and turns TOU on:
+
+.. code-block:: json
+
+   {
+     "writes": [{"at": "2026-10-18T22:00:00-07:00", "setpoint_f": 120.0}],
+     "tou_enabled": true
+   }
+
+A read from the device knows nothing of the time before it: when the
+compressor last stopped, when the tank last heated. The result names
+those defaults. Logging goes to stderr, so ``--format json`` and
+``csv`` can be piped.
+
+
 Fetch what the heater reports
 =============================
 
@@ -39,7 +143,37 @@ A scenario starts from four things the library already reads:
 - the ``ReservationSchedule``: the weekly reservations;
 - the ``TOUInfo``: the TOU price periods.
 
-The simulator does no I/O, so fetch them first. Each MQTT read is a
+The simulator does no I/O, so fetch them first. ``nwp500.sim_live``
+fetches them and builds a scenario in one call:
+
+.. code-block:: python
+
+   from datetime import UTC, datetime, timedelta
+
+   from nwp500 import sim, sim_live
+
+
+   async def simulate_now(mqtt, api, device):
+       """The next 24 hours, from the heater as it is now (a connected
+       ``NavienMqttClient``, a ``NavienAPIClient`` and the device)."""
+       composed = await sim_live.compose(
+           start=datetime.now(UTC),
+           horizon=timedelta(hours=24),
+           tz="America/Los_Angeles",  # the zone the heater's clock is set to
+           heater=sim_live.LiveHeaterSource(mqtt, device),
+           schedules=sim_live.LiveScheduleSource(mqtt, api, device),
+       )
+       return sim.simulate(composed.scenario, composed.params)
+
+``environment=`` and ``loads=`` take any source with an ``async
+read()``; ``sim_live.Given(value)`` is one for a value in hand. Without
+``environment`` the air is the heater's own reading. A source that
+gets no reply raises ``sim_live.LiveReadError``; so does the schedule
+source when TOU is on and its periods cannot be read. A missing
+feature info leaves ``composed.params`` None (the tank size is
+unknown). Change a part with ``composed.scenario.model_copy(update=...)``.
+
+To have the models themselves, read them directly. Each MQTT read is a
 request answered on a subscription:
 
 .. code-block:: python

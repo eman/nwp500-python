@@ -19,6 +19,7 @@ If using the `nwp500` library from the source code (this repository), most examp
 *   `intermediate/`: Common use-cases like real-time monitoring and event handling.
 *   `advanced/`: Specialized features like schedules, energy analytics, and deep diagnostics.
 *   `testing/`: Scripts for testing connections and API behavior.
+*   `simulator/`: Scenario files for `nwp-cli simulate`.
 
 ## Beginner Examples
 
@@ -91,6 +92,22 @@ Utilities for verifying your environment and library function.
 *   **`test_mqtt_connection.py`**: Verify MQTT broker connectivity.
 *   **`test_mqtt_messaging.py`**: Test messaging reliability.
 *   **`periodic_device_info.py`**: Debug tool for periodic polling.
+
+## Simulator
+
+Files for `nwp-cli simulate` (`pip install 'nwp500-python[cli,sim]'`).
+The how-to, `docs/how-to/simulate-heater.rst`, explains each one.
+
+*   **`simulator/scenario.json`**: A day from 06:00: a part-used tank in
+    Energy Saver, two weekday reservations, a TOU peak from 16:00 to
+    21:00, the air over the day, three draws and a shower to judge. It
+    needs no account:
+    `nwp-cli simulate run --scenario examples/simulator/scenario.json`.
+*   **`simulator/plan.json`**: Commands to evaluate on it: a 140 °F
+    setpoint at 15:00 and TOU off. Add `--plan examples/simulator/plan.json`.
+*   **`simulator/lower-setpoint.json`**: An overlay for the heater as it
+    is now, with the setpoint at 125 °F:
+    `nwp-cli simulate run --live --scenario examples/simulator/lower-setpoint.json`.
 
 ---
 **Note:** Some examples might require specific device models to function fully (e.g., recirculation control).

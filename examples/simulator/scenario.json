@@ -1,0 +1,91 @@
+{
+  "schema_version": 1,
+  "scenario": {
+    "start": "2026-10-19T13:00:00Z",
+    "horizon": "P1D",
+    "tz": "America/Los_Angeles",
+    "state": {
+      "upper_f": 128.0,
+      "lower_f": 104.0
+    },
+    "settings": {
+      "setpoint_f": 130.0,
+      "mode": 3,
+      "hp_lower_on_f": 105.0,
+      "hp_lower_off_f": 130.0,
+      "hp_upper_on_f": 105.0
+    },
+    "schedules": {
+      "reservations": [
+        {
+          "week": 124,
+          "hour": 21,
+          "minute": 0,
+          "mode": 1,
+          "setpoint_half_c": 98
+        },
+        {
+          "week": 124,
+          "hour": 5,
+          "minute": 30,
+          "mode": 3,
+          "setpoint_half_c": 109
+        }
+      ],
+      "tou_periods": [
+        {
+          "season": 4095,
+          "week": 124,
+          "start_hour": 16,
+          "start_minute": 0,
+          "end_hour": 20,
+          "end_minute": 59,
+          "price_min": 45000,
+          "price_max": 45000,
+          "decimal_point": 5
+        }
+      ],
+      "tou_enabled": true
+    },
+    "environment": {
+      "ambient_f": [
+        [
+          "2026-10-19T13:00:00Z",
+          58.0
+        ],
+        [
+          "2026-10-19T21:00:00Z",
+          66.0
+        ],
+        [
+          "2026-10-20T05:00:00Z",
+          60.0
+        ]
+      ],
+      "inlet_f": 60.0
+    },
+    "loads": {
+      "draws": [
+        {
+          "at": "2026-10-19T14:00:00Z",
+          "gallons": 12.0
+        },
+        {
+          "at": "2026-10-19T14:20:00Z",
+          "gallons": 10.0
+        },
+        {
+          "at": "2026-10-20T02:30:00Z",
+          "gallons": 8.0
+        }
+      ],
+      "windows": [
+        {
+          "start": "2026-10-20T04:30:00Z",
+          "end": "2026-10-20T04:45:00Z",
+          "expected_gal": 18.0
+        }
+      ]
+    }
+  }
+}
