@@ -239,6 +239,12 @@ Added
 
 Changed
 -------
+- **The package root loads its exports on first use** (PEP 562).
+  ``from nwp500 import NavienMqttClient``, ``nwp500.DeviceStatus`` and
+  ``nwp500.mqtt`` work as before, and type checkers read the same names,
+  but ``import nwp500.sim`` and ``nwp500.sim_adapters`` no longer load
+  the clients, aiohttp or the AWS IoT SDK (tested in a fresh
+  interpreter).
 - **Superheat is converted as a difference** (#153).
   ``DeviceStatus.target_super_heat`` and ``current_super_heat`` converted
   their raw tenths of a degree Celsius as absolute temperatures, so in

@@ -22,6 +22,10 @@ does not:
 
    pip install nwp500-python[sim]
 
+Importing ``nwp500.sim`` or ``nwp500.sim_adapters`` loads none of the
+clients or their dependencies (aiohttp, the AWS IoT SDK), so a service
+that only simulates never starts them.
+
 
 Fetch what the heater reports
 =============================

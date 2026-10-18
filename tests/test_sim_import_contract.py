@@ -325,6 +325,15 @@ def _loaded_after(statement: str) -> list[str]:
     return loaded
 
 
+def test_the_simulator_does_not_load_the_clients():
+    """``nwp500.sim`` and its adapters run without the network clients'
+    dependencies: the package root loads its exports on first use."""
+    loaded = _loaded_after("import nwp500.sim, nwp500.sim_adapters")
+    clients = {"aiohttp", "awscrt", "awsiot"}
+    assert not [m for m in loaded if m.split(".")[0] in clients]
+    assert "nwp500.mqtt" not in loaded and "nwp500.auth" not in loaded
+
+
 def test_importing_nwp500_does_not_load_the_simulator():
     loaded = _loaded_after("import nwp500")
     assert "nwp500" in loaded
