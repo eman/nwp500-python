@@ -22,12 +22,14 @@ none without one, and the caller keeps its own inlet rather than the
 raw series.
 """
 
+import math
 from collections.abc import Sequence
 from dataclasses import dataclass, replace
 from datetime import datetime, timedelta
 from statistics import median
 
 from nwp500.sim.book import Booked
+from nwp500.sim.circulation import merge_runs
 
 
 @dataclass(frozen=True)
@@ -52,6 +54,9 @@ class ColdSupplyParams:
     min_readings: int = 3
     #: The meter's flow that is water moving, gal/min.
     draw_gpm: float = 0.3
+    #: Circulation runs closer than this are one run, s, as the walk
+    #: merges them (``circulation.merge_runs``).
+    run_gap_s: float = 600.0
 
 
 @dataclass(frozen=True)
@@ -115,9 +120,11 @@ def plateau_t_cold(
     if circulation is None or not flow or not probe or not ticks:
         return ColdSupply(None)
     since = at - timedelta(seconds=p.window_s)
-    flow = sorted((t, v) for t, v in flow if t <= at)
+    # A missing reading (NaN) is one not taken, never a number.
+    flow = sorted((t, v) for t, v in flow if t <= at and math.isfinite(v))
     ticks = [t for t in ticks if since <= t <= at]
-    probe = sorted((t, v) for t, v in probe if t <= at)
+    probe = sorted((t, v) for t, v in probe if t <= at and math.isfinite(v))
+    circulation = merge_runs(circulation, timedelta(seconds=p.run_gap_s))
     settle = timedelta(seconds=p.settle_s)
     tail = timedelta(seconds=p.tail_s)
     plateaus: list[float] = []

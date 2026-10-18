@@ -101,10 +101,17 @@ def run_draws(
 @dataclass(frozen=True)
 class Circulation:
     """The runs, and how far they are known: a span starting after
-    ``known_until`` is not known (None: known throughout)."""
+    ``known_until`` is not known (None: known throughout). The runs are
+    held merged within ``gap`` (``merge_runs``), once, over the whole
+    input, so the zone draws and the book's loss see the same runs
+    wherever a walk is cut."""
 
     runs: tuple[Run, ...] = ()
     known_until: datetime | None = None
+    gap: timedelta = RUN_GAP
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "runs", tuple(merge_runs(self.runs, self.gap)))
 
     def over(self, start: datetime, end: datetime) -> list[Run] | None:
         """The runs overlapping ``[start, end)``, unclipped, in the order
@@ -142,11 +149,11 @@ class CirculationDraws:
             for run_start, run_end in runs:
                 overlap = min(end, run_end) - max(start, run_start)
                 self.minutes += max(0.0, overlap.total_seconds() / 60.0)
-        # Merged over the whole schedule, not this coast's share of it:
-        # two runs a coast boundary falls between are still one run, and
-        # one displaced volume.
+        # The whole schedule's runs, merged once before any coast (the
+        # caller's, ``api._circulation``): two runs a coast boundary
+        # falls between are still one run, and one displaced volume.
         return run_draws(
-            merge_runs(self.circulation.runs),
+            self.circulation.runs,
             start,
             end,
             self.displaced,

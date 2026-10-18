@@ -393,13 +393,17 @@ Draws: ``Loads``
      - ``CirculationRun(start, end)``
      - An installation's circulation of hot water through its own
        plumbing, as runs: a weekly schedule laid out by
-       ``sim_adapters.circulation``, a record, or a run on demand. None,
-       the default, is no circulation. Needs
+       ``sim_adapters.circulation``, a record, or a run on demand. An
+       empty tuple is a circuit known to be quiet. None, the default,
+       charges nothing: with ``HeaterParams.circulation`` set, the runs
+       are not known, which is not the same as none ran, and
+       ``reasons`` says ``circulation_unknown``. Needs
        ``HeaterParams.circulation`` (`Circulation`_).
    * - ``circulation_known_until``
      - instant
      - The runs are known for a span starting by this instant, and not
-       after it, where nothing is charged. None: known throughout.
+       after it, where nothing is charged (``circulation_unknown``).
+       None: known throughout.
 
 
 Commands: ``Commands``
@@ -461,10 +465,16 @@ nothing is charged.
      - The share of a run's own flow a household flow meter also reads
        (default 0, a meter the circulation does not pass). A book from
        a recorded history takes it off the meter to find the draws.
+   * - ``run_gap_min``
+     - Runs closer than this are one run (default 10 minutes), merged
+       once over the whole input before both the zone draws and the
+       book's loss. ``displaced_gal`` is fitted on runs merged at this
+       gap, so change them together.
 
 Each run is a flowing draw of ``min(flow x minutes, displaced_gal)``
 gallons, its water returning at the air where the heater stands; runs
-closer than 10 minutes are one run, as ``displaced_gal`` was fitted.
+closer than ``run_gap_min`` are one run, as ``displaced_gal`` was
+fitted.
 With a heat book, a run also costs the book ``loss_btu_per_gal`` per
 gallon circulated, and the book does not re-anchor across it.
 ``DrawParams.lower_gate_f``, ``pool_f_per_hour`` and
@@ -524,7 +534,18 @@ standby and circulation out, and each draw (the meter less
 median of the probe's readings over the last 3 hours
 (``book.inlet_window_s``), the default without one. The meter must
 report at rest too: a silence over an hour in the window is refused,
-since it would read as a quiet full tank.
+since it would read as a quiet full tank. A missing reading (None or
+NaN) in any series is left out, here and in every adapter: never a
+number to compute with.
+
+What an installation's own meter and circulation need beyond this,
+its meter's arithmetic and its circulator's reading rules, is the
+installation's to compute. Steps built that way go to
+``book.book_steps`` directly. ``BookStep.circulation_in_meter_gpm`` is
+the circulation's flow the meter's figure still holds (a meter
+reporting a trailing net holds a run's flow after it stops), and a
+``Draw``'s ``per_draw_gal`` is the size a recorded draw is judged by
+for ``draw_out_of_domain``.
 
 A loss the book does not model, water an installation circulates
 through its own plumbing say, comes in through ``sim.book.SpanLoss``:

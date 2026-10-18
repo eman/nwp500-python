@@ -45,8 +45,9 @@ Example::
 """
 
 import itertools
+import math
 from collections.abc import Callable, Iterable, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime, time, timedelta
 from typing import TYPE_CHECKING, Any
 from zoneinfo import ZoneInfo
@@ -288,6 +289,16 @@ def schedules(
     )
 
 
+def _finite(
+    rows: Iterable[tuple[datetime, float | None]],
+) -> list[tuple[datetime, float]]:
+    """``rows`` without its missing readings: a None, NaN or infinite
+    value is a reading not taken, never a number to compute with."""
+    return [
+        (t, float(v)) for t, v in rows if v is not None and math.isfinite(v)
+    ]
+
+
 def environment(
     status: DeviceStatus | None = None,
     *,
@@ -313,7 +324,7 @@ def environment(
     elif isinstance(ambient, int | float):
         ambient_f = _to_sim(float(ambient))
     else:
-        ambient_f = tuple((at, _to_sim(v)) for at, v in ambient)
+        ambient_f = tuple((at, _to_sim(v)) for at, v in _finite(ambient))
     kw: dict[str, Any] = {"ambient_f": ambient_f}
     if humidity is not None:
         kw["humidity"] = humidity
@@ -334,7 +345,9 @@ def loads(
     and the windows to judge, ``(start, end, expected volume or None)``
     (``sim.DrawWindow``)."""
     return Loads(
-        draws=tuple(Draw(at=at, gallons=_volume_to_sim(v)) for at, v in draws),
+        draws=tuple(
+            Draw(at=at, gallons=_volume_to_sim(v)) for at, v in _finite(draws)
+        ),
         windows=tuple(
             DrawWindow(
                 start=a,
@@ -532,7 +545,7 @@ def location_air(
     installation's; fit your own with ``sim.location_air.fit``."""
     air = project_location_air(
         model,
-        [(at, _to_sim(v)) for at, v in outdoor],
+        [(at, _to_sim(v)) for at, v in _finite(outdoor)],
         start,
         until,
         anchor=None if anchor is None else (anchor[0], _to_sim(anchor[1])),
@@ -633,7 +646,7 @@ def history(
     for name, series in (("air_f", air), ("humidity_pct", humidity)):
         if series is None:
             continue
-        points = sorted(series, key=lambda r: r[0])
+        points = sorted(_finite(series), key=lambda r: r[0])
         if not points:
             continue
         to = _to_sim if name == "air_f" else float
@@ -942,7 +955,8 @@ def book_steps_from_history(
         rows: Iterable[tuple[datetime, float]], to: Any
     ) -> list[tuple[datetime, float]]:
         return sorted(
-            ((t.astimezone(UTC), to(v)) for t, v in rows), key=lambda r: r[0]
+            ((t.astimezone(UTC), to(v)) for t, v in _finite(rows)),
+            key=lambda r: r[0],
         )
 
     def of(
@@ -1152,28 +1166,53 @@ def cold_supply(
     at: datetime,
     flow: Iterable[tuple[datetime, float]],
     ticks: Iterable[datetime] | None = None,
-    circulation: Iterable[tuple[datetime, datetime]] = (),
+    circulation: Iterable[tuple[datetime, datetime]] | None = (),
 ) -> ColdSupply:
     """The mains as of ``at`` from an inlet probe's ``probe`` readings
     over recent long draws (``sim.cold_supply``), the probe and the
     meter's ``flow`` (per minute) in the preferred units. ``ticks`` are
     the instants water was drawn; by default, each flow reading at or
-    above the draw line. ``circulation`` are its runs (none for an
-    installation without). The estimate is degF: pass it on as
+    above the draw line, each standing for the meter's own reporting
+    interval. ``circulation`` are its runs: none (the default) for an
+    installation without, None for runs not recorded (no estimate). A
+    missing reading (NaN) is left out. The estimate is degF: pass it on as
     ``environment(inlet=temperature(...))`` or with ``on_the_mains``."""
-    readings = [(t.astimezone(UTC), _to_sim(v)) for t, v in probe]
-    flows = sorted((t.astimezone(UTC), _volume_to_sim(v)) for t, v in flow)
-    p = ColdSupplyParams()
-    drawn = (
-        [t.astimezone(UTC) for t in ticks]
-        if ticks is not None
-        else [t for t, v in flows if v >= p.draw_gpm]
+    readings = [(t.astimezone(UTC), _to_sim(v)) for t, v in _finite(probe)]
+    flows = sorted(
+        (t.astimezone(UTC), _volume_to_sim(v)) for t, v in _finite(flow)
     )
+    p = ColdSupplyParams()
+    if ticks is not None:
+        drawn = [t.astimezone(UTC) for t in ticks]
+    else:
+        drawn = [t for t, v in flows if v >= p.draw_gpm]
+        # Each reading stands for the meter's own interval, whatever its
+        # cadence: a meter reporting every minute closes a minute.
+        cadence = _cadence_s([t for t, _ in flows])
+        if cadence is not None and cadence > p.tick_s:
+            p = replace(
+                p,
+                tick_s=cadence,
+                tick_gap_s=max(p.tick_gap_s, 1.5 * cadence),
+            )
     return plateau_t_cold(
         readings,
         drawn,
-        [(a.astimezone(UTC), b.astimezone(UTC)) for a, b in circulation],
+        None
+        if circulation is None
+        else [(a.astimezone(UTC), b.astimezone(UTC)) for a, b in circulation],
         at.astimezone(UTC),
         p,
         flow=flows,
     )
+
+
+def _cadence_s(times: Sequence[datetime]) -> float | None:
+    """The median spacing of consecutive readings, s, those a reporting
+    gap (over 10 min) apart left out; None with fewer than two."""
+    gaps = [
+        (b - a).total_seconds()
+        for a, b in itertools.pairwise(times)
+        if 0 < (b - a).total_seconds() <= 600
+    ]
+    return float(np.median(gaps)) if gaps else None

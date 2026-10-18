@@ -141,6 +141,47 @@ class TestThroughTheAPI:
         ]
         assert circulated.points[-1].lower_f < quiet.points[-1].lower_f
 
+    def test_unknown_runs_say_so_and_quiet_ones_do_not(self, params):
+        unknown = simulate(_scenario(loads=Loads()), params)
+        assert "circulation_unknown" in unknown.reasons
+        quiet = simulate(_scenario(loads=_loads(())), params)
+        assert "circulation_unknown" not in quiet.reasons
+        known = simulate(_scenario(), params)
+        assert "circulation_unknown" not in known.reasons
+        partly = simulate(
+            _scenario(
+                loads=_loads().model_copy(
+                    update={"circulation_known_until": at(2.0)}
+                )
+            ),
+            params,
+        )
+        assert "circulation_unknown" in partly.reasons
+        t = standby(
+            HeaterState(upper_f=139.0, lower_f=132.0),
+            Environment(ambient_f=68.0),
+            Loads(),
+            params,
+            start=T0,
+            until=at(4.0),
+        )
+        assert "circulation_unknown" in t.reasons
+        # An installation without circulation has nothing unknown.
+        bare = simulate(_scenario(loads=Loads()), default_params())
+        assert "circulation_unknown" not in bare.reasons
+
+    def test_the_merge_gap_is_the_installations(self, params):
+        """Runs 20 minutes apart are two runs at the default gap and one
+        at 30 minutes, which displaces its volume once."""
+        runs = ((at(0.2), at(0.3)), (at(0.633), at(0.733)))
+        apart = simulate(_scenario(loads=_loads(runs)), params)
+        wide = replace(
+            params,
+            circulation=replace(params.circulation, run_gap_min=30.0),
+        )
+        joined = simulate(_scenario(loads=_loads(runs)), wide)
+        assert joined.points[-1].lower_f > apart.points[-1].lower_f
+
     def test_runs_need_the_installations_terms(self, params):
         with pytest.raises(ValueError, match=r"HeaterParams\.circulation"):
             simulate(_scenario(), default_params())

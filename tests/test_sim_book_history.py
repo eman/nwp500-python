@@ -219,3 +219,21 @@ class TestFromTheHistory:
             sa.book_from_history(
                 heater(20, recovery_at=4), p, at=T0, flow=gappy
             )
+
+    def test_a_missing_meter_reading_is_no_reading(self, heater):
+        """A NaN in the meter's flow is a reading not taken: the anchor
+        and the booked heat are what they are without it."""
+        p = site_example_params()
+        flow = with_a_draw(meter(20), 2.0)
+        holed = sorted(
+            [*flow, (T0 - timedelta(hours=1, seconds=15), float("nan"))]
+        )
+        clean = sa.book_from_history(
+            heater(20, recovery_at=4), p, at=T0, flow=flow
+        )
+        got = sa.book_from_history(
+            heater(20, recovery_at=4), p, at=T0, flow=holed
+        )
+        assert clean is not None and got is not None
+        assert got.heat_btu == pytest.approx(clean.heat_btu)
+        assert got.anchor_age_h == clean.anchor_age_h

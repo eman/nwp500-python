@@ -28,6 +28,7 @@ from nwp500.sim.book import (
     standby_btu,
 )
 from nwp500.sim.circulation import (
+    RUN_GAP,
     Circulation,
     CirculationDraws,
     CirculationLoss,
@@ -160,13 +161,39 @@ def _ambient_frame(
     return pd.DataFrame({"ambient_f": values}, index=stamps)
 
 
-def _circulation(loads: Loads) -> Circulation | None:
-    """The scenario's circulation as the core's, or None."""
+def _circulation(loads: Loads, params: HeaterParams) -> Circulation | None:
+    """The scenario's circulation as the core's, or None: its runs
+    merged once, over the whole input, at the circulation's own gap
+    (``CirculationParams.run_gap_min``), so the zone draws and the book's
+    loss see the same runs wherever a walk is cut."""
     if loads.circulation is None:
         return None
+    gap = (
+        RUN_GAP
+        if params.circulation is None
+        else timedelta(minutes=params.circulation.run_gap_min)
+    )
     return Circulation(
         tuple((r.start, r.end) for r in loads.circulation),
         loads.circulation_known_until,
+        gap,
+    )
+
+
+#: The installation has circulation, and its runs are not known over
+#: the span (none given, or not past ``Loads.circulation_known_until``):
+#: nothing is charged there, which is not the same as none ran.
+CIRCULATION_UNKNOWN = "circulation_unknown"
+
+
+def _circulation_unknown(
+    params: HeaterParams, loads: Loads, until: datetime
+) -> bool:
+    if params.circulation is None:
+        return False
+    return loads.circulation is None or (
+        loads.circulation_known_until is not None
+        and loads.circulation_known_until < until
     )
 
 
@@ -380,7 +407,9 @@ def simulate(
     defaults: list[str] = []
     if s.loads.draws and _gap_prior(params):
         reasons.append(TAU_GAP_PRIOR)
-    circulation = _circulation(s.loads)
+    circulation = _circulation(s.loads, params)
+    if _circulation_unknown(params, s.loads, s.until):
+        reasons.append(CIRCULATION_UNKNOWN)
     physics = _physics(
         params,
         s.environment,
@@ -716,7 +745,7 @@ def standby(
         draws_on=bool(loads.draws),
         model=None,
         defaults=defaults,
-        circulation=_circulation(loads),
+        circulation=_circulation(loads, params),
     )
     draws = [(d.at, d.gallons) for d in loads.draws if start <= d.at < until]
     coast = physics.coast(
@@ -774,6 +803,8 @@ def standby(
                 mode=mode,
             )
     reasons += _unfitted(params, "standby")
+    if _circulation_unknown(params, loads, until):
+        reasons.append(CIRCULATION_UNKNOWN)
     flowing = physics.flowing_draws
     circulating = isinstance(flowing, CirculationDraws)
     return Trace(
@@ -1298,6 +1329,13 @@ def time_to_ready(
             [
                 *answer["reasons"],
                 *_unfitted(params, "compressor", "power", "standby"),
+                *(
+                    [CIRCULATION_UNKNOWN]
+                    if _circulation_unknown(
+                        params, s.loads, s.start + TRIGGER_HORIZON
+                    )
+                    else []
+                ),
             ]
         )
     return typed(answer, s.start, nxt, defaults)
@@ -1477,7 +1515,7 @@ def forecast(
         draws_on=False,
         model=model,
         defaults=defaults,
-        circulation=_circulation(loads),
+        circulation=_circulation(loads, params),
     )
 
     def coast_to(when: datetime) -> tuple[float, float, float | None]:
@@ -1614,6 +1652,11 @@ def forecast(
                 [
                     *served.reasons,
                     *_unfitted(params, "compressor", "power", "standby"),
+                    *(
+                        [CIRCULATION_UNKNOWN]
+                        if _circulation_unknown(params, loads, target)
+                        else []
+                    ),
                 ]
             )
         ),

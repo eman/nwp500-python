@@ -9,7 +9,12 @@ from datetime import UTC, datetime, timedelta
 
 from nwp500 import sim_adapters as sa
 from nwp500.sim.book import full_tank_book
-from nwp500.sim.cold_supply import ColdSupply, on_the_mains, plateau_t_cold
+from nwp500.sim.cold_supply import (
+    ColdSupply,
+    ColdSupplyParams,
+    on_the_mains,
+    plateau_t_cold,
+)
 from nwp500.sim.params import BookParams
 
 T0 = datetime(2026, 9, 20, 12, 0, tzinfo=UTC)
@@ -79,6 +84,50 @@ class TestThePlateau:
         probe, _, flow = a_draw(15)
         got = sa.cold_supply(probe, at=T0 + timedelta(hours=1), flow=flow)
         assert got.t_cold_f == 72.0
+
+
+class TestWhatTheReadingsAre:
+    def test_a_meter_reporting_each_minute_still_has_a_plateau(self):
+        probe, _, _ = a_draw(15)
+        each_minute = [(T0 + timedelta(minutes=m), 2.0) for m in range(15)] + [
+            (T0 + timedelta(minutes=15), 0.0)
+        ]
+        got = sa.cold_supply(
+            probe, at=T0 + timedelta(hours=1), flow=each_minute
+        )
+        assert got.t_cold_f == 72.0
+
+    def test_a_missing_reading_is_left_out(self):
+        probe, ticks, flow = a_draw(15)
+        tail = T0 + timedelta(minutes=14)
+        probe = [*probe, (tail + timedelta(seconds=5), float("nan"))]
+        flow = sorted([*flow, (tail + timedelta(seconds=5), float("nan"))])
+        at = T0 + timedelta(hours=1)
+        assert plateau_t_cold(probe, ticks, [], at, flow=flow).t_cold_f == 72.0
+        assert sa.cold_supply(probe, at=at, flow=flow).t_cold_f == 72.0
+
+    def test_runs_closer_than_the_gap_are_one(self):
+        """Runs closer than the gap are one run: a draw between them is a
+        draw with circulation on."""
+        probe, ticks, flow = a_draw(15)
+        runs = [
+            (T0 - timedelta(minutes=3), T0 - timedelta(minutes=1)),
+            (T0 + timedelta(minutes=16), T0 + timedelta(minutes=17)),
+        ]
+        at = T0 + timedelta(hours=1)
+        apart = plateau_t_cold(probe, ticks, runs, at, flow=flow)
+        assert apart.t_cold_f == 72.0
+        wide = ColdSupplyParams(run_gap_s=1200.0)
+        joined = plateau_t_cold(probe, ticks, runs, at, wide, flow=flow)
+        assert joined.t_cold_f is None
+
+    def test_unrecorded_circulation_gives_no_estimate(self):
+        probe, _, flow = a_draw(15)
+        at = T0 + timedelta(hours=1)
+        assert (
+            sa.cold_supply(probe, at=at, flow=flow, circulation=None).t_cold_f
+            is None
+        )
 
 
 def test_on_the_mains():
