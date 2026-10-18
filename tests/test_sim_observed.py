@@ -93,6 +93,48 @@ class TestTheRecord:
         assert [(s.at, s.zone) for s in got.starts] == [(at(10), "upper")]
         assert got.uncorroborated == 1
 
+    def test_a_handoff_at_one_wattage_is_corroborated(self):
+        """The third review of #162: power records on change, so the
+        lower element taking over from the upper at 5000 W leaves no
+        row in its run; the value in force at its on-edge shows it."""
+        rec = Record(
+            upper_element=((at(0), 0.0), (at(10), 1.0), (at(20), 0.0)),
+            lower_element=((at(0), 0.0), (at(20), 1.0), (at(30), 0.0)),
+            power_w=((at(0), 3.0), (at(19.5), 5000.0), (at(31), 3.0)),
+        )
+        got = rec.starts(at(5), at(60))
+        assert [(s.at, s.zone) for s in got.starts] == [
+            (at(10), "upper"),
+            (at(20), "lower"),
+        ]
+        assert got.uncorroborated == 0
+        o = observe(rec, at(0), at(60), now=at(600))
+        assert [
+            (s.start, s.end) for s in o.sources if s.source == "element"
+        ] == [(at(10), at(20)), (at(20), at(30))]
+
+    def test_a_stale_power_row_does_not_corroborate(self):
+        """The value in force counts only within ``ELEMENT_POWER_SLACK``
+        of the on-edge, so an earlier run's row cannot show a flag's."""
+        rec = Record(
+            lower_element=((at(0), 0.0), (at(20), 1.0), (at(30), 0.0)),
+            power_w=((at(0), 3.0), (at(18), 5000.0), (at(31), 3.0)),
+        )
+        got = rec.starts(at(5), at(60))
+        assert got.starts == []
+        assert got.uncorroborated == 1
+
+    def test_an_off_edge_at_the_start_is_not_running(self):
+        """The third review of #162: a compressor that stopped at the
+        span's start is off throughout it; its stop still counts for
+        the lockout."""
+        rec = Record(compressor=((at(0), 0.0), (at(10), 1.0), (at(20), 0.0)))
+        got = rec.starts(at(20), at(30))
+        assert got.starts == []
+        assert at(20) in got.stops
+        on_at = rec.starts(at(10), at(30))
+        assert [(s.at, s.running) for s in on_at.starts] == [(at(10), False)]
+
     def test_writes_and_the_heaters_drop(self):
         rec = Record(
             setpoint_f=((at(0), 140.0), (at(10), 136.4)),

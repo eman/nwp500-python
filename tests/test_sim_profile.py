@@ -27,6 +27,16 @@ class TestTheProfile:
         assert p.name_of("HIGH_DEMAND") == "high_demand"
         assert p.name_of("VACATION") is None
 
+    def test_a_reported_mode_is_read_by_its_name(self):
+        """The third review of #162: ``DeviceStatus`` carries the mode
+        as a ``DhwOperationSetting``, whose ``str`` is its number."""
+        from nwp500.enums import DhwOperationSetting
+
+        p = P.heater_profile()
+        assert p.name_of(DhwOperationSetting.HIGH_DEMAND) == "high_demand"
+        assert p.name_of(DhwOperationSetting.HEAT_PUMP) == "heat_pump"
+        assert p.name_of(DhwOperationSetting.VACATION) is None
+
     def test_the_revision_moves_with_a_fact_only(self):
         p = P.heater_profile()
         assert p.revision == P.heater_profile().revision

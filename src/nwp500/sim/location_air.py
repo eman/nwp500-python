@@ -50,7 +50,9 @@ class LocationAirModel:
     ) -> list[float]:
         """The model's air at each of ``when``: the outdoor air
         interpolated in time at ``when - lag``, held past its ends."""
-        series = sorted(outdoor, key=lambda r: r[0])
+        # By elapsed instant: local datetimes in one zone compare by wall
+        # clock, so a repeated hour's two halves would sort out of order.
+        series = sorted(outdoor, key=lambda r: r[0].timestamp())
         if not series:
             raise ValueError("no outdoor readings")
         xs = np.array([t.timestamp() for t, _ in series])

@@ -129,10 +129,12 @@ class HeaterProfile:
     def name_of(self, device_mode: object) -> str | None:
         """The profile's name for a mode the heater reported (the
         device's ``HEAT_PUMP``, ...), or None for one it does not list
-        (``VACATION``, ``POWER_OFF``)."""
+        (``VACATION``, ``POWER_OFF``). An enum member is read by its name
+        (a ``DhwOperationSetting`` prints as its number)."""
         if device_mode is None:
             return None
-        name = HEATER_MODE.get(str(device_mode).upper())
+        label = getattr(device_mode, "name", device_mode)
+        name = HEATER_MODE.get(str(label).upper())
         return name if name in self.names else None
 
 

@@ -196,6 +196,20 @@ class TestElapsedTime:
         )
         assert len(local) == int(span) + 1
 
+    def test_a_repeated_hours_readings_sort_by_instant(self):
+        """The third review of #162: 01:45 PDT comes before 01:15 PST
+        but sorts after it by wall clock; local readings must be the
+        same series as their UTC instants."""
+        first = datetime(2026, 11, 1, 1, 45, tzinfo=LA)
+        second = datetime(2026, 11, 1, 1, 15, fold=1, tzinfo=LA)
+        assert first.astimezone(UTC) < second.astimezone(UTC)
+        local = [(first, 50.0), (second, 60.0)]
+        utc = [(t.astimezone(UTC), v) for t, v in local]
+        model = LocationAirModel(1.0, timedelta(0), 0.0)
+        when = [first.astimezone(UTC) + timedelta(minutes=15)]
+        assert model.at(local, when) == model.at(utc, when)
+        assert model.at(local, when)[0] == pytest.approx(55.0)
+
     def test_the_lag_is_elapsed_time(self):
         when = datetime(2026, 11, 1, 2, 0, tzinfo=LA)
         outdoor = [

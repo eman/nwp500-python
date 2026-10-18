@@ -100,11 +100,25 @@ def corroborator(
     sample of ``ELEMENT_W`` or more from its on-edge to
     ``ELEMENT_POWER_SLACK`` after its off-edge, but not from the next
     element run's on-edge (``element_ons``, either element's), whose
-    power it would be."""
+    power it would be. The value in force at the on-edge counts too,
+    if its row is at most ``ELEMENT_POWER_SLACK`` old: power records
+    on change, so a handoff between the elements at one wattage
+    leaves no row in the second run."""
 
     def powered(on: datetime, off: datetime) -> bool:
         hi = off + ELEMENT_POWER_SLACK
         nxt = next((a for a in element_ons if a > on), None)
+        held: tuple[datetime, float] | None = None
+        for t, v in watts:
+            if t >= on:
+                break
+            held = (t, v)
+        if (
+            held is not None
+            and on - held[0] <= ELEMENT_POWER_SLACK
+            and held[1] >= ELEMENT_W
+        ):
+            return True
         return any(
             v >= ELEMENT_W
             for t, v in watts
@@ -224,7 +238,9 @@ class Record:
         and the compressor's stops from a day before (for the lockout).
         An element run counts only where the heater's power shows it
         (``corroborator``); one already on at ``start`` is judged over
-        its whole run."""
+        its whole run. An off-edge at ``start`` is in force at it, so
+        a run that stopped there is not running; an on-edge there is a
+        new start."""
         day = timedelta(days=1)
         series = {
             "compressor": self.compressor,
@@ -261,7 +277,7 @@ class Record:
             )
             since = start - day
             for at, on in edges:
-                if at < start:
+                if at < start or (at == start and not on):
                     on_at_start = on
                     since = at
             if on_at_start:
