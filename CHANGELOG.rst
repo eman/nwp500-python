@@ -248,9 +248,38 @@ Added
     TOU rules that have no prices, such as a learned schedule. The
     engine, the tank physics and the physics models are documented as
     public (:doc:`/reference/python_api/sim`).
+- **``nwp-cli simulate``, and the live sources it composes** (#151).
+
+  - ``nwp500.sim_live`` reads what a scenario needs from the device:
+    ``LiveHeaterSource`` (the state, the settings, the air and the
+    tank size, from one status and one feature read) and
+    ``LiveScheduleSource`` (the reservations over MQTT, the TOU
+    periods over REST, the TOU switch from the status).
+    ``compose()`` awaits them, and any other source with an ``async
+    read()`` (``Given`` for a value in hand), into a ``Scenario``. A
+    read with no reply raises ``LiveReadError``, as does a TOU read
+    that fails while TOU is on. The simulator still imports none of
+    it.
+  - ``nwp-cli simulate run`` walks the heater as it is now, a scenario
+    file, or the heater now with a scenario file laid on it
+    (``--live``). Each part is chosen on its own: a flag
+    (``--start``, ``--hours``, ``--tz``, ``--ambient``,
+    ``--environment``, ``--inlet``, ``--draws``, ``--plan``,
+    ``--params``), then the scenario file, then the device. It prints
+    a table (the heating intervals, the energy by source, readiness,
+    the draw windows and which ran cold, the defaults used), the
+    result document (``--format json``) or the path (``--format
+    csv``). ``nwp-cli simulate snapshot`` writes the heater and its
+    schedules now as a scenario file to edit and replay. Without the
+    ``sim`` extra the commands stop with an install hint.
+    ``examples/simulator/`` has a scenario, a plan and an overlay to
+    start from; :doc:`/how-to/simulate-heater` shows each use.
 
 Changed
 -------
+- **The CLI logs to stderr.** It logged to stdout, so a warning could
+  land in the middle of ``--json``, ``--raw`` or CSV output piped to
+  another program. Output stays on stdout.
 - **The package root loads its exports on first use** (PEP 562).
   ``from nwp500 import NavienMqttClient``, ``nwp500.DeviceStatus`` and
   ``nwp500.mqtt`` work as before, and type checkers read the same names,

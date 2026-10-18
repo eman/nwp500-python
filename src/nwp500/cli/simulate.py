@@ -1,0 +1,403 @@
+"""``nwp-cli simulate``: compose a scenario and walk it.
+
+The heater and its schedules come from the device (``nwp500.sim_live``),
+from a scenario document, or both; the air, the draws, the commands and
+the parameters from flags or files. Each part is chosen on its own, in
+this order of precedence: a flag, then the scenario document, then the
+device.
+
+This module needs the ``sim`` extra; ``__main__`` imports it only when a
+``simulate`` command runs.
+"""
+
+import csv
+import json
+import logging
+import os
+import sys
+from collections.abc import Mapping
+from dataclasses import dataclass
+from datetime import datetime, timedelta
+from pathlib import Path
+from typing import TYPE_CHECKING, Any, TextIO
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+
+from rich.console import Console
+from rich.table import Table
+
+from nwp500 import sim, sim_live
+from nwp500 import sim_adapters as sa
+from nwp500.sim.codec import (
+    SCHEMA_VERSION,
+    result_to_document,
+    scenario_to_document,
+)
+from nwp500.sim.params import params_from_document
+
+if TYPE_CHECKING:
+    from nwp500.api_client import NavienAPIClient
+    from nwp500.models import Device
+    from nwp500.mqtt import NavienMqttClient
+
+__author__ = "Emmanuel Levijarvi"
+__copyright__ = "Emmanuel Levijarvi"
+__license__ = "MIT"
+
+_logger = logging.getLogger(__name__)
+
+#: How far a run looks ahead when nothing else says.
+DEFAULT_HOURS = 24.0
+
+
+class InputError(ValueError):
+    """An input that cannot be read or does not make a scenario."""
+
+
+def read_document(path: str | Path, what: str) -> Any:
+    """The JSON document at ``path``."""
+    try:
+        return json.loads(Path(path).read_text())
+    except (OSError, ValueError) as e:
+        raise InputError(f"cannot read the {what} {path}: {e}") from None
+
+
+def merge(base: Mapping[str, Any], over: Mapping[str, Any]) -> dict[str, Any]:
+    """``base`` with ``over`` laid on it: objects merge key by key; any
+    other value, a list included, replaces the one under it."""
+    out = dict(base)
+    for key, value in over.items():
+        under = out.get(key)
+        if isinstance(value, Mapping) and isinstance(under, Mapping):
+            out[key] = merge(under, value)  # pyright: ignore[reportUnknownArgumentType]
+        else:
+            out[key] = value
+    return out
+
+
+def local_zone() -> str | None:
+    """This machine's IANA zone (``TZ``, then ``/etc/localtime``), or
+    None when it has no name."""
+    candidates: list[str] = []
+    if tz := os.environ.get("TZ"):
+        candidates.append(tz.removeprefix(":"))
+    try:
+        link = str(Path("/etc/localtime").readlink())
+    except OSError:
+        pass
+    else:
+        if "zoneinfo/" in link:
+            candidates.append(link.rpartition("zoneinfo/")[2])
+    for name in candidates:
+        try:
+            ZoneInfo(name)
+        except ZoneInfoNotFoundError, ValueError:
+            continue
+        return name
+    return None
+
+
+@dataclass(frozen=True)
+class Inputs:
+    """What the command was given. Files are read already; ``ambient``
+    and ``inlet`` are in the preferred unit."""
+
+    scenario: Mapping[str, Any] | None = None
+    live: bool = False
+    hours: float | None = None
+    start: datetime | None = None
+    tz: str | None = None
+    ambient: float | None = None
+    environment: Mapping[str, Any] | None = None
+    inlet: float | None = None
+    loads: Mapping[str, Any] | None = None
+    commands: Mapping[str, Any] | None = None
+    params: Mapping[str, Any] | None = None
+
+    def __post_init__(self) -> None:
+        if self.ambient is not None and self.environment is not None:
+            raise InputError("give --ambient or --environment, not both")
+        if self.start is not None and self.start.tzinfo is None:
+            raise InputError("--start needs its UTC offset")
+        if self.scenario is not None:
+            version = self.scenario.get("schema_version")
+            if version != SCHEMA_VERSION:
+                raise InputError(
+                    f"unsupported scenario schema_version {version!r}"
+                )
+            if not isinstance(self.scenario.get("scenario"), Mapping):
+                raise InputError("a scenario document has a scenario object")
+
+    @property
+    def needs_device(self) -> bool:
+        """Whether any part is read from the device: without a scenario
+        document, or with one and ``--live``."""
+        return self.scenario is None or self.live
+
+    def zone(self) -> str:
+        """The zone the schedules' local times are in: ``--tz``, the
+        scenario's, then this machine's."""
+        if self.tz is not None:
+            return self.tz
+        if self.scenario is not None:
+            given = self.scenario["scenario"].get("tz")
+            if isinstance(given, str):
+                return given
+        if (tz := local_zone()) is not None:
+            return tz
+        raise InputError(
+            "this machine's time zone has no name; give --tz "
+            "(an IANA zone such as America/Los_Angeles)"
+        )
+
+
+@dataclass(frozen=True)
+class Built:
+    """A scenario ready to walk, with its parameters."""
+
+    scenario: sim.Scenario
+    params: sim.HeaterParams
+    #: What the driver assumed, for the user to see.
+    notes: tuple[str, ...] = ()
+
+
+def build(
+    inputs: Inputs, live: sim_live.Composed | None, now: datetime
+) -> Built:
+    """The scenario: the device's parts (``live``), the scenario
+    document's laid over them, then the flags'. ``now`` is the start
+    when nothing gives one."""
+    data: dict[str, Any] = {}
+    if live is not None:
+        data = scenario_to_document(live.scenario)["scenario"]
+    if inputs.scenario is not None:
+        data = merge(data, inputs.scenario["scenario"])
+    if inputs.start is not None:
+        data["start"] = inputs.start
+    data.setdefault("start", now)
+    if inputs.hours is not None:
+        data["horizon"] = timedelta(hours=inputs.hours)
+    data.setdefault("horizon", timedelta(hours=DEFAULT_HOURS))
+    if inputs.tz is not None:
+        data["tz"] = inputs.tz
+    elif "tz" not in data:
+        data["tz"] = inputs.zone()
+    if inputs.environment is not None:
+        data["environment"] = dict(inputs.environment)
+    if inputs.ambient is not None:
+        data["environment"] = {
+            **data.get("environment", {}),
+            "ambient_f": sa.to_sim_temperature(inputs.ambient),
+        }
+    if inputs.inlet is not None:
+        data["environment"] = {
+            **data.get("environment", {}),
+            "inlet_f": sa.to_sim_temperature(inputs.inlet),
+        }
+    if inputs.loads is not None:
+        data["loads"] = dict(inputs.loads)
+    if inputs.commands is not None:
+        data["commands"] = dict(inputs.commands)
+    try:
+        scenario = sim.Scenario.model_validate(data)
+    except ValueError as e:
+        raise InputError(f"the inputs do not make a scenario: {e}") from None
+
+    notes: list[str] = []
+    doc_params = (
+        None if inputs.scenario is None else inputs.scenario.get("params")
+    )
+    if inputs.params is not None:
+        params = params_from_document(inputs.params)
+    elif doc_params is not None:
+        params = params_from_document(doc_params)
+    elif live is not None and live.params is not None:
+        params = live.params
+    else:
+        params = sim.default_params()
+        notes.append(
+            "the tank size is unknown: using the 65 gal defaults "
+            "(give --params)"
+        )
+    return Built(scenario, params, tuple(notes))
+
+
+async def compose_live(
+    mqtt: NavienMqttClient,
+    api: NavienAPIClient,
+    device: Device,
+    inputs: Inputs,
+    now: datetime,
+) -> sim_live.Composed:
+    """The device's heater and schedules from ``now``."""
+    return await sim_live.compose(
+        start=now,
+        horizon=timedelta(hours=inputs.hours or DEFAULT_HOURS),
+        tz=inputs.zone(),
+        heater=sim_live.LiveHeaterSource(mqtt, device),
+        schedules=sim_live.LiveScheduleSource(mqtt, api, device),
+    )
+
+
+def snapshot_document(composed: sim_live.Composed) -> dict[str, Any]:
+    """The device's state as a scenario document, to edit and replay:
+    one instant, with the parameters for its tank size when known."""
+    return scenario_to_document(composed.scenario, composed.params)
+
+
+# ── output ──────────────────────────────────────────────────────────
+
+
+def _local(at: datetime, tz: str) -> str:
+    return at.astimezone(ZoneInfo(tz)).strftime("%a %H:%M")
+
+
+def _wh(value: float | None) -> str:
+    return "unpriced" if value is None else f"{value:,.0f}"
+
+
+def _temp(value_f: float) -> str:
+    return f"{sa.temperature(value_f):.1f} {sa.temperature_unit()}"
+
+
+def _volume(value_gal: float | None) -> str:
+    if value_gal is None:
+        return "-"
+    return f"{sa.volume(value_gal):.1f} {sa.volume_unit()}"
+
+
+def energy_totals(
+    result: sim.SimulationResult,
+) -> tuple[float | None, float]:
+    """The compressor's and the elements' electricity over the walk, Wh;
+    the compressor's None when an interval could not be priced."""
+    compressor: float | None = 0.0
+    element = 0.0
+    for _, c, e in result.energy_by_source():
+        compressor = None if c is None or compressor is None else compressor + c
+        element += e
+    return compressor, element
+
+
+def print_table(
+    built: Built, result: sim.SimulationResult, console: Console
+) -> None:
+    """The heating intervals, the energy by source, the readiness, the
+    draw windows (and which ran cold), the reasons and the defaults."""
+    s = built.scenario
+    tz = s.tz
+    ready = sim.readiness(s.state, s.settings, built.params)
+    console.print(
+        f"[bold]{_local(s.start, tz)} to {_local(s.until, tz)}[/bold] ({tz}): "
+        f"tank {_temp(s.state.upper_f)} upper, {_temp(s.state.lower_f)} "
+        f"lower, setpoint {_temp(s.settings.setpoint_f)}; "
+        f"{_volume(ready.gal)} deliverable now ({ready.basis})"
+    )
+
+    heating = Table(title="Heating")
+    for col in ("Start", "End", "Source", "Why", "Target", "Stop", "Wh"):
+        heating.add_column(col)
+    for h in result.heating:
+        why = h.start.trigger or h.start.cause
+        if h.start.serves:
+            why = f"{why} ({h.start.serves})"
+        source = h.source if h.zone is None else f"{h.source} ({h.zone})"
+        heating.add_row(
+            _local(h.start.at, tz),
+            _local(h.end, tz),
+            source,
+            str(why),
+            _temp(h.target_f),
+            h.stop + (" (capped)" if h.capped else ""),
+            _wh(h.input_wh),
+        )
+    if result.heating:
+        console.print(heating)
+    else:
+        console.print("No heating over the span.")
+
+    compressor, element = energy_totals(result)
+    console.print(
+        f"Energy: compressor {_wh(compressor)} Wh, element {_wh(element)} Wh"
+    )
+
+    if result.windows:
+        windows = Table(title="Draw windows")
+        for col in ("Start", "End", "Deliverable", "Margin", "Lowest", "Cold"):
+            windows.add_column(col)
+        for w in result.windows:
+            windows.add_row(
+                _local(w.start, tz),
+                _local(w.end, tz),
+                _volume(w.deliverable_gal),
+                _volume(w.margin_gal),
+                _temp(w.delivery_min_f),
+                "[red]ran cold[/red]" if w.depleted else "",
+            )
+        console.print(windows)
+
+    if result.reasons:
+        console.print("Reasons: " + ", ".join(result.reasons))
+    if result.defaults_used:
+        console.print("Defaults used: " + ", ".join(result.defaults_used))
+
+
+#: The CSV's columns after the instant, the temperatures in the
+#: preferred unit.
+CSV_COLUMNS = (
+    "upper",
+    "lower",
+    "setpoint",
+    "delivery",
+    "heating",
+    "compressor_wh",
+    "element_wh",
+    "mode",
+)
+
+
+def write_csv(result: sim.SimulationResult, out: TextIO) -> None:
+    """The path, one row per point."""
+    suffix = "_c" if sa.temperature_unit() == "°C" else "_f"
+    header = [
+        f"{c}{suffix}" if c in ("upper", "lower", "setpoint", "delivery") else c
+        for c in CSV_COLUMNS
+    ]
+    writer = csv.writer(out)
+    writer.writerow(["at", *header])
+    for reading, point in zip(sa.path(result), result.points, strict=True):
+        writer.writerow(
+            [
+                reading.at.isoformat(),
+                reading.upper,
+                reading.lower,
+                reading.setpoint,
+                "" if reading.delivery is None else reading.delivery,
+                int(point.heating),
+                "" if point.input_wh is None else point.input_wh,
+                point.element_wh,
+                point.mode,
+            ]
+        )
+
+
+def run(
+    inputs: Inputs,
+    live: sim_live.Composed | None,
+    now: datetime,
+    output_format: str,
+    out: TextIO | None = None,
+) -> sim.SimulationResult:
+    """Build the scenario, walk it and print the result."""
+    built = build(inputs, live, now)
+    for note in built.notes:
+        _logger.warning(note)
+    result = sim.simulate(built.scenario, built.params)
+    stream = out or sys.stdout
+    if output_format == "json":
+        json.dump(result_to_document(result), stream, indent=2)
+        stream.write("\n")
+    elif output_format == "csv":
+        write_csv(result, stream)
+    else:
+        print_table(built, result, Console(file=stream))
+    return result

@@ -2,8 +2,12 @@
 
 import asyncio
 import functools
+import json
 import logging
 import sys
+from collections.abc import Awaitable, Callable
+from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any
 
 import click
@@ -92,109 +96,117 @@ def _parse_recirc_schedule(
     return value
 
 
+async def _with_device(
+    ctx: click.Context,
+    command: Callable[[NavienMqttClient, Device], Awaitable[None]],
+) -> int:
+    """Sign in, connect to the first device and run ``command`` on it.
+
+    Returns the exit code: 0 when ``command`` ran, 1 when it failed or
+    no device was reached. The API client is in ``ctx.obj["api"]``.
+    """
+    email = ctx.obj.get("email")
+    password = ctx.obj.get("password")
+    unit_system = ctx.obj.get("unit_system")
+
+    # Set unit system if provided
+    if unit_system:
+        set_unit_system(unit_system)
+
+    # Load cached tokens if available
+    tokens, cached_email = load_tokens()
+    # Cached tokens belong to cached_email; never reuse them for a
+    # different account.
+    if email and cached_email and email != cached_email:
+        tokens = None
+    # If email not provided in args, try cached email
+    email = email or cached_email
+
+    if not email or not password:
+        _logger.error(
+            "Credentials missing. Use --email/--password or env vars."
+        )
+        return 1
+
+    try:
+        async with NavienAuthClient(
+            email, password, stored_tokens=tokens
+        ) as auth:
+            if auth.current_tokens and auth.user_email:
+                save_tokens(auth.current_tokens, auth.user_email)
+
+            if unit_system is not None:
+                api = NavienAPIClient(auth_client=auth, unit_system=unit_system)
+            else:
+                api = NavienAPIClient(auth_client=auth)
+            device = await api.get_first_device()
+            if not device:
+                _logger.error("No devices found.")
+                return 1
+
+            _logger.info(f"Using device: {device.device_info.device_name}")
+
+            if unit_system is not None:
+                mqtt = NavienMqttClient(auth, unit_system=unit_system)
+            else:
+                mqtt = NavienMqttClient(auth)
+            await mqtt.connect()
+            try:
+                # Auto-detect unit system from device when not
+                # explicitly set. This ensures commands like
+                # reservations use the correct temperature unit.
+                if unit_system is None:
+                    detected = await _detect_unit_system(mqtt, device)
+                    if detected:
+                        set_unit_system(detected)
+
+                # Attach api to context for commands that need it
+                ctx.obj["api"] = api
+
+                await command(mqtt, device)
+            finally:
+                await mqtt.disconnect()
+            return 0
+
+    except click.ClickException:
+        # A usage/config error a command raised deliberately. Let
+        # Click report it as itself; the catch-all below would
+        # otherwise log it as an "Unexpected Error" with a traceback.
+        raise
+    except (
+        InvalidCredentialsError,
+        AuthenticationError,
+        TokenRefreshError,
+    ) as e:
+        _logger.error(f"Auth failed: {e}")
+        _formatter.print_error(str(e), title="Authentication Failed")
+    except (MqttNotConnectedError, MqttConnectionError, MqttError) as e:
+        _logger.error(f"MQTT error: {e}")
+        _formatter.print_error(str(e), title="MQTT Connection Error")
+    except ValidationError as e:
+        _logger.error(f"Validation error: {e}")
+        _formatter.print_error(str(e), title="Validation Error")
+    except Nwp500Error as e:
+        _logger.error(f"Library error: {e}")
+        _formatter.print_error(str(e), title="Library Error")
+    except Exception as e:
+        _logger.error(f"Unexpected error: {e}", exc_info=True)
+        _formatter.print_error(str(e), title="Unexpected Error")
+    return 1
+
+
 def async_command(f: Any) -> Any:
     """Decorator to run click commands asynchronously with device connection."""
 
     @click.pass_context
     @functools.wraps(f)
     def wrapper(ctx: click.Context, *args: Any, **kwargs: Any) -> Any:
-        async def runner() -> int:
-            email = ctx.obj.get("email")
-            password = ctx.obj.get("password")
-            unit_system = ctx.obj.get("unit_system")
-
-            # Set unit system if provided
-            if unit_system:
-                set_unit_system(unit_system)
-
-            # Load cached tokens if available
-            tokens, cached_email = load_tokens()
-            # Cached tokens belong to cached_email; never reuse them for a
-            # different account.
-            if email and cached_email and email != cached_email:
-                tokens = None
-            # If email not provided in args, try cached email
-            email = email or cached_email
-
-            if not email or not password:
-                _logger.error(
-                    "Credentials missing. Use --email/--password or env vars."
-                )
-                return 1
-
-            try:
-                async with NavienAuthClient(
-                    email, password, stored_tokens=tokens
-                ) as auth:
-                    if auth.current_tokens and auth.user_email:
-                        save_tokens(auth.current_tokens, auth.user_email)
-
-                    if unit_system is not None:
-                        api = NavienAPIClient(
-                            auth_client=auth, unit_system=unit_system
-                        )
-                    else:
-                        api = NavienAPIClient(auth_client=auth)
-                    device = await api.get_first_device()
-                    if not device:
-                        _logger.error("No devices found.")
-                        return 1
-
-                    _logger.info(
-                        f"Using device: {device.device_info.device_name}"
-                    )
-
-                    if unit_system is not None:
-                        mqtt = NavienMqttClient(auth, unit_system=unit_system)
-                    else:
-                        mqtt = NavienMqttClient(auth)
-                    await mqtt.connect()
-                    try:
-                        # Auto-detect unit system from device when not
-                        # explicitly set. This ensures commands like
-                        # reservations use the correct temperature unit.
-                        if unit_system is None:
-                            detected = await _detect_unit_system(mqtt, device)
-                            if detected:
-                                set_unit_system(detected)
-
-                        # Attach api to context for commands that need it
-                        ctx.obj["api"] = api
-
-                        await f(mqtt, device, *args, **kwargs)
-                    finally:
-                        await mqtt.disconnect()
-                    return 0
-
-            except click.ClickException:
-                # A usage/config error a command raised deliberately. Let
-                # Click report it as itself; the catch-all below would
-                # otherwise log it as an "Unexpected Error" with a traceback.
-                raise
-            except (
-                InvalidCredentialsError,
-                AuthenticationError,
-                TokenRefreshError,
-            ) as e:
-                _logger.error(f"Auth failed: {e}")
-                _formatter.print_error(str(e), title="Authentication Failed")
-            except (MqttNotConnectedError, MqttConnectionError, MqttError) as e:
-                _logger.error(f"MQTT error: {e}")
-                _formatter.print_error(str(e), title="MQTT Connection Error")
-            except ValidationError as e:
-                _logger.error(f"Validation error: {e}")
-                _formatter.print_error(str(e), title="Validation Error")
-            except Nwp500Error as e:
-                _logger.error(f"Library error: {e}")
-                _formatter.print_error(str(e), title="Library Error")
-            except Exception as e:
-                _logger.error(f"Unexpected error: {e}", exc_info=True)
-                _formatter.print_error(str(e), title="Unexpected Error")
-            return 1
+        async def command(mqtt: NavienMqttClient, device: Device) -> None:
+            await f(mqtt, device, *args, **kwargs)
 
         # click ignores callback return values in standalone mode, so
         # propagate failures via ctx.exit to get a non-zero exit code.
-        ctx.exit(asyncio.run(runner()))
+        ctx.exit(asyncio.run(_with_device(ctx, command)))
 
     return wrapper
 
@@ -233,7 +245,7 @@ def cli(
 
     logging.basicConfig(
         level=logging.WARNING,  # Default for other libraries
-        stream=sys.stdout,
+        stream=sys.stderr,
         format="[%(asctime)s] %(levelname)s:%(name)s:%(message)s",
     )
     logging.getLogger("nwp500").setLevel(log_level)
@@ -949,6 +961,208 @@ async def monitor(mqtt: NavienMqttClient, device: Any, output: str) -> None:
     from .monitoring import handle_monitoring
 
     await handle_monitoring(mqtt, device, output)
+
+
+#: The extra's packages: a missing one is a missing extra, not a bug.
+_SIM_EXTRA = frozenset({"numpy", "pandas", "scipy"})
+
+
+def _simulator() -> Any:
+    """The simulate commands' module, or a one-line install hint."""
+    try:
+        from . import simulate as sim_cli
+    except ModuleNotFoundError as e:
+        if (e.name or "").split(".")[0] not in _SIM_EXTRA:
+            raise
+        raise click.ClickException(
+            "nwp-cli simulate needs the sim extra: "
+            "pip install 'nwp500-python[sim]'"
+        ) from None
+    return sim_cli
+
+
+def _read_inputs(sim_cli: Any, **given: Any) -> Any:
+    """The command's inputs, its files read."""
+    files = {
+        "scenario": "scenario",
+        "environment": "environment",
+        "loads": "draws file",
+        "commands": "plan",
+        "params": "parameters",
+    }
+    try:
+        for key, what in files.items():
+            if given[key] is not None:
+                given[key] = sim_cli.read_document(given[key], what)
+        return sim_cli.Inputs(**given)
+    except sim_cli.InputError as e:
+        raise click.UsageError(str(e)) from None
+
+
+def _iso_instant(
+    ctx: click.Context, param: click.Parameter, value: str | None
+) -> datetime | None:
+    if value is None:
+        return None
+    try:
+        at = datetime.fromisoformat(value)
+    except ValueError:
+        raise click.BadParameter(f"{value!r} is not an ISO 8601 instant")
+    if at.tzinfo is None:
+        raise click.BadParameter("give the instant's UTC offset")
+    return at
+
+
+@cli.group()  # type: ignore[attr-defined]
+def simulate() -> None:
+    """Simulate the water heater (needs the sim extra).
+
+    The heater and its schedules come from the device, a scenario file,
+    or both; flags override either.
+    """
+
+
+_hours_option = click.option(
+    "--hours",
+    type=click.FloatRange(min=0, min_open=True),
+    default=None,
+    help="How far to look ahead (default 24, or the scenario's)",
+)
+_tz_option = click.option(
+    "--tz",
+    default=None,
+    help="IANA zone of the schedules (default the scenario's, then "
+    "this machine's)",
+)
+
+
+@simulate.command("run")  # type: ignore[attr-defined]
+@click.option(
+    "--scenario",
+    type=click.Path(exists=True, dir_okay=False),
+    help="A scenario document; without --live nothing is read from the device",
+)
+@click.option(
+    "--live",
+    is_flag=True,
+    help="With --scenario: read the device too, and lay the scenario on it",
+)
+@_hours_option
+@click.option(
+    "--start",
+    callback=_iso_instant,
+    help="ISO 8601 instant with its offset (default now)",
+)
+@_tz_option
+@click.option(
+    "--ambient",
+    type=float,
+    help="Air at the heater, in the preferred unit (default the heater's "
+    "own reading)",
+)
+@click.option(
+    "--environment",
+    type=click.Path(exists=True, dir_okay=False),
+    help="An Environment document (°F)",
+)
+@click.option("--inlet", type=float, help="Mains water, preferred unit")
+@click.option(
+    "--draws",
+    "loads",
+    type=click.Path(exists=True, dir_okay=False),
+    help="A Loads document: draws, windows to judge, circulation",
+)
+@click.option(
+    "--plan",
+    "commands",
+    type=click.Path(exists=True, dir_okay=False),
+    help="A Commands document: writes, reservations, the TOU switch",
+)
+@click.option(
+    "--params",
+    type=click.Path(exists=True, dir_okay=False),
+    help="A HeaterParams document (default the tank size's defaults)",
+)
+@click.option(
+    "--format",
+    "output_format",
+    type=click.Choice(["table", "json", "csv"]),
+    default="table",
+    show_default=True,
+)
+@click.pass_context
+def simulate_run(ctx: click.Context, output_format: str, **given: Any) -> None:
+    """Walk a scenario and print what the heater would do."""
+    sim_cli = _simulator()
+    inputs = _read_inputs(sim_cli, **given)
+    now = datetime.now(UTC)
+
+    def walk(live: Any) -> None:
+        try:
+            sim_cli.run(inputs, live, now, output_format)
+        except sim_cli.InputError as e:
+            raise click.UsageError(str(e)) from None
+
+    if not inputs.needs_device:
+        if ctx.obj.get("unit_system"):
+            set_unit_system(ctx.obj["unit_system"])
+        walk(None)
+        return
+
+    async def command(mqtt: NavienMqttClient, device: Device) -> None:
+        walk(
+            await sim_cli.compose_live(
+                mqtt, ctx.obj["api"], device, inputs, now
+            )
+        )
+
+    ctx.exit(asyncio.run(_with_device(ctx, command)))
+
+
+@simulate.command("snapshot")  # type: ignore[attr-defined]
+@click.option(
+    "-o",
+    "--output",
+    type=click.Path(dir_okay=False, writable=True),
+    help="Write the scenario here (default stdout)",
+)
+@_hours_option
+@_tz_option
+@click.pass_context
+def simulate_snapshot(
+    ctx: click.Context,
+    output: str | None,
+    hours: float | None,
+    tz: str | None,
+) -> None:
+    """Write the heater and its schedules now as a scenario document."""
+    sim_cli = _simulator()
+    inputs = _read_inputs(
+        sim_cli,
+        scenario=None,
+        environment=None,
+        loads=None,
+        commands=None,
+        params=None,
+        hours=hours,
+        tz=tz,
+    )
+    now = datetime.now(UTC)
+
+    async def command(mqtt: NavienMqttClient, device: Device) -> None:
+        try:
+            composed = await sim_cli.compose_live(
+                mqtt, ctx.obj["api"], device, inputs, now
+            )
+        except sim_cli.InputError as e:
+            raise click.UsageError(str(e)) from None
+        text = json.dumps(sim_cli.snapshot_document(composed), indent=2)
+        if output is None:
+            click.echo(text)
+        else:
+            await asyncio.to_thread(Path(output).write_text, text + "\n")
+
+    ctx.exit(asyncio.run(_with_device(ctx, command)))
 
 
 if __name__ == "__main__":
