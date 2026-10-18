@@ -5,6 +5,7 @@ The fits are held to their source by the parity check run with the
 port; these hold what each recovers, screens and reports.
 """
 
+import math
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -99,6 +100,17 @@ class TestQuiet:
         h["circulating"] = False
         assert cal.quiet_windows(h) == [(T0, h.index[-1].to_pydatetime())]
         assert cal.fit_standby(h, MASS).quiet_by == "meter"
+
+    def test_a_meter_without_circulation_keeps_the_heaters_flag(self):
+        """Only draws recorded: the heater's flag still stands in for
+        circulation, which it also fires on."""
+        h = decay(12, 5.0)
+        h["drawing"] = False
+        h.loc[
+            T0 + timedelta(hours=4) : T0 + timedelta(hours=5), "dhw_in_use"
+        ] = True
+        windows = cal.quiet_windows(h)
+        assert windows[0] == (T0, T0 + timedelta(hours=4))
 
     def test_short_gaps_are_not_windows(self):
         h = decay(5, 5.0)
@@ -195,7 +207,8 @@ class TestRecoveries:
         assert row.delta_t_lower == 40.0
         assert row.stratification_gap == 35.0
         assert row.t_amb_mean == 65.0
-        assert row.h_amb_start == 50.0
+        # No humidity recorded: unknown, as the model passed it on.
+        assert math.isnan(row.h_amb_start)
         assert row.reached
 
     def test_a_dip_below_the_start_moves_the_row_after_it(self):
@@ -334,6 +347,13 @@ class TestCompressor:
 
 
 class TestCalibrate:
+    def test_an_unrecorded_stop_threshold_is_the_usual_one(self):
+        h = recovery_history([(2, 100, 100.0)]).drop(columns=["target_f"])
+        (row,) = cal.recoveries(h).itertuples()
+        assert row.delta_t_lower == pytest.approx(
+            cal.UNRECORDED_TARGET_F - row.t_start_lower
+        )
+
     def test_too_little_history_keeps_the_base(self):
         base = default_params()
         got = cal.calibrate(recovery_history([(2, 100, 100.0)]), base)

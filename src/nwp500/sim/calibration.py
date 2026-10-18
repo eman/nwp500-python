@@ -143,12 +143,16 @@ def busy_intervals(
 ) -> list[Interval]:
     """The spans the tank is not quiet: heating (``compressor_on``,
     ``element_on``), water moving (``drawing``, ``circulating`` where
-    recorded, else ``dhw_in_use``), each extended forward by
-    ``settle_minutes`` while the tank settles. Merged, sorted."""
+    recorded, else ``dhw_in_use``, which fires on both), each extended
+    forward by ``settle_minutes`` while the tank settles. Merged,
+    sorted. One recorded and not the other: the heater's flag stands in
+    for the other."""
     when = _instants(history)
     columns = ["compressor_on", "element_on"]
     tier1 = [c for c in ("drawing", "circulating") if c in history.columns]
-    columns += tier1 or ["dhw_in_use"]
+    columns += tier1
+    if len(tier1) < 2 and "dhw_in_use" in history.columns:
+        columns.append("dhw_in_use")
     settle = timedelta(minutes=settle_minutes)
     spans: list[Interval] = []
     for column in columns:
@@ -351,7 +355,7 @@ class StandbyFit:
     tau_gap_hours: float | None
     n_gap_windows: int
     #: The quiet test: ``meter`` with draws and circulation recorded,
-    #: ``dhw_in_use`` without them.
+    #: ``dhw_in_use`` without them, ``meter+dhw_in_use`` with one.
     quiet_by: str
 
 
@@ -380,7 +384,7 @@ def fit_standby(
             [w.duration_hours for w in kept],
         )
     tau, n_gap = fit_gap_tau([(w.gap_hours, w.gap_f) for w in kept])
-    tier1 = any(c in history.columns for c in ("drawing", "circulating"))
+    tier1 = [c for c in ("drawing", "circulating") if c in history.columns]
     return StandbyFit(
         windows=tuple(kept),
         n_quiet=len(quiet),
@@ -389,7 +393,13 @@ def fit_standby(
         ua_exponent=exponent,
         tau_gap_hours=tau,
         n_gap_windows=n_gap,
-        quiet_by="meter" if tier1 else "dhw_in_use",
+        quiet_by=(
+            "meter"
+            if len(tier1) == 2
+            else "meter+dhw_in_use"
+            if tier1
+            else "dhw_in_use"
+        ),
     )
 
 
@@ -470,12 +480,16 @@ def fit_compressor(
         else 0
     )
     fit_df, held_df = df.iloc[: n - n_held], df.iloc[n - n_held :]
-    has_gaps = "stratification_gap" in df.columns and bool(
-        df["stratification_gap"].notna().all()
+    # Usable gaps are judged on the rows fitted, as the model's fit did:
+    # a gap the fit has not got cannot be the mass model's.
+    has_gaps = "stratification_gap" in fit_df.columns and bool(
+        fit_df["stratification_gap"].notna().all()
     )
     two_zone = two_zone and has_gaps
 
-    def columns(frame: pd.DataFrame) -> tuple[np.ndarray, ...]:
+    def columns(
+        frame: pd.DataFrame, gaps: bool = has_gaps
+    ) -> tuple[np.ndarray, ...]:
         rows = len(frame)
         return (
             np.asarray(frame["t_start_lower"], dtype=float),
@@ -490,7 +504,7 @@ def fit_compressor(
                 dtype=float,
             ),
             np.asarray(
-                frame["stratification_gap"] if has_gaps else np.zeros(rows),
+                frame["stratification_gap"] if gaps else np.zeros(rows),
                 dtype=float,
             ),
             np.asarray(frame["duration_minutes"], dtype=float),
@@ -548,7 +562,10 @@ def fit_compressor(
     mae = float(np.mean(np.abs(predicted(fit_cols, k, approach) - fit_cols[5])))
     held_mae = None
     if n_held:
-        held_cols = columns(held_df)
+        # The held-out rows' gaps as recorded, wherever the column is.
+        held_cols = columns(
+            held_df, gaps="stratification_gap" in held_df.columns
+        )
         held_mae = float(
             np.mean(np.abs(predicted(held_cols, k, approach) - held_cols[5]))
         )
@@ -652,6 +669,11 @@ _SNAPSHOT_COLUMNS = (
 #: Circulation runs closer than this in a cycle are one run, as the
 #: circulation's displaced volume was fitted (``circulation.RUN_GAP``).
 _RUN_GAP = timedelta(minutes=10)
+
+
+#: A recovery's lower-zone target when the history records no stop
+#: threshold (``target_f``), °F.
+UNRECORDED_TARGET_F = 140.0
 
 
 def _in_cycle(
@@ -764,7 +786,7 @@ def snapshots(
     in force at the start less the lower probe); ``t_amb_mean`` (the
     ``air`` column's mean from the snapshot to the end, else its reading
     at the snapshot: the heater's own by default, a sensor's with
-    ``air="air_f"``); ``h_amb_start`` (50 without humidity); ``reached``
+    ``air="air_f"``); ``h_amb_start`` (NaN without humidity); ``reached``
     (the lower probe came within ``REACHED_TOLERANCE_F`` of the target
     before the run ended); ``metered_input_wh`` (``power_w`` integrated
     from the snapshot to the end, None without it); ``t_lower_end``,
@@ -803,7 +825,9 @@ def snapshots(
             continue
         target = _asof(target_f, seconds, start)
         if target is None:
-            continue
+            # The stop threshold not recorded: the device's usual one, as
+            # the model's fit took it.
+            target = UNRECORDED_TARGET_F
         before, after = INTERRUPTED_WINDOW
         at_end = energy_wh[(index >= end + before) & (index <= end + after)]
         at_end = at_end[np.isfinite(at_end)]
@@ -855,7 +879,9 @@ def snapshots(
                     "stratification_gap": upper - lower,
                     "delta_t_lower": target - lower,
                     "t_amb_mean": air_mean,
-                    "h_amb_start": 50.0 if humidity is None else humidity,
+                    # Unrecorded humidity is passed on unknown, as the
+                    # model's fit read it, not as an assumed 50 %.
+                    "h_amb_start": math.nan if humidity is None else humidity,
                     "reached": reached,
                     "metered_input_wh": _energy_wh(
                         power_w[cycle], c_seconds, at, end
