@@ -20,6 +20,7 @@ Units:
   in.
 """
 
+import math
 from datetime import UTC, datetime, timedelta
 from typing import Annotated, Self
 from zoneinfo import ZoneInfo
@@ -180,6 +181,16 @@ class Environment(_Value):
     #: The inlet (mains) water temperature, °F. None: the parameters'
     #: ``DrawParams.inlet_temp_f``.
     inlet_f: float | None = None
+
+    @property
+    def ambient_defaulted(self) -> bool:
+        """Whether no usable air reading was given (a missing value, or
+        readings all missing), so the simulation runs at its default
+        air (``units.DEFAULT_AMBIENT_F``)."""
+        a = self.ambient_f
+        if isinstance(a, tuple):
+            return not any(math.isfinite(v) for _, v in a)
+        return not math.isfinite(a)
 
     @field_validator("ambient_f")
     @classmethod

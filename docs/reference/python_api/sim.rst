@@ -134,7 +134,9 @@ Parameters
    :members: TankParams, LossParams, CompressorParams, PowerParams,
       ElementParams, DrawParams, ControllerParams, ReadinessParams,
       BookParams, Provenance, provenance_of, unit_of, params_to_document,
-      params_from_document
+      params_from_document, unknown_fields, FITTED, MEASURED, DEFAULT,
+      HEATER, INSTALLATION, UNFITTED_TERMS, INSTALLATION_TERMS,
+      UA_REF_DELTA_T_F, UA_MIN_DELTA_T_F
 
 
 Hot water and the heat book
@@ -173,7 +175,7 @@ Hot water and the heat book
       metered_withdrawn, metered_lead,
       path_to_end, with_power, snapshots, recoveries, quiet_windows,
       busy_intervals, fit_window, fit_ua_law, fit_gap_tau, with_standby,
-      with_compressor
+      with_compressor, UA_SEARCH_BOUNDS, UA_EXPONENT_BOUNDS, DRAW_LEAD
 
 .. automodule:: nwp500.sim.profile
    :members: HeaterProfile, heater_profile, check, COMMAND_KEYS
@@ -211,23 +213,27 @@ The engine and the physics
 
 The pieces the entry points are built from, for a caller that needs
 what they do not pass through (a recovery model's holds, a coast's own
-grid). Everything on this page is public: its names and their meaning
-are kept across minor versions, and a change to them is listed in the
-changelog.
+grid). Everything on this page is public, and so is every name without
+a leading underscore in the modules it lists: its functions, classes
+and constants, the reason strings an answer carries (``PHYSICS_TRUNCATED``,
+``LOWER_TRIGGER_HELD``, ...) among them, since a caller matches on
+them. Their names and meaning are kept across minor versions, and a
+change to them is listed in the changelog.
 
 .. automodule:: nwp500.sim.engine
    :members: simulate, Simulation, SimulationError, Heater, Entry,
       HeatingInterval, PathPoint, Write, RawWrite, ModeWrite,
       ModeInterval, quantise, floor_minute, energy_by_slot,
-      energy_by_source
+      energy_by_source, DRAW_LEAD, HEATER_SETPOINT_MIN_F,
+      HEATER_SETPOINT_MAX_F
 
 .. automodule:: nwp500.sim.tank_physics
    :members: TankPhysics, Physics, Point, Coast, Heat, point_at,
-      ambient_window_mean
+      ambient_window_mean, REFINE_TOL_MINUTES
 
 .. automodule:: nwp500.sim.heat_pump_recovery
    :members: physics_recovery, PhysicsRecovery, recovery, Recovery,
-      RecoveryContext, ModelDuration
+      RecoveryContext, ModelDuration, PHYSICS_TRUNCATED
 
 .. automodule:: nwp500.sim.heating_trajectory
    :members: build_heating_trajectory, HeatingPoint, path_cop
@@ -238,7 +244,8 @@ changelog.
       compute_start_time
 
 .. automodule:: nwp500.sim.tou_triggers
-   :members: autonomous_start, heater_start, in_window, while_enabled
+   :members: autonomous_start, heater_start, in_window, while_enabled,
+      Trigger, LOWER_TRIGGER_HELD, UPPER_DEFICIT_F
 
 .. automodule:: nwp500.sim.schedules
    :members: TouRule, tou_rules, tou_windows, rule_windows, Firing,
@@ -246,7 +253,7 @@ changelog.
 
 .. automodule:: nwp500.sim.physics.compressor
    :members: predict_physics_detailed, predict_physics, PhysicsPath,
-      PhysicsResult
+      PhysicsResult, MAX_MINUTES
 
 .. automodule:: nwp500.sim.physics.refrigerant
    :members: sat_pressure, vapor_density, liquid_enthalpy,
@@ -258,12 +265,17 @@ changelog.
 .. automodule:: nwp500.sim.physics.element
    :members: mode_recovery, ModeRecovery, mode_plan, ModePlan,
       ElementInterval, entry_deficit_f, entry_bracket_f,
-      upper_off_deficit_f, coast_f, upper_rise_f, is_heater_mode
+      upper_off_deficit_f, coast_f, upper_rise_f, is_heater_mode,
+      DEVICE_MODE, HEATER_MODE
 
 .. automodule:: nwp500.sim.physics.draw
    :members: delivery_temp_f, hot_fraction, draw_energy_btu,
       withdrawn_gal, gap_opened_f, lower_zone_drop_f, settled_lower_f,
-      unsettled_after_f
+      unsettled_after_f, DEFAULT_OBSERVABILITY, DEFAULT_INLET_TEMP_F,
+      DEFAULT_TMV_DELIVERY_INTERCEPT_F, DEFAULT_TMV_DELIVERY_SLOPE,
+      DEFAULT_GAP_OPEN_F_PER_GAL, DEFAULT_DOMAIN_T_UPPER_F,
+      DEFAULT_DOMAIN_VOLUME_GAL, DEFAULT_LOWER_GATE_F,
+      DEFAULT_POOL_F_PER_HOUR
 
 
 Documents

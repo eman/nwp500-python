@@ -218,6 +218,12 @@ class TestMissingReadings:
         slot = next(s for s in o.slots if s.start == at(30))
         assert slot.energy_wh == 66.67
 
+    def test_rows_in_a_list_are_filtered_too(self):
+        """The re-check of the replacement review: any sequence of rows
+        is held as a tuple, its missing readings dropped."""
+        rec = Record(power_w=[(at(0), 5.0), (at(1), NAN)])  # type: ignore[arg-type]
+        assert rec.power_w == ((at(0), 5.0),)
+
     def test_none_and_infinite_are_missing_too(self):
         rec = Record(power_w=((at(0), 5.0), (at(1), None), (at(2), math.inf)))  # type: ignore[arg-type]
         assert rec.power_w == ((at(0), 5.0),)

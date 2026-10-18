@@ -769,9 +769,13 @@ The ones about inputs and parameters:
      - The installation's heat book terms, readiness terms or draw
        response are another installation's (``default_params()`` marks
        all three, ``INSTALLATION_TERMS``), not fitted from this one's
-       meter. The readiness answer says the first two; any answer with
-       draws, the third. Fit them and drop each from
+       meter. The readiness answer says the first two, whether or not a
+       recovery was needed; any answer with draws, the third. Fit them and drop each from
        ``HeaterParams.unfitted``.
+   * - ``ambient_defaulted``
+     - No usable air reading was given (``Environment.ambient_f`` missing,
+       or its readings all missing), so the answer ran at the default
+       air, 65 °F.
    * - ``tau_gap_prior``
      - Draws opened a gap that closes on a prior time constant, not one
        fitted on this heater.

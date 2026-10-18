@@ -641,3 +641,68 @@ class TestOneInstallationsTerms:
         assert "draw_uncalibrated" in simulate(s, default_params()).reasons
         quiet = simulate(_scenario(), default_params())
         assert "draw_uncalibrated" not in quiet.reasons
+
+    def test_a_ready_bath_still_says_its_terms(self):
+        """The re-check of the replacement review: the gallons a ready
+        tank reports rest on the same terms."""
+        from nwp500.sim import default_params
+
+        s = _scenario(
+            state=HeaterState(upper_f=140.5, lower_f=139.6),
+            history=History(compressor_stopped_at=at(-1.0)),
+        )
+        r = time_to_ready(s, default_params(), bath_gal=20.0)
+        assert r.bath.ready
+        assert {"book_uncalibrated", "readiness_uncalibrated"} <= set(r.reasons)
+
+
+NAN = float("nan")
+
+
+class TestTheDefaultAir:
+    """The re-check of the replacement review: an air reading missing
+    throughout runs at the default air, and every answer says so."""
+
+    @pytest.mark.parametrize(
+        "missing",
+        [
+            Environment(ambient_f=NAN, humidity=48.0),
+            Environment(ambient_f=((at(0), NAN), (at(6), NAN)), humidity=48.0),
+        ],
+    )
+    def test_each_answer_says_its_air_was_the_default(self, params, missing):
+        from nwp500.sim import forecast, standby
+        from nwp500.sim.units import DEFAULT_AMBIENT_F
+
+        assert missing.ambient_defaulted
+        given = Environment(ambient_f=DEFAULT_AMBIENT_F, humidity=48.0)
+        assert not given.ambient_defaulted
+        s, g = _scenario(environment=missing), _scenario(environment=given)
+
+        sim = simulate(s, params)
+        assert "ambient_defaulted" in sim.reasons
+        assert sim.simulation.points == simulate(g, params).simulation.points
+        assert "ambient_defaulted" not in simulate(g, params).reasons
+
+        coast = standby(
+            s.state, missing, Loads(), params, start=T0, until=at(6)
+        )
+        assert "ambient_defaulted" in coast.reasons
+        assert (
+            coast.points
+            == standby(
+                s.state, given, Loads(), params, start=T0, until=at(6)
+            ).points
+        )
+
+        ahead = forecast(
+            s.state, s.settings, missing, params, at=T0, target_time=at(6)
+        )
+        assert "ambient_defaulted" in ahead.reasons
+
+        ready = time_to_ready(s, params, bath_gal=20.0)
+        assert "ambient_defaulted" in ready.reasons
+        assert (
+            "ambient_defaulted"
+            not in time_to_ready(g, params, bath_gal=20.0).reasons
+        )

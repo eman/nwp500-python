@@ -116,7 +116,7 @@ from nwp500.sim.tou_triggers import (
     in_window,
     while_enabled,
 )
-from nwp500.sim.units import BTU_PER_WH
+from nwp500.sim.units import BTU_PER_WH, DEFAULT_AMBIENT_F
 
 #: The engine's name for each mode it models.
 ENGINE_MODE: Mapping[int, HeaterMode] = MappingProxyType(
@@ -162,8 +162,20 @@ def _ambient_frame(
         )
         values = [sampler.at(t.to_pydatetime()) for t in stamps]
     else:
-        values = [float(a)] * len(stamps)
+        values = [float(a) if math.isfinite(a) else DEFAULT_AMBIENT_F] * len(
+            stamps
+        )
     return pd.DataFrame({"ambient_f": values}, index=stamps)
+
+
+#: No usable air reading was given: the answer ran at the default air.
+AMBIENT_DEFAULTED = "ambient_defaulted"
+
+
+def _ambient_reasons(environment: Environment) -> list[str]:
+    """``ambient_defaulted`` when the air the answer ran at is the
+    default, not a reading (``Environment.ambient_defaulted``)."""
+    return [AMBIENT_DEFAULTED] if environment.ambient_defaulted else []
 
 
 def _circulation(loads: Loads, params: HeaterParams) -> Circulation | None:
@@ -549,6 +561,7 @@ def simulate(
         reasons.append("physics_failed")
     if any(h.source == "compressor" for h in sim.heating):
         reasons += _unfitted(params, "compressor", "power")
+    reasons += _ambient_reasons(s.environment)
     return SimulationResult(
         start=s.start,
         until=s.until,
@@ -732,7 +745,7 @@ def recovery(
         at=at,
         interval=first,
         path=path,
-        reasons=tuple(reasons),
+        reasons=tuple(_unique([*reasons, *_ambient_reasons(environment)])),
         defaults_used=result.defaults_used,
     )
 
@@ -856,7 +869,7 @@ def standby(
         trigger=trigger,
         start_held=held,
         lower_margin_f=margin,
-        reasons=tuple(reasons),
+        reasons=tuple(_unique([*reasons, *_ambient_reasons(environment)])),
         draw_out_of_domain_at=out_of_domain_at,
         draw_volume_gal=coast.draw_volume_gal if draws else None,
         draw_heat_wh=coast.draw_heat_btu / BTU_PER_WH if draws else None,
@@ -948,7 +961,7 @@ def _ambient_at(environment: Environment, at: datetime) -> float:
     """The air at the heater at ``at``, °F, from ``environment``."""
     a = environment.ambient_f
     if not isinstance(a, tuple):
-        return float(a)
+        return float(a) if math.isfinite(a) else DEFAULT_AMBIENT_F
     sampler = AmbientSampler(
         pd.DataFrame(
             {"ambient_f": [v for _, v in a]},
@@ -1379,12 +1392,20 @@ def time_to_ready(
         element_params=params.element,
         book_params=params.book_terms(),
     )
+    # The gallons now rest on the book's and readiness's terms whether
+    # or not a recovery was needed; the rest only on the recovery.
+    answer["reasons"] = _unique(
+        [
+            *answer["reasons"],
+            *_unfitted(params, "book", "readiness"),
+            *_ambient_reasons(s.environment),
+        ]
+    )
     if nxt.outcome == "ok":
         answer["reasons"] = _unique(
             [
                 *answer["reasons"],
                 *_unfitted(params, "compressor", "power", "standby"),
-                *_unfitted(params, "book", "readiness"),
                 *(_unfitted(params, "draw") if s.loads.draws else []),
                 *(
                     [CIRCULATION_UNKNOWN]
@@ -1561,7 +1582,7 @@ def forecast(
                 HeatingPoint(origin, state.upper_f, state.lower_f, 0.0, 0.0),
             ),
             startup_energy_wh=None,
-            reasons=(),
+            reasons=tuple(_ambient_reasons(environment)),
             defaults_used=tuple(defaults),
         )
     physics = _physics(
@@ -1710,6 +1731,7 @@ def forecast(
                     *served.reasons,
                     *_unfitted(params, "compressor", "power", "standby"),
                     *(_unfitted(params, "draw") if loads.draws else []),
+                    *_ambient_reasons(environment),
                     *(
                         [CIRCULATION_UNKNOWN]
                         if _circulation_unknown(params, loads, target)
@@ -1831,7 +1853,13 @@ def active_cycle(
         target_f=goal,
         confidence=served.confidence,
         reasons=tuple(
-            _unique([*reasons, *_unfitted(params, "compressor", "standby")])
+            _unique(
+                [
+                    *reasons,
+                    *_unfitted(params, "compressor", "standby"),
+                    *_ambient_reasons(environment),
+                ]
+            )
         ),
         defaults_used=tuple(defaults),
     )

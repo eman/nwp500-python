@@ -163,14 +163,16 @@ class Record:
     resting_upper_on_f: float = RESTING_UPPER_ON_F
 
     def __post_init__(self) -> None:
+        # Any sequence of rows is held as a tuple, its missing readings
+        # dropped; the lookback, cadences and threshold are not rows.
         for f in fields(self):
             rows = getattr(self, f.name)
-            if not isinstance(rows, tuple):
+            if not isinstance(rows, (tuple, list)):
                 continue
             kept = tuple(
                 (t, v) for t, v in rows if v is not None and math.isfinite(v)
             )
-            if len(kept) != len(rows):
+            if kept != rows:
                 object.__setattr__(self, f.name, kept)
 
     def tou_switches(

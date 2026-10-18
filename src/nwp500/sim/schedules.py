@@ -51,9 +51,10 @@ def month_bit(day: date) -> int:
 
 @dataclass(frozen=True)
 class TouRule:
-    """A daily window on the days both masks select: from ``opens`` to
-    ``closes`` (exclusive), local, within the day; a ``closes`` of 00:00
-    is the day's end."""
+    """A daily window opening on the days both masks select: from
+    ``opens`` to ``closes`` (exclusive), local. A ``closes`` at or before
+    ``opens`` is on the next day (00:00 the opening day's end, 06:00
+    after a 22:00 opening the next morning)."""
 
     season_mask: int
     week_mask: int

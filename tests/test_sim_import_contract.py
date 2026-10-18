@@ -356,3 +356,53 @@ def test_no_name_shadows_a_submodule():
         bound = getattr(importlib.import_module(parent), leaf)
         assert isinstance(bound, types.ModuleType), info.name
         assert bound is module, info.name
+
+
+def test_the_names_a_caller_matches_on_are_documented():
+    """The re-check of the replacement review: the reason strings and
+    constants a service imports are listed on the API page, whose rule
+    makes every public name in its modules public."""
+    import importlib
+
+    page = (
+        Path(__file__).resolve().parents[1]
+        / "docs/reference/python_api/sim.rst"
+    ).read_text()
+    listed: dict[str, set[str]] = {}
+    for block in re.finditer(
+        r"\.\. automodule:: (\S+)\n   :members: ([^\n]+(?:\n      [^\n]+)*)",
+        page,
+    ):
+        names = {n.strip() for n in block.group(2).split(",") if n.strip()}
+        listed[block.group(1)] = names
+    wanted = {
+        "nwp500.sim.heat_pump_recovery": {"PHYSICS_TRUNCATED"},
+        "nwp500.sim.tou_triggers": {
+            "LOWER_TRIGGER_HELD",
+            "Trigger",
+            "UPPER_DEFICIT_F",
+        },
+        "nwp500.sim.physics.element": {"DEVICE_MODE", "HEATER_MODE"},
+        "nwp500.sim.engine": {
+            "DRAW_LEAD",
+            "HEATER_SETPOINT_MIN_F",
+            "HEATER_SETPOINT_MAX_F",
+        },
+        "nwp500.sim.physics.compressor": {"MAX_MINUTES"},
+        "nwp500.sim.tank_physics": {"REFINE_TOL_MINUTES"},
+        "nwp500.sim.params": {
+            "FITTED",
+            "unknown_fields",
+            "UA_REF_DELTA_T_F",
+            "UA_MIN_DELTA_T_F",
+        },
+        "nwp500.sim.physics.draw": {
+            "DEFAULT_INLET_TEMP_F",
+            "DEFAULT_OBSERVABILITY",
+        },
+    }
+    for module, names in wanted.items():
+        assert names <= listed[module], (module, names - listed[module])
+    for module, names in listed.items():
+        loaded = importlib.import_module(module)
+        assert not [n for n in names if not hasattr(loaded, n)], module
