@@ -70,6 +70,7 @@ from nwp500.sim.params import (
 )
 from nwp500.sim.physics.compressor import PhysicsPath, predict_physics_detailed
 from nwp500.sim.physics.draw import delivery_temp_f, draw_energy_btu
+from nwp500.sim.physics.tank import ua_at
 from nwp500.sim.record import Record
 from nwp500.sim.units import BTU_PER_WH, WATER_BTU_PER_GAL_F
 
@@ -3391,3 +3392,193 @@ def fit_element_rates(
         lower_interval=None if lo is None else lo[1],
         runs=len(r),
     )
+
+
+# ── the probes' share of circulation's heat ─────────────────────────
+#
+# ``DrawParams.ungated_observability``: the run model's heat
+# (``run_heat_btu``) is physical, the flow's integral; the tank it is
+# charged to is described in the probes' frame, their mean times the
+# tank's mass. The factor between the two is measured on windows of
+# circulation with nothing else going on, and **against the displaced
+# volume it will be used with**: a saturated run's heat is proportional
+# to it, so a factor fitted at one volume misprices those runs at
+# another. Refit the two together.
+
+#: Minutes after the last run a window stays open: past the probes'
+#: lag, and the factor measured flat from 15 minutes to 4 hours.
+OBSERVABILITY_SETTLE = timedelta(minutes=30)
+#: A compressor this close before a window disqualifies it.
+OBSERVABILITY_LEAD = timedelta(minutes=5)
+#: Fewer windows than this and the factor is not fitted.
+MIN_OBSERVABILITY_WINDOWS = 20
+#: A run cannot cost the tank more than its physical heat, and a factor
+#: near zero means the fit failed.
+OBSERVABILITY_BOUNDS = (0.05, 1.0)
+
+
+@dataclass(frozen=True)
+class CirculationWindow:
+    """One window's evidence, independent of the displaced volume: its
+    runs ``(minutes, upper zone at start)``, the air over it, the heat
+    the probes lost to the runs (the mean's fall times the tank's mass,
+    less standby and the draws' heat), BTU, its length, the gallons
+    drawn in it, and the flow its runs ran at (None: the caller's)."""
+
+    runs: tuple[tuple[float, float], ...]
+    air_f: float
+    apparent_btu: float
+    hours: float
+    draw_gal: float
+    flow_gpm: float | None = None
+
+
+def _last_at(
+    values: np.ndarray, seconds: np.ndarray, at: datetime
+) -> float | None:
+    ok = np.isfinite(values) & (seconds <= at.timestamp())
+    return float(values[ok][-1]) if ok.any() else None
+
+
+def circulation_windows(
+    history: pd.DataFrame,
+    circulation: Sequence[tuple[datetime, datetime]],
+    params: HeaterParams,
+    *,
+    draws: Sequence[tuple[datetime, float]],
+    settle: timedelta = OBSERVABILITY_SETTLE,
+    flow_at: Callable[[datetime], float | None] | None = None,
+) -> list[CirculationWindow]:
+    """The clean circulation windows in ``history`` (``sa.history``'s:
+    the probes, ``compressor_on``, ``air_f``). Each opens at a run and
+    closes ``settle`` after the last run that starts before it would,
+    so a chain of runs is one window and every run in it is charged. A
+    window is left out when the compressor runs within
+    ``OBSERVABILITY_LEAD`` before it or in it, or when a draw in it has
+    no size (a NaN in ``draws``: its heat cannot be added back); a sized
+    draw is charged through the draw term at the window's starting upper
+    zone. Standby is the loss law's (``params.loss``) at the mean over
+    the air; with no loss law fitted there are no windows. ``flow_at``
+    gives each window's runs the flow they ran at (``flow_lookup``)."""
+    when = _instants(history)
+    seconds = np.array([t.timestamp() for t in when])
+    upper, lower = _floats(history, "upper_f"), _floats(history, "lower_f")
+    air = _floats(history, "air_f")
+    compressor = _on_intervals(
+        when, history["compressor_on"].fillna(False).astype(bool).to_numpy()
+    )
+    loss, d = params.loss, params.draw
+    if loss.ua_btu_hr_f is None:
+        # No loss law to take standby off with.
+        return []
+    ua_ref = loss.ua_btu_hr_f
+    corpus = sorted(circulation)
+    out: list[CirculationWindow] = []
+    i = 0
+    while i < len(corpus):
+        start, end = corpus[i]
+        j = i + 1
+        while j < len(corpus) and corpus[j][0] <= end + settle:
+            end = max(end, corpus[j][1])
+            j += 1
+        i = j
+        close = end + settle
+        lead = start - OBSERVABILITY_LEAD
+        inside = [g for t, g in draws if lead <= t <= close]
+        if any(math.isnan(g) for g in inside):
+            continue
+        if any(not (close <= s or e <= lead) for s, e in compressor):
+            continue
+        at0 = start - timedelta(seconds=10)
+        u0, l0 = _last_at(upper, seconds, at0), _last_at(lower, seconds, at0)
+        u1, l1 = (
+            _last_at(upper, seconds, close),
+            _last_at(lower, seconds, close),
+        )
+        span = (seconds >= start.timestamp()) & (seconds <= close.timestamp())
+        amb = (
+            float(np.nanmean(air[span]))
+            if span.any() and np.isfinite(air[span]).any()
+            else math.nan
+        )
+        runs = _in_cycle(None, circulation, upper, seconds, at0, close)[
+            "circulation_runs"
+        ]
+        if (
+            u0 is None
+            or l0 is None
+            or u1 is None
+            or l1 is None
+            or not runs
+            or not math.isfinite(amb)
+        ):
+            continue
+        m0, m1 = (u0 + l0) / 2, (u1 + l1) / 2
+        hours = (close - start).total_seconds() / 3600
+        dt = (m0 + m1) / 2 - amb
+        standby = (
+            ua_at(dt, ua_ref, loss.ua_exponent, loss.ua_ref_delta_t_f)
+            * max(dt, 0.0)
+            * hours
+        )
+        gal = float(sum(inside))
+        draw_btu = 0.0
+        if gal > 0.0 and d.observability is not None:
+            draw_btu = draw_energy_btu(
+                gal,
+                u0,
+                delivery_temp_f(u0, d.delivery_intercept_f, d.delivery_slope),
+                d.inlet_temp_f,
+                d.observability,
+            )
+        out.append(
+            CirculationWindow(
+                runs=cast(tuple[tuple[float, float], ...], runs),
+                air_f=amb,
+                apparent_btu=(m0 - m1) * params.tank.thermal_mass_btu_f
+                - standby
+                - draw_btu,
+                hours=hours,
+                draw_gal=gal,
+                flow_gpm=None if flow_at is None else flow_at(start),
+            )
+        )
+    return out
+
+
+def fit_ungated_observability(
+    windows: Sequence[CirculationWindow],
+    displaced_gal: float,
+    flow_gpm: float,
+) -> tuple[float, int] | None:
+    """``DrawParams.ungated_observability``: the windows' apparent heat
+    over the run model's (``run_heat_btu``) at ``displaced_gal``, a ratio
+    of sums, and the windows it rests on. None with fewer than
+    ``MIN_OBSERVABILITY_WINDOWS`` carrying modelled heat, or a ratio
+    outside ``OBSERVABILITY_BOUNDS``."""
+    if displaced_gal <= 0.0:
+        return None
+    pairs = [
+        (
+            w.apparent_btu,
+            sum(
+                run_heat_btu(
+                    minutes,
+                    upper,
+                    w.air_f,
+                    displaced_gal,
+                    w.flow_gpm if w.flow_gpm is not None else flow_gpm,
+                )
+                for minutes, upper in w.runs
+            ),
+        )
+        for w in windows
+    ]
+    pairs = [(a, m) for a, m in pairs if m > 0.0]
+    if len(pairs) < MIN_OBSERVABILITY_WINDOWS:
+        return None
+    factor = sum(a for a, _ in pairs) / sum(m for _, m in pairs)
+    lo, hi = OBSERVABILITY_BOUNDS
+    if not lo <= factor <= hi:
+        return None
+    return factor, len(pairs)

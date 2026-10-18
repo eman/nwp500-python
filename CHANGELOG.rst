@@ -193,6 +193,9 @@ Added
     every answer it reaches says ``physics_uncalibrated``,
     ``energy_uncalibrated``, ``standby_uncalibrated`` or
     ``tau_gap_prior``.
+    The probes' share of circulation's heat
+    (``circulation_windows``, ``fit_ungated_observability``), fitted
+    against the displaced volume it is used with.
     Circulation's terms from its own telemetry: each run's measured heat
     (``measure_runs``), the displaced volume that prices them
     (``fit_displaced_gal``), its recent flow and the flow a past run ran

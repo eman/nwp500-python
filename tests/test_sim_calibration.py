@@ -600,3 +600,86 @@ class TestMeteredPricing:
         assert row.circulation_runs == ((10.0, 135.0),)
         plain = cal.snapshots(h)
         assert plain.draw_gal.isna().all()
+
+
+class TestTheProbesShareOfCirculation:
+    """``circulation_windows`` and ``fit_ungated_observability``."""
+
+    def _history(self, runs, compressor=()):
+        times = [T0 + timedelta(minutes=m) for m in range(24 * 60)]
+        upper, lower = [], []
+        u, lo = 138.0, 130.0
+        for t in times:
+            on = any(a <= t < b for a, b in runs)
+            u -= 0.6 if on else 0.002
+            lo -= 0.3 if on else 0.002
+            upper.append(u)
+            lower.append(lo)
+        heating = [any(a <= t < b for a, b in compressor) for t in times]
+        return pd.DataFrame(
+            {
+                "upper_f": upper,
+                "lower_f": lower,
+                "air_f": [65.0] * len(times),
+                "compressor_on": heating,
+            },
+            index=pd.DatetimeIndex(times),
+        )
+
+    def test_a_chain_of_runs_is_one_window(self):
+        from nwp500.sim import site_example_params
+
+        runs = [
+            (T0 + timedelta(hours=2), T0 + timedelta(hours=2, minutes=10)),
+            (
+                T0 + timedelta(hours=2, minutes=20),
+                T0 + timedelta(hours=2, minutes=25),
+            ),
+            (T0 + timedelta(hours=6), T0 + timedelta(hours=6, minutes=8)),
+        ]
+        w = cal.circulation_windows(
+            self._history(runs), runs, site_example_params(), draws=[]
+        )
+        assert len(w) == 2
+        assert [len(x.runs) for x in w] == [1, 1]  # merged within the gap
+        assert w[0].runs[0][0] == pytest.approx(25.0)
+        assert all(x.apparent_btu > 0 for x in w)
+
+    def test_a_compressor_or_an_unsized_draw_rules_one_out(self):
+        from nwp500.sim import site_example_params
+
+        runs = [
+            (T0 + timedelta(hours=2), T0 + timedelta(hours=2, minutes=10)),
+            (T0 + timedelta(hours=6), T0 + timedelta(hours=6, minutes=8)),
+            (T0 + timedelta(hours=10), T0 + timedelta(hours=10, minutes=8)),
+        ]
+        heating = [
+            (T0 + timedelta(hours=6, minutes=20), T0 + timedelta(hours=7))
+        ]
+        unsized = [(T0 + timedelta(hours=10, minutes=4), float("nan"))]
+        w = cal.circulation_windows(
+            self._history(runs, heating),
+            runs,
+            site_example_params(),
+            draws=unsized,
+        )
+        assert len(w) == 1
+
+    def test_too_few_windows_fit_nothing(self):
+        from nwp500.sim import site_example_params
+
+        runs = [(T0 + timedelta(hours=2), T0 + timedelta(hours=2, minutes=10))]
+        p = site_example_params()
+        w = cal.circulation_windows(self._history(runs), runs, p, draws=[])
+        assert p.circulation is not None
+        assert (
+            cal.fit_ungated_observability(
+                w, p.circulation.displaced_gal, p.circulation.flow_gpm
+            )
+            is None
+        )
+        many = w * cal.MIN_OBSERVABILITY_WINDOWS
+        got = cal.fit_ungated_observability(
+            many, p.circulation.displaced_gal, p.circulation.flow_gpm
+        )
+        assert got is not None and got[1] == cal.MIN_OBSERVABILITY_WINDOWS

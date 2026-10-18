@@ -709,6 +709,15 @@ and each says what it used:
   a circulation can move from run to run; pass
   ``circulation_flow_at=cal.flow_lookup(cal.measure_runs(...))`` and
   each cycle's runs are priced at the flow they ran at.
+- **The probes' share of circulation's heat**
+  (``DrawParams.ungated_observability``):
+  ``cal.fit_ungated_observability(cal.circulation_windows(history,
+  runs, params, draws=meter_draws), displaced_gal, flow_gpm)``. It
+  works on windows of circulation with no compressor and no unsized
+  draw (a NaN gallon count). Fit it at the same ``displaced_gal`` you
+  will use (``fit_displaced_gal``): a long run's modelled heat is
+  proportional to that volume, so the two are a pair. It needs 20
+  windows, and a factor outside 0.05-1 is refused.
 
 A part without the evidence keeps the value it had, and is named in
 ``cal.params.unfitted``: ``compressor`` (too few recoveries, or a fit
