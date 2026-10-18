@@ -613,7 +613,7 @@ NWP500-65's installation; measure your own where you can.
      - 12.0 gal
      - A shower, when none is given. Assumed, not measured.
    * - ``evidence``
-     - none
+     - none (``site_example_params``: the site's 19)
      - Draws from your own record: ``(upper_f, lower_f, gallons)``, the
        probes before a draw with the heat pump and elements off and the
        gallons it delivered before the upper probe crossed the line,
@@ -624,7 +624,8 @@ NWP500-65's installation; measure your own where you can.
 
 Without a book or evidence, ``readiness`` has an answer only for a full
 tank (the floor); any other state reads 0 with
-``colder_than_evidence``.
+``colder_than_evidence``. ``site_example_params`` carries the site's
+evidence; ``default_params``, which has no mixing valve, carries none.
 
 ``params.book`` (``BookParams``) holds the book's own terms, fitted on
 the re-anchors of one NWP500-65's metered record: its compressor,

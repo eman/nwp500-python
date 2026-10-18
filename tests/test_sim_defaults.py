@@ -103,9 +103,16 @@ def test_a_fitted_document_writes_back_as_it_was():
 def test_the_site_example_is_that_fitted_model():
     """The document carries no circulation (its bundle keeps that
     apart); the site example adds the installation's."""
+    # Nor its readiness evidence, which the model kept in its code.
+    site = site_example_params()
     assert params_from_document(json.loads(FITTED_DOC.read_text())) == (
-        replace(site_example_params(), circulation=None)
+        replace(
+            site,
+            circulation=None,
+            readiness=replace(site.readiness, evidence=()),
+        )
     )
+    assert len(site.readiness.evidence) == 19
     assert site_example_params().circulation == SITE_CIRCULATION
 
 
@@ -118,8 +125,10 @@ def test_the_default_is_the_site_without_its_mixing_valve():
     assert (site_book.delivery_intercept_f, site_book.delivery_slope) == (
         SITE_VALVE
     )
-    assert d.circulation is None
-    assert with_valve(d, SITE_VALVE) == replace(site, circulation=None)
+    assert d.circulation is None and d.readiness.evidence == ()
+    assert with_valve(d, SITE_VALVE) == replace(
+        site, circulation=None, readiness=d.readiness
+    )
 
 
 def test_one_valve_drives_the_draw_and_the_book():

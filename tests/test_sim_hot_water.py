@@ -75,6 +75,10 @@ def params() -> HeaterParams:
     return site_example_params()
 
 
+def _no_evidence(p: HeaterParams) -> HeaterParams:
+    return replace(p, readiness=replace(p.readiness, evidence=()))
+
+
 @pytest.fixture(autouse=True)
 def _units():
     yield
@@ -248,17 +252,17 @@ class TestReadiness:
                 upper_f=FULL[0], lower_f=FULL[1], compressor_running=True
             ),
             Settings(setpoint_f=140.9),
-            params,
+            _no_evidence(params),
         )
         assert d.gal == 0.0 and d.colder_than_evidence
 
     def test_any_other_state_needs_evidence(self, params: HeaterParams):
         state = HeaterState(upper_f=135.86, lower_f=135.5)
         settings = Settings(setpoint_f=140.9)
-        assert readiness(state, settings, params).gal == 0.0
-        given = replace(
-            params, readiness=with_example_evidence(params.readiness)
-        )
+        bare = _no_evidence(params)
+        assert readiness(state, settings, bare).gal == 0.0
+        given = replace(bare, readiness=with_example_evidence(bare.readiness))
+        assert given == params
         assert readiness(state, settings, given).gal == pytest.approx(
             23.6 + params.readiness.delivered_lag_gal
         )
@@ -288,7 +292,9 @@ class TestTheParameters:
     ):
         doc = params_to_document(params)
         del doc["readiness"], doc["book"]
-        assert params_from_document(doc) == params
+        assert params_from_document(doc) == replace(
+            params, readiness=ReadinessParams(), book=params.book
+        )
 
     def test_the_example_evidence_is_refused_at_another_line(self):
         with pytest.raises(ValueError, match="105"):

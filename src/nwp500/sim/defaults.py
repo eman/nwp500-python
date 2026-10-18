@@ -21,6 +21,7 @@ valve, passes its own ``HeaterParams``.
 
 from dataclasses import replace
 
+from nwp500.sim.delivery import with_example_evidence
 from nwp500.sim.params import (
     CirculationParams,
     CompressorParams,
@@ -148,12 +149,16 @@ def with_valve(
 def default_params(volume_code: int = VOLUME_65) -> HeaterParams:
     """The default parameters for a tank of ``volume_code`` (the
     device's: 1 for 50 gal, 2 for 65, 3 for 80): ``site_example_params``
-    with no mixing valve (``NO_VALVE``) and no circulation. Every other
-    installation term is still that site's, and labelled so
-    (``params.scope_of``)."""
+    with no mixing valve (``NO_VALVE``), no circulation and no readiness
+    evidence (the site's was metered through its valve, and over-promises
+    without one: a tank that is not full reads 0 until your own is
+    measured). Every other installation term is still that site's, and
+    labelled so (``params.scope_of``)."""
+    site = site_example_params(volume_code)
     return replace(
-        with_valve(site_example_params(volume_code), NO_VALVE),
+        with_valve(site, NO_VALVE),
         circulation=None,
+        readiness=replace(site.readiness, evidence=()),
     )
 
 
@@ -165,13 +170,17 @@ def site_example_params(volume_code: int = VOLUME_65) -> HeaterParams:
     compressor and power fits), so read it as an example, not as that
     installation's current state. The 50 and 80 gal models scale
     its tank volume by nominal size (the tank's, and the heat book's
-    count of it), and nothing else."""
+    count of it), and nothing else. Its readiness evidence is the
+    site's 19-draw frontier (``delivery.EXAMPLE_EVIDENCE``), measured
+    on the 65 gal tank, which the model served for every heater."""
     nominal = dict(NOMINAL_GAL)
     if volume_code not in nominal:
         raise ValueError(f"unknown volume_code {volume_code!r}")
+    site = _nwp500_65()
     base = replace(
-        with_valve(_nwp500_65(), SITE_VALVE),
+        with_valve(site, SITE_VALVE),
         circulation=SITE_CIRCULATION,
+        readiness=with_example_evidence(site.readiness),
     )
     if volume_code == VOLUME_65:
         return base
