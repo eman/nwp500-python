@@ -331,7 +331,8 @@ def test_the_simulator_does_not_load_the_clients():
     exports on first use, and the live sources name the clients only
     for type checking."""
     loaded = _loaded_after(
-        "import nwp500.sim, nwp500.sim_adapters, nwp500.sim_live"
+        "import nwp500.sim, nwp500.sim_adapters, nwp500.sim_live, "
+        "nwp500.status_history"
     )
     clients = {"aiohttp", "awscrt", "awsiot"}
     assert not [m for m in loaded if m.split(".")[0] in clients]

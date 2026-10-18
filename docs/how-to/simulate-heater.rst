@@ -650,7 +650,7 @@ Each of these replaces a default with a fact:
 
 **The air ahead of time.** The device reports the air at its intake
 now, and only while the compressor runs is that the air the heater
-stands in: idle, it reads its own cabinet, about 5 degF warm. Project
+stands in: idle, it reads its own cabinet, about 6 degF warm. Project
 the air from an outdoor forecast instead, anchored to the last reading
 taken while the compressor ran:
 
@@ -812,7 +812,8 @@ line you call hot, your own draws: ``ReadinessParams``
 Fit your own from what your heater reported: record each status and
 when it arrived (a few weeks, through quiet nights and full
 recoveries), give the air where it stands over the same time, and
-calibrate:
+calibrate. :doc:`calibrate-simulator` does it from the command line
+and says which air to give; from Python:
 
 .. code-block:: python
 
@@ -820,9 +821,10 @@ calibrate:
 
    history = sa.history(
        recorded,                 # [(instant, DeviceStatus), ...]
-       air=air_over_the_record,  # a sensor's, or sa.location_air(...)
+       air=air_over_the_record,  # a sensor's, beside the heater
    )
-   fitted = calibration.calibrate(history, sa.params(feature))
+   fitted = calibration.calibrate(history, sa.params(feature),
+                                  recovery_air="air_f")
    print(fitted.standby.ua_ref, fitted.standby.n_quiet)
    print(fitted.compressor)      # None: too few recoveries
    params = fitted.params
@@ -835,7 +837,8 @@ and each says what it used:
   in use (45 minutes after either). It needs ``air``.
 - **The compressor**: its constant and the evaporator's approach, from
   heat-pump recoveries that reached their target, against the loss
-  just fitted. The air over a recovery is the heater's own reading,
+  just fitted. ``recovery_air="air_f"`` takes the air over a recovery
+  from the sensor's too; the default is the heater's own reading,
   taken while its compressor runs. With 10 recoveries or more, the
   latest fifth is held out, and ``heldout_mae_minutes`` says how well
   the fit predicts recoveries it did not see. A fit that lands on a
@@ -1063,7 +1066,7 @@ heater's own, read with this library. With ``air``, the air is the
 recorded readings as 10-minute means from 6 hours before ``at`` (a
 past instant's weather forecast is not recorded), and ``humidity=``
 goes with it. Without it, the heater's own reading at ``at`` holds,
-and that reads the cabinet, about 5 degF warm, while the compressor is
+and that reads the cabinet, about 6 degF warm, while the compressor is
 idle. ``environment=`` replaces either.
 
 

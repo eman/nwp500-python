@@ -312,7 +312,7 @@ def environment(
     as ``location_air``'s projection. Without it, ``status``'s own
     reading of the air at its intake now (``ambient_temperature_raw``)
     holds for the whole span; while the compressor is idle that reading
-    is the cabinet's, about 5 °F warm (``location_air_reading``).
+    is the cabinet's, about 6 °F warm (``location_air_reading``).
     ``humidity`` is %RH; ``inlet`` the mains water, in the preferred
     unit. Each left out is the simulator's default, which its result
     names in ``defaults_used``."""
@@ -519,9 +519,11 @@ def evaporator_f(status: DeviceStatus) -> float | None:
 def location_air_reading(status: DeviceStatus) -> float | None:
     """The air where the heater stands, from its own sensor, in the
     preferred unit: only while the compressor runs, when the evaporator
-    fan draws that air past it (within about 0.35 °F at one
-    installation). None while idle, when it reads the cabinet, about
-    5 °F warm."""
+    fan draws that air past it. At one installation, against a sensor
+    beside the heater, it read within about 0.35 °F from August to
+    October, but up to about 2 °F warm from May to July, and about
+    2.7 °F warm in a run's first 2 minutes. None while idle, when it
+    reads the cabinet, about 6 °F warm."""
     if not status.comp_use:
         return None
     return temperature(
@@ -862,7 +864,7 @@ def replay(
     in the preferred unit), as 10-minute means from ``CLIMATE_LOOKBACK``
     before ``at`` (a past instant's weather forecast is not recorded),
     with ``humidity`` (%RH); without it, to the heater's own air reading
-    at ``at``, which reads the cabinet, about 5 °F warm, while the
+    at ``at``, which reads the cabinet, about 6 °F warm, while the
     compressor is idle.
     """
     at, until = at.astimezone(UTC), until.astimezone(UTC)

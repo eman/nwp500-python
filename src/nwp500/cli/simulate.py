@@ -226,9 +226,9 @@ def build(
         None if inputs.scenario is None else inputs.scenario.get("params")
     )
     if inputs.params is not None:
-        params = _params(inputs.params, "--params")
+        params = read_params(inputs.params, "--params")
     elif doc_params is not None:
-        params = _params(doc_params, "the scenario's params")
+        params = read_params(doc_params, "the scenario's params")
     elif live is not None and live.params is not None:
         params = live.params
     else:
@@ -240,7 +240,8 @@ def build(
     return Built(scenario, params, tuple(notes))
 
 
-def _params(doc: Any, what: str) -> sim.HeaterParams:
+def read_params(doc: Any, what: str) -> sim.HeaterParams:
+    """``doc`` as parameters; ``what`` names it in the error."""
     try:
         return params_from_document(doc)
     except ValueError as e:
