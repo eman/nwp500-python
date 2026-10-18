@@ -223,6 +223,41 @@ class TestMissingReadings:
         assert rec.power_w == ((at(0), 5.0),)
 
 
+class TestTheRecordsCadence:
+    """The replacement review of #162: the poll and power cadences and
+    the resting threshold are one installation's by default, and a
+    record passes its own."""
+
+    def test_a_slower_meters_power_corroborates_its_run(self):
+        rows = {
+            "upper_element": ((at(0), 0.0), (at(10), 1.0), (at(20), 0.0)),
+            "power_w": ((at(0), 3.0), (at(22), 5000.0), (at(23), 3.0)),
+        }
+        assert Record(**rows).starts(at(5), at(60)).starts == []
+        slow = Record(**rows, element_power_slack=timedelta(minutes=3))
+        assert [s.at for s in slow.starts(at(5), at(60)).starts] == [at(10)]
+        o = observe(slow, at(0), at(60), now=at(600))
+        assert [(s.start, s.source) for s in o.sources] == [(at(10), "element")]
+
+    def test_a_slower_polls_drop_is_the_heaters(self):
+        rows = {
+            "mode": ((at(0), 3.0), (at(10.5), 1.0)),
+            "tou": ((at(0), 0.0), (at(10), 1.0)),
+        }
+        (write,) = Record(**rows).writes(at(1), at(60))
+        assert not write.dropped
+        (slow,) = Record(**rows, drop_within=timedelta(minutes=1)).writes(
+            at(1), at(60)
+        )
+        assert slow.dropped
+
+    def test_another_resting_threshold(self):
+        rows = {"hp_upper_on_f": ((at(0), 100.4), (at(10), 102.0))}
+        assert Record(**rows).upper_on_edges(at(1), at(60)) == ([], [])
+        other = Record(**rows, resting_upper_on_f=100.4)
+        assert other.upper_on_edges(at(1), at(60)) == ([at(10)], [])
+
+
 class TestTheProfile:
     """The replacement review of #162: ``observe`` names modes by the
     profile it is given, from when its revision took effect."""

@@ -19,6 +19,7 @@ from nwp500.sim.params import (
     FITTED,
     HEATER,
     INSTALLATION,
+    INSTALLATION_TERMS,
     MEASURED,
     note_of,
     params_from_document,
@@ -127,8 +128,19 @@ def test_the_default_is_the_site_without_its_mixing_valve():
     )
     assert d.circulation is None and d.readiness.evidence == ()
     assert with_valve(d, SITE_VALVE) == replace(
-        site, circulation=None, readiness=d.readiness
+        site,
+        circulation=None,
+        readiness=d.readiness,
+        unfitted=INSTALLATION_TERMS,
     )
+
+
+def test_the_defaults_installation_terms_are_named_unfitted():
+    """The replacement review of #162: one installation's book,
+    readiness and draw terms stand in for another's, and every answer
+    they reach says so; the site's own example is its fit."""
+    assert default_params().unfitted == INSTALLATION_TERMS
+    assert site_example_params().unfitted == ()
 
 
 def test_one_valve_drives_the_draw_and_the_book():

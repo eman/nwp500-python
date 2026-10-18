@@ -612,3 +612,32 @@ class TestTheHeatersOwnTouMarker:
         assert (
             "tou_schedule_unknown" not in simulate(_scenario(), params).reasons
         )
+
+
+class TestOneInstallationsTerms:
+    """The replacement review of #162: under ``default_params`` the
+    book, readiness and draw terms are another installation's, and the
+    answers they reach say so; the site's own example is its fit."""
+
+    def test_readiness_says_its_terms_are_not_this_heaters(self, params):
+        from nwp500.sim import default_params
+
+        mine = time_to_ready(_scenario(), default_params(), bath_gal=20.0)
+        assert {"book_uncalibrated", "readiness_uncalibrated"} <= set(
+            mine.reasons
+        )
+        assert "draw_uncalibrated" not in mine.reasons
+        site = time_to_ready(_scenario(), params, bath_gal=20.0)
+        assert not {
+            "book_uncalibrated",
+            "readiness_uncalibrated",
+            "draw_uncalibrated",
+        } & set(site.reasons)
+
+    def test_a_draw_says_its_response_is_not_this_heaters(self):
+        from nwp500.sim import default_params
+
+        s = _scenario(loads=Loads(draws=(Draw(at=at(1), gallons=5.0),)))
+        assert "draw_uncalibrated" in simulate(s, default_params()).reasons
+        quiet = simulate(_scenario(), default_params())
+        assert "draw_uncalibrated" not in quiet.reasons

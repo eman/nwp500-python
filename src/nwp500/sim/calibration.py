@@ -60,8 +60,10 @@ from nwp500.sim.decay import draw_step
 from nwp500.sim.heating_trajectory import path_cop
 from nwp500.sim.inputs import ELECTRIC, ENERGY_SAVER, HIGH_DEMAND
 from nwp500.sim.params import (
+    INSTALLATION_TERMS,
     UA_MIN_DELTA_T_F,
     UA_REF_DELTA_T_F,
+    UNFITTED_TERMS,
     BookParams,
     CirculationParams,
     CompressorParams,
@@ -1424,7 +1426,9 @@ def calibrate(
     one: a compressor not fitted (too few recoveries, or pinned on a
     bound) leaves ``compressor`` and ``power``, power or COP not fitted
     ``power``, no quiet window ``standby`` and no gap constant
-    ``gap_tau``."""
+    ``gap_tau``. ``base``'s record of the installation's terms
+    (``INSTALLATION_TERMS``) is kept: they are fitted apart, and a
+    caller applying its own fits drops each from ``unfitted``."""
     standby = fit_standby(history, base.tank.thermal_mass_btu_f)
     params = with_standby(base, standby)
     rows = snapshots(
@@ -1449,7 +1453,9 @@ def calibrate(
             lead = metered_lead(params)
         power = fit_power(rows, params, withdrawn=withdrawn, lead=lead)
         params = with_power(params, power)
-    unfitted = []
+    # The installation's terms are fitted apart (``fit_book_terms``,
+    # ``fit_evidence``, ``fit_front``): ``base``'s record of them holds.
+    unfitted = [t for t in base.unfitted if t in INSTALLATION_TERMS]
     if compressor is None or compressor.hit_bounds:
         unfitted += ["compressor", "power"]
     elif power is None or power.power_scale is None or power.cop_scale is None:
@@ -1458,7 +1464,9 @@ def calibrate(
         unfitted.append("standby")
     if standby.tau_gap_hours is None:
         unfitted.append("gap_tau")
-    params = replace(params, unfitted=tuple(unfitted))
+    params = replace(
+        params, unfitted=tuple(t for t in UNFITTED_TERMS if t in unfitted)
+    )
     return Calibration(params, standby, compressor, power, found)
 
 

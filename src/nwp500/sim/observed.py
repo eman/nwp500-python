@@ -39,7 +39,6 @@ from typing import Literal
 from nwp500.sim.attribution import RESTART_LOCKOUT, WRITE_EVIDENCE, attribute
 from nwp500.sim.profile import HeaterProfile, heater_profile
 from nwp500.sim.record import (
-    ELEMENT_POWER_SLACK,
     Record,
     Recorded,
     Rows,
@@ -437,7 +436,7 @@ def observe(
 
     earliest = min([frm, *element_ons])
     power = _read(
-        record.power_w, earliest, cut + ELEMENT_POWER_SLACK, POWER_HOLD
+        record.power_w, earliest, cut + record.element_power_slack, POWER_HOLD
     )
     power_pieces = power.pieces(frm, cut, POWER_HOLD)
     for lo, hi in _complement([(a, b) for a, b, _ in power_pieces], frm, cut):
@@ -464,7 +463,9 @@ def observe(
         )
         s = e
     meter_gaps = _known_gaps(power, earliest, cut, POWER_HOLD)
-    powered = corroborator(tuple(power.points), element_ons)
+    powered = corroborator(
+        tuple(power.points), element_ons, record.element_power_slack
+    )
     element_runs: list[Span] = []
     for on, off in runs:
         end = cut if off is None else off
@@ -474,8 +475,8 @@ def observe(
             if hi > lo:
                 sources.append(SourceInterval(lo, hi, "element"))
         elif (
-            _overlaps(meter_gaps, on, end + ELEMENT_POWER_SLACK)
-            or end + ELEMENT_POWER_SLACK > now
+            _overlaps(meter_gaps, on, end + record.element_power_slack)
+            or end + record.element_power_slack > now
         ):
             gap("elements", [(on, end)], UNCORROBORATED)
     sources.sort(key=lambda x: (x.start, x.source))

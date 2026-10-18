@@ -540,6 +540,10 @@ def simulate(
         if any_out:
             reasons.append("draw_out_of_domain")
     reasons += _unfitted(params, "standby")
+    if s.loads.draws:
+        reasons += _unfitted(params, "draw")
+    if s.loads.windows:
+        reasons += _unfitted(params, "book", "readiness")
     if physics.failed_recoveries:
         # The integrator raised on a recovery the walk then went without.
         reasons.append("physics_failed")
@@ -618,6 +622,9 @@ UNFITTED_REASONS: Mapping[str, str] = MappingProxyType(
         "compressor": "physics_uncalibrated",
         "power": "energy_uncalibrated",
         "standby": "standby_uncalibrated",
+        "book": "book_uncalibrated",
+        "readiness": "readiness_uncalibrated",
+        "draw": "draw_uncalibrated",
     }
 )
 
@@ -836,6 +843,8 @@ def standby(
             # and no window was laid out to judge either.
             reasons.append("tou_schedule_unknown")
     reasons += _unfitted(params, "standby")
+    if any(start <= d.at < until for d in loads.draws):
+        reasons += _unfitted(params, "draw")
     if _circulation_unknown(params, loads, until):
         reasons.append(CIRCULATION_UNKNOWN)
     flowing = physics.flowing_draws
@@ -1375,6 +1384,8 @@ def time_to_ready(
             [
                 *answer["reasons"],
                 *_unfitted(params, "compressor", "power", "standby"),
+                *_unfitted(params, "book", "readiness"),
+                *(_unfitted(params, "draw") if s.loads.draws else []),
                 *(
                     [CIRCULATION_UNKNOWN]
                     if _circulation_unknown(
@@ -1698,6 +1709,7 @@ def forecast(
                 [
                     *served.reasons,
                     *_unfitted(params, "compressor", "power", "standby"),
+                    *(_unfitted(params, "draw") if loads.draws else []),
                     *(
                         [CIRCULATION_UNKNOWN]
                         if _circulation_unknown(params, loads, target)

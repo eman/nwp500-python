@@ -23,6 +23,7 @@ from dataclasses import replace
 
 from nwp500.sim.delivery import with_example_evidence
 from nwp500.sim.params import (
+    INSTALLATION_TERMS,
     CirculationParams,
     CompressorParams,
     ControllerParams,
@@ -152,13 +153,17 @@ def default_params(volume_code: int = VOLUME_65) -> HeaterParams:
     with no mixing valve (``NO_VALVE``), no circulation and no readiness
     evidence (the site's was metered through its valve, and over-promises
     without one: a tank that is not full reads 0 until your own is
-    measured). Every other installation term is still that site's, and
-    labelled so (``params.scope_of``)."""
+    measured). Every other installation term is still that site's,
+    labelled so (``params.scope_of``) and named in ``unfitted``
+    (``INSTALLATION_TERMS``), so every answer they reach says
+    ``book_uncalibrated``, ``readiness_uncalibrated`` or
+    ``draw_uncalibrated`` until your own meter fits them."""
     site = site_example_params(volume_code)
     return replace(
         with_valve(site, NO_VALVE),
         circulation=None,
         readiness=replace(site.readiness, evidence=()),
+        unfitted=INSTALLATION_TERMS,
     )
 
 

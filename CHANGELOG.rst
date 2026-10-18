@@ -236,6 +236,18 @@ Added
     under 0.6 confidence says ``recovery_low_confidence``. ``standby``
     reports the gallons drawn and the heat they took, circulation's
     minutes and heat, and the mean air over the coast.
+  - ``default_params()`` names the installation's book, readiness and
+    draw terms in ``HeaterParams.unfitted`` (``INSTALLATION_TERMS``):
+    they are one installation's fits, so answers they reach say
+    ``book_uncalibrated``, ``readiness_uncalibrated`` or
+    ``draw_uncalibrated``. A ``Record`` drops missing readings on entry
+    and takes its installation's cadences and the heater's resting
+    threshold (``drop_within``, ``element_power_slack``,
+    ``resting_upper_on_f``). ``observe(profile=, revision_since=)``
+    names modes by a heater profile. ``schedules.rule_windows`` lays out
+    TOU rules that have no prices, such as a learned schedule. The
+    engine, the tank physics and the physics models are documented as
+    public (:doc:`/reference/python_api/sim`).
 
 Changed
 -------

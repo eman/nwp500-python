@@ -21,17 +21,20 @@ from nwp500.sim.inputs import ELECTRIC, ENERGY_SAVER, HEAT_PUMP, HIGH_DEMAND
 #: A setpoint change smaller than this is no write, °F.
 SAME_F = 0.05
 #: A drop to Heat Pump within this of TOU switching on or a window
-#: opening is the heater's own, not a write.
+#: opening is the heater's own, not a write: one installation's poll
+#: (``Record.drop_within``).
 DROP_WITHIN = timedelta(seconds=5)
-#: The upper start threshold at rest; raised above this (the setting's
-#: half-degree step on top), a TOU window is in force.
+#: The upper start threshold at rest, as one NWP500-65 read it at every
+#: setpoint (``Record.resting_upper_on_f``); raised above it by more
+#: than the setting's half-degree step, a TOU window is in force.
 RESTING_UPPER_ON_F = 104.9
-RAISED_ABOVE_F = RESTING_UPPER_ON_F + 0.9
+#: How far above rest the threshold must read to be raised.
+RAISED_BY_F = 0.9
 #: A metered sample at or above this is an element running: one element
 #: is about 5 kW, the compressor alone well under 1.
 ELEMENT_W = 3000.0
-#: The power is sampled about every 30 s, so a run's can land just
-#: after its flag falls.
+#: The power is sampled about every 30 s at one installation, so a
+#: run's can land just after its flag falls (``Record.element_power_slack``).
 ELEMENT_POWER_SLACK = timedelta(seconds=60)
 #: How far back a setting's value in force is looked for.
 SETTING_LOOKBACK = timedelta(days=30)
@@ -95,30 +98,27 @@ def between(rows: Rows, start: datetime, end: datetime) -> Rows:
 
 
 def corroborator(
-    watts: Rows, element_ons: Sequence[datetime]
+    watts: Rows,
+    element_ons: Sequence[datetime],
+    slack: timedelta = ELEMENT_POWER_SLACK,
 ) -> Callable[[datetime, datetime], bool]:
     """Whether a metered element's power is in the run ``[on, off]``: a
-    sample of ``ELEMENT_W`` or more from its on-edge to
-    ``ELEMENT_POWER_SLACK`` after its off-edge, but not from the next
-    element run's on-edge (``element_ons``, either element's), whose
-    power it would be. The value in force at the on-edge counts too,
-    if its row is at most ``ELEMENT_POWER_SLACK`` old: power records
-    on change, so a handoff between the elements at one wattage
-    leaves no row in the second run."""
+    sample of ``ELEMENT_W`` or more from its on-edge to ``slack`` after
+    its off-edge, but not from the next element run's on-edge
+    (``element_ons``, either element's), whose power it would be. The
+    value in force at the on-edge counts too, if its row is at most
+    ``slack`` old: power records on change, so a handoff between the
+    elements at one wattage leaves no row in the second run."""
 
     def powered(on: datetime, off: datetime) -> bool:
-        hi = off + ELEMENT_POWER_SLACK
+        hi = off + slack
         nxt = next((a for a in element_ons if a > on), None)
         held: tuple[datetime, float] | None = None
         for t, v in watts:
             if t >= on:
                 break
             held = (t, v)
-        if (
-            held is not None
-            and on - held[0] <= ELEMENT_POWER_SLACK
-            and held[1] >= ELEMENT_W
-        ):
+        if held is not None and on - held[0] <= slack and held[1] >= ELEMENT_W:
             return True
         return any(
             v >= ELEMENT_W
@@ -154,6 +154,13 @@ class Record:
     #: against) is looked for: settings record only on change and
     #: legitimately hold for months.
     setting_lookback: timedelta = SETTING_LOOKBACK
+    #: The installation's cadences and the heater's resting threshold,
+    #: one installation's by default (``DROP_WITHIN``,
+    #: ``ELEMENT_POWER_SLACK``, ``RESTING_UPPER_ON_F``): a record polled
+    #: or metered at another rate passes its own.
+    drop_within: timedelta = DROP_WITHIN
+    element_power_slack: timedelta = ELEMENT_POWER_SLACK
+    resting_upper_on_f: float = RESTING_UPPER_ON_F
 
     def __post_init__(self) -> None:
         for f in fields(self):
@@ -191,11 +198,12 @@ class Record:
             start - timedelta(microseconds=1),
             self.setting_lookback,
         )
-        raised = before is not None and before[1] > RAISED_ABOVE_F
+        line = self.resting_upper_on_f + RAISED_BY_F
+        raised = before is not None and before[1] > line
         openings: list[datetime] = []
         closings: list[datetime] = []
         for at, value in between(self.hp_upper_on_f, start, end):
-            up = value > RAISED_ABOVE_F
+            up = value > line
             if up and not raised:
                 openings.append(at)
             elif raised and not up:
@@ -217,7 +225,7 @@ class Record:
         """Every change of the setpoint and of the mode in ``(start,
         end)``, in time order, a mode before a setpoint at one instant,
         each judged against the value in force before it. A change to
-        Heat Pump out of an element mode within ``DROP_WITHIN`` of TOU
+        Heat Pump out of an element mode within ``drop_within`` of TOU
         switching on or a window opening is the heater's, ``dropped``."""
         out: list[tuple[datetime, int, RecordedWrite]] = []
         lookback = self.setting_lookback if lookback is None else lookback
@@ -229,7 +237,8 @@ class Record:
             if value is not None and start < at < end:
                 out.append((at, 1, RecordedWrite(at, setpoint_f=v)))
             value = v
-        edges = self._window_starts(start - DROP_WITHIN, end + DROP_WITHIN)
+        near = self.drop_within
+        edges = self._window_starts(start - near, end + near)
         mode_prior = last(self.mode, start, lookback)
         mode = None if mode_prior is None else int(mode_prior[1])
         for at, v in between(self.mode, start, end):
@@ -240,7 +249,7 @@ class Record:
                 dropped = (
                     m == HEAT_PUMP
                     and mode in _ELEMENT_MODES
-                    and any(abs(e - at) <= DROP_WITHIN for e in edges)
+                    and any(abs(e - at) <= near for e in edges)
                 )
                 out.append((at, 0, RecordedWrite(at, mode=m, dropped=dropped)))
             mode = m
@@ -275,9 +284,11 @@ class Record:
         element_ons = sorted(
             at for name in ("upper", "lower") for at, on in found[name][1] if on
         )
+        slack = self.element_power_slack
         powered = corroborator(
-            between(self.power_w, start - day, end + ELEMENT_POWER_SLACK),
+            between(self.power_w, start - day, end + slack),
             element_ons,
+            slack,
         )
         starts: list[Recorded] = []
         stops: list[datetime] = []

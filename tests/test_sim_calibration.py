@@ -31,6 +31,7 @@ from nwp500.sim import (
     Settings,
     default_params,
     simulate,
+    site_example_params,
 )
 from nwp500.sim import calibration as cal
 from nwp500.sim.params import (
@@ -398,9 +399,22 @@ class TestCalibrate:
         got = cal.calibrate(recovery_history([(2, 100, 100.0)]), base)
         assert got.compressor is None
         assert got.standby.ua_ref is None
-        # Base's values, each named as not fitted on this heater.
-        assert replace(got.params, unfitted=()) == base
+        # Base's values, each named as not fitted on this heater, and
+        # base's own record of the installation's terms kept.
+        assert replace(got.params, unfitted=base.unfitted) == base
         assert got.params.unfitted == (
+            "compressor",
+            "power",
+            "standby",
+            "gap_tau",
+            "book",
+            "readiness",
+            "draw",
+        )
+        site = cal.calibrate(
+            recovery_history([(2, 100, 100.0)]), site_example_params()
+        )
+        assert site.params.unfitted == (
             "compressor",
             "power",
             "standby",
@@ -432,6 +446,7 @@ class TestCalibrate:
             "energy_uncalibrated",
             "standby_uncalibrated",
             "tau_gap_prior",
+            "draw_uncalibrated",
         ):
             assert reason in r.reasons
         # The record survives the parameters' document.

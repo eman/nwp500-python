@@ -949,9 +949,10 @@ window opens, the lower zone as one closes, or the heater dropping an
 element mode. ``counted`` merges starts less than 30 minutes apart.
 ``seen.sources`` are when the compressor and each element ran; an
 element counts only where the heater's power shows it running, by a
-reading in the run or one at most a minute before it starts. Power is
-recorded on change, so a handoff between the elements at one wattage
-leaves no new reading.
+reading in the run or one at most a minute before it starts
+(``Record.element_power_slack``; a meter reporting less often passes
+its own). Power is recorded on change, so a handoff between the
+elements at one wattage leaves no new reading.
 ``seen.slots`` are the energy per 10 minutes from the heater's own
 power; ``seen.modes`` are the mode in force and whether the heat source
 the heater reported showed it in effect, named by a heater profile

@@ -1050,8 +1050,23 @@ class CirculationParams:
 #: them: ``compressor`` (its constant and approach: a recovery's
 #: duration), ``power`` (the power and COP scales: its energy and COP),
 #: ``standby`` (the jacket's loss law) and ``gap_tau`` (the gap's time
-#: constant).
-UNFITTED_TERMS: tuple[str, ...] = ("compressor", "power", "standby", "gap_tau")
+#: constant); and the installation's terms fitted from a meter's draws,
+#: ``book`` (``BookParams``: the heat book's terms and error bands),
+#: ``readiness`` (``ReadinessParams``: the delivered lag, hidden heat,
+#: cap and volumes) and ``draw`` (``DrawParams``: the draw response and
+#: its domain).
+UNFITTED_TERMS: tuple[str, ...] = (
+    "compressor",
+    "power",
+    "standby",
+    "gap_tau",
+    "book",
+    "readiness",
+    "draw",
+)
+#: The installation's terms another installation's values stand in for
+#: until its own meter fits them (``defaults.default_params``).
+INSTALLATION_TERMS: tuple[str, ...] = ("book", "readiness", "draw")
 
 
 @dataclass(frozen=True, kw_only=True)

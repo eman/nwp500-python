@@ -764,6 +764,14 @@ The ones about inputs and parameters:
      - A term calibration could not fit on this heater (a recovery's
        duration; its energy and COP; the jacket's loss) is the base's
        (``HeaterParams.unfitted``).
+   * - ``book_uncalibrated``, ``readiness_uncalibrated``,
+       ``draw_uncalibrated``
+     - The installation's heat book terms, readiness terms or draw
+       response are another installation's (``default_params()`` marks
+       all three, ``INSTALLATION_TERMS``), not fitted from this one's
+       meter. The readiness answer says the first two; any answer with
+       draws, the third. Fit them and drop each from
+       ``HeaterParams.unfitted``.
    * - ``tau_gap_prior``
      - Draws opened a gap that closes on a prior time constant, not one
        fitted on this heater.
