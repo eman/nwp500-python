@@ -2263,6 +2263,8 @@ def energy_by_source(
     element Wh)``. The compressor's is None where an unpriced
     interval touches the slot; the element's is always priced (its
     fitted power, ``ElementParams.element_w``)."""
+    if slot <= timedelta(0):
+        raise ValueError(f"slot must be positive, not {slot}")
     if len(sim.points) < 2:
         return []
     step = slot.total_seconds()

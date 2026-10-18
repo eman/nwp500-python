@@ -303,3 +303,32 @@ class TestLearnedRules:
             (_local(2026, 10, 9, 22), _local(2026, 10, 10, 6)),
             (_local(2026, 10, 12, 22), _local(2026, 10, 13, 6)),
         ]
+
+
+class TestTheSkippedHour:
+    """Copilot's review of #162: a window or run the clock skips whole
+    at spring forward never happens, rather than coming out reversed."""
+
+    SPRING = (_local(2026, 3, 8), _local(2026, 3, 8, 12))
+
+    def test_a_window_inside_the_skipped_hour_is_none(self):
+        skipped = TouRule(ALL_MONTHS, EVERY_DAY, time(2, 30), time(3, 0))
+        assert rule_windows([skipped], LA, *self.SPRING) == ()
+        # The next night it is half an hour long again.
+        ((opens, closes),) = rule_windows(
+            [skipped], LA, _local(2026, 3, 9), _local(2026, 3, 9, 12)
+        )
+        assert closes - opens == timedelta(minutes=30)
+
+    def test_a_window_across_it_keeps_its_elapsed_time(self):
+        across = TouRule(ALL_MONTHS, EVERY_DAY, time(1, 30), time(3, 30))
+        ((opens, closes),) = rule_windows([across], LA, *self.SPRING)
+        assert closes - opens == timedelta(hours=1)
+
+    def test_no_run_is_reversed(self):
+        from nwp500.sim.schedules import weekly_runs
+
+        runs = weekly_runs(
+            [(EVERY_DAY, time(2, 30), time(3, 0))], LA, *self.SPRING
+        )
+        assert runs == []

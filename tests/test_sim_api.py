@@ -428,6 +428,18 @@ class TestWhatTheResultSays:
         (w,) = simulate(s, params).simulation.writes
         assert w.setpoint_f == 146.3
 
+    @pytest.mark.parametrize("slot", [timedelta(0), timedelta(minutes=-10)])
+    def test_a_slot_must_be_positive(self, params: HeaterParams, slot):
+        """Copilot's review of #162: a negative slot walked backwards
+        forever, and a zero one divided by zero."""
+        r = simulate(
+            _scenario(state=HeaterState(upper_f=110.0, lower_f=100.0)), params
+        )
+        with pytest.raises(ValueError, match="positive"):
+            r.energy_by_slot(slot)
+        with pytest.raises(ValueError, match="positive"):
+            r.energy_by_source(slot)
+
     def test_energy_adds_up(self, params: HeaterParams):
         r = simulate(
             _scenario(state=HeaterState(upper_f=110.0, lower_f=100.0)), params

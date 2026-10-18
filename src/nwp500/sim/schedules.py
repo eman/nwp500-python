@@ -142,7 +142,10 @@ def rule_windows(
     UTC instants, with the local times in ``tz``: each rule laid out on
     the dates its masks select, from a day before ``start`` to a day
     after ``end`` so a window across either edge is whole, and then
-    joined where one ends as the next begins. The rules need not come
+    joined where one ends as the next begins. A window the clock skips
+    whole at a daylight-saving change never happens; one it skips part
+    of opens or closes at the local time's standard-time reading. The
+    rules need not come
     from priced periods: a schedule learned from a heater's history is
     laid out the same way."""
     dated: list[Window] = []
@@ -155,7 +158,11 @@ def rule_windows(
                 day + timedelta(days=1) if closes_at <= opens_at else day
             )
             closes = datetime.combine(close_day, closes_at, tz)
-            dated.append((opens.astimezone(UTC), closes.astimezone(UTC)))
+            window = (opens.astimezone(UTC), closes.astimezone(UTC))
+            # A window the clock skips whole (02:30 to 03:00 the night
+            # it springs forward) never happens.
+            if window[1] > window[0]:
+                dated.append(window)
         day += timedelta(days=1)
     joined: list[Window] = []
     for opens, closes in sorted(dated):
@@ -229,7 +236,8 @@ def weekly_runs(
             close_day = day + timedelta(days=1) if ends <= starts else day
             closes = datetime.combine(close_day, ends, tz)
             run = (opens.astimezone(UTC), closes.astimezone(UTC))
-            if run[1] > start and run[0] < end:
+            # As a TOU window: a run the clock skips whole never happens.
+            if run[1] > run[0] and run[1] > start and run[0] < end:
                 out.append(run)
         day += timedelta(days=1)
     return sorted(out)
