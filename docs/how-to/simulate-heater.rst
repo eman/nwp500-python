@@ -567,13 +567,19 @@ draws it expects instead:
 
    from nwp500.sim import draw_forecast
 
-   if draw_forecast.check_issue(slots) is None:
+   if draw_forecast.check_issue(slots, scenario.start, scenario.until,
+                                issued_at=issued_at, now=now) is None:
        profile = draw_forecast.draw_profile(slots, scenario.start,
                                             scenario.until)
        loads, withheld = draw_forecast.forecast_loads(
            profile, scenario.start, worst_case=True)
        result = sim.simulate(scenario.model_copy(update={"loads": loads}),
                              params, book=book, withheld_windows=withheld)
+
+An issue answers only a window its slots cover whole, and only for
+36 hours after it was issued (``no_covering_issue``). To replay an
+issue on another week, move it with ``draw_forecast.shifted`` and pass
+``shift=``.
 
 Each expected draw is a slot's rate times its per-draw mean, a
 fraction of a shower in most slots. It keeps that per-draw volume, so

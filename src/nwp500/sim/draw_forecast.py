@@ -24,7 +24,7 @@ never an empty one standing in for a failure.
 import math
 from bisect import bisect_left, bisect_right
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta
 from itertools import accumulate, pairwise
 from types import MappingProxyType
@@ -65,6 +65,10 @@ REQUIRED_FIELDS: Mapping[str, tuple[str, ...]] = MappingProxyType(
     }
 )
 NO_COVERING_ISSUE = "no_covering_issue"
+SHIFTED_ISSUE_UNCOVERED = "shifted_issue_uncovered"
+#: An issue older than this answers nothing: a newer one should have
+#: been published.
+MAX_ISSUE_AGE = timedelta(hours=36)
 FAMILY_NULL = "family_null"
 INCOMPLETE_ISSUE = "incomplete_issue"
 
@@ -134,13 +138,57 @@ class DrawProfile:
     windows: list[ForecastWindow] = field(default_factory=list)
 
 
-def check_issue(slots: Sequence[ForecastSlot]) -> str | None:
+def covers(
+    coverage_start: datetime,
+    coverage_end: datetime,
+    window_start: datetime,
+    window_end: datetime,
+) -> bool:
+    """Whether ``[coverage_start, coverage_end)`` contains a window (a
+    window of no length: its instant)."""
+    if coverage_start > window_start:
+        return False
+    if window_end > window_start:
+        return coverage_end >= window_end
+    return coverage_end > window_start
+
+
+def shifted(slots: Sequence[ForecastSlot], by: timedelta) -> list[ForecastSlot]:
+    """``slots`` moved ``by`` in time: an issue replayed on another week,
+    whose coverage ``check_issue`` then judges as moved
+    (``SHIFTED_ISSUE_UNCOVERED``)."""
+    return [replace(s, valid_at=s.valid_at + by) for s in slots]
+
+
+def check_issue(
+    slots: Sequence[ForecastSlot],
+    start: datetime | None = None,
+    end: datetime | None = None,
+    *,
+    issued_at: datetime | None = None,
+    now: datetime | None = None,
+    shift: timedelta | None = None,
+) -> str | None:
     """Why an issue cannot answer, or None: no slots
     (``NO_COVERING_ISSUE``); a family missing, non-finite or negative
     in any slot (``FAMILY_NULL``); or not seven consecutive days of
-    slots (``INCOMPLETE_ISSUE``)."""
+    slots (``INCOMPLETE_ISSUE``). With a window ``[start, end]``, also
+    one the issue's slots do not cover whole (``NO_COVERING_ISSUE``,
+    ``SHIFTED_ISSUE_UNCOVERED`` for an issue moved by ``shift``); with
+    ``issued_at`` and ``now``, one issued more than ``MAX_ISSUE_AGE``
+    before ``now`` or after it (``NO_COVERING_ISSUE``)."""
     if not slots:
         return NO_COVERING_ISSUE
+    if (
+        issued_at is not None
+        and now is not None
+        and not (timedelta(0) <= now - issued_at <= MAX_ISSUE_AGE)
+    ):
+        return NO_COVERING_ISSUE
+    if start is not None:
+        stamps = [s.valid_at for s in slots]
+        if not covers(min(stamps), max(stamps) + SLOT, start, end or start):
+            return SHIFTED_ISSUE_UNCOVERED if shift else NO_COVERING_ISSUE
     for columns in REQUIRED_FIELDS.values():
         for column in columns:
             for s in slots:
@@ -289,13 +337,26 @@ def heater_draw_windows(
 def draw_profile(
     slots: Sequence[ForecastSlot], start: datetime, end: datetime
 ) -> DrawProfile:
-    """The draws an issue (``check_issue``'s) expects in ``[start,
-    end)``: per slot and class, ``rate x mean volume`` delivered from
-    the slot's start over ``rate x mean duration``, the per-draw volume
-    kept; the expected onsets (the rates' sum, a slot with no volume
-    counting toward it); and the issue's draw windows overlapping the
-    span, laid out over the whole issue so a window open before
-    ``start`` keeps its geometry."""
+    """The draws an issue (``check_issue``'s, the window included)
+    expects in ``[start, end)``: per slot and class, ``rate x mean
+    volume`` delivered from the slot's start over ``rate x mean
+    duration``, the per-draw volume kept; the expected onsets (the
+    rates' sum, a slot with no volume counting toward it); and the
+    issue's draw windows overlapping the span, laid out over the whole
+    issue so a window open before ``start`` keeps its geometry. A
+    window the issue does not cover is a ``ValueError``: past its end
+    the draws are unknown, not none."""
+    if not covers(
+        min(s.valid_at for s in slots),
+        max(s.valid_at for s in slots) + SLOT,
+        start,
+        end,
+    ):
+        # Past the issue's end the draws are unknown, not none.
+        raise ValueError(
+            f"{NO_COVERING_ISSUE}: the issue does not cover "
+            f"{start.isoformat()} to {end.isoformat()}"
+        )
     draws: list[ExpectedDraw] = []
     onsets = 0.0
     for s in slots:

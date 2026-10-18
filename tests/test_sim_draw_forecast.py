@@ -64,6 +64,38 @@ class TestTheIssue:
         assert F.check_issue([]) == F.NO_COVERING_ISSUE
 
 
+class TestTheWindow:
+    def test_an_issue_answers_only_the_window_it_covers(self):
+        slots = issue()
+        week_end = T0 + timedelta(days=7)
+        assert F.check_issue(slots, T0, week_end) is None
+        late = F.check_issue(
+            slots, week_end - timedelta(hours=6), week_end + timedelta(hours=1)
+        )
+        assert late == F.NO_COVERING_ISSUE
+        with pytest.raises(ValueError, match="no_covering_issue"):
+            F.draw_profile(
+                slots,
+                week_end - timedelta(hours=24),
+                week_end + timedelta(hours=24),
+            )
+
+    def test_an_old_issue_answers_nothing(self):
+        slots = issue()
+        assert (
+            F.check_issue(slots, issued_at=T0, now=T0 + timedelta(hours=36))
+            is None
+        )
+        old = F.check_issue(slots, issued_at=T0, now=T0 + timedelta(hours=37))
+        assert old == F.NO_COVERING_ISSUE
+
+    def test_a_shifted_issue_is_judged_where_it_was_moved(self):
+        moved = F.shifted(issue(), timedelta(days=7))
+        assert F.check_issue(
+            moved, T0, T0 + timedelta(hours=1), shift=timedelta(days=7)
+        ) == (F.SHIFTED_ISSUE_UNCOVERED)
+
+
 class TestTheProfile:
     def test_expected_draws_are_fractional_with_their_per_draw_volume(self):
         p = F.draw_profile(issue({60: 0.4}), T0, T0 + timedelta(hours=12))
