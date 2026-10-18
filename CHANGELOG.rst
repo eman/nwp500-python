@@ -217,8 +217,10 @@ Added
     ``time_to_ready`` and ``element_mode`` read "in a window now" from
     it, and ``next_recovery`` lets it override the schedule for a
     recovery running now (``api.marked_windows``), as the model did;
-    ``simulate(tou_windows_in_force=)`` takes the windows to keep, and
-    TOU on with no periods says ``tou_schedule_unknown``.
+    an unknown marker counts as in force. ``simulate(tou_windows_in_force=)``
+    takes the windows to keep, and TOU on with no periods says
+    ``tou_schedule_unknown``. ``element_mode(setpoint_f=)`` projects to a
+    what-if setpoint while the heater's own decides the window test.
   - ``time_to_ready`` says ``inlet_temp_modelled`` when a booked answer
     converts at an inlet nobody measured (``inlet_measured=``, or a
     book whose steps measured it); ``next_recovery``'s coast loses the

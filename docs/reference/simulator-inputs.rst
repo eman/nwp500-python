@@ -218,8 +218,11 @@ Built by ``sim_adapters.settings(status)``.
        now" from it, ``next_recovery`` lets it override the schedule
        for a recovery running now (away from a scheduled edge), and
        ``forecast`` reads it to tell whether the energy count is
-       measured to the setpoint. Without it they fall back to the
-       schedule, named in ``defaults_used``.
+       measured to the setpoint. Without it, ``time_to_ready``,
+       ``next_recovery`` and ``element_mode`` count a window as in
+       force now, the conservative reading that the heater may not heat
+       (named in ``defaults_used``); ``forecast`` lets the thermistors
+       decide.
 
 
 History: ``History``

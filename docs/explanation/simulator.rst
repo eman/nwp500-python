@@ -269,8 +269,9 @@ Entry points
    "When can I run a bath?": ready now or not, the margin, the time to
    ready and its energy in each heating mode, and the showers the tank
    is ready for. The heat pump's time follows the recovery the heater
-   runs next (``next_recovery``): from its own trigger on the coast to
-   it, with the TOU cap judged where the recovery ends.
+   runs next (``next_recovery``): the tank coasts on the standby model
+   to the heater's own trigger, and the recovery runs from there to the
+   heater's stop threshold, with the TOU cap judged where it ends.
 
 ``element_mode(state, settings, params, mode=..., at=...)``
    One recovery in an element mode, from the element model.

@@ -427,15 +427,16 @@ element's running time and energy, and the tank when you switch back.
        params,
        mode=4,                      # High Demand
        at=scenario.start,
-       schedules=scenario.schedules,
-       tz=scenario.tz,
        switch_back_after_minutes=30,
    )
    print(e.reachable, e.unreachable_reason)
    print(e.plan.upper_setpoint_minutes, e.plan.element_kwh)
 
 ``reachable`` is False inside a TOU window, where a mode write may not
-take, and while heating is disabled. To see the whole day with the
+take, and while heating is disabled. The heater's own marker
+(``Settings.hp_upper_on_f``) decides, and an unknown marker counts as
+in force. ``setpoint_f=`` projects to another setpoint without moving
+that test. To see the whole day with the
 mode in force, simulate a mode write instead (`Evaluate a change before
 sending it`_).
 

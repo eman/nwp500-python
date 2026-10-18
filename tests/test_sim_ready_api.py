@@ -40,6 +40,10 @@ from nwp500.sim.physics.element import mode_plan
 
 T0 = datetime(2026, 10, 4, 19, 0, tzinfo=UTC)
 EVERY_DAY = 254
+#: ``hp_upper_on`` at rest (no TOU window) and raised (one in force).
+RESTING, RAISED = 104.0, 139.5
+#: A heater whose marker is not known: counted as in a TOU window.
+UNMARKED = Settings(setpoint_f=140.9, hp_lower_on_f=105.0)
 
 
 def at(h: float) -> datetime:
@@ -59,7 +63,9 @@ def _scenario(**kw: Any) -> Scenario:
         "horizon": timedelta(hours=12),
         "tz": "UTC",
         "state": HeaterState(upper_f=128.0, lower_f=112.0),
-        "settings": Settings(setpoint_f=140.9, hp_lower_on_f=105.0),
+        "settings": Settings(
+            setpoint_f=140.9, hp_lower_on_f=105.0, hp_upper_on_f=RESTING
+        ),
         "history": History(compressor_stopped_at=at(-2.0)),
         "environment": Environment(ambient_f=68.0, humidity=48.0),
     }
@@ -102,6 +108,34 @@ def _peak_now() -> Schedules:
 
 
 class TestNextRecovery:
+    def test_it_ends_at_the_heaters_stop_threshold(self, params):
+        running = HeaterState(
+            upper_f=128.0, lower_f=100.0, compressor_running=True
+        )
+        stop = Settings(
+            setpoint_f=140.9,
+            hp_lower_on_f=105.0,
+            hp_lower_off_f=136.4,
+            hp_upper_on_f=RESTING,
+        )
+        r = next_recovery(_scenario(state=running, settings=stop), params)
+        assert r.outcome == "ok"
+        assert r.points[-1][2] == pytest.approx(136.4, abs=0.2)
+
+    def test_electric_still_has_a_heat_pump_recovery(self, params):
+        electric = Settings(
+            setpoint_f=140.9, mode=2, hp_lower_on_f=105.0, hp_upper_on_f=RESTING
+        )
+        r = next_recovery(
+            _scenario(
+                state=HeaterState(upper_f=120.0, lower_f=106.0),
+                settings=electric,
+                horizon=timedelta(hours=24),
+            ),
+            params,
+        )
+        assert r.outcome == "ok" and r.start_minute > 0
+
     def test_a_running_compressor_recovers_from_now(self, params):
         s = _scenario(
             state=HeaterState(
@@ -198,6 +232,7 @@ class TestNextRecovery:
                 upper_f=128.0, lower_f=100.0, compressor_running=True
             ),
             schedules=_peak_now(),
+            settings=UNMARKED,
         )
         r = next_recovery(s, params)
         assert r.outcome == "ok" and r.tou_capped
@@ -212,11 +247,7 @@ class TestTimeToReady:
         r = time_to_ready(s, params)
         assert r.bath.ready
         assert {m.ready_in_minutes for m in r.bath.by_mode} == {0.0}
-        assert r.defaults_used == (
-            "bath_gal=28.7",
-            "shower_gal=12.0",
-            "tou_window=schedule (hp_upper_on_f unknown)",
-        )
+        assert r.defaults_used == ("bath_gal=28.7", "shower_gal=12.0")
         assert r.showers.ready_for_whole == 3
 
     def test_a_short_tank_has_a_time_in_each_mode(self, params):
@@ -231,10 +262,14 @@ class TestTimeToReady:
             < rows["heat_pump"].ready_in_minutes
         )
         assert r.recovery.outcome == "ok"
-        assert r.defaults_used == (
-            "shower_gal=12.0",
-            "tou_window=schedule (hp_upper_on_f unknown)",
-        )
+        assert r.defaults_used == ("shower_gal=12.0",)
+
+    def test_an_unknown_tou_marker_counts_as_in_force(self, params):
+        r = time_to_ready(_scenario(settings=UNMARKED), params, bath_gal=20.0)
+        assert "tou_window=in_force (hp_upper_on_f unknown)" in r.defaults_used
+        rows = {m.mode: m for m in r.bath.by_mode}
+        assert not rows["electric"].reachable_now
+        assert "tou_window_in_force" in r.reasons
 
     def test_with_a_book_the_booked_heat_answers(self, params):
         s = _scenario(state=HeaterState(upper_f=140.5, lower_f=139.6))
@@ -274,7 +309,9 @@ class TestTimeToReady:
         assert not any(m.reachable_now for m in r.bath.by_mode)
 
     def test_inside_a_tou_window_only_the_heat_pump_is_reachable(self, params):
-        r = time_to_ready(_scenario(schedules=_peak_now()), params)
+        r = time_to_ready(
+            _scenario(schedules=_peak_now(), settings=UNMARKED), params
+        )
         rows = {m.mode: m for m in r.bath.by_mode}
         assert rows["heat_pump"].reachable_now
         assert not rows["electric"].reachable_now
@@ -322,7 +359,7 @@ class TestStandbysStart:
 class TestElementMode:
     def test_it_is_the_element_models_plan(self, params):
         state = HeaterState(upper_f=125.0, lower_f=110.0)
-        settings = Settings(setpoint_f=141.8)
+        settings = Settings(setpoint_f=141.8, hp_upper_on_f=RESTING)
         r = element_mode(state, settings, params, mode=4, at=T0)
         assert r.plan == mode_plan(
             "HIGH_DEMAND", 125.0, 110.0, 141.8, params=params.element
@@ -333,17 +370,36 @@ class TestElementMode:
         state = HeaterState(upper_f=125.0, lower_f=110.0)
         r = element_mode(
             state,
-            Settings(setpoint_f=141.8),
+            Settings(setpoint_f=141.8, hp_upper_on_f=RAISED),
             params,
             mode=2,
             at=T0,
-            schedules=_peak_now(),
         )
         assert r.unreachable_reason == "tou_window_in_force"
+        unknown = element_mode(
+            state, Settings(setpoint_f=141.8), params, mode=2, at=T0
+        )
+        assert unknown.unreachable_reason == "tou_window_in_force"
         v = element_mode(
             state, Settings(setpoint_f=141.8, mode=5), params, mode=3, at=T0
         )
         assert v.unreachable_reason == "heating_disabled"
+
+    def test_a_what_if_setpoint_does_not_move_the_window_test(self, params):
+        # A resting heater (hp_upper_on at the device minimum) asked about
+        # 108 °F: the window test is the device's setpoint's.
+        r = element_mode(
+            HeaterState(upper_f=100.0, lower_f=95.0),
+            Settings(setpoint_f=140.9, hp_upper_on_f=RESTING),
+            params,
+            mode=2,
+            at=T0,
+            setpoint_f=108.0,
+        )
+        assert r.reachable
+        assert r.plan == mode_plan(
+            "ELECTRIC", 100.0, 95.0, 108.0, params=params.element
+        )
 
     @pytest.mark.parametrize("mode", [1, 5, 6])
     def test_a_mode_without_an_element_is_refused(self, params, mode):
@@ -489,9 +545,6 @@ class TestARecoveryModel:
         assert fast.bath.ready_in_minutes is not None
         assert slow.bath.ready_in_minutes is not None
         assert fast.bath.ready_in_minutes < slow.bath.ready_in_minutes
-
-
-RESTING, RAISED = 104.0, 139.5
 
 
 class TestTheHeatersOwnTouMarker:

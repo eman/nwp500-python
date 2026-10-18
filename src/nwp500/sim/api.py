@@ -10,6 +10,8 @@ named in the result's ``reasons``, and every default used in its
 ``defaults_used``.
 """
 
+import dataclasses
+import itertools
 import math
 from collections.abc import Mapping, Sequence
 from datetime import UTC, datetime, timedelta
@@ -34,7 +36,6 @@ from nwp500.sim.decay import AmbientSampler, compute_start_time
 from nwp500.sim.defaults import SITE_CIRCULATION
 from nwp500.sim.delivery import (
     Deliverable,
-    _state_before,  # pyright: ignore[reportPrivateUsage]
     booked_deliverable,
     deliverable,
     delivery_along,
@@ -102,6 +103,7 @@ from nwp500.sim.schedules import (
 )
 from nwp500.sim.tank_physics import (
     REFINE_TOL_MINUTES,
+    Point,
     TankPhysics,
     ambient_window_mean,
 )
@@ -720,8 +722,7 @@ def element_mode(
     *,
     mode: int,
     at: datetime,
-    schedules: Schedules | None = None,
-    tz: str = "UTC",
+    setpoint_f: float | None = None,
     ready_upper_f: float | None = None,
     hp_lower_minutes: float | None = None,
     switch_back_after_minutes: float | None = None,
@@ -733,13 +734,19 @@ def element_mode(
     (``physics.element.mode_plan``). ``mode`` is a ``DhwOperationSetting``
     value, 2, 3 or 4.
 
+    ``setpoint_f`` is a setpoint to project to instead of the heater's
+    (``settings.setpoint_f``), which still decides the TOU-window test:
+    a what-if setpoint of 108 °F must not make a resting heater read as
+    inside a window.
+
     ``ready_upper_f`` is an upper-zone temperature that counts as ready;
     ``hp_lower_minutes``, in High Demand and Energy Saver, the
     heat pump's minutes for the lower zone (``recovery`` gives them);
     ``switch_back_after_minutes`` ends the stint early. ``reachable``
     says whether a mode write can take at ``at``: not while heating is
-    disabled, nor inside a TOU window: the heater's own marker
-    (``tou_marked``), else ``schedules``, in ``tz``."""
+    disabled, nor inside a TOU window, by the heater's own marker
+    (``tou_marked``). An unknown marker counts as in force: the
+    conservative direction is "do not count on it"."""
     at = _instant(at)
     named = ENGINE_MODE.get(mode)
     if named is None or named == "heat_pump":
@@ -752,7 +759,7 @@ def element_mode(
         device,
         state.upper_f,
         state.lower_f,
-        settings.setpoint_f,
+        settings.setpoint_f if setpoint_f is None else setpoint_f,
         ready_upper_f=ready_upper_f,
         hp_lower_minutes=hp_lower_minutes,
         switch_back_after_minutes=switch_back_after_minutes,
@@ -761,26 +768,11 @@ def element_mode(
     )
     _, disabled = _engine_mode(settings.mode)
     reason: str | None = None
-    # The heater's own marker decides, as the model's did; the schedule
-    # only where it is not known.
-    marked = tou_marked(settings)
-    if marked is None:
-        marked = (
-            schedules is not None
-            and schedules.tou_enabled
-            and in_window(
-                at,
-                tou_windows(
-                    schedules.tou_periods,
-                    ZoneInfo(tz),
-                    at,
-                    at + timedelta(minutes=1),
-                ),
-            )
-        )
+    # The heater's own marker decides, at its own setpoint; unknown
+    # counts as in force.
     if disabled:
         reason = "heating_disabled"
-    elif marked:
+    elif tou_marked(settings) is not False:
         reason = "tou_window_in_force"
     return ElementModeResult(
         starts_at=at,
@@ -869,14 +861,15 @@ def next_recovery(
     recovery: RecoveryModel | None = None,
 ) -> Recovery:
     """The heat-pump recovery the heater runs next, as ``time_to_ready``
-    scores it: from now if the compressor runs; else the tank coasts,
-    under the scenario's draws, to the heater's own first compressor
-    start within ``TRIGGER_HORIZON`` (``idle`` without one), and the
-    recovery runs from the tank there, draw-free, in Heat Pump, with
-    the TOU cap judged where it ends. ``recovery`` serves that
-    recovery's duration (``extensions.RecoveryModel``); the trigger is
-    the coast's alone. ``not_scheduled`` while heating is disabled;
-    ``unavailable`` when the walk cannot be completed.
+    scores it: from now if the compressor runs; else the tank coasts
+    (``standby``), under the scenario's draws (none when the draw terms
+    are not calibrated), to the heater's own trigger within
+    ``TRIGGER_HORIZON`` (``idle`` without one), and the recovery runs
+    from the tank there (``forecast``: to the heater's stop threshold),
+    with the TOU cap judged where it ends (``_tou_capped``).
+    ``recovery`` serves its duration (``extensions.RecoveryModel``).
+    ``not_scheduled`` while heating is disabled; ``unavailable`` when
+    it cannot be computed.
 
     The coast's loss, in the book's frame, is standby to the air now,
     the heat circulation takes over the coast, and the draws before the
@@ -893,63 +886,231 @@ def next_recovery(
     coast_btu = coast_gal = 0.0
     try:
         if not s.state.compressor_running:
-            coast = simulate(
-                s.model_copy(update={"horizon": TRIGGER_HORIZON}), params
+            # The household's expected draws cool the tank to its
+            # trigger; quiet only when they cannot be modelled.
+            loads = (
+                s.loads
+                if params.draw.observability is not None
+                else s.loads.model_copy(update={"draws": ()})
             )
-            first = next(
-                (h for h in coast.heating if h.source == "compressor"), None
+            coast = standby(
+                s.state,
+                s.environment,
+                loads,
+                params,
+                start=now,
+                until=now + TRIGGER_HORIZON,
+                history=s.history,
+                settings=s.settings,
+                schedules=s.schedules,
+                tz=s.tz,
             )
-            if first is None:
+            if not coast.points:
+                return Recovery("unavailable")
+            if coast.starts_at is None:
                 return Recovery("idle")
-            start = first.start.at
-            state = _state_before(coast.points, start)
+            start = max(now, coast.starts_at)
+            state = _coast_state(s.state, now, coast.points, start)
             if state is None:
                 return Recovery("unavailable")
             upper, lower = state
-            coast_btu, coast_gal = _coast_loss(s, params, start, air)
-        end = start + _RECOVERY_ROOM
-        heat = simulate(
-            s.model_copy(
-                update={
-                    "start": start,
-                    "horizon": _RECOVERY_ROOM,
-                    "state": HeaterState(
-                        upper_f=upper, lower_f=lower, compressor_running=True
-                    ),
-                    "settings": s.settings.model_copy(
-                        update={"mode": HEAT_PUMP}
-                    ),
-                    "history": History(),
-                    "loads": Loads(),
-                    "commands": s.commands.model_copy(update={"writes": ()}),
-                }
-            ),
+            coast_btu, coast_gal = _coast_loss(
+                s.model_copy(update={"loads": loads}), params, start, air
+            )
+        starting = HeaterState(
+            upper_f=upper,
+            lower_f=lower,
+            compressor_running=s.state.compressor_running,
+        )
+        circulating = Loads(circulation=s.loads.circulation)
+        answer = forecast(
+            starting,
+            s.settings,
+            s.environment,
             params,
-            recovery=recovery,
-            tou_windows_in_force=marked_windows(
-                now,
-                tou_marked(s.settings),
-                start,
-                end,
-                _scheduled(s, start, end),
-            ),
+            at=start,
+            target_time=start,
+            loads=circulating,
+            history=s.history,
+            model=recovery,
+        )
+        if answer.status == "not_scheduled":
+            return Recovery("not_scheduled")
+        if not answer.trajectory:
+            return Recovery("unavailable")
+        trajectory, capped = _tou_capped(
+            s,
+            params,
+            start,
+            lower,
+            s.settings.setpoint_f - params.controller.tou_cap_f,
+            list(answer.trajectory),
+            starting,
+            circulating,
+            recovery,
         )
     except SimulationError:
         return Recovery("unavailable")
-    if not heat.heating:
-        return Recovery("unavailable")
-    h = heat.heating[0]
-    points = [p for p in heat.points if p.at <= h.end]
     return Recovery(
         "ok",
-        [(p.at, p.upper_f, p.lower_f) for p in points],
-        tou_capped=h.capped,
-        input_wh=[p.input_wh or 0.0 for p in points],
+        [(pt.at, pt.t_upper_f, pt.t_lower_f) for pt in trajectory],
+        tou_capped=capped,
+        input_wh=[pt.input_energy_wh or 0.0 for pt in trajectory],
         start_minute=(start - now).total_seconds() / 60.0,
         coast_btu=coast_btu,
         coast_draw_gal=coast_gal,
         hp_btu_per_h=hp_btu_per_h(air, bp),
     )
+
+
+def _coast_state(
+    state: HeaterState,
+    now: datetime,
+    points: Sequence[Point],
+    at: datetime,
+) -> tuple[float, float] | None:
+    """The tank at ``at`` along a coast from ``state`` at ``now``,
+    linear between its points."""
+    path = [(now, state.upper_f, state.lower_f)] + [
+        (p.at, p.upper_f, p.lower_f) for p in points
+    ]
+    for (t0, u0, l0), (t1, u1, l1) in itertools.pairwise(path):
+        if t0 <= at <= t1:
+            span = (t1 - t0).total_seconds()
+            f = 0.0 if span <= 0 else (at - t0).total_seconds() / span
+            return u0 + (u1 - u0) * f, l0 + (l1 - l0) * f
+    if at <= path[0][0]:
+        return path[0][1], path[0][2]
+    return None
+
+
+def _tou_capped(
+    s: Scenario,
+    params: HeaterParams,
+    start: datetime,
+    lower: float,
+    level: float,
+    full: list[HeatingPoint],
+    starting: HeaterState,
+    loads: Loads,
+    model: RecoveryModel | None,
+) -> tuple[list[HeatingPoint], bool]:
+    """The recovery the heater runs under the TOU cap, judged where it
+    ends rather than where it starts: the device stops a recovery at
+    the first instant it is inside a window with the lower zone at
+    ``level`` (the setpoint less the cap), so one that starts off-peak
+    and runs into a window is still capped.
+
+    - Already at the level inside the window: it does not heat.
+    - At the level before the window opens: it runs on toward the full
+      target and stops as the window opens, a compressor already
+      running above the level included.
+    - At the level inside the window: it stops there.
+    - At the level only after the window closes: the full target
+      applies again, uncapped."""
+    now = s.start
+    # An unknown marker counts as in force: the conservative direction
+    # is "it may not heat".
+    windows = marked_windows(
+        now,
+        tou_marked(s.settings) is not False,
+        start,
+        full[-1].at,
+        _scheduled(s, start, full[-1].at),
+    )
+    stop = _cap_stop(full, level, windows)
+    if stop is None:
+        return full, False
+    w0, w1 = next(w for w in windows if w[0] <= stop < w[1])
+    capped = forecast(
+        starting,
+        s.settings,
+        s.environment,
+        params,
+        at=start,
+        target_time=start,
+        target_lower_f=level,
+        loads=loads,
+        history=s.history,
+        model=model,
+    )
+    cut: list[HeatingPoint] = list(capped.trajectory or ())
+    if start >= w0 and lower >= level:
+        return cut, True
+    reached = capped.ready_at or (cut[-1].at if cut else None)
+    if reached is None:
+        return full, False
+    if reached < w0:
+        return _until(full, w0), True
+    if reached < w1:
+        return cut, True
+    return full, False
+
+
+def _cap_stop(
+    points: Sequence[HeatingPoint],
+    level: float,
+    windows: Sequence[tuple[datetime, datetime]],
+) -> datetime | None:
+    """The first instant on ``points`` inside one of ``windows`` with the
+    lower zone at ``level`` or above; None when there is none."""
+    end = points[-1].at
+    found: list[datetime] = []
+    path = [(p.at, p.t_upper_f, p.t_lower_f) for p in points]
+    for w0, w1 in windows:
+        lo = max(points[0].at, w0)
+        if lo >= w1 or lo > end:
+            continue
+        state = _heating_state(path, lo)
+        if state is not None and state[1] >= level:
+            found.append(lo)
+            continue
+        for p0, p1 in itertools.pairwise(points):
+            if p1.at <= lo or p0.at >= w1:
+                continue
+            if p1.t_lower_f >= level > p0.t_lower_f:
+                f = (level - p0.t_lower_f) / (p1.t_lower_f - p0.t_lower_f)
+                at = p0.at + (p1.at - p0.at) * f
+                if lo <= at < w1:
+                    found.append(at)
+                break
+    return min(found) if found else None
+
+
+def _heating_state(
+    path: Sequence[tuple[datetime, float, float]], at: datetime
+) -> tuple[float, float] | None:
+    for (t0, u0, l0), (t1, u1, l1) in itertools.pairwise(path):
+        if t0 <= at <= t1:
+            span = (t1 - t0).total_seconds()
+            f = 0.0 if span <= 0 else (at - t0).total_seconds() / span
+            return u0 + (u1 - u0) * f, l0 + (l1 - l0) * f
+    if path and at <= path[0][0]:
+        return path[0][1], path[0][2]
+    return None
+
+
+def _until(points: list[HeatingPoint], at: datetime) -> list[HeatingPoint]:
+    """``points`` cut off at ``at``: the recovery the window's opening
+    stops before its target. The interval ``at`` cuts keeps its share
+    of energy, in proportion to time."""
+    kept = [p for p in points if p.at <= at]
+    if kept and kept[-1].at < at and len(kept) < len(points):
+        p0, p1 = kept[-1], points[len(kept)]
+        share = (at - p0.at).total_seconds() / (p1.at - p0.at).total_seconds()
+        kept.append(
+            dataclasses.replace(
+                p1,
+                at=at,
+                t_upper_f=p0.t_upper_f + (p1.t_upper_f - p0.t_upper_f) * share,
+                t_lower_f=p0.t_lower_f + (p1.t_lower_f - p0.t_lower_f) * share,
+                input_energy_wh=None
+                if p1.input_energy_wh is None
+                else p1.input_energy_wh * share,
+                stored_energy_wh=p1.stored_energy_wh * share,
+            )
+        )
+    return kept
 
 
 #: The share of a book's steps that measured the inlet for its
@@ -998,13 +1159,13 @@ def time_to_ready(
     if shower_gal is None:
         shower_gal = p.shower_gal
         defaults.append(f"shower_gal={shower_gal}")
-    # In a TOU window now: the heater's own marker, as the model read
-    # it; the schedule's only where the marker is not known.
+    # In a TOU window now: the heater's own marker. Unknown counts as in
+    # force, as for the counter test and for ``element_mode``: the
+    # conservative direction is "it may not heat".
     marked = tou_marked(s.settings)
     if marked is None:
-        defaults.append("tou_window=schedule (hp_upper_on_f unknown)")
-        scheduled = _scheduled(s, s.start, s.start)
-        marked = scheduled is not None and in_window(s.start, scheduled)
+        defaults.append("tou_window=in_force (hp_upper_on_f unknown)")
+        marked = True
     tank = TankNow(
         upper_f=s.state.upper_f,
         lower_f=s.state.lower_f,
