@@ -24,6 +24,7 @@ except ImportError:
 
 from nwp500 import sim, sim_live
 from nwp500.sim.codec import scenario_to_document
+from nwp500.sim.engine import SimulationError
 from nwp500.sim.params import params_to_document
 from nwp500.unit_system import reset_unit_system, set_unit_system
 
@@ -132,6 +133,57 @@ class TestInputs:
         monkeypatch.setattr(sim_cli, "local_zone", lambda: None)
         with pytest.raises(sim_cli.InputError, match="--tz"):
             sim_cli.Inputs().zone()
+
+
+class TestBadInputs:
+    @pytest.mark.parametrize("text", ["null", "[1]", "3"])
+    def test_a_document_is_an_object(self, tmp_path, text):
+        path = tmp_path / "doc.json"
+        path.write_text(text)
+        with pytest.raises(sim_cli.InputError, match="not a JSON object"):
+            sim_cli.read_document(path, "scenario")
+
+    def test_an_unknown_zone_flag(self):
+        with pytest.raises(sim_cli.InputError, match="unknown time zone"):
+            sim_cli.Inputs(tz="Mars/Base")
+
+    def test_an_unknown_zone_in_the_scenario(self):
+        doc = scenario_to_document(_scenario())
+        doc["scenario"]["tz"] = "Mars/Base"
+        inputs = sim_cli.Inputs(scenario=doc)
+        with pytest.raises(sim_cli.InputError, match="unknown time zone"):
+            inputs.zone()
+        with pytest.raises(sim_cli.InputError, match="unknown time zone"):
+            sim_cli.build(inputs, None, NOW)
+
+    def test_a_good_zone_flag_wins_over_a_bad_one_in_the_scenario(self):
+        doc = scenario_to_document(_scenario())
+        doc["scenario"]["tz"] = "Mars/Base"
+        built = sim_cli.build(sim_cli.Inputs(scenario=doc, tz="UTC"), None, NOW)
+        assert built.scenario.tz == "UTC"
+
+    def test_parameters_that_are_not_a_document(self):
+        doc = scenario_to_document(_scenario())
+        with pytest.raises(sim_cli.InputError, match="--params"):
+            sim_cli.build(sim_cli.Inputs(scenario=doc, params={}), None, NOW)
+        with pytest.raises(sim_cli.InputError, match="scenario's params"):
+            sim_cli.build(
+                sim_cli.Inputs(scenario={**doc, "params": {}}), None, NOW
+            )
+
+    def test_a_scenario_the_simulator_refuses(self, monkeypatch):
+        def refuse(*_: Any, **__: Any) -> Any:
+            raise SimulationError("no fitted draw response")
+
+        monkeypatch.setattr(sim_cli.sim, "simulate", refuse)
+        with pytest.raises(sim_cli.InputError, match="cannot be simulated"):
+            sim_cli.run(
+                sim_cli.Inputs(scenario=scenario_to_document(_scenario())),
+                None,
+                NOW,
+                "json",
+                io.StringIO(),
+            )
 
 
 class TestPrecedence:
@@ -365,6 +417,20 @@ class TestTheCommand:
         )
         assert result.exit_code == 2
         assert "not both" in result.output
+
+    def test_a_null_scenario_never_reads_the_device(
+        self, tmp_path, monkeypatch
+    ):
+        async def no_device(*_: Any) -> int:
+            raise AssertionError("connected")
+
+        monkeypatch.setattr(cli_main, "_with_device", no_device)
+        scenario = self._write(tmp_path, "null.json", None)
+        result = CliRunner().invoke(
+            cli_main.cli, ["simulate", "run", "--scenario", scenario]
+        )
+        assert result.exit_code == 2
+        assert "not a JSON object" in result.output
 
     def test_an_unreadable_file_is_a_usage_error(self, tmp_path):
         bad = tmp_path / "bad.json"

@@ -1110,11 +1110,13 @@ def simulate_run(ctx: click.Context, output_format: str, **given: Any) -> None:
         return
 
     async def command(mqtt: NavienMqttClient, device: Device) -> None:
-        walk(
-            await sim_cli.compose_live(
+        try:
+            live = await sim_cli.compose_live(
                 mqtt, ctx.obj["api"], device, inputs, now
             )
-        )
+        except sim_cli.InputError as e:
+            raise click.UsageError(str(e)) from None
+        walk(live)
 
     ctx.exit(asyncio.run(_with_device(ctx, command)))
 

@@ -286,14 +286,30 @@ class TestTheSchedules:
         with pytest.raises(sim_live.LiveReadError, match="no TOU"):
             await source.read()
 
+    @pytest.mark.parametrize(
+        "error",
+        [APIError("no TOU"), TimeoutError(), ValueError("not a TOU document")],
+        ids=["rest", "timeout", "bad reply"],
+    )
     async def test_a_failed_tou_read_with_tou_off_reads_no_periods(
-        self, device, status, feature, reservations
+        self, device, status, feature, reservations, error
     ):
         mqtt = FakeMqtt(status, feature, reservations)
-        source = sim_live.LiveScheduleSource(
-            mqtt, _api(APIError("no TOU")), device
-        )
+        source = sim_live.LiveScheduleSource(mqtt, _api(error), device)
         assert (await source.read()).tou_periods == ()
+
+    @pytest.mark.parametrize(
+        "error",
+        [TimeoutError(), ValueError("not a TOU document")],
+        ids=["timeout", "bad reply"],
+    )
+    async def test_a_timed_out_or_bad_tou_reply_with_tou_on_is_an_error(
+        self, device, status, feature, reservations, error
+    ):
+        mqtt = FakeMqtt(_tou_on(status), feature, reservations)
+        source = sim_live.LiveScheduleSource(mqtt, _api(error), device)
+        with pytest.raises(sim_live.LiveReadError, match="TOU read failed"):
+            await source.read()
 
 
 class TestCompose:

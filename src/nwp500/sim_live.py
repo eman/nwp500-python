@@ -308,8 +308,10 @@ class LiveScheduleSource:
                 additional_value=info.additional_value,
                 controller_id=feature.controller_serial_number,
             )
-        except Nwp500Error as e:
-            return None, f"the TOU read failed: {e}"
+        # A REST error, a request that timed out, or a reply that is not
+        # a TOU document (bad JSON, a model that does not validate).
+        except (Nwp500Error, TimeoutError, ValueError) as e:
+            return None, f"the TOU read failed: {e!r}"
         return tou, None
 
 

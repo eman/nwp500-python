@@ -32,6 +32,7 @@ from nwp500.sim.codec import (
     result_to_document,
     scenario_to_document,
 )
+from nwp500.sim.engine import SimulationError
 from nwp500.sim.params import params_from_document
 
 if TYPE_CHECKING:
@@ -53,12 +54,25 @@ class InputError(ValueError):
     """An input that cannot be read or does not make a scenario."""
 
 
-def read_document(path: str | Path, what: str) -> Any:
-    """The JSON document at ``path``."""
+def read_document(path: str | Path, what: str) -> dict[str, Any]:
+    """The JSON object at ``path``: every document the command reads is
+    one."""
     try:
-        return json.loads(Path(path).read_text())
+        doc = json.loads(Path(path).read_text())
     except (OSError, ValueError) as e:
         raise InputError(f"cannot read the {what} {path}: {e}") from None
+    if not isinstance(doc, dict):
+        raise InputError(f"the {what} {path} is not a JSON object")
+    return doc  # pyright: ignore[reportUnknownVariableType]
+
+
+def zone_name(name: str) -> str:
+    """``name``, when it is an IANA zone this machine knows."""
+    try:
+        ZoneInfo(name)
+    except ZoneInfoNotFoundError, ValueError:
+        raise InputError(f"unknown time zone {name!r}") from None
+    return name
 
 
 def merge(base: Mapping[str, Any], over: Mapping[str, Any]) -> dict[str, Any]:
@@ -118,6 +132,8 @@ class Inputs:
             raise InputError("give --ambient or --environment, not both")
         if self.start is not None and self.start.tzinfo is None:
             raise InputError("--start needs its UTC offset")
+        if self.tz is not None:
+            zone_name(self.tz)
         if self.scenario is not None:
             version = self.scenario.get("schema_version")
             if version != SCHEMA_VERSION:
@@ -141,7 +157,7 @@ class Inputs:
         if self.scenario is not None:
             given = self.scenario["scenario"].get("tz")
             if isinstance(given, str):
-                return given
+                return zone_name(given)
         if (tz := local_zone()) is not None:
             return tz
         raise InputError(
@@ -181,6 +197,9 @@ def build(
         data["tz"] = inputs.tz
     elif "tz" not in data:
         data["tz"] = inputs.zone()
+    elif isinstance(data["tz"], str):
+        # The model's own check raises a KeyError for an unknown zone.
+        zone_name(data["tz"])
     if inputs.environment is not None:
         data["environment"] = dict(inputs.environment)
     if inputs.ambient is not None:
@@ -207,9 +226,9 @@ def build(
         None if inputs.scenario is None else inputs.scenario.get("params")
     )
     if inputs.params is not None:
-        params = params_from_document(inputs.params)
+        params = _params(inputs.params, "--params")
     elif doc_params is not None:
-        params = params_from_document(doc_params)
+        params = _params(doc_params, "the scenario's params")
     elif live is not None and live.params is not None:
         params = live.params
     else:
@@ -219,6 +238,13 @@ def build(
             "(give --params)"
         )
     return Built(scenario, params, tuple(notes))
+
+
+def _params(doc: Any, what: str) -> sim.HeaterParams:
+    try:
+        return params_from_document(doc)
+    except ValueError as e:
+        raise InputError(f"{what} is not a parameters document: {e}") from None
 
 
 async def compose_live(
@@ -391,7 +417,10 @@ def run(
     built = build(inputs, live, now)
     for note in built.notes:
         _logger.warning(note)
-    result = sim.simulate(built.scenario, built.params)
+    try:
+        result = sim.simulate(built.scenario, built.params)
+    except SimulationError as e:
+        raise InputError(f"the scenario cannot be simulated: {e}") from None
     stream = out or sys.stdout
     if output_format == "json":
         json.dump(result_to_document(result), stream, indent=2)
