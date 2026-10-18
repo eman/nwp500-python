@@ -6,6 +6,7 @@ They are held to their source by the parity checks run with the port;
 these hold their rules.
 """
 
+import math
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -168,6 +169,97 @@ def statuses(device_status_dict):
         return DeviceStatus.model_validate(device_status_dict | d)
 
     return [(at(m - 1440), status(m)) for m in range(0, 2 * 1440)]
+
+
+NAN = float("nan")
+
+
+class TestMissingReadings:
+    """The replacement review of #162: a missing reading is dropped on
+    entry, so the value before it holds, in every reading of the
+    record."""
+
+    def test_a_setpoint_write_is_not_doubled(self):
+        rec = Record(
+            setpoint_f=(
+                (at(0), 120.0),
+                (at(5), 130.0),
+                (at(6), NAN),
+                (at(7), 130.0),
+            )
+        )
+        assert [(w.at, w.setpoint_f) for w in rec.writes(at(1), at(60))] == [
+            (at(5), 130.0)
+        ]
+
+    def test_a_raised_threshold_does_not_close_and_reopen(self):
+        rec = Record(
+            hp_upper_on_f=((at(0), 139.0), (at(57), NAN), (at(58), 139.0))
+        )
+        assert rec.upper_on_edges(at(1), at(60)) == ([], [])
+
+    def test_a_missing_mode_is_no_write(self):
+        rec = Record(mode=((at(0), 1.0), (at(10), NAN), (at(20), 3.0)))
+        assert [(w.at, w.mode) for w in rec.writes(at(1), at(60))] == [
+            (at(20), 3)
+        ]
+        observe(rec, at(0), at(60), now=at(600))
+
+    def test_observe_reads_the_record_as_starts_does(self):
+        rec = Record(
+            compressor=((at(0), 0.0), (at(80), NAN)),
+            power_w=((at(0), 400.0), (at(30), NAN)),
+            mode=((at(0), 1.0), (at(30), NAN)),
+        )
+        o = observe(rec, at(0), at(120), now=at(600))
+        assert rec.starts(at(0), at(120)).starts == []
+        assert not [s for s in o.sources if s.source == "compressor"]
+        assert o.starts == []
+        slot = next(s for s in o.slots if s.start == at(30))
+        assert slot.energy_wh == 66.67
+
+    def test_none_and_infinite_are_missing_too(self):
+        rec = Record(power_w=((at(0), 5.0), (at(1), None), (at(2), math.inf)))  # type: ignore[arg-type]
+        assert rec.power_w == ((at(0), 5.0),)
+
+
+class TestTheProfile:
+    """The replacement review of #162: ``observe`` names modes by the
+    profile it is given, from when its revision took effect."""
+
+    REC = Record(
+        mode=((at(0), 1.0), (at(30), 2.0), (at(60), 5.0)),
+        heat_source=((at(0), 1.0), (at(30), 2.0), (at(60), 0.0)),
+    )
+
+    def test_the_simulations_profile_by_default(self):
+        o = observe(self.REC, at(0), at(90), now=at(600))
+        assert [(m.start, m.end, m.name, m.effective) for m in o.modes] == [
+            (at(0), at(30), "heat_pump", True),
+            (at(30), at(60), "electric", True),
+            (at(60), at(90), None, None),
+        ]
+
+    def test_a_mode_the_profile_does_not_list_has_no_name(self):
+        from dataclasses import replace
+
+        from nwp500.sim.profile import heater_profile
+
+        base = heater_profile()
+        narrow = replace(
+            base, modes=tuple(m for m in base.modes if m[0] != "electric")
+        )
+        o = observe(self.REC, at(0), at(90), now=at(600), profile=narrow)
+        assert [m.name for m in o.modes] == ["heat_pump", None]
+
+    def test_no_mode_is_named_before_the_revision(self):
+        o = observe(self.REC, at(0), at(90), now=at(600), revision_since=at(10))
+        assert [(m.start, m.end, m.name) for m in o.modes] == [
+            (at(0), at(10), None),
+            (at(10), at(30), "heat_pump"),
+            (at(30), at(60), "electric"),
+            (at(60), at(90), None),
+        ]
 
 
 class TestObserve:

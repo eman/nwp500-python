@@ -1,5 +1,5 @@
 """The calibrated tank the engine walks (``nwp500.sim.tank_physics``) and
-the served recovery under it (``nwp500.sim.recovery``)."""
+the served recovery under it (``nwp500.sim.heat_pump_recovery``)."""
 
 import dataclasses
 import json
@@ -11,14 +11,14 @@ import pytest
 
 pd = pytest.importorskip("pandas")
 
-from nwp500.sim.params import HeaterParams, params_from_document  # noqa: E402
-from nwp500.sim.recovery import (  # noqa: E402
+from nwp500.sim.heat_pump_recovery import (  # noqa: E402
     PHYSICS_TRUNCATED,
     ModelDuration,
     PhysicsRecovery,
     RecoveryContext,
     recovery,
 )
+from nwp500.sim.params import HeaterParams, params_from_document  # noqa: E402
 from nwp500.sim.tank_physics import TankPhysics  # noqa: E402
 
 FIXTURES = Path(__file__).with_name("fixtures") / "sim"
@@ -131,3 +131,54 @@ class TestTruncatedPhysics:
         assert served is not None
         assert served.reasons == ("m", PHYSICS_TRUNCATED)
         assert served.path is None
+
+
+class TestTheAmbientSeries:
+    """The replacement review of #162: an absent ``ambient_f`` column
+    is an error, not a silent coast at the default air."""
+
+    def test_an_absent_column_is_an_error(self):
+        from nwp500.sim.decay import AmbientSampler, project_decay
+        from nwp500.sim.defaults import default_params
+
+        stamps = pd.date_range(T0, periods=4, freq="1h")
+        wrong = pd.DataFrame({"temp_f": 55.0}, index=stamps)
+        with pytest.raises(ValueError, match="ambient_f"):
+            AmbientSampler(wrong)
+        with pytest.raises(ValueError, match="ambient_f"):
+            project_decay(
+                130.0, 120.0, wrong, 3.0, 60.0, T0 + timedelta(hours=2), T0
+            )
+        with pytest.raises(ValueError, match="ambient_f"):
+            TankPhysics(
+                default_params(),
+                pd.DataFrame(),
+                None,
+                draws_on=False,
+                tau_gap_hours=60.0,
+            )
+
+    def test_no_usable_reading_is_the_default_said(self):
+        from nwp500.sim.decay import AmbientSampler, project_decay
+        from nwp500.sim.units import DEFAULT_AMBIENT_F
+
+        stamps = pd.date_range(T0, periods=4, freq="1h")
+        missing = pd.DataFrame({"ambient_f": float("nan")}, index=stamps)
+        assert AmbientSampler(missing).defaulted
+        assert AmbientSampler(missing).at(T0) == DEFAULT_AMBIENT_F
+        out = project_decay(
+            130.0, 120.0, missing, 3.0, 60.0, T0 + timedelta(hours=2), T0
+        )
+        assert out.ambient_defaulted
+        assert out.t_amb_mean == pytest.approx(DEFAULT_AMBIENT_F)
+        given = project_decay(
+            130.0,
+            120.0,
+            pd.DataFrame({"ambient_f": 56.0}, index=stamps),
+            3.0,
+            60.0,
+            T0 + timedelta(hours=2),
+            T0,
+        )
+        assert not given.ambient_defaulted
+        assert given.t_amb_mean == pytest.approx(56.0)

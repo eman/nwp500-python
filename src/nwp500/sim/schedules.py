@@ -126,11 +126,24 @@ def tou_windows(
     end: datetime,
 ) -> tuple[Window, ...]:
     """The TOU windows ``periods`` define that overlap ``[start, end]``,
-    as UTC instants, with the local times in ``tz``: each rule laid out
-    on the dates its masks select, from a day before ``start`` to a day
+    as UTC instants, with the local times in ``tz``: their rules
+    (``tou_rules``) laid out by ``rule_windows``."""
+    return rule_windows(tou_rules(periods), tz, start, end)
+
+
+def rule_windows(
+    rules: Sequence[TouRule],
+    tz: ZoneInfo,
+    start: datetime,
+    end: datetime,
+) -> tuple[Window, ...]:
+    """The windows ``rules`` define that overlap ``[start, end]``, as
+    UTC instants, with the local times in ``tz``: each rule laid out on
+    the dates its masks select, from a day before ``start`` to a day
     after ``end`` so a window across either edge is whole, and then
-    joined where one ends as the next begins."""
-    rules = tou_rules(periods)
+    joined where one ends as the next begins. The rules need not come
+    from priced periods: a schedule learned from a heater's history is
+    laid out the same way."""
     dated: list[Window] = []
     day = start.astimezone(tz).date() - timedelta(days=1)
     last = end.astimezone(tz).date() + timedelta(days=1)

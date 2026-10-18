@@ -30,16 +30,14 @@ from ``MERGE_CONTEXT`` before ``frm``. Where it begins, as after any
 write made there could own it, and the record does not show it.
 """
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Sequence
 from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta
 from itertools import pairwise
-from types import MappingProxyType
 from typing import Literal
 
 from nwp500.sim.attribution import RESTART_LOCKOUT, WRITE_EVIDENCE, attribute
-from nwp500.sim.controller import COMPRESSOR_MODES, ELEMENT_MODES
-from nwp500.sim.inputs import ELECTRIC, ENERGY_SAVER, HEAT_PUMP, HIGH_DEMAND
+from nwp500.sim.profile import HeaterProfile, heater_profile
 from nwp500.sim.record import (
     ELEMENT_POWER_SLACK,
     Record,
@@ -92,30 +90,7 @@ HOLD_EXCEEDED = "hold_exceeded"
 UNCORROBORATED = "uncorroborated"
 NOT_YET = "not_yet_recorded"
 
-#: The simulation's name for each mode the heater reports, and the
-#: sources each uses.
-MODE_NAMES: Mapping[int, str] = MappingProxyType(
-    {
-        HEAT_PUMP: "heat_pump",
-        ELECTRIC: "electric",
-        ENERGY_SAVER: "energy_saver",
-        HIGH_DEMAND: "high_demand",
-    }
-)
-
 Span = tuple[datetime, datetime]
-
-
-def mode_sources(name: str) -> frozenset[str]:
-    """The sources a mode uses."""
-    return frozenset(
-        s
-        for s, uses in (
-            ("compressor", name in COMPRESSOR_MODES),
-            ("element", name in ELEMENT_MODES),
-        )
-        if uses
-    )
 
 
 def reported_sources(heat_source: int | None) -> frozenset[str] | None:
@@ -133,18 +108,9 @@ def reported_sources(heat_source: int | None) -> frozenset[str] | None:
 
 
 def effective(name: str, reported: frozenset[str] | None) -> bool | None:
-    """Whether the reported heat source shows mode ``name`` in effect:
-    every reported source one the mode uses, and, where the mode uses a
-    source Heat Pump does not (an element), that source among them. So
-    a compressor alone never shows an element mode in effect. None when
-    the heater reports no source."""
-    if not reported:
-        return None
-    mode = mode_sources(name)
-    if not mode:
-        return None
-    beyond = mode - mode_sources("heat_pump")
-    return reported <= mode and beyond <= reported
+    """Whether the reported heat source shows mode ``name`` in effect,
+    by the simulation's own profile (``HeaterProfile.effective``)."""
+    return heater_profile().effective(name, reported)
 
 
 @dataclass(frozen=True)
@@ -366,11 +332,20 @@ def observe(
     to: datetime,
     *,
     now: datetime,
+    profile: HeaterProfile | None = None,
+    revision_since: datetime | None = None,
 ) -> Observed:
     """What the heater did over ``[frm, to)``, both on the ``SLOT``
     grid; nothing after ``now`` is claimed (module docstring). A
     setting's value in force is looked for as far back as a state's
-    (``STATE_LOOKBACK``)."""
+    (``STATE_LOOKBACK``).
+
+    Modes are named, and judged in effect, by ``profile`` (the
+    simulation's own, ``heater_profile()``, by default); a mode it does
+    not list is an interval with no name. ``revision_since``: when
+    ``profile``'s revision took effect, before which no mode is named
+    (None: always in effect)."""
+    profile = heater_profile() if profile is None else profile
     record = replace(record, setting_lookback=STATE_LOOKBACK)
     cut = max(frm, min(to, now))
     ctx = frm - MERGE_CONTEXT
@@ -508,6 +483,8 @@ def observe(
     heat_source = _read(record.heat_source, frm, cut, STATE_LOOKBACK)
     gap("heat_source", _known_gaps(heat_source, frm, cut), NO_RECORD)
     cuts = {frm, cut}
+    if revision_since is not None:
+        cuts.add(max(frm, min(revision_since, cut)))
     for lo, hi, _ in [
         *mode_series.pieces(frm, cut),
         *heat_source.pieces(frm, cut),
@@ -518,11 +495,12 @@ def observe(
         mode = mode_series.at(lo)
         if mode is None:
             continue
-        name = MODE_NAMES.get(int(mode))
+        named = revision_since is None or lo >= revision_since
+        name = profile.name_of(mode) if named else None
         eff = None
         if name is not None:
             hs = heat_source.at(lo)
-            eff = effective(
+            eff = profile.effective(
                 name, None if hs is None else reported_sources(int(hs))
             )
         prev = modes[-1] if modes else None

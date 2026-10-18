@@ -67,6 +67,7 @@ from nwp500.sim.params import (
     CompressorParams,
     HeaterParams,
     LossParams,
+    TankParams,
 )
 from nwp500.sim.physics.compressor import PhysicsPath, predict_physics_detailed
 from nwp500.sim.physics.draw import delivery_temp_f, draw_energy_btu
@@ -448,11 +449,15 @@ def fit_compressor(
     loss: LossParams,
     *,
     two_zone: bool = True,
+    tank: TankParams = TankParams(),
 ) -> CompressorFit | None:
     """``compressor_constant`` and ``evap_approach_f`` minimising the
-    squared error of the physics' durations against recorded ones.
+    squared error of the physics' durations against recorded ones, each
+    integrated on ``tank`` (the heater's own: pass ``HeaterParams.tank``).
 
-    ``recoveries``: one row per heat-pump recovery, with
+    ``recoveries``: exactly one row per heat-pump recovery (a recovery
+    read twice, from overlapping windows say, is weighted twice and
+    moves the fit; keep one row for each), with
     ``t_start_lower``, ``delta_t_lower`` (the lower zone's rise to its
     target), ``t_amb_mean`` (the air over it, °F) and
     ``duration_minutes``; optionally ``h_amb_start`` (%RH; 50 without),
@@ -528,6 +533,7 @@ def fit_compressor(
                     ua_ref_delta_t=loss.ua_ref_delta_t_f,
                     stratification_gap=float(gap[i]),
                     two_zone=two_zone,
+                    tank=tank,
                 ).minutes
                 for i in range(len(start))
             ]
@@ -1004,6 +1010,7 @@ def path_to_end(
         stratification_gap=0.0 if gap is None else float(gap),
         two_zone=params.compressor.two_zone,
         record_path=True,
+        tank=params.tank,
     )
     if not result.converged or result.path is None or result.minutes <= 0.0:
         return None
@@ -1425,7 +1432,9 @@ def calibrate(
     )
     found = recoveries(history, air=recovery_air)
     reached = found.loc[found["reached"].astype(bool)] if len(found) else found
-    compressor = fit_compressor(reached, params.compressor, params.loss)
+    compressor = fit_compressor(
+        reached, params.compressor, params.loss, tank=params.tank
+    )
     power = None
     if compressor is not None and not compressor.hit_bounds:
         params = with_compressor(params, compressor)

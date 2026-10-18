@@ -157,7 +157,7 @@ def test_the_core_has_modules_to_check():
         "tank_physics.py",
         "decay.py",
         "heating_trajectory.py",
-        "recovery.py",
+        "heat_pump_recovery.py",
         "extensions.py",
         "controller.py",
         "tou_triggers.py",
@@ -338,3 +338,21 @@ def test_importing_nwp500_does_not_load_the_simulator():
     loaded = _loaded_after("import nwp500")
     assert "nwp500" in loaded
     assert not [m for m in loaded if m.split(".")[:2] == ["nwp500", "sim"]]
+
+
+def test_no_name_shadows_a_submodule():
+    """The replacement review of #162: ``import nwp500.sim.X as m``
+    binds the package's attribute ``X``, so an export named as a
+    submodule would hand back the export instead of the module."""
+    import importlib
+    import pkgutil
+    import types
+
+    import nwp500.sim
+
+    for info in pkgutil.walk_packages(nwp500.sim.__path__, "nwp500.sim."):
+        module = importlib.import_module(info.name)
+        parent, _, leaf = info.name.rpartition(".")
+        bound = getattr(importlib.import_module(parent), leaf)
+        assert isinstance(bound, types.ModuleType), info.name
+        assert bound is module, info.name

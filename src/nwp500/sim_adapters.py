@@ -98,6 +98,7 @@ from nwp500.sim.location_air import (
 from nwp500.sim.location_air import project as project_location_air
 from nwp500.sim.observed import Observed
 from nwp500.sim.observed import observe as observe_record
+from nwp500.sim.profile import HeaterProfile
 from nwp500.sim.record import Record
 from nwp500.sim.schedules import weekly_runs
 from nwp500.temperature import DeciCelsius, HalfCelsius, Temperature
@@ -758,6 +759,8 @@ def observe(
     start: datetime,
     end: datetime,
     now: datetime,
+    profile: HeaterProfile | None = None,
+    revision_since: datetime | None = None,
 ) -> Observed:
     """What the heater did over ``[start, end)`` (``sim.observed``),
     from the statuses it reported: modes and whether each was in
@@ -765,12 +768,17 @@ def observe(
     whether each counts, the energy per slot from its own power, the
     delivered temperature, and where its record was missing. Nothing
     after ``now`` is claimed; ``start`` and ``end`` on the 10-minute
-    slot grid."""
+    slot grid. Modes are named by ``profile`` from ``revision_since``
+    (``sim.observed.observe``)."""
     return observe_record(
         record(readings),
         start.astimezone(UTC),
         end.astimezone(UTC),
         now=now.astimezone(UTC),
+        profile=profile,
+        revision_since=(
+            None if revision_since is None else revision_since.astimezone(UTC)
+        ),
     )
 
 

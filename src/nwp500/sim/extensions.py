@@ -19,7 +19,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import TYPE_CHECKING, Protocol
 
-from nwp500.sim.recovery import ModelDuration, RecoveryContext
+from nwp500.sim.heat_pump_recovery import ModelDuration, RecoveryContext
 
 if TYPE_CHECKING:
     from nwp500.sim.engine import Draw, HeatingInterval, PathPoint
@@ -27,7 +27,7 @@ if TYPE_CHECKING:
 
 
 class RecoveryModel(Protocol):
-    """A recovery's duration given the physics (``sim.recovery``)."""
+    """A recovery's duration given the physics (``sim.heat_pump_recovery``)."""
 
     def duration(self, ctx: RecoveryContext) -> ModelDuration | None:
         """The served duration for ``ctx``, the start's hold included,

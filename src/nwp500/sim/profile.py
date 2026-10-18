@@ -27,14 +27,19 @@ from dataclasses import dataclass
 from types import MappingProxyType
 from typing import Any
 
+from nwp500.sim import inputs
 from nwp500.sim.book import DEPLETION_THRESHOLD_F
-from nwp500.sim.controller import ENERGY_SAVER, HEAT_PUMP
+from nwp500.sim.controller import (
+    COMPRESSOR_MODES,
+    ELEMENT_MODES,
+    ENERGY_SAVER,
+    HEAT_PUMP,
+)
 from nwp500.sim.engine import (
     HEATER_SETPOINT_MAX_F,
     HEATER_SETPOINT_MIN_F,
     SETPOINT_RESOLUTION_C,
 )
-from nwp500.sim.observed import mode_sources
 from nwp500.sim.params import TankParams
 from nwp500.sim.physics.element import DEVICE_MODE, HEATER_MODE
 
@@ -57,6 +62,18 @@ COMMAND_KEYS: Mapping[str, Mapping[str, type]] = MappingProxyType(
         "demand_response": MappingProxyType({"enabled": bool}),
     }
 )
+#: The device's name for each ``DhwOperationSetting`` value a record
+#: holds.
+DEVICE_MODE_CODES: Mapping[int, str] = MappingProxyType(
+    {
+        inputs.HEAT_PUMP: "HEAT_PUMP",
+        inputs.ELECTRIC: "ELECTRIC",
+        inputs.ENERGY_SAVER: "ENERGY_SAVER",
+        inputs.HIGH_DEMAND: "HIGH_DEMAND",
+        inputs.VACATION: "VACATION",
+        inputs.POWER_OFF: "POWER_OFF",
+    }
+)
 #: The command names, in the order served.
 COMMANDS: tuple[str, ...] = tuple(COMMAND_KEYS)
 #: The settable setpoints: half degrees Celsius on this heater, the step
@@ -65,6 +82,18 @@ SETPOINT_STEP_UNIT = "C"
 SETPOINT_STEP = SETPOINT_RESOLUTION_C
 #: The digest's length, in hex characters: 64 bits.
 _REVISION_HEX = 16
+
+
+def mode_sources(name: str) -> frozenset[str]:
+    """The sources a mode uses, as the engine runs it."""
+    return frozenset(
+        s
+        for s, uses in (
+            ("compressor", name in COMPRESSOR_MODES),
+            ("element", name in ELEMENT_MODES),
+        )
+        if uses
+    )
 
 
 @dataclass(frozen=True)
@@ -127,15 +156,43 @@ class HeaterProfile:
         return frozenset()
 
     def name_of(self, device_mode: object) -> str | None:
-        """The profile's name for a mode the heater reported (the
-        device's ``HEAT_PUMP``, ...), or None for one it does not list
-        (``VACATION``, ``POWER_OFF``). An enum member is read by its name
-        (a ``DhwOperationSetting`` prints as its number)."""
-        if device_mode is None:
+        """The profile's name for a mode the heater reported, or None
+        for one it does not list (``VACATION``, ``POWER_OFF``) or does not
+        know. The mode may be the device's name (``HEAT_PUMP``, ...), a
+        ``DhwOperationSetting`` member, or its value as a record holds it
+        (``1``, ``1.0``)."""
+        if device_mode is None or isinstance(device_mode, bool):
             return None
-        label = getattr(device_mode, "name", device_mode)
+        if isinstance(device_mode, (int, float)):
+            value = float(device_mode)
+            if not value.is_integer():
+                return None
+            label: object = DEVICE_MODE_CODES.get(int(value))
+        else:
+            label = getattr(device_mode, "name", device_mode)
+        if label is None:
+            return None
         name = HEATER_MODE.get(str(label).upper())
         return name if name in self.names else None
+
+    def effective(
+        self, name: str, reported: frozenset[str] | None
+    ) -> bool | None:
+        """Whether the heater's reported heat source shows mode
+        ``name`` in effect. ``reported`` is the sources the heat source
+        names; None or empty: it reports none, and the answer is None.
+        True when every reported source is one the mode uses and, where
+        the mode uses a source the default mode does not (an element,
+        for each element mode here), that source is among them; else
+        False. So a compressor alone never shows an element mode in
+        effect."""
+        if not reported:
+            return None
+        mode = self.sources(name)
+        if not mode:
+            return None
+        beyond = mode - self.sources(self.default_mode)
+        return reported <= mode and beyond <= reported
 
 
 def heater_profile(

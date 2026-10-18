@@ -504,7 +504,7 @@ class _Fixed:
         self.confidence = confidence
 
     def duration(self, ctx: Any) -> Any:
-        from nwp500.sim.recovery import ModelDuration
+        from nwp500.sim.heat_pump_recovery import ModelDuration
 
         return ModelDuration(
             minutes=self.minutes,

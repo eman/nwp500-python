@@ -206,6 +206,66 @@ Hot water and the heat book
       book_steps, house_gpm, step_heat_btu, inlet_now_f
 
 
+The engine and the physics
+==========================
+
+The pieces the entry points are built from, for a caller that needs
+what they do not pass through (a recovery model's holds, a coast's own
+grid). Everything on this page is public: its names and their meaning
+are kept across minor versions, and a change to them is listed in the
+changelog.
+
+.. automodule:: nwp500.sim.engine
+   :members: simulate, Simulation, SimulationError, Heater, Entry,
+      HeatingInterval, PathPoint, Write, RawWrite, ModeWrite,
+      ModeInterval, quantise, floor_minute, energy_by_slot,
+      energy_by_source
+
+.. automodule:: nwp500.sim.tank_physics
+   :members: TankPhysics, Physics, Point, Coast, Heat, point_at,
+      ambient_window_mean
+
+.. automodule:: nwp500.sim.heat_pump_recovery
+   :members: physics_recovery, PhysicsRecovery, recovery, Recovery,
+      RecoveryContext, ModelDuration
+
+.. automodule:: nwp500.sim.heating_trajectory
+   :members: build_heating_trajectory, HeatingPoint, path_cop
+
+.. automodule:: nwp500.sim.decay
+   :members: project_decay, DecayProjection, AmbientSampler, Draw,
+      Impulse, draw_step, partitions, threshold_crossing,
+      compute_start_time
+
+.. automodule:: nwp500.sim.tou_triggers
+   :members: autonomous_start, heater_start, in_window, while_enabled
+
+.. automodule:: nwp500.sim.schedules
+   :members: TouRule, tou_rules, tou_windows, rule_windows, Firing,
+      reservation_firings, week_bit, month_bit, half_c_to_f, weekly_runs
+
+.. automodule:: nwp500.sim.physics.compressor
+   :members: predict_physics_detailed, predict_physics, PhysicsPath,
+      PhysicsResult
+
+.. automodule:: nwp500.sim.physics.refrigerant
+   :members: sat_pressure, vapor_density, liquid_enthalpy,
+      vapor_enthalpy, dew_point_f
+
+.. automodule:: nwp500.sim.physics.tank
+   :members: ua_at
+
+.. automodule:: nwp500.sim.physics.element
+   :members: mode_recovery, ModeRecovery, mode_plan, ModePlan,
+      ElementInterval, entry_deficit_f, entry_bracket_f,
+      upper_off_deficit_f, coast_f, upper_rise_f, is_heater_mode
+
+.. automodule:: nwp500.sim.physics.draw
+   :members: delivery_temp_f, hot_fraction, draw_energy_btu,
+      withdrawn_gal, gap_opened_f, lower_zone_drop_f, settled_lower_f,
+      unsettled_after_f
+
+
 Documents
 =========
 

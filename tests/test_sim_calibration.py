@@ -5,6 +5,7 @@ The fits are held to their source by the parity check run with the
 port; these hold what each recovers, screens and reports.
 """
 
+import dataclasses
 import math
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
@@ -286,7 +287,11 @@ class TestRecoveries:
 
 
 def physics_durations(
-    starts: list[float], air: list[float], k: float, approach: float
+    starts: list[float],
+    air: list[float],
+    k: float,
+    approach: float,
+    tank: TankParams | None = None,
 ) -> pd.DataFrame:
     df = pd.DataFrame(
         {
@@ -308,6 +313,7 @@ def physics_durations(
             loss=LossParams(),
             stratification_gap=10.0,
             two_zone=True,
+            tank=TankParams() if tank is None else tank,
         ).minutes
         for s, a in zip(starts, air, strict=True)
     ]
@@ -339,6 +345,39 @@ class TestCompressor:
             LossParams(),
         )
         assert fit is not None and not fit.two_zone
+
+    def test_it_fits_on_the_heaters_tank(self):
+        """The replacement review of #162: durations recorded on a
+        50 gal tank fit the constant that made them only when the fit
+        integrates that tank, as the simulation will."""
+        starts = [80.0, 90.0, 100.0, 110.0, 85.0, 95.0, 105.0, 115.0]
+        air = [50.0, 80.0, 60.0, 70.0, 75.0, 55.0, 65.0, 85.0]
+        small = TankParams(volume_gal=50.0)
+        df = physics_durations(starts, air, 0.08, 12.0, tank=small)
+        fit = cal.fit_compressor(
+            df, CompressorParams(), LossParams(), tank=small
+        )
+        assert fit is not None
+        assert fit.compressor_constant == pytest.approx(0.08, rel=0.02)
+        assert fit.mae_minutes < 1.0
+        wrong = cal.fit_compressor(df, CompressorParams(), LossParams())
+        assert wrong is not None
+        assert wrong.compressor_constant != pytest.approx(0.08, rel=0.02)
+
+    def test_a_cycles_path_is_walked_on_the_heaters_tank(self):
+        row = {
+            "t_start_lower": 100.0,
+            "delta_t_lower": 30.0,
+            "t_amb_mean": 65.0,
+            "stratification_gap": 10.0,
+        }
+        base = default_params()
+        small = dataclasses.replace(
+            base, tank=dataclasses.replace(base.tank, volume_gal=50.0)
+        )
+        full, short = cal.path_to_end(row, base), cal.path_to_end(row, small)
+        assert full is not None and short is not None
+        assert short.elapsed_s[-1] < full.elapsed_s[-1]
 
     def test_a_pinned_fit_is_not_applied(self):
         fit = cal.CompressorFit(0.3, 4.0, 1.0, None, 8, 0, True, True)

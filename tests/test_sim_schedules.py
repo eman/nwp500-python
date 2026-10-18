@@ -8,9 +8,11 @@ import pytest
 from nwp500.encoding import encode_week_bitfield
 from nwp500.sim.inputs import ReservationEntry, TouPeriod
 from nwp500.sim.schedules import (
+    TouRule,
     half_c_to_f,
     month_bit,
     reservation_firings,
+    rule_windows,
     tou_rules,
     tou_windows,
     week_bit,
@@ -276,3 +278,28 @@ class TestTheReviewOfTheWindows:
             for a, b in local
         )
         assert (_local(2026, 10, 12, 0), _local(2026, 10, 12, 6)) in local
+
+
+class TestLearnedRules:
+    """The replacement review of #162: rules with no price behind them
+    (a schedule learned from a heater's history) are laid out as the
+    periods' own are."""
+
+    def test_the_periods_rules_lay_out_as_their_windows(self):
+        periods = [_period(0, 16, 1), _period(17, 20, 3), _period(21, 23, 1)]
+        start, end = _local(2026, 10, 5), _local(2026, 10, 9)
+        assert rule_windows(tou_rules(periods), LA, start, end) == (
+            tou_windows(periods, LA, start, end)
+        )
+
+    def test_a_learned_overnight_rule_joins_only_selected_dates(self):
+        weekday_nights = TouRule(ALL_MONTHS, WEEKDAYS, time(22), time(6))
+        windows = rule_windows(
+            [weekday_nights], LA, _local(2026, 10, 9), _local(2026, 10, 13)
+        )
+        # Friday 22:00 to Saturday 06:00, then Monday 22:00: no weekend.
+        assert [(o.astimezone(LA), c.astimezone(LA)) for o, c in windows] == [
+            (_local(2026, 10, 8, 22), _local(2026, 10, 9, 6)),
+            (_local(2026, 10, 9, 22), _local(2026, 10, 10, 6)),
+            (_local(2026, 10, 12, 22), _local(2026, 10, 13, 6)),
+        ]

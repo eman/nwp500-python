@@ -27,6 +27,34 @@ class TestTheProfile:
         assert p.name_of("HIGH_DEMAND") == "high_demand"
         assert p.name_of("VACATION") is None
 
+    @pytest.mark.parametrize(
+        ("reported", "name"),
+        [
+            (1, "heat_pump"),
+            (1.0, "heat_pump"),
+            (4, "high_demand"),
+            (5, None),
+            (6, None),
+            (7, None),
+            (2.5, None),
+            (True, None),
+            ("vacation", None),
+        ],
+    )
+    def test_a_recorded_mode_value(self, reported, name):
+        """The replacement review of #162: a record holds the mode as
+        its ``DhwOperationSetting`` value."""
+        assert P.heater_profile().name_of(reported) == name
+
+    def test_a_mode_in_effect(self):
+        p = P.heater_profile()
+        compressor, element = frozenset({"compressor"}), frozenset({"element"})
+        assert p.effective("heat_pump", compressor) is True
+        assert p.effective("energy_saver", compressor) is False
+        assert p.effective("energy_saver", compressor | element) is True
+        assert p.effective("electric", compressor) is False
+        assert p.effective("heat_pump", None) is None
+
     def test_a_reported_mode_is_read_by_its_name(self):
         """The third review of #162: ``DeviceStatus`` carries the mode
         as a ``DhwOperationSetting``, whose ``str`` is its number."""

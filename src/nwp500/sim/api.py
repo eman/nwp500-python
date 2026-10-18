@@ -54,6 +54,13 @@ from nwp500.sim.engine import (
 )
 from nwp500.sim.engine import simulate as walk
 from nwp500.sim.extensions import HeatLedger, RecoveryModel
+from nwp500.sim.heat_pump_recovery import (
+    PHYSICS_TRUNCATED,
+    PhysicsRecovery,
+    RecoveryContext,
+    physics_recovery,
+)
+from nwp500.sim.heat_pump_recovery import recovery as serve_recovery
 from nwp500.sim.heating_trajectory import HeatingPoint, build_heating_trajectory
 from nwp500.sim.inputs import (
     ELECTRIC,
@@ -84,13 +91,6 @@ from nwp500.sim.ready import (
     assess,
     typed,
 )
-from nwp500.sim.recovery import (
-    PHYSICS_TRUNCATED,
-    PhysicsRecovery,
-    RecoveryContext,
-    physics_recovery,
-)
-from nwp500.sim.recovery import recovery as serve_recovery
 from nwp500.sim.result import (
     ActiveCycle,
     ElementModeResult,

@@ -3,7 +3,7 @@
 The engine (``sim.engine``) takes its physics as a ``Physics``:
 a standby coast, a heat-pump recovery and a draw. ``TankPhysics`` is
 the core's, and the default: the standby coast (``sim.decay``), the
-heat-pump recovery (``sim.recovery``, through a ``RecoveryModel`` when
+heat-pump recovery (``sim.heat_pump_recovery``, through a ``RecoveryModel`` when
 one is given) and the delivered draw (``sim.decay.draw_step``), all on
 one ``HeaterParams`` and one ambient series, so every segment of a
 simulation reads the same world.
@@ -41,15 +41,15 @@ from nwp500.sim.decay import (
     project_decay,
 )
 from nwp500.sim.extensions import RecoveryModel
-from nwp500.sim.heating_trajectory import build_heating_trajectory
-from nwp500.sim.params import HeaterParams
-from nwp500.sim.recovery import (
+from nwp500.sim.heat_pump_recovery import (
     PhysicsRecovery,
     Recovery,
     RecoveryContext,
     physics_recovery,
     recovery,
 )
+from nwp500.sim.heating_trajectory import build_heating_trajectory
+from nwp500.sim.params import HeaterParams
 
 #: A delivered draw at the inlet: its onset, and the gallons the meter
 #: counts (``Draw(at, gallons)``).
@@ -438,7 +438,7 @@ class TankPhysics:
         )
         # When the physics path is not the served recovery: none at all,
         # or the model clamped the duration
-        # (``sim.recovery._path_publishable`` leaves no path then).
+        # (``sim.heat_pump_recovery._path_publishable`` leaves no path then).
         if p.path is not None:
             points = [
                 Point(pt.at, pt.t_upper_f, pt.t_lower_f, pt.input_energy_wh)

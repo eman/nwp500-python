@@ -535,8 +535,13 @@ median of the probe's readings over the last 3 hours
 (``book.inlet_window_s``), the default without one. The meter must
 report at rest too: a silence over an hour in the window is refused,
 since it would read as a quiet full tank. A missing reading (None or
-NaN) in any series is left out, here and in every adapter: never a
-number to compute with.
+NaN) in any series is left out, here, in every adapter and in a
+``Record`` built directly: never a number to compute with, and the
+value before it holds. An ambient frame handed to the core
+(``decay.project_decay``, ``TankPhysics``) must carry an ``ambient_f``
+column: without one it is an error, not a coast at the 65 °F default.
+A column with no usable reading does take the default, and the
+projection says so (``DecayProjection.ambient_defaulted``).
 
 What an installation's own meter and circulation need beyond this,
 its meter's arithmetic and its circulator's reading rules, is the

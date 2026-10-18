@@ -182,6 +182,9 @@ class DecayProjection:
     #: and may report as absent for a quiet scenario.
     draw_volume_gal: float = 0.0
     draw_heat_btu: float = 0.0
+    #: The series held no usable reading, so the coast ran at
+    #: ``DEFAULT_AMBIENT_F`` throughout (``AmbientSampler.defaulted``).
+    ambient_defaulted: bool = False
     #: The path, not just where it ends: ``(at, t_upper, t_lower)`` at
     #: each integration boundary, first element the starting instant
     #: and last exactly ``target_time``.  A schedule optimiser needs
@@ -330,6 +333,9 @@ def project_decay(
             t_amb_at_start=_get_t_amb(t_amb_series, now),
             t_amb_mean=_get_t_amb(t_amb_series, now),
             projection_hours=0.0,
+            ambient_defaulted=(
+                AmbientSampler(t_amb_series) if ambient is None else ambient
+            ).defaulted,
             # The degenerate projection is the one exception to the
             # trajectory invariants: a single point at the starting
             # instant, because there is no interval to walk.
@@ -754,6 +760,7 @@ def project_decay(
         flowing_heat_btu=flowing_heat_btu,
         draw_volume_gal=draw_volume_total,
         draw_heat_btu=draw_heat_btu,
+        ambient_defaulted=amb.defaulted,
         trajectory=trajectory,
         impulses=impulses,
     )
@@ -1001,7 +1008,14 @@ class AmbientSampler:
 
     def __init__(self, series: pd.DataFrame) -> None:
         self._stamps: np.ndarray | None = None
-        if series.empty or "ambient_f" not in series.columns:
+        # An absent column is a caller's mistake, not a missing reading:
+        # it would coast every projection at the default air unannounced.
+        if "ambient_f" not in series.columns:
+            raise ValueError(
+                "the ambient series has no 'ambient_f' column: pass the "
+                "air at the heater, °F, or an empty frame with the column"
+            )
+        if series.empty:
             return
 
         # DatetimeIndex, not the bare Index the attribute is typed as —
@@ -1054,6 +1068,12 @@ class AmbientSampler:
         self._base = idx[0].to_pydatetime()  # pyright: ignore[reportAttributeAccessIssue]
         self._stamps = (idx - idx[0]).total_seconds().to_numpy()
         self._values = values
+
+    @property
+    def defaulted(self) -> bool:
+        """Whether no usable reading was given (none, or all missing),
+        so every lookup is ``DEFAULT_AMBIENT_F``."""
+        return self._stamps is None
 
     def at(self, target: datetime) -> float:
         """Ambient temperature at ``target``, linearly interpolated."""

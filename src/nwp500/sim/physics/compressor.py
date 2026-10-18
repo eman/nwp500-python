@@ -374,10 +374,10 @@ def predict_physics_detailed(
             break
 
     # Not converged: the integration bound, not setpoint, ended it, and
-    # the estimate is a lower bound, not a duration. The result
-    # says so (``converged``, ``bound_reached``), which ``sim.recovery``
-    # serves as its ``PHYSICS_TRUNCATED`` reason and callers outside the
-    # core log; the core logs nothing.
+    # the estimate is a lower bound, not a duration. The result says so
+    # (``converged``, ``bound_reached``), which
+    # ``sim.heat_pump_recovery`` serves as its ``PHYSICS_TRUNCATED``
+    # reason and callers outside the core log; the core logs nothing.
     converged = t_lower >= hp_lower_off
     path = (
         PhysicsPath(

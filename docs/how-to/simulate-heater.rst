@@ -954,7 +954,10 @@ recorded on change, so a handoff between the elements at one wattage
 leaves no new reading.
 ``seen.slots`` are the energy per 10 minutes from the heater's own
 power; ``seen.modes`` are the mode in force and whether the heat source
-the heater reported showed it in effect. ``seen.gaps`` are where a
+the heater reported showed it in effect, named by a heater profile
+(``profile=``, the simulation's own by default; a mode it does not list
+has no name) from when its revision took effect (``revision_since=``).
+``seen.gaps`` are where a
 signal's record was missing, and a start a missing record could explain
 gets no ``cause``. Set them beside the replay's ``result.heating``
 (each interval's start, with its cause and trigger) and

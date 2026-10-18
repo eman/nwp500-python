@@ -10,8 +10,9 @@ start threshold shows, and the starts, an element's only where the
 heater's power shows it running (``starts``).
 """
 
+import math
 from collections.abc import Callable, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, fields
 from datetime import datetime, timedelta
 from typing import Literal
 
@@ -132,7 +133,9 @@ def corroborator(
 class Record:
     """Each signal's change rows, oldest first: on/off states as 1.0 and
     0.0, temperatures °F, the mode a ``DhwOperationSetting`` value, the
-    heat source a ``HeatSource`` value, the power W."""
+    heat source a ``HeatSource`` value, the power W. A row whose value
+    is missing (None, NaN or infinite) is a reading not taken and is
+    dropped on entry, so the value before it holds."""
 
     compressor: Rows = ()
     upper_element: Rows = ()
@@ -151,6 +154,17 @@ class Record:
     #: against) is looked for: settings record only on change and
     #: legitimately hold for months.
     setting_lookback: timedelta = SETTING_LOOKBACK
+
+    def __post_init__(self) -> None:
+        for f in fields(self):
+            rows = getattr(self, f.name)
+            if not isinstance(rows, tuple):
+                continue
+            kept = tuple(
+                (t, v) for t, v in rows if v is not None and math.isfinite(v)
+            )
+            if len(kept) != len(rows):
+                object.__setattr__(self, f.name, kept)
 
     def tou_switches(
         self, start: datetime, end: datetime
