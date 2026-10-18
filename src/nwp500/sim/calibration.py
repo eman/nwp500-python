@@ -1121,7 +1121,11 @@ def solve_cop_fit(
 Withdrawn = Callable[[Mapping[str, Any]], float | None]
 
 
-def metered_withdrawn(params: HeaterParams) -> Withdrawn:
+def metered_withdrawn(
+    params: HeaterParams,
+    *,
+    flow_at: Callable[[datetime], float | None] | None = None,
+) -> Withdrawn:
     """With a meter: the apparent heat a cycle's draws and circulation
     took (``snapshots``' ``draw_gal`` and ``circulation_runs``), Wh.
     Draws through the calibrated draw term at their volume-weighted
@@ -1131,7 +1135,11 @@ def metered_withdrawn(params: HeaterParams) -> Withdrawn:
     circulation's heat). None when either record is missing, when draws
     happened and the draw term is off, or when circulation ran and the
     installation has no circulation terms: an unknown withdrawal is not
-    a zero one."""
+    a zero one. ``flow_at`` prices a cycle's runs at the flow the
+    circulation ran at then, by the cycle's ``start_time``
+    (``flow_lookup``), ``CirculationParams.flow_gpm`` where it has none:
+    the flow moves run to run, and today's priced months of runs
+    wrongly."""
     d, c = params.draw, params.circulation
 
     def withdrawn(row: Mapping[str, Any]) -> float | None:
@@ -1145,9 +1153,14 @@ def metered_withdrawn(params: HeaterParams) -> Withdrawn:
             air = row.get("t_amb_mean")
             if air is None or pd.isna(air):
                 return None
+            flow = c.flow_gpm
+            at = row.get("start_time")
+            if flow_at is not None and at is not None and not pd.isna(at):
+                then = flow_at(cast(datetime, pd.Timestamp(at).to_pydatetime()))
+                flow = then if then is not None else c.flow_gpm
             for minutes, upper in runs:
                 displaced = circulation_displaced_gal(
-                    minutes, c.displaced_gal, c.flow_gpm
+                    minutes, c.displaced_gal, flow
                 )
                 btu += d.ungated_observability * max(
                     0.0, displaced * WATER_BTU_PER_GAL_F * (upper - float(air))
@@ -1354,6 +1367,7 @@ def calibrate(
     lead: Withdrawn | None = None,
     draws: Sequence[tuple[datetime, float]] | None = None,
     circulation: Sequence[tuple[datetime, datetime]] | None = None,
+    circulation_flow_at: Callable[[datetime], float | None] | None = None,
 ) -> Calibration:
     """``base`` refitted on ``history``: the standby loss law and the
     gap's time constant from its quiet windows, then the compressor on
@@ -1365,7 +1379,9 @@ def calibrate(
     With a meter's ``draws`` (``(instant, delivered gallons)``) and
     ``circulation``'s runs (an empty list for none), the COP fit prices
     the heat each cycle's draws and runs took (``metered_withdrawn``,
-    ``metered_lead``); without them it keeps draw-free cycles.
+    ``metered_lead``), each run at the flow it ran at when
+    ``circulation_flow_at`` says (``flow_lookup`` over ``measure_runs``);
+    without them it keeps draw-free cycles.
     ``withdrawn`` and ``lead`` replace either.
 
     What could not be fitted keeps ``base``'s value, the best prior
@@ -1389,7 +1405,9 @@ def calibrate(
         metered = draws is not None and circulation is not None
         if withdrawn is None:
             withdrawn = (
-                metered_withdrawn(params) if metered else draw_free_withdrawn
+                metered_withdrawn(params, flow_at=circulation_flow_at)
+                if metered
+                else draw_free_withdrawn
             )
         if lead is None and metered:
             lead = metered_lead(params)

@@ -570,6 +570,22 @@ class TestMeteredPricing:
         assert lead(self._row(draw_lead_gal=4.0)) > 0
         assert lead(self._row()) == 0.0
 
+    def test_a_run_is_priced_at_the_flow_it_ran_at(self):
+        """A slower circulation displaces its volume later, so a short
+        run priced at the flow it ran at takes less heat."""
+        from nwp500.sim import site_example_params
+
+        p = site_example_params()
+        row = self._row(
+            circulation_runs=((2.0, 135.0),),
+            start_time=pd.Timestamp("2026-07-10", tz="UTC"),
+        )
+        today = cal.metered_withdrawn(p)(row)
+        then = cal.metered_withdrawn(p, flow_at=lambda _: 1.1)(row)
+        assert then is not None and today is not None and then < today
+        unknown = cal.metered_withdrawn(p, flow_at=lambda _: None)(row)
+        assert unknown == today
+
     def test_snapshots_carry_the_cycles_draws(self):
         h = recovery_history([(2, 100, 100.0)])
         start = T0 + timedelta(hours=2)

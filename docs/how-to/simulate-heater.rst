@@ -705,7 +705,10 @@ and each says what it used:
   their end. With one, pass its draws and the circulation's runs,
   ``calibrate(..., draws=[(instant, gallons), ...],
   circulation=[(start, end), ...])`` (an empty list for none), and every
-  cycle counts, the heat its draws and runs took priced in.
+  cycle counts, the heat its draws and runs took priced in. The flow of
+  a circulation can move from run to run; pass
+  ``circulation_flow_at=cal.flow_lookup(cal.measure_runs(...))`` and
+  each cycle's runs are priced at the flow they ran at.
 
 A part without the evidence keeps the value it had, and is named in
 ``cal.params.unfitted``: ``compressor`` (too few recoveries, or a fit
