@@ -136,9 +136,14 @@ class HeaterProfile:
         return name if name in self.names else None
 
 
-def heater_profile(tank: TankParams = TankParams()) -> HeaterProfile:
+def heater_profile(
+    tank: TankParams = TankParams(),
+    line_f: float = DEPLETION_THRESHOLD_F,
+) -> HeaterProfile:
     """The profile the simulation runs by; ``tank_gal`` is ``tank``'s
-    volume, the one the physics use (pass ``HeaterParams.tank``)."""
+    volume, the one the physics use (pass ``HeaterParams.tank``), and
+    ``depletion_threshold_f`` the line readiness draws at (pass
+    ``HeaterParams.readiness.line_f``)."""
     return HeaterProfile(
         heater=HEATER_LABEL,
         default_mode=HEAT_PUMP,
@@ -152,7 +157,7 @@ def heater_profile(tank: TankParams = TankParams()) -> HeaterProfile:
         setpoint_max_f=HEATER_SETPOINT_MAX_F,
         setpoint_step_unit=SETPOINT_STEP_UNIT,
         setpoint_step=SETPOINT_STEP,
-        depletion_threshold_f=DEPLETION_THRESHOLD_F,
+        depletion_threshold_f=line_f,
         tank_gal=tank.volume_gal,
     )
 

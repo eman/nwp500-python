@@ -601,6 +601,11 @@ class DrawWindowResult:
     delivery_min_f: float
     below_line_min: float
     depleted: bool
+    #: For a forecast's window (``DrawWindow.expected_count``): the
+    #: draws it expects, fractional, and when its long draws end in the
+    #: worst case (``DrawWindow.draws_until``). None otherwise.
+    expected_count: float | None = None
+    draws_until: datetime | None = None
 
 
 def draw_windows(
@@ -612,8 +617,11 @@ def draw_windows(
     band_btu: float = 0.0,
     p: ReadinessParams | None = None,
     ep: BookParams | None = None,
+    forecast: Sequence[tuple[float | None, datetime | None]] = (),
 ) -> list[DrawWindowResult]:
-    """One per ``(start, end, expected_gal)`` window. ``band_btu`` is
+    """One per ``(start, end, expected_gal)`` window; ``forecast`` gives
+    each, by index, the draws a forecast expects in it and the end of its
+    long draws in the worst case. ``band_btu`` is
     taken off ``margin_gal``, in gallons at the window's tank: an aged
     book's error band. With the booked state walked along the path, the
     tank at the onset, its ``deliverable_gal`` and the delivery judged
@@ -622,7 +630,8 @@ def draw_windows(
     p = p or ReadinessParams()
     ep = ep or BookParams()
     out: list[DrawWindowResult] = []
-    for start, end, expected in windows:
+    for k, (start, end, expected) in enumerate(windows):
+        count, draws_until = forecast[k] if k < len(forecast) else (None, None)
         # A window already open at the start is read at the start.
         opened = max(start, sim.points[0].at)
         state = _state_before(sim.points, opened)
@@ -672,6 +681,8 @@ def draw_windows(
                 delivery_min_f=judged.min_f,
                 below_line_min=judged.below_min,
                 depleted=judged.depleted,
+                expected_count=count,
+                draws_until=draws_until,
             )
         )
     return out

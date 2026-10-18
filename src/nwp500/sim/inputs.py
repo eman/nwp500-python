@@ -217,6 +217,12 @@ class DrawWindow(_Value):
     #: Delivered gallons the window is expected to draw, if known: the
     #: result's ``margin_gal`` is the deliverable gallons less it.
     expected_gal: Annotated[float, Field(ge=0.0)] | None = None
+    #: For a draw forecast's window (``draw_forecast.forecast_loads``):
+    #: the draws it expects to start in it, fractional, and when its
+    #: long draws end with them first (the worst case), carried to the
+    #: result as they are. None otherwise.
+    expected_count: Annotated[float, Field(ge=0.0)] | None = None
+    draws_until: Instant | None = None
 
     @model_validator(mode="after")
     def _ordered(self) -> Self:

@@ -167,3 +167,6 @@ class TestInAWalk:
         )
         r = simulate(s, site_example_params(), withheld_windows=withheld)
         assert r.windows
+        (w,) = r.windows
+        assert w.expected_count == pytest.approx(0.4)
+        assert w.draws_until == withheld[0][1]

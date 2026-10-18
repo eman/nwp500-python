@@ -439,11 +439,13 @@ def forecast_loads(
 ) -> tuple[Loads, list[tuple[datetime, datetime]]]:
     """The profile as a scenario's ``Loads`` (each expected draw a
     ``Draw`` carrying its per-draw volume, each window a ``DrawWindow``
-    expecting its long draws' volume) and the spans to withhold heat
+    expecting its long draws' volume and count, and when they end) and
+    the spans to withhold heat
     over (``simulate``'s ``withheld_windows``): none, or with
     ``worst_case`` each window's long draws first (``draws_first``)."""
     from nwp500.sim.inputs import Draw, DrawWindow, Loads
 
+    spans: list[tuple[datetime, datetime] | None] = []
     if worst_case:
         placed, spans = draws_first(profile, start)
         withheld = [x for x in spans if x is not None]
@@ -459,8 +461,20 @@ def forecast_loads(
             if g > 0.0
         ),
         windows=tuple(
-            DrawWindow(start=w.start, end=w.end, expected_gal=w.volume_mean_gal)
-            for w in profile.windows
+            DrawWindow(
+                start=w.start,
+                end=w.end,
+                expected_gal=w.volume_mean_gal,
+                expected_count=w.expected_count,
+                # The long draws' end in the worst case; its opening
+                # when they are not moved there, or it expects none.
+                draws_until=(
+                    span[1]
+                    if k < len(spans) and (span := spans[k]) is not None
+                    else max(w.start, start)
+                ),
+            )
+            for k, w in enumerate(profile.windows)
         ),
     )
     return loads, withheld

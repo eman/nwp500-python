@@ -110,7 +110,12 @@ from nwp500.sim.tank_physics import (
     TankPhysics,
     ambient_window_mean,
 )
-from nwp500.sim.tou_triggers import heater_start, in_window, while_enabled
+from nwp500.sim.tou_triggers import (
+    LOWER_TRIGGER_HELD,
+    heater_start,
+    in_window,
+    while_enabled,
+)
 from nwp500.sim.units import BTU_PER_WH
 
 #: The engine's name for each mode it models.
@@ -368,6 +373,7 @@ def simulate(
     ledger: HeatLedger | None = None,
     tou_windows_in_force: Sequence[tuple[datetime, datetime]] | None = None,
     withheld_windows: Sequence[tuple[datetime, datetime]] = (),
+    inlet_measured: bool = False,
 ) -> SimulationResult:
     """Walk ``scenario`` from its start to its end on ``params``.
 
@@ -384,6 +390,10 @@ def simulate(
     delivery is the upper zone's, and ``reasons`` says
     ``no_heat_book``. ``ledger`` is any other ``extensions.HeatLedger``
     in its place.
+
+    ``inlet_measured``: the scenario's inlet (``Environment.inlet_f``) is
+    the mains as measured (``cold_supply``); without it, a scenario with
+    draws says ``inlet_temp_modelled``.
 
     ``withheld_windows`` are spans over which a recovery is credited no
     heat, as the worst case of a draw window's long draws coming first
@@ -407,6 +417,10 @@ def simulate(
     defaults: list[str] = []
     if s.loads.draws and _gap_prior(params):
         reasons.append(TAU_GAP_PRIOR)
+    if s.loads.draws and not inlet_measured:
+        # Each draw's cold water is priced at an inlet nobody measured
+        # at the mains (``cold_supply``).
+        reasons.append("inlet_temp_modelled")
     circulation = _circulation(s.loads, params)
     if _circulation_unknown(params, s.loads, s.until):
         reasons.append(CIRCULATION_UNKNOWN)
@@ -493,7 +507,12 @@ def simulate(
         # A window's edges, so its onset and its end are read exactly
         # rather than across the coast's 10-minute grid.
         marks=[at for w in s.loads.windows for at in (w.start, w.end)],
-        startup_wh=params.power.startup_wh,
+        # A start-up's energy is the COP fit's: without one, none.
+        startup_wh=(
+            params.power.startup_wh
+            if params.power.cop_scale is not None
+            else None
+        ),
         element_running=s.state.element_running,
         element_running_since=s.state.element_running_since,
         raw_writes=raw,
@@ -521,6 +540,9 @@ def simulate(
         if any_out:
             reasons.append("draw_out_of_domain")
     reasons += _unfitted(params, "standby")
+    if physics.failed_recoveries:
+        # The integrator raised on a recovery the walk then went without.
+        reasons.append("physics_failed")
     if any(h.source == "compressor" for h in sim.heating):
         reasons += _unfitted(params, "compressor", "power")
     return SimulationResult(
@@ -543,6 +565,9 @@ def simulate(
                 ),
                 p=params.readiness,
                 ep=params.book_terms(),
+                forecast=[
+                    (w.expected_count, w.draws_until) for w in s.loads.windows
+                ],
             )
         ),
         booked=walked,
@@ -802,6 +827,14 @@ def standby(
                 setpoint_f=settings.setpoint_f,
                 mode=mode,
             )
+            if held:
+                reasons.append(LOWER_TRIGGER_HELD)
+        if schedules is None or (
+            schedules.tou_enabled and not schedules.tou_periods
+        ):
+            # A TOU opening could start it, or hold its lower trigger,
+            # and no window was laid out to judge either.
+            reasons.append("tou_schedule_unknown")
     reasons += _unfitted(params, "standby")
     if _circulation_unknown(params, loads, until):
         reasons.append(CIRCULATION_UNKNOWN)

@@ -741,6 +741,60 @@ what a simulation needs of it:
 parameters as one document.
 
 
+Reasons
+=======
+
+Every answer carries ``reasons``: why it may be less than it seems. A
+caller with its own record can add to them, since they are a tuple.
+The ones about inputs and parameters:
+
+.. list-table::
+   :header-rows: 1
+   :widths: 34 66
+
+   * - Reason
+     - What it says
+   * - ``physics_uncalibrated``, ``energy_uncalibrated``,
+       ``standby_uncalibrated``
+     - A term calibration could not fit on this heater (a recovery's
+       duration; its energy and COP; the jacket's loss) is the base's
+       (``HeaterParams.unfitted``).
+   * - ``tau_gap_prior``
+     - Draws opened a gap that closes on a prior time constant, not one
+       fitted on this heater.
+   * - ``circulation_unknown``
+     - The installation circulates, and its runs are not known over
+       the span: nothing was charged there.
+   * - ``hp_lower_on_unknown``
+     - The lower-zone start threshold was not known, so that start was
+       never searched (a TOU opening's still was).
+   * - ``tou_schedule_unknown``
+     - TOU is on (or, for ``standby``, no schedule was given) and no
+       window could be laid out.
+   * - ``tou_window_in_force``
+     - The heater is in a TOU window now (an unknown marker counts as
+       in force): an element mode write may not take.
+   * - ``lower_trigger_held_uncertain``
+     - The lower trigger was held (the upper zone at the setpoint, or a
+       window), which moved or dropped a start.
+   * - ``inlet_temp_modelled``
+     - Draws' cold water, or a book's gallons, are priced at an inlet
+       nobody measured at the mains.
+   * - ``draw_out_of_domain``
+     - A draw lies outside the range the draw terms were fitted over.
+   * - ``write_mode_not_modelled``, ``reservation_mode_not_modelled``
+     - A write or a reservation into Vacation or Power Off was left out.
+   * - ``physics_truncated=integration_bound_reached``
+     - A served recovery rests on an integration that hit its bound.
+   * - ``physics_failed``
+     - The integrator raised on a recovery the walk went without.
+   * - ``recovery_low_confidence``
+     - A recovery model served a duration under 0.6 confidence.
+   * - ``no_heat_book``, ``heat_book_aged``
+     - Without a book the delivery is the upper zone's; an aged one
+       carries its error band.
+
+
 Errors
 ======
 

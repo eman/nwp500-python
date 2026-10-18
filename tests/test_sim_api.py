@@ -367,6 +367,41 @@ class TestWhatTheResultSays:
         )
         assert "tau_gap_prior" in drawn.reasons
 
+    def test_an_unmeasured_inlet_with_draws_says_so(self, params: HeaterParams):
+        s = _scenario(loads=Loads(draws=(Draw(at=at(1.0), gallons=10.0),)))
+        assert "inlet_temp_modelled" in simulate(s, params).reasons
+        measured = simulate(s, params, inlet_measured=True)
+        assert "inlet_temp_modelled" not in measured.reasons
+        assert (
+            "inlet_temp_modelled" not in simulate(_scenario(), params).reasons
+        )
+
+    def test_standby_says_when_no_tou_schedule_was_laid_out(
+        self, params: HeaterParams
+    ):
+        s = _scenario()
+        t = standby(
+            s.state,
+            s.environment,
+            Loads(),
+            params,
+            start=s.start,
+            until=s.until,
+            settings=s.settings,
+        )
+        assert "tou_schedule_unknown" in t.reasons
+        known = standby(
+            s.state,
+            s.environment,
+            Loads(),
+            params,
+            start=s.start,
+            until=s.until,
+            settings=s.settings,
+            schedules=Schedules(),
+        )
+        assert "tou_schedule_unknown" not in known.reasons
+
     def test_draws_without_a_draw_response_are_refused(
         self, params: HeaterParams
     ):
