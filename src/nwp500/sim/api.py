@@ -178,6 +178,12 @@ LOW_CONFIDENCE_FLOOR = 0.6
 #: start was never searched (the TOU-opening start still was), so an
 #: answer may miss a start the heater makes.
 HP_LOWER_ON_UNKNOWN = "hp_lower_on_unknown"
+#: The gap time constant served when the parameters have none fitted
+#: (``TankParams.stratification_gap_tau_h``), h, as the model's was.
+TAU_GAP_PRIOR_H = 10.0
+#: Draws opened a gap that closes on that prior, not a fitted constant:
+#: under no draws it only shapes how an existing gap closes.
+TAU_GAP_PRIOR = "tau_gap_prior"
 
 
 def _physics(
@@ -193,10 +199,8 @@ def _physics(
 ) -> TankPhysics:
     tau = params.tank.stratification_gap_tau_h
     if tau is None:
-        raise ValueError(
-            "params.tank.stratification_gap_tau_h is required "
-            "(default_params() carries one)"
-        )
+        tau = TAU_GAP_PRIOR_H
+        defaults.append(f"stratification_gap_tau_h={tau} (prior)")
     if "humidity" not in environment.model_fields_set:
         defaults.append(f"humidity={environment.humidity}")
     if environment.inlet_f is None:
@@ -373,6 +377,8 @@ def simulate(
     tz = ZoneInfo(s.tz)
     reasons: list[str] = []
     defaults: list[str] = []
+    if s.loads.draws and params.tank.stratification_gap_tau_h is None:
+        reasons.append(TAU_GAP_PRIOR)
     circulation = _circulation(s.loads)
     physics = _physics(
         params,
@@ -704,6 +710,8 @@ def standby(
         )
         if any_out:
             reasons.append("draw_out_of_domain")
+        if params.tank.stratification_gap_tau_h is None:
+            reasons.append(TAU_GAP_PRIOR)
     starts_at = trigger = None
     held = False
     margin: float | None = None

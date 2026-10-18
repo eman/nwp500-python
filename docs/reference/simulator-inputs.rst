@@ -702,12 +702,14 @@ what a simulation needs of it:
    * - Field
      - Without it
    * - ``tank.stratification_gap_tau_h``
-     - Required: ``simulate`` raises ``ValueError``.
+     - A 10 h prior, named in ``defaults_used``; with draws, which open
+       a gap that closes on it, ``reasons`` says ``tau_gap_prior``.
    * - ``compressor.compressor_constant`` above 0
      - No heat-pump recovery can be predicted, and a walk that needs
        one raises ``SimulationError``.
    * - ``draw.observability``
-     - Draws do not move the tank.
+     - A scenario with draws is refused: ``SimulationError``
+       (``draw_model_unsupported``).
    * - ``loss.ua_btu_hr_f``
      - The jacket loss falls back to ``loss.ua_baseline_btu_hr_f``.
 
@@ -726,10 +728,10 @@ Errors
    reservation whose setpoint is outside the range the simulation runs
    (104.9-149.9 degF; the device's own limits are its
    ``DeviceFeature``'s), a draw window that does not end after it
-   starts, an element mode that runs no element, an unknown ``volume_code``, parameters missing
-   ``stratification_gap_tau_h``, or ``with_example_evidence`` at a
-   line other than 105 degF.
+   starts, an element mode that runs no element, an unknown ``volume_code``, or
+   ``with_example_evidence`` at a line other than 105 degF.
 ``nwp500.sim.engine.SimulationError``
    The walk could not be completed: most often a heat-pump recovery
    the parameters cannot predict, or one past the integrator's
-   30-hour bound.
+   30-hour bound (the message names the bound), or draws the parameters
+   have no draw response for (``draw_model_unsupported``).
