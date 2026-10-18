@@ -487,6 +487,42 @@ class TestTheHistoryAdapter:
         h = sa.history([(T0, s)], air=[(T0, 20.0)])
         assert h.iloc[0].air_f == pytest.approx(68.0)
 
+    def test_a_gap_in_the_readings_is_unobserved(self, device_status_dict):
+        s = self._status(device_status_dict)
+        minutes = [0, 1, 2, 30, 31]
+        readings = [(T0 + timedelta(minutes=m), s) for m in minutes]
+        h = sa.history(readings, max_gap=timedelta(minutes=5))
+        assert list(h["dhw_in_use"]) == [False, False, True, False, False]
+        assert list(h["excluded"]) == [False, False, True, False, False]
+        # Without it, every span is taken as observed.
+        assert not sa.history(readings)["dhw_in_use"].any()
+
+    def test_a_gap_splits_the_quiet_windows(self, device_status_dict):
+        s = self._status(device_status_dict)
+        readings = [
+            (T0 + timedelta(minutes=m), s)
+            for m in [*range(0, 240, 2), *range(600, 840, 2)]
+        ]
+        h = sa.history(readings, max_gap=timedelta(minutes=5))
+        windows = cal.quiet_windows(h)
+        assert len(windows) == 2
+        assert all(
+            b <= T0 + timedelta(minutes=240) or a >= T0 + timedelta(hours=10)
+            for a, b in windows
+        )
+
+    def test_a_gap_with_a_meter_marks_its_draws(self, device_status_dict):
+        s = self._status(device_status_dict)
+        readings = [(T0 + timedelta(minutes=m), s) for m in (0, 30)]
+        h = sa.history(
+            readings,
+            drawing=[],
+            circulating=[],
+            max_gap=timedelta(minutes=5),
+        )
+        assert list(h["drawing"]) == [True, False]
+        assert not h["circulating"].any()
+
     def test_a_meters_spans(self, device_status_dict):
         s = self._status(device_status_dict)
         h = sa.history(

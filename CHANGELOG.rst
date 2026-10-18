@@ -274,9 +274,58 @@ Added
     ``sim`` extra the commands stop with an install hint.
     ``examples/simulator/`` has a scenario, a plan and an overlay to
     start from; :doc:`/how-to/simulate-heater` shows each use.
+- **Record a heater's history and calibrate the simulator to it**
+  (#152).
+
+  - ``nwp500.status_history`` is the history's format: one JSON line
+    per status, ``{"t": <ISO 8601 instant>, "status": <raw payload>}``.
+    ``line()`` writes one and ``read()`` reads them back as
+    ``(instant, DeviceStatus)`` pairs. It does no I/O and needs no
+    extra.
+  - ``nwp-cli simulate record HISTORY`` appends the heater's statuses
+    to a file until stopped, by default asking for one every 30 s.
+  - ``nwp-cli simulate calibrate HISTORY`` fits the standby loss, the
+    compressor and the power to that history
+    (``sim.calibration.calibrate``). It prints a row for each term: the
+    value, what it was fitted from, its error, and whether it was
+    fitted or kept the base's value, and why. ``-o`` writes the fitted
+    ``HeaterParams`` document for ``simulate run --params``. The
+    standby fit needs the air beside the heater, from a sensor
+    (``--air``, a CSV file) or a constant (``--ambient``). Given, that
+    air is the recoveries' air too. The heater's own reading, filled
+    across the gaps between compressor runs, and an outdoor projection
+    both biased the fitted loss, so neither stands in for the air.
+    Without ``--humidity`` the fits get 50 %, their documented default.
+    A gap between statuses of more than 4 times the record's usual
+    spacing (at least 5 minutes) is unobserved, so no quiet window or
+    recovery spans a stopped recording. If a write fails, ``record``
+    stops with an error.
+  - ``sim_adapters.history(..., max_gap=)`` marks such gaps: the
+    sample before one is set to water in use and excluded.
+  - :doc:`/how-to/calibrate-simulator` covers the recording, the air,
+    the report, and what a history cannot tell (the draws, a
+    circulation loop the heater does not run).
+  - Three helpers the issue proposed are left out:
+
+    - **A mains-temperature estimate from the air.** The draw terms
+      were fitted against a measured inlet, so an estimated inlet
+      would bias every draw.
+    - **A draw-timing profile from the "hot water in use" flag.** The
+      flag also fires on circulation, and the expected draws from such
+      a profile never predicted better than no draws.
+    - **A check against the daily energy totals.** Power and COP are
+      fitted cycle by cycle.
 
 Changed
 -------
+- **The heater's own air reading is not as close as documented in
+  every season.** ``sim_adapters.location_air_reading``,
+  ``sim.location_air`` and the inputs reference said it read the air
+  beside the heater within about 0.35 °F while the compressor runs.
+  Measured against a sensor beside the heater, that held from August
+  to October. From May to July the reading was up to about 2 °F warm,
+  and in a run's first 2 minutes about 2.7 °F warm. The idle reading
+  is about 6 °F warm, not 5.
 - **The CLI logs to stderr.** It logged to stdout, so a warning could
   land in the middle of ``--json``, ``--raw`` or CSV output piped to
   another program. Output stays on stdout.

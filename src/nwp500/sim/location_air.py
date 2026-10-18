@@ -17,9 +17,14 @@ offset no longer matters; the damping and the lag shape the projection.
 The anchor to use is the heater's own reading **while the compressor
 runs**: the evaporator fan then draws the air it stands in past the
 sensor, which read that air within 0.35 °F (sd 1.25) at one
-installation. Idle, the sensor sits in the cabinet and read about 5 °F
-warm there, by an amount that varies with the air; an idle reading is a
-poor anchor.
+installation from August to October, but up to about 2 °F warm from May
+to July, and about 2.7 °F warm in a run's first 2 minutes. Idle, the
+sensor sits in the cabinet and read about 6 °F warm there, by an amount
+that varies with the air; an idle reading is a poor anchor.
+
+The projection is for looking ahead. Unanchored over a record's quiet
+windows, the same installation's ran about 6 °F cold, so it is no
+substitute for a sensor's air in calibration.
 
 ``fit`` fits the damping, the offset and the lag on a history of such
 readings against the outdoor air's history, from a public weather

@@ -16,6 +16,7 @@ Practical step-by-step recipes for specific tasks.
    auto-recovery
    optimize-tou
    simulate-heater
+   calibrate-simulator
    diagnose-mqtt
    maintenance
    home-assistant

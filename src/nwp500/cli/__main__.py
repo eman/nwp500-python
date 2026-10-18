@@ -1015,10 +1015,11 @@ def _iso_instant(
 
 @cli.group()  # type: ignore[attr-defined]
 def simulate() -> None:
-    """Simulate the water heater (needs the sim extra).
+    """Simulate the water heater (needs the sim extra; record does not).
 
     The heater and its schedules come from the device, a scenario file,
-    or both; flags override either.
+    or both; flags override either. Record the heater's statuses, and
+    calibrate its parameters to them.
     """
 
 
@@ -1165,6 +1166,97 @@ def simulate_snapshot(
             await asyncio.to_thread(Path(output).write_text, text + "\n")
 
     ctx.exit(asyncio.run(_with_device(ctx, command)))
+
+
+@simulate.command("record")  # type: ignore[attr-defined]
+@click.argument("history", type=click.Path(dir_okay=False, writable=True))
+@click.option(
+    "--every",
+    type=click.FloatRange(min=5),
+    default=30.0,
+    show_default=True,
+    help="Seconds between status requests",
+)
+@async_command
+async def simulate_record(
+    mqtt: NavienMqttClient, device: Any, history: str, every: float
+) -> None:
+    """Append the heater's statuses to HISTORY until interrupted.
+
+    Each line is the instant and the raw status, which
+    ``simulate calibrate`` reads. Needs no sim extra.
+    """
+    from .recording import handle_recording
+
+    await handle_recording(mqtt, device, history, every)
+
+
+@simulate.command("calibrate")  # type: ignore[attr-defined]
+@click.argument("history", type=click.Path(exists=True, dir_okay=False))
+@click.option(
+    "-o",
+    "--output",
+    type=click.Path(dir_okay=False, writable=True),
+    help="Write the fitted parameters here (default only the report)",
+)
+@click.option(
+    "--air",
+    type=click.Path(exists=True, dir_okay=False),
+    help="CSV of instant,temperature: a sensor's air beside the heater, "
+    "in the preferred unit",
+)
+@click.option(
+    "--ambient",
+    type=float,
+    help="The air beside the heater, a constant in the preferred unit "
+    "(conditioned space)",
+)
+@click.option(
+    "--humidity",
+    type=click.Path(exists=True, dir_okay=False),
+    help="CSV of instant,percent: that air's relative humidity",
+)
+@click.option(
+    "--params",
+    type=click.Path(exists=True, dir_okay=False),
+    help="A HeaterParams document to refit (default the 65 gal defaults)",
+)
+@click.pass_context
+def simulate_calibrate(
+    ctx: click.Context,
+    history: str,
+    output: str | None,
+    air: str | None,
+    ambient: float | None,
+    humidity: str | None,
+    params: str | None,
+) -> None:
+    """Fit the heater's parameters to its recorded HISTORY.
+
+    Prints what each fit found, and why a term kept the base's value.
+    """
+    sim_cli = _simulator()
+    from . import calibration as cal_cli
+
+    if air is not None and ambient is not None:
+        raise click.UsageError("give --air or --ambient, not both")
+    if ctx.obj.get("unit_system"):
+        set_unit_system(ctx.obj["unit_system"])
+    try:
+        done = cal_cli.calibrate(
+            cal_cli.read_history(history),
+            air=None if air is None else cal_cli.read_readings(air, "air"),
+            ambient=ambient,
+            humidity=None
+            if humidity is None
+            else cal_cli.read_readings(humidity, "humidity"),
+            params=None
+            if params is None
+            else sim_cli.read_document(params, "parameters"),
+        )
+    except sim_cli.InputError as e:
+        raise click.UsageError(str(e)) from None
+    cal_cli.run(done, output)
 
 
 if __name__ == "__main__":

@@ -300,3 +300,10 @@ Live sources
       LiveHeaterSource, LiveScheduleSource, LiveReadError, read_status,
       read_feature, read_reservations, HeaterSource, ScheduleSource,
       EnvironmentSource, LoadSource, DEFAULT_TIMEOUT
+
+
+Recorded history
+================
+
+.. automodule:: nwp500.status_history
+   :members:
