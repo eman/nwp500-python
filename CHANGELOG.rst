@@ -187,7 +187,11 @@ Added
     With a meter, the COP fit prices the heat each cycle's draws and
     circulation runs took, and the draws just before it
     (``metered_withdrawn``, ``metered_lead``; ``calibrate(draws=,
-    circulation=)``), as the model's fit did.
+    circulation=)``), as the model's fit did. What could not be fitted
+    keeps the base's value and is named in ``HeaterParams.unfitted``;
+    every answer it reaches says ``physics_uncalibrated``,
+    ``energy_uncalibrated``, ``standby_uncalibrated`` or
+    ``tau_gap_prior``.
     Circulation's terms from its own telemetry: each run's measured heat
     (``measure_runs``), the displaced volume that prices them
     (``fit_displaced_gal``), its recent flow and the flow a past run ran

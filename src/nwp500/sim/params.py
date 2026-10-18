@@ -1040,6 +1040,14 @@ class CirculationParams:
     )
 
 
+#: The term groups calibration fits, as ``HeaterParams.unfitted`` names
+#: them: ``compressor`` (its constant and approach: a recovery's
+#: duration), ``power`` (the power and COP scales: its energy and COP),
+#: ``standby`` (the jacket's loss law) and ``gap_tau`` (the gap's time
+#: constant).
+UNFITTED_TERMS: tuple[str, ...] = ("compressor", "power", "standby", "gap_tau")
+
+
 @dataclass(frozen=True, kw_only=True)
 class HeaterParams:
     """Every parameter the simulation runs on, as one frozen value."""
@@ -1055,6 +1063,26 @@ class HeaterParams:
     book: BookParams = field(default_factory=BookParams)
     #: None: no circulation, or none described.
     circulation: CirculationParams | None = None
+    #: The term groups (``UNFITTED_TERMS``) whose values were not fitted
+    #: on this heater but kept from the parameters calibration started
+    #: from (``calibration.calibrate``): every answer they reach says so
+    #: (``api`` reasons ``physics_uncalibrated``, ``energy_uncalibrated``,
+    #: ``standby_uncalibrated``, ``tau_gap_prior``). A client with its own
+    #: model may read it and turn the physics off itself.
+    unfitted: tuple[str, ...] = ()
+
+    def __post_init__(self) -> None:
+        unknown = set(self.unfitted) - set(UNFITTED_TERMS)
+        if unknown:
+            raise ValueError(
+                f"unfitted names {sorted(unknown)}, not one of "
+                f"{list(UNFITTED_TERMS)}"
+            )
+        object.__setattr__(
+            self,
+            "unfitted",
+            tuple(t for t in UNFITTED_TERMS if t in set(self.unfitted)),
+        )
 
     def book_terms(self) -> BookParams:
         """``book`` with the mixing valve's line taken from ``draw``: one
@@ -1109,6 +1137,8 @@ def params_to_document(params: HeaterParams) -> dict[str, Any]:
         doc[name] = {
             f.name: _plain(getattr(part, f.name)) for f in fields(part)
         }
+    if params.unfitted:
+        doc["unfitted"] = list(params.unfitted)
     return doc
 
 
@@ -1116,7 +1146,7 @@ def unknown_fields(doc: Mapping[str, Any]) -> list[str]:
     """The parts and fields ``doc`` names that ``HeaterParams`` has not
     (``part`` or ``part.field``): what a newer writer added, which
     ``params_from_document`` leaves out."""
-    out = [k for k in doc if k != "schema" and k not in PARTS]
+    out = [k for k in doc if k not in ("schema", "unfitted") and k not in PARTS]
     for name, cls in PARTS.items():
         known = {f.name for f in fields(cls)}
         out.extend(f"{name}.{k}" for k in doc.get(name, {}) if k not in known)
@@ -1151,4 +1181,4 @@ def params_from_document(doc: Mapping[str, Any]) -> HeaterParams:
             elif f.default is MISSING and f.default_factory is MISSING:
                 raise ValueError(f"{name}.{f.name} is missing")
         parts[name] = cls(**values)
-    return HeaterParams(**parts)
+    return HeaterParams(**parts, unfitted=tuple(doc.get("unfitted", ())))

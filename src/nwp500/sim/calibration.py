@@ -1366,7 +1366,15 @@ def calibrate(
     ``circulation``'s runs (an empty list for none), the COP fit prices
     the heat each cycle's draws and runs took (``metered_withdrawn``,
     ``metered_lead``); without them it keeps draw-free cycles.
-    ``withdrawn`` and ``lead`` replace either."""
+    ``withdrawn`` and ``lead`` replace either.
+
+    What could not be fitted keeps ``base``'s value, the best prior
+    there is for the same product, and is named in the result's
+    ``HeaterParams.unfitted``, so a failed fit never reads as a fitted
+    one: a compressor not fitted (too few recoveries, or pinned on a
+    bound) leaves ``compressor`` and ``power``, power or COP not fitted
+    ``power``, no quiet window ``standby`` and no gap constant
+    ``gap_tau``."""
     standby = fit_standby(history, base.tank.thermal_mass_btu_f)
     params = with_standby(base, standby)
     rows = snapshots(
@@ -1387,6 +1395,16 @@ def calibrate(
             lead = metered_lead(params)
         power = fit_power(rows, params, withdrawn=withdrawn, lead=lead)
         params = with_power(params, power)
+    unfitted = []
+    if compressor is None or compressor.hit_bounds:
+        unfitted += ["compressor", "power"]
+    elif power is None or power.power_scale is None or power.cop_scale is None:
+        unfitted.append("power")
+    if standby.ua_ref is None or standby.ua_exponent is None:
+        unfitted.append("standby")
+    if standby.tau_gap_hours is None:
+        unfitted.append("gap_tau")
+    params = replace(params, unfitted=tuple(unfitted))
     return Calibration(params, standby, compressor, power, found)
 
 

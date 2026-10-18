@@ -359,7 +359,7 @@ class TestWhatTheResultSays:
             params, tank=replace(params.tank, stratification_gap_tau_h=None)
         )
         quiet = simulate(_scenario(), bare)
-        assert "stratification_gap_tau_h=10.0 (prior)" in quiet.defaults_used
+        assert "stratification_gap_tau_h=60.0 (prior)" in quiet.defaults_used
         assert "tau_gap_prior" not in quiet.reasons
         drawn = simulate(
             _scenario(loads=Loads(draws=(Draw(at=at(1.0), gallons=10.0),))),

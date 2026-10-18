@@ -20,9 +20,24 @@ import pandas as pd
 
 from nwp500 import sim_adapters as sa
 from nwp500.models import DeviceStatus
+from nwp500.sim import (
+    Draw,
+    Environment,
+    HeaterState,
+    Loads,
+    Scenario,
+    Settings,
+    default_params,
+    simulate,
+)
 from nwp500.sim import calibration as cal
-from nwp500.sim import default_params
-from nwp500.sim.params import CompressorParams, LossParams, TankParams
+from nwp500.sim.params import (
+    CompressorParams,
+    LossParams,
+    TankParams,
+    params_from_document,
+    params_to_document,
+)
 from nwp500.sim.physics.compressor import predict_physics_detailed
 from nwp500.unit_system import reset_unit_system, set_unit_system
 
@@ -324,9 +339,46 @@ class TestCalibrate:
         got = cal.calibrate(recovery_history([(2, 100, 100.0)]), base)
         assert got.compressor is None
         assert got.standby.ua_ref is None
-        assert got.params == base
+        # Base's values, each named as not fitted on this heater.
+        assert replace(got.params, unfitted=()) == base
+        assert got.params.unfitted == (
+            "compressor",
+            "power",
+            "standby",
+            "gap_tau",
+        )
         assert got.power is None
         assert len(got.recoveries) == 1
+
+    def test_what_was_not_fitted_says_so_in_its_answers(self):
+        got = cal.calibrate(
+            recovery_history([(2, 100, 100.0)]), default_params()
+        )
+        p = got.params
+        t0 = datetime(2026, 10, 5, tzinfo=UTC)
+        s = Scenario(
+            start=t0,
+            horizon=timedelta(hours=6),
+            tz="UTC",
+            state=HeaterState(
+                upper_f=120.0, lower_f=110.0, compressor_running=True
+            ),
+            settings=Settings(setpoint_f=140.9, hp_lower_on_f=105.0),
+            environment=Environment(ambient_f=65.0),
+            loads=Loads(draws=(Draw(at=t0 + timedelta(hours=1), gallons=5.0),)),
+        )
+        r = simulate(s, p)
+        for reason in (
+            "physics_uncalibrated",
+            "energy_uncalibrated",
+            "standby_uncalibrated",
+            "tau_gap_prior",
+        ):
+            assert reason in r.reasons
+        # The record survives the parameters' document.
+        assert params_from_document(params_to_document(p)).unfitted == (
+            p.unfitted
+        )
 
 
 class TestTheHistoryAdapter:

@@ -701,7 +701,15 @@ and each says what it used:
   circulation=[(start, end), ...])`` (an empty list for none), and every
   cycle counts, the heat its draws and runs took priced in.
 
-A part without the evidence keeps the value it had. A meter's draws
+A part without the evidence keeps the value it had, and is named in
+``cal.params.unfitted``: ``compressor`` (too few recoveries, or a fit
+pinned on a bound), ``power``, ``standby`` (no quiet window) or
+``gap_tau``. Every answer such a term reaches says so in its
+``reasons``: ``physics_uncalibrated`` for a recovery's duration,
+``energy_uncalibrated`` for its energy and COP, ``standby_uncalibrated``
+for the jacket's loss, and ``tau_gap_prior`` for a gap that draws open.
+A client with its own recovery model can read ``unfitted`` and turn
+the physics off itself. A meter's draws
 and the circulation's runs, where you record them, make the quiet test
 exact (``sa.history(..., drawing=..., circulating=...)``): the heater's
 own "hot water in use" flag also fires on circulation.

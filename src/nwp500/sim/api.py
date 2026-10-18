@@ -178,9 +178,10 @@ LOW_CONFIDENCE_FLOOR = 0.6
 #: start was never searched (the TOU-opening start still was), so an
 #: answer may miss a start the heater makes.
 HP_LOWER_ON_UNKNOWN = "hp_lower_on_unknown"
-#: The gap time constant served when the parameters have none fitted
-#: (``TankParams.stratification_gap_tau_h``), h, as the model's was.
-TAU_GAP_PRIOR_H = 10.0
+#: The gap time constant served when the parameters carry none
+#: (``TankParams.stratification_gap_tau_h``), h: history puts it near
+#: 60 h on this product.
+TAU_GAP_PRIOR_H = 60.0
 #: Draws opened a gap that closes on that prior, not a fitted constant:
 #: under no draws it only shapes how an existing gap closes.
 TAU_GAP_PRIOR = "tau_gap_prior"
@@ -377,7 +378,7 @@ def simulate(
     tz = ZoneInfo(s.tz)
     reasons: list[str] = []
     defaults: list[str] = []
-    if s.loads.draws and params.tank.stratification_gap_tau_h is None:
+    if s.loads.draws and _gap_prior(params):
         reasons.append(TAU_GAP_PRIOR)
     circulation = _circulation(s.loads)
     physics = _physics(
@@ -490,6 +491,9 @@ def simulate(
         )
         if any_out:
             reasons.append("draw_out_of_domain")
+    reasons += _unfitted(params, "standby")
+    if any(h.source == "compressor" for h in sim.heating):
+        reasons += _unfitted(params, "compressor", "power")
     return SimulationResult(
         start=s.start,
         until=s.until,
@@ -550,6 +554,30 @@ def readiness(
         ep=params.book_terms(),
         setpoint_f=settings.setpoint_f,
         heating=heating,
+    )
+
+
+#: The reason each unfitted term group (``HeaterParams.unfitted``) adds
+#: to an answer it reaches: a failed fit never reads as a fitted one.
+UNFITTED_REASONS: Mapping[str, str] = MappingProxyType(
+    {
+        "compressor": "physics_uncalibrated",
+        "power": "energy_uncalibrated",
+        "standby": "standby_uncalibrated",
+    }
+)
+
+
+def _unfitted(params: HeaterParams, *terms: str) -> list[str]:
+    """The reasons for those of ``terms`` the parameters did not fit."""
+    return [UNFITTED_REASONS[t] for t in params.unfitted if t in terms]
+
+
+def _gap_prior(params: HeaterParams) -> bool:
+    """Whether the gap constant is a prior, not this heater's fit."""
+    return (
+        params.tank.stratification_gap_tau_h is None
+        or "gap_tau" in params.unfitted
     )
 
 
@@ -710,7 +738,7 @@ def standby(
         )
         if any_out:
             reasons.append("draw_out_of_domain")
-        if params.tank.stratification_gap_tau_h is None:
+        if _gap_prior(params):
             reasons.append(TAU_GAP_PRIOR)
     starts_at = trigger = None
     held = False
@@ -745,6 +773,7 @@ def standby(
                 setpoint_f=settings.setpoint_f,
                 mode=mode,
             )
+    reasons += _unfitted(params, "standby")
     flowing = physics.flowing_draws
     circulating = isinstance(flowing, CirculationDraws)
     return Trace(
@@ -1264,6 +1293,13 @@ def time_to_ready(
         element_params=params.element,
         book_params=params.book_terms(),
     )
+    if nxt.outcome == "ok":
+        answer["reasons"] = _unique(
+            [
+                *answer["reasons"],
+                *_unfitted(params, "compressor", "power", "standby"),
+            ]
+        )
     return typed(answer, s.start, nxt, defaults)
 
 
@@ -1573,7 +1609,14 @@ def forecast(
         tou_capped=tou_capped,
         trajectory=trajectory,
         startup_energy_wh=startup,
-        reasons=tuple(_unique(served.reasons)),
+        reasons=tuple(
+            _unique(
+                [
+                    *served.reasons,
+                    *_unfitted(params, "compressor", "power", "standby"),
+                ]
+            )
+        ),
         defaults_used=tuple(defaults),
     )
 
@@ -1686,6 +1729,8 @@ def active_cycle(
         lower_f=state.lower_f,
         target_f=goal,
         confidence=served.confidence,
-        reasons=tuple(_unique(reasons)),
+        reasons=tuple(
+            _unique([*reasons, *_unfitted(params, "compressor", "standby")])
+        ),
         defaults_used=tuple(defaults),
     )

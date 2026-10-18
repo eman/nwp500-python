@@ -702,8 +702,9 @@ what a simulation needs of it:
    * - Field
      - Without it
    * - ``tank.stratification_gap_tau_h``
-     - A 10 h prior, named in ``defaults_used``; with draws, which open
-       a gap that closes on it, ``reasons`` says ``tau_gap_prior``.
+     - A 60 h prior (history puts the constant near it on this
+       product), named in ``defaults_used``; with draws, which open a
+       gap that closes on it, ``reasons`` says ``tau_gap_prior``.
    * - ``compressor.compressor_constant`` above 0
      - No heat-pump recovery can be predicted, and a walk that needs
        one raises ``SimulationError``.
