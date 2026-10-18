@@ -290,3 +290,13 @@ Adapters
 
 .. automodule:: nwp500.sim_adapters
    :members:
+
+
+Live sources
+============
+
+.. automodule:: nwp500.sim_live
+   :members: compose, Composed, Source, Given, HeaterReading,
+      LiveHeaterSource, LiveScheduleSource, LiveReadError, read_status,
+      read_feature, read_reservations, HeaterSource, ScheduleSource,
+      EnvironmentSource, LoadSource, DEFAULT_TIMEOUT
