@@ -8,6 +8,7 @@ its modes by the engine's names), so the facade adds nothing to the
 walk but the translation.
 """
 
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -33,7 +34,12 @@ from nwp500.sim import (  # noqa: E402
     simulate,
     standby,
 )
-from nwp500.sim.engine import Entry, Heater, RawWrite  # noqa: E402
+from nwp500.sim.engine import (  # noqa: E402
+    Entry,
+    Heater,
+    RawWrite,
+    SimulationError,
+)
 from nwp500.sim.engine import simulate as walk  # noqa: E402
 from nwp500.sim.params import HeaterParams  # noqa: E402
 from nwp500.sim.tank_physics import TankPhysics  # noqa: E402
@@ -319,6 +325,58 @@ class TestWhatTheResultSays:
             commands=Commands(writes=(Write(at=at(1.0), mode=6),)),
         )
         assert "write_mode_not_modelled" in simulate(s, params).reasons
+
+    def test_a_write_into_vacation_is_dropped_whole(self, params: HeaterParams):
+        s = _scenario(
+            commands=Commands(
+                writes=(Write(at=at(1.0), mode=5, setpoint_f=120.0),)
+            ),
+        )
+        r = simulate(s, params)
+        assert "write_mode_not_modelled" in r.reasons
+        assert not r.simulation.writes
+
+    def test_a_truncated_recovery_is_refused_by_name(
+        self, params: HeaterParams
+    ):
+        weak = replace(
+            params,
+            compressor=replace(params.compressor, compressor_constant=0.02),
+        )
+        s = _scenario(
+            state=HeaterState(
+                upper_f=110.0, lower_f=100.0, compressor_running=True
+            ),
+            environment=Environment(ambient_f=40.0),
+        )
+        with pytest.raises(SimulationError, match="1800-min bound"):
+            simulate(s, weak)
+
+    def test_draws_without_a_draw_response_are_refused(
+        self, params: HeaterParams
+    ):
+        bare = replace(params, draw=replace(params.draw, observability=None))
+        s = _scenario(loads=Loads(draws=(Draw(at=at(1.0), gallons=30.0),)))
+        with pytest.raises(SimulationError, match="draw_model_unsupported"):
+            simulate(s, bare)
+        with pytest.raises(SimulationError, match="draw_model_unsupported"):
+            standby(
+                s.state,
+                s.environment,
+                s.loads,
+                bare,
+                start=s.start,
+                until=s.until,
+            )
+
+    def test_a_written_setpoint_is_held_as_the_device_holds_it(
+        self, params: HeaterParams
+    ):
+        s = _scenario(
+            commands=Commands(writes=(Write(at=at(1.0), setpoint_f=146.0),)),
+        )
+        (w,) = simulate(s, params).simulation.writes
+        assert w.setpoint_f == 146.3
 
     def test_energy_adds_up(self, params: HeaterParams):
         r = simulate(

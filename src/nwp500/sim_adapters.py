@@ -842,7 +842,10 @@ def replay(
                 continue
             if w.mode is not None:
                 if w.mode in (VACATION, POWER_OFF):
+                    # No rule for what a write into or out of them does:
+                    # the whole write is left out, its setpoint too.
                     reasons.append("recorded_write_not_modelled")
+                    continue
                 else:
                     recorded.append(Write(at=w.at, mode=w.mode))
             if w.setpoint_f is not None:

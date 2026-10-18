@@ -111,6 +111,7 @@ from nwp500.sim.extensions import (
     ZoneBound,
 )
 from nwp500.sim.params import ControllerParams, ElementParams
+from nwp500.sim.physics.compressor import MAX_MINUTES
 from nwp500.sim.physics.draw import settled_lower_f, unsettled_after_f
 from nwp500.sim.physics.element import ElementMode, HeaterMode
 from nwp500.sim.physics.element import coast_f as earned_coast_f
@@ -1046,8 +1047,15 @@ class _Engine:
                 kw["hold_minutes"] = cycle.hold_minutes
             if cycle.lead_load > 0.0:
                 kw["draw_load"] = cycle.lead_load
+            truncated = getattr(self.physics, "truncated_recoveries", 0)
             heat = self.physics.heat(t0, up, lo, target, **kw)
             if heat is None:
+                if getattr(self.physics, "truncated_recoveries", 0) > truncated:
+                    # A weak fit or very cold air, not missing physics.
+                    raise SimulationError(
+                        "recovery unavailable: the physics integration hit "
+                        f"its {MAX_MINUTES:.0f}-min bound short of the target"
+                    )
                 raise SimulationError("recovery unavailable")
             self._note(heat)
             cycle.confidence = min(cycle.confidence, heat.confidence)

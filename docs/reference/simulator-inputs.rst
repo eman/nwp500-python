@@ -198,8 +198,9 @@ Built by ``sim_adapters.settings(status)``.
      - ``DeviceStatus.hp_lower_on_temp_setting_raw`` (half degC): the
        lower thermistor's compressor start threshold. Without it the
        heater never starts on the lower zone, its usual trigger
-       (:doc:`/explanation/what-starts-a-recovery`); the adapter always
-       fills it.
+       (:doc:`/explanation/what-starts-a-recovery`), though a TOU
+       window's opening still can; ``simulate`` and ``standby`` say
+       ``hp_lower_on_unknown``. The adapter always fills it.
    * - ``hp_lower_off_f``
      - degF
      - None
@@ -418,8 +419,10 @@ heater does on its own.
      - none
      - ``Write(at, setpoint_f=..., mode=..., id=...)``: a setpoint, a
        mode or both, at an instant inside the span. ``id`` names it in
-       the result. A write to Vacation or Power Off is not modelled
-       (``write_mode_not_modelled``).
+       the result. Its setpoint is taken as the device will hold it, to
+       the nearest half degree Celsius (146 degF is held as 146.3). A
+       write to Vacation or Power Off is not modelled and is dropped
+       whole, setpoint included (``write_mode_not_modelled``).
    * - ``reservations``
      - None
      - A reservation schedule written at the start, replacing the

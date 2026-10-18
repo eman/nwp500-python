@@ -491,6 +491,9 @@ class TestWithoutALowerThreshold:
         )
         assert t.trigger == "upper_at_tou_open"
         assert t.lower_margin_f is None
+        # Each says it never searched the lower trigger.
+        assert "hp_lower_on_unknown" in r.reasons
+        assert "hp_lower_on_unknown" in t.reasons
 
 
 class _Fixed:

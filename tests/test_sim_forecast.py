@@ -198,6 +198,18 @@ class TestTheRunningCycle:
         assert cold.physics_remaining_minutes > a.physics_remaining_minutes
         assert cold.remaining_minutes == a.remaining_minutes
 
+    @pytest.mark.parametrize("lower", [140.0, 141.0])
+    def test_a_cycle_at_its_target_has_nothing_left(self, params, lower):
+        a = active_cycle(
+            HeaterState(upper_f=141.0, lower_f=lower, compressor_running=True),
+            SETTINGS,
+            ENV,
+            params,
+            at=T0,
+        )
+        assert a.status == "heating" and a.remaining_minutes == 0.0
+        assert a.ready_at == T0 and a.physics_remaining_minutes == 0.0
+
 
 class TestTheAdapters:
     def _status(self, d, **kw):

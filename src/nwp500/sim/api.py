@@ -49,6 +49,7 @@ from nwp500.sim.engine import (
     Heater,
     RawWrite,
     SimulationError,
+    quantise,
 )
 from nwp500.sim.engine import simulate as walk
 from nwp500.sim.extensions import HeatLedger, RecoveryModel
@@ -68,7 +69,7 @@ from nwp500.sim.inputs import (
     Settings,
 )
 from nwp500.sim.params import HeaterParams
-from nwp500.sim.physics.compressor import predict_physics_detailed
+from nwp500.sim.physics.compressor import MAX_MINUTES, predict_physics_detailed
 from nwp500.sim.physics.element import (
     DEVICE_MODE,
     ElementMode,
@@ -84,6 +85,7 @@ from nwp500.sim.ready import (
 )
 from nwp500.sim.recovery import (
     PHYSICS_TRUNCATED,
+    PhysicsRecovery,
     RecoveryContext,
     physics_recovery,
 )
@@ -172,6 +174,10 @@ def _circulation(loads: Loads) -> Circulation | None:
 #: ``recovery_low_confidence``: only a ``RecoveryModel``'s can be, the
 #: physics alone answering with full confidence.
 LOW_CONFIDENCE_FLOOR = 0.6
+#: ``Settings.hp_lower_on_f`` was not known: the heater's lower-zone
+#: start was never searched (the TOU-opening start still was), so an
+#: answer may miss a start the heater makes.
+HP_LOWER_ON_UNKNOWN = "hp_lower_on_unknown"
 
 
 def _physics(
@@ -304,6 +310,10 @@ def _check_setpoints(scenario: Scenario) -> None:
 
 
 def _raw_writes(scenario: Scenario, reasons: list[str]) -> list[RawWrite]:
+    """The commands' writes as the engine takes them: each setpoint as
+    the device will hold it (``engine.quantise``, half degrees Celsius),
+    and a write into Vacation or Power Off dropped whole, setpoint and
+    all, since the simulation holds no rule for what it does."""
     out: list[RawWrite] = []
     for w in scenario.commands.writes:
         mode: HeaterMode | None = None
@@ -311,9 +321,9 @@ def _raw_writes(scenario: Scenario, reasons: list[str]) -> list[RawWrite]:
             mode = ENGINE_MODE.get(w.mode)
             if mode is None:
                 reasons.append("write_mode_not_modelled")
-                if w.setpoint_f is None:
-                    continue
-        out.append(RawWrite(w.at, setpoint_f=w.setpoint_f, mode=mode, id=w.id))
+                continue
+        setpoint = None if w.setpoint_f is None else quantise(w.setpoint_f)
+        out.append(RawWrite(w.at, setpoint_f=setpoint, mode=mode, id=w.id))
     return out
 
 
@@ -353,10 +363,13 @@ def simulate(
     over a recovery running now). With TOU on and no periods to lay out,
     ``reasons`` says ``tou_schedule_unknown`` and no window is kept.
 
-    Raises ``engine.SimulationError`` when the walk cannot be completed.
+    Raises ``engine.SimulationError`` when the walk cannot be completed,
+    and for a scenario with draws and parameters with no fitted draw
+    response (``draw_model_unsupported``).
     """
     s = scenario
     _check_setpoints(s)
+    _check_draws(params, s.loads.draws)
     tz = ZoneInfo(s.tz)
     reasons: list[str] = []
     defaults: list[str] = []
@@ -397,6 +410,8 @@ def simulate(
     mode, disabled = _engine_mode(s.settings.mode)
     if s.settings.hp_lower_on_f is None:
         defaults.append("hp_lower_on_f=None (no lower-zone start)")
+        # The lower trigger was never searched; the TOU-opening one was.
+        reasons.append(HP_LOWER_ON_UNKNOWN)
     _history_defaults(s.state, s.history, defaults)
     entries = _entries(s, tz, reasons)
     raw = _raw_writes(s, reasons)
@@ -532,6 +547,30 @@ def readiness(
     )
 
 
+def _refusal(physics: PhysicsRecovery) -> SimulationError:
+    """Why a recovery could not be served: the integration hitting its
+    bound (a weak fit, or very cold air) is told apart from no usable
+    physics at all."""
+    if physics.truncated:
+        return SimulationError(
+            "the recovery could not be computed: the physics integration "
+            f"hit its {MAX_MINUTES:.0f}-min bound short of the target"
+        )
+    return SimulationError("the recovery could not be computed")
+
+
+def _check_draws(params: HeaterParams, draws: Sequence[Draw]) -> None:
+    """Refuse draws the parameters cannot move the tank for: without a
+    fitted draw response (``DrawParams.observability``) a draw would
+    leave the tank as it was, an answer that looks like one."""
+    if draws and params.draw.observability is None:
+        raise SimulationError(
+            "draw_model_unsupported: the scenario has draws, and the "
+            "parameters have no fitted draw response "
+            "(DrawParams.observability)"
+        )
+
+
 def _largest_draw(draws: Sequence[Draw]) -> float:
     """The largest draw a domain is judged against: each one's own
     per-draw volume where it is an expected draw, else its gallons."""
@@ -624,10 +663,13 @@ def standby(
     ``hp_lower_on``, or the upper zone far short at a TOU window's
     opening, with the lower trigger held as the heater holds it), and
     how far above ``hp_lower_on`` the coast leaves the lower zone.
-    ``schedules`` brings the TOU windows, their local times in ``tz``."""
+    ``schedules`` brings the TOU windows, their local times in ``tz``.
+    Draws with no fitted draw response raise ``engine.SimulationError``
+    (``draw_model_unsupported``)."""
     start, until = _instant(start), _instant(until)
     if until <= start:
         raise ValueError("until must be after start")
+    _check_draws(params, [d for d in loads.draws if start <= d.at < until])
     history = history if history is not None else History()
     defaults: list[str] = []
     if history.heated_at is None:
@@ -667,6 +709,8 @@ def standby(
     margin: float | None = None
     if settings is not None:
         on = settings.hp_lower_on_f
+        if on is None:
+            reasons.append(HP_LOWER_ON_UNKNOWN)
         last = coast.points[-1]
         margin = None if on is None else last.lower_f - on
         mode, disabled = _engine_mode(settings.mode)
@@ -1415,42 +1459,39 @@ def forecast(
         # is an instant): the coast's mean, as the forecast's was.
         fallback = coast_air if coast_air is not None else amb
         t_amb_mean = mean if mean is not None else fallback
-        served = serve_recovery(
-            RecoveryContext(
+        ctx = RecoveryContext(
+            t_start_lower=lower,
+            t_start_upper=upper,
+            target_f=goal,
+            t_amb_start=amb,
+            t_amb_mean=t_amb_mean,
+            h_amb_start=environment.humidity,
+            start_hold_minutes=0.0,
+            draw_load=0.0,
+            physics=physics_recovery(
                 t_start_lower=lower,
                 t_start_upper=upper,
                 target_f=goal,
-                t_amb_start=amb,
                 t_amb_mean=t_amb_mean,
                 h_amb_start=environment.humidity,
-                start_hold_minutes=0.0,
-                draw_load=0.0,
-                physics=physics_recovery(
-                    t_start_lower=lower,
-                    t_start_upper=upper,
-                    target_f=goal,
-                    t_amb_mean=t_amb_mean,
-                    h_amb_start=environment.humidity,
-                    compressor=params.compressor,
-                    loss=params.loss,
-                    usable=physics.physics_usable,
-                    record_path=True,
-                    tank=params.tank,
-                ),
+                compressor=params.compressor,
+                loss=params.loss,
+                usable=physics.physics_usable,
+                record_path=True,
+                tank=params.tank,
             ),
-            model=model,
         )
-        return served, (upper, lower)
+        return serve_recovery(ctx, model=model), (upper, lower), ctx.physics
 
-    served, tank = predict(target, 0.0)
+    served, tank, integrated = predict(target, 0.0)
     if served is None:
-        raise SimulationError("the recovery could not be computed")
+        raise _refusal(integrated)
     decayed_to = target
     for _ in range(_FORECAST_PASSES):
         when = max(compute_start_time(target, served.minutes), origin)
         if when >= target:
             break
-        refined, refined_tank = predict(when, served.minutes)
+        refined, refined_tank, _ = predict(when, served.minutes)
         if refined is None:
             break
         converged = abs(refined.minutes - served.minutes) <= REFINE_TOL_MINUTES
@@ -1547,7 +1588,8 @@ def active_cycle(
     ``sim_adapters.evaporator_f``) in place of its approach estimate:
     the coil is cooled by the running refrigerant, so it is the
     operating point. A truncated integration says
-    ``physics_truncated``."""
+    ``physics_truncated``. A lower zone already at its target has
+    nothing left: 0 minutes, ready now."""
     at = _instant(at)
     if not state.compressor_running:
         return ActiveCycle(status="not_heating")
@@ -1562,33 +1604,45 @@ def active_cycle(
     air = _ambient_at(environment, at)
     # As the core's: a positive compressor constant is calibrated.
     usable = params.compressor.compressor_constant > 0.0
-    served = serve_recovery(
-        RecoveryContext(
+    if state.lower_f >= goal:
+        # The cycle is at its end: the lower zone has reached the target
+        # and the compressor is about to stop. Nothing is left, as the
+        # integrator says (0 minutes).
+        return ActiveCycle(
+            status="heating",
+            ready_at=at,
+            remaining_minutes=0.0,
+            physics_remaining_minutes=0.0 if usable else None,
+            lower_f=state.lower_f,
+            target_f=goal,
+            confidence=1.0,
+            defaults_used=tuple(defaults),
+        )
+    ctx = RecoveryContext(
+        t_start_lower=state.lower_f,
+        t_start_upper=state.upper_f,
+        target_f=goal,
+        t_amb_start=air,
+        # The cycle is under way: the air now stands for its mean.
+        t_amb_mean=air,
+        h_amb_start=environment.humidity,
+        start_hold_minutes=0.0,
+        draw_load=0.0,
+        physics=physics_recovery(
             t_start_lower=state.lower_f,
             t_start_upper=state.upper_f,
             target_f=goal,
-            t_amb_start=air,
-            # The cycle is under way: the air now stands for its mean.
             t_amb_mean=air,
             h_amb_start=environment.humidity,
-            start_hold_minutes=0.0,
-            draw_load=0.0,
-            physics=physics_recovery(
-                t_start_lower=state.lower_f,
-                t_start_upper=state.upper_f,
-                target_f=goal,
-                t_amb_mean=air,
-                h_amb_start=environment.humidity,
-                compressor=params.compressor,
-                loss=params.loss,
-                usable=usable,
-                tank=params.tank,
-            ),
+            compressor=params.compressor,
+            loss=params.loss,
+            usable=usable,
+            tank=params.tank,
         ),
-        model=model,
     )
+    served = serve_recovery(ctx, model=model)
     if served is None:
-        raise SimulationError("the recovery could not be computed")
+        raise _refusal(ctx.physics)
     reasons = list(served.reasons)
     physics_minutes: float | None = None
     if usable:
