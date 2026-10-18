@@ -15,13 +15,14 @@ This module needs the ``sim`` extra.
 """
 
 import csv
+import itertools
 import json
 import logging
 import math
 import sys
 from collections.abc import Sequence
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, TextIO
 
@@ -89,6 +90,28 @@ def read_readings(path: str | Path, what: str) -> list[Reading]:
     return out
 
 
+#: The air's relative humidity when none is given, %: the fits' own.
+DEFAULT_HUMIDITY_PCT = 50.0
+#: Readings further apart than ``GAP_SAMPLES`` times the record's usual
+#: spacing, and at least ``MIN_GAP``, are a span nobody observed.
+GAP_SAMPLES = 4
+MIN_GAP = timedelta(minutes=5)
+
+
+def max_gap(readings: Sequence[status_history.TimedStatus]) -> timedelta:
+    """The longest spacing between readings still taken as observed:
+    ``GAP_SAMPLES`` times their median spacing, and at least
+    ``MIN_GAP``. A recorder asks every 30 s, so a stop and restart is
+    far longer; an element run can be under a minute, so much longer
+    could hide one."""
+    times = sorted(t.timestamp() for t, _ in readings)
+    steps = sorted(b - a for a, b in itertools.pairwise(times) if b > a)
+    if not steps:
+        return MIN_GAP
+    usual = timedelta(seconds=steps[len(steps) // 2])
+    return max(MIN_GAP, GAP_SAMPLES * usual)
+
+
 @dataclass(frozen=True)
 class Calibrated:
     """A calibration, and what the command chose along the way."""
@@ -98,6 +121,10 @@ class Calibrated:
     #: ``constant``), or None.
     air: str | None
     n_statuses: int
+    #: Readings further apart than this were taken as unobserved, and
+    #: how many such spans the history has.
+    max_gap: timedelta
+    n_gaps: int
     notes: tuple[str, ...]
 
 
@@ -127,15 +154,22 @@ def calibrate(
         )
     else:
         base = read_params(params, "--params")
+    first = min(t for t, _ in readings)
+    last = max(t for t, _ in readings)
     series: list[Reading] | None = None
     how: str | None = None
     if air is not None:
         series, how = list(air), "readings"
     elif ambient is not None:
-        first = min(t for t, _ in readings)
-        last = max(t for t, _ in readings)
         series, how = [(first, ambient), (last, ambient)], "constant"
-    frame = sa.history(readings, air=series, humidity=humidity)
+    if humidity is None:
+        # The fits' own default, given explicitly: an absent humidity
+        # reaches the evaporator's dew point as NaN, which reads as 100 %.
+        humidity = [(first, DEFAULT_HUMIDITY_PCT), (last, DEFAULT_HUMIDITY_PCT)]
+    gap = max_gap(readings)
+    times = sorted(t for t, _ in readings)
+    n_gaps = sum(b - a > gap for a, b in itertools.pairwise(times))
+    frame = sa.history(readings, air=series, humidity=humidity, max_gap=gap)
     if how is None:
         notes.append(
             "no air given (--air or --ambient): the standby loss is not fitted"
@@ -145,7 +179,7 @@ def calibrate(
         base,
         recovery_air="heater_air_f" if how is None else "air_f",
     )
-    return Calibrated(fitted, how, len(readings), tuple(notes))
+    return Calibrated(fitted, how, len(readings), gap, n_gaps, tuple(notes))
 
 
 # ── the report ──────────────────────────────────────────────────────
@@ -162,6 +196,8 @@ class Term:
     error: str
     fitted: bool
     why: str = ""
+    #: What a fitted value means, where it needs saying.
+    note: str = ""
 
 
 def _num(value: float | None, digits: int = 3) -> str:
@@ -203,14 +239,12 @@ def report(done: Calibrated) -> list[Term]:
             _num(s.ua_exponent),
             f"{kept} windows",
             "-",
-            s.ua_exponent is not None and s.ua_exponent > 0.0,
-            why
-            or (
-                ""
-                if s.ua_exponent
-                else "held at 0 (constant UA): the windows do not span "
-                "two 20 °F bands"
-            ),
+            s.ua_exponent is not None,
+            why,
+            note=""
+            if s.ua_exponent != 0.0
+            else "0, a constant loss: under 4 windows, under two 20 °F "
+            "bands, or the fit clamped to 0",
         ),
         Term(
             "Zone gap time constant (h)",
@@ -305,6 +339,12 @@ def report(done: Calibrated) -> list[Term]:
     return terms
 
 
+def _kept(t: Term) -> str:
+    if t.fitted:
+        return f"fitted: {t.note}" if t.note else "fitted"
+    return f"base: {t.why}" if t.why else "base"
+
+
 def print_report(done: Calibrated, console: Console) -> None:
     """The report as tables on ``console``."""
     c = done.calibration
@@ -312,6 +352,12 @@ def print_report(done: Calibrated, console: Console) -> None:
         f"{done.n_statuses} statuses; quiet test: {c.standby.quiet_by}; "
         f"{len(c.recoveries)} recoveries found"
     )
+    if done.n_gaps:
+        minutes = done.max_gap.total_seconds() / 60
+        console.print(
+            f"{done.n_gaps} gap{'' if done.n_gaps == 1 else 's'} of over "
+            f"{minutes:g} min between statuses: no fit spans them"
+        )
     console.print(
         {
             "readings": "Air: the readings given",
@@ -328,7 +374,7 @@ def print_report(done: Calibrated, console: Console) -> None:
             t.value,
             t.samples,
             t.error,
-            "fitted" if t.fitted else f"base: {t.why}" if t.why else "base",
+            _kept(t),
         )
     console.print(table)
     unfitted = ", ".join(c.params.unfitted) or "none"

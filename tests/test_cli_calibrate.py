@@ -22,6 +22,8 @@ except ImportError:
     pytest.skip("CLI dependencies not installed", allow_module_level=True)
 
 from nwp500 import sim, status_history
+from nwp500 import sim_adapters as sa
+from nwp500.models import DeviceStatus
 from nwp500.sim import calibration as cal
 from nwp500.sim.params import params_from_document, params_to_document
 from nwp500.unit_system import reset_unit_system, set_unit_system
@@ -43,14 +45,18 @@ def _deci_c(f: float) -> int:
 
 
 def quiet_lines(
-    status: dict[str, Any], hours: float = 24, ua: float = UA
+    status: dict[str, Any],
+    hours: float = 24,
+    ua: float = UA,
+    *,
+    start: datetime = T0,
 ) -> list[str]:
-    """A quiet tank cooling at ``ua`` toward ``AIR_F``, a status every
-    two minutes, as a recorder writes it."""
+    """A quiet tank cooling at ``ua`` toward ``AIR_F`` from 130 °F, a
+    status every two minutes, as a recorder writes it."""
     lines, tank, gap = [], 130.0, 4.0
     step = timedelta(minutes=2)
-    t = T0
-    while t < T0 + timedelta(hours=hours):
+    t = start
+    while t < start + timedelta(hours=hours):
         raw = status | {
             "tankUpperTemperature": _deci_c(tank + gap / 2),
             "tankLowerTemperature": _deci_c(tank - gap / 2),
@@ -115,7 +121,11 @@ class TestTheFits:
         terms = _terms(
             cal_cli.calibrate(cal_cli.read_history(history), ambient=AIR_F)
         )
-        assert "two 20 °F bands" in terms["Standby loss exponent"].why
+        exponent = terms["Standby loss exponent"]
+        # Applied, not kept: the fit replaces the base's exponent with 0.
+        assert exponent.fitted and exponent.value == "0"
+        assert "a constant loss" in exponent.note
+        assert "two 20 °F bands" in exponent.note
         assert "20 needed" in terms["Zone gap time constant (h)"].why
         compressor = terms["Compressor constant"]
         assert not compressor.fitted
@@ -167,6 +177,61 @@ class TestTheFits:
         k = _terms(pinned)["Compressor constant"]
         assert not k.fitted
         assert "pinned on a bound" in k.why
+
+    def test_without_humidity_the_air_is_50_percent(self, history, monkeypatch):
+        seen: list[Any] = []
+        real = cal.calibrate
+
+        def spy(frame: Any, *args: Any, **kw: Any) -> Any:
+            seen.append(frame)
+            return real(frame, *args, **kw)
+
+        monkeypatch.setattr(cal_cli.cal, "calibrate", spy)
+        cal_cli.calibrate(cal_cli.read_history(history), ambient=AIR_F)
+        assert (seen[0]["humidity_pct"] == 50.0).all()
+        cal_cli.calibrate(
+            cal_cli.read_history(history),
+            ambient=AIR_F,
+            humidity=[(T0, 35.0)],
+        )
+        assert (seen[1]["humidity_pct"] == 35.0).all()
+
+    def test_a_stopped_recording_is_not_one_quiet_window(
+        self, tmp_path, device_status_dict
+    ):
+        # Recorded 0-8 h and 11-24 h; the tank was heated back to 130 °F
+        # in between, unobserved.
+        lines = quiet_lines(device_status_dict, hours=8) + quiet_lines(
+            device_status_dict, hours=13, start=T0 + timedelta(hours=11)
+        )
+        path = tmp_path / "restarted.jsonl"
+        path.write_text("\n".join(lines) + "\n")
+        readings = cal_cli.read_history(path)
+        done = cal_cli.calibrate(readings, ambient=AIR_F)
+        assert done.n_gaps == 1
+        s = done.calibration.standby
+        assert (s.n_quiet, len(s.windows)) == (2, 2)
+        assert s.ua_ref == pytest.approx(UA, rel=0.05)
+        # Taken as observed, the gap joins them into one window.
+        joined = cal.fit_standby(sa.history(readings, air=[(T0, AIR_F)]), MASS)
+        assert joined.n_quiet == 1
+        out = io.StringIO()
+        cal_cli.run(done, None, out)
+        assert "1 gap of over 8 min between statuses" in out.getvalue()
+
+    @pytest.mark.parametrize(
+        ("spacing_s", "expected"),
+        [(30, timedelta(minutes=5)), (120, timedelta(minutes=8))],
+    )
+    def test_the_gap_scales_with_the_spacing(
+        self, device_status_dict, spacing_s, expected
+    ):
+        status = DeviceStatus.model_validate(device_status_dict)
+        readings = [
+            (T0 + timedelta(seconds=spacing_s * i), status) for i in range(10)
+        ]
+        assert cal_cli.max_gap(readings) == expected
+        assert cal_cli.max_gap(readings[:1]) == cal_cli.MIN_GAP
 
     def test_the_base_is_the_one_given(self, history):
         base = replace(sim.default_params(1), unfitted=())
@@ -269,4 +334,5 @@ class TestTheCommand:
         cal_cli.run(done, None, out)
         text = out.getvalue()
         assert "base: no air given" in text
+        assert "gaps of over" not in text
         assert "Unfitted: compressor, power, standby, gap_tau" in text

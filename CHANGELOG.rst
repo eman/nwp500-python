@@ -295,6 +295,13 @@ Added
     air is the recoveries' air too. The heater's own reading, filled
     across the gaps between compressor runs, and an outdoor projection
     both biased the fitted loss, so neither stands in for the air.
+    Without ``--humidity`` the fits get 50 %, their documented default.
+    A gap between statuses of more than 4 times the record's usual
+    spacing (at least 5 minutes) is unobserved, so no quiet window or
+    recovery spans a stopped recording. If a write fails, ``record``
+    stops with an error.
+  - ``sim_adapters.history(..., max_gap=)`` marks such gaps: the
+    sample before one is set to water in use and excluded.
   - :doc:`/how-to/calibrate-simulator` covers the recording, the air,
     the report, and what a history cannot tell (the draws, a
     circulation loop the heater does not run).

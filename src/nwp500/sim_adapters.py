@@ -580,6 +580,7 @@ def history(
     humidity: Iterable[tuple[datetime, float]] | None = None,
     drawing: Iterable[tuple[datetime, datetime]] | None = None,
     circulating: Iterable[tuple[datetime, datetime]] | None = None,
+    max_gap: timedelta | None = None,
 ) -> pd.DataFrame:
     """A heater's history as ``sim.calibration`` takes it, from the
     statuses it reported and when (``readings``, any order).
@@ -598,6 +599,12 @@ def history(
     - ``humidity``: that air's relative humidity, %;
     - ``drawing``, ``circulating``: the spans a meter saw water drawn and
       a circulation pump ran, where an installation records them.
+
+    ``max_gap``: readings further apart than this are a span nobody
+    observed (a recorder stopped and started again). The sample before
+    such a span is marked water in use and excluded, so no quiet
+    window and no recovery spans it. Without it, every span between two
+    readings is taken as observed.
     """
     import pandas as pd
 
@@ -661,6 +668,12 @@ def history(
     for name, spans in (("drawing", drawing), ("circulating", circulating)):
         if spans is not None:
             frame[name] = _interval_column(index, spans)
+    if max_gap is not None and len(frame) > 1:
+        unobserved = np.zeros(len(frame), dtype=bool)
+        unobserved[:-1] = np.diff(seconds) > max_gap.total_seconds()
+        for name in ("dhw_in_use", "drawing", "excluded"):
+            if name in frame.columns:
+                frame[name] = frame[name].to_numpy(dtype=bool) | unobserved
     return frame
 
 

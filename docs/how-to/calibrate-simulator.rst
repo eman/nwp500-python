@@ -34,8 +34,13 @@ out):
    {"t": "2026-10-18T23:09:10.298+00:00", "status": {"dhwUse": 1, "...": 0}}
 
 Stopping and starting again appends to the same file, so the record
-can have gaps. Fits use only the spans that have the evidence they
-need. Write the file any other way you like (an MQTT callback, an
+can have gaps. The heater may have heated or delivered water during a
+gap, so ``calibrate`` takes any spacing between statuses of more than
+4 times the record's usual spacing (and at least 5 minutes) as
+unobserved. No quiet window and no recovery spans such a gap, and the
+report counts them. If a write fails (a full disk, say), the recording
+stops with an error rather than carrying on without saving. Write the
+file any other way you like (an MQTT callback, an
 export from a home-automation recorder) as long as each line has this
 shape: ``nwp500.status_history.line(instant, raw_status)`` writes one,
 and ``status_history.read(lines)`` reads them back as
@@ -91,7 +96,7 @@ installation, against the sensor, that reading was within about
 to July, and about 2.7 °F warm in a run's first 2 minutes.
 
 ``--humidity`` takes the same kind of file, in %RH, for the
-evaporator; without it the fit assumes 50 %.
+evaporator; without it the command gives the fits 50 %.
 
 
 Calibrate
@@ -164,15 +169,29 @@ The command is a thin layer over ``sim.calibration.calibrate``:
 
 .. code-block:: python
 
+   from datetime import timedelta
+
    from nwp500 import sim, sim_adapters as sa, status_history
    from nwp500.sim import calibration
 
    with open("history.jsonl") as f:
        readings = status_history.read(f)
-   history = sa.history(readings, air=air_readings)  # [(instant, temp)]
+   history = sa.history(
+       readings,
+       air=air_readings,            # [(instant, temperature), ...]
+       humidity=humidity_readings,  # [(instant, %RH), ...]
+       max_gap=timedelta(minutes=5),
+   )
    fitted = calibration.calibrate(history, sim.default_params(),
                                   recovery_air="air_f")
    params = fitted.params
+
+Give the humidity: without a ``humidity_pct`` column, a recovery's
+humidity reaches the evaporator's dew point as NaN, which reads as
+100 %, not the 50 % the fits document. A constant series of 50 %, as
+the command passes, is the fits' own default. ``max_gap`` is what
+marks a recording's gaps as unobserved; without it every span between
+two statuses is taken as observed.
 
 From Python you can also give a meter's draws and the circulation's
 runs, which make the quiet test exact and price the heat each cycle's

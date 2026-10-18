@@ -817,11 +817,15 @@ and says which air to give; from Python:
 
 .. code-block:: python
 
+   from datetime import timedelta
+
    from nwp500.sim import calibration
 
    history = sa.history(
        recorded,                 # [(instant, DeviceStatus), ...]
        air=air_over_the_record,  # a sensor's, beside the heater
+       humidity=humidity,        # %RH; give 50 if you have none
+       max_gap=timedelta(minutes=5),  # a longer gap is unobserved
    )
    fitted = calibration.calibrate(history, sa.params(feature),
                                   recovery_air="air_f")
