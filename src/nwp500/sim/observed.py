@@ -31,7 +31,7 @@ write made there could own it, and the record does not show it.
 """
 
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta
 from itertools import pairwise
 from types import MappingProxyType
@@ -368,7 +368,10 @@ def observe(
     now: datetime,
 ) -> Observed:
     """What the heater did over ``[frm, to)``, both on the ``SLOT``
-    grid; nothing after ``now`` is claimed (module docstring)."""
+    grid; nothing after ``now`` is claimed (module docstring). A
+    setting's value in force is looked for as far back as a state's
+    (``STATE_LOOKBACK``)."""
+    record = replace(record, setting_lookback=STATE_LOOKBACK)
     cut = max(frm, min(to, now))
     ctx = frm - MERGE_CONTEXT
     gaps: dict[Signal, list[tuple[datetime, datetime, str]]] = {

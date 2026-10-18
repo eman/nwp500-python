@@ -906,7 +906,7 @@ instant from the record:
        until=yesterday_11pm,
        tz="America/Los_Angeles",
        schedules=sa.schedules(tou=tou_info, reservations=reservations),
-       environment=sa.environment(ambient=air_then),
+       air=air_readings,         # [(instant, value), ...] where it stands
    )
    result = sim.simulate(r.scenario, params)
 
@@ -915,9 +915,14 @@ before ``at``. When the compressor last stopped and when the tank last
 heated come from the record's edges. Every setpoint or mode change
 over the span is a write, except the heater's own drop to Heat Pump as
 a TOU window opens. The TOU switch's changes are kept too. A write into
-Vacation or Power Off cannot be simulated and is named in
-``r.reasons``. The record holds no schedule, so give the heater's own,
-read with this library.
+Vacation or Power Off cannot be simulated: it is left out whole and
+named in ``r.reasons``. The record holds no schedule, so give the
+heater's own, read with this library. With ``air``, the air is the
+recorded readings as 10-minute means from 6 hours before ``at`` (a
+past instant's weather forecast is not recorded), and ``humidity=``
+goes with it. Without it, the heater's own reading at ``at`` holds,
+and that reads the cabinet, about 5 degF warm, while the compressor is
+idle. ``environment=`` replaces either.
 
 
 Compare it with what the heater did

@@ -132,13 +132,18 @@ class Record:
     hp_lower_on_f: Rows = ()
     hp_upper_on_f: Rows = ()
     tou: Rows = ()
+    #: How far back a setting's value in force (the TOU switch, the
+    #: upper start threshold, the mode and setpoint a write is judged
+    #: against) is looked for: settings record only on change and
+    #: legitimately hold for months.
+    setting_lookback: timedelta = SETTING_LOOKBACK
 
     def tou_switches(
         self, start: datetime, end: datetime
     ) -> list[tuple[datetime, bool]]:
         """Every change of the TOU switch in ``(start, end)``, judged
         against the state in force before it."""
-        prior = last(self.tou, start, SETTING_LOOKBACK)
+        prior = last(self.tou, start, self.setting_lookback)
         state = None if prior is None else prior[1] >= 0.5
         out: list[tuple[datetime, bool]] = []
         for at, v in between(self.tou, start, end):
@@ -156,7 +161,7 @@ class Record:
         before = last(
             self.hp_upper_on_f,
             start - timedelta(microseconds=1),
-            SETTING_LOOKBACK,
+            self.setting_lookback,
         )
         raised = before is not None and before[1] > RAISED_ABOVE_F
         openings: list[datetime] = []
@@ -179,7 +184,7 @@ class Record:
         self,
         start: datetime,
         end: datetime,
-        lookback: timedelta = SETTING_LOOKBACK,
+        lookback: timedelta | None = None,
     ) -> list[RecordedWrite]:
         """Every change of the setpoint and of the mode in ``(start,
         end)``, in time order, a mode before a setpoint at one instant,
@@ -187,6 +192,7 @@ class Record:
         Heat Pump out of an element mode within ``DROP_WITHIN`` of TOU
         switching on or a window opening is the heater's, ``dropped``."""
         out: list[tuple[datetime, int, RecordedWrite]] = []
+        lookback = self.setting_lookback if lookback is None else lookback
         prior = last(self.setpoint_f, start, lookback)
         value = None if prior is None else prior[1]
         for at, v in between(self.setpoint_f, start, end):

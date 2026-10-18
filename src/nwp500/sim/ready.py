@@ -104,6 +104,12 @@ class Recovery:
     #: adds heat at this rate from its start to its end: the book's own
     #: term, not the physics' apparent-frame stored energy.
     hp_btu_per_h: float = 0.0
+    #: The recovery as ``forecast`` gives it, each point with its
+    #: electricity, stored heat and COP over the interval ending there
+    #: (``heating_trajectory.HeatingPoint``), and the start-up's energy,
+    #: Wh (None without a fitted COP): a projection's heating curve.
+    trajectory: Sequence[Any] = ()
+    startup_energy_wh: float | None = None
 
 
 def recovery_as_of(rec: Recovery, then: datetime, now: datetime) -> Recovery:

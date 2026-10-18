@@ -55,6 +55,9 @@ class TestTheProjection:
         )
         assert len(air) == 13
 
+    def test_no_forecast_is_no_projection(self):
+        assert project(SITE_LOCATION_AIR, [], T0, T0 + timedelta(hours=1)) == ()
+
     def test_it_holds_past_the_forecasts_ends(self):
         model = LocationAirModel(1.0, timedelta(0), 0.0)
         out = _outdoor(6)

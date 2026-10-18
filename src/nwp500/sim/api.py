@@ -1105,6 +1105,8 @@ def next_recovery(
         coast_btu=coast_btu,
         coast_draw_gal=coast_gal,
         hp_btu_per_h=hp_btu_per_h(air, bp),
+        trajectory=tuple(trajectory),
+        startup_energy_wh=answer.startup_energy_wh,
     )
 
 

@@ -774,6 +774,49 @@ def observe(
     )
 
 
+#: How far before a replay's start its recorded air is read.
+CLIMATE_LOOKBACK = timedelta(hours=6)
+
+
+def _recorded_air(
+    air: Iterable[tuple[datetime, float]] | None,
+    at: datetime,
+    until: datetime,
+    humidity: float | None,
+    status: DeviceStatus,
+) -> Environment:
+    """A replay's air: the recorded readings' 10-minute means from
+    ``CLIMATE_LOOKBACK`` before ``at`` to as long after ``until``, the
+    last carried over a silent bin; the heater's own reading with
+    none."""
+    import pandas as pd
+
+    rows = sorted(
+        (t.astimezone(UTC), _to_sim(v))
+        for t, v in _finite(air or ())
+        if at - CLIMATE_LOOKBACK
+        <= t.astimezone(UTC)
+        <= until + CLIMATE_LOOKBACK
+    )
+    if not rows:
+        fallback = _air(status)
+        if humidity is None:
+            return fallback
+        return fallback.model_copy(update={"humidity": humidity})
+    series = pd.Series(
+        [v for _, v in rows], index=pd.DatetimeIndex([t for t, _ in rows])
+    )
+    binned = series.resample("10min").mean().ffill().dropna()
+    kw: dict[str, Any] = {
+        "ambient_f": tuple(
+            (t.to_pydatetime(), float(v)) for t, v in binned.items()
+        )
+    }
+    if humidity is not None:
+        kw["humidity"] = humidity
+    return Environment(**kw)
+
+
 def replay(
     readings: Iterable[tuple[datetime, DeviceStatus]],
     *,
@@ -782,6 +825,8 @@ def replay(
     tz: str,
     schedules: Schedules | None = None,
     environment: Environment | None = None,
+    air: Iterable[tuple[datetime, float]] | None = None,
+    humidity: float | None = None,
     loads: Loads | None = None,
     writes: bool = True,
 ) -> Replay:
@@ -805,7 +850,12 @@ def replay(
     ``schedules`` brings the TOU periods and reservations (the
     heater's own, read with this library: the record has none); its
     switch and switches are the record's. ``environment`` defaults to
-    the heater's own air reading at ``at``.
+    the recorded ``air`` where the heater stands (a sensor's readings,
+    in the preferred unit), as 10-minute means from ``CLIMATE_LOOKBACK``
+    before ``at`` (a past instant's weather forecast is not recorded),
+    with ``humidity`` (%RH); without it, to the heater's own air reading
+    at ``at``, which reads the cabinet, about 5 °F warm, while the
+    compressor is idle.
     """
     at, until = at.astimezone(UTC), until.astimezone(UTC)
     if until <= at:
@@ -876,7 +926,11 @@ def replay(
                 "tou_switches": tuple(switches),
             }
         ),
-        environment=environment if environment is not None else _air(now),
+        environment=(
+            environment
+            if environment is not None
+            else _recorded_air(air, at, until, humidity, now)
+        ),
         loads=loads if loads is not None else Loads(),
         commands=Commands(writes=tuple(recorded)),
     )

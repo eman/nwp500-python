@@ -87,9 +87,13 @@ def project(
     """The air where the heater stands from ``start`` to ``end`` every
     ``step``, by ``model`` on the ``outdoor`` forecast, moved to pass
     through ``anchor`` (a reading and its instant) when given: the
-    readings ``Environment.ambient_f`` takes."""
+    readings ``Environment.ambient_f`` takes. No outdoor forecast is no
+    projection: empty, not an error, so the caller falls back to its
+    own air."""
     if step <= timedelta(0):
         raise ValueError("step must be positive")
+    if not outdoor:
+        return ()
     # The grid in elapsed time, UTC: a local wall clock skips or repeats
     # an hour at a daylight-saving change.
     start, end = start.astimezone(UTC), end.astimezone(UTC)

@@ -5,6 +5,7 @@ The derivations are held to their source by the parity check run with
 the port; these hold their rules.
 """
 
+import itertools
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -200,3 +201,24 @@ class TestTheSwitchInTheWalk:
         p = default_params()
         assert simulate(s, p).heating[0].capped
         assert not simulate(off, p).heating[0].capped
+
+
+class TestTheAir:
+    def _replay(self, record, **kw):
+        return sa.replay(
+            record.readings(), at=at(30), until=at(300), tz="UTC", **kw
+        )
+
+    def test_the_recorded_air_as_ten_minute_means(self, record):
+        air = [(at(m), 60.0 + (m % 20) / 10) for m in range(-400, 400, 2)]
+        env = self._replay(record, air=air, humidity=45.0).scenario.environment
+        assert isinstance(env.ambient_f, tuple)
+        stamps = [t for t, _ in env.ambient_f]
+        assert stamps[0] >= at(30) - sa.CLIMATE_LOOKBACK - timedelta(minutes=10)
+        steps = {b - a for a, b in itertools.pairwise(stamps)}
+        assert steps == {timedelta(minutes=10)}
+        assert env.humidity == 45.0
+
+    def test_without_it_the_heaters_own_reading(self, record):
+        env = self._replay(record).scenario.environment
+        assert isinstance(env.ambient_f, float)
