@@ -3582,3 +3582,57 @@ def fit_ungated_observability(
     if not lo <= factor <= hi:
         return None
     return factor, len(pairs)
+
+
+def energy_saver_off_deficit(
+    off_points: pd.DataFrame, *, n_boot: int = 4000, seed: int = 252
+) -> tuple[float, float, float] | None:
+    """``ElementParams.energy_saver_upper_off_below_setpoint_f``: how far
+    short of the setpoint Energy Saver's upper element stops, the median
+    deficit over ``element_off_points``' clean upper off-edges in that
+    mode with the probe read within ``FRESH_READ_S`` of the edge (an
+    older read was still rising), with its 90 % day-bootstrap interval.
+    None without one."""
+    if off_points.empty:
+        return None
+    deficit = np.asarray(off_points["deficit"], dtype=float)
+    keep = (
+        np.asarray(off_points["clean"], dtype=bool)
+        & (np.asarray(off_points["which"]) == "upper")
+        & (np.asarray(off_points["mode"], dtype=float) == ENERGY_SAVER)
+        & (np.asarray(off_points["age_s"], dtype=float) <= FRESH_READ_S)
+        & np.isfinite(deficit)
+    )
+    if not keep.any():
+        return None
+    return day_ci(
+        deficit[keep],
+        np.asarray(off_points["day"])[keep],
+        n_boot=n_boot,
+        seed=seed,
+    )
+
+
+def upper_start_edge(runs: pd.DataFrame) -> dict[str, float] | None:
+    """How far below the setpoint the upper element starts, as an edge
+    (``element_runs``' upper runs with no known draw): the smallest
+    deficit seen, and among the starts within 8 °F of the setpoint how
+    many, the smallest, the 10th percentile and the median. The edge is
+    the smallest deficit that still starts it, not the middle of the
+    starts. None without an upper run."""
+    if runs.empty:
+        return None
+    drawn = [d is True for d in runs["draw"]]
+    upper = np.asarray(runs["which"]) == "upper"
+    deficit = np.asarray(runs["deficit"], dtype=float)[upper & ~np.array(drawn)]
+    if not len(deficit):
+        return None
+    close = deficit[deficit < 8]
+    some = bool(len(close))
+    return {
+        "smallest_f": float(deficit.min()),
+        "close_n": float(len(close)),
+        "close_min_f": float(close.min()) if some else math.nan,
+        "close_p10_f": float(np.quantile(close, 0.1)) if some else math.nan,
+        "close_median_f": float(np.median(close)) if some else math.nan,
+    }

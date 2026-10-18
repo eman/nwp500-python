@@ -464,3 +464,17 @@ def forecast_loads(
         ),
     )
     return loads, withheld
+
+
+def shower_gal(profile: DrawProfile) -> float | None:
+    """The long draw a household expects, delivered gallons: the
+    rate-weighted mean of the profile's long draws' per-draw volume (its
+    volumes over its rates), for ``time_to_ready``'s ``shower_gal`` over
+    the next 24 hours. None when the profile expects no long draw."""
+    rate = volume = 0.0
+    for d in profile.draws:
+        if d.draw_class != "long" or d.per_draw_gal <= 0:
+            continue
+        rate += d.volume_gal / d.per_draw_gal
+        volume += d.volume_gal
+    return volume / rate if rate > 0 else None

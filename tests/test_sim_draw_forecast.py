@@ -121,6 +121,17 @@ class TestTheProfile:
         assert (w.start, 8.0, 20.0) in draws
 
 
+class TestTheShower:
+    def test_it_is_the_rate_weighted_long_draw(self):
+        slots = issue({60: 0.4, 80: 0.1})
+        slots[80] = replace(slots[80], long_volume_mean_gal=10.0)
+        p = F.draw_profile(slots, T0, T0 + timedelta(hours=24))
+        # (0.4 x 20 + 0.1 x 10) / 0.5
+        assert F.shower_gal(p) == pytest.approx(18.0)
+        none = F.draw_profile(issue(), T0, T0 + timedelta(hours=24))
+        assert F.shower_gal(none) is None
+
+
 class TestInAWalk:
     def _scenario(self, draws):
         return Scenario(

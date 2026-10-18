@@ -576,6 +576,11 @@ draws it expects instead:
        result = sim.simulate(scenario.model_copy(update={"loads": loads}),
                              params, book=book, withheld_windows=withheld)
 
+``draw_forecast.shower_gal(profile)`` over the next 24 hours is the
+long draw the household expects, the rate-weighted mean of the long
+draws' volume; pass it on as ``time_to_ready(shower_gal=...,
+shower_from_forecast=True)``.
+
 An issue answers only a window its slots cover whole, and only for
 36 hours after it was issued (``no_covering_issue``). To replay an
 issue on another week, move it with ``draw_forecast.shifted`` and pass
@@ -864,6 +869,10 @@ and rate are fitted as one line, run minutes = lag + rise / rate. The
 rate taken end to end on the grid (``fit_element_rates``) comes out
 lower because the lag is inside it. ``day_ci`` is the 90 % interval
 the measurements report, bootstrapped over local days.
+``cal.energy_saver_off_deficit(off)`` reduces the off-edges to Energy
+Saver's stop short of the setpoint, and
+``cal.upper_start_edge(cal.element_runs(grid))`` the runs to how far
+below the setpoint the upper element starts.
 
 Plan with the heater's facts
 ============================

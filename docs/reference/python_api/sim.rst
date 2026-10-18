@@ -166,7 +166,8 @@ Hot water and the heat book
       flow_lookup, circulation_windows, CirculationWindow,
       fit_ungated_observability, element_stints, fit_element_lag, ElementLagFit,
       element_off_points, element_power, element_grid, element_runs,
-      fit_element_rates, ElementRateFit, day_ci, fit_power,
+      fit_element_rates, ElementRateFit, day_ci,
+      energy_saver_off_deficit, upper_start_edge, fit_power,
       PowerFit, fit_power_scale,
       fit_cop_scale, solve_cop_fit, solve_cop_scale, draw_free_withdrawn,
       metered_withdrawn, metered_lead,
@@ -178,9 +179,9 @@ Hot water and the heat book
    :members: HeaterProfile, heater_profile, check, COMMAND_KEYS
 
 .. automodule:: nwp500.sim.draw_forecast
-   :members: ForecastSlot, check_issue, draw_profile, DrawProfile,
-      ExpectedDraw, heater_draw_windows, ForecastWindow, draws_first,
-      forecast_loads
+   :members: ForecastSlot, check_issue, covers, shifted, draw_profile,
+      DrawProfile, ExpectedDraw, heater_draw_windows, ForecastWindow,
+      draws_first, forecast_loads, shower_gal
 
 .. automodule:: nwp500.sim.cold_supply
    :members: plateau_t_cold, ColdSupply, ColdSupplyParams, on_the_mains

@@ -16,7 +16,7 @@ import math
 from collections.abc import Mapping, Sequence
 from datetime import UTC, datetime, timedelta
 from types import MappingProxyType
-from typing import Any
+from typing import Any, Literal
 from zoneinfo import ZoneInfo
 
 import pandas as pd
@@ -1237,6 +1237,7 @@ def time_to_ready(
     book: Booked | None = None,
     bath_gal: float | None = None,
     shower_gal: float | None = None,
+    shower_from_forecast: bool = False,
     drawing: bool = False,
     inlet_measured: bool = False,
     recovery: RecoveryModel | None = None,
@@ -1251,7 +1252,11 @@ def time_to_ready(
     without it the answer is the full-tank floor's or the evidence's.
     ``bath_gal`` and ``shower_gal`` default to
     ``ReadinessParams.bath_gal`` and ``shower_gal``, named in
-    ``defaults_used``. ``drawing``: water is being drawn now.
+    ``defaults_used`` and in ``reasons`` (``bath_volume_inferred``,
+    ``shower_volume_default``). ``shower_from_forecast``: the
+    ``shower_gal`` given is a draw forecast's
+    (``draw_forecast.shower_gal``). ``drawing``: water is being drawn
+    now.
     ``inlet_measured``: the book converts heat to gallons at an inlet
     measured at the mains (a probe's plateau over a long draw); without
     it, or a book whose steps measured the inlet at least
@@ -1265,11 +1270,17 @@ def time_to_ready(
     s = scenario
     p = params.readiness
     defaults: list[str] = []
+    bath_source: Literal["configured", "request"] = "request"
     if bath_gal is None:
         bath_gal = p.bath_gal
+        bath_source = "configured"
         defaults.append(f"bath_gal={bath_gal}")
+    shower_source: Literal["weekly_forecast", "default", "request"] = (
+        "weekly_forecast" if shower_from_forecast else "request"
+    )
     if shower_gal is None:
         shower_gal = p.shower_gal
+        shower_source = "default"
         defaults.append(f"shower_gal={shower_gal}")
     # In a TOU window now: the heater's own marker. Unknown counts as in
     # force, as for the counter test and for ``element_mode``: the
@@ -1310,9 +1321,9 @@ def time_to_ready(
         tank,
         nxt,
         bath_gal=round(bath_gal, 1),
-        bath_source="configured",
+        bath_source=bath_source,
         shower_gal=shower_gal,
-        shower_source="default",
+        shower_source=shower_source,
         valid_s=0.0,
         setpoint_f=s.settings.setpoint_f,
         booked=book,
