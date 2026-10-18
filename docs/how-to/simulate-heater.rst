@@ -735,8 +735,12 @@ pinned on a bound), ``power``, ``standby`` (no quiet window) or
 ``reasons``: ``physics_uncalibrated`` for a recovery's duration,
 ``energy_uncalibrated`` for its energy and COP, ``standby_uncalibrated``
 for the jacket's loss, and ``tau_gap_prior`` for a gap that draws open.
-A client with its own recovery model can read ``unfitted`` and turn
-the physics off itself. A meter's draws
+The base's record of the installation's book, readiness and draw terms
+is kept (``default_params`` names all three): they are fitted apart,
+from a meter's draws, and once you apply your own fits drop each from
+``unfitted`` (``replace(params, unfitted=...)``). A client with its
+own recovery model can read ``unfitted`` and turn the physics off
+itself. A meter's draws
 and the circulation's runs, where you record them, make the quiet test
 exact (``sa.history(..., drawing=..., circulating=...)``): the heater's
 own "hot water in use" flag also fires on circulation.
@@ -952,7 +956,10 @@ element counts only where the heater's power shows it running, by a
 reading in the run or one at most a minute before it starts
 (``Record.element_power_slack``; a meter reporting less often passes
 its own). Power is recorded on change, so a handoff between the
-elements at one wattage leaves no new reading.
+elements at one wattage leaves no new reading. A drop to Heat Pump
+within 5 seconds of a TOU window opening is the heater's own, not a
+write (``Record.drop_within``, for a slower poll), and the upper start
+threshold reads 104.9 degF at rest (``Record.resting_upper_on_f``).
 ``seen.slots`` are the energy per 10 minutes from the heater's own
 power; ``seen.modes`` are the mode in force and whether the heat source
 the heater reported showed it in effect, named by a heater profile

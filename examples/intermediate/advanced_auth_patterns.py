@@ -49,8 +49,9 @@ async def example_basic_pattern():
         if devices:
             device = devices[0]
             print(f"  Device: {device.device_info.device_name}")
-            unit = device.status.get_field_unit("dhw_temperature")
-            print(f"  Temperature: {device.status.dhw_temperature}{unit}")
+            # The REST list carries no live status; that comes over MQTT
+            # (see example_with_mqtt below).
+            print(f"  MAC: {device.device_info.mac_address}")
 
     print("✓ Context exited, session closed")
 

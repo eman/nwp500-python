@@ -120,7 +120,9 @@ The span
        and TOU periods are local times. **Not reported**: the heater
        keeps local time with no zone. On a daylight-saving change a
        skipped local time fires an hour later on the wall clock, and a
-       repeated one fires once.
+       repeated one fires once. A TOU window or circulation run the
+       clock skips whole never happens; one it skips part of keeps its
+       elapsed time.
 
 
 The heater's state: ``HeaterState``
@@ -686,7 +688,9 @@ whether it was ``measured``, ``fitted`` or an engineering ``default``
 
 ``default_params(volume_code)`` takes ``DeviceFeature.volume_code``
 (``sim_adapters.params(feature)`` passes it). It has **no mixing
-valve**; ``site_example_params`` is the installation the values were
+valve**, and names the installation's book, readiness and draw terms
+in ``unfitted`` (``INSTALLATION_TERMS``: one installation's fits stand
+in for them); ``site_example_params`` is the installation the values were
 fitted at, its valve included, and ``with_valve(params, (intercept_f,
 slope))`` sets a valve's delivery line, delivered water at ``intercept +
 slope x upper zone``, never above the tank. ``NO_VALVE`` is ``(0, 1)``;

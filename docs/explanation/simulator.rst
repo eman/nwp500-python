@@ -210,7 +210,12 @@ that installation whole, its thermostatic mixing valve included.
 the one draw setting with no fitted numbers in it, and the one that
 errs the safe way for a valve owner who leaves it unset (every gallon
 charged as tank water, so depletion is called early, never late). An
-installation with a valve sets its line (``with_valve``). The 50 and
+installation with a valve sets its line (``with_valve``). It also has
+no circulation and no readiness evidence, and it names the
+installation's heat book, readiness and draw terms as not fitted
+(``HeaterParams.unfitted``), so the answers they reach say
+``book_uncalibrated``, ``readiness_uncalibrated`` or
+``draw_uncalibrated`` until an installation's own meter fits them. The 50 and
 80 gal models get the same parameters with the tank's volume scaled by
 nominal size, and nothing else: their compressors, elements and jacket
 loss have not been measured.
