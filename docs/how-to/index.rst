@@ -15,6 +15,7 @@ Practical step-by-step recipes for specific tasks.
    queue-commands
    auto-recovery
    optimize-tou
+   simulate-heater
    diagnose-mqtt
    maintenance
    home-assistant

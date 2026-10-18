@@ -5,8 +5,258 @@ Changelog
 Unreleased
 ==========
 
+Added
+-----
+- **An optional heater simulator, ``nwp500.sim``** (#150, first part). The
+  core of a physics simulation of the NWP500: an R-134a compressor model
+  coupled to a two-zone tank, standby loss, the heating elements, draws,
+  and the heater's own controller (start triggers, the TOU hold and
+  recovery cap, the restart lockout, reservation entries, setpoint and
+  mode writes), walked as events by ``nwp500.sim.engine.simulate()``. It
+  is a port of an engine checked against recorded data from one
+  NWP500-65, and returns the same answers to the last bit. Install it
+  with the ``sim`` extra (numpy, pandas, scipy). It performs no I/O,
+  reads no clock and holds no module state, and ``import nwp500`` does
+  not load it. An import-linter contract in ``tox -e lint`` keeps it
+  from importing the MQTT or REST clients, aiohttp, the AWS IoT SDK or
+  ``logging``.
+- **The simulator's API** (#150, second part).
+
+  - ``nwp500.sim.simulate(scenario, params)`` walks a frozen
+    ``Scenario``: the heater's state, settings, history, schedules,
+    environment, draws and the commands under evaluation.
+  - ``recovery()`` answers "when will the tank be hot?", and
+    ``standby()`` projects the tank coasting.
+  - The TOU periods become the windows the heater holds, and the
+    reservations become firings, with the local times in the
+    scenario's zone (``sim.schedules``).
+  - Results name every default they used.
+  - ``default_params(volume_code)`` carries one NWP500-65's parameters,
+    with the tank volume scaled for the 50 and 80 gal models.
+  - ``sim.codec`` reads and writes scenarios as JSON documents.
+  - ``nwp500.sim_adapters`` builds the inputs from ``DeviceStatus``,
+    ``DeviceFeature``, ``ReservationSchedule`` and ``TOUInfo``, reading
+    the raw fields so the unit preference cannot change them. It is
+    where units are crossed: ``environment``, ``loads``, ``write`` and
+    ``reservation_entry`` take a caller's values in the preferred units
+    (degC and litres under ``metric``), and ``path``, ``temperature``
+    and ``volume`` give a result's back in them. The simulator itself
+    works in degF and US gallons.
+  - Docs: a how-to (``docs/how-to/simulate-heater.rst``), from fetching
+    the heater's data to evaluating a change before sending it; a
+    reference of every input, its unit, default and source
+    (``docs/reference/simulator-inputs.rst``); an explanation of the
+    model and its accuracy (``docs/explanation/simulator.rst``); and the
+    API reference.
+
+  - Hot water at the tap: ``nwp500.sim.readiness(state, settings,
+    params)`` gives deliverable gallons now; ``Loads.windows`` judge a
+    shower or a bath (deliverable gallons and margin at the onset, and
+    whether the delivered water ran cold); ``SimulationResult.delivery``
+    is the delivered temperature along the walk (``sim.delivery``).
+  - The heat book (``sim.book``): the tank's heat by bookkeeping, walked
+    through the simulation as the engine's ``HeatLedger`` so a draw that
+    spends it takes the zones down. Started from the caller's knowledge
+    (``full_tank_book``) or their own record, never guessed from the
+    probes.
+  - ``HeaterParams`` gains ``readiness`` (the line, the outlet lag, the
+    fall rate, the dip tolerance, evidence) and ``book`` parts, with one
+    installation's measured defaults and their provenance.
+  - Time to ready: ``nwp500.sim.time_to_ready(scenario, params)`` says
+    whether the tank can run a bath, when it can in the heat pump and
+    in each element mode with the energy to get there, and how many
+    showers it is ready for, along the recovery the heater runs next
+    (``next_recovery``) (``sim.ready``).
+  - ``standby(..., settings=)`` says when the heater would start itself
+    on the coast and why; ``element_mode`` projects a recovery in an
+    element mode.
+  - A walk with draws outside the range the draw terms were fitted over
+    says ``draw_out_of_domain`` (``DrawParams.domain_upper_f``,
+    ``domain_volume_gal``); a write or a written reservation outside the
+    setpoint range the simulation runs is refused.
+
+  **Behaviour notes.** Answers that a client carrying an earlier copy of
+  this engine will see change at the switch:
+
+  - When no ``RecoveryModel`` answers (none given, or it declines) and
+    the physics integration stops at its bound short of the target,
+    there is no recovery and ``simulate`` raises ``SimulationError``.
+    The bound is no longer served as a duration.
+  - A recovery's reasons keep the served recovery's own (a truncated
+    integration, a model's diagnostics) beside ``recovery_low_confidence``.
+  - ``mode_recovery``'s ``upper_end_f`` is the zone's own temperature
+    when the element does not start or has nothing to do.
+  - A draw during a recovery honours ``draws_on`` and is priced on the
+    configured tank, not the 63.2 gal default.
+  - No ``hp_lower_on`` disables only the lower trigger; the upper
+    zone's at a TOU window's opening still starts the heater.
+  - A draw at a draw window's onset counts its cold side when the window
+    is judged.
+  - TOU prices are compared decoded at their own ``decimal_point``; each
+    period is laid out on the dates its day and season masks select
+    before windows that touch are joined across midnight.
+  - Scenario instants are held in UTC, so a horizon is elapsed time
+    across a daylight-saving change; a scenario document keeps which
+    fields were left to their defaults.
+  - ``sim.book.SpanLoss`` lets a client charge a loss the book does not
+    model; without one, the book charges none.
+  - Circulation runs within 10 minutes of each other are one run over
+    the whole schedule, so a coast boundary between them no longer
+    charges each its own displaced volume.
+  - ``default_params()`` has no mixing valve; ``site_example_params()``
+    is the installation the values were fitted at, its valve included
+    (``with_valve``, ``SITE_VALVE``). The core's draw functions default
+    to no valve as well. Each parameter says whether it describes the
+    heater or the installation (``scope_of``), and the frame it was
+    fitted in (``note_of``).
+  - Circulation (``sim.circulation``): an installation's runs
+    (``Loads.circulation``, ``sim_adapters.circulation`` for a weekly
+    schedule) charged as flowing draws and to the heat book while they
+    run, on ``HeaterParams.circulation``; with none, nothing is charged.
+  - The air where the heater stands, from the heater alone and a public
+    forecast: ``sim_adapters.location_air_reading`` (the heater's own
+    reading, only while the compressor runs) and
+    ``sim_adapters.location_air`` (an outdoor forecast projected by
+    ``sim.location_air``, anchored to that reading, with ``fit`` for
+    one's own model). ``time_to_ready`` and ``next_recovery`` take a
+    ``RecoveryModel``.
+  - Calibration from the heater's own record (``sim.calibration``,
+    ``sim_adapters.history`` to build one from ``DeviceStatus``
+    readings): the standby loss law and the zones' mixing constant from
+    quiet windows, then the compressor constant and evaporator approach
+    from heat-pump recoveries that reached their target, then input
+    power and apparent COP against the heater's own power readings, each
+    reported
+    with what it rested on (held-out error, windows used, a fit pinned
+    on a bound). An element run counts as busy in the quiet test, not
+    only the compressor and hot water in use.
+  - ``forecast``: when a recovery must start to have the tank ready at
+    a time, and whether it can (``feasible``, ``shortfall_minutes``),
+    to the heater's own stop threshold or a partial charge, with
+    ``no_heating_required`` (the lower zone at its target, or a zero
+    energy count outside a TOU window), ``not_scheduled``, and the
+    trajectory's electricity, stored heat and COP.
+    ``active_cycle``: what is left of a running recovery, its physics
+    estimate on the evaporator coil's live reading.
+    ``Settings.hp_lower_off_f``, ``hp_upper_on_f`` and
+    ``HeaterState.energy_to_setpoint_wh`` carry what they need, filled
+    by the adapters; ``recovery`` says ``not_scheduled`` in Vacation and
+    Power Off.
+  - The heater's profile (``sim.profile``): its modes and their energy,
+    setpoint range and step, depletion threshold and tank, under a
+    revision digest; and ``recovery_as_of``, a kept recovery aged to
+    now.
+  - The element terms from a heater's raw record (``sim.calibration``):
+    the upper probe's lag and rate as one line from clean stints
+    (``element_stints``, ``fit_element_lag``), where each element
+    switches off and what it draws per metered stint
+    (``element_off_points``, ``element_power``), and the zones' rates
+    and element power on the one-minute grid (``element_grid``,
+    ``fit_element_rates``), each with day-bootstrap intervals.
+  - Draws from a weekly draw forecast (``sim.draw_forecast``): an issue
+    checked whole, its expected draws (rate x per-draw mean, the
+    per-draw volume kept), the heater's draw windows, and the worst case
+    of each window's long draws first (``forecast_loads``,
+    ``simulate(withheld_windows=)``). A draw's domain is now judged by
+    its per-draw volume where it carries one (``Draw.per_draw_gal``),
+    not its fractional expectation.
+  - The mains from an inlet probe (``sim.cold_supply``,
+    ``sim_adapters.cold_supply``): the median plateau of recent long
+    draws with circulation off and the meter reading flow, from minute 9
+    of each; ``on_the_mains`` converts a book's gallons at it.
+  - What the heater did over a range, from its record, as the model
+    reads it: ``sim.record.Record`` (each signal's change rows, its
+    writes and the heater's own drops, TOU switches and window edges,
+    starts with elements corroborated by power;
+    ``sim_adapters.record``), ``sim.attribution`` (why each recorded
+    start happened) and ``sim.observed`` (modes and whether each was in
+    effect, when each source ran, counted and attributed starts, energy
+    per slot, the delivered temperature, and the record's gaps;
+    ``sim_adapters.observe``). ``replay`` reads its writes from the same
+    record.
+  - The readiness evidence and the heat book's own terms from a metered
+    record (``sim.calibration``, ``sim_adapters.draw_frame``): clean
+    draws and their demonstrated volumes reduced to the frontier, with a
+    time-ordered held-out check, and the cap after a cold lower zone;
+    the book's compressor rate, its slope with the air, standby UA and
+    circulation's loss fitted on re-anchors of full tanks
+    (``RecordedBook``, ``fit_book_terms``), its error by anchor age, and
+    the empty points in the book's frame and the drawable one, and the
+    error bands (``book_error_btu``: the p90 pooled over anchors an hour
+    to 18 h old, and the 18-24 h band's, each rounded up to 100 BTU).
+    With a meter, the COP fit prices the heat each cycle's draws and
+    circulation runs took, and the draws just before it
+    (``metered_withdrawn``, ``metered_lead``; ``calibrate(draws=,
+    circulation=)``), as the model's fit did, each run at the flow it
+    ran at (``circulation_flow_at=``, ``flow_lookup``). What could not be fitted
+    keeps the base's value and is named in ``HeaterParams.unfitted``;
+    every answer it reaches says ``physics_uncalibrated``,
+    ``energy_uncalibrated``, ``standby_uncalibrated`` or
+    ``tau_gap_prior``.
+    The probes' share of circulation's heat
+    (``circulation_windows``, ``fit_ungated_observability``), fitted
+    against the displaced volume it is used with.
+    Circulation's terms from its own telemetry: each run's measured heat
+    (``measure_runs``), the displaced volume that prices them
+    (``fit_displaced_gal``), its recent flow and the flow a past run ran
+    at (``recent_flow_gpm``, ``flow_lookup``), as the model fitted them.
+    The book's response to a draw, fitted on the record's long draws by
+    the procedures its values were fitted with: the cold front's place
+    and width (``fit_front``), the lower zone's settling after a draw
+    (``fit_front_settle``) and the upper zone's mixing
+    (``fit_zone_mix``), each with a day bootstrap.
+  - The heat book from a recorded history, as the model kept it:
+    ``sim.book.Step``, ``book_steps`` (the anchor on a quiet full tank
+    after a recovery, or a recovery's end during a draw; every step
+    booked from it; the inlet the median of 3 h of a probe), and
+    ``sim_adapters.book_from_history``, which grids the heater's
+    statuses, a hot-water meter's flow, circulation's runs and flow and
+    an inlet probe onto 10 s steps and books 18 h, else 72 h aged.
+    ``CirculationParams.meter_share`` is the share of a run's flow the
+    meter also reads; ``BookParams`` gains ``history_h``, ``draw_gpm``
+    and ``inlet_window_s``.
+  - ``sim_adapters.replay``: a past scenario from the statuses the
+    heater reported, as the model's replay read its record: the state
+    then, the compressor's last stop and the last heating from their
+    edges, the recorded setpoint and mode changes as writes (but the
+    heater's own drop to Heat Pump at a window), and the TOU switch's
+    changes (``Schedules.tou_switches``, which the walk applies).
+  - The heater's own TOU marker (``Settings.hp_upper_on_f`` raised):
+    ``time_to_ready`` and ``element_mode`` read "in a window now" from
+    it, and ``next_recovery`` lets it override the schedule for a
+    recovery running now (``api.marked_windows``), as the model did;
+    an unknown marker counts as in force. ``simulate(tou_windows_in_force=)``
+    takes the windows to keep, and TOU on with no periods says
+    ``tou_schedule_unknown``. ``element_mode(setpoint_f=)`` projects to a
+    what-if setpoint while the heater's own decides the window test.
+  - ``time_to_ready`` says ``inlet_temp_modelled`` when a booked answer
+    converts at an inlet nobody measured (``inlet_measured=``, or a
+    book whose steps measured it); ``next_recovery``'s coast loses the
+    heat circulation takes on it as well as standby; a served recovery
+    under 0.6 confidence says ``recovery_low_confidence``. ``standby``
+    reports the gallons drawn and the heat they took, circulation's
+    minutes and heat, and the mean air over the coast.
+  - ``default_params()`` names the installation's book, readiness and
+    draw terms in ``HeaterParams.unfitted`` (``INSTALLATION_TERMS``):
+    they are one installation's fits, so answers they reach say
+    ``book_uncalibrated``, ``readiness_uncalibrated`` or
+    ``draw_uncalibrated``. A ``Record`` drops missing readings on entry
+    and takes its installation's cadences and the heater's resting
+    threshold (``drop_within``, ``element_power_slack``,
+    ``resting_upper_on_f``). ``observe(profile=, revision_since=)``
+    names modes by a heater profile. ``schedules.rule_windows`` lays out
+    TOU rules that have no prices, such as a learned schedule. The
+    engine, the tank physics and the physics models are documented as
+    public (:doc:`/reference/python_api/sim`).
+
 Changed
 -------
+- **The package root loads its exports on first use** (PEP 562).
+  ``from nwp500 import NavienMqttClient``, ``nwp500.DeviceStatus`` and
+  ``nwp500.mqtt`` work as before, and type checkers read the same names,
+  but ``import nwp500.sim`` and ``nwp500.sim_adapters`` no longer load
+  the clients, aiohttp or the AWS IoT SDK (tested in a fresh
+  interpreter).
 - **Superheat is converted as a difference** (#153).
   ``DeviceStatus.target_super_heat`` and ``current_super_heat`` converted
   their raw tenths of a degree Celsius as absolute temperatures, so in

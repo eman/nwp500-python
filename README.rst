@@ -20,6 +20,7 @@ Features
 * **Advanced Features:** Native support for reservations, time-of-use (TOU) optimization, and anti-legionella cycles.
 * **Type-Safe:** Built with Pydantic for robust data validation and unit handling.
 * **Async/Await:** Modern asyncio-based implementation for high-performance integration.
+* **Simulator (optional):** A physics model of the heater, ``nwp500.sim``, that answers "when will the tank be hot?", "how much hot water is there?" and "what would this change do?", and calibrates from a heater's own history. Install it with ``pip install nwp500-python[sim]``; it loads none of the network clients.
 
 Getting Started
 ===============
@@ -33,16 +34,37 @@ Quick Example
 
 .. code-block:: python
 
-    from nwp500 import NavienAuthClient, NavienAPIClient
+    import asyncio
 
-    async with NavienAuthClient("email@example.com", "password") as auth:
-        api = NavienAPIClient(auth)
-        devices = await api.list_devices()
-        
-        if devices:
-            device = devices[0]
-            print(f"Temperature: {device.status.dhw_temperature}°F")
-            await api.set_device_temperature(device, 130)
+    from nwp500 import NavienAPIClient, NavienAuthClient, NavienMqttClient
+
+
+    async def main():
+        async with NavienAuthClient("email@example.com", "password") as auth:
+            api = NavienAPIClient(auth)
+            device = await api.get_first_device()
+
+            # Status and control go over MQTT.
+            mqtt = NavienMqttClient(auth)
+            await mqtt.connect()
+            try:
+                got = asyncio.Event()
+
+                def on_status(status):
+                    print(f"Tank: {status.dhw_temperature}°F, "
+                          f"setpoint {status.dhw_target_temperature_setting}°F")
+                    got.set()
+
+                await mqtt.subscribe_device_status(device, on_status)
+                await mqtt.request_device_status(device)
+                await asyncio.wait_for(got.wait(), timeout=20)
+
+                await mqtt.set_dhw_temperature(device, 130)
+            finally:
+                await mqtt.disconnect()
+
+
+    asyncio.run(main())
 
 Documentation
 =============
