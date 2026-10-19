@@ -112,6 +112,18 @@ def max_gap(readings: Sequence[status_history.TimedStatus]) -> timedelta:
     return max(MIN_GAP, GAP_SAMPLES * usual)
 
 
+def _unobserved(
+    index: Any,
+    covers: tuple[datetime, datetime],
+    outages: Sequence[tuple[datetime, datetime]],
+) -> Any:
+    """Where ``index`` falls outside ``covers`` or inside an outage."""
+    mask = (index < covers[0]) | (index > covers[1])
+    for a, b in outages:
+        mask |= (index >= a) & (index < b)
+    return mask
+
+
 async def read_record(
     sources: Any, readings: Sequence[status_history.TimedStatus]
 ) -> Any:
@@ -177,6 +189,7 @@ def calibrate(
     series: list[Reading] | None = None
     how: str | None = None
     covers: tuple[datetime, datetime] | None = None
+    rh_covers: tuple[datetime, datetime] | None = None
     if air is not None:
         series, how = list(air), "readings"
     elif ambient is not None:
@@ -189,6 +202,10 @@ def calibrate(
         covers = (record.air[0][0], record.air[-1][0] + timedelta(hours=1))
     if humidity is None and record is not None and record.humidity:
         humidity = record.humidity
+        rh_covers = (
+            record.humidity[0][0],
+            record.humidity[-1][0] + timedelta(hours=1),
+        )
     drawing = circulating = None
     if record is not None:
         notes.extend(record.notes)
@@ -216,11 +233,18 @@ def calibrate(
         circulating=circulating,
         max_gap=gap,
     )
-    if covers is not None:
-        # Held past its ends, the series would stand for air nobody read.
-        index = frame.index
-        outside = (index < covers[0]) | (index > covers[1])
-        frame.loc[outside, "air_f"] = float("nan")
+    # A source's series, held past its ends or across an outage, would
+    # stand for air nobody read: the air is left unknown there, and the
+    # humidity takes the fits' own default.
+    if covers is not None and record is not None:
+        frame.loc[
+            _unobserved(frame.index, covers, record.air_outages), "air_f"
+        ] = float("nan")
+    if rh_covers is not None and record is not None:
+        frame.loc[
+            _unobserved(frame.index, rh_covers, record.humidity_outages),
+            "humidity_pct",
+        ] = DEFAULT_HUMIDITY_PCT
     if how is None:
         notes.append(
             "no air given (--air, --ambient or --sources): the standby "

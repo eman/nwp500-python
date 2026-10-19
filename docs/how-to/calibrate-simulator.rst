@@ -81,8 +81,10 @@ Idle, it reads the cabinet, about 6 °F warm. So give one of these:
   the meter's draws and the circulation's runs, which make the quiet
   test exact: the heater's own "hot water in use" flag also fires on
   circulation. Home Assistant keeps 10 days of history by default. The
-  air is used only over the span its history covers, and the report
-  says how much that is. The meter's draws and the circulation's runs
+  air is used only over the span its history covers, and not while its
+  sensor was ``unavailable``; the humidity takes the 50 % default
+  outside that span, and the report says how much that is. Any flow the
+  meter reports counts as a draw here, however short. The meter's draws and the circulation's runs
   are used only when their history covers the whole record; otherwise
   the heater's own flag stands in, since a span with no history would
   read as one with no water moving. For the same reason, a spell when

@@ -779,3 +779,55 @@ class TestTheSecondReviewLive:
         )
         env = await source.read()
         assert env.ambient_f == 70.0
+
+
+@pytest.mark.asyncio
+class TestTheThirdReview:
+    START = NOW - timedelta(days=2)
+
+    async def test_a_short_draw_without_a_rate_is_drawing(self):
+        at = NOW - timedelta(hours=3)
+        client = FakeClient(
+            UNITS,
+            {
+                "sensor.volume": [
+                    (self.START, 0.0),
+                    (at, 1.0),
+                    (at + timedelta(seconds=30), 1.0),
+                ],
+                "sensor.pump": [(self.START, 0.0)],
+            },
+        )
+        got = await ha.record_inputs(
+            client,  # pyright: ignore[reportArgumentType]
+            ha.Entities(
+                meter_volume="sensor.volume", circulation_speed="sensor.pump"
+            ),
+            self.START,
+            NOW,
+        )
+        (drawn,) = got.drawing or []
+        assert drawn[0] <= at <= drawn[1]
+
+    async def test_air_and_humidity_outages_are_carried(self):
+        gap = (NOW - timedelta(hours=10), NOW - timedelta(hours=8))
+        client = FakeClient(
+            {
+                "sensor.air": _s("sensor.air", 60.0, "°F"),
+                "sensor.rh": _s("sensor.rh", 40.0, "%"),
+            },
+            {
+                "sensor.air": [(self.START, 60.0)],
+                "sensor.rh": [(self.START, 40.0)],
+            },
+            outages={"sensor.air": [gap], "sensor.rh": [gap]},
+        )
+        got = await ha.record_inputs(
+            client,  # pyright: ignore[reportArgumentType]
+            ha.Entities(air="sensor.air", humidity="sensor.rh"),
+            self.START,
+            NOW,
+        )
+        assert got.air_outages == (gap,)
+        assert got.humidity_outages == (gap,)
+        assert sum("left unobserved" in n for n in got.notes) == 2

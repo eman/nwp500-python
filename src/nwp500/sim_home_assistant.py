@@ -835,6 +835,10 @@ class RecordInputs:
     drawing: list[Span] | None
     circulating: list[Span] | None
     notes: tuple[str, ...] = ()
+    #: The spans the air's and the humidity's entities were unavailable:
+    #: not observed, whatever the readings either side say.
+    air_outages: tuple[Span, ...] = ()
+    humidity_outages: tuple[Span, ...] = ()
 
 
 def draw_spans(
@@ -967,6 +971,9 @@ async def record_inputs(
                 if rate_id and rate_id in units
                 else []
             )
+            # Any net flow at the line is water moving, however briefly:
+            # the quiet test is conservative where the plateau's sustain
+            # filter is not.
             flow = meter.flow_gpm(
                 [
                     (t, to_gal(v, units[volume_id]))
@@ -975,6 +982,7 @@ async def record_inputs(
                 rate,
                 start,
                 end,
+                sustain=timedelta(0),
             )
             # While the meter was unavailable, water may have moved.
             down = busy(
@@ -998,4 +1006,27 @@ async def record_inputs(
                 outage("circulation", down)
         except ValueError as err:
             notes.append(f"circulation: {err}")
-    return RecordInputs(air, humidity, drawing, circulating, tuple(notes))
+    air_down = (
+        tuple(got.outages.get(e.air, [])) if air is not None and e.air else ()
+    )
+    rh_down = (
+        tuple(got.outages.get(e.humidity, []))
+        if humidity is not None and e.humidity
+        else ()
+    )
+    for what, spans in (("air", air_down), ("humidity", rh_down)):
+        if spans:
+            hours = sum((b - a).total_seconds() for a, b in spans) / 3600
+            notes.append(
+                f"{what}: unavailable {len(spans)} times ({hours:.1f} h), "
+                "left unobserved"
+            )
+    return RecordInputs(
+        air,
+        humidity,
+        drawing,
+        circulating,
+        tuple(notes),
+        air_outages=air_down,
+        humidity_outages=rh_down,
+    )

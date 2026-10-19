@@ -96,7 +96,8 @@ def flow_gpm(
             lo += 1
         net.append(abs(total) / span_s * 60.0)
     # The sustained runs.
-    need = round(sustain / step)
+    # Whole steps, rounded up: a run never counts before ``sustain``.
+    need = math.ceil(sustain / step)
     sustained = [False] * len(times)
     i = 0
     while i < len(times):

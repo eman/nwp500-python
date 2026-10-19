@@ -86,3 +86,24 @@ class TestTheForwardRate:
             steady(2.0, 15), [(_at(4 * 60), 5.0)], T0, _at(20 * 60)
         )
         assert _value(flow, 4 * 60) == pytest.approx(2.0)
+
+
+class TestSustainRoundsUp:
+    def test_a_run_never_counts_before_sustain(self):
+        # One report per step, a 10 s window: 13 steps at the line, a
+        # run 120 s long.
+        reports = [(_at(10 * (i + 1)), 1.0) for i in range(13)]
+
+        def moving(sustain_s: float) -> bool:
+            flow = meter.flow_gpm(
+                reports,
+                [],
+                T0,
+                _at(300),
+                window=timedelta(seconds=10),
+                sustain=timedelta(seconds=sustain_s),
+            )
+            return any(v > 0 for _, v in flow)
+
+        assert moving(120)
+        assert not moving(125)

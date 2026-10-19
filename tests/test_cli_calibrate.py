@@ -279,6 +279,38 @@ class TestTheFits:
         assert done.calibration.standby.quiet_by == "dhw_in_use"
         assert any("together or not at all" in n for n in done.notes)
 
+    def test_unobserved_air_and_humidity(self, history, monkeypatch):
+        from nwp500.sim_home_assistant import RecordInputs
+
+        seen: list[Any] = []
+        real = cal.calibrate
+
+        def spy(frame: Any, *args: Any, **kw: Any) -> Any:
+            seen.append(frame)
+            return real(frame, *args, **kw)
+
+        monkeypatch.setattr(cal_cli.cal, "calibrate", spy)
+        gap = (T0 + timedelta(hours=4), T0 + timedelta(hours=6))
+        record = RecordInputs(
+            air=[(T0, AIR_F), (T0 + timedelta(days=1), AIR_F)],
+            # Recorded over the first 10 h only.
+            humidity=[(T0, 30.0), (T0 + timedelta(hours=9), 30.0)],
+            drawing=[],
+            circulating=[],
+            air_outages=(gap,),
+            humidity_outages=(gap,),
+        )
+        cal_cli.calibrate(cal_cli.read_history(history), record=record)
+        frame = seen[0]
+        inside = frame.index[(frame.index >= gap[0]) & (frame.index < gap[1])]
+        assert len(inside) and frame.loc[inside, "air_f"].isna().all()
+        assert (frame.loc[inside, "humidity_pct"] == 50.0).all()
+        early = frame.index[frame.index < T0 + timedelta(hours=3)]
+        late = frame.index[frame.index > T0 + timedelta(hours=11)]
+        assert (frame.loc[early, "humidity_pct"] == 30.0).all()
+        assert (frame.loc[late, "humidity_pct"] == 50.0).all()
+        assert frame.loc[late, "air_f"].notna().all()
+
     def test_flags_win_over_the_sources(self, history):
         from nwp500.sim_home_assistant import RecordInputs
 
