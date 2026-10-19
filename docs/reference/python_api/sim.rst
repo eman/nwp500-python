@@ -318,5 +318,6 @@ Home Assistant sources
 .. automodule:: nwp500.sim_home_assistant
    :members: HomeAssistantEnvironment, HomeAssistantClient, record_inputs,
       RecordInputs, Sources, Entities, sources_from, State, parse_state,
-      parse_history, parse_forecast, pump_runs, draw_spans, reports_after,
-      fresh, to_f, to_gpm, to_gal, HomeAssistantError
+      parse_history, parse_outages, History, history_for, parse_forecast,
+      pump_runs, draw_spans, busy, covers_start, reports_after, percent,
+      fresh, to_f, to_gpm, to_gal, to_rpm, HomeAssistantError

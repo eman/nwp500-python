@@ -85,7 +85,8 @@ Idle, it reads the cabinet, about 6 °F warm. So give one of these:
   says how much that is. The meter's draws and the circulation's runs
   are used only when their history covers the whole record; otherwise
   the heater's own flag stands in, since a span with no history would
-  read as one with no water moving. A flag (``--air``, ``--ambient``,
+  read as one with no water moving. For the same reason, a spell when
+  the meter or the pump was ``unavailable`` counts as busy. A flag (``--air``, ``--ambient``,
   ``--humidity``) wins over the sources.
 
 Neither of the ways to stand in for a sensor reproduced a sensor's fit

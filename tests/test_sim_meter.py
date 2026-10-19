@@ -61,6 +61,15 @@ class TestTheNetVolume:
         assert [t for t, _ in flow] == [_at(s) for s in range(0, 61, 10)]
         assert meter.flow_gpm([], [], _at(60), T0) == []
 
+    def test_the_grid_is_on_whole_steps(self):
+        # Read from any instant, the steps (and so a draw's edges) fall
+        # on the same marks.
+        flow = meter.flow_gpm([], [], _at(6.4), _at(40))
+        assert [t for t, _ in flow] == [_at(s) for s in (10, 20, 30, 40)]
+        a = meter.flow_gpm(steady(2.0, 15), [], T0, _at(20 * 60))
+        b = meter.flow_gpm(steady(2.0, 15), [], _at(3), _at(20 * 60))
+        assert dict(b).items() <= dict(a).items()
+
 
 class TestTheForwardRate:
     def test_it_holds_for_a_minute(self):

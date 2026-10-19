@@ -273,6 +273,54 @@ def parse_history(doc: Any) -> dict[str, list[Reading]]:
     return out
 
 
+def parse_outages(doc: Any, end: datetime) -> dict[str, list[Span]]:
+    """The spans in ``/api/history/period``'s answer that each entity
+    was ``unavailable`` or ``unknown``: from that row to the next with a
+    number, or to ``end``. ``parse_history`` leaves those rows out, so
+    without these an outage reads as the last value held."""
+    if not isinstance(doc, list):
+        raise HomeAssistantError("not a history")
+    out: dict[str, list[Span]] = {}
+    for series in cast(list[Any], doc):
+        if not isinstance(series, list) or not series:
+            continue
+        rows = [
+            cast(Mapping[str, Any], r)
+            for r in cast(list[Any], series)
+            if isinstance(r, Mapping)
+        ]
+        if not rows or "entity_id" not in rows[0]:
+            continue
+        stamped = sorted(
+            (
+                (_instant(stamp), _number(r.get("state")) is not None)
+                for r in rows
+                if (stamp := r.get("last_changed") or r.get("last_updated"))
+            ),
+            key=lambda x: x[0],
+        )
+        spans: list[Span] = []
+        down: datetime | None = None
+        for at, known in stamped:
+            if not known and down is None:
+                down = at
+            elif known and down is not None:
+                spans.append((down, at))
+                down = None
+        if down is not None and end > down:
+            spans.append((down, end))
+        out[str(rows[0]["entity_id"])] = spans
+    return out
+
+
+@dataclass(frozen=True)
+class History:
+    """A history's readings and its outages, by entity, each present."""
+
+    readings: dict[str, list[Reading]]
+    outages: dict[str, list[Span]]
+
+
 def history_for(doc: Any, entities: Iterable[str]) -> dict[str, list[Reading]]:
     """``parse_history`` for ``entities``, each present: Home Assistant
     leaves out an entity with no history over the span, which is an
@@ -286,11 +334,13 @@ def parse_forecast(doc: Any, entity: str) -> tuple[list[Reading], str | None]:
     instant and temperature, and the unit when the answer gives one."""
     try:
         body = cast(Mapping[str, Any], doc)["service_response"][entity]
-        hours = cast(list[Any], body["forecast"])
+        hours = body["forecast"]
     except KeyError, TypeError:
         raise HomeAssistantError(f"no forecast for {entity}") from None
+    if not isinstance(hours, list):
+        raise HomeAssistantError(f"no forecast for {entity}")
     out: list[Reading] = []
-    for hour in hours:
+    for hour in cast(list[Any], hours):
         if not isinstance(hour, Mapping):
             continue
         h = cast(Mapping[str, Any], hour)
@@ -327,6 +377,27 @@ def to_gpm(value: float, unit: str | None) -> float:
     if u in ("m³/h", "m3/h"):
         return value * 1000.0 / _L_PER_GAL / 60.0
     raise ValueError(f"{unit!r} is not a flow unit")
+
+
+def to_rpm(value: float, unit: str | None) -> float:
+    """A rotational speed in ``unit`` (rpm, Hz), in rpm."""
+    u = (unit or "").strip().lower().replace(" ", "")
+    if u in ("rpm", "r/min", "rev/min"):
+        return value
+    if u == "hz":
+        return value * 60.0
+    raise ValueError(f"{unit!r} is not a rotational speed unit")
+
+
+def busy(*spans: Sequence[Span]) -> list[Span]:
+    """``spans`` together, overlapping ones joined, in time order."""
+    out: list[Span] = []
+    for a, b in sorted(x for group in spans for x in group):
+        if out and a <= out[-1][1]:
+            out[-1] = (out[-1][0], max(out[-1][1], b))
+        else:
+            out.append((a, b))
+    return out
 
 
 def to_gal(value: float, unit: str | None) -> float:
@@ -478,9 +549,15 @@ class HomeAssistantClient:
     ) -> dict[str, list[Reading]]:
         """Each of ``entities``' changes from ``start`` to ``end``. The
         first reading is the value in force at ``start``."""
+        return (await self.read_history(entities, start, end)).readings
+
+    async def read_history(
+        self, entities: Iterable[str], start: datetime, end: datetime
+    ) -> History:
+        """``history``, with the spans each entity was unavailable."""
         names = sorted(set(entities))
         if not names:
-            return {}
+            return History({}, {})
         doc = await self._json(
             "GET",
             f"/api/history/period/{start.astimezone(UTC).isoformat()}",
@@ -491,7 +568,10 @@ class HomeAssistantClient:
                 "no_attributes": "",
             },
         )
-        return history_for(doc, names)
+        outages = parse_outages(doc, end)
+        return History(
+            history_for(doc, names), {n: outages.get(n, []) for n in names}
+        )
 
     async def forecast(self, entity: str) -> tuple[list[Reading], str | None]:
         """``entity``'s hourly forecast: each hour's temperature, and the
@@ -659,7 +739,8 @@ class HomeAssistantEnvironment:
         names = [n for n in (probe_id, volume_id, rate_id, pump_id) if n]
 
         async def read() -> float | None:
-            history = await self.client.history(names, since, self.now)
+            got = await self.client.read_history(names, since, self.now)
+            history = got.readings
             probe_unit = (await self.client.state(probe_id)).unit
             volume_unit = (await self.client.state(volume_id)).unit
             probe = [
@@ -683,19 +764,15 @@ class HomeAssistantEnvironment:
             )
             runs: list[Span] | None = []
             if pump_id is not None:
-                speed = history.get(pump_id, [])
-                # Before its first reading the pump is unknown, and a
-                # draw then may have overlapped a run.
-                runs = (
-                    pump_runs(speed, since, self.now)
-                    if covers_start(speed, since)
-                    else None
+                runs = await self._pump_runs(
+                    pump_id, history.get(pump_id, []), since
                 )
                 if runs is None:
-                    self.notes.append(
-                        "inlet: the circulation's runs are unknown"
-                    )
                     return None
+            # A draw while any of them was unavailable may have
+            # overlapped a run or ended unseen: the plateau skips it, as
+            # it skips one that overlaps a run.
+            runs = busy(runs, *(got.outages.get(n, []) for n in names))
             # The adapter takes the preferred unit; these are °F and gal.
             cold = sa.cold_supply(
                 [(t, sa.temperature(v)) for t, v in probe],
@@ -714,6 +791,29 @@ class HomeAssistantEnvironment:
             return cold.t_cold_f
 
         return await self._guard("inlet", read, None)
+
+    async def _pump_runs(
+        self, pump_id: str, speed: list[Reading], since: datetime
+    ) -> list[Span] | None:
+        """The pump's runs since ``since``, or None (and a note) when
+        they are unknown: no reading in force at ``since`` (a draw
+        before the first may have overlapped a run), or a speed in no
+        unit this reads."""
+        why = None
+        if not covers_start(speed, since):
+            why = "no speed reading in force at the start"
+        else:
+            try:
+                unit = (await self.client.state(pump_id)).unit
+                speed = [(t, to_rpm(v, unit)) for t, v in speed]
+            except (HomeAssistantError, ValueError) as err:
+                why = str(err)
+        if why is not None:
+            self.notes.append(
+                f"inlet: the circulation's runs are unknown ({why})"
+            )
+            return None
+        return pump_runs(speed, since, self.now)
 
 
 # ── over a recorded history, for the calibration ────────────────────
@@ -783,11 +883,18 @@ async def record_inputs(
     if not names:
         return RecordInputs(None, None, None, None, ())
     try:
-        history = await client.history(names, start, end)
+        got = await client.read_history(names, start, end)
     except HomeAssistantError as err:
         return RecordInputs(None, None, None, None, (f"not read ({err})",))
+    history = got.readings
     units: dict[str, str | None] = {}
-    for n in (e.air, e.humidity, e.meter_volume, e.meter_flow):
+    for n in (
+        e.air,
+        e.humidity,
+        e.meter_volume,
+        e.meter_flow,
+        e.circulation_speed,
+    ):
         if n:
             try:
                 units[n] = (await client.state(n)).unit
@@ -816,6 +923,14 @@ async def record_inputs(
             "the heater's own in-use flag stands in"
         )
         return False
+
+    def outage(what: str, spans: list[Span]) -> None:
+        if spans:
+            hours = sum((b - a).total_seconds() for a, b in spans) / 3600
+            notes.append(
+                f"{what}: unavailable {len(spans)} times ({hours:.1f} h), "
+                "counted as busy"
+            )
 
     air = humidity = None
     try:
@@ -861,12 +976,26 @@ async def record_inputs(
                 start,
                 end,
             )
-            drawing = draw_spans(flow)
+            # While the meter was unavailable, water may have moved.
+            down = busy(
+                *(got.outages.get(n, []) for n in (volume_id, rate_id) if n)
+            )
+            drawing = busy(draw_spans(flow), down)
+            outage("meter", down)
         except ValueError as err:
             notes.append(f"meter: {err}")
     circulating = None
-    if e.circulation_speed:
-        speed = history.get(e.circulation_speed, [])
-        if whole("circulation", speed):
-            circulating = pump_runs(speed, start, end)
+    pump_id = e.circulation_speed
+    if pump_id and pump_id in units:
+        speed = history.get(pump_id, [])
+        try:
+            rpm = [(t, to_rpm(v, units[pump_id])) for t, v in speed]
+            if whole("circulation", rpm):
+                down = got.outages.get(pump_id, [])
+                runs = pump_runs(rpm, start, end)
+                # While the pump was unavailable, it may have run.
+                circulating = None if runs is None else busy(runs, down)
+                outage("circulation", down)
+        except ValueError as err:
+            notes.append(f"circulation: {err}")
     return RecordInputs(air, humidity, drawing, circulating, tuple(notes))

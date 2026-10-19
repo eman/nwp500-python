@@ -215,8 +215,10 @@ class FakeClient:
         history: dict[str, list[ha.Reading]] | None = None,
         forecast: tuple[list[ha.Reading], str | None] | None = None,
         fail: set[str] | None = None,
+        outages: dict[str, list[ha.Span]] | None = None,
     ) -> None:
         self.states = states or {}
+        self.down = outages or {}
         self.series = history or {}
         self.hours = forecast
         self.fail = fail or set()
@@ -228,8 +230,14 @@ class FakeClient:
         return self.states[entity]
 
     async def history(self, entities, start, end):
+        return (await self.read_history(entities, start, end)).readings
+
+    async def read_history(self, entities, start, end):
         self.history_calls.append((list(entities), start, end))
-        return {e: self.series.get(e, []) for e in entities}
+        return ha.History(
+            {e: self.series.get(e, []) for e in entities},
+            {e: self.down.get(e, []) for e in entities},
+        )
 
     async def forecast(self, entity: str):
         if self.hours is None:
@@ -388,7 +396,10 @@ class TestTheInlet:
         client = FakeClient(UNITS, long_draw(ended_hours_ago=5))
         source = _source(client, circulation_speed="sensor.pump", **INLET)
         assert (await source.read()).inlet_f is None
-        assert "inlet: the circulation's runs are unknown" in source.notes
+        assert any(
+            n.startswith("inlet: the circulation's runs are unknown")
+            for n in source.notes
+        )
 
     async def test_without_the_meters_volume(self):
         source = _source(FakeClient(UNITS), inlet="sensor.inlet")
@@ -482,7 +493,10 @@ class TestTheRecord:
         late = NOW - timedelta(hours=10)
         got = await ha.record_inputs(
             FakeClient(  # pyright: ignore[reportArgumentType]
-                {"sensor.air": _s("sensor.air", 60.0, "°F")},
+                {
+                    "sensor.air": _s("sensor.air", 60.0, "°F"),
+                    "sensor.pump": _s("sensor.pump", 0.0, "rpm"),
+                },
                 {"sensor.air": [(late, 60.0)]},
             ),
             ha.Entities(air="sensor.air", circulation_speed="sensor.pump"),
@@ -512,7 +526,7 @@ class TestTheRecord:
 
     async def test_a_failed_history_is_noted(self):
         class Down(FakeClient):
-            async def history(self, entities, start, end):
+            async def read_history(self, entities, start, end):
                 raise ha.HomeAssistantError("GET /api/history: HTTP 502")
 
         got = await ha.record_inputs(
@@ -614,12 +628,15 @@ class TestReviewRegressionsLive:
         client = FakeClient(UNITS, series)
         source = _source(client, circulation_speed="sensor.pump", **INLET)
         assert (await source.read()).inlet_f is None
-        assert "inlet: the circulation's runs are unknown" in source.notes
+        assert any(
+            n.startswith("inlet: the circulation's runs are unknown")
+            for n in source.notes
+        )
 
     async def test_an_omitted_entity_in_the_record_is_no_history(self):
         class Omits(FakeClient):
-            async def history(self, entities, start, end):
-                return {}
+            async def read_history(self, entities, start, end):
+                return ha.History({}, {})
 
         got = await ha.record_inputs(
             Omits({"sensor.air": _s("sensor.air", 60.0, "°F")}),  # pyright: ignore[reportArgumentType]
@@ -629,3 +646,136 @@ class TestReviewRegressionsLive:
         )
         assert got.air is None
         assert any("air: no history" in n for n in got.notes)
+
+
+class TestTheSecondReview:
+    def test_outages_run_to_the_next_number(self):
+        def row(at, state):
+            return {
+                "entity_id": "sensor.m",
+                "state": state,
+                "last_changed": at.isoformat(),
+            }
+
+        a, b, c = NOW, NOW + timedelta(minutes=5), NOW + timedelta(minutes=9)
+        doc = [[row(a, "0"), row(b, "unavailable"), row(c, "0.1")]]
+        assert ha.parse_outages(doc, c + timedelta(hours=1)) == {
+            "sensor.m": [(b, c)]
+        }
+        tail = [[row(a, "0"), row(b, "unknown")]]
+        assert ha.parse_outages(tail, c) == {"sensor.m": [(b, c)]}
+        # Left out of the readings, as before.
+        assert ha.parse_history(doc) == {"sensor.m": [(a, 0.0), (c, 0.1)]}
+
+    def test_a_null_forecast_is_an_error(self):
+        doc = {"service_response": {"weather.home": {"forecast": None}}}
+        with pytest.raises(ha.HomeAssistantError, match="no forecast"):
+            ha.parse_forecast(doc, "weather.home")
+
+    def test_rpm(self):
+        assert ha.to_rpm(1200.0, "RPM") == 1200.0
+        assert ha.to_rpm(5.0, "Hz") == 300.0
+        with pytest.raises(ValueError, match="rotational speed"):
+            ha.to_rpm(40.0, "%")
+        with pytest.raises(ValueError, match="rotational speed"):
+            ha.to_rpm(40.0, None)
+
+    def test_busy(self):
+        x = [(_t(0), _t(1)), (_t(3), _t(4))]
+        assert ha.busy(x, [(_t(0.5), _t(2))]) == [
+            (_t(0), _t(2)),
+            (_t(3), _t(4)),
+        ]
+
+
+@pytest.mark.asyncio
+class TestTheSecondReviewLive:
+    START = NOW - timedelta(days=2)
+
+    async def test_a_pump_in_hz_is_running(self):
+        series = long_draw(ended_hours_ago=5)
+        since = NOW - ha.INLET_LOOKBACK
+        # 5 Hz, 300 rpm, through the draw: it overlapped a run.
+        ended = NOW - timedelta(hours=5)
+        series["sensor.pump"] = [(since, 0.0)] + [
+            (ended - timedelta(minutes=m), 5.0) for m in range(30, -10, -4)
+        ]
+        states = UNITS | {"sensor.pump": _s("sensor.pump", 5.0, "Hz")}
+        source = _source(
+            FakeClient(states, series), circulation_speed="sensor.pump", **INLET
+        )
+        assert (await source.read()).inlet_f is None
+        assert "inlet: the plateau of 0 long draws" not in source.notes
+
+    async def test_a_pump_in_no_speed_unit_is_unknown(self):
+        series = long_draw(ended_hours_ago=5)
+        series["sensor.pump"] = [(NOW - ha.INLET_LOOKBACK, 0.0)]
+        states = UNITS | {"sensor.pump": _s("sensor.pump", 0.0, "%")}
+        source = _source(
+            FakeClient(states, series), circulation_speed="sensor.pump", **INLET
+        )
+        assert (await source.read()).inlet_f is None
+        assert any("not a rotational speed unit" in n for n in source.notes)
+        got = await ha.record_inputs(
+            FakeClient(states, {"sensor.pump": [(self.START, 0.0)]}),  # pyright: ignore[reportArgumentType]
+            ha.Entities(circulation_speed="sensor.pump"),
+            self.START,
+            NOW,
+        )
+        assert got.circulating is None
+        assert any("not a rotational speed unit" in n for n in got.notes)
+
+    async def test_a_pump_outage_skips_the_draw_for_the_inlet(self):
+        series = long_draw(ended_hours_ago=5)
+        series["sensor.pump"] = [(NOW - ha.INLET_LOOKBACK, 0.0)]
+        down = {
+            "sensor.pump": [
+                (NOW - timedelta(hours=6), NOW - timedelta(hours=4))
+            ]
+        }
+        source = _source(
+            FakeClient(UNITS, series, outages=down),
+            circulation_speed="sensor.pump",
+            **INLET,
+        )
+        assert (await source.read()).inlet_f is None
+        clear = _source(
+            FakeClient(UNITS, series), circulation_speed="sensor.pump", **INLET
+        )
+        assert (await clear.read()).inlet_f == pytest.approx(58.0)
+
+    async def test_outages_after_valid_readings_count_as_busy(self):
+        gap = (NOW - timedelta(hours=10), NOW - timedelta(hours=8))
+        client = FakeClient(
+            UNITS,
+            {
+                "sensor.volume": [(self.START, 0.0)],
+                "sensor.pump": [(self.START, 0.0)],
+            },
+            outages={"sensor.volume": [gap], "sensor.pump": [gap]},
+        )
+        got = await ha.record_inputs(
+            client,  # pyright: ignore[reportArgumentType]
+            ha.Entities(
+                meter_volume="sensor.volume", circulation_speed="sensor.pump"
+            ),
+            self.START,
+            NOW,
+        )
+        assert got.drawing == [gap]
+        assert got.circulating == [gap]
+        assert sum("counted as busy" in n for n in got.notes) == 2
+
+    async def test_a_null_forecast_falls_back(self):
+        class Null(FakeClient):
+            async def forecast(self, entity):
+                return ha.parse_forecast(
+                    {"service_response": {entity: {"forecast": None}}}, entity
+                )
+
+        states = {"sensor.air": _s("sensor.air", 70.0, "°F")}
+        source = _source(
+            Null(states), model=MODEL, air="sensor.air", weather="weather.home"
+        )
+        env = await source.read()
+        assert env.ambient_f == 70.0

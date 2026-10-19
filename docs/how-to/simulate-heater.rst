@@ -178,9 +178,11 @@ the heater read live, the sources give:
   flow rate goes silent (``sim.meter.flow_gpm``). A circulation pump
   with no speed reading is taken as unknown, which leaves no estimate.
 
-Units come from each entity's ``unit_of_measurement``. A part that
-can't be read, or is stale, keeps its default, and a warning on stderr
-says why. Flags and a scenario file still win: ``--ambient``,
+Units come from each entity's ``unit_of_measurement``: the pump's speed
+in rpm or Hz. A part that can't be read, or is stale, keeps its
+default, and a warning on stderr says why. A spell when the meter, the
+probe or the pump was ``unavailable`` counts as busy: the plateau skips
+a draw that overlaps one. Flags and a scenario file still win: ``--ambient``,
 ``--inlet`` and ``--environment`` override what the sources give.
 
 

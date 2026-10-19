@@ -22,8 +22,9 @@ the cold supply (``sim.cold_supply``) found every long draw the detector
 found, where the rate alone missed one in five.
 """
 
+import math
 from collections.abc import Sequence
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 
 #: A reading: an instant and a value.
 Reading = tuple[datetime, float]
@@ -54,7 +55,8 @@ def flow_gpm(
     rate_hold: timedelta = RATE_HOLD,
 ) -> list[Reading]:
     """The meter's flow, gal/min, every ``step`` from ``start`` to
-    ``end``.
+    ``end``, on whole multiples of ``step`` (from the Unix epoch), so a
+    draw's edges do not move with the instant it is read at.
 
     ``volume`` is each report's volume since the previous one, gallons,
     at the instant of the report (it belongs to the interval the report
@@ -76,7 +78,8 @@ def flow_gpm(
     rates = sorted(rate, key=lambda r: r[0])
     span_s = window.total_seconds()
     times: list[datetime] = []
-    t = start
+    epoch = datetime(1970, 1, 1, tzinfo=start.tzinfo or UTC)
+    t = epoch + step * math.ceil((start - epoch) / step)
     while t <= end:
         times.append(t)
         t += step
