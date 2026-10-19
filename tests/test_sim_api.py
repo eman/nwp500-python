@@ -260,6 +260,21 @@ class TestSimulateIsTheEngine:
         assert "powered_on_by_entry" in off.reasons
         assert not run(5).heating
 
+    @pytest.mark.parametrize("mode", [0, 5, 6])
+    def test_an_entry_outside_1_to_4_is_not_modelled(
+        self, params: HeaterParams, mode: int
+    ):
+        """Entry modes are ``ReservationMode`` ids: 5 is Power Off and 0 an
+        unused slot; 6 is what earlier library versions wrote for Power
+        Off. None is modelled, and each says so."""
+        e = ReservationEntry(
+            week=EVERY_DAY, hour=20, minute=0, mode=mode, setpoint_half_c=124
+        )
+        s = _scenario(schedules=Schedules(reservations=(e,)))
+        got = simulate(s, params)
+        assert "reservation_mode_not_modelled" in got.reasons
+        assert got.simulation == _by_hand(params, s)
+
     def test_a_disabled_reservation_schedule_is_not_walked(
         self, params: HeaterParams
     ):

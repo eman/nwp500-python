@@ -29,6 +29,7 @@ finally:
 if TYPE_CHECKING:
     from nwp500.api_client import (
         NavienAPIClient,
+        get_app_version,
     )
     from nwp500.auth import (
         AuthenticationResponse,
@@ -172,7 +173,10 @@ _EXPORTS: Mapping[str, str] = MappingProxyType(
     {
         name: module
         for module, names in {
-            "nwp500.api_client": ("NavienAPIClient",),
+            "nwp500.api_client": (
+                "NavienAPIClient",
+                "get_app_version",
+            ),
             "nwp500.auth": (
                 "AuthenticationResponse",
                 "AuthTokens",
@@ -427,6 +431,7 @@ __all__ = [
     "DeviceError",
     # API Client
     "NavienAPIClient",
+    "get_app_version",
     # OpenEI Client
     "OpenEIClient",
     # Reservation helpers

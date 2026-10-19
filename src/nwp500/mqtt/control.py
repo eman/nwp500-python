@@ -27,7 +27,13 @@ weekly reservation) have no method.
 """
 
 import logging
-from collections.abc import Awaitable, Callable, Mapping, Sequence
+from collections.abc import (
+    Awaitable,
+    Callable,
+    Collection,
+    Mapping,
+    Sequence,
+)
 from typing import Any
 
 from ..command_decorators import requires_capability
@@ -131,6 +137,8 @@ _RESERVATION_MODE_MAX = ReservationMode.POWER_OFF
 def validate_reservation_entries(
     reservations: Sequence[Mapping[str, Any]],
     features: DeviceFeature | None = None,
+    *,
+    kept: Collection[int] = (),
 ) -> None:
     """Check raw reservation entries before they are written to the device.
 
@@ -148,9 +156,15 @@ def validate_reservation_entries(
     ``dhw_temperature_min_raw`` to ``dhw_temperature_max_raw``; without
     them, only within the single byte the protocol carries (0-255).
 
+    ``kept`` names entries read back from the device and sent unchanged
+    (1-based, as in the error messages). Their ``mode`` is not held to
+    the writable range, so an entry an earlier version of this library
+    wrote with mode 6 does not block an edit to the rest of the schedule.
+
     Args:
         reservations: Raw entry dicts, as passed to ``update_reservations``.
         features: The device's feature data, for its setpoint limits.
+        kept: Positions of entries the device already holds, unchanged.
 
     Raises:
         ParameterValidationError: On a missing field, a non-integer field,
@@ -159,13 +173,18 @@ def validate_reservation_entries(
             outside its range.
     """
     for index, entry in enumerate(reservations, start=1):
-        _check_reservation_entry(index, entry)
+        _check_reservation_entry(index, entry, kept=index in kept)
     if features is not None:
         _check_reservation_setpoints(reservations, features)
 
 
-def _check_reservation_entry(index: int, entry: Mapping[str, Any]) -> None:
-    """Check one entry's fields, except ``param`` against device limits."""
+def _check_reservation_entry(
+    index: int, entry: Mapping[str, Any], *, kept: bool = False
+) -> None:
+    """Check one entry's fields, except ``param`` against device limits.
+
+    A ``kept`` entry's ``mode`` is only checked to be an integer.
+    """
     for name in RESERVATION_ENTRY_FIELDS:
         if name not in entry:
             raise ParameterValidationError(
@@ -202,6 +221,8 @@ def _check_reservation_entry(index: int, entry: Mapping[str, Any]) -> None:
         ("param", 0, 255),
     ]
     for name, low, high in ranges:
+        if kept and name == "mode":
+            continue
         value = entry[name]
         if not low <= value <= high:
             raise RangeValidationError(
@@ -622,7 +643,19 @@ class MqttDeviceController:
     async def set_dhw_mode(
         self, device: Device, mode_id: int, vacation_days: int | None = None
     ) -> int:
-        """Set DHW operation mode."""
+        """Set DHW operation mode.
+
+        ``mode_id`` is a :class:`~nwp500.enums.DhwOperationSetting` from
+        ``HEAT_PUMP`` (1) to ``POWER_OFF`` (6). ``STANDBY`` (0) is reported
+        by the device but never sent, and is refused.
+        """
+        self._validate_int("mode_id", mode_id)
+        self._validate_range(
+            "mode_id",
+            mode_id,
+            DhwOperationSetting.HEAT_PUMP,
+            DhwOperationSetting.POWER_OFF,
+        )
         if mode_id == DhwOperationSetting.VACATION.value:
             if vacation_days is None:
                 raise ParameterValidationError(
@@ -715,6 +748,7 @@ class MqttDeviceController:
         reservations: Sequence[dict[str, Any]],
         *,
         enabled: bool = True,
+        kept: Collection[int] = (),
     ) -> int:
         """
         Update programmed reservations for temperature/mode changes.
@@ -728,6 +762,8 @@ class MqttDeviceController:
             device: Device object
             reservations: List of reservation entries
             enabled: Whether reservations are enabled (default: True)
+            kept: 1-based positions of entries read back from the device
+                and sent unchanged; their ``mode`` is not range-checked
 
         Returns:
             Publish packet ID
@@ -741,7 +777,7 @@ class MqttDeviceController:
             DeviceCapabilityError: If the device's feature data, and so
                 its setpoint range, is not available.
         """
-        validate_reservation_entries(reservations)
+        validate_reservation_entries(reservations, kept=kept)
         if reservations:
             features = await self._get_reservation_limits(device)
             _check_reservation_setpoints(reservations, features)

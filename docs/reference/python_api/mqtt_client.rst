@@ -481,7 +481,7 @@ set_vacation_duration()
 update_reservations()
 ^^^^^^^^^^^^^^^^^^^^^
 
-.. py:method:: update_reservations(device, reservations, *, enabled=True)
+.. py:method:: update_reservations(device, reservations, *, enabled=True, kept=())
 
    Update the standard reservation program.
 
@@ -490,13 +490,19 @@ update_reservations()
    :type reservations: Sequence[dict[str, Any]]
    :param enabled: Global reservation enable flag
    :type enabled: bool
+   :param kept: 1-based positions of entries read back from the device and
+      sent unchanged. Their ``mode`` is not range-checked, so an entry an
+      earlier version of this library wrote with mode 6 does not block an
+      edit to the rest of the schedule. The reservation helpers
+      (``add_reservation`` and the rest) pass it for you.
+   :type kept: Collection[int]
    :raises ParameterValidationError: If an entry is missing a field, has a
       non-integer field (a ``bool`` or ``float`` is rejected), an ``enable``
       other than ``1``/``2``, or a ``week`` that is not a day bitfield
       (``2``-``254``, bit 0 clear)
    :raises RangeValidationError: If an entry's ``hour`` is outside
       ``0``-``23``, ``min`` outside ``0``-``59``, ``mode`` not a
-      :class:`~nwp500.enums.DhwOperationSetting` id (``1``-``6``), or
+      :class:`~nwp500.enums.ReservationMode` id (``1``-``5``), or
       ``param`` outside the setpoint range the device reports
       (``dhw_temperature_min_raw``-``dhw_temperature_max_raw``, in
       half-degrees Celsius)
@@ -1005,6 +1011,11 @@ the connection is lost without a DISCONNECT, so other clients watching
 the topic learn this one dropped. A will names one topic, so one device;
 every rebuilt connection (reconnects included) carries it again. A
 graceful :meth:`disconnect` does not trigger it.
+
+The NaviLink app shows a "device disconnected" notice when it receives
+a status-0 event on this topic. The Android app does not subscribe to
+it for the NWP500, but an app build that does would show the notice
+whenever this client drops. The will is off by default.
 
 .. code-block:: python
 

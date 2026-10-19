@@ -543,7 +543,7 @@ These two fields serve different purposes:
 Field Definitions
 ^^^^^^^^^^^^^^^^^
 
-**dhwOperationSetting** (DhwOperationSetting enum with command values 1-6)
+**dhwOperationSetting** (DhwOperationSetting enum with command values 1-6; the device may also report 0, Standby)
   The user's **configured mode preference**: what heating mode the device should use when it needs to heat water. This is set via the ``dhw-mode`` command and persists until changed by the user or device.
 
   * Type: ``DhwOperationSetting`` enum
@@ -724,7 +724,7 @@ For user-facing applications, follow these guidelines:
 
 4. **operationMode changes automatically**: you cannot directly set this; it changes based on device operation
 
-5. **Separate enum types provide clarity**: ``DhwOperationSetting`` (values 1-6) for user preferences, ``CurrentOperationMode`` (values 0/32/64/96) for real-time states
+5. **Separate enum types provide clarity**: ``DhwOperationSetting`` (command values 1-6, and 0 reported as Standby) for user preferences, ``CurrentOperationMode`` (values 0/32/64/96) for real-time states
 
 6. **Power off detection**: Check if ``dhwOperationSetting == DhwOperationSetting.POWER_OFF`` to determine if device is powered off vs just idle
 

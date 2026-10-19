@@ -1,6 +1,20 @@
 """Models for the account and app-level REST endpoints."""
 
+from typing import Annotated, Any
+
+from pydantic import BeforeValidator
+
 from .._base import NavienBaseModel
+from .device import NullableInt
+
+
+def _null_to_empty(value: Any) -> Any:
+    """``null`` reads as an empty string, as the NaviLink app reads it."""
+    return "" if value is None else value
+
+
+#: A string field the cloud may send as ``null``.
+NullableStr = Annotated[str, BeforeValidator(_null_to_empty)]
 
 
 class UserProfile(NavienBaseModel):
@@ -11,19 +25,19 @@ class UserProfile(NavienBaseModel):
     """
 
     #: ``"O"`` owner, ``"M"`` member, or an installer type.
-    user_type: str = ""
-    user_first_name: str = ""
+    user_type: NullableStr = ""
+    user_first_name: NullableStr = ""
     #: The cloud sends ``null`` for an account without a last name; the
     #: NaviLink app treats that as an empty string, as does this model.
-    user_last_name: str | None = ""
+    user_last_name: NullableStr = ""
     user_phone_number: str | None = None
-    user_seq: int = 0
-    user_email: str = ""
+    user_seq: NullableInt = 0
+    user_email: NullableStr = ""
 
     @property
     def full_name(self) -> str:
         """Return the user's full name."""
-        return f"{self.user_first_name} {self.user_last_name or ''}".strip()
+        return f"{self.user_first_name} {self.user_last_name}".strip()
 
 
 class AppVersionInfo(NavienBaseModel):

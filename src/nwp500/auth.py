@@ -715,7 +715,9 @@ class NavienAuthClient:
         Only keys present and non-empty in ``data`` are overwritten, as
         the app does. A renewed access token re-stamps ``issued_at``;
         renewed AWS credentials re-stamp ``aws_credentials_issued_at``
-        without touching the JWT's expiry.
+        without touching the JWT's expiry. A renewed access token without
+        AWS credentials pins the kept credentials' issue time, so their
+        expiry is not recomputed from the new ``issued_at``.
 
         Returns:
             The merged tokens and the set of snake-case fields updated.
@@ -731,6 +733,10 @@ class NavienAuthClient:
             merged["issued_at"] = now
         if updates.keys() & cls._AWS_KEYS:
             merged["aws_credentials_issued_at"] = now
+        elif "access_token" in updates:
+            merged["aws_credentials_issued_at"] = (
+                current.aws_credentials_issued_at or current.issued_at
+            )
         return AuthTokens.model_validate(merged), set(updates)
 
     async def _refresh_session_unlocked(self) -> AuthTokens:
@@ -918,24 +924,29 @@ class NavienAuthClient:
         2. ``/user/secured-sign-in`` with the current access token
         3. ``/user/sign-in`` with the stored password (last resort)
 
-        Steps 1 and 2 are skipped when there is no access token. Step 3
-        is skipped when no password is stored; the last error is then
-        re-raised.
+        Steps 1 and 2 are skipped when there is no access token, or when
+        it has expired and cannot be refreshed: both endpoints need a live
+        one. Step 3 is skipped when no password is stored; the last error
+        is then re-raised.
         """
         last_error: AuthenticationError | None = None
         tokens = self.current_tokens
+        live = bool(tokens and tokens.access_token)
 
-        if tokens and tokens.access_token:
-            if tokens.is_expired and tokens.refresh_token:
-                # Both endpoints need a live access token.
+        if tokens and live and tokens.is_expired:
+            # Both endpoints need a live access token.
+            live = False
+            if tokens.refresh_token:
                 try:
                     tokens = await self._refresh_token_unlocked()
+                    live = True
                 except TokenRefreshError as e:
                     last_error = e
                     _logger.warning(
                         "JWT refresh before session refresh failed: %s", e
                     )
 
+        if live:
             try:
                 return await self._refresh_session_unlocked()
             except AuthenticationError as e:
@@ -954,7 +965,7 @@ class NavienAuthClient:
             if last_error is not None:
                 raise last_error
             raise AuthenticationError(
-                "Cannot renew AWS credentials: no access token and no "
+                "Cannot renew AWS credentials: no live access token and no "
                 "stored credentials"
             )
 
@@ -969,36 +980,40 @@ class NavienAuthClient:
         is held, so the password is only sent if the token is rejected.
         Falls back to a fresh password sign-in using the user_id and
         password from initialization. Useful for recovering from expired
-        tokens or connection issues.
+        tokens or connection issues. A client restored from tokens alone
+        can re-authenticate while its access token is live.
 
         Returns:
             AuthenticationResponse with fresh tokens and user info
 
         Raises:
-            ValueError: If stored credentials are not available
+            ValueError: If the secured sign-in is not possible or failed
+                and no stored credentials are available
             AuthenticationError: If authentication fails
 
         Example:
             >>> client = NavienAuthClient(email, password)
             >>> await client.re_authenticate()  # Uses stored credentials
         """
-        if not self.has_stored_credentials:
-            raise ValueError(
-                "No stored credentials available for re-authentication. "
-                "Credentials must be provided during initialization."
-            )
-
         tokens = self.current_tokens
         if tokens and tokens.access_token and not tokens.is_expired:
             try:
                 _logger.info("Re-authenticating with stored access token")
                 return await self.secured_sign_in()
             except AuthenticationError as e:
+                if not self.has_stored_credentials:
+                    raise
                 _logger.warning(
                     "Secured sign-in failed: %s. Falling back to password "
                     "sign-in...",
                     e,
                 )
+
+        if not self.has_stored_credentials:
+            raise ValueError(
+                "No stored credentials available for re-authentication. "
+                "Credentials must be provided during initialization."
+            )
 
         _logger.info("Re-authenticating with stored credentials")
         return await self.sign_in(self._user_id, self._password)

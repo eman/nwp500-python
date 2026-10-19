@@ -23,7 +23,11 @@ Added
   only, an owner account gets ``COMMON_NOT_AUTHORIZED``), ``update_device_info()``
   (``/device/change-info``), ``list_simple_devices()`` and
   ``get_app_version()`` (unauthenticated; a 403 maintenance notice is
-  returned as ``server_check_text``). New models: ``PushSettings``,
+  returned as ``server_check_text``; ``nwp500.get_app_version()`` asks
+  before sign-in, without a client). ``set_push_settings()`` keeps the
+  current value of a flag left ``None``, since the app always sends
+  every flag. ``get_error_history()`` entries carry the list's
+  ``timeZone`` (``time_zone``, ``occurred_at_local``). New models: ``PushSettings``,
   ``DeviceInstaller``, ``FirmwareDeviceGroup``, ``FirmwareDetail``,
   ``DisplayPreferences``, ``SimpleDevice``, ``DeviceErrorHistoryEntry``,
   ``MaintenanceHistoryEntry``, ``UserProfile``, ``AppVersionInfo``. Push
@@ -38,9 +42,13 @@ Added
   auth error. ``secured_sign_in()`` posts to ``/user/secured-sign-in`` with
   the access token and overlays whatever token fields come back (observed
   live: the AWS credentials only; the JWTs are kept), which the app uses
-  for auto-login. When the AWS credentials expire, ``ensure_valid_token()``, the
-  context manager's stored-token check and ``re_authenticate()`` now try
-  session refresh, then secured sign-in, and only then the password sign-in.
+  for auto-login. When the AWS credentials expire, ``ensure_valid_token()``
+  and the context manager's stored-token check now try session refresh,
+  then secured sign-in, and only then the password sign-in; both token
+  steps are skipped when the access token has expired and cannot be
+  refreshed. ``re_authenticate()`` tries secured sign-in while the access
+  token is live, then the password sign-in, so a client restored from
+  tokens alone can use it too.
   The MQTT client's deep reconnect calls ``refresh_session()`` after the
   forced token refresh. ``AuthTokens`` gained an optional
   ``aws_credentials_issued_at`` so a renewed AWS expiry survives
@@ -71,8 +79,9 @@ Added
   Defaults to 0 for payloads that omit it.
 - **``DhwOperationSetting.STANDBY`` (0)**, the app's
   ``MgppOperationMode.STANDBY``. ``DeviceStatus.dhw_operation_setting``
-  previously rejected a 0. It is status-only; ``dhw-mode`` still accepts
-  1-6.
+  previously rejected a 0. It is status-only: ``set_dhw_mode()`` refuses
+  it, as it now refuses any id outside 1-6. ``sim_adapters.settings()``
+  refuses a Standby status, which the simulator does not model.
 - **``DREvent.GRID_EMERGENCY`` (6).** The app declares CPE and Grid
   Emergency both as id 5 but decodes ``drEventStatus`` by array position,
   so raw 6 is Grid Emergency; ``CPE`` (5) stays "Customer Peak Event".
@@ -80,7 +89,8 @@ Added
   NPF_SYSTEM (514); **``DeviceType``** IOT_MODULE (8), NFB700_MAIN (50),
   NFB700_SUB (51) (the app's names; ``NPF700_MAIN``/``NPF700_SUB`` remain
   as aliases) and ``HPWH`` as an alias of 52, which is the NWP500
-  (``DefineData.HPWH_MODEL``), not an NPF700 WiFi module.
+  (``DefineData.HPWH_MODEL``), not an NPF700 WiFi module. A dumped device
+  of type 50 or 51 now names it ``NFB700_MAIN`` or ``NFB700_SUB``.
 - **A recovery model's inputs, through ``nwp500.sim.simulate``** (#165).
   Beside ``recovery=``, ``simulate`` takes what a learned model was
   trained with and brings: ``start_hold`` (a start's hold by the
@@ -443,7 +453,10 @@ Changed
   ``TEMPERATURE`` are removed, since their meanings were wrong; code that
   sent ``RecirculationMode.BUTTON`` (2) was selecting the weekly schedule.
   ``RECIRC_MODE_TEXT``, the ``recirc`` CLI command, the recirculation
-  example and the protocol docs follow.
+  example and the protocol docs follow. ``model_dump()`` writes enum
+  names, so a dumped status now says ``"ALWAYS_ON"`` for 1 (was
+  ``"ALWAYS"``) and ``"WEEKLY"`` for 2 (was ``"BUTTON"``); code keyed on
+  the old strings must follow.
 - **Reservation mode 5 is Power Off, not Vacation.** Weekly-schedule
   entries carry the app's ``MgppReservationMode`` (0 not reserved, 1 Heat
   Pump, 2 Electric, 3 Energy Saver, 4 High Demand, 5 Power Off; there is
@@ -453,7 +466,12 @@ Changed
   **Behaviour change:** reservation writes (``add_reservation()``,
   ``update_reservation()``, ``build_reservation_entry()`` and the MQTT
   reservation validator) now accept mode 1-5 and reject 6, which was never
-  a valid entry mode.
+  a valid entry mode. An entry already on the heater with mode 6 (earlier
+  versions documented 6 as Power Off) does not block the reservation
+  helpers: they send the entries they did not change as they read them
+  (``update_reservations(kept=)``). Changing such an entry needs a mode
+  of 1-5. The simulator's reservation entries take the same numbering
+  (``sim.inputs.EntryMode``); only 1-4 are modelled, as before.
 - **``dr_override_status`` is an on/off flag, not hours.** The app decodes
   it with its 0/1/2 on-off enum and shows "DR applied" when it is 2. The
   field stays an ``int`` but no longer carries an ``hours`` unit; the new

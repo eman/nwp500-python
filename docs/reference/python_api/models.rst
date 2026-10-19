@@ -294,6 +294,9 @@ Description of one firmware image, from
      NaviLink 2.04.00)
    * ``sw_code``, ``sw_version`` (int): The pair the image was looked up by
 
+   Each integer field reads a ``null`` from the cloud as 0, as the app
+   does.
+
 DisplayPreferences
 ------------------
 
@@ -343,10 +346,15 @@ One recorded fault from :meth:`~nwp500.NavienAPIClient.get_error_history`.
      :class:`DeviceErrorSummary`)
    * ``sub_error`` (int)
    * ``error_occurred_time`` (int, optional): Epoch milliseconds, sent by
-     the API as ``errorOccuredTime``. Pass the last entry's value back as
-     ``continuous_key`` for the next page.
+     the API as ``errorOccuredTime``. An ISO 8601 string is converted.
+     Pass the last entry's value back as ``continuous_key`` for the next
+     page.
+   * ``time_zone`` (str, optional): The list's ``timeZone``, which the app
+     formats the times in
    * ``occurred_at`` (datetime, property): ``error_occurred_time`` as an
      aware UTC datetime
+   * ``occurred_at_local`` (datetime, property): ``occurred_at`` in
+     ``time_zone``, or in UTC when the zone is missing or unknown
 
 Maintenance Models
 ==================
@@ -387,11 +395,13 @@ The signed-in user's profile, from
    * ``user_type`` (str): ``"O"`` owner, ``"M"`` member, or an installer
      type
    * ``user_first_name`` (str)
-   * ``user_last_name`` (str, optional): ``None`` from the cloud reads as
-     ``""`` in ``full_name``, as in the app
+   * ``user_last_name`` (str)
    * ``user_phone_number`` (str, optional)
    * ``user_seq`` (int)
    * ``user_email`` (str)
+
+   A ``null`` from the cloud reads as ``""`` in the string fields and as
+   0 in ``user_seq``, as in the app.
    * ``full_name`` (str, property)
 
 AppVersionInfo

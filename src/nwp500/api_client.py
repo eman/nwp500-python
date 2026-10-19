@@ -41,6 +41,7 @@ _logger = logging.getLogger(__name__)
 
 __all__ = [
     "NavienAPIClient",
+    "get_app_version",
 ]
 
 
@@ -387,7 +388,7 @@ class NavienAPIClient:
         mac_address: str,
         additional_value: str,
         controller_id: str,
-        user_type: str = "O",
+        user_type: str | None = None,
     ) -> TOUInfo:
         """
         Get Time of Use (TOU) information for a device.
@@ -396,7 +397,8 @@ class NavienAPIClient:
             mac_address: Device MAC address
             additional_value: Additional device identifier
             controller_id: Controller serial number from the device feature
-            user_type: User type (default: "O")
+            user_type: User type; defaults to the signed-in user's type
+                (``"O"`` when unknown), as the NaviLink app sends
 
         Returns:
             TOUInfo object
@@ -416,7 +418,7 @@ class NavienAPIClient:
                 "controllerId": controller_id,
                 "macAddress": mac_address,
                 "userId": self._auth_client.user_email,
-                "userType": user_type,
+                "userType": user_type or self._user_type(),
             },
         )
 
@@ -487,7 +489,7 @@ class NavienAPIClient:
         zip_code: str,
         register_path: str = "wifi",
         source_type: str = "openei",
-        user_type: str = "O",
+        user_type: str | None = None,
     ) -> TOUInfo:
         """
         Apply a TOU rate plan to a device.
@@ -500,7 +502,8 @@ class NavienAPIClient:
             zip_code: Service area zip code
             register_path: Device connection type (default: "wifi")
             source_type: Data source type (default: "openei")
-            user_type: User type (default: "O")
+            user_type: User type; defaults to the signed-in user's type
+                (``"O"`` when unknown)
 
         Returns:
             TOUInfo object with the applied configuration
@@ -523,7 +526,7 @@ class NavienAPIClient:
                 "sourceType": source_type,
                 "touInfo": tou_info,
                 "userId": self._auth_client.user_email,
-                "userType": user_type,
+                "userType": user_type or self._user_type(),
                 "zipCode": zip_code,
             },
         )
@@ -676,7 +679,7 @@ class NavienAPIClient:
         )
 
         data = response.get("data") or {}
-        manufacture_id = str(data.get("manufactureId", ""))
+        manufacture_id = str(data.get("manufactureId") or "")
 
         _logger.info("Retrieved manufacture ID for device")
         return manufacture_id
@@ -733,8 +736,10 @@ class NavienAPIClient:
         Enable or disable push notifications for a device.
 
         Sends ``POST /user/set-push-settings``. Flags are encoded 1 (on)
-        or 2 (off); a flag left ``None`` is omitted from the request, as
-        the NaviLink app does for a member account's descaling flag.
+        or 2 (off). The app always sends every flag the account has, so a
+        flag left ``None`` keeps its current value, read first with
+        :meth:`get_push_settings`; one the cloud does not report (a member
+        account's descaling flag) is omitted, as the app omits it.
 
         Args:
             mac_address: Device MAC address
@@ -751,6 +756,17 @@ class NavienAPIClient:
             AuthenticationError: If not authenticated
         """
         user_email = self._require_user_email()
+
+        if None in (error_alarm, descaling_alarm, etc_alarm):
+            current = await self.get_push_settings(
+                mac_address, additional_value
+            )
+            if error_alarm is None:
+                error_alarm = current.is_error_alarm
+            if descaling_alarm is None:
+                descaling_alarm = current.is_descaling_alarm
+            if etc_alarm is None:
+                etc_alarm = current.is_etc_alarm
 
         flags = PushSettings(
             is_error_alarm=error_alarm,
@@ -1138,6 +1154,7 @@ class NavienAPIClient:
         ``404 COMMON_NOT_AUTHORIZED`` (checked live), so this only works
         when signed in as the device's installer. Pass ``continuous_key``
         (the last entry's ``error_occurred_time``) to fetch the next page.
+        Each entry carries the list's ``timeZone`` as ``time_zone``.
 
         Args:
             mac_address: Device MAC address
@@ -1168,8 +1185,11 @@ class NavienAPIClient:
         )
 
         data = response.get("data") or {}
+        time_zone = data.get("timeZone")
         entries = [
-            DeviceErrorHistoryEntry.model_validate(item)
+            DeviceErrorHistoryEntry.model_validate(
+                {**item, "timeZone": time_zone}
+            )
             for item in data.get("errorInfo") or []
         ]
 
@@ -1296,11 +1316,9 @@ class NavienAPIClient:
         """
         Query the NaviLink app versions the cloud expects.
 
-        Sends ``POST /app/version`` **without** authentication, as the app
-        does on its splash screen before sign-in. A 403 whose data carries
-        ``serverCheckText`` is a maintenance notice and is returned as an
-        :class:`~nwp500.models.AppVersionInfo` with
-        ``server_check_text`` set; any other failure raises.
+        Sends ``POST /app/version`` without authentication, on this
+        client's session. Before sign-in, use the module-level
+        :func:`get_app_version`, which needs no client.
 
         Args:
             os: Platform code; the app sends ``"A"`` (Android)
@@ -1312,36 +1330,14 @@ class NavienAPIClient:
             APIError: If the request fails for a reason other than a
                 maintenance notice
         """
-        url = f"{self.base_url}/app/version"
         session = self._session
         if session is None:
             raise APIError(
                 "No active session available. The auth client session "
                 "has been closed."
             )
-
-        _logger.debug(f"POST {url}")
-        try:
-            async with session.post(url, json={"os": os}) as response:
-                response_data: dict[str, Any] = await response.json()
-        except aiohttp.ClientError as e:
-            _logger.error(f"Network error: {e}")
-            raise APIError(f"Network error: {e!s}") from e
-
-        code = response_data.get("code", response.status)
-        data = response_data.get("data") or {}
-
-        if code == 200:
-            return AppVersionInfo.model_validate(data)
-
-        if code == 403 and isinstance(data, dict) and "serverCheckText" in data:
-            _logger.warning("Navien cloud reports maintenance")
-            return AppVersionInfo.model_validate(data)
-
-        msg = response_data.get("msg", "")
-        _logger.error(f"API error: {code} - {msg}")
-        raise APIError(
-            f"API request failed: {msg}", code=code, response=response_data
+        return await get_app_version(
+            os, session=session, base_url=self.base_url
         )
 
     # Convenience methods
@@ -1365,3 +1361,73 @@ class NavienAPIClient:
     def user_email(self) -> str | None:
         """Get current user email."""
         return self._auth_client.user_email
+
+
+async def get_app_version(
+    os: str = "A",
+    *,
+    session: aiohttp.ClientSession | None = None,
+    base_url: str = API_BASE_URL,
+) -> AppVersionInfo:
+    """
+    Query the NaviLink app versions the cloud expects, before sign-in.
+
+    Sends ``POST /app/version`` without authentication, as the app does on
+    its splash screen. A 403 whose data carries ``serverCheckText`` is a
+    maintenance notice and is returned as an
+    :class:`~nwp500.models.AppVersionInfo` with ``server_check_text`` set;
+    any other failure raises.
+
+    Args:
+        os: Platform code; the app sends ``"A"`` (Android)
+        session: Session to send on; a temporary one is opened if omitted
+        base_url: Base URL for the API
+
+    Returns:
+        AppVersionInfo object
+
+    Raises:
+        APIError: If the request fails for a reason other than a
+            maintenance notice
+    """
+    if session is None:
+        # Use ThreadedResolver for reliable DNS in containerized environments
+        connector = aiohttp.TCPConnector(resolver=aiohttp.ThreadedResolver())
+        timeout = aiohttp.ClientTimeout(total=30)
+        async with aiohttp.ClientSession(
+            connector=connector, timeout=timeout
+        ) as owned:
+            return await get_app_version(os, session=owned, base_url=base_url)
+
+    url = f"{base_url.rstrip('/')}/app/version"
+    _logger.debug(f"POST {url}")
+    try:
+        async with session.post(
+            url,
+            json={"os": os},
+            headers=NavienAuthClient._default_headers(),
+        ) as response:
+            response_data = await response.json()
+            status = response.status
+    except (aiohttp.ClientError, ValueError) as e:
+        _logger.error(f"Network error: {e}")
+        raise APIError(f"Network error: {e!s}") from e
+
+    if not isinstance(response_data, dict):
+        raise APIError("Invalid response format: not an object", code=status)
+
+    code = response_data.get("code", status)
+    data = response_data.get("data") or {}
+
+    if code == 200 and isinstance(data, dict):
+        return AppVersionInfo.model_validate(data)
+
+    if code == 403 and isinstance(data, dict) and "serverCheckText" in data:
+        _logger.warning("Navien cloud reports maintenance")
+        return AppVersionInfo.model_validate(data)
+
+    msg = response_data.get("msg", "")
+    _logger.error(f"API error: {code} - {msg}")
+    raise APIError(
+        f"API request failed: {msg}", code=code, response=response_data
+    )

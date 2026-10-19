@@ -53,7 +53,12 @@ from zoneinfo import ZoneInfo
 import numpy as np
 
 from nwp500.encoding import build_reservation_entry, encode_week_bitfield
-from nwp500.enums import CurrentOperationMode, ErrorCode, HeatSource
+from nwp500.enums import (
+    CurrentOperationMode,
+    DhwOperationSetting,
+    ErrorCode,
+    HeatSource,
+)
 from nwp500.models import (
     DeviceFeature,
     DeviceStatus,
@@ -186,7 +191,17 @@ def heater_state(status: DeviceStatus) -> HeaterState:
 
 def settings(status: DeviceStatus) -> Settings:
     """The setpoint, the operation mode, the lower zone's start and stop
-    thresholds, and the upper zone's start threshold."""
+    thresholds, and the upper zone's start threshold.
+
+    Raises:
+        ValueError: The heater reports Standby (0), a status-only mode
+            the simulator does not model.
+    """
+    if status.dhw_operation_setting == DhwOperationSetting.STANDBY:
+        raise ValueError(
+            "the heater reports Standby (dhw_operation_setting 0), a mode "
+            "the simulator does not model"
+        )
     return Settings(
         setpoint_f=_from_device(
             HalfCelsius(status.dhw_temperature_setting_raw)

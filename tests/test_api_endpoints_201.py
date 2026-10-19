@@ -4,12 +4,13 @@ Each test pins the HTTP method, path and request body/params the NaviLink
 app sends, and parses a response shaped like the app's own parser expects.
 """
 
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from nwp500.api_client import NavienAPIClient
+from nwp500.api_client import NavienAPIClient, get_app_version
+from nwp500.auth import __version__
 from nwp500.enums import DeviceType, ErrorCode
 from nwp500.exceptions import APIError
 from nwp500.models import (
@@ -77,12 +78,12 @@ async def test_get_push_settings() -> None:
 
 
 @pytest.mark.asyncio
-async def test_set_push_settings_encodes_and_omits_unset_flags() -> None:
+async def test_set_push_settings_encodes_every_given_flag() -> None:
     client, mock_request = _make_api_client()
     mock_request.return_value = _ok(None)
 
     result = await client.set_push_settings(
-        MAC, ADD, error_alarm=True, etc_alarm=False
+        MAC, ADD, error_alarm=True, descaling_alarm=True, etc_alarm=False
     )
 
     assert result is True
@@ -94,9 +95,34 @@ async def test_set_push_settings_encodes_and_omits_unset_flags() -> None:
             "macAddress": MAC,
             "additionalValue": ADD,
             "isErrorAlarm": 1,
+            "isDescalingAlarm": 1,
             "isEtcAlarm": 2,
         },
     )
+
+
+@pytest.mark.asyncio
+async def test_set_push_settings_keeps_current_values_of_unset_flags() -> None:
+    """The app always sends every flag, so an unset one is read first; one
+    the cloud does not report (a member's descaling flag) stays out."""
+    client, mock_request = _make_api_client()
+    mock_request.side_effect = [
+        _ok({"isErrorAlarm": 2, "isDescalingAlarm": 0, "isEtcAlarm": 1}),
+        _ok(None),
+    ]
+
+    await client.set_push_settings(MAC, ADD, error_alarm=True)
+
+    read, write = mock_request.await_args_list
+    assert read.args == ("POST", "/user/get-push-settings")
+    assert write.args == ("POST", "/user/set-push-settings")
+    assert write.kwargs["json_data"] == {
+        "userId": USER,
+        "macAddress": MAC,
+        "additionalValue": ADD,
+        "isErrorAlarm": 1,
+        "isEtcAlarm": 1,
+    }
 
 
 # --- Maintenance records ----------------------------------------------
@@ -447,6 +473,35 @@ async def test_get_error_history_first_page() -> None:
     assert second.error_code == 9999
     assert not isinstance(second.error_code, ErrorCode)
     assert second.occurred_at is None
+    assert first.time_zone == "America/Los_Angeles"
+    assert first.occurred_at_local == first.occurred_at
+    assert first.occurred_at_local.utcoffset() == -timedelta(hours=8)
+
+
+@pytest.mark.parametrize(
+    ("raw", "expected"),
+    [
+        (1733572682000, 1733572682000),
+        ("1733572682000", 1733572682000),
+        ("2024-12-07T11:58:02Z", 1733572682000),
+        ("2024-12-07T11:58:02", 1733572682000),
+        ("2024-12-07T03:58:02-08:00", 1733572682000),
+        (None, None),
+        ("", None),
+    ],
+)
+def test_error_occurred_time_accepts_epoch_ms_or_iso(
+    raw: object, expected: int | None
+) -> None:
+    entry = DeviceErrorHistoryEntry.model_validate({"errorOccuredTime": raw})
+    assert entry.error_occurred_time == expected
+
+
+def test_error_entry_unknown_time_zone_reads_as_utc() -> None:
+    entry = DeviceErrorHistoryEntry.model_validate(
+        {"errorOccuredTime": 1733572682000, "timeZone": "Not/AZone"}
+    )
+    assert entry.occurred_at_local == entry.occurred_at
 
 
 @pytest.mark.asyncio
@@ -629,7 +684,12 @@ async def test_get_app_version_is_unauthenticated_post() -> None:
     info = await client.get_app_version()
 
     session.post.assert_called_once_with(
-        "https://x/api/app/version", json={"os": "A"}
+        "https://x/api/app/version",
+        json={"os": "A"},
+        headers={
+            "User-Agent": f"nwp500-python/{__version__}",
+            "Content-Type": "application/json",
+        },
     )
     assert isinstance(info, AppVersionInfo)
     assert info.app_version == "2.04.00"
@@ -666,3 +726,85 @@ async def test_get_app_version_other_error_raises() -> None:
         await client.get_app_version()
 
     assert excinfo.value.code == 500
+
+
+@pytest.mark.asyncio
+async def test_module_get_app_version_needs_no_client() -> None:
+    session = MagicMock()
+    session.post = MagicMock(
+        return_value=_FakeResponse(200, _ok({"appVersion": "2.04.00"}))
+    )
+
+    info = await get_app_version(session=session, base_url="https://x/api/")
+
+    args, kwargs = session.post.call_args
+    assert args == ("https://x/api/app/version",)
+    assert "authorization" not in kwargs["headers"]
+    assert info.app_version == "2.04.00"
+
+
+@pytest.mark.asyncio
+async def test_get_app_version_non_object_body_raises_api_error() -> None:
+    client, _ = _client_with_session(200, ["not", "an", "object"])  # type: ignore[arg-type]
+
+    with pytest.raises(APIError, match="not an object"):
+        await client.get_app_version()
+
+
+@pytest.mark.asyncio
+async def test_get_manufacture_id_null_is_empty() -> None:
+    client, mock_request = _make_api_client()
+    mock_request.return_value = _ok({"manufactureId": None})
+
+    assert await client.get_manufacture_id(MAC, ADD, "CTRL1") == ""
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(("user_type", "sent"), [("M", "M"), (None, "O")])
+async def test_tou_reads_and_writes_send_the_signed_in_user_type(
+    user_type: str | None, sent: str
+) -> None:
+    client, mock_request = _make_api_client(user_type=user_type)
+    mock_request.return_value = _ok({})
+
+    await client.get_tou_info(MAC, ADD, "CTRL1")
+    await client.update_tou(MAC, ADD, {}, {}, "94103")
+
+    get_call, put_call = mock_request.await_args_list
+    assert get_call.kwargs["params"]["userType"] == sent
+    assert put_call.kwargs["json_data"]["userType"] == sent
+
+
+@pytest.mark.asyncio
+async def test_tou_explicit_user_type_wins() -> None:
+    client, mock_request = _make_api_client(user_type="M")
+    mock_request.return_value = _ok({})
+
+    await client.get_tou_info(MAC, ADD, "CTRL1", user_type="O")
+
+    assert mock_request.await_args.kwargs["params"]["userType"] == "O"
+
+
+def test_firmware_detail_reads_null_as_zero() -> None:
+    detail = FirmwareDetail.model_validate(
+        {"description": None, "runTime": None, "registerAt": None, "swCode": 7}
+    )
+    assert detail.run_time == 0
+    assert detail.register_at == 0
+    assert detail.sw_code == 7
+
+
+def test_user_profile_reads_null_as_empty() -> None:
+    profile = UserProfile.model_validate(
+        {
+            "userType": None,
+            "userFirstName": "Jane",
+            "userLastName": None,
+            "userSeq": None,
+            "userEmail": None,
+        }
+    )
+    assert profile.user_type == ""
+    assert profile.user_last_name == ""
+    assert profile.user_seq == 0
+    assert profile.full_name == "Jane"

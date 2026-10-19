@@ -574,6 +574,49 @@ class TestEnsureValidTokenFallbackOrder:
         sign_in.assert_not_awaited()
 
     @pytest.mark.asyncio
+    async def test_failed_jwt_refresh_goes_to_password(self):
+        """With the JWT expired and its refresh rejected, neither token
+        endpoint can succeed, so neither is called."""
+        client = _client(_both_expired_tokens())
+        fresh = AuthenticationResponse(user_info=UserInfo(), tokens=_tokens())
+
+        with (
+            patch.object(
+                client,
+                "_refresh_token_unlocked",
+                new=AsyncMock(side_effect=TokenRefreshError("expired")),
+            ),
+            patch.object(
+                client, "_refresh_session_unlocked", new=AsyncMock()
+            ) as session_refresh,
+            patch.object(
+                client, "_secured_sign_in_unlocked", new=AsyncMock()
+            ) as secured,
+            patch.object(
+                client, "sign_in", new=AsyncMock(return_value=fresh)
+            ) as sign_in,
+        ):
+            await client.ensure_valid_token()
+
+        session_refresh.assert_not_awaited()
+        secured.assert_not_awaited()
+        sign_in.assert_awaited_once_with(EMAIL, PASSWORD)
+
+    @pytest.mark.asyncio
+    async def test_failed_jwt_refresh_without_password_reraises(self):
+        client = _client(_both_expired_tokens(), password="")
+
+        with (
+            patch.object(
+                client,
+                "_refresh_token_unlocked",
+                new=AsyncMock(side_effect=TokenRefreshError("expired")),
+            ),
+            pytest.raises(TokenRefreshError, match="expired"),
+        ):
+            await client.ensure_valid_token()
+
+    @pytest.mark.asyncio
     async def test_no_tokens_returns_none(self):
         """Existing behaviour: nothing stored means nothing to renew."""
         client = _client(None)
@@ -659,8 +702,30 @@ class TestReAuthenticate:
 
     @pytest.mark.asyncio
     async def test_requires_stored_credentials(self):
-        client = _client(_tokens(), password="")
+        client = _client(_both_expired_tokens(), password="")
         with pytest.raises(ValueError, match="No stored credentials"):
+            await client.re_authenticate()
+
+    @pytest.mark.asyncio
+    async def test_token_only_client_uses_secured_sign_in(self):
+        client = _client(_tokens(), password="")
+        fresh = AuthenticationResponse(user_info=UserInfo(), tokens=_tokens())
+        secured = AsyncMock(return_value=fresh)
+
+        with patch.object(client, "_secured_sign_in_unlocked", new=secured):
+            result = await client.re_authenticate()
+
+        assert result is fresh
+
+    @pytest.mark.asyncio
+    async def test_token_only_client_raises_secured_sign_in_error(self):
+        client = _client(_tokens(), password="")
+        secured = AsyncMock(side_effect=AuthenticationError("rejected"))
+
+        with (
+            patch.object(client, "_secured_sign_in_unlocked", new=secured),
+            pytest.raises(AuthenticationError, match="rejected"),
+        ):
             await client.re_authenticate()
 
 
@@ -696,3 +761,51 @@ class TestUserAgentOnUnauthenticatedCalls:
         _, kwargs = session.post.call_args
         assert kwargs["headers"]["User-Agent"] == f"nwp500-python/{__version__}"
         assert "authorization" not in kwargs["headers"]
+
+
+class TestMergeTokenFields:
+    def test_new_access_token_alone_keeps_aws_expiry(self):
+        """A renewed JWT without AWS keys must not make the kept AWS
+        credentials look freshly issued."""
+        issued = datetime.now(UTC) - timedelta(minutes=50)
+        current = _tokens(issued_at=issued)
+        before = current.time_until_expiry
+        aws_left = current._aws_expires_at - datetime.now(UTC)
+
+        merged, updated = NavienAuthClient._merge_token_fields(
+            current, {"accessToken": "renewed"}
+        )
+
+        assert updated == {"access_token"}
+        assert merged.access_token == "renewed"
+        assert merged.time_until_expiry > before
+        assert merged.aws_credentials_issued_at == issued
+        merged_left = merged._aws_expires_at - datetime.now(UTC)
+        assert abs(merged_left - aws_left) < timedelta(seconds=5)
+
+        restored = AuthTokens.model_validate(merged.to_dict())
+        assert restored._aws_expires_at == merged._aws_expires_at
+
+    def test_new_access_token_keeps_earlier_aws_issue_time(self):
+        jwt_issued = datetime.now(UTC) - timedelta(minutes=10)
+        aws_issued = datetime.now(UTC) - timedelta(minutes=40)
+        current = _tokens(
+            issued_at=jwt_issued, aws_credentials_issued_at=aws_issued
+        )
+
+        merged, _ = NavienAuthClient._merge_token_fields(
+            current, {"accessToken": "renewed"}
+        )
+
+        assert merged.aws_credentials_issued_at == aws_issued
+
+    def test_new_aws_keys_restamp_their_issue_time(self):
+        issued = datetime.now(UTC) - timedelta(minutes=50)
+        current = _tokens(issued_at=issued)
+
+        merged, _ = NavienAuthClient._merge_token_fields(
+            current, {"accessToken": "renewed", "accessKeyId": "new_key"}
+        )
+
+        assert merged.aws_credentials_issued_at > issued
+        assert not merged.are_aws_credentials_expired

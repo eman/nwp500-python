@@ -235,10 +235,14 @@ re_authenticate()
    Re-authenticate, preferring the stored access token. Calls
    ``secured_sign_in()`` when a non-expired access token is held and falls
    back to a password ``sign_in()`` if that fails or no live token exists.
+   A client restored from tokens alone can re-authenticate while its
+   access token is live; if the secured sign-in fails, its error is
+   raised.
 
    :return: Authentication response with fresh tokens and user info
    :rtype: AuthenticationResponse
-   :raises ValueError: If no credentials were given at construction
+   :raises ValueError: If no live access token is held and no credentials
+      were given at construction
    :raises AuthenticationError: If authentication fails
 
 Token and Session Management

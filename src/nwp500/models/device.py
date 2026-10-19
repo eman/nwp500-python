@@ -1,5 +1,6 @@
 from datetime import UTC, datetime
 from typing import Annotated, Any, Self
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from pydantic import BeforeValidator, Field
 
@@ -46,6 +47,36 @@ def python_to_push_flag(value: bool | None) -> int | None:
 
 #: A push-notification flag: 1=on, 2=off, 0/absent=unknown (``None``).
 PushFlag = Annotated[bool | None, BeforeValidator(push_flag_to_python)]
+
+
+def _null_to_zero(value: Any) -> Any:
+    """``null`` reads as 0, as the NaviLink app's JSON parser reads it."""
+    return 0 if value is None else value
+
+
+#: An integer field the cloud may send as ``null``.
+NullableInt = Annotated[int, BeforeValidator(_null_to_zero)]
+
+
+def epoch_ms_to_python(value: Any) -> Any:
+    """Read a timestamp as epoch milliseconds.
+
+    The NaviLink app reads ``errorOccuredTime`` as a number. The same key
+    on ``/device/list`` is an ISO 8601 string, so a string is accepted
+    too: a numeric one as is, an ISO 8601 one converted (UTC when it
+    carries no offset).
+    """
+    if not isinstance(value, str):
+        return value
+    text = value.strip()
+    if not text:
+        return None
+    if text.lstrip("-").isdigit():
+        return int(text)
+    moment = datetime.fromisoformat(text)
+    if moment.tzinfo is None:
+        moment = moment.replace(tzinfo=UTC)
+    return int(moment.timestamp() * 1000)
 
 
 class DeviceInfo(NavienBaseModel):
@@ -209,16 +240,17 @@ class FirmwareDetail(NavienBaseModel):
     """
 
     description: str | None = None
-    model_number: int = 0
-    model_type: int = 0
-    product_family: int = 0
+    #: The integer fields read ``null`` as 0, as the app does.
+    model_number: NullableInt = 0
+    model_type: NullableInt = 0
+    product_family: NullableInt = 0
     #: When the image was registered, as the cloud sends it (epoch
     #: milliseconds).
-    register_at: int = 0
+    register_at: NullableInt = 0
     #: Estimated update duration in minutes (added in NaviLink 2.04.00).
-    run_time: int = 0
-    sw_code: int = 0
-    sw_version: int = 0
+    run_time: NullableInt = 0
+    sw_code: NullableInt = 0
+    sw_version: NullableInt = 0
 
 
 class DisplayPreferences(NavienBaseModel):
@@ -264,10 +296,14 @@ class DeviceErrorHistoryEntry(NavienBaseModel):
     sub_error: int = 0
     #: Epoch milliseconds. Spelled "Occured" by the API; the Python name is
     #: spelled correctly. The app passes the last entry's value back as
-    #: ``continuousKey`` to fetch the next page.
-    error_occurred_time: int | None = Field(
-        default=None, alias="errorOccuredTime"
-    )
+    #: ``continuousKey`` to fetch the next page. An ISO 8601 string is
+    #: converted (see :func:`epoch_ms_to_python`).
+    error_occurred_time: Annotated[
+        int | None, BeforeValidator(epoch_ms_to_python)
+    ] = Field(default=None, alias="errorOccuredTime")
+    #: The list's ``timeZone`` (an IANA name), which the app formats the
+    #: times in. ``None`` when the cloud sends none.
+    time_zone: str | None = None
 
     @property
     def occurred_at(self) -> datetime | None:
@@ -275,3 +311,15 @@ class DeviceErrorHistoryEntry(NavienBaseModel):
         if self.error_occurred_time is None:
             return None
         return datetime.fromtimestamp(self.error_occurred_time / 1000, tz=UTC)
+
+    @property
+    def occurred_at_local(self) -> datetime | None:
+        """``occurred_at`` in ``time_zone``; in UTC when the zone is
+        missing or unknown."""
+        moment = self.occurred_at
+        if moment is None or not self.time_zone:
+            return moment
+        try:
+            return moment.astimezone(ZoneInfo(self.time_zone))
+        except ZoneInfoNotFoundError, ValueError:
+            return moment

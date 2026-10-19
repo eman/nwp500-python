@@ -11,7 +11,7 @@ All functions are ``async`` and require a connected :class:`NavienMqttClient`.
 
 import asyncio
 import logging
-from collections.abc import Sequence
+from collections.abc import Collection, Sequence
 from typing import TYPE_CHECKING, Any
 
 from .converters import device_bool_from_python
@@ -89,6 +89,7 @@ async def update_reservations_confirmed(
     *,
     enabled: bool = True,
     timeout: float = 10.0,
+    kept: Collection[int] = (),
 ) -> ReservationSchedule | None:
     """Write the full reservation list and confirm the device applied it.
 
@@ -107,6 +108,9 @@ async def update_reservations_confirmed(
         reservations: List of raw reservation entry dicts to write.
         enabled: Whether reservations are enabled (default: True).
         timeout: Seconds to wait for the confirming response.
+        kept: 1-based positions of entries read back from the device and
+            sent unchanged; their ``mode`` is not range-checked (see
+            :func:`nwp500.mqtt.control.validate_reservation_entries`).
 
     Returns:
         The :class:`ReservationSchedule` the device echoed back after the
@@ -135,7 +139,7 @@ async def update_reservations_confirmed(
     # a coerced expectation (``ReservationEntry`` turns ``True`` into 1).
     # The setpoint range is checked by ``update_reservations`` against the
     # device's feature data, still before anything is published.
-    validate_reservation_entries(reservations)
+    validate_reservation_entries(reservations, kept=kept)
     expected = ReservationSchedule(
         reservationUse=device_bool_from_python(enabled),
         reservation=[ReservationEntry(**entry) for entry in reservations],
@@ -151,7 +155,9 @@ async def update_reservations_confirmed(
 
     await mqtt.subscribe_reservation_response(device, on_schedule)
     try:
-        await mqtt.update_reservations(device, reservations, enabled=enabled)
+        await mqtt.update_reservations(
+            device, reservations, enabled=enabled, kept=kept
+        )
         try:
             return await asyncio.wait_for(future, timeout=timeout)
         except TimeoutError:
@@ -229,9 +235,12 @@ async def add_reservation(
         e.model_dump(include=_RAW_RESERVATION_FIELDS)
         for e in schedule.reservation
     ]
+    kept = range(1, len(current_reservations) + 1)
     current_reservations.append(reservation_entry)
 
-    await mqtt.update_reservations(device, current_reservations, enabled=True)
+    await mqtt.update_reservations(
+        device, current_reservations, enabled=True, kept=kept
+    )
 
 
 async def delete_reservation(
@@ -275,7 +284,10 @@ async def delete_reservation(
     still_enabled = schedule.enabled and len(current_reservations) > 0
 
     await mqtt.update_reservations(
-        device, current_reservations, enabled=still_enabled
+        device,
+        current_reservations,
+        enabled=still_enabled,
+        kept=range(1, len(current_reservations) + 1),
     )
 
 
@@ -368,9 +380,10 @@ async def update_reservation(
         for e in schedule.reservation
     ]
     current_reservations[index - 1] = new_entry
+    kept = [i for i in range(1, count + 1) if i != index]
 
     await mqtt.update_reservations(
-        device, current_reservations, enabled=schedule.enabled
+        device, current_reservations, enabled=schedule.enabled, kept=kept
     )
 
 

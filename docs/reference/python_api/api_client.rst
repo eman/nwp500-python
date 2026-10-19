@@ -227,7 +227,8 @@ get_error_history()
    backend accepts an owner's ID there is untested.
 
    To fetch the next page pass the last entry's ``error_occurred_time`` as
-   ``continuous_key``.
+   ``continuous_key``. Each entry carries the list's ``timeZone`` as
+   ``time_zone``; ``occurred_at_local`` is the time in it.
 
    Installer accounts only: an owner account receives
    ``404 COMMON_NOT_AUTHORIZED`` (checked live).
@@ -355,7 +356,8 @@ convert_tou() / update_tou()
 See :doc:`../../how-to/optimize-tou` for the OpenEI conversion and
 apply workflow. ``convert_tou`` sends the signed-in user's ``userType``
 from the sign-in response (``auth.current_user.user_type``) and falls
-back to ``"O"`` (owner) when that is not available.
+back to ``"O"`` (owner) when that is not available. ``get_tou_info``
+and ``update_tou`` take a ``user_type`` that defaults to the same.
 
 delete_tou()
 ^^^^^^^^^^^^
@@ -408,10 +410,12 @@ set_push_settings()
 .. py:method:: set_push_settings(mac_address, additional_value="", *, error_alarm=None, descaling_alarm=None, etc_alarm=None)
 
    Enable or disable push notifications (``POST /user/set-push-settings``).
-   A flag left ``None`` is omitted from the request, as the NaviLink app
-   does for a member account's descaling flag. On the wire 1 is on and 2
-   is off, the reverse of the device's on/off flags, which the library
-   handles for you.
+   The app always sends every flag the account has, so a flag left
+   ``None`` keeps its current value, read first with
+   :meth:`get_push_settings`. One the cloud does not report (a member
+   account's descaling flag) is omitted, as the app omits it. On the
+   wire 1 is on and 2 is off, the reverse of the device's on/off flags,
+   which the library handles for you.
 
    :return: True on success
    :rtype: bool
@@ -420,9 +424,8 @@ set_push_settings()
 
    .. code-block:: python
 
-      settings = await api.get_push_settings(mac, additional_value)
-      if not settings.is_error_alarm:
-          await api.set_push_settings(mac, additional_value, error_alarm=True)
+      # The other flags keep their current values.
+      await api.set_push_settings(mac, additional_value, error_alarm=True)
 
 update_push_token()
 ^^^^^^^^^^^^^^^^^^^
@@ -542,6 +545,18 @@ get_app_version()
 
    :return: App version information
    :rtype: AppVersionInfo
+
+   Before sign-in, when there is no client to call it on, use the
+   module-level function, which opens a temporary session if none is
+   given:
+
+   .. code-block:: python
+
+      from nwp500 import get_app_version
+
+      info = await get_app_version()
+      if info.is_under_maintenance:
+          print(info.server_check_text)
 
 Properties
 ----------

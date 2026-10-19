@@ -232,7 +232,9 @@ class MqttConnectionConfig:
             publishes it (``connection.status`` 0) if the connection is
             lost without a DISCONNECT, so other clients watching the topic
             learn the client dropped. A will names one topic, so one
-            device. ``None`` registers no will.
+            device. ``None`` (the default) registers no will. A NaviLink
+            app subscribed to the topic shows a "device disconnected"
+            notice when it receives one.
     """
 
     endpoint: str = AWS_IOT_ENDPOINT

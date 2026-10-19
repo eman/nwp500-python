@@ -192,7 +192,8 @@ Built by ``sim_adapters.settings(status)``.
      - mode
      - 1
      - ``DeviceStatus.dhw_operation_setting``. In Vacation (5) or Power
-       Off (6) the heater starts no heating.
+       Off (6) the heater starts no heating. A status in Standby (0) is
+       refused by ``sim_adapters.settings``.
    * - ``hp_lower_on_f``
      - degF
      - None
@@ -317,8 +318,11 @@ A ``ReservationEntry`` is one entry as the device stores it:
      - ``param``
 
 An entry fires in its minute on each day its mask names, setting the
-mode and the setpoint. One in Vacation or Power Off is not modelled: it
-is left out, with ``reservation_mode_not_modelled`` in ``reasons``.
+mode and the setpoint. Its ``mode`` is a ``ReservationMode``: 1-4 are
+the operation modes of the same ids and 5 is Power Off (there is no
+Vacation entry). An entry in Power Off, or with any id other than 1-4,
+is not modelled: it is left out, with ``reservation_mode_not_modelled``
+in ``reasons``.
 
 A ``TouPeriod`` is one price period: ``season`` and ``week`` masks,
 ``start_hour``:``start_minute`` to ``end_hour``:``end_minute`` (the end
@@ -794,7 +798,8 @@ The ones about inputs and parameters:
    * - ``draw_out_of_domain``
      - A draw lies outside the range the draw terms were fitted over.
    * - ``write_mode_not_modelled``, ``reservation_mode_not_modelled``
-     - A write or a reservation into Vacation or Power Off was left out.
+     - A write into Vacation or Power Off, or a reservation in Power Off
+       (or a mode id other than 1-4), was left out.
    * - ``physics_truncated=integration_bound_reached``
      - A served recovery rests on an integration that hit its bound.
    * - ``physics_failed``
