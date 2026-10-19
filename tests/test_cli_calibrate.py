@@ -405,6 +405,43 @@ class TestTheFits:
             (T0 + 6 * h, 70.0),
         ]
 
+    def test_no_recovery_spans_unobserved_air(self, history, monkeypatch):
+        import numpy as np
+
+        from nwp500.sim_home_assistant import RecordInputs
+
+        seen: list[Any] = []
+        real = cal.calibrate
+
+        def spy(frame: Any, *args: Any, **kw: Any) -> Any:
+            seen.append(frame)
+            return real(frame, *args, **kw)
+
+        monkeypatch.setattr(cal_cli.cal, "calibrate", spy)
+        h = timedelta(hours=1)
+        # Recorded to 10 h: the air's span ends at 11 h.
+        record = RecordInputs(
+            air=[(T0, AIR_F), (T0 + 10 * h, AIR_F)],
+            humidity=None,
+            drawing=[],
+            circulating=[],
+        )
+        cal_cli.calibrate(cal_cli.read_history(history), record=record)
+        frame = seen[0].copy()
+        # Reached and not cut short: nothing left to heat at the end.
+        frame["energy_to_setpoint_wh"] = 0.0
+        target = float(frame["target_f"].iloc[0])
+        for start in (T0 + 2 * h, T0 + 10 * h + timedelta(minutes=30)):
+            span = (frame.index >= start) & (frame.index < start + 2 * h)
+            frame.loc[span, "compressor_on"] = True
+            frame.loc[span, "lower_f"] = np.linspace(
+                target - 30.0, target, int(span.sum())
+            )
+        found = cal.recoveries(frame, air="air_f")
+        # The one inside the air's span, not the one across its end.
+        assert len(found) == 1
+        assert found["start_time"].iloc[0] < T0 + 10 * h
+
     def test_flags_win_over_the_sources(self, history):
         from nwp500.sim_home_assistant import RecordInputs
 

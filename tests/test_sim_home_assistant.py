@@ -900,3 +900,82 @@ class TestTheSixthReviewLive:
         )
         (drawn,) = got.drawing or []
         assert drawn[0] < at <= drawn[1]
+
+
+@pytest.mark.asyncio
+class TestTheToken:
+    TOKEN = "secret-token-value"
+
+    def client_raising(self, exc: BaseException):
+        class Response:
+            async def __aenter__(self):
+                raise exc
+
+            async def __aexit__(self, *a):
+                return False
+
+        class Session:
+            def __init__(self):
+                self.kw: dict[str, Any] = {}
+
+            def request(self, method, url, **kw):
+                self.kw = kw
+                return Response()
+
+        session = Session()
+        return (
+            ha.HomeAssistantClient(
+                "http://ha.invalid",
+                self.TOKEN,
+                session=session,  # pyright: ignore[reportArgumentType]
+            ),
+            session,
+        )
+
+    async def test_a_request_error_never_carries_the_token(self):
+        import aiohttp
+        from multidict import CIMultiDict, CIMultiDictProxy
+        from yarl import URL
+
+        info = aiohttp.RequestInfo(
+            URL("http://ha.invalid/api/states/sensor.a"),
+            "GET",
+            CIMultiDictProxy(
+                CIMultiDict({"Authorization": f"Bearer {self.TOKEN}"})
+            ),
+        )
+        client, session = self.client_raising(
+            aiohttp.TooManyRedirects(info, ())
+        )
+        with pytest.raises(ha.HomeAssistantError) as err:
+            await client.state("sensor.a")
+        assert self.TOKEN not in str(err.value)
+        assert "TooManyRedirects" in str(err.value)
+        assert session.kw["allow_redirects"] is False
+
+    async def test_an_error_body_is_scrubbed(self):
+        class Response:
+            status = 401
+
+            async def text(self):
+                return f"bad token {TestTheToken.TOKEN}"
+
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *a):
+                return False
+
+        class Session:
+            def request(self, method, url, **kw):
+                return Response()
+
+        client = ha.HomeAssistantClient(
+            "http://ha.invalid",
+            self.TOKEN,
+            session=Session(),  # pyright: ignore[reportArgumentType]
+        )
+        with pytest.raises(ha.HomeAssistantError) as err:
+            await client.state("sensor.a")
+        assert self.TOKEN not in str(err.value)
+        assert "<token>" in str(err.value)

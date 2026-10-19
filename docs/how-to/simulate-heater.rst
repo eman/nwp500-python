@@ -161,7 +161,9 @@ pass it with ``--sources`` (or set ``NWP500_SOURCES``):
    export HA_TOKEN=...   # Profile > Security > Long-lived access tokens
    nwp-cli simulate run --sources sources.toml
 
-Every entity is optional, and the token never goes in the file. With
+Every entity is optional, and the token never goes in the file. The
+``url`` is the one Home Assistant answers on (``https://`` if it uses
+TLS): the client follows no redirects, which would carry the token on. With
 the heater read live, the sources give:
 
 - **the air:** the hourly forecast projected through the

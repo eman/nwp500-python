@@ -527,15 +527,18 @@ class HomeAssistantClient:
             raise HomeAssistantError("the client is not open")
         headers = {"Authorization": f"Bearer {self._token}"}
         try:
+            # No redirects: the API needs none, and following one would
+            # carry the token and put it in the error's request details.
             async with self._session.request(
                 method,
                 self.url + path,
                 headers=headers,
                 timeout=aiohttp.ClientTimeout(total=self.timeout),
+                allow_redirects=False,
                 **kw,
             ) as response:
                 if response.status != 200:
-                    body = (await response.text())[:200]
+                    body = self._scrub((await response.text())[:200])
                     raise HomeAssistantError(
                         f"{method} {path}: HTTP {response.status} {body}"
                     )
@@ -546,7 +549,14 @@ class HomeAssistantClient:
                         f"{method} {path}: the answer is not JSON"
                     ) from None
         except (aiohttp.ClientError, TimeoutError) as e:
-            raise HomeAssistantError(f"{method} {path}: {e!r}") from None
+            # The type alone: an exception's repr can carry the request's
+            # headers, and so the token.
+            raise HomeAssistantError(
+                f"{method} {path}: {type(e).__name__}"
+            ) from None
+
+    def _scrub(self, text: str) -> str:
+        return text.replace(self._token, "<token>") if self._token else text
 
     async def state(self, entity: str) -> State:
         """``entity``'s value now."""

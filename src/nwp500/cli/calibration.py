@@ -254,8 +254,10 @@ def calibrate(
     if covers is not None and record is not None:
         unseen = _unobserved(frame.index, covers, record.air_outages)
         frame.loc[unseen, "air_f"] = float("nan")
-        # And out of the standby fit, which would interpolate across.
+        # And out of the standby fit, which would interpolate across,
+        # and out of any recovery, which would take an older reading.
         frame["air_unobserved"] = unseen
+        frame["excluded"] = frame["excluded"].to_numpy(dtype=bool) | unseen
     if rh_covers is not None and record is not None:
         frame.loc[
             _unobserved(frame.index, rh_covers, record.humidity_outages),
