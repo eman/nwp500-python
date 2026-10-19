@@ -2,6 +2,7 @@
 (``nwp500.sim.meter``)."""
 
 from datetime import UTC, datetime, timedelta
+from itertools import pairwise
 
 import pytest
 
@@ -107,3 +108,40 @@ class TestSustainRoundsUp:
 
         assert moving(120)
         assert not moving(125)
+
+
+class TestZones:
+    @pytest.mark.parametrize(
+        ("zone", "start", "end"),
+        [
+            # Clocks forward, back, and a fixed half-hour offset.
+            ("America/New_York", (2026, 3, 8, 1, 55), (2026, 3, 8, 3, 5)),
+            (
+                "America/Los_Angeles",
+                (2026, 11, 1, 1, 50, 0),
+                (2026, 11, 1, 1, 10, 1),
+            ),
+            ("Asia/Kolkata", (2026, 10, 18, 7, 3), (2026, 10, 18, 8, 3)),
+        ],
+    )
+    def test_local_instants_read_as_utc(self, zone, start, end):
+        from zoneinfo import ZoneInfo
+
+        z = ZoneInfo(zone)
+        a = datetime(*start[:5], tzinfo=z)
+        b = datetime(*end[:5], tzinfo=z, fold=end[5] if len(end) > 5 else 0)
+        reports = [
+            (a + timedelta(seconds=30 * (i + 1)), 1.0) for i in range(20)
+        ]
+        local = meter.flow_gpm(reports, [], a, b)
+        utc = meter.flow_gpm(
+            [(t.astimezone(UTC), v) for t, v in reports],
+            [],
+            a.astimezone(UTC),
+            b.astimezone(UTC),
+        )
+        assert local == utc
+        elapsed = b.astimezone(UTC) - a.astimezone(UTC)
+        assert len(local) == pytest.approx(elapsed / meter.STEP, abs=1)
+        steps = [t for t, _ in local]
+        assert all(y - x == meter.STEP for x, y in pairwise(steps))

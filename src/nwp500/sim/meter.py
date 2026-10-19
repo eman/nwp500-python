@@ -56,7 +56,9 @@ def flow_gpm(
 ) -> list[Reading]:
     """The meter's flow, gal/min, every ``step`` from ``start`` to
     ``end``, on whole multiples of ``step`` (from the Unix epoch), so a
-    draw's edges do not move with the instant it is read at.
+    draw's edges do not move with the instant it is read at. Instants
+    are UTC: arithmetic on a zone's wall time would skip or repeat an
+    hour where its clocks change.
 
     ``volume`` is each report's volume since the previous one, gallons,
     at the instant of the report (it belongs to the interval the report
@@ -72,13 +74,14 @@ def flow_gpm(
     it, only from the step that completes ``sustain``. A step at or above
     ``draw_gpm`` is water moving: the draw ticks ``sim.cold_supply``
     reads."""
+    start, end = start.astimezone(UTC), end.astimezone(UTC)
     if step <= timedelta(0) or end < start:
         return []
-    reports = sorted(volume, key=lambda r: r[0])
-    rates = sorted(rate, key=lambda r: r[0])
+    reports = sorted((t.astimezone(UTC), v) for t, v in volume)
+    rates = sorted((t.astimezone(UTC), v) for t, v in rate)
     span_s = window.total_seconds()
     times: list[datetime] = []
-    epoch = datetime(1970, 1, 1, tzinfo=start.tzinfo or UTC)
+    epoch = datetime(1970, 1, 1, tzinfo=UTC)
     t = epoch + step * math.ceil((start - epoch) / step)
     while t <= end:
         times.append(t)
