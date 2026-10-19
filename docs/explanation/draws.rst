@@ -231,12 +231,16 @@ plateaus (next section) instead, they were 26.3, 49.3 and 2.4: a mean
 0.3 gal over, and a worst over-promise of 9.4 gal. Three events say
 little about the level.
 
-Without a full tank in the last 72 hours to count from, an estimate can
-only lean on the longest draw the history shows from a tank in the same
-state or colder. That is a floor, and a low one. No clean recorded draw
-took the upper probe below 105 degF (the lowest reached 107.2 degF), so
-on that evidence a full tank that had filled a 38 gal bath reads
-33.4 gal. Its assumption, that a tank no colder delivers at least as
+Without a full tank in the last 72 hours for the heat book to count
+from, the estimate leans on evidence: the longest draw the history
+shows from a tank in the same state or colder, counted to the upper
+probe's crossing. That is a low figure. No clean recorded draw took the
+upper probe below 105 degF (the lowest reached 107.2 degF), so for a
+full tank that had filled a 38 gal bath the evidence gives 33.4 gal at
+the probe. The estimate takes the larger of that and a full tank's
+floor, caps it at 6.5 gal when the lower probe reads 100 degF or less, and adds the
+lag to the delivered water (5 gal by default). The evidence's
+assumption, that a tank no colder delivers at least as
 much, failed on small differences: 15 of 22 later draws over-promised
 for a 2 degF fall, because two probes cannot place the boundary between
 the hot and the cold water. With the lower probe cold, heat that went

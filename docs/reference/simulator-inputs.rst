@@ -787,8 +787,9 @@ the one seen over the retrains from 2026-08-08 to 2026-10-18.
      - 257 cycles against an energy meter on the heater's circuit. The
        lift term corrects the model's efficiency for the gap between the
        tank and the air, which the refrigerant model alone under-states.
-       Checked on later cycles in September: median error 4.8 % per
-       recovery (:doc:`/explanation/recovery-speed`).
+       No error is recorded for these coefficients. An evaluation of the
+       same fit on 2026-09-18, on the record to then, gave a median error
+       of 4.8 % per recovery (Accuracy in :doc:`/explanation/simulator`).
      - 2.08-2.22, 158-171 Wh, 0.004-0.0065
    * - ``draw.ungated_observability``
      - 0.398
