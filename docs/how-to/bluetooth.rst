@@ -94,6 +94,20 @@ be read whole over Bluetooth; :meth:`~nwp500.NavienAPIClient.get_tou_info`
 returns all of it. ``python -m nwp500.ble read`` prints the decoded
 records under the ``TOU_PLAN`` line.
 
+Read the DIP-switch block
+-------------------------
+
+``SSD`` (17) is not live status: an NWP500 reports its status over MQTT
+only, and it does not answer the real-time monitoring class (``RTMD``, 48)
+that Navien's service toolkit reads live data from on other models.
+:meth:`~nwp500.ble.NavienBleClient.read_sub_status` decodes ``SSD`` into
+:class:`~nwp500.ble.SubStatus`, with two 16-bit DIP-switch words, using
+the layout the UK service toolkit reads on boilers. That layout is
+unconfirmed on the heat pump. The toolkit expects a 60-byte block and an
+NWP500 sends 59, and what each bit means is not known. The unit checked
+read ``0x0004`` and ``0x0000``. ``python -m nwp500.ble read`` prints both
+words under the ``SSD`` line.
+
 From Python:
 
 .. code-block:: python
@@ -107,12 +121,14 @@ From Python:
        serials = await ble.read_controller_serials()
        for record in await ble.read_tou_records():
            print(record.as_period())
-       status = await ble.read(ClassCode.SSD)
-       print(status.crc_ok, status.data.hex())
+       dip = await ble.read_sub_status()
+       print(hex(dip.dip_switch_1), hex(dip.dip_switch_2))
+       errors = await ble.read(ClassCode.EHD)
+       print(errors.crc_ok, errors.data.hex())
 
 ``read()`` returns each reply as received, with ``crc_ok`` set. The
 readers that decode a block (``read_device_info()``,
-``read_controller_serials()``, ``read_tou_records()``,
+``read_controller_serials()``, ``read_sub_status()``, ``read_tou_records()``,
 ``read_parameter_blocks()``) raise
 :class:`~nwp500.ble.CrcMismatchError` rather than decode a reply that
 failed its checksum.

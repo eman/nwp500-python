@@ -354,6 +354,42 @@ class ControllerSerials:
 
 
 @dataclass(frozen=True)
+class SubStatus:
+    """The ``SSD`` block (class 17): two DIP-switch settings.
+
+    This is not live status; an NWP500 reports that over MQTT only. The
+    layout comes from Navien's UK service toolkit, which names the block
+    "DeviceSubStatusInfo" and reads two little-endian 16-bit words from
+    it, labelled DIP switch 1 (bytes 16-17) and DIP switch 2 (bytes
+    18-19). That toolkit was written for boilers and expects a 60-byte
+    block, while an NWP500 sends 59, so on the heat pump the layout is
+    unconfirmed and what each bit means is not known. On the unit
+    checked (2026-10-16) the words were 0x0004 and 0x0000; every other
+    byte was zero. The NWP500 does have DIP switches (error E593,
+    "Abnormal DIP switch settings"). The whole block is kept in ``raw``.
+    """
+
+    dip_switch_1: int
+    dip_switch_2: int
+    raw: bytes
+
+    MIN_LENGTH = 20
+
+    @classmethod
+    def parse(cls, data: bytes) -> SubStatus:
+        if len(data) < cls.MIN_LENGTH:
+            raise ValueError(
+                f"SSD block must be at least {cls.MIN_LENGTH} bytes, "
+                f"got {len(data)}"
+            )
+        return cls(
+            dip_switch_1=int.from_bytes(data[16:18], "little"),
+            dip_switch_2=int.from_bytes(data[18:20], "little"),
+            raw=bytes(data),
+        )
+
+
+@dataclass(frozen=True)
 class TouRecord:
     """One 16-byte interval of the ``TOU_PLAN`` block.
 
@@ -475,6 +511,7 @@ __all__ = [
     "parse_packet",
     "DeviceInfo",
     "ControllerSerials",
+    "SubStatus",
     "TouRecord",
     "parse_tou_records",
 ]

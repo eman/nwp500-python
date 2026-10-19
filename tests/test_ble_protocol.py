@@ -15,6 +15,7 @@ from nwp500.ble import (
     CrcMismatchError,
     DeviceInfo,
     NavienBleClient,
+    SubStatus,
     TouRecord,
     build_packet,
     build_read,
@@ -505,3 +506,52 @@ def test_cli_read_prints_decoded_tou_records(monkeypatch, capsys):
     out = capsys.readouterr().out
     assert "season=0x01f week=0x7c 00:00-14:59 price=0.28468-0.28468" in out
     assert out.count("season=") == 12
+
+
+# --- SSD ---------------------------------------------------------------
+
+# Read from an NWP500 (2026-10-16): 59 bytes, only byte 16 set.
+SSD_BLOCK = bytes.fromhex(
+    "000000000000000000000000000000000400000000000000000000000000"
+    "0000000000000000000000000000000000000000000000000000000000"
+)
+
+
+def test_sub_status_reads_the_toolkit_dip_switch_words():
+    assert len(SSD_BLOCK) == 59
+    ssd = SubStatus.parse(SSD_BLOCK)
+    assert (ssd.dip_switch_1, ssd.dip_switch_2) == (0x0004, 0x0000)
+    assert ssd.raw == SSD_BLOCK
+
+
+def test_sub_status_words_are_little_endian():
+    data = bytearray(60)  # the boiler block length the toolkit expects
+    data[16:20] = bytes([0x01, 0x80, 0x34, 0x12])
+    ssd = SubStatus.parse(bytes(data))
+    assert (ssd.dip_switch_1, ssd.dip_switch_2) == (0x8001, 0x1234)
+
+
+def test_sub_status_rejects_a_short_block():
+    with pytest.raises(ValueError):
+        SubStatus.parse(bytes(19))
+
+
+@pytest.mark.asyncio
+async def test_client_reads_sub_status():
+    transport = FakeTransport({ClassCode.SSD: SSD_BLOCK})
+    async with NavienBleClient(transport=transport) as ble:
+        assert (await ble.read_sub_status()).dip_switch_1 == 4
+
+
+@pytest.mark.asyncio
+async def test_client_refuses_an_ssd_reply_with_a_bad_crc():
+    transport = CorruptTransport({ClassCode.SSD: SSD_BLOCK})
+    async with NavienBleClient(transport=transport) as ble:
+        with pytest.raises(CrcMismatchError):
+            await ble.read_sub_status()
+
+
+def test_cli_read_prints_decoded_sub_status(monkeypatch, capsys):
+    transport = FakeTransport({ClassCode.SSD: SSD_BLOCK})
+    assert _run_read(monkeypatch, transport, ["SSD"]) == 0
+    assert "dip_switch_1=0x0004 dip_switch_2=0x0000" in capsys.readouterr().out

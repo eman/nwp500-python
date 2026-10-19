@@ -12,6 +12,7 @@ from . import (
     NWP500_RESPONDING_CLASSES,
     ClassCode,
     NavienBleClient,
+    SubStatus,
     parse_tou_records,
     scan,
 )
@@ -47,6 +48,18 @@ def _print_tou(data: bytes) -> None:
             f"{r.end_hour:02}:{r.end_minute:02} "
             f"price={r.decoded_price_min:g}-{r.decoded_price_max:g}"
         )
+
+
+def _print_sub_status(data: bytes) -> None:
+    try:
+        ssd = SubStatus.parse(data)
+    except ValueError as e:
+        print(f"  (not decoded: {e})")
+        return
+    print(
+        f"  dip_switch_1={ssd.dip_switch_1:#06x} "
+        f"dip_switch_2={ssd.dip_switch_2:#06x} (layout unconfirmed)"
+    )
 
 
 async def _scan(args: argparse.Namespace) -> int:
@@ -94,6 +107,8 @@ async def _read(args: argparse.Namespace) -> int:
             )
             if pkt.class_code == ClassCode.TOU_PLAN and pkt.crc_ok:
                 _print_tou(pkt.data)
+            elif pkt.class_code == ClassCode.SSD and pkt.crc_ok:
+                _print_sub_status(pkt.data)
             results.append(
                 {
                     "class": pkt.class_code,

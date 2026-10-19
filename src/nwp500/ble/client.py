@@ -24,6 +24,7 @@ from .protocol import (
     CrcMismatchError,
     DeviceInfo,
     Packet,
+    SubStatus,
     TouRecord,
     build_packet,
     build_read,
@@ -108,12 +109,13 @@ class NavienBleClient:
 
         async with NavienBleClient(address) as ble:
             info = await ble.read_device_info()
-            status = await ble.read(ClassCode.SSD)
+            plan = await ble.read_tou_records()
 
     Reads are safe. :meth:`read` returns the reply as received, with
     ``crc_ok`` set; the readers that decode a block
     (:meth:`read_device_info`, :meth:`read_controller_serials`,
-    :meth:`read_tou_records`, :meth:`read_parameter_blocks`) raise
+    :meth:`read_sub_status`, :meth:`read_tou_records`,
+    :meth:`read_parameter_blocks`) raise
     :class:`CrcMismatchError` instead of decoding bytes that failed their
     checksum.
 
@@ -250,6 +252,17 @@ class NavienBleClient:
             CrcMismatchError: The reply failed its checksum.
         """
         return ControllerSerials.parse(await self._read_checked(ClassCode.MSCD))
+
+    async def read_sub_status(self) -> SubStatus:
+        """Read and decode the ``SSD`` block: two DIP-switch settings.
+
+        The layout is from Navien's boiler service toolkit and is
+        unconfirmed on the NWP500; see :class:`SubStatus`.
+
+        Raises:
+            CrcMismatchError: The reply failed its checksum.
+        """
+        return SubStatus.parse(await self._read_checked(ClassCode.SSD))
 
     async def read_tou_records(self, address: int = 0) -> list[TouRecord]:
         """Read the stored TOU plan from record ``address`` on.

@@ -25,7 +25,10 @@ Added
   on a reply that failed its checksum.
   ``read_tou_records()`` decodes the stored time-of-use plan into
   ``TouRecord`` (``as_period()`` gives the cloud's period dict); one read
-  returns up to the first twelve intervals.
+  returns up to the first twelve intervals. ``read_sub_status()`` decodes
+  the ``SSD`` block into two DIP-switch words (``SubStatus``), using the
+  layout Navien's boiler service toolkit reads; it is unconfirmed on the
+  NWP500.
 - **New REST endpoints.** ``NavienAPIClient`` gains
   ``get_push_settings()`` / ``set_push_settings()``
   (``/user/get-push-settings``, ``/user/set-push-settings``),
