@@ -21,12 +21,12 @@ Enumerations
 
 See :doc:`../enumerations` for the complete enumeration reference including:
 
-* **DhwOperationSetting** - User-configured DHW heating modes (Heat Pump/Hybrid/Electric)
-* **CurrentOperationMode** - Real-time operational state (Standby/Heat Pump/Hybrid modes)
-* **HeatSource** - Currently active heat source
-* **TemperatureType** - Temperature unit (Celsius/Fahrenheit)
-* **CommandCode** - All control command IDs
-* **TouRateType** - Time-of-Use rate periods
+* **DhwOperationSetting**: User-configured DHW heating modes (Heat Pump/Hybrid/Electric)
+* **CurrentOperationMode**: Real-time operational state (Standby/Heat Pump/Hybrid modes)
+* **HeatSource**: Currently active heat source
+* **TemperatureType**: Temperature unit (Celsius/Fahrenheit)
+* **CommandCode**: All control command IDs
+* **TouRateType**: Time-of-Use rate periods
 * And many more protocol enumerations
 
 **Quick Reference:**
@@ -58,11 +58,11 @@ Complete device representation with info and location.
 
    **Fields:**
 
-   * ``device_info`` (DeviceInfo) - Device identification and status
-   * ``location`` (Location) - Physical location information
-   * ``error`` (DeviceErrorSummary, optional) - Last recorded fault. Returned by
+   * ``device_info`` (DeviceInfo): Device identification and status
+   * ``location`` (Location): Physical location information
+   * ``error`` (DeviceErrorSummary, optional): Last recorded fault. Returned by
      ``/device/list`` only; ``None`` on a device fetched through ``/device/info``.
-   * ``descaling`` (DescalingInfo, optional) - Descaling window, if one is
+   * ``descaling`` (DescalingInfo, optional): Descaling window, if one is
      scheduled or recorded
 
    **Example:**
@@ -95,12 +95,12 @@ remains readable while the device is offline.
 
    **Fields:**
 
-   * ``error_code`` (ErrorCode | int | None) - ``ErrorCode.NO_ERROR`` when the
+   * ``error_code`` (ErrorCode | int | None): ``ErrorCode.NO_ERROR`` when the
      device has no recorded fault, and ``None`` when the cloud reports no code
-     at all - it sends ``"errorCode": null`` on some devices, which is not the
+     at all: it sends ``"errorCode": null`` on some devices, which is not the
      same claim as "no error". A code the enum does not know is kept as a plain
      int, so neither a null nor an unrecognised code fails the whole response.
-   * ``error_occurred_time`` (str, optional) - When the fault was recorded, as an
+   * ``error_occurred_time`` (str, optional): When the fault was recorded, as an
      ISO-8601 string. Sent by the API under the misspelled key ``errorOccuredTime``.
 
    **Example:**
@@ -128,8 +128,8 @@ Descaling window reported by the REST API.
 
    **Fields:**
 
-   * ``descaling_start_time`` (str, optional) - Start of the descaling window
-   * ``descaling_end_time`` (str, optional) - End of the descaling window
+   * ``descaling_start_time`` (str, optional): Start of the descaling window
+   * ``descaling_end_time`` (str, optional): End of the descaling window
 
    Both are ``None`` on a device with no descaling scheduled or recorded.
 
@@ -142,18 +142,18 @@ Device identification and connection information.
 
    **Fields:**
 
-   * ``home_seq`` (int) - Unique home/location identifier used for MQTT message routing.
+   * ``home_seq`` (int): Unique home/location identifier used for MQTT message routing.
      Each home/installation receives a unique sequence number from the Navien cloud
      system. This value is included in all MQTT topic paths to route commands and
      status updates to the correct location.
-   * ``mac_address`` (str) - MAC address (without colons)
-   * ``additional_value`` (str) - Additional identifier
-   * ``device_type`` (int) - Device type code (52 for NWP500)
-   * ``device_name`` (str) - User-assigned device name
-   * ``connected`` (int) - Connection status (2 = online, 0 = offline)
-   * ``install_type`` (str, optional) - Installation type
-   * ``model_type_code`` (int, optional) - Model type code
-   * ``installer_id`` (str, optional) - Installer identifier
+   * ``mac_address`` (str): MAC address (without colons)
+   * ``additional_value`` (str): Additional identifier
+   * ``device_type`` (int): Device type code (52 for NWP500)
+   * ``device_name`` (str): User-assigned device name
+   * ``connected`` (int): Connection status (2 = online, 0 = offline)
+   * ``install_type`` (str, optional): Installation type
+   * ``model_type_code`` (int, optional): Model type code
+   * ``installer_id`` (str, optional): Installer identifier
 
    **Example:**
 
@@ -179,12 +179,12 @@ Physical location information for a device.
 
    **Fields:**
 
-   * ``state`` (str, optional) - State/province
-   * ``city`` (str, optional) - City name
-   * ``address`` (str, optional) - Street address
-   * ``latitude`` (float, optional) - GPS latitude
-   * ``longitude`` (float, optional) - GPS longitude
-   * ``altitude`` (float, optional) - Altitude in meters
+   * ``state`` (str, optional): State/province
+   * ``city`` (str, optional): City name
+   * ``address`` (str, optional): Street address
+   * ``latitude`` (float, optional): GPS latitude
+   * ``longitude`` (float, optional): GPS longitude
+   * ``altitude`` (float, optional): Altitude in meters
 
    **Example:**
 
@@ -207,13 +207,13 @@ Firmware version information.
 
    **Fields:**
 
-   * ``mac_address`` (str) - Device MAC address
-   * ``additional_value`` (str) - Additional identifier
-   * ``device_type`` (int) - Device type code
-   * ``cur_sw_code`` (int) - Current software code
-   * ``cur_version`` (int) - Current version number
-   * ``downloaded_version`` (int, optional) - Downloaded update version
-   * ``device_group`` (str, optional) - Device group
+   * ``mac_address`` (str): Device MAC address
+   * ``additional_value`` (str): Additional identifier
+   * ``device_type`` (int): Device type code
+   * ``cur_sw_code`` (int): Current software code
+   * ``cur_version`` (int): Current version number
+   * ``downloaded_version`` (int, optional): Downloaded update version
+   * ``device_group`` (str, optional): Device group
 
    **Example:**
 
@@ -242,89 +242,89 @@ Complete real-time device status with 100+ fields.
 
    **Temperature Fields:**
 
-   * ``dhw_temperature`` (float) - Current water temperature (°F or °C)
-   * ``dhw_temperature_setting`` (float) - Target temperature setting
-   * ``dhw_target_temperature_setting`` (float) - Target with offsets applied
-   * ``tank_upper_temperature`` (float) - Upper tank sensor
-   * ``tank_lower_temperature`` (float) - Lower tank sensor
-   * ``current_inlet_temperature`` (float) - Cold water inlet temperature
-   * ``outside_temperature`` (float) - Outdoor temperature
-   * ``ambient_temperature`` (float) - Ambient air temperature
+   * ``dhw_temperature`` (float): Current water temperature (°F or °C)
+   * ``dhw_temperature_setting`` (float): Target temperature setting
+   * ``dhw_target_temperature_setting`` (float): Target with offsets applied
+   * ``tank_upper_temperature`` (float): Upper tank sensor
+   * ``tank_lower_temperature`` (float): Lower tank sensor
+   * ``current_inlet_temperature`` (float): Cold water inlet temperature
+   * ``outside_temperature`` (float): Outdoor temperature
+   * ``ambient_temperature`` (float): Ambient air temperature
 
    .. note::
       Temperature values from the device are automatically converted from their raw (scaled Celsius) representation to Fahrenheit or Celsius based on the device's settings. The library handles these conversions transparently.
 
    **Power/Energy Fields:**
 
-   * ``current_inst_power`` (float) - Current power consumption (Watts)
-   * ``full_recovery_energy`` (float) - Energy needed to heat the whole tank from the device reference temperature to the current setpoint (Wh). Tracks the setpoint; not a fixed tank size. The reference is 2 degC higher during a TOU window that raises ``hp_upper_on_temp_setting``.
-   * ``energy_to_setpoint`` (float) - Energy still **needed** to reach the setpoint (Wh). A deficit: it falls as the tank heats and reaches zero when fully charged, or about 2 degC short of that during a TOU window that raises ``hp_upper_on_temp_setting``.
-   * ``dhw_charge_per`` (float) - DHW charge percentage
+   * ``current_inst_power`` (float): Current power consumption (Watts)
+   * ``full_recovery_energy`` (float): Energy needed to heat the whole tank from the device reference temperature to the current setpoint (Wh). Tracks the setpoint; not a fixed tank size. The reference is 2 degC higher during a TOU window that raises ``hp_upper_on_temp_setting``.
+   * ``energy_to_setpoint`` (float): Energy still **needed** to reach the setpoint (Wh). A deficit: it falls as the tank heats and reaches zero when fully charged, or about 2 degC short of that during a TOU window that raises ``hp_upper_on_temp_setting``.
+   * ``dhw_charge_per`` (float): DHW charge percentage
 
    .. warning::
       These replace ``total_energy_capacity`` and
       ``available_energy_capacity``, which were **removed** in v9.3.0. The
       old names were misleading -- ``available_energy_capacity`` is the
       energy *needed*, not the energy available -- and both were scaled
-      2.5x too large. For energy you can actually draw, see
+      2.5x too large. For the energy you can draw, see
       :doc:`../../explanation/tank-energy`.
 
    **Operation Mode Fields:**
 
-   * ``operation_mode`` (CurrentOperationMode) - Current operational state (read-only)
-   * ``dhw_operation_setting`` (DhwOperationSetting) - User's configured mode preference
-   * ``current_heat_use`` (HeatSource) - Currently active heat source
-   * ``temperature_type`` (TemperatureType) - Temperature unit
+   * ``operation_mode`` (CurrentOperationMode): Current operational state (read-only)
+   * ``dhw_operation_setting`` (DhwOperationSetting): User's configured mode preference
+   * ``current_heat_use`` (HeatSource): Currently active heat source
+   * ``temperature_type`` (TemperatureType): Temperature unit
 
    **Boolean Status Fields:**
 
-   * ``operation_busy`` (bool) - Device actively heating water
-   * ``dhw_use`` (bool) - Water being used (short-term detection)
-   * ``dhw_use_sustained`` (bool) - Water being used (sustained)
-   * ``comp_use`` (bool) - Compressor/heat pump running
-   * ``heat_upper_use`` (bool) - Upper electric heater active
-   * ``heat_lower_use`` (bool) - Lower electric heater active
-   * ``eva_fan_use`` (bool) - Evaporator fan running
-   * ``anti_legionella_use`` (bool) - Anti-Legionella enabled
-   * ``anti_legionella_operation_busy`` (bool) - Anti-Legionella cycle active
-   * ``program_reservation_use`` (bool) - Reservation schedule enabled
-   * ``freeze_protection_use`` (bool) - Freeze protection enabled
+   * ``operation_busy`` (bool): Device actively heating water
+   * ``dhw_use`` (bool): Water being used (short-term detection)
+   * ``dhw_use_sustained`` (bool): Water being used (sustained)
+   * ``comp_use`` (bool): Compressor/heat pump running
+   * ``heat_upper_use`` (bool): Upper electric heater active
+   * ``heat_lower_use`` (bool): Lower electric heater active
+   * ``eva_fan_use`` (bool): Evaporator fan running
+   * ``anti_legionella_use`` (bool): Anti-Legionella enabled
+   * ``anti_legionella_operation_busy`` (bool): Anti-Legionella cycle active
+   * ``program_reservation_use`` (bool): Reservation schedule enabled
+   * ``freeze_protection_use`` (bool): Freeze protection enabled
 
    **Error/Diagnostic Fields:**
 
-   * ``error_code`` (int) - Error code (0 = no error)
-   * ``sub_error_code`` (int) - Sub-error code
-   * ``smart_diagnostic`` (int) - Smart diagnostic status
-   * ``fault_status1`` (int) - Fault status flags
-   * ``fault_status2`` (int) - Additional fault flags
+   * ``error_code`` (int): Error code (0 = no error)
+   * ``sub_error_code`` (int): Sub-error code
+   * ``smart_diagnostic`` (int): Smart diagnostic status
+   * ``fault_status1`` (int): Fault status flags
+   * ``fault_status2`` (int): Additional fault flags
 
    **Network/Communication:**
 
-   * ``wifi_rssi`` (int) - WiFi signal strength (dBm)
+   * ``wifi_rssi`` (int): WiFi signal strength (dBm)
 
    **Vacation/Schedule:**
 
-   * ``vacation_day_setting`` (int) - Vacation days configured
-   * ``vacation_day_elapsed`` (int) - Vacation days elapsed
-   * ``anti_legionella_period`` (int) - Anti-Legionella cycle period
+   * ``vacation_day_setting`` (int): Vacation days configured
+   * ``vacation_day_elapsed`` (int): Vacation days elapsed
+   * ``anti_legionella_period`` (int): Anti-Legionella cycle period
 
    **Time-of-Use (TOU):**
 
-   * ``tou_status`` (int) - TOU status
-   * ``tou_override_status`` (int) - TOU override status
+   * ``tou_status`` (int): TOU status
+   * ``tou_override_status`` (int): TOU override status
 
    **Heat Pump Detailed Status:**
 
-   * ``target_fan_rpm`` (int) - Target fan RPM
-   * ``current_fan_rpm`` (int) - Current fan RPM
-   * ``fan_pwm`` (int) - Fan PWM duty cycle
-   * ``mixing_rate`` (float) - Mixing valve rate
-   * ``eev_step`` (int) - Electronic expansion valve position
-   * ``discharge_temperature`` (float) - Compressor discharge temp
-   * ``suction_temperature`` (float) - Compressor suction temp
-   * ``evaporator_temperature`` (float) - Evaporator temperature
-   * ``target_super_heat`` (float) - Target superheat
-   * ``current_super_heat`` (float) - Current superheat
+   * ``target_fan_rpm`` (int): Target fan RPM
+   * ``current_fan_rpm`` (int): Current fan RPM
+   * ``fan_pwm`` (int): Fan PWM duty cycle
+   * ``mixing_rate`` (float): Mixing valve rate
+   * ``eev_step`` (int): Electronic expansion valve position
+   * ``discharge_temperature`` (float): Compressor discharge temp
+   * ``suction_temperature`` (float): Compressor suction temp
+   * ``evaporator_temperature`` (float): Evaporator temperature
+   * ``target_super_heat`` (float): Target superheat
+   * ``current_super_heat`` (float): Current superheat
 
    **Example:**
 
@@ -376,50 +376,50 @@ Device capabilities, features, and firmware information.
 
    **Firmware Version Fields:**
 
-   * ``controller_sw_version`` (int) - Controller firmware version
-   * ``panel_sw_version`` (int) - Panel firmware version
-   * ``wifi_sw_version`` (int) - WiFi module firmware version
-   * ``controller_sw_code`` (int) - Controller software code
-   * ``panel_sw_code`` (int) - Panel software code
-   * ``wifi_sw_code`` (int) - WiFi software code
-   * ``controller_serial_number`` (str) - Controller serial number
+   * ``controller_sw_version`` (int): Controller firmware version
+   * ``panel_sw_version`` (int): Panel firmware version
+   * ``wifi_sw_version`` (int): WiFi module firmware version
+   * ``controller_sw_code`` (int): Controller software code
+   * ``panel_sw_code`` (int): Panel software code
+   * ``wifi_sw_code`` (int): WiFi software code
+   * ``controller_serial_number`` (str): Controller serial number
 
    **Device Configuration:**
 
-   * ``country_code`` (int) - Country code
-   * ``model_type_code`` (int) - Model type
-   * ``control_type_code`` (int) - Control type
-   * ``volume_code`` (int) - Tank volume code
-   * ``temp_formula_type`` (TempFormulaType) - Temperature formula type
-   * ``temperature_type`` (TemperatureType) - Temperature unit
+   * ``country_code`` (int): Country code
+   * ``model_type_code`` (int): Model type
+   * ``control_type_code`` (int): Control type
+   * ``volume_code`` (int): Tank volume code
+   * ``temp_formula_type`` (TempFormulaType): Temperature formula type
+   * ``temperature_type`` (TemperatureType): Temperature unit
 
    **Temperature Limits:**
 
-   * ``dhw_temperature_min`` (int) - Minimum DHW temperature
-   * ``dhw_temperature_max`` (int) - Maximum DHW temperature
-   * ``freeze_protection_temp_min`` (int) - Min freeze protection temp
-   * ``freeze_protection_temp_max`` (int) - Max freeze protection temp
+   * ``dhw_temperature_min`` (int): Minimum DHW temperature
+   * ``dhw_temperature_max`` (int): Maximum DHW temperature
+   * ``freeze_protection_temp_min`` (int): Min freeze protection temp
+   * ``freeze_protection_temp_max`` (int): Max freeze protection temp
 
    **Feature Flags (all int, 0=disabled, 1=enabled):**
 
-   * ``power_use`` - Power control supported
-   * ``dhw_use`` - DHW functionality
-   * ``dhw_temperature_setting_use`` - Temperature control
-   * ``energy_usage_use`` - Energy monitoring supported
-   * ``anti_legionella_setting_use`` - Anti-Legionella supported
-   * ``program_reservation_use`` - Reservation scheduling supported
-   * ``freeze_protection_use`` - Freeze protection available
-   * ``heatpump_use`` - Heat pump mode available
-   * ``electric_use`` - Electric mode available
-   * ``energy_saver_use`` - Energy Saver mode available
-   * ``high_demand_use`` - High Demand mode available
-   * ``smart_diagnostic_use`` - Smart diagnostics available
-   * ``wifi_rssi_use`` - WiFi signal strength available
-   * ``holiday_use`` - Holiday/vacation mode
-   * ``mixing_valve_use`` - Mixing valve
-   * ``dr_setting_use`` - Demand response
-   * ``dhw_refill_use`` - DHW refill
-   * ``eco_use`` - Eco mode
+   * ``power_use``: Power control supported
+   * ``dhw_use``: DHW functionality
+   * ``dhw_temperature_setting_use``: Temperature control
+   * ``energy_usage_use``: Energy monitoring supported
+   * ``anti_legionella_setting_use``: Anti-Legionella supported
+   * ``program_reservation_use``: Reservation scheduling supported
+   * ``freeze_protection_use``: Freeze protection available
+   * ``heatpump_use``: Heat pump mode available
+   * ``electric_use``: Electric mode available
+   * ``energy_saver_use``: Energy Saver mode available
+   * ``high_demand_use``: High Demand mode available
+   * ``smart_diagnostic_use``: Smart diagnostics available
+   * ``wifi_rssi_use``: WiFi signal strength available
+   * ``holiday_use``: Holiday/vacation mode
+   * ``mixing_valve_use``: Mixing valve
+   * ``dr_setting_use``: Demand response
+   * ``dhw_refill_use``: DHW refill
+   * ``eco_use``: Eco mode
 
    **Example:**
 
@@ -462,12 +462,12 @@ A single timed reservation entry used by :class:`ReservationSchedule`.
 
    **Raw Fields:**
 
-   * ``enable`` (int) - Device boolean (``2`` enabled, ``1`` disabled)
-   * ``week`` (int) - Weekday bitfield
-   * ``hour`` (int) - Start hour (0-23)
-   * ``min`` (int) - Start minute (0-59)
-   * ``mode`` (int) - DHW operation mode ID
-   * ``param`` (int) - Temperature encoded in half-degrees Celsius
+   * ``enable`` (int): Device boolean (``2`` enabled, ``1`` disabled)
+   * ``week`` (int): Weekday bitfield
+   * ``hour`` (int): Start hour (0-23)
+   * ``min`` (int): Start minute (0-59)
+   * ``mode`` (int): DHW operation mode ID
+   * ``param`` (int): Temperature encoded in half-degrees Celsius
 
    **Computed Properties:**
 
@@ -488,13 +488,13 @@ Full programmed reservation schedule used by ``request_reservations()`` and
 
    **Fields:**
 
-   * ``reservation_use`` (int) - Device boolean for global enable/disable state
-   * ``reservation`` (list[ReservationEntry]) - Reservation entries
+   * ``reservation_use`` (int): Device boolean for global enable/disable state
+   * ``reservation`` (list[ReservationEntry]): Reservation entries
 
    **Computed Properties / Methods:**
 
    * ``enabled`` (bool)
-   * :meth:`model_validate` - Parse a raw MQTT response payload
+   * :meth:`model_validate`: Parse a raw MQTT response payload
 
 RecirculationScheduleEntry
 --------------------------
@@ -507,13 +507,13 @@ wire fields match :class:`ReservationEntry`.
 
    **Raw Fields:**
 
-   * ``enable`` (int) - Device boolean (``2`` enabled, ``1`` disabled)
-   * ``week`` (int) - Weekday bitfield
-   * ``hour`` (int) - Hour (0-23)
-   * ``min`` (int) - Minute (0-59)
-   * ``mode`` (int) - In the app's schedule editor, the entry's on/off
+   * ``enable`` (int): Device boolean (``2`` enabled, ``1`` disabled)
+   * ``week`` (int): Weekday bitfield
+   * ``hour`` (int): Hour (0-23)
+   * ``min`` (int): Minute (0-59)
+   * ``mode`` (int): In the app's schedule editor, the entry's on/off
      toggle (``2`` pump on, ``1`` pump off)
-   * ``param`` (int) - Unused for recirculation; the app sends ``-1``. The
+   * ``param`` (int): Unused for recirculation; the app sends ``-1``. The
      hex read-back's ``0xFF`` is normalized to ``-1``.
 
    **Computed Properties:**
@@ -539,15 +539,15 @@ and returned by
 
    **Fields:**
 
-   * ``reservation_use`` (int) - Device boolean for global enable/disable state
-   * ``reservation`` (list[RecirculationScheduleEntry]) - Schedule entries
+   * ``reservation_use`` (int): Device boolean for global enable/disable state
+   * ``reservation`` (list[RecirculationScheduleEntry]): Schedule entries
 
    **Computed Properties / Methods:**
 
    * ``enabled`` (bool)
-   * :meth:`canonical` - Order-independent representation for comparing a
+   * :meth:`canonical`: Order-independent representation for comparing a
      write against its echo
-   * :meth:`model_validate` - Parse a raw MQTT response payload (JSON list
+   * :meth:`model_validate`: Parse a raw MQTT response payload (JSON list
      or the legacy hex string)
 
 DeviceDiagnostics
@@ -562,19 +562,19 @@ from a raw ``res/td/rd`` response with :meth:`DeviceDiagnostics.from_response`.
    **Fields:**
 
    * ``type_of_td`` (int)
-   * ``ts_data`` (:class:`DiagnosticsEventCounters`) - Lifetime energy
+   * ``ts_data`` (:class:`DiagnosticsEventCounters`): Lifetime energy
      (``cumulated_pwr_hp``/``cumulated_pwr_he`` in Wh), ``days_since_installation``,
      fault event counters and demand-response operation times
-   * ``td_data`` (:class:`DiagnosticsDhwUsage`) - Hot-water draw counts,
+   * ``td_data`` (:class:`DiagnosticsDhwUsage`): Hot-water draw counts,
      flow, time and ``average_recovery_time``
-   * ``ta_data`` (:class:`DiagnosticsComponentCounters`) - Run time in hours
+   * ``ta_data`` (:class:`DiagnosticsComponentCounters`): Run time in hours
      (``cumulated_op_time_*``) and start counts (``cumulated_op_num_*``) for
      the compressor, evaporator fan, upper and lower elements,
      recirculation pump and inverter stages, plus EEV and mixing valve steps
 
-   Every field is a raw integer. The two energies and the compressor and
-   upper-element run times were cross-checked against the energy query;
-   the other counters have no documented unit. Vendor misspellings on the
+   Every field is a raw integer. The two energies are watt-hours and the
+   compressor and upper-element run times hours; the other counters have
+   no documented unit. Vendor misspellings on the
    wire (``numOffRostProtectBurn``, ``avrageRecoveryTime``, ``numOfdhwUse``,
    ``mixingValveOpAvgMixinGrate``) map to correctly spelled field names.
 
@@ -588,7 +588,7 @@ Reply to
 
    **Fields:**
 
-   * ``download_sw_info`` (list[FirmwareDownloadEntry]) - One entry per
+   * ``download_sw_info`` (list[FirmwareDownloadEntry]): One entry per
      downloadable component; a unit with no pending update reports one
      all-zero entry
 
@@ -596,14 +596,14 @@ Reply to
 
    **Fields:**
 
-   * ``sw_code`` (int) - Firmware component code
+   * ``sw_code`` (int): Firmware component code
    * ``ota_mode`` (int)
    * ``sw_version`` (int)
    * ``status`` (int)
 
    **Computed Properties:**
 
-   * ``component_name`` (str) - From :class:`~nwp500.enums.FirmwareType`
+   * ``component_name`` (str): From :class:`~nwp500.enums.FirmwareType`
 
 OtaCommitPayload
 ----------------
@@ -615,9 +615,9 @@ Payload model used by
 
    **Fields:**
 
-   * ``sw_code`` (int) - Firmware component code (for example controller, panel,
+   * ``sw_code`` (int): Firmware component code (for example controller, panel,
      or WiFi module)
-   * ``sw_version`` (int) - Firmware version to commit
+   * ``sw_version`` (int): Firmware version to commit
 
    **Example:**
 
@@ -638,15 +638,15 @@ Reply to the daily, monthly and hourly energy queries.
 
    **Fields:**
 
-   * ``type_of_usage`` (int | None) - Reported by the device (``1`` for the
+   * ``type_of_usage`` (int | None): Reported by the device (``1`` for the
      daily and monthly queries)
-   * ``total`` (EnergyUsageTotal) - Lifetime totals
-   * ``usage`` (list[MonthlyEnergyData]) - One entry per requested period
+   * ``total`` (EnergyUsageTotal): Lifetime totals
+   * ``usage`` (list[MonthlyEnergyData]): One entry per requested period
 
    **Methods:**
 
-   * :meth:`get_month_data` (year, month) - Entry from a daily query
-   * :meth:`get_year_data` (year) - Entry from a monthly query
+   * :meth:`get_month_data` (year, month): Entry from a daily query
+   * :meth:`get_year_data` (year): Entry from a monthly query
 
    **Example:**
 
@@ -679,16 +679,16 @@ Summary totals for energy usage.
 
    **Fields:**
 
-   * ``heat_element_usage`` (int) - Total heat element usage (Wh)
-   * ``heat_pump_usage`` (int) - Total heat pump usage (Wh)
-   * ``heat_element_time`` (int) - Total heat element time (hours)
-   * ``heat_pump_time`` (int) - Total heat pump time (hours)
+   * ``heat_element_usage`` (int): Total heat element usage (Wh)
+   * ``heat_pump_usage`` (int): Total heat pump usage (Wh)
+   * ``heat_element_time`` (int): Total heat element time (hours)
+   * ``heat_pump_time`` (int): Total heat pump time (hours)
 
    **Computed Properties:**
 
-   * ``total_usage`` (int) - heat_element_usage + heat_pump_usage
-   * ``heat_pump_percentage`` (float) - (heat_pump_usage / total) × 100
-   * ``heat_element_percentage`` (float) - (heat_element_usage / total) × 100
+   * ``total_usage`` (int): heat_element_usage + heat_pump_usage
+   * ``heat_pump_percentage`` (float): (heat_pump_usage / total) × 100
+   * ``heat_element_percentage`` (float): (heat_element_usage / total) × 100
 
 MonthlyEnergyData
 -----------------
@@ -701,12 +701,12 @@ per requested year with ``month`` absent and twelve ``data`` items.
 
    **Fields:**
 
-   * ``year`` (int) - Year
-   * ``month`` (int | None) - Month (1-12) for the daily query, ``None``
+   * ``year`` (int): Year
+   * ``month`` (int | None): Month (1-12) for the daily query, ``None``
      for the monthly query
-   * ``day`` (int | None) - Declared by the app for the hourly query, which
+   * ``day`` (int | None): Declared by the app for the hourly query, which
      the NWP500 did not answer in testing
-   * ``data`` (list[EnergyUsageDay]) - Per-day or per-month items
+   * ``data`` (list[EnergyUsageDay]): Per-day or per-month items
      (index 0 = day 1 or January)
 
 EnergyUsageDay
@@ -718,16 +718,16 @@ Energy data for a single day (or month, in a monthly-query entry).
 
    **Fields:**
 
-   * ``heat_element_usage`` (int) - Heat element usage (Wh)
-   * ``heat_pump_usage`` (int) - Heat pump usage (Wh)
-   * ``heat_element_time`` (int) - Heat element time (hours)
-   * ``heat_pump_time`` (int) - Heat pump time (hours)
-   * ``ep_usage`` (int), ``water_usage`` (int) - Declared in the app's model;
+   * ``heat_element_usage`` (int): Heat element usage (Wh)
+   * ``heat_pump_usage`` (int): Heat pump usage (Wh)
+   * ``heat_element_time`` (int): Heat element time (hours)
+   * ``heat_pump_time`` (int): Heat pump time (hours)
+   * ``ep_usage`` (int), ``water_usage`` (int): Declared in the app's model;
      the NWP500 does not report them (always ``0``)
 
    **Computed Properties:**
 
-   * ``total_usage`` (int) - heat_element_usage + heat_pump_usage
+   * ``total_usage`` (int): heat_element_usage + heat_pump_usage
 
 Time-of-Use Models
 ==================
@@ -741,14 +741,14 @@ Time-of-Use pricing schedule information.
 
    **Fields:**
 
-   * ``register_path`` (str) - Registration path
-   * ``source_type`` (str) - Source type
-   * ``controller_id`` (str) - Controller ID
-   * ``manufacture_id`` (str) - Manufacturer ID
-   * ``name`` (str) - Schedule name
-   * ``utility`` (str) - Utility provider name
-   * ``zip_code`` (int) - ZIP code
-   * ``schedule`` (list[TOUSchedule]) - Seasonal schedules
+   * ``register_path`` (str): Registration path
+   * ``source_type`` (str): Source type
+   * ``controller_id`` (str): Controller ID
+   * ``manufacture_id`` (str): Manufacturer ID
+   * ``name`` (str): Schedule name
+   * ``utility`` (str): Utility provider name
+   * ``zip_code`` (int): ZIP code
+   * ``schedule`` (list[TOUSchedule]): Seasonal schedules
 
    **Example:**
 
@@ -774,8 +774,8 @@ Seasonal TOU schedule.
 
    **Fields:**
 
-   * ``season`` (int) - Season identifier/months
-   * ``intervals`` (list[dict]) - Time intervals with pricing tiers
+   * ``season`` (int): Season identifier/months
+   * ``intervals`` (list[dict]): Time intervals with pricing tiers
 
 MQTT Models
 ===========
@@ -789,12 +789,12 @@ Complete MQTT command message.
 
    **Fields:**
 
-   * ``client_id`` (str) - MQTT client ID
-   * ``session_id`` (str) - Session ID
-   * ``request_topic`` (str) - Request topic
-   * ``response_topic`` (str) - Response topic
-   * ``request`` (MqttRequest) - Request payload
-   * ``protocol_version`` (int) - Protocol version (default: 2)
+   * ``client_id`` (str): MQTT client ID
+   * ``session_id`` (str): Session ID
+   * ``request_topic`` (str): Request topic
+   * ``response_topic`` (str): Response topic
+   * ``request`` (MqttRequest): Request payload
+   * ``protocol_version`` (int): Protocol version (default: 2)
 
 MqttRequest
 -----------
@@ -805,15 +805,15 @@ MQTT request payload.
 
    **Fields:**
 
-   * ``command`` (int) - Command code (see CommandCode)
-   * ``device_type`` (int) - Device type
-   * ``mac_address`` (str) - Device MAC
-   * ``additional_value`` (str) - Additional identifier
-   * ``mode`` (str, optional) - Mode parameter
-   * ``param`` (list[int | float]) - Numeric parameters
-   * ``param_str`` (str) - String parameters
-   * ``month`` (list[int], optional) - Month list for energy queries
-   * ``year`` (int, optional) - Year for energy queries
+   * ``command`` (int): Command code (see CommandCode)
+   * ``device_type`` (int): Device type
+   * ``mac_address`` (str): Device MAC
+   * ``additional_value`` (str): Additional identifier
+   * ``mode`` (str, optional): Mode parameter
+   * ``param`` (list[int | float]): Numeric parameters
+   * ``param_str`` (str): String parameters
+   * ``month`` (list[int], optional): Month list for energy queries
+   * ``year`` (int, optional): Year for energy queries
 
 Best Practices
 ==============
@@ -855,6 +855,6 @@ Best Practices
 Related Documentation
 =====================
 
-* :doc:`auth_client` - Authentication
-* :doc:`api_client` - REST API
-* :doc:`mqtt_client` - MQTT client
+* :doc:`auth_client`: Authentication
+* :doc:`api_client`: REST API
+* :doc:`mqtt_client`: MQTT client

@@ -9,17 +9,17 @@ followed a **control write**: a setpoint change or an operation-mode
 change, made by anyone. The device behaves as if it re-evaluates whether
 to heat whenever it is told something new.
 
-This matters to anything that writes to the heater on a schedule. A write
-is a possible start, and holding the heater off takes more than lowering
-one threshold.
+For anything that writes to the heater on a schedule, a write is a
+possible start, and holding the heater off takes more than lowering one
+threshold.
 
 .. contents::
    :local:
    :depth: 2
 
 
-The short version
-=================
+Summary
+=======
 
 .. list-table::
    :header-rows: 1
@@ -179,8 +179,8 @@ A mode written inside a TOU window may be held rather than applied. See
 :ref:`reservations and mode writes during a tou window`.
 
 
-Every start, classified
-=======================
+Start causes
+============
 
 246 compressor starts from 2026-04-08 to 2026-09-17, with starts less
 than 30 minutes apart merged, tested against the rules above in this
@@ -243,8 +243,8 @@ restore is also a start: putting a higher setpoint back is the same as a
 write above the tank.
 
 
-What a lowered setpoint holds off
-=================================
+Lowering the setpoint
+=====================
 
 * **In-window, nothing started, but for a reason this run can't isolate.**
   On 2026-09-20 the setpoint was lowered to 107.6 degF at 17:48, inside the
@@ -283,8 +283,8 @@ did, and closer than that is not established. In ``HEAT_PUMP`` that holds
 through a draw; in ``ENERGY_SAVER`` a draw started the heater anyway.
 
 
-Working with it
-===============
+In practice
+===========
 
 * **Treat every control write as a possible start.** That includes a
   restore, a setpoint lowered as a hold-off unless it is at or below the
@@ -298,8 +298,8 @@ Working with it
   that misses about half of them.
 
 
-Reading the history yourself
-============================
+Checking your own history
+=========================
 
 Two traps, both of which moved results when this was first measured:
 

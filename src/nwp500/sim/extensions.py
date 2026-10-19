@@ -1,8 +1,6 @@
 """The core's extension points.
 
-Each is a ``Protocol`` that receives values and returns values. No
-extension is called for I/O: a client that fetches does so before it
-builds one.
+Each is a ``Protocol``.
 
 - ``RecoveryModel``: a learned correction to the physics recovery,
   such as a model fitted to a heater's own recoveries. With none, the

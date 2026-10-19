@@ -2,14 +2,14 @@
 The Heating Elements
 ====================
 
-The NWP500 publishes four element thermostat settings -
-``heUpperOnTempSetting``, ``heUpperOffTempSetting`` and their lower-zone
-pair - plus a differential for each. Read literally they describe a
+The NWP500 publishes four element thermostat settings
+(``heUpperOnTempSetting``, ``heUpperOffTempSetting`` and their lower-zone
+pair) plus a differential for each. Read literally they describe a
 thermostat, and how far that holds depends on the mode and the moment:
 
 * **On entry to any element mode they do not** describe when the element
   runs. It engages on a mode-dependent differential of its own, published
-  nowhere - the start thresholds below.
+  nowhere: the start thresholds below.
 * **Later in a stint, in** ``ENERGY_SAVER`` **they do**: the element
   engages as the probe reaches ``heUpperOnTempSetting``. That is from this
   unit's history and confirmed by a commanded run.
@@ -22,11 +22,10 @@ and High Demand the on and off settings are **the same value**, and every
 ``he*DiffTempSetting`` reads 0.
 
 **The start thresholds** here were measured on one unit by commanding
-the modes and watching - not inferred from historical logs. That
-distinction matters: two earlier values came from "the smallest deficit
-ever seen to start an element" in a passive record, and both were wrong,
-because such a figure measures where the tank happened to sit rather
-than where the device decides.
+the modes and watching, not inferred from historical logs. "The smallest
+deficit ever seen to start an element" in a passive record is the wrong
+measure: it shows where the tank happened to sit rather than where the
+device decides.
 
 Two things on this page are *not* from commanded runs, and are labelled
 where they appear: High Demand's **steady-state** re-engagement, which
@@ -38,8 +37,8 @@ with. Everything else is a bounded run.
    :depth: 2
 
 
-The short version
-=================
+Summary
+=======
 
 .. list-table::
    :header-rows: 1
@@ -52,7 +51,7 @@ The short version
        **0.3 degC (0.54 degF)** below the setpoint; ``HIGH_DEMAND``
        somewhere in **(0.2, 0.4] degC** ((0.36, 0.72] degF);
        ``ENERGY_SAVER`` in **(0.8, 1.0] degC** ((1.44, 1.80] degF).
-       Each bracket has a run on either side of it - except Electric's
+       Each bracket has a run on either side of it, except Electric's
        lower edge, whose only negative sits *above* the setpoint.
    * - Where that differential is published
      - **Nowhere.** ``heUpperOnDiffTempSetting`` and its three siblings
@@ -73,9 +72,8 @@ The short version
        running and the others did not.
    * - Energy Saver later in a stint
      - Different rule. The element re-engages **as the upper probe
-       reaches** ``heUpperOnTempSetting`` - the field working exactly
-       as this reference describes it. Entry is the exception, not the
-       rule.
+       reaches** ``heUpperOnTempSetting``, the field working as this
+       reference describes it. Entry is the exception.
    * - Electric ordering
      - Never both, as the protocol reference states. In the commanded
        runs, upper element to the setpoint, then the lower; the
@@ -123,8 +121,8 @@ setpoint step relative to the tank.
      - first poll after the mode landed
 
 So the boundary lies in (0.8, 1.0] degC, and 1.0 degC is the device's
-own storage granularity - settings are held in half-degree Celsius
-steps - which makes a one-degree differential the natural parameter.
+own storage granularity (settings are held in half-degree Celsius
+steps), which makes a one-degree differential the natural parameter.
 
 A further run put the element on at 2.0 degC (3.6 degF) short, so
 nothing above the boundary has been seen to decline.
@@ -175,8 +173,8 @@ nothing above the boundary has been seen to decline.
 ``heUpperOnTempSetting`` moved to the new setpoint in the same status
 message the mode landed in, as it does in Electric.
 
-Putting the three together
---------------------------
+The three modes compared
+------------------------
 
 .. list-table::
    :header-rows: 1
@@ -203,7 +201,7 @@ Putting the three together
 happens within a poll of switching *into* a mode. In ``HIGH_DEMAND``'s
 steady state this unit's history has the upper element on in 1 of 47
 minutes 0.2-0.3 degC short and 168 of 169 minutes more than 2.2 degC
-short - so a stint already running re-engages on something much larger
+short, so a stint already running re-engages on something much larger
 than the entry figure. Do not use one for the other.
 
 .. [#electric] Electric's own negative is 0.6 degC *above* the setpoint,
@@ -214,24 +212,23 @@ than the entry figure. Do not use one for the other.
 **Electric and High Demand may share one entry threshold. That is an
 inference, not a measurement.** Their brackets overlap in
 (0.2, 0.3] degC and the two modes handle ``heUpperOnTempSetting``
-identically, which is a real argument for one number covering both -
-but High Demand has never been watched between 0.2 and 0.4 degC, so
-nothing here measures where its boundary falls inside that span.
+identically, which argues for one number covering both. But High Demand
+has never been watched between 0.2 and 0.4 degC, so nothing here
+measures where its boundary falls inside that span.
 Energy Saver's band does not intersect either of them: at 0.7 degC
-short, High Demand runs the element and Energy Saver does not. One
-caveat on that last comparison: the Energy Saver runs had the
-compressor running and the others did not, so mode is not the only
-difference between them.
+short, High Demand runs the element and Energy Saver does not. The
+Energy Saver runs had the compressor running and the others did not, so
+mode is not the only difference between them.
 
 A consumer wanting one number per mode should take the **top of that
-mode's own bracket** - 0.3 degC for ``ELECTRIC``, **0.4 degC** for
+mode's own bracket**: 0.3 degC for ``ELECTRIC``, **0.4 degC** for
 ``HIGH_DEMAND``, 1.0 degC for ``ENERGY_SAVER``. Each is the **smallest
 deficit at which that mode was seen to start an element**, so assuming
-it contradicts no observation of that mode - where anything lower
+it contradicts no observation of that mode, where anything lower
 contradicts that mode's own negative. Borrowing Electric's 0.3 degC for
 High Demand predicts an element at a deficit High Demand has never been
 watched at. The gap is one 0.1 degC probe step, under the probe's own
-jitter, so it costs at most one step - but if your consumer is deciding
+jitter, so it costs at most one step. But if your consumer is deciding
 whether hot water will be ready, that is the expensive direction to be
 wrong in.
 
@@ -246,16 +243,16 @@ between these runs shows::
    "heLowerOffDiffTempSetting": 0,
 
 A consumer that wants to predict when an element will run therefore
-cannot read it from the status message; it has to assume the per-mode
-figures above - 0.3 degC for ``ELECTRIC``, 0.4 for ``HIGH_DEMAND``,
-1.0 for ``ENERGY_SAVER`` - and treat a tank inside the corresponding
+cannot read it from the status message. It has to assume the per-mode
+figures above (0.3 degC for ``ELECTRIC``, 0.4 for ``HIGH_DEMAND``,
+1.0 for ``ENERGY_SAVER``) and treat a tank inside the corresponding
 bracket as a case where the device may go either way. Electric's
 bracket, open at the bottom, is the widest, so that "either way" span
 is widest there too.
 
 
-What the on-setting does and does not tell you
-==============================================
+Reading the on-setting
+======================
 
 ``heUpperOnTempSetting`` tracks the **mode**, not the moment:
 
@@ -265,11 +262,11 @@ What the on-setting does and does not tell you
   entry the measured differential is at most 0.3 degC in Electric and
   within (0.2, 0.4] degC in High Demand.
 * In ``ENERGY_SAVER`` it rests at 40.5 degC, the device minimum, which
-  is 33 degC below a normally charged tank. An earlier version of this
-  page said the same of ``HEAT_PUMP``; on this unit that holds in only
-  48.5 % of Heat Pump minutes. The rest are other values - 63.0 degC
-  most often - which equal the *current* setpoint in only 6 % of Heat
-  Pump minutes, so this is not the field tracking the setpoint; it may
+  is 33 degC below a normally charged tank. In ``HEAT_PUMP`` it rests
+  there in only 48.5 % of minutes on this unit. The rest are other
+  values, 63.0 degC most often, which equal the *current* setpoint in
+  only 6 % of Heat Pump minutes, so this is not the field tracking the
+  setpoint; it may
   be holding a value over from an earlier mode. Do not rely on it in
   Heat Pump mode.
 
@@ -277,20 +274,18 @@ The second case misleads **on entry only**. Switching into
 ``ENERGY_SAVER`` with the tank 1.0 degC or more short brought the upper
 element on within one poll in both runs tested, while
 ``heUpperOnTempSetting`` dropped from the setpoint to 40.5 degC in the
-*same* status message - 33 degC below the probe. For that moment the
+*same* status message, 33 degC below the probe. For that moment the
 field explains nothing.
 
 That is as far as the entry observation goes. It does not explain *why*
 Energy Saver's bracket sits higher than Electric's; the runs differ in
 compressor state as well as mode, and nothing here separates the two.
 
-**Later in the same stint the field is exactly what drives the
-element.** In 21 mid-stint upper-element starts in ``ENERGY_SAVER``
+**Later in the same stint the field drives the element.** In 21 mid-stint upper-element starts in ``ENERGY_SAVER``
 drawn from one unit's recorded history, **16 have the upper probe
-between 39.8 and 40.4 degC** - just under the 40.5 degC
+between 39.8 and 40.4 degC**, just under the 40.5 degC
 ``heUpperOnTempSetting`` rests at in this mode. The element comes on as
-the probe reaches the on-setting, which is what this reference has said
-all along.
+the probe reaches the on-setting.
 
 **Confirmed on the device.** The history above cannot prove it on its
 own: with the setpoint fixed for almost the whole record, "at the
@@ -339,7 +334,7 @@ and one morning; the counts are given so they can be weighed.
   is the entry rule again, triggered by the setpoint rather than a mode
   change. A controller writing setpoints in this mode can start a 5 kW
   element.
-* **Every engagement came with water moving through the tank** — one
+* **Every engagement came with water moving through the tank:** one
   shower and two runs of a recirculation pump on a cooled loop, which
   the tank experiences as draws. Whether movement is *required*, or the
   temperature alone suffices, is not separable from these.
@@ -347,25 +342,21 @@ and one morning; the counts are given so they can be weighed.
 .. warning::
 
    These mid-stint figures come from **recorded history, not commanded
-   runs**, and they carry a sampling hazard worth repeating - one that
-   bit us.
+   runs**, and they carry a sampling hazard.
 
    **The element runs in two very different lengths.** Of 128 raw
    element runs on this unit over eight months, 22 (17 %) lasted
-   **under a minute** - median 16 s - and 106 ran longer.
+   **under a minute** (median 16 s) and 106 ran longer.
    The short ones are real elements at full power. They carry little
-   energy - 0.66 kWh across the record against 99.3 kWh for the rest -
+   energy (0.66 kWh across the record against 99.3 kWh for the rest),
    but they are not negligible to the probe: a 20-second burst raises
    the upper zone about 0.3 degC, three quanta of its 0.1 degC
    resolution, and measured bursts of 41-58 s moved it 0.7-1.5 degC.
-   *(An earlier version said they "heat nothing", from dividing by the
-   whole tank's heat capacity rather than the upper zone's - three
-   times too large.)*
 
    They are also easy to lose or to misread. ``currentPower`` samples
    at a median 30 s, with 24 % of gaps over a minute, so **a
    one-minute-resampled power series can miss a sub-minute burst
-   entirely** - taking the last sample at or before each minute makes a
+   entirely**: taking the last sample at or before each minute makes a
    real 5.5 kW element look like 0.5 kW. Resample power with a
    **maximum** over the interval, or work from the raw edges, and
    corroborate a run's duration rather than a single aligned sample.
@@ -375,15 +366,15 @@ and one morning; the counts are given so they can be weighed.
    heat the tank.
 
 
-Electric: the handover, and what happens to the upper zone
-===========================================================
+Electric: the element handover
+==============================
 
 The protocol reference states that elements do not operate
 simultaneously in Electric mode. Confirmed, and in both commanded runs
 that reached the handover the upper element ran first: in a six-minute
 run the upper element stopped and the lower one appeared in the next
 poll, with no overlap. Every handover in the recorded history went the
-same way - four in all. Which element a stint *starts* with is less
+same way, four in all. Which element a stint *starts* with is less
 settled: on one evening, 2026-04-16, the lower element ran alone for
 343 s and 146 s with the upper zone 4.0 and 5.0 degF short, and the
 upper probe fell. A third such run that evening had the upper zone
@@ -417,13 +408,13 @@ is the element alone:
 
 The reference gives 3,755 W at 208 V or 5,000 W at 240 V. The measured
 figure is 4 % above the 240 V rating on this unit, which is one unit at
-one supply voltage - a nudge for anyone integrating energy, not a
+one supply voltage: worth knowing when integrating energy, but not a
 correction to the specification.
 
 For the record, the upper zone rose at 0.86-0.89 degC/min
-(1.55-1.61 degF/min) end to end over 5.8 minutes on a 63.2 gal tank -
-the spread is sampling resolution, the higher figure from 10-second
-polls and the lower from a one-minute grid - and at 1.00-1.11 degC/min
+(1.55-1.61 degF/min) end to end over 5.8 minutes on a 63.2 gal tank
+(the spread is sampling resolution, the higher figure from 10-second
+polls and the lower from a one-minute grid), and at 1.00-1.11 degC/min
 (1.80-2.00 degF/min) as a least-squares slope through the polls, the
 higher leaving out the first 42 s. The lower zone rose at
 0.66-0.86 degC/min depending on where the fit starts; the probe lags the
@@ -436,7 +427,7 @@ Writing the mode while a TOU window is in force
 
 Relevant when planning any of this: with TOU scheduling enabled and a
 window in force, a mode write may not take effect. Measured on the same
-unit, four minutes with no change and nothing logged, twice - and the
+unit, four minutes with no change and nothing logged, twice. The
 command was not discarded either: it took effect one poll after the TOU
 switch was turned off, with nothing else commanded.
 
@@ -454,8 +445,8 @@ Limits
 
 One unit, one supply voltage, 2026-09-19 and 2026-09-20. **Twenty-two**
 bounded runs in all: thirteen on the elements and the thresholds, nine
-on mode writes and reservation entries under TOU - plus two High Demand
-threshold runs on 2026-09-21. Specifically **not** established:
+on mode writes and reservation entries under TOU, plus two High Demand
+threshold runs on 2026-09-21. **Not** established:
 
 * **where inside (0.2, 0.4] degC** ``HIGH_DEMAND``'s **boundary falls**,
   and so whether it shares Electric's. Its top and Electric's are one

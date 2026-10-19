@@ -4,9 +4,7 @@ Calibrate the Simulator to Your Heater
 
 The simulator's default parameters are one NWP500-65's, fitted at one
 installation. Record what your own heater reports for a few weeks and
-fit its standby loss, its compressor and its power to that record. The
-library records nothing itself: you collect the history, and the fits
-run on what you give them.
+fit its standby loss, its compressor and its power to that record.
 
 .. contents::
    :local:
@@ -26,8 +24,7 @@ needs the ``cli`` extra and no other:
    nwp-cli simulate record history.jsonl --every 60
 
 Each line is one status, as JSON: the instant it arrived and the
-status payload as the heater sent it (the device's address is left
-out):
+status payload as the heater sent it:
 
 .. code-block:: json
 
@@ -38,9 +35,7 @@ can have gaps. The heater may have heated or delivered water during a
 gap, so ``calibrate`` takes any spacing between statuses of more than
 4 times the record's usual spacing (and at least 5 minutes) as
 unobserved. No quiet window and no recovery spans such a gap, and the
-report counts them. If a write fails (a full disk, say), the recording
-stops with an error rather than carrying on without saving. Write the
-file any other way you like (an MQTT callback, an
+report counts them. Write the file any other way you like (an MQTT callback, an
 export from a home-automation recorder) as long as each line has this
 shape: ``nwp500.status_history.line(instant, raw_status)`` writes one,
 and ``status_history.read(lines)`` reads them back as
@@ -83,33 +78,14 @@ Idle, it reads the cabinet, about 6 °F warm. So give one of these:
   circulation. Home Assistant keeps 10 days of history by default. The
   air is used only over the span its history covers, and not while its
   sensor was ``unavailable``; the humidity takes the 50 % default
-  outside that span, and the report says how much that is. Any flow the
-  meter reports counts as a draw here, however short. The meter's draws and the circulation's runs
-  are used only when their history covers the whole record; otherwise
-  the heater's own flag stands in, since a span with no history would
-  read as one with no water moving. For the same reason, a spell when
-  the meter or the pump was ``unavailable`` counts as busy. A flag (``--air``, ``--ambient``,
-  ``--humidity``) wins over the sources.
+  outside that span, and the report says how much that is. Where the
+  meter's or the circulation's history doesn't cover the whole record,
+  the heater's own flag is used instead. ``--air``, ``--ambient`` and
+  ``--humidity`` override the sources.
 
-Neither of the ways to stand in for a sensor reproduced a sensor's fit
-at the installation the model was fitted at. Over 279 quiet windows,
-both moved the fitted loss, and the command offers neither:
-
-- **The heater's own readings while its compressor ran, filled across
-  the gaps:** these ran about 5 °F warm over the quiet windows. Quiet
-  windows are the long gaps, often overnight, and the runs that bound
-  them come in warmer hours.
-- **An outdoor history projected through** ``sim.location_air``: this
-  ran about 6 °F cold. The projection is for looking ahead.
-
-Without either, the standby loss keeps the base's value and the report
-says so.
-
-When you give the air, the recoveries use it too. Without it, they
-use the heater's own reading while the compressor runs. At that
-installation, against the sensor, that reading was within about
-0.35 °F from August to October. It was up to about 2 °F warm from May
-to July, and about 2.7 °F warm in a run's first 2 minutes.
+Without the air, the standby loss keeps the base's value and the report
+says so. When you give the air, the recoveries use it too; without it,
+they use the heater's own reading while the compressor runs.
 
 ``--humidity`` takes the same kind of file, in %RH, for the
 evaporator; without it the command gives the fits 50 %.
@@ -182,7 +158,7 @@ meter's draws, which the command does not take (see below).
 From Python
 ===========
 
-The command is a thin layer over ``sim.calibration.calibrate``:
+The command runs ``sim.calibration.calibrate``:
 
 .. code-block:: python
 
@@ -203,22 +179,20 @@ The command is a thin layer over ``sim.calibration.calibrate``:
                                   recovery_air="air_f")
    params = fitted.params
 
-Give the humidity: without a ``humidity_pct`` column, a recovery's
-humidity reaches the evaporator's dew point as NaN, which reads as
-100 %, not the 50 % the fits document. A constant series of 50 %, as
-the command passes, is the fits' own default. ``max_gap`` is what
+Give the humidity; if you have none, pass a constant 50 %, as the
+command does. ``max_gap`` is what
 marks a recording's gaps as unobserved; without it every span between
 two statuses is taken as observed.
 
 From Python you can also give a meter's draws and the circulation's
 runs, which make the quiet test exact and price the heat each cycle's
 draws took. The fits for the readiness terms, the heat book, the draw
-response and the elements also run there: see "Make the answer better"
+response and the elements also run there: see "Improve accuracy"
 and "Fit the elements" in :doc:`simulate-heater`.
 
 
-What the history cannot tell
-============================
+Limitations
+===========
 
 - **The draws.** The heater reports no draw volume, and in recorded
   statuses its inlet and flow readings read 0. The draw terms
@@ -230,9 +204,6 @@ What the history cannot tell
   to the heater and lands in the standby loss. From Python, pass the
   circulation's runs (``sa.history(..., circulating=...)``) to keep
   them out of the quiet windows.
-- **Daily energy totals.** The fit is not compared with the heater's
-  daily totals (``request_energy_usage``): power and COP are fitted
-  cycle by cycle, against its own power readings.
 
 
 See also

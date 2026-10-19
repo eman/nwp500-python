@@ -339,14 +339,14 @@ Examples
 
 Complete working examples are provided:
 
-1. **examples/simple_auto_recovery.py** - Recommended pattern (Strategy 4)
+1. **examples/simple_auto_recovery.py**: Recommended pattern (Strategy 4)
    
    * Production-ready ResilientMqttClient wrapper
    * Exponential backoff
    * Token refresh
    * Easy to use
 
-2. **examples/auto_recovery_example.py** - All 4 strategies
+2. **examples/auto_recovery_example.py**: All 4 strategies
    
    * Shows all approaches side-by-side
    * Good for learning and comparison

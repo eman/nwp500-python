@@ -67,8 +67,8 @@ the device will use when heating is needed:
 
 - **HEAT_PUMP**: Most efficient but slower heating
 - **ELECTRIC**: Fastest but uses most energy
-- **ENERGY_SAVER**: Hybrid mode - balanced efficiency
-- **HIGH_DEMAND**: Hybrid mode - maximum heating capacity
+- **ENERGY_SAVER**: Hybrid mode, balanced efficiency
+- **HIGH_DEMAND**: Hybrid mode, maximum heating capacity
 - **VACATION**: Energy-saving mode for extended absences
 - **POWER_OFF**: Device powered off
 
@@ -88,7 +88,7 @@ CurrentOperationMode
    :undoc-members:
    :no-index:
 
-Real-time operational state (read-only). This reflects what the device is actually
+Real-time operational state (read-only). This reflects what the device is
 doing right now, which may differ from the configured mode setting:
 
 - **STANDBY**: Device idle, not actively heating
@@ -190,9 +190,9 @@ TouRateType
 
 Electricity rate period type. Device behavior can be configured for each period:
 
-- **OFF_PEAK**: Lowest rates - device heats aggressively
-- **MID_PEAK**: Medium rates - device heats normally
-- **ON_PEAK**: Highest rates - device minimizes heating
+- **OFF_PEAK**: Lowest rates, device heats aggressively
+- **MID_PEAK**: Medium rates, device heats normally
+- **ON_PEAK**: Highest rates, device minimizes heating
 
 Temperature and Unit Enumerations
 ----------------------------------
@@ -306,6 +306,6 @@ Related Documentation
 
 For detailed protocol documentation, see:
 
-- :doc:`protocol/device_status` - Status field definitions
-- :doc:`../how-to/optimize-tou` - TOU scheduling and rate types
-- :doc:`protocol/quick_reference` - Quick reference and control commands
+- :doc:`protocol/device_status`: Status field definitions
+- :doc:`../how-to/optimize-tou`: TOU scheduling and rate types
+- :doc:`protocol/quick_reference`: Quick reference and control commands

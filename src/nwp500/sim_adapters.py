@@ -1,17 +1,15 @@
 """Building the simulator's inputs from the library's models.
 
-``nwp500.sim`` imports nothing from the rest of the library; this
-module is the bridge. Each function takes what a client already fetched
-(a ``DeviceStatus``, a ``DeviceFeature``, a ``ReservationSchedule``, a
-``TOUInfo``) and returns a scenario part. Nothing here does I/O.
+Each function takes what a client already fetched (a
+``DeviceStatus``, a ``DeviceFeature``, a ``ReservationSchedule``, a
+``TOUInfo``) and returns a scenario part.
 
 The simulator takes °F and US gallons, whatever unit system the
 process has set. This module is where units are crossed, so a caller
 works in the library's preferred units and never in the simulator's:
 
-- The device's own fields are read raw (``*_raw``), never through the
-  converted properties, whose unit follows the preference: the same
-  status always builds the same scenario.
+- The device's own fields are read in the device's units, whatever
+  the preference.
 - What a caller supplies (the ambient, the inlet, a write's setpoint, a
   reservation's temperature, a draw's volume) is in the preferred unit:
   °C and litres with ``set_unit_system("metric")``, °F and gallons

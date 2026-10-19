@@ -24,7 +24,7 @@ device behaviour is in ``docs/explanation/heating-elements.rst``):
 - **Entry thresholds differ by mode**, and each is held at its own
   observed edge: Electric 0.54 °F below the setpoint, High Demand 0.72,
   Energy Saver 1.8.  Electric and High Demand handle ``he_upper_on``
-  identically and their brackets overlap, so they plausibly share one —
+  identically and their brackets overlap, so they plausibly share one,
   but High Demand has never been seen to run between 0.36 and 0.72, and
   assuming the smaller number would promise an element that mode has
   never been seen to run.
@@ -56,7 +56,7 @@ device behaviour is in ``docs/explanation/heating-elements.rst``):
 
 **This models the entry decision only.**  Every device run measured what
 happens within a poll of switching *into* a mode, and that is the
-question ``mode_recovery`` answers — a recovery from the moment the mode
+question ``mode_recovery`` answers: a recovery from the moment the mode
 takes effect.  It is **not** a thermostat: in High Demand's steady state
 history has the upper element on in 2 % of minutes 0.36-0.54 °F short
 and 99 % of minutes more than 4 °F short, so a stint that has been
@@ -65,10 +65,10 @@ steady-state figure than the entry figures below.  A plan that depends
 on the element coming back mid-stint is outside what this models.
 
 **Whether the mode can be reached at all is a separate question** and not
-this module's: with TOU enabled a mode write may simply not take
+this module's: with TOU enabled a mode write may not take
 (``docs/explanation/heating-elements.rst``, *Writing the mode while a
 TOU window is in force*).  A caller
-planning against these numbers must check that first — the API layer
+planning against these numbers must check that first; the API layer
 reports it.
 
 **Low confidence, by construction.**  Every parameter comes from a few
@@ -379,8 +379,8 @@ def mode_recovery(
         reasons.append("deficit_inside_the_start_threshold_bracket")
     if mode == "ELECTRIC" and t_lower < setpoint:
         # Measured 2026-09-20: once the upper element stops and
-        # the lower one takes over, the upper probe *falls* — 3.4 °F in
-        # that run — before recovering as the tank mixes.  Nothing here
+        # the lower one takes over, the upper probe *falls* (3.4 °F in
+        # that run) before recovering as the tank mixes.  Nothing here
         # models redistribution, so an answer that depends on
         # the upper zone staying put through the lower phase is not
         # safe.
@@ -421,7 +421,7 @@ class ElementInterval:
 
     #: Minutes from the moment the mode takes effect to the slot's end.
     end_minute: float
-    #: Element input over the slot, Wh.  **Elements only** — in High
+    #: Element input over the slot, Wh.  **Elements only**: in High
     #: Demand and Energy Saver the heat pump runs alongside and its
     #: input is the heat-pump model's to report.
     element_wh: float
@@ -437,7 +437,7 @@ class ModePlan:
 
     **Every field here describes the stint as planned**, truncation
     included.  ``recovery`` is the *untruncated* recovery and is kept
-    only for reference — reading a scalar off it after a switch-back
+    only for reference. Reading a scalar off it after a switch-back
     gives the cost and the readiness of a stint that will not happen,
     which is how this class was wrong when first written.
     """
@@ -454,7 +454,7 @@ class ModePlan:
     element_minutes: float
     element_kwh: float
     #: When the upper zone reaches the ready target / the setpoint, and
-    #: when the whole recovery ends — **None when the stint ends
+    #: when the whole recovery ends; **None when the stint ends
     #: first**, since a time after the switch-back is a time that never
     #: arrives.
     upper_ready_minutes: float | None
@@ -479,14 +479,14 @@ def mode_plan(
 
     ``switch_back_after_minutes`` truncates the stint: the elements stop
     there, and the end state is the tank at that moment. That answers
-    "what happens when switching back mid-recovery" — the scheduler
+    "what happens when switching back mid-recovery": the scheduler
     needs it to price a bounded make-up rather than a full recovery.
 
     The end state projects **only what this module models**: the upper
     zone under the upper element, and Electric's lower zone under the
     lower element. In High Demand and Energy Saver the lower zone is the
-    heat pump's, so it is returned unchanged with a reason saying so —
-    chain the heat-pump model for that half rather than reading a number
+    heat pump's, so it is returned unchanged with a reason saying so.
+    Chain the heat-pump model for that half rather than reading a number
     this model did not produce.
     """
     if slot_minutes <= 0:
@@ -567,7 +567,7 @@ def mode_plan(
     # only when that came first.  Carrying the switch-back through
     # instead would hand back a tank held at setpoint for however long
     # the caller named, with the standby loss over that gap silently
-    # dropped — and nothing here models standby.
+    # dropped, and nothing here models standby.
     if (
         switch_back_after_minutes is not None
         and switch_back_after_minutes > span
@@ -575,7 +575,7 @@ def mode_plan(
         reasons.append("plan_ends_when_the_elements_stop_not_at_switch_back")
 
     def _before_the_end(minutes: float | None) -> float | None:
-        """A time the stint actually reaches, else None.
+        """A time the stint reaches, else None.
 
         Gated on the **switch-back**, not on the element span: in High
         Demand and Energy Saver the heat pump carries on after the

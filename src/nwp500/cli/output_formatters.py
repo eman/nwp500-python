@@ -3,7 +3,7 @@
 Data-shaping (which fields, labels, units, ordering, aggregation) lives in
 :mod:`.presentation`; human-readable rendering is delegated to the Rich
 renderer in :mod:`.rich_output`, which consumes the same neutral structures.
-This module additionally handles the genuinely different CSV and JSON outputs.
+This module also handles the CSV and JSON outputs, which differ.
 """
 
 import csv

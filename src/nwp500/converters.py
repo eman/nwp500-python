@@ -105,8 +105,8 @@ def device_tristate_to_python(value: Any) -> bool | None:
 
     Note this applies only to flags the vendor itself decodes as an on/off
     enum. It is **not** a general rule about zero - see
-    :func:`device_bool_to_python` for capability flags, and note that
-    temperature fields carry no sentinel at all.
+    :func:`device_bool_to_python` for capability flags; temperature fields
+    carry no sentinel at all.
 
     Args:
         value: Device value (0, 1 or 2).

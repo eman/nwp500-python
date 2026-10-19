@@ -518,8 +518,8 @@ class NavienAuthClient:
         Refresh access token using refresh token.
 
         Refreshes are serialized: if another task is already refreshing,
-        this call waits for it and — when no explicit ``refresh_token``
-        was given and the stored tokens are now valid — returns the
+        this call waits for it and, when no explicit ``refresh_token``
+        was given and the stored tokens are now valid, returns the
         already-refreshed tokens instead of issuing a duplicate request.
 
         Args:
@@ -587,7 +587,7 @@ class NavienAuthClient:
 
                 # Preserve fields the refresh response may omit. The
                 # refresh endpoint does not return AWS credentials, and it
-                # may not echo the refresh token itself — without this,
+                # may not echo the refresh token itself. Without this,
                 # new_tokens.refresh_token would be "" and every
                 # subsequent refresh would fail.
                 if self._auth_response and self._auth_response.tokens:

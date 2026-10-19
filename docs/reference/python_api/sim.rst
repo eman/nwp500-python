@@ -2,18 +2,11 @@
 Simulator
 =========
 
-The optional heater simulator, ``nwp500.sim``, and the adapters that
+The heater simulator, ``nwp500.sim``, and the adapters that
 build its inputs from the library's models, ``nwp500.sim_adapters``.
 :doc:`/explanation/simulator` explains the model, its inputs and its
 accuracy; :doc:`/how-to/simulate-heater` shows how to use it, and
 :doc:`/reference/simulator-inputs` lists every input.
-
-Install it with the ``sim`` extra:
-
-.. code-block:: bash
-
-   pip install nwp500-python[sim]
-
 
 Entry points
 ============
@@ -214,14 +207,7 @@ Hot water and the heat book
 The engine and the physics
 ==========================
 
-The pieces the entry points are built from, for a caller that needs
-what they do not pass through (a recovery model's holds, a coast's own
-grid). Everything on this page is public, and so is every name without
-a leading underscore in the modules it lists: its functions, classes
-and constants, the reason strings an answer carries (``PHYSICS_TRUNCATED``,
-``LOWER_TRIGGER_HELD``, ...) among them, since a caller matches on
-them. Their names and meaning are kept across minor versions, and a
-change to them is listed in the changelog.
+The pieces the entry points are built from.
 
 .. automodule:: nwp500.sim.engine
    :members: simulate, Simulation, SimulationError, Heater, Entry,

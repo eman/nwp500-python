@@ -176,7 +176,7 @@ Monitor the tank's heating deficit:
        print(f"Energy still needed: {needed:.0f} Wh")
 
        if needed < 200:
-           print("Tank is essentially fully charged")
+           print("Tank is nearly fully charged")
 
 | **Field:** ``energy_to_setpoint`` (protocol: ``availableEnergyCapacity``)
 | **Type:** ``float``
@@ -382,7 +382,7 @@ Notes
 See Also
 --------
 
-- :doc:`../explanation/tank-energy` - What the energy fields really mean
-- :doc:`../reference/protocol/device_status` - Complete list of all status fields
-- :doc:`../reference/python_api/mqtt_client` - How to connect and subscribe to device updates
-- :doc:`../reference/protocol/mqtt_protocol` - Message format reference
+- :doc:`../explanation/tank-energy`: What the energy fields mean
+- :doc:`../reference/protocol/device_status`: Complete list of all status fields
+- :doc:`../reference/python_api/mqtt_client`: How to connect and subscribe to device updates
+- :doc:`../reference/protocol/mqtt_protocol`: Message format reference

@@ -2,12 +2,12 @@
 
 Property values are derived from ASHRAE Standard 34 and cross-referenced
 against the observed telemetry ranges for the Navien NWP500 installation.
-Saturated vapor density — not Carnot COP — is what scales the modelled
+Saturated vapor density, not Carnot COP, is what scales the modelled
 capacity with ambient.  It was chosen to explain a 1.7× cold/warm
 duration ratio between two calibration cycles, which does not generalize:
 across 217 heating cycles with a deficit of at least 10 °F the effective
 heating rate rises only ~1.18× from 53.6 to 75.1 °F ambient, and
-mid-cycle compressor power is flat across ambient (median 392–431 W).
+mid-cycle compressor power is flat across ambient (median 392-431 W).
 
 All temperatures are in °F, pressures in psia, densities in lb/ft³, and
 enthalpies in BTU/lb.
@@ -22,7 +22,7 @@ import numpy as np
 # Columns: T_f, P_sat_psia, rho_g_lb_ft3, h_f_btu_lb, h_g_btu_lb
 # Temperature range covers the operating envelope:
 #   evaporator: ~20°F (41°F ambient − 21°F approach) → 80°F (warm ambient)
-#   condenser:  ~130°F–165°F (T_lower + 10°F approach)
+#   condenser:  ~130°F-165°F (T_lower + 10°F approach)
 #
 # Critical density values:
 #   40°F → 0.265 lb/ft³ (cold-cycle calibration point)
@@ -82,7 +82,7 @@ _HG = _TABLE[:, 4]
 # instead of two.  Exact bit-equality with np.interp is deliberately NOT the
 # contract, because it is not numpy's either: whether np.interp contracts the
 # multiply-add depends on the numpy build and the CPU.  What is asserted is
-# what actually has to hold -- exact at the knots and in the clamped tails,
+# what has to hold -- exact at the knots and in the clamped tails,
 # within one ulp between them, and NaN in gives NaN out.
 _T_LIST: tuple[float, ...] = tuple(_T.tolist())
 _T_LO = _T_LIST[0]
@@ -149,11 +149,11 @@ def dew_point_f(t_db_f: float, rh_pct: float) -> float:
     """Estimate dew point (°F) from dry-bulb temperature and relative humidity.
 
     Uses the Magnus formula in Celsius, then converts back to Fahrenheit.
-    Valid for the residential ambient range (30–120°F, 10–100% RH).
+    Valid for the residential ambient range (30-120°F, 10-100% RH).
 
     Args:
         t_db_f: Dry-bulb temperature in °F.
-        rh_pct: Relative humidity in percent (0–100).
+        rh_pct: Relative humidity in percent (0-100).
     """
     # Convert to Celsius for Magnus formula
     t_c = (t_db_f - 32.0) / 1.8

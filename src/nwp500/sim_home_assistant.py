@@ -6,7 +6,7 @@ the water drawn or a circulation pump it does not run. An owner who
 records those in Home Assistant gets them into a simulation through
 this module, a ``sim_live`` source:
 
-- ``HomeAssistantClient`` reads Home Assistant's REST API, read-only:
+- ``HomeAssistantClient`` reads Home Assistant's REST API:
   ``/api/states/<entity>`` for the value now, ``/api/history/period``
   for recent history, and the ``weather.get_forecasts`` service for the
   outdoor forecast.
@@ -20,20 +20,17 @@ this module, a ``sim_live`` source:
   - **the humidity:** a fresh reading;
   - **the inlet:** the plateau of the long draws in the last 72 h, from
     the inlet probe, the meter's flow and the circulation's runs
-    (``sim_adapters.cold_supply``), never the probe's raw reading.
+    (``sim_adapters.cold_supply``).
 
-The rules are the reference implementation's:
+Readings are used by these rules:
 
 - a reading more than an hour old is not used;
 - a pump with no reading in force is unknown, never idle;
 - a part that cannot be read leaves the simulator's default in place,
-  and ``notes`` say why: a source that fails never fails the
-  simulation.
+  and ``notes`` say why.
 
-Units come from each entity's ``unit_of_measurement``, never assumed.
-Entity ids belong to the caller's configuration (``sources_from``), not
-to this module. The parsing is pure and does no I/O; only the client
-makes requests.
+Units come from each entity's ``unit_of_measurement``. Entity ids come
+from the caller's configuration (``sources_from``).
 """
 
 import logging
@@ -557,7 +554,7 @@ def pump_runs(
 
 
 class HomeAssistantClient:
-    """Home Assistant's REST API, read-only. Use it as an async context
+    """Home Assistant's REST API. Use it as an async context
     manager, or pass a ``session`` the caller owns."""
 
     def __init__(

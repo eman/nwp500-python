@@ -20,7 +20,7 @@ All temperature, flow rate, and volume values from ``DeviceStatus`` are automati
 - **Flow rate fields**: Converted to LPM or GPM
 - **Volume fields**: Converted to L or gallons
 
-This conversion happens at the model level via Pydantic wrap validators, so values are already in the correct unit when you receive them.
+Values arrive already in the device's unit.
 
 **Unit Metadata**
 
@@ -90,7 +90,7 @@ Basic Pattern
 Complete Example
 ^^^^^^^^^^^^^^^^
 
-Here's a complete example showing how to implement dynamic units in a Home Assistant sensor:
+Dynamic units in a Home Assistant sensor:
 
 .. code-block:: python
 
@@ -334,7 +334,7 @@ Troubleshooting
 
 **Units Not Updating When Device Preference Changes**
 
-Ensure that:
+Check that:
 1. Device status is being updated via coordinator
 2. The sensor's ``_status`` property returns the latest status
 3. Home Assistant has permission to refresh entity attributes
@@ -348,7 +348,7 @@ Check that:
 
 **Field Not Found**
 
-Ensure:
+Check that:
 1. The field name matches exactly (case-sensitive)
 2. The field exists in ``DeviceStatus`` model
 3. Check nwp500-python documentation for field names
@@ -365,6 +365,6 @@ Best Practices
 See Also
 ========
 
-- :doc:`../reference/python_api/models` - Complete model reference
-- :doc:`../reference/protocol/data_conversions` - Detailed conversion formulas
-- :doc:`../reference/enumerations` - TemperatureType and other enumerations
+- :doc:`../reference/python_api/models`: Complete model reference
+- :doc:`../reference/protocol/data_conversions`: Detailed conversion formulas
+- :doc:`../reference/enumerations`: TemperatureType and other enumerations

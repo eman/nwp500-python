@@ -54,21 +54,27 @@ Core Dependencies
 
 The library requires:
 
-* ``aiohttp>=3.13.5`` - Async HTTP client for REST API
-* ``awsiotsdk>=1.29.0`` - AWS IoT SDK for MQTT
-* ``pydantic>=2.0.0`` - Data validation and models
+* ``aiohttp>=3.13.5``: Async HTTP client for REST API
+* ``awsiotsdk>=1.29.0``: AWS IoT SDK for MQTT
+* ``pydantic>=2.0.0``: Data validation and models
 
 Optional Dependencies
 ---------------------
 
+For the simulator (numpy, pandas and scipy):
+
+.. code-block:: bash
+
+   pip install nwp500-python[sim]
+
 For development:
 
-* ``pytest>=7.0.0`` - Testing framework
-* ``pytest-asyncio>=0.21.0`` - Async test support
-* ``pytest-cov>=4.0.0`` - Coverage reporting
-* ``ruff>=0.1.0`` - Fast Python linter
-* ``mypy>=1.0.0`` - Static type checking
-* ``sphinx>=5.0.0`` - Documentation generation
+* ``pytest>=7.0.0``: Testing framework
+* ``pytest-asyncio>=0.21.0``: Async test support
+* ``pytest-cov>=4.0.0``: Coverage reporting
+* ``ruff>=0.1.0``: Fast Python linter
+* ``mypy>=1.0.0``: Static type checking
+* ``sphinx>=5.0.0``: Documentation generation
 
 Verification
 ============
@@ -152,6 +158,6 @@ To upgrade to a specific version:
 Next Steps
 ==========
 
-* :doc:`../tutorials/getting-started` - Get started with your first script
-* :doc:`configuration` - Configure credentials and options
-* :doc:`python_api/auth_client` - Learn about authentication
+* :doc:`../tutorials/getting-started`: Get started with your first script
+* :doc:`configuration`: Configure credentials and options
+* :doc:`python_api/auth_client`: Learn about authentication

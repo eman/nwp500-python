@@ -33,11 +33,11 @@ Substituting collapses the two::
     E = V_del · 8.34 · (min(T_upper, T_del) − T_cold)
 
 **`T_del` is not a constant.** A gauge cam on the valve outlet
-(2026-09-16/17, five full draw plateaus) reads ~114–116 °F with a
-124–131 °F tank and ~120–122 °F with a 138–140 °F tank: about half a
+(2026-09-16/17, five full draw plateaus) reads ~114-116 °F with a
+124-131 °F tank and ~120-122 °F with a 138-140 °F tank: about half a
 degree of delivery per degree of upper zone. :func:`delivery_temp_f`
 carries that as a line in `T_upper`. Had the setpoint been fixed, tank
-temperature would cancel exactly while the valve mixes — a hotter tank
+temperature would cancel exactly while the valve mixes: a hotter tank
 gives up proportionally less water for the same shower. With the
 measured slope it re-enters at about half weight, so a hotter tank
 makes a draw cost somewhat more heat. It re-enters fully only once the
@@ -45,26 +45,26 @@ upper zone falls *below* `T_del`, where the valve has nothing to blend
 with; on the measured line that is below about 104 °F.
 
 That leaves one unknown the corpus cannot resolve as physics. `T_cold`
-and the **observability** of a draw — the share of its enthalpy two tank
-thermistors register — enter the data only as a product, because the
+and the **observability** of a draw (the share of its enthalpy two tank
+thermistors register) enter the data only as a product, because the
 tank sits above `T_del` on every clean draw and the conversion then
 barely varies. Fitting `T_cold` alone returns 97 °F, which is the
 stratification bias wearing groundwater's clothes.
 
 So `k` is fitted against a **reference** `T_cold`, and the two move
 together. That is consistency rather than compromise, because every
-other number here is already in the same apparent frame — the
+other number here is already in the same apparent frame: the
 standby law is fitted against the same two-point
 mean, and the appliance's own `available_energy_wh` is that mean times
 the full tank mass (measured: 153.8 Wh/°F against the tank's 154.5,
 r = 0.9988). A physically parameterised draw term would have been the
 odd one out, reporting about 1/k ≈ 1.6x more energy removed than the
-appliance's own accounting recognises — and a scheduler differencing
+appliance's own accounting recognises, and a scheduler differencing
 a draw's heat against `available_energy_wh`, which is why the two
 share a unit, would have been badly wrong.
 
 **The reference is measured (2026-09-26).** A probe on the cold
-supply reads `T_cold` from the plateau of long draws: 71.3–73.1 °F
+supply reads `T_cold` from the plateau of long draws: 71.3-73.1 °F
 over its first week, median 72.4, where the draw term had assumed 60.
 `k` and the gap coefficient are refitted against 72.4, so parameters
 fitted on them may be given the live plateau in place of the
@@ -88,8 +88,8 @@ exponential is a two-zone approximation of a thermocline, so
 `t_lower_f` after a draw stays the field to trust least.
 
 ``draw_gap_open_f_per_gal = 0.0`` disables the front and
-``observability = None`` in the parameters disables the term entirely
-— which is what parameters fitted before this existed carry, so the
+``observability = None`` in the parameters disables the term entirely,
+which is what parameters fitted before this existed carry, so the
 projection reverts exactly to the behaviour that shipped without it.
 """
 
@@ -114,25 +114,25 @@ from nwp500.sim.units import WATER_BTU_PER_GAL_F
 #: Below one because the upper half of the tank barely participates:
 #: an 11.5 gal draw moves the upper thermistor 0.36 °F while the lower
 #: falls 6.8 °F, so the pair under-weighs every draw by roughly the
-#: same factor whatever its size. Not a fudge — it is the same
+#: same factor whatever its size. Not a fudge: it is the same
 #: apparent frame the standby law and the appliance's own energy field
 #: already use.
 DEFAULT_OBSERVABILITY = 0.633
 
 #: The inlet ``DEFAULT_OBSERVABILITY`` is fitted against, °F: the median
 #: plateau of the cold-supply probe's long draws over 2026-09-19..26,
-#: seven draws, 71.3–73.1, bootstrap CI on the median [71.8, 73.0].
+#: seven draws, 71.3-73.1, bootstrap CI on the median [71.8, 73.0].
 #: It is the reference the whole corpus is held at, and the
 #: value served when the probe has no fresh plateau. The two move
-#: together — change one and refit the other, or neither means
+#: together: change one and refit the other, or neither means
 #: anything.
 DEFAULT_INLET_TEMP_F = 72.4
 
 #: Mixing-valve delivery, ``T_del = intercept + slope · T_upper``, °F.
 #:
 #: Least squares through the five full draw plateaus the gauge cam
-#: recorded on 2026-09-16/17: tank 123.8–139.5 °F, delivery
-#: 114.2–121.8 °F. Five points, and every hot-tank one is an evening,
+#: recorded on 2026-09-16/17: tank 123.8-139.5 °F, delivery
+#: 114.2-121.8 °F. Five points, and every hot-tank one is an evening,
 #: so part of the slope might have been a warmer evening inlet. The
 #: probe does not show that it was (2026-09-26): over seven later
 #: draws the slope held (0.42 with the inlet in the fit), and the
@@ -165,15 +165,15 @@ LEGACY_TMV_DELIVERY_F = 128.0
 #: ×1.119, to 1.167. A 72.4 °F inlet lowers it again (0.73 at
 #: 139 °F): ×1.058 on the rebuilt corpus (bootstrap [1.058, 1.058]),
 #: to 1.235. The response is mildly *convex* rather than
-#: saturating — a power fit puts the exponent at 1.57, CI [1.11, 2.07],
+#: saturating: a power fit puts the exponent at 1.57, CI [1.11, 2.07],
 #: because the thermocline has to reach the lower thermistor before
-#: the gap opens at all — so this linear coefficient under-reads the
+#: the gap opens at all, so this linear coefficient under-reads the
 #: largest draws.
 DEFAULT_GAP_OPEN_F_PER_GAL = 1.235
 
-#: Pre-draw upper-zone range the fit actually saw, °F: 508 episodes
-#: spanning 122.2–147.9. The delivery line was measured only over
-#: 123.8–139.5, so the top of this band already extrapolates it. A
+#: Pre-draw upper-zone range the fit saw, °F: 508 episodes
+#: spanning 122.2-147.9. The delivery line was measured only over
+#: 123.8-139.5, so the top of this band already extrapolates it. A
 #: projection that walks the tank out of the band should say so.
 DEFAULT_DOMAIN_T_UPPER_F = (122.2, 147.9)
 
@@ -206,7 +206,7 @@ def hot_fraction(
 
     1.0 once the upper zone is at or below the delivery setpoint: the
     valve has nothing to blend with and passes tank water straight
-    through. Never above 1.0 and never below 0.0 — a tank at or under
+    through. Never above 1.0 and never below 0.0: a tank at or under
     the inlet temperature delivers nothing, and the degenerate
     ``T_upper <= T_cold`` case is guarded rather than dividing.
     """
@@ -228,7 +228,7 @@ def draw_energy_btu(
 ) -> float:
     """Tank heat a delivered volume carries away, in **apparent** BTU.
 
-    ``volume_delivered_gal`` is the **metered** figure — blended water
+    ``volume_delivered_gal`` is the **metered** figure: blended water
     past the mixing valve, which is the basis draw volumes are
     published on and the only one a forecast can supply.
 
@@ -262,9 +262,9 @@ def withdrawn_gal(
     t_delivery_f: float,
     t_cold_f: float,
 ) -> float:
-    """Hot water actually taken from the tank, in gallons.
+    """Hot water taken from the tank, in gallons.
 
-    The energy above does not need this — the substitution cancels it —
+    The energy above does not need this (the substitution cancels it),
     but the **front** does: what opens the stratification gap is the
     cold water admitted at the bottom, which equals the hot water that
     left the top.
@@ -291,7 +291,7 @@ def gap_opened_f(
 
     **A draw cannot warm any part of the tank.** The gap is split
     evenly about the bulk, so an opening larger than twice the bulk
-    drop raises the upper zone — and with the fitted coefficient that
+    drop raises the upper zone, and with the fitted coefficient that
     is not a corner case: it happens below about 122 °F, which is the
     depleted-tank regime this term exists to describe. Measured
     before the cap, a 9.5 gal draw against a 110 °F tank *heated* the
@@ -306,7 +306,7 @@ def gap_opened_f(
     separately and is not bounded here, so a single implausibly large
     event can still carry `t_lower` below the inlet. Aggregate slot
     events are a few gallons and real mornings are tens, so this is a
-    latent edge rather than a live one — but it is an edge, and the
+    latent edge rather than a live one, but it is an edge, and the
     docstring used to claim otherwise.
     """
     if withdrawn_volume_gal <= 0.0 or open_f_per_gal <= 0.0:

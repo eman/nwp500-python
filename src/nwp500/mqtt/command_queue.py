@@ -29,7 +29,7 @@ class MqttCommandQueue:
     Manages command queueing when MQTT connection is interrupted.
 
     Commands sent while disconnected are queued and automatically sent
-    when the connection is restored. This ensures commands are not lost
+    when the connection is restored, so commands are not lost
     during temporary network interruptions.
 
     The queue uses a deque with a fixed maximum size. When the queue is

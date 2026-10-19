@@ -22,10 +22,10 @@ How the pieces fit together
 
 The event system is split across two complementary modules:
 
-* :mod:`nwp500.events` provides the delivery **mechanism** — the generic
+* :mod:`nwp500.events` provides the delivery **mechanism**: the generic
   :class:`~nwp500.events.EventEmitter` (multiple listeners, async handlers,
   one-time listeners, priority ordering). ``NavienMqttClient`` extends it.
-* :mod:`nwp500.mqtt_events` provides the **vocabulary** — the
+* :mod:`nwp500.mqtt_events` provides the **vocabulary**: the
   :class:`~nwp500.mqtt_events.MqttClientEvents` name registry and the typed,
   frozen dataclass payloads carried by each event.
 
@@ -129,7 +129,7 @@ ConnectionInterruptedEvent
 
    **Fields:**
 
-   * ``error`` (:class:`Exception`) - The exception that interrupted the MQTT
+   * ``error`` (:class:`Exception`): The exception that interrupted the MQTT
      connection.
 
    **Example:**
@@ -150,8 +150,8 @@ ConnectionResumedEvent
 
    **Fields:**
 
-   * ``return_code`` (int) - MQTT return code from the resume attempt.
-   * ``session_present`` (bool) - Whether broker session state was preserved.
+   * ``return_code`` (int): MQTT return code from the resume attempt.
+   * ``session_present`` (bool): Whether broker session state was preserved.
 
    **Example:**
 
@@ -172,7 +172,7 @@ StatusReceivedEvent
 
    **Fields:**
 
-   * ``status`` (:class:`~nwp500.models.DeviceStatus`) - Parsed device status.
+   * ``status`` (:class:`~nwp500.models.DeviceStatus`): Parsed device status.
 
 TemperatureChangedEvent
 -----------------------
@@ -183,8 +183,8 @@ TemperatureChangedEvent
 
    **Fields:**
 
-   * ``old_temperature`` (float) - Previous DHW temperature in the current unit system.
-   * ``new_temperature`` (float) - New DHW temperature in the current unit system.
+   * ``old_temperature`` (float): Previous DHW temperature in the current unit system.
+   * ``new_temperature`` (float): New DHW temperature in the current unit system.
 
 ModeChangedEvent
 ----------------
@@ -195,8 +195,8 @@ ModeChangedEvent
 
    **Fields:**
 
-   * ``old_mode`` (:class:`~nwp500.CurrentOperationMode`) - Previous operating mode.
-   * ``new_mode`` (:class:`~nwp500.CurrentOperationMode`) - New operating mode.
+   * ``old_mode`` (:class:`~nwp500.CurrentOperationMode`): Previous operating mode.
+   * ``new_mode`` (:class:`~nwp500.CurrentOperationMode`): New operating mode.
 
 PowerChangedEvent
 -----------------
@@ -207,8 +207,8 @@ PowerChangedEvent
 
    **Fields:**
 
-   * ``old_power`` (float) - Previous instantaneous power draw in watts.
-   * ``new_power`` (float) - New instantaneous power draw in watts.
+   * ``old_power`` (float): Previous instantaneous power draw in watts.
+   * ``new_power`` (float): New instantaneous power draw in watts.
 
 HeatingStartedEvent
 -------------------
@@ -219,7 +219,7 @@ HeatingStartedEvent
 
    **Fields:**
 
-   * ``status`` (:class:`~nwp500.models.DeviceStatus`) - Status snapshot when
+   * ``status`` (:class:`~nwp500.models.DeviceStatus`): Status snapshot when
      heating started.
 
 HeatingStoppedEvent
@@ -231,7 +231,7 @@ HeatingStoppedEvent
 
    **Fields:**
 
-   * ``status`` (:class:`~nwp500.models.DeviceStatus`) - Status snapshot when
+   * ``status`` (:class:`~nwp500.models.DeviceStatus`): Status snapshot when
      heating stopped.
 
 ErrorDetectedEvent
@@ -243,8 +243,8 @@ ErrorDetectedEvent
 
    **Fields:**
 
-   * ``error_code`` (:class:`~nwp500.ErrorCode`) - Newly detected device error.
-   * ``status`` (:class:`~nwp500.models.DeviceStatus`) - Status snapshot that
+   * ``error_code`` (:class:`~nwp500.ErrorCode`): Newly detected device error.
+   * ``status`` (:class:`~nwp500.models.DeviceStatus`): Status snapshot that
      contained the error.
 
 ErrorClearedEvent
@@ -256,7 +256,7 @@ ErrorClearedEvent
 
    **Fields:**
 
-   * ``error_code`` (:class:`~nwp500.ErrorCode`) - Error code that cleared.
+   * ``error_code`` (:class:`~nwp500.ErrorCode`): Error code that cleared.
 
 FeatureReceivedEvent
 --------------------
@@ -267,7 +267,7 @@ FeatureReceivedEvent
 
    **Fields:**
 
-   * ``feature`` (:class:`~nwp500.models.DeviceFeature`) - Parsed device feature payload.
+   * ``feature`` (:class:`~nwp500.models.DeviceFeature`): Parsed device feature payload.
 
 Usage Examples
 ==============
@@ -301,6 +301,6 @@ Wait for a connection event
 Related Documentation
 =====================
 
-* :doc:`mqtt_client` - MQTT client API reference
-* :doc:`models` - Models used by subscription callbacks
-* :doc:`../../how-to/monitor-status` - Event-driven programming guide
+* :doc:`mqtt_client`: MQTT client API reference
+* :doc:`models`: Models used by subscription callbacks
+* :doc:`../../how-to/monitor-status`: Event-driven programming guide

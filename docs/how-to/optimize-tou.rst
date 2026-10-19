@@ -366,7 +366,7 @@ schedule with its pricing intervals.
 .. note::
 
    There is no MQTT read for the TOU schedule. ``ctrl/tou/rd`` with
-   ``CommandCode.TOU_RESERVATION`` is the *write* - it is what
+   ``CommandCode.TOU_RESERVATION`` is the *write*: it is what
    :meth:`~nwp500.NavienMqttClient.configure_tou_schedule` publishes, and what
    the vendor app publishes from its TOU editor. The device replies on
    ``cmd/{deviceType}/{clientId}/res/tou/rd`` to confirm such a write; it does
@@ -509,7 +509,7 @@ Usage Examples
 Example 1: Simple TOU Schedule
 ------------------------------
 
-Configure two rate periods - off-peak and peak pricing:
+Configure two rate periods, off-peak and peak:
 
 .. code-block:: python
 
@@ -945,7 +945,7 @@ Best Practices
 
 4. **Validate overlapping periods**
 
-   Ensure time periods don't overlap within the same day and month combination.
+   Time periods must not overlap within the same day and month combination.
 
 5. **Test with simulation**
 
@@ -966,23 +966,23 @@ Limitations
 * Time resolution limited to minutes (no seconds)
 * Price encoding limited by decimal point precision
 * Cannot specify different rates for individual days within a period
-* No support for variable rate structures (e.g., tiered rates) - only flat rate per period
+* No support for variable rate structures (e.g., tiered rates): one flat rate per period
 
 Further Reading
 ---------------
 
-* :doc:`../reference/python_api/api_client` - API client documentation and ``get_tou_info()`` method
-* :doc:`../reference/python_api/mqtt_client` - MQTT client and TOU configuration methods
-* :doc:`../reference/protocol/mqtt_protocol` - MQTT message formats including TOU commands
-* :doc:`../reference/protocol/device_status` - Device status fields including ``touStatus``
+* :doc:`../reference/python_api/api_client`: API client documentation and ``get_tou_info()`` method
+* :doc:`../reference/python_api/mqtt_client`: MQTT client and TOU configuration methods
+* :doc:`../reference/protocol/mqtt_protocol`: MQTT message formats including TOU commands
+* :doc:`../reference/protocol/device_status`: Device status fields including ``touStatus``
 * `OpenEI Utility Rates API <https://openei.org/services/doc/rest/util_rates/?version=7>`__ - Official OpenEI API documentation
 * `OpenEI IURDB <https://apps.openei.org/IURDB/>`__ - Interactive Utility Rate Database
 
 Related Examples
 ----------------
 
-* ``examples/tou_schedule_example.py`` - Complete working example of manual TOU configuration
-* ``examples/tou_openei_example.py`` - Retrieve TOU schedules from OpenEI API and configure device
+* ``examples/tou_schedule_example.py``: Complete working example of manual TOU configuration
+* ``examples/tou_openei_example.py``: Retrieve TOU schedules from OpenEI API and configure device
 
 CLI Commands
 ~~~~~~~~~~~~

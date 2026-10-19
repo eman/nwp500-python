@@ -4,8 +4,8 @@ Models the R-134a vapor compression cycle coupled to the stratified tank,
 integrating the lower-zone temperature at 10-second steps until the
 lower thermostat setpoint is reached.
 
-The free parameters — ``compressor_constant`` (absorbs V_disp × N_RPM ×
-η_motor) and ``evap_approach_f`` (T_amb − T_evap at the coil) — are fit
+The free parameters, ``compressor_constant`` (absorbs V_disp × N_RPM ×
+η_motor) and ``evap_approach_f`` (T_amb − T_evap at the coil), are fit
 over the full training corpus by a calibration outside this package,
 which passes them in.
 """
@@ -32,16 +32,16 @@ from nwp500.sim.physics.tank import ua_at
 # tank's (≈ 527) once the gap closes.  Once the stratification gap closes
 # the tank is one body, and the same heat has to warm all of it.  Measured
 # across 269 recovery traces, the effective mass resisting the lower probe
-# is 0.44–0.48 × full tank while stratified and 0.96 × once mixed — and
+# is 0.44-0.48 × full tank while stratified and 0.96 × once mixed, and
 # 57 % of all heating steps are in the mixed regime, where integrating at
-# half-tank mass runs the tank up roughly twice as fast as it really goes.
+# half-tank mass runs the tank up roughly twice as fast as it does.
 # Latent heat of vaporization of water at typical condensation temperatures
 _H_FG_WATER_BTU_LB = 1054.0
 # Runaway-integration guard, in minutes.
 #
 # An iteration bound only.  It must sit clear of every *physically real*
-# recovery, or it stops being a guard and becomes a ceiling on the answer
-# — which is what 600 was: the ODE needs 621 min at ΔT 80 °F and 735 at
+# recovery, or it stops being a guard and becomes a ceiling on the answer,
+# which is what 600 was: the ODE needs 621 min at ΔT 80 °F and 735 at
 # 95, so deep deficits returned a flat 600, and under the ratio target
 # that propagated into a flat served duration.
 #
@@ -60,15 +60,15 @@ _H_FG_WATER_BTU_LB = 1054.0
 # 1,700 is the corner of what the hardware can present. 1800 clears it.
 #
 # The cost of a generous bound is iterations in the pathological case
-# only — 10,800 steps of scalar arithmetic — and no real call approaches
+# only (10,800 steps of scalar arithmetic), and no real call approaches
 # it. The cost of a tight one is a silent wrong answer, which is what 600
 # gave. When in doubt, raise it: ``converged`` on the result is what
 # catches anything past the bound, and unlike the bound it cannot be
 # wrong, only ignored.
 #
 # Not a training change. Calibration was fitted bit-identically at 600 and
-# at 900 on the real corpus — 19,591 Nelder-Mead trial integrations, none
-# of which reached either bound — and the deepest corpus row (ΔT 67.1 °F)
+# at 900 on the real corpus (19,591 Nelder-Mead trial integrations, none
+# of which reached either bound), and the deepest corpus row (ΔT 67.1 °F)
 # integrates in 457 min. Raising an iteration bound cannot alter a run that
 # already terminated.
 _MAX_MINUTES = 1800.0
@@ -89,7 +89,7 @@ class PhysicsPath:
     the end of a step, so ``elapsed_s[-1]`` is ``minutes × 60``.
 
     ``input_btu`` is **cumulative** compressor input work, ``ṁ ·
-    w_comp`` summed over the steps so far — what the refrigerant cycle
+    w_comp`` summed over the steps so far: what the refrigerant cycle
     is charged for in this model. It excludes the evaporator fan and
     the controls. Its level is not published as is: a scale fitted
     per retrain to metered power corrects it, outside the core. Its
@@ -106,11 +106,11 @@ class PhysicsPath:
 
 @dataclass(frozen=True)
 class PhysicsResult:
-    """A physics estimate and whether the integrator actually finished.
+    """A physics estimate and whether the integrator finished.
 
     ``converged`` is False when the walk hit ``_MAX_MINUTES`` without the
     lower probe reaching setpoint.  ``minutes`` is then a *lower bound*,
-    not an estimate, and callers must not present it as one — that
+    not an estimate, and callers must not present it as one. That
     distinction was invisible for as long as this returned a bare float,
     which is how a truncated integration reached production looking like
     a converged answer.
@@ -163,7 +163,7 @@ def predict_physics_detailed(
     5. Compute volumetric efficiency: η_v = 1 − C × (r_p^(1/n) − 1)
     6. Compute mass flow: ṁ = K × η_v × ρ_suction
     7. Compute discharge enthalpy: h₂ = h_g(T_evap) + w_comp, where
-       w_comp is the polytropic compression work — the condenser rejects
+       w_comp is the polytropic compression work; the condenser rejects
        evaporator heat *plus* compression work (Q̇_h = ṁ(h₂ − h₃))
     8. Compute condenser enthalpy span: Δh = h₂ − h_f(T_cond)
     9. Add latent heat extraction when T_evap < dew_point
@@ -179,7 +179,7 @@ def predict_physics_detailed(
             Use 0.0 to signal uncalibrated (returns NaN).
         evap_approach_f: T_amb − T_evap temperature approach at the
             evaporator coil (°F).  Fitted, not measured, and it absorbs
-            structural error besides the coil's: 10–15 °F holds for
+            structural error besides the coil's: 10-15 °F holds for
             winter-only fits, and an all-season fit with compression
             work lands near 18 °F.  Ignored when ``t_evap_override`` is
             supplied.
@@ -200,15 +200,15 @@ def predict_physics_detailed(
             UA; falls back to ``loss.ua_baseline_btu_hr_f`` when None
             (pre-calibration only).  When ``ua_exponent`` is non-zero this
             is the UA at ``ua_ref_delta_t`` rather than a flat constant.
-        ua_exponent: Power-law exponent for ``UA(ΔT)``.  ``0.0`` — the
-            default, and what older parameter sets carry — reproduces the
+        ua_exponent: Power-law exponent for ``UA(ΔT)``.  ``0.0`` (the
+            default, and what older parameter sets carry) reproduces the
             constant-UA behaviour exactly.  See ``physics.tank``.
         ua_ref_delta_t: ΔT at which ``ua_btu_hr_f`` is quoted (°F).
         stratification_gap: ``T_upper − T_lower`` at cycle start (°F).
             Ignored unless ``two_zone``.
         two_zone: Track the stratification gap and switch to the full-tank
-            mass once it closes.  ``False`` — the default, and what
-            parameters calibrated before this carry — integrates the lower
+            mass once it closes.  ``False`` (the default, and what
+            parameters calibrated before this carry) integrates the lower
             zone at half-tank mass for the whole cycle, which is what
             shipped.
             See the note below; a fitted ``K`` is only valid for the mode
@@ -255,7 +255,7 @@ def predict_physics_detailed(
     # Convert UA from BTU/hr·°F to BTU/s·°F for per-step integration.  With
     # a flat UA this is step-invariant and stays hoisted; with a ΔT-dependent
     # one it has to be recomputed each step, so only pay for that when the
-    # parameters actually carry an exponent.
+    # parameters carry an exponent.
     ua_is_flat = ua_exponent == 0.0
     ua_per_s = ua_btu_hr_f / 3600.0
 
@@ -273,7 +273,7 @@ def predict_physics_detailed(
     # T_evap is fixed for the whole call (t_amb is constant and
     # t_evap_override, when given, is a constant), so every quantity that
     # depends only on T_evap is computed once here rather than each of the
-    # up-to-10,800 Euler steps — a pure, behaviour-preserving speedup that
+    # up-to-10,800 Euler steps: a pure, behaviour-preserving speedup that
     # also cuts calibration time (Nelder-Mead runs this per event per
     # iteration).
     t_evap = (
@@ -343,7 +343,7 @@ def predict_physics_detailed(
         # ΔT, and over a deep recovery that ΔT roughly doubles, so the loss
         # term cannot use a single UA fitted at one end of the cycle.
         # Priced on the tank *mean*, which sits above t_lower while the tank
-        # is still stratified — the jacket loses heat from the whole tank,
+        # is still stratified: the jacket loses heat from the whole tank,
         # not from the lower zone alone.
         t_mean = t_lower + gap / 2.0
         delta_t = t_mean - t_amb
@@ -354,7 +354,7 @@ def predict_physics_detailed(
             )
         q_loss = ua_per_s * max(0.0, delta_t)
 
-        # Net heat → temperature rise, against whatever mass is actually
+        # Net heat → temperature rise, against whatever mass is
         # resisting it.  While the tank is stratified the condenser warms
         # the lower zone alone; once the gap closes the same heat has to
         # warm the whole tank, and the lower probe rises half as fast.
@@ -419,7 +419,7 @@ def predict_physics(
 ) -> float:
     """Backwards-compatible float wrapper.
 
-    Kept for callers that cannot act on truncation — the calibration fits
+    Kept for callers that cannot act on truncation: the calibration fits
     and the training-feature build, which want a number per row and
     nothing else.  Anything that surfaces the estimate to a *user* should
     call :func:`predict_physics_detailed` and say so when ``converged`` is

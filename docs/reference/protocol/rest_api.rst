@@ -37,10 +37,10 @@ The API uses JWT (JSON Web Tokens) for authentication with a
 Authentication Flow
 -------------------
 
-1. **Sign In** - POST credentials to ``/user/sign-in``
-2. **Receive Tokens** - Get ``idToken``, ``accessToken``, ``refreshToken``
-3. **Use Token** - Include ``accessToken`` in ``authorization`` header
-4. **Refresh** - POST ``refreshToken`` to ``/auth/refresh`` before expiry
+1. **Sign In**: POST credentials to ``/user/sign-in``
+2. **Receive Tokens**: Get ``idToken``, ``accessToken``, ``refreshToken``
+3. **Use Token**: Include ``accessToken`` in ``authorization`` header
+4. **Refresh**: POST ``refreshToken`` to ``/auth/refresh`` before expiry
 
 Token Lifetimes
 ---------------
@@ -161,9 +161,9 @@ List all devices registered to the user.
 
 **Parameters:**
 
-* ``userId`` (string, required) - User email address
-* ``offset`` (integer) - Pagination offset (default: 0)
-* ``count`` (integer) - Number of devices to return (default: 20, max:
+* ``userId`` (string, required): User email address
+* ``offset`` (integer): Pagination offset (default: 0)
+* ``count`` (integer): Number of devices to return (default: 20, max:
   20)
 
 **Response (200 OK):**
@@ -198,7 +198,7 @@ List all devices registered to the user.
 
 **Response Fields:**
 
-* ``homeSeq`` - Unique home/location identifier assigned by the Navien cloud system.
+* ``homeSeq``: Unique home/location identifier assigned by the Navien cloud system.
   Used in MQTT topic paths (format: ``cmd/{deviceType}/{homeSeq}/{userSeq}/...``)
   to route all device commands and status messages to the correct home installation.
 * Other fields as documented in :py:class:`nwp500.models.DeviceInfo`
@@ -270,11 +270,11 @@ Get Time-of-Use (TOU) information for a device.
 
 **Query Parameters:**
 
-* ``macAddress`` (string, required) - Device MAC address
-* ``additionalValue`` (string, required) - Additional device identifier
-* ``controllerId`` (string, required) - Controller ID
-* ``userId`` (string, required) - User email
-* ``userType`` (string) - User type (default: "O")
+* ``macAddress`` (string, required): Device MAC address
+* ``additionalValue`` (string, required): Additional device identifier
+* ``controllerId`` (string, required): Controller ID
+* ``userId`` (string, required): User email
+* ``userType`` (string): User type (default: "O")
 
 **Response (200 OK):**
 
@@ -430,6 +430,6 @@ See :doc:`../python_api/api_client` for the Python client documentation.
 Related Documentation
 =====================
 
-* :doc:`mqtt_protocol` - MQTT protocol for real-time communication
-* :doc:`../python_api/auth_client` - Python authentication client
-* :doc:`../python_api/api_client` - Python REST API client
+* :doc:`mqtt_protocol`: MQTT protocol for real-time communication
+* :doc:`../python_api/auth_client`: Python authentication client
+* :doc:`../python_api/api_client`: Python REST API client
