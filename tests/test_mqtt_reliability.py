@@ -17,6 +17,7 @@ from __future__ import annotations
 import asyncio
 import concurrent.futures
 import logging
+from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -508,6 +509,87 @@ class TestQueueFlushAfterReconnect:
 
         reauth.assert_awaited_once()
         assert client._connected is True
+
+    @pytest.mark.asyncio
+    async def test_token_only_client_recovers_with_secured_sign_in(
+        self, mock_auth_client
+    ):
+        """No stored password: a rejected session refresh after a good
+        token refresh still re-authenticates, by secured sign-in."""
+        from nwp500.mqtt import NavienMqttClient
+
+        mock_auth_client._password = ""
+        assert not mock_auth_client.has_stored_credentials
+        client = NavienMqttClient(mock_auth_client)
+        client._connected = False
+        client._loop = asyncio.get_running_loop()
+        client._connection_manager = None
+
+        new_manager = MagicMock()
+        new_manager.connect = AsyncMock(return_value=True)
+        new_manager.connection = MagicMock()
+        fresh = AuthenticationResponse(
+            user_info=UserInfo(), tokens=mock_auth_client.current_tokens
+        )
+
+        with (
+            patch.object(mock_auth_client, "refresh_token", new=AsyncMock()),
+            patch.object(
+                mock_auth_client,
+                "refresh_session",
+                new=AsyncMock(side_effect=TokenRefreshError("rejected")),
+            ),
+            patch.object(
+                mock_auth_client,
+                "_secured_sign_in_unlocked",
+                new=AsyncMock(return_value=fresh),
+            ) as secured,
+            patch.object(mock_auth_client, "sign_in", new=AsyncMock()) as pw,
+            patch(
+                "nwp500.mqtt.client.MqttConnection",
+                return_value=new_manager,
+            ),
+        ):
+            await client._deep_reconnect()
+
+        secured.assert_awaited_once()
+        pw.assert_not_awaited()
+        assert client._connected is True
+
+    @pytest.mark.asyncio
+    async def test_token_only_client_with_dead_token_reraises(
+        self, mock_auth_client
+    ):
+        """No stored password and no live access token: nothing can
+        re-authenticate, so the refresh error propagates."""
+        from nwp500.mqtt import NavienMqttClient
+
+        mock_auth_client._password = ""
+        client = NavienMqttClient(mock_auth_client)
+        expired = mock_auth_client.current_tokens.model_copy(
+            update={"issued_at": datetime.now(UTC) - timedelta(hours=2)}
+        )
+        expired.model_post_init(None)
+        assert expired.is_expired
+        mock_auth_client._auth_response.tokens = expired
+        client._connected = False
+        client._loop = asyncio.get_running_loop()
+        client._connection_manager = None
+
+        with (
+            patch.object(
+                mock_auth_client,
+                "refresh_token",
+                new=AsyncMock(side_effect=TokenRefreshError("expired")),
+            ),
+            patch.object(
+                mock_auth_client, "re_authenticate", new=AsyncMock()
+            ) as reauth,
+            pytest.raises(TokenRefreshError, match="expired"),
+        ):
+            await client._deep_reconnect()
+
+        reauth.assert_not_awaited()
 
 
 class TestPeriodicLoopResilience:

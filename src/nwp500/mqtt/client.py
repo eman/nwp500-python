@@ -620,9 +620,15 @@ class NavienMqttClient(
                         "No refresh token available for refresh"
                     )
             except (TokenRefreshError, ValueError, AuthenticationError) as e:
-                # If refresh fails, try full re-authentication with stored
-                # credentials
-                if self._auth_client.has_stored_credentials:
+                # If refresh fails, re-authenticate: re_authenticate() uses
+                # a live access token (secured sign-in) before the stored
+                # password, so a client restored from tokens alone can
+                # recover too.
+                tokens = self._auth_client.current_tokens
+                token_live = bool(
+                    tokens and tokens.access_token and not tokens.is_expired
+                )
+                if self._auth_client.has_stored_credentials or token_live:
                     _logger.warning(
                         f"Token refresh failed: {e}. Attempting full "
                         "re-authentication..."
@@ -630,7 +636,8 @@ class NavienMqttClient(
                     await self._auth_client.re_authenticate()
                 else:
                     _logger.error(
-                        "Cannot re-authenticate: no stored credentials"
+                        "Cannot re-authenticate: no live access token and "
+                        "no stored credentials"
                     )
                     raise
 
