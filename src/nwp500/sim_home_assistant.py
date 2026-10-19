@@ -538,7 +538,9 @@ class HomeAssistantClient:
                 **kw,
             ) as response:
                 if response.status != 200:
-                    body = self._scrub((await response.text())[:200])
+                    # Scrubbed whole, then cut: cut first, a token across
+                    # the cut would keep its prefix.
+                    body = self._scrub(await response.text())[:200]
                     raise HomeAssistantError(
                         f"{method} {path}: HTTP {response.status} {body}"
                     )

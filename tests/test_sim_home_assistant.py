@@ -958,7 +958,8 @@ class TestTheToken:
             status = 401
 
             async def text(self):
-                return f"bad token {TestTheToken.TOKEN}"
+                # The token across the 200-character cut.
+                return "x" * 190 + f" {TestTheToken.TOKEN} bad token"
 
             async def __aenter__(self):
                 return self
@@ -977,5 +978,5 @@ class TestTheToken:
         )
         with pytest.raises(ha.HomeAssistantError) as err:
             await client.state("sensor.a")
-        assert self.TOKEN not in str(err.value)
-        assert "<token>" in str(err.value)
+        assert self.TOKEN[:5] not in str(err.value)
+        assert "<tok" in str(err.value)
