@@ -4,7 +4,7 @@ The water heater exposes a GATT service that carries the controller's
 native class-code protocol: one request packet is written to the write
 characteristic and one reply packet arrives as a notification. The framing
 below mirrors what the NaviLink app sends to the heater in Bluetooth
-pairing mode (with the heater on, hold Back and Power for five seconds; it
+pairing mode (with the heater off, hold Back and Power for five seconds; it
 then advertises as ``HPWH1…``). In its Wi-Fi setup mode the heater
 advertises as ``HPWH4610`` instead, and accepts a connection but answers
 nothing.

@@ -25,7 +25,7 @@ Install the extra
 Put the heater in pairing mode
 ------------------------------
 
-With the heater on, hold the **Back** and **Power** buttons on the front
+With the heater off, hold the **Back** and **Power** buttons on the front
 panel for five seconds. The heater then advertises over Bluetooth with a
 name starting ``HPWH1``. Your computer needs to be within Bluetooth range
 of the heater.

@@ -1,6 +1,6 @@
 """Bluetooth LE access to the NWP500's controller (installer-side data).
 
-The heater must be in Bluetooth pairing mode (with the heater on, hold
+The heater must be in Bluetooth pairing mode (with the heater off, hold
 Back and Power for five seconds; it advertises as ``HPWH1…``). Install the
 ``ble`` extra for the transport::
 

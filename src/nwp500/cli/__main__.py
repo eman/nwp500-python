@@ -233,8 +233,8 @@ def async_command(f: Any) -> Any:
     default=None,
     help="How to reach the heater. Default (or mqtt): through Navien's "
     "cloud, over MQTT and REST. ble: directly over Bluetooth LE, without "
-    "signing in (needs the ble extra and the heater in pairing mode: hold "
-    "Back + Power for 5 s; supports info, serial and status).",
+    "signing in (needs the ble extra and the heater in pairing mode: with it "
+    "off, hold Back + Power for 5 s; supports info, serial and status).",
 )
 @click.option(
     "--ble-address",

@@ -10,7 +10,7 @@ Added
 - **Bluetooth LE access to the controller** (``nwp500.ble``, optional
   ``ble`` extra). The NWP500 exposes a GATT service that carries the
   controller's native class-code protocol once the heater is put in pairing
-  mode (with the heater on, hold Back and Power for five seconds; it
+  mode (with the heater off, hold Back and Power for five seconds; it
   advertises as ``HPWH1…``). The scan also lists a heater in Wi-Fi setup
   mode (``HPWH4610``), which answers nothing, and the CLIs pick an
   ``HPWH1`` heater over it.

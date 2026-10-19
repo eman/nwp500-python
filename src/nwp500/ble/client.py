@@ -83,7 +83,7 @@ class BleakTransport:
 async def scan(timeout: float = 10.0) -> list[tuple[str, str, int]]:
     """Return ``(address, name, rssi)`` for heaters advertising nearby.
 
-    A heater advertises in Bluetooth pairing mode (with the heater on,
+    A heater advertises in Bluetooth pairing mode (with the heater off,
     hold Back and Power for five seconds) as ``HPWH1…``, and in its Wi-Fi
     setup mode as ``HPWH4610``, which answers nothing. Both names match;
     :func:`best_heater` picks one that answers.
@@ -114,7 +114,7 @@ _ANSWERING_NAME_PREFIX = "HPWH1"
 
 #: Printed when a scan finds no heater, or none that answers.
 NOT_ADVERTISING_HINT = (
-    "No heater advertising as HPWH1. With the heater on, hold Back + Power "
+    "No heater advertising as HPWH1. With the heater off, hold Back + Power "
     "for 5 s to enter Bluetooth pairing mode. (HPWH4610 is the Wi-Fi setup "
     "mode, which answers nothing.)"
 )
