@@ -421,9 +421,11 @@ def simulate(
     - ``physics_usable``: whether the physics duration may be served;
       None, when the compressor is calibrated (a positive constant).
 
-    With no model, or one that declines, the holds change nothing.
-    ``draw_hold_factor`` holds a recovery for the walk's own draws
-    either way.
+    With no model, or one that declines, the served duration adds no
+    start hold and the lead draws are not read. The holds still mark
+    where the lower zone starts to climb, which placing a recovery again
+    after a draw and a draw hold count from. ``draw_hold_factor`` holds
+    a recovery for the walk's own draws either way.
 
     ``book`` is the tank's booked heat at the start (``sim.book``): from
     the caller's own record, or ``book.full_tank_book`` when they know

@@ -317,9 +317,12 @@ with, beside ``recovery=``:
    compressor is calibrated. A model may still answer from the
    integrator's minutes when it isn't.
 
-With no model, or one that declines, the holds and the lead draws
-change nothing. ``draw_hold_factor`` applies either way: a recovery the
-walk's own draws set back holds for them.
+With no model, or one that declines, the served duration adds no start
+hold and the lead draws are not read. The holds still mark where the
+lower zone starts to climb: a recovery placed again after a draw inside
+its hold, and a draw hold, count from there. ``draw_hold_factor``
+applies either way: a recovery the walk's own draws set back holds for
+them.
 
 
 Accuracy
