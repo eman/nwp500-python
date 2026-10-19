@@ -994,6 +994,8 @@ def _read_inputs(sim_cli: Any, **given: Any) -> Any:
         for key, what in files.items():
             if given[key] is not None:
                 given[key] = sim_cli.read_document(given[key], what)
+        if given.get("sources") is not None:
+            given["sources"] = sim_cli.read_sources(given["sources"])
         return sim_cli.Inputs(**given)
     except sim_cli.InputError as e:
         raise click.UsageError(str(e)) from None
@@ -1028,6 +1030,13 @@ _hours_option = click.option(
     type=click.FloatRange(min=0, min_open=True),
     default=None,
     help="How far to look ahead (default 24, or the scenario's)",
+)
+_sources_option = click.option(
+    "--sources",
+    type=click.Path(exists=True, dir_okay=False),
+    envvar="NWP500_SOURCES",
+    help="A TOML file naming where the air, its humidity and the inlet "
+    "are read live (Home Assistant); with the heater read live",
 )
 _tz_option = click.option(
     "--tz",
@@ -1084,6 +1093,7 @@ _tz_option = click.option(
     type=click.Path(exists=True, dir_okay=False),
     help="A HeaterParams document (default the tank size's defaults)",
 )
+@_sources_option
 @click.option(
     "--format",
     "output_format",
@@ -1131,12 +1141,14 @@ def simulate_run(ctx: click.Context, output_format: str, **given: Any) -> None:
 )
 @_hours_option
 @_tz_option
+@_sources_option
 @click.pass_context
 def simulate_snapshot(
     ctx: click.Context,
     output: str | None,
     hours: float | None,
     tz: str | None,
+    sources: str | None,
 ) -> None:
     """Write the heater and its schedules now as a scenario document."""
     sim_cli = _simulator()
@@ -1149,6 +1161,7 @@ def simulate_snapshot(
         params=None,
         hours=hours,
         tz=tz,
+        sources=sources,
     )
     now = datetime.now(UTC)
 
