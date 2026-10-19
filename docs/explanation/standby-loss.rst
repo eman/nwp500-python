@@ -129,12 +129,13 @@ tank at the bottom.
 How much heat a run removes
 ---------------------------
 
-A run displaces the water standing in the loop and then recirculates
-water it has already warmed, so a run costs at most about one loop
-volume of water heated from the air to the tank. Its cost depends on the
-loop's volume, fitted from the runs themselves, and the tank-to-air
-difference. Runs less than 10 minutes apart count as one, because the
-loop has not cooled in between.
+A run first displaces the water standing in the loop, which has cooled
+toward the air, and then recirculates water it has already warmed. The
+cooled water it returns to the tank is at most about one loop volume,
+fitted from the runs themselves. After that, the warmed pipe keeps
+losing heat for as long as the pump runs: on this installation the heat
+book charges 159 BTU for each gallon circulated. Runs less than 10
+minutes apart count as one, because the loop has not cooled in between.
 
 The fitted volume of the same loop grew between two measurements:
 
