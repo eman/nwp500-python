@@ -341,6 +341,15 @@ Measured on one NWP500-65:
   recorded starts reproduced over six days held out, 31 of 40; daily
   energy, with start-up charged once, 3.6 % low in sample and 4.4 %
   low held out (2.0 % low and 2.2 % high with the start hold);
+- time to ready after a switch into an element mode, 12 events (8 of
+  them Energy Saver): mean absolute error 0.51 min; on the two held
+  out, 0.13 min, ready a little later than predicted.
+  Element energy on the 7 whole runs: mean absolute error 0.045 kWh,
+  7 % high;
+- the lower zone after a draw, fitted before 2026-06-23 and scored on
+  the draws after: mean absolute error 3.09 degF, against 5.32 for
+  assuming no change; 5.33 degF on long draws and 1.24 degF on short
+  ones; a well-mixed tank gains least (:doc:`draws`);
 - the heat book against the tank's re-anchors, fitted February-June and
   scored July-September: mean absolute error 1,987 BTU (about 5 gal),
   flat to 18 h after an anchor and about double beyond;

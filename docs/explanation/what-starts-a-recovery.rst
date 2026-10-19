@@ -70,6 +70,12 @@ with the setpoint.** In ``HEAT_PUMP``, though, it waits while the upper
 tank is at or above the setpoint, so a setpoint lowered to the upper tank
 holds it off (below).
 
+A recirculation run can reach this trigger without a tap opening. Where
+the loop returns into the cold inlet, a run into a stratified tank drops
+the lower probe about 7 degF within ten minutes while the upper probe
+does not move (:doc:`standby-loss`). A lower probe a few degrees above
+104.9 degF can cross it that way.
+
 Inside a TOU window
 -------------------
 

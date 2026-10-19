@@ -406,6 +406,17 @@ Fixed
 
 Documentation
 -------------
+- **What the device tests and the record measured.** Three new
+  explanation pages: :doc:`/explanation/recovery-speed` (heat output,
+  minutes per degF, compressor power and efficiency, start-up energy,
+  the air's effect, how much of the tank heats),
+  :doc:`/explanation/standby-loss` (the jacket loss, a circulation run's
+  heat and where it shows) and :doc:`/explanation/draws` (the delivered
+  temperature, the probes through a draw, how much hot water is left,
+  reading a cold-supply probe). The element pages gain hours and energy
+  by mode, the off point and the probe's lag; scheduling gains write and
+  entry timing; the simulator's Accuracy section gains time to ready and
+  the lower zone after a draw.
 - **Less noise.** Implementation notes, the docs' own revision history
   and where things were ported from are gone from the pages, and
   section titles are plainer. The ``sim`` extra is listed under
