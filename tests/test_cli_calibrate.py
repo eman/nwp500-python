@@ -365,6 +365,15 @@ class TestTheFits:
         )
         assert (frame.loc[before, "humidity_pct"] == 30.0).all()
 
+    def test_each_outage_holds_the_reading_before_it(self):
+        h = timedelta(hours=1)
+        readings = [(T0, 60.0), (T0 + 6 * h, 70.0), (T0 + 12 * h, 80.0)]
+        outages = [(T0 + 4 * h, T0 + 6 * h), (T0 + 10 * h, T0 + 12 * h)]
+        held = cal_cli._held_to(readings, outages)
+        assert (T0 + 4 * h, 60.0) in held
+        assert (T0 + 10 * h, 70.0) in held
+        assert [t for t, _ in held] == sorted(t for t, _ in held)
+
     def test_flags_win_over_the_sources(self, history):
         from nwp500.sim_home_assistant import RecordInputs
 

@@ -119,9 +119,11 @@ def _held_to(
     start repeated there: a state holds until the next, so the readings
     either side of an outage are not to be drawn as a ramp across it,
     which would reach back before it."""
-    out = sorted(series)
+    readings = sorted(series)
+    out = list(readings)
     for a, _ in outages:
-        before = [v for t, v in out if t <= a]
+        # From the readings themselves, never an earlier boundary's copy.
+        before = [v for t, v in readings if t <= a]
         if before:
             out.append((a, before[-1]))
     return sorted(set(out))
