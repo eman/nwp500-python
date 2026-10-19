@@ -857,7 +857,11 @@ def snapshots(
         c_seconds, c_air = seconds[cycle], air_f[cycle]
         lower_end = _asof(lower_f[cycle], c_seconds, end)
         upper_end = _asof(upper_f[cycle], c_seconds, end)
-        lead = (index >= start - DRAW_LEAD) & (index <= end)
+        # A source flag on the sample at ``end`` is the interval after
+        # the recovery; the heater's own flag is read at its instant.
+        lead = (index >= start - DRAW_LEAD) & (
+            (index < end) if tier1 else (index <= end)
+        )
         draw_free = not water[lead].any()
         first = int(np.argmax(lead)) if lead.any() else len(lead)
         if (

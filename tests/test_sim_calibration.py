@@ -819,6 +819,14 @@ class TestTheLeadByInterval:
         h.loc[before, "drawing"] = True
         assert not cal.recoveries(h, air="heater_air_f")["draw_free"].item()
 
+    def test_activity_after_the_recovery_does_not_count(self):
+        h = self.frame()
+        end = h.index[
+            ~h["compressor_on"] & (h.index > T0 + timedelta(hours=2))
+        ][0]
+        h.loc[end, "circulating"] = True
+        assert cal.recoveries(h, air="heater_air_f")["draw_free"].item()
+
     def test_not_for_the_heaters_own_flag(self):
         h = self.frame().drop(columns=["drawing", "circulating"])
         before = h.index[h.index < T0 + timedelta(hours=2) - cal.DRAW_LEAD][-1]
