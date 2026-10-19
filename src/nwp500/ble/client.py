@@ -24,9 +24,11 @@ from .protocol import (
     CrcMismatchError,
     DeviceInfo,
     Packet,
+    TouRecord,
     build_packet,
     build_read,
     parse_packet,
+    parse_tou_records,
 )
 
 _logger = logging.getLogger(__name__)
@@ -111,8 +113,9 @@ class NavienBleClient:
     Reads are safe. :meth:`read` returns the reply as received, with
     ``crc_ok`` set; the readers that decode a block
     (:meth:`read_device_info`, :meth:`read_controller_serials`,
-    :meth:`read_parameter_blocks`) raise :class:`CrcMismatchError` instead
-    of decoding bytes that failed their checksum.
+    :meth:`read_tou_records`, :meth:`read_parameter_blocks`) raise
+    :class:`CrcMismatchError` instead of decoding bytes that failed their
+    checksum.
 
     :meth:`write_block` sends a write and is marked experimental: the
     parameter block layouts are not yet mapped, so only write bytes you
@@ -204,18 +207,28 @@ class NavienBleClient:
                 _logger.debug("Ignoring BLE packet %s", reply)
 
     async def read(
-        self, class_code: int, expected_length: int | None = None
+        self,
+        class_code: int,
+        expected_length: int | None = None,
+        address: int = 0,
     ) -> Packet:
-        """Read one data class."""
+        """Read one data class.
+
+        ``address`` selects within a class; only ``TOU_PLAN`` uses it on
+        an NWP500 (see :meth:`read_tou_records`).
+        """
         return await self.request(
-            build_read(class_code, expected_length), class_code
+            build_read(class_code, expected_length, address), class_code
         )
 
     async def _read_checked(
-        self, class_code: int, expected_length: int | None = None
+        self,
+        class_code: int,
+        expected_length: int | None = None,
+        address: int = 0,
     ) -> bytes:
         """A block's bytes, refused if the reply failed its CRC."""
-        packet = await self.read(class_code, expected_length)
+        packet = await self.read(class_code, expected_length, address)
         if not packet.crc_ok:
             raise CrcMismatchError(
                 f"reply for class {packet.class_name} failed its CRC"
@@ -237,6 +250,27 @@ class NavienBleClient:
             CrcMismatchError: The reply failed its checksum.
         """
         return ControllerSerials.parse(await self._read_checked(ClassCode.MSCD))
+
+    async def read_tou_records(self, address: int = 0) -> list[TouRecord]:
+        """Read the stored TOU plan from record ``address`` on.
+
+        The address is a record index, and one reply runs from it to the
+        end of a page, empty slots dropped. On an NWP500 the first page is
+        records 0-11, so the default read returns up to the first twelve
+        intervals, which is the whole plan when it has no more. The next
+        page ends at record 27, and its first records did not come back:
+        starting at 12 returned an empty reply, and 13 and 14 none. Reads
+        from 15 onward return the rest. A plan of more than twelve
+        intervals therefore cannot yet be read whole over Bluetooth;
+        :meth:`nwp500.NavienAPIClient.get_tou_info` returns all of it.
+
+        Raises:
+            CrcMismatchError: The reply failed its checksum.
+            ValueError: The reply is not a whole number of records.
+        """
+        return parse_tou_records(
+            await self._read_checked(ClassCode.TOU_PLAN, None, address)
+        )
 
     async def read_parameter_blocks(self) -> dict[ClassCode, bytes]:
         """Read the four boiler parameter blocks (classes 51-54).

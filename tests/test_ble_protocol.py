@@ -15,10 +15,12 @@ from nwp500.ble import (
     CrcMismatchError,
     DeviceInfo,
     NavienBleClient,
+    TouRecord,
     build_packet,
     build_read,
     crc16,
     parse_packet,
+    parse_tou_records,
 )
 
 
@@ -383,3 +385,123 @@ def test_transport_without_bleak_gives_the_install_hint(monkeypatch):
     monkeypatch.setitem(sys.modules, "bleak", None)
     with pytest.raises(RuntimeError, match=r"nwp500-python\[ble\]"):
         NavienBleClient("AA:BB")
+
+
+# --- TOU_PLAN ---------------------------------------------------------
+
+# Read from an NWP500 at address 0 (2026-10-16): twelve records, the first
+# twelve intervals of its PG&E plan as the cloud's get_tou_info() returns it.
+TOU_PLAN_PAGE = bytes.fromhex(
+    "1f007c00000e3b05346f0000346f00001f007c0f000f3b059e7400009e740000"
+    "1f007c1000143b053f7d00003f7d00001f007c1500173b059e7400009e740000"
+    "e0017c00000e3b054e8200004e820000e0017c0f000f3b057298000072980000"
+    "e0017c1000143b05aed70000aed70000e0017c1500173b057298000072980000"
+    "e0018200000e3b054e8200004e820000e001820f000f3b057298000072980000"
+    "e001821000143b05aed70000aed70000e001821500173b057298000072980000"
+)
+
+# (season, week, start, end, price) of the cloud's first twelve intervals
+CLOUD_INTERVALS = [
+    (0x01F, 0x7C, (0, 0), (14, 59), 28468),
+    (0x01F, 0x7C, (15, 0), (15, 59), 29854),
+    (0x01F, 0x7C, (16, 0), (20, 59), 32063),
+    (0x01F, 0x7C, (21, 0), (23, 59), 29854),
+    (0x1E0, 0x7C, (0, 0), (14, 59), 33358),
+    (0x1E0, 0x7C, (15, 0), (15, 59), 39026),
+    (0x1E0, 0x7C, (16, 0), (20, 59), 55214),
+    (0x1E0, 0x7C, (21, 0), (23, 59), 39026),
+    (0x1E0, 0x82, (0, 0), (14, 59), 33358),
+    (0x1E0, 0x82, (15, 0), (15, 59), 39026),
+    (0x1E0, 0x82, (16, 0), (20, 59), 55214),
+    (0x1E0, 0x82, (21, 0), (23, 59), 39026),
+]
+
+
+def test_tou_records_match_the_cloud_plan():
+    records = parse_tou_records(TOU_PLAN_PAGE)
+    assert [
+        (
+            r.season,
+            r.week,
+            (r.start_hour, r.start_minute),
+            (r.end_hour, r.end_minute),
+            r.price_min,
+        )
+        for r in records
+    ] == CLOUD_INTERVALS
+    assert all(r.decimal_point == 5 for r in records)
+    assert all(r.price_max == r.price_min for r in records)
+    assert records[6].decoded_price_max == pytest.approx(0.55214)
+
+
+def test_tou_record_field_positions():
+    raw = (
+        bytes([0x34, 0x12, 0x82, 1, 2, 3, 4, 2])
+        + (1000).to_bytes(4, "little")
+        + (250).to_bytes(4, "little")
+    )
+    r = TouRecord.parse(raw)
+    assert (r.season, r.week) == (0x1234, 0x82)
+    assert (r.start_hour, r.start_minute, r.end_hour, r.end_minute) == (
+        1,
+        2,
+        3,
+        4,
+    )
+    assert (r.price_max, r.price_min, r.decimal_point) == (1000, 250, 2)
+    assert r.decoded_price_min == pytest.approx(2.5)
+
+
+def test_tou_record_as_period_validates_as_tou_period():
+    from nwp500.models import TOUPeriod
+
+    record = parse_tou_records(TOU_PLAN_PAGE)[2]
+    period = TOUPeriod.model_validate(record.as_period())
+    assert (period.season, period.week) == (0x01F, 0x7C)
+    assert (period.start_hour, period.end_hour, period.end_min) == (
+        16,
+        20,
+        59,
+    )
+    assert period.decoded_price_min == pytest.approx(0.32063)
+
+
+def test_parse_tou_records_drops_empty_slots_and_rejects_partial_records():
+    padded = TOU_PLAN_PAGE[:32] + bytes(48)
+    assert len(parse_tou_records(padded)) == 2
+    assert parse_tou_records(b"") == []
+    with pytest.raises(ValueError):
+        parse_tou_records(TOU_PLAN_PAGE[:20])
+    with pytest.raises(ValueError):
+        TouRecord.parse(bytes(15))
+
+
+@pytest.mark.asyncio
+async def test_client_reads_tou_records_at_an_address():
+    transport = FakeTransport({ClassCode.TOU_PLAN: TOU_PLAN_PAGE[64:]})
+    async with NavienBleClient(transport=transport) as ble:
+        records = await ble.read_tou_records(4)
+    assert len(records) == 8
+    assert records[0].season == 0x1E0
+    request = parse_packet(transport.written[0])
+    assert (request.class_code, request.address) == (ClassCode.TOU_PLAN, 4)
+
+
+@pytest.mark.asyncio
+async def test_client_refuses_a_tou_reply_with_a_bad_crc():
+    transport = CorruptTransport({ClassCode.TOU_PLAN: TOU_PLAN_PAGE})
+    async with NavienBleClient(transport=transport) as ble:
+        with pytest.raises(CrcMismatchError):
+            await ble.read_tou_records()
+
+
+def test_build_read_carries_the_address():
+    assert parse_packet(build_read(ClassCode.TOU_PLAN, None, 15)).address == 15
+
+
+def test_cli_read_prints_decoded_tou_records(monkeypatch, capsys):
+    transport = FakeTransport({ClassCode.TOU_PLAN: TOU_PLAN_PAGE})
+    assert _run_read(monkeypatch, transport, ["TOU_PLAN"]) == 0
+    out = capsys.readouterr().out
+    assert "season=0x01f week=0x7c 00:00-14:59 price=0.28468-0.28468" in out
+    assert out.count("season=") == 12

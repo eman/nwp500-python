@@ -23,6 +23,9 @@ Added
   dumps the classes the heater answers by default and exits 1 when none
   answered; the readers that decode a block raise ``CrcMismatchError``
   on a reply that failed its checksum.
+  ``read_tou_records()`` decodes the stored time-of-use plan into
+  ``TouRecord`` (``as_period()`` gives the cloud's period dict); one read
+  returns up to the first twelve intervals.
 - **New REST endpoints.** ``NavienAPIClient`` gains
   ``get_push_settings()`` / ``set_push_settings()``
   (``/user/get-push-settings``, ``/user/set-push-settings``),

@@ -179,8 +179,10 @@ def build_packet(
     return body + bytes([crc & 0xFF, crc >> 8])
 
 
-def build_read(class_code: int, expected_length: int | None = None) -> bytes:
-    """Frame a read request for ``class_code``.
+def build_read(
+    class_code: int, expected_length: int | None = None, address: int = 0
+) -> bytes:
+    """Frame a read request for ``class_code`` at ``address``.
 
     ``expected_length`` defaults to the length the apps use for that class
     (:data:`DEFAULT_READ_LENGTHS`) and must be given for other classes.
@@ -192,7 +194,9 @@ def build_read(class_code: int, expected_length: int | None = None) -> bytes:
             raise ValueError(
                 f"no default read length for class {class_code}; pass one"
             ) from None
-    return build_packet(Command.READ, class_code, bytes([expected_length]))
+    return build_packet(
+        Command.READ, class_code, bytes([expected_length]), address
+    )
 
 
 @dataclass(frozen=True)
@@ -349,6 +353,112 @@ class ControllerSerials:
         return cls(text(data[0:18]), text(data[20:38]), bytes(data))
 
 
+@dataclass(frozen=True)
+class TouRecord:
+    """One 16-byte interval of the ``TOU_PLAN`` block.
+
+    The fields are those of a cloud TOU interval
+    (:class:`nwp500.models.TOUPeriod`): ``season`` has bit N-1 set for
+    month N, ``week`` has Sunday in bit 7 down to Saturday in bit 1, and
+    prices are integers scaled by ``10 ** decimal_point``. Layout, with
+    multi-byte fields little-endian::
+
+        0-1    season
+        2      week
+        3-4    start hour, start minute
+        5-6    end hour, end minute
+        7      decimal point
+        8-11   price max
+        12-15  price min
+
+    This is the layout the NaviLink app writes. Checked on an NWP500
+    (2026-10-16): the twelve records read at address 0 equal the first
+    twelve intervals of the plan the cloud holds for that heater, field
+    for field. Price max and min were equal in every interval checked, so
+    their order is taken from the app.
+    """
+
+    season: int
+    week: int
+    start_hour: int
+    start_minute: int
+    end_hour: int
+    end_minute: int
+    decimal_point: int
+    price_max: int
+    price_min: int
+
+    SIZE = 16
+
+    @property
+    def decoded_price_min(self) -> float:
+        """Minimum price (``price_min / 10 ** decimal_point``)."""
+        return self.price_min / 10**self.decimal_point
+
+    @property
+    def decoded_price_max(self) -> float:
+        """Maximum price (``price_max / 10 ** decimal_point``)."""
+        return self.price_max / 10**self.decimal_point
+
+    def as_period(self) -> dict[str, int]:
+        """The record as a cloud/MQTT TOU period dict (camelCase keys).
+
+        ``TOUPeriod.model_validate(record.as_period())`` gives the model
+        the MQTT client uses, so a plan read here can be compared with
+        one read from the cloud.
+        """
+        return {
+            "season": self.season,
+            "week": self.week,
+            "startHour": self.start_hour,
+            "startMinute": self.start_minute,
+            "endHour": self.end_hour,
+            "endMinute": self.end_minute,
+            "priceMin": self.price_min,
+            "priceMax": self.price_max,
+            "decimalPoint": self.decimal_point,
+        }
+
+    @classmethod
+    def parse(cls, data: bytes) -> TouRecord:
+        if len(data) != cls.SIZE:
+            raise ValueError(
+                f"TOU record must be {cls.SIZE} bytes, got {len(data)}"
+            )
+        return cls(
+            season=int.from_bytes(data[0:2], "little"),
+            week=data[2],
+            start_hour=data[3],
+            start_minute=data[4],
+            end_hour=data[5],
+            end_minute=data[6],
+            decimal_point=data[7],
+            price_max=int.from_bytes(data[8:12], "little"),
+            price_min=int.from_bytes(data[12:16], "little"),
+        )
+
+
+def parse_tou_records(data: bytes) -> list[TouRecord]:
+    """Split a ``TOU_PLAN`` reply into records, dropping empty slots.
+
+    An empty slot is sixteen zero bytes; the controller pads its pages
+    with them after the last interval.
+
+    Raises:
+        ValueError: If ``data`` is not a whole number of records.
+    """
+    size = TouRecord.SIZE
+    if len(data) % size:
+        raise ValueError(
+            f"TOU_PLAN data must be a multiple of {size} bytes, got {len(data)}"
+        )
+    return [
+        TouRecord.parse(data[o : o + size])
+        for o in range(0, len(data), size)
+        if any(data[o : o + size])
+    ]
+
+
 __all__ = [
     "SERVICE_UUID",
     "WRITE_CHAR_UUID",
@@ -365,4 +475,6 @@ __all__ = [
     "parse_packet",
     "DeviceInfo",
     "ControllerSerials",
+    "TouRecord",
+    "parse_tou_records",
 ]

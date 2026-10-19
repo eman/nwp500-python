@@ -8,7 +8,13 @@ import json
 import sys
 from pathlib import Path
 
-from . import NWP500_RESPONDING_CLASSES, ClassCode, NavienBleClient, scan
+from . import (
+    NWP500_RESPONDING_CLASSES,
+    ClassCode,
+    NavienBleClient,
+    parse_tou_records,
+    scan,
+)
 
 
 def _class_name(code: int) -> str:
@@ -26,6 +32,21 @@ def _parse_class(text: str) -> tuple[int, int | None]:
         else int(name)
     )
     return int(code), (int(length) if length else None)
+
+
+def _print_tou(data: bytes) -> None:
+    try:
+        records = parse_tou_records(data)
+    except ValueError as e:
+        print(f"  (not decoded: {e})")
+        return
+    for r in records:
+        print(
+            f"  season={r.season:#05x} week={r.week:#04x} "
+            f"{r.start_hour:02}:{r.start_minute:02}-"
+            f"{r.end_hour:02}:{r.end_minute:02} "
+            f"price={r.decoded_price_min:g}-{r.decoded_price_max:g}"
+        )
 
 
 async def _scan(args: argparse.Namespace) -> int:
@@ -71,6 +92,8 @@ async def _read(args: argparse.Namespace) -> int:
                 f"{pkt.class_name:6} len={len(pkt.data):3} "
                 f"crc_ok={pkt.crc_ok} {pkt.data.hex()}"
             )
+            if pkt.class_code == ClassCode.TOU_PLAN and pkt.crc_ok:
+                _print_tou(pkt.data)
             results.append(
                 {
                     "class": pkt.class_code,

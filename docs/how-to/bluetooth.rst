@@ -52,7 +52,7 @@ What an NWP500 answers
 
 Checked against a unit on 2026-10-16, the heat pump answers these classes:
 ``SSD`` (17), ``EHD`` (32), ``TSD``/``TCD``/``TDD``/``TAD`` (38-41),
-``TOU_PLAN`` (170, the stored plan as 192 bytes), ``SFHD`` (210), ``DID``
+``TOU_PLAN`` (170, the stored time-of-use plan), ``SFHD`` (210), ``DID``
 (240), ``MSCD`` (243) and ``MSWD`` (244). It does **not** answer the
 parameter classes 51-54 that the service app uses on boilers, with any
 expected length or sub-address, so its installer parameters live behind
@@ -70,8 +70,29 @@ class is selected from a per-model table the service app downloads from
 Navien's server, so it is not reachable from this interface alone.
 
 The address byte is ignored by every answering class except ``TOU_PLAN``,
-where it is a record index: the stored plan is twelve 16-byte records and a
-read at address *N* returns the plan from record *N* on.
+where it is a record index (see below).
+
+Read the time-of-use plan
+-------------------------
+
+``TOU_PLAN`` holds the time-of-use plan the controller runs, as 16-byte
+records with the fields of a cloud TOU interval: season and weekday
+bitfields, start and end times, and prices scaled by ``10 **
+decimal_point``. :meth:`~nwp500.ble.NavienBleClient.read_tou_records`
+decodes them into :class:`~nwp500.ble.TouRecord`, and
+``TouRecord.as_period()`` gives the dict that
+:class:`~nwp500.models.TOUPeriod` validates, so a plan read here can be
+compared with the cloud's. Checked on a unit, the records match the cloud's
+copy of its plan field for field.
+
+The address is a record index, and one reply runs from it to the end of a
+page. The first page is records 0-11, so the default read returns up to
+the first twelve intervals. Records 12-14 did not come back from any start
+address (12 returns an empty reply, 13 and 14 none), and reads from 15 on
+return the rest. A plan of more than twelve intervals therefore cannot yet
+be read whole over Bluetooth; :meth:`~nwp500.NavienAPIClient.get_tou_info`
+returns all of it. ``python -m nwp500.ble read`` prints the decoded
+records under the ``TOU_PLAN`` line.
 
 From Python:
 
@@ -84,12 +105,15 @@ From Python:
    async with NavienBleClient(address) as ble:
        info = await ble.read_device_info()
        serials = await ble.read_controller_serials()
+       for record in await ble.read_tou_records():
+           print(record.as_period())
        status = await ble.read(ClassCode.SSD)
        print(status.crc_ok, status.data.hex())
 
 ``read()`` returns each reply as received, with ``crc_ok`` set. The
 readers that decode a block (``read_device_info()``,
-``read_controller_serials()``, ``read_parameter_blocks()``) raise
+``read_controller_serials()``, ``read_tou_records()``,
+``read_parameter_blocks()``) raise
 :class:`~nwp500.ble.CrcMismatchError` rather than decode a reply that
 failed its checksum.
 

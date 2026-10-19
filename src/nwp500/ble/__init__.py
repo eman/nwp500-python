@@ -23,10 +23,12 @@ from .protocol import (
     CrcMismatchError,
     DeviceInfo,
     Packet,
+    TouRecord,
     build_packet,
     build_read,
     crc16,
     parse_packet,
+    parse_tou_records,
 )
 
 __all__ = [
@@ -46,9 +48,11 @@ __all__ = [
     "DeviceInfo",
     "NavienBleClient",
     "Packet",
+    "TouRecord",
     "build_packet",
     "build_read",
     "crc16",
     "parse_packet",
+    "parse_tou_records",
     "scan",
 ]
