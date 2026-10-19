@@ -29,6 +29,12 @@ Added
   the ``SSD`` block into two DIP-switch words (``SubStatus``), using the
   layout Navien's boiler service toolkit reads; it is unconfirmed on the
   NWP500.
+- ``nwp-cli --backend ble`` (with ``--ble-address`` or a scan) runs
+  ``serial`` and ``info`` over Bluetooth without signing in, and refuses
+  other commands. Without ``--backend``, commands use the cloud as before.
+  The handlers run unchanged against ``nwp500.ble.BleMqttAdapter``, which
+  offers the MQTT client methods the heater serves over Bluetooth and
+  raises ``BleUnsupportedError`` for the rest.
 - **New REST endpoints.** ``NavienAPIClient`` gains
   ``get_push_settings()`` / ``set_push_settings()``
   (``/user/get-push-settings``, ``/user/set-push-settings``),

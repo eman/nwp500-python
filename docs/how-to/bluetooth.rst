@@ -47,6 +47,36 @@ example ``SSD:59`` or ``TOU_PLAN``, or the boiler parameter blocks
 ``read`` exits with status 1, and writes no ``--out`` file, when no class
 answered.
 
+From nwp-cli
+------------
+
+``nwp-cli`` reaches the heater through Navien's cloud (MQTT and REST)
+unless told otherwise. ``--backend ble`` runs a command over Bluetooth
+instead, with no sign-in. It needs the ``cli`` and ``ble`` extras:
+
+.. code-block:: bash
+
+   nwp-cli --backend ble serial
+   nwp-cli --backend ble info
+   nwp-cli --backend ble --ble-address AA:BB:CC:DD:EE:FF info --raw
+
+Without ``--ble-address`` (or ``NAVIEN_BLE_ADDRESS``), it scans for ten
+seconds and uses the strongest heater. ``serial`` and ``info`` are the
+commands the heater can answer over Bluetooth. ``info`` shows only what the
+``DID`` and ``MSCD`` blocks hold: serial numbers, model type, country code
+and the setpoint range, whose lower end is Min Operation Temp. Every other
+command is refused before connecting, since the heater sends no live status
+over Bluetooth and accepts no writes.
+
+The commands run their usual handlers against
+:class:`~nwp500.ble.BleMqttAdapter`, which offers the
+:class:`~nwp500.NavienMqttClient` methods the heater can serve over
+Bluetooth and raises :class:`~nwp500.ble.BleUnsupportedError` for the rest.
+Where the MQTT client delivers a ``DeviceFeature``, the adapter delivers a
+:class:`~nwp500.ble.BleDeviceFeature`. It has only the fields the blocks
+carry, each checked against the heater's MQTT report, and any other field
+raises :class:`AttributeError` rather than reading as a default.
+
 What an NWP500 answers
 ----------------------
 

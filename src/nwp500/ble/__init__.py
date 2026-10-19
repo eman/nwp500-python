@@ -9,6 +9,12 @@ seconds). Install the ``ble`` extra for the transport::
 """
 
 from .client import BleakTransport, BleTransport, NavienBleClient, scan
+from .mqtt_adapter import (
+    BleDeviceFeature,
+    BleMqttAdapter,
+    BleUnsupportedError,
+    device_feature_from_blocks,
+)
 from .protocol import (
     ADVERTISED_NAME_FRAGMENT,
     DEFAULT_READ_LENGTHS,
@@ -40,7 +46,10 @@ __all__ = [
     "NWP500_WRITABLE_CLASSES",
     "SERVICE_UUID",
     "WRITE_CHAR_UUID",
+    "BleDeviceFeature",
+    "BleMqttAdapter",
     "BleTransport",
+    "BleUnsupportedError",
     "BleakTransport",
     "ClassCode",
     "Command",
@@ -54,6 +63,7 @@ __all__ = [
     "build_packet",
     "build_read",
     "crc16",
+    "device_feature_from_blocks",
     "parse_packet",
     "parse_tou_records",
     "scan",
