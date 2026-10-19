@@ -980,3 +980,76 @@ class TestTheToken:
             await client.state("sensor.a")
         assert self.TOKEN[:5] not in str(err.value)
         assert "<tok" in str(err.value)
+
+
+class TestRecordedUnits:
+    @staticmethod
+    def doc():
+        def row(at, state, unit):
+            r = {
+                "entity_id": "sensor.air",
+                "state": state,
+                "last_updated": at.isoformat(),
+            }
+            if unit is not None:
+                r["attributes"] = {"unit_of_measurement": unit}
+            return r
+
+        a, b, c = (
+            NOW - timedelta(hours=3),
+            NOW - timedelta(hours=2),
+            NOW - timedelta(hours=1),
+        )
+        # 68 °F, then the sensor switched to °C, then a row with no unit.
+        return [
+            [row(a, "68.0", "°F"), row(b, "20.0", "°C"), row(c, "21.0", None)]
+        ], (a, b, c)
+
+    def test_each_row_in_its_own_unit(self):
+        doc, (a, b, _) = self.doc()
+        assert ha.parse_units(doc) == {"sensor.air": ["°F", "°C", None]}
+        got = ha.History(
+            ha.history_for(doc, ["sensor.air"]), {}, ha.parse_units(doc)
+        )
+        rows, dropped = got.converted("sensor.air", "°C", ha.to_f)
+        assert rows == [(a, 68.0), (b, pytest.approx(68.0))]
+        assert dropped == 1
+
+    def test_without_recorded_units_todays_unit(self):
+        doc, (a, _, _) = self.doc()
+        got = ha.History(ha.history_for(doc, ["sensor.air"]), {})
+        rows, dropped = got.converted("sensor.air", "°C", ha.to_f)
+        assert rows[0] == (a, pytest.approx(154.4))
+        assert dropped == 0
+
+    def test_todays_unit_must_read(self):
+        doc, _ = self.doc()
+        got = ha.History(
+            ha.history_for(doc, ["sensor.air"]), {}, ha.parse_units(doc)
+        )
+        with pytest.raises(ValueError, match="not a temperature unit"):
+            got.converted("sensor.air", "%", ha.to_f)
+
+
+@pytest.mark.asyncio
+class TestRecordedUnitsLive:
+    START = NOW - timedelta(days=2)
+
+    async def test_a_unit_change_in_the_record(self):
+        class Changed(FakeClient):
+            async def read_history(self, entities, start, end):
+                doc, _ = TestRecordedUnits.doc()
+                return ha.History(
+                    ha.history_for(doc, list(entities)),
+                    {e: [] for e in entities},
+                    {e: ha.parse_units(doc).get(e, []) for e in entities},
+                )
+
+        got = await ha.record_inputs(
+            Changed({"sensor.air": _s("sensor.air", 21.0, "°C")}),  # pyright: ignore[reportArgumentType]
+            ha.Entities(air="sensor.air"),
+            self.START,
+            NOW,
+        )
+        assert [v for _, v in got.air or []] == [68.0, pytest.approx(68.0)]
+        assert any("1 readings in no unit" in n for n in got.notes)

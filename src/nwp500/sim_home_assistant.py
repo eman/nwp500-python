@@ -315,10 +315,76 @@ def parse_outages(doc: Any, end: datetime) -> dict[str, list[Span]]:
 
 @dataclass(frozen=True)
 class History:
-    """A history's readings and its outages, by entity, each present."""
+    """A history's readings and its outages, by entity, each present,
+    and the unit each reading was recorded in, where it was read."""
 
     readings: dict[str, list[Reading]]
     outages: dict[str, list[Span]]
+    #: Aligned with ``readings``; None where the history carries no
+    #: attributes, when each reading is taken to be in today's unit.
+    units: dict[str, list[str | None]] | None = None
+
+    def converted(
+        self,
+        entity: str,
+        unit: str | None,
+        to: Callable[[float, str | None], float],
+    ) -> tuple[list[Reading], int]:
+        """``entity``'s readings through ``to``, each from the unit it
+        was recorded in (``unit``, today's, where the history carries
+        none): a sensor's unit can change, and its history keeps the
+        old one. The count of readings left out, in a unit ``to``
+        refuses or none at all, is the second item. Raises ValueError
+        if ``to`` refuses ``unit`` itself."""
+        to(50.0, unit)
+        rows = self.readings.get(entity, [])
+        recorded = None if self.units is None else self.units.get(entity)
+        out: list[Reading] = []
+        dropped = 0
+        for i, (t, v) in enumerate(rows):
+            u = unit if recorded is None or i >= len(recorded) else recorded[i]
+            try:
+                out.append((t, to(v, u)))
+            except ValueError:
+                dropped += 1
+        return out, dropped
+
+
+def parse_units(doc: Any) -> dict[str, list[str | None]]:
+    """The unit each of ``parse_history``'s readings was recorded in
+    (its row's ``unit_of_measurement``, None if it carries none), by
+    entity, in the same order."""
+    if not isinstance(doc, list):
+        raise HomeAssistantError("not a history")
+    out: dict[str, list[str | None]] = {}
+    for series in cast(list[Any], doc):
+        if not isinstance(series, list) or not series:
+            continue
+        rows = [
+            cast(Mapping[str, Any], r)
+            for r in cast(list[Any], series)
+            if isinstance(r, Mapping)
+        ]
+        if not rows or "entity_id" not in rows[0]:
+            continue
+        units: list[tuple[datetime, str | None]] = []
+        for r in rows:
+            stamp = r.get("last_updated") or r.get("last_changed")
+            if _number(r.get("state")) is None or stamp is None:
+                continue
+            attributes = r.get("attributes")
+            unit = (
+                cast(Mapping[str, Any], attributes).get("unit_of_measurement")
+                if isinstance(attributes, Mapping)
+                else None
+            )
+            units.append(
+                (_instant(stamp), unit if isinstance(unit, str) else None)
+            )
+        out[str(rows[0]["entity_id"])] = [
+            u for _, u in sorted(units, key=lambda x: x[0])
+        ]
+    return out
 
 
 def history_for(doc: Any, entities: Iterable[str]) -> dict[str, list[Reading]]:
@@ -587,13 +653,16 @@ class HomeAssistantClient:
                 # Full rows, every change: a minimal row carries only
                 # ``last_changed``, which an attribute-only update
                 # leaves behind.
+                # With attributes: each row's unit, which can change.
                 "significant_changes_only": "0",
-                "no_attributes": "",
             },
         )
         outages = parse_outages(doc, end)
+        units = parse_units(doc)
         return History(
-            history_for(doc, names), {n: outages.get(n, []) for n in names}
+            history_for(doc, names),
+            {n: outages.get(n, []) for n in names},
+            {n: units.get(n, []) for n in names},
         )
 
     async def forecast(self, entity: str) -> tuple[list[Reading], str | None]:
@@ -763,33 +832,30 @@ class HomeAssistantEnvironment:
 
         async def read() -> float | None:
             got = await self.client.read_history(names, since, self.now)
-            history = got.readings
-            probe_unit = (await self.client.state(probe_id)).unit
-            volume_unit = (await self.client.state(volume_id)).unit
-            probe = [
-                (t, to_f(v, probe_unit)) for t, v in history.get(probe_id, [])
-            ]
-            rate: list[Reading] = []
-            if rate_id is not None:
-                rate_unit = (await self.client.state(rate_id)).unit
-                rate = [
-                    (t, to_gpm(v, rate_unit))
-                    for t, v in history.get(rate_id, [])
-                ]
+
+            async def read_in(
+                entity: str, to: Callable[[float, str | None], float]
+            ) -> list[Reading]:
+                unit = (await self.client.state(entity)).unit
+                rows, dropped = got.converted(entity, unit, to)
+                if dropped:
+                    self.notes.append(
+                        f"inlet: {dropped} readings of {entity} in no unit "
+                        "this reads left out"
+                    )
+                return rows
+
+            probe = await read_in(probe_id, to_f)
+            rate = [] if rate_id is None else await read_in(rate_id, to_gpm)
             flow = meter.flow_gpm(
-                [
-                    (t, to_gal(v, volume_unit))
-                    for t, v in reports_after(history.get(volume_id, []), since)
-                ],
+                reports_after(await read_in(volume_id, to_gal), since),
                 rate,
                 since,
                 self.now,
             )
             runs: list[Span] | None = []
             if pump_id is not None:
-                runs = await self._pump_runs(
-                    pump_id, history.get(pump_id, []), since
-                )
+                runs = await self._pump_runs(pump_id, got, since)
                 if runs is None:
                     return None
             # A draw while any of them was unavailable may have
@@ -816,19 +882,23 @@ class HomeAssistantEnvironment:
         return await self._guard("inlet", read, None)
 
     async def _pump_runs(
-        self, pump_id: str, speed: list[Reading], since: datetime
+        self, pump_id: str, got: History, since: datetime
     ) -> list[Span] | None:
         """The pump's runs since ``since``, or None (and a note) when
         they are unknown: no reading in force at ``since`` (a draw
         before the first may have overlapped a run), or a speed in no
         unit this reads."""
         why = None
-        if not covers_start(speed, since):
+        speed: list[Reading] = []
+        if not covers_start(got.readings.get(pump_id, []), since):
             why = "no speed reading in force at the start"
         else:
             try:
                 unit = (await self.client.state(pump_id)).unit
-                speed = [(t, to_rpm(v, unit)) for t, v in speed]
+                speed, dropped = got.converted(pump_id, unit, to_rpm)
+                if dropped:
+                    # A reading left out could have been a run.
+                    why = f"{dropped} readings in no speed unit"
             except (HomeAssistantError, ValueError) as err:
                 why = str(err)
         if why is not None:
@@ -982,26 +1052,28 @@ async def record_inputs(
                 "counted as busy"
             )
 
+    def read_in(
+        what: str, entity: str, to: Callable[[float, str | None], float]
+    ) -> list[Reading]:
+        rows, dropped = got.converted(entity, units[entity], to)
+        if dropped:
+            notes.append(
+                f"{what}: {dropped} readings in no unit this reads, or "
+                "outside 0-100 for a humidity, left out"
+            )
+        return rows
+
     air = humidity = None
     try:
         if e.air and e.air in units:
-            air = covered(
-                "air",
-                [(t, to_f(v, units[e.air])) for t, v in history.get(e.air, [])],
-            )
+            air = covered("air", read_in("air", e.air, to_f))
     except ValueError as err:
         notes.append(f"air: {err}")
     if e.humidity and e.humidity in units:
-        rh = history.get(e.humidity, [])
         try:
-            percent(50.0, units[e.humidity])
-            kept = [(t, v) for t, v in rh if 0.0 <= v <= 100.0]
-            if len(kept) < len(rh):
-                notes.append(
-                    f"humidity: {len(rh) - len(kept)} readings outside 0-100 "
-                    "left out"
-                )
-            humidity = covered("humidity", kept)
+            humidity = covered(
+                "humidity", read_in("humidity", e.humidity, percent)
+            )
         except ValueError as err:
             notes.append(f"humidity: {err}")
     drawing = None
@@ -1009,11 +1081,9 @@ async def record_inputs(
     volume = history.get(volume_id, []) if volume_id else []
     if volume_id and volume_id in units and whole("meter", volume):
         try:
+            gallons = reports_after(read_in("meter", volume_id, to_gal), start)
             rate = (
-                [
-                    (t, to_gpm(v, units[rate_id]))
-                    for t, v in history.get(rate_id, [])
-                ]
+                read_in("meter", rate_id, to_gpm)
                 if rate_id and rate_id in units
                 else []
             )
@@ -1021,14 +1091,7 @@ async def record_inputs(
             # the quiet test is conservative where the plateau's sustain
             # filter is not.
             flow = meter.flow_gpm(
-                [
-                    (t, to_gal(v, units[volume_id]))
-                    for t, v in reports_after(volume, start)
-                ],
-                rate,
-                start,
-                end,
-                sustain=timedelta(0),
+                gallons, rate, start, end, sustain=timedelta(0)
             )
             # While the meter was unavailable, water may have moved.
             down = busy(
@@ -1036,12 +1099,7 @@ async def record_inputs(
             )
             drawing = busy(
                 draw_spans(flow),
-                volume_spans(
-                    [
-                        (t, to_gal(v, units[volume_id]))
-                        for t, v in reports_after(volume, start)
-                    ]
-                ),
+                volume_spans(gallons),
                 down,
             )
             outage("meter", down)
@@ -1050,9 +1108,11 @@ async def record_inputs(
     circulating = None
     pump_id = e.circulation_speed
     if pump_id and pump_id in units:
-        speed = history.get(pump_id, [])
         try:
-            rpm = [(t, to_rpm(v, units[pump_id])) for t, v in speed]
+            rpm, dropped = got.converted(pump_id, units[pump_id], to_rpm)
+            if dropped:
+                # A reading left out could have been a run.
+                raise ValueError(f"{dropped} readings in no speed unit")
             if whole("circulation", rpm):
                 down = got.outages.get(pump_id, [])
                 runs = pump_runs(rpm, start, end)
