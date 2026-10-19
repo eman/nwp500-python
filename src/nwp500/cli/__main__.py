@@ -1234,6 +1234,13 @@ async def simulate_record(
     type=click.Path(exists=True, dir_okay=False),
     help="A HeaterParams document to refit (default the 65 gal defaults)",
 )
+@click.option(
+    "--sources",
+    type=click.Path(exists=True, dir_okay=False),
+    envvar="NWP500_SOURCES",
+    help="A TOML file naming where the air, its humidity, the meter and "
+    "the circulation are recorded (Home Assistant)",
+)
 @click.pass_context
 def simulate_calibrate(
     ctx: click.Context,
@@ -1243,6 +1250,7 @@ def simulate_calibrate(
     ambient: float | None,
     humidity: str | None,
     params: str | None,
+    sources: str | None,
 ) -> None:
     """Fit the heater's parameters to its recorded HISTORY.
 
@@ -1256,8 +1264,14 @@ def simulate_calibrate(
     if ctx.obj.get("unit_system"):
         set_unit_system(ctx.obj["unit_system"])
     try:
+        readings = cal_cli.read_history(history)
+        record = None
+        if sources is not None:
+            record = asyncio.run(
+                cal_cli.read_record(sim_cli.read_sources(sources), readings)
+            )
         done = cal_cli.calibrate(
-            cal_cli.read_history(history),
+            readings,
             air=None if air is None else cal_cli.read_readings(air, "air"),
             ambient=ambient,
             humidity=None
@@ -1266,6 +1280,7 @@ def simulate_calibrate(
             params=None
             if params is None
             else sim_cli.read_document(params, "parameters"),
+            record=record,
         )
     except sim_cli.InputError as e:
         raise click.UsageError(str(e)) from None

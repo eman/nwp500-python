@@ -233,6 +233,40 @@ class TestTheFits:
         assert cal_cli.max_gap(readings) == expected
         assert cal_cli.max_gap(readings[:1]) == cal_cli.MIN_GAP
 
+    def test_a_sources_record_fits_over_what_it_covers(self, history):
+        from nwp500.sim_home_assistant import RecordInputs
+
+        readings = cal_cli.read_history(history)
+        record = RecordInputs(
+            air=[(T0, AIR_F), (T0 + timedelta(days=1), AIR_F)],
+            humidity=[(T0, 45.0)],
+            drawing=[],
+            circulating=[],
+            notes=("humidity: a note",),
+        )
+        done = cal_cli.calibrate(readings, record=record)
+        assert done.air == "source"
+        s = done.calibration.standby
+        assert s.ua_ref == pytest.approx(UA, rel=0.05)
+        assert s.quiet_by == "meter"
+        assert "humidity: a note" in done.notes
+        # Only what it covers: from 12 h in, half the window is left.
+        late = replace(record, air=[(T0 + timedelta(hours=12), AIR_F)])
+        half = cal_cli.calibrate(readings, record=late).calibration.standby
+        # The later half, the tank nearer the air.
+        assert half.windows
+        assert half.windows[0].delta_t_mean_f < s.windows[0].delta_t_mean_f
+
+    def test_flags_win_over_the_sources(self, history):
+        from nwp500.sim_home_assistant import RecordInputs
+
+        record = RecordInputs([(T0, 30.0)], None, None, None)
+        done = cal_cli.calibrate(
+            cal_cli.read_history(history), ambient=AIR_F, record=record
+        )
+        assert done.air == "constant"
+        assert done.calibration.standby.ua_ref == pytest.approx(UA, rel=0.05)
+
     def test_the_base_is_the_one_given(self, history):
         base = replace(sim.default_params(1), unfitted=())
         done = cal_cli.calibrate(

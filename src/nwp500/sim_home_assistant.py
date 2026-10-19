@@ -335,6 +335,13 @@ def to_gal(value: float, unit: str | None) -> float:
     raise ValueError(f"{unit!r} is not a volume unit")
 
 
+def reports_after(series: Sequence[Reading], start: datetime) -> list[Reading]:
+    """A report series (a meter's volume since its previous report) from
+    a history, without the row in force at ``start``: that row repeats
+    the last report before the span, not one inside it."""
+    return [(t, v) for t, v in series if t > start]
+
+
 def fresh(state: State, now: datetime, max_age: timedelta = FRESH) -> bool:
     """Whether ``state`` holds a value reported within ``max_age`` of
     ``now``."""
@@ -638,7 +645,7 @@ class HomeAssistantEnvironment:
             flow = meter.flow_gpm(
                 [
                     (t, to_gal(v, volume_unit))
-                    for t, v in history.get(volume_id, [])
+                    for t, v in reports_after(history.get(volume_id, []), since)
                 ],
                 rate,
                 since,
@@ -670,3 +677,131 @@ class HomeAssistantEnvironment:
             return cold.t_cold_f
 
         return await self._guard("inlet", read, None)
+
+
+# ── over a recorded history, for the calibration ────────────────────
+
+
+#: Draw ticks further apart than this are two draws.
+DRAW_GAP = timedelta(seconds=30)
+
+
+@dataclass(frozen=True)
+class RecordInputs:
+    """What Home Assistant recorded over a heater's history: the air
+    beside it and that air's humidity (°F, %), the spans a meter saw
+    water drawn, and the circulation's runs. None for a part it does
+    not record, or could not be read (``notes`` say which)."""
+
+    air: list[Reading] | None
+    humidity: list[Reading] | None
+    drawing: list[Span] | None
+    circulating: list[Span] | None
+    notes: tuple[str, ...] = ()
+
+
+def draw_spans(
+    flow: Sequence[Reading],
+    *,
+    draw_gpm: float = 0.3,
+    gap: timedelta = DRAW_GAP,
+    step: timedelta = timedelta(seconds=10),
+) -> list[Span]:
+    """The spans water moved, from a flow series on a grid
+    (``sim.meter.flow_gpm``): runs of steps at or above ``draw_gpm``,
+    joined across gaps up to ``gap``, each to its last step's end."""
+    out: list[Span] = []
+    for t, v in flow:
+        if v < draw_gpm:
+            continue
+        if out and t - out[-1][1] <= gap:
+            out[-1] = (out[-1][0], t + step)
+        else:
+            out.append((t, t + step))
+    return out
+
+
+async def record_inputs(
+    client: HomeAssistantClient,
+    entities: Entities,
+    start: datetime,
+    end: datetime,
+) -> RecordInputs:
+    """The air, its humidity, the draws and the circulation's runs from
+    ``start`` to ``end``. A series that starts after ``start`` covers
+    only its own span; the notes say how much."""
+    notes: list[str] = []
+    e = entities
+    names = [
+        n
+        for n in (
+            e.air,
+            e.humidity,
+            e.meter_volume,
+            e.meter_flow,
+            e.circulation_speed,
+        )
+        if n
+    ]
+    if not names:
+        return RecordInputs(None, None, None, None, ())
+    try:
+        history = await client.history(names, start, end)
+    except HomeAssistantError as err:
+        return RecordInputs(None, None, None, None, (f"not read ({err})",))
+    units: dict[str, str | None] = {}
+    for n in (e.air, e.meter_volume, e.meter_flow):
+        if n:
+            try:
+                units[n] = (await client.state(n)).unit
+            except HomeAssistantError as err:
+                notes.append(f"{n}: unit not read ({err})")
+
+    def covered(what: str, series: list[Reading]) -> list[Reading] | None:
+        if not series:
+            notes.append(f"{what}: no history over the record")
+            return None
+        if series[0][0] > start + timedelta(hours=1):
+            notes.append(
+                f"{what}: history covers only from {series[0][0].isoformat()}"
+            )
+        return series
+
+    air = humidity = None
+    try:
+        if e.air and e.air in units:
+            air = covered(
+                "air", [(t, to_f(v, units[e.air])) for t, v in history[e.air]]
+            )
+    except ValueError as err:
+        notes.append(f"air: {err}")
+    if e.humidity:
+        humidity = covered("humidity", history[e.humidity])
+    drawing = None
+    volume_id, rate_id = e.meter_volume, e.meter_flow
+    if volume_id and volume_id in units:
+        try:
+            rate = (
+                [(t, to_gpm(v, units[rate_id])) for t, v in history[rate_id]]
+                if rate_id and rate_id in units
+                else []
+            )
+            flow = meter.flow_gpm(
+                [
+                    (t, to_gal(v, units[volume_id]))
+                    for t, v in reports_after(history[volume_id], start)
+                ],
+                rate,
+                start,
+                end,
+            )
+            if covered("meter", history[volume_id]) is not None:
+                drawing = draw_spans(flow)
+        except ValueError as err:
+            notes.append(f"meter: {err}")
+    circulating = None
+    if e.circulation_speed:
+        circulating = pump_runs(history[e.circulation_speed], start, end)
+        if circulating is None:
+            notes.append("circulation: no speed reading over the record")
+    return RecordInputs(air, humidity, drawing, circulating, tuple(notes))

@@ -431,3 +431,92 @@ class TestCompose:
         assert env.ambient_f == 75.0
         assert env.humidity == 41.0
         assert not math.isnan(env.ambient_f)
+
+
+class TestDrawSpans:
+    def test_runs_joined_across_short_gaps(self):
+        flow = [(_t(0), 2.0), (_t(10 / 60), 2.0), (_t(0.5), 2.0), (_t(5), 0.0)]
+        assert ha.draw_spans(flow) == [(_t(0), _t(0.5) + timedelta(seconds=10))]
+
+    def test_a_long_gap_is_two_draws(self):
+        flow = [(_t(0), 2.0), (_t(1), 2.0)]
+        assert len(ha.draw_spans(flow)) == 2
+
+
+@pytest.mark.asyncio
+class TestTheRecord:
+    START = NOW - timedelta(days=2)
+
+    async def test_the_air_humidity_draws_and_runs(self):
+        series = long_draw(ended_hours_ago=5)
+        # The meter's row in force at the start repeats an old report.
+        series["sensor.volume"].insert(0, (self.START, 5.0))
+        series |= {
+            "sensor.air": [(self.START, 20.0), (NOW, 21.0)],
+            "sensor.rh": [(self.START, 40.0)],
+            "sensor.pump": [(self.START, 0.0)],
+        }
+        states = UNITS | {
+            "sensor.air": _s("sensor.air", 21.0, "°C"),
+            "sensor.rh": _s("sensor.rh", 40.0, "%"),
+        }
+        got = await ha.record_inputs(
+            FakeClient(states, series),  # pyright: ignore[reportArgumentType]
+            ha.Entities(
+                air="sensor.air",
+                humidity="sensor.rh",
+                meter_volume="sensor.volume",
+                circulation_speed="sensor.pump",
+            ),
+            self.START,
+            NOW,
+        )
+        assert got.air == [(self.START, 68.0), (NOW, pytest.approx(69.8))]
+        assert got.humidity == [(self.START, 40.0)]
+        assert got.circulating == []
+        (drawn,) = got.drawing or []
+        assert drawn[1] - drawn[0] > timedelta(minutes=15)
+        assert got.notes == ()
+
+    async def test_coverage_and_missing_parts_are_noted(self):
+        late = NOW - timedelta(hours=10)
+        got = await ha.record_inputs(
+            FakeClient(  # pyright: ignore[reportArgumentType]
+                {"sensor.air": _s("sensor.air", 60.0, "°F")},
+                {"sensor.air": [(late, 60.0)]},
+            ),
+            ha.Entities(air="sensor.air", circulation_speed="sensor.pump"),
+            self.START,
+            NOW,
+        )
+        assert got.air == [(late, 60.0)]
+        assert any("covers only from" in n for n in got.notes)
+        assert got.circulating is None
+        assert any("circulation: no speed reading" in n for n in got.notes)
+
+    async def test_a_failed_read_is_noted(self):
+        client = FakeClient()
+        got = await ha.record_inputs(
+            client,  # pyright: ignore[reportArgumentType]
+            ha.Entities(air="sensor.air"),
+            self.START,
+            NOW,
+        )
+        assert (got.air, got.drawing) == (None, None)
+        assert got.notes == (
+            "sensor.air: unit not read (GET /api/states/sensor.air: HTTP 404)",
+        )
+
+    async def test_a_failed_history_is_noted(self):
+        class Down(FakeClient):
+            async def history(self, entities, start, end):
+                raise ha.HomeAssistantError("GET /api/history: HTTP 502")
+
+        got = await ha.record_inputs(
+            Down(),  # pyright: ignore[reportArgumentType]
+            ha.Entities(air="sensor.air"),
+            self.START,
+            NOW,
+        )
+        assert got.air is None
+        assert got.notes[0].startswith("not read")

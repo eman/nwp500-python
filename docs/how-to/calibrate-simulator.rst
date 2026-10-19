@@ -75,6 +75,16 @@ Idle, it reads the cabinet, about 6 °F warm. So give one of these:
 - **A constant,** for a heater in conditioned space that holds one
   temperature.
 
+- **Home Assistant:** ``--sources FILE``, the same sources file as
+  ``simulate run`` takes (:doc:`simulate-heater`). The command reads the
+  air beside the heater and its humidity over the record. It also reads
+  the meter's draws and the circulation's runs, which make the quiet
+  test exact: the heater's own "hot water in use" flag also fires on
+  circulation. Home Assistant keeps 10 days of history by default; the
+  air is used only over the span its history covers, and the report
+  says how much that is. A flag (``--air``, ``--ambient``,
+  ``--humidity``) wins over the sources.
+
 Neither of the ways to stand in for a sensor reproduced a sensor's fit
 at the installation the model was fitted at. Over 279 quiet windows,
 both moved the fitted loss, and the command offers neither:
@@ -110,6 +120,7 @@ writes the fitted parameters, as a ``HeaterParams`` document:
 
    nwp-cli simulate calibrate history.jsonl --air air.csv -o params.json
    nwp-cli simulate calibrate history.jsonl --ambient 68 -o params.json
+   nwp-cli simulate calibrate history.jsonl --sources sources.toml -o params.json
    nwp-cli simulate run --params params.json
 
 It refits the 65 gal defaults. For another tank size, start from that
