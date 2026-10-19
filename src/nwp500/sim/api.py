@@ -44,10 +44,12 @@ from nwp500.sim.delivery import (
     draw_windows,
 )
 from nwp500.sim.engine import (
+    DRAW_LEAD,
     HEATER_SETPOINT_MAX_F,
     HEATER_SETPOINT_MIN_F,
     Entry,
     Heater,
+    HeatingInterval,
     RawWrite,
     SimulationError,
     quantise,
@@ -413,7 +415,9 @@ def simulate(
       draw-free model reads as the first recovery's ``draw_load`` when
       it begins within ``engine.DRAW_LEAD`` of them; read only with a
       positive ``draw_hold_factor``. Like the scenario's draws, they
-      need a fitted draw response (``draw_model_unsupported``);
+      need a fitted draw response (``draw_model_unsupported``), and
+      those the model reads carry the draw and inlet reasons
+      (``draw_uncalibrated``, ``inlet_temp_modelled``);
     - ``draw_hold_factor``: ``(1 − k) / k`` at the draw observability
       ``k``: a recovery holds that many times the time a draw sets it
       back, for the share of the draw the probes miss; 0.0 none;
@@ -583,6 +587,14 @@ def simulate(
     delivery = delivery_along(
         sim.points, draws, walked, params.readiness, params.book_terms()
     )
+    # Lead draws the model read are priced as the scenario's own are.
+    lead_read = (
+        recovery is not None
+        and draw_hold_factor > 0.0
+        and _lead_read(sim.heating, lead_draws, s.start)
+    )
+    if lead_read and not s.loads.draws and not inlet_measured:
+        reasons.append("inlet_temp_modelled")
     out_of_domain_at: datetime | None = None
     if draws:
         any_out, out_of_domain_at = draw_domain_judgement(
@@ -593,7 +605,7 @@ def simulate(
         if any_out:
             reasons.append("draw_out_of_domain")
     reasons += _unfitted(params, "standby")
-    if s.loads.draws:
+    if s.loads.draws or lead_read:
         reasons += _unfitted(params, "draw")
     if s.loads.windows:
         reasons += _unfitted(params, "book", "readiness")
@@ -686,6 +698,22 @@ UNFITTED_REASONS: Mapping[str, str] = MappingProxyType(
 def _unfitted(params: HeaterParams, *terms: str) -> list[str]:
     """The reasons for those of ``terms`` the parameters did not fit."""
     return [UNFITTED_REASONS[t] for t in params.unfitted if t in terms]
+
+
+def _lead_read(
+    heating: Sequence[HeatingInterval],
+    lead_draws: Sequence[Draw],
+    start: datetime,
+) -> bool:
+    """Whether the walk's first heat-pump recovery read any of
+    ``lead_draws`` as its draw load: one before ``start`` and within
+    ``DRAW_LEAD`` of the recovery's start (``engine._lead_load``)."""
+    first = next(
+        (h.start.at for h in heating if h.source == "compressor"), None
+    )
+    return first is not None and any(
+        first - DRAW_LEAD <= d.at < start for d in lead_draws
+    )
 
 
 def _gap_prior(params: HeaterParams) -> bool:

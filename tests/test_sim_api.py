@@ -474,6 +474,45 @@ class TestAModelsInputs:
         assert all(c.physics.estimate is None for c in model.asked)
         assert "unusable" in got.reasons
 
+    def test_lead_draws_read_carry_the_draw_reasons(self, params: HeaterParams):
+        s = _scenario(state=COLD)
+        got = simulate(
+            s, params, recovery=_Model(), lead_draws=LEAD, draw_hold_factor=0.5
+        ).reasons
+        assert "draw_uncalibrated" in got
+        assert "inlet_temp_modelled" in got
+        measured = simulate(
+            s,
+            params,
+            recovery=_Model(),
+            lead_draws=LEAD,
+            draw_hold_factor=0.5,
+            inlet_measured=True,
+        ).reasons
+        assert "inlet_temp_modelled" not in measured
+
+    @pytest.mark.parametrize(
+        "kw",
+        [
+            # No hold factor: the draws are not read.
+            {"recovery": _Model(), "lead_draws": LEAD},
+            # No model: nothing reads them.
+            {"lead_draws": LEAD, "draw_hold_factor": 0.5},
+            # Before the lead: the recovery does not reach back to it.
+            {
+                "recovery": _Model(),
+                "lead_draws": (EARLY,),
+                "draw_hold_factor": 0.5,
+            },
+        ],
+    )
+    def test_lead_draws_not_read_carry_none(
+        self, params: HeaterParams, kw: dict[str, Any]
+    ):
+        got = simulate(_scenario(state=COLD), params, **kw).reasons
+        assert "draw_uncalibrated" not in got
+        assert "inlet_temp_modelled" not in got
+
     def test_lead_draws_need_a_draw_response(self, params: HeaterParams):
         bare = replace(params, draw=replace(params.draw, observability=None))
         with pytest.raises(SimulationError, match="draw_model_unsupported"):

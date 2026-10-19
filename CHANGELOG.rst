@@ -15,9 +15,10 @@ Added
   before the start), ``draw_hold_factor`` and ``physics_usable``. Each
   goes to the engine as given. Left at their defaults, no answer
   changes.
-  Lead draws move the tank as the scenario's own draws do, and, like
-  them, are refused on parameters with no fitted draw response
-  (``draw_model_unsupported``).
+  Lead draws move the tank as the scenario's own draws do. Like them,
+  they are refused on parameters with no fitted draw response
+  (``draw_model_unsupported``), and those the model reads carry
+  ``draw_uncalibrated`` and ``inlet_temp_modelled`` where they apply.
 - **The air, its humidity and the inlet, live from Home Assistant**
   (#166).
 
