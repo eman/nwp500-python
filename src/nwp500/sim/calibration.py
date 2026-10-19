@@ -830,6 +830,10 @@ def snapshots(
     for column in tier1 or ["dhw_in_use"]:
         if column in history.columns:
             water |= history[column].fillna(False).astype(bool).to_numpy()
+    # A meter's or the circulation's flag marks a sample's interval, to the next
+    # sample (``sim_adapters.history``): the sample before a lead's first
+    # can hold water moving inside it.
+    interval_water = water if tier1 else np.zeros(len(history), dtype=bool)
     rows: list[dict[str, object]] = []
     for n, (start, end) in enumerate(_on_intervals(when, on)):
         span = (index >= start - PRE_RECOVERY_LOOKBACK) & (index <= end)
@@ -855,6 +859,13 @@ def snapshots(
         upper_end = _asof(upper_f[cycle], c_seconds, end)
         lead = (index >= start - DRAW_LEAD) & (index <= end)
         draw_free = not water[lead].any()
+        first = int(np.argmax(lead)) if lead.any() else len(lead)
+        if (
+            0 < first < len(lead)
+            and index[first] > start - DRAW_LEAD
+            and interval_water[first - 1]
+        ):
+            draw_free = False
         for at in _snapshots(start, end):
             lower = _asof(lower_f[cycle], c_seconds, at)
             upper = _asof(upper_f[cycle], c_seconds, at)
