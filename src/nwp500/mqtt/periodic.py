@@ -184,7 +184,7 @@ class MqttPeriodicRequestManager:
                     await asyncio.sleep(period_seconds)
 
                 except asyncio.CancelledError:
-                    # Re-raise so the task is actually marked as cancelled
+                    # Re-raise so the task is marked as cancelled
                     # instead of ending "successfully".
                     _logger.info(
                         f"Periodic {request_type.value} requests cancelled "

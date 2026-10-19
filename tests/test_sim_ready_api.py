@@ -1,0 +1,708 @@
+"""The entry points around readiness: ``time_to_ready``,
+``next_recovery``, standby's start answer, ``element_mode``, the draw
+range and the setpoint range.
+
+The answer's assembly is held to its source in ``test_sim_ready``; these
+hold the entry points to the core they compose.
+"""
+
+from dataclasses import replace
+from datetime import UTC, datetime, timedelta
+from typing import Any
+
+import pytest
+
+pytest.importorskip("pandas")
+
+from nwp500.sim import (
+    Commands,
+    Draw,
+    Environment,
+    HeaterParams,
+    HeaterState,
+    History,
+    Loads,
+    ReservationEntry,
+    Scenario,
+    Schedules,
+    Settings,
+    TouPeriod,
+    Write,
+    element_mode,
+    full_tank_book,
+    next_recovery,
+    simulate,
+    site_example_params,
+    standby,
+    time_to_ready,
+)
+from nwp500.sim.physics.element import mode_plan
+
+T0 = datetime(2026, 10, 4, 19, 0, tzinfo=UTC)
+EVERY_DAY = 254
+#: ``hp_upper_on`` at rest (no TOU window) and raised (one in force).
+RESTING, RAISED = 104.0, 139.5
+#: A heater whose marker is not known: counted as in a TOU window.
+UNMARKED = Settings(setpoint_f=140.9, hp_lower_on_f=105.0)
+
+
+def at(h: float) -> datetime:
+    return T0 + timedelta(hours=h)
+
+
+@pytest.fixture(scope="module")
+def params() -> HeaterParams:
+    """One installation's parameters, its mixing valve included: the
+    numbers below are that site's."""
+    return site_example_params()
+
+
+def _scenario(**kw: Any) -> Scenario:
+    base: dict[str, Any] = {
+        "start": T0,
+        "horizon": timedelta(hours=12),
+        "tz": "UTC",
+        "state": HeaterState(upper_f=128.0, lower_f=112.0),
+        "settings": Settings(
+            setpoint_f=140.9, hp_lower_on_f=105.0, hp_upper_on_f=RESTING
+        ),
+        "history": History(compressor_stopped_at=at(-2.0)),
+        "environment": Environment(ambient_f=68.0, humidity=48.0),
+    }
+    base.update(kw)
+    return Scenario(**base)
+
+
+def _peak_now() -> Schedules:
+    """TOU on, with its peak from 18:00 to 23:00 UTC (in force at T0)."""
+    periods = (
+        TouPeriod(
+            season=4095,
+            week=EVERY_DAY,
+            start_hour=0,
+            start_minute=0,
+            end_hour=17,
+            end_minute=59,
+            price_max=1,
+        ),
+        TouPeriod(
+            season=4095,
+            week=EVERY_DAY,
+            start_hour=18,
+            start_minute=0,
+            end_hour=22,
+            end_minute=59,
+            price_max=5,
+        ),
+        TouPeriod(
+            season=4095,
+            week=EVERY_DAY,
+            start_hour=23,
+            start_minute=0,
+            end_hour=23,
+            end_minute=59,
+            price_max=1,
+        ),
+    )
+    return Schedules(tou_periods=periods, tou_enabled=True)
+
+
+class TestNextRecovery:
+    def test_it_ends_at_the_heaters_stop_threshold(self, params):
+        running = HeaterState(
+            upper_f=128.0, lower_f=100.0, compressor_running=True
+        )
+        stop = Settings(
+            setpoint_f=140.9,
+            hp_lower_on_f=105.0,
+            hp_lower_off_f=136.4,
+            hp_upper_on_f=RESTING,
+        )
+        r = next_recovery(_scenario(state=running, settings=stop), params)
+        assert r.outcome == "ok"
+        assert r.points[-1][2] == pytest.approx(136.4, abs=0.2)
+
+    def test_electric_still_has_a_heat_pump_recovery(self, params):
+        electric = Settings(
+            setpoint_f=140.9, mode=2, hp_lower_on_f=105.0, hp_upper_on_f=RESTING
+        )
+        r = next_recovery(
+            _scenario(
+                state=HeaterState(upper_f=120.0, lower_f=106.0),
+                settings=electric,
+                horizon=timedelta(hours=24),
+            ),
+            params,
+        )
+        assert r.outcome == "ok" and r.start_minute > 0
+
+    def test_a_running_compressor_recovers_from_now(self, params):
+        s = _scenario(
+            state=HeaterState(
+                upper_f=128.0, lower_f=100.0, compressor_running=True
+            )
+        )
+        r = next_recovery(s, params)
+        assert r.outcome == "ok"
+        assert r.start_minute == 0.0
+        assert r.points[0][0] == T0
+
+    def test_an_idle_tank_recovers_from_the_heaters_own_trigger(self, params):
+        s = _scenario()
+        r = next_recovery(s, params)
+        coast = standby(
+            s.state,
+            s.environment,
+            s.loads,
+            params,
+            start=T0,
+            until=at(24.0),
+            history=s.history,
+            settings=s.settings,
+        )
+        assert r.outcome == "ok"
+        assert coast.starts_at is not None
+        assert r.start_minute == pytest.approx(
+            (coast.starts_at - T0).total_seconds() / 60.0, abs=10.0
+        )
+        assert r.coast_btu > 0.0
+
+    def test_draws_before_the_start_are_the_coasts(self, params):
+        draws = tuple(
+            Draw(at=at(0.5) + timedelta(minutes=i), gallons=1.6)
+            for i in range(8)
+        )
+        r = next_recovery(_scenario(loads=Loads(draws=draws)), params)
+        start = T0 + timedelta(minutes=r.start_minute)
+        before = sum(d.gallons for d in draws if d.at < start)
+        # The shower itself takes the lower zone to the trigger.
+        assert 0.0 < before < 12.8
+        assert r.coast_draw_gal == pytest.approx(before)
+
+    def test_circulation_on_the_coast_is_its_loss(self, params):
+        """The source's coast lost circulation's heat over it as well as
+        standby; the port's charged standby alone."""
+        from nwp500.sim import CirculationRun
+
+        quiet = next_recovery(_scenario(), params)
+        start = T0 + timedelta(minutes=quiet.start_minute)
+        runs = (CirculationRun(start=at(0.5), end=at(1.0)),)
+        s = _scenario(loads=Loads(circulation=runs))
+        circulated = next_recovery(s, params)
+        until = T0 + timedelta(minutes=circulated.start_minute)
+        trace = standby(
+            s.state,
+            s.environment,
+            s.loads,
+            params,
+            start=T0,
+            until=until,
+            history=s.history,
+        )
+        assert trace.circulation_heat_wh is not None
+        assert trace.circulation_heat_wh > 0.0
+        from nwp500.sim.book import standby_btu
+
+        assert circulated.coast_btu == pytest.approx(
+            standby_btu(
+                (until - T0).total_seconds() / 3600.0,
+                s.state.upper_f,
+                s.state.lower_f,
+                68.0,
+                params.book_terms(),
+            )
+            + trace.circulation_heat_wh * 3.412141633
+        )
+        assert start > at(1.0)
+
+    def test_no_trigger_within_a_day_is_idle(self, params):
+        s = _scenario(
+            state=HeaterState(upper_f=140.0, lower_f=139.0),
+            settings=Settings(setpoint_f=140.9, hp_lower_on_f=None),
+        )
+        assert next_recovery(s, params).outcome == "idle"
+
+    def test_vacation_is_not_scheduled(self, params):
+        s = _scenario(settings=Settings(setpoint_f=140.9, mode=5))
+        assert next_recovery(s, params).outcome == "not_scheduled"
+
+    def test_inside_a_tou_window_the_recovery_is_capped(self, params):
+        s = _scenario(
+            state=HeaterState(
+                upper_f=128.0, lower_f=100.0, compressor_running=True
+            ),
+            schedules=_peak_now(),
+            settings=UNMARKED,
+        )
+        r = next_recovery(s, params)
+        assert r.outcome == "ok" and r.tou_capped
+
+
+class TestTimeToReady:
+    def test_a_full_tank_at_its_setpoint_is_ready_in_every_mode(self, params):
+        s = _scenario(
+            state=HeaterState(upper_f=140.5, lower_f=139.6),
+            history=History(compressor_stopped_at=at(-1.0)),
+        )
+        r = time_to_ready(s, params)
+        assert r.bath.ready
+        assert {m.ready_in_minutes for m in r.bath.by_mode} == {0.0}
+        assert r.defaults_used == ("bath_gal=28.7", "shower_gal=12.0")
+        assert r.showers.ready_for_whole == 3
+
+    def test_a_short_tank_has_a_time_in_each_mode(self, params):
+        r = time_to_ready(_scenario(), params, bath_gal=20.0)
+        assert not r.bath.ready
+        rows = {m.mode: m for m in r.bath.by_mode}
+        assert r.bath.ready_in_minutes == rows["heat_pump"].ready_in_minutes
+        assert rows["heat_pump"].ready_in_minutes is not None
+        assert rows["electric"].ready_in_minutes is not None
+        assert (
+            rows["electric"].ready_in_minutes
+            < rows["heat_pump"].ready_in_minutes
+        )
+        assert r.recovery.outcome == "ok"
+        assert r.defaults_used == ("shower_gal=12.0",)
+
+    def test_an_unknown_tou_marker_counts_as_in_force(self, params):
+        r = time_to_ready(_scenario(settings=UNMARKED), params, bath_gal=20.0)
+        assert "tou_window=in_force (hp_upper_on_f unknown)" in r.defaults_used
+        rows = {m.mode: m for m in r.bath.by_mode}
+        assert not rows["electric"].reachable_now
+        assert "tou_window_in_force" in r.reasons
+
+    def test_with_a_book_the_booked_heat_answers(self, params):
+        s = _scenario(state=HeaterState(upper_f=140.5, lower_f=139.6))
+        book = full_tank_book(140.5, 139.6, params.book)
+        r = time_to_ready(s, params, book=book)
+        assert "no_heat_book" not in r.reasons
+        assert r.deliverable_gal == pytest.approx(53.1, abs=0.05)
+
+    def test_a_booked_answer_says_when_its_inlet_was_modelled(self, params):
+        """The third review of #162's port audit: the flag was always
+        set, so a book converting at a default inlet never said so."""
+        s = _scenario(state=HeaterState(upper_f=140.5, lower_f=139.6))
+        book = full_tank_book(140.5, 139.6, params.book)
+        assert (
+            "inlet_temp_modelled" in time_to_ready(s, params, book=book).reasons
+        )
+        measured = time_to_ready(s, params, book=book, inlet_measured=True)
+        assert "inlet_temp_modelled" not in measured.reasons
+        recorded = replace(book, inlet_measured_share=0.95)
+        assert "inlet_temp_modelled" not in (
+            time_to_ready(s, params, book=recorded).reasons
+        )
+        # Without a book there is no conversion to flag.
+        assert "inlet_temp_modelled" not in time_to_ready(s, params).reasons
+
+    def test_standing_and_sourcing_reasons_are_left_out(self, params):
+        r = time_to_ready(_scenario(), params)
+        assert "readiness_model_provisional" not in r.reasons
+        assert "bath_volume_inferred" not in r.reasons
+        assert "no_heat_book" in r.reasons
+
+    def test_vacation_reaches_nothing(self, params):
+        r = time_to_ready(
+            _scenario(settings=Settings(setpoint_f=140.9, mode=5)), params
+        )
+        assert "heating_not_scheduled" in r.reasons
+        assert not any(m.reachable_now for m in r.bath.by_mode)
+
+    def test_inside_a_tou_window_only_the_heat_pump_is_reachable(self, params):
+        r = time_to_ready(
+            _scenario(schedules=_peak_now(), settings=UNMARKED), params
+        )
+        rows = {m.mode: m for m in r.bath.by_mode}
+        assert rows["heat_pump"].reachable_now
+        assert not rows["electric"].reachable_now
+        assert "tou_window_in_force" in r.reasons
+
+
+class TestStandbysStart:
+    def test_without_settings_there_is_no_start_answer(self, params):
+        s = _scenario()
+        t = standby(
+            s.state, s.environment, Loads(), params, start=T0, until=at(12.0)
+        )
+        assert t.starts_at is None and t.lower_margin_f is None
+
+    def test_the_lower_trigger_and_the_margin(self, params):
+        s = _scenario()
+        t = standby(
+            s.state,
+            s.environment,
+            Loads(),
+            params,
+            start=T0,
+            until=at(24.0),
+            settings=s.settings,
+        )
+        assert t.trigger == "lower"
+        assert t.starts_at is not None and T0 < t.starts_at < at(24.0)
+        last = t.points[-1]
+        assert t.lower_margin_f == pytest.approx(last.lower_f - 105.0)
+
+    def test_vacation_never_starts(self, params):
+        s = _scenario(settings=Settings(setpoint_f=140.9, mode=5))
+        t = standby(
+            s.state,
+            s.environment,
+            Loads(),
+            params,
+            start=T0,
+            until=at(24.0),
+            settings=Settings(setpoint_f=140.9, mode=5, hp_lower_on_f=105.0),
+        )
+        assert t.starts_at is None
+
+
+class TestElementMode:
+    def test_it_is_the_element_models_plan(self, params):
+        state = HeaterState(upper_f=125.0, lower_f=110.0)
+        settings = Settings(setpoint_f=141.8, hp_upper_on_f=RESTING)
+        r = element_mode(state, settings, params, mode=4, at=T0)
+        assert r.plan == mode_plan(
+            "HIGH_DEMAND", 125.0, 110.0, 141.8, params=params.element
+        )
+        assert r.reachable and r.unreachable_reason is None
+
+    def test_not_reachable_inside_a_tou_window_or_on_vacation(self, params):
+        state = HeaterState(upper_f=125.0, lower_f=110.0)
+        r = element_mode(
+            state,
+            Settings(setpoint_f=141.8, hp_upper_on_f=RAISED),
+            params,
+            mode=2,
+            at=T0,
+        )
+        assert r.unreachable_reason == "tou_window_in_force"
+        unknown = element_mode(
+            state, Settings(setpoint_f=141.8), params, mode=2, at=T0
+        )
+        assert unknown.unreachable_reason == "tou_window_in_force"
+        v = element_mode(
+            state, Settings(setpoint_f=141.8, mode=5), params, mode=3, at=T0
+        )
+        assert v.unreachable_reason == "heating_disabled"
+
+    def test_a_what_if_setpoint_does_not_move_the_window_test(self, params):
+        # A resting heater (hp_upper_on at the device minimum) asked about
+        # 108 °F: the window test is the device's setpoint's.
+        r = element_mode(
+            HeaterState(upper_f=100.0, lower_f=95.0),
+            Settings(setpoint_f=140.9, hp_upper_on_f=RESTING),
+            params,
+            mode=2,
+            at=T0,
+            setpoint_f=108.0,
+        )
+        assert r.reachable
+        assert r.plan == mode_plan(
+            "ELECTRIC", 100.0, 95.0, 108.0, params=params.element
+        )
+
+    @pytest.mark.parametrize("mode", [1, 5, 6])
+    def test_a_mode_without_an_element_is_refused(self, params, mode):
+        with pytest.raises(ValueError, match="no element"):
+            element_mode(
+                HeaterState(upper_f=125.0, lower_f=110.0),
+                Settings(setpoint_f=141.8),
+                params,
+                mode=mode,
+                at=T0,
+            )
+
+
+class TestTheDrawRange:
+    def test_a_draw_beyond_the_fitted_volume_says_so(self, params):
+        big = Loads(draws=(Draw(at=at(1.0), gallons=45.0),))
+        r = simulate(_scenario(loads=big), params)
+        assert "draw_out_of_domain" in r.reasons
+
+    def test_one_inside_it_does_not(self, params):
+        small = Loads(draws=(Draw(at=at(1.0), gallons=10.0),))
+        s = _scenario(
+            state=HeaterState(upper_f=140.0, lower_f=139.0),
+            horizon=timedelta(hours=3),
+        )
+        r = simulate(s.model_copy(update={"loads": small}), params)
+        assert "draw_out_of_domain" not in r.reasons
+        assert r.draw_out_of_domain_at is None
+
+    def test_a_range_of_none_is_not_judged(self, params):
+        p = replace(
+            params,
+            draw=replace(
+                params.draw, domain_upper_f=None, domain_volume_gal=None
+            ),
+        )
+        big = Loads(draws=(Draw(at=at(1.0), gallons=45.0),))
+        assert (
+            "draw_out_of_domain"
+            not in simulate(_scenario(loads=big), p).reasons
+        )
+
+
+class TestTheSetpointRange:
+    def test_a_write_outside_it_is_refused(self, params):
+        s = _scenario(
+            commands=Commands(writes=(Write(at=at(1.0), setpoint_f=155.0),))
+        )
+        with pytest.raises(ValueError, match="outside the range"):
+            simulate(s, params)
+
+    def test_a_written_reservation_outside_it_is_refused(self, params):
+        entry = ReservationEntry(
+            week=124, hour=6, minute=0, mode=1, setpoint_half_c=70
+        )
+        s = _scenario(commands=Commands(reservations=(entry,)))
+        with pytest.raises(ValueError, match="reservation 0"):
+            simulate(s, params)
+
+    def test_the_ends_of_it_run(self, params):
+        for f in (104.9, 149.9):
+            s = _scenario(
+                commands=Commands(writes=(Write(at=at(1.0), setpoint_f=f),))
+            )
+            assert simulate(s, params).simulation.points
+
+
+class TestWithoutALowerThreshold:
+    def test_the_upper_trigger_at_a_tou_opening_still_starts_it(self, params):
+        """No ``hp_lower_on`` disables the lower trigger only: a tank far
+        short at a window's opening still starts on its own."""
+        s = _scenario(
+            state=HeaterState(upper_f=120.0, lower_f=115.0),
+            settings=Settings(setpoint_f=140.9, hp_lower_on_f=None),
+            schedules=_peak_now(),
+        )
+        r = simulate(s, params)
+        assert r.heating
+        assert r.heating[0].start.trigger == "upper_at_tou_open"
+        t = standby(
+            s.state,
+            s.environment,
+            Loads(),
+            params,
+            start=T0,
+            until=at(3.0),
+            settings=s.settings,
+            schedules=s.schedules,
+        )
+        assert t.trigger == "upper_at_tou_open"
+        assert t.lower_margin_f is None
+        # Each says it never searched the lower trigger.
+        assert "hp_lower_on_unknown" in r.reasons
+        assert "hp_lower_on_unknown" in t.reasons
+
+
+class _Fixed:
+    """A recovery model that serves a fixed duration."""
+
+    def __init__(self, minutes: float, confidence: float = 1.0) -> None:
+        self.minutes = minutes
+        self.confidence = confidence
+
+    def duration(self, ctx: Any) -> Any:
+        from nwp500.sim.heat_pump_recovery import ModelDuration
+
+        return ModelDuration(
+            minutes=self.minutes,
+            start_hold_minutes=0.0,
+            confidence=self.confidence,
+        )
+
+
+class TestARecoveryModel:
+    def test_a_low_confidence_answer_says_so(self, params):
+        """The source flagged a served recovery under 0.6; the port's
+        floor was 0, so nothing could."""
+        s = _scenario(
+            state=HeaterState(
+                upper_f=128.0, lower_f=112.0, compressor_running=True
+            )
+        )
+        sure = simulate(s, params, recovery=_Fixed(90.0))
+        unsure = simulate(s, params, recovery=_Fixed(90.0, confidence=0.4))
+        assert "recovery_low_confidence" in unsure.reasons
+        assert "recovery_low_confidence" not in sure.reasons
+
+    def test_it_serves_the_next_recoverys_duration(self, params):
+        s = _scenario(
+            state=HeaterState(
+                upper_f=128.0, lower_f=100.0, compressor_running=True
+            )
+        )
+        r = next_recovery(s, params, recovery=_Fixed(90.0))
+        end = r.points[-1][0]
+        assert (end - T0).total_seconds() / 60.0 == pytest.approx(90.0)
+
+    def test_time_to_ready_follows_it(self, params):
+        s = _scenario(
+            state=HeaterState(
+                upper_f=128.0, lower_f=100.0, compressor_running=True
+            )
+        )
+        fast = time_to_ready(s, params, bath_gal=20.0, recovery=_Fixed(60.0))
+        slow = time_to_ready(s, params, bath_gal=20.0, recovery=_Fixed(240.0))
+        assert fast.bath.ready_in_minutes is not None
+        assert slow.bath.ready_in_minutes is not None
+        assert fast.bath.ready_in_minutes < slow.bath.ready_in_minutes
+
+
+class TestTheHeatersOwnTouMarker:
+    """The heater raises its upper start threshold to about the setpoint
+    while a TOU window is in force; the model read that before the
+    schedule."""
+
+    def test_raised_is_in_force(self):
+        from nwp500.sim.api import tou_marked
+
+        assert tou_marked(Settings(setpoint_f=140.9, hp_upper_on_f=RAISED))
+        assert not tou_marked(Settings(setpoint_f=140.9, hp_upper_on_f=RESTING))
+        assert tou_marked(Settings(setpoint_f=140.9)) is None
+
+    def test_it_caps_a_running_recovery_the_schedule_misses(self, params):
+        running = HeaterState(
+            upper_f=128.0, lower_f=100.0, compressor_running=True
+        )
+        plain = next_recovery(_scenario(state=running), params)
+        marked = next_recovery(
+            _scenario(
+                state=running,
+                settings=Settings(
+                    setpoint_f=140.9, hp_lower_on_f=105.0, hp_upper_on_f=RAISED
+                ),
+            ),
+            params,
+        )
+        assert not plain.tou_capped and marked.tou_capped
+
+    def test_resting_lifts_a_scheduled_window_off_it(self, params):
+        """An override: the schedule says peak, the heater does not."""
+        s = _scenario(
+            state=HeaterState(
+                upper_f=128.0, lower_f=100.0, compressor_running=True
+            ),
+            schedules=_peak_now(),
+            settings=Settings(
+                setpoint_f=140.9, hp_lower_on_f=105.0, hp_upper_on_f=RESTING
+            ),
+        )
+        assert not next_recovery(s, params).tou_capped
+
+    def test_readiness_and_the_element_modes_follow_it(self, params):
+        raised = Settings(
+            setpoint_f=140.9, hp_lower_on_f=105.0, hp_upper_on_f=RAISED
+        )
+        r = time_to_ready(_scenario(settings=raised), params)
+        assert not any(d.startswith("tou_window=") for d in r.defaults_used)
+        e = element_mode(
+            HeaterState(upper_f=120.0, lower_f=100.0),
+            raised,
+            params,
+            mode=3,
+            at=T0,
+        )
+        assert e.unreachable_reason == "tou_window_in_force"
+
+    def test_tou_on_with_no_periods_is_unknown(self, params):
+        s = _scenario(schedules=Schedules(tou_enabled=True))
+        assert "tou_schedule_unknown" in simulate(s, params).reasons
+        assert (
+            "tou_schedule_unknown" not in simulate(_scenario(), params).reasons
+        )
+
+
+class TestOneInstallationsTerms:
+    """The replacement review of #162: under ``default_params`` the
+    book, readiness and draw terms are another installation's, and the
+    answers they reach say so; the site's own example is its fit."""
+
+    def test_readiness_says_its_terms_are_not_this_heaters(self, params):
+        from nwp500.sim import default_params
+
+        mine = time_to_ready(_scenario(), default_params(), bath_gal=20.0)
+        assert {"book_uncalibrated", "readiness_uncalibrated"} <= set(
+            mine.reasons
+        )
+        assert "draw_uncalibrated" not in mine.reasons
+        site = time_to_ready(_scenario(), params, bath_gal=20.0)
+        assert not {
+            "book_uncalibrated",
+            "readiness_uncalibrated",
+            "draw_uncalibrated",
+        } & set(site.reasons)
+
+    def test_a_draw_says_its_response_is_not_this_heaters(self):
+        from nwp500.sim import default_params
+
+        s = _scenario(loads=Loads(draws=(Draw(at=at(1), gallons=5.0),)))
+        assert "draw_uncalibrated" in simulate(s, default_params()).reasons
+        quiet = simulate(_scenario(), default_params())
+        assert "draw_uncalibrated" not in quiet.reasons
+
+    def test_a_ready_bath_still_says_its_terms(self):
+        """The re-check of the replacement review: the gallons a ready
+        tank reports rest on the same terms."""
+        from nwp500.sim import default_params
+
+        s = _scenario(
+            state=HeaterState(upper_f=140.5, lower_f=139.6),
+            history=History(compressor_stopped_at=at(-1.0)),
+        )
+        r = time_to_ready(s, default_params(), bath_gal=20.0)
+        assert r.bath.ready
+        assert {"book_uncalibrated", "readiness_uncalibrated"} <= set(r.reasons)
+
+
+NAN = float("nan")
+
+
+class TestTheDefaultAir:
+    """The re-check of the replacement review: an air reading missing
+    throughout runs at the default air, and every answer says so."""
+
+    @pytest.mark.parametrize(
+        "missing",
+        [
+            Environment(ambient_f=NAN, humidity=48.0),
+            Environment(ambient_f=((at(0), NAN), (at(6), NAN)), humidity=48.0),
+        ],
+    )
+    def test_each_answer_says_its_air_was_the_default(self, params, missing):
+        from nwp500.sim import forecast, standby
+        from nwp500.sim.units import DEFAULT_AMBIENT_F
+
+        assert missing.ambient_defaulted
+        given = Environment(ambient_f=DEFAULT_AMBIENT_F, humidity=48.0)
+        assert not given.ambient_defaulted
+        s, g = _scenario(environment=missing), _scenario(environment=given)
+
+        sim = simulate(s, params)
+        assert "ambient_defaulted" in sim.reasons
+        assert sim.simulation.points == simulate(g, params).simulation.points
+        assert "ambient_defaulted" not in simulate(g, params).reasons
+
+        coast = standby(
+            s.state, missing, Loads(), params, start=T0, until=at(6)
+        )
+        assert "ambient_defaulted" in coast.reasons
+        assert (
+            coast.points
+            == standby(
+                s.state, given, Loads(), params, start=T0, until=at(6)
+            ).points
+        )
+
+        ahead = forecast(
+            s.state, s.settings, missing, params, at=T0, target_time=at(6)
+        )
+        assert "ambient_defaulted" in ahead.reasons
+
+        ready = time_to_ready(s, params, bath_gal=20.0)
+        assert "ambient_defaulted" in ready.reasons
+        assert (
+            "ambient_defaulted"
+            not in time_to_ready(g, params, bath_gal=20.0).reasons
+        )

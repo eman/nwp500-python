@@ -798,8 +798,8 @@ Best Practices
 Related Documentation
 =====================
 
-* :doc:`auth_client` - Authentication client
-* :doc:`mqtt_client` - MQTT client for monitoring/control
-* :doc:`models` - Data models (Device, FirmwareInfo, etc.)
-* :doc:`exceptions` - Exception handling
-* :doc:`../protocol/rest_api` - REST API protocol details
+* :doc:`auth_client`: Authentication client
+* :doc:`mqtt_client`: MQTT client for monitoring/control
+* :doc:`models`: Data models (Device, FirmwareInfo, etc.)
+* :doc:`exceptions`: Exception handling
+* :doc:`../protocol/rest_api`: REST API protocol details

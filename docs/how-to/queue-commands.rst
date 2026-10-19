@@ -36,8 +36,8 @@ New fields added to ``MqttConnectionConfig``:
 Configuration Options
 ^^^^^^^^^^^^^^^^^^^^^
 
-- ``enable_command_queue`` - Enable/disable command queuing (default: True)
-- ``max_queued_commands`` - Maximum number of commands to queue (default: 100)
+- ``enable_command_queue``: Enable/disable command queuing (default: True)
+- ``max_queued_commands``: Maximum number of commands to queue (default: 100)
 
 When the queue is full, the oldest command is automatically dropped to make room for new commands.
 
@@ -46,11 +46,11 @@ Queue Management
 
 **New Properties:**
 
-- ``queued_commands_count`` - Get the number of commands currently queued
+- ``queued_commands_count``: Get the number of commands currently queued
 
 **New Methods:**
 
-- ``clear_command_queue()`` - Manually clear all queued commands
+- ``clear_command_queue()``: Manually clear all queued commands
 
 **Internal Components:**
 
@@ -227,24 +227,24 @@ Handle Queue Full Condition
 Benefits
 ========
 
-1. **No Lost Commands** - Commands sent during disconnection are preserved
-2. **Automatic Recovery** - Works with auto-reconnection
-3. **Transparent** - Works automatically without user intervention
-4. **Configurable** - Adjust queue size or disable if needed
-5. **Monitorable** - Query queue status at any time
-6. **Efficient** - FIFO queue with O(1) operations using deque
-7. **Safe** - Queue limits prevent memory issues
-8. **Order Preserved** - Commands sent in original order
+1. **No Lost Commands**: Commands sent during disconnection are preserved
+2. **Automatic Recovery**: Works with auto-reconnection
+3. **Transparent**: Works automatically without user intervention
+4. **Configurable**: Adjust queue size or disable if needed
+5. **Monitorable**: Query queue status at any time
+6. **Efficient**: FIFO queue with O(1) operations using deque
+7. **Safe**: Queue limits prevent memory issues
+8. **Order Preserved**: Commands sent in original order
 
 Design Philosophy
 =================
 
 The command queue feature is designed with reliability and ease of use in mind:
 
-- **Enabled by default** - Most users want commands preserved during network issues
-- **Automatic operation** - No manual queue management required
-- **Configurable** - Can be disabled or tuned for specific use cases
-- **Integrated** - Works with automatic reconnection
+- **Enabled by default**: Most users want commands preserved during network issues
+- **Automatic operation**: No manual queue management required
+- **Configurable**: Can be disabled or tuned for specific use cases
+- **Integrated**: Works with automatic reconnection
 
 Use Cases
 =========
@@ -297,16 +297,16 @@ Technical Notes
 See Also
 ========
 
-- :doc:`../reference/python_api/mqtt_client` - MQTT client documentation
-- :doc:`../reference/python_api/events` - Event emitter documentation
-- :doc:`../reference/python_api/auth_client` - Authentication and tokens
+- :doc:`../reference/python_api/mqtt_client`: MQTT client documentation
+- :doc:`../reference/python_api/events`: Event emitter documentation
+- :doc:`../reference/python_api/auth_client`: Authentication and tokens
 
 Example Code
 ============
 
 Complete working examples can be found in the ``examples/`` directory:
 
-- ``examples/command_queue_demo.py`` - Comprehensive command queue demonstration
+- ``examples/command_queue_demo.py``: Command queue demonstration
 
 .. note::
    The command queue feature works hand-in-hand with automatic reconnection. When disconnection occurs, commands are queued automatically and sent when the connection is restored. No user intervention is required.

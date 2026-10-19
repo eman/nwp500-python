@@ -3,13 +3,12 @@ Unknown Values
 ==============
 
 The device sometimes declines to report a field. This page records what
-the protocol actually does about that, which fields are affected, and -
-just as importantly - which fields look affected but are not.
+the protocol does about that, which fields are affected, and which
+fields look affected but are not.
 
-The short answer: **there is no single rule about zero.** Zero is a
+**There is no single rule about zero.** Zero is a
 reserved sentinel in some field families, a real value in others, and
-carries no special meaning at all for temperatures. Earlier attempts to
-apply one rule library-wide produced bugs in both directions.
+carries no special meaning at all for temperatures.
 
 .. contents::
    :local:
@@ -19,7 +18,7 @@ apply one rule library-wide produced bugs in both directions.
 Where the evidence comes from
 =============================
 
-Navien's own Android client, NaviLink, was decompiled - version 2.03.00,
+Navien's own Android client, NaviLink, was decompiled: version 2.03.00,
 versionCode 141, published March 2026, and re-checked against 2.04.00,
 versionCode 201, published October 2026, which changed nothing in the
 NWP500 protocol. The app is a first-party decoder
@@ -47,9 +46,9 @@ generic on/off flag is declared:
        ON(2, "ON");
    }
 
-Zero is reserved and real values start at 1. This is not an accident of
-one enum - eight of the app's enums do it, and two render their zero as
-something a user would read as "no data":
+Zero is reserved and real values start at 1. Eight of the app's enums do
+this, and two render their zero as something a user would read as
+"no data":
 
 .. list-table::
    :header-rows: 1
@@ -84,8 +83,8 @@ something a user would read as "no data":
      - "Unknown"
 
 
-But in five other enums zero is real
-------------------------------------
+Enums where zero is a value
+---------------------------
 
 The rule is not global, and this is where a blanket converter goes wrong:
 
@@ -96,7 +95,7 @@ The rule is not global, and this is where a blanket converter goes wrong:
    * - App enum
      - Zero means
    * - ``MgppOperationMode``
-     - ``STANDBY`` - a real, common state
+     - ``STANDBY``, a real, common state
    * - ``OperationMode``
      - ``STANDBY``
    * - ``HydroOperationMode``
@@ -104,7 +103,7 @@ The rule is not global, and this is where a blanket converter goes wrong:
    * - ``HydroFsmState``
      - ``INIT``
    * - ``FilterChange``
-     - ``NORMAL`` - filter is fine
+     - ``NORMAL``: filter is fine
 
 A device sitting in standby reports 0 constantly. Treating that as
 "unknown" would blank the operating mode most of the time.
@@ -138,7 +137,7 @@ Capability flags: zero means "not fitted"
 =========================================
 
 The DID/feature ``Use`` flags are a third case, and the app treats them
-differently from status flags - it does not decode them through an enum
+differently from status flags: it does not decode them through an enum
 at all, and checks them directly:
 
 .. code:: java
@@ -174,25 +173,18 @@ been guessed wrong before.
 So a temperature of zero means zero. The library does not map any
 temperature field to ``None``.
 
-.. warning::
-   Do not add zero-as-none to a temperature field on the strength of it
-   "always reading 0" in a capture. Ambient and tank temperatures can
-   legitimately reach 0 degC, and a heat pump in a cold garage will get
-   there. A previous attempt did exactly this and had to be reverted after
-   it reported working sensors as missing during cold-weather operation.
-
 
 Absent and zero are indistinguishable
 =====================================
 
 All 126 numeric fields in the app's status model are declared as
-primitive ``int`` - there is not a single boxed ``Integer`` among them. A
+primitive ``int``, with no boxed ``Integer`` among them. A
 field missing from the JSON therefore deserializes to ``0``, and the
 vendor's own client cannot tell "not reported" from "reported as zero"
 either.
 
 There is consequently no protocol-level concept of "unreported" to
-recover. Where a field is genuinely absent from the payload, that is
+recover. Where a field is absent from the payload, that is
 visible to this library through Pydantic's own missing-field handling,
 not through any sentinel.
 
@@ -201,7 +193,7 @@ Fields the app never displays
 =============================
 
 Several fields that look like natural candidates for N/A handling are
-simply not rendered by the app for this device type. They exist as
+not rendered by the app for this device type. They exist as
 getters on the status model with no UI call site:
 
 ``outsideTemperature``, ``mixingRate``, ``currentInletTemperature``,
@@ -225,7 +217,7 @@ has been used.
 
 The one place the app does treat a numeric zero as "not configured" is
 ``airFilterAlarmPeriod``, and it handles it by substituting a different
-*message* ("filter setup needed") rather than blanking a value - a
+*message* ("filter setup needed") rather than blanking a value: a
 per-field UI decision, not a converter-level rule.
 
 
@@ -246,7 +238,7 @@ same thing:
 .. code:: python
 
    # Before: True for both OFF and unknown
-   # After:  True for both OFF and unknown - but now you can tell them apart
+   # After:  True for both OFF and unknown, but now you can tell them apart
    if not status.comp_use:
        ...
 
@@ -267,6 +259,6 @@ The CLI renders these as ``Unknown`` rather than ``No``.
 See also
 ========
 
-- :doc:`tank-energy` - the other case where the protocol's own names
+- :doc:`tank-energy`: the other case where the protocol's own names
   mislead, worked out from the same teardown
-- :doc:`../reference/protocol/data_conversions` - protocol field conversions
+- :doc:`../reference/protocol/data_conversions`: protocol field conversions

@@ -176,8 +176,8 @@ class ReservationSchedule(NavienBaseModel):
         order a program was written in, so entries are sorted by their raw
         field tuple. Two schedules holding the same reservations return
         equal (and equally hashable) results from this method regardless of
-        entry order — the intended way to compare a desired program against
-        a device read-back (see
+        entry order. This is the intended way to compare a desired program
+        against a device read-back (see
         :func:`nwp500.reservations.update_reservations_confirmed`).
         """
         return (

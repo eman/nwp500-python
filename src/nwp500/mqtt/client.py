@@ -118,7 +118,7 @@ class NavienMqttClient(
     Reconnection behavior can be customized via MqttConnectionConfig.
 
     When enabled, the command queue stores commands sent while disconnected
-    and automatically sends them when the connection is restored. This ensures
+    and automatically sends them when the connection is restored, so
     commands are not lost during temporary network interruptions.
 
     Example (Traditional Callbacks)::
@@ -405,7 +405,7 @@ class NavienMqttClient(
         # previous subscriptions have been dropped server-side.  We must
         # re-establish them before any device data can flow.  This covers the
         # common case where the AWS IoT SDK auto-reconnects internally before
-        # the MqttReconnectionHandler fires its own reconnect path — in that
+        # the MqttReconnectionHandler fires its own reconnect path. In that
         # scenario the reconnect handler sees _connected==True and exits early,
         # so resubscribe_all() would never be called without this block.
         #
@@ -460,7 +460,7 @@ class NavienMqttClient(
         Handle clean session reconnection with ordered resubscription.
 
         When session_present=False (clean session), the broker has dropped all
-        subscriptions. This method ensures subscriptions are restored BEFORE
+        subscriptions. This method restores subscriptions BEFORE
         sending any queued commands, preventing commands from being processed
         before their subscriptions are re-established.
         """
@@ -1125,7 +1125,7 @@ class NavienMqttClient(
         future: asyncio.Future[DeviceFeature] = loop.create_future()
 
         def on_feature(feature: DeviceFeature) -> None:
-            # Called from AWS SDK thread — schedule onto the event loop
+            # Called from AWS SDK thread: schedule onto the event loop
             # thread-safely. The done() check is inside the scheduled
             # callback so it runs on the event loop thread, eliminating
             # the race between the check and set_result.

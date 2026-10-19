@@ -115,11 +115,11 @@ Example Conversion Flow
 Field Ordering Requirements
 ---------------------------
 
-**IMPORTANT**: The ``temperature_type`` field MUST be defined before all temperature-dependent fields in the model.
+The ``temperature_type`` field must be defined before all temperature-dependent fields in the model.
 
 Pydantic's ``WrapValidator`` accesses sibling fields through ``ValidationInfo.data``, which only includes fields processed earlier. If ``temperature_type`` is defined after temperature fields, the converter won't find it and will default to Fahrenheit.
 
-This is correctly implemented in the library - do not reorder fields in ``DeviceStatus`` or ``DeviceFeature`` classes.
+Do not reorder the fields in ``DeviceStatus`` or ``DeviceFeature``.
 
 Supported Dynamic Fields
 ========================
@@ -127,7 +127,7 @@ Supported Dynamic Fields
 Temperature Fields (42 total)
 -----------------------------
 
-**DeviceStatus** - Half-degree Celsius encoding (raw value ÷ 2 = °C)
+**DeviceStatus**: Half-degree Celsius encoding (raw value ÷ 2 = °C)
 
 - ``dhw_temperature``
 - ``dhw_temperature_setting``
@@ -148,17 +148,17 @@ Temperature Fields (42 total)
 - ``recirc_faucet_temperature``
 - ``current_inlet_temperature``
 
-**DeviceStatus** - Deci-degree encoding (raw value ÷ 10 = °C)
+**DeviceStatus**: Deci-degree encoding (raw value ÷ 10 = °C)
 
 - ``tank_upper_temperature``
 - ``tank_lower_temperature``
 - ``external_temp_sensor``
 
-**DeviceStatus** - Raw Celsius encoding (device-specific)
+**DeviceStatus**: Raw Celsius encoding (device-specific)
 
 - ``outside_temperature``
 
-**DeviceStatus** - Differential temperature (raw value ÷ 10 = °C)
+**DeviceStatus**: Differential temperature (raw value ÷ 10 = °C)
 
 - ``hp_upper_on_diff_temp_setting``
 - ``hp_upper_off_diff_temp_setting``
@@ -169,7 +169,7 @@ Temperature Fields (42 total)
 - ``he_lower_on_diff_temp_setting``
 - ``he_lower_off_diff_temp_setting``
 
-**DeviceFeature** - Temperature configuration limits (raw value ÷ 2 = °C)
+**DeviceFeature**: Temperature configuration limits (raw value ÷ 2 = °C)
 
 - ``dhw_temperature_min``
 - ``dhw_temperature_max``
@@ -183,8 +183,8 @@ Flow Rate Fields (2 total)
 
 Converts between LPM (Liters Per Minute) and GPM (Gallons Per Minute)
 
-- ``current_dhw_flow_rate`` - Current DHW flow rate
-- ``recirc_dhw_flow_rate`` - Recirculation DHW flow rate
+- ``current_dhw_flow_rate``: Current DHW flow rate
+- ``recirc_dhw_flow_rate``: Recirculation DHW flow rate
 
 Conversion formula: ``1 GPM = 3.785 LPM``
 
@@ -193,8 +193,8 @@ Volume Fields (1 total)
 
 Converts between Liters and Gallons
 
-- ``cumulated_dhw_flow_rate`` - Cumulative water usage
-- ``volume_code`` (DeviceFeature) - Tank capacity
+- ``cumulated_dhw_flow_rate``: Cumulative water usage
+- ``volume_code`` (DeviceFeature): Tank capacity
 
 Conversion formula: ``1 gallon = 3.785 liters``
 
@@ -299,10 +299,10 @@ Volume Conversions
 Temperature Formula Type (temp_formula_type)
 =============================================
 
-**Important**: The ``temp_formula_type`` field is independent of ``temperature_type``.
+The ``temp_formula_type`` field is independent of ``temperature_type``.
 
-- **temperature_type**: User preference (Celsius or Fahrenheit) - controls WHICH unit system is used
-- **temp_formula_type**: Device model configuration (ASYMMETRIC or STANDARD) - affects rounding when converting Fahrenheit
+- **temperature_type**: User preference (Celsius or Fahrenheit); controls which unit system is used
+- **temp_formula_type**: Device model configuration (ASYMMETRIC or STANDARD); affects rounding when converting Fahrenheit
 
 **Scenario**: Device with ASYMMETRIC formula in Celsius mode
 
@@ -457,7 +457,7 @@ Issue: A field shows the wrong unit (e.g., °F when device is in Celsius mode)
 Solution:
 1. Verify the device's ``temperature_type`` is set correctly
 2. Check that status is being updated with latest device data
-3. Ensure no local caching is preventing updates
+3. Check that no local caching is preventing updates
 4. Call ``get_field_unit()`` to verify correct unit resolution
 
 .. code-block:: python
@@ -656,7 +656,7 @@ This feature represents a breaking change from previous versions where all value
 See Also
 ========
 
-- :doc:`../reference/python_api/models` - Complete model reference
-- :doc:`../reference/enumerations` - TemperatureType and TemperatureFormulaType enumerations
-- :doc:`../reference/protocol/data_conversions` - Raw protocol data formats
-- :doc:`home-assistant` - Home Assistant integration guide
+- :doc:`../reference/python_api/models`: Complete model reference
+- :doc:`../reference/enumerations`: TemperatureType and TemperatureFormulaType enumerations
+- :doc:`../reference/protocol/data_conversions`: Raw protocol data formats
+- :doc:`home-assistant`: Home Assistant integration guide

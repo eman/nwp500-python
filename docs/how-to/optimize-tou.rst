@@ -10,7 +10,7 @@ Time of Use pricing enables:
 
 * **Cost optimization**: Heat water during off-peak hours when electricity rates are lower
 * **Demand response**: Reduce energy consumption during peak rate periods
-* **Custom schedules**: Configure up to 16 different time periods with varying rates
+* **Custom schedules**: Configure many time periods with varying rates (a device has held at least 20)
 * **Seasonal support**: Different schedules for different months of the year
 * **Weekday/weekend support**: Separate schedules for weekdays and weekends
 
@@ -319,7 +319,7 @@ Configures the TOU schedule directly on the device via MQTT.
 
 * ``device``: Device object from API
 * ``controller_serial_number``: Controller serial number (obtain via device info)
-* ``periods``: List of TOU period dictionaries (up to 16 periods)
+* ``periods``: List of TOU period dictionaries (a device has held at least 20 periods)
 * ``enabled``: Whether to enable TOU scheduling (default: ``True``)
 
 MQTT: Enable/Disable TOU
@@ -366,7 +366,7 @@ schedule with its pricing intervals.
 .. note::
 
    There is no MQTT read for the TOU schedule. ``ctrl/tou/rd`` with
-   ``CommandCode.TOU_RESERVATION`` is the *write* - it is what
+   ``CommandCode.TOU_RESERVATION`` is the *write*: it is what
    :meth:`~nwp500.NavienMqttClient.configure_tou_schedule` publishes, and what
    the vendor app publishes from its TOU editor. The device replies on
    ``cmd/{deviceType}/{clientId}/res/tou/rd`` to confirm such a write; it does
@@ -509,7 +509,7 @@ Usage Examples
 Example 1: Simple TOU Schedule
 ------------------------------
 
-Configure two rate periods - off-peak and peak pricing:
+Configure two rate periods, off-peak and peak:
 
 .. code-block:: python
 
@@ -937,7 +937,7 @@ Best Practices
 
 2. **Limit number of periods**
 
-   The device supports up to 16 TOU periods. Design schedules efficiently to stay within this limit.
+   The device's period limit is not known; one unit has held 20 TOU periods, and more were not tried. Design schedules efficiently.
 
 3. **Use appropriate decimal precision**
 
@@ -945,7 +945,7 @@ Best Practices
 
 4. **Validate overlapping periods**
 
-   Ensure time periods don't overlap within the same day and month combination.
+   Time periods must not overlap within the same day and month combination.
 
 5. **Test with simulation**
 
@@ -962,27 +962,27 @@ Best Practices
 Limitations
 -----------
 
-* Maximum 16 TOU periods per configuration
+* Period limit unknown; at least 20 TOU periods per configuration have been held
 * Time resolution limited to minutes (no seconds)
 * Price encoding limited by decimal point precision
 * Cannot specify different rates for individual days within a period
-* No support for variable rate structures (e.g., tiered rates) - only flat rate per period
+* No support for variable rate structures (e.g., tiered rates): one flat rate per period
 
 Further Reading
 ---------------
 
-* :doc:`../reference/python_api/api_client` - API client documentation and ``get_tou_info()`` method
-* :doc:`../reference/python_api/mqtt_client` - MQTT client and TOU configuration methods
-* :doc:`../reference/protocol/mqtt_protocol` - MQTT message formats including TOU commands
-* :doc:`../reference/protocol/device_status` - Device status fields including ``touStatus``
+* :doc:`../reference/python_api/api_client`: API client documentation and ``get_tou_info()`` method
+* :doc:`../reference/python_api/mqtt_client`: MQTT client and TOU configuration methods
+* :doc:`../reference/protocol/mqtt_protocol`: MQTT message formats including TOU commands
+* :doc:`../reference/protocol/device_status`: Device status fields including ``touStatus``
 * `OpenEI Utility Rates API <https://openei.org/services/doc/rest/util_rates/?version=7>`__ - Official OpenEI API documentation
 * `OpenEI IURDB <https://apps.openei.org/IURDB/>`__ - Interactive Utility Rate Database
 
 Related Examples
 ----------------
 
-* ``examples/tou_schedule_example.py`` - Complete working example of manual TOU configuration
-* ``examples/tou_openei_example.py`` - Retrieve TOU schedules from OpenEI API and configure device
+* ``examples/tou_schedule_example.py``: Complete working example of manual TOU configuration
+* ``examples/tou_openei_example.py``: Retrieve TOU schedules from OpenEI API and configure device
 
 CLI Commands
 ~~~~~~~~~~~~

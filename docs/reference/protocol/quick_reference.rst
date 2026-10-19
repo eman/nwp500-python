@@ -2,7 +2,7 @@ Protocol Quick Reference
 ========================
 
 This document serves as a "cheat sheet" for developers working with the Navien
-device protocol. It documents the non-standard boolean logic, key enumerations,
+device protocol. It documents the non-standard boolean logic, the enumerations,
 and common command codes used throughout the system.
 
 Boolean Values

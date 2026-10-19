@@ -18,13 +18,13 @@ Overview
 
 The CLI supports:
 
-* **Real-time monitoring** - Continuous device status updates (logs to CSV)
-* **Device control** - Power, mode, temperature, vacation mode
-* **Device information** - Status, firmware, features, serial number
-* **Instant hot water** - Trigger hot button for immediate hot water
-* **Energy management** - Historical usage data, demand response, TOU settings
-* **Scheduling** - Reservations and time-of-use configuration
-* **Maintenance** - Air filter reset, recirculation control, water program mode
+* **Real-time monitoring**: Continuous device status updates (logs to CSV)
+* **Device control**: Power, mode, temperature, vacation mode
+* **Device information**: Status, firmware, features, serial number
+* **Instant hot water**: Trigger hot button for immediate hot water
+* **Energy management**: Historical usage data, demand response, TOU settings
+* **Scheduling**: Reservations and time-of-use configuration
+* **Maintenance**: Air filter reset, recirculation control, water program mode
 
 Authentication
 ==============
@@ -234,10 +234,10 @@ Set operation mode.
 
 **Available Modes:**
 
-* ``heat-pump`` - Heat pump only (1)
-* ``electric`` - Electric heating only (2)
-* ``energy-saver`` - Hybrid/balanced mode (3) **recommended**
-* ``high-demand`` - Maximum heating capacity (4)
+* ``heat-pump``: Heat pump only (1)
+* ``electric``: Electric heating only (2)
+* ``energy-saver``: Hybrid/balanced mode (3) **recommended**
+* ``high-demand``: Maximum heating capacity (4)
 
 For vacation mode use the ``vacation`` command (it requires a day count);
 to power the unit off use the ``power`` command.
@@ -346,10 +346,10 @@ Set recirculation pump mode.
 
 **Available Modes:**
 
-* ``1`` - ALWAYS_ON (pump always running)
-* ``2`` - WEEKLY (runs on the weekly recirculation schedule)
-* ``3`` - HOT_BUTTON_ONLY (runs only when the hot button is pressed)
-* ``4`` - OFF (no recirculation)
+* ``1``: ALWAYS_ON (pump always running)
+* ``2``: WEEKLY (runs on the weekly recirculation schedule)
+* ``3``: HOT_BUTTON_ONLY (runs only when the hot button is pressed)
+* ``4``: OFF (no recirculation)
 
 **Output:** Confirmation message and updated device status.
 
@@ -916,7 +916,7 @@ Best Practices
 Related Documentation
 =====================
 
-* :doc:`auth_client` - Python authentication API
-* :doc:`api_client` - Python REST API
-* :doc:`mqtt_client` - Python MQTT API
-* :doc:`../../how-to/auto-recovery` - Connection recovery and resilience
+* :doc:`auth_client`: Python authentication API
+* :doc:`api_client`: Python REST API
+* :doc:`mqtt_client`: Python MQTT API
+* :doc:`../../how-to/auto-recovery`: Connection recovery and resilience

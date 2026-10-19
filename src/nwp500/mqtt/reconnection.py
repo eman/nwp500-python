@@ -323,7 +323,7 @@ class MqttReconnectionHandler:
                         )
 
             except asyncio.CancelledError:
-                # Re-raise so the task is actually marked as cancelled;
+                # Re-raise so the task is marked as cancelled;
                 # swallowing it would let execution continue past the loop
                 # (e.g. emitting reconnection_failed during a manual
                 # disconnect) and break cancellation semantics.

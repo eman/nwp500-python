@@ -575,7 +575,7 @@ class MqttSubscriptionManager:
         self._subscriptions.clear()
         self._message_handlers.clear()
 
-        # Re-establish each subscription — one network call per topic,
+        # Re-establish each subscription: one network call per topic,
         # regardless of how many handlers are registered for it.
         failed_subscriptions: set[str] = set()
         for topic, qos in subscriptions_to_restore:

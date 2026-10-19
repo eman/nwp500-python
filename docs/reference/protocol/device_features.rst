@@ -51,17 +51,17 @@ The DeviceFeature data contains device capabilities, configuration, and firmware
    * - ``controllerSwVersion``
      - int
      - None
-     - Main controller firmware version - controls heat pump, heating elements, and system logic
+     - Main controller firmware version: controls heat pump, heating elements, and system logic
      - None
    * - ``panelSwVersion``
      - int
      - None
-     - Front panel display firmware version - manages LCD display and user interface
+     - Front panel display firmware version: manages LCD display and user interface
      - None
    * - ``wifiSwVersion``
      - int
      - None
-     - WiFi module firmware version - handles WiFi app connectivity and cloud communication
+     - WiFi module firmware version: handles WiFi app connectivity and cloud communication
      - None
    * - ``controllerSwCode``
      - int
@@ -86,27 +86,27 @@ The DeviceFeature data contains device capabilities, configuration, and firmware
    * - ``powerUse``
      - int
      - Boolean
-     - Power control capability (2=supported, 1=not supported) - can be turned on/off via controls (always 2=supported for NWP500)
+     - Power control capability (2=supported, 1=not supported): can be turned on/off via controls (always 2=supported for NWP500)
      - None
    * - ``holidayUse``
      - int
      - Boolean
-     - Vacation mode support (2=supported, 1=not supported) - energy-saving mode for 1-99 days with minimal operations
+     - Vacation mode support (2=supported, 1=not supported): energy-saving mode for 1-99 days with minimal operations
      - None
    * - ``programReservationUse``
      - int
      - Boolean
-     - Scheduled operation support (2=supported, 1=not supported) - programmable heating schedules and timers
+     - Scheduled operation support (2=supported, 1=not supported): programmable heating schedules and timers
      - None
    * - ``dhwUse``
      - int
      - Boolean
-     - Domestic hot water functionality (2=supported, 1=not supported) - primary function of water heater (always 2=supported)
+     - Domestic hot water functionality (2=supported, 1=not supported): primary function of water heater (always 2=supported)
      - None
    * - ``dhwTemperatureSettingUse``
      - int
      - Boolean
-     - Temperature adjustment capability (2=supported, 1=not supported) - user can modify target temperature
+     - Temperature adjustment capability (2=supported, 1=not supported): user can modify target temperature
      - None
    * - ``dhwTemperatureMin``
      - int
@@ -116,22 +116,22 @@ The DeviceFeature data contains device capabilities, configuration, and firmware
    * - ``dhwTemperatureMax``
      - int
      - °F
-     - Maximum DHW temperature setting: 150°F (65.5°C) - scald protection upper limit
+     - Maximum DHW temperature setting: 150°F (65.5°C): scald protection upper limit
      - HalfCelsiusToF
    * - ``smartDiagnosticUse``
      - int
      - Boolean
-     - Self-diagnostic capability (2=supported, 1=not supported) - 10-minute startup diagnostic, error code system
+     - Self-diagnostic capability (2=supported, 1=not supported): 10-minute startup diagnostic, error code system
      - None
    * - ``wifiRssiUse``
      - int
      - Boolean
-     - WiFi signal monitoring (2=supported, 1=not supported) - reports signal strength in dBm for connectivity diagnostics
+     - WiFi signal monitoring (2=supported, 1=not supported): reports signal strength in dBm for connectivity diagnostics
      - None
    * - ``temperatureType``
      - TemperatureUnit
      - Enum
-     - Default temperature unit preference (CELSIUS=1, FAHRENHEIT=2) - factory set to Fahrenheit for USA
+     - Default temperature unit preference (CELSIUS=1, FAHRENHEIT=2): factory set to Fahrenheit for USA
      - Enum
    * - ``tempFormulaType``
      - int
@@ -141,72 +141,72 @@ The DeviceFeature data contains device capabilities, configuration, and firmware
    * - ``energyUsageUse``
      - int
      - Boolean
-     - Energy monitoring support (2=supported, 1=not supported) - tracks kWh consumption for heat pump and electric elements
+     - Energy monitoring support (2=supported, 1=not supported): tracks kWh consumption for heat pump and electric elements
      - None
    * - ``freezeProtectionUse``
      - int
      - Boolean
-     - Freeze protection capability (2=supported, 1=not supported) - automatic heating when tank drops below threshold
+     - Freeze protection capability (2=supported, 1=not supported): automatic heating when tank drops below threshold
      - None
    * - ``freezeProtectionTempMin``
      - int
      - °F
-     - Minimum freeze protection threshold: 43°F (6°C) - factory default activation temperature
+     - Minimum freeze protection threshold: 43°F (6°C): factory default activation temperature
      - HalfCelsiusToF
    * - ``freezeProtectionTempMax``
      - int
      - °F
-     - Maximum freeze protection threshold: typically 65°F - user-adjustable upper limit
+     - Maximum freeze protection threshold: typically 65°F: user-adjustable upper limit
      - HalfCelsiusToF
    * - ``mixingValueUse``
      - int
      - Boolean
-     - Thermostatic mixing valve support (2=supported, 1=not supported) - for temperature limiting at point of use
+     - Thermostatic mixing valve support (2=supported, 1=not supported): for temperature limiting at point of use
      - None
    * - ``drSettingUse``
      - int
      - Boolean
-     - Demand Response support (2=supported, 1=not supported) - CTA-2045 compliance for utility load management
+     - Demand Response support (2=supported, 1=not supported): CTA-2045 compliance for utility load management
      - None
    * - ``antiLegionellaSettingUse``
      - int
      - Boolean
-     - Anti-Legionella function (2=supported, 1=not supported) - periodic heating to 140°F (60°C) to prevent bacteria
+     - Anti-Legionella function (2=supported, 1=not supported): periodic heating to 140°F (60°C) to prevent bacteria
      - None
    * - ``hpwhUse``
      - int
      - Boolean
-     - Heat Pump Water Heater mode (2=supported, 1=not supported) - primary efficient heating method using refrigeration cycle
+     - Heat Pump Water Heater mode (2=supported, 1=not supported): primary efficient heating method using refrigeration cycle
      - None
    * - ``dhwRefillUse``
      - int
      - Boolean
-     - Tank refill detection (2=supported, 1=not supported) - monitors for "dry fire" conditions during refill
+     - Tank refill detection (2=supported, 1=not supported): monitors for "dry fire" conditions during refill
      - None
    * - ``ecoUse``
      - int
      - Boolean
-     - ECO safety switch (2=supported, 1=not supported) - Energy Cut Off high-temperature limit protection
+     - ECO safety switch (2=supported, 1=not supported): Energy Cut Off high-temperature limit protection
      - None
    * - ``electricUse``
      - int
      - Boolean
-     - Electric-only mode (2=supported, 1=not supported) - heating element only operation for maximum recovery speed
+     - Electric-only mode (2=supported, 1=not supported): heating element only operation for maximum recovery speed
      - None
    * - ``heatpumpUse``
      - int
      - Boolean
-     - Heat pump only mode (2=supported, 1=not supported) - most efficient operation using only refrigeration cycle
+     - Heat pump only mode (2=supported, 1=not supported): most efficient operation using only refrigeration cycle
      - None
    * - ``energySaverUse``
      - int
      - Boolean
-     - Energy Saver mode (2=supported, 1=not supported) - hybrid efficiency mode balancing speed and efficiency (default)
+     - Energy Saver mode (2=supported, 1=not supported): hybrid efficiency mode balancing speed and efficiency (default)
      - None
    * - ``highDemandUse``
      - int
      - Boolean
-     - High Demand mode (2=supported, 1=not supported) - hybrid boost mode prioritizing fast recovery over efficiency
+     - High Demand mode (2=supported, 1=not supported): hybrid boost mode prioritizing fast recovery over efficiency
      - None
 
 Operation Mode Support Matrix
@@ -225,23 +225,23 @@ The NWP500 supports five primary operation modes as indicated by the capability 
    * - 1
      - Heat Pump Only
      - ``heatpumpUse``
-     - **Most Efficient** - Uses only the heat pump compressor and evaporator. Longest recovery time but highest energy efficiency. Performance varies with ambient temperature and humidity.
+     - **Most Efficient**: Uses only the heat pump compressor and evaporator. Longest recovery time but highest energy efficiency. Performance varies with ambient temperature and humidity.
    * - 2
      - Electric Only
      - ``electricUse``
-     - **Least Efficient, Shortest Recovery** - Uses only the 3,755 W upper and lower heating elements, which do not run simultaneously. Reverts to the previous mode after 72 hours.
+     - **Least Efficient, Shortest Recovery**: Uses only the 3,755 W upper and lower heating elements, which do not run simultaneously. Reverts to the previous mode after 72 hours.
    * - 3
      - Energy Saver (Default)
      - ``energySaverUse``
-     - **Balanced Efficiency** - Hybrid mode: the heat pump is the primary source and the elements shorten recovery. The factory default.
+     - **Balanced Efficiency**: Hybrid mode: the heat pump is the primary source and the elements shorten recovery. The factory default.
    * - 4
      - High Demand
      - ``highDemandUse``
-     - **Fastest Hybrid Recovery** - Hybrid mode that uses the elements more often than Energy Saver to shorten recovery further.
+     - **Fastest Hybrid Recovery**: Hybrid mode that uses the elements more often than Energy Saver to shorten recovery further.
    * - 5
      - Vacation
      - ``holidayUse``
-     - **Maximum Energy Savings** - Suspends normal heating for 1-99 days. Only freeze protection and anti-seize operations continue. Heating resumes 9 hours before vacation end.
+     - **Maximum Energy Savings**: Suspends normal heating for 1-99 days. Only freeze protection and anti-seize operations continue. Heating resumes 9 hours before vacation end.
 
 Hardware Specifications from Manual Cross-Reference
 ---------------------------------------------------
@@ -301,14 +301,13 @@ Temperature Range Validation
 
 The reported temperature ranges align with official specifications and use the same conversion patterns as DeviceStatus fields:
 
-* **DHW Range**: 95°F to 150°F (factory default: 120°F for safety) - uses HalfCelsiusToF conversion
-* **Freeze Protection**: Activates at 43°F, prevents tank freezing - uses HalfCelsiusToF conversion
+* **DHW Range**: 95°F to 150°F (factory default: 120°F for safety); uses HalfCelsiusToF conversion
+* **Freeze Protection**: Activates at 43°F, prevents tank freezing; uses HalfCelsiusToF conversion
 * **Anti-Legionella**: Heats to 140°F at programmed intervals (requires mixing valve)
 * **Scald Protection**: Built-in limits with recommendation for thermostatic mixing valves
 
 **Conversion Pattern Consistency**: Temperature fields in DeviceFeature use the same HalfCelsiusToF
-conversion formula as corresponding fields in DeviceStatus, ensuring consistent temperature 
-handling across all device data structures.
+conversion formula as corresponding fields in DeviceStatus.
 
 **HalfCelsiusToF Formula**: ``fahrenheit = (raw_value / 2.0) * 9/5 + 32``
 
@@ -376,7 +375,7 @@ Usage Example
 See Also
 --------
 
-* :doc:`device_status` - Real-time device status field reference
-* :doc:`../python_api/mqtt_client` - MQTT client usage guide for device communication
-* :doc:`../python_api/api_client` - REST API client for device management
-* :doc:`error_codes` - Complete error code reference for diagnostics
+* :doc:`device_status`: Real-time device status field reference
+* :doc:`../python_api/mqtt_client`: MQTT client usage guide for device communication
+* :doc:`../python_api/api_client`: REST API client for device management
+* :doc:`error_codes`: Complete error code reference for diagnostics

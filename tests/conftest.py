@@ -1,5 +1,6 @@
 """Test fixtures for nwp500."""
 
+import logging
 from typing import Any
 
 import pytest
@@ -118,3 +119,21 @@ def device_status_dict() -> dict[str, Any]:
         "freezeProtectionTempMin": 86,
         "freezeProtectionTempMax": 130,
     }
+
+
+@pytest.fixture(autouse=True)
+def _restore_logging():
+    """Undo the logging setup the CLI group performs on every invocation.
+
+    ``cli()`` calls ``logging.basicConfig`` and pins the ``nwp500`` logger
+    to the verbosity flags, which would otherwise leak into later tests -
+    ``tests/test_utils.py`` asserts on DEBUG records and sees none once
+    a module that invokes the CLI has run.
+    """
+    nwp500_logger = logging.getLogger("nwp500")
+    levels = (logging.root.level, nwp500_logger.level)
+    handlers = list(logging.root.handlers)
+    yield
+    logging.root.setLevel(levels[0])
+    nwp500_logger.setLevel(levels[1])
+    logging.root.handlers[:] = handlers

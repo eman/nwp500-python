@@ -97,8 +97,10 @@ auth client:
         devices = await api.list_devices()  # Uses shared session
         await mqtt.connect()  # Uses shared session
         
-        # Devices remain current even when using different clients
-        status = devices[0].status
+        # The device list comes over REST; its status comes over MQTT,
+        # on the same session
+        await mqtt.subscribe_device_status(devices[0], print)
+        await mqtt.request_device_status(devices[0])
 
 
 Token Management

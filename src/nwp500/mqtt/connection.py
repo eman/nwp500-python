@@ -145,7 +145,7 @@ class MqttConnection:
         """Await a broker acknowledgement future with a timeout.
 
         The awscrt future is shielded so cancellation (or a timeout) never
-        propagates into the SDK future — the underlying operation completes
+        propagates into the SDK future: the underlying operation completes
         independently, preventing InvalidStateError in AWS CRT callbacks.
 
         A timeout guards against half-open TCP connections where the
@@ -158,7 +158,7 @@ class MqttConnection:
         exception was never retrieved" warnings.
 
         Args:
-            future: Acknowledgement future — the
+            future: Acknowledgement future: the
                 ``concurrent.futures.Future`` returned by the AWS CRT SDK
                 (wrapped via ``asyncio.wrap_future``), or an already
                 loop-bound ``asyncio.Future``
@@ -343,8 +343,8 @@ class MqttConnection:
         regardless of the ``_connected`` flag.  After a connection
         interruption, ``_connected`` is ``False`` but the SDK connection
         object is still alive and its built-in auto-reconnect can still
-        fire.  Calling ``close()`` ensures the SDK connection is fully
-        torn down so its callbacks and auto-reconnect cannot interfere
+        fire.  Calling ``close()`` fully tears the SDK connection
+        down so its callbacks and auto-reconnect cannot interfere
         with a replacement connection.
 
         This method is safe to call multiple times or on already-closed

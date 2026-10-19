@@ -117,34 +117,34 @@ Classes
    - ``record_connection_success(event_type, session_present, return_code, attempt_number)``
    - ``record_publish(queued)``
    - ``update_metrics()``
-   - ``get_metrics()`` - Returns MqttMetrics object
-   - ``get_recent_drops(limit)`` - Get N recent drop events
-   - ``get_recent_connections(limit)`` - Get N recent connection events
-   - ``export_json()`` - Export all metrics as JSON string
-   - ``print_summary()`` - Print human-readable summary
-   - ``on_connection_drop(callback)`` - Register drop event callback
+   - ``get_metrics()``: Returns MqttMetrics object
+   - ``get_recent_drops(limit)``: Get N recent drop events
+   - ``get_recent_connections(limit)``: Get N recent connection events
+   - ``export_json()``: Export all metrics as JSON string
+   - ``print_summary()``: Print human-readable summary
+   - ``on_connection_drop(callback)``: Register drop event callback
 
 **ConnectionDropEvent**
    Dataclass representing a single connection drop event:
 
-   - ``timestamp`` - ISO 8601 timestamp
-   - ``error_name`` - AWS error name (e.g., ``AWS_ERROR_MQTT_UNEXPECTED_HANGUP``)
-   - ``error_message`` - Error message text
-   - ``error_code`` - AWS error code
-   - ``reconnect_attempt`` - Reconnection attempt number
-   - ``duration_connected_seconds`` - How long session lasted
-   - ``active_subscriptions`` - Number of active subscriptions
-   - ``queued_commands`` - Commands in queue
+   - ``timestamp``: ISO 8601 timestamp
+   - ``error_name``: AWS error name (e.g., ``AWS_ERROR_MQTT_UNEXPECTED_HANGUP``)
+   - ``error_message``: Error message text
+   - ``error_code``: AWS error code
+   - ``reconnect_attempt``: Reconnection attempt number
+   - ``duration_connected_seconds``: How long session lasted
+   - ``active_subscriptions``: Number of active subscriptions
+   - ``queued_commands``: Commands in queue
 
 **ConnectionEvent**
    Dataclass representing successful connection/reconnection:
 
-   - ``timestamp`` - ISO 8601 timestamp
-   - ``event_type`` - "connected", "resumed", or "deep_reconnected"
-   - ``session_present`` - MQTT session was present
-   - ``return_code`` - MQTT return code
-   - ``attempt_number`` - Reconnection attempt number (0 for initial)
-   - ``time_to_reconnect_seconds`` - Time to recover from drop
+   - ``timestamp``: ISO 8601 timestamp
+   - ``event_type``: "connected", "resumed", or "deep_reconnected"
+   - ``session_present``: MQTT session was present
+   - ``return_code``: MQTT return code
+   - ``attempt_number``: Reconnection attempt number (0 for initial)
+   - ``time_to_reconnect_seconds``: Time to recover from drop
 
 **MqttMetrics**
    Aggregate statistics:
@@ -190,7 +190,7 @@ Why These Settings Matter
 **Keep-Alive (1200s → 60s)**
    Most NAT devices timeout idle connections after 300-600 seconds. Default
    1200s keep-alive allows NAT to timeout before keep-alive packets arrive,
-   causing connection to die. 60s ensures packets arrive before timeout.
+   causing connection to die. At 60s, packets arrive before the timeout.
 
 **Faster Reconnection (1s → 0.5s)**
    Transient network glitches often recover in <1 second. Faster initial retry
@@ -293,13 +293,13 @@ Check AWS IoT Core metrics and logs.
 2.1 CloudWatch Metrics
 ----------------------
 
-1. Navigate to **AWS IoT Core** → **Monitor** → **Metrics**
+1. Go to **AWS IoT Core** → **Monitor** → **Metrics**
 2. Look for:
 
-   - ``NumberOfConnections`` - Should remain stable
-   - ``PublishIn.Success`` / ``PublishOut.Success`` - Message throughput
-   - ``RejectedConnections`` - Auth/quota rejections
-   - ``PublishIn.Throttle`` - Rate limiting
+   - ``NumberOfConnections``: Should remain stable
+   - ``PublishIn.Success`` / ``PublishOut.Success``: Message throughput
+   - ``RejectedConnections``: Auth/quota rejections
+   - ``PublishIn.Throttle``: Rate limiting
 
 2.2 CloudWatch Logs
 -------------------
@@ -868,7 +868,7 @@ Why This Approach?
 
 **Home Assistant Config Directory** (Recommended)
     - Stored alongside user configuration files
-    - User can easily locate and review
+    - Easy for the user to find and review
     - Accessible via file editor integration
     - Persists across restarts
     - Can be included in bug reports
@@ -1141,8 +1141,8 @@ Investigation Checklist
 See Also
 ========
 
-- :doc:`../reference/protocol/device_status` - Device status field reference
-- :doc:`../reference/python_api/mqtt_client` - MQTT client API documentation
+- :doc:`../reference/protocol/device_status`: Device status field reference
+- :doc:`../reference/python_api/mqtt_client`: MQTT client API documentation
 
 External Resources
 

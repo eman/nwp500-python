@@ -4,8 +4,8 @@ Device Maintenance
 
 Maintenance commands cover firmware update information, the installer
 diagnostics counters, air filter service intervals, the cloud's
-replacement log and fault resets. All of them mirror what the NaviLink
-app sends; the CLI equivalents are noted with each one.
+replacement log and fault resets. The CLI equivalents are noted with
+each one.
 
 .. contents:: On This Page
    :local:
@@ -46,8 +46,7 @@ consumer account's unit answers the query.
    await mqtt.request_diagnostics(device)
 
 The two energies are watt-hours and ``cumulated_op_time_*`` values are
-hours (both cross-checked against the energy query); the remaining
-counters have no documented unit. See
+hours; the remaining counters have no documented unit. See
 :class:`~nwp500.models.DeviceDiagnostics` for every field.
 
 CLI: ``nwp-cli diagnostics`` (add ``--json`` for the raw model).
@@ -94,8 +93,7 @@ Air Filter
 
 The air filter timer is reset after cleaning or replacing the filter. The
 service interval is set in evaporator-fan hours: ``0`` disables the alarm,
-otherwise 1000 to 10000 hours in 500-hour steps, which are the values the
-NaviLink app offers. The device reports the interval back as
+otherwise 1000 to 10000 hours in 500-hour steps. The device reports the interval back as
 ``DeviceStatus.air_filter_alarm_period``.
 
 .. code-block:: python
@@ -174,18 +172,15 @@ CLI: ``nwp-cli reset-condenser-fault``.
 Commands the App Never Sends
 ============================
 
-The NaviLink app's command enum also declares an OTA check, WiFi reconnect
-and reset, a freeze-protection temperature and a smart diagnostic trigger,
-but its request builder has no case for any of them, so no NaviLink client
-publishes those codes and their payloads are unknown. Earlier versions of
-this library sent made-up payloads for them; those methods were removed.
-The freeze-protection range and the smart diagnostic result remain
+An OTA check, WiFi reconnect and reset, setting the freeze-protection
+temperature and triggering a smart diagnostic aren't supported: their
+payloads are unknown. The freeze-protection range and the smart diagnostic result remain
 readable from :class:`~nwp500.models.DeviceFeature` and
 :class:`~nwp500.models.DeviceStatus`.
 
 Related Documentation
 =====================
 
-* :doc:`../reference/python_api/mqtt_client` - Full MQTT client API reference
-* :doc:`schedule-operation` - Reservations, recirculation schedules, and intelligent scheduling
-* :doc:`diagnose-mqtt` - Connection troubleshooting and diagnostics
+* :doc:`../reference/python_api/mqtt_client`: Full MQTT client API reference
+* :doc:`schedule-operation`: Reservations, recirculation schedules, and intelligent scheduling
+* :doc:`diagnose-mqtt`: Connection troubleshooting and diagnostics

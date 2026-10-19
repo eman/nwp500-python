@@ -559,6 +559,6 @@ Buffer updates and flush periodically to reduce I/O overhead:
 Related Documentation
 =====================
 
-* :doc:`../reference/python_api/events` - Event API reference
-* :doc:`../reference/python_api/mqtt_client` - MQTT client
-* :doc:`../reference/python_api/models` - Data models
+* :doc:`../reference/python_api/events`: Event API reference
+* :doc:`../reference/python_api/mqtt_client`: MQTT client
+* :doc:`../reference/python_api/models`: Data models

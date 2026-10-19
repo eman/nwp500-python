@@ -1,0 +1,9 @@
+{
+  "writes": [
+    {
+      "at": "2026-10-19T22:00:00Z",
+      "setpoint_f": 140.0
+    }
+  ],
+  "tou_enabled": false
+}

@@ -131,3 +131,33 @@ def test_app_queries_and_controls_are_exposed():
         "FirmwareDownloadEntry",
     ):
         assert name in nwp500.__all__
+
+
+def test_the_lazy_exports_are_the_typed_ones():
+    """The exports load on first use (``_EXPORTS``); the imports type
+    checkers read under ``TYPE_CHECKING`` must name the same objects,
+    and ``__all__`` the same names."""
+    import ast
+    import importlib
+    from pathlib import Path
+
+    tree = ast.parse(Path(nwp500.__file__).read_text())
+    guarded = next(
+        node
+        for node in tree.body
+        if isinstance(node, ast.If)
+        and isinstance(node.test, ast.Name)
+        and node.test.id == "TYPE_CHECKING"
+    )
+    typed = {
+        alias.name: node.module
+        for node in guarded.body
+        if isinstance(node, ast.ImportFrom)
+        for alias in node.names
+    }
+    assert typed == dict(nwp500._EXPORTS)
+    assert set(nwp500.__all__) == {"__version__", *nwp500._EXPORTS}
+    for name, module in nwp500._EXPORTS.items():
+        assert getattr(nwp500, name) is getattr(
+            importlib.import_module(module), name
+        )

@@ -218,7 +218,7 @@ class DeviceStatus(NavienBaseModel):
             "True = TOU is active/enabled, False = TOU is disabled. "
             "This reports only that scheduling is enabled - NOT that an "
             "expensive period is currently in force, which is what "
-            "actually changes behaviour. Inside a period the device caps "
+            "changes behaviour. Inside a period the device caps "
             "a heat-pump recovery at about 90% dhw_charge_per, finishing "
             "~1.9 degC below hp_lower_off_temp_setting rather than "
             "reaching it, so code that waits for the setpoint will wait "
@@ -980,10 +980,10 @@ class DeviceStatus(NavienBaseModel):
         The reference is the device's minimum operating temperature,
         ``dhw_temperature_min`` (40.5 degC / 104.9 degF). That is close
         to the lowest temperature usable for a shower, so this is a good
-        estimate of what can actually be drawn - water colder than that
+        estimate of what can be drawn - water colder than that
         still holds heat, but not heat you can wash with.
 
-        Usually robust: ``full_recovery_energy`` is bimodal, taking one
+        Usually reliable: ``full_recovery_energy`` is bimodal, taking one
         of two values 2 degC apart at a fixed setpoint, but both fields
         shift together so the difference is unaffected. Checked against
         the tank thermistors over 12275 samples, the implied tank

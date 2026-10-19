@@ -210,7 +210,7 @@ async def handle_status_request(
 async def handle_device_info_request(
     mqtt: NavienMqttClient, device: Device, raw: bool = False
 ) -> None:
-    """Request comprehensive device information."""
+    """Request the device information."""
     await _handle_info_request(
         mqtt,
         device,

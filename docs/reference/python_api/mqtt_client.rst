@@ -3,7 +3,7 @@ MQTT Client
 ============
 
 ``NavienMqttClient`` is the main interface for real-time communication with
-Navien devices — status monitoring, device control, and event callbacks.
+Navien devices: status monitoring, device control, and event callbacks.
 
 .. important::
    Use the REST API only for device discovery. Everything else goes through MQTT.
@@ -11,13 +11,13 @@ Navien devices — status monitoring, device control, and event callbacks.
 Overview
 ========
 
-* **Real-Time Monitoring** - Subscribe to device status updates
-* **Device Control** - Send commands (power, temperature, mode)
-* **Event System** - React to state changes with callbacks
-* **Auto-Reconnection** - Exponential backoff reconnection with command queueing
-* **Type-Safe** - Returns typed models (DeviceStatus, DeviceFeature)
-* **Periodic Requests** - Scheduled status polling
-* **Energy Monitoring** - Query historical energy usage data
+* **Real-Time Monitoring**: Subscribe to device status updates
+* **Device Control**: Send commands (power, temperature, mode)
+* **Event System**: React to state changes with callbacks
+* **Auto-Reconnection**: Exponential backoff reconnection with command queueing
+* **Type-Safe**: Returns typed models (DeviceStatus, DeviceFeature)
+* **Periodic Requests**: Scheduled status polling
+* **Energy Monitoring**: Query historical energy usage data
 
 Quick Start
 ===========
@@ -1287,7 +1287,7 @@ The device responds on a topic you must already be listening to:
    await mqtt.subscribe_device_status(device, on_status)
    await mqtt.request_device_status(device)
 
-   # wrong — response arrives before subscription
+   # wrong: response arrives before subscription
    await mqtt.request_device_status(device)
    await mqtt.subscribe_device_status(device, on_status)
 
@@ -1331,14 +1331,14 @@ Periodic requests for long-running monitoring
 Related Documentation
 =====================
 
-* :doc:`auth_client` - Authentication client
-* :doc:`api_client` - REST API client
-* :doc:`models` - Data models (DeviceStatus, DeviceFeature, etc.)
-* :doc:`events` - Event system
-* :doc:`exceptions` - Exception handling
-* :doc:`../protocol/mqtt_protocol` - MQTT protocol details
-* :doc:`../../how-to/track-energy` - Energy monitoring guide
-* :doc:`../../how-to/schedule-operation` - Scheduling, recirculation, and intelligent modes
-* :doc:`../../how-to/maintenance` - OTA, WiFi, freeze protection, and diagnostics
-* :doc:`../../how-to/queue-commands` - Command queueing guide
-* :doc:`../../how-to/auto-recovery` - Auto-reconnection guide
+* :doc:`auth_client`: Authentication client
+* :doc:`api_client`: REST API client
+* :doc:`models`: Data models (DeviceStatus, DeviceFeature, etc.)
+* :doc:`events`: Event system
+* :doc:`exceptions`: Exception handling
+* :doc:`../protocol/mqtt_protocol`: MQTT protocol details
+* :doc:`../../how-to/track-energy`: Energy monitoring guide
+* :doc:`../../how-to/schedule-operation`: Scheduling, recirculation, and intelligent modes
+* :doc:`../../how-to/maintenance`: OTA, WiFi, freeze protection, and diagnostics
+* :doc:`../../how-to/queue-commands`: Command queueing guide
+* :doc:`../../how-to/auto-recovery`: Auto-reconnection guide

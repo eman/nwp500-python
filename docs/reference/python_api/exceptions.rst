@@ -52,16 +52,16 @@ Nwp500Error
 
    **Attributes:**
 
-   * ``message`` (str) - Human-readable error message
-   * ``error_code`` (str or None) - Machine-readable error code
-   * ``details`` (dict) - Additional context
-   * ``retriable`` (bool) - Whether operation can be retried
+   * ``message`` (str): Human-readable error message
+   * ``error_code`` (str or None): Machine-readable error code
+   * ``details`` (dict): Additional context
+   * ``retriable`` (bool): Whether operation can be retried
 
    **Methods:**
 
-   * ``to_dict()`` - Serialize exception for logging/monitoring
+   * ``to_dict()``: Serialize exception for logging/monitoring
 
-   **Example - Catching all library errors:**
+   **Example: Catching all library errors:**
 
    .. code-block:: python
 
@@ -101,9 +101,9 @@ AuthenticationError
 
    **Attributes:**
 
-   * ``message`` (str) - Error message
-   * ``status_code`` (int or None) - HTTP status code
-   * ``response`` (dict or None) - Full API response
+   * ``message`` (str): Error message
+   * ``status_code`` (int or None): HTTP status code
+   * ``response`` (dict or None): Full API response
 
 InvalidCredentialsError
 -----------------------
@@ -171,12 +171,12 @@ APIError
 
    **Common HTTP codes:**
 
-   * 400 - Bad request (invalid parameters)
-   * 401 - Unauthorized (authentication failed)
-   * 404 - Not found (device or resource missing)
-   * 429 - Rate limited (too many requests)
-   * 500 - Server error (Navien API issue)
-   * 503 - Service unavailable (API down)
+   * 400: Bad request (invalid parameters)
+   * 401: Unauthorized (authentication failed)
+   * 404: Not found (device or resource missing)
+   * 429: Rate limited (too many requests)
+   * 500: Server error (Navien API issue)
+   * 503: Service unavailable (API down)
 
    **Example:**
 
@@ -402,8 +402,8 @@ DeviceCapabilityError
 
    **Attributes:**
 
-   * ``feature`` (str) - Name of the unsupported feature
-   * ``message`` (str) - Human-readable error message
+   * ``feature`` (str): Name of the unsupported feature
+   * ``message`` (str): Human-readable error message
 
    **Example:**
 
@@ -427,13 +427,13 @@ DeviceCapabilityError
 
    **Supported Controllable Features:**
 
-   * ``power_use`` - Device power on/off control
-   * ``dhw_use`` - DHW mode changes
-   * ``dhw_temperature_setting_use`` - DHW temperature control
-   * ``holiday_use`` - Vacation/away mode
-   * ``program_reservation_use`` - Reservations and TOU scheduling
-   * ``recirculation_use`` - Recirculation pump control
-   * ``recirc_reservation_use`` - Recirculation scheduling
+   * ``power_use``: Device power on/off control
+   * ``dhw_use``: DHW mode changes
+   * ``dhw_temperature_setting_use``: DHW temperature control
+   * ``holiday_use``: Vacation/away mode
+   * ``program_reservation_use``: Reservations and TOU scheduling
+   * ``recirculation_use``: Recirculation pump control
+   * ``recirc_reservation_use``: Recirculation scheduling
 
    **Checking Capabilities Before Control:**
 
@@ -639,7 +639,7 @@ When the library wraps exceptions (e.g., wrapping ``aiohttp.ClientError`` in
 ``AuthenticationError``), the original exception is preserved using Python's
 ``raise ... from`` syntax.
 
-**Example - Inspecting exception chains:**
+**Example: Inspecting exception chains:**
 
 .. code-block:: python
 
@@ -762,7 +762,7 @@ See the CHANGELOG.rst for complete migration guide with more examples.
 Related Documentation
 =====================
 
-* :doc:`auth_client` - Authentication client
-* :doc:`api_client` - REST API client
-* :doc:`mqtt_client` - MQTT client
+* :doc:`auth_client`: Authentication client
+* :doc:`api_client`: REST API client
+* :doc:`mqtt_client`: MQTT client
 * Complete example: ``examples/exception_handling_example.py``

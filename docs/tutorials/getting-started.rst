@@ -253,11 +253,11 @@ Next Steps
 
 Now that you have the basics, explore these topics:
 
-* :doc:`../reference/python_api/auth_client` - Deep dive into authentication
-* :doc:`../reference/python_api/mqtt_client` - Complete MQTT client documentation
-* :doc:`../how-to/track-energy` - Track energy usage
-* :doc:`../how-to/optimize-tou` - Optimize for TOU pricing
-* :doc:`../how-to/monitor-status` - Use the event-driven architecture
+* :doc:`../reference/python_api/auth_client`: Authentication
+* :doc:`../reference/python_api/mqtt_client`: Complete MQTT client documentation
+* :doc:`../how-to/track-energy`: Track energy usage
+* :doc:`../how-to/optimize-tou`: Optimize for TOU pricing
+* :doc:`../how-to/monitor-status`: Use the event-driven architecture
 
 Common Issues
 =============
@@ -267,7 +267,7 @@ Common Issues
    Navilink mobile app first.
 
 **No Devices Found**
-   Ensure your device is registered to your account in the Navilink app
+   Check that your device is registered to your account in the Navilink app
    and is online.
 
 **Connection Timeout**

@@ -144,8 +144,8 @@ The MQTT client supports various configuration options through
 
 For detailed configuration guides, see:
 
-* :doc:`../how-to/auto-recovery` - Connection recovery settings
-* :doc:`../how-to/queue-commands` - Offline command queuing
+* :doc:`../how-to/auto-recovery`: Connection recovery settings
+* :doc:`../how-to/queue-commands`: Offline command queuing
 
 Basic Example
 -------------
@@ -219,13 +219,13 @@ Log to File
 Best Practices
 ==============
 
-1. **Never hardcode credentials** - Use environment variables or config
+1. **Never hardcode credentials**: Use environment variables or config
    files
-2. **Use async context managers** - Ensures proper cleanup
-3. **Enable logging** - Helps debug issues
-4. **Handle exceptions** - Network errors are common
-5. **Rate limit API calls** - Use MQTT for real-time updates
-6. **Secure config files** - Set proper file permissions (chmod 600)
+2. **Use async context managers**: they clean up connections
+3. **Enable logging**: Helps debug issues
+4. **Handle exceptions**: Network errors are common
+5. **Rate limit API calls**: Use MQTT for real-time updates
+6. **Secure config files**: Set proper file permissions (chmod 600)
 
 Example: Production Configuration
 ==================================
@@ -281,7 +281,7 @@ Example: Production Configuration
 Next Steps
 ==========
 
-* :doc:`../tutorials/getting-started` - Build your first application
-* :doc:`python_api/auth_client` - Authentication details
-* :doc:`python_api/mqtt_client` - MQTT client configuration
-* :doc:`../how-to/auto-recovery` - Automatic reconnection guide
+* :doc:`../tutorials/getting-started`: Build your first application
+* :doc:`python_api/auth_client`: Authentication details
+* :doc:`python_api/mqtt_client`: MQTT client configuration
+* :doc:`../how-to/auto-recovery`: Automatic reconnection guide

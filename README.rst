@@ -7,19 +7,20 @@ nwp500-python
 Python library for Navien NWP500 Heat Pump Water Heater
 ========================================================
 
-A complete Python library for monitoring and controlling the Navien NWP500 Heat Pump Water Heater through the Navilink cloud service.
+A Python library for monitoring and controlling the Navien NWP500 Heat Pump Water Heater through the Navilink cloud service.
 
 * **Documentation:** https://nwp500-python.readthedocs.io/
 * **Source:** https://github.com/eman/nwp500-python
 
 Features
 ========
-* **Complete Interface:** Full support for both REST API and real-time MQTT (AWS IoT).
+* **REST and MQTT:** The REST API and real-time MQTT (AWS IoT).
 * **Monitoring:** Real-time tracking of temperature, power usage, tank charge, and component status.
 * **Control:** Remote control of target temperatures, operation modes, and vacation settings.
-* **Advanced Features:** Native support for reservations, time-of-use (TOU) optimization, and anti-legionella cycles.
-* **Type-Safe:** Built with Pydantic for robust data validation and unit handling.
-* **Async/Await:** Modern asyncio-based implementation for high-performance integration.
+* **Scheduling:** Reservations, time-of-use (TOU) schedules and anti-legionella cycles.
+* **Typed models:** Pydantic models with validation and unit handling.
+* **Async:** Built on asyncio.
+* **Simulator (optional):** A physics model of the heater, ``nwp500.sim``, that answers "when will the tank be hot?", "how much hot water is there?" and "what would this change do?", and calibrates from a heater's own history. ``nwp-cli simulate`` runs it on the heater as it is now or on a scenario file. Install it with ``pip install nwp500-python[sim]``.
 
 Getting Started
 ===============
@@ -33,16 +34,37 @@ Quick Example
 
 .. code-block:: python
 
-    from nwp500 import NavienAuthClient, NavienAPIClient
+    import asyncio
 
-    async with NavienAuthClient("email@example.com", "password") as auth:
-        api = NavienAPIClient(auth)
-        devices = await api.list_devices()
-        
-        if devices:
-            device = devices[0]
-            print(f"Temperature: {device.status.dhw_temperature}°F")
-            await api.set_device_temperature(device, 130)
+    from nwp500 import NavienAPIClient, NavienAuthClient, NavienMqttClient
+
+
+    async def main():
+        async with NavienAuthClient("email@example.com", "password") as auth:
+            api = NavienAPIClient(auth)
+            device = await api.get_first_device()
+
+            # Status and control go over MQTT.
+            mqtt = NavienMqttClient(auth)
+            await mqtt.connect()
+            try:
+                got = asyncio.Event()
+
+                def on_status(status):
+                    print(f"Tank: {status.dhw_temperature}°F, "
+                          f"setpoint {status.dhw_target_temperature_setting}°F")
+                    got.set()
+
+                await mqtt.subscribe_device_status(device, on_status)
+                await mqtt.request_device_status(device)
+                await asyncio.wait_for(got.wait(), timeout=20)
+
+                await mqtt.set_dhw_temperature(device, 130)
+            finally:
+                await mqtt.disconnect()
+
+
+    asyncio.run(main())
 
 Documentation
 =============
@@ -50,7 +72,7 @@ Documentation
 * `Tutorials <https://nwp500-python.readthedocs.io/en/latest/tutorials/getting-started.html>`_: Start here if you're new to the library.
 * `How-to Guides <https://nwp500-python.readthedocs.io/en/latest/how-to/index.html>`_: Practical step-by-step recipes for specific tasks.
 * `Reference <https://nwp500-python.readthedocs.io/en/latest/reference/index.html>`_: Technical descriptions of the API, models, and protocol.
-* `Explanation <https://nwp500-python.readthedocs.io/en/latest/explanation/index.html>`_: Understanding-oriented deep dives into the library's design and advanced features.
+* `Explanation <https://nwp500-python.readthedocs.io/en/latest/explanation/index.html>`_: How the library and the device work.
 
 Contributing
 ============
