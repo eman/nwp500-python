@@ -156,8 +156,9 @@ figures on this page, not measured together).
 Where a run's heat shows
 ------------------------
 
-The probes do not see a run's heat evenly. On 146 runs with no draw and
-no heating, 2026-02-26 to 2026-09-24, ten minutes after each run:
+The probes do not see a run's heat evenly. Of 146 runs with no draw and
+no heating, 2026-02-26 to 2026-09-24, 117 are classified below by the
+gap before the run, ten minutes after each run:
 
 .. list-table::
    :header-rows: 1
@@ -219,8 +220,9 @@ tank did, over the day and a half of projections available on
 2026-09-22, at horizons of 1 to 24 hours. With no draw and no compressor
 run in between, the lower probe's mean absolute error was **0.86 degF at
 1 hour** and **1.41 degF at 3 hours**. With a draw or a compressor run
-in between it was 9.15 and 13.99 degF: a projection with nothing in it
-is the warmest the tank can be, and a draw takes the tank below it.
+in between it was 9.15 and 13.99 degF. A projection with nothing in it
+includes neither: a draw takes the tank below it, and a compressor run
+above it.
 
 
 Limits

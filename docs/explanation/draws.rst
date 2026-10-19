@@ -217,13 +217,19 @@ made before the tap opened against the gallon at which the spout fell
 below 105 degF:
 
 * Two baths did not run cold, and the estimate said so.
-* One ran cold 5.2 gal later than estimated: a cautious answer.
+* One, bath B, ran cold 5.2 gal later than estimated: a cautious answer.
 * One ran cold after 39.4 gal against an estimate of 56.6, an
   over-promise of 17.2 gal. The compressor ran through it.
 
-Re-scored with the inlet read from long-draw plateaus (next section),
-the three crossings in these tests came out a mean 0.3 gal over, and
-the worst over-promise was 9.4 gal. Three events say little about the level.
+A second scoring used the gallon at which the valve outlet, not the
+spout, fell below 105 degF. Three draws crossed there: bath B, the bath
+that ran cold after 39.4 gal, and a later drawdown of the tank. Their
+estimates against the outlet's crossing were 30.3 gal against 28.6,
+56.9 against 39.9 and 1.6 against 8.6: a mean 3.9 gal over, and a
+worst over-promise of 17.0 gal. With the inlet read from long-draw
+plateaus (next section) instead, they were 26.3, 49.3 and 2.4: a mean
+0.3 gal over, and a worst over-promise of 9.4 gal. Three events say
+little about the level.
 
 Without a full tank in the last 72 hours to count from, an estimate can
 only lean on the longest draw the history shows from a tank in the same

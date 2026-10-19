@@ -350,7 +350,8 @@ fitted on.
   recovery, 90th percentile 13 %, against 10.9 % and 26 % for a
   constant efficiency;
 - replaying the recorded draws from each draw's start (1,312 draw
-  events from 2026-02-25): recorded depletions caught, 5 of
+  events from 2026-02-25), with the upper probe crossing the line
+  standing in for the tap running cold: recorded depletions caught, 5 of
   5; draws called empty where the probe never crossed, 17 of 1,306
   (1.3 %). From 2026-07-01, after the heat book's fit, 2 of 2 caught
   (one independent event) and 2 false calls in 488. Replayed over whole
@@ -358,9 +359,10 @@ fitted on.
   mean absolute error 3.22 degF a day on the upper zone and 6.61 degF on
   the lower;
 - a forecast's draw windows, issued every 3 h for 24 h ahead from
-  2026-09-08 to 2026-09-28 and judged at the delivered water: 1 of the
-  8 windows in which the upper probe crossed the line was flagged, and
-  1 of 160 others;
+  2026-09-08 to 2026-09-28, flagged by the delivered water and scored
+  against the upper probe crossing the line, which reads 5.3-7.3 gal
+  before the delivered water does (:doc:`draws`): 1 of the 8 windows in
+  which the probe crossed was flagged, and 1 of 160 others;
 - time to ready after a switch into an element mode, 12 events (8 of
   them Energy Saver): mean absolute error 0.51 min; on the two held
   out, 0.13 min, ready a little later than predicted.

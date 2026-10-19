@@ -123,9 +123,9 @@ nearly flat across the bands. Under 10 degF short the figure is not
 useful: that band is where interrupted cycles sit, and it reaches
 over 1,000 minutes per degF.
 
-**The slowest recovery on record** ran 378 minutes for a 56.8 degF
-shortfall, 6.66 minutes per degF, on 2026-08-12 after four days in
-``VACATION``. That is 17 % slower than the band's median. The air beside
+**A deep recovery on 2026-08-12**, after four days in ``VACATION``, ran
+378 minutes for a 56.8 degF shortfall, 6.66 minutes per degF. That is
+17 % slower than its band's median. The air beside
 the heater was falling (81.9 to 67.3 degF), and the tank had fully
 mixed, so both conditions that slow a recovery held at once.
 
@@ -273,9 +273,10 @@ the heat draws took out during the recovery:
   cold and 63 Wh at an immediate restart. The record held only 10
   restarts within an hour, so that difference is not settled.
 
-To price a recovery: the start-up once, plus the heat to be stored
-divided by the efficiency at the tank and air temperatures it will run
-at. :doc:`tank-energy` gives the heat a tank is short.
+To price a recovery from the whole-recovery figures above, divide the
+heat to be stored by the efficiency at the tank and air temperatures it
+will run at. Those figures already include the start-up, so don't add
+it again. :doc:`tank-energy` gives the heat a tank is short.
 
 
 The start of a recovery
