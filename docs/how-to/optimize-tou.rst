@@ -10,7 +10,7 @@ Time of Use pricing enables:
 
 * **Cost optimization**: Heat water during off-peak hours when electricity rates are lower
 * **Demand response**: Reduce energy consumption during peak rate periods
-* **Custom schedules**: Configure up to 16 different time periods with varying rates
+* **Custom schedules**: Configure many time periods with varying rates (a device has held at least 20)
 * **Seasonal support**: Different schedules for different months of the year
 * **Weekday/weekend support**: Separate schedules for weekdays and weekends
 
@@ -319,7 +319,7 @@ Configures the TOU schedule directly on the device via MQTT.
 
 * ``device``: Device object from API
 * ``controller_serial_number``: Controller serial number (obtain via device info)
-* ``periods``: List of TOU period dictionaries (up to 16 periods)
+* ``periods``: List of TOU period dictionaries (a device has held at least 20 periods)
 * ``enabled``: Whether to enable TOU scheduling (default: ``True``)
 
 MQTT: Enable/Disable TOU
@@ -937,7 +937,7 @@ Best Practices
 
 2. **Limit number of periods**
 
-   The device supports up to 16 TOU periods. Design schedules efficiently to stay within this limit.
+   The device's period limit is not known; one unit has held 20 TOU periods, and more were not tried. Design schedules efficiently.
 
 3. **Use appropriate decimal precision**
 
@@ -962,7 +962,7 @@ Best Practices
 Limitations
 -----------
 
-* Maximum 16 TOU periods per configuration
+* Period limit unknown; at least 20 TOU periods per configuration have been held
 * Time resolution limited to minutes (no seconds)
 * Price encoding limited by decimal point precision
 * Cannot specify different rates for individual days within a period

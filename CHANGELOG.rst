@@ -383,6 +383,32 @@ Changed
 
 Documentation
 -------------
+- **Corrections from the device tests and the recorded history.** The
+  explanation pages, the how-tos, the protocol reference and the
+  simulator's docstrings said things later measurements contradict:
+
+  - High Demand's element starts somewhere in (0.2, 0.4] degC short,
+    not (0.2, 0.7]; Electric ran upper first in the commanded runs, but
+    the record also has the lower running alone; the element-run and
+    mid-stint counts are the record's.
+  - Inside a TOU window the upper tank starts a cycle when it is more
+    than 14.4 degF short, at the opening or later. A setpoint write
+    starts one in 120 of 122 writes leaving the upper tank short (not
+    about 70 %), a lowering to the upper tank or below in none, and in
+    ``HEAT_PUMP`` a draw does not start one while the upper tank is at
+    or above the setpoint. The restart lockout measured 5.5 min.
+  - The simulator's accuracy figures are the ones measured with
+    start-up charged once (3.6 % and 4.4 % low; starts 31 of 40 held
+    out), and the heater's idle air reading is about 6 degF warm.
+  - ``HYBRID_BOOST_MODE`` is also Energy Saver with an element running;
+    ``touStatus`` means TOU is enabled, not that a period is in force.
+  - A device has held at least 32 reservation entries and 20 TOU
+    periods; a list write can be lost with no error, so read it back;
+    a powered-off heater runs its reservation entries; forcing a full
+    recovery with ``tou_override_status`` is untested.
+  - The ambient effect on the compressor is about 1.18x, not 1.7x; the
+    standby soak's figures, the 60 h gap prior and the circulation runs
+    behind the lower-zone drop are stated as measured.
 - **Docs that contradicted the code or the vendor's sources** (#155). Each
   now has one value with its source:
 

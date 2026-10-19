@@ -581,12 +581,22 @@ Common Patterns
 Important Notes
 ---------------
 
-* The device can store up to ~16 reservation entries.
+* The device held at least 32 reservation entries in a device test
+  (2026-09-24); larger lists were not tried.
+* A list write can be lost with no error: the device keeps its previous
+  list (2 of about 30 writes on the unit tested). Read the list back after
+  writing; ``update_reservations_confirmed()`` returns ``None`` when the
+  device does not echo the new list.
+* A list write starts no heating by itself: none of 8 writes started a
+  recovery within 3 minutes, with the tank 2.2 degF below the setpoint.
 * Reservations execute at the exact minute specified; the device
   checks every minute.
-* If the device is powered off, reservations will not execute.
+* Reservations execute while the device is powered off: in two runs of
+  a device test (2026-09-24) an entry fired with the heater powered off
+  and turned it on, in the entry's mode.
 * Reservations persist through power cycles and internet outages.
-* Reservations are suspended when vacation mode is active.
+* Reservations are suspended when vacation mode is active, and an entry
+  skipped in vacation is not run late when it ends.
 * Reservations execute normally during TOU periods. However, an entry's
   **mode** does not take effect while a TOU window is in force; only its
   target temperature does. See `Reservations and mode writes during a
@@ -746,11 +756,12 @@ How TOU Works
 4. **Peak periods**: Device may pre-charge the tank before peak to
    minimize peak-time heating.
 
-The device supports up to 16 TOU periods. Typical setups:
+The device holds at least 20 TOU periods (the most one unit has been
+seen to hold). Typical setups:
 
 * **Simple**: 3–4 periods (off-peak, shoulder, on-peak)
 * **Moderate**: 6–8 periods (split by season and weekday/weekend)
-* **Complex**: 12–16 periods (full seasonal tariff)
+* **Complex**: 12 or more periods (full seasonal tariff)
 
 .. _reservations and mode writes during a tou window:
 
@@ -774,18 +785,21 @@ the setpoint and ``hp_lower_off_diff_temp_setting`` non-zero.
   the same evening did the same.
 * **A reservation entry's mode does not.** The same entry with
   ``mode_id=3`` (Energy Saver) moved the setpoint at its scheduled minute.
-  ``dhw_operation_setting`` stayed ``HEAT_PUMP`` for the 4.5 minutes
+  ``dhw_operation_setting`` stayed ``HEAT_PUMP`` for the 4.6 minutes
   observed.
 * **A direct mode write is held, not discarded.** ``set_operation_mode()``
-  to Energy Saver produced no error and no change for two minutes. About
-  11 seconds after TOU was switched off, it took effect with nothing
-  else commanded, and the upper element came on.
+  to Energy Saver produced no error and no change for two minutes. It
+  took effect by the next status poll after TOU was switched off (polls
+  were about 10 seconds apart), with nothing else commanded, and the
+  upper element came on.
 
 So the priority is Vacation > Reservations > TOU for the target
 temperature. A mode change issued in a window may apply later, when the
 window is lifted. That includes one that looked like it failed, and it
-can start a heating element. **Confirm a mode write by reading
-``dhw_operation_setting`` back, and do not treat an unconfirmed one as
+can start a heating element. **While TOU is enabled, reading
+``dhw_operation_setting`` back cannot show whether a mode write took.
+Confirm it by what the device does, such as an element running or the
+heat source it reports, and do not treat an unconfirmed one as
 failed.** See also :doc:`../explanation/heating-elements`.
 
 **Measured since, on the same unit** (local dates and times):
@@ -808,8 +822,9 @@ failed.** See also :doc:`../explanation/heating-elements`.
   ``HEAT_PUMP`` was written over it, and TOU was then switched off for
   about 90 seconds. Energy Saver never took effect, neither while TOU was
   off nor in the hour after. The control, on 2026-09-19, was a held Energy
-  Saver with nothing written over it; it took effect 11 seconds after the
-  same release. So a controller that changes its mind inside a window
+  Saver with nothing written over it; it took effect by the next status
+  poll after the same release. So a controller that changes its mind
+  inside a window
   should write the mode it now wants, rather than leave the held one to
   land.
 * **Turning TOU back on inside a window drops a running element mode.** On
@@ -824,7 +839,10 @@ failed.** See also :doc:`../explanation/heating-elements`.
 windows only; the shoulder period was not tested. Each result comes from
 one or two runs. It is not settled whether the device holds a mode or
 accepts it and masks the read-back. Either way, writing the wanted mode
-over it leaves nothing pending.
+over it leaves nothing pending. Nor is a held mode a rule the device
+always follows: the same unit's history has two switches into an element
+mode that took inside the peak window with TOU enabled, and three
+element starts there.
 
 Example: Summer 3-Period Schedule
 ---------------------------------

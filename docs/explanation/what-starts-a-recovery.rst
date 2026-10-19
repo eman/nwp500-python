@@ -30,27 +30,31 @@ The short version
    * - Lower tank at its turn-on setting
      - Outside a TOU window, ``hp_lower_on_temp_setting`` read
        **104.9 degF** at every setpoint from 107.6 to 149 degF. It does
-       not follow the setpoint.
+       not follow the setpoint. In ``HEAT_PUMP`` it waits while the upper
+       tank is at or above the setpoint.
    * - A TOU window
-     - ``hp_upper_on_temp_setting`` is raised to the setpoint. At the
-       window's opening the upper tank can start a cycle, and the lower
-       trigger waits for the window to close.
+     - ``hp_upper_on_temp_setting`` is raised to the setpoint. An upper
+       tank more than **14.4 degF** short starts a cycle, at the opening
+       or later in the window, and the lower trigger waits for the window
+       to close.
    * - A setpoint write
      - Outside a TOU window, a write that leaves the upper tank below the
-       new setpoint started the compressor within 2 minutes in **112 of
-       117** writes, typically **30 s** after it, raises and lowerings
-       alike.
+       new setpoint started the compressor in **120 of 122** writes held
+       two minutes or more, typically **30 s** after it, raises and
+       lowerings alike. A lowering to the upper tank or below started it
+       in **0 of 15**.
    * - A mode write
      - With the compressor off, **46 of 81** mode writes (57 %) started
        it within 2 minutes. ``ELECTRIC`` started an element instead.
    * - Stopping mid-cycle
-     - A setpoint lowered well below the upper tank stopped the running
-       compressor within **5 s**. Restoring it called for heat within
-       5 s, and the compressor started **2 min 34 s** later.
+     - A setpoint lowered to the upper tank or below stopped a running
+       compressor in **19 of 25** writes. Restoring it called for heat
+       within 5 s, and the compressor started when the restart lockout
+       ended.
 
 All figures come from one NWP500, from its recorded status history
-(2025-12-28 to 2026-09-22) and from deliberate device tests between
-2026-09-19 and 2026-09-21. Dates and times are local.
+(2025-12-28 to 2026-10-03) and from deliberate device tests between
+2026-09-19 and 2026-10-05. Dates and times are local.
 
 
 The thermostat triggers
@@ -62,8 +66,9 @@ The lower tank
 Outside a TOU window, both ``hp_lower_on_temp_setting`` and
 ``hp_upper_on_temp_setting`` read 104.9 degF at every setpoint in the
 history, from 107.6 to 149 degF. **The lower-tank trigger does not move
-with the setpoint.** Lowering the setpoint to hold the heater off
-therefore does nothing to this trigger.
+with the setpoint.** In ``HEAT_PUMP``, though, it waits while the upper
+tank is at or above the setpoint, so a setpoint lowered to the upper tank
+holds it off (below).
 
 Inside a TOU window
 -------------------
@@ -72,20 +77,21 @@ While a TOU window is in force, ``hp_upper_on_temp_setting`` equals the
 setpoint, with a differential of 2.9 degF. This is the in-window marker
 :doc:`tank-energy` describes. ``hp_lower_on_temp_setting`` also followed
 the setpoint in-window from December to March, and has not since April.
-On this unit the window is the TOU schedule's highest-priced period. It
-opened at 14:00 or at 16:00, depending on the time of year, and closed at
-21:00.
+On this unit the window is the TOU schedule's highest-priced period. Its
+opening moved during the year, and it closed at 21:00.
 
 From every heat-pump start since 2026-04-08:
 
-* **At the window's opening, a start followed when the upper tank was well
-  below the setpoint.** All 19 openings with the upper tank more than
-  13.7 degF short started a cycle, and none of the other 50 did. The
-  boundary lies somewhere between 11.9 and 15.5 degF.
-* **Later in the window, no simple threshold predicts a start.** From
-  June, 10 window-days had a start inside the window. A 13.7 degF rule
-  caught 5 of them, and the upper tank was a median 10.8 degF short at
-  those starts.
+* **Inside the window, a start follows when the upper tank is more than
+  14.4 degF (8 degC) short of the setpoint,** at the opening or later in
+  the window. On 89 window-days from 2026-06-01 to 2026-10-01 that rule
+  was right on 18 of 18 days it fired, and caught all 18 days the heater
+  started itself in the window. Of the openings with the compressor off,
+  all 17 at 15.48 degF short or more started, 25-34 s later, and none of
+  the 38 at 11.88 degF or less did. Later in the window the upper tank
+  reached 14.22 degF short without a start, and one start came 33 s after
+  it read 14.76 degF short. A 13.7 degF rule tested at the opening alone
+  missed that mid-window start.
 * **The lower-tank trigger waits for the window to close** (9 of 9).
 
 **"Upper tank below** ``hp_upper_on_temp_setting`` **" is a condition,
@@ -97,19 +103,24 @@ held at 11 % of starts, and at 16.7 % of random compressor-off minutes.
 A setpoint write re-evaluates
 =============================
 
-From 260 setpoint writes in ``HEAT_PUMP`` with the compressor off:
+From setpoint writes in ``HEAT_PUMP`` with the compressor off, counting
+only writes held two minutes or more (a setpoint stepped through several
+values in seconds credits each step with what a later step caused):
 
 * **Outside a TOU window**, a write that leaves the upper tank **below the
-  new setpoint** started the compressor within 2 minutes **112 times in
-  117**, whatever the lower tank read. That includes lowering the setpoint:
-  48 of 49 writes that lowered it but left it above the upper tank started
-  a recovery. The delay is a median **30 s** (IQR 25-31 s). Writes that
-  left the new setpoint at or below the upper tank started it in 2 of 3,
-  too few to say.
+  new setpoint** started the compressor **120 times in 122**, whatever the
+  lower tank read. That includes lowering the setpoint: 48 of 49 writes
+  that lowered it but left it above the upper tank started a recovery.
+  The delay is a median **30 s** (IQR 25-31 s). Writes that left the new
+  setpoint at or below the upper tank started it in 1 of 16, and that one
+  was a raise: **no such lowering started it (0 of 15)**.
 * **Inside a TOU window**, a write that put the setpoint 2 degF or more
   **below** the upper tank never started it (0 of 8). One that left the
-  upper tank 4 degF or more short almost always did (57 of 58). In
-  between, about 70 % did.
+  upper tank more than 4 degF short almost always did (16 of 17). In
+  between, 0-4 degF short, only 3 of 15 did. In device tests, writes
+  1.8 and 2.7 degF short started nothing in six minutes, and one 3.1 degF
+  short started it 36 s later. An earlier count over every write, stepped
+  ones included, put this band near 70 %.
 * **A reservation entry's setpoint is such a write.** On 2026-09-21 at
   21:43, after the window, an entry lowered the setpoint from 141.8 to
   137.3 degF with the upper tank at 135.5 degF. The device called for
@@ -220,14 +231,16 @@ the compressor running:
 * **Well below the upper tank, it stops.** Lowered from 141.8 to
   114.8 degF with the upper tank at 123.1 degF, the compressor stopped
   within **5 s**. Restoring 141.8 degF called for heat within 5 s, and the
-  compressor started **2 min 34 s** later.
+  compressor started **2 min 34 s** later, about 5.5 min after it stopped:
+  the restart lockout.
 * **Just above the upper tank, it doesn't.** Lowered to 124.7 degF with the
   upper tank at 123.8-124.2 degF, the compressor kept running for the
   50 s observed.
 
-How far below the tank a setpoint must go to stop a running compressor is
-not mapped. A restore is also a start: putting a higher setpoint back is
-the same as a write above the tank.
+On the record, a setpoint lowered to the upper tank or below stopped a
+running compressor 19 times in 25, against 10 in 44 left above it. A
+restore is also a start: putting a higher setpoint back is the same as a
+write above the tank.
 
 
 What a lowered setpoint holds off
@@ -247,7 +260,15 @@ What a lowered setpoint holds off
   The heat pump started at 06:55:55, with the lower zone at 86.2 degF. The
   lower-tank setting stays at 104.9 degF whatever the setpoint. The device
   was in ``ENERGY_SAVER`` by then (the held mode had taken effect at
-  21:00), so for ``HEAT_PUMP`` this is inferred, not measured.
+  21:00). ``HEAT_PUMP`` differs (next).
+* **In** ``HEAT_PUMP`` **a draw does not start it while the upper tank is
+  at or above the setpoint.** On 2026-10-03 an entry lowered the setpoint
+  to 120.2 degF with the upper tank at 137.1 degF. Draws took the
+  lower zone from 104.9 to 99.5 degF and nothing started in the
+  4 h held, where 104 of 104 other crossings of its setting, each with
+  the upper tank short, started within 30 s. On 2026-10-05, with no draw,
+  the same entry held the compressor off for 3 h 59 min. The entries that
+  restored the setpoint started it within 40 s.
 * **A lower zone that is merely low does not always start it.** Before
   that pump run, the lower zone had sat near 87 degF for about 10 hours,
   below its 104.9 degF setting, without a start, also in
@@ -255,17 +276,18 @@ What a lowered setpoint holds off
   not a simple level test on the lower probe. This is one observation,
   and the mechanism is not established.
 
-To hold the heater off with the setpoint, put it **at least 2 degF below
-the upper tank**: inside a window, none of 8 such writes started the
-compressor. Closer than that, and outside a window, it is not
-established. Expect a draw to start the heater anyway.
+To hold the heater off with the setpoint, put it **at or below the upper
+tank**: outside a window, none of 15 such lowerings started the
+compressor. Inside a window, none of 8 writes 2 degF or more below it
+did, and closer than that is not established. In ``HEAT_PUMP`` that holds
+through a draw; in ``ENERGY_SAVER`` a draw started the heater anyway.
 
 
 Working with it
 ===============
 
 * **Treat every control write as a possible start.** That includes a
-  restore, a setpoint lowered as a hold-off unless it is well below the
+  restore, a setpoint lowered as a hold-off unless it is at or below the
   upper tank, and a mode change to anything that heats.
 * **Confirm by reading back, not by the command's return.** Read
   ``dhw_target_temperature_setting``, ``dhw_operation_setting`` and
@@ -298,6 +320,7 @@ Limits
 
 One unit, one household, one TOU schedule. The record mixes the
 manufacturer's app, test scripts and the device's own schedule, which is
-part of the finding: the device does not care who wrote. The mid-cycle,
-hold-off and after-window results each come from a single run. The
-shoulder period was not tested.
+part of the finding: the device does not care who wrote. The mid-cycle
+and after-window results each come from a single run, and the
+``HEAT_PUMP`` hold-off from two, one with draws. The shoulder period was
+not tested.

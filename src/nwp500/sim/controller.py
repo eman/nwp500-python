@@ -54,8 +54,10 @@ lockout); the upper zone at ``he_upper_on`` (``UpperRead``,
   compressor in 118 of 120 writes, ``write_start_lag_s`` later
   (``ControllerParams``); mode writes by rules of their own.
 - **Reservation entries** fire in their minute whatever runs,
-  setting the setpoint, then the mode; skipped in Vacation and powered
-  off. One repeating the heater's state starts nothing.
+  setting the setpoint, then the mode; skipped in Vacation. Powered
+  off, the device fires them and turns the heater on (a device test,
+  2026-09-24), but the walk skips them there too. One repeating the
+  heater's state starts nothing.
 - **The TOU cap**, judged at the recovery's end
   (``judge_cap``): one ending inside a window stops ``tou_cap_f``
   short of its target.
@@ -247,11 +249,11 @@ class Settings:
     hp_lower_on_f: float | None
     #: The TOU windows in force: the device's, while its switch is on.
     tou_windows: tuple[Window, ...] = ()
-    #: VACATION or POWER_OFF: nothing starts, and no entry fires: the
-    #: device skips each as its minute passes, and does not run it late
-    #: (measured on this heater, 2026-09;
-    #: ``docs/how-to/schedule-operation.rst``: reservations are suspended
-    #: in vacation and do not execute while powered off).
+    #: VACATION or POWER_OFF: nothing starts, and no entry fires. In
+    #: Vacation the device skips each as its minute passes, and does not
+    #: run it late (a device test, 2026-09-24). Powered off it fires
+    #: them, turning the heater on (the same test); the walk does not
+    #: model that, and skips them as in Vacation.
     heating_disabled: bool = False
     #: The elements' thresholds and dead time.
     element: ElementParams = field(default_factory=ElementParams)
@@ -1161,8 +1163,10 @@ def _entry_fires(s: _Step, ev: EntryFires) -> None:
     its whole state: the setpoint first, so the mode's own rules judge
     the new setpoint, then the mode. A setpoint or mode equal to the
     heater's is no change and starts nothing (measured: 0 of 4, a
-    device test). In Vacation or powered off the device skips it, and
-    does not run it late (a device test, 2026-09)."""
+    device test). In Vacation the device skips it, and does not run it
+    late (a device test, 2026-09-24). Powered off it fires it and turns
+    the heater on (the same test); the walk skips it there too, as in
+    Vacation."""
     if s.disabled:
         s.act(EntrySkipped(ev.ref))
         return

@@ -178,8 +178,11 @@ def predict_physics_detailed(
         compressor_constant: Calibrated K = V_disp × N_RPM × η_motor (ft³/s).
             Use 0.0 to signal uncalibrated (returns NaN).
         evap_approach_f: T_amb − T_evap temperature approach at the
-            evaporator coil (°F).  Empirically 10–15°F.  Ignored when
-            ``t_evap_override`` is supplied.
+            evaporator coil (°F).  Fitted, not measured, and it absorbs
+            structural error besides the coil's: 10–15 °F holds for
+            winter-only fits, and an all-season fit with compression
+            work lands near 18 °F.  Ignored when ``t_evap_override`` is
+            supplied.
         compressor: The cycle's fixed constants (``cond_approach_f``,
             ``clearance_ratio``, ``polytropic_exp``, ``fan_airflow_cfm``).
             Its fitted pair and two-zone flag are not read: they are the

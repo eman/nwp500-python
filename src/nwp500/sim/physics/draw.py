@@ -81,7 +81,7 @@ water off the top and admits cold at the bottom, so the upper-lower gap
 *opens* by roughly the cold volume admitted, and then relaxes on the
 stratification time constant, `tau_gap_hours`. It is fitted each
 retrain on quiet windows and carried with the fitted parameters.
-Parameters without one project on the 10 h prior, and a projection
+Parameters without one project on the 60 h prior, and a projection
 whose window contains a draw should then say it used the prior.
 Fitted or not, one
 exponential is a two-zone approximation of a thermocline, so
@@ -320,26 +320,26 @@ def gap_opened_f(
 #: Stratification gap, °F, over which water let in at the bottom comes
 #: to reach the lower thermistor (``lower_zone_drop_f``): at this gap it
 #: reaches it with share ``1 − 1/e``. Fitted 2026-09-25 through the
-#: coast itself on 101 clean flowing draws from 2026-02-26 to 08-31,
+#: coast itself on 101 clean circulation runs from 2026-02-26 to 08-31,
 #: their inflow at ambient, each projected at its own measured flow,
 #: minimising the lower zone's absolute error averaged over 10, 30, 60
-#: and 120 min after the draw: 5.0 °F at the 10 h gap constant the
+#: and 120 min after the run: 5.0 °F at the 10 h gap constant the
 #: model then used (bootstrap 95 % CI 3.5-6.0), and 5.5 at the
 #: fitted 59 h (CI 4.0-6.0), where 5.0 is within 0.02 °F of the optimum.
 #: September was held out to validate it: the value, not the law's
-#: form, which was chosen from statistics over all 146 draws,
+#: form, which was chosen from statistics over all 146 runs,
 #: September's included.
 DEFAULT_LOWER_GATE_F = 5.0
 
 #: The standby pool, °F of reach per hour the tank has stood unheated,
 #: added to the gap a flowing draw is gated on (``lower_zone_drop_f``).
 #: Fitted 2026-09-25 through the coast with the gate on the same 101
-#: draws to 08-31, at the 10 h gap constant and each draw's measured
+#: runs to 08-31, at the 10 h gap constant and each run's measured
 #: flow: 0.015 at the gate above (bootstrap 95 % CI 0.010 to >= 0.040,
 #: the upper bound censored by the grid searched), the joint optimum
 #: (5.25 °F, 0.015) within 0.002 °F of it. On September, the rate held
-#: out (not the form, chosen on all 146 draws), it takes the lower
-#: zone's error after a draw from 2.11 to 1.90 °F at 10 min and 1.52 to
+#: out (not the form, chosen on all 146 runs), it takes the lower
+#: zone's error after a run from 2.11 to 1.90 °F at 10 min and 1.52 to
 #: 1.07 at 120, all of it in tanks the probes read as mixed.
 DEFAULT_POOL_F_PER_HOUR = 0.015
 
@@ -358,13 +358,13 @@ def lower_zone_drop_f(
     A draw that flows straight from the tank takes water off the top,
     and the water replacing it comes in below the lower thermistor at
     the draw's inflow temperature. What the thermistors show is
-    measured, on 146 compressor-off flowing draws with no other draw,
-    their inflow at ambient, from 2026-02-26 to 09-24: the upper zone
-    does not move (−0.36 °F 10 min after the draw, most of it standby),
-    and the lower zone moves by an amount set by where the thermocline
-    is. With the tank mixed (gap ≤ 1 °F) it fell 0.9 °F; with a gap
-    over 3 °F, 7.0 °F. The drop persisted for the two hours the record
-    stays clean for; it did not mix back.
+    measured on 146 circulation runs with no draw and no compressor or
+    element, their inflow at ambient, from 2026-02-26 to 09-24: the
+    upper zone does not move (−0.36 °F 10 min after the run, most of it
+    standby), and the lower zone moves by an amount set by where the
+    thermocline is. With the tank mixed (gap ≤ 1 °F) it fell 0.90 °F;
+    with a gap over 3 °F, 7.02 °F. The drop persisted for the two hours
+    the record stays clean for; it did not mix back.
 
     So the incoming water is mixed into the lower zone, half the tank,
     at its inflow temperature::
@@ -381,7 +381,7 @@ def lower_zone_drop_f(
 
     ``pool`` is cold water the probes cannot see. A tank that has stood
     unheated for hours reads mixed, but a draw then lifts water that
-    cooled below the probe: on the 48 draws into a mixed tank the drop
+    cooled below the probe: on the 48 runs into a mixed tank the drop
     was 0.7 °F within 3 h of the heater stopping and 3.6 °F after
     14 h (n = 5). The rate is ``DEFAULT_POOL_F_PER_HOUR``, fitted with
     the gate as a pair.
