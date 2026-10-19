@@ -21,6 +21,7 @@ from .protocol import (
     ClassCode,
     Command,
     ControllerSerials,
+    CrcMismatchError,
     DeviceInfo,
     Packet,
     build_packet,
@@ -98,12 +99,17 @@ class NavienBleClient:
 
         async with NavienBleClient(address) as ble:
             info = await ble.read_device_info()
-            blocks = await ble.read_parameter_blocks()
+            status = await ble.read(ClassCode.SSD)
 
-    Reads are safe. :meth:`write_block` sends a write and is marked
-    experimental: the parameter block layouts are not yet mapped, so only
-    write bytes you obtained from a read of the same class and changed
-    deliberately.
+    Reads are safe. :meth:`read` returns the reply as received, with
+    ``crc_ok`` set; the readers that decode a block
+    (:meth:`read_device_info`, :meth:`read_controller_serials`,
+    :meth:`read_parameter_blocks`) raise :class:`CrcMismatchError` instead
+    of decoding bytes that failed their checksum.
+
+    :meth:`write_block` sends a write and is marked experimental: the
+    parameter block layouts are not yet mapped, so only write bytes you
+    obtained from a read of the same class and changed deliberately.
     """
 
     def __init__(
@@ -131,8 +137,24 @@ class NavienBleClient:
         await self.disconnect()
 
     async def connect(self) -> None:
+        """Connect and subscribe to replies.
+
+        If the subscription fails or is cancelled, the connection is
+        closed again before the error propagates: ``__aexit__`` does not
+        run when ``__aenter__`` raises, and an open GATT connection keeps
+        other clients from connecting.
+        """
         await self._transport.connect()
-        await self._transport.start_notify(self._on_notify)
+        try:
+            await self._transport.start_notify(self._on_notify)
+        except BaseException:
+            try:
+                await self._transport.disconnect()
+            except Exception:
+                _logger.debug(
+                    "Disconnect after a failed subscribe failed", exc_info=True
+                )
+            raise
 
     async def disconnect(self) -> None:
         await self._transport.disconnect()
@@ -182,11 +204,32 @@ class NavienBleClient:
             build_read(class_code, expected_length), class_code
         )
 
+    async def _read_checked(
+        self, class_code: int, expected_length: int | None = None
+    ) -> bytes:
+        """A block's bytes, refused if the reply failed its CRC."""
+        packet = await self.read(class_code, expected_length)
+        if not packet.crc_ok:
+            raise CrcMismatchError(
+                f"reply for class {packet.class_name} failed its CRC"
+            )
+        return packet.data
+
     async def read_device_info(self) -> DeviceInfo:
-        return DeviceInfo.parse((await self.read(ClassCode.DID)).data)
+        """Read and decode the device info block (``DID``).
+
+        Raises:
+            CrcMismatchError: The reply failed its checksum.
+        """
+        return DeviceInfo.parse(await self._read_checked(ClassCode.DID))
 
     async def read_controller_serials(self) -> ControllerSerials:
-        return ControllerSerials.parse((await self.read(ClassCode.MSCD)).data)
+        """Read and decode the controller serial numbers (``MSCD``).
+
+        Raises:
+            CrcMismatchError: The reply failed its checksum.
+        """
+        return ControllerSerials.parse(await self._read_checked(ClassCode.MSCD))
 
     async def read_parameter_blocks(self) -> dict[ClassCode, bytes]:
         """Read the four boiler parameter blocks (classes 51-54).
@@ -196,6 +239,9 @@ class NavienBleClient:
         :data:`~nwp500.ble.NWP500_RESPONDING_CLASSES`), so on the heat
         pump expect a :class:`TimeoutError`; the classes it does answer
         can be read with :meth:`read`.
+
+        Raises:
+            CrcMismatchError: A reply failed its checksum.
         """
         out: dict[ClassCode, bytes] = {}
         for cc in (
@@ -204,7 +250,7 @@ class NavienBleClient:
             ClassCode.SPHD,
             ClassCode.SPD,
         ):
-            out[cc] = (await self.read(cc, DEFAULT_READ_LENGTHS[cc])).data
+            out[cc] = await self._read_checked(cc, DEFAULT_READ_LENGTHS[cc])
         return out
 
     async def write_block(

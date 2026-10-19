@@ -124,6 +124,10 @@ NWP500_RESPONDING_CLASSES: frozenset[int] = frozenset(
 NWP500_WRITABLE_CLASSES: frozenset[int] = frozenset()
 
 
+class CrcMismatchError(ValueError):
+    """A reply's checksum did not match, so its bytes cannot be trusted."""
+
+
 def crc16(data: bytes) -> int:
     """CRC-16/MODBUS: reflected polynomial 0xA001, initial value 0xFFFF.
 

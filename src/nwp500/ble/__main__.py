@@ -8,7 +8,7 @@ import json
 import sys
 from pathlib import Path
 
-from . import ClassCode, NavienBleClient, scan
+from . import NWP500_RESPONDING_CLASSES, ClassCode, NavienBleClient, scan
 
 
 def _class_name(code: int) -> str:
@@ -58,17 +58,9 @@ async def _read(args: argparse.Namespace) -> int:
         if args.classes:
             targets = [_parse_class(c) for c in args.classes]
         else:
-            targets = [
-                (int(c), None)
-                for c in (
-                    ClassCode.DID,
-                    ClassCode.MSCD,
-                    ClassCode.SPID,
-                    ClassCode.SPLD,
-                    ClassCode.SPHD,
-                    ClassCode.SPD,
-                )
-            ]
+            # The classes an NWP500 answers; the boiler parameter classes
+            # 51-54 only time out on it and are read when named.
+            targets = [(c, None) for c in sorted(NWP500_RESPONDING_CLASSES)]
         for code, length in targets:
             try:
                 pkt = await ble.read(code, length)
@@ -89,6 +81,9 @@ async def _read(args: argparse.Namespace) -> int:
             )
         for raw in ble.unparsed_notifications:
             print("unparsed notification:", raw.hex())
+    if not results:
+        print("No blocks read.", file=sys.stderr)
+        return 1
     if args.out:
         await asyncio.to_thread(
             Path(args.out).write_text, json.dumps(results, indent=1)

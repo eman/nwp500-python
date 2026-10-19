@@ -19,7 +19,10 @@ Added
   192-byte TOU plan, device info, the controller serial numbers and a
   software-data block; the boiler parameter classes 51-54 do not answer, so
   installer parameters are not reachable yet. ``write_block()`` exists for
-  the eventual parameter write and is marked experimental.
+  the eventual parameter write and is marked experimental. ``read``
+  dumps the classes the heater answers by default and exits 1 when none
+  answered; the readers that decode a block raise ``CrcMismatchError``
+  on a reply that failed its checksum.
 - **New REST endpoints.** ``NavienAPIClient`` gains
   ``get_push_settings()`` / ``set_push_settings()``
   (``/user/get-push-settings``, ``/user/set-push-settings``),

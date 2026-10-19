@@ -38,11 +38,14 @@ Scan and read
    python -m nwp500.ble scan
    python -m nwp500.ble read --out blocks.json
 
-``read`` connects to the strongest heater it hears and dumps the device
-info block (``DID``), the controller serial numbers (``MSCD``) and the four
-boiler parameter blocks (``SPID``, ``SPLD``, ``SPHD``, ``SPD``) as hex,
-with the CRC check result for each reply. Pass ``CLASS[:LENGTH]`` arguments
-to read other classes, for example ``SSD:59`` or ``TOU_PLAN``.
+``read`` connects to the strongest heater it hears and dumps every class
+an NWP500 answers (:data:`nwp500.ble.NWP500_RESPONDING_CLASSES`, listed
+below) as hex, with the CRC check result for each reply. Pass
+``CLASS[:LENGTH]`` arguments to read particular classes instead, for
+example ``SSD:59`` or ``TOU_PLAN``, or the boiler parameter blocks
+(``SPID``, ``SPLD``, ``SPHD``, ``SPD``), which an NWP500 does not answer.
+``read`` exits with status 1, and writes no ``--out`` file, when no class
+answered.
 
 What an NWP500 answers
 ----------------------
@@ -74,14 +77,21 @@ From Python:
 
 .. code-block:: python
 
-   from nwp500.ble import NavienBleClient, scan
+   from nwp500.ble import ClassCode, NavienBleClient, scan
 
    found = await scan(10)
    address = found[0][0]
    async with NavienBleClient(address) as ble:
        info = await ble.read_device_info()
        serials = await ble.read_controller_serials()
-       blocks = await ble.read_parameter_blocks()
+       status = await ble.read(ClassCode.SSD)
+       print(status.crc_ok, status.data.hex())
+
+``read()`` returns each reply as received, with ``crc_ok`` set. The
+readers that decode a block (``read_device_info()``,
+``read_controller_serials()``, ``read_parameter_blocks()``) raise
+:class:`~nwp500.ble.CrcMismatchError` rather than decode a reply that
+failed its checksum.
 
 Locating a parameter
 --------------------

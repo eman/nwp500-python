@@ -7,9 +7,12 @@ import asyncio
 import pytest
 
 from nwp500.ble import (
+    DEFAULT_READ_LENGTHS,
+    NWP500_RESPONDING_CLASSES,
     ClassCode,
     Command,
     ControllerSerials,
+    CrcMismatchError,
     DeviceInfo,
     NavienBleClient,
     build_packet,
@@ -245,3 +248,119 @@ def test_device_info_min_operation_temperature():
     assert info.min_operation_temperature_raw == 81
     assert round(info.min_operation_temperature(celsius=True), 1) == 40.5
     assert round(info.min_operation_temperature(), 1) == 104.9
+
+
+class CorruptTransport(FakeTransport):
+    """Delivers each reply with its CRC bytes flipped."""
+
+    async def write(self, data: bytes):
+        self.written.append(data)
+        req = parse_packet(data)
+        if req.class_code in self.replies:
+            reply = bytearray(
+                build_packet(
+                    Command.READ_RESPONSE,
+                    req.class_code,
+                    self.replies[req.class_code],
+                )
+            )
+            reply[-1] ^= 0xFF
+            asyncio.get_running_loop().call_soon(self._cb, bytes(reply))
+
+
+@pytest.mark.asyncio
+async def test_decoding_readers_refuse_a_bad_crc():
+    transport = CorruptTransport(
+        {
+            ClassCode.DID: bytes(58),
+            ClassCode.MSCD: bytes(40),
+            ClassCode.SPID: bytes(8),
+        }
+    )
+    async with NavienBleClient(transport=transport) as ble:
+        # The raw read still returns the packet, flagged, for diagnosis.
+        pkt = await ble.read(ClassCode.DID)
+        assert pkt.crc_ok is False
+        with pytest.raises(CrcMismatchError):
+            await ble.read_device_info()
+        with pytest.raises(CrcMismatchError):
+            await ble.read_controller_serials()
+        with pytest.raises(CrcMismatchError):
+            await ble.read_parameter_blocks()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "error", [RuntimeError("gatt"), asyncio.CancelledError()]
+)
+async def test_failed_subscribe_disconnects(error: BaseException):
+    class FailingNotify(FakeTransport):
+        async def start_notify(self, callback):
+            raise error
+
+    transport = FailingNotify({})
+    with pytest.raises(type(error)):
+        async with NavienBleClient(transport=transport):
+            pass  # pragma: no cover - never entered
+    assert not transport.connected
+
+
+@pytest.mark.asyncio
+async def test_failed_subscribe_keeps_its_error_if_disconnect_fails():
+    class Broken(FakeTransport):
+        async def start_notify(self, callback):
+            raise RuntimeError("subscribe failed")
+
+        async def disconnect(self):
+            raise RuntimeError("disconnect failed")
+
+    with pytest.raises(RuntimeError, match="subscribe failed"):
+        await NavienBleClient(transport=Broken({})).connect()
+
+
+# --- python -m nwp500.ble read ---------------------------------------
+
+
+def _run_read(monkeypatch, transport, argv):
+    from nwp500.ble import __main__ as cli
+
+    monkeypatch.setattr(
+        cli,
+        "NavienBleClient",
+        lambda address: NavienBleClient(
+            transport=transport, reply_timeout=0.05
+        ),
+    )
+    return cli.main(["read", "--address", "AA:BB", *argv])
+
+
+def test_cli_read_defaults_to_the_classes_the_heater_answers(monkeypatch):
+    transport = FakeTransport(
+        {c: bytes(DEFAULT_READ_LENGTHS[c]) for c in NWP500_RESPONDING_CLASSES}
+    )
+    assert _run_read(monkeypatch, transport, []) == 0
+    asked = [parse_packet(w).class_code for w in transport.written]
+    assert asked == sorted(NWP500_RESPONDING_CLASSES)
+    assert not {51, 52, 53, 54} & set(asked)
+
+
+def test_cli_read_fails_when_nothing_answers(monkeypatch, tmp_path):
+    out = tmp_path / "blocks.json"
+    transport = FakeTransport({})
+    status = _run_read(monkeypatch, transport, ["--out", str(out), "SPID"])
+    assert status == 1
+    assert not out.exists()
+
+
+def test_cli_read_succeeds_on_a_partial_dump(monkeypatch, tmp_path):
+    out = tmp_path / "blocks.json"
+    transport = FakeTransport({ClassCode.DID: bytes(58)})
+    status = _run_read(
+        monkeypatch, transport, ["--out", str(out), "DID", "SPID"]
+    )
+    assert status == 0
+    assert '"name": "DID"' in out.read_text()
+
+
+def test_every_default_cli_class_has_a_read_length():
+    assert NWP500_RESPONDING_CLASSES <= set(DEFAULT_READ_LENGTHS)
