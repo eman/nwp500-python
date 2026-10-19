@@ -112,21 +112,17 @@ def max_gap(readings: Sequence[status_history.TimedStatus]) -> timedelta:
     return max(MIN_GAP, GAP_SAMPLES * usual)
 
 
-def _held_to(
-    series: Sequence[Reading], outages: Sequence[tuple[datetime, datetime]]
-) -> list[Reading]:
-    """A source's ``series`` with the value in force at each outage's
-    start repeated there: a state holds until the next, so the readings
-    either side of an outage are not to be drawn as a ramp across it,
-    which would reach back before it."""
-    readings = sorted(series)
-    out = list(readings)
-    for a, _ in outages:
-        # From the readings themselves, never an earlier boundary's copy.
-        before = [v for t, v in readings if t <= a]
-        if before:
-            out.append((a, before[-1]))
-    return sorted(set(out))
+def _stepped(series: Sequence[Reading]) -> list[Reading]:
+    """A source's ``series`` as the steps it is: a state holds until the
+    next, so each change is preceded by the value before it, a moment
+    earlier. Interpolated, the readings either side of a long quiet
+    spell or an outage would otherwise ramp across it."""
+    out: list[Reading] = []
+    for t, v in sorted(series):
+        if out:
+            out.append((t - timedelta(microseconds=1), out[-1][1]))
+        out.append((t, v))
+    return out
 
 
 def _unobserved(
@@ -214,16 +210,13 @@ def calibrate(
     elif ambient is not None:
         series, how = [(first, ambient), (last, ambient)], "constant"
     elif record is not None and record.air:
-        series = [
-            (t, sa.temperature(v))
-            for t, v in _held_to(record.air, record.air_outages)
-        ]
+        series = [(t, sa.temperature(v)) for t, v in _stepped(record.air)]
         how = "source"
         # A history's first reading is the value in force at its start,
         # and the last holds a reading's freshness past it.
         covers = (record.air[0][0], record.air[-1][0] + timedelta(hours=1))
     if humidity is None and record is not None and record.humidity:
-        humidity = _held_to(record.humidity, record.humidity_outages)
+        humidity = _stepped(record.humidity)
         rh_covers = (
             record.humidity[0][0],
             record.humidity[-1][0] + timedelta(hours=1),

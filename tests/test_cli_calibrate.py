@@ -365,14 +365,45 @@ class TestTheFits:
         )
         assert (frame.loc[before, "humidity_pct"] == 30.0).all()
 
-    def test_each_outage_holds_the_reading_before_it(self):
+    def test_source_states_hold_until_the_next(self, history, monkeypatch):
+        from nwp500.sim_home_assistant import RecordInputs
+
+        seen: list[Any] = []
+        real = cal.calibrate
+
+        def spy(frame: Any, *args: Any, **kw: Any) -> Any:
+            seen.append(frame)
+            return real(frame, *args, **kw)
+
+        monkeypatch.setattr(cal_cli.cal, "calibrate", spy)
         h = timedelta(hours=1)
-        readings = [(T0, 60.0), (T0 + 6 * h, 70.0), (T0 + 12 * h, 80.0)]
-        outages = [(T0 + 4 * h, T0 + 6 * h), (T0 + 10 * h, T0 + 12 * h)]
-        held = cal_cli._held_to(readings, outages)
-        assert (T0 + 4 * h, 60.0) in held
-        assert (T0 + 10 * h, 70.0) in held
-        assert [t for t, _ in held] == sorted(t for t, _ in held)
+        record = RecordInputs(
+            air=[(T0, AIR_F), (T0 + 8 * h, AIR_F + 20.0), (T0 + 24 * h, AIR_F)],
+            humidity=[(T0, 30.0), (T0 + 8 * h, 70.0)],
+            drawing=[],
+            circulating=[],
+        )
+        cal_cli.calibrate(cal_cli.read_history(history), record=record)
+        frame = seen[0]
+        at = frame.index[(frame.index > T0 + h) & (frame.index < T0 + 8 * h)]
+        assert len(at)
+        assert frame.loc[at, "air_f"].tolist() == pytest.approx(
+            [AIR_F] * len(at)
+        )
+        assert (frame.loc[at, "humidity_pct"] == 30.0).all()
+        after = frame.index[
+            (frame.index >= T0 + 8 * h) & (frame.index < T0 + 9 * h)
+        ]
+        assert (frame.loc[after, "humidity_pct"] == 70.0).all()
+
+    def test_stepped(self):
+        h = timedelta(hours=1)
+        tick = timedelta(microseconds=1)
+        assert cal_cli._stepped([(T0 + 6 * h, 70.0), (T0, 60.0)]) == [
+            (T0, 60.0),
+            (T0 + 6 * h - tick, 60.0),
+            (T0 + 6 * h, 70.0),
+        ]
 
     def test_flags_win_over_the_sources(self, history):
         from nwp500.sim_home_assistant import RecordInputs
