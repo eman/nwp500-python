@@ -34,6 +34,7 @@ from nwp500.sim import (  # noqa: E402
     simulate,
     standby,
 )
+from nwp500.sim.api import LOW_CONFIDENCE_FLOOR  # noqa: E402
 from nwp500.sim.engine import (  # noqa: E402
     Entry,
     Heater,
@@ -41,6 +42,11 @@ from nwp500.sim.engine import (  # noqa: E402
     SimulationError,
 )
 from nwp500.sim.engine import simulate as walk  # noqa: E402
+from nwp500.sim.extensions import RecoveryModel  # noqa: E402
+from nwp500.sim.heat_pump_recovery import (  # noqa: E402
+    ModelDuration,
+    RecoveryContext,
+)
 from nwp500.sim.params import HeaterParams  # noqa: E402
 from nwp500.sim.tank_physics import TankPhysics  # noqa: E402
 
@@ -105,7 +111,15 @@ def _scenario(**kw: Any) -> Scenario:
     return Scenario(**base)
 
 
-def _by_hand(params: HeaterParams, s: Scenario, **kw: Any) -> Any:
+def _by_hand(
+    params: HeaterParams,
+    s: Scenario,
+    *,
+    model: RecoveryModel | None = None,
+    physics_usable: bool | None = None,
+    draws_on: bool | None = None,
+    **kw: Any,
+) -> Any:
     """The engine called directly with what ``s`` stands for: a flat
     ambient on an hourly grid (any grid gives a flat ambient)."""
     stamps = pd.date_range(at(-2), s.until + timedelta(hours=24), freq="1h")
@@ -114,8 +128,11 @@ def _by_hand(params: HeaterParams, s: Scenario, **kw: Any) -> Any:
         params,
         frame,
         s.environment.humidity,
-        draws_on=bool(s.loads.draws),
+        draws_on=bool(s.loads.draws) if draws_on is None else draws_on,
         tau_gap_hours=params.tank.stratification_gap_tau_h,  # type: ignore[arg-type]
+        physics_usable=physics_usable,
+        recovery_model=model,
+        low_confidence_floor=LOW_CONFIDENCE_FLOOR,
     )
     heater = kw.pop(
         "heater",
@@ -318,6 +335,149 @@ class TestSimulateIsTheEngine:
         )
         assert got.simulation == want
         assert not got.heating
+
+
+class _Model:
+    """A model that uses what it is given: the physics' minutes, longer
+    by half again per unit of draw load, plus the start's hold. It keeps
+    every context it was asked about."""
+
+    def __init__(self) -> None:
+        self.asked: list[RecoveryContext] = []
+
+    def duration(self, ctx: RecoveryContext) -> ModelDuration:
+        self.asked.append(ctx)
+        hold = ctx.start_hold_minutes
+        return ModelDuration(
+            minutes=ctx.physics.minutes * (1.0 + 0.5 * ctx.draw_load) + hold,
+            start_hold_minutes=hold,
+            confidence=0.9,
+            reasons=() if ctx.physics.estimate is not None else ("unusable",),
+        )
+
+
+def _hold(gap: float | None) -> float:
+    """A start's hold, minutes: a sixth of the gap since the last stop,
+    at most 30 (unknown: 30)."""
+    return 30.0 if gap is None else min(gap / 6.0, 30.0)
+
+
+#: A tank whose lower zone is below the start threshold: a start at T0.
+COLD = HeaterState(upper_f=128.0, lower_f=100.0)
+#: Two draws in the ``DRAW_LEAD`` before T0, and one before it.
+LEAD = (Draw(at=at(-0.25), gallons=6.0), Draw(at=at(-0.1), gallons=4.0))
+EARLY = Draw(at=at(-1.0), gallons=8.0)
+
+
+class TestAModelsInputs:
+    """Each of a model's inputs reaches the engine as given: the walk is
+    the engine's called by hand with it, and differs from the walk
+    without it."""
+
+    def _both(
+        self, params: HeaterParams, s: Scenario, **kw: Any
+    ) -> tuple[Any, Any, _Model]:
+        model = _Model()
+        got = simulate(s, params, recovery=model, **kw).simulation
+        usable = kw.pop("physics_usable", None)
+        lead = kw.pop("lead_draws", ())
+        want = _by_hand(
+            params,
+            s,
+            model=_Model(),
+            physics_usable=usable,
+            draws_on=bool(s.loads.draws or lead),
+            lead_draws=[(d.at, d.gallons) for d in lead],
+            draws=[(d.at, d.gallons) for d in s.loads.draws],
+            **kw,
+        )
+        return got, want, model
+
+    def test_none_given_is_the_engines_defaults(self, params: HeaterParams):
+        s = _scenario(state=COLD)
+        got, want, model = self._both(params, s)
+        assert got == want
+        assert model.asked
+        assert all(c.start_hold_minutes == 0.0 for c in model.asked)
+        assert all(c.draw_load == 0.0 for c in model.asked)
+
+    def test_the_start_hold(self, params: HeaterParams):
+        s = _scenario(state=COLD)
+        got, want, model = self._both(params, s, start_hold=_hold)
+        assert got == want
+        # Stopped two hours before: a 20-minute hold.
+        assert model.asked[0].start_hold_minutes == pytest.approx(20.0)
+        assert got != simulate(s, params, recovery=_Model()).simulation
+
+    def test_a_running_compressors_hold(self, params: HeaterParams):
+        s = _scenario(
+            state=HeaterState(
+                upper_f=128.0, lower_f=100.0, compressor_running=True
+            )
+        )
+        got, want, _ = self._both(params, s, running_hold=15.0)
+        assert got == want
+        assert got != simulate(s, params, recovery=_Model()).simulation
+
+    def test_lead_draws_are_the_first_recoverys_load(
+        self, params: HeaterParams
+    ):
+        s = _scenario(state=COLD)
+        got, want, model = self._both(
+            params, s, lead_draws=(EARLY, *LEAD), draw_hold_factor=0.5
+        )
+        assert got == want
+        assert model.asked[0].draw_load > 0.0
+        # Without the draw before the lead, the same load.
+        alone = _Model()
+        simulate(
+            s, params, recovery=alone, lead_draws=LEAD, draw_hold_factor=0.5
+        )
+        assert alone.asked[0].draw_load == model.asked[0].draw_load
+
+    def test_lead_draws_need_a_hold_factor(self, params: HeaterParams):
+        s = _scenario(state=COLD)
+        got, want, model = self._both(params, s, lead_draws=LEAD)
+        assert got == want
+        assert model.asked[0].draw_load == 0.0
+
+    def test_the_draw_hold_factor(self, params: HeaterParams):
+        s = _scenario(
+            state=COLD,
+            loads=Loads(draws=(Draw(at=at(0.5), gallons=10.0),)),
+        )
+        got, want, _ = self._both(params, s, draw_hold_factor=0.5)
+        assert got == want
+        assert got != simulate(s, params, recovery=_Model()).simulation
+        # The physics alone holds for the draw too.
+        alone = simulate(s, params, draw_hold_factor=0.5).simulation
+        assert alone != simulate(s, params).simulation
+
+    def test_with_no_model_the_holds_change_nothing(self, params: HeaterParams):
+        s = _scenario(state=COLD)
+        plain = simulate(s, params).simulation
+        assert simulate(s, params, start_hold=_hold).simulation == plain
+        running = _scenario(
+            state=HeaterState(
+                upper_f=128.0, lower_f=100.0, compressor_running=True
+            )
+        )
+        assert (
+            simulate(running, params, running_hold=15.0).simulation
+            == simulate(running, params).simulation
+        )
+
+    def test_physics_not_usable(self, params: HeaterParams):
+        s = _scenario(state=COLD)
+        got, want, model = self._both(params, s, physics_usable=False)
+        assert got == want
+        assert all(c.physics.estimate is None for c in model.asked)
+        assert "unusable" in got.reasons
+
+    def test_lead_draws_need_a_draw_response(self, params: HeaterParams):
+        bare = replace(params, draw=replace(params.draw, observability=None))
+        with pytest.raises(SimulationError, match="draw_model_unsupported"):
+            simulate(_scenario(state=COLD), bare, lead_draws=LEAD)
 
 
 class TestWhatTheResultSays:

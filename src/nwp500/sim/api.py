@@ -13,7 +13,7 @@ named in the result's ``reasons``, and every default used in its
 import dataclasses
 import itertools
 import math
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from datetime import UTC, datetime, timedelta
 from types import MappingProxyType
 from typing import Any, Literal
@@ -242,6 +242,7 @@ def _physics(
     model: RecoveryModel | None,
     defaults: list[str],
     circulation: Circulation | None = None,
+    physics_usable: bool | None = None,
 ) -> TankPhysics:
     tau = params.tank.stratification_gap_tau_h
     if tau is None:
@@ -279,6 +280,7 @@ def _physics(
         flowing_draws=flowing,
         tau_gap_hours=tau,
         draw_inlet_temp_f=environment.inlet_f,
+        physics_usable=physics_usable,
         recovery_model=model,
         low_confidence_floor=LOW_CONFIDENCE_FLOOR,
     )
@@ -387,11 +389,41 @@ def simulate(
     tou_windows_in_force: Sequence[tuple[datetime, datetime]] | None = None,
     withheld_windows: Sequence[tuple[datetime, datetime]] = (),
     inlet_measured: bool = False,
+    start_hold: Callable[[float | None], float] | None = None,
+    running_hold: float = 0.0,
+    lead_draws: Sequence[Draw] = (),
+    draw_hold_factor: float = 0.0,
+    physics_usable: bool | None = None,
 ) -> SimulationResult:
     """Walk ``scenario`` from its start to its end on ``params``.
 
     ``recovery`` replaces the physics duration of each heat-pump
-    recovery with its own (``extensions.RecoveryModel``).
+    recovery with its own (``extensions.RecoveryModel``). The five
+    inputs after it are what such a model may have been trained with,
+    and it brings them: none is a heater term, and none is fitted here.
+    Each goes to the engine as given (``engine.simulate``):
+
+    - ``start_hold``: how long a compressor start holds before the lower
+      zone climbs, minutes, by the minutes since the compressor last
+      stopped (None when not known); None holds none;
+    - ``running_hold``: what is left at the start of a running
+      compressor's own start's hold, minutes; ignored when it is not
+      running;
+    - ``lead_draws``: draws recorded before the start, which a
+      draw-free model reads as the first recovery's ``draw_load`` when
+      it begins within ``engine.DRAW_LEAD`` of them; read only with a
+      positive ``draw_hold_factor``. Like the scenario's draws, they
+      need a fitted draw response (``draw_model_unsupported``);
+    - ``draw_hold_factor``: ``(1 − k) / k`` at the draw observability
+      ``k``: a recovery holds that many times the time a draw sets it
+      back, for the share of the draw the probes miss; 0.0 none;
+    - ``physics_usable``: whether the physics duration may be served;
+      None, when the compressor is calibrated (a positive constant).
+
+    With no model, or one that declines, a recovery adds no start hold:
+    the physics is calibrated on whole durations, hold included.
+    ``draw_hold_factor`` holds a recovery for the walk's own draws
+    either way.
 
     ``book`` is the tank's booked heat at the start (``sim.book``): from
     the caller's own record, or ``book.full_tank_book`` when they know
@@ -419,12 +451,12 @@ def simulate(
     ``reasons`` says ``tou_schedule_unknown`` and no window is kept.
 
     Raises ``engine.SimulationError`` when the walk cannot be completed,
-    and for a scenario with draws and parameters with no fitted draw
-    response (``draw_model_unsupported``).
+    and for draws, the scenario's or ``lead_draws``, on parameters with
+    no fitted draw response (``draw_model_unsupported``).
     """
     s = scenario
     _check_setpoints(s)
-    _check_draws(params, s.loads.draws)
+    _check_draws(params, [*s.loads.draws, *lead_draws])
     tz = ZoneInfo(s.tz)
     reasons: list[str] = []
     defaults: list[str] = []
@@ -442,10 +474,13 @@ def simulate(
         s.environment,
         s.start,
         s.until,
-        draws_on=bool(s.loads.draws),
+        # Recorded draws before the start move the tank as the
+        # scenario's own do: the model's load is what they took off it.
+        draws_on=bool(s.loads.draws or lead_draws),
         model=recovery,
         defaults=defaults,
         circulation=circulation,
+        physics_usable=physics_usable,
     )
     tou_on = (
         s.commands.tou_enabled
@@ -535,6 +570,10 @@ def simulate(
         ledger=ledger,
         controller=params.controller,
         withheld_windows=sorted(withheld_windows),
+        start_hold=start_hold,
+        running_hold=running_hold,
+        draw_hold_factor=draw_hold_factor,
+        lead_draws=[(d.at, d.gallons) for d in lead_draws],
     )
     walked = (
         ledger.walk(sim.points, sim.heating, draws)
@@ -675,7 +714,7 @@ def _check_draws(params: HeaterParams, draws: Sequence[Draw]) -> None:
     leave the tank as it was, an answer that looks like one."""
     if draws and params.draw.observability is None:
         raise SimulationError(
-            "draw_model_unsupported: the scenario has draws, and the "
+            "draw_model_unsupported: draws were given, and the "
             "parameters have no fitted draw response "
             "(DrawParams.observability)"
         )
