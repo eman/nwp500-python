@@ -44,9 +44,14 @@ Summary
    * - How much of the tank heats
      - About **0.44** of the tank's mass while it is stratified, and
        **0.96** once it has mixed.
+   * - The start of a recovery
+     - The lower tank holds for a median **3.0 minutes** before it
+       climbs when the compressor restarts within 15 minutes of its last
+       stop, and **17.8 minutes** after more than 12 hours off.
    * - The end of a recovery
-     - Outside a TOU window, the lower tank ran **1.1-1.3 degF past the
-       setpoint** before the compressor stopped (5 of 5).
+     - Outside a TOU window, the compressor ran a median **10.7 minutes**
+       past the lower tank reaching the setpoint, and the lower tank ended
+       **1.1-1.3 degF past the setpoint** (5 of 5).
 
 The figures come from the unit's recorded status history and, for
 energy, a meter on the heater's circuit, between 2025-12-28 and
@@ -258,9 +263,6 @@ the heat draws took out during the recovery:
 * **Heat per unit of electricity: 2.76 pooled**, 2.09-3.30 from
   recovery to recovery (10th to 90th percentile). 2.98 with the tank
   averaging 125-130 degF, 2.76 at 130-140 degF.
-* **The gap between the tank and the air costs about 0.65 % per
-  degF.** Heat per unit of electricity falls by that much for each degF
-  the tank's mean sits further above the air.
 * **Each compressor start costs about 160 Wh** (162 Wh fitted) before
   the tank gains anything: warming the refrigerant circuit and the
   condenser. It is a cost per start, not per unit of heat, so it is a
@@ -276,13 +278,46 @@ divided by the efficiency at the tank and air temperatures it will run
 at. :doc:`tank-energy` gives the heat a tank is short.
 
 
+The start of a recovery
+=======================
+
+At a compressor start the lower tank dips, then holds while the
+refrigerant circuit and the condenser warm, and only then climbs. The
+hold is longer the longer the compressor has been off. Over 121
+draw-free starts from 2026-02-26 to 2026-09-26, the median minutes until
+the lower tank regained its reading from before the start:
+
+.. list-table::
+   :header-rows: 1
+   :widths: 50 50
+
+   * - Compressor off for
+     - Hold
+   * - Under 15 minutes
+     - 3.0 min
+   * - 15 minutes to 1 hour
+     - 4.5 min
+   * - 1-3 hours
+     - 11.5 min
+   * - 3-12 hours
+     - 11.4 min
+   * - Over 12 hours
+     - 17.8 min
+
+A short top-off after a long idle spends much of its run in this hold,
+and the start-up energy above goes into the same warming.
+
+
 The end of a recovery
 =====================
 
-Outside a TOU window, the compressor stops when the lower tank has
-passed the setpoint, not when it reaches it. In 5 of 5 draw-free
-recoveries in September 2026 the lower tank ran **1.1-1.3 degF past the
-setpoint** before the compressor stopped. A setpoint lowered to within
+Outside a TOU window, the compressor stops after the lower tank has
+passed the setpoint, not when it reaches it. Over the recorded
+recoveries to 2026-08-30 that reached the setpoint, it ran on for a
+median **10.7 minutes** after the lower tank first read the setpoint,
+5.8-40.9 minutes across them. In 5 of 5 draw-free recoveries in
+September 2026 the lower tank ended **1.1-1.3 degF past the setpoint**
+when the compressor stopped. A setpoint lowered to within
 that margin of the lower tank during a recovery did not stop it (one
 run, 2026-09-21; see :doc:`what-starts-a-recovery`).
 

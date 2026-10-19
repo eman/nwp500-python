@@ -28,8 +28,10 @@ Summary
        the air, rising to about **5.0** at 85 degF. For a 140 degF tank
        in 65 degF air that is about **0.7 degF an hour**.
    * - A circulation run
-     - A median **1,126 BTU** per run, about 2.1 degF of the whole tank,
-       measured from the loop's flow and temperatures.
+     - About **5 degF** of the whole tank for a typical run at the loop
+       volume fitted in September (6.38 gal), of which the probes show
+       about 0.44. In August, at a smaller fitted loop, a median
+       1,126 BTU (about 2.1 degF).
    * - Where a run's heat shows
      - Ten minutes after a run, the lower probe had fallen **0.9 degF** in
        a mixed tank and **7.0 degF** in a stratified one. The upper probe
@@ -55,7 +57,10 @@ no circulation run) covering a tank-to-air difference of 11.2 to
 ``UA(dT) = 4.47 * (dT / 50) ^ 0.227`` BTU/hr per degF
 
 Across the 301 windows ``UA`` averaged 4.87 BTU/hr per degF (standard
-deviation 1.26). Computed from the fit, with the tank's thermal mass of
+deviation 1.26). The same rule, refitted on 393 windows to 2026-10-11,
+gave ``4.61 * (dT / 50) ^ 0.186``, the simulator's default
+(:doc:`/reference/simulator-inputs`); the law has moved steadily that
+way as windows accrued. Computed from the fit, with the tank's thermal mass of
 527 BTU/degF:
 
 .. list-table::
@@ -124,19 +129,29 @@ tank at the bottom.
 How much heat a run removes
 ---------------------------
 
-Measured from the loop's flow and the difference between the tank's
-upper probe and the return temperature, a run removed a median
-**1,126 BTU** (18 runs, 2026-08-06 to 2026-08-08), about 2.1 degF of the
-whole tank. A run displaces the water standing in the loop and then
-recirculates water it has already warmed, so a run costs at most about
-one loop volume of water heated from the air to the tank. Its cost
-depends on the loop's volume and the tank-to-air difference. Runs less
-than 10 minutes apart cost about one run between them, because the loop
-has not cooled in between.
+A run displaces the water standing in the loop and then recirculates
+water it has already warmed, so a run costs at most about one loop
+volume of water heated from the air to the tank. Its cost depends on the
+loop's volume, fitted from the runs themselves, and the tank-to-air
+difference. Runs less than 10 minutes apart count as one, because the
+loop has not cooled in between.
 
-Compared with the jacket table above, a few runs a day remove heat of
-the same order as the jacket's whole daily loss (computed from the two
-figures, not measured together).
+The fitted volume of the same loop grew between two measurements:
+
+* **August.** Measured from the loop's flow and the difference between
+  the tank's upper probe and the return temperature, a run removed a
+  median **1,126 BTU** (18 runs, 2026-08-06 to 2026-08-08), about
+  2.1 degF of the whole tank. The loop volume fitted on 64 runs then was
+  3.59 gal.
+* **September.** With runs less than 10 minutes apart merged, the loop
+  fitted at **6.38 gal** on 2026-09-18, and a typical run removed about
+  **5 degF** of the whole tank. The probes show about 0.44 of that
+  (below), about 2 degF.
+
+At about 5 degF of the tank, one run removes as much heat as the jacket
+loses in about 7 hours with the tank 75 degF above the air, so three
+runs a day match the jacket's whole daily loss (computed from the
+figures on this page, not measured together).
 
 Where a run's heat shows
 ------------------------
@@ -174,10 +189,11 @@ mixed still holds water that cooled below the lower probe while it stood:
 the lower probe fell a median 0.7 degF after runs within 3 h of a
 recovery (26 runs), and 3.6 degF after 14 h (5 runs).
 
-Pooled over 136 windows, the two probes' mean fell by about **0.44** of
-the heat the loop measurement gives for the runs (90 % CI 0.38-0.50, read
-30 minutes after the last run, 2026-09-18). That share held from 15
-minutes to 2 hours after a run.
+Pooled over 136 windows at the 6.38 gal loop, the two probes' mean
+fell by about **0.44** of the heat the loop measurement gives for the
+runs (90 % CI 0.38-0.50, read 30 minutes after the last run,
+2026-09-18). That share held from 15 minutes to 2 hours after a run. At
+4 hours it read 0.56, on 32 windows.
 
 A run into a stratified tank can take the lower probe to its turn-on
 setting while the upper probe has not moved, and the lower-tank trigger
@@ -195,6 +211,18 @@ CI 47-94 h; fitted on 2026-09-22). A gap of 10 degF is about 9 degF
 six hours later and about 6.7 degF a day later.
 
 
+Projecting the tank's cooling
+=============================
+
+Standby projections made with this model were scored against what the
+tank did, over the day and a half of projections available on
+2026-09-22, at horizons of 1 to 24 hours. With no draw and no compressor
+run in between, the lower probe's mean absolute error was **0.86 degF at
+1 hour** and **1.41 degF at 3 hours**. With a draw or a compressor run
+in between it was 9.15 and 13.99 degF: a projection with nothing in it
+is the warmest the tank can be, and a draw takes the tank below it.
+
+
 Limits
 ======
 
@@ -202,4 +230,5 @@ One unit, one installation, one loop. The jacket law is fitted on quiet
 windows, and the clearest cold window, the 93.9-hour stretch, is one
 episode. The heat per run and where it shows depend on
 the loop's volume, its plumbing and where its return enters; on a loop
-that returns elsewhere, the split between the probes will differ.
+that returns elsewhere, the split between the probes will differ. The
+projection's accuracy rests on a day and a half of projections.

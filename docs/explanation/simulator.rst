@@ -328,19 +328,39 @@ them.
 Accuracy
 ========
 
-Measured on one NWP500-65:
+Measured on one NWP500-65. The recovery-duration figures are those of
+the fit the default parameters come from (2026-10-11): cross-validated
+over its record, and held out on the 40 recoveries after the 162 it was
+fitted on.
 
 - a heat-pump recovery's duration, from physics alone: mean absolute
-  error about 28 min (18 %), and 38.6 min held out in time order;
-  about 13 min for a deficit under 15 degF, and about 45 min past
-  35 degF. Physics alone runs short on long recoveries: cold starts
-  come out about 55 min short, and past about 180 min it
-  under-predicts; under about 60 min it is the better estimate;
+  error about 28 min, and 38.6 min held out in time order. Scored by the time a recovery had left (28 recoveries over
+  45 days to 2026-09-06, an earlier fit): with under 30 min left,
+  4.4 min; with over 180 min left, 55.9 min, a mean 44 min short.
+  Under about 60-90 min left, physics alone is the better estimate
+  of the two;
 - replaying recorded writes, with a recovery model trained on the
   heater's record:
   recorded starts reproduced over six days held out, 31 of 40; daily
   energy, with start-up charged once, 3.6 % low in sample and 4.4 %
   low held out (2.0 % low and 2.2 % high with the start hold);
+- a recovery's electricity, priced from the fitted power and efficiency
+  and checked against an energy meter on later cycles than it was
+  fitted on (188 of 235 cycles, 2026-09-18): median error 4.8 % per
+  recovery, 90th percentile 13 %, against 10.9 % and 26 % for a
+  constant efficiency;
+- replaying the recorded draws from each draw's start (1,312 draw
+  events from 2026-02-25): recorded depletions caught, 5 of
+  5; draws called empty where the probe never crossed, 17 of 1,306
+  (1.3 %). From 2026-07-01, after the heat book's fit, 2 of 2 caught
+  (one independent event) and 2 false calls in 488. Replayed over whole
+  days (214, 2026-02-26 to 2026-09-27) the zones drift from the record:
+  mean absolute error 3.22 degF a day on the upper zone and 6.61 degF on
+  the lower;
+- a forecast's draw windows, issued every 3 h for 24 h ahead from
+  2026-09-08 to 2026-09-28 and judged at the delivered water: 1 of the
+  8 windows in which the upper probe crossed the line was flagged, and
+  1 of 160 others;
 - time to ready after a switch into an element mode, 12 events (8 of
   them Energy Saver): mean absolute error 0.51 min; on the two held
   out, 0.13 min, ready a little later than predicted.
@@ -352,7 +372,8 @@ Measured on one NWP500-65:
   ones; a well-mixed tank gains least (:doc:`draws`);
 - the heat book against the tank's re-anchors, fitted February-June and
   scored July-September: mean absolute error 1,987 BTU (about 5 gal),
-  flat to 18 h after an anchor and about double beyond;
+  against 3,761 BTU with textbook constants; flat to 18 h after an
+  anchor and about double beyond;
 - the five recorded crossings of the line: all caught, 0.8-12.7 gal
   early, in sample (the book's form was chosen with all five in view;
   fitted without them, 2 of 5); draws of 5 gal or more that did not

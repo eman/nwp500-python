@@ -417,6 +417,15 @@ Documentation
   by mode, the off point and the probe's lag; scheduling gains write and
   entry timing; the simulator's Accuracy section gains time to ready and
   the lower zone after a draw.
+- **Where the simulator's defaults come from.** A table in
+  :doc:`/reference/simulator-inputs` gives each default parameter's
+  evidence: what it was measured or fitted on, its error, and how far
+  the per-retrain values move between retrains.
+- **Accuracy figures corrected.** ``simulator.rst`` gave 18 % and the
+  13 and 45 min deficit-band errors as physics alone; they scored the
+  physics with a learned correction, and are removed. The "cold starts
+  about 55 min short" figure is replaced by the recorded errors by time
+  left. The lower trigger's in-window wait is given with its full count.
 - **Less noise.** Implementation notes, the docs' own revision history
   and where things were ported from are gone from the pages, and
   section titles are plainer. The ``sim`` extra is listed under

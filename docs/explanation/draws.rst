@@ -224,6 +224,20 @@ below 105 degF:
 Re-scored with the inlet read from long-draw plateaus (next section),
 the three crossings in these tests came out a mean 0.3 gal over, and
 the worst over-promise was 9.4 gal. Three events say little about the level.
+
+Without a full tank in the last 72 hours to count from, an estimate can
+only lean on the longest draw the history shows from a tank in the same
+state or colder. That is a floor, and a low one. No clean recorded draw
+took the upper probe below 105 degF (the lowest reached 107.2 degF), so
+on that evidence a full tank that had filled a 38 gal bath reads
+33.4 gal. Its assumption, that a tank no colder delivers at least as
+much, failed on small differences: 15 of 22 later draws over-promised
+for a 2 degF fall, because two probes cannot place the boundary between
+the hot and the cold water. With the lower probe cold, heat that went
+into the bottom of the tank may not come out hot: on 2026-04-14 a draw
+from 139.6/78.4 degF (upper/lower) stayed above 129 degF for 15.7 gal,
+and ninety minutes later a 10 gal draw from 141.3/89.6 degF took the
+upper probe to 101 degF.
 The heat book's catch of recorded depletions is in :doc:`simulator`,
 under Accuracy.
 
