@@ -442,6 +442,64 @@ class TestTheFits:
         assert len(found) == 1
         assert found["start_time"].iloc[0] < T0 + 10 * h
 
+    def test_a_rejected_reading_masks_the_air(self, history, monkeypatch):
+        import asyncio
+
+        from nwp500 import sim_home_assistant as ha
+
+        h = timedelta(hours=1)
+
+        def row(at, state, unit):
+            r = {"entity_id": "sensor.air", "state": state}
+            r["last_updated"] = at.isoformat()
+            if unit:
+                r["attributes"] = {"unit_of_measurement": unit}
+            return r
+
+        doc = [
+            [
+                row(T0, str(AIR_F), "°F"),
+                row(T0 + 4 * h, str(AIR_F), None),
+                row(T0 + 8 * h, str(AIR_F), "°F"),
+            ]
+        ]
+
+        class Client:
+            async def state(self, entity):
+                return ha.State(entity, AIR_F, "°F", T0)
+
+            async def read_history(self, entities, start, end):
+                names = list(entities)
+                return ha.History(
+                    ha.history_for(doc, names),
+                    {n: [] for n in names},
+                    {n: ha.parse_units(doc).get(n, []) for n in names},
+                )
+
+        record = asyncio.run(
+            ha.record_inputs(
+                Client(),  # pyright: ignore[reportArgumentType]
+                ha.Entities(air="sensor.air"),
+                T0,
+                T0 + 24 * h,
+            )
+        )
+        seen: list[Any] = []
+        real = cal.calibrate
+
+        def spy(frame: Any, *args: Any, **kw: Any) -> Any:
+            seen.append(frame)
+            return real(frame, *args, **kw)
+
+        monkeypatch.setattr(cal_cli.cal, "calibrate", spy)
+        cal_cli.calibrate(cal_cli.read_history(history), record=record)
+        frame = seen[0]
+        gap = (frame.index > T0 + 4 * h) & (frame.index < T0 + 8 * h)
+        assert gap.any()
+        assert frame.loc[gap, "air_f"].isna().all()
+        assert frame.loc[gap, "air_unobserved"].all()
+        assert frame.loc[gap, "excluded"].all()
+
     def test_flags_win_over_the_sources(self, history):
         from nwp500.sim_home_assistant import RecordInputs
 
