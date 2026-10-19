@@ -284,12 +284,12 @@ ControlFailedEvent
 
    **Fields:**
 
-   * ``device_mac`` (str) - MAC address of the device that refused the command.
+   * ``device_mac`` (str): MAC address of the device that refused the command.
    * ``fail_code`` (:class:`~nwp500.models.mqtt_models.ControlFailCode` | int) -
      The failure code. 2 (``DHW_CONTROL_INTERVAL_EXCEEDED``) is the only code
      the NaviLink app interprets; others stay plain integers.
-   * ``reason`` (str) - Human-readable meaning of ``fail_code``.
-   * ``own_command`` (bool) - Whether the failed command was sent by this
+   * ``reason`` (str): Human-readable meaning of ``fail_code``.
+   * ``own_command`` (bool): Whether the failed command was sent by this
      client (the message's ``clientID`` matches ours).
    * ``response`` (:class:`~nwp500.models.mqtt_models.ControlFailResponse`) -
      The parsed message, envelope included.
@@ -317,10 +317,10 @@ AppConnectionReceivedEvent
 
    **Fields:**
 
-   * ``device_mac`` (str) - MAC address of the device the client was attached to.
-   * ``client_id`` (str | None) - MQTT client ID of the client the message is
+   * ``device_mac`` (str): MAC address of the device the client was attached to.
+   * ``client_id`` (str | None): MQTT client ID of the client the message is
      about. This client's own announcement is delivered too.
-   * ``connected`` (bool) - ``True`` for a connect announcement
+   * ``connected`` (bool): ``True`` for a connect announcement
      (``event.connection.status`` above 0), ``False`` for a Last-Will.
    * ``event`` (:class:`~nwp500.models.mqtt_models.AppConnectionEvent`) -
      The parsed message.

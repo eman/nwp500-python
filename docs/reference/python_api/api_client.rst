@@ -286,8 +286,8 @@ get_firmware_detail()
 .. py:method:: get_firmware_detail(sw_code, sw_version)
 
    Describe a firmware image (``POST /firmware/info``) by the
-   ``cur_sw_code``/``cur_version`` pair - or ``downloaded_version`` when an
-   update is pending - from :class:`~nwp500.models.FirmwareInfo`. The
+   ``cur_sw_code``/``cur_version`` pair (or ``downloaded_version`` when an
+   update is pending) from :class:`~nwp500.models.FirmwareInfo`. The
    NaviLink app shows ``description`` on its update screen and ``run_time``
    as the estimated update time in minutes.
 
@@ -410,8 +410,8 @@ set_push_settings()
    Enable or disable push notifications (``POST /user/set-push-settings``).
    A flag left ``None`` is omitted from the request, as the NaviLink app
    does for a member account's descaling flag. On the wire 1 is on and 2
-   is off - the reverse of the device's on/off flags - which the
-   library handles for you.
+   is off, the reverse of the device's on/off flags, which the library
+   handles for you.
 
    :return: True on success
    :rtype: bool

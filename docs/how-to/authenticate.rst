@@ -129,10 +129,10 @@ The MQTT connection signs with AWS credentials that expire separately from
 the JWT, and ``/auth/refresh`` does not renew them. When they expire the
 library follows the NaviLink app and tries, in order:
 
-1. ``refresh_session()`` - ``POST /auth/session/refresh`` with the current
+1. ``refresh_session()``: ``POST /auth/session/refresh`` with the current
    access token; returns new AWS credentials only. If the JWT has also
    expired it is refreshed first so the access token is live.
-2. ``secured_sign_in()`` - ``POST /user/secured-sign-in`` with the access
+2. ``secured_sign_in()``: ``POST /user/secured-sign-in`` with the access
    token; returns user info plus whatever token fields the server issues.
    Observed live, that is the AWS credentials only, so the JWT access and
    refresh tokens are kept.

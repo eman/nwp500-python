@@ -316,9 +316,9 @@ plus two sections the list omits:
      }
    }
 
-* ``installer`` - the installer linked to the device, every field ``null``
+* ``installer``: the installer linked to the device, every field ``null``
   when there is none (:py:class:`nwp500.models.DeviceInstaller`).
-* ``alarmInfo`` - push-notification flags, **1 = on, 2 = off** (the
+* ``alarmInfo``: push-notification flags, **1 = on, 2 = off** (the
   opposite of the device's on/off flags; see ``/user/get-push-settings``
   below). A flag the cloud does not report is simply absent
   (:py:class:`nwp500.models.PushSettings`).
@@ -611,7 +611,7 @@ request object and appends it to the URL as a query string.
 
 * ``macAddress`` (string, required)
 * ``additionalValue`` (string, required)
-* ``modelTypeCode`` (integer) - from the device feature; omitted when
+* ``modelTypeCode`` (integer): from the device feature; omitted when
   unknown
 
 **Response (200 OK):**
@@ -678,10 +678,10 @@ otherwise.
 **Query Parameters:**
 
 * ``userId``, ``userType`` (string, required)
-* ``registerPath`` (string) - ``"wifi"`` or ``"bt"``
-* ``sourceType`` (string) - ``"openei"``
-* ``macAddress``, ``additionalValue`` (string) - WiFi-registered plan
-* ``controllerId`` (string) - Bluetooth-registered plan
+* ``registerPath`` (string): ``"wifi"`` or ``"bt"``
+* ``sourceType`` (string): ``"openei"``
+* ``macAddress``, ``additionalValue`` (string): WiFi-registered plan
+* ``controllerId`` (string): Bluetooth-registered plan
 
 **Response (200 OK):** ``{"code": 200, "msg": "SUCCESS"}``
 

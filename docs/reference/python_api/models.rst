@@ -64,9 +64,9 @@ Complete device representation with info and location.
      ``/device/list`` only; ``None`` on a device fetched through ``/device/info``.
    * ``descaling`` (DescalingInfo, optional): Descaling window, if one is
      scheduled or recorded
-   * ``installer`` (DeviceInstaller, optional) - Installer linked to the
+   * ``installer`` (DeviceInstaller, optional): Installer linked to the
      device. Returned by ``/device/info`` only.
-   * ``alarm_info`` (PushSettings, optional) - Push-notification flags.
+   * ``alarm_info`` (PushSettings, optional): Push-notification flags.
      Returned by ``/device/info`` only.
 
    **Example:**
@@ -163,13 +163,13 @@ Push-notification preferences for one device, from
 
    **Fields:**
 
-   * ``is_error_alarm`` (bool, optional) - Notify on device faults
-   * ``is_descaling_alarm`` (bool, optional) - Notify when descaling is due;
+   * ``is_error_alarm`` (bool, optional): Notify on device faults
+   * ``is_descaling_alarm`` (bool, optional): Notify when descaling is due;
      the cloud omits it for member accounts
-   * ``is_etc_alarm`` (bool, optional) - Other notifications
+   * ``is_etc_alarm`` (bool, optional): Other notifications
 
-   On the wire each flag is **1 = on, 2 = off** - the reverse of the
-   device's own on/off flags - and 0 or a missing key means the cloud did
+   On the wire each flag is **1 = on, 2 = off** (the reverse of the
+   device's own on/off flags), and 0 or a missing key means the cloud did
    not report it, which reads as ``None`` rather than a fabricated off.
    ``to_request_dict()`` encodes the flags back for
    ``/user/set-push-settings``, leaving out the ``None`` ones.
@@ -286,13 +286,13 @@ Description of one firmware image, from
 
    **Fields:**
 
-   * ``description`` (str, optional) - Release notes shown by the app
+   * ``description`` (str, optional): Release notes shown by the app
    * ``model_number``, ``model_type``, ``product_family`` (int)
-   * ``register_at`` (int) - When the image was registered, epoch
+   * ``register_at`` (int): When the image was registered, epoch
      milliseconds
-   * ``run_time`` (int) - Estimated update duration in minutes (new in
+   * ``run_time`` (int): Estimated update duration in minutes (new in
      NaviLink 2.04.00)
-   * ``sw_code``, ``sw_version`` (int) - The pair the image was looked up by
+   * ``sw_code``, ``sw_version`` (int): The pair the image was looked up by
 
 DisplayPreferences
 ------------------
@@ -305,9 +305,9 @@ Unit display preferences stored by the cloud, from
    **Fields:**
 
    * ``model_type_code`` (int, optional)
-   * ``pressure_display_format`` (str, optional) - ``"P"`` (psi) or ``"M"``
+   * ``pressure_display_format`` (str, optional): ``"P"`` (psi) or ``"M"``
      (metric)
-   * ``temperature_display_format`` (str, optional) - ``"F"`` or ``"C"``
+   * ``temperature_display_format`` (str, optional): ``"F"`` or ``"C"``
 
    Those four letters are the only values the NaviLink app compares
    against or writes.
@@ -338,14 +338,14 @@ One recorded fault from :meth:`~nwp500.NavienAPIClient.get_error_history`.
 
    * ``channel_number`` (int)
    * ``unit_type`` (int)
-   * ``error_code`` (ErrorCode | int | None) - A known code arrives as an
+   * ``error_code`` (ErrorCode | int | None): A known code arrives as an
      ``ErrorCode``; an unknown one is kept as an int (see
      :class:`DeviceErrorSummary`)
    * ``sub_error`` (int)
-   * ``error_occurred_time`` (int, optional) - Epoch milliseconds, sent by
+   * ``error_occurred_time`` (int, optional): Epoch milliseconds, sent by
      the API as ``errorOccuredTime``. Pass the last entry's value back as
      ``continuous_key`` for the next page.
-   * ``occurred_at`` (datetime, property) - ``error_occurred_time`` as an
+   * ``occurred_at`` (datetime, property): ``error_occurred_time`` as an
      aware UTC datetime
 
 Maintenance Models
@@ -362,9 +362,9 @@ One recorded air-filter or CIP replacement, from
 
    **Fields:**
 
-   * ``maintenance_date`` (str) - The date the owner entered, as the cloud
+   * ``maintenance_date`` (str): The date the owner entered, as the cloud
      returns it (``YYYY-M-D``, no zero padding)
-   * ``register_at`` (int, optional) - When the record was created. The
+   * ``register_at`` (int, optional): When the record was created. The
      NaviLink app reads it as an integer; its unit is not documented.
 
 The matching request helper ``format_maintenance_date(date)`` renders a
@@ -384,10 +384,10 @@ The signed-in user's profile, from
 
    **Fields:**
 
-   * ``user_type`` (str) - ``"O"`` owner, ``"M"`` member, or an installer
+   * ``user_type`` (str): ``"O"`` owner, ``"M"`` member, or an installer
      type
    * ``user_first_name`` (str)
-   * ``user_last_name`` (str, optional) - ``None`` from the cloud reads as
+   * ``user_last_name`` (str, optional): ``None`` from the cloud reads as
      ``""`` in ``full_name``, as in the app
    * ``user_phone_number`` (str, optional)
    * ``user_seq`` (int)
@@ -403,12 +403,12 @@ Answer to :meth:`~nwp500.NavienAPIClient.get_app_version`.
 
    **Fields:**
 
-   * ``app_version`` (str, optional) - Latest NaviLink release
-   * ``app_force_version`` (str, optional) - Oldest release the cloud still
+   * ``app_version`` (str, optional): Latest NaviLink release
+   * ``app_force_version`` (str, optional): Oldest release the cloud still
      serves
-   * ``server_check_text`` (str, optional) - Maintenance notice, present
+   * ``server_check_text`` (str, optional): Maintenance notice, present
      only when the cloud answered 403
-   * ``is_under_maintenance`` (bool, property) - ``server_check_text`` is
+   * ``is_under_maintenance`` (bool, property): ``server_check_text`` is
      set
 
 Status Models
