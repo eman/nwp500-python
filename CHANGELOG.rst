@@ -381,6 +381,17 @@ Changed
   library now accepts the same. The ``vacation`` and
   ``vacation-duration`` CLI commands follow.
 
+Fixed
+-----
+- **A reservation entry turns a powered-off heater on in the
+  simulator.** The controller skipped entries while powered off, as in
+  Vacation, on a misreading of the device test, which found that a
+  powered-off heater fires the entry and turns on in its mode (two
+  runs). ``Settings.powered_off`` tells power-off from Vacation; the
+  entry is judged as a mode write out of power-off, and the result
+  carries ``powered_on_by_entry``. In Vacation entries are still
+  skipped.
+
 Documentation
 -------------
 - **Corrections from the device tests and the recorded history.** The

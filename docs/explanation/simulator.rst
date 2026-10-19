@@ -113,7 +113,8 @@ according to how stratified the tank is.
 - after a stop, the compressor will not restart for 330 s (two device
   tests restarted 5 min 28 s and 5 min 31 s after the stop);
 - reservations fire in their minute; Vacation and Power Off start no
-  heating.
+  heating. In Vacation an entry is skipped; powered off, it fires and
+  turns the heater on, judged as a mode write.
 
 **The heat book.** Two probes cannot say how much hot water is left
 once the hot/cold boundary sits between them; they can when the tank is

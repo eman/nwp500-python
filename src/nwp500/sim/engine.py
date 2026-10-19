@@ -207,10 +207,13 @@ class Heater:
     hp_lower_on_f: float | None
     #: TOU windows over the horizon, from the device's schedule.
     tou_windows: tuple[Window, ...] = ()
-    #: VACATION or POWER_OFF: nothing starts, and no entry fires: the
-    #: device skips each as its minute passes, and does not run it late
-    #: (its documented behaviour in Vacation and powered off alike).
+    #: VACATION or POWER_OFF: nothing starts. In Vacation no entry
+    #: fires: the device skips each as its minute passes, and does not
+    #: run it late; powered off (``powered_off``) an entry fires and
+    #: turns the heater on (a device test, 2026-09-24).
     heating_disabled: bool = False
+    #: The heater is powered off, which is why heating is disabled.
+    powered_off: bool = False
     #: The mode the heater is in at the start, in the feature's names.
     mode: HeaterMode = HEAT_PUMP
     #: The element model (``sim/physics/element.py``).
@@ -625,6 +628,7 @@ class _Engine:
             hp_lower_on_f=heater.hp_lower_on_f,
             tou_windows=self.windows,
             heating_disabled=heater.heating_disabled,
+            powered_off=heater.powered_off,
             element=heater.element,
             start_hold=start_hold,
         )

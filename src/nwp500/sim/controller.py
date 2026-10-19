@@ -126,6 +126,9 @@ ELEMENT_DONE_F = 0.05
 
 #: The reason a recovery capped short of its target carries.
 TOU_CAP_PROJECTED = "tou_cap_projected"
+#: A reservation entry turned a powered-off heater on: seen in two device
+#: runs, with what follows judged as a mode write (``_entry_fires``).
+POWERED_ON_BY_ENTRY = "powered_on_by_entry"
 
 StartCause = Literal["heater", "write", "running"]
 Source = Literal["compressor", "element"]
@@ -238,6 +241,8 @@ class State:
     mode: ModeState
     compressor: Compressor = field(default_factory=Compressor)
     element: Element = field(default_factory=Element)
+    #: A powered-off heater an entry has turned on (``_entry_fires``).
+    powered_on: bool = False
 
 
 @dataclass(frozen=True)
@@ -249,12 +254,13 @@ class Settings:
     hp_lower_on_f: float | None
     #: The TOU windows in force: the device's, while its switch is on.
     tou_windows: tuple[Window, ...] = ()
-    #: VACATION or POWER_OFF: nothing starts, and no entry fires. In
-    #: Vacation the device skips each as its minute passes, and does not
-    #: run it late (a device test, 2026-09-24). Powered off it fires
-    #: them, turning the heater on (the same test); the walk does not
-    #: model that, and skips them as in Vacation.
+    #: VACATION or POWER_OFF: nothing starts. In Vacation the device
+    #: skips each entry as its minute passes, and does not run it late
+    #: (a device test, 2026-09-24); powered off (``powered_off``) an
+    #: entry fires and turns the heater on (the same test, two runs).
     heating_disabled: bool = False
+    #: The heater is powered off, which is why heating is disabled.
+    powered_off: bool = False
     #: The elements' thresholds and dead time.
     element: ElementParams = field(default_factory=ElementParams)
     #: The hold a compressor start begins with, minutes, by the minutes
@@ -596,6 +602,14 @@ Action = (
 # ── The transition ──────────────────────────────────────────────────
 
 
+def disabled(state: State, settings: Settings) -> bool:
+    """Whether heating is disabled now: Vacation, or powered off with no
+    entry having turned the heater on."""
+    return settings.heating_disabled and not (
+        settings.powered_off and state.powered_on
+    )
+
+
 class _Step:
     """One transition under way: the state as the rules move it, and
     the actions they take, in order."""
@@ -634,7 +648,7 @@ class _Step:
 
     @property
     def disabled(self) -> bool:
-        return self.settings.heating_disabled
+        return disabled(self.state, self.settings)
 
     def act(self, action: Action) -> None:
         self.actions.append(action)
@@ -1043,7 +1057,12 @@ def _setpoint(
 
 
 def _mode_write(
-    s: _Step, mode: HeaterMode, owner: Owner, serves: str | None
+    s: _Step,
+    mode: HeaterMode,
+    owner: Owner,
+    serves: str | None,
+    *,
+    afresh: bool = False,
 ) -> None:
     """``mode`` is written to the heater: an entry's, or a direct write.
 
@@ -1069,7 +1088,10 @@ def _mode_write(
       case of a write-response measurement: 1 of 1).
 
     In Vacation or powered off the simulation holds no rule for a write
-    that leaves them: it is recorded, and takes nothing."""
+    that leaves them: it is recorded, and takes nothing. ``afresh`` is
+    an entry turning a powered-off heater on: the heater re-evaluates
+    even in the mode it had (out of ``power_off`` it starts afresh,
+    ``ControllerParams``)."""
     ref = s.state.mode.recorded
     s.modes(recorded=ref + 1)
     s.act(RecordModeWrite(s.at, mode, owner, serves))
@@ -1096,20 +1118,26 @@ def _mode_write(
             s.note("mode_write_start_projected")
             s.pend(_write_start(s, serves))
         return
-    _apply_mode(s, ref, mode, serves)
+    _apply_mode(s, ref, mode, serves, afresh=afresh)
 
 
 def _apply_mode(
-    s: _Step, ref: int, mode: HeaterMode, serves: str | None
+    s: _Step,
+    ref: int,
+    mode: HeaterMode,
+    serves: str | None,
+    *,
+    afresh: bool = False,
 ) -> None:
     """A written mode takes effect: the heater re-evaluates, and an
     element mode's entry rule runs. Electric runs no heat pump (0 of 6),
     so it ends a recovery."""
     s.act(ModeTook(ref, s.at))
     previous = s.mode
-    if mode == previous:
+    if mode == previous and not afresh:
         return
-    _set_mode(s, mode, "write")
+    if mode != previous:
+        _set_mode(s, mode, "write")
     if s.state.compressor.running:
         if mode == ELECTRIC:
             _stop_compressor(s, "mode")
@@ -1164,20 +1192,34 @@ def _entry_fires(s: _Step, ev: EntryFires) -> None:
     the new setpoint, then the mode. A setpoint or mode equal to the
     heater's is no change and starts nothing (measured: 0 of 4, a
     device test). In Vacation the device skips it, and does not run it
-    late (a device test, 2026-09-24). Powered off it fires it and turns
-    the heater on (the same test); the walk skips it there too, as in
-    Vacation."""
-    if s.disabled:
+    late (a device test, 2026-09-24). Powered off it fires and turns the
+    heater on, in the entry's mode (the same test, two runs): a mode
+    write out of ``power_off``, the entry's or, with none, the heater's,
+    judged by the mode write's rules. What a powered-off heater does
+    with an entry that names no mode, or inside a TOU window, is
+    unobserved."""
+    powering_on = s.disabled and s.settings.powered_off
+    if s.disabled and not powering_on:
         s.act(EntrySkipped(ev.ref))
         return
     s.act(EntryFired(ev.ref))
-    changes_mode = ev.mode is not None and ev.mode != s.state.mode.commanded
+    if powering_on:
+        s.state = replace(s.state, powered_on=True)
+        s.note(POWERED_ON_BY_ENTRY)
+    changes_mode = powering_on or (
+        ev.mode is not None and ev.mode != s.state.mode.commanded
+    )
     value = ev.setpoint_f
     if value is not None and abs(value - s.sp) > 1e-6:
         _setpoint(s, value, ev.serves, mode_follows=changes_mode)
     if changes_mode:
-        assert ev.mode is not None
-        _mode_write(s, ev.mode, "plan", ev.serves)
+        _mode_write(
+            s,
+            ev.mode or s.state.mode.commanded,
+            "plan",
+            ev.serves,
+            afresh=powering_on,
+        )
 
 
 def _raw_writes(s: _Step, ev: RawWrites) -> None:
@@ -1411,7 +1453,7 @@ def trigger_ahead(
     landed, the lower zone 5.4 °F under the setting). Nor at the instant
     a recovery ended: the trigger reads the tank it left at its target.
     A trigger inside the restart lockout starts when the lockout ends."""
-    if settings.heating_disabled or state.mode.in_force == ELECTRIC:
+    if disabled(state, settings) or state.mode.in_force == ELECTRIC:
         return None, ()
     # No lower threshold disables the lower trigger alone: the upper
     # zone's at a TOU window's opening does not read it.
@@ -1450,7 +1492,7 @@ def upper_on_crossing(
     ``he_upper_on`` with no element running (``_read_upper``); None when
     it does not."""
     if (
-        settings.heating_disabled
+        disabled(state, settings)
         or state.mode.in_force != ENERGY_SAVER
         or state.element.running
     ):

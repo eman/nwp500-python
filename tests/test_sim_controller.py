@@ -13,7 +13,9 @@ import pytest
 pytest.importorskip("numpy")
 pytest.importorskip("pandas")
 
+from nwp500.sim import controller
 from nwp500.sim.controller import (
+    POWERED_ON_BY_ENTRY,
     Begins,
     Cap,
     DeadTimeEnds,
@@ -85,12 +87,18 @@ WINDOW = (at(-10), at(60))
 
 
 def settings(
-    *, windows=(), hp_lower_on=104.9, disabled=False, start_hold=None
+    *,
+    windows=(),
+    hp_lower_on=104.9,
+    disabled=False,
+    powered_off=False,
+    start_hold=None,
 ) -> Settings:
     return Settings(
         hp_lower_on_f=hp_lower_on,
         tou_windows=tuple(windows),
-        heating_disabled=disabled,
+        heating_disabled=disabled or powered_off,
+        powered_off=powered_off,
         start_hold=start_hold,
     )
 
@@ -608,10 +616,10 @@ class TestEntries:
         assert acts == (EntryFired(0),)
         assert st.compressor.pending is None
 
-    def test_an_entry_in_vacation_or_powered_off_is_skipped(self):
-        """In Vacation or powered off the device skips an entry as its
-        minute passes and does not run it late (the reservation spec's
-        device test ``entries_fire_in_vacation``)."""
+    def test_an_entry_in_vacation_is_skipped(self):
+        """In Vacation the device skips an entry as its minute passes and
+        does not run it late (the reservation spec's device test
+        ``entries_fire_in_vacation``)."""
         st, acts = step(
             fresh(),
             EntryFires(
@@ -625,6 +633,37 @@ class TestEntries:
         )
         assert acts == (EntrySkipped(2),)
         assert st.setpoint_f == 140.0
+
+    def test_an_entry_turns_a_powered_off_heater_on(self):
+        """Powered off, the device fires an entry and turns the heater
+        on, in the entry's mode (two device runs, 2026-09-24): judged as
+        a mode write out of power-off, which with the tank short starts
+        the compressor."""
+        st, acts = step(
+            fresh(),
+            EntryFires(
+                at=T0,
+                tank=tank(120, 100),
+                setpoint_f=140.0,
+                mode="heat_pump",
+                ref=3,
+            ),
+            settings(powered_off=True),
+        )
+        assert acts[0] == EntryFired(3)
+        assert Note(POWERED_ON_BY_ENTRY) in acts
+        assert st.powered_on
+        assert st.compressor.pending is not None
+
+    def test_a_powered_off_heater_with_no_entry_stays_off(self):
+        """With no entry, a powered-off heater starts nothing (six
+        minutes, the same device test)."""
+        s = settings(powered_off=True)
+        assert controller.disabled(fresh(), s)
+        assert not controller.disabled(replace(fresh(), powered_on=True), s)
+        assert controller.disabled(
+            replace(fresh(), powered_on=True), settings(disabled=True)
+        )
 
 
 # ── Mode writes ──────────────────────────────────────────
