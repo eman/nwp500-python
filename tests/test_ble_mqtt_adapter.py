@@ -147,9 +147,10 @@ def cli_with_fake_heater(monkeypatch):
 
     from nwp500.cli.__main__ import cli
 
-    def invoke(*args: str):
+    def invoke(*args: str, options: tuple[str, ...] = ()):
         return CliRunner().invoke(
-            cli, ["--backend", "ble", "--ble-address", "AA:BB", *args]
+            cli,
+            [*options, "--backend", "ble", "--ble-address", "AA:BB", *args],
         )
 
     invoke.transport = transport  # type: ignore[attr-defined]
@@ -167,7 +168,8 @@ def test_cli_info_over_bluetooth_shows_only_block_fields(cli_with_fake_heater):
     assert result.exit_code == 0, result.output
     out = result.output
     assert "Controller serial" in out and "56496061BT22230408" in out
-    assert "104.9 - 149.9 °F (40.5 - 65.5 °C)" in out
+    assert "104.9 - 149.9 °F" in out
+    assert "Min operation temp  104.9 °F" in out
     # nothing the blocks do not carry, such as firmware or capability flags
     assert "firmware" not in out.lower() and "supported" not in out.lower()
 
@@ -223,3 +225,52 @@ def test_cli_without_ble_backend_takes_the_cloud_path(monkeypatch, backend):
     assert result.exit_code == 1
     assert not any(m.startswith("nwp500.ble") for m in sys.modules)
     assert "nwp500.cli.ble_backend" not in sys.modules
+
+
+@pytest.fixture
+def unit_system():
+    from nwp500.unit_system import reset_unit_system, set_unit_system
+
+    yield set_unit_system
+    reset_unit_system()
+
+
+def test_cli_info_over_bluetooth_honours_unit_system(
+    cli_with_fake_heater, unit_system
+):
+    result = cli_with_fake_heater("info", options=("--unit-system", "metric"))
+    assert result.exit_code == 0, result.output
+    assert "40.5 - 65.5 °C" in result.output
+    assert "Min operation temp  40.5 °C" in result.output
+
+
+def test_ble_feature_converts_like_device_feature(unit_system):
+    from nwp500.models import DeviceFeature
+
+    ble = device_feature_from_blocks(
+        DeviceInfo.parse(DID), ControllerSerials.parse(MSCD)
+    )
+    # the cloud model with the same raw values (its other required fields
+    # are irrelevant to the conversion)
+    cloud = DeviceFeature.model_construct(
+        dhw_temperature_min_raw=81, dhw_temperature_max_raw=131
+    )
+    for system in (None, "us_customary", "metric"):
+        unit_system(system)
+        assert (ble.dhw_temperature_min, ble.dhw_temperature_max) == (
+            cloud.dhw_temperature_min,
+            cloud.dhw_temperature_max,
+        )
+        assert ble.get_field_unit("dhw_temperature_min") == (
+            cloud.get_field_unit("dhw_temperature_min")
+        )
+    assert ble.get_field_unit("country_code") == ""
+
+
+def test_min_operation_temperature_follows_unit_system(unit_system):
+    info = DeviceInfo.parse(DID)
+    assert info.min_operation_temperature() == pytest.approx(104.9)
+    unit_system("metric")
+    assert info.min_operation_temperature() == pytest.approx(40.5)
+    # an explicit unit still wins
+    assert info.min_operation_temperature(celsius=False) == pytest.approx(104.9)

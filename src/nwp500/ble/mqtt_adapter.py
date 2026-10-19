@@ -15,8 +15,14 @@ from dataclasses import dataclass
 from typing import Any
 
 from ..exceptions import Nwp500Error
+from ..temperature import HalfCelsius
 from .client import NavienBleClient
-from .protocol import ControllerSerials, DeviceInfo
+from .protocol import (
+    ControllerSerials,
+    DeviceInfo,
+    prefers_celsius,
+    temperature_unit,
+)
 
 
 class BleUnsupportedError(Nwp500Error):
@@ -40,6 +46,11 @@ class BleDeviceFeature:
     field, such as the capability flags or firmware versions, is not in
     these blocks and raises :class:`AttributeError` here rather than
     reading as a default; read those over MQTT.
+
+    ``dhw_temperature_min`` and ``dhw_temperature_max`` convert as the
+    ``DeviceFeature`` properties do, following the unit-system preference.
+    The heater's own display unit is not in these blocks, so without a
+    preference they are Fahrenheit.
     """
 
     controller_serial_number: str
@@ -47,6 +58,27 @@ class BleDeviceFeature:
     dhw_temperature_max_raw: int
     model_type_code: int
     country_code: int
+
+    @property
+    def dhw_temperature_min(self) -> float:
+        return HalfCelsius(self.dhw_temperature_min_raw).to_preferred(
+            prefers_celsius()
+        )
+
+    @property
+    def dhw_temperature_max(self) -> float:
+        return HalfCelsius(self.dhw_temperature_max_raw).to_preferred(
+            prefers_celsius()
+        )
+
+    def get_field_unit(self, field_name: str) -> str:
+        """Unit suffix for a field, as ``DeviceFeature.get_field_unit``."""
+        if field_name.removesuffix("_raw") in {
+            "dhw_temperature_min",
+            "dhw_temperature_max",
+        }:
+            return temperature_unit()
+        return ""
 
 
 FeatureCallback = Callable[[BleDeviceFeature], None]

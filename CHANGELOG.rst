@@ -34,7 +34,10 @@ Added
   other commands. Without ``--backend``, commands use the cloud as before.
   The handlers run unchanged against ``nwp500.ble.BleMqttAdapter``, which
   offers the MQTT client methods the heater serves over Bluetooth and
-  raises ``BleUnsupportedError`` for the rest.
+  raises ``BleUnsupportedError`` for the rest. Bluetooth temperatures use
+  the cloud models' conversion and unit-system preference;
+  ``DeviceInfo.min_operation_temperature()`` follows the preference when
+  ``celsius`` is not given (Fahrenheit without one, as before).
 - **New REST endpoints.** ``NavienAPIClient`` gains
   ``get_push_settings()`` / ``set_push_settings()``
   (``/user/get-push-settings``, ``/user/set-push-settings``),

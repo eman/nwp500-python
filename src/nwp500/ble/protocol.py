@@ -30,6 +30,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import IntEnum
 
+from ..temperature import HalfCelsius
+from ..unit_system import get_unit_system
+
 SERVICE_UUID = "237339a3-b40d-4283-a629-f89bb838d85a"
 WRITE_CHAR_UUID = "237339a3-b40d-4283-a629-f89bb838d85c"
 NOTIFY_CHAR_UUID = "237339a3-b40d-4283-a629-f89bb838d85b"
@@ -247,6 +250,21 @@ def _u8(data: bytes, i: int) -> int:
     return data[i]
 
 
+def prefers_celsius() -> bool:
+    """Whether converted temperatures are in Celsius.
+
+    The unit-system preference decides, as for the cloud models. These
+    blocks do not carry the heater's own display unit (the cloud's
+    ``temperatureType``), so without a preference it is Fahrenheit, the
+    cloud models' default.
+    """
+    return get_unit_system() == "metric"
+
+
+def temperature_unit() -> str:
+    return " °C" if prefers_celsius() else " °F"
+
+
 @dataclass(frozen=True)
 class DeviceInfo:
     """The 58-byte ``DID`` block, as the NaviLink app reads it.
@@ -293,10 +311,18 @@ class DeviceInfo:
         """
         return self.hot_water_temp_min
 
-    def min_operation_temperature(self, celsius: bool = False) -> float:
-        """Minimum operation temperature in F (default) or C."""
-        c = self.min_operation_temperature_raw / 2
-        return c if celsius else c * 9 / 5 + 32
+    def min_operation_temperature(self, celsius: bool | None = None) -> float:
+        """Minimum operation temperature, converted as the cloud models do.
+
+        ``celsius`` picks the unit; left out, the unit-system preference
+        (:func:`nwp500.set_unit_system`) decides, and Fahrenheit without
+        one. Equal to ``DeviceFeature.dhw_temperature_min`` for the same
+        heater.
+        """
+        is_celsius = prefers_celsius() if celsius is None else celsius
+        return HalfCelsius(self.min_operation_temperature_raw).to_preferred(
+            is_celsius
+        )
 
     @classmethod
     def parse(cls, data: bytes) -> DeviceInfo:

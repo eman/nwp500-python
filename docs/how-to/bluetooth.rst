@@ -77,6 +77,13 @@ Where the MQTT client delivers a ``DeviceFeature``, the adapter delivers a
 carry, each checked against the heater's MQTT report, and any other field
 raises :class:`AttributeError` rather than reading as a default.
 
+Temperatures convert as the cloud models do: ``BleDeviceFeature`` and
+:meth:`~nwp500.ble.DeviceInfo.min_operation_temperature` go through the
+same half-degree conversion and follow ``--unit-system``
+(:func:`nwp500.set_unit_system`). The blocks do not carry the heater's own
+display unit, which the cloud path detects from the device, so without a
+preference they are Fahrenheit.
+
 What an NWP500 answers
 ----------------------
 

@@ -21,8 +21,10 @@ from nwp500.ble import (
     BleUnsupportedError,
     CrcMismatchError,
     NavienBleClient,
+    device_feature_from_blocks,
     scan,
 )
+from nwp500.unit_system import set_unit_system
 
 from .rich_output import get_formatter
 
@@ -70,6 +72,10 @@ async def run_with_ble(
     without signing in, and the adapter ignores it. Returns the exit code.
     """
     check_supported(ctx)
+    # As on the cloud path; there is no device report to detect the unit
+    # from, so without --unit-system the models fall back to Fahrenheit.
+    if ctx.obj.get("unit_system"):
+        set_unit_system(ctx.obj["unit_system"])
     try:
         address = ctx.obj.get("ble_address") or await _find_address()
         if address is None:
@@ -118,21 +124,16 @@ async def print_info(adapter: BleMqttAdapter, raw: bool) -> None:
             )
         )
         return
-
-    def f(half_c: int) -> str:
-        return f"{half_c / 2 * 9 / 5 + 32:.1f}"
-
-    def c(half_c: int) -> str:
-        return f"{half_c / 2:.1f}"
-
-    lo, hi = info.hot_water_temp_min, info.hot_water_temp_max
+    feature = device_feature_from_blocks(info, serials)
+    unit = feature.get_field_unit("dhw_temperature_min")
+    lo, hi = feature.dhw_temperature_min, feature.dhw_temperature_max
     rows = [
         ("Controller serial", serials.product_serial),
         ("PCB serial", serials.pcb_serial),
         ("Model type code", str(info.model_type)),
         ("Country code", str(info.country_code)),
-        ("Setpoint range", f"{f(lo)} - {f(hi)} °F ({c(lo)} - {c(hi)} °C)"),
-        ("Min operation temp", f"{f(lo)} °F ({c(lo)} °C)"),
+        ("Setpoint range", f"{lo:.1f} - {hi:.1f}{unit}"),
+        ("Min operation temp", f"{info.min_operation_temperature():.1f}{unit}"),
     ]
     width = max(len(label) for label, _ in rows)
     print("Device info (Bluetooth: DID and MSCD blocks)")
