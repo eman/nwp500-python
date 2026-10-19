@@ -334,6 +334,37 @@ class TestTheFits:
         assert len(windows) == 2
         assert all(w.end <= gap[0] or w.start >= gap[1] for w in windows)
 
+    def test_a_later_reading_does_not_reach_back_over_an_outage(
+        self, history, monkeypatch
+    ):
+        from nwp500.sim_home_assistant import RecordInputs
+
+        seen: list[Any] = []
+        real = cal.calibrate
+
+        def spy(frame: Any, *args: Any, **kw: Any) -> Any:
+            seen.append(frame)
+            return real(frame, *args, **kw)
+
+        monkeypatch.setattr(cal_cli.cal, "calibrate", spy)
+        gap = (T0 + timedelta(hours=4), T0 + timedelta(hours=8))
+        record = RecordInputs(
+            air=[(T0, AIR_F), (gap[1], AIR_F + 20.0)],
+            humidity=[(T0, 30.0), (gap[1], 70.0)],
+            drawing=[],
+            circulating=[],
+            air_outages=(gap,),
+            humidity_outages=(gap,),
+        )
+        cal_cli.calibrate(cal_cli.read_history(history), record=record)
+        frame = seen[0]
+        before = frame.index[frame.index < gap[0]]
+        assert len(before)
+        assert frame.loc[before, "air_f"].tolist() == pytest.approx(
+            [AIR_F] * len(before)
+        )
+        assert (frame.loc[before, "humidity_pct"] == 30.0).all()
+
     def test_flags_win_over_the_sources(self, history):
         from nwp500.sim_home_assistant import RecordInputs
 

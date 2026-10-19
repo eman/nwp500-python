@@ -847,3 +847,56 @@ class TestFullRows:
             ]
         ]
         assert ha.parse_history(doc) == {"sensor.v": [(NOW, 1.0)]}
+
+
+class TestTheSixthReview:
+    def test_pump_runs_hold_their_silence_across_a_change_of_clocks(self):
+        from zoneinfo import ZoneInfo
+
+        la = ZoneInfo("America/Los_Angeles")
+        on = datetime(2026, 11, 1, 1, 55, tzinfo=la)  # PDT
+        off = datetime(2026, 11, 1, 1, 57, tzinfo=la, fold=1)  # PST, 62 min on
+        start, end = on - timedelta(hours=1), off + timedelta(hours=1)
+        local = ha.pump_runs([(on, 1200.0), (off, 0.0)], start, end)
+        utc = ha.pump_runs(
+            [(on.astimezone(UTC), 1200.0), (off.astimezone(UTC), 0.0)],
+            start.astimezone(UTC),
+            end.astimezone(UTC),
+        )
+        assert local == utc
+        ((a, b),) = local or []
+        assert b - a == ha.PUMP_STALE
+
+    def test_a_small_report_is_water_moving(self):
+        at = NOW - timedelta(hours=1)
+        spans = ha.volume_spans(
+            [(at - timedelta(seconds=30), 0.002), (at, 0.25)]
+        )
+        assert spans == [(at - timedelta(seconds=30), at)]
+        # A meter's noise at rest is not.
+        assert ha.volume_spans([(at, -0.0017)]) == []
+
+
+@pytest.mark.asyncio
+class TestTheSixthReviewLive:
+    START = NOW - timedelta(days=2)
+
+    async def test_a_quarter_gallon_draw_is_drawing(self):
+        at = NOW - timedelta(hours=3)
+        client = FakeClient(
+            UNITS,
+            {
+                "sensor.volume": [(self.START, 0.0), (at, 0.25)],
+                "sensor.pump": [(self.START, 0.0)],
+            },
+        )
+        got = await ha.record_inputs(
+            client,  # pyright: ignore[reportArgumentType]
+            ha.Entities(
+                meter_volume="sensor.volume", circulation_speed="sensor.pump"
+            ),
+            self.START,
+            NOW,
+        )
+        (drawn,) = got.drawing or []
+        assert drawn[0] < at <= drawn[1]

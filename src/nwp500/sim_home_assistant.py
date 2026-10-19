@@ -390,9 +390,15 @@ def to_rpm(value: float, unit: str | None) -> float:
 
 
 def busy(*spans: Sequence[Span]) -> list[Span]:
-    """``spans`` together, overlapping ones joined, in time order."""
+    """``spans`` together, overlapping ones joined, in time order, in
+    UTC."""
     out: list[Span] = []
-    for a, b in sorted(x for group in spans for x in group):
+    flat = (
+        (a.astimezone(UTC), b.astimezone(UTC))
+        for group in spans
+        for a, b in group
+    )
+    for a, b in sorted(flat):
         if out and a <= out[-1][1]:
             out[-1] = (out[-1][0], max(out[-1][1], b))
         else:
@@ -460,8 +466,10 @@ def pump_runs(
     (the reading in force at ``start`` first, as a history gives it): at
     or above ``on_rpm`` is running, below is stopped, and a run silent
     for longer than ``stale`` ended ``stale`` after its last reading.
-    None (unknown, not idle) when there is no reading at all."""
-    rows = sorted(speed, key=lambda r: r[0])
+    None (unknown, not idle) when there is no reading at all. Instants
+    are read as UTC, so the silence holds across a change of clocks."""
+    rows = sorted((t.astimezone(UTC), v) for t, v in speed)
+    start, end = start.astimezone(UTC), end.astimezone(UTC)
     if not rows:
         return None
     runs: list[Span] = []
@@ -865,6 +873,29 @@ def draw_spans(
     return out
 
 
+def volume_spans(
+    volume: Sequence[Reading],
+    *,
+    min_gal: float = meter.DRAW_GPM * meter.STEP.total_seconds() / 60.0,
+    window: timedelta = meter.WINDOW,
+) -> list[Span]:
+    """The spans a meter's volume reports (each the volume since its
+    previous report, gallons) say water moved: each report of
+    ``min_gal`` or more, either sign, from the previous report (or
+    ``window`` before it, if longer ago) to itself. The default is the
+    draw line held for one step, well above a meter's noise at rest.
+    However short or slow the draw, it is caught here, where the net
+    flow over ``window`` can stay under the line."""
+    out: list[Span] = []
+    prev: datetime | None = None
+    for t, v in sorted((t.astimezone(UTC), v) for t, v in volume):
+        if abs(v) >= min_gal:
+            a = t - window if prev is None else max(prev, t - window)
+            out.append((a, t))
+        prev = t
+    return busy(out)
+
+
 async def record_inputs(
     client: HomeAssistantClient,
     entities: Entities,
@@ -991,7 +1022,16 @@ async def record_inputs(
             down = busy(
                 *(got.outages.get(n, []) for n in (volume_id, rate_id) if n)
             )
-            drawing = busy(draw_spans(flow), down)
+            drawing = busy(
+                draw_spans(flow),
+                volume_spans(
+                    [
+                        (t, to_gal(v, units[volume_id]))
+                        for t, v in reports_after(volume, start)
+                    ]
+                ),
+                down,
+            )
             outage("meter", down)
         except ValueError as err:
             notes.append(f"meter: {err}")

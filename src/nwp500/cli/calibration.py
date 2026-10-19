@@ -112,6 +112,21 @@ def max_gap(readings: Sequence[status_history.TimedStatus]) -> timedelta:
     return max(MIN_GAP, GAP_SAMPLES * usual)
 
 
+def _held_to(
+    series: Sequence[Reading], outages: Sequence[tuple[datetime, datetime]]
+) -> list[Reading]:
+    """A source's ``series`` with the value in force at each outage's
+    start repeated there: a state holds until the next, so the readings
+    either side of an outage are not to be drawn as a ramp across it,
+    which would reach back before it."""
+    out = sorted(series)
+    for a, _ in outages:
+        before = [v for t, v in out if t <= a]
+        if before:
+            out.append((a, before[-1]))
+    return sorted(set(out))
+
+
 def _unobserved(
     index: Any,
     covers: tuple[datetime, datetime],
@@ -197,13 +212,16 @@ def calibrate(
     elif ambient is not None:
         series, how = [(first, ambient), (last, ambient)], "constant"
     elif record is not None and record.air:
-        series = [(t, sa.temperature(v)) for t, v in record.air]
+        series = [
+            (t, sa.temperature(v))
+            for t, v in _held_to(record.air, record.air_outages)
+        ]
         how = "source"
         # A history's first reading is the value in force at its start,
         # and the last holds a reading's freshness past it.
         covers = (record.air[0][0], record.air[-1][0] + timedelta(hours=1))
     if humidity is None and record is not None and record.humidity:
-        humidity = record.humidity
+        humidity = _held_to(record.humidity, record.humidity_outages)
         rh_covers = (
             record.humidity[0][0],
             record.humidity[-1][0] + timedelta(hours=1),
