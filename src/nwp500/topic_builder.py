@@ -14,8 +14,16 @@ Topic schema::
     Response (app form):         cmd/{device_type}/{home_seq}/{user_seq}/
                                  {client_id}/res/{suffix}
     Response (device-keyed):     cmd/{device_type}/navilink-{mac}/res/{suffix}
+    Response (control failure):  cmd/{device_type}/navilink-{mac}/res/ctrl-fail
     Event:                       evt/{device_type}/navilink-{mac}/{suffix}
+    Event (app connection):      evt/{device_type}/navilink-{mac}/app-connection
 """
+
+#: Suffix of the device-keyed topic carrying control failures.
+CONTROL_FAIL_SUFFIX = "ctrl-fail"
+
+#: Suffix of the event topic carrying app connection events and Last-Wills.
+APP_CONNECTION_SUFFIX = "app-connection"
 
 
 class MqttTopicBuilder:
@@ -102,6 +110,20 @@ class MqttTopicBuilder:
         return f"cmd/{device_type}/{dt}/res/{suffix}"
 
     @staticmethod
+    def control_fail_response_topic(device_type: str, mac_address: str) -> str:
+        """Build the device-keyed topic that carries control failures.
+
+        The NaviLink app subscribes to it for the NWP500 and shows a popup
+        when ``failCode`` is 2. The ``command_topic(..., "#")`` wildcard
+        subscription receives it.
+
+        Format: ``cmd/{device_type}/navilink-{mac}/res/ctrl-fail``
+        """
+        return MqttTopicBuilder.device_response_topic(
+            device_type, mac_address, CONTROL_FAIL_SUFFIX
+        )
+
+    @staticmethod
     def event_topic(device_type: str, mac_address: str, suffix: str) -> str:
         """Build a device event topic.
 
@@ -109,3 +131,17 @@ class MqttTopicBuilder:
         """
         dt = MqttTopicBuilder.device_topic(mac_address)
         return f"evt/{device_type}/{dt}/{suffix}"
+
+    @staticmethod
+    def app_connection_topic(device_type: str, mac_address: str) -> str:
+        """Build the app connection event topic.
+
+        Clients publish their presence here and register their MQTT
+        Last-Will on it, so a dropped connection is announced with
+        ``connection.status`` 0.
+
+        Format: ``evt/{device_type}/navilink-{mac}/app-connection``
+        """
+        return MqttTopicBuilder.event_topic(
+            device_type, mac_address, APP_CONNECTION_SUFFIX
+        )

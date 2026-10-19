@@ -470,7 +470,11 @@ async def vacation_duration(
 )
 @async_command
 async def recirc(mqtt: NavienMqttClient, device: Any, mode_val: str) -> None:
-    """Set recirculation pump mode (1-4)."""
+    """Set recirculation pump mode.
+
+    1 = always on, 2 = weekly schedule, 3 = hot button only,
+    4 = no recirculation.
+    """
     await handlers.handle_set_recirculation_mode_request(
         mqtt, device, int(mode_val)
     )
@@ -517,8 +521,7 @@ async def reservations_set(
     "--mode",
     type=int,
     required=True,
-    help="Mode: 1=HP, 2=Electric, 3=EnergySaver, 4=HighDemand, "
-    "5=Vacation, 6=PowerOff",
+    help="Mode: 1=HP, 2=Electric, 3=EnergySaver, 4=HighDemand, 5=PowerOff",
 )
 @click.option(
     "--temp",
@@ -567,8 +570,7 @@ async def reservations_delete(
     "--mode",
     type=int,
     default=None,
-    help="Mode: 1=HP, 2=Electric, 3=EnergySaver, 4=HighDemand, "
-    "5=Vacation, 6=PowerOff",
+    help="Mode: 1=HP, 2=Electric, 3=EnergySaver, 4=HighDemand, 5=PowerOff",
 )
 @click.option(
     "--temp",

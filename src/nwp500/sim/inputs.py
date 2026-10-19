@@ -45,6 +45,12 @@ POWER_OFF = 6
 
 Mode = Annotated[int, Field(ge=HEAT_PUMP, le=POWER_OFF)]
 
+#: A reservation entry's mode (``ReservationMode``), its own numbering:
+#: 1-4 are the operation modes of the same ids, 5 is Power Off, and 0 an
+#: unused slot. Any id the device stores is accepted (an earlier version
+#: of the library wrote 6); only 1-4 are modelled.
+EntryMode = Annotated[int, Field(ge=0, le=255)]
+
 
 def _utc(at: datetime) -> datetime:
     return at.astimezone(UTC)
@@ -121,7 +127,7 @@ class ReservationEntry(_Value):
     week: Mask
     hour: Annotated[int, Field(ge=0, le=23)]
     minute: Annotated[int, Field(ge=0, le=59)]
-    mode: Mode
+    mode: EntryMode
     #: The setpoint it writes, half-degrees Celsius (the device's
     #: ``param``).
     setpoint_half_c: int

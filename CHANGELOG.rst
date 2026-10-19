@@ -7,6 +7,90 @@ Unreleased
 
 Added
 -----
+- **New REST endpoints.** ``NavienAPIClient`` gains
+  ``get_push_settings()`` / ``set_push_settings()``
+  (``/user/get-push-settings``, ``/user/set-push-settings``),
+  ``record_filter_change()`` / ``record_cip_change()`` and
+  ``get_filter_history()`` / ``get_cip_history()`` (the cloud's maintenance
+  log; dates are sent ``YYYY-M-D`` without zero padding, as the app does),
+  ``get_display_preferences()`` / ``set_display_preferences()``
+  (``/device/preferences/format``; the cloud rejects it for the NWP500,
+  the app only uses it for the IoT-module hydro unit), ``get_user_profile()`` (``/user/info``),
+  ``get_firmware_detail()`` (``/firmware/info``; ``run_time`` is the
+  estimated update time in minutes), ``delete_tou()``
+  (``DELETE /device/tou``), ``get_manufacture_id()``,
+  ``get_error_history()`` (``/device/error/list``; installer accounts
+  only, an owner account gets ``COMMON_NOT_AUTHORIZED``), ``update_device_info()``
+  (``/device/change-info``), ``list_simple_devices()`` and
+  ``get_app_version()`` (unauthenticated; a 403 maintenance notice is
+  returned as ``server_check_text``; ``nwp500.get_app_version()`` asks
+  before sign-in, without a client). ``set_push_settings()`` keeps the
+  current value of a flag left ``None``, since the app always sends
+  every flag. ``get_error_history()`` entries carry the list's
+  ``timeZone`` (``time_zone``, ``occurred_at_local``). New models: ``PushSettings``,
+  ``DeviceInstaller``, ``FirmwareDeviceGroup``, ``FirmwareDetail``,
+  ``DisplayPreferences``, ``SimpleDevice``, ``DeviceErrorHistoryEntry``,
+  ``MaintenanceHistoryEntry``, ``UserProfile``, ``AppVersionInfo``. Push
+  flags are 1 = on, 2 = off, the reverse of the device's on/off flags, and
+  decode to ``True``/``False``/``None``. ``Device.installer`` and
+  ``Device.alarm_info`` are parsed from ``/device/info`` as the app does;
+  ``TOUSchedule.nickname`` is modelled.
+- **AWS credentials renew without the password.**
+  ``NavienAuthClient.refresh_session()`` posts to ``/auth/session/refresh``
+  with the access token and updates only the AWS credential fields the
+  server returns, as the app does when the MQTT connection fails with an
+  auth error. ``secured_sign_in()`` posts to ``/user/secured-sign-in`` with
+  the access token and overlays whatever token fields come back (observed
+  live: the AWS credentials only; the JWTs are kept), which the app uses
+  for auto-login. When the AWS credentials expire, ``ensure_valid_token()``
+  and the context manager's stored-token check now try session refresh,
+  then secured sign-in, and only then the password sign-in; both token
+  steps are skipped when the access token has expired and cannot be
+  refreshed. ``re_authenticate()`` tries secured sign-in while the access
+  token is live, then the password sign-in, so a client restored from
+  tokens alone can use it too.
+  The MQTT client's deep reconnect calls ``refresh_session()`` after the
+  forced token refresh. ``AuthTokens`` gained an optional
+  ``aws_credentials_issued_at`` so a renewed AWS expiry survives
+  ``to_dict()``/restore. Stored tokens without the field load as before.
+- **Control failures are parsed and surfaced.** When the device refuses a
+  control command it publishes on ``cmd/52/navilink-{mac}/res/ctrl-fail``
+  instead of acknowledging it; the library silently dropped that message.
+  It is now parsed into ``ControlFailResponse``
+  (``ControlFailCode.DHW_CONTROL_INTERVAL_EXCEEDED`` = 2 is the only code
+  the app interprets: the previous DHW control was too recent) and emitted
+  as the ``control_failed`` client event (``ControlFailedEvent`` with
+  ``own_command`` and ``reason``) for every device subscription, with a
+  WARNING log. ``subscribe_control_fail_response()`` /
+  ``unsubscribe_control_fail_response()`` add a plain callback.
+- **MQTT Last-Will and app-connection presence.** Set
+  ``MqttConnectionConfig.last_will_device`` to register the app's Last-Will
+  on ``evt/52/navilink-{mac}/app-connection`` (``event.connection.status``
+  0, QoS 1) so other clients learn when this one drops; every rebuilt
+  connection carries it. ``subscribe_app_connection()`` /
+  ``unsubscribe_app_connection()`` parse the topic into
+  ``AppConnectionEvent`` and emit ``app_connection_received``
+  (``AppConnectionReceivedEvent``). New ``MqttTopicBuilder`` helpers
+  ``control_fail_response_topic()`` and ``app_connection_topic()``.
+- **``DeviceStatus.air_filter_remaining_hours``**: the app's remaining
+  filter life (``None`` when the reminder period is 0, else clamped at 0).
+- **``DeviceStatus.minor_code``** (``minorCode``): the secondary alarm code
+  the app shows as ``R%03d``; 101 is the one it lets the user reset.
+  Defaults to 0 for payloads that omit it.
+- **``DhwOperationSetting.STANDBY`` (0)**, the app's
+  ``MgppOperationMode.STANDBY``. ``DeviceStatus.dhw_operation_setting``
+  previously rejected a 0. It is status-only: ``set_dhw_mode()`` refuses
+  it, as it now refuses any id outside 1-6. ``sim_adapters.settings()``
+  refuses a Standby status, which the simulator does not model.
+- **``DREvent.GRID_EMERGENCY`` (6).** The app declares CPE and Grid
+  Emergency both as id 5 but decodes ``drEventStatus`` by array position,
+  so raw 6 is Grid Emergency; ``CPE`` (5) stays "Customer Peak Event".
+- **``UnitType``** NCB700 (22), NFB700_H (24), CAS_NFB700_H (25),
+  NPF_SYSTEM (514); **``DeviceType``** IOT_MODULE (8), NFB700_MAIN (50),
+  NFB700_SUB (51) (the app's names; ``NPF700_MAIN``/``NPF700_SUB`` remain
+  as aliases) and ``HPWH`` as an alias of 52, which is the NWP500
+  (``DefineData.HPWH_MODEL``), not an NPF700 WiFi module. A dumped device
+  of type 50 or 51 now names it ``NFB700_MAIN`` or ``NFB700_SUB``.
 - **A recovery model's inputs, through ``nwp500.sim.simulate``** (#165).
   Beside ``recovery=``, ``simulate`` takes what a learned model was
   trained with and brings: ``start_hold`` (a start's hold by the
@@ -359,6 +443,51 @@ Added
 
 Changed
 -------
+- **Recirculation mode values follow the NaviLink app.** ``RecirculationMode``
+  had 2 and 3 swapped and 4 wrong: the app's
+  ``MgppRecirculationOperationMode`` (sent by ``recirc-mode`` and decoded
+  from ``recircOperationMode``) is 1 Always on, 2 Weekly, 3 HotButton only,
+  4 No recirculation. The members are now ``ALWAYS_ON``, ``WEEKLY``,
+  ``HOT_BUTTON_ONLY`` and ``OFF``; ``ALWAYS`` remains as an alias of
+  ``ALWAYS_ON``. **Behaviour change:** ``BUTTON``, ``SCHEDULE`` and
+  ``TEMPERATURE`` are removed, since their meanings were wrong; code that
+  sent ``RecirculationMode.BUTTON`` (2) was selecting the weekly schedule.
+  ``RECIRC_MODE_TEXT``, the ``recirc`` CLI command, the recirculation
+  example and the protocol docs follow. ``model_dump()`` writes enum
+  names, so a dumped status now says ``"ALWAYS_ON"`` for 1 (was
+  ``"ALWAYS"``) and ``"WEEKLY"`` for 2 (was ``"BUTTON"``); code keyed on
+  the old strings must follow.
+- **Reservation mode 5 is Power Off, not Vacation.** Weekly-schedule
+  entries carry the app's ``MgppReservationMode`` (0 not reserved, 1 Heat
+  Pump, 2 Electric, 3 Energy Saver, 4 High Demand, 5 Power Off; there is
+  no vacation entry), now the ``ReservationMode`` enum.
+  ``ReservationEntry.mode_name`` resolves through it, so a mode-5 entry
+  reads "Power Off" instead of "Vacation" and mode 0 reads "Not Reserved".
+  **Behaviour change:** reservation writes (``add_reservation()``,
+  ``update_reservation()``, ``build_reservation_entry()`` and the MQTT
+  reservation validator) now accept mode 1-5 and reject 6, which was never
+  a valid entry mode. An entry already on the heater with mode 6 (earlier
+  versions documented 6 as Power Off) does not block the reservation
+  helpers: they send the entries they did not change as they read them
+  (``update_reservations(kept=)``). Changing such an entry needs a mode
+  of 1-5. The simulator's reservation entries take the same numbering
+  (``sim.inputs.EntryMode``); only 1-4 are modelled, as before.
+- **``dr_override_status`` is an on/off flag, not hours.** The app decodes
+  it with its 0/1/2 on-off enum and shows "DR applied" when it is 2. The
+  field stays an ``int`` but no longer carries an ``hours`` unit; the new
+  ``DeviceStatus.dr_override_active`` is True when it is 2.
+- **Air-filter life comes from ``cumulated_op_time_eva_fan``.** The app
+  computes remaining filter life as ``air_filter_alarm_period -
+  cumulated_op_time_eva_fan`` and never reads ``air_filter_alarm_elapsed``.
+  The two descriptions were the wrong way round; ``cumulated_op_time_eva_fan``
+  is fan hours since the last filter reset and ``air_filter_alarm_elapsed``
+  is unconfirmed.
+- **``signal_app_connection()`` sends the app's message shape.** It
+  published ``{clientID, timestamp}``, a shape nothing reads. It now
+  publishes the NaviLink app's ``RequestLastWill`` envelope with
+  ``event.connection.status`` 1.
+- Sign-in and ``/auth/refresh`` requests now send the library's
+  ``User-Agent`` and ``Content-Type`` headers, as every other request does.
 - **The heater's own air reading is not as close as documented in
   every season.** ``sim_adapters.location_air_reading``,
   ``sim.location_air`` and the inputs reference said it read the air
@@ -395,6 +524,11 @@ Changed
 
 Fixed
 -----
+- ``FirmwareInfo.device_group`` was typed as a string; the app reads an
+  object ``{groupSeq, unitNum}`` (plus a top-level ``deviceGroupUnitNo``).
+  It is now ``FirmwareDeviceGroup``, with a bare string still accepted.
+- ``convert_tou()`` hard-coded ``userType: "O"``; it now sends the
+  signed-in user's type from the sign-in response, defaulting to ``"O"``.
 - **A reservation entry turns a powered-off heater on in the
   simulator.** The controller skipped entries while powered off, as in
   Vacation, on a misreading of the device test, which found that a
@@ -426,6 +560,15 @@ Documentation
   physics with a learned correction, and are removed. The "cold starts
   about 55 min short" figure is replaced by the recorded errors by time
   left. The lower trigger's in-window wait is given with its full count.
+- ``unknown-values``, ``tank-energy`` and the MQTT protocol reference now
+  cite the current NaviLink app release they were checked against.
+- ``docs/openapi.yaml`` and ``rest_api.rst`` describe every endpoint above
+  plus ``POST /auth/session/refresh`` and ``POST /user/secured-sign-in``;
+  ``mqtt_protocol.rst`` documents ``res/ctrl-fail`` and the
+  ``app-connection`` event / Last-Will payload; ``diagnose-mqtt.rst`` gains
+  "Why was my command rejected?"; ``maintenance.rst`` gains a "Maintenance
+  Log" section; ``authenticate.rst`` explains the password-free renewal
+  chain.
 - **Less noise.** Implementation notes, the docs' own revision history
   and where things were ported from are gone from the pages, and
   section titles are plainer. The ``sim`` extra is listed under

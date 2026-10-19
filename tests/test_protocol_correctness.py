@@ -440,6 +440,31 @@ class TestControlPayloads:
         publish.assert_not_awaited()
 
     @pytest.mark.asyncio
+    @pytest.mark.parametrize("mode_id", [0, 7, -1])
+    async def test_dhw_mode_range(self, mock_device, mode_id):
+        """``dhw-mode`` takes 1-6; Standby (0) is status-only."""
+        controller, publish = _make_controller()
+        with pytest.raises(RangeValidationError):
+            await controller.set_dhw_mode(mock_device, mode_id)
+        publish.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("mode_id", [3.0, True, "3"])
+    async def test_dhw_mode_rejects_non_integers(self, mock_device, mode_id):
+        controller, publish = _make_controller()
+        with pytest.raises(ParameterValidationError):
+            await controller.set_dhw_mode(mock_device, mode_id)
+        publish.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("mode_id", [1, 4, 6])
+    async def test_dhw_mode_sends_valid_ids(self, mock_device, mode_id):
+        controller, publish = _make_controller()
+        await controller.set_dhw_mode(mock_device, mode_id)
+        _topic, command = publish.await_args.args
+        assert command["request"]["param"] == [mode_id]
+
+    @pytest.mark.asyncio
     @pytest.mark.parametrize(
         ("hours", "param"), [(0, 0), (1000, 2), (3000, 6), (10000, 20)]
     )

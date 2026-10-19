@@ -85,6 +85,11 @@ class TestTheHeater:
         assert s.hp_lower_on_f == pytest.approx(104.9)
         assert s.mode == 3
 
+    def test_a_standby_status_is_refused(self, status: DeviceStatus):
+        standby_status = status.model_copy(update={"dhw_operation_setting": 0})
+        with pytest.raises(ValueError, match="Standby"):
+            sa.settings(standby_status)
+
     @pytest.mark.parametrize("units", ["metric", "us_customary", None])
     def test_the_unit_preference_changes_nothing(
         self, status: DeviceStatus, units: Any
@@ -146,6 +151,26 @@ class TestTheSchedules:
             True,
         )
         assert second.enabled is False
+
+    def test_entries_in_any_stored_mode_are_read(self):
+        sched = ReservationSchedule.model_validate(
+            {
+                "reservationUse": 2,
+                "reservation": [
+                    {
+                        "enable": 2,
+                        "week": 124,
+                        "hour": 6,
+                        "min": 0,
+                        "mode": mode,
+                        "param": 120,
+                    }
+                    for mode in (0, 5, 6)
+                ],
+            }
+        )
+        modes = [e.mode for e in sa.schedules(reservations=sched).reservations]
+        assert modes == [0, 5, 6]
 
     def test_a_switched_off_reservation_schedule(self):
         sched = ReservationSchedule.model_validate(

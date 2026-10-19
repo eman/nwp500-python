@@ -395,8 +395,8 @@ Then check what the answer rests on:
    print(result.reasons)        # e.g. ('tou_cap_projected',)
 
 ``defaults_used`` names every input the simulator had to assume.
-``reasons`` names what it could not model, such as a reservation in
-Vacation mode (``reservation_mode_not_modelled``). Each entry in either
+``reasons`` names what it could not model, such as a reservation that
+powers the heater off (``reservation_mode_not_modelled``). Each entry in either
 list is a limit on the answer, and most can be removed by supplying the
 input (:doc:`/reference/simulator-inputs`).
 
@@ -443,9 +443,9 @@ fall inside the scenario's span. ``sa.reservation_entry`` builds an
 entry as ``build_reservation_entry`` builds one for the device
 (:doc:`schedule-operation`), with the same range check.
 
-A heater already in Vacation or Power Off starts no heating. A write or
-reservation that switches to either is not modelled: it is left out,
-and ``reasons`` says so (``write_mode_not_modelled``,
+A heater already in Vacation or Power Off starts no heating. A write
+that switches to either, or a reservation that powers the heater off,
+is not modelled: it is left out, and ``reasons`` says so (``write_mode_not_modelled``,
 ``reservation_mode_not_modelled``). ``input_wh`` is None when an
 interval's energy could not be priced.
 

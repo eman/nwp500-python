@@ -12,14 +12,23 @@ from ._converters import (
     preferred_to_half_celsius,
     reservation_param_to_preferred,
 )
+from .account import AppVersionInfo, UserProfile
 from .device import (
     ConnectionStatusField,
     DescalingInfo,
     Device,
+    DeviceErrorHistoryEntry,
     DeviceErrorSummary,
     DeviceInfo,
+    DeviceInstaller,
+    DisplayPreferences,
+    FirmwareDetail,
+    FirmwareDeviceGroup,
     FirmwareInfo,
     Location,
+    PushFlag,
+    PushSettings,
+    SimpleDevice,
 )
 from .diagnostics import (
     DeviceDiagnostics,
@@ -36,7 +45,18 @@ from .energy import (
 )
 from .feature import CapabilityFlag, DeviceFeature, VolumeCodeField
 from .firmware import FirmwareDownloadEntry, FirmwareDownloadInfo
-from .mqtt_models import MqttCommand, MqttRequest
+from .maintenance import MaintenanceHistoryEntry, format_maintenance_date
+from .mqtt_models import (
+    APP_CONNECTION_OS,
+    AppConnectionEvent,
+    AppConnectionInfo,
+    AppConnectionStatus,
+    ControlFailCode,
+    ControlFailDetail,
+    ControlFailResponse,
+    MqttCommand,
+    MqttRequest,
+)
 from .schedule import (
     OtaCommitPayload,
     RecirculationSchedule,
@@ -78,7 +98,19 @@ __all__ = [
     "Device",
     "DeviceErrorSummary",
     "DescalingInfo",
+    "DeviceInstaller",
+    "PushFlag",
+    "PushSettings",
     "FirmwareInfo",
+    "FirmwareDeviceGroup",
+    "FirmwareDetail",
+    "DisplayPreferences",
+    "SimpleDevice",
+    "DeviceErrorHistoryEntry",
+    "MaintenanceHistoryEntry",
+    "format_maintenance_date",
+    "UserProfile",
+    "AppVersionInfo",
     "TOUSchedule",
     "ConvertedTOUPlan",
     "TOUInfo",
@@ -99,6 +131,13 @@ __all__ = [
     "DeviceFeature",
     "MqttRequest",
     "MqttCommand",
+    "ControlFailCode",
+    "ControlFailDetail",
+    "ControlFailResponse",
+    "AppConnectionEvent",
+    "AppConnectionInfo",
+    "AppConnectionStatus",
+    "APP_CONNECTION_OS",
     "EnergyUsageBase",
     "EnergyUsageTotal",
     "EnergyUsageDay",

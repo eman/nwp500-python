@@ -44,7 +44,7 @@ from .diagnostics import MqttDiagnosticsCollector
 from .periodic import MqttPeriodicRequestManager
 from .reconnection import MqttReconnectionHandler
 from .subscriptions import MqttSubscriptionManager
-from .types import MqttConnectionHandle, QoS
+from .types import MqttConnectionHandle, MqttWill, QoS
 from .utils import (
     MqttConnectionConfig,
     PeriodicRequestType,
@@ -164,6 +164,8 @@ class NavienMqttClient(
         - heating_stopped: Device stopped heating
         - error_detected: Device error occurred
         - error_cleared: Device error resolved
+        - control_failed: Device rejected a control command
+        - app_connection_received: Another client connected or dropped
         - connection_interrupted: Connection lost
         - connection_resumed: Connection restored
     """
@@ -415,6 +417,35 @@ class NavienMqttClient(
         elif self.config.enable_command_queue and self._command_queue:
             self._schedule_coroutine(self._send_queued_commands_internal())
 
+    def _create_connection_manager(self) -> MqttConnection:
+        """Build a connection manager wired to this client's callbacks.
+
+        Used for the first connect and for every rebuild, so each
+        connection carries the same Last-Will (see :meth:`_build_will`).
+        """
+        return MqttConnection(
+            config=self.config,
+            auth_client=self._auth_client,
+            on_connection_interrupted=self._on_connection_interrupted_internal,
+            on_connection_resumed=self._on_connection_resumed_internal,
+            will=self._build_will(),
+        )
+
+    def _build_will(self) -> MqttWill | None:
+        """The Last-Will for ``config.last_will_device``, or ``None``.
+
+        Mirrors the NaviLink app, which registers its will on the
+        device's ``app-connection`` event topic with
+        ``event.connection.status`` 0 so a dropped client is announced.
+        """
+        device = self.config.last_will_device
+        if device is None:
+            return None
+        topic, payload = self._device_controller.build_app_connection(
+            device, connected=False
+        )
+        return MqttWill(topic=topic, payload=payload, qos=QoS.AT_LEAST_ONCE)
+
     async def _send_queued_commands_internal(self) -> None:
         """Send all queued commands using the command queue component."""
         if not self._command_queue or not self._connection_manager:
@@ -489,12 +520,7 @@ class NavienMqttClient(
                     _logger.debug(f"Old connection cleanup (benign): {e}")
 
                 # Create a new connection manager with same config
-                self._connection_manager = MqttConnection(
-                    config=self.config,
-                    auth_client=self._auth_client,
-                    on_connection_interrupted=self._on_connection_interrupted_internal,
-                    on_connection_resumed=self._on_connection_resumed_internal,
-                )
+                self._connection_manager = self._create_connection_manager()
 
                 # Try to connect
                 success = await self._connection_manager.connect()
@@ -583,15 +609,26 @@ class NavienMqttClient(
                     await self._auth_client.refresh_token(
                         current_tokens.refresh_token
                     )
+                    # The NaviLink app answers an MQTT auth failure with a
+                    # session refresh: AWS IoT can reject SigV4 credentials
+                    # before they are locally "expired", so renew them
+                    # explicitly rather than trusting the stored expiry.
+                    await self._auth_client.refresh_session()
                 else:
                     _logger.warning("No refresh token available")
                     raise MqttCredentialsError(
                         "No refresh token available for refresh"
                     )
             except (TokenRefreshError, ValueError, AuthenticationError) as e:
-                # If refresh fails, try full re-authentication with stored
-                # credentials
-                if self._auth_client.has_stored_credentials:
+                # If refresh fails, re-authenticate: re_authenticate() uses
+                # a live access token (secured sign-in) before the stored
+                # password, so a client restored from tokens alone can
+                # recover too.
+                tokens = self._auth_client.current_tokens
+                token_live = bool(
+                    tokens and tokens.access_token and not tokens.is_expired
+                )
+                if self._auth_client.has_stored_credentials or token_live:
                     _logger.warning(
                         f"Token refresh failed: {e}. Attempting full "
                         "re-authentication..."
@@ -599,18 +636,14 @@ class NavienMqttClient(
                     await self._auth_client.re_authenticate()
                 else:
                     _logger.error(
-                        "Cannot re-authenticate: no stored credentials"
+                        "Cannot re-authenticate: no live access token and "
+                        "no stored credentials"
                     )
                     raise
 
             # Step 3: Create completely new connection manager
             _logger.debug("Creating new connection manager...")
-            self._connection_manager = MqttConnection(
-                config=self.config,
-                auth_client=self._auth_client,
-                on_connection_interrupted=self._on_connection_interrupted_internal,
-                on_connection_resumed=self._on_connection_resumed_internal,
-            )
+            self._connection_manager = self._create_connection_manager()
 
             # Step 4: Attempt connection
             success = await self._connection_manager.connect()
@@ -679,12 +712,7 @@ class NavienMqttClient(
 
         try:
             # Initialize connection manager with internal callbacks
-            self._connection_manager = MqttConnection(
-                config=self.config,
-                auth_client=self._auth_client,
-                on_connection_interrupted=self._on_connection_interrupted_internal,
-                on_connection_resumed=self._on_connection_resumed_internal,
-            )
+            self._connection_manager = self._create_connection_manager()
 
             # Delegate connection to connection manager
             success = await self._connection_manager.connect()

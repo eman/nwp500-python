@@ -122,6 +122,37 @@ Tokens are automatically refreshed when they expire:
         devices = await api.list_devices()
 
 
+Renewing AWS Credentials Without the Password
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The MQTT connection signs with AWS credentials that expire separately from
+the JWT, and ``/auth/refresh`` does not renew them. When they expire the
+library follows the NaviLink app and tries, in order:
+
+1. ``refresh_session()``: ``POST /auth/session/refresh`` with the current
+   access token; returns new AWS credentials only. If the JWT has also
+   expired it is refreshed first so the access token is live.
+2. ``secured_sign_in()``: ``POST /user/secured-sign-in`` with the access
+   token; returns user info plus whatever token fields the server issues.
+   Observed live, that is the AWS credentials only, so the JWT access and
+   refresh tokens are kept.
+3. ``sign_in()`` with the stored password, only if both of the above fail.
+
+``ensure_valid_token()`` (called by the API and MQTT clients) and the
+context manager's stored-token check run this chain automatically, so the
+password is rarely sent after the first login. You can also call the first
+two methods directly:
+
+.. code-block:: python
+
+    async with NavienAuthClient(email, password, stored_tokens=saved) as auth:
+        if auth.current_tokens.are_aws_credentials_expired:
+            try:
+                await auth.refresh_session()
+            except TokenRefreshError:
+                await auth.secured_sign_in()
+
+
 Checking Token Expiration
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
 
