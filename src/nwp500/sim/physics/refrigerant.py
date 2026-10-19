@@ -2,9 +2,12 @@
 
 Property values are derived from ASHRAE Standard 34 and cross-referenced
 against the observed telemetry ranges for the Navien NWP500 installation.
-The key insight is that saturated vapor density — not Carnot COP — drives
-the observed 1.7× capacity difference between the two empirical calibration
-cycles.
+Saturated vapor density — not Carnot COP — is what scales the modelled
+capacity with ambient.  It was chosen to explain a 1.7× cold/warm
+duration ratio between two calibration cycles, which does not generalize:
+across 217 heating cycles with a deficit of at least 10 °F the effective
+heating rate rises only ~1.18× from 53.6 to 75.1 °F ambient, and
+mid-cycle compressor power is flat across ambient (median 392–431 W).
 
 All temperatures are in °F, pressures in psia, densities in lb/ft³, and
 enthalpies in BTU/lb.
@@ -24,7 +27,7 @@ import numpy as np
 # Critical density values:
 #   40°F → 0.265 lb/ft³ (cold-cycle calibration point)
 #   80°F → 0.535 lb/ft³ (warm-cycle calibration point)
-#   Ratio ≈ 2.02× — primary driver of 1.7× capacity difference.
+#   Ratio ≈ 2.02×, far above the ~1.18× measured (module docstring).
 
 _TABLE = np.array(
     [

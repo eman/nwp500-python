@@ -7,6 +7,35 @@ Unreleased
 
 Added
 -----
+- **The air, its humidity and the inlet, live from Home Assistant**
+  (#166).
+
+  - ``nwp500.sim_home_assistant`` reads Home Assistant's REST API,
+    read-only. ``HomeAssistantEnvironment`` is a ``sim_live``
+    environment source:
+
+    - the air is the hourly forecast projected through a
+      ``location_air`` model, anchored to a reading beside the heater at
+      most an hour old (without a model, that reading held);
+    - the humidity is a reading at most an hour old;
+    - the inlet is the plateau of the last 72 hours' long draws, from
+      the inlet probe, the meter and the circulation's runs.
+
+    Units come from each entity's ``unit_of_measurement``. A part that
+    can't be read keeps its default, and the source says why.
+    ``record_inputs`` reads the same entities over a recorded history.
+  - ``nwp500.sim.meter.flow_gpm`` is a meter's flow from its volume
+    reports and its forward rate: the net volume over a trailing 90 s
+    where it holds at the draw line for 120 s, the rate elsewhere. It
+    finds the long draws the inlet plateau needs where the rate alone,
+    silent through a steady draw, misses some.
+  - ``nwp-cli simulate run``, ``snapshot`` and ``calibrate`` take
+    ``--sources FILE`` (or ``NWP500_SOURCES``), a TOML file naming the
+    entities, with the token in an environment variable.
+    ``calibrate`` reads the air, the humidity, the draws and the
+    circulation over the record, which makes the quiet test exact.
+  - ``sim_live.compose`` takes the heater's own air reading when the
+    environment source has none.
 - **An optional heater simulator, ``nwp500.sim``** (#150, first part). The
   core of a physics simulation of the NWP500: an R-134a compressor model
   coupled to a two-zone tank, standby loss, the heating elements, draws,
@@ -352,8 +381,45 @@ Changed
   library now accepts the same. The ``vacation`` and
   ``vacation-duration`` CLI commands follow.
 
+Fixed
+-----
+- **A reservation entry turns a powered-off heater on in the
+  simulator.** The controller skipped entries while powered off, as in
+  Vacation, on a misreading of the device test, which found that a
+  powered-off heater fires the entry and turns on in its mode (two
+  runs). ``Settings.powered_off`` tells power-off from Vacation; the
+  entry is judged as a mode write out of power-off, and the result
+  carries ``powered_on_by_entry``. In Vacation entries are still
+  skipped.
+
 Documentation
 -------------
+- **Corrections from the device tests and the recorded history.** The
+  explanation pages, the how-tos, the protocol reference and the
+  simulator's docstrings said things later measurements contradict:
+
+  - High Demand's element starts somewhere in (0.2, 0.4] degC short,
+    not (0.2, 0.7]; Electric ran upper first in the commanded runs, but
+    the record also has the lower running alone; the element-run and
+    mid-stint counts are the record's.
+  - Inside a TOU window the upper tank starts a cycle when it is more
+    than 14.4 degF short, at the opening or later. A setpoint write
+    starts one in 120 of 122 writes leaving the upper tank short (not
+    about 70 %), a lowering to the upper tank or below in none, and in
+    ``HEAT_PUMP`` a draw does not start one while the upper tank is at
+    or above the setpoint. The restart lockout measured 5.5 min.
+  - The simulator's accuracy figures are the ones measured with
+    start-up charged once (3.6 % and 4.4 % low; starts 31 of 40 held
+    out), and the heater's idle air reading is about 6 degF warm.
+  - ``HYBRID_BOOST_MODE`` is also Energy Saver with an element running;
+    ``touStatus`` means TOU is enabled, not that a period is in force.
+  - A device has held at least 32 reservation entries and 20 TOU
+    periods; a list write can be lost with no error, so read it back;
+    a powered-off heater runs its reservation entries; forcing a full
+    recovery with ``tou_override_status`` is untested.
+  - The ambient effect on the compressor is about 1.18x, not 1.7x; the
+    standby soak's figures, the 60 h gap prior and the circulation runs
+    behind the lower-zone drop are stated as measured.
 - **Docs that contradicted the code or the vendor's sources** (#155). Each
   now has one value with its source:
 

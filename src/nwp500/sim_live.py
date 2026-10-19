@@ -18,10 +18,11 @@ driver's part:
 An override is ``scenario.model_copy(update=...)`` on the result, so
 scenario data can always stand in for the device's current state.
 
-There is no live air or draw source: the device reports neither the
-weather nor the volume drawn. Without an environment, ``compose`` takes
-the heater's own reading of the air at its intake
-(``sim_adapters.environment``).
+The device reports neither the weather nor the volume drawn: the air,
+its humidity and the inlet come from another source
+(``sim_home_assistant``, or ``Given``). Without one, or where it gives
+no usable air, ``compose`` takes the heater's own reading of the air
+at its intake (``sim_adapters.environment``).
 
 A one-shot read cannot know the history the simulator asks for (when
 the compressor last stopped, when the tank last heated): a composed
@@ -328,22 +329,26 @@ async def compose(
 ) -> Composed:
     """A scenario from ``start`` for ``horizon``, its local times in
     ``tz``, from the sources. Without ``schedules`` the heater has none;
-    without ``environment`` the air is the heater's own reading; without
+    without ``environment`` the air is the heater's own reading, as it
+    is when ``environment`` gives no usable air; without
     ``loads`` nothing is drawn; without ``commands`` nothing is
     written. The driver reads the clock for ``start``; nothing here
     does."""
     reading = await heater.read()
+    env = reading.environment
+    if environment is not None:
+        env = await environment.read()
+        if env.ambient_defaulted:
+            env = env.model_copy(
+                update={"ambient_f": reading.environment.ambient_f}
+            )
     parts: dict[str, Any] = {
         "start": start,
         "horizon": horizon,
         "tz": tz,
         "state": reading.state,
         "settings": reading.settings,
-        "environment": (
-            reading.environment
-            if environment is None
-            else await environment.read()
-        ),
+        "environment": env,
     }
     if schedules is not None:
         parts["schedules"] = await schedules.read()

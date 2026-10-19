@@ -126,6 +126,9 @@ class Inputs:
     loads: Mapping[str, Any] | None = None
     commands: Mapping[str, Any] | None = None
     params: Mapping[str, Any] | None = None
+    #: Where the air, its humidity and the inlet are read live
+    #: (``sim_home_assistant.Sources``), when the heater is.
+    sources: Any = None
 
     def __post_init__(self) -> None:
         if self.ambient is not None and self.environment is not None:
@@ -255,14 +258,85 @@ async def compose_live(
     inputs: Inputs,
     now: datetime,
 ) -> sim_live.Composed:
-    """The device's heater and schedules from ``now``."""
-    return await sim_live.compose(
-        start=now,
-        horizon=timedelta(hours=inputs.hours or DEFAULT_HOURS),
-        tz=inputs.zone(),
-        heater=sim_live.LiveHeaterSource(mqtt, device),
-        schedules=sim_live.LiveScheduleSource(mqtt, api, device),
-    )
+    """The device's heater and schedules from ``now``, and the air, its
+    humidity and the inlet from ``inputs.sources`` when given, over the
+    span the scenario will walk (``window``); ``now`` stays the clock a
+    reading's freshness is judged by."""
+    horizon = timedelta(hours=inputs.hours or DEFAULT_HOURS)
+    start, span = window(inputs, now)
+
+    async def compose(environment: Any = None) -> sim_live.Composed:
+        return await sim_live.compose(
+            start=now,
+            horizon=horizon,
+            tz=inputs.zone(),
+            heater=sim_live.LiveHeaterSource(mqtt, device),
+            schedules=sim_live.LiveScheduleSource(mqtt, api, device),
+            environment=environment,
+        )
+
+    if inputs.sources is None:
+        return await compose()
+    from nwp500 import sim_home_assistant as ha
+
+    src = inputs.sources
+    async with ha.HomeAssistantClient(src.url, src.token) as client:
+        environment = ha.HomeAssistantEnvironment(
+            client,
+            src.entities,
+            start=start,
+            until=start + span,
+            now=now,
+            location_air=src.location_air,
+        )
+        composed = await compose(environment)
+    for note in environment.notes:
+        if "not read" in note or "stale" in note or "unknown" in note:
+            _logger.warning(note)
+        else:
+            _logger.info(note)
+    return composed
+
+
+def window(inputs: Inputs, now: datetime) -> tuple[datetime, timedelta]:
+    """The start and horizon ``build`` will give the scenario: a flag,
+    then the scenario document's, then ``now`` and ``DEFAULT_HOURS``.
+    A document value that does not parse is left for ``build`` to
+    refuse."""
+    from pydantic import TypeAdapter, ValidationError
+
+    doc = {} if inputs.scenario is None else inputs.scenario["scenario"]
+    start, horizon = now, timedelta(hours=DEFAULT_HOURS)
+    try:
+        if "start" in doc:
+            start = TypeAdapter(datetime).validate_python(doc["start"])
+        if "horizon" in doc:
+            horizon = TypeAdapter(timedelta).validate_python(doc["horizon"])
+    except ValidationError:
+        pass
+    if inputs.start is not None:
+        start = inputs.start
+    if inputs.hours is not None:
+        horizon = timedelta(hours=inputs.hours)
+    return start, horizon
+
+
+def read_sources(path: str | Path) -> Any:
+    """The sources file at ``path`` (TOML), its token read from the
+    environment."""
+    import tomllib
+
+    from nwp500 import sim_home_assistant as ha
+
+    try:
+        with Path(path).open("rb") as f:
+            doc = tomllib.load(f)
+    except (OSError, tomllib.TOMLDecodeError) as e:
+        raise InputError(f"cannot read the sources file {path}: {e}") from None
+    try:
+        return ha.sources_from(doc, os.environ)
+    except ValueError as e:
+        raise InputError(f"the sources file {path}: {e}") from None
 
 
 def snapshot_document(composed: sim_live.Composed) -> dict[str, Any]:

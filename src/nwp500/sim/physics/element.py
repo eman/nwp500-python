@@ -15,8 +15,11 @@ device behaviour is in ``docs/explanation/heating-elements.rst``):
 - **Electric.** No heat pump.  The upper element runs first, to the
   setpoint; then the lower element, to the setpoint.  Never both at once
   (``docs/reference/protocol/device_status.rst``: "Elements do not
-  operate simultaneously in Electric mode"; the upper-first order is
-  what every Electric sequence in history shows).
+  operate simultaneously in Electric mode").  Every handover on record
+  went upper then lower (four, two in device runs).  Which element a
+  stint *starts* with is less settled: on one evening of the record the
+  lower element ran alone twice with the upper zone 4-5 °F short, which
+  the upper-first rule does not explain and this does not model.
 
 - **Entry thresholds differ by mode**, and each is held at its own
   observed edge: Electric 0.54 °F below the setpoint, High Demand 0.72,

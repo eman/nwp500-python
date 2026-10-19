@@ -344,3 +344,16 @@ class TestThePreferredUnits:
         assert len(sa.path(result)) == len(result.points)
         assert sa.path(trace)[0].setpoint is None
         assert sa.path(trace)[0].upper == pytest.approx(55.0)
+
+
+class TestSpansBetweenSamples:
+    def test_a_span_between_two_samples_marks_the_first(self):
+        import pandas as pd
+
+        t0 = datetime(2026, 1, 5, tzinfo=UTC)
+        index = pd.DatetimeIndex([t0, t0 + timedelta(seconds=120)])
+        between = [(t0 + timedelta(seconds=10), t0 + timedelta(seconds=100))]
+        assert sa._interval_column(index, between) == [True, False]
+        assert sa._interval_column(index, []) == [False, False]
+        last = [(t0 + timedelta(seconds=120), t0 + timedelta(seconds=130))]
+        assert sa._interval_column(index, last) == [False, True]

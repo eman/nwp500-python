@@ -79,7 +79,8 @@ class CurrentOperationMode(IntEnum):
     STANDBY = 0  # Device is idle, not actively heating
     HEAT_PUMP_MODE = 32  # Heat pump is actively running to heat water
     HYBRID_EFFICIENCY_MODE = 64  # Device actively heating in Energy Saver mode
-    HYBRID_BOOST_MODE = 96  # Device actively heating in High Demand mode
+    # Heating in High Demand mode, or in Energy Saver while an element runs
+    HYBRID_BOOST_MODE = 96
 
 
 class HeatSource(IntEnum):

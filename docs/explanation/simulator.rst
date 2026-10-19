@@ -102,15 +102,19 @@ according to how stratified the tank is.
 (:doc:`what-starts-a-recovery`, :doc:`tou-recovery-cap`):
 
 - the compressor starts when the lower thermistor falls to
-  ``hp_lower_on``, after a setpoint write that leaves the upper zone
-  short, after a mode write, or at a TOU window's opening when the
-  upper zone is far short;
+  ``hp_lower_on`` (in Heat Pump, only with the upper zone below the
+  setpoint), after a setpoint write that leaves the upper zone short,
+  after a mode write, or inside a TOU window when the upper zone is
+  more than 14.4 degF short;
 - inside a TOU window the lower trigger is held until the window
-  closes, a recovery stops 3.6 degF short of the setpoint (the 90 %
-  cap), and a mode write is held until the window ends;
-- after a stop, the compressor will not restart for 330 s;
+  closes, a recovery stops 3.6 degF (2 degC) short of the setpoint (the
+  90 % cap; recorded capped recoveries stopped 3.42 degF short), and a
+  mode write is held until the window ends;
+- after a stop, the compressor will not restart for 330 s (two device
+  tests restarted 5 min 28 s and 5 min 31 s after the stop);
 - reservations fire in their minute; Vacation and Power Off start no
-  heating.
+  heating. In Vacation an entry is skipped; powered off, it fires and
+  turns the heater on, judged as a mode write.
 
 **The heat book.** Two probes cannot say how much hot water is left
 once the hot/cold boundary sits between them; they can when the tank is
@@ -228,7 +232,8 @@ What carries to another installation, and what does not:
 - **The standby loss and the compressor terms** were fitted against a
   sensor of the air where the heater stands. The heater's own
   ``ambient_temperature`` reads that air within about 0.35 degF while
-  the compressor runs and about 5 degF warm while it is idle, so give
+  the compressor runs (August to October; up to about 2 degF warm from
+  May to July) and about 6 degF warm while it is idle, so give
   the simulator the running readings, or a forecast anchored to one.
   The compressor terms were fitted with that installation's draws and
   circulation runs inside its recoveries, so a recovery without them
@@ -298,23 +303,27 @@ Accuracy
 Measured on one NWP500-65:
 
 - a heat-pump recovery's duration, from physics alone: mean absolute
-  error about 28 min (18 %); about 13 min for a deficit under 15 degF,
-  and about 45 min past 35 degF. Physics alone runs short on long
-  recoveries: cold starts come out about 55 min short, and past about
-  180 min it under-predicts; under about 60 min it is the better
-  estimate. The source this was ported from serves a recovery model
-  trained on its heater's record on top of the physics, and has no
+  error about 28 min (18 %), and 38.6 min held out in time order;
+  about 13 min for a deficit under 15 degF, and about 45 min past
+  35 degF. Physics alone runs short on long recoveries: cold starts
+  come out about 55 min short, and past about 180 min it
+  under-predicts; under about 60 min it is the better estimate. The
+  source this was ported from serves a recovery model trained on its
+  heater's record on top of the physics, and has no
   physics-only mode for readiness's time to ready; the library serves
   physics alone, through ``RecoveryModel`` for a caller with a model of
   their own;
-- recorded compressor starts reproduced: 35 of 47;
-- daily energy: 10.8 % high;
+- in that source's replay of recorded writes, with its recovery model:
+  recorded starts reproduced over six days held out, 31 of 40; daily
+  energy, with start-up charged once, 3.6 % low in sample and 4.4 %
+  low held out (2.0 % low and 2.2 % high with the start hold);
 - the heat book against the tank's re-anchors, fitted February-June and
   scored July-September: mean absolute error 1,987 BTU (about 5 gal),
   flat to 18 h after an anchor and about double beyond;
 - the five recorded crossings of the line: all caught, 0.8-12.7 gal
-  early (in sample); draws of 5 gal or more that did not cross, called
-  empty before they ended: 14 of 446 (3.1 %);
+  early, in sample (the book's form was chosen with all five in view;
+  fitted without them, 2 of 5); draws of 5 gal or more that did not
+  cross, called empty before they ended: 14 of 446 (3.1 %);
 - the outlet lag: one measurement (5.3-7.3 gal, 5.0 used).
 
 The library makes no claim beyond these until they are measured again.

@@ -580,7 +580,7 @@ Vacation and Scheduling Fields
    * - ``touStatus``
      - None (direct value)
      - See values below
-     - **Time-of-Use (TOU) schedule status**. 0 = inactive/disabled, 1 = active/enabled. Controls heating based on electricity rate periods.
+     - **Time-of-Use (TOU) scheduling enabled**. 0 = disabled, 1 = enabled. It follows the TOU on/off command and reads 1 outside a TOU period too, so it does not show whether a period is in force (:doc:`/explanation/tou-recovery-cap`).
    * - ``drEventStatus``
      - enum
      - ``DREvent``

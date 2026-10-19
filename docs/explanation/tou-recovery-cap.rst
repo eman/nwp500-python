@@ -186,6 +186,8 @@ uncapped recoveries biases any duration estimate downward; discarding
 them biases it upward, because capped cycles are systematically shorter
 (median 161 minutes against 235 for cycles that ran to setpoint).
 
-**To force a full recovery,** set ``tou_override_status`` - none of the
-59 capped cycles had it set, and 27 of the cycles that ran to setpoint
-under an active TOU schedule did.
+**An override goes with a full recovery, but forcing one is untested.**
+None of the 59 capped cycles had ``tou_override_status`` set, and 27 of
+the 196 that ran to setpoint did. That is a correlation in the record:
+whether overriding TOU makes a recovery run to the setpoint has not been
+tested on the device.

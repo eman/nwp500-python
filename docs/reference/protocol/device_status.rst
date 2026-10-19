@@ -351,7 +351,7 @@ This document lists the fields found in the ``status`` object of device status m
    * - ``touStatus``
      - integer
      - None
-     - Time of Use (TOU) status - indicates if TOU scheduled operation is active.
+     - Time of Use (TOU) status - indicates if TOU scheduling is enabled (0 = disabled, 1 = enabled). It follows the TOU on/off command and reads 1 outside a TOU period too, so it does not show whether a period is in force; see :doc:`/explanation/tou-recovery-cap`.
      - None
    * - ``hpUpperOnTempSetting``
      - integer

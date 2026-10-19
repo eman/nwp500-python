@@ -188,6 +188,9 @@ Hot water and the heat book
 .. automodule:: nwp500.sim.cold_supply
    :members: plateau_t_cold, ColdSupply, ColdSupplyParams, on_the_mains
 
+.. automodule:: nwp500.sim.meter
+   :members: flow_gpm
+
 .. automodule:: nwp500.sim.record
    :members: Record, RecordedWrite, Recorded, RecordedStarts, corroborator
 
@@ -307,3 +310,14 @@ Recorded history
 
 .. automodule:: nwp500.status_history
    :members:
+
+
+Home Assistant sources
+======================
+
+.. automodule:: nwp500.sim_home_assistant
+   :members: HomeAssistantEnvironment, HomeAssistantClient, record_inputs,
+      RecordInputs, Sources, Entities, sources_from, State, parse_state,
+      parse_history, parse_outages, History, history_for, parse_forecast,
+      pump_runs, draw_spans, busy, covers_start, reports_after, percent,
+      fresh, to_f, to_gpm, to_gal, to_rpm, HomeAssistantError

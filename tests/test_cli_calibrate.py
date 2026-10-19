@@ -233,6 +233,283 @@ class TestTheFits:
         assert cal_cli.max_gap(readings) == expected
         assert cal_cli.max_gap(readings[:1]) == cal_cli.MIN_GAP
 
+    def test_a_sources_record_fits_over_what_it_covers(self, history):
+        from nwp500.sim_home_assistant import RecordInputs
+
+        readings = cal_cli.read_history(history)
+        record = RecordInputs(
+            air=[(T0, AIR_F), (T0 + timedelta(days=1), AIR_F)],
+            humidity=[(T0, 45.0)],
+            drawing=[],
+            circulating=[],
+            notes=("humidity: a note",),
+        )
+        done = cal_cli.calibrate(readings, record=record)
+        assert done.air == "source"
+        s = done.calibration.standby
+        assert s.ua_ref == pytest.approx(UA, rel=0.05)
+        assert s.quiet_by == "meter"
+        assert "humidity: a note" in done.notes
+        # Only what it covers: from 12 h in, half the window is left.
+        late = replace(
+            record,
+            air=[
+                (T0 + timedelta(hours=12), AIR_F),
+                (T0 + timedelta(days=1), AIR_F),
+            ],
+        )
+        half = cal_cli.calibrate(readings, record=late).calibration.standby
+        # The later half, the tank nearer the air, and only it.
+        assert half.windows
+        assert half.windows[0].start >= T0 + timedelta(hours=12)
+        assert half.windows[0].delta_t_mean_f < s.windows[0].delta_t_mean_f
+
+    @pytest.mark.parametrize(
+        ("drawing", "circulating"), [(None, []), ([], None)]
+    )
+    def test_the_meter_and_circulation_go_together(
+        self, history, monkeypatch, drawing, circulating
+    ):
+        from nwp500.sim_home_assistant import RecordInputs
+
+        seen: list[Any] = []
+        real = cal.calibrate
+
+        def spy(frame: Any, *args: Any, **kw: Any) -> Any:
+            seen.append(frame)
+            return real(frame, *args, **kw)
+
+        monkeypatch.setattr(cal_cli.cal, "calibrate", spy)
+        record = RecordInputs([(T0, AIR_F)], None, drawing, circulating)
+        done = cal_cli.calibrate(cal_cli.read_history(history), record=record)
+        assert not {"drawing", "circulating"} & set(seen[0].columns)
+        assert done.calibration.standby.quiet_by == "dhw_in_use"
+        assert any("together or not at all" in n for n in done.notes)
+
+    def test_unobserved_air_and_humidity(self, history, monkeypatch):
+        from nwp500.sim_home_assistant import RecordInputs
+
+        seen: list[Any] = []
+        real = cal.calibrate
+
+        def spy(frame: Any, *args: Any, **kw: Any) -> Any:
+            seen.append(frame)
+            return real(frame, *args, **kw)
+
+        monkeypatch.setattr(cal_cli.cal, "calibrate", spy)
+        gap = (T0 + timedelta(hours=4), T0 + timedelta(hours=6))
+        record = RecordInputs(
+            air=[(T0, AIR_F), (T0 + timedelta(days=1), AIR_F)],
+            # Recorded over the first 10 h only.
+            humidity=[(T0, 30.0), (T0 + timedelta(hours=9), 30.0)],
+            drawing=[],
+            circulating=[],
+            air_outages=(gap,),
+            humidity_outages=(gap,),
+        )
+        cal_cli.calibrate(cal_cli.read_history(history), record=record)
+        frame = seen[0]
+        inside = frame.index[(frame.index >= gap[0]) & (frame.index < gap[1])]
+        assert len(inside) and frame.loc[inside, "air_f"].isna().all()
+        assert (frame.loc[inside, "humidity_pct"] == 50.0).all()
+        early = frame.index[frame.index < T0 + timedelta(hours=3)]
+        late = frame.index[frame.index > T0 + timedelta(hours=11)]
+        assert (frame.loc[early, "humidity_pct"] == 30.0).all()
+        assert (frame.loc[late, "humidity_pct"] == 50.0).all()
+        assert frame.loc[late, "air_f"].notna().all()
+
+    def test_no_window_spans_an_air_outage(self, history):
+        from nwp500.sim_home_assistant import RecordInputs
+
+        gap = (T0 + timedelta(hours=10), T0 + timedelta(hours=10, minutes=20))
+        record = RecordInputs(
+            air=[(T0, AIR_F), (T0 + timedelta(days=1), AIR_F)],
+            humidity=None,
+            drawing=[],
+            circulating=[],
+            air_outages=(gap,),
+        )
+        done = cal_cli.calibrate(cal_cli.read_history(history), record=record)
+        windows = done.calibration.standby.windows
+        assert len(windows) == 2
+        assert all(w.end <= gap[0] or w.start >= gap[1] for w in windows)
+
+    def test_a_later_reading_does_not_reach_back_over_an_outage(
+        self, history, monkeypatch
+    ):
+        from nwp500.sim_home_assistant import RecordInputs
+
+        seen: list[Any] = []
+        real = cal.calibrate
+
+        def spy(frame: Any, *args: Any, **kw: Any) -> Any:
+            seen.append(frame)
+            return real(frame, *args, **kw)
+
+        monkeypatch.setattr(cal_cli.cal, "calibrate", spy)
+        gap = (T0 + timedelta(hours=4), T0 + timedelta(hours=8))
+        record = RecordInputs(
+            air=[(T0, AIR_F), (gap[1], AIR_F + 20.0)],
+            humidity=[(T0, 30.0), (gap[1], 70.0)],
+            drawing=[],
+            circulating=[],
+            air_outages=(gap,),
+            humidity_outages=(gap,),
+        )
+        cal_cli.calibrate(cal_cli.read_history(history), record=record)
+        frame = seen[0]
+        before = frame.index[frame.index < gap[0]]
+        assert len(before)
+        assert frame.loc[before, "air_f"].tolist() == pytest.approx(
+            [AIR_F] * len(before)
+        )
+        assert (frame.loc[before, "humidity_pct"] == 30.0).all()
+
+    def test_source_states_hold_until_the_next(self, history, monkeypatch):
+        from nwp500.sim_home_assistant import RecordInputs
+
+        seen: list[Any] = []
+        real = cal.calibrate
+
+        def spy(frame: Any, *args: Any, **kw: Any) -> Any:
+            seen.append(frame)
+            return real(frame, *args, **kw)
+
+        monkeypatch.setattr(cal_cli.cal, "calibrate", spy)
+        h = timedelta(hours=1)
+        record = RecordInputs(
+            air=[(T0, AIR_F), (T0 + 8 * h, AIR_F + 20.0), (T0 + 24 * h, AIR_F)],
+            humidity=[(T0, 30.0), (T0 + 8 * h, 70.0)],
+            drawing=[],
+            circulating=[],
+        )
+        cal_cli.calibrate(cal_cli.read_history(history), record=record)
+        frame = seen[0]
+        at = frame.index[(frame.index > T0 + h) & (frame.index < T0 + 8 * h)]
+        assert len(at)
+        assert frame.loc[at, "air_f"].tolist() == pytest.approx(
+            [AIR_F] * len(at)
+        )
+        assert (frame.loc[at, "humidity_pct"] == 30.0).all()
+        after = frame.index[
+            (frame.index >= T0 + 8 * h) & (frame.index < T0 + 9 * h)
+        ]
+        assert (frame.loc[after, "humidity_pct"] == 70.0).all()
+
+    def test_stepped(self):
+        h = timedelta(hours=1)
+        tick = timedelta(microseconds=1)
+        assert cal_cli._stepped([(T0 + 6 * h, 70.0), (T0, 60.0)]) == [
+            (T0, 60.0),
+            (T0 + 6 * h - tick, 60.0),
+            (T0 + 6 * h, 70.0),
+        ]
+
+    def test_no_recovery_spans_unobserved_air(self, history, monkeypatch):
+        import numpy as np
+
+        from nwp500.sim_home_assistant import RecordInputs
+
+        seen: list[Any] = []
+        real = cal.calibrate
+
+        def spy(frame: Any, *args: Any, **kw: Any) -> Any:
+            seen.append(frame)
+            return real(frame, *args, **kw)
+
+        monkeypatch.setattr(cal_cli.cal, "calibrate", spy)
+        h = timedelta(hours=1)
+        # Recorded to 10 h: the air's span ends at 11 h.
+        record = RecordInputs(
+            air=[(T0, AIR_F), (T0 + 10 * h, AIR_F)],
+            humidity=None,
+            drawing=[],
+            circulating=[],
+        )
+        cal_cli.calibrate(cal_cli.read_history(history), record=record)
+        frame = seen[0].copy()
+        # Reached and not cut short: nothing left to heat at the end.
+        frame["energy_to_setpoint_wh"] = 0.0
+        target = float(frame["target_f"].iloc[0])
+        for start in (T0 + 2 * h, T0 + 10 * h + timedelta(minutes=30)):
+            span = (frame.index >= start) & (frame.index < start + 2 * h)
+            frame.loc[span, "compressor_on"] = True
+            frame.loc[span, "lower_f"] = np.linspace(
+                target - 30.0, target, int(span.sum())
+            )
+        found = cal.recoveries(frame, air="air_f")
+        # The one inside the air's span, not the one across its end.
+        assert len(found) == 1
+        assert found["start_time"].iloc[0] < T0 + 10 * h
+
+    def test_a_rejected_reading_masks_the_air(self, history, monkeypatch):
+        import asyncio
+
+        from nwp500 import sim_home_assistant as ha
+
+        h = timedelta(hours=1)
+
+        def row(at, state, unit):
+            r = {"entity_id": "sensor.air", "state": state}
+            r["last_updated"] = at.isoformat()
+            if unit:
+                r["attributes"] = {"unit_of_measurement": unit}
+            return r
+
+        doc = [
+            [
+                row(T0, str(AIR_F), "°F"),
+                row(T0 + 4 * h, str(AIR_F), None),
+                row(T0 + 8 * h, str(AIR_F), "°F"),
+            ]
+        ]
+
+        class Client:
+            async def state(self, entity):
+                return ha.State(entity, AIR_F, "°F", T0)
+
+            async def read_history(self, entities, start, end):
+                names = list(entities)
+                return ha.History(
+                    ha.history_for(doc, names),
+                    {n: [] for n in names},
+                    {n: ha.parse_units(doc).get(n, []) for n in names},
+                )
+
+        record = asyncio.run(
+            ha.record_inputs(
+                Client(),  # pyright: ignore[reportArgumentType]
+                ha.Entities(air="sensor.air"),
+                T0,
+                T0 + 24 * h,
+            )
+        )
+        seen: list[Any] = []
+        real = cal.calibrate
+
+        def spy(frame: Any, *args: Any, **kw: Any) -> Any:
+            seen.append(frame)
+            return real(frame, *args, **kw)
+
+        monkeypatch.setattr(cal_cli.cal, "calibrate", spy)
+        cal_cli.calibrate(cal_cli.read_history(history), record=record)
+        frame = seen[0]
+        gap = (frame.index > T0 + 4 * h) & (frame.index < T0 + 8 * h)
+        assert gap.any()
+        assert frame.loc[gap, "air_f"].isna().all()
+        assert frame.loc[gap, "air_unobserved"].all()
+        assert frame.loc[gap, "excluded"].all()
+
+    def test_flags_win_over_the_sources(self, history):
+        from nwp500.sim_home_assistant import RecordInputs
+
+        record = RecordInputs([(T0, 30.0)], None, None, None)
+        done = cal_cli.calibrate(
+            cal_cli.read_history(history), ambient=AIR_F, record=record
+        )
+        assert done.air == "constant"
+        assert done.calibration.standby.ua_ref == pytest.approx(UA, rel=0.05)
+
     def test_the_base_is_the_one_given(self, history):
         base = replace(sim.default_params(1), unfitted=())
         done = cal_cli.calibrate(

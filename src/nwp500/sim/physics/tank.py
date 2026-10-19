@@ -10,11 +10,11 @@ fitting each window independently:
 ======================  ========  ====================  ========
 Window                  mean ΔT   UA (BTU/hr·°F)        fit RMSE
 ======================  ========  ====================  ========
-2026-08-08 → 08-12      13.1 °F   3.14                  0.15 °F
+2026-08-08 → 08-12      13.5 °F   2.93                  0.22 °F
 2026-07-31 03:20→15:30  61.8 °F   5.58                  0.11 °F
 ======================  ========  ====================  ========
 
-A 1.78× spread with residuals of 0.11–0.15 °F is not measurement noise.
+A 1.9× spread with residuals of 0.11–0.22 °F is not measurement noise.
 A single constant fitted on the hot windows — which is what the corpus is
 made of, because hot windows are what happens between ordinary draws —
 overstates cold-tank loss by ~1.75×, and a constant fitted on the cold
@@ -26,18 +26,17 @@ The law here is a power law in ΔT::
 
 The shape is not arbitrary.  Free convection in the insulation gap and in
 the standing plumbing above the tank scales as ΔT^0.25 (laminar) to
-ΔT^0.33 (turbulent); the two anchors above imply an exponent of 0.371,
-which sits just above the turbulent value — consistent with an additional
-thermosiphon term in the standing plumbing that only runs when the tank
-is hot.  So the functional form carries a physical prior rather than
-being a curve fitted to two points.
+ΔT^0.33 (turbulent).  Fitted on 24 windows over 20 days, the exponent was
+0.353, on the turbulent value; over one installation's full record, 301
+windows spanning ΔT 11.2–90.7 °F with no band empty, it is 0.227, just
+below the laminar one.  So the functional form carries a physical prior
+rather than being a curve fitted to two points.
 
-Which is the caveat that matters: **it is two points.**  The corpus has
-n=2 windows below ΔT 20 °F (both from a single 2026-08 vacation episode)
-and nothing at all between 20 and 40 °F.  The fit that sets the exponent
-(outside the core: it is a fit) therefore refuses to fit one until the
-corpus spans at least two ΔT bands, and falls back to the constant-UA
-behaviour that shipped before it.
+The 20-day fit was the weaker one: its two windows below ΔT 20 °F came
+from a single standby soak, and it had none between 20 and 40 °F.  The
+fit that sets the exponent (outside the core: it is a fit) therefore
+refuses to fit one until the corpus spans at least two ΔT bands, and
+falls back to the constant-UA behaviour that shipped before it.
 
 ``exponent = 0.0`` reproduces the pre-existing constant-UA model exactly,
 which is also what parameter sets fitted before the law existed carry.

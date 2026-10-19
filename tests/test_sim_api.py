@@ -218,6 +218,31 @@ class TestSimulateIsTheEngine:
             "electric",
         }
 
+    def test_an_entry_turns_a_powered_off_heater_on(self, params: HeaterParams):
+        """Powered off, an entry fires and the heater heats after it (two
+        device runs, 2026-09-24); in Vacation the same entry is skipped."""
+        e = ReservationEntry(
+            week=EVERY_DAY, hour=20, minute=0, mode=1, setpoint_half_c=124
+        )
+
+        def run(mode: int) -> Any:
+            return simulate(
+                _scenario(
+                    state=HeaterState(upper_f=110.0, lower_f=95.0),
+                    settings=Settings(
+                        setpoint_f=140.9, mode=mode, hp_lower_on_f=105.0
+                    ),
+                    schedules=Schedules(reservations=(e,)),
+                ),
+                params,
+            )
+
+        off = run(6)
+        assert off.heating
+        assert off.heating[0].start.at >= T0.replace(hour=20)
+        assert "powered_on_by_entry" in off.reasons
+        assert not run(5).heating
+
     def test_a_disabled_reservation_schedule_is_not_walked(
         self, params: HeaterParams
     ):

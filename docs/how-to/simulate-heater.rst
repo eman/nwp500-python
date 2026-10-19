@@ -130,6 +130,65 @@ compressor last stopped, when the tank last heated. The result names
 those defaults. Logging goes to stderr, so ``--format json`` and
 ``csv`` can be piped.
 
+**The air, its humidity and the inlet from Home Assistant.** The heater
+doesn't report the air it stands in while idle (it reads its own
+cabinet, about 6 degF warm), the humidity or the mains water. If you
+record them in Home Assistant, name the entities in a sources file and
+pass it with ``--sources`` (or set ``NWP500_SOURCES``):
+
+.. code-block:: toml
+
+   [home_assistant]
+   url = "http://homeassistant.local:8123"
+   token_env = "HA_TOKEN"   # the variable holding a long-lived token
+
+   [home_assistant.entities]
+   air = "sensor.beside_the_heater_temperature"
+   humidity = "sensor.beside_the_heater_humidity"
+   inlet = "sensor.cold_supply_temperature"
+   meter_volume = "sensor.water_volume"     # volume since the last report
+   meter_flow = "sensor.water_flow_rate"
+   circulation_speed = "sensor.circulation_pump_speed"
+   weather = "weather.forecast_home"
+
+   [location_air]   # optional: air = damping x outdoor(t - lag) + offset
+   damping = 0.638
+   lag_hours = 2.0
+   offset_f = 24.5
+
+.. code-block:: bash
+
+   export HA_TOKEN=...   # Profile > Security > Long-lived access tokens
+   nwp-cli simulate run --sources sources.toml
+
+Every entity is optional, and the token never goes in the file. The
+``url`` is the one Home Assistant answers on (``https://`` if it uses
+TLS): the client follows no redirects, which would carry the token on. With
+the heater read live, the sources give:
+
+- **the air:** the hourly forecast projected through the
+  ``[location_air]`` model, shifted to pass through a reading beside the
+  heater that is at most an hour old. Without a model, that reading is
+  held over the span; without a fresh one, the projection is
+  unshifted. Fit a model for your own heater with
+  ``sim.location_air.fit``;
+- **the humidity:** a reading at most an hour old;
+- **the inlet:** the plateau of the long draws (11 minutes or more,
+  circulation off) in the last 72 hours, from the inlet probe and the
+  meter, never the probe's raw reading. A draw is found from the
+  meter's volume reports, which hold up through a steady draw where the
+  flow rate goes silent (``sim.meter.flow_gpm``). Home Assistant records
+  a state only when it changes, so a meter that reports the same volume
+  twice running loses the second; name its flow rate too. A circulation pump
+  with no speed reading is taken as unknown, which leaves no estimate.
+
+Units come from each entity's ``unit_of_measurement``, for a history
+the one each reading was recorded in: the pump's speed in rpm or Hz. A part that can't be read, or is stale, keeps its
+default, and a warning on stderr says why. A spell when the meter, the
+probe or the pump was ``unavailable`` counts as busy: the plateau skips
+a draw that overlaps one. Flags and a scenario file still win: ``--ambient``,
+``--inlet`` and ``--environment`` override what the sources give.
+
 
 Fetch what the heater reports
 =============================

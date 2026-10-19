@@ -94,7 +94,9 @@ doing right now, which may differ from the configured mode setting:
 - **STANDBY**: Device idle, not actively heating
 - **HEAT_PUMP_MODE**: Heat pump actively running
 - **HYBRID_EFFICIENCY_MODE**: Actively heating in Energy Saver mode
-- **HYBRID_BOOST_MODE**: Actively heating in High Demand mode
+- **HYBRID_BOOST_MODE**: Actively heating in High Demand mode, or in
+  Energy Saver mode while an element runs (Energy Saver on the heat pump
+  alone reports HEAT_PUMP_MODE)
 
 Example::
 

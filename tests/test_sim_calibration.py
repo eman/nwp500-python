@@ -793,3 +793,42 @@ class TestTheProbesShareOfCirculation:
             many, p.circulation.displaced_gal, p.circulation.flow_gpm
         )
         assert got is not None and got[1] == cal.MIN_OBSERVABILITY_WINDOWS
+
+
+class TestTheLeadByInterval:
+    """A meter's flag marks a sample's interval (``sim_adapters``): a
+    draw inside the lead but before its first sample is on the sample
+    before."""
+
+    def frame(self) -> pd.DataFrame:
+        h = recovery_history([(2, 100, 100.0)])
+        h["energy_to_setpoint_wh"] = 0.0
+        h["circulating"] = False
+        h["drawing"] = False
+        # Samples 23:59:40-like: none between 29.5 and 28.5 min before.
+        lead_start = T0 + timedelta(hours=2) - cal.DRAW_LEAD
+        keep = (h.index < lead_start - timedelta(seconds=20)) | (
+            h.index > lead_start + timedelta(seconds=100)
+        )
+        return h.loc[keep]
+
+    def test_the_sample_before_the_lead_counts(self):
+        h = self.frame()
+        before = h.index[h.index < T0 + timedelta(hours=2) - cal.DRAW_LEAD][-1]
+        assert cal.recoveries(h, air="heater_air_f")["draw_free"].item()
+        h.loc[before, "drawing"] = True
+        assert not cal.recoveries(h, air="heater_air_f")["draw_free"].item()
+
+    def test_activity_after_the_recovery_does_not_count(self):
+        h = self.frame()
+        end = h.index[
+            ~h["compressor_on"] & (h.index > T0 + timedelta(hours=2))
+        ][0]
+        h.loc[end, "circulating"] = True
+        assert cal.recoveries(h, air="heater_air_f")["draw_free"].item()
+
+    def test_not_for_the_heaters_own_flag(self):
+        h = self.frame().drop(columns=["drawing", "circulating"])
+        before = h.index[h.index < T0 + timedelta(hours=2) - cal.DRAW_LEAD][-1]
+        h.loc[before, "dhw_in_use"] = True
+        assert cal.recoveries(h, air="heater_air_f")["draw_free"].item()

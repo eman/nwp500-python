@@ -112,13 +112,53 @@ def max_gap(readings: Sequence[status_history.TimedStatus]) -> timedelta:
     return max(MIN_GAP, GAP_SAMPLES * usual)
 
 
+def _stepped(series: Sequence[Reading]) -> list[Reading]:
+    """A source's ``series`` as the steps it is: a state holds until the
+    next, so each change is preceded by the value before it, a moment
+    earlier. Interpolated, the readings either side of a long quiet
+    spell or an outage would otherwise ramp across it."""
+    out: list[Reading] = []
+    for t, v in sorted(series):
+        if out:
+            out.append((t - timedelta(microseconds=1), out[-1][1]))
+        out.append((t, v))
+    return out
+
+
+def _unobserved(
+    index: Any,
+    covers: tuple[datetime, datetime],
+    outages: Sequence[tuple[datetime, datetime]],
+) -> Any:
+    """Where ``index`` falls outside ``covers``, or its interval (to the
+    next instant) overlaps an outage."""
+    mask = (index < covers[0]) | (index > covers[1])
+    nxt = index[1:].append(index[-1:] + timedelta(microseconds=1))
+    for a, b in outages:
+        mask |= (index < b) & (nxt > a)
+    return mask
+
+
+async def read_record(
+    sources: Any, readings: Sequence[status_history.TimedStatus]
+) -> Any:
+    """What ``sources`` recorded over ``readings``' span
+    (``sim_home_assistant.record_inputs``)."""
+    from nwp500 import sim_home_assistant as ha
+
+    first = min(t for t, _ in readings)
+    last = max(t for t, _ in readings)
+    async with ha.HomeAssistantClient(sources.url, sources.token) as client:
+        return await ha.record_inputs(client, sources.entities, first, last)
+
+
 @dataclass(frozen=True)
 class Calibrated:
     """A calibration, and what the command chose along the way."""
 
     calibration: cal.Calibration
-    #: How the air where the heater stands was given (``readings`` or
-    #: ``constant``), or None.
+    #: How the air where the heater stands was given (``readings``,
+    #: ``constant`` or ``source``), or None.
     air: str | None
     n_statuses: int
     #: Readings further apart than this were taken as unobserved, and
@@ -135,6 +175,7 @@ def calibrate(
     ambient: float | None = None,
     humidity: Sequence[Reading] | None = None,
     params: Any = None,
+    record: Any = None,
 ) -> Calibrated:
     """``params`` (a parameters document; default the 65 gal defaults)
     refitted on ``readings``. The air where the heater stands is
@@ -142,7 +183,11 @@ def calibrate(
     preferred unit, and ``humidity`` that air's, %. Given, the air is
     both the standby fit's and the recoveries'; without it, the standby
     loss is not fitted and recoveries use the heater's own reading while
-    its compressor runs."""
+    its compressor runs. ``record`` (``sim_home_assistant.RecordInputs``)
+    is what a live source recorded over the history, °F: its air and
+    humidity where none was given, and its draws and circulation runs,
+    which make the quiet test exact. Its air is used only over the span
+    it covers."""
     if air is not None and ambient is not None:
         raise InputError("give --air or --ambient, not both")
     notes: list[str] = []
@@ -158,10 +203,36 @@ def calibrate(
     last = max(t for t, _ in readings)
     series: list[Reading] | None = None
     how: str | None = None
+    covers: tuple[datetime, datetime] | None = None
+    rh_covers: tuple[datetime, datetime] | None = None
     if air is not None:
         series, how = list(air), "readings"
     elif ambient is not None:
         series, how = [(first, ambient), (last, ambient)], "constant"
+    elif record is not None and record.air:
+        series = [(t, sa.temperature(v)) for t, v in _stepped(record.air)]
+        how = "source"
+        # A history's first reading is the value in force at its start,
+        # and the last holds a reading's freshness past it.
+        covers = (record.air[0][0], record.air[-1][0] + timedelta(hours=1))
+    if humidity is None and record is not None and record.humidity:
+        humidity = _stepped(record.humidity)
+        rh_covers = (
+            record.humidity[0][0],
+            record.humidity[-1][0] + timedelta(hours=1),
+        )
+    drawing = circulating = None
+    if record is not None:
+        notes.extend(record.notes)
+        if record.drawing is not None and record.circulating is not None:
+            drawing, circulating = record.drawing, record.circulating
+        elif record.drawing is not None or record.circulating is not None:
+            # One alone would replace the heater's in-use flag for the
+            # other in the recoveries' draw-free test (``snapshots``).
+            notes.append(
+                "the meter and the circulation are used together or not at "
+                "all: with one unknown, the heater's own in-use flag stands in"
+            )
     if humidity is None:
         # The fits' own default, given explicitly: an absent humidity
         # reaches the evaporator's dew point as NaN, which reads as 100 %.
@@ -169,10 +240,33 @@ def calibrate(
     gap = max_gap(readings)
     times = sorted(t for t, _ in readings)
     n_gaps = sum(b - a > gap for a, b in itertools.pairwise(times))
-    frame = sa.history(readings, air=series, humidity=humidity, max_gap=gap)
+    frame = sa.history(
+        readings,
+        air=series,
+        humidity=humidity,
+        drawing=drawing,
+        circulating=circulating,
+        max_gap=gap,
+    )
+    # A source's series, held past its ends or across an outage, would
+    # stand for air nobody read: the air is left unknown there, and the
+    # humidity takes the fits' own default.
+    if covers is not None and record is not None:
+        unseen = _unobserved(frame.index, covers, record.air_outages)
+        frame.loc[unseen, "air_f"] = float("nan")
+        # And out of the standby fit, which would interpolate across,
+        # and out of any recovery, which would take an older reading.
+        frame["air_unobserved"] = unseen
+        frame["excluded"] = frame["excluded"].to_numpy(dtype=bool) | unseen
+    if rh_covers is not None and record is not None:
+        frame.loc[
+            _unobserved(frame.index, rh_covers, record.humidity_outages),
+            "humidity_pct",
+        ] = DEFAULT_HUMIDITY_PCT
     if how is None:
         notes.append(
-            "no air given (--air or --ambient): the standby loss is not fitted"
+            "no air given (--air, --ambient or --sources): the standby "
+            "loss is not fitted"
         )
     fitted = cal.calibrate(
         frame,
@@ -362,6 +456,7 @@ def print_report(done: Calibrated, console: Console) -> None:
         {
             "readings": "Air: the readings given",
             "constant": "Air: the constant given",
+            "source": "Air: the sources' record beside the heater",
             None: "Air: none given; recoveries use the heater's own reading",
         }[done.air]
     )
