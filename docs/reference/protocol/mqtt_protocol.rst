@@ -5,8 +5,10 @@ MQTT Protocol
 This document describes the MQTT protocol used for real-time communication
 with Navien NWP500 devices via AWS IoT Core. Everything here was taken from
 the NaviLink Android app's request builder (``SendRequestMgppData.java``,
-version 2.03.00) and confirmed against captured traffic and live queries to
-an NWP500 wherever a capture exists; the exceptions are marked.
+version 2.03.00, re-checked against 2.04.00, versionCode 201, published
+October 2026, with no change to the NWP500 protocol) and confirmed against
+captured traffic and live queries to an NWP500 wherever a capture exists;
+the exceptions are marked.
 
 .. warning::
    This document describes the underlying MQTT protocol. Most users should use the
@@ -40,7 +42,10 @@ publishes there.
                                                              # app form
    cmd/{deviceType}/navilink-{mac}/res/dl-sw-info            # device-keyed
                                                              # reply
-   evt/{deviceType}/navilink-{mac}/app-connection            # event
+   cmd/{deviceType}/navilink-{mac}/res/ctrl-fail             # control
+                                                             # failure
+   evt/{deviceType}/navilink-{mac}/app-connection            # event and
+                                                             # Last-Will
 
 **Variables:**
 
@@ -710,12 +715,13 @@ Control recirculation pump operation.
      "paramStr": ""
    }
 
-**Recirculation Mode Values:**
+**Recirculation Mode Values** (the app's ``MgppRecirculationOperationMode``;
+the same ids come back in ``recircOperationMode``):
 
 * 1 = Always On
-* 2 = Button Only (manual activation)
-* 3 = Schedule (follow configured schedule)
-* 4 = Temperature (activate when pipe temp drops)
+* 2 = Weekly (follow the recirculation schedule)
+* 3 = Hot Button Only (pump runs only when the hot button is pressed)
+* 4 = No Recirculation (off)
 
 Recirculation Schedule Write
 ----------------------------
@@ -1125,12 +1131,117 @@ The same schedule is also republished on ``res/rsv`` / ``res/recirc-rsv``
 with ``reservation`` as a hex string of six bytes per entry
 (``enable, week, hour, min, mode, param``).
 
+In a weekly (``rsv``) entry, ``mode`` is the app's ``MgppReservationMode``
+(``ReservationMode`` in the library): 0 = not reserved, 1 = Heat Pump,
+2 = Electric, 3 = Energy Saver, 4 = High Demand, 5 = Power Off. This is
+not the ``dhw-mode`` numbering: there is no vacation entry, and 5 is
+Power Off rather than Vacation.
+
 TOU Response
 ------------
 
 The TOU write is echoed on ``res/tou/rd`` with the written
 ``reservationUse`` and ``reservation`` list. There is no MQTT read; use
 the REST API to read the schedule.
+
+Control Failure Response
+------------------------
+
+When the device refuses a control command it publishes on its own topic,
+``cmd/52/navilink-{mac}/res/ctrl-fail``, which the
+``cmd/52/navilink-{mac}/#`` wildcard subscription receives. The NaviLink
+app (2.04.00) subscribes to this topic for the NWP500 and parses the
+message as ``ControlFailData``:
+
+.. code-block:: json
+
+   {
+     "clientID": "navien-client-1996271a",
+     "sessionID": "my-session-id",
+     "protocolVersion": 2,
+     "requestTopic": "cmd/52/navilink-04786332fca0/ctrl",
+     "response": {
+       "deviceType": 52,
+       "macAddress": "04786332fca0",
+       "additionalValue": "5322",
+       "failCode": 2,
+       "swVersion": 1234
+     }
+   }
+
+The envelope names the client whose command failed; ``requestTopic`` is
+the topic that command was published on. The app interprets exactly one
+``failCode``:
+
+.. list-table::
+   :header-rows: 1
+
+   * - ``failCode``
+     - Meaning
+   * - 2
+     - DHW control interval exceeded. The app shows "DHW control
+       interval exceeded" and refreshes the screen; the previous DHW
+       control was too recent, so wait and resend.
+   * - other
+     - Not interpreted by the app. The library keeps the raw integer.
+
+There is no acknowledgement for the failed command on the control ack
+topic, so a client that only waits for a status response sees nothing
+but silence. The library parses the message into
+:class:`~nwp500.models.mqtt_models.ControlFailResponse`, emits the
+``control_failed`` client event for every device subscription and offers
+``subscribe_control_fail_response()`` for a plain callback.
+
+App Connection Event and Last-Will
+----------------------------------
+
+``evt/52/navilink-{mac}/app-connection`` announces client presence. The
+NaviLink app registers its MQTT Last-Will on it when it connects to a
+device: the broker publishes the will if the app's connection is lost
+without a DISCONNECT. The payload is the app's ``RequestLastWill``:
+
+.. code-block:: json
+
+   {
+     "clientID": "navilink-04786332fca0",
+     "sessionID": "1760000000000",
+     "protocolVersion": 1,
+     "requestTopic": "evt/52/navilink-04786332fca0/app-connection",
+     "event": {
+       "macAddress": "04786332fca0",
+       "additionalValue": "5322",
+       "deviceType": 52,
+       "modelTypeCode": 49,
+       "connection": {
+         "os": "A",
+         "status": 0
+       }
+     }
+   }
+
+``event.connection.status`` is 0 in the will. A client announcing that
+it is connected publishes the same shape with ``status`` 1; readers treat
+any value at or below 0 as "disconnected" (the app's screens show a
+"device disconnected" notice on it). ``os`` is the publisher's platform
+tag: ``"A"`` for the Android app, ``"P"`` for this library. Nothing that
+reads the topic looks at ``os``, and AWS IoT delivers the message either
+way, so the library does not impersonate the app. The app's parsing model
+(``EventStatus``) also allows a ``sessionNumber`` in ``connection``, which
+is shared with the device's own ``evt/52/navilink-{mac}/connection``
+event.
+
+Two caveats from the app's code. First, the app only registers the will;
+it never publishes a ``status`` 1 announcement itself. Second, NaviLink
+2.04 does not subscribe to ``app-connection`` for device type 52 (its
+NWP500 screens handle the message, but the subscription list for type 52
+omits the topic), so for the NWP500 the topic is read only by other
+library clients. The will is QoS 1 and not retained.
+
+The library registers the same will when
+``MqttConnectionConfig.last_will_device`` is set, publishes the ``status``
+1 form from ``signal_app_connection()``, and parses incoming messages into
+:class:`~nwp500.models.mqtt_models.AppConnectionEvent` through
+``subscribe_app_connection()``.
 
 Connection Flow
 ===============
@@ -1149,16 +1260,12 @@ Connection Flow
    status and the device-keyed replies, and to ``cmd/52/{clientId}/res/#``
    for query replies.
 
-4. **Signal App Connection**
+4. **Signal App Connection** (optional)
 
-   Publish to ``evt/52/navilink-{mac}/app-connection``:
-
-   .. code-block:: json
-
-      {
-        "clientID": "navien-client-1996271a",
-        "timestamp": "2026-09-12T16:00:00Z"
-      }
+   Publish to ``evt/52/navilink-{mac}/app-connection`` with
+   ``event.connection.status`` 1 (the shape is under *App Connection
+   Event and Last-Will* above). The app registers the ``status`` 0 form
+   of the same message as its Last-Will in step 2.
 
 5. **Send Commands / Requests**
 

@@ -46,6 +46,11 @@ from typing import TYPE_CHECKING, cast
 if TYPE_CHECKING:
     from .enums import CurrentOperationMode, ErrorCode
     from .models import DeviceFeature, DeviceStatus
+    from .models.mqtt_models import (
+        AppConnectionEvent,
+        ControlFailCode,
+        ControlFailResponse,
+    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -199,6 +204,58 @@ class FeatureReceivedEvent:
     feature: DeviceFeature
 
 
+@dataclass(frozen=True, slots=True)
+class ControlFailedEvent:
+    """Emitted when a device rejects a control command (``res/ctrl-fail``).
+
+    Fires for every device with an active device subscription
+    (``subscribe_device_status()``, ``subscribe_device_feature()``,
+    ``subscribe_device()`` and the like); no separate subscription is
+    needed. The message names the client whose command failed, so
+    ``own_command`` tells this client's rejections from other clients'.
+
+    Attributes:
+        device_mac: MAC address of the origin device
+        fail_code: The failure code; a
+            :class:`~nwp500.models.mqtt_models.ControlFailCode` when known
+            (2 = DHW control interval exceeded), else a plain ``int``
+        reason: Human-readable meaning of ``fail_code``
+        own_command: Whether the failed command was sent by this client
+            (the message's ``clientID`` matches ours)
+        response: The parsed message
+    """
+
+    device_mac: str
+    fail_code: ControlFailCode | int
+    reason: str
+    own_command: bool
+    response: ControlFailResponse
+
+
+@dataclass(frozen=True, slots=True)
+class AppConnectionReceivedEvent:
+    """Emitted when an app-connection message arrives.
+
+    Requires ``subscribe_app_connection()`` for the device. The message is
+    either a client announcing itself (``connected`` True) or the
+    broker publishing a dropped client's Last-Will (``connected`` False).
+    This client's own announcement is delivered too; ``client_id`` tells
+    it apart.
+
+    Attributes:
+        device_mac: MAC address of the device the client was attached to
+        client_id: MQTT client ID of the client the message is about
+        connected: Whether that client is connected
+            (``event.connection.status`` above 0)
+        event: The parsed message
+    """
+
+    device_mac: str
+    client_id: str | None
+    connected: bool
+    event: AppConnectionEvent
+
+
 class MqttClientEvents:
     """Registry of all NavienMqttClient events.
 
@@ -334,6 +391,30 @@ class MqttClientEvents:
         event (FeatureReceivedEvent): Event object with the feature field.
 
     See: :class:`FeatureReceivedEvent`
+    """
+
+    # Control failure events
+    CONTROL_FAILED = "control_failed"
+    """Emitted: Device rejected a control command (``res/ctrl-fail``).
+
+    Args:
+        event (ControlFailedEvent): Event object with fail_code, reason,
+            own_command and response fields.
+
+    See: :class:`ControlFailedEvent`
+    """
+
+    # Client presence events
+    APP_CONNECTION_RECEIVED = "app_connection_received"
+    """Emitted: An app-connection message (connect announcement or
+    Last-Will) arrived for a device subscribed with
+    ``subscribe_app_connection()``.
+
+    Args:
+        event (AppConnectionReceivedEvent): Event object with client_id,
+            connected and event fields.
+
+    See: :class:`AppConnectionReceivedEvent`
     """
 
     @classmethod

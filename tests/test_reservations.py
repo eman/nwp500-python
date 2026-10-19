@@ -204,7 +204,7 @@ async def test_update_reservations_confirmed_success(
 
     assert result is echoed
     mock_mqtt.update_reservations.assert_awaited_once_with(
-        mock_device, entries, enabled=True
+        mock_device, entries, enabled=True, kept=()
     )
     mock_mqtt.unsubscribe_reservation_response.assert_called_once_with(
         mock_device, ANY
@@ -543,3 +543,83 @@ async def test_update_reservation_timeout(
     with patch("nwp500.reservations.fetch_reservations", return_value=None):
         with pytest.raises(TimeoutError):
             await update_reservation(mock_mqtt, mock_device, 1, hour=8)
+
+
+# ---------------------------------------------------------------------------
+# Entries the device already holds
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_helpers_mark_unchanged_entries_as_kept(
+    mock_mqtt: MagicMock, mock_device: MagicMock
+) -> None:
+    """Earlier versions wrote mode 6 for Power Off. The helpers send the
+    entries they did not change as kept, so such an entry does not block
+    an edit to the rest of the schedule."""
+    legacy = _entry(mode=6, hour=22)
+    schedule = _make_schedule([legacy, _entry(hour=6), _entry(hour=7)])
+
+    with patch("nwp500.reservations.fetch_reservations", return_value=schedule):
+        await add_reservation(
+            mock_mqtt,
+            mock_device,
+            enabled=True,
+            days=["MO"],
+            hour=8,
+            minute=0,
+            mode=3,
+            temperature=120.0,
+        )
+        assert list(mock_mqtt.update_reservations.call_args.kwargs["kept"]) == [
+            1,
+            2,
+            3,
+        ]
+
+        await delete_reservation(mock_mqtt, mock_device, 2)
+        _, sent = mock_mqtt.update_reservations.call_args.args
+        assert sent[0]["mode"] == 6
+        assert list(mock_mqtt.update_reservations.call_args.kwargs["kept"]) == [
+            1,
+            2,
+        ]
+
+        await update_reservation(mock_mqtt, mock_device, 3, hour=9)
+        assert list(mock_mqtt.update_reservations.call_args.kwargs["kept"]) == [
+            1,
+            2,
+        ]
+
+
+@pytest.mark.asyncio
+async def test_add_reservation_with_legacy_entry_passes_validation(
+    mock_device: MagicMock,
+) -> None:
+    """End to end through the controller's checks: a stored mode-6 entry
+    goes out unchanged beside the new one."""
+    from nwp500.mqtt.control import validate_reservation_entries
+
+    schedule = _make_schedule([_entry(mode=6)])
+    mqtt = MagicMock()
+
+    async def checked_update(device, reservations, *, enabled, kept):
+        validate_reservation_entries(reservations, kept=kept)
+        return 1
+
+    mqtt.update_reservations = AsyncMock(side_effect=checked_update)
+
+    with patch("nwp500.reservations.fetch_reservations", return_value=schedule):
+        await add_reservation(
+            mqtt,
+            mock_device,
+            enabled=True,
+            days=["MO"],
+            hour=8,
+            minute=0,
+            mode=3,
+            temperature=120.0,
+        )
+
+    _, sent = mqtt.update_reservations.call_args.args
+    assert [e["mode"] for e in sent] == [6, 3]

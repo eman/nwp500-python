@@ -19,7 +19,9 @@ Where the evidence comes from
 =============================
 
 Navien's own Android client, NaviLink, was decompiled: version 2.03.00,
-versionCode 141, published March 2026. The app is a first-party decoder
+versionCode 141, published March 2026, and re-checked against 2.04.00,
+versionCode 201, published October 2026, which changed nothing in the
+NWP500 protocol. The app is a first-party decoder
 for the same MQTT payloads this library parses, so its enum tables and
 its null-handling are direct evidence of intent rather than inference
 from observed traffic.
@@ -124,8 +126,9 @@ eight of them exist here as flags and are typed
 - ``air_filter_alarm_use``
 - ``recirc_reservation_use``
 
-The ninth is ``drOverrideStatus``, which this library exposes as a raw
-``int`` rather than a flag, so it is left alone.
+The ninth is ``drOverrideStatus``, which this library keeps as a raw
+``int`` for compatibility; the app shows "DR applied" when it is 2, and
+``DeviceStatus.dr_override_active`` gives the same reading.
 
 Every other flag keeps :data:`~nwp500.models.status.DeviceBool`.
 

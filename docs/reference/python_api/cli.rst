@@ -346,10 +346,10 @@ Set recirculation pump mode.
 
 **Available Modes:**
 
-* ``1``: ALWAYS (always running)
-* ``2``: BUTTON (manual trigger only)
-* ``3``: SCHEDULE (based on schedule)
-* ``4``: TEMPERATURE (based on temperature)
+* ``1``: ALWAYS_ON (pump always running)
+* ``2``: WEEKLY (runs on the weekly recirculation schedule)
+* ``3``: HOT_BUTTON_ONLY (runs only when the hot button is pressed)
+* ``4``: OFF (no recirculation)
 
 **Output:** Confirmation message and updated device status.
 

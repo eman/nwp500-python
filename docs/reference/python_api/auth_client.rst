@@ -160,12 +160,60 @@ refresh_token()
       except TokenRefreshError:
           print("Refresh failed - need to sign in again")
 
+refresh_session()
+^^^^^^^^^^^^^^^^^
+
+.. py:method:: refresh_session()
+
+   Renew the AWS (SigV4) credentials used for MQTT without a password.
+
+   Posts ``{"userId": <email>}`` to ``/auth/session/refresh`` with the
+   current access token in the ``authorization`` header. Only the AWS
+   credential fields the server returns (``accessKeyId``, ``secretKey``,
+   ``sessionToken``, ``authorizationExpiresIn``) are updated; any it omits
+   keep their stored values. The JWT tokens and their expiry are untouched.
+   Serialized with ``refresh_token()`` on the same lock.
+
+   :return: Updated auth tokens (also stored as ``current_tokens``)
+   :rtype: AuthTokens
+   :raises AuthenticationError: If no access token is held
+   :raises TokenRefreshError: If the server rejects the request or returns
+      no credentials
+
+   .. note::
+      ``ensure_valid_token()`` calls this first when the AWS credentials
+      expire, before ``secured_sign_in()`` and a password ``sign_in()``.
+
+secured_sign_in()
+^^^^^^^^^^^^^^^^^
+
+.. py:method:: secured_sign_in()
+
+   Sign in again using the stored access token instead of the password.
+
+   Posts ``{"userId": <email>}`` to ``/user/secured-sign-in`` with the
+   current access token in the ``authorization`` header. The response
+   carries user info, legal notices and a ``token`` object; only the token
+   fields the server sends are overwritten. Observed live, the ``token``
+   object holds the AWS credentials only, so the JWT access and refresh
+   tokens are kept. This is what the NaviLink app uses for auto-login.
+
+   :return: Authentication response with user info and tokens
+   :rtype: AuthenticationResponse
+   :raises AuthenticationError: If no access token is held, the token is
+      rejected (401/403), or the response cannot be parsed
+
 ensure_valid_token()
 ^^^^^^^^^^^^^^^^^^^^
 
 .. py:method:: ensure_valid_token()
 
    Check that the access token is valid, and refresh it if needed.
+
+   An expired JWT is refreshed with ``refresh_token()``. Expired AWS
+   credentials are renewed with ``refresh_session()``, then
+   ``secured_sign_in()``, and only as a last resort a password
+   ``sign_in()``.
 
    :return: Current valid tokens or None if not authenticated
    :rtype: AuthTokens or None
@@ -178,6 +226,24 @@ ensure_valid_token()
       tokens = await auth.ensure_valid_token()
       if tokens:
           print(f"Valid until: {tokens.expires_at}")
+
+re_authenticate()
+^^^^^^^^^^^^^^^^^
+
+.. py:method:: re_authenticate()
+
+   Re-authenticate, preferring the stored access token. Calls
+   ``secured_sign_in()`` when a non-expired access token is held and falls
+   back to a password ``sign_in()`` if that fails or no live token exists.
+   A client restored from tokens alone can re-authenticate while its
+   access token is live; if the secured sign-in fails, its error is
+   raised.
+
+   :return: Authentication response with fresh tokens and user info
+   :rtype: AuthenticationResponse
+   :raises ValueError: If no live access token is held and no credentials
+      were given at construction
+   :raises AuthenticationError: If authentication fails
 
 Token and Session Management
 -----------------------------

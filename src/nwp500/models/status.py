@@ -118,7 +118,15 @@ class DeviceStatus(NavienBaseModel):
             "Demand Response (DR) event status from utility (CTA-2045). "
             "0=UNKNOWN (No event), 1=RUN_NORMAL, 2=SHED (reduce power), "
             "3=LOADUP (pre-heat), 4=LOADUP_ADV (advanced pre-heat), "
-            "5=CPE (customer peak event/grid emergency)"
+            "5=CPE (customer peak event), 6=GRID_EMERGENCY"
+        ),
+    )
+    minor_code: int = Field(
+        default=0,
+        description=(
+            "Secondary alarm code, shown by the NaviLink app as 'R%03d' "
+            "alongside error_code. 0 = none. 101 is the one code the app "
+            "lets the user reset from the alarm screen."
         ),
     )
     vacation_day_setting: int = Field(
@@ -176,14 +184,20 @@ class DeviceStatus(NavienBaseModel):
     )
     air_filter_alarm_elapsed: int = Field(
         description=(
-            "Operating hours elapsed since last air filter maintenance reset. "
-            "Track this to schedule preventative replacement"
+            "Reported by the device but never read by the NaviLink app, "
+            "which derives remaining filter life from "
+            "cumulated_op_time_eva_fan instead. Its semantics are "
+            "unconfirmed; see air_filter_remaining_hours"
         ),
         json_schema_extra={"unit_of_measurement": "h"},
     )
     cumulated_op_time_eva_fan: int = Field(
         description=(
-            "Cumulative operation time of the evaporator fan since installation"
+            "Evaporator fan run time since the last air-filter reset. "
+            "The NaviLink app computes remaining filter life as "
+            "air_filter_alarm_period minus this value "
+            "(see air_filter_remaining_hours). The lifetime fan total "
+            "is DeviceDiagnostics.ta_data.cumulated_op_time_eva_fan"
         ),
         json_schema_extra={"unit_of_measurement": "h"},
     )
@@ -218,12 +232,12 @@ class DeviceStatus(NavienBaseModel):
     )
     dr_override_status: int = Field(
         description=(
-            "Demand Response override status in hours. "
-            "0 = no override active. "
-            "Non-zero (1-72) = override active with specified remaining hours. "
-            "User can override DR commands for up to 72 hours."
+            "Demand Response override flag, tri-state in the device's "
+            "on/off convention: 0 = unknown, 1 = off, 2 = on. The "
+            "NaviLink app decodes it through its on/off enum and shows "
+            "'DR applied' when it is 2. Kept as a raw int; use "
+            "dr_override_active for the boolean reading"
         ),
-        json_schema_extra={"unit_of_measurement": "hours"},
     )
     tou_override_status: TouOverride = Field(
         description=(
@@ -630,7 +644,10 @@ class DeviceStatus(NavienBaseModel):
     )
     dhw_operation_setting: DhwOperationSetting = Field(
         default=DhwOperationSetting.ENERGY_SAVER,
-        description="User's configured DHW operation mode preference",
+        description=(
+            "User's configured DHW operation mode preference. 0 (STANDBY) "
+            "is reported by the device but cannot be sent"
+        ),
     )
     freeze_protection_temp_min_raw: int = temperature_field(
         "Active freeze protection lower limit",
@@ -983,6 +1000,32 @@ class DeviceStatus(NavienBaseModel):
             Drawable energy in Watt-hours, clamped at zero.
         """
         return max(0.0, self.full_recovery_energy - self.energy_to_setpoint)
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def dr_override_active(self) -> bool:
+        """Whether a Demand Response override is in force.
+
+        True when ``dr_override_status`` is 2 (ON), the value the NaviLink
+        app shows as "DR applied". 0 (unknown) and 1 (off) both read False.
+        """
+        return self.dr_override_status == 2
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def air_filter_remaining_hours(self) -> int | None:
+        """Evaporator-fan hours left before the air-filter reminder.
+
+        The NaviLink app's calculation: ``air_filter_alarm_period -
+        cumulated_op_time_eva_fan``, clamped at zero (the app shows it in
+        days as ``ceil(hours / 24)``). ``None`` when the reminder period is
+        0 (reminder off), since there is nothing to count down to.
+        """
+        if self.air_filter_alarm_period == 0:
+            return None
+        return max(
+            self.air_filter_alarm_period - self.cumulated_op_time_eva_fan, 0
+        )
 
     def get_field_unit(self, field_name: str) -> str:
         """Get the correct unit suffix based on temperature preference.
