@@ -296,6 +296,45 @@ a learned one, and a ``HeatLedger`` can track booked heat from a flow
 meter; both are protocols in ``sim.extensions``. With neither, the
 physics alone is served.
 
+A model is asked about each recovery with its start state, its target,
+the air, the physics duration, the start's hold and the draw load
+(``RecoveryContext``). The hold and the load are the model's, not the
+heater's: ``simulate`` takes what the model was trained with, beside
+``recovery=``, and nothing in the library fits them:
+
+``start_hold``
+   How long a compressor start holds before the lower zone climbs,
+   minutes, by the minutes since the compressor last stopped (None when
+   that isn't known). The model is asked with the hold, and serves a
+   duration that includes it.
+
+``running_hold``
+   What is left, at the start, of a running compressor's own start's
+   hold, minutes.
+
+``lead_draws``
+   Draws recorded before the start. Those within 30 minutes of the
+   first recovery's start are its ``draw_load``: what they took off the
+   tank, over the recovery's deficit.
+
+``draw_hold_factor``
+   ``(1 − k) / k`` at the probes' draw observability ``k``: a recovery
+   holds that many times the time a draw sets it back, for the share of
+   the draw the probes miss. Lead draws are read only when it is
+   positive.
+
+``physics_usable``
+   Whether the physics duration may be served; by default, when the
+   compressor is calibrated. A model may still answer from the
+   integrator's minutes when it isn't.
+
+With no model, or one that declines, the holds and the lead draws
+change nothing but the rare recovery placed again inside a start's
+hold: the physics is calibrated on whole durations, hold included, so
+none is added. ``draw_hold_factor`` acts either way: a recovery the
+walk's own draws set back holds for them whoever serves its duration.
+Left at their defaults, the five change no answer.
+
 
 Accuracy
 ========

@@ -7,6 +7,18 @@ Unreleased
 
 Added
 -----
+- **A recovery model's inputs, through ``nwp500.sim.simulate``** (#165).
+  Beside ``recovery=``, ``simulate`` takes what a learned model was
+  trained with and brings: ``start_hold`` (a start's hold by the
+  minutes since the compressor last stopped), ``running_hold`` (what
+  is left of a running compressor's), ``lead_draws`` (draws recorded
+  before the start), ``draw_hold_factor`` and ``physics_usable``. Each
+  goes to the engine as given. Left at their defaults, no answer
+  changes.
+  Lead draws move the tank as the scenario's own draws do. Like them,
+  they are refused on parameters with no fitted draw response
+  (``draw_model_unsupported``), and those the model reads carry
+  ``draw_uncalibrated`` and ``inlet_temp_modelled`` where they apply.
 - **The air, its humidity and the inlet, live from Home Assistant**
   (#166).
 
