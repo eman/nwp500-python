@@ -55,9 +55,9 @@ lockout); the upper zone at ``he_upper_on`` (``UpperRead``,
   (``ControllerParams``); mode writes by rules of their own.
 - **Reservation entries** fire in their minute whatever runs,
   setting the setpoint, then the mode; skipped in Vacation. Powered
-  off, the device fires them and turns the heater on (a device test,
-  2026-09-24), but the walk skips them there too. One repeating the
-  heater's state starts nothing.
+  off, one fires and turns the heater on (a device test, 2026-09-24),
+  judged as a mode write out of power-off. On a heater that is on, one
+  repeating its state starts nothing.
 - **The TOU cap**, judged at the recovery's end
   (``judge_cap``): one ending inside a window stops ``tou_cap_f``
   short of its target.
@@ -1189,9 +1189,9 @@ def _element_was_on(s: _Step, ev: ElementWasOn) -> None:
 def _entry_fires(s: _Step, ev: EntryFires) -> None:
     """The device fires an entry in its minute, whatever runs, setting
     its whole state: the setpoint first, so the mode's own rules judge
-    the new setpoint, then the mode. A setpoint or mode equal to the
-    heater's is no change and starts nothing (measured: 0 of 4, a
-    device test). In Vacation the device skips it, and does not run it
+    the new setpoint, then the mode. On a heater that is on, a setpoint
+    or mode equal to the heater's is no change and starts nothing
+    (measured: 0 of 4, a device test). In Vacation the device skips it, and does not run it
     late (a device test, 2026-09-24). Powered off it fires and turns the
     heater on, in the entry's mode (the same test, two runs): a mode
     write out of ``power_off``, the entry's or, with none, the heater's,
