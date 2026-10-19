@@ -9,9 +9,9 @@ followed a **control write**: a setpoint change or an operation-mode
 change, made by anyone. The device behaves as if it re-evaluates whether
 to heat whenever it is told something new.
 
-This matters to anything that writes to the heater on a schedule. A write
-is a possible start, and holding the heater off takes more than lowering
-one threshold.
+For anything that writes to the heater on a schedule, a write is a
+possible start, and holding the heater off takes more than lowering one
+threshold.
 
 .. contents::
    :local:

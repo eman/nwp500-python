@@ -165,7 +165,7 @@ ensure_valid_token()
 
 .. py:method:: ensure_valid_token()
 
-   Ensure access token is valid, refreshing if needed.
+   Check that the access token is valid, and refresh it if needed.
 
    :return: Current valid tokens or None if not authenticated
    :rtype: AuthTokens or None
@@ -317,7 +317,7 @@ UserInfo
 
    **Properties:**
 
-   * ``full_name`` - Full name (first + last)
+   * ``full_name``: Full name (first + last)
 
 AuthTokens
 ----------
@@ -337,11 +337,11 @@ AuthTokens
 
    **Properties:**
 
-   * ``expires_at`` - Expiration timestamp
-   * ``is_expired`` - Check if expired
-   * ``time_until_expiry`` - Time remaining
-   * ``bearer_token`` - Formatted bearer token
-   * ``are_aws_credentials_expired`` - Check if AWS credentials expired
+   * ``expires_at``: Expiration timestamp
+   * ``is_expired``: Check if expired
+   * ``time_until_expiry``: Time remaining
+   * ``bearer_token``: Formatted bearer token
+   * ``are_aws_credentials_expired``: Check if AWS credentials expired
 
    **Methods:**
 
@@ -592,6 +592,6 @@ Best Practices
 Related Documentation
 =====================
 
-* :doc:`api_client` - REST API client
-* :doc:`mqtt_client` - MQTT client
-* :doc:`exceptions` - Exception handling
+* :doc:`api_client`: REST API client
+* :doc:`mqtt_client`: MQTT client
+* :doc:`exceptions`: Exception handling

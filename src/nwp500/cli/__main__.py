@@ -153,7 +153,7 @@ async def _with_device(
             await mqtt.connect()
             try:
                 # Auto-detect unit system from device when not
-                # explicitly set. This ensures commands like
+                # explicitly set, so commands like
                 # reservations use the correct temperature unit.
                 if unit_system is None:
                     detected = await _detect_unit_system(mqtt, device)

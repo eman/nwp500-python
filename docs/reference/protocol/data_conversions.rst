@@ -107,7 +107,7 @@ Tank Temperature Sensors
    * - ``tankUpperTemperature``
      - DeciCelsiusToF
      - °F
-     - **Upper tank sensor temperature**. Indicates stratification - hot water at top for quick delivery. Typically hottest point in tank.
+     - **Upper tank sensor temperature**. Indicates stratification: hot water at top for quick delivery. Typically hottest point in tank.
    * - ``tankLowerTemperature``
      - DeciCelsiusToF
      - °F
@@ -147,7 +147,7 @@ These temperatures monitor the heat pump refrigerant circuit health and performa
    * - ``targetSuperHeat``
      - div_10_celsius_delta
      - °F (difference)
-     - **Target superheat setpoint**. Desired temperature difference between suction and evaporator ensuring complete refrigerant vaporization. A difference, so no +32 offset in °F: raw 50 is 5.0°C or 9.0°F. Reads raw 50 constantly on the unit these docs were checked against.
+     - **Target superheat setpoint**. Desired temperature difference between suction and evaporator, which keeps the refrigerant fully vaporized. A difference, so no +32 offset in °F: raw 50 is 5.0°C or 9.0°F. Reads raw 50 constantly on the unit these docs were checked against.
    * - ``currentSuperHeat``
      - div_10_celsius_delta
      - °F (difference)
@@ -180,7 +180,7 @@ Electric heating elements are controlled via thermostat ranges. Two sensors (upp
      the tank. That differential is published
      nowhere.
    - In ``ELECTRIC`` and ``HIGH_DEMAND`` the ON and OFF settings are
-     **the same value** - no hysteresis at all, which cannot be how the
+     **the same value**: no hysteresis at all, which cannot be how the
      device behaves.
    - **Every** ``he*DiffTempSetting`` reads 0 on a 9.x-firmware unit
      rather than the 2-5 degF described below.
@@ -215,7 +215,7 @@ Electric heating elements are controlled via thermostat ranges. Two sensors (upp
    * - ``heUpperOnDiffTempSetting``
      - div_10_celsius_delta
      - °F
-     - **Upper element differential** (ON-OFF hysteresis width). Temperature delta to prevent rapid cycling. Nominally 2-5°F, but **measured as 0 on a 9.x-firmware unit in every mode**, while the device nonetheless applied a differential - see the warning above. This is a DELTA value, not an absolute temperature (0 delta = 0°F difference).
+     - **Upper element differential** (ON-OFF hysteresis width). Temperature delta to prevent rapid cycling. Nominally 2-5°F, but **measured as 0 on a 9.x-firmware unit in every mode**, while the device nonetheless applied a differential (see the warning above). This is a DELTA value, not an absolute temperature (0 delta = 0°F difference).
    * - ``heUpperOffDiffTempSetting``
      - div_10_celsius_delta
      - °F
@@ -231,7 +231,7 @@ Electric heating elements are controlled via thermostat ranges. Two sensors (upp
    * - ``heatMinOpTemperature``
      - HalfCelsiusToF
      - °F
-     - **Minimum heat pump operation temperature**. Lowest tank temperature setpoint allowed in the current operating mode. Range: 95-113°F. Default: 95°F. When set, the user can only set the target tank temperature at or above this threshold, ensuring minimum system operating conditions.
+     - **Minimum heat pump operation temperature**. Lowest tank temperature setpoint allowed in the current operating mode. Range: 95-113°F. Default: 95°F. When set, the user can only set the target tank temperature at or above this threshold.
 
 Heat Pump Control Temperatures
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -394,7 +394,7 @@ Power and Energy Fields
    * - ``availableEnergyCapacity``
      - ``x 4`` (see note)
      - Wh
-     - **Energy still needed to reach the setpoint** - a heating deficit, despite the name. Exposed as ``energy_to_setpoint``. It *falls* as the tank heats and reaches zero when the tank is fully charged, so it is the inverse of available energy. During a TOU window that raises ``hpUpperOnTempSetting``, it reaches zero about 2 degC short of the setpoint.
+     - **Energy still needed to reach the setpoint**: a heating deficit, despite the name. Exposed as ``energy_to_setpoint``. It *falls* as the tank heats and reaches zero when the tank is fully charged, so it is the inverse of available energy. During a TOU window that raises ``hpUpperOnTempSetting``, it reaches zero about 2 degC short of the setpoint.
 
 .. note::
    **Energy quantum.** The two energy fields are raw counts in a fixed
@@ -724,8 +724,8 @@ Both formulas convert from half-degrees Celsius to Fahrenheit based on the raw e
 See Also
 --------
 
-* :doc:`device_status` - Complete status message structure and field definitions
-* :doc:`error_codes` - Error code reference for fault diagnosis
-* :doc:`../../how-to/track-energy` - Using energy data for optimization
-* :doc:`../../how-to/optimize-tou` - TOU scheduling and rate optimization
-* :doc:`../../explanation/what-starts-a-recovery` - How the tank sensors and settings trigger heating
+* :doc:`device_status`: Complete status message structure and field definitions
+* :doc:`error_codes`: Error code reference for fault diagnosis
+* :doc:`../../how-to/track-energy`: Using energy data for optimization
+* :doc:`../../how-to/optimize-tou`: TOU scheduling and rate optimization
+* :doc:`../../explanation/what-starts-a-recovery`: How the tank sensors and settings trigger heating

@@ -1181,7 +1181,7 @@ class MqttDeviceController:
         The app's request builder has a case for it but no screen calls
         it. Verified live: the device updates ``vacation_day_setting`` and
         leaves ``dhw_operation_setting`` unchanged. Use
-        :meth:`set_vacation_days` to actually enter vacation mode.
+        :meth:`set_vacation_days` to enter vacation mode.
 
         Args:
             device: Device object

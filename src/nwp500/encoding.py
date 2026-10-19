@@ -276,7 +276,7 @@ def encode_price(value: Real | float | Decimal, decimal_point: int) -> int:
     # Use Decimal with HALF_UP rounding: round() applies banker's
     # rounding, which under-encodes exact half values at even
     # boundaries (e.g. 0.125 at decimal_point=2 -> 12 instead of 13).
-    # Build the Decimal from the original value where possible —
+    # Build the Decimal from the original value where possible:
     # round-tripping through float would lose precision for Decimal
     # inputs and introduce binary floating-point artifacts.
     decimal_value: Decimal

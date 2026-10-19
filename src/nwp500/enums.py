@@ -4,7 +4,7 @@ This module contains enumerations for the Navien device protocol. These
 enums define valid values for device control commands, status fields, and
 capabilities.
 
-See docs/reference/protocol/quick_reference.rst for comprehensive protocol
+See docs/reference/protocol/quick_reference.rst for protocol
 details.
 """
 
@@ -205,7 +205,7 @@ class TempFormulaType(IntEnum):
     """Temperature conversion formula type.
 
     Different device models use slightly different rounding algorithms
-    when converting internal Celsius values to Fahrenheit. This ensures
+    when converting internal Celsius values to Fahrenheit, so that
     the mobile app matches the device's built-in display.
 
     Type 0: Asymmetric ceiling/floor rounding based on raw value remainder

@@ -181,8 +181,8 @@ UA_REF_DELTA_T_F = 50.0
 
 # ΔT floor inside the power law.  As ΔT → 0 the power law would drive UA
 # → 0 (exponent > 0), which is unphysical: conduction through the jacket
-# does not vanish.  It also has no observable consequence — the loss term
-# is UA·ΔT, so both factors are heading to zero — but it keeps UA finite
+# does not vanish.  It also has no observable consequence (the loss term
+# is UA·ΔT, so both factors are heading to zero), but it keeps UA finite
 # and positive for callers that read it directly.
 UA_MIN_DELTA_T_F = 5.0
 
@@ -523,7 +523,7 @@ class ElementParams:
     lower_f_per_min: float = field(default=1.38, metadata=_p(FITTED, "°F/min"))
     #: How far below the setpoint the upper zone must be **on entry to
     #: the mode** before the element starts, **in Electric**.  Not a
-    #: thermostat — see the module docstring.
+    #: thermostat; see the module docstring.
     #:
     #: Electric ran the element at 0.54 and 0.72 °F short and stayed
     #: off 1.08 °F *above* the setpoint, so 0.54 is the top of
@@ -541,7 +541,7 @@ class ElementParams:
     #:
     #: The two modes handle ``he_upper_on`` identically and their
     #: brackets overlap in (0.36, 0.54], so they plausibly share one
-    #: threshold — but that is an **inference, not a measurement**, and
+    #: threshold, but that is an **inference, not a measurement**, and
     #: assuming it would have the model promise an element at 0.6 °F
     #: that High Demand has never been seen to run.  The expensive
     #: error is promising hot water that does not arrive, so
@@ -554,7 +554,7 @@ class ElementParams:
 
     #: Lower edges of those brackets.  High Demand's negative held for
     #: 53 seconds as the tank cooled through it, not a whole watch;
-    #: Electric's lower edge is not observed at all — its only
+    #: Electric's lower edge is not observed at all: its only
     #: negative is above the setpoint.
     start_bracket_lower_f: float = field(
         default=0.0, metadata=_p(MEASURED, "°F")
@@ -571,15 +571,15 @@ class ElementParams:
     #: starts on record, read at each run's raw on-edge: deficits 2.5,
     #: 3.8 x4, 4.1 x2, 5.0, median **3.8 °F**. Consistent with 4.1 and
     #: inside that interval. This is the same series by a different
-    #: estimator — starts rather than minutes — so it catches a gross
+    #: estimator (starts rather than minutes), so it catches a gross
     #: error and is **not** independent confirmation.
     #:
     #: **High Demand only.** `he_upper_on` equals the setpoint in this
     #: mode, so a setpoint-relative rule and a field-relative one
     #: coincide here and cannot be told apart. Energy Saver's figure is
-    #: expressed as a temperature instead — see
-    #: ``energy_saver_reengages_at_f`` — but which of the two forms the
-    #: device actually uses is unresolved in both modes.
+    #: expressed as a temperature instead (see
+    #: ``energy_saver_reengages_at_f``), but which of the two forms the
+    #: device uses is unresolved in both modes.
     #: Recorded because the entry figure above is routinely mistaken
     #: for it; nothing in this module projects a re-engagement, and no
     #: device run has tested one.
@@ -587,14 +587,14 @@ class ElementParams:
         default=4.1, metadata=_p(MEASURED, "°F")
     )
 
-    #: What the element re-engages at **mid-stint in Energy Saver** —
+    #: What the element re-engages at **mid-stint in Energy Saver**:
     #: an absolute tank temperature, not a deficit.
     #:
     #: ``he_upper_on`` rests at 104.9 °F (40.5 degC, the device
     #: minimum) in Energy Saver, and the mid-stint starts cluster just
     #: under it: of 21 on record, **16 begin between 103.6 and
-    #: 104.7 °F**. The zone also cannot stay below the setting
-    #: — 52 minutes under 104.9 across 36,946, an element running in
+    #: 104.7 °F**. The zone also cannot stay below the setting:
+    #: 52 minutes under 104.9 across 36,946, an element running in
     #: 50, no excursion reaching 10 minutes.
     #:
     #: **The engagement point is a temperature, not a gap**
@@ -612,13 +612,13 @@ class ElementParams:
     #: ~138-139). An earlier version called it a fixed ~106 thermostat
     #: because the setpoint never moved during the replication.
     #:
-    #: **Every engagement came with water moving through the tank** —
+    #: **Every engagement came with water moving through the tank**:
     #: one shower and two flowing draws of water that had stood and
     #: cooled, each a draw on the tank (it took the upper zone down
     #: 5-8 °F each time). So "the element needs demand on the tank" fits
     #: everything seen; whether demand is *required*, rather than the
     #: temperature alone, is untested. And a setpoint *raise* in this
-    #: mode starts it too, via the entry rule — so this constant
+    #: mode starts it too, via the entry rule, so this constant
     #: describes descents only.
     #:
     #: It is also not razor-sharp: the tank sits at 104.9-106 °F with
@@ -630,7 +630,7 @@ class ElementParams:
     #:
     #: **Sanity-check the live field before preferring it** to this
     #: default: the reported ``heUpperOnTempSetting`` reads 32 °F
-    #: (0 degC, plainly unset) for 16,988 minutes in 2026-03/04 — only
+    #: (0 degC, plainly unset) for 16,988 minutes in 2026-03/04. Only
     #: 646 of them in Energy Saver, but a consumer taking 32 °F as the
     #: element threshold would wait for a tank that never gets there.
     energy_saver_reengages_at_f: float = field(
@@ -641,7 +641,7 @@ class ElementParams:
     #: a descending sweep that found the element off at 0.54 and
     #: 1.44 °F and on within one poll at 1.80 and 2.16.
     #:
-    #: Larger than Electric's and High Demand's, and the modes really do
+    #: Larger than Electric's and High Demand's, and the modes do
     #: differ: at 0.54 °F short Electric ran the element and Energy Saver
     #: did not.  (Those two runs also differed in compressor state, so
     #: the *mechanism* is one reading of two.)
@@ -649,8 +649,8 @@ class ElementParams:
     #: An earlier 5 °F read a history count, "2 of 11 engaged within
     #: 5 °F", as a threshold.  The count is right; 8 of those 11 are tanks at or
     #: above setpoint, with nothing for an element to do.  Of the three
-    #: genuinely short, history gives 0 of 2 at 1-2 °F and 1 of 1 at
-    #: 2-3 °F — thin, and consistent with the 1.8 the sweep measured.
+    #: short, history gives 0 of 2 at 1-2 °F and 1 of 1 at
+    #: 2-3 °F: thin, and consistent with the 1.8 the sweep measured.
     energy_saver_entry_deficit_f: float = field(
         default=1.8, metadata=_p(MEASURED, "°F")
     )
@@ -658,7 +658,7 @@ class ElementParams:
     #: Lower edge of the bracket around Energy Saver's entry threshold:
     #: the sweep bounds it to (1.44, 1.80].  Electric and High Demand
     #: have their own band, (0.36, 0.54], in
-    #: ``start_bracket_lower_f`` — both are reported, and a plan landing
+    #: ``start_bracket_lower_f``. Both are reported, and a plan landing
     #: inside either says so rather than pretending the step is sharp.
     energy_saver_bracket_lower_f: float = field(
         default=1.44, metadata=_p(MEASURED, "°F")
@@ -676,10 +676,10 @@ class ElementParams:
     #: device's record against the upper probe and the setpoint as of the edge,
     #: leaving out stints a mode change ended or a setpoint change
     #: crossed.  Since the device runs (2026-09-19 on): **1.62 °F**,
-    #: n = 5 on 3 days, range 1.62–1.80, 90 % CI by day 1.62–1.80, at
+    #: n = 5 on 3 days, range 1.62-1.80, 90 % CI by day 1.62-1.80, at
     #: setpoints of 107.6 and 141.8.  Over the whole record, with the
     #: probe reported at most 6 s before the edge: 1.62, n = 21 on 15
-    #: days, CI 1.62–1.80, range 1.26–2.16, at six setpoints from 107.6
+    #: days, CI 1.62-1.80, range 1.26-2.16, at six setpoints from 107.6
     #: to 147.2.  Reads older than that sit 2.16 short (n = 27): the
     #: probe was still rising, so they are left out, not averaged in.
     #: 1.62 °F is 0.9 °C, five probe steps.
@@ -705,16 +705,16 @@ class ElementParams:
     #: own off point, with no draw recorded (a detector session or a
     #: flowing draw) or from before draws were, the two events a
     #: held-out check left out: run minutes = lag + rise ÷ rate,
-    #: Theil-Sen, gives **1.21 min (90 % CI by day 0.95–1.60) and
-    #: 2.01 °F/min (1.86–2.29), n = 29 on 21 days**; with no draw recorded
+    #: Theil-Sen, gives **1.21 min (90 % CI by day 0.95-1.60) and
+    #: 2.01 °F/min (1.86-2.29), n = 29 on 21 days**; with no draw recorded
     #: only, 1.10 and 2.10 (n = 13).  The probe's first held step comes
     #: sooner, 0.54 min after the on-edge less its reporting cadence (CI
-    #: 0.42–0.68, n = 19 on 12 days; a device run saw 42 s with no
+    #: 0.42-0.68, n = 19 on 12 days; a device run saw 42 s with no
     #: movement at all), but its rise is smeared over the next minute: a
     #: zone held for 0.54 min and then lifted at any one rate is early
     #: at one end of a run or late at the other.  By mode that first
-    #: step is Energy Saver 0.71 (n = 8, CI −0.03–0.90), High Demand
-    #: 0.67 (n = 4 on 2 days), Electric 0.43 (n = 7, 0.15–0.67): no
+    #: step is Energy Saver 0.71 (n = 8, CI −0.03 to 0.90), High Demand
+    #: 0.67 (n = 4 on 2 days), Electric 0.43 (n = 7, 0.15-0.67): no
     #: split the data can carry, so one figure.
     #:
     #: **The rate moved with it, from 1.66 to 2.01.**  1.66 was rise over
@@ -725,12 +725,12 @@ class ElementParams:
     #: min), inside 1.66's interval.  On the Energy Saver and High Demand
     #: stints of under 8 °F, the size an assisted mode makes, the line
     #: lands within 0.31 min of every recorded run, where 1.66 alone was
-    #: 0.54–1.22 min early on every one; three short Electric runs rose
+    #: 0.54-1.22 min early on every one; three short Electric runs rose
     #: faster than either.
     #:
     #: **One lag, start and end** (``coast_f``): the coast after the
     #: off-edge is the same lag's heat arriving, 0.98 min of rise at this
-    #: rate (median coast 1.98 °F, CI 1.80–1.98).  What is in transit at
+    #: rate (median coast 1.98 °F, CI 1.80-1.98).  What is in transit at
     #: the off-edge, rate × lag = 2.43 °F, exceeds both the coast and the
     #: off deficit, so the setpoint, not the lag, bounds the coast.  The
     #: lag's own minutes lift nothing during the run; their heat is the
@@ -738,7 +738,7 @@ class ElementParams:
     #: lesser of the run and the lag), so nothing is credited that was
     #: not charged.  Short clean stints coast the same ~2 °F whatever
     #: their rise: Energy Saver runs lifting the zone 0.54, 1.26 and
-    #: 1.44 °F coasted 2.16, 1.98 and 2.16, each to 0.18–0.54 °F over
+    #: 1.44 °F coasted 2.16, 1.98 and 2.16, each to 0.18-0.54 °F over
     #: the setpoint; an Electric run of 0.18, 1.80; High Demand's 2.34,
     #: 2.34.  So a run at the entry threshold coasts to the setpoint.
     #:

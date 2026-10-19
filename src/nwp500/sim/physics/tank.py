@@ -2,7 +2,7 @@
 
 The decay ODE and the physics ODE both subtract a standby loss term
 ``UA · (T_tank − T_amb)``.  Both used to take ``UA`` as a single fitted
-scalar.  That is wrong across the range this tank actually operates in.
+scalar.  That is wrong across the range this tank operates in.
 
 Measured on clean quiet windows (no compressor and no water moving),
 fitting each window independently:
@@ -14,9 +14,9 @@ Window                  mean ΔT   UA (BTU/hr·°F)        fit RMSE
 2026-07-31 03:20→15:30  61.8 °F   5.58                  0.11 °F
 ======================  ========  ====================  ========
 
-A 1.9× spread with residuals of 0.11–0.22 °F is not measurement noise.
-A single constant fitted on the hot windows — which is what the corpus is
-made of, because hot windows are what happens between ordinary draws —
+A 1.9× spread with residuals of 0.11-0.22 °F is not measurement noise.
+A single constant fitted on the hot windows (which is what the corpus is
+made of, because hot windows are what happens between ordinary draws)
 overstates cold-tank loss by ~1.75×, and a constant fitted on the cold
 window understates hot-tank loss by about as much.
 
@@ -28,7 +28,7 @@ The shape is not arbitrary.  Free convection in the insulation gap and in
 the standing plumbing above the tank scales as ΔT^0.25 (laminar) to
 ΔT^0.33 (turbulent).  Fitted on 24 windows over 20 days, the exponent was
 0.353, on the turbulent value; over one installation's full record, 301
-windows spanning ΔT 11.2–90.7 °F with no band empty, it is 0.227, just
+windows spanning ΔT 11.2-90.7 °F with no band empty, it is 0.227, just
 below the laminar one.  So the functional form carries a physical prior
 rather than being a curve fitted to two points.
 
@@ -64,7 +64,7 @@ def ua_at(
         UA in BTU/hr·°F.
     """
     if exponent == 0.0:
-        # Exact passthrough, not a pow() that happens to return 1.0 —
+        # Exact passthrough, not a pow() that happens to return 1.0:
         # older parameter sets must reproduce their old numbers bit for
         # bit.
         return ua_ref

@@ -128,6 +128,6 @@ readable from :class:`~nwp500.models.DeviceFeature` and
 Related Documentation
 =====================
 
-* :doc:`../reference/python_api/mqtt_client` - Full MQTT client API reference
-* :doc:`schedule-operation` - Reservations, recirculation schedules, and intelligent scheduling
-* :doc:`diagnose-mqtt` - Connection troubleshooting and diagnostics
+* :doc:`../reference/python_api/mqtt_client`: Full MQTT client API reference
+* :doc:`schedule-operation`: Reservations, recirculation schedules, and intelligent scheduling
+* :doc:`diagnose-mqtt`: Connection troubleshooting and diagnostics

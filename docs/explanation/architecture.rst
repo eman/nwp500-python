@@ -64,7 +64,7 @@ The ``NavienMqttClient`` is the heart of real-time interaction. It maintains a p
 Data Models
 ===========
 
-The library uses **Pydantic** for all data models. This ensures:
+The library uses **Pydantic** for all data models. This gives:
 * **Type Safety**: All fields have explicit types.
 * **Validation**: Incoming data is validated against expected formats.
 * **Unit Handling**: Temperatures and other units are automatically converted to appropriate scales (e.g., Fahrenheit).
@@ -77,5 +77,5 @@ The library implements an asynchronous event system. You can subscribe to variou
 See Also
 ========
 
-* :doc:`what-starts-a-recovery` - What triggers a heating cycle, measured on a real unit.
-* :doc:`../reference/protocol/mqtt_protocol` - Low-level details of the MQTT messaging.
+* :doc:`what-starts-a-recovery`: what triggers a heating cycle, measured on a real unit.
+* :doc:`../reference/protocol/mqtt_protocol`: low-level details of the MQTT messaging.

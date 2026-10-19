@@ -280,7 +280,7 @@ The water heater stores the 10 most recent errors, with the most recent displaye
 
 1. Press and hold the Menu button for more than 5 seconds
 2. Select "Error History"
-3. Use Up/Down buttons to navigate the error list
+3. Use Up/Down buttons to scroll through the error list
 4. Press OK to view detailed information about a specific error
 
 Each error record includes:
@@ -316,7 +316,7 @@ Troubleshooting Tips
 * Check refrigerant pressures (requires certified technician)
 * Verify evaporator fan operation
 * Check EEV operation and step position
-* Ensure adequate airflow through air intake/exhaust (Ø8")
+* Keep adequate airflow through air intake/exhaust (Ø8")
 
 **Communication Errors (E596, E781):**
 
@@ -327,7 +327,7 @@ Troubleshooting Tips
 
 **Water System Errors (E326, E799, E990):**
 
-* E326 (Dry fire): Ensure tank is filled before operation
+* E326 (Dry fire): Fill the tank before operating
 * E799 (Water leak): Inspect all plumbing connections and tank for leaks
 * E990 (Condensate overflow): Clear condensate drain tubing of obstructions
 
@@ -344,6 +344,6 @@ Contact technical support at 1-800-519-8794 when:
 See Also
 --------
 
-* :doc:`device_status` - Status field descriptions
-* :doc:`mqtt_protocol` - Error reporting via MQTT
-* Installation Manual - Complete technical specifications
+* :doc:`device_status`: Status field descriptions
+* :doc:`mqtt_protocol`: Error reporting via MQTT
+* Installation Manual: Complete technical specifications

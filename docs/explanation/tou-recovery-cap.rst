@@ -6,10 +6,10 @@ When a Time-of-Use schedule is active, the NWP500 stops a heat-pump
 recovery at about **90 % charge** instead of running to the setpoint. The
 tank finishes roughly 1.9 degC below ``hp_lower_off_temp_setting`` and
 stays there. Nothing in the protocol announces this, and no error is
-raised - the compressor simply stops early.
+raised: the compressor stops early.
 
-This matters for anything that waits for the tank to reach its setpoint:
-under an active TOU window that instant never arrives.
+Anything that waits for the tank to reach its setpoint under an active
+TOU window waits for an instant that never arrives.
 
 .. contents::
    :local:
@@ -32,7 +32,7 @@ Summary
        ``hp_lower_off_temp_setting``
    * - Precondition
      - An expensive TOU period in force, un-overridden. ``tou_status``
-       alone is **not** the test - see below.
+       alone is **not** the test; see below.
    * - Frequency
      - 59 of 333 recoveries (18 %) over 260 days
 
@@ -62,8 +62,8 @@ The spike at 3.42 degF is 1.9 degC exactly, and 19 steps of the 0.1 degC
 tank-probe quantum. It holds across eight different setpoints from 140.0
 to 147.2 degF and appears in all nine months observed, so it is an
 offset in the control logic rather than a proportional effect or a
-seasonal one. The long tail beyond 8 degF is ordinary interruption -
-a draw starting mid-recovery, a mode change - and is unrelated.
+seasonal one. The long tail beyond 8 degF is ordinary interruption (a
+draw starting mid-recovery, a mode change) and is unrelated.
 
 ``tou_status`` looks like a clean separator, and is not one:
 
@@ -91,10 +91,10 @@ a draw starting mid-recovery, a mode change - and is unrelated.
 All 59 ran in ``HEAT_PUMP`` mode throughout, so this is not
 ``ENERGY_SAVER`` or ``VACATION`` behaviour.
 
-But read that table carefully: 98 cycles reached the setpoint with
+Yet 98 cycles reached the setpoint with
 ``tou_status`` True. **The flag only reports that TOU scheduling is
 enabled.** It says nothing about whether the recovery ran inside an
-expensive period, and the cap bites only when it did - outside one, an
+expensive period, and the cap bites only when it did. Outside one, an
 enabled schedule does nothing at all.
 
 The device marks a period itself. While inside one it applies non-zero
@@ -125,11 +125,11 @@ the start catches 17 of 59 against 43 testing the end.
 
 Two plausible explanations were tested and **refuted**:
 
-- *The upper zone satisfied its own cut-out first.* No -
+- *The upper zone satisfied its own cut-out first.* No:
   ``tank_upper_temperature`` reached ``hp_upper_off_temp_setting`` on
   only 2 of 137 unreached cycles, against 179 of 196 reached ones. The
   upper probe finishes short too, by a median of 4.5 degF.
-- *The device terminates on outlet temperature.* No -
+- *The device terminates on outlet temperature.* No:
   ``dhw_temperature`` reached the setpoint on only 2 of 136. This is the
   field the protocol calls the outlet temperature (Home Assistant names
   it "DHW outlet temperature"); it is read inside the tank, and the
@@ -141,10 +141,10 @@ Open questions
 
 Being inside a period is a strong predictor but not a deterministic one:
 12 cycles reached the setpoint from inside one, and 16 were capped from
-outside. Some of that is the marker's own resolution - it is sampled at
-the cycle end, and a period boundary crossed mid-recovery is not captured
-- but it has not been reconciled against the schedule the device was
-actually holding, which ``configure_tou_schedule_confirmed`` can read
+outside. Some of that is the marker's own resolution (it is sampled at
+the cycle end, and a period boundary crossed mid-recovery is not
+captured), but it has not been reconciled against the schedule the
+device was holding, which ``configure_tou_schedule_confirmed`` can read
 back.
 
 The 90 % figure has been observed on one unit under one TOU schedule. It
@@ -176,7 +176,7 @@ appliance is doing what the schedule told it to. A recovery that ends at
 90 % charge with ``tou_status`` True is a normal outcome.
 
 **When measuring recovery duration, treat capped cycles separately.**
-They are not censored observations of a full recovery - they are
+They are not censored observations of a full recovery; they are
 complete observations of a different, shorter target. Pooling them with
 uncapped recoveries biases any duration estimate downward; discarding
 them biases it upward, because capped cycles are systematically shorter

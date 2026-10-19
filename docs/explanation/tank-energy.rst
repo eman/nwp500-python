@@ -5,7 +5,7 @@ Tank Energy
 The NWP500 reports two energy figures, ``totalEnergyCapacity`` and
 ``availableEnergyCapacity``. Both names mislead, and before v9.3.0 this
 library also scaled them wrongly. This page explains what they
-actually measure and shows the evidence for the correction.
+measure and shows the evidence for the correction.
 
 .. contents::
    :local:
@@ -21,12 +21,12 @@ Summary
 
    * - Protocol field
      - What the name suggests
-     - What it actually is
+     - What it is
    * - ``availableEnergyCapacity``
      - Energy available in the tank
      - Energy still **needed** to reach the setpoint. It *falls* as the
-       tank heats and hits zero when the tank is fully charged - the
-       exact inverse of the name.
+       tank heats and hits zero when the tank is fully charged: the
+       inverse of the name.
    * - ``totalEnergyCapacity``
      - Fixed tank capacity
      - Cost of a full recovery to the **current setpoint**. It moves
@@ -48,8 +48,8 @@ Their **difference** is a state of charge, and is exposed as
                  = k * (tank_temperature - 104.9 degF)
 
 The setpoint cancels. What remains is the tank's heat above the device's
-minimum operating temperature - close enough to the lowest useful shower
-temperature that it is a good estimate of what you can actually draw.
+minimum operating temperature, close enough to the lowest useful shower
+temperature that it is a good estimate of what you can draw.
 The exception is a Time-of-Use window near the setpoint, where it can
 under-read by up to about 560 Wh; see `Drawable energy`_.
 
@@ -66,12 +66,12 @@ Both fields fit a single two-parameter model:
 
 where ``k`` is the tank's heat capacity and ``reference_temperature`` is
 the device's own minimum setpoint, ``dhwTemperatureMin`` (40.5 degC /
-104.9 degF) - except during a Time-of-Use window that raises
+104.9 degF), except during a Time-of-Use window that raises
 ``hpUpperOnTempSetting``. Then both fields measure to a target 2 degC
 below the setpoint, which puts ``full_recovery_energy``'s reference
 2 degC higher; see `Two branches`_.
 
-Two consequences follow, and both matter:
+Two consequences follow:
 
 * ``energy_to_setpoint`` is a **deficit**. Code that treats it as stored
   energy has the signal backwards: it is largest when the tank is
@@ -120,7 +120,7 @@ The last two rows also check out against the tank's heat capacity of
 156 Wh/degF: 227.5 counts x 4 Wh = 910 Wh against 5.8 degF x 156 =
 905 Wh, and 530.0 counts = 2120 Wh against 13.5 degF x 156 = 2106 Wh.
 The coldest row runs about 6 % high, which is the stratification error
-in using ``(upper + lower) / 2`` as the mean tank temperature - it is
+in using ``(upper + lower) / 2`` as the mean tank temperature. It is
 worst when the tank is least mixed.
 
 The 4 Wh quantum
@@ -130,8 +130,8 @@ The 4 Wh quantum
 the setpoint measures the quantum without needing any assumption about
 how the tank stratifies.
 
-The device does not report a single ``totalEnergyCapacity`` per setpoint -
-see `Two branches`_ below - so the table lists the most common value at
+The device does not report a single ``totalEnergyCapacity`` per setpoint
+(see `Two branches`_ below), so the table lists the most common value at
 each setpoint, which covers 68 % of samples. Values are raw counts as
 they arrive on the wire:
 
@@ -167,20 +167,20 @@ An arithmetic sequence: least squares gives **R-squared 0.99999** and a
 slope of **70.25 raw counts per Kelvin** of whole-tank temperature rise.
 The endpoints alone give the same figure: (1685 - 1369) / 4.5 K = 70.2.
 
-The slope is the robust part of this. The second branch, fitted
-separately, gives 38.98 counts/degF against the primary's 39.06 - the
+The slope is the dependable part of this. The second branch, fitted
+separately, gives 38.98 counts/degF against the primary's 39.06, the
 same figure to within 0.2 %. Two independent populations agreeing on the
 slope is stronger evidence for the quantum than either alone.
 
 Converting that to Watt-hours needs a water mass, and this is where care
 is required: a "65 gallon" tank does not hold 65 gallons of water. The
-nameplate is an upper bound - the vendor's own app hard-codes it, mapping
-``volumeCode`` 1/2/3 to 189.2 L, **246.0 L** and 302.8 L (see `What the
-vendor app does with these fields`_) - and the water actually in the tank
-must come in under it. Rather than assume nominal volume and derive an
-odd-looking quantum, assume the quantum is a round number - every other
-conversion in this protocol is (half-degrees, tenths) - and see which one
-implies a sensible volume:
+nameplate is an upper bound. The vendor's own app hard-codes it, mapping
+``volumeCode`` 1/2/3 to 189.2 L, **246.0 L** and 302.8 L (see
+`In the NaviLink app`_), and the water in the tank must come in under
+it. Rather than assume nominal volume and derive an odd-looking quantum,
+assume the quantum is a round number, as every other conversion in this
+protocol is (half-degrees, tenths), and see which one implies a sensible
+volume:
 
 .. list-table::
    :header-rows: 1
@@ -190,10 +190,10 @@ implies a sensible volume:
      - Plausible?
    * - **4 Wh** (1/250 kWh)
      - **241.7 L / 63.9 gal**
-     - Yes - slightly under nominal, as expected
+     - Yes: slightly under nominal, as expected
    * - 1/240 kWh (4.167 Wh)
      - 251.8 L / 66.5 gal
-     - No - more than the nameplate
+     - No: more than the nameplate
    * - 10 kJ
      - 167.8 L / 44.3 gal
      - No
@@ -237,9 +237,9 @@ coefficient of performance:
 A heat pump water heater in a 72 degF room runs at a COP of roughly 2 to
 4. A COP of 7 would mean the device generated energy it never consumed.
 
-This argument is worth stating separately because it needs no tank
-volume, specific heat or stratification model - only the device's own
-reported energy and its own reported power. It cannot tell you what the
+This argument stands on its own: it needs no tank volume, specific heat
+or stratification model, only the device's own reported energy and its
+own reported power. It cannot tell you what the
 quantum *is*, but it rules out the pre-9.3.0 value regardless of anything
 assumed elsewhere on this page.
 
@@ -268,12 +268,12 @@ times a day. Over four months at nine setpoints:
      - 38.98 counts/degF
      - **108.48 degF**
 
-The two are parallel, separated by a constant 140-141 counts - exactly
-**2 degC** of setpoint - at every setpoint measured.
+The two are parallel, separated by a constant 140-141 counts (exactly
+**2 degC** of setpoint) at every setpoint measured.
 
 The primary branch's zero crossing matches the device's
-``dhwTemperatureMin`` of 104.9 degF to within a twentieth of a degree -
-140.0 - 1369 / 39.06 = 104.95 degF - using only the device's own two
+``dhwTemperatureMin`` of 104.9 degF to within a twentieth of a degree
+(140.0 - 1369 / 39.06 = 104.95 degF), using only the device's own two
 numbers: no tank mass, no specific heat, no thermistors, no assumption
 about the quantum. On that branch,
 
@@ -343,26 +343,24 @@ In the NaviLink app
 
 Nothing. Navien's own NaviLink app never reads either field.
 
-Decompiling the current release - version 2.03.00, versionCode 141,
-published March 2026 - gives 8,101 Java sources, and neither
+Decompiling the current release (version 2.03.00, versionCode 141,
+published March 2026) gives 8,101 Java sources, and neither
 ``totalEnergyCapacity`` nor ``availableEnergyCapacity`` appears in any of
 them. Neither string appears in the raw dex string pool either, which
 rules out the names having been lost to obfuscation. The app's status
-model, ``KDResponseMgppStatus.Status``, declares about 140 fields -
-including ``dhwChargePer``, ``tankUpperTemperature``,
-``tankLowerTemperature``, ``currentInstPower`` and ``mixingRate`` - and
-neither energy field is among them. The app requests no field subset, so
+model, ``KDResponseMgppStatus.Status``, declares about 140 fields
+(``dhwChargePer``, ``tankUpperTemperature``, ``tankLowerTemperature``,
+``currentInstPower`` and ``mixingRate`` among them), and neither energy
+field is among them. The app requests no field subset, so
 the device sends both and the app discards them on deserialization.
 
 As a control, ``dhwChargePer`` and ``tankUpperTemperature`` *are* present
-in the dex strings, so the absence of the other two is a real result and
-not a broken search.
+in the dex strings, so the search itself works.
 
-This matters for reading the rest of this page. There is no vendor label,
-no vendor scale factor and no vendor formula to check the conclusions
-above against - the evidence here is the only account of these two fields
-that exists. It also explains why the protocol names are so misleading:
-nothing Navien ships ever has to act on them.
+So there is no vendor label, scale factor or formula to check the
+conclusions above against: the evidence here is the only account of
+these two fields. It also explains why the protocol names mislead:
+nothing Navien ships has to act on them.
 
 The app does corroborate the surrounding facts this page leans on:
 
@@ -401,16 +399,14 @@ distance from a target:
    usable_energy = full_recovery_energy - energy_to_setpoint
 
 Raising the setpoint inflates both inputs equally, so the result does not
-move - which is what makes it a state of charge and the two raw fields
-not.
+move. That makes it a state of charge, and the two raw fields not.
 
 The implied reference is ``dhw_temperature_min``, 104.9 degF. A shower
 runs around 105 degF, so heat below that reference is real but not
-useful, and excluding it is the behaviour you want. Note that a mixing
-valve does not change this floor: it caps how *hot* water can be
-delivered, and once the tank falls below its setting it simply passes
-through, so water stays usable down to the temperature you actually want
-at the tap.
+useful, and excluding it is the behaviour you want. A mixing valve does
+not change this floor: it caps how *hot* water can be delivered, and
+once the tank falls below its setting it passes through, so water stays
+usable down to the temperature you want at the tap.
 
 ``full_recovery_energy`` is bimodal (see `Two branches`_), but both
 fields shift together, so the difference is usually unaffected. Checked
@@ -438,8 +434,8 @@ Outside the window, ``usable_energy`` matched the two-probe mean to a
 standard deviation of 0.25 degF. If ``hpUpperOnTempSetting`` is raised
 and ``energy_to_setpoint`` reads 0, use the thermistors instead.
 
-For that case, or if you need a different floor - a bath at 100 degF, or energy above the
-cold inlet - compute it from the thermistors instead. On a 65-gallon tank
+For that case, or if you need a different floor (a bath at 100 degF, or
+energy above the cold inlet), compute it from the thermistors instead. On a 65-gallon tank
 the heat capacity is 156 Wh per degF:
 
 .. code:: text
@@ -457,10 +453,10 @@ Migrating from before v9.3.0
    * - Old
      - New
    * - ``status.total_energy_capacity`` (removed)
-     - ``status.full_recovery_energy`` - and the value is 2.5x smaller
+     - ``status.full_recovery_energy``; the value is 2.5x smaller
    * - ``status.available_energy_capacity`` (removed)
-     - ``status.energy_to_setpoint`` - 2.5x smaller, and note it was
-       never "available"
+     - ``status.energy_to_setpoint``: 2.5x smaller, and it was never
+       "available"
    * - Treating the value as available energy
      - It is a deficit; invert the logic. ``full_recovery_energy -
        energy_to_setpoint`` is the energy added above the device's

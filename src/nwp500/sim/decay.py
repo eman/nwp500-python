@@ -146,7 +146,7 @@ class _Flowing:
 class Impulse(NamedTuple):
     """A step change in the lower zone: an extraction's drop.
 
-    ``at`` is the instant the drop is accounted at — a flowing draw's
+    ``at`` is the instant the drop is accounted at: a flowing draw's
     is the end of the integration step that charged it, a delivered
     draw's is its onset, which is in general *not* a trajectory
     instant.  ``lower_before`` is the lower zone just before the drop,
@@ -199,8 +199,8 @@ class DecayProjection:
     #: grid and cannot show where inside a step the curve stepped down,
     #: so `threshold_crossing` walks these between the grid points: a
     #: crossing the drop caused is reported at the drop, and one the
-    #: coast reached is interpolated over the coast segment it fell in
-    #: — never rounded up to the next grid point, which a scheduler's
+    #: coast reached is interpolated over the coast segment it fell in,
+    #: never rounded up to the next grid point, which a scheduler's
     #: use of the crossing cannot absorb.
     impulses: list[Impulse] = field(default_factory=list)
 
@@ -211,7 +211,7 @@ class DecayProjection:
 #: three minutes, so the tank the last gallons leave is materially
 #: colder than the tank the first ones left.  Charging a whole step
 #: at one temperature ignores that, and then a projection chained
-#: mid-draw — which does see the drop across its split — disagrees
+#: mid-draw (which does see the drop across its split) disagrees
 #: with the single projection over the same span.  Walking the
 #: accrual in half-minute pieces makes both paths integrate the same
 #: curve: it holds the disagreement to the same order as the quiet
@@ -266,8 +266,8 @@ def project_decay(
         tau_gap_hours: Stratification gap decay time constant.
         target_time: When the tank must be ready (UTC).
         now: Current time (UTC).
-        ua_exponent: Power-law exponent for ``UA(ΔT)``.  ``0.0`` — the
-            default, and what older calibrations carry — reproduces the
+        ua_exponent: Power-law exponent for ``UA(ΔT)``.  ``0.0`` (the
+            default, and what older calibrations carry) reproduces the
             constant-UA behaviour exactly.  See ``sim.physics.tank``.
         ua_ref_delta_t: ΔT at which ``ua_btu_hr_f`` is quoted (°F).
         draws: The draws (``Draw``; a ``(at, gallons)`` pair is a
@@ -356,7 +356,7 @@ def project_decay(
 
     # The gap relaxes from a *reference*, not from the start. With no
     # draws the reference never moves and this is the closed form it
-    # replaces, evaluated on the same numbers — so the quiet path is
+    # replaces, evaluated on the same numbers, so the quiet path is
     # bit-identical.
     #
     # A draw moves the reference: it opens the gap, and the relaxation
@@ -392,8 +392,8 @@ def project_decay(
         )
 
     # Ambient is averaged by **duration**, not by sample count.  The
-    # steps are no longer all the same length — the last one is
-    # shortened so the walk ends exactly at `target_time` — so a mean
+    # steps are no longer all the same length (the last one is
+    # shortened so the walk ends exactly at `target_time`), so a mean
     # over one sample per step would give a one-second tail the same
     # weight as a full ten minutes, and `t_amb_mean` would stop
     # describing the window it is documented as describing.  It feeds
@@ -419,7 +419,7 @@ def project_decay(
     )
     # Flowing draws, **not** clipped to the window.  The volume given
     # is a function of a draw's own elapsed time, so the charge for a
-    # window is the increment of that curve across it — and computing
+    # window is the increment of that curve across it, and computing
     # the increment needs the true start, even when it precedes
     # ``now``.  In start order (stable), which is what makes the walk
     # below well defined: charges inside a step are priced
@@ -454,7 +454,7 @@ def project_decay(
         # **The step is partitioned at every draw onset inside it, and
         # each partition is integrated in turn.**  A draw used to be
         # charged in full by the end of the step containing its
-        # onset, which placed it anywhere up to ten minutes late — and
+        # onset, which placed it anywhere up to ten minutes late, and
         # *where* inside the step it fell depended on the grid, which
         # is anchored to `now`.  A chained projection cut off-grid
         # therefore applied the same draw at a different instant,
@@ -474,7 +474,7 @@ def project_decay(
         for i, (sub_start, sub_end) in enumerate(pairwise(points)):
             if i == last:
                 # The last partition takes what is left so the pieces
-                # sum to the step exactly — and with no draws in the
+                # sum to the step exactly, and with no draws in the
                 # step this is `dt_hours - 0.0`, the quiet path's own
                 # step to the bit.
                 sub_dt = dt_hours - (sub_elapsed - elapsed_hours)
@@ -521,7 +521,7 @@ def project_decay(
                 # the relaxation restarts from the wider one. The drop
                 # this draw just caused is passed in because the gap
                 # is split evenly about the bulk, so an opening wider
-                # than twice the drop would *raise* the upper zone —
+                # than twice the drop would *raise* the upper zone,
                 # which no draw can do, and which the fitted
                 # coefficient produces below about 122 °F without the
                 # bound.
@@ -582,12 +582,12 @@ def project_decay(
             # no projection charges water that has not moved, so a
             # target falling mid-draw reports the tank as it will be;
             # and chaining is an accounting identity in
-            # *volume* — the given-volume curve telescopes exactly at
+            # *volume*: the given-volume curve telescopes exactly at
             # any split, aligned to the step grid or not.
             #
             # Heat is that volume times a price.  The price is the
             # tank at the instant the water left, less the inflow at
-            # that same instant — both read off the clock, so a split
+            # that same instant, both read off the clock, so a split
             # that re-anchors the grid does not move either.  See the
             # sub-step walk below for what pricing on the grid cost.
             for f in flowing:
@@ -604,7 +604,7 @@ def project_decay(
                 # against a bulk that already carries what this draw
                 # has taken.  A single charge per step prices every
                 # gallon at one temperature and ignores the 2.7 °F its
-                # own first gallons just removed — so a chained
+                # own first gallons just removed, so a chained
                 # projection, which does see that drop across its
                 # split, disagreed with the single projection by
                 # 0.035 °F while the same split with the term off
@@ -643,7 +643,7 @@ def project_decay(
                     # fraction.  `t_bulk` is the tank at the *end* of
                     # the partition's coast less every extraction
                     # charged so far, so the coast not yet taken at
-                    # this instant is added back — which makes the
+                    # this instant is added back, which makes the
                     # price a function of the clock rather than of
                     # where the 10-minute grid happens to fall.
                     into_sub = (left_at - sub_start).total_seconds() / 3600.0
@@ -774,8 +774,8 @@ def _step_grid(
     # `ceil` on a float ratio is the trap here.  Ten minutes is not
     # representable in binary, so for 55 of the 168 whole-step
     # horizons up to a week `projection_hours / full_dt` lands a few
-    # ulp *above* the integer — 50 minutes divides to 5.000000000000001
-    # — and the walk took one more step of about 1e-16 hours.  That
+    # ulp *above* the integer (50 minutes divides to 5.000000000000001),
+    # and the walk took one more step of about 1e-16 hours.  That
     # step charges nothing and decays nothing, so the arithmetic was
     # unharmed, but it appended a second trajectory element at a
     # timestamp equal to the one before it once rounded to
@@ -917,13 +917,13 @@ def threshold_crossing(
 
     Linearly interpolated inside the coast segment that contains the
     crossing, so the answer is not quantised to the trajectory's
-    sample interval — without that it could run a whole step late,
+    sample interval. Without that it could run a whole step late,
     which is more than the scheduler's use of it can absorb.
 
     **The curve between two trajectory points is a slide with drops in
     it.**  The tank coasts continuously, and each extraction lands as a
-    step change at its own instant — a flowing draw's at the end of the
-    step that charged it, a delivered draw's at its onset — so the path is
+    step change at its own instant (a flowing draw's at the end of the
+    step that charged it, a delivered draw's at its onset), so the path is
     coast, drop, coast, drop, coast.  The walk follows it in that
     order: a crossing that lies on a coast segment is interpolated
     over that segment, between the drops on either side of it, and a
@@ -957,8 +957,8 @@ def threshold_crossing(
 
     for (t0, _, lower0), (t1, _, lower1) in pairwise(trajectory):
         cur_t, cur_lower = t0, lower0
-        # A drop on the segment's start instant belongs to it — a draw
-        # at a grid point is charged before the coast that follows —
+        # A drop on the segment's start instant belongs to it (a draw
+        # at a grid point is charged before the coast that follows),
         # and one on its end instant is the flowing accounting boundary.
         # A drop already walked from the previous segment's end is
         # seen again here with nothing left to cross, harmlessly.
@@ -990,7 +990,7 @@ class AmbientSampler:
 
     **Ambient is a function of the clock, not of the step grid.**  The
     lookup used to return the *nearest* sample, and the step grid is
-    anchored to the projection's own ``now`` — so cutting a chain at a
+    anchored to the projection's own ``now``, so cutting a chain at a
     different instant moved every step start, moved which sample each
     step snapped to, and moved the answer.  That lookup was the
     dominant term in the chained-versus-single disagreement, ahead of
@@ -1018,7 +1018,7 @@ class AmbientSampler:
         if series.empty:
             return
 
-        # DatetimeIndex, not the bare Index the attribute is typed as —
+        # DatetimeIndex, not the bare Index the attribute is typed as:
         # subtracting a datetime from the latter has no defined result
         # type. Indexing one returns the bare type again, hence the
         # rewraps below.
@@ -1029,7 +1029,7 @@ class AmbientSampler:
         # single NaN sample used to poison one nearest-neighbour cell;
         # it would now poison *both* bracketing intervals, and `nan`
         # flows straight through `t_bulk` into the trajectory and out
-        # of the end state — and past any downstream guard whose `<=`
+        # of the end state, and past any downstream guard whose `<=`
         # and `>=` are both False against it, so duration caps
         # silently stop arming.  `NaT` in the index does the same
         # through `searchsorted`.
@@ -1043,7 +1043,7 @@ class AmbientSampler:
             # Assumed UTC, matching every reader of these series.
             # Earlier this raised instead, so a caller handing back
             # *local* naive timestamps now reads ambient up to eight
-            # hours out of phase — several °F on a 26 °F swing —
+            # hours out of phase (several °F on a 26 °F swing),
             # silently rather than loudly.  Guarded below rather than
             # left implicit.
             idx = idx.tz_localize(UTC)
@@ -1058,7 +1058,7 @@ class AmbientSampler:
             idx, values = pd.DatetimeIndex(idx[order]), values[order]
 
         # Seconds from the first sample, never raw integer timestamps.
-        # `DatetimeIndex.asi8` is *resolution-dependent* — pandas 2
+        # `DatetimeIndex.asi8` is *resolution-dependent*: pandas 2
         # gives a `datetime64[us]` index here and `Timestamp.value` is
         # always nanoseconds, so mixing them is a silent factor of 1000
         # that clamps every lookup to the last sample.  Subtraction
@@ -1116,6 +1116,6 @@ def compute_start_time(
 ) -> datetime:
     """Compute when the compressor must start.
 
-    Simply: start_at = target_time − duration_minutes.
+    start_at = target_time − duration_minutes.
     """
     return target_time - timedelta(minutes=duration_minutes)

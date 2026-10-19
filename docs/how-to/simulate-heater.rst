@@ -1108,7 +1108,7 @@ idle. ``environment=`` replaces either.
 Compare with the recorded day
 -----------------------------
 
-``sa.observe`` reads the same record for what actually happened over a
+``sa.observe`` reads the same record for what happened over a
 range, in the simulation's terms:
 
 .. code-block:: python
