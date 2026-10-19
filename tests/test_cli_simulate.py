@@ -487,3 +487,32 @@ class TestTheExamples:
         built = sim_cli.build(inputs, _live(), NOW)
         assert built.scenario.settings.setpoint_f == 125.0
         assert built.scenario.state == _live().scenario.state
+
+
+class TestTheSourcesWindow:
+    NOW = datetime(2026, 10, 18, 15, tzinfo=UTC)
+
+    def test_now_and_the_default(self):
+        assert sim_cli.window(sim_cli.Inputs(), self.NOW) == (
+            self.NOW,
+            timedelta(hours=sim_cli.DEFAULT_HOURS),
+        )
+
+    def test_the_scenarios_then_the_flags(self):
+        doc = {
+            "schema_version": 1,
+            "scenario": {
+                "start": "2026-10-19T06:00:00+00:00",
+                "horizon": "PT48H",
+            },
+        }
+        start, horizon = sim_cli.window(
+            sim_cli.Inputs(scenario=doc, live=True), self.NOW
+        )
+        assert start == datetime(2026, 10, 19, 6, tzinfo=UTC)
+        assert horizon == timedelta(hours=48)
+        later = self.NOW + timedelta(days=2)
+        assert sim_cli.window(
+            sim_cli.Inputs(scenario=doc, live=True, start=later, hours=6),
+            self.NOW,
+        ) == (later, timedelta(hours=6))

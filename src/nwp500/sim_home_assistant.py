@@ -273,6 +273,14 @@ def parse_history(doc: Any) -> dict[str, list[Reading]]:
     return out
 
 
+def history_for(doc: Any, entities: Iterable[str]) -> dict[str, list[Reading]]:
+    """``parse_history`` for ``entities``, each present: Home Assistant
+    leaves out an entity with no history over the span, which is an
+    empty series, not an error."""
+    parsed = parse_history(doc)
+    return {e: parsed.get(e, []) for e in entities}
+
+
 def parse_forecast(doc: Any, entity: str) -> tuple[list[Reading], str | None]:
     """``weather.get_forecasts``'s answer for ``entity``: each hour's
     instant and temperature, and the unit when the answer gives one."""
@@ -335,11 +343,32 @@ def to_gal(value: float, unit: str | None) -> float:
     raise ValueError(f"{unit!r} is not a volume unit")
 
 
+#: How late a history's first row may be and still be the value in force
+#: at its start.
+START_SLACK = timedelta(minutes=5)
+
+
+def covers_start(series: Sequence[Reading], start: datetime) -> bool:
+    """Whether a history ``series`` holds the value in force at
+    ``start``: Home Assistant's history opens with it, when it has
+    one."""
+    return bool(series) and series[0][0] <= start + START_SLACK
+
+
 def reports_after(series: Sequence[Reading], start: datetime) -> list[Reading]:
     """A report series (a meter's volume since its previous report) from
     a history, without the row in force at ``start``: that row repeats
     the last report before the span, not one inside it."""
     return [(t, v) for t, v in series if t > start]
+
+
+def percent(value: float, unit: str | None) -> float:
+    """A relative humidity in ``unit`` (%), checked to lie in 0-100."""
+    if (unit or "").strip() != "%":
+        raise ValueError(f"{unit!r} is not a relative humidity unit")
+    if not 0.0 <= value <= 100.0:
+        raise ValueError(f"{value} is not a relative humidity")
+    return value
 
 
 def fresh(state: State, now: datetime, max_age: timedelta = FRESH) -> bool:
@@ -462,7 +491,7 @@ class HomeAssistantClient:
                 "no_attributes": "",
             },
         )
-        return parse_history(doc)
+        return history_for(doc, names)
 
     async def forecast(self, entity: str) -> tuple[list[Reading], str | None]:
         """``entity``'s hourly forecast: each hour's temperature, and the
@@ -609,10 +638,11 @@ class HomeAssistantEnvironment:
         state = await self._fresh_state("humidity", e.humidity)
         if state is None or state.value is None:
             return None
-        if not 0.0 <= state.value <= 100.0:
-            self.notes.append(f"humidity: {state.value} is not a percentage")
+        try:
+            return percent(state.value, state.unit)
+        except ValueError as err:
+            self.notes.append(f"humidity: {err}")
             return None
-        return state.value
 
     async def _inlet(self) -> float | None:
         e = self.entities
@@ -653,7 +683,14 @@ class HomeAssistantEnvironment:
             )
             runs: list[Span] | None = []
             if pump_id is not None:
-                runs = pump_runs(history.get(pump_id, []), since, self.now)
+                speed = history.get(pump_id, [])
+                # Before its first reading the pump is unknown, and a
+                # draw then may have overlapped a run.
+                runs = (
+                    pump_runs(speed, since, self.now)
+                    if covers_start(speed, since)
+                    else None
+                )
                 if runs is None:
                     self.notes.append(
                         "inlet: the circulation's runs are unknown"
@@ -750,7 +787,7 @@ async def record_inputs(
     except HomeAssistantError as err:
         return RecordInputs(None, None, None, None, (f"not read ({err})",))
     units: dict[str, str | None] = {}
-    for n in (e.air, e.meter_volume, e.meter_flow):
+    for n in (e.air, e.humidity, e.meter_volume, e.meter_flow):
         if n:
             try:
                 units[n] = (await client.state(n)).unit
@@ -761,47 +798,75 @@ async def record_inputs(
         if not series:
             notes.append(f"{what}: no history over the record")
             return None
-        if series[0][0] > start + timedelta(hours=1):
+        if not covers_start(series, start):
             notes.append(
                 f"{what}: history covers only from {series[0][0].isoformat()}"
             )
         return series
 
+    def whole(what: str, series: list[Reading]) -> bool:
+        # Spans read as "nothing happened" outside what was recorded,
+        # and a meter's or pump's spans replace the heater's own flag:
+        # a part history is no history.
+        if covers_start(series, start):
+            return True
+        since = f"from {series[0][0].isoformat()}" if series else "none"
+        notes.append(
+            f"{what}: history covers only part of the record ({since}); "
+            "the heater's own in-use flag stands in"
+        )
+        return False
+
     air = humidity = None
     try:
         if e.air and e.air in units:
             air = covered(
-                "air", [(t, to_f(v, units[e.air])) for t, v in history[e.air]]
+                "air",
+                [(t, to_f(v, units[e.air])) for t, v in history.get(e.air, [])],
             )
     except ValueError as err:
         notes.append(f"air: {err}")
-    if e.humidity:
-        humidity = covered("humidity", history[e.humidity])
+    if e.humidity and e.humidity in units:
+        rh = history.get(e.humidity, [])
+        try:
+            percent(50.0, units[e.humidity])
+            kept = [(t, v) for t, v in rh if 0.0 <= v <= 100.0]
+            if len(kept) < len(rh):
+                notes.append(
+                    f"humidity: {len(rh) - len(kept)} readings outside 0-100 "
+                    "left out"
+                )
+            humidity = covered("humidity", kept)
+        except ValueError as err:
+            notes.append(f"humidity: {err}")
     drawing = None
     volume_id, rate_id = e.meter_volume, e.meter_flow
-    if volume_id and volume_id in units:
+    volume = history.get(volume_id, []) if volume_id else []
+    if volume_id and volume_id in units and whole("meter", volume):
         try:
             rate = (
-                [(t, to_gpm(v, units[rate_id])) for t, v in history[rate_id]]
+                [
+                    (t, to_gpm(v, units[rate_id]))
+                    for t, v in history.get(rate_id, [])
+                ]
                 if rate_id and rate_id in units
                 else []
             )
             flow = meter.flow_gpm(
                 [
                     (t, to_gal(v, units[volume_id]))
-                    for t, v in reports_after(history[volume_id], start)
+                    for t, v in reports_after(volume, start)
                 ],
                 rate,
                 start,
                 end,
             )
-            if covered("meter", history[volume_id]) is not None:
-                drawing = draw_spans(flow)
+            drawing = draw_spans(flow)
         except ValueError as err:
             notes.append(f"meter: {err}")
     circulating = None
     if e.circulation_speed:
-        circulating = pump_runs(history[e.circulation_speed], start, end)
-        if circulating is None:
-            notes.append("circulation: no speed reading over the record")
+        speed = history.get(e.circulation_speed, [])
+        if whole("circulation", speed):
+            circulating = pump_runs(speed, start, end)
     return RecordInputs(air, humidity, drawing, circulating, tuple(notes))

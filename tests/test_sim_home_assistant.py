@@ -492,7 +492,10 @@ class TestTheRecord:
         assert got.air == [(late, 60.0)]
         assert any("covers only from" in n for n in got.notes)
         assert got.circulating is None
-        assert any("circulation: no speed reading" in n for n in got.notes)
+        assert any(
+            n.startswith("circulation: history covers only part")
+            for n in got.notes
+        )
 
     async def test_a_failed_read_is_noted(self):
         client = FakeClient()
@@ -520,3 +523,109 @@ class TestTheRecord:
         )
         assert got.air is None
         assert got.notes[0].startswith("not read")
+
+
+class TestReviewRegressions:
+    def test_an_omitted_entity_is_an_empty_series(self):
+        doc = [
+            [
+                {
+                    "entity_id": "sensor.a",
+                    "state": "1",
+                    "last_changed": NOW.isoformat(),
+                }
+            ]
+        ]
+        assert ha.history_for(doc, ["sensor.a", "sensor.b"]) == {
+            "sensor.a": [(NOW, 1.0)],
+            "sensor.b": [],
+        }
+        assert ha.history_for([], ["sensor.a"]) == {"sensor.a": []}
+
+    def test_humidity_is_a_percentage(self):
+        assert ha.percent(41.0, "%") == 41.0
+        with pytest.raises(ValueError, match="not a relative humidity unit"):
+            ha.percent(10.0, "g/m³")
+        with pytest.raises(ValueError, match="not a relative humidity"):
+            ha.percent(140.0, "%")
+
+    def test_covers_start(self):
+        assert ha.covers_start([(NOW, 1.0)], NOW)
+        assert not ha.covers_start([(NOW + timedelta(minutes=6), 1.0)], NOW)
+        assert not ha.covers_start([], NOW)
+
+
+@pytest.mark.asyncio
+class TestReviewRegressionsLive:
+    START = NOW - timedelta(days=2)
+
+    async def test_humidity_in_another_unit_is_the_default(self):
+        client = FakeClient({"sensor.rh": _s("sensor.rh", 10.0, "g/m³")})
+        source = _source(client, humidity="sensor.rh")
+        env = await source.read()
+        assert env.humidity == sim.Environment(ambient_f=60.0).humidity
+        assert any("not a relative humidity unit" in n for n in source.notes)
+
+    async def test_recorded_humidity_is_checked(self):
+        client = FakeClient(
+            {"sensor.rh": _s("sensor.rh", 40.0, "%")},
+            {"sensor.rh": [(self.START, 40.0), (NOW, 140.0)]},
+        )
+        got = await ha.record_inputs(
+            client,  # pyright: ignore[reportArgumentType]
+            ha.Entities(humidity="sensor.rh"),
+            self.START,
+            NOW,
+        )
+        assert got.humidity == [(self.START, 40.0)]
+        assert any("outside 0-100" in n for n in got.notes)
+        wrong = FakeClient(
+            {"sensor.rh": _s("sensor.rh", 4.0, "g/m³")},
+            {"sensor.rh": [(self.START, 4.0)]},
+        )
+        got = await ha.record_inputs(
+            wrong,  # pyright: ignore[reportArgumentType]
+            ha.Entities(humidity="sensor.rh"),
+            self.START,
+            NOW,
+        )
+        assert got.humidity is None
+
+    async def test_part_histories_leave_the_heaters_flag(self):
+        late = NOW - timedelta(hours=10)
+        series = long_draw(ended_hours_ago=5)
+        series["sensor.pump"] = [(late, 0.0)]
+        client = FakeClient(UNITS, series)
+        got = await ha.record_inputs(
+            client,  # pyright: ignore[reportArgumentType]
+            ha.Entities(
+                meter_volume="sensor.volume", circulation_speed="sensor.pump"
+            ),
+            self.START,
+            NOW,
+        )
+        assert (got.drawing, got.circulating) == (None, None)
+        assert sum("covers only part" in n for n in got.notes) == 2
+
+    async def test_a_pump_read_only_late_is_unknown_for_the_inlet(self):
+        series = long_draw(ended_hours_ago=5)
+        # One idle reading an hour ago: before it, nobody knows.
+        series["sensor.pump"] = [(NOW - timedelta(hours=1), 0.0)]
+        client = FakeClient(UNITS, series)
+        source = _source(client, circulation_speed="sensor.pump", **INLET)
+        assert (await source.read()).inlet_f is None
+        assert "inlet: the circulation's runs are unknown" in source.notes
+
+    async def test_an_omitted_entity_in_the_record_is_no_history(self):
+        class Omits(FakeClient):
+            async def history(self, entities, start, end):
+                return {}
+
+        got = await ha.record_inputs(
+            Omits({"sensor.air": _s("sensor.air", 60.0, "°F")}),  # pyright: ignore[reportArgumentType]
+            ha.Entities(air="sensor.air", circulation_speed="sensor.pump"),
+            self.START,
+            NOW,
+        )
+        assert got.air is None
+        assert any("air: no history" in n for n in got.notes)
