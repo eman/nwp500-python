@@ -831,3 +831,19 @@ class TestTheThirdReview:
         assert got.air_outages == (gap,)
         assert got.humidity_outages == (gap,)
         assert sum("left unobserved" in n for n in got.notes) == 2
+
+
+class TestFullRows:
+    def test_last_updated_wins(self):
+        changed = NOW - timedelta(minutes=10)
+        doc = [
+            [
+                {
+                    "entity_id": "sensor.v",
+                    "state": "1.0",
+                    "last_changed": changed.isoformat(),
+                    "last_updated": NOW.isoformat(),
+                }
+            ]
+        ]
+        assert ha.parse_history(doc) == {"sensor.v": [(NOW, 1.0)]}

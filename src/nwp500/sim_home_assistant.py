@@ -246,9 +246,9 @@ def parse_state(doc: Any) -> State:
 
 
 def parse_history(doc: Any) -> dict[str, list[Reading]]:
-    """``/api/history/period``'s answer (with ``minimal_response``), by
-    entity: each change's instant and number, in time order, values
-    Home Assistant does not have left out."""
+    """``/api/history/period``'s answer, by entity: each row's instant
+    (``last_updated``, else ``last_changed``) and number, in time
+    order, values Home Assistant does not have left out."""
     if not isinstance(doc, list):
         raise HomeAssistantError("not a history")
     out: dict[str, list[Reading]] = {}
@@ -266,7 +266,7 @@ def parse_history(doc: Any) -> dict[str, list[Reading]]:
                 continue
             r = cast(Mapping[str, Any], row)
             value = _number(r.get("state"))
-            stamp = r.get("last_changed") or r.get("last_updated")
+            stamp = r.get("last_updated") or r.get("last_changed")
             if value is not None and stamp is not None:
                 readings.append((_instant(stamp), value))
         out[entity] = sorted(readings, key=lambda x: x[0])
@@ -295,7 +295,7 @@ def parse_outages(doc: Any, end: datetime) -> dict[str, list[Span]]:
             (
                 (_instant(stamp), _number(r.get("state")) is not None)
                 for r in rows
-                if (stamp := r.get("last_changed") or r.get("last_updated"))
+                if (stamp := r.get("last_updated") or r.get("last_changed"))
             ),
             key=lambda x: x[0],
         )
@@ -564,7 +564,10 @@ class HomeAssistantClient:
             params={
                 "filter_entity_id": ",".join(names),
                 "end_time": end.astimezone(UTC).isoformat(),
-                "minimal_response": "",
+                # Full rows, every change: a minimal row carries only
+                # ``last_changed``, which an attribute-only update
+                # leaves behind.
+                "significant_changes_only": "0",
                 "no_attributes": "",
             },
         )

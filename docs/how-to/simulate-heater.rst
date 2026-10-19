@@ -175,7 +175,9 @@ the heater read live, the sources give:
   circulation off) in the last 72 hours, from the inlet probe and the
   meter, never the probe's raw reading. A draw is found from the
   meter's volume reports, which hold up through a steady draw where the
-  flow rate goes silent (``sim.meter.flow_gpm``). A circulation pump
+  flow rate goes silent (``sim.meter.flow_gpm``). Home Assistant records
+  a state only when it changes, so a meter that reports the same volume
+  twice running loses the second; name its flow rate too. A circulation pump
   with no speed reading is taken as unknown, which leaves no estimate.
 
 Units come from each entity's ``unit_of_measurement``: the pump's speed

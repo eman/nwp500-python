@@ -569,8 +569,18 @@ def _hybrid(status: DeviceStatus) -> bool:
 def _interval_column(
     index: pd.DatetimeIndex, spans: Iterable[tuple[datetime, datetime]]
 ) -> list[bool]:
+    """Each row's interval (its instant to the next row's) that overlaps
+    a span: a span wholly between two samples marks the first."""
     spans = list(spans)
-    return [any(a <= t < b for a, b in spans) for t in index]
+    times = list(index)
+    out: list[bool] = []
+    for i, t in enumerate(times):
+        if i + 1 < len(times):
+            nxt = times[i + 1]
+            out.append(any(a < nxt and b > t for a, b in spans))
+        else:
+            out.append(any(a <= t < b for a, b in spans))
+    return out
 
 
 def history(
@@ -598,7 +608,9 @@ def history(
       standby fit needs it;
     - ``humidity``: that air's relative humidity, %;
     - ``drawing``, ``circulating``: the spans a meter saw water drawn and
-      a circulation pump ran, where an installation records them. Give
+      a circulation pump ran, where an installation records them. A
+      sample is marked when its interval (to the next sample) overlaps
+      a span, so a short one between samples is not lost. Give
       both or neither: the standby fit keeps the heater's ``dhw_use``
       for whichever is missing, but the recoveries' draw-free test
       (``calibration.snapshots``) drops it once either is given.

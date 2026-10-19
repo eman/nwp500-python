@@ -251,10 +251,17 @@ class TestTheFits:
         assert s.quiet_by == "meter"
         assert "humidity: a note" in done.notes
         # Only what it covers: from 12 h in, half the window is left.
-        late = replace(record, air=[(T0 + timedelta(hours=12), AIR_F)])
+        late = replace(
+            record,
+            air=[
+                (T0 + timedelta(hours=12), AIR_F),
+                (T0 + timedelta(days=1), AIR_F),
+            ],
+        )
         half = cal_cli.calibrate(readings, record=late).calibration.standby
-        # The later half, the tank nearer the air.
+        # The later half, the tank nearer the air, and only it.
         assert half.windows
+        assert half.windows[0].start >= T0 + timedelta(hours=12)
         assert half.windows[0].delta_t_mean_f < s.windows[0].delta_t_mean_f
 
     @pytest.mark.parametrize(
@@ -310,6 +317,22 @@ class TestTheFits:
         assert (frame.loc[early, "humidity_pct"] == 30.0).all()
         assert (frame.loc[late, "humidity_pct"] == 50.0).all()
         assert frame.loc[late, "air_f"].notna().all()
+
+    def test_no_window_spans_an_air_outage(self, history):
+        from nwp500.sim_home_assistant import RecordInputs
+
+        gap = (T0 + timedelta(hours=10), T0 + timedelta(hours=10, minutes=20))
+        record = RecordInputs(
+            air=[(T0, AIR_F), (T0 + timedelta(days=1), AIR_F)],
+            humidity=None,
+            drawing=[],
+            circulating=[],
+            air_outages=(gap,),
+        )
+        done = cal_cli.calibrate(cal_cli.read_history(history), record=record)
+        windows = done.calibration.standby.windows
+        assert len(windows) == 2
+        assert all(w.end <= gap[0] or w.start >= gap[1] for w in windows)
 
     def test_flags_win_over_the_sources(self, history):
         from nwp500.sim_home_assistant import RecordInputs

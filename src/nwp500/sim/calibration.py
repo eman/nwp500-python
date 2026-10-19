@@ -149,9 +149,13 @@ def busy_intervals(
     recorded, else ``dhw_in_use``, which fires on both), each extended
     forward by ``settle_minutes`` while the tank settles. Merged,
     sorted. One recorded and not the other: the heater's flag stands in
-    for the other."""
+    for the other. Where a caller marks ``air_unobserved`` (no reading
+    of the air), the tank is not quiet either: a fit there would stand
+    on air nobody read."""
     when = _instants(history)
     columns = ["compressor_on", "element_on"]
+    if "air_unobserved" in history.columns:
+        columns.append("air_unobserved")
     tier1 = [c for c in ("drawing", "circulating") if c in history.columns]
     columns += tier1
     if len(tier1) < 2 and "dhw_in_use" in history.columns:

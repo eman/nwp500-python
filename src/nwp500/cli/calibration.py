@@ -117,10 +117,12 @@ def _unobserved(
     covers: tuple[datetime, datetime],
     outages: Sequence[tuple[datetime, datetime]],
 ) -> Any:
-    """Where ``index`` falls outside ``covers`` or inside an outage."""
+    """Where ``index`` falls outside ``covers``, or its interval (to the
+    next instant) overlaps an outage."""
     mask = (index < covers[0]) | (index > covers[1])
+    nxt = index[1:].append(index[-1:] + timedelta(microseconds=1))
     for a, b in outages:
-        mask |= (index >= a) & (index < b)
+        mask |= (index < b) & (nxt > a)
     return mask
 
 
@@ -237,9 +239,10 @@ def calibrate(
     # stand for air nobody read: the air is left unknown there, and the
     # humidity takes the fits' own default.
     if covers is not None and record is not None:
-        frame.loc[
-            _unobserved(frame.index, covers, record.air_outages), "air_f"
-        ] = float("nan")
+        unseen = _unobserved(frame.index, covers, record.air_outages)
+        frame.loc[unseen, "air_f"] = float("nan")
+        # And out of the standby fit, which would interpolate across.
+        frame["air_unobserved"] = unseen
     if rh_covers is not None and record is not None:
         frame.loc[
             _unobserved(frame.index, rh_covers, record.humidity_outages),
