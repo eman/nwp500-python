@@ -21,6 +21,7 @@ from nwp500.ble import (
     device_feature_from_blocks,
     parse_packet,
 )
+from nwp500.enums import CurrentOperationMode
 from nwp500.exceptions import Nwp500Error
 
 # Read from an NWP500 on 2026-10-16. Its MQTT device-info report on
@@ -341,6 +342,7 @@ def test_min_operation_temperature_follows_unit_system(unit_system):
 
 def test_rtmd_decodes_the_fields_checked_against_mqtt():
     status = RealTimeStatus.parse(RTMD)
+    assert status.operation_mode is CurrentOperationMode.STANDBY
     assert status.current_statenum == 20
     assert status.dhw_temperature_raw == 110
     assert status.dhw_temperature_setting_raw == 122
@@ -355,7 +357,16 @@ def test_rtmd_decodes_the_fields_checked_against_mqtt():
     assert status.raw == RTMD
     # fields not decoded are absent, not defaulted
     with pytest.raises(AttributeError):
-        status.operation_mode  # type: ignore[attr-defined]
+        status.comp_use  # type: ignore[attr-defined]
+
+
+def test_rtmd_operation_mode_while_heating_and_unknown():
+    # MQTT reported operationMode 32 and currentStatenum 50 while heating
+    heating = RealTimeStatus.parse(RTMD_STALE)
+    assert heating.operation_mode is CurrentOperationMode.HEAT_PUMP_MODE
+    assert heating.current_statenum == 50
+    unknown = RealTimeStatus.parse(bytes([7]) + RTMD[1:])
+    assert unknown.operation_mode == 7
 
 
 def test_rtmd_rejects_a_block_of_the_wrong_length():
@@ -421,9 +432,15 @@ async def test_read_status_restarts_the_stream_after_a_reconnect():
 @pytest.mark.asyncio
 async def test_read_status_times_out_when_nothing_is_pushed():
     transport = FakeTransport({}, stream=())
-    async with NavienBleClient(transport=transport, reply_timeout=0.05) as ble:
+    async with NavienBleClient(transport=transport) as ble:
         with pytest.raises(TimeoutError, match="no status block"):
-            await ble.read_status()
+            await ble.read_status(timeout=0.05)
+
+
+def test_status_waits_longer_than_a_reply():
+    from nwp500.ble import STATUS_TIMEOUT
+
+    assert STATUS_TIMEOUT > NavienBleClient(transport=_heater())._reply_timeout
 
 
 @pytest.mark.asyncio
@@ -451,6 +468,7 @@ def test_cli_status_over_bluetooth(cli_with_fake_heater, unit_system):
     result = cli_with_fake_heater("status")
     assert result.exit_code == 0, result.output
     out = result.output
+    assert "Operation mode   STANDBY" in out
     assert "State number     20" in out
     assert "DHW temperature  131.0 °F" in out
     assert "DHW setpoint     141.8 °F" in out

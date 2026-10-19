@@ -83,10 +83,10 @@ class BleakTransport:
 async def scan(timeout: float = 10.0) -> list[tuple[str, str, int]]:
     """Return ``(address, name, rssi)`` for heaters advertising nearby.
 
-    A heater advertises only while in a Bluetooth mode. Both of its
-    advertised names match: ``HPWH1…``, which answers the class-code
-    protocol, and the Wi-Fi setup mode's ``HPWH4610``, which answers
-    nothing; the name tells them apart.
+    A heater advertises in Bluetooth pairing mode (with the heater on,
+    hold Back and Power for five seconds) as ``HPWH1…``, and in its Wi-Fi
+    setup mode as ``HPWH4610``, which answers nothing. Both names match;
+    :func:`best_heater` picks one that answers.
 
     Raises:
         RuntimeError: The ``ble`` extra (bleak) is not installed.
@@ -114,9 +114,14 @@ _ANSWERING_NAME_PREFIX = "HPWH1"
 
 #: Printed when a scan finds no heater, or none that answers.
 NOT_ADVERTISING_HINT = (
-    "No heater advertising as HPWH1. A heater advertising as HPWH4610 is "
-    "in Wi-Fi setup mode, which answers nothing over Bluetooth."
+    "No heater advertising as HPWH1. With the heater on, hold Back + Power "
+    "for 5 s to enter Bluetooth pairing mode. (HPWH4610 is the Wi-Fi setup "
+    "mode, which answers nothing.)"
 )
+
+#: How long :meth:`NavienBleClient.read_status` waits for a block. The
+#: first block has taken more than five seconds to arrive.
+STATUS_TIMEOUT = 15.0
 
 
 def answers_class_codes(name: str) -> bool:
@@ -364,7 +369,9 @@ class NavienBleClient:
             out[cc] = await self._read_checked(cc, DEFAULT_READ_LENGTHS[cc])
         return out
 
-    async def read_status(self) -> RealTimeStatus:
+    async def read_status(
+        self, timeout: float = STATUS_TIMEOUT
+    ) -> RealTimeStatus:
         """The next live status block (``RTMD``) the heater pushes.
 
         The first call starts the stream with the
@@ -377,9 +384,13 @@ class NavienBleClient:
         next. While the stream runs the heater answers no reads, so read
         any other blocks before calling this.
 
+        Args:
+            timeout: Seconds to wait for each block. Longer than the reply
+                timeout, since the first block can take several seconds.
+
         Raises:
             CrcMismatchError: The block failed its checksum.
-            TimeoutError: No block arrived within the reply timeout.
+            TimeoutError: No block arrived within ``timeout``.
         """
         async with self._lock:
             if not self._streaming:
@@ -388,26 +399,22 @@ class NavienBleClient:
                 await self._transport.write(
                     build_session_command(START_STATUS_STREAM)
                 )
-                await self._next_status_frame()
+                await self._next_status_frame(timeout)
                 self._streaming = True
             packet: Packet | None = None
             while not self._status_frames.empty():
                 packet = self._status_frames.get_nowait()
             if packet is None:
-                packet = await self._next_status_frame()
+                packet = await self._next_status_frame(timeout)
         if not packet.crc_ok:
             raise CrcMismatchError("RTMD block failed its CRC")
         return RealTimeStatus.parse(packet.data)
 
-    async def _next_status_frame(self) -> Packet:
+    async def _next_status_frame(self, timeout: float) -> Packet:
         try:
-            return await asyncio.wait_for(
-                self._status_frames.get(), self._reply_timeout
-            )
+            return await asyncio.wait_for(self._status_frames.get(), timeout)
         except TimeoutError:
-            raise TimeoutError(
-                f"no status block within {self._reply_timeout}s"
-            ) from None
+            raise TimeoutError(f"no status block within {timeout}s") from None
 
     async def write_block(
         self, class_code: int, data: bytes, address: int = 0
@@ -431,6 +438,7 @@ class NavienBleClient:
 
 __all__ = [
     "NOT_ADVERTISING_HINT",
+    "STATUS_TIMEOUT",
     "BleTransport",
     "BleakTransport",
     "NavienBleClient",

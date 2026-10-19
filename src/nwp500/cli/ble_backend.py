@@ -164,7 +164,9 @@ def _status_rows(status: RealTimeStatus) -> list[tuple[str, str]]:
         ("Ambient", status.ambient_temperature),
         ("Superheat", status.current_super_heat),
     ]
+    mode = status.operation_mode
     return [
+        ("Operation mode", getattr(mode, "name", str(mode))),
         ("State number", str(status.current_statenum)),
         *((label, f"{value:.1f}{unit}") for label, value in temperatures),
         ("EEV step", str(status.eev_step)),

@@ -3,10 +3,11 @@
 The water heater exposes a GATT service that carries the controller's
 native class-code protocol: one request packet is written to the write
 characteristic and one reply packet arrives as a notification. The framing
-below mirrors what the NaviLink app sends to the heater. The heater
-advertises under a name starting ``HPWH`` in two modes: ``HPWH1…``, which
-answers this protocol, and the Wi-Fi setup mode's ``HPWH4610``, which
-accepts a connection but answers nothing.
+below mirrors what the NaviLink app sends to the heater in Bluetooth
+pairing mode (with the heater on, hold Back and Power for five seconds; it
+then advertises as ``HPWH1…``). In its Wi-Fi setup mode the heater
+advertises as ``HPWH4610`` instead, and accepts a connection but answers
+nothing.
 
 Packet layout (all single bytes unless noted)::
 
@@ -31,6 +32,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import IntEnum
 
+from ..enums import CurrentOperationMode
 from ..models.tou import TOUPeriod
 from ..temperature import DeciCelsius, DeciCelsiusDelta, HalfCelsius
 from ..unit_system import get_unit_system
@@ -514,21 +516,30 @@ class RealTimeStatus:
 
     The fields carry :class:`~nwp500.models.DeviceStatus` names and that
     model's raw encodings, and each was checked against the same heater's
-    MQTT status report (2026-10-19). The block holds the six thermistors
+    MQTT status report (2026-10-19), including while the heat pump ran.
+    The block holds the operation mode (byte 0) and the state number
+    (byte 1); the six thermistors
     (``tank_upper``, ``tank_lower``, ``discharge``, ``suction``,
     ``evaporator``, ``ambient``) and the superheat as little-endian
     16-bit values in 0.1 degC plus 500; ``dhw_temperature`` in 0.1 degC,
     which is rounded here to the cloud's half-degrees; the setpoint as
-    one byte in half-degrees; the state number; and the EEV step. Other
-    ``DeviceStatus`` fields, such as the operation mode, the component
-    flags and the energy figures, are not decoded and raise
+    one byte in half-degrees; and the EEV step. ``operation_mode`` is a
+    :class:`~nwp500.enums.CurrentOperationMode`, or the raw byte if it is
+    not one of that enum's values. Other ``DeviceStatus`` fields, such as
+    the component flags and the energy figures, are not decoded and raise
     :class:`AttributeError`. The whole block is kept in ``raw``.
+
+    Nor does the block carry the heater's display unit (the cloud's
+    ``temperatureType``): checked by switching the display between °F and
+    °C, which changed no byte of this block or of any other block the
+    heater answers.
 
     Temperature properties convert as the ``DeviceStatus`` properties do,
     following the unit-system preference. The block does not carry the
     heater's display unit, so without a preference they are Fahrenheit.
     """
 
+    operation_mode: CurrentOperationMode | int
     current_statenum: int
     dhw_temperature_raw: int
     dhw_temperature_setting_raw: int
@@ -621,7 +632,12 @@ class RealTimeStatus:
         def temp(i: int) -> int:
             return u16(i) - _RTMD_TEMPERATURE_OFFSET
 
+        try:
+            mode: CurrentOperationMode | int = CurrentOperationMode(data[0])
+        except ValueError:
+            mode = data[0]
         return cls(
+            operation_mode=mode,
             current_statenum=_u8(data, 1),
             # 0.1 degC to the cloud's half-degrees; a tenth is never
             # exactly half way, so round() never ties.

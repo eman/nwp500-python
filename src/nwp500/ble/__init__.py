@@ -1,8 +1,8 @@
 """Bluetooth LE access to the NWP500's controller (installer-side data).
 
-The heater must be advertising as ``HPWH1…``; in its Wi-Fi setup mode it
-advertises as ``HPWH4610`` and answers nothing. Install the ``ble`` extra
-for the transport::
+The heater must be in Bluetooth pairing mode (with the heater on, hold
+Back and Power for five seconds; it advertises as ``HPWH1…``). Install the
+``ble`` extra for the transport::
 
     pip install 'nwp500-python[ble]'
     python -m nwp500.ble scan
@@ -11,6 +11,7 @@ for the transport::
 
 from .client import (
     NOT_ADVERTISING_HINT,
+    STATUS_TIMEOUT,
     BleakTransport,
     BleTransport,
     NavienBleClient,
@@ -61,6 +62,7 @@ __all__ = [
     "NWP500_WRITABLE_CLASSES",
     "SERVICE_UUID",
     "START_STATUS_STREAM",
+    "STATUS_TIMEOUT",
     "TOU_RECORD_SIZE",
     "WRITE_CHAR_UUID",
     "BleDeviceFeature",

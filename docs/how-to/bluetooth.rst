@@ -22,21 +22,20 @@ Install the extra
 
    pip install 'nwp500-python[ble]'
 
-Make the heater advertise
--------------------------
+Put the heater in pairing mode
+------------------------------
 
-The heater advertises over Bluetooth in two modes, under the same address
-and GATT service:
-
-* ``HPWH1…``: answers the protocol below. Everything on this page needs
-  this mode.
-* ``HPWH4610``: the Wi-Fi setup mode (with the heater off, hold **M** and
-  **OK**, then hold **OK** on the Wi-Fi ready screen). It accepts a
-  connection but answers nothing, not even the device-info read.
-
-``scan`` lists both, marking the second, and ``read`` and ``nwp-cli``
-pick an ``HPWH1`` heater. Your computer needs to be within Bluetooth range
+With the heater on, hold the **Back** and **Power** buttons on the front
+panel for five seconds. The heater then advertises over Bluetooth with a
+name starting ``HPWH1``. Your computer needs to be within Bluetooth range
 of the heater.
+
+The heater's Wi-Fi setup mode (with the heater off, hold **M** and **OK**,
+then hold **OK** on the Wi-Fi ready screen) also advertises, as
+``HPWH4610``, under the same address and GATT service. It accepts a
+connection but answers nothing, not even the device-info read. ``scan``
+lists it, marked as the Wi-Fi setup mode, and ``read`` and ``nwp-cli``
+pick an ``HPWH1`` heater over it.
 
 Scan and read
 -------------
@@ -70,7 +69,7 @@ instead, with no sign-in. It needs the ``cli`` and ``ble`` extras:
    nwp-cli --backend ble --ble-address AA:BB:CC:DD:EE:FF info --raw
 
 Without ``--ble-address`` (or ``NAVIEN_BLE_ADDRESS``), it scans for ten
-seconds and uses the strongest heater advertising as ``HPWH1``. ``serial``,
+seconds and uses the strongest heater in pairing mode. ``serial``,
 ``info`` and ``status`` are the commands the heater can answer over
 Bluetooth. ``info`` shows only what the ``DID`` and ``MSCD`` blocks hold:
 serial numbers, model type, country code and the setpoint range, whose
@@ -104,7 +103,9 @@ Temperatures convert as the cloud models do: ``BleDeviceFeature`` and
 same half-degree conversion and follow ``--unit-system``
 (:func:`nwp500.set_unit_system`). The blocks do not carry the heater's own
 display unit, which the cloud path detects from the device, so without a
-preference they are Fahrenheit.
+preference they are Fahrenheit. This was checked by switching the heater's
+display between °F and °C: the cloud's ``temperatureType`` followed, and no
+byte of any block the heater answers over Bluetooth changed.
 
 What an NWP500 answers
 ----------------------
@@ -174,6 +175,7 @@ and each was checked against the same heater's MQTT status report
 ==================================  ======  =================================
 Field                               Offset  Encoding
 ==================================  ======  =================================
+``operation_mode``                  0       ``CurrentOperationMode``
 ``current_statenum``                1       byte
 ``dhw_temperature_raw``             16-17   0.1 °C, rounded to half-degrees
 ``current_super_heat_raw``          18-19   0.1 °C + 500
@@ -188,9 +190,10 @@ Field                               Offset  Encoding
 ==================================  ======  =================================
 
 Multi-byte fields are little-endian, and ``_raw`` fields hold the cloud's
-encoding (0.1 °C for the thermistors). The rest of the block, including the
-operation mode, the component flags and the energy figures, is not yet
-decoded and is kept in ``raw``.
+encoding (0.1 °C for the thermistors). Checked in standby and while the heat pump ran. The rest of the block,
+including the component flags and the energy figures, is not yet decoded
+and is kept in ``raw``. ``read_status()`` waits up to 15 seconds for a
+block (``timeout``), since the first one can take more than five.
 
 .. code-block:: python
 
@@ -253,8 +256,8 @@ Protocol summary
 
 * Service ``237339a3-b40d-4283-a629-f89bb838d85a``; write characteristic
   ``…d85c``; notifications on ``…d85b``; MTU 247.
-* Advertised name: ``HPWH1…`` (answers) or ``HPWH4610`` (Wi-Fi setup mode;
-  answers nothing).
+* Advertised name: ``HPWH1…`` in pairing mode, or ``HPWH4610`` in Wi-Fi
+  setup mode (answers nothing).
 * Packet: ``F7 20 01 03`` + command (3 read / 16 write; replies 131 / 144)
   + length (payload + 2) + class + address + payload + CRC-16/MODBUS
   (low byte first).

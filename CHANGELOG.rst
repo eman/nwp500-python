@@ -9,10 +9,11 @@ Added
 -----
 - **Bluetooth LE access to the controller** (``nwp500.ble``, optional
   ``ble`` extra). The NWP500 exposes a GATT service that carries the
-  controller's native class-code protocol while the heater advertises as
-  ``HPWH1…``. The scan also lists a heater in Wi-Fi setup mode
-  (``HPWH4610``), which answers nothing, and the CLIs pick an ``HPWH1``
-  heater over it.
+  controller's native class-code protocol once the heater is put in pairing
+  mode (with the heater on, hold Back and Power for five seconds; it
+  advertises as ``HPWH1…``). The scan also lists a heater in Wi-Fi setup
+  mode (``HPWH4610``), which answers nothing, and the CLIs pick an
+  ``HPWH1`` heater over it.
   The package frames and parses those packets (header, class code, address,
   CRC-16/MODBUS), scans for the heater, and reads data classes with a
   matched request/reply client; ``python -m nwp500.ble scan`` and
@@ -36,10 +37,12 @@ Added
   ``read_status()`` returns live status: the class-50 session command 200
   makes the heater push the ``RTMD`` block about every 300 ms until the
   connection closes, and ``RealTimeStatus`` decodes the fields checked
-  against the MQTT status report (state number, DHW temperature and
-  setpoint, the six thermistors, superheat and EEV step) under the
-  ``DeviceStatus`` names and conversions. The heater answers no reads
-  while the stream runs.
+  against the MQTT status report, in standby and while heating (operation
+  mode, state number, DHW temperature and setpoint, the six thermistors,
+  superheat and EEV step), under the ``DeviceStatus`` names and
+  conversions. The heater answers no reads while the stream runs. The
+  heater's display unit is in no Bluetooth block, so Bluetooth
+  temperatures follow the unit-system preference.
 - ``nwp-cli --backend ble`` (with ``--ble-address`` or a scan) runs
   ``serial``, ``info`` and ``status`` over Bluetooth without signing in,
   and refuses other commands. Without ``--backend``, commands use the cloud as before.
