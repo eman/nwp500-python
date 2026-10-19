@@ -1191,8 +1191,8 @@ def _entry_fires(s: _Step, ev: EntryFires) -> None:
     its whole state: the setpoint first, so the mode's own rules judge
     the new setpoint, then the mode. On a heater that is on, a setpoint
     or mode equal to the heater's is no change and starts nothing
-    (measured: 0 of 4, a device test). In Vacation the device skips it, and does not run it
-    late (a device test, 2026-09-24). Powered off it fires and turns the
+    (measured: 0 of 4, a device test). In Vacation the device skips
+    it, and does not run it late (a device test, 2026-09-24). Powered off it fires and turns the
     heater on, in the entry's mode (the same test, two runs): a mode
     write out of ``power_off``, the entry's or, with none, the heater's,
     judged by the mode write's rules. What a powered-off heater does
