@@ -257,6 +257,28 @@ class TestTheFits:
         assert half.windows
         assert half.windows[0].delta_t_mean_f < s.windows[0].delta_t_mean_f
 
+    @pytest.mark.parametrize(
+        ("drawing", "circulating"), [(None, []), ([], None)]
+    )
+    def test_the_meter_and_circulation_go_together(
+        self, history, monkeypatch, drawing, circulating
+    ):
+        from nwp500.sim_home_assistant import RecordInputs
+
+        seen: list[Any] = []
+        real = cal.calibrate
+
+        def spy(frame: Any, *args: Any, **kw: Any) -> Any:
+            seen.append(frame)
+            return real(frame, *args, **kw)
+
+        monkeypatch.setattr(cal_cli.cal, "calibrate", spy)
+        record = RecordInputs([(T0, AIR_F)], None, drawing, circulating)
+        done = cal_cli.calibrate(cal_cli.read_history(history), record=record)
+        assert not {"drawing", "circulating"} & set(seen[0].columns)
+        assert done.calibration.standby.quiet_by == "dhw_in_use"
+        assert any("together or not at all" in n for n in done.notes)
+
     def test_flags_win_over_the_sources(self, history):
         from nwp500.sim_home_assistant import RecordInputs
 

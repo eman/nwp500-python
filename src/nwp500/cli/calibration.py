@@ -189,8 +189,18 @@ def calibrate(
         covers = (record.air[0][0], record.air[-1][0] + timedelta(hours=1))
     if humidity is None and record is not None and record.humidity:
         humidity = record.humidity
+    drawing = circulating = None
     if record is not None:
         notes.extend(record.notes)
+        if record.drawing is not None and record.circulating is not None:
+            drawing, circulating = record.drawing, record.circulating
+        elif record.drawing is not None or record.circulating is not None:
+            # One alone would replace the heater's in-use flag for the
+            # other in the recoveries' draw-free test (``snapshots``).
+            notes.append(
+                "the meter and the circulation are used together or not at "
+                "all: with one unknown, the heater's own in-use flag stands in"
+            )
     if humidity is None:
         # The fits' own default, given explicitly: an absent humidity
         # reaches the evaporator's dew point as NaN, which reads as 100 %.
@@ -202,8 +212,8 @@ def calibrate(
         readings,
         air=series,
         humidity=humidity,
-        drawing=None if record is None else record.drawing,
-        circulating=None if record is None else record.circulating,
+        drawing=drawing,
+        circulating=circulating,
         max_gap=gap,
     )
     if covers is not None:

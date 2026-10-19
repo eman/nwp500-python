@@ -598,7 +598,10 @@ def history(
       standby fit needs it;
     - ``humidity``: that air's relative humidity, %;
     - ``drawing``, ``circulating``: the spans a meter saw water drawn and
-      a circulation pump ran, where an installation records them.
+      a circulation pump ran, where an installation records them. Give
+      both or neither: the standby fit keeps the heater's ``dhw_use``
+      for whichever is missing, but the recoveries' draw-free test
+      (``calibration.snapshots``) drops it once either is given.
 
     ``max_gap``: readings further apart than this are a span nobody
     observed (a recorder stopped and started again). The sample before
