@@ -3,9 +3,10 @@
 The water heater exposes a GATT service that carries the controller's
 native class-code protocol: one request packet is written to the write
 characteristic and one reply packet arrives as a notification. The framing
-below mirrors what the NaviLink app sends to the heater when it is in
-Bluetooth pairing mode (hold Back and Power for five seconds; the heater
-then advertises a name containing ``HPWH1``).
+below mirrors what the NaviLink app sends to the heater. The heater
+advertises under a name starting ``HPWH`` in two modes: ``HPWH1…``, which
+answers this protocol, and the Wi-Fi setup mode's ``HPWH4610``, which
+accepts a connection but answers nothing.
 
 Packet layout (all single bytes unless noted)::
 
@@ -31,13 +32,15 @@ from dataclasses import dataclass
 from enum import IntEnum
 
 from ..models.tou import TOUPeriod
-from ..temperature import HalfCelsius
+from ..temperature import DeciCelsius, DeciCelsiusDelta, HalfCelsius
 from ..unit_system import get_unit_system
 
 SERVICE_UUID = "237339a3-b40d-4283-a629-f89bb838d85a"
 WRITE_CHAR_UUID = "237339a3-b40d-4283-a629-f89bb838d85c"
 NOTIFY_CHAR_UUID = "237339a3-b40d-4283-a629-f89bb838d85b"
-ADVERTISED_NAME_FRAGMENT = "HPWH1"
+#: Common to both advertised names (``HPWH1…`` and the Wi-Fi setup mode's
+#: ``HPWH4610``); the same address and GATT service serve both.
+ADVERTISED_NAME_FRAGMENT = "HPWH"
 MTU = 247
 
 HEADER = 0xF7
@@ -71,9 +74,9 @@ class ClassCode(IntEnum):
     TCD = 39  # diagnostics: component counters
     TDD = 40  # diagnostics: DHW usage
     TAD = 41  # diagnostics: accumulated
-    RTMD = 48  # real-time monitoring
-    SAPID = 49  # Wi-Fi access point id
-    SAPCD = 50  # Wi-Fi access point credential
+    RTMD = 48  # real-time monitoring; pushed, see RealTimeStatus
+    SAPID = 49
+    SAPCD = 50  # session commands, see build_session_command
     SPID = 51  # parameter block: id (8 bytes)
     SPLD = 52  # parameter block: low grade (59 bytes)
     SPHD = 53  # parameter block: high grade (59 bytes)
@@ -126,6 +129,14 @@ NWP500_RESPONDING_CLASSES: frozenset[int] = frozenset(
 #: downloads from Navien's server; it is not one of the classes below and
 #: cannot be found by safe probing.
 NWP500_WRITABLE_CLASSES: frozenset[int] = frozenset()
+
+#: Bytes in a ``SAPCD`` (class 50) session command.
+SESSION_COMMAND_LENGTH = 30
+
+#: The session command that starts the ``RTMD`` status stream. Navien's
+#: service apps send it on connecting; on an NWP500 the heater then pushes
+#: an ``RTMD`` block about every 300 ms until the connection closes.
+START_STATUS_STREAM = 200
 
 
 class CrcMismatchError(ValueError):
@@ -181,6 +192,21 @@ def build_packet(
     body += payload
     crc = crc16(body)
     return body + bytes([crc & 0xFF, crc >> 8])
+
+
+def build_session_command(code: int) -> bytes:
+    """Frame a ``SAPCD`` (class 50) session command.
+
+    The command is a write of a 30-byte block whose first byte is
+    ``code`` and whose other bytes are zero, as Navien's service apps
+    send it. The heater sends no reply to it. Only
+    :data:`START_STATUS_STREAM` has been tried on an NWP500; the apps'
+    other codes change controller state and are not exposed here.
+    """
+    if not 0 <= code <= 0xFF:
+        raise ValueError("session command code must fit in one byte")
+    block = bytes([code]) + bytes(SESSION_COMMAND_LENGTH - 1)
+    return build_packet(Command.WRITE, ClassCode.SAPCD, block)
 
 
 def build_read(
@@ -440,7 +466,8 @@ class SoftwareInfoBlock:
 class SubStatus:
     """The ``SSD`` block (class 17): two DIP-switch settings.
 
-    This is not live status; an NWP500 reports that over MQTT only. The
+    This is not live status, which comes in the ``RTMD`` stream
+    (:class:`RealTimeStatus`). The
     layout comes from Navien's UK service toolkit, which names the block
     "DeviceSubStatusInfo" and reads two little-endian 16-bit words from
     it, labelled DIP switch 1 (bytes 16-17) and DIP switch 2 (bytes
@@ -468,6 +495,146 @@ class SubStatus:
         return cls(
             dip_switch_1=int.from_bytes(data[16:18], "little"),
             dip_switch_2=int.from_bytes(data[18:20], "little"),
+            raw=bytes(data),
+        )
+
+
+#: ``RTMD`` stores temperatures in 0.1 degC plus this offset.
+_RTMD_TEMPERATURE_OFFSET = 500
+
+
+@dataclass(frozen=True)
+class RealTimeStatus:
+    """The 156-byte ``RTMD`` block (class 48): live status.
+
+    The heater does not answer a read of this class. It pushes the block,
+    as a command-16 packet, about every 300 ms once it has received the
+    :data:`START_STATUS_STREAM` session command, and stops when the
+    connection closes.
+
+    The fields carry :class:`~nwp500.models.DeviceStatus` names and that
+    model's raw encodings, and each was checked against the same heater's
+    MQTT status report (2026-10-19). The block holds the six thermistors
+    (``tank_upper``, ``tank_lower``, ``discharge``, ``suction``,
+    ``evaporator``, ``ambient``) and the superheat as little-endian
+    16-bit values in 0.1 degC plus 500; ``dhw_temperature`` in 0.1 degC,
+    which is rounded here to the cloud's half-degrees; the setpoint as
+    one byte in half-degrees; the state number; and the EEV step. Other
+    ``DeviceStatus`` fields, such as the operation mode, the component
+    flags and the energy figures, are not decoded and raise
+    :class:`AttributeError`. The whole block is kept in ``raw``.
+
+    Temperature properties convert as the ``DeviceStatus`` properties do,
+    following the unit-system preference. The block does not carry the
+    heater's display unit, so without a preference they are Fahrenheit.
+    """
+
+    current_statenum: int
+    dhw_temperature_raw: int
+    dhw_temperature_setting_raw: int
+    tank_upper_temperature_raw: int
+    tank_lower_temperature_raw: int
+    discharge_temperature_raw: int
+    suction_temperature_raw: int
+    evaporator_temperature_raw: int
+    ambient_temperature_raw: int
+    current_super_heat_raw: int
+    eev_step: int
+    raw: bytes
+
+    LENGTH = 156
+
+    @property
+    def dhw_temperature(self) -> float:
+        return HalfCelsius(self.dhw_temperature_raw).to_preferred(
+            prefers_celsius()
+        )
+
+    @property
+    def dhw_temperature_setting(self) -> float:
+        return HalfCelsius(self.dhw_temperature_setting_raw).to_preferred(
+            prefers_celsius()
+        )
+
+    @property
+    def tank_upper_temperature(self) -> float:
+        return DeciCelsius(self.tank_upper_temperature_raw).to_preferred(
+            prefers_celsius()
+        )
+
+    @property
+    def tank_lower_temperature(self) -> float:
+        return DeciCelsius(self.tank_lower_temperature_raw).to_preferred(
+            prefers_celsius()
+        )
+
+    @property
+    def discharge_temperature(self) -> float:
+        return DeciCelsius(self.discharge_temperature_raw).to_preferred(
+            prefers_celsius()
+        )
+
+    @property
+    def suction_temperature(self) -> float:
+        return DeciCelsius(self.suction_temperature_raw).to_preferred(
+            prefers_celsius()
+        )
+
+    @property
+    def evaporator_temperature(self) -> float:
+        return DeciCelsius(self.evaporator_temperature_raw).to_preferred(
+            prefers_celsius()
+        )
+
+    @property
+    def ambient_temperature(self) -> float:
+        return DeciCelsius(self.ambient_temperature_raw).to_preferred(
+            prefers_celsius()
+        )
+
+    @property
+    def current_super_heat(self) -> float:
+        return DeciCelsiusDelta(self.current_super_heat_raw).to_preferred(
+            prefers_celsius()
+        )
+
+    def get_field_unit(self, field_name: str) -> str:
+        """Unit suffix for a field, as ``DeviceStatus.get_field_unit``."""
+        name = field_name.removesuffix("_raw")
+        if name.endswith("_temperature") or name in {
+            "dhw_temperature_setting",
+            "current_super_heat",
+        }:
+            return temperature_unit()
+        return ""
+
+    @classmethod
+    def parse(cls, data: bytes) -> RealTimeStatus:
+        if len(data) != cls.LENGTH:
+            raise ValueError(
+                f"RTMD block must be {cls.LENGTH} bytes, got {len(data)}"
+            )
+
+        def u16(i: int) -> int:
+            return int.from_bytes(data[i : i + 2], "little")
+
+        def temp(i: int) -> int:
+            return u16(i) - _RTMD_TEMPERATURE_OFFSET
+
+        return cls(
+            current_statenum=_u8(data, 1),
+            # 0.1 degC to the cloud's half-degrees; a tenth is never
+            # exactly half way, so round() never ties.
+            dhw_temperature_raw=round(u16(16) / 5),
+            dhw_temperature_setting_raw=_u8(data, 35),
+            tank_upper_temperature_raw=temp(42),
+            tank_lower_temperature_raw=temp(44),
+            discharge_temperature_raw=temp(46),
+            suction_temperature_raw=temp(48),
+            evaporator_temperature_raw=temp(50),
+            ambient_temperature_raw=temp(52),
+            current_super_heat_raw=temp(18),
+            eev_step=u16(80),
             raw=bytes(data),
         )
 
@@ -551,16 +718,20 @@ __all__ = [
     "Command",
     "ClassCode",
     "DEFAULT_READ_LENGTHS",
+    "SESSION_COMMAND_LENGTH",
+    "START_STATUS_STREAM",
     "TOU_RECORD_SIZE",
     "crc16",
     "build_packet",
     "build_read",
+    "build_session_command",
     "Packet",
     "parse_packet",
     "DeviceInfoBlock",
     "ControllerSerials",
     "SoftwareInfoBlock",
     "SubStatus",
+    "RealTimeStatus",
     "parse_tou_record",
     "parse_tou_records",
 ]

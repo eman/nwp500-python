@@ -17,10 +17,13 @@ from typing import Any
 import click
 
 from nwp500.ble import (
+    NOT_ADVERTISING_HINT,
     BleMqttAdapter,
     BleUnsupportedError,
     CrcMismatchError,
     NavienBleClient,
+    RealTimeStatus,
+    best_heater,
     device_feature_from_blocks,
     scan,
 )
@@ -32,7 +35,7 @@ _logger = logging.getLogger(__name__)
 _formatter = get_formatter()
 
 #: Top-level commands that work over Bluetooth.
-SUPPORTED_COMMANDS = frozenset({"info", "serial"})
+SUPPORTED_COMMANDS = frozenset({"info", "serial", "status"})
 
 SCAN_SECONDS = 10.0
 
@@ -49,15 +52,15 @@ def check_supported(ctx: click.Context) -> None:
         raise click.UsageError(
             f"'{name}' is not available over Bluetooth. With --backend ble "
             f"use: {', '.join(sorted(SUPPORTED_COMMANDS))}. The heater "
-            "sends no live status over Bluetooth and accepts no writes."
+            "accepts no settings changes over Bluetooth."
         )
 
 
 async def _find_address() -> str | None:
-    found = await scan(SCAN_SECONDS)
-    if not found:
+    best = best_heater(await scan(SCAN_SECONDS))
+    if best is None:
         return None
-    address, name, rssi = max(found, key=lambda t: t[2])
+    address, name, rssi = best
     _logger.info(f"Using {name} at {address} (rssi {rssi})")
     return address
 
@@ -80,8 +83,7 @@ async def run_with_ble(
         address = ctx.obj.get("ble_address") or await _find_address()
         if address is None:
             _formatter.print_error(
-                "No heater advertising. Hold Back + Power for 5 s to "
-                "enter pairing mode, or pass --ble-address.",
+                f"{NOT_ADVERTISING_HINT} Or pass --ble-address.",
                 title="Bluetooth",
             )
             return 1
@@ -145,5 +147,48 @@ async def print_info(adapter: BleMqttAdapter, raw: bool) -> None:
     ]
     width = max(len(label) for label, _ in rows)
     print("Device info (Bluetooth: DID and MSCD blocks)")
+    for label, value in rows:
+        print(f"  {label:<{width}}  {value}")
+
+
+def _status_rows(status: RealTimeStatus) -> list[tuple[str, str]]:
+    unit = status.get_field_unit("dhw_temperature")
+    temperatures = [
+        ("DHW temperature", status.dhw_temperature),
+        ("DHW setpoint", status.dhw_temperature_setting),
+        ("Tank upper", status.tank_upper_temperature),
+        ("Tank lower", status.tank_lower_temperature),
+        ("Discharge", status.discharge_temperature),
+        ("Suction", status.suction_temperature),
+        ("Evaporator", status.evaporator_temperature),
+        ("Ambient", status.ambient_temperature),
+        ("Superheat", status.current_super_heat),
+    ]
+    return [
+        ("State number", str(status.current_statenum)),
+        *((label, f"{value:.1f}{unit}") for label, value in temperatures),
+        ("EEV step", str(status.eev_step)),
+    ]
+
+
+async def print_status(adapter: BleMqttAdapter, raw: bool) -> None:
+    """``status`` over Bluetooth: the ``RTMD`` fields that are decoded.
+
+    The MQTT ``status`` output covers the operation mode, component flags
+    and energy figures, which are not decoded from this block.
+    """
+    received: list[RealTimeStatus] = []
+    await adapter.subscribe_device_status(None, received.append)
+    await adapter.request_device_status(None)
+    if not received:
+        # request_device_status delivers one block or raises
+        raise RuntimeError("status was not read")
+    status = received[-1]
+    if raw:
+        print(json.dumps({"RTMD": status.raw.hex()}, indent=2))
+        return
+    rows = _status_rows(status)
+    width = max(len(label) for label, _ in rows)
+    print("Device status (Bluetooth: RTMD block)")
     for label, value in rows:
         print(f"  {label:<{width}}  {value}")

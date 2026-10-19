@@ -7,6 +7,7 @@ import asyncio
 import pytest
 
 from nwp500.ble import (
+    ADVERTISED_NAME_FRAGMENT,
     DEFAULT_READ_LENGTHS,
     NWP500_RESPONDING_CLASSES,
     TOU_RECORD_SIZE,
@@ -17,8 +18,11 @@ from nwp500.ble import (
     DeviceInfoBlock,
     NavienBleClient,
     SubStatus,
+    answers_class_codes,
+    best_heater,
     build_packet,
     build_read,
+    build_session_command,
     crc16,
     parse_packet,
     parse_tou_record,
@@ -558,3 +562,27 @@ def test_software_info_block_reads_the_controller_sw_code():
     assert sw.controller_sw_code == 0x02000711
     with pytest.raises(ValueError):
         SoftwareInfoBlock.parse(bytes(3))
+
+
+def test_session_command_is_a_30_byte_class_50_write():
+    packet = parse_packet(build_session_command(200))
+    assert packet.crc_ok
+    assert (packet.command, packet.class_code) == (Command.WRITE, 50)
+    assert packet.data == bytes([200]) + bytes(29)
+    with pytest.raises(ValueError):
+        build_session_command(256)
+
+
+def test_scan_filter_matches_both_advertised_names():
+    for name in ("HPWH1A2B", "HPWH4610"):
+        assert ADVERTISED_NAME_FRAGMENT in name
+    assert answers_class_codes("hpwh1a2b")
+    assert not answers_class_codes("HPWH4610")
+
+
+def test_best_heater_skips_the_wifi_setup_mode():
+    setup = ("AA", "HPWH4610", -30)
+    weak, strong = ("BB", "HPWH1X", -80), ("CC", "HPWH1Y", -50)
+    assert best_heater([setup, weak, strong]) == strong
+    assert best_heater([setup]) is None
+    assert best_heater([]) is None

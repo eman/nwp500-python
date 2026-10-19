@@ -18,6 +18,7 @@ from .protocol import (
     DEFAULT_READ_LENGTHS,
     NOTIFY_CHAR_UUID,
     SERVICE_UUID,
+    START_STATUS_STREAM,
     WRITE_CHAR_UUID,
     ClassCode,
     Command,
@@ -25,10 +26,12 @@ from .protocol import (
     CrcMismatchError,
     DeviceInfoBlock,
     Packet,
+    RealTimeStatus,
     SoftwareInfoBlock,
     SubStatus,
     build_packet,
     build_read,
+    build_session_command,
     parse_packet,
     parse_tou_records,
 )
@@ -80,7 +83,10 @@ class BleakTransport:
 async def scan(timeout: float = 10.0) -> list[tuple[str, str, int]]:
     """Return ``(address, name, rssi)`` for heaters advertising nearby.
 
-    A heater advertises only while in Bluetooth pairing mode.
+    A heater advertises only while in a Bluetooth mode. Both of its
+    advertised names match: ``HPWH1…``, which answers the class-code
+    protocol, and the Wi-Fi setup mode's ``HPWH4610``, which answers
+    nothing; the name tells them apart.
 
     Raises:
         RuntimeError: The ``ble`` extra (bleak) is not installed.
@@ -103,6 +109,29 @@ async def scan(timeout: float = 10.0) -> list[tuple[str, str, int]]:
     return [(a, n, r) for a, (n, r) in found.items()]
 
 
+#: The advertised name of a heater that answers the class-code protocol.
+_ANSWERING_NAME_PREFIX = "HPWH1"
+
+#: Printed when a scan finds no heater, or none that answers.
+NOT_ADVERTISING_HINT = (
+    "No heater advertising as HPWH1. A heater advertising as HPWH4610 is "
+    "in Wi-Fi setup mode, which answers nothing over Bluetooth."
+)
+
+
+def answers_class_codes(name: str) -> bool:
+    """Whether a heater advertising ``name`` answers the protocol."""
+    return name.upper().startswith(_ANSWERING_NAME_PREFIX)
+
+
+def best_heater(
+    found: list[tuple[str, str, int]],
+) -> tuple[str, str, int] | None:
+    """The strongest of :func:`scan`'s heaters that answers, if any."""
+    answering = [t for t in found if answers_class_codes(t[1])]
+    return max(answering, key=lambda t: t[2]) if answering else None
+
+
 class NavienBleClient:
     """Request/reply client for one connected heater.
 
@@ -119,6 +148,10 @@ class NavienBleClient:
     :meth:`read_parameter_blocks`) raise
     :class:`CrcMismatchError` instead of decoding bytes that failed their
     checksum.
+
+    :meth:`read_status` starts the heater's live status stream, after
+    which the heater answers no reads on the connection; reconnect to
+    read blocks again.
 
     :meth:`write_block` sends a write and is marked experimental: the
     parameter block layouts are not yet mapped, so only write bytes you
@@ -139,6 +172,8 @@ class NavienBleClient:
         self._transport = transport
         self._reply_timeout = reply_timeout
         self._replies: asyncio.Queue[Packet] = asyncio.Queue()
+        self._status_frames: asyncio.Queue[Packet] = asyncio.Queue()
+        self._streaming = False
         self._lock = asyncio.Lock()
         self._unparsed: list[bytes] = []
 
@@ -171,6 +206,8 @@ class NavienBleClient:
 
     async def disconnect(self) -> None:
         await self._transport.disconnect()
+        # The heater ends the status stream when the connection closes.
+        self._streaming = False
 
     @property
     def unparsed_notifications(self) -> list[bytes]:
@@ -188,6 +225,13 @@ class NavienBleClient:
             _logger.warning(
                 "BLE reply for class %s failed its CRC", packet.class_name
             )
+        if (
+            packet.class_code == ClassCode.RTMD
+            and packet.command == Command.WRITE
+        ):
+            # Pushed status, not a reply to a request.
+            self._status_frames.put_nowait(packet)
+            return
         self._replies.put_nowait(packet)
 
     async def request(self, packet: bytes, class_code: int) -> Packet:
@@ -320,6 +364,51 @@ class NavienBleClient:
             out[cc] = await self._read_checked(cc, DEFAULT_READ_LENGTHS[cc])
         return out
 
+    async def read_status(self) -> RealTimeStatus:
+        """The next live status block (``RTMD``) the heater pushes.
+
+        The first call starts the stream with the
+        :data:`~nwp500.ble.protocol.START_STATUS_STREAM` session command
+        and drops the first block that follows: on an NWP500 that block
+        held values from earlier, with temperatures 3 degC away from the
+        blocks after it and from the MQTT report. The heater then pushes a
+        block about every 300 ms until the connection closes, and later
+        calls return the newest one that has arrived, or wait for the
+        next. While the stream runs the heater answers no reads, so read
+        any other blocks before calling this.
+
+        Raises:
+            CrcMismatchError: The block failed its checksum.
+            TimeoutError: No block arrived within the reply timeout.
+        """
+        async with self._lock:
+            if not self._streaming:
+                while not self._status_frames.empty():
+                    self._status_frames.get_nowait()
+                await self._transport.write(
+                    build_session_command(START_STATUS_STREAM)
+                )
+                await self._next_status_frame()
+                self._streaming = True
+            packet: Packet | None = None
+            while not self._status_frames.empty():
+                packet = self._status_frames.get_nowait()
+            if packet is None:
+                packet = await self._next_status_frame()
+        if not packet.crc_ok:
+            raise CrcMismatchError("RTMD block failed its CRC")
+        return RealTimeStatus.parse(packet.data)
+
+    async def _next_status_frame(self) -> Packet:
+        try:
+            return await asyncio.wait_for(
+                self._status_frames.get(), self._reply_timeout
+            )
+        except TimeoutError:
+            raise TimeoutError(
+                f"no status block within {self._reply_timeout}s"
+            ) from None
+
     async def write_block(
         self, class_code: int, data: bytes, address: int = 0
     ) -> Packet:
@@ -340,4 +429,12 @@ class NavienBleClient:
         )
 
 
-__all__ = ["BleTransport", "BleakTransport", "NavienBleClient", "scan"]
+__all__ = [
+    "NOT_ADVERTISING_HINT",
+    "BleTransport",
+    "BleakTransport",
+    "NavienBleClient",
+    "answers_class_codes",
+    "best_heater",
+    "scan",
+]

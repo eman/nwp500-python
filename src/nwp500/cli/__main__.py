@@ -233,8 +233,8 @@ def async_command(f: Any) -> Any:
     default=None,
     help="How to reach the heater. Default (or mqtt): through Navien's "
     "cloud, over MQTT and REST. ble: directly over Bluetooth LE, without "
-    "signing in (needs the ble extra and the heater in pairing mode; "
-    "supports info and serial).",
+    "signing in (needs the ble extra and the heater advertising as HPWH1; "
+    "supports info, serial and status).",
 )
 @click.option(
     "--ble-address",
@@ -316,6 +316,12 @@ async def device_info(
 @async_command
 async def status(mqtt: NavienMqttClient, device: Any, raw: bool) -> None:
     """Show current device status (temps, mode, etc)."""
+    if click.get_current_context().obj.get("backend") == "ble":
+        # Bluetooth carries only some of these fields; show just those.
+        from .ble_backend import print_status
+
+        await print_status(mqtt, raw)  # type: ignore[arg-type]
+        return
     await handlers.handle_status_request(mqtt, device, raw)
 
 

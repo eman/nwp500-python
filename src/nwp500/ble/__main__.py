@@ -9,10 +9,13 @@ import sys
 from pathlib import Path
 
 from . import (
+    NOT_ADVERTISING_HINT,
     NWP500_RESPONDING_CLASSES,
     ClassCode,
     NavienBleClient,
     SubStatus,
+    answers_class_codes,
+    best_heater,
     parse_tou_records,
     scan,
 )
@@ -65,27 +68,22 @@ def _print_sub_status(data: bytes) -> None:
 async def _scan(args: argparse.Namespace) -> int:
     found = await scan(args.seconds)
     if not found:
-        print(
-            "No heater advertising. "
-            "Hold Back + Power for 5 s to enter pairing mode."
-        )
+        print(NOT_ADVERTISING_HINT)
         return 1
     for address, name, rssi in sorted(found, key=lambda t: -t[2]):
-        print(f"{address}  rssi={rssi}  {name}")
+        note = "" if answers_class_codes(name) else "  (Wi-Fi setup mode)"
+        print(f"{address}  rssi={rssi}  {name}{note}")
     return 0
 
 
 async def _read(args: argparse.Namespace) -> int:
     address = args.address
     if not address:
-        found = await scan(args.seconds)
-        if not found:
-            print(
-                "No heater advertising. "
-                "Hold Back + Power for 5 s to enter pairing mode."
-            )
+        best = best_heater(await scan(args.seconds))
+        if best is None:
+            print(NOT_ADVERTISING_HINT)
             return 1
-        address, name, _ = max(found, key=lambda t: t[2])
+        address, name, _ = best
         print(f"using {name} at {address}")
     results: list[dict[str, object]] = []
     async with NavienBleClient(address) as ble:
@@ -135,7 +133,7 @@ def main(argv: list[str] | None = None) -> int:
         prog="python -m nwp500.ble", description=__doc__
     )
     sub = p.add_subparsers(dest="cmd", required=True)
-    s = sub.add_parser("scan", help="list heaters in pairing mode")
+    s = sub.add_parser("scan", help="list heaters advertising nearby")
     s.add_argument("--seconds", type=float, default=10.0)
     s.set_defaults(func=_scan)
     r = sub.add_parser("read", help="read data blocks (read-only)")

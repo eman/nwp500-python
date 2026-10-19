@@ -2,10 +2,11 @@
 
 Code written against :class:`nwp500.NavienMqttClient` (the ``nwp-cli``
 handlers, for one) can run over Bluetooth for the operations the heater
-supports there. Today that is the device-feature request, answered from
-the ``DID``, ``MSCD`` and ``MSWD`` blocks. Every other MQTT client
-attribute raises :class:`BleUnsupportedError`: the heater sends no live
-status over Bluetooth, and every class it answers is read-only.
+supports there: the device-feature request, answered from the ``DID``,
+``MSCD`` and ``MSWD`` blocks, and the status request, answered from the
+``RTMD`` stream. Every other MQTT client attribute raises
+:class:`BleUnsupportedError`, since every class the heater answers is
+read-only.
 """
 
 from __future__ import annotations
@@ -20,6 +21,7 @@ from .client import NavienBleClient
 from .protocol import (
     ControllerSerials,
     DeviceInfoBlock,
+    RealTimeStatus,
     SoftwareInfoBlock,
     prefers_celsius,
     temperature_unit,
@@ -85,6 +87,7 @@ class BleDeviceFeature:
 
 
 FeatureCallback = Callable[[BleDeviceFeature], None]
+StatusCallback = Callable[[RealTimeStatus], None]
 
 
 def device_feature_from_blocks(
@@ -109,9 +112,14 @@ class BleMqttAdapter:
     The ``device`` arguments the MQTT methods take are accepted and
     ignored: the connection is already to one heater. A subscription
     callback is called once per matching request, with the decoded reply,
-    as the MQTT client does. :attr:`device_info` and
-    :attr:`controller_serials` keep the last blocks read, for callers that
-    want the whole blocks rather than the :class:`BleDeviceFeature` subset.
+    as the MQTT client does. Where the MQTT client delivers a
+    ``DeviceStatus``, the adapter delivers a
+    :class:`~nwp500.ble.RealTimeStatus`, which has the status fields
+    Bluetooth carries under the same names. The heater answers no reads
+    once status is streaming, so request device info before status.
+    :attr:`device_info` and :attr:`controller_serials` keep the last blocks
+    read, for callers that want the whole blocks rather than the
+    :class:`BleDeviceFeature` subset.
 
     Example::
 
@@ -125,6 +133,7 @@ class BleMqttAdapter:
         self.controller_serials: ControllerSerials | None = None
         self.software_info: SoftwareInfoBlock | None = None
         self._feature_callbacks: list[FeatureCallback] = []
+        self._status_callbacks: list[StatusCallback] = []
 
     async def __aenter__(self) -> BleMqttAdapter:
         await self.connect()
@@ -163,6 +172,27 @@ class BleMqttAdapter:
         )
         for callback in list(self._feature_callbacks):
             callback(feature)
+        return 0
+
+    async def subscribe_device_status(
+        self, device: Any, callback: StatusCallback
+    ) -> int:
+        self._status_callbacks.append(callback)
+        return 0
+
+    async def request_device_status(self, device: Any) -> int:
+        """Deliver the next :class:`~nwp500.ble.RealTimeStatus` block.
+
+        The first request starts the heater's status stream; see
+        :meth:`~nwp500.ble.NavienBleClient.read_status`.
+
+        Raises:
+            CrcMismatchError: The block failed its checksum.
+            TimeoutError: No block arrived.
+        """
+        status = await self.client.read_status()
+        for callback in list(self._status_callbacks):
+            callback(status)
         return 0
 
     def __getattr__(self, name: str) -> Any:

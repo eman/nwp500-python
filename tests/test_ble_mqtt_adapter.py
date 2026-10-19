@@ -15,6 +15,7 @@ from nwp500.ble import (
     ControllerSerials,
     DeviceInfoBlock,
     NavienBleClient,
+    RealTimeStatus,
     SoftwareInfoBlock,
     build_packet,
     device_feature_from_blocks,
@@ -41,15 +42,54 @@ MSCD = bytes.fromhex(
     "3536343936303631425432323233303430380000"
 )
 
+# Pushed by the same NWP500 on 2026-10-19 after the class-50 session
+# command 200. RTMD is a steady block, taken while the MQTT status report
+# had currentStatenum 20, dhwTemperature 110, dhwTemperatureSetting 122,
+# tankUpperTemperature 553, tankLowerTemperature 510, dischargeTemperature
+# 401, suctionTemperature 238, evaporatorTemperature 276,
+# ambientTemperature 242, currentSuperHeat -16 and eevStep 480.
+# RTMD_STALE is the first block after the command, which held values from
+# earlier (its tank upper reads 58.4 degC against 55.3).
+RTMD = bytes.fromhex(
+    "001400000000000000000000000000002602e401000000000000000000008100"
+    "0000007a0000000000001d04f2038503e2020803e6020000c800000000000800"
+    "0000f401f40101003800f80000000000e001000000000000e001010000000000"
+    "0000000000000000000000000000002002000000000000000400040000000000"
+    "00000000000000000000000000000000000000000000000000000000"
+)
+RTMD_STALE = bytes.fromhex(
+    "2032000026021f029e050000000000002602ea01000000000000000000000100"
+    "0000007b0000000000003c042f0430046d028e0207030000c800000000000000"
+    "0000f401f401b301c906fb0000000000c800000000000000c800010000000000"
+    "0000000000000000000000000000003702000001000000000400040000000000"
+    "00000000000000000000000000000000000000000000000000000000"
+)
+
 
 class FakeTransport:
-    """Answers reads of the classes it was given, like the heater."""
+    """Answers reads of the classes it was given, like the heater.
 
-    def __init__(self, replies: dict[int, bytes]):
+    Like the heater, the session command 200 starts a status stream: the
+    blocks in ``stream`` are pushed, and reads go unanswered after it.
+    """
+
+    def __init__(
+        self,
+        replies: dict[int, bytes],
+        stream: tuple[bytes, ...] = (RTMD_STALE, RTMD),
+    ):
         self.replies = replies
+        self.stream = stream
+        self.streaming = False
         self.written: list[bytes] = []
         self.connected = False
         self._cb = None
+
+    def push(self, block: bytes) -> None:
+        """Push one status block, as the heater does while streaming."""
+        packet = build_packet(Command.WRITE, ClassCode.RTMD, block)
+        assert self._cb is not None, "push before start_notify"
+        asyncio.get_running_loop().call_soon(self._cb, packet)
 
     async def connect(self):
         self.connected = True
@@ -63,7 +103,11 @@ class FakeTransport:
     async def write(self, data: bytes):
         self.written.append(data)
         req = parse_packet(data)
-        if req.class_code in self.replies:
+        if req.class_code == ClassCode.SAPCD and req.data[:1] == b"\xc8":
+            self.streaming = True
+            for block in self.stream:
+                self.push(block)
+        elif req.class_code in self.replies and not self.streaming:
             reply = build_packet(
                 Command.READ_RESPONSE,
                 req.class_code,
@@ -121,7 +165,7 @@ async def test_controller_serial_helper_runs_unchanged_over_bluetooth():
 
 
 @pytest.mark.parametrize(
-    "name", ["request_device_status", "set_power", "control", "client_id"]
+    "name", ["set_dhw_temperature", "set_power", "control", "client_id"]
 )
 def test_other_mqtt_attributes_raise_a_clear_error(name: str):
     mqtt = BleMqttAdapter(NavienBleClient(transport=_heater()))
@@ -195,7 +239,7 @@ def test_cli_info_raw_over_bluetooth(cli_with_fake_heater):
 
 
 @pytest.mark.parametrize(
-    "args", [["status"], ["power", "on"], ["reservations", "get"]]
+    "args", [["power", "on"], ["temp", "120"], ["reservations", "get"]]
 )
 def test_cli_refuses_other_commands_before_connecting(
     cli_with_fake_heater, args
@@ -290,3 +334,141 @@ def test_min_operation_temperature_follows_unit_system(unit_system):
     assert info.min_operation_temperature() == pytest.approx(40.5)
     # an explicit unit still wins
     assert info.min_operation_temperature(celsius=False) == pytest.approx(104.9)
+
+
+# --- live status (RTMD) ------------------------------------------------
+
+
+def test_rtmd_decodes_the_fields_checked_against_mqtt():
+    status = RealTimeStatus.parse(RTMD)
+    assert status.current_statenum == 20
+    assert status.dhw_temperature_raw == 110
+    assert status.dhw_temperature_setting_raw == 122
+    assert status.tank_upper_temperature_raw == 553
+    assert status.tank_lower_temperature_raw == 510
+    assert status.discharge_temperature_raw == 401
+    assert status.suction_temperature_raw == 238
+    assert status.evaporator_temperature_raw == 276
+    assert status.ambient_temperature_raw == 242
+    assert status.current_super_heat_raw == -16
+    assert status.eev_step == 480
+    assert status.raw == RTMD
+    # fields not decoded are absent, not defaulted
+    with pytest.raises(AttributeError):
+        status.operation_mode  # type: ignore[attr-defined]
+
+
+def test_rtmd_rejects_a_block_of_the_wrong_length():
+    with pytest.raises(ValueError, match="156 bytes"):
+        RealTimeStatus.parse(RTMD[:-1])
+
+
+def test_rtmd_converts_like_device_status(unit_system):
+    from nwp500.models import DeviceStatus
+
+    ble = RealTimeStatus.parse(RTMD)
+    names = [
+        "dhw_temperature",
+        "dhw_temperature_setting",
+        "tank_upper_temperature",
+        "tank_lower_temperature",
+        "discharge_temperature",
+        "suction_temperature",
+        "evaporator_temperature",
+        "ambient_temperature",
+        "current_super_heat",
+    ]
+    # the cloud model with the same raw values (its other required fields
+    # are irrelevant to the conversion)
+    cloud = DeviceStatus.model_construct(
+        **{f"{n}_raw": getattr(ble, f"{n}_raw") for n in names}
+    )
+    for system in ("us_customary", "metric"):
+        unit_system(system)
+        for name in names:
+            assert getattr(ble, name) == getattr(cloud, name), name
+            assert ble.get_field_unit(name) == cloud.get_field_unit(name)
+    assert ble.get_field_unit("eev_step") == ""
+
+
+@pytest.mark.asyncio
+async def test_read_status_starts_the_stream_once_and_skips_the_stale_block():
+    transport = _heater()
+    async with NavienBleClient(transport=transport) as ble:
+        first = await ble.read_status()
+        assert first.raw == RTMD
+        transport.push(RTMD_STALE[:1] + RTMD[1:])
+        await asyncio.sleep(0)
+        second = await ble.read_status()
+    assert second.raw[0] == 0x20  # the newest block, not a resend
+    commands = [parse_packet(w) for w in transport.written]
+    assert [(c.command, c.class_code) for c in commands] == [
+        (Command.WRITE, ClassCode.SAPCD)
+    ]
+    assert commands[0].data == bytes([200]) + bytes(29)
+
+
+@pytest.mark.asyncio
+async def test_read_status_restarts_the_stream_after_a_reconnect():
+    transport = _heater()
+    ble = NavienBleClient(transport=transport)
+    for _ in range(2):
+        async with ble:
+            assert (await ble.read_status()).raw == RTMD
+    assert len(transport.written) == 2
+
+
+@pytest.mark.asyncio
+async def test_read_status_times_out_when_nothing_is_pushed():
+    transport = FakeTransport({}, stream=())
+    async with NavienBleClient(transport=transport, reply_timeout=0.05) as ble:
+        with pytest.raises(TimeoutError, match="no status block"):
+            await ble.read_status()
+
+
+@pytest.mark.asyncio
+async def test_status_blocks_do_not_answer_a_read():
+    transport = _heater()
+    async with NavienBleClient(transport=transport, reply_timeout=0.1) as ble:
+        await ble.read_status()
+        # the heater answers no reads while streaming, and the blocks it
+        # pushes are not taken for the reply
+        transport.push(RTMD)
+        with pytest.raises(TimeoutError):
+            await ble.read(ClassCode.RTMD, 156)
+
+
+@pytest.mark.asyncio
+async def test_adapter_answers_a_device_status_request():
+    got: list[RealTimeStatus] = []
+    async with BleMqttAdapter(NavienBleClient(transport=_heater())) as mqtt:
+        await mqtt.subscribe_device_status(None, got.append)
+        assert await mqtt.request_device_status(None) == 0
+    assert [s.tank_upper_temperature_raw for s in got] == [553]
+
+
+def test_cli_status_over_bluetooth(cli_with_fake_heater, unit_system):
+    result = cli_with_fake_heater("status")
+    assert result.exit_code == 0, result.output
+    out = result.output
+    assert "State number     20" in out
+    assert "DHW temperature  131.0 °F" in out
+    assert "DHW setpoint     141.8 °F" in out
+    assert "Tank upper       131.5 °F" in out
+    assert "Ambient          75.6 °F" in out
+    assert "EEV step         480" in out
+
+
+def test_cli_status_over_bluetooth_honours_unit_system(
+    cli_with_fake_heater, unit_system
+):
+    result = cli_with_fake_heater("status", options=("--unit-system", "metric"))
+    assert result.exit_code == 0, result.output
+    assert "Tank upper       55.3 °C" in result.output
+    assert "Superheat        -1.6 °C" in result.output
+
+
+def test_cli_status_raw_over_bluetooth(cli_with_fake_heater):
+    result = cli_with_fake_heater("status", "--raw")
+    assert result.exit_code == 0, result.output
+    assert RTMD.hex() in result.output

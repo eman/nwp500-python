@@ -22,13 +22,21 @@ Install the extra
 
    pip install 'nwp500-python[ble]'
 
-Put the heater in pairing mode
-------------------------------
+Make the heater advertise
+-------------------------
 
-Hold the **Back** and **Power** buttons on the front panel for five seconds.
-The heater then advertises over Bluetooth with a name containing ``HPWH1``
-until it is connected or pairing mode ends. Your computer needs to be within
-Bluetooth range of the heater.
+The heater advertises over Bluetooth in two modes, under the same address
+and GATT service:
+
+* ``HPWH1…``: answers the protocol below. Everything on this page needs
+  this mode.
+* ``HPWH4610``: the Wi-Fi setup mode (with the heater off, hold **M** and
+  **OK**, then hold **OK** on the Wi-Fi ready screen). It accepts a
+  connection but answers nothing, not even the device-info read.
+
+``scan`` lists both, marking the second, and ``read`` and ``nwp-cli``
+pick an ``HPWH1`` heater. Your computer needs to be within Bluetooth range
+of the heater.
 
 Scan and read
 -------------
@@ -58,22 +66,25 @@ instead, with no sign-in. It needs the ``cli`` and ``ble`` extras:
 
    nwp-cli --backend ble serial
    nwp-cli --backend ble info
+   nwp-cli --backend ble status
    nwp-cli --backend ble --ble-address AA:BB:CC:DD:EE:FF info --raw
 
 Without ``--ble-address`` (or ``NAVIEN_BLE_ADDRESS``), it scans for ten
-seconds and uses the strongest heater. ``serial`` and ``info`` are the
-commands the heater can answer over Bluetooth. ``info`` shows only what the
-``DID`` and ``MSCD`` blocks hold: serial numbers, model type, country code
-and the setpoint range, whose lower end is Min Operation Temp. Every other
-command is refused before connecting, since the heater sends no live status
-over Bluetooth and accepts no writes.
+seconds and uses the strongest heater advertising as ``HPWH1``. ``serial``,
+``info`` and ``status`` are the commands the heater can answer over
+Bluetooth. ``info`` shows only what the ``DID`` and ``MSCD`` blocks hold:
+serial numbers, model type, country code and the setpoint range, whose
+lower end is Min Operation Temp. ``status`` shows only the decoded ``RTMD``
+fields (see `Read live status`_). Every other command is refused before
+connecting, since the heater accepts no settings changes over Bluetooth.
 
 The commands run their usual handlers against
 :class:`~nwp500.ble.BleMqttAdapter`, which offers the
 :class:`~nwp500.NavienMqttClient` methods the heater can serve over
 Bluetooth and raises :class:`~nwp500.ble.BleUnsupportedError` for the rest.
-Where the MQTT client delivers a ``DeviceFeature``, the adapter delivers a
-:class:`~nwp500.ble.BleDeviceFeature`. It has only the fields the blocks
+Where the MQTT client delivers a ``DeviceStatus``, the adapter delivers a
+:class:`~nwp500.ble.RealTimeStatus`, and where it delivers a
+``DeviceFeature``, a :class:`~nwp500.ble.BleDeviceFeature`. It has only the fields the blocks
 carry, each checked against the heater's MQTT report: the controller
 serial, the setpoint range, the model type, the country code and the
 controller software code. Any other field raises :class:`AttributeError`
@@ -98,7 +109,8 @@ preference they are Fahrenheit.
 What an NWP500 answers
 ----------------------
 
-Checked against a unit on 2026-10-16, the heat pump answers these classes:
+Checked against a unit on 2026-10-16, the heat pump answers reads of
+these classes:
 ``SSD`` (17), ``EHD`` (32), ``TSD``/``TCD``/``TDD``/``TAD`` (38-41),
 ``TOU_PLAN`` (170, the stored time-of-use plan), ``SFHD`` (210), ``DID``
 (240), ``MSCD`` (243) and ``MSWD`` (244). It does **not** answer the
@@ -141,12 +153,56 @@ be read whole over Bluetooth; :meth:`~nwp500.NavienAPIClient.get_tou_info`
 returns all of it. ``python -m nwp500.ble read`` prints the decoded
 records under the ``TOU_PLAN`` line.
 
+Read live status
+----------------
+
+The heater does not answer a read of the real-time monitoring class
+(``RTMD``, 48). It pushes that block instead, once it receives the
+class-50 session command 200 that Navien's service apps send on
+connecting: a 156-byte block about every 300 ms until the connection
+closes. While the stream runs, the heater answers no reads, so read any
+other blocks first.
+
+:meth:`~nwp500.ble.NavienBleClient.read_status` starts the stream and
+returns the newest block as a :class:`~nwp500.ble.RealTimeStatus`. It
+drops the first block after the command, which on the unit checked held
+values from earlier. The decoded fields have the
+:class:`~nwp500.models.DeviceStatus` names, raw encodings and conversions,
+and each was checked against the same heater's MQTT status report
+(2026-10-19):
+
+==================================  ======  =================================
+Field                               Offset  Encoding
+==================================  ======  =================================
+``current_statenum``                1       byte
+``dhw_temperature_raw``             16-17   0.1 °C, rounded to half-degrees
+``current_super_heat_raw``          18-19   0.1 °C + 500
+``dhw_temperature_setting_raw``     35      half-degrees Celsius
+``tank_upper_temperature_raw``      42-43   0.1 °C + 500
+``tank_lower_temperature_raw``      44-45   0.1 °C + 500
+``discharge_temperature_raw``       46-47   0.1 °C + 500
+``suction_temperature_raw``         48-49   0.1 °C + 500
+``evaporator_temperature_raw``      50-51   0.1 °C + 500
+``ambient_temperature_raw``         52-53   0.1 °C + 500
+``eev_step``                        80-81   steps
+==================================  ======  =================================
+
+Multi-byte fields are little-endian, and ``_raw`` fields hold the cloud's
+encoding (0.1 °C for the thermistors). The rest of the block, including the
+operation mode, the component flags and the energy figures, is not yet
+decoded and is kept in ``raw``.
+
+.. code-block:: python
+
+   async with NavienBleClient(address) as ble:
+       info = await ble.read_device_info()  # before the stream starts
+       status = await ble.read_status()
+       print(status.tank_upper_temperature, status.ambient_temperature)
+
 Read the DIP-switch block
 -------------------------
 
-``SSD`` (17) is not live status: an NWP500 reports its status over MQTT
-only, and it does not answer the real-time monitoring class (``RTMD``, 48)
-that Navien's service toolkit reads live data from on other models.
+``SSD`` (17) is not live status.
 :meth:`~nwp500.ble.NavienBleClient.read_sub_status` decodes ``SSD`` into
 :class:`~nwp500.ble.SubStatus`, with two 16-bit DIP-switch words, using
 the layout the UK service toolkit reads on boilers. That layout is
@@ -197,8 +253,13 @@ Protocol summary
 
 * Service ``237339a3-b40d-4283-a629-f89bb838d85a``; write characteristic
   ``…d85c``; notifications on ``…d85b``; MTU 247.
+* Advertised name: ``HPWH1…`` (answers) or ``HPWH4610`` (Wi-Fi setup mode;
+  answers nothing).
 * Packet: ``F7 20 01 03`` + command (3 read / 16 write; replies 131 / 144)
   + length (payload + 2) + class + address + payload + CRC-16/MODBUS
   (low byte first).
 * A read's payload is one byte, the expected reply length (58 for ``DID``,
   40 for ``MSCD``, 8 for ``SPID``, 59 for the other parameter blocks).
+* A session command is a class-50 write of 30 bytes: the code, then
+  zeros. Code 200 starts the ``RTMD`` stream, whose blocks arrive as
+  command-16 packets.
