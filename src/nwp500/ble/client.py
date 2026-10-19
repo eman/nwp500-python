@@ -33,6 +33,10 @@ _logger = logging.getLogger(__name__)
 
 NotifyCallback = Callable[[bytes], None]
 
+_NEEDS_EXTRA = (
+    "Bluetooth support needs the 'ble' extra: pip install 'nwp500-python[ble]'"
+)
+
 
 class BleTransport(Protocol):
     """What the client needs from a GATT connection."""
@@ -49,11 +53,8 @@ class BleakTransport:
     def __init__(self, address: str, timeout: float = 30.0) -> None:
         try:
             from bleak import BleakClient
-        except ImportError as e:  # pragma: no cover - depends on extras
-            raise RuntimeError(
-                "Bluetooth support needs the 'ble' extra: "
-                "pip install 'nwp500-python[ble]'"
-            ) from e
+        except ImportError as e:
+            raise RuntimeError(_NEEDS_EXTRA) from e
         self._client = BleakClient(address, timeout=timeout)
 
     async def connect(self) -> None:
@@ -76,8 +77,14 @@ async def scan(timeout: float = 10.0) -> list[tuple[str, str, int]]:
     """Return ``(address, name, rssi)`` for heaters advertising nearby.
 
     A heater advertises only while in Bluetooth pairing mode.
+
+    Raises:
+        RuntimeError: The ``ble`` extra (bleak) is not installed.
     """
-    from bleak import BleakScanner
+    try:
+        from bleak import BleakScanner
+    except ImportError as e:
+        raise RuntimeError(_NEEDS_EXTRA) from e
 
     found: dict[str, tuple[str, int]] = {}
 

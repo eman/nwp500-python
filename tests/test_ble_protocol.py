@@ -364,3 +364,22 @@ def test_cli_read_succeeds_on_a_partial_dump(monkeypatch, tmp_path):
 
 def test_every_default_cli_class_has_a_read_length():
     assert NWP500_RESPONDING_CLASSES <= set(DEFAULT_READ_LENGTHS)
+
+
+@pytest.mark.asyncio
+async def test_scan_without_bleak_gives_the_install_hint(monkeypatch):
+    import sys
+
+    from nwp500.ble import scan
+
+    monkeypatch.setitem(sys.modules, "bleak", None)
+    with pytest.raises(RuntimeError, match=r"nwp500-python\[ble\]"):
+        await scan(0)
+
+
+def test_transport_without_bleak_gives_the_install_hint(monkeypatch):
+    import sys
+
+    monkeypatch.setitem(sys.modules, "bleak", None)
+    with pytest.raises(RuntimeError, match=r"nwp500-python\[ble\]"):
+        NavienBleClient("AA:BB")
