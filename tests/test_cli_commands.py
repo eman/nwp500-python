@@ -1,6 +1,5 @@
 """Tests for CLI command handlers."""
 
-import logging
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -290,24 +289,6 @@ async def test_handle_get_energy_request_multi_month_summary(
     )
 
     assert energy_views == ["monthly"]
-
-
-@pytest.fixture(autouse=True)
-def _restore_logging():
-    """Undo the logging setup the CLI group performs on every invocation.
-
-    ``cli()`` calls ``logging.basicConfig`` and pins the ``nwp500`` logger
-    to the verbosity flags, which would otherwise leak into later tests -
-    ``tests/test_utils.py`` asserts on DEBUG records and sees none once
-    this module has run.
-    """
-    nwp500_logger = logging.getLogger("nwp500")
-    levels = (logging.root.level, nwp500_logger.level)
-    handlers = list(logging.root.handlers)
-    yield
-    logging.root.setLevel(levels[0])
-    nwp500_logger.setLevel(levels[1])
-    logging.root.handlers[:] = handlers
 
 
 @pytest.fixture

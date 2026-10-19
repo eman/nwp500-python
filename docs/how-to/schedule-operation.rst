@@ -123,7 +123,7 @@ Delete a reservation by index (1-based):
 
    nwp-cli reservations delete 2
 
-Update a reservation (partial — only specified fields change):
+Update a reservation (only the fields you pass change):
 
 .. code-block:: bash
 
@@ -160,7 +160,7 @@ Pydantic Models
 The library provides ``ReservationEntry`` and ``ReservationSchedule``
 models for type-safe reservation handling.
 
-**ReservationEntry** — A single reservation slot:
+**ReservationEntry**: A single reservation slot:
 
 .. code-block:: python
 
@@ -176,7 +176,7 @@ models for type-safe reservation handling.
    entry.unit          # '°C' or '°F'
    entry.mode_name     # 'High Demand'
 
-**ReservationSchedule** — The full schedule (auto-decodes hex):
+**ReservationSchedule**: The full schedule (auto-decodes hex):
 
 .. code-block:: python
 
@@ -216,8 +216,8 @@ Each reservation entry has these fields:
 ``enable`` (integer)
    Uses the standard device boolean convention:
 
-   * ``1`` — disabled (stored but won't execute)
-   * ``2`` — enabled (reservation will execute)
+   * ``1``: disabled (stored but won't execute)
+   * ``2``: enabled (reservation will execute)
 
 ``week`` (integer)
    Bitfield for days of the week (Monday-first):
@@ -243,26 +243,26 @@ Each reservation entry has these fields:
 
    Common values:
 
-   * Weekdays (Mon–Fri): ``124`` (0b01111100)
+   * Weekdays (Mon-Fri): ``124`` (0b01111100)
    * Weekends (Sat+Sun): ``130`` (0b10000010)
    * Every day: ``254`` (0b11111110)
-   * Tue–Sat: ``62`` (0b00111110)
+   * Tue-Sat: ``62`` (0b00111110)
 
 ``hour`` (integer)
-   Hour in 24-hour format (0–23).
+   Hour in 24-hour format (0-23).
 
 ``min`` (integer)
-   Minute (0–59).
+   Minute (0-59).
 
 ``mode`` (integer)
    DHW operation mode:
 
-   * ``1`` — Heat Pump Only
-   * ``2`` — Electric Heater Only
-   * ``3`` — Energy Saver (Eco)
-   * ``4`` — High Demand
-   * ``5`` — Vacation Mode
-   * ``6`` — Power Off
+   * ``1``: Heat Pump Only
+   * ``2``: Electric Heater Only
+   * ``3``: Energy Saver (Eco)
+   * ``4``: High Demand
+   * ``5``: Vacation Mode
+   * ``6``: Power Off
 
 ``param`` (integer)
    Target temperature in **half-degrees Celsius**:
@@ -277,7 +277,7 @@ Each reservation entry has these fields:
 Helper Functions
 ----------------
 
-**build_reservation_entry()** — Create a properly formatted entry:
+**build_reservation_entry()**: Create a properly formatted entry:
 
 .. code-block:: python
 
@@ -324,8 +324,8 @@ The ``days`` parameter accepts:
 Managing Reservations
 ---------------------
 
-**Important:** The device protocol requires sending the **full list**
-of reservations for every update. Individual add/delete/update
+The device protocol requires sending the full list of reservations
+for every update. Individual add/delete/update
 operations work by fetching the current schedule, modifying it, and
 sending the full list back.
 
@@ -364,9 +364,7 @@ every raw entry before anything is sent, and raise
 :class:`~nwp500.exceptions.RangeValidationError` on a bad one. Each
 ``param`` must lie within the setpoint range the heater reports in its
 feature data (``dhw_temperature_min_raw`` to ``dhw_temperature_max_raw``,
-both in half-degrees Celsius like ``param``). The heater clamps an
-out-of-range setpoint itself; the check makes a bad entry fail early and
-clearly instead.
+both in half-degrees Celsius like ``param``).
 
 **Disable reservations** (entries are preserved on the device):
 
@@ -436,7 +434,7 @@ Library Helpers
 The library provides convenience functions that abstract the
 read-modify-write pattern for individual reservation entries.
 
-**fetch_reservations()** — Retrieve the current schedule:
+**fetch_reservations()**: Retrieve the current schedule:
 
 .. code-block:: python
 
@@ -447,10 +445,10 @@ read-modify-write pattern for individual reservation entries.
        print(f"Schedule enabled: {schedule.enabled}")
        for entry in schedule.reservation:
            print(f"  {entry.time} {', '.join(entry.days)}"
-                 f" — {entry.temperature}{entry.unit}"
-                 f" — {entry.mode_name}")
+                 f", {entry.temperature}{entry.unit}"
+                 f", {entry.mode_name}")
 
-**add_reservation()** — Append a new entry to the schedule:
+**add_reservation()**: Append a new entry to the schedule:
 
 .. code-block:: python
 
@@ -466,7 +464,7 @@ read-modify-write pattern for individual reservation entries.
        temperature=60.0, # In user's preferred unit
    )
 
-**delete_reservation()** — Remove an entry by 1-based index:
+**delete_reservation()**: Remove an entry by 1-based index:
 
 .. code-block:: python
 
@@ -474,7 +472,7 @@ read-modify-write pattern for individual reservation entries.
 
    await delete_reservation(mqtt, device, index=2)
 
-**update_reservation()** — Modify specific fields of an existing entry.
+**update_reservation()**: Modify specific fields of an existing entry.
 Only the keyword arguments you supply are changed; all others are kept:
 
 .. code-block:: python
@@ -504,12 +502,12 @@ Mode Selection Strategy
 
 Choose the right mode for each time period:
 
-* **Heat Pump (1)** — Lowest cost, slowest recovery. Best for
+* **Heat Pump (1)**: Lowest cost, slowest recovery. Best for
   off-peak or overnight.
-* **Energy Saver (3)** — Balanced hybrid mode. Good for all-day use.
-* **High Demand (4)** — Fast recovery, higher cost. Use for scheduled
+* **Energy Saver (3)**: Balanced hybrid mode. Good for all-day use.
+* **High Demand (4)**: Fast recovery, higher cost. Use for scheduled
   peak demand (e.g., morning showers).
-* **Electric (2)** — Emergency only. Very high cost, fastest recovery.
+* **Electric (2)**: Emergency only. Very high cost, fastest recovery.
   72-hour operation limit.
 
 Common Patterns
@@ -581,12 +579,22 @@ Common Patterns
 Important Notes
 ---------------
 
-* The device can store up to ~16 reservation entries.
+* The device held at least 32 reservation entries in a device test
+  (2026-09-24); larger lists were not tried.
+* A list write can be lost with no error: the device keeps its previous
+  list (2 of about 30 writes on the unit tested). Read the list back after
+  writing; ``update_reservations_confirmed()`` returns ``None`` when the
+  device does not echo the new list.
+* A list write starts no heating by itself: none of 8 writes started a
+  recovery within 3 minutes, with the tank 2.2 degF below the setpoint.
 * Reservations execute at the exact minute specified; the device
   checks every minute.
-* If the device is powered off, reservations will not execute.
+* Reservations execute while the device is powered off: in two runs of
+  a device test (2026-09-24) an entry fired with the heater powered off
+  and turned it on, in the entry's mode.
 * Reservations persist through power cycles and internet outages.
-* Reservations are suspended when vacation mode is active.
+* Reservations are suspended when vacation mode is active, and an entry
+  skipped in vacation is not run late when it ends.
 * Reservations execute normally during TOU periods. However, an entry's
   **mode** does not take effect while a TOU window is in force; only its
   target temperature does. See `Reservations and mode writes during a
@@ -599,9 +607,7 @@ Weekly Reservations
 The NaviLink app's "weekly" schedule screen is the reservation program
 above: it writes with ``update_reservations()`` on ``ctrl/rsv/rd`` and
 reads with ``request_reservations()``. There is no separate weekly
-command. (The app's enum declares a ``RESERVATION_WEEKLY`` code, but
-nothing sends it; the ``update_weekly_reservation()`` method that earlier
-library versions built on it was removed.)
+command.
 
 Recirculation Scheduling
 ========================
@@ -732,8 +738,8 @@ Months are encoded as a 12-bit field:
      - 1024
      - 2048
 
-* Summer (Jun–Aug): ``32 + 64 + 128 = 224``
-* Winter (Dec–Feb): ``1 + 2 + 2048 = 2051``
+* Summer (Jun-Aug): ``32 + 64 + 128 = 224``
+* Winter (Dec-Feb): ``1 + 2 + 2048 = 2051``
 * Year-round: ``4095``
 
 How TOU Works
@@ -746,11 +752,12 @@ How TOU Works
 4. **Peak periods**: Device may pre-charge the tank before peak to
    minimize peak-time heating.
 
-The device supports up to 16 TOU periods. Typical setups:
+The device holds at least 20 TOU periods (the most one unit has been
+seen to hold). Typical setups:
 
-* **Simple**: 3–4 periods (off-peak, shoulder, on-peak)
-* **Moderate**: 6–8 periods (split by season and weekday/weekend)
-* **Complex**: 12–16 periods (full seasonal tariff)
+* **Simple**: 3-4 periods (off-peak, shoulder, on-peak)
+* **Moderate**: 6-8 periods (split by season and weekday/weekend)
+* **Complex**: 12 or more periods (full seasonal tariff)
 
 .. _reservations and mode writes during a tou window:
 
@@ -774,18 +781,21 @@ the setpoint and ``hp_lower_off_diff_temp_setting`` non-zero.
   the same evening did the same.
 * **A reservation entry's mode does not.** The same entry with
   ``mode_id=3`` (Energy Saver) moved the setpoint at its scheduled minute.
-  ``dhw_operation_setting`` stayed ``HEAT_PUMP`` for the 4.5 minutes
+  ``dhw_operation_setting`` stayed ``HEAT_PUMP`` for the 4.6 minutes
   observed.
 * **A direct mode write is held, not discarded.** ``set_operation_mode()``
-  to Energy Saver produced no error and no change for two minutes. About
-  11 seconds after TOU was switched off, it took effect with nothing
-  else commanded, and the upper element came on.
+  to Energy Saver produced no error and no change for two minutes. It
+  took effect by the next status poll after TOU was switched off (polls
+  were about 10 seconds apart), with nothing else commanded, and the
+  upper element came on.
 
 So the priority is Vacation > Reservations > TOU for the target
 temperature. A mode change issued in a window may apply later, when the
 window is lifted. That includes one that looked like it failed, and it
-can start a heating element. **Confirm a mode write by reading
-``dhw_operation_setting`` back, and do not treat an unconfirmed one as
+can start a heating element. **While TOU is enabled, reading
+``dhw_operation_setting`` back cannot show whether a mode write took.
+Confirm it by what the device does, such as an element running or the
+heat source it reports, and do not treat an unconfirmed one as
 failed.** See also :doc:`../explanation/heating-elements`.
 
 **Measured since, on the same unit** (local dates and times):
@@ -808,8 +818,9 @@ failed.** See also :doc:`../explanation/heating-elements`.
   ``HEAT_PUMP`` was written over it, and TOU was then switched off for
   about 90 seconds. Energy Saver never took effect, neither while TOU was
   off nor in the hour after. The control, on 2026-09-19, was a held Energy
-  Saver with nothing written over it; it took effect 11 seconds after the
-  same release. So a controller that changes its mind inside a window
+  Saver with nothing written over it; it took effect by the next status
+  poll after the same release. So a controller that changes its mind
+  inside a window
   should write the mode it now wants, rather than leave the held one to
   land.
 * **Turning TOU back on inside a window drops a running element mode.** On
@@ -824,14 +835,17 @@ failed.** See also :doc:`../explanation/heating-elements`.
 windows only; the shoulder period was not tested. Each result comes from
 one or two runs. It is not settled whether the device holds a mode or
 accepts it and masks the read-back. Either way, writing the wanted mode
-over it leaves nothing pending.
+over it leaves nothing pending. Nor is a held mode a rule the device
+always follows: the same unit's history has two switches into an element
+mode that took inside the peak window with TOU enabled, and three
+element starts there.
 
 Example: Summer 3-Period Schedule
 ---------------------------------
 
 .. code-block:: python
 
-   # Off-peak: 9 PM – 9 AM weekdays
+   # Off-peak: 9 PM to 9 AM weekdays
    off_peak = {
        "season": 224, "week": 31,
        "startHour": 21, "startMinute": 0,
@@ -839,7 +853,7 @@ Example: Summer 3-Period Schedule
        "priceMin": 8, "priceMax": 10, "decimalPoint": 2
    }
 
-   # Shoulder: 9 AM – 2 PM weekdays
+   # Shoulder: 9 AM to 2 PM weekdays
    shoulder = {
        "season": 224, "week": 31,
        "startHour": 9, "startMinute": 0,
@@ -847,7 +861,7 @@ Example: Summer 3-Period Schedule
        "priceMin": 12, "priceMax": 18, "decimalPoint": 2
    }
 
-   # Peak: 2 PM – 9 PM weekdays
+   # Peak: 2 PM to 9 PM weekdays
    peak = {
        "season": 224, "week": 31,
        "startHour": 14, "startMinute": 0,
@@ -859,28 +873,25 @@ Example: Summer 3-Period Schedule
 Vacation Mode
 =============
 
-Vacation mode suspends heating for 1–99 days while maintaining
-critical functions. The range is the front panel's (User's Information
-Manual, section 3.4.5) and the NaviLink app's, and
-:meth:`~nwp500.mqtt.client.NavienMqttClient.set_vacation_days` accepts the
-same.
+Vacation mode suspends heating for 1-99 days. Freeze protection and
+anti-seize keep running.
 
 Behavior
 --------
 
 When vacation mode is active:
 
-1. **Heating suspended** — no heat pump or electric heating cycles.
-2. **Freeze protection** — still active. If temperature drops below
+1. **Heating suspended**: no heat pump or electric heating cycles.
+2. **Freeze protection**: still active. If temperature drops below
    43 °F (6 °C), electric heating activates briefly.
-3. **Anti-seize** — still runs. The manual lists freeze protection and
+3. **Anti-seize**: still runs. The manual lists freeze protection and
    anti-seize as examples of the minimal operations that continue; it
    does not say whether an anti-legionella cycle runs during vacation.
-4. **Automatic resumption** — heating resumes 9 hours before the
+4. **Automatic resumption**: heating resumes 9 hours before the
    vacation end date.
-5. **Other schedules suspended** — reservations and TOU are paused.
+5. **Other schedules suspended**: reservations and TOU are paused.
 
-Duration: 1–99 days. The device reports ``vacation_day_setting`` 0 when
+Duration: 1-99 days. The device reports ``vacation_day_setting`` 0 when
 no vacation is set.
 
 When to Use
@@ -895,9 +906,9 @@ When to Use
 
 **Not recommended for:**
 
-* Weekend trips — use reservations instead
-* Work-day absences — use Energy Saver + TOU
-* Daily night-time suspension — use reservations with Heat Pump mode
+* Weekend trips: use reservations instead
+* Work-day absences: use Energy Saver + TOU
+* Daily night-time suspension: use reservations with Heat Pump mode
 
 
 Anti-Legionella
@@ -926,7 +937,7 @@ CLI Usage
 Period Configuration
 --------------------
 
-The period is 1–30 days, and the library rejects anything
+The period is 1-30 days, and the library rejects anything
 else. The factory default is 7 days. Navien's manuals give no guidance on
 choosing a different period; follow local code or the advice of whoever
 is responsible for the water system.
@@ -938,16 +949,16 @@ Anti-legionella is especially important when:
 
 * Hard water areas (mineral deposits harbor bacteria)
 * Systems left unused for days (stagnant water)
-* Warm climates (25–45 °C ideal for legionella growth)
+* Warm climates (25-45 °C ideal for legionella growth)
 * Recirculation systems (warm water sitting in pipes)
 
 
 See Also
 ========
 
-* :doc:`optimize-tou` — Full TOU guide with OpenEI integration
-* :doc:`../reference/python_api/mqtt_client` — MQTT client API reference
-* :doc:`maintenance` — Maintenance and OTA operations
-* :doc:`../reference/protocol/data_conversions` — Temperature and power field
+* :doc:`optimize-tou`: Full TOU guide with OpenEI integration
+* :doc:`../reference/python_api/mqtt_client`: MQTT client API reference
+* :doc:`maintenance`: Maintenance and OTA operations
+* :doc:`../reference/protocol/data_conversions`: Temperature and power field
   conversions
-* :doc:`auto-recovery` — Handling temporary connectivity issues
+* :doc:`auto-recovery`: Handling temporary connectivity issues

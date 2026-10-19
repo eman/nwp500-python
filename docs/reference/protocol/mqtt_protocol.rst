@@ -44,10 +44,10 @@ publishes there.
 
 **Variables:**
 
-* ``{deviceType}`` - Device type code (52 for NWP500)
-* ``{mac}`` - Device MAC address without separators
-* ``{clientId}`` - MQTT client ID
-* ``{homeSeq}``, ``{userSeq}`` - The NaviLink app builds its reply topics with
+* ``{deviceType}``: Device type code (52 for NWP500)
+* ``{mac}``: Device MAC address without separators
+* ``{clientId}``: MQTT client ID
+* ``{homeSeq}``, ``{userSeq}``: The NaviLink app builds its reply topics with
   the home and user sequence numbers from the REST API. The cloud does not
   check the values; it keys one behaviour (the ``td/rd`` JSON decode below)
   on the five-segment *shape*. The library passes ``DeviceInfo.home_seq``
@@ -161,12 +161,12 @@ All MQTT messages are JSON with this structure:
 
 **Fields:**
 
-* ``clientID`` - MQTT client identifier
-* ``sessionID`` - Session identifier for tracking
-* ``requestTopic`` - Topic the request is published to
-* ``responseTopic`` - Topic the reply should be published to
-* ``protocolVersion`` - Protocol version (always 2)
-* ``request`` - Command payload (see below)
+* ``clientID``: MQTT client identifier
+* ``sessionID``: Session identifier for tracking
+* ``requestTopic``: Topic the request is published to
+* ``responseTopic``: Topic the reply should be published to
+* ``protocolVersion``: Protocol version (always 2)
+* ``request``: Command payload (see below)
 
 Request Object
 ==============
@@ -185,19 +185,19 @@ Request Object
 
 **Fields:**
 
-* ``command`` (int) - Command code (see Command Codes below)
-* ``deviceType`` (int) - Device type (52 for NWP500)
-* ``macAddress`` (str) - Device MAC address
-* ``additionalValue`` (str) - Additional device identifier
-* ``mode`` (str) - Control commands only: the command's mode string.
+* ``command`` (int): Command code (see Command Codes below)
+* ``deviceType`` (int): Device type (52 for NWP500)
+* ``macAddress`` (str): Device MAC address
+* ``additionalValue`` (str): Additional device identifier
+* ``mode`` (str): Control commands only: the command's mode string.
   The device acts on the numeric ``command`` code; the mode string is
   sent to match the app but does not select the action.
-* ``param`` (array) - Control commands only: integer parameters
-* ``paramStr`` (str) - Control commands only: always ``""``
-* ``year``, ``month``, ``day`` - Energy queries only (see below)
-* ``reservationUse``, ``reservation`` - Schedule writes only
-* ``controllerSerialNumber`` - TOU schedule write only
-* ``commitOta`` - OTA commit only
+* ``param`` (array): Control commands only: integer parameters
+* ``paramStr`` (str): Control commands only: always ``""``
+* ``year``, ``month``, ``day``: Energy queries only (see below)
+* ``reservationUse``, ``reservation``: Schedule writes only
+* ``controllerSerialNumber``: TOU schedule write only
+* ``commitOta``: OTA commit only
 
 Queries carry no ``mode``/``param``/``paramStr``.
 
@@ -1097,8 +1097,7 @@ and hours. The app's diagnostics screen labels the ``tdData`` values without
 converting them: ``dhwUseTotalFlow`` and ``longDhwUseTotalFlow`` in litres,
 ``dhwUseTotalTime`` and ``longDhwUseTotalTime`` in hours,
 ``avrageRecoveryTime`` in minutes, and the ``numOf*`` fields as counts. The
-remaining counters have no documented unit. The misspelled keys are the
-vendor's.
+remaining counters have no documented unit.
 
 Firmware Download Info Response
 -------------------------------
@@ -1242,7 +1241,7 @@ this protocol.
 Related Documentation
 =====================
 
-* :doc:`../python_api/mqtt_client` - Python MQTT client
-* :doc:`device_status` - Device status fields
-* :doc:`device_features` - Device feature fields
-* :doc:`error_codes` - Error codes
+* :doc:`../python_api/mqtt_client`: Python MQTT client
+* :doc:`device_status`: Device status fields
+* :doc:`device_features`: Device feature fields
+* :doc:`error_codes`: Error codes

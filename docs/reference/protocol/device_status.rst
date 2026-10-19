@@ -27,7 +27,7 @@ This document lists the fields found in the ``status`` object of device status m
      - integer
      - °F
      - Outdoor/ambient temperature
-     - ``RawCelsius(raw_value).to_fahrenheit_with_formula(TempFormulaType)`` - See :class:`nwp500.temperature.RawCelsius` and :meth:`nwp500.temperature.RawCelsius.to_fahrenheit_with_formula`
+     - ``RawCelsius(raw_value).to_fahrenheit_with_formula(TempFormulaType)``: See :class:`nwp500.temperature.RawCelsius` and :meth:`nwp500.temperature.RawCelsius.to_fahrenheit_with_formula`
    * - ``specialFunctionStatus``
      - integer
      - None
@@ -66,12 +66,12 @@ This document lists the fields found in the ``status`` object of device status m
    * - ``dhwUse``
      - bool
      - None
-     - Domestic Hot Water (DHW) usage status - indicates if hot water is currently being drawn from the tank.
+     - Domestic Hot Water (DHW) usage status: indicates if hot water is currently being drawn from the tank.
      - Converted from integer (1=OFF, 2=ON) to bool
    * - ``dhwUseSustained``
      - bool
      - None
-     - Sustained DHW usage status - indicates prolonged hot water usage.
+     - Sustained DHW usage status: indicates prolonged hot water usage.
      - Converted from integer (1=OFF, 2=ON) to bool
    * - ``dhwTemperature``
      - integer
@@ -96,12 +96,12 @@ This document lists the fields found in the ``status`` object of device status m
    * - ``faultStatus1``
      - integer
      - None
-     - Fault status register 1 - bitfield indicating various fault conditions.
+     - Fault status register 1: bitfield indicating various fault conditions.
      - None
    * - ``faultStatus2``
      - integer
      - None
-     - Fault status register 2 - bitfield indicating additional fault conditions.
+     - Fault status register 2: bitfield indicating additional fault conditions.
      - None
    * - ``wifiRssi``
      - integer
@@ -131,17 +131,17 @@ This document lists the fields found in the ``status`` object of device status m
    * - ``dischargeTemperature``
      - integer
      - °F
-     - Compressor discharge temperature - temperature of refrigerant leaving the compressor.
+     - Compressor discharge temperature: temperature of refrigerant leaving the compressor.
      - DeciCelsiusToF
    * - ``suctionTemperature``
      - integer
      - °F
-     - Compressor suction temperature - temperature of refrigerant entering the compressor.
+     - Compressor suction temperature: temperature of refrigerant entering the compressor.
      - DeciCelsiusToF
    * - ``evaporatorTemperature``
      - integer
      - °F
-     - Evaporator temperature - temperature where heat is absorbed from ambient air.
+     - Evaporator temperature: temperature where heat is absorbed from ambient air.
      - DeciCelsiusToF
    * - ``ambientTemperature``
      - integer
@@ -151,7 +151,7 @@ This document lists the fields found in the ``status`` object of device status m
    * - ``targetSuperHeat``
      - integer
      - °F (difference)
-     - Target superheat value - the desired temperature difference ensuring complete refrigerant vaporization. A difference, so °F is ``raw / 10.0 * 9/5`` with no +32 offset.
+     - Target superheat value: the temperature difference that keeps the refrigerant fully vaporized. A difference, so °F is ``raw / 10.0 * 9/5`` with no +32 offset.
      - ``raw / 10.0`` (°C), ``raw / 10.0 * 9/5`` (°F)
    * - ``compUse``
      - bool
@@ -191,7 +191,7 @@ This document lists the fields found in the ``status`` object of device status m
    * - ``dhwChargePer``
      - integer
      - %
-     - DHW charge percentage - estimated percentage of hot water capacity available (0-100%).
+     - DHW charge percentage: estimated percentage of hot water capacity available (0-100%).
      - None
    * - ``drEventStatus``
      - integer
@@ -306,7 +306,7 @@ This document lists the fields found in the ``status`` object of device status m
    * - ``currentSuperHeat``
      - integer
      - °F (difference)
-     - Current superheat value - actual temperature difference between suction and evaporator temperatures. A difference, so °F is ``raw / 10.0 * 9/5`` with no +32 offset.
+     - Current superheat value: actual temperature difference between suction and evaporator temperatures. A difference, so °F is ``raw / 10.0 * 9/5`` with no +32 offset.
      - ``raw / 10.0`` (°C), ``raw / 10.0 * 9/5`` (°F)
    * - ``heatUpperUse``
      - bool
@@ -346,12 +346,12 @@ This document lists the fields found in the ``status`` object of device status m
    * - ``cumulatedDhwFlowRate``
      - integer
      - L or gal
-     - Cumulative DHW flow - total hot water delivered since installation, in whole litres; see :ref:`flow-rate-fields`.
+     - Cumulative DHW flow: total hot water delivered since installation, in whole litres; see :ref:`flow-rate-fields`.
      - ``raw`` (L), ``raw / 3.785`` (gal)
    * - ``touStatus``
      - integer
      - None
-     - Time of Use (TOU) status - indicates if TOU scheduled operation is active.
+     - Time of Use (TOU) status: indicates if TOU scheduling is enabled (0 = disabled, 1 = enabled). It follows the TOU on/off command and reads 1 outside a TOU period too, so it does not show whether a period is in force; see :doc:`/explanation/tou-recovery-cap`.
      - None
    * - ``hpUpperOnTempSetting``
      - integer
@@ -456,7 +456,7 @@ This document lists the fields found in the ``status`` object of device status m
    * - ``availableEnergyCapacity``
      - integer
      - Wh
-     - Energy still **needed** to reach the setpoint - a heating deficit, not available energy. Falls to zero as the tank charges; during a TOU window that raises ``hpUpperOnTempSetting``, about 2 degC short of the setpoint. Python name: ``energy_to_setpoint``.
+     - Energy still **needed** to reach the setpoint: a heating deficit, not available energy. Falls to zero as the tank charges; during a TOU window that raises ``hpUpperOnTempSetting``, about 2 degC short of the setpoint. Python name: ``energy_to_setpoint``.
      - ``x 4`` (energy quantum)
 
 DHW Operation Setting Modes
@@ -533,13 +533,13 @@ The following ``operationMode`` values appear in status messages from the device
 Understanding operationMode vs dhwOperationSetting
 ---------------------------------------------------
 
-These two fields serve different purposes and it's critical to understand their relationship:
+These two fields serve different purposes:
 
 Field Definitions
 ^^^^^^^^^^^^^^^^^
 
 **dhwOperationSetting** (DhwOperationSetting enum with command values 1-6)
-  The user's **configured mode preference** - what heating mode the device should use when it needs to heat water. This is set via the ``dhw-mode`` command and persists until changed by the user or device.
+  The user's **configured mode preference**: what heating mode the device should use when it needs to heat water. This is set via the ``dhw-mode`` command and persists until changed by the user or device.
 
   * Type: ``DhwOperationSetting`` enum
   * Values:
@@ -557,7 +557,7 @@ Field Definitions
   * Value 6 (``POWER_OFF``) indicates the device was powered off via the power-off command. This is how to distinguish between "powered off" and "on but idle".
 
 **operationMode** (CurrentOperationMode enum with status values 0, 32, 64, 96)
-  The device's **current actual operational state** - what the device is doing RIGHT NOW. This reflects real-time operation and changes automatically based on whether the device is idle or actively heating.
+  The device's **current actual operational state**: what the device is doing RIGHT NOW. This reflects real-time operation and changes automatically based on whether the device is idle or actively heating.
 
   * Type: ``CurrentOperationMode`` enum
   * Values:
@@ -570,7 +570,7 @@ Field Definitions
   * Set by: Device automatically based on heating demand
   * Changes: Dynamically as device starts/stops heating
   * Meaning: "This is what I'm doing right now"
-  * **Note**: This field shows ``STANDBY`` (0) both when device is powered off AND when it's on but not heating. Check ``dhwOperationSetting`` to determine if device is actually powered off (value 6).
+  * **Note**: This field shows ``STANDBY`` (0) both when device is powered off AND when it's on but not heating. Check ``dhwOperationSetting`` to tell whether the device is powered off (value 6).
 
 Relationship
 ^^^^^^^^^^^^^^^^
@@ -620,7 +620,7 @@ Real-World Examples
     operationMode = 0 (STANDBY)                # Currently idle
     operationBusy = false                      # No heating
 
-  *Interpretation:* Device was powered off using the power-off command. Although ``operationMode`` shows ``STANDBY`` (same as an idle device), the ``dhwOperationSetting`` value of 6 indicates it's actually powered off, not just idle.
+  *Interpretation:* Device was powered off using the power-off command. Although ``operationMode`` shows ``STANDBY`` (same as an idle device), the ``dhwOperationSetting`` value of 6 shows it is powered off, not idle.
 
 Displaying Status in a User Interface
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -711,17 +711,17 @@ For user-facing applications, follow these guidelines:
 
 **Display Notes**
 
-1. **Never display operationMode as "the mode"** - users don't care that the device is in "HYBRID_EFFICIENCY_MODE", they want to know it's set to "Energy Saver"
+1. **Never display operationMode as "the mode"**: users don't care that the device is in "HYBRID_EFFICIENCY_MODE", they want to know it's set to "Energy Saver"
 
-2. **Do use operationMode for heating indicators** - it tells you whether the device is actively heating right now
+2. **Do use operationMode for heating indicators**: it tells you whether the device is actively heating right now
 
-3. **Mode changes affect dhwOperationSetting** - when a user changes the mode, you're setting ``dhwOperationSetting``
+3. **Mode changes affect dhwOperationSetting**: when a user changes the mode, you're setting ``dhwOperationSetting``
 
-4. **operationMode changes automatically** - you cannot directly set this; it changes based on device operation
+4. **operationMode changes automatically**: you cannot directly set this; it changes based on device operation
 
-5. **Separate enum types provide clarity** - ``DhwOperationSetting`` (values 1-6) for user preferences, ``CurrentOperationMode`` (values 0/32/64/96) for real-time states
+5. **Separate enum types provide clarity**: ``DhwOperationSetting`` (values 1-6) for user preferences, ``CurrentOperationMode`` (values 0/32/64/96) for real-time states
 
-6. **Power off detection** - Check if ``dhwOperationSetting == DhwOperationSetting.POWER_OFF`` to determine if device is powered off vs just idle
+6. **Power off detection**: Check if ``dhwOperationSetting == DhwOperationSetting.POWER_OFF`` to determine if device is powered off vs just idle
 
 Technical Notes
 ---------------
@@ -736,13 +736,13 @@ Technical Notes
 
 * Upper and lower heating elements: 3,755W @ 208V or 5,000W @ 240V
   (measured 5,219 W upper / 5,200 W lower on one 240 V unit)
-* Elements do not operate simultaneously in Electric mode - upper first,
+* Elements do not operate simultaneously in Electric mode: upper first,
   then lower, with the handover in a single status message
 * Heating elements activate for freeze protection when tank < 43°F (6°C)
 * The ``he*TempSetting`` fields do **not** describe what happens on
   **entry** to a mode: in Electric and High Demand the on and off
   settings are equal and every ``he*DiffTempSetting`` reads 0. The
-  measured entry differential is **mode-dependent** - at most 0.3 degC
+  measured entry differential is **mode-dependent**: at most 0.3 degC
   in ``ELECTRIC``, within (0.2, 0.7] degC in ``HIGH_DEMAND``, and
   within (0.8, 1.0] degC in ``ENERGY_SAVER``.
 * **Later in a stint it depends on the mode.** ``ENERGY_SAVER``
@@ -776,6 +776,6 @@ Technical Notes
 See Also
 --------
 
-* :doc:`error_codes` - Complete error code reference with diagnostics
-* :doc:`../../how-to/track-energy` - Energy consumption tracking
-* :doc:`mqtt_protocol` - Status message format details
+* :doc:`error_codes`: Complete error code reference with diagnostics
+* :doc:`../../how-to/track-energy`: Energy consumption tracking
+* :doc:`mqtt_protocol`: Status message format details

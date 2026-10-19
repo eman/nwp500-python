@@ -194,9 +194,9 @@ async def add_reservation(
         days: Days of the week.  Accepts full names (``"Monday"``), 2-letter
             abbreviations (``"MO"``), or integer indices where 0 = Monday and
             6 = Sunday.
-        hour: Hour of the day in 24-hour format (0–23).
-        minute: Minute of the hour (0–59).
-        mode: DHW operation mode (1–6).
+        hour: Hour of the day in 24-hour format (0-23).
+        minute: Minute of the hour (0-59).
+        mode: DHW operation mode (1-6).
         temperature: Target temperature in the user's preferred unit.
 
     Raises:
@@ -262,7 +262,7 @@ async def delete_reservation(
     if index < 1 or index > count:
         raise ValueError(
             f"Invalid reservation index {index}. "
-            f"Valid range: 1–{count} ({count} reservation(s) exist)"
+            f"Valid range: 1-{count} ({count} reservation(s) exist)"
         )
 
     current_reservations = [
@@ -304,9 +304,9 @@ async def update_reservation(
         days: Replace the days, or ``None`` to keep current.  Accepts full
             names, 2-letter abbreviations, or integer indices (see
             :func:`add_reservation`).
-        hour: Replace the hour (0–23), or ``None`` to keep current.
-        minute: Replace the minute (0–59), or ``None`` to keep current.
-        mode: Replace the mode (1–6), or ``None`` to keep current.
+        hour: Replace the hour (0-23), or ``None`` to keep current.
+        minute: Replace the minute (0-59), or ``None`` to keep current.
+        mode: Replace the mode (1-6), or ``None`` to keep current.
         temperature: Replace the temperature (in the user's preferred unit),
             or ``None`` to keep the existing raw ``param`` value unchanged.
 
@@ -325,7 +325,7 @@ async def update_reservation(
     if index < 1 or index > count:
         raise ValueError(
             f"Invalid reservation index {index}. "
-            f"Valid range: 1–{count} ({count} reservation(s) exist)"
+            f"Valid range: 1-{count} ({count} reservation(s) exist)"
         )
 
     if hour is not None and not 0 <= hour <= 23:

@@ -17,6 +17,7 @@ Python API
    python_api/events
    python_api/exceptions
    python_api/cli
+   python_api/sim
    api/modules
 
 Protocol Reference
@@ -42,3 +43,4 @@ General Reference
    enumerations
    installation
    configuration
+   simulator-inputs
