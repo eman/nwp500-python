@@ -24,11 +24,13 @@ Added
   answered; the readers that decode a block raise ``CrcMismatchError``
   on a reply that failed its checksum.
   ``read_tou_records()`` decodes the stored time-of-use plan into
-  ``TouRecord`` (``as_period()`` gives the cloud's period dict); one read
-  returns up to the first twelve intervals. ``read_sub_status()`` decodes
-  the ``SSD`` block into two DIP-switch words (``SubStatus``), using the
-  layout Navien's boiler service toolkit reads; it is unconfirmed on the
-  NWP500.
+  ``TOUPeriod``, the cloud's model; one read returns up to the first
+  twelve intervals. ``DeviceInfoBlock`` (``DID``), ``ControllerSerials``
+  (``MSCD``) and ``SoftwareInfoBlock`` (``MSWD``) use the cloud models'
+  field names for the fields matched against them.
+  ``read_sub_status()`` decodes the ``SSD`` block into two DIP-switch
+  words (``SubStatus``), using the layout Navien's boiler service toolkit
+  reads; it is unconfirmed on the NWP500.
 - ``nwp-cli --backend ble`` (with ``--ble-address`` or a scan) runs
   ``serial`` and ``info`` over Bluetooth without signing in, and refuses
   other commands. Without ``--backend``, commands use the cloud as before.
@@ -36,8 +38,8 @@ Added
   offers the MQTT client methods the heater serves over Bluetooth and
   raises ``BleUnsupportedError`` for the rest. Bluetooth temperatures use
   the cloud models' conversion and unit-system preference;
-  ``DeviceInfo.min_operation_temperature()`` follows the preference when
-  ``celsius`` is not given (Fahrenheit without one, as before).
+  ``DeviceInfoBlock.min_operation_temperature()`` follows the preference
+  when ``celsius`` is not given (Fahrenheit without one, as before).
 - **New REST endpoints.** ``NavienAPIClient`` gains
   ``get_push_settings()`` / ``set_push_settings()``
   (``/user/get-push-settings``, ``/user/set-push-settings``),

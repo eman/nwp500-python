@@ -107,7 +107,7 @@ async def run_with_ble(
 
 
 async def print_info(adapter: BleMqttAdapter, raw: bool) -> None:
-    """``info`` over Bluetooth: what the ``DID`` and ``MSCD`` blocks hold.
+    """``info`` over Bluetooth: the ``DID``, ``MSCD`` and ``MSWD`` fields.
 
     Only fields read from the heater are shown. The MQTT ``info`` output
     covers capability flags and firmware versions, which these blocks do
@@ -115,23 +115,31 @@ async def print_info(adapter: BleMqttAdapter, raw: bool) -> None:
     """
     await adapter.request_device_info(None)
     info, serials = adapter.device_info, adapter.controller_serials
-    if info is None or serials is None:  # request_device_info sets both
+    software = adapter.software_info
+    if info is None or serials is None or software is None:
+        # request_device_info sets all three
         raise RuntimeError("device info was not read")
     if raw:
         print(
             json.dumps(
-                {"DID": info.raw.hex(), "MSCD": serials.raw.hex()}, indent=2
+                {
+                    "DID": info.raw.hex(),
+                    "MSCD": serials.raw.hex(),
+                    "MSWD": software.raw.hex(),
+                },
+                indent=2,
             )
         )
         return
-    feature = device_feature_from_blocks(info, serials)
+    feature = device_feature_from_blocks(info, serials, software)
     unit = feature.get_field_unit("dhw_temperature_min")
     lo, hi = feature.dhw_temperature_min, feature.dhw_temperature_max
     rows = [
-        ("Controller serial", serials.product_serial),
+        ("Controller serial", feature.controller_serial_number),
         ("PCB serial", serials.pcb_serial),
-        ("Model type code", str(info.model_type)),
-        ("Country code", str(info.country_code)),
+        ("Model type code", str(feature.model_type_code)),
+        ("Country code", str(feature.country_code)),
+        ("Controller SW code", f"{feature.controller_sw_code:#010x}"),
         ("Setpoint range", f"{lo:.1f} - {hi:.1f}{unit}"),
         ("Min operation temp", f"{info.min_operation_temperature():.1f}{unit}"),
     ]

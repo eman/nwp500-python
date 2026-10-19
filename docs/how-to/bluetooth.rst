@@ -74,11 +74,22 @@ The commands run their usual handlers against
 Bluetooth and raises :class:`~nwp500.ble.BleUnsupportedError` for the rest.
 Where the MQTT client delivers a ``DeviceFeature``, the adapter delivers a
 :class:`~nwp500.ble.BleDeviceFeature`. It has only the fields the blocks
-carry, each checked against the heater's MQTT report, and any other field
-raises :class:`AttributeError` rather than reading as a default.
+carry, each checked against the heater's MQTT report: the controller
+serial, the setpoint range, the model type, the country code and the
+controller software code. Any other field raises :class:`AttributeError`
+rather than reading as a default.
+
+The block decoders use the cloud models' field names where a field was
+matched against them. :class:`~nwp500.ble.DeviceInfoBlock` (``DID``) has
+``dhw_temperature_min_raw``, ``dhw_temperature_max_raw``,
+``model_type_code`` and ``country_code``; it is unrelated to
+:class:`nwp500.models.DeviceInfo`, the cloud's device record.
+:class:`~nwp500.ble.ControllerSerials` (``MSCD``) has
+``controller_serial_number``, and :class:`~nwp500.ble.SoftwareInfoBlock`
+(``MSWD``) has ``controller_sw_code``.
 
 Temperatures convert as the cloud models do: ``BleDeviceFeature`` and
-:meth:`~nwp500.ble.DeviceInfo.min_operation_temperature` go through the
+:meth:`~nwp500.ble.DeviceInfoBlock.min_operation_temperature` go through the
 same half-degree conversion and follow ``--unit-system``
 (:func:`nwp500.set_unit_system`). The blocks do not carry the heater's own
 display unit, which the cloud path detects from the device, so without a
@@ -101,7 +112,7 @@ empty). The boiler parameter classes 51-54 are not implemented on this
 controller at all.
 
 Min Operation Temp is readable but not writable here: it is DID byte 17
-(:meth:`~nwp500.ble.DeviceInfo.min_operation_temperature`), confirmed equal
+(:meth:`~nwp500.ble.DeviceInfoBlock.min_operation_temperature`), confirmed equal
 to the device's ``heatMinOpTemperature`` over MQTT. The writable parameter
 class is selected from a per-model table the service app downloads from
 Navien's server, so it is not reachable from this interface alone.
@@ -116,11 +127,10 @@ Read the time-of-use plan
 records with the fields of a cloud TOU interval: season and weekday
 bitfields, start and end times, and prices scaled by ``10 **
 decimal_point``. :meth:`~nwp500.ble.NavienBleClient.read_tou_records`
-decodes them into :class:`~nwp500.ble.TouRecord`, and
-``TouRecord.as_period()`` gives the dict that
-:class:`~nwp500.models.TOUPeriod` validates, so a plan read here can be
-compared with the cloud's. Checked on a unit, the records match the cloud's
-copy of its plan field for field.
+decodes them into :class:`~nwp500.models.TOUPeriod`, the model the MQTT
+client and REST API use, so a plan read here compares directly with the
+cloud's (for example with ``TOUPeriod.canonical()``). Checked on a unit,
+the decoded intervals equal the cloud's copy of its plan.
 
 The address is a record index, and one reply runs from it to the end of a
 page. The first page is records 0-11, so the default read returns up to
@@ -157,7 +167,7 @@ From Python:
        info = await ble.read_device_info()
        serials = await ble.read_controller_serials()
        for record in await ble.read_tou_records():
-           print(record.as_period())
+           print(record.start_hour, record.end_hour, record.decoded_price_min)
        dip = await ble.read_sub_status()
        print(hex(dip.dip_switch_1), hex(dip.dip_switch_2))
        errors = await ble.read(ClassCode.EHD)

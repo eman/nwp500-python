@@ -3,9 +3,9 @@
 Code written against :class:`nwp500.NavienMqttClient` (the ``nwp-cli``
 handlers, for one) can run over Bluetooth for the operations the heater
 supports there. Today that is the device-feature request, answered from
-the ``DID`` and ``MSCD`` blocks. Every other MQTT client attribute raises
-:class:`BleUnsupportedError`: the heater sends no live status over
-Bluetooth, and every class it answers is read-only.
+the ``DID``, ``MSCD`` and ``MSWD`` blocks. Every other MQTT client
+attribute raises :class:`BleUnsupportedError`: the heater sends no live
+status over Bluetooth, and every class it answers is read-only.
 """
 
 from __future__ import annotations
@@ -19,7 +19,8 @@ from ..temperature import HalfCelsius
 from .client import NavienBleClient
 from .protocol import (
     ControllerSerials,
-    DeviceInfo,
+    DeviceInfoBlock,
+    SoftwareInfoBlock,
     prefers_celsius,
     temperature_unit,
 )
@@ -42,7 +43,8 @@ class BleDeviceFeature:
     and each was checked against the same heater's MQTT device-info
     report (2026-10-19): the controller serial (``MSCD``), the setpoint
     range (``DID`` bytes 16 and 17, half-degrees Celsius), the model type
-    (byte 21) and the country code (byte 24). Any other ``DeviceFeature``
+    (byte 21), the country code (byte 24) and the controller software code
+    (``MSWD`` bytes 0-3). Any other ``DeviceFeature``
     field, such as the capability flags or firmware versions, is not in
     these blocks and raises :class:`AttributeError` here rather than
     reading as a default; read those over MQTT.
@@ -58,6 +60,7 @@ class BleDeviceFeature:
     dhw_temperature_max_raw: int
     model_type_code: int
     country_code: int
+    controller_sw_code: int
 
     @property
     def dhw_temperature_min(self) -> float:
@@ -85,15 +88,18 @@ FeatureCallback = Callable[[BleDeviceFeature], None]
 
 
 def device_feature_from_blocks(
-    info: DeviceInfo, serials: ControllerSerials
+    info: DeviceInfoBlock,
+    serials: ControllerSerials,
+    software: SoftwareInfoBlock,
 ) -> BleDeviceFeature:
-    """The device-feature fields the ``DID`` and ``MSCD`` blocks carry."""
+    """The device-feature fields in the ``DID``, ``MSCD``, ``MSWD`` blocks."""
     return BleDeviceFeature(
-        controller_serial_number=serials.product_serial,
-        dhw_temperature_max_raw=info.hot_water_temp_max,
-        dhw_temperature_min_raw=info.hot_water_temp_min,
-        model_type_code=info.model_type,
+        controller_serial_number=serials.controller_serial_number,
+        dhw_temperature_max_raw=info.dhw_temperature_max_raw,
+        dhw_temperature_min_raw=info.dhw_temperature_min_raw,
+        model_type_code=info.model_type_code,
         country_code=info.country_code,
+        controller_sw_code=software.controller_sw_code,
     )
 
 
@@ -115,8 +121,9 @@ class BleMqttAdapter:
 
     def __init__(self, client: NavienBleClient) -> None:
         self.client = client
-        self.device_info: DeviceInfo | None = None
+        self.device_info: DeviceInfoBlock | None = None
         self.controller_serials: ControllerSerials | None = None
+        self.software_info: SoftwareInfoBlock | None = None
         self._feature_callbacks: list[FeatureCallback] = []
 
     async def __aenter__(self) -> BleMqttAdapter:
@@ -140,7 +147,9 @@ class BleMqttAdapter:
         return 0
 
     async def request_device_info(self, device: Any) -> int:
-        """Read ``DID`` and ``MSCD`` and deliver a :class:`BleDeviceFeature`.
+        """Read the blocks and deliver a :class:`BleDeviceFeature`.
+
+        Reads ``DID``, ``MSCD`` and ``MSWD``.
 
         Raises:
             CrcMismatchError: A reply failed its checksum.
@@ -148,8 +157,9 @@ class BleMqttAdapter:
         """
         self.device_info = await self.client.read_device_info()
         self.controller_serials = await self.client.read_controller_serials()
+        self.software_info = await self.client.read_software_info()
         feature = device_feature_from_blocks(
-            self.device_info, self.controller_serials
+            self.device_info, self.controller_serials, self.software_info
         )
         for callback in list(self._feature_callbacks):
             callback(feature)

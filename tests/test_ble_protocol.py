@@ -9,20 +9,22 @@ import pytest
 from nwp500.ble import (
     DEFAULT_READ_LENGTHS,
     NWP500_RESPONDING_CLASSES,
+    TOU_RECORD_SIZE,
     ClassCode,
     Command,
     ControllerSerials,
     CrcMismatchError,
-    DeviceInfo,
+    DeviceInfoBlock,
     NavienBleClient,
     SubStatus,
-    TouRecord,
     build_packet,
     build_read,
     crc16,
     parse_packet,
+    parse_tou_record,
     parse_tou_records,
 )
+from nwp500.models import TOUPeriod
 
 
 def test_crc16_is_modbus():
@@ -108,10 +110,13 @@ def test_device_info_parse():
     data[24] = 7
     data[26], data[27], data[28] = 25, 6, 30
     data[44], data[45] = 1, 3
-    info = DeviceInfo.parse(bytes(data))
+    info = DeviceInfoBlock.parse(bytes(data))
     assert (info.version, info.version_sub) == (10, 2)
-    assert (info.hot_water_temp_max, info.hot_water_temp_min) == (131, 70)
-    assert info.model_type == 240
+    assert (info.dhw_temperature_max_raw, info.dhw_temperature_min_raw) == (
+        131,
+        70,
+    )
+    assert info.model_type_code == 240
     assert info.country_code == 7
     assert (
         info.manufacturing_year,
@@ -120,7 +125,7 @@ def test_device_info_parse():
     ) == (25, 6, 30)
     assert (info.toolkit_version, info.toolkit_version_sub) == (3, 1)
     with pytest.raises(ValueError):
-        DeviceInfo.parse(b"\x00" * 10)
+        DeviceInfoBlock.parse(b"\x00" * 10)
 
 
 def test_controller_serials_parse():
@@ -128,7 +133,7 @@ def test_controller_serials_parse():
     data[0:14] = b"56496061BT2223"
     data[20:32] = b"PCB-123456AB"
     cs = ControllerSerials.parse(bytes(data))
-    assert cs.product_serial == "56496061BT2223"
+    assert cs.controller_serial_number == "56496061BT2223"
     assert cs.pcb_serial == "PCB-123456AB"
 
 
@@ -187,7 +192,7 @@ async def test_client_reads_and_parses_blocks():
         info = await ble.read_device_info()
         assert info.raw == did
         serials = await ble.read_controller_serials()
-        assert serials.product_serial == "SERIA"
+        assert serials.controller_serial_number == "SERIA"
         blocks = await ble.read_parameter_blocks()
         assert blocks[ClassCode.SPD] == spd
         assert set(blocks) == {
@@ -247,7 +252,7 @@ def test_device_info_min_operation_temperature():
     data = bytearray(58)
     data[21] = 240  # model type (HPWH)
     data[17] = 81
-    info = DeviceInfo.parse(bytes(data))
+    info = DeviceInfoBlock.parse(bytes(data))
     assert info.min_operation_temperature_raw == 81
     assert round(info.min_operation_temperature(celsius=True), 1) == 40.5
     assert round(info.min_operation_temperature(), 1) == 104.9
@@ -418,20 +423,27 @@ CLOUD_INTERVALS = [
 ]
 
 
-def test_tou_records_match_the_cloud_plan():
+def _cloud_period(season, week, start, end, price):
+    """A TOUPeriod as the MQTT client and REST API build it."""
+    return TOUPeriod.model_validate(
+        {
+            "season": season,
+            "week": week,
+            "startHour": start[0],
+            "startMinute": start[1],
+            "endHour": end[0],
+            "endMinute": end[1],
+            "priceMin": price,
+            "priceMax": price,
+            "decimalPoint": 5,
+        }
+    )
+
+
+def test_tou_records_equal_the_cloud_periods():
     records = parse_tou_records(TOU_PLAN_PAGE)
-    assert [
-        (
-            r.season,
-            r.week,
-            (r.start_hour, r.start_minute),
-            (r.end_hour, r.end_minute),
-            r.price_min,
-        )
-        for r in records
-    ] == CLOUD_INTERVALS
-    assert all(r.decimal_point == 5 for r in records)
-    assert all(r.price_max == r.price_min for r in records)
+    assert all(isinstance(r, TOUPeriod) for r in records)
+    assert records == [_cloud_period(*iv) for iv in CLOUD_INTERVALS]
     assert records[6].decoded_price_max == pytest.approx(0.55214)
 
 
@@ -441,30 +453,11 @@ def test_tou_record_field_positions():
         + (1000).to_bytes(4, "little")
         + (250).to_bytes(4, "little")
     )
-    r = TouRecord.parse(raw)
+    r = parse_tou_record(raw)
     assert (r.season, r.week) == (0x1234, 0x82)
-    assert (r.start_hour, r.start_minute, r.end_hour, r.end_minute) == (
-        1,
-        2,
-        3,
-        4,
-    )
+    assert (r.start_hour, r.start_min, r.end_hour, r.end_min) == (1, 2, 3, 4)
     assert (r.price_max, r.price_min, r.decimal_point) == (1000, 250, 2)
     assert r.decoded_price_min == pytest.approx(2.5)
-
-
-def test_tou_record_as_period_validates_as_tou_period():
-    from nwp500.models import TOUPeriod
-
-    record = parse_tou_records(TOU_PLAN_PAGE)[2]
-    period = TOUPeriod.model_validate(record.as_period())
-    assert (period.season, period.week) == (0x01F, 0x7C)
-    assert (period.start_hour, period.end_hour, period.end_min) == (
-        16,
-        20,
-        59,
-    )
-    assert period.decoded_price_min == pytest.approx(0.32063)
 
 
 def test_parse_tou_records_drops_empty_slots_and_rejects_partial_records():
@@ -474,7 +467,8 @@ def test_parse_tou_records_drops_empty_slots_and_rejects_partial_records():
     with pytest.raises(ValueError):
         parse_tou_records(TOU_PLAN_PAGE[:20])
     with pytest.raises(ValueError):
-        TouRecord.parse(bytes(15))
+        parse_tou_record(bytes(15))
+    assert TOU_RECORD_SIZE == 16
 
 
 @pytest.mark.asyncio
@@ -555,3 +549,12 @@ def test_cli_read_prints_decoded_sub_status(monkeypatch, capsys):
     transport = FakeTransport({ClassCode.SSD: SSD_BLOCK})
     assert _run_read(monkeypatch, transport, ["SSD"]) == 0
     assert "dip_switch_1=0x0004 dip_switch_2=0x0000" in capsys.readouterr().out
+
+
+def test_software_info_block_reads_the_controller_sw_code():
+    from nwp500.ble import SoftwareInfoBlock
+
+    sw = SoftwareInfoBlock.parse(bytes.fromhex("110700020b05") + bytes(53))
+    assert sw.controller_sw_code == 0x02000711
+    with pytest.raises(ValueError):
+        SoftwareInfoBlock.parse(bytes(3))

@@ -12,6 +12,7 @@ import logging
 from collections.abc import Callable
 from typing import Any, Protocol
 
+from ..models.tou import TOUPeriod
 from .protocol import (
     ADVERTISED_NAME_FRAGMENT,
     DEFAULT_READ_LENGTHS,
@@ -22,10 +23,10 @@ from .protocol import (
     Command,
     ControllerSerials,
     CrcMismatchError,
-    DeviceInfo,
+    DeviceInfoBlock,
     Packet,
+    SoftwareInfoBlock,
     SubStatus,
-    TouRecord,
     build_packet,
     build_read,
     parse_packet,
@@ -237,13 +238,13 @@ class NavienBleClient:
             )
         return packet.data
 
-    async def read_device_info(self) -> DeviceInfo:
+    async def read_device_info(self) -> DeviceInfoBlock:
         """Read and decode the device info block (``DID``).
 
         Raises:
             CrcMismatchError: The reply failed its checksum.
         """
-        return DeviceInfo.parse(await self._read_checked(ClassCode.DID))
+        return DeviceInfoBlock.parse(await self._read_checked(ClassCode.DID))
 
     async def read_controller_serials(self) -> ControllerSerials:
         """Read and decode the controller serial numbers (``MSCD``).
@@ -252,6 +253,14 @@ class NavienBleClient:
             CrcMismatchError: The reply failed its checksum.
         """
         return ControllerSerials.parse(await self._read_checked(ClassCode.MSCD))
+
+    async def read_software_info(self) -> SoftwareInfoBlock:
+        """Read and decode the controller software block (``MSWD``).
+
+        Raises:
+            CrcMismatchError: The reply failed its checksum.
+        """
+        return SoftwareInfoBlock.parse(await self._read_checked(ClassCode.MSWD))
 
     async def read_sub_status(self) -> SubStatus:
         """Read and decode the ``SSD`` block: two DIP-switch settings.
@@ -264,8 +273,12 @@ class NavienBleClient:
         """
         return SubStatus.parse(await self._read_checked(ClassCode.SSD))
 
-    async def read_tou_records(self, address: int = 0) -> list[TouRecord]:
+    async def read_tou_records(self, address: int = 0) -> list[TOUPeriod]:
         """Read the stored TOU plan from record ``address`` on.
+
+        Each interval decodes into :class:`~nwp500.models.TOUPeriod`, the
+        model the MQTT client and REST API use, so the plan compares
+        directly with the cloud's (e.g. with ``TOUPeriod.canonical()``).
 
         The address is a record index, and one reply runs from it to the
         end of a page, empty slots dropped. On an NWP500 the first page is

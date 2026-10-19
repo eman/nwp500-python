@@ -30,6 +30,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import IntEnum
 
+from ..models.tou import TOUPeriod
 from ..temperature import HalfCelsius
 from ..unit_system import get_unit_system
 
@@ -266,12 +267,18 @@ def temperature_unit() -> str:
 
 
 @dataclass(frozen=True)
-class DeviceInfo:
-    """The 58-byte ``DID`` block, as the NaviLink app reads it.
+class DeviceInfoBlock:
+    """The 58-byte ``DID`` block.
 
-    Field names follow the app's ``DeviceInfo`` class, which was written for
-    boilers; on the heat pump the temperature limits still describe the
-    hot-water setpoint range. Unlisted bytes are kept in ``raw``.
+    Fields checked against the same heater's MQTT device-info report
+    (:class:`~nwp500.models.DeviceFeature`) carry that model's names and
+    raw encodings: ``dhw_temperature_max_raw`` and
+    ``dhw_temperature_min_raw`` (bytes 16 and 17, half-degrees Celsius),
+    ``model_type_code`` (byte 21) and ``country_code`` (byte 24). The
+    others keep the names of the NaviLink app's ``DeviceInfo`` class, which
+    was written for boilers. Unlisted bytes are kept in ``raw``. Not to be
+    confused with :class:`nwp500.models.DeviceInfo`, the cloud's device
+    record.
     """
 
     version: int
@@ -282,11 +289,11 @@ class DeviceInfo:
     heating_control_type: int
     hot_water_control_type: int
     special: int
-    hot_water_temp_max: int
-    hot_water_temp_min: int
+    dhw_temperature_max_raw: int
+    dhw_temperature_min_raw: int
     hot_water_temp_step_max: int
     hot_water_temp_step_min: int
-    model_type: int
+    model_type_code: int
     model_characteristic: int
     model_capacity: int
     country_code: int
@@ -303,13 +310,28 @@ class DeviceInfo:
     def min_operation_temperature_raw(self) -> int:
         """Minimum heat-pump operation temperature, half-degrees Celsius.
 
-        DID byte 17. Verified on an NWP500 to equal the device's
-        ``heatMinOpTemperature`` as reported over MQTT (both 81 = 40.5 C =
-        104.9 F on 2026-10-16). The installer range is 95-113 F (35-45 C).
-        This block is read-only over Bluetooth; writing it back is echoed as
-        a read, so this field can be read here but not set here.
+        DID byte 17, the lower end of the setpoint range. Verified on an
+        NWP500 to equal the device's ``heatMinOpTemperature`` as reported
+        over MQTT (both 81 = 40.5 C = 104.9 F on 2026-10-16). The installer
+        range is 95-113 F (35-45 C). This block is read-only over
+        Bluetooth; writing it back is echoed as a read, so this field can
+        be read here but not set here.
         """
-        return self.hot_water_temp_min
+        return self.dhw_temperature_min_raw
+
+    @property
+    def dhw_temperature_min(self) -> float:
+        """As ``DeviceFeature.dhw_temperature_min``: in the preferred unit."""
+        return HalfCelsius(self.dhw_temperature_min_raw).to_preferred(
+            prefers_celsius()
+        )
+
+    @property
+    def dhw_temperature_max(self) -> float:
+        """As ``DeviceFeature.dhw_temperature_max``: in the preferred unit."""
+        return HalfCelsius(self.dhw_temperature_max_raw).to_preferred(
+            prefers_celsius()
+        )
 
     def min_operation_temperature(self, celsius: bool | None = None) -> float:
         """Minimum operation temperature, converted as the cloud models do.
@@ -325,7 +347,7 @@ class DeviceInfo:
         )
 
     @classmethod
-    def parse(cls, data: bytes) -> DeviceInfo:
+    def parse(cls, data: bytes) -> DeviceInfoBlock:
         if len(data) != cls.LENGTH:
             raise ValueError(
                 f"DID block must be {cls.LENGTH} bytes, got {len(data)}"
@@ -339,11 +361,11 @@ class DeviceInfo:
             heating_control_type=_u8(data, 5),
             hot_water_control_type=_u8(data, 6),
             special=_u8(data, 7),
-            hot_water_temp_max=_u8(data, 16),
-            hot_water_temp_min=_u8(data, 17),
+            dhw_temperature_max_raw=_u8(data, 16),
+            dhw_temperature_min_raw=_u8(data, 17),
             hot_water_temp_step_max=_u8(data, 18),
             hot_water_temp_step_min=_u8(data, 19),
-            model_type=_u8(data, 21),
+            model_type_code=_u8(data, 21),
             model_characteristic=_u8(data, 22),
             model_capacity=_u8(data, 23),
             country_code=_u8(data, 24),
@@ -358,9 +380,14 @@ class DeviceInfo:
 
 @dataclass(frozen=True)
 class ControllerSerials:
-    """The 40-byte ``MSCD`` block: two NUL-padded ASCII serial numbers."""
+    """The 40-byte ``MSCD`` block: two NUL-padded ASCII serial numbers.
 
-    product_serial: str
+    The first is the cloud's ``controllerSerialNumber``
+    (``DeviceFeature.controller_serial_number``), checked on an NWP500;
+    there the second, ``pcb_serial``, held the same number.
+    """
+
+    controller_serial_number: str
     pcb_serial: str
     raw: bytes
 
@@ -377,6 +404,36 @@ class ControllerSerials:
             return bytes(b for b in chunk if b).decode("ascii", "replace")
 
         return cls(text(data[0:18]), text(data[20:38]), bytes(data))
+
+
+@dataclass(frozen=True)
+class SoftwareInfoBlock:
+    """The ``MSWD`` block (class 244): controller software identity.
+
+    ``controller_sw_code`` is bytes 0-3, little-endian, under the
+    ``DeviceFeature`` name: on an NWP500 it equalled the MQTT report's
+    ``controllerSwCode`` (``0x02000711``; 2026-10-19). Bytes 4-5 held
+    ``0b 05``, which matches ``controllerSwVersion`` (``0x0B050000``) only
+    read big-endian, so with one sample that field is not decoded. The
+    whole block is kept in ``raw``.
+    """
+
+    controller_sw_code: int
+    raw: bytes
+
+    MIN_LENGTH = 4
+
+    @classmethod
+    def parse(cls, data: bytes) -> SoftwareInfoBlock:
+        if len(data) < cls.MIN_LENGTH:
+            raise ValueError(
+                f"MSWD block must be at least {cls.MIN_LENGTH} bytes, "
+                f"got {len(data)}"
+            )
+        return cls(
+            controller_sw_code=int.from_bytes(data[0:4], "little"),
+            raw=bytes(data),
+        )
 
 
 @dataclass(frozen=True)
@@ -415,15 +472,18 @@ class SubStatus:
         )
 
 
-@dataclass(frozen=True)
-class TouRecord:
-    """One 16-byte interval of the ``TOU_PLAN`` block.
+#: Bytes per interval in the ``TOU_PLAN`` block.
+TOU_RECORD_SIZE = 16
 
-    The fields are those of a cloud TOU interval
-    (:class:`nwp500.models.TOUPeriod`): ``season`` has bit N-1 set for
-    month N, ``week`` has Sunday in bit 7 down to Saturday in bit 1, and
-    prices are integers scaled by ``10 ** decimal_point``. Layout, with
-    multi-byte fields little-endian::
+
+def parse_tou_record(data: bytes) -> TOUPeriod:
+    """Decode one 16-byte ``TOU_PLAN`` interval into a :class:`TOUPeriod`.
+
+    The interval has the fields of a cloud TOU period, so it decodes into
+    the model the MQTT client and REST API use: ``season`` has bit N-1 set
+    for month N, ``week`` has Sunday in bit 7 down to Saturday in bit 1,
+    and prices are integers scaled by ``10 ** decimal_point``. Layout,
+    with multi-byte fields little-endian::
 
         0-1    season
         2      week
@@ -434,88 +494,49 @@ class TouRecord:
         12-15  price min
 
     This is the layout the NaviLink app writes. Checked on an NWP500
-    (2026-10-16): the twelve records read at address 0 equal the first
-    twelve intervals of the plan the cloud holds for that heater, field
-    for field. Price max and min were equal in every interval checked, so
-    their order is taken from the app.
+    (2026-10-16): the twelve intervals read at address 0 equal the first
+    twelve of the plan the cloud holds for that heater, field for field.
+    Price max and min were equal in every interval checked, so their order
+    is taken from the app.
+
+    Raises:
+        ValueError: If ``data`` is not 16 bytes.
     """
-
-    season: int
-    week: int
-    start_hour: int
-    start_minute: int
-    end_hour: int
-    end_minute: int
-    decimal_point: int
-    price_max: int
-    price_min: int
-
-    SIZE = 16
-
-    @property
-    def decoded_price_min(self) -> float:
-        """Minimum price (``price_min / 10 ** decimal_point``)."""
-        return self.price_min / 10**self.decimal_point
-
-    @property
-    def decoded_price_max(self) -> float:
-        """Maximum price (``price_max / 10 ** decimal_point``)."""
-        return self.price_max / 10**self.decimal_point
-
-    def as_period(self) -> dict[str, int]:
-        """The record as a cloud/MQTT TOU period dict (camelCase keys).
-
-        ``TOUPeriod.model_validate(record.as_period())`` gives the model
-        the MQTT client uses, so a plan read here can be compared with
-        one read from the cloud.
-        """
-        return {
-            "season": self.season,
-            "week": self.week,
-            "startHour": self.start_hour,
-            "startMinute": self.start_minute,
-            "endHour": self.end_hour,
-            "endMinute": self.end_minute,
-            "priceMin": self.price_min,
-            "priceMax": self.price_max,
-            "decimalPoint": self.decimal_point,
-        }
-
-    @classmethod
-    def parse(cls, data: bytes) -> TouRecord:
-        if len(data) != cls.SIZE:
-            raise ValueError(
-                f"TOU record must be {cls.SIZE} bytes, got {len(data)}"
-            )
-        return cls(
-            season=int.from_bytes(data[0:2], "little"),
-            week=data[2],
-            start_hour=data[3],
-            start_minute=data[4],
-            end_hour=data[5],
-            end_minute=data[6],
-            decimal_point=data[7],
-            price_max=int.from_bytes(data[8:12], "little"),
-            price_min=int.from_bytes(data[12:16], "little"),
+    if len(data) != TOU_RECORD_SIZE:
+        raise ValueError(
+            f"TOU record must be {TOU_RECORD_SIZE} bytes, got {len(data)}"
         )
+    return TOUPeriod.model_validate(
+        {
+            "season": int.from_bytes(data[0:2], "little"),
+            "week": data[2],
+            "startHour": data[3],
+            "startMinute": data[4],
+            "endHour": data[5],
+            "endMinute": data[6],
+            "decimalPoint": data[7],
+            "priceMax": int.from_bytes(data[8:12], "little"),
+            "priceMin": int.from_bytes(data[12:16], "little"),
+        }
+    )
 
 
-def parse_tou_records(data: bytes) -> list[TouRecord]:
-    """Split a ``TOU_PLAN`` reply into records, dropping empty slots.
+def parse_tou_records(data: bytes) -> list[TOUPeriod]:
+    """Split a ``TOU_PLAN`` reply into :class:`TOUPeriod` intervals.
 
-    An empty slot is sixteen zero bytes; the controller pads its pages
-    with them after the last interval.
+    Empty slots are dropped: an empty slot is sixteen zero bytes, which
+    the controller pads its pages with after the last interval.
 
     Raises:
         ValueError: If ``data`` is not a whole number of records.
     """
-    size = TouRecord.SIZE
+    size = TOU_RECORD_SIZE
     if len(data) % size:
         raise ValueError(
             f"TOU_PLAN data must be a multiple of {size} bytes, got {len(data)}"
         )
     return [
-        TouRecord.parse(data[o : o + size])
+        parse_tou_record(data[o : o + size])
         for o in range(0, len(data), size)
         if any(data[o : o + size])
     ]
@@ -530,14 +551,16 @@ __all__ = [
     "Command",
     "ClassCode",
     "DEFAULT_READ_LENGTHS",
+    "TOU_RECORD_SIZE",
     "crc16",
     "build_packet",
     "build_read",
     "Packet",
     "parse_packet",
-    "DeviceInfo",
+    "DeviceInfoBlock",
     "ControllerSerials",
+    "SoftwareInfoBlock",
     "SubStatus",
-    "TouRecord",
+    "parse_tou_record",
     "parse_tou_records",
 ]

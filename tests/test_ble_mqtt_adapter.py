@@ -13,8 +13,9 @@ from nwp500.ble import (
     ClassCode,
     Command,
     ControllerSerials,
-    DeviceInfo,
+    DeviceInfoBlock,
     NavienBleClient,
+    SoftwareInfoBlock,
     build_packet,
     device_feature_from_blocks,
     parse_packet,
@@ -28,6 +29,12 @@ from nwp500.exceptions import Nwp500Error
 DID = bytes.fromhex(
     "050ba1000000033b00000000000000008351000000f00100030100000000141a"
     "030ab51475050000000000000000000010d20000000000000000"
+)
+# Read on 2026-10-16; controllerSwCode in that MQTT report was
+# 33556241 = 0x02000711.
+MSWD = bytes.fromhex(
+    "110700020b05000000000000000000000000000000000000000000000000"
+    "0000000000000000000000000000000000000000000000000000000000"
 )
 MSCD = bytes.fromhex(
     "3536343936303631425432323233303430380000"
@@ -66,18 +73,23 @@ class FakeTransport:
 
 
 def _heater() -> FakeTransport:
-    return FakeTransport({ClassCode.DID: DID, ClassCode.MSCD: MSCD})
+    return FakeTransport(
+        {ClassCode.DID: DID, ClassCode.MSCD: MSCD, ClassCode.MSWD: MSWD}
+    )
 
 
 def test_feature_carries_only_the_fields_checked_against_mqtt():
     feature = device_feature_from_blocks(
-        DeviceInfo.parse(DID), ControllerSerials.parse(MSCD)
+        DeviceInfoBlock.parse(DID),
+        ControllerSerials.parse(MSCD),
+        SoftwareInfoBlock.parse(MSWD),
     )
     assert feature.controller_serial_number == "56496061BT22230408"
     assert feature.dhw_temperature_min_raw == 81
     assert feature.dhw_temperature_max_raw == 131
     assert feature.model_type_code == 240
     assert feature.country_code == 3
+    assert feature.controller_sw_code == 33556241
     # fields Bluetooth does not carry are absent, not defaulted
     with pytest.raises(AttributeError):
         feature.hpwh_use  # type: ignore[attr-defined]
@@ -95,7 +107,7 @@ async def test_adapter_answers_a_device_feature_request():
     assert [f.controller_serial_number for f in got] == ["56496061BT22230408"]
     assert mqtt.device_info is not None and mqtt.device_info.raw == DID
     asked = [parse_packet(w).class_code for w in transport.written]
-    assert asked == [ClassCode.DID, ClassCode.MSCD]
+    assert asked == [ClassCode.DID, ClassCode.MSCD, ClassCode.MSWD]
 
 
 @pytest.mark.asyncio
@@ -168,6 +180,7 @@ def test_cli_info_over_bluetooth_shows_only_block_fields(cli_with_fake_heater):
     assert result.exit_code == 0, result.output
     out = result.output
     assert "Controller serial" in out and "56496061BT22230408" in out
+    assert "Controller SW code  0x02000711" in out
     assert "104.9 - 149.9 °F" in out
     assert "Min operation temp  104.9 °F" in out
     # nothing the blocks do not carry, such as firmware or capability flags
@@ -177,7 +190,8 @@ def test_cli_info_over_bluetooth_shows_only_block_fields(cli_with_fake_heater):
 def test_cli_info_raw_over_bluetooth(cli_with_fake_heater):
     result = cli_with_fake_heater("info", "--raw")
     assert result.exit_code == 0, result.output
-    assert DID.hex() in result.output and MSCD.hex() in result.output
+    for block in (DID, MSCD, MSWD):
+        assert block.hex() in result.output
 
 
 @pytest.mark.parametrize(
@@ -248,7 +262,9 @@ def test_ble_feature_converts_like_device_feature(unit_system):
     from nwp500.models import DeviceFeature
 
     ble = device_feature_from_blocks(
-        DeviceInfo.parse(DID), ControllerSerials.parse(MSCD)
+        DeviceInfoBlock.parse(DID),
+        ControllerSerials.parse(MSCD),
+        SoftwareInfoBlock.parse(MSWD),
     )
     # the cloud model with the same raw values (its other required fields
     # are irrelevant to the conversion)
@@ -268,7 +284,7 @@ def test_ble_feature_converts_like_device_feature(unit_system):
 
 
 def test_min_operation_temperature_follows_unit_system(unit_system):
-    info = DeviceInfo.parse(DID)
+    info = DeviceInfoBlock.parse(DID)
     assert info.min_operation_temperature() == pytest.approx(104.9)
     unit_system("metric")
     assert info.min_operation_temperature() == pytest.approx(40.5)

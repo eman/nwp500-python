@@ -44,8 +44,8 @@ def _print_tou(data: bytes) -> None:
     for r in records:
         print(
             f"  season={r.season:#05x} week={r.week:#04x} "
-            f"{r.start_hour:02}:{r.start_minute:02}-"
-            f"{r.end_hour:02}:{r.end_minute:02} "
+            f"{r.start_hour:02}:{r.start_min:02}-"
+            f"{r.end_hour:02}:{r.end_min:02} "
             f"price={r.decoded_price_min:g}-{r.decoded_price_max:g}"
         )
 
