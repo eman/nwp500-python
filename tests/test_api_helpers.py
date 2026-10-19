@@ -1,6 +1,7 @@
 """Tests for encoding helper utilities."""
 
 import math
+from datetime import date
 
 import pytest  # type: ignore[import]
 
@@ -18,6 +19,8 @@ from nwp500.exceptions import (
     ParameterValidationError,
     RangeValidationError,
 )
+from nwp500.models import PushSettings, format_maintenance_date
+from nwp500.models.device import push_flag_to_python, python_to_push_flag
 
 
 def test_encode_decode_week_bitfield():
@@ -180,3 +183,32 @@ def test_build_tou_period():
             price_max=0.2,
             decimal_point=5,
         )
+
+
+def test_format_maintenance_date_is_not_zero_padded():
+    """The NaviLink app joins the picker's integers with "-"."""
+    assert format_maintenance_date(date(2025, 3, 7)) == "2025-3-7"
+    assert format_maintenance_date(date(2025, 12, 25)) == "2025-12-25"
+
+
+@pytest.mark.parametrize(
+    ("raw", "expected"),
+    [(1, True), (2, False), (0, None), (None, None), ("1", True), ("x", None)],
+)
+def test_push_flag_to_python(raw, expected):
+    """Push flags are 1=on, 2=off, 0=unknown - inverted from DeviceBool."""
+    assert push_flag_to_python(raw) is expected
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"), [(True, 1), (False, 2), (None, None)]
+)
+def test_python_to_push_flag(value, expected):
+    assert python_to_push_flag(value) == expected
+
+
+def test_push_settings_request_dict_omits_unknown():
+    settings = PushSettings(is_error_alarm=True, is_etc_alarm=False)
+
+    assert settings.to_request_dict() == {"isErrorAlarm": 1, "isEtcAlarm": 2}
+    assert PushSettings().to_request_dict() == {}

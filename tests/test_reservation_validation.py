@@ -101,7 +101,7 @@ class TestValidateReservationEntries:
             [
                 _entry(),
                 _entry(enable=1, week=2, hour=0, min=0, mode=1),
-                _entry(week=254, hour=23, min=59, mode=6),
+                _entry(week=254, hour=23, min=59, mode=5),
             ],
             _features(),
         )
@@ -145,8 +145,8 @@ class TestValidateReservationEntries:
             ("hour", 24, 0, 23),
             ("min", -1, 0, 59),
             ("min", 60, 0, 59),
-            ("mode", 0, 1, 6),
-            ("mode", 7, 1, 6),
+            ("mode", 0, 1, 5),
+            ("mode", 6, 1, 5),
             ("param", -1, 0, 255),
             ("param", 256, 0, 255),
         ],
@@ -179,6 +179,29 @@ class TestValidateReservationEntries:
         assert exc.value.min_value == DEVICE_MIN_RAW
         assert exc.value.max_value == DEVICE_MAX_RAW
 
+    def test_kept_entry_mode_is_not_range_checked(self) -> None:
+        """An entry an earlier library version wrote with mode 6 is read
+        back and resent unchanged; it must not block the write."""
+        validate_reservation_entries(
+            [_entry(mode=6), _entry(mode=3)], _features(), kept={1}
+        )
+
+    def test_changed_entry_mode_is_still_range_checked(self) -> None:
+        with pytest.raises(RangeValidationError) as exc:
+            validate_reservation_entries(
+                [_entry(mode=6), _entry(mode=6)], kept={1}
+            )
+        assert exc.value.field == "reservation[2].mode"
+
+    def test_kept_entry_other_fields_are_still_checked(self) -> None:
+        with pytest.raises(RangeValidationError) as exc:
+            validate_reservation_entries([_entry(mode=6, hour=24)], kept={1})
+        assert exc.value.field == "reservation[1].hour"
+
+    def test_kept_entry_mode_must_be_an_integer(self) -> None:
+        with pytest.raises(ParameterValidationError):
+            validate_reservation_entries([_entry(mode="6")], kept={1})
+
     def test_param_without_features_is_held_to_a_byte(self) -> None:
         # 200 (100 degC) is outside any heater's range but fits the byte;
         # without feature data only the byte range can be checked.
@@ -186,6 +209,18 @@ class TestValidateReservationEntries:
 
 
 class TestControllerUpdateReservations:
+    @pytest.mark.asyncio
+    async def test_kept_legacy_entry_is_published_unchanged(
+        self, mock_device: MagicMock
+    ) -> None:
+        controller, publish, _ = _make_controller(_features())
+        entries = [_entry(mode=6), _entry(mode=2)]
+
+        await controller.update_reservations(mock_device, entries, kept=[1])
+
+        _topic, command = publish.await_args.args
+        assert command["request"]["reservation"] == entries
+
     @pytest.mark.asyncio
     async def test_valid_entries_are_published(
         self, mock_device: MagicMock

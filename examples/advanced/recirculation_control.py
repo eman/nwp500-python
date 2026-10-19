@@ -105,22 +105,24 @@ async def recirculation_example():
             else:
                 logger.warning("Timeout waiting for hot button confirmation")
 
-            logger.info("Waiting 5 seconds before changing mode to 'Button Only'...")
+            logger.info(
+                "Waiting 5 seconds before changing mode to 'Hot Button Only'..."
+            )
             await asyncio.sleep(5)
 
-            # Change mode to "Button Only"
-            logger.info("Changing recirculation pump mode to 'Button Only'...")
+            # Change mode to "Hot Button Only"
+            logger.info("Changing recirculation pump mode to 'Hot Button Only'...")
 
             button_only_set = False
 
             def on_button_only_set(status):
                 nonlocal button_only_set
-                logger.info("Recirculation pump mode changed to 'Button Only'!")
+                logger.info("Recirculation pump mode changed to 'Hot Button Only'!")
                 logger.info("The pump will only run when the hot button is pressed")
                 button_only_set = True
 
             await mqtt_client.subscribe_device_status(device, on_button_only_set)
-            await mqtt_client.set_recirculation_mode(device, 2)  # 2 = Button Only
+            await mqtt_client.set_recirculation_mode(device, 3)  # 3 = Hot Button Only
 
             # Wait for confirmation
             for _ in range(10):  # Wait up to 10 seconds
@@ -143,7 +145,7 @@ if __name__ == "__main__":
     print("2. Getting current device status")
     print("3. Setting recirculation pump mode to 'Always On'")
     print("4. Triggering the recirculation pump hot button")
-    print("5. Changing recirculation pump mode to 'Button Only'")
+    print("5. Changing recirculation pump mode to 'Hot Button Only'")
     print("6. Receiving and displaying responses")
     print()
 

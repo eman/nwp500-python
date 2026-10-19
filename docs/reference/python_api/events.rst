@@ -61,6 +61,8 @@ Examples include:
 * :meth:`nwp500.mqtt.client.NavienMqttClient.subscribe_recirculation_schedule_response`
 * :meth:`nwp500.mqtt.client.NavienMqttClient.subscribe_diagnostics`
 * :meth:`nwp500.mqtt.client.NavienMqttClient.subscribe_firmware_download_info`
+* :meth:`nwp500.mqtt.client.NavienMqttClient.subscribe_control_fail_response`
+* :meth:`nwp500.mqtt.client.NavienMqttClient.subscribe_app_connection`
 
 Client event subscriptions
 --------------------------
@@ -268,6 +270,70 @@ FeatureReceivedEvent
    **Fields:**
 
    * ``feature`` (:class:`~nwp500.models.DeviceFeature`): Parsed device feature payload.
+
+ControlFailedEvent
+------------------
+
+.. py:class:: nwp500.mqtt_events.ControlFailedEvent
+
+   Emitted for :attr:`nwp500.mqtt_events.MqttClientEvents.CONTROL_FAILED`
+   when a device publishes a control failure (``res/ctrl-fail``). Fires for
+   every device with an active device subscription (status, feature, raw);
+   no extra subscription is needed. The device sends no control ack for a
+   refused command, so this is the only sign of the refusal.
+
+   **Fields:**
+
+   * ``device_mac`` (str): MAC address of the device that refused the command.
+   * ``fail_code`` (:class:`~nwp500.models.mqtt_models.ControlFailCode` | int) -
+     The failure code. 2 (``DHW_CONTROL_INTERVAL_EXCEEDED``) is the only code
+     the NaviLink app interprets; others stay plain integers.
+   * ``reason`` (str): Human-readable meaning of ``fail_code``.
+   * ``own_command`` (bool): Whether the failed command was sent by this
+     client (the message's ``clientID`` matches ours).
+   * ``response`` (:class:`~nwp500.models.mqtt_models.ControlFailResponse`) -
+     The parsed message, envelope included.
+
+   **Example:**
+
+   .. code-block:: python
+
+      def on_control_failed(event):
+          if event.own_command:
+              print(f"Command refused: {event.reason}")
+
+      mqtt.on(MqttClientEvents.CONTROL_FAILED, on_control_failed)
+
+AppConnectionReceivedEvent
+--------------------------
+
+.. py:class:: nwp500.mqtt_events.AppConnectionReceivedEvent
+
+   Emitted for
+   :attr:`nwp500.mqtt_events.MqttClientEvents.APP_CONNECTION_RECEIVED` on
+   each message of a device's ``app-connection`` topic. Requires
+   :meth:`~nwp500.mqtt.client.NavienMqttClient.subscribe_app_connection`
+   for the device.
+
+   **Fields:**
+
+   * ``device_mac`` (str): MAC address of the device the client was attached to.
+   * ``client_id`` (str | None): MQTT client ID of the client the message is
+     about. This client's own announcement is delivered too.
+   * ``connected`` (bool): ``True`` for a connect announcement
+     (``event.connection.status`` above 0), ``False`` for a Last-Will.
+   * ``event`` (:class:`~nwp500.models.mqtt_models.AppConnectionEvent`) -
+     The parsed message.
+
+   **Example:**
+
+   .. code-block:: python
+
+      def on_presence(event):
+          if event.client_id != mqtt.client_id and not event.connected:
+              print(f"{event.client_id} dropped off {event.device_mac}")
+
+      mqtt.on(MqttClientEvents.APP_CONNECTION_RECEIVED, on_presence)
 
 Usage Examples
 ==============

@@ -10,8 +10,8 @@ from pydantic import (
 
 from .._base import NavienBaseModel
 from ..enums import (
-    DHW_OPERATION_SETTING_TEXT,
-    DhwOperationSetting,
+    RESERVATION_MODE_TEXT,
+    ReservationMode,
 )
 from ..unit_system import get_unit_system
 from ._converters import reservation_param_to_preferred
@@ -49,7 +49,10 @@ class ReservationEntry(NavienBaseModel):
         - week: bitfield of active days (Sun=bit7, Mon=bit6, ..., Sat=bit1)
         - hour: 0-23
         - min: 0-59
-        - mode: DHW operation mode ID (1-6)
+        - mode: :class:`~nwp500.enums.ReservationMode` id. 1-4 match the
+          DHW operation modes; 5 is Power Off (not Vacation, as in
+          :class:`~nwp500.enums.DhwOperationSetting`) and 0 marks an
+          unused slot. Mirrors the NaviLink app's ``MgppReservationMode``.
         - param: temperature in half-degrees Celsius
 
     Unit-aware note:
@@ -105,10 +108,14 @@ class ReservationEntry(NavienBaseModel):
     @computed_field  # type: ignore[prop-decorator]
     @property
     def mode_name(self) -> str:
-        """Human-readable operation mode name."""
+        """Human-readable operation mode name.
+
+        Resolved through :class:`~nwp500.enums.ReservationMode`, so mode
+        5 reads "Power Off" as it does in the NaviLink app.
+        """
         try:
-            return DHW_OPERATION_SETTING_TEXT.get(
-                DhwOperationSetting(self.mode), f"Unknown ({self.mode})"
+            return RESERVATION_MODE_TEXT.get(
+                ReservationMode(self.mode), f"Unknown ({self.mode})"
             )
         except ValueError:
             return f"Unknown ({self.mode})"

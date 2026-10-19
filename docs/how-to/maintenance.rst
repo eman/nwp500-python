@@ -3,8 +3,9 @@ Device Maintenance
 ==================
 
 Maintenance commands cover firmware update information, the installer
-diagnostics counters, air filter service intervals and fault resets. The
-CLI equivalents are noted with each one.
+diagnostics counters, air filter service intervals, the cloud's
+replacement log and fault resets. The CLI equivalents are noted with
+each one.
 
 .. contents:: On This Page
    :local:
@@ -101,6 +102,58 @@ otherwise 1000 to 10000 hours in 500-hour steps. The device reports the interval
    await mqtt.reset_air_filter(device)
 
 CLI: ``nwp-cli filter-life 3000`` and ``nwp-cli reset-filter``.
+
+Maintenance Log
+===============
+
+Separately from the device's own filter timer, the Navien cloud keeps a
+log of when the air filter was replaced and when a CIP (clean-in-place,
+the descaling flush) service was done. The NaviLink app's product
+management screen writes to it with a date picker and lists the history
+underneath. The same endpoints are available on the REST client.
+
+Recording a replacement date only updates the cloud's log; it does not
+reset the device's filter timer. Do both after servicing the filter.
+
+.. code-block:: python
+
+   from datetime import date
+
+   from nwp500 import NavienAPIClient
+
+   api = NavienAPIClient(auth)
+   info = device.device_info
+
+   # Log today's filter replacement, then reset the device's timer.
+   await api.record_filter_change(info.mac_address, info.additional_value, date.today())
+   await mqtt.reset_air_filter(device)
+
+   # Log a descaling flush.
+   await api.record_cip_change(info.mac_address, info.additional_value, date(2025, 3, 7))
+
+The date is sent as ``YYYY-M-D`` without zero padding (``2025-3-7``),
+exactly as the app formats it; pass a :class:`datetime.date` and the
+library does the formatting.
+
+Reading the history back returns the newest entries first:
+
+.. code-block:: python
+
+   for entry in await api.get_filter_history(info.mac_address, info.additional_value):
+       print("Filter replaced", entry.maintenance_date)
+
+   for entry in await api.get_cip_history(info.mac_address, info.additional_value):
+       print("Descaled", entry.maintenance_date)
+
+Each :class:`~nwp500.models.MaintenanceHistoryEntry` carries the date as
+the cloud returns it and ``register_at``, the record's creation stamp,
+whose unit the app does not interpret. Both calls page with ``offset`` and
+``count`` (default 20).
+
+Related cloud-side data readable without MQTT:
+:meth:`~nwp500.NavienAPIClient.get_error_history` for recorded faults and
+``Device.descaling`` (from :meth:`~nwp500.NavienAPIClient.get_device_info`)
+for the scheduled descaling window.
 
 Condenser Fault Reset
 =====================

@@ -10,10 +10,13 @@ import uuid
 from dataclasses import dataclass
 from datetime import datetime
 from enum import StrEnum
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from ..config import AWS_IOT_ENDPOINT, AWS_REGION
 from .types import QoS
+
+if TYPE_CHECKING:
+    from ..models import Device
 
 __author__ = "Emmanuel Levijarvi"
 __copyright__ = "Emmanuel Levijarvi"
@@ -222,6 +225,16 @@ class MqttConnectionConfig:
             called, as the NaviLink app does when it leaves a device. Its
             effect on other clients connected to the same device is not
             known; turn it off to disconnect without it.
+
+        last_will_device: Device whose ``app-connection`` event topic
+            receives this client's MQTT Last-Will. The NaviLink app
+            registers one for the device it is attached to; the broker
+            publishes it (``connection.status`` 0) if the connection is
+            lost without a DISCONNECT, so other clients watching the topic
+            learn the client dropped. A will names one topic, so one
+            device. ``None`` (the default) registers no will. A NaviLink
+            app subscribed to the topic shows a "device disconnected"
+            notice when it receives one.
     """
 
     endpoint: str = AWS_IOT_ENDPOINT
@@ -250,6 +263,9 @@ class MqttConnectionConfig:
 
     # Session end
     send_session_end_on_disconnect: bool = True
+
+    # Last-Will target
+    last_will_device: Device | None = None
 
     def __post_init__(self) -> None:
         """Generate client ID if not provided and validate settings."""

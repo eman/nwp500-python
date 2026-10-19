@@ -38,6 +38,8 @@ def test_registry_lists_all_event_names():
         "ERROR_DETECTED",
         "ERROR_CLEARED",
         "FEATURE_RECEIVED",
+        "CONTROL_FAILED",
+        "APP_CONNECTION_RECEIVED",
     }
     assert set(events) == expected
 

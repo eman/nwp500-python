@@ -6,7 +6,7 @@ Splitting them out of ``client.py`` keeps :class:`NavienMqttClient` focused on
 connection orchestration while preserving its public API surface.
 """
 
-from collections.abc import Sequence
+from collections.abc import Collection, Sequence
 from typing import TYPE_CHECKING, Any
 
 from .control import MqttDeviceController
@@ -75,10 +75,11 @@ class DeviceControlCommandsMixin:
         reservations: Sequence[dict[str, Any]],
         *,
         enabled: bool = True,
+        kept: Collection[int] = (),
     ) -> int:
         """Update programmed reservations."""
         return await self._device_controller.update_reservations(
-            device, reservations, enabled=enabled
+            device, reservations, enabled=enabled, kept=kept
         )
 
     async def request_reservations(self, device: Device) -> int:
@@ -186,7 +187,11 @@ class DeviceControlCommandsMixin:
         )
 
     async def set_recirculation_mode(self, device: Device, mode: int) -> int:
-        """Set recirculation pump operation mode (1-4)."""
+        """Set recirculation pump operation mode.
+
+        ``mode``: 1 = always on, 2 = weekly schedule, 3 = hot button only,
+        4 = no recirculation (:class:`~nwp500.enums.RecirculationMode`).
+        """
         return await self._device_controller.set_recirculation_mode(
             device, mode
         )

@@ -129,6 +129,10 @@ DREvent
 Demand Response event status. Allows utilities to manage grid load by signaling
 water heaters to reduce consumption (shed) or pre-heat (load up) before peak periods.
 
+Raw 5 is ``CPE`` (Customer Peak Event) and raw 6 is ``GRID_EMERGENCY``. The
+NaviLink app declares both with id 5 but decodes the field by array position,
+so the two are distinct on the wire.
+
 WaterLevel
 ~~~~~~~~~~
 
@@ -159,12 +163,26 @@ RecirculationMode
    :undoc-members:
    :no-index:
 
-Recirculation pump operation mode:
+Recirculation pump operation mode, as the NaviLink app's
+``MgppRecirculationOperationMode`` sends and decodes it:
 
-- **ALWAYS**: Pump continuously runs
-- **BUTTON**: Manual activation only (hot button)
-- **SCHEDULE**: Runs on configured schedule
-- **TEMPERATURE**: Activates when pipe temp drops below setpoint
+- **ALWAYS_ON** (1): Pump runs continuously (``ALWAYS`` is an alias)
+- **WEEKLY** (2): Follows the recirculation schedule
+- **HOT_BUTTON_ONLY** (3): Pump runs only when the hot button is pressed
+- **OFF** (4): No recirculation
+
+ReservationMode
+~~~~~~~~~~~~~~~
+
+.. autoclass:: nwp500.enums.ReservationMode
+   :members:
+   :undoc-members:
+   :no-index:
+
+Operation mode carried by a weekly-schedule (reservation) entry, the NaviLink
+app's ``MgppReservationMode``. Values 1-4 match ``DhwOperationSetting``; 5 is
+``POWER_OFF`` (there is no vacation entry) and 0 marks an unused slot.
+``ReservationEntry.mode_name`` resolves through this enum.
 
 Time of Use (TOU) Enumerations
 -------------------------------
@@ -239,6 +257,7 @@ UnitType
 Navien device/unit model types. Common values:
 
 - **NPF** (513): Heat pump water heater (primary model for this library)
+- **NPF_SYSTEM** (514): Heat pump water heater system
 - **NPE**: Tankless water heater
 - **NCB**: Condensing boiler
 - **NPN**: Condensing water heater
@@ -254,7 +273,10 @@ DeviceType
    :undoc-members:
    :no-index:
 
-Communication device type (WiFi module model).
+Communication device type. The NWP500 reports 52, which the NaviLink app
+calls ``HPWH_MODEL`` (``DeviceType.HPWH``, an alias of ``NPF700_WIFI``).
+``NFB700_MAIN``/``NFB700_SUB`` follow the app's names; ``NPF700_MAIN`` and
+``NPF700_SUB`` remain as aliases.
 
 FirmwareType
 ~~~~~~~~~~~~
@@ -281,6 +303,7 @@ user-friendly display text:
        HEAT_SOURCE_TEXT,
        DR_EVENT_TEXT,
        RECIRC_MODE_TEXT,
+       RESERVATION_MODE_TEXT,
        TOU_RATE_TEXT,
        FILTER_STATUS_TEXT,
        ERROR_CODE_TEXT,

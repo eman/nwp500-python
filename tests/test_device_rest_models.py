@@ -7,7 +7,13 @@ The payloads below are trimmed from live ``/device/list`` and
 import pytest
 
 from nwp500.enums import ErrorCode
-from nwp500.models import Device
+from nwp500.models import (
+    Device,
+    DeviceInstaller,
+    FirmwareDeviceGroup,
+    FirmwareInfo,
+    PushSettings,
+)
 
 DEVICE_LIST_ENTRY = {
     "deviceInfo": {
@@ -121,8 +127,101 @@ class TestDeviceInfoEntry:
         assert device.error is None
         assert device.descaling is not None
 
-    def test_unmodelled_sections_are_ignored(self):
-        """``installer``/``alarmInfo`` are unmodelled and must not fail."""
+    def test_install_type_is_parsed(self):
         device = Device.model_validate(DEVICE_INFO_ENTRY)
 
         assert device.device_info.install_type == "R"
+
+    def test_installer_without_details_is_parsed(self):
+        device = Device.model_validate(DEVICE_INFO_ENTRY)
+
+        assert isinstance(device.installer, DeviceInstaller)
+        assert device.installer.installer_id is None
+        assert device.installer.installer_first_name is None
+
+    def test_installer_details_are_parsed(self):
+        payload = DEVICE_INFO_ENTRY | {
+            "installer": {
+                "installerId": "installer@example.com",
+                "installerFirstName": "Pat",
+                "installerLastName": None,
+                "installerPhoneNumber": "5550100",
+            }
+        }
+
+        installer = Device.model_validate(payload).installer
+
+        assert installer.installer_id == "installer@example.com"
+        assert installer.installer_first_name == "Pat"
+        assert installer.installer_last_name is None
+        assert installer.installer_phone_number == "5550100"
+
+    def test_alarm_info_uses_push_encoding(self):
+        """``alarmInfo`` flags are 1=on, 2=off - not the device's 1=off,
+        2=on - and a missing flag reads as unknown, not off."""
+        device = Device.model_validate(DEVICE_INFO_ENTRY)
+
+        assert isinstance(device.alarm_info, PushSettings)
+        assert device.alarm_info.is_error_alarm is True
+        assert device.alarm_info.is_etc_alarm is True
+        assert device.alarm_info.is_descaling_alarm is None
+
+    def test_alarm_info_off_flag(self):
+        payload = DEVICE_INFO_ENTRY | {
+            "alarmInfo": {
+                "isEtcAlarm": 2,
+                "isErrorAlarm": 1,
+                "isDescalingAlarm": 0,
+            }
+        }
+
+        alarm = Device.model_validate(payload).alarm_info
+
+        assert alarm.is_etc_alarm is False
+        assert alarm.is_error_alarm is True
+        assert alarm.is_descaling_alarm is None
+
+    def test_list_entry_has_no_installer_or_alarm_info(self):
+        device = Device.model_validate(DEVICE_LIST_ENTRY)
+
+        assert device.installer is None
+        assert device.alarm_info is None
+
+
+FIRMWARE_ENTRY = {
+    "macAddress": "0123456789ab",
+    "additionalValue": "5322",
+    "deviceType": 52,
+    "deviceGroup": None,
+    "curSwCode": 33556241,
+    "curVersion": 167837696,
+    "downloadedVersion": 0,
+}
+
+
+class TestFirmwareInfo:
+    def test_null_device_group(self):
+        fw = FirmwareInfo.model_validate(FIRMWARE_ENTRY)
+
+        assert fw.device_group is None
+        assert fw.device_group_unit_no is None
+        assert fw.cur_sw_code == 33556241
+
+    def test_device_group_object(self):
+        """The app reads ``deviceGroup`` as ``{groupSeq, unitNum}``."""
+        payload = FIRMWARE_ENTRY | {
+            "deviceGroup": {"groupSeq": 7, "unitNum": 2},
+            "deviceGroupUnitNo": 2,
+        }
+
+        fw = FirmwareInfo.model_validate(payload)
+
+        assert isinstance(fw.device_group, FirmwareDeviceGroup)
+        assert fw.device_group.group_seq == 7
+        assert fw.device_group.unit_num == 2
+        assert fw.device_group_unit_no == 2
+
+    def test_device_group_bare_string_still_accepted(self):
+        payload = FIRMWARE_ENTRY | {"deviceGroup": "NWP500"}
+
+        assert FirmwareInfo.model_validate(payload).device_group == "NWP500"

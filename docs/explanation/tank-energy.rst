@@ -344,7 +344,9 @@ In the NaviLink app
 Nothing. Navien's own NaviLink app never reads either field.
 
 Decompiling the current release (version 2.03.00, versionCode 141,
-published March 2026) gives 8,101 Java sources, and neither
+published March 2026; re-checked against 2.04.00, versionCode 201,
+published October 2026, with no change) gives 8,101 Java sources, and
+neither
 ``totalEnergyCapacity`` nor ``availableEnergyCapacity`` appears in any of
 them. Neither string appears in the raw dex string pool either, which
 rules out the names having been lost to obfuscation. The app's status
