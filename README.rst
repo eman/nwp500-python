@@ -20,7 +20,7 @@ Features
 * **Advanced Features:** Native support for reservations, time-of-use (TOU) optimization, and anti-legionella cycles.
 * **Type-Safe:** Built with Pydantic for robust data validation and unit handling.
 * **Async/Await:** Modern asyncio-based implementation for high-performance integration.
-* **Simulator (optional):** A physics model of the heater, ``nwp500.sim``, that answers "when will the tank be hot?", "how much hot water is there?" and "what would this change do?", and calibrates from a heater's own history. ``nwp-cli simulate`` runs it on the heater as it is now or on a scenario file. Install it with ``pip install nwp500-python[sim]``; it loads none of the network clients.
+* **Simulator (optional):** A physics model of the heater, ``nwp500.sim``, that answers "when will the tank be hot?", "how much hot water is there?" and "what would this change do?", and calibrates from a heater's own history. ``nwp-cli simulate`` runs it on the heater as it is now or on a scenario file. Install it with ``pip install nwp500-python[sim]``.
 
 Getting Started
 ===============

@@ -61,6 +61,12 @@ The library requires:
 Optional Dependencies
 ---------------------
 
+For the simulator (numpy, pandas and scipy):
+
+.. code-block:: bash
+
+   pip install nwp500-python[sim]
+
 For development:
 
 * ``pytest>=7.0.0`` - Testing framework

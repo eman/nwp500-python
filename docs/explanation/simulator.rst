@@ -9,10 +9,6 @@ heater starts heating and with which source, the electricity it uses,
 how much hot water the tank can deliver, and whether a draw runs cold. It also evaluates commands before they are sent: setpoint and mode
 writes, a new reservation schedule, TOU on or off.
 
-It is optional. Install it with the ``sim`` extra
-(``pip install nwp500-python[sim]``), which adds numpy, pandas and
-scipy. ``import nwp500`` does not load it.
-
 :doc:`/how-to/simulate-heater` walks through using it, from fetching
 the heater's data to evaluating a change, and
 :doc:`/reference/simulator-inputs` lists every input it takes.
@@ -22,15 +18,11 @@ the heater's data to evaluating a change, and
    :depth: 2
 
 
-Values in, values out
-=====================
+Building a scenario
+===================
 
-The simulator does no I/O: it makes no MQTT or REST request, reads no
-file or environment variable, and never reads the clock. The start,
-the horizon and the time zone are inputs, so a scenario replays
-identically. It keeps no module state and does not log; anything it
-would warn about is in the result's ``reasons``. A client fetches what
-it needs, builds a scenario, and reads the answer.
+You fetch the heater's data, build a scenario from it, and read the
+answer. Anything worth a warning is in the result's ``reasons``.
 
 ``nwp500.sim_adapters`` builds a scenario's parts from the library's
 models:
@@ -180,12 +172,10 @@ A ``Scenario`` is a frozen value made of parts:
 
 The simulator's fields are in degF and US gallons, the units the
 physics were fitted in; schedules keep the device's units.
-``sim_adapters`` is the boundary: it reads the device's raw fields
-(``*_raw``), never the converted properties, so the process-wide unit
-preference (:doc:`/how-to/manage-units`) cannot change a scenario, and
-it takes what a caller supplies and gives back a result's values in
-that preference. A core in other units would change the adapters'
-conversions and nothing a caller writes.
+``sim_adapters`` converts between them: it builds a scenario from the
+library's models whatever the unit preference
+(:doc:`/how-to/manage-units`), and gives back a result's values in that
+preference.
 
 ``sim.codec`` writes a scenario, with or without its parameters, as a
 JSON document, and reads one back. :doc:`/reference/simulator-inputs`
@@ -298,9 +288,8 @@ physics alone is served.
 
 A model is asked about each recovery with its start state, its target,
 the air, the physics duration, the start's hold and the draw load
-(``RecoveryContext``). The hold and the load are the model's, not the
-heater's: ``simulate`` takes what the model was trained with, beside
-``recovery=``, and nothing in the library fits them:
+(``RecoveryContext``). ``simulate`` takes what the model was trained
+with, beside ``recovery=``:
 
 ``start_hold``
    How long a compressor start holds before the lower zone climbs,
@@ -329,11 +318,8 @@ heater's: ``simulate`` takes what the model was trained with, beside
    integrator's minutes when it isn't.
 
 With no model, or one that declines, the holds and the lead draws
-change nothing but the rare recovery placed again inside a start's
-hold: the physics is calibrated on whole durations, hold included, so
-none is added. ``draw_hold_factor`` acts either way: a recovery the
-walk's own draws set back holds for them whoever serves its duration.
-Left at their defaults, the five change no answer.
+change nothing. ``draw_hold_factor`` applies either way: a recovery the
+walk's own draws set back holds for them.
 
 
 Accuracy
@@ -346,13 +332,9 @@ Measured on one NWP500-65:
   about 13 min for a deficit under 15 degF, and about 45 min past
   35 degF. Physics alone runs short on long recoveries: cold starts
   come out about 55 min short, and past about 180 min it
-  under-predicts; under about 60 min it is the better estimate. The
-  source this was ported from serves a recovery model trained on its
-  heater's record on top of the physics, and has no
-  physics-only mode for readiness's time to ready; the library serves
-  physics alone, through ``RecoveryModel`` for a caller with a model of
-  their own;
-- in that source's replay of recorded writes, with its recovery model:
+  under-predicts; under about 60 min it is the better estimate;
+- replaying recorded writes, with a recovery model trained on the
+  heater's record:
   recorded starts reproduced over six days held out, 31 of 40; daily
   energy, with start-up charged once, 3.6 % low in sample and 4.4 %
   low held out (2.0 % low and 2.2 % high with the start hold);
@@ -365,11 +347,9 @@ Measured on one NWP500-65:
   cross, called empty before they ended: 14 of 446 (3.1 %);
 - the outlet lag: one measurement (5.3-7.3 gal, 5.0 used).
 
-The library makes no claim beyond these until they are measured again.
 
-
-What it cannot know
-===================
+Limitations
+===========
 
 - **The inlet temperature.** The device's inlet field reads 0, so the
   inlet is an input, or the parameters' fitted value.

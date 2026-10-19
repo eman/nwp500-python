@@ -406,6 +406,10 @@ Fixed
 
 Documentation
 -------------
+- **Less noise.** Implementation notes, the docs' own revision history
+  and where things were ported from are gone from the pages, and
+  section titles are plainer. The ``sim`` extra is listed under
+  :doc:`/reference/installation`'s optional dependencies.
 - **Corrections from the device tests and the recorded history.** The
   explanation pages, the how-tos, the protocol reference and the
   simulator's docstrings said things later measurements contradict:

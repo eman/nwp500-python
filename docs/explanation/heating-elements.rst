@@ -38,8 +38,8 @@ with. Everything else is a bounded run.
    :depth: 2
 
 
-The short version
-=================
+Summary
+=======
 
 .. list-table::
    :header-rows: 1
@@ -175,8 +175,8 @@ nothing above the boundary has been seen to decline.
 ``heUpperOnTempSetting`` moved to the new setpoint in the same status
 message the mode landed in, as it does in Electric.
 
-Putting the three together
---------------------------
+The three modes compared
+------------------------
 
 .. list-table::
    :header-rows: 1
@@ -254,8 +254,8 @@ bracket, open at the bottom, is the widest, so that "either way" span
 is widest there too.
 
 
-What the on-setting does and does not tell you
-==============================================
+Reading the on-setting
+======================
 
 ``heUpperOnTempSetting`` tracks the **mode**, not the moment:
 
@@ -265,9 +265,8 @@ What the on-setting does and does not tell you
   entry the measured differential is at most 0.3 degC in Electric and
   within (0.2, 0.4] degC in High Demand.
 * In ``ENERGY_SAVER`` it rests at 40.5 degC, the device minimum, which
-  is 33 degC below a normally charged tank. An earlier version of this
-  page said the same of ``HEAT_PUMP``; on this unit that holds in only
-  48.5 % of Heat Pump minutes. The rest are other values - 63.0 degC
+  is 33 degC below a normally charged tank. In ``HEAT_PUMP`` it rests
+  there in only 48.5 % of minutes on this unit. The rest are other values - 63.0 degC
   most often - which equal the *current* setpoint in only 6 % of Heat
   Pump minutes, so this is not the field tracking the setpoint; it may
   be holding a value over from an earlier mode. Do not rely on it in
@@ -289,8 +288,7 @@ element.** In 21 mid-stint upper-element starts in ``ENERGY_SAVER``
 drawn from one unit's recorded history, **16 have the upper probe
 between 39.8 and 40.4 degC** - just under the 40.5 degC
 ``heUpperOnTempSetting`` rests at in this mode. The element comes on as
-the probe reaches the on-setting, which is what this reference has said
-all along.
+the probe reaches the on-setting.
 
 **Confirmed on the device.** The history above cannot prove it on its
 own: with the setpoint fixed for almost the whole record, "at the
@@ -358,9 +356,6 @@ and one morning; the counts are given so they can be weighed.
    but they are not negligible to the probe: a 20-second burst raises
    the upper zone about 0.3 degC, three quanta of its 0.1 degC
    resolution, and measured bursts of 41-58 s moved it 0.7-1.5 degC.
-   *(An earlier version said they "heat nothing", from dividing by the
-   whole tank's heat capacity rather than the upper zone's - three
-   times too large.)*
 
    They are also easy to lose or to misread. ``currentPower`` samples
    at a median 30 s, with 24 % of gaps over a minute, so **a
@@ -375,8 +370,8 @@ and one morning; the counts are given so they can be weighed.
    heat the tank.
 
 
-Electric: the handover, and what happens to the upper zone
-===========================================================
+Electric: the element handover
+==============================
 
 The protocol reference states that elements do not operate
 simultaneously in Electric mode. Confirmed, and in both commanded runs

@@ -16,8 +16,8 @@ under an active TOU window that instant never arrives.
    :depth: 2
 
 
-The short version
-=================
+Summary
+=======
 
 .. list-table::
    :header-rows: 1
@@ -136,8 +136,8 @@ Two plausible explanations were tested and **refuted**:
   heater has no sensor in the outlet pipe.
 
 
-What is not yet established
-===========================
+Open questions
+==============
 
 Being inside a period is a strong predictor but not a deterministic one:
 12 cycles reached the setpoint from inside one, and 16 were capped from
@@ -151,12 +151,8 @@ The 90 % figure has been observed on one unit under one TOU schedule. It
 is not known whether the ceiling is fixed in firmware, derived from the
 schedule, or configurable.
 
-A note on reading ``tou_status`` over time: the field emits brief
-``unknown`` values on integration reconnect - sub-second blips that
-return immediately to the value they interrupted - so a raw state history
-contains entries that are not transitions. Stores that keep only boolean
-values drop these, which is the right behaviour and leaves a faithful
-record of the genuine changes.
+A recorded ``tou_status`` history can contain sub-second ``unknown``
+blips on reconnect. They are not transitions: drop them.
 
 Do not read a low record count as lost data. It means the state was
 *held*: on the unit measured, ``tou_status`` logged 165 changes in one

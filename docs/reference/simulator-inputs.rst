@@ -72,8 +72,7 @@ units (:doc:`/how-to/manage-units`): degC and litres after
    * - Adapter
      - Units
    * - ``heater_state``, ``settings``, ``environment(status)``
-     - Read the device's raw fields: the same status gives the same
-       values whatever unit is preferred.
+     - From the status, whatever unit is preferred.
    * - ``environment(ambient=..., inlet=...)``
      - The air and the mains water in the preferred unit; humidity in
        %RH.
@@ -498,9 +497,8 @@ follows the cold front; without it, each draw moves the zones by its
 calibrated response only, which holds the upper zone up through a draw
 that empties the tank, and ``reasons`` says ``no_heat_book``.
 
-The heater cannot tell you the starting book, and the library does not
-guess it: two probes read a full tank over the cold water of a recent
-draw. Start one only from what you know:
+The heater cannot tell you the starting book: two probes read a full
+tank over the cold water of a recent draw. Start one only from what you know:
 
 .. list-table::
    :header-rows: 1
@@ -538,18 +536,10 @@ median of the probe's readings over the last 3 hours
 (``book.inlet_window_s``), the default without one. The meter must
 report at rest too: a silence over an hour in the window is refused,
 since it would read as a quiet full tank. A missing reading (None or
-NaN) in any series is left out, here, in every adapter and in a
-``Record`` built directly: never a number to compute with, and the
-value before it holds. An ambient frame handed to the core
-(``decay.project_decay``, ``TankPhysics``) must carry an ``ambient_f``
-column: without one it is an error, not a coast at the 65 °F default.
-A column with no usable reading does take the default, and the
-projection says so (``DecayProjection.ambient_defaulted``).
+NaN) is skipped, and the value before it holds.
 
-What an installation's own meter and circulation need beyond this,
-its meter's arithmetic and its circulator's reading rules, is the
-installation's to compute. Steps built that way go to
-``book.book_steps`` directly. ``BookStep.circulation_in_meter_gpm`` is
+To build the steps yourself, pass them to ``book.book_steps``.
+``BookStep.circulation_in_meter_gpm`` is
 the circulation's flow the meter's figure still holds (a meter
 reporting a trailing net holds a run's flow after it stops), and a
 ``Draw``'s ``per_draw_gal`` is the size a recorded draw is judged by
@@ -754,8 +744,7 @@ parameters as one document.
 Reasons
 =======
 
-Every answer carries ``reasons``: why it may be less than it seems. A
-caller with its own record can add to them, since they are a tuple.
+Every answer carries ``reasons``: why it may be less than it seems.
 The ones about inputs and parameters:
 
 .. list-table::

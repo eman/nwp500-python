@@ -8,8 +8,7 @@ just as importantly - which fields look affected but are not.
 
 The short answer: **there is no single rule about zero.** Zero is a
 reserved sentinel in some field families, a real value in others, and
-carries no special meaning at all for temperatures. Earlier attempts to
-apply one rule library-wide produced bugs in both directions.
+carries no special meaning at all for temperatures.
 
 .. contents::
    :local:
@@ -82,8 +81,8 @@ something a user would read as "no data":
      - "Unknown"
 
 
-But in five other enums zero is real
-------------------------------------
+Enums where zero is a value
+---------------------------
 
 The rule is not global, and this is where a blanket converter goes wrong:
 
@@ -170,13 +169,6 @@ been guessed wrong before.
 
 So a temperature of zero means zero. The library does not map any
 temperature field to ``None``.
-
-.. warning::
-   Do not add zero-as-none to a temperature field on the strength of it
-   "always reading 0" in a capture. Ambient and tank temperatures can
-   legitimately reach 0 degC, and a heat pump in a cold garage will get
-   there. A previous attempt did exactly this and had to be reverted after
-   it reported working sensors as missing during cold-weather operation.
 
 
 Absent and zero are indistinguishable

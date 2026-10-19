@@ -572,9 +572,9 @@ from a raw ``res/td/rd`` response with :meth:`DeviceDiagnostics.from_response`.
      the compressor, evaporator fan, upper and lower elements,
      recirculation pump and inverter stages, plus EEV and mixing valve steps
 
-   Every field is a raw integer. The two energies and the compressor and
-   upper-element run times were cross-checked against the energy query;
-   the other counters have no documented unit. Vendor misspellings on the
+   Every field is a raw integer. The two energies are watt-hours and the
+   compressor and upper-element run times hours; the other counters have
+   no documented unit. Vendor misspellings on the
    wire (``numOffRostProtectBurn``, ``avrageRecoveryTime``, ``numOfdhwUse``,
    ``mixingValveOpAvgMixinGrate``) map to correctly spelled field names.
 

@@ -364,32 +364,13 @@ is set to Fahrenheit, converting with 1 GPM = 3.785 LPM.
      - L or gal
      - **Total hot water delivered since installation**. Cumulative counter in whole litres. ``raw`` is litres; ``raw / 3.785`` is gallons.
 
-**Evidence.** Three first-party sources agree that the NWP500 measures and
-counts water in metric units, whatever the display setting:
+The heater measures and counts water in metric units whatever the
+display setting: tenths of a litre per minute for a rate, whole litres
+for a total.
 
-- Navien's NaviLink Android app (version 2.01.02, decompiled) decodes
-  ``currentDhwFlowRate`` on its status screen as ``raw / 10.0`` with the label
-  "LPM" when the device is set to Celsius, and as ``raw / 3.785 / 10.0`` with
-  the label "GPM" when it is set to Fahrenheit. The raw value is tenths of a
-  litre per minute in both settings.
-- The NWP500 User's Information Manual lists the front panel's Status
-  Information item "Water Flow" as "Current water flow of the tank (LPM)",
-  although the panel's default display units are °F and GPM.
-- The app's installer diagnostics screen shows the heater's hot-water volume
-  totals (``dhwUseTotalFlow`` and ``longDhwUseTotalFlow`` in the
-  ``res/td/rd`` response) as the raw value with a fixed "Liter" label, in
-  either unit setting. The firmware keeps its volume totals in whole litres.
-
-The app parses ``recircDhwFlowRate`` but never displays it, and it does not
-parse ``cumulatedDhwFlowRate`` at all. Their units follow the firmware's
-convention above: tenths of a litre per minute for a rate, whole litres for
-a total.
-
-On the unit these docs were checked against, ``cumulatedDhwFlowRate`` and
-every draw counter in the diagnostics response, including the draw count
-``numOfdhwUse``, read 0 after 392 days in service. That unit does not keep
-draw accounting, so a 0 here does not mean that no water has been used. See
-:doc:`/explanation/unknown-values`.
+Some units keep no draw accounting: ``cumulatedDhwFlowRate`` and every
+draw counter in the diagnostics response read 0, so a 0 there does not
+mean no water was used. See :doc:`/explanation/unknown-values`.
 
 Power and Energy Fields
 -----------------------

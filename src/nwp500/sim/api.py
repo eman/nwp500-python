@@ -1,13 +1,12 @@
 """The simulator's entry points: ``simulate``, ``recovery`` and
 ``standby``.
 
-Each takes values and returns values. A scenario's parts become the
-engine's inputs here: the ambient as a frame on a 10-minute grid, the
-TOU periods as windows and the reservations as firings
-(``sim.schedules``), the modes as the engine names them, and the
-parameters as the core's ``TankPhysics``. What could not be modelled is
-named in the result's ``reasons``, and every default used in its
-``defaults_used``.
+A scenario's parts become the engine's inputs here: the ambient as a
+frame on a 10-minute grid, the TOU periods as windows and the
+reservations as firings (``sim.schedules``), the modes as the engine
+names them, and the parameters as the core's ``TankPhysics``. What
+could not be modelled is named in the result's ``reasons``, and every
+default used in its ``defaults_used``.
 """
 
 import dataclasses
@@ -401,9 +400,7 @@ def simulate(
 
     ``recovery`` replaces the physics duration of each heat-pump
     recovery with its own (``extensions.RecoveryModel``). The five
-    inputs after it are what such a model may have been trained with,
-    and it brings them: none is a heater term, and none is fitted here.
-    Each goes to the engine as given (``engine.simulate``):
+    inputs after it are what such a model was trained with:
 
     - ``start_hold``: how long a compressor start holds before the lower
       zone climbs, minutes, by the minutes since the compressor last
@@ -424,8 +421,7 @@ def simulate(
     - ``physics_usable``: whether the physics duration may be served;
       None, when the compressor is calibrated (a positive constant).
 
-    With no model, or one that declines, a recovery adds no start hold:
-    the physics is calibrated on whole durations, hold included.
+    With no model, or one that declines, the holds change nothing.
     ``draw_hold_factor`` holds a recovery for the walk's own draws
     either way.
 

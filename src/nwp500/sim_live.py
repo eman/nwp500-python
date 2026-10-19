@@ -1,10 +1,9 @@
 """Live sources for the simulator, and the composition of a scenario
 from them.
 
-``nwp500.sim`` takes values only and makes no requests. A driver gets
-the values: the heater's state and its schedules from the device, the
-air, the draws and the commands from its caller. This module is that
-driver's part:
+A driver gets the simulator's inputs: the heater's state and its
+schedules from the device, the air, the draws and the commands from its
+caller. This module is that driver's part:
 
 - the **source protocols** a driver composes. A source is anything with
   an ``async read()`` that returns one input: a ``HeaterReading``, the

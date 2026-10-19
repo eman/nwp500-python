@@ -20,7 +20,7 @@ All temperature, flow rate, and volume values from ``DeviceStatus`` are automati
 - **Flow rate fields**: Converted to LPM or GPM
 - **Volume fields**: Converted to L or gallons
 
-This conversion happens at the model level via Pydantic wrap validators, so values are already in the correct unit when you receive them.
+Values arrive already in the device's unit.
 
 **Unit Metadata**
 

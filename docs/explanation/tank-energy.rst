@@ -12,8 +12,8 @@ actually measure and shows the evidence for the correction.
    :depth: 2
 
 
-The short version
-=================
+Summary
+=======
 
 .. list-table::
    :header-rows: 1
@@ -338,8 +338,8 @@ anything. For a charge figure with defined meaning, use
 
 .. _what the vendor app does with these fields:
 
-What the vendor app does with these fields
-==========================================
+In the NaviLink app
+===================
 
 Nothing. Navien's own NaviLink app never reads either field.
 
@@ -468,9 +468,8 @@ Migrating from before v9.3.0
    * - Treating the value as a percentage
      - It never was one
 
-The old attribute names are removed rather than aliased, so a
-rename that is missed fails immediately with ``AttributeError`` instead
-of silently returning a number 2.5x too large.
+The old names are removed: code still using them raises
+``AttributeError``.
 
 If you logged these values historically, the stored series needs
 rescaling by 0.4 to be comparable with values from v9.3.0 onward.

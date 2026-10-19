@@ -15,24 +15,16 @@ every input it takes is listed in :doc:`/reference/simulator-inputs`.
 Install the extra
 =================
 
-The simulator needs numpy, pandas and scipy, which the core library
-does not:
-
 .. code-block:: bash
 
    pip install nwp500-python[sim]
-
-Importing ``nwp500.sim`` or ``nwp500.sim_adapters`` loads none of the
-clients or their dependencies (aiohttp, the AWS IoT SDK), so a service
-that only simulates never starts them.
 
 
 From the command line
 =====================
 
 ``nwp-cli simulate`` needs the ``cli`` and ``sim`` extras
-(``pip install 'nwp500-python[cli,sim]'``). Without the ``sim`` extra
-it stops with a one-line install hint.
+(``pip install 'nwp500-python[cli,sim]'``).
 
 **From the heater as it is now.** With no scenario, the heater and its
 schedules are read from the device, the air is the heater's own
@@ -163,8 +155,8 @@ pass it with ``--sources`` (or set ``NWP500_SOURCES``):
 
 Every entity is optional, and the token never goes in the file. The
 ``url`` is the one Home Assistant answers on (``https://`` if it uses
-TLS): the client follows no redirects, which would carry the token on. With
-the heater read live, the sources give:
+TLS); redirects aren't followed. With the heater read live, the sources
+give:
 
 - **the air:** the hourly forecast projected through the
   ``[location_air]`` model, shifted to pass through a reading beside the
@@ -175,19 +167,13 @@ the heater read live, the sources give:
 - **the humidity:** a reading at most an hour old;
 - **the inlet:** the plateau of the long draws (11 minutes or more,
   circulation off) in the last 72 hours, from the inlet probe and the
-  meter, never the probe's raw reading. A draw is found from the
-  meter's volume reports, which hold up through a steady draw where the
-  flow rate goes silent (``sim.meter.flow_gpm``). Home Assistant records
-  a state only when it changes, so a meter that reports the same volume
-  twice running loses the second; name its flow rate too. A circulation pump
-  with no speed reading is taken as unknown, which leaves no estimate.
+  meter. Name the meter's flow rate as well as its volume. A
+  circulation pump with no speed reading leaves no estimate.
 
-Units come from each entity's ``unit_of_measurement``, for a history
-the one each reading was recorded in: the pump's speed in rpm or Hz. A part that can't be read, or is stale, keeps its
-default, and a warning on stderr says why. A spell when the meter, the
-probe or the pump was ``unavailable`` counts as busy: the plateau skips
-a draw that overlaps one. Flags and a scenario file still win: ``--ambient``,
-``--inlet`` and ``--environment`` override what the sources give.
+Units come from each entity's ``unit_of_measurement``: the pump's speed
+in rpm or Hz. A part that can't be read, or is stale, keeps its
+default, and a warning on stderr says why. ``--ambient``, ``--inlet``
+and ``--environment`` override what the sources give.
 
 
 Fetch what the heater reports
@@ -202,8 +188,7 @@ A scenario starts from four things the library already reads:
 - the ``ReservationSchedule``: the weekly reservations;
 - the ``TOUInfo``: the TOU price periods.
 
-The simulator does no I/O, so fetch them first. ``nwp500.sim_live``
-fetches them and builds a scenario in one call:
+``nwp500.sim_live`` fetches them and builds a scenario in one call:
 
 .. code-block:: python
 
@@ -328,7 +313,7 @@ which the heater does not report.
 
 ``start`` must be timezone-aware. ``sa.environment(status)`` holds the
 device's reading of the air at its intake for the whole span; a
-forecast does better (`Make the answer better`_).
+forecast does better (`Improve accuracy`_).
 
 
 Work in your units
@@ -339,8 +324,6 @@ The simulator itself takes degF and US gallons: its fields end in
 them; it converts at the boundary, in the library's preferred units
 (:doc:`manage-units`):
 
-- The device's fields are read raw, so the same status builds the same
-  scenario whatever unit system is set.
 - What you supply is in the preferred unit: degC and litres after
   ``set_unit_system("metric")``, degF and gallons otherwise.
   ``sa.environment(ambient=..., inlet=...)``, ``sa.loads``, ``sa.write``
@@ -495,8 +478,8 @@ ends about 3.6 degF (2 degC) short of the setpoint, and its ``stop``
 says ``cap`` (:doc:`/explanation/tou-recovery-cap`).
 
 
-Watch the tank coast
-====================
+Watch the tank cool
+===================
 
 ``standby`` runs the tank with no heating at all: standby loss and any
 draws. Use it for "how cold will it be by morning?":
@@ -672,7 +655,7 @@ the recovery under way. Pass ``evaporator_f=sa.evaporator_f(status)``
 so its physics estimate uses the coil's live reading.
 
 
-Judge a shower or a bath
+Check a shower or a bath
 ========================
 
 Give the draws and the window they fall in; the result says whether
@@ -702,8 +685,8 @@ the answer to read. ``result.delivery`` and ``sa.path(result)`` give the
 delivered temperature along the whole walk.
 
 
-Make the answer better
-======================
+Improve accuracy
+================
 
 Each of these replaces a default with a fact:
 
@@ -938,9 +921,7 @@ for the jacket's loss, and ``tau_gap_prior`` for a gap that draws open.
 The base's record of the installation's book, readiness and draw terms
 is kept (``default_params`` names all three): they are fitted apart,
 from a meter's draws, and once you apply your own fits drop each from
-``unfitted`` (``replace(params, unfitted=...)``). A client with its
-own recovery model can read ``unfitted`` and turn the physics off
-itself. A meter's draws
+``unfitted`` (``replace(params, unfitted=...)``). A meter's draws
 and the circulation's runs, where you record them, make the quiet test
 exact (``sa.history(..., drawing=..., circulating=...)``): the heater's
 own "hot water in use" flag also fires on circulation.
@@ -1012,13 +993,7 @@ the front is (``lower_probe_gal``, ``front_width_gal``). ``settle`` is
 how fast the lower zone settles after a draw (``front_settle_min``).
 ``mix`` is how the upper zone falls through a long draw
 (``zone_mix_f_per_gal``, ``zone_mix_gal``). Each reports its error on
-the training and held-out draws and a day bootstrap's interval, and
-each fit's procedure is the one its value was fitted with. Two inputs
-stand in for what that fit had:
-
-- the long draws are the record's own runs of household flow;
-- the front's base is the calibrated draw response chained from each
-  draw's onset probes, rather than a full replay's lower zone.
+the training and held-out draws and a day bootstrap's interval.
 
 With circulation's own telemetry (its running samples, flow and return
 line temperature), fit its terms too:
@@ -1052,9 +1027,7 @@ Fit the elements
 ================
 
 The element terms (``ElementParams``) come from the heater's raw
-change rows (``sim_adapters.record``). They are never read from a
-one-minute grid, which can move an edge by as much as the lag being
-measured:
+change rows (``sim_adapters.record``):
 
 .. code-block:: python
 
@@ -1082,7 +1055,7 @@ Saver's stop short of the setpoint, and
 ``cal.upper_start_edge(cal.element_runs(grid))`` the runs to how far
 below the setpoint the upper element starts.
 
-Plan with the heater's facts
+Plan with the heater profile
 ============================
 
 A scheduler plans with ``sim.profile.heater_profile(params.tank)``.
@@ -1090,17 +1063,16 @@ It lists the modes and the energy each one uses, the setpoint range
 and step, the depletion threshold and the tank's volume, all as the
 simulation runs them. ``profile.revision`` changes only when one of
 those facts changes, so re-read the profile when the revision moves.
-A plan reaches the heater as what a control integration writes:
-reservation entries (``Commands.reservations``) and writes
-(``Commands.writes``).
+Express a plan as reservation entries (``Commands.reservations``) and
+writes (``Commands.writes``).
 
 To keep a ``next_recovery`` answer and reuse it later, age it with
 ``sim.recovery_as_of(rec, computed_at, now)``. Otherwise its start
 comes late and the part of the coast that has already happened is
 charged a second time.
 
-Replay a day the heater lived
-=============================
+Replay a recorded day
+=====================
 
 Record each status and when it arrived, and the simulator can be held
 to what the heater did. ``sa.replay`` builds the scenario as of a past
@@ -1126,15 +1098,15 @@ a TOU window opens. The TOU switch's changes are kept too. A write into
 Vacation or Power Off cannot be simulated: it is left out whole and
 named in ``r.reasons``. The record holds no schedule, so give the
 heater's own, read with this library. With ``air``, the air is the
-recorded readings as 10-minute means from 6 hours before ``at`` (a
-past instant's weather forecast is not recorded), and ``humidity=``
+recorded readings as 10-minute means from 6 hours before ``at``, and
+``humidity=``
 goes with it. Without it, the heater's own reading at ``at`` holds,
 and that reads the cabinet, about 6 degF warm, while the compressor is
 idle. ``environment=`` replaces either.
 
 
-Compare it with what the heater did
------------------------------------
+Compare with the recorded day
+-----------------------------
 
 ``sa.observe`` reads the same record for what actually happened over a
 range, in the simulation's terms:
@@ -1189,8 +1161,7 @@ the ones you want to look at again, or attach one to a bug report:
    with open("scenario.json") as f:
        scenario, params = codec.scenario_from_document(f.read())
 
-The same scenario on the same parameters always returns the same
-answer. ``codec.result_to_document(result)`` writes a result the same
+``codec.result_to_document(result)`` writes a result the same
 way.
 
 

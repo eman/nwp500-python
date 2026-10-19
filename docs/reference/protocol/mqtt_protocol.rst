@@ -1083,8 +1083,7 @@ and hours. The app's diagnostics screen labels the ``tdData`` values without
 converting them: ``dhwUseTotalFlow`` and ``longDhwUseTotalFlow`` in litres,
 ``dhwUseTotalTime`` and ``longDhwUseTotalTime`` in hours,
 ``avrageRecoveryTime`` in minutes, and the ``numOf*`` fields as counts. The
-remaining counters have no documented unit. The misspelled keys are the
-vendor's.
+remaining counters have no documented unit.
 
 Firmware Download Info Response
 -------------------------------

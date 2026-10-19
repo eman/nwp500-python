@@ -364,9 +364,7 @@ every raw entry before anything is sent, and raise
 :class:`~nwp500.exceptions.RangeValidationError` on a bad one. Each
 ``param`` must lie within the setpoint range the heater reports in its
 feature data (``dhw_temperature_min_raw`` to ``dhw_temperature_max_raw``,
-both in half-degrees Celsius like ``param``). The heater clamps an
-out-of-range setpoint itself; the check makes a bad entry fail early and
-clearly instead.
+both in half-degrees Celsius like ``param``).
 
 **Disable reservations** (entries are preserved on the device):
 
@@ -609,9 +607,7 @@ Weekly Reservations
 The NaviLink app's "weekly" schedule screen is the reservation program
 above: it writes with ``update_reservations()`` on ``ctrl/rsv/rd`` and
 reads with ``request_reservations()``. There is no separate weekly
-command. (The app's enum declares a ``RESERVATION_WEEKLY`` code, but
-nothing sends it; the ``update_weekly_reservation()`` method that earlier
-library versions built on it was removed.)
+command.
 
 Recirculation Scheduling
 ========================
@@ -878,10 +874,7 @@ Vacation Mode
 =============
 
 Vacation mode suspends heating for 1–99 days while maintaining
-critical functions. The range is the front panel's (User's Information
-Manual, section 3.4.5) and the NaviLink app's, and
-:meth:`~nwp500.mqtt.client.NavienMqttClient.set_vacation_days` accepts the
-same.
+critical functions.
 
 Behavior
 --------
