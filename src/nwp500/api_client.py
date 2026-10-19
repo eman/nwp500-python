@@ -1405,7 +1405,7 @@ async def get_app_version(
         async with session.post(
             url,
             json={"os": os},
-            headers=NavienAuthClient._default_headers(),
+            headers=NavienAuthClient.default_headers(),
         ) as response:
             response_data = await response.json()
             status = response.status

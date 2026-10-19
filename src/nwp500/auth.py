@@ -475,7 +475,7 @@ class NavienAuthClient:
 
         try:
             async with self._session.post(
-                url, json=payload, headers=self._default_headers()
+                url, json=payload, headers=self.default_headers()
             ) as response:
                 response_data = await response.json()
 
@@ -586,7 +586,7 @@ class NavienAuthClient:
 
         try:
             async with self._session.post(
-                url, json=payload, headers=self._default_headers()
+                url, json=payload, headers=self.default_headers()
             ) as response:
                 response_data = await response.json()
 
@@ -1128,7 +1128,7 @@ class NavienAuthClient:
             self._session = None
 
     @staticmethod
-    def _default_headers() -> dict[str, str]:
+    def default_headers() -> dict[str, str]:
         """Headers sent on every request, authenticated or not.
 
         The NaviLink app sends its User-Agent on sign-in and refresh calls
@@ -1152,7 +1152,7 @@ class NavienAuthClient:
             'authorization').
             This is different from standard Bearer token authentication.
         """
-        headers = self._default_headers()
+        headers = self.default_headers()
 
         # IMPORTANT: Use lowercase 'authorization' and raw token (no 'Bearer '
         # prefix)
