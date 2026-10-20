@@ -121,13 +121,20 @@ parameter classes 51-54 that the service app uses on boilers, with any
 expected length or sub-address, so its installer parameters live behind
 a class the heat-pump-specific service app knows and this library does
 not yet. :data:`nwp500.ble.NWP500_RESPONDING_CLASSES` lists the
-responding set. Writing a block's own bytes back is answered as a read by
-every one of them, ``TOU_PLAN`` included, yet ``TOU_PLAN`` stores a write in
-its own format (see `Write the time-of-use plan`_). So it is the only class
-written so far (:data:`nwp500.ble.NWP500_WRITABLE_CLASSES`), not the only
-writable one: the others may take a format not yet known. The session
+responding set. ``TOU_PLAN`` stores a write in its own format (see
+`Write the time-of-use plan`_), and is the only class written so far
+(:data:`nwp500.ble.NWP500_WRITABLE_CLASSES`). The other responding classes
+serve a write as a read: the reply is as long as the first byte of the
+write's payload, and nothing is stored, whatever the payload. The session
 commands are writes too, to class 50, which answers no reads. The boiler
 parameter classes 51-54 answered neither reads nor the writes tried.
+
+A read may ask for up to 234 bytes, the most one reply carries, however
+short the block. The bytes past the block are whatever the heater keeps
+after it: 100 bytes after the start of ``DID`` is the ``TSD`` block, 80
+bytes after ``MSCD`` is ``EHD``, and from 104 bytes after ``EHD`` are the
+tank upper, tank lower, suction, discharge, evaporator and ambient
+temperatures, as in the status block (2026-10-20).
 
 Min Operation Temp is readable but not writable here: it is DID byte 17
 (:meth:`~nwp500.ble.DeviceInfoBlock.min_operation_temperature`), confirmed equal

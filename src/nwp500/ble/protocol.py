@@ -124,16 +124,14 @@ NWP500_RESPONDING_CLASSES: frozenset[int] = frozenset(
     {17, 32, 38, 39, 40, 41, 170, 210, 240, 243, 244}
 )
 
-#: Classes an NWP500 has stored a write (command 16) to. Writing a block's
-#: own bytes back (2026-10-16) was answered as a read by every class that
-#: answers reads, ``TOU_PLAN`` included, yet ``TOU_PLAN`` stores a write in
-#: its own format, a clock header before the records (see
-#: :func:`build_tou_write`). So that test does not show the other classes
-#: are read-only: they may take a format not yet known. The heater also
-#: drops some malformed writes without answering, and ``SAPCD`` (50), which
-#: answers no read, takes the session commands
-#: (:func:`build_session_command`). The boiler parameter classes 51-54
-#: answered neither reads nor the writes tried.
+#: Classes an NWP500 has stored a write (command 16) to. The other classes
+#: that answer reads serve a write as a read: the reply is a read response
+#: as long as the first byte of the write's payload, and nothing is stored,
+#: whether the payload is the block's own bytes or those bytes behind the
+#: ``TOU_PLAN`` clock header (2026-10-20). ``SAPCD`` (50), which answers no
+#: read, takes the session commands (:func:`build_session_command`). The
+#: boiler parameter classes 51-54 answered neither reads nor the writes
+#: tried.
 NWP500_WRITABLE_CLASSES: frozenset[int] = frozenset({ClassCode.TOU_PLAN})
 
 #: Bytes in a ``SAPCD`` (class 50) session command.
