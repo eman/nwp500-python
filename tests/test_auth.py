@@ -20,7 +20,7 @@ from nwp500.exceptions import (
 
 
 # Test UserInfo dataclass
-def test_user_info_creation():
+def test_user_info_creation() -> None:
     """Test UserInfo dataclass creation."""
     user_info = UserInfo(
         user_type="standard",
@@ -37,7 +37,7 @@ def test_user_info_creation():
     assert user_info.user_seq == 123
 
 
-def test_user_info_full_name():
+def test_user_info_full_name() -> None:
     """Test UserInfo full_name property."""
     user_info = UserInfo(
         user_type="standard",
@@ -50,7 +50,7 @@ def test_user_info_full_name():
     assert user_info.full_name == "John Doe"
 
 
-def test_user_info_full_name_with_empty_names():
+def test_user_info_full_name_with_empty_names() -> None:
     """Test UserInfo full_name with empty first or last name."""
     user_info = UserInfo(
         user_type="standard",
@@ -63,7 +63,7 @@ def test_user_info_full_name_with_empty_names():
     assert user_info.full_name == "Doe"
 
 
-def test_user_info_model_validate_validate():
+def test_user_info_model_validate_validate() -> None:
     """Test UserInfo.model_validate class method."""
     data = {
         "userType": "premium",
@@ -82,7 +82,7 @@ def test_user_info_model_validate_validate():
     assert user_info.user_seq == 456
 
 
-def test_user_info_model_validate_validate_with_missing_fields():
+def test_user_info_model_validate_validate_with_missing_fields() -> None:
     """Test UserInfo.model_validate with missing fields."""
     data = {}
 
@@ -96,7 +96,7 @@ def test_user_info_model_validate_validate_with_missing_fields():
 
 
 # Test AuthTokens dataclass
-def test_auth_tokens_creation():
+def test_auth_tokens_creation() -> None:
     """Test AuthTokens dataclass creation."""
     tokens = AuthTokens(
         id_token="test_id_token",
@@ -119,7 +119,7 @@ def test_auth_tokens_creation():
     assert tokens.authorization_expires_in == 3600
 
 
-def test_auth_tokens_expires_at_calculation():
+def test_auth_tokens_expires_at_calculation() -> None:
     """Test AuthTokens expires_at property."""
     now = datetime.now(UTC)
     tokens = AuthTokens(
@@ -134,7 +134,7 @@ def test_auth_tokens_expires_at_calculation():
     assert abs((tokens.expires_at - expected_expiry).total_seconds()) < 1
 
 
-def test_auth_tokens_is_expired_false():
+def test_auth_tokens_is_expired_false() -> None:
     """Test AuthTokens.is_expired when token is not expired."""
     tokens = AuthTokens(
         id_token="test",
@@ -146,7 +146,7 @@ def test_auth_tokens_is_expired_false():
     assert tokens.is_expired is False
 
 
-def test_auth_tokens_is_expired_true():
+def test_auth_tokens_is_expired_true() -> None:
     """Test AuthTokens.is_expired when token is expired."""
     old_time = datetime.now(UTC) - timedelta(seconds=7200)  # 2 hours ago
     tokens = AuthTokens(
@@ -160,7 +160,7 @@ def test_auth_tokens_is_expired_true():
     assert tokens.is_expired is True
 
 
-def test_auth_tokens_is_expired_near_expiry():
+def test_auth_tokens_is_expired_near_expiry() -> None:
     """Test AuthTokens.is_expired within 5-minute buffer."""
     # Token expires in 3 minutes - should be considered expired
     near_expiry = datetime.now(UTC) - timedelta(seconds=3420)  # 57 minutes ago
@@ -175,7 +175,7 @@ def test_auth_tokens_is_expired_near_expiry():
     assert tokens.is_expired is True
 
 
-def test_auth_tokens_aws_credentials_expired_false():
+def test_auth_tokens_aws_credentials_expired_false() -> None:
     """Test are_aws_credentials_expired when AWS credentials are not expired."""
     tokens = AuthTokens(
         id_token="test",
@@ -191,7 +191,7 @@ def test_auth_tokens_aws_credentials_expired_false():
     assert tokens.are_aws_credentials_expired is False
 
 
-def test_auth_tokens_aws_credentials_expired_true():
+def test_auth_tokens_aws_credentials_expired_true() -> None:
     """Test are_aws_credentials_expired when AWS credentials are expired."""
     old_time = datetime.now(UTC) - timedelta(seconds=7200)  # 2 hours ago
     tokens = AuthTokens(
@@ -209,7 +209,7 @@ def test_auth_tokens_aws_credentials_expired_true():
     assert tokens.are_aws_credentials_expired is True
 
 
-def test_auth_tokens_aws_credentials_no_expiration():
+def test_auth_tokens_aws_credentials_no_expiration() -> None:
     """Test are_aws_credentials_expired when no expiration info available."""
     tokens = AuthTokens(
         id_token="test",
@@ -223,7 +223,7 @@ def test_auth_tokens_aws_credentials_no_expiration():
     assert tokens.are_aws_credentials_expired is False
 
 
-def test_auth_tokens_time_until_expiry():
+def test_auth_tokens_time_until_expiry() -> None:
     """Test AuthTokens.time_until_expiry property."""
     tokens = AuthTokens(
         id_token="test",
@@ -237,7 +237,7 @@ def test_auth_tokens_time_until_expiry():
     assert 3595 < time_until.total_seconds() < 3605
 
 
-def test_auth_tokens_bearer_token():
+def test_auth_tokens_bearer_token() -> None:
     """Test AuthTokens.bearer_token property."""
     tokens = AuthTokens(
         id_token="test",
@@ -249,7 +249,7 @@ def test_auth_tokens_bearer_token():
     assert tokens.bearer_token == "Bearer my_access_token"
 
 
-def test_auth_tokens_model_validate_validate():
+def test_auth_tokens_model_validate_validate() -> None:
     """Test AuthTokens.model_validate class method."""
     data = {
         "idToken": "test_id",
@@ -274,7 +274,7 @@ def test_auth_tokens_model_validate_validate():
     assert tokens.authorization_expires_in == 1800
 
 
-def test_auth_tokens_model_validate_validate_minimal():
+def test_auth_tokens_model_validate_validate_minimal() -> None:
     """Test AuthTokens.model_validate with minimal data."""
     data = {}
 
@@ -291,7 +291,7 @@ def test_auth_tokens_model_validate_validate_minimal():
 
 
 # Test AuthenticationResponse dataclass
-def test_authentication_response_model_validate_validate():
+def test_authentication_response_model_validate_validate() -> None:
     """Test AuthenticationResponse.model_validate class method."""
     data = {
         "code": 200,
@@ -324,7 +324,7 @@ def test_authentication_response_model_validate_validate():
 
 
 # Test Exception classes
-def test_authentication_error():
+def test_authentication_error() -> None:
     """Test AuthenticationError exception."""
     error = AuthenticationError(
         "Test error", status_code=400, response={"error": "details"}
@@ -336,7 +336,7 @@ def test_authentication_error():
     assert error.response == {"error": "details"}
 
 
-def test_invalid_credentials_error():
+def test_invalid_credentials_error() -> None:
     """Test InvalidCredentialsError exception."""
     error = InvalidCredentialsError("Invalid password", status_code=401)
 
@@ -345,7 +345,7 @@ def test_invalid_credentials_error():
     assert isinstance(error, AuthenticationError)
 
 
-def test_token_refresh_error():
+def test_token_refresh_error() -> None:
     """Test TokenRefreshError exception."""
     error = TokenRefreshError("Refresh failed", status_code=403)
 
@@ -355,7 +355,7 @@ def test_token_refresh_error():
 
 
 # Test NavienAuthClient
-def test_navien_auth_client_initialization():
+def test_navien_auth_client_initialization() -> None:
     """Test NavienAuthClient initialization."""
     client = NavienAuthClient(
         user_id="test@example.com", password="test_password"
@@ -369,7 +369,7 @@ def test_navien_auth_client_initialization():
     assert client._owned_session is True
 
 
-def test_navien_auth_client_is_authenticated_false():
+def test_navien_auth_client_is_authenticated_false() -> None:
     """Test NavienAuthClient.is_authenticated when not authenticated."""
     client = NavienAuthClient(
         user_id="test@example.com", password="test_password"
@@ -378,7 +378,7 @@ def test_navien_auth_client_is_authenticated_false():
     assert client.is_authenticated is False
 
 
-def test_navien_auth_client_is_authenticated_true():
+def test_navien_auth_client_is_authenticated_true() -> None:
     """Test NavienAuthClient.is_authenticated when authenticated."""
     client = NavienAuthClient(
         user_id="test@example.com", password="test_password"
@@ -404,7 +404,7 @@ def test_navien_auth_client_is_authenticated_true():
     assert client.is_authenticated is True
 
 
-def test_navien_auth_client_current_user_none():
+def test_navien_auth_client_current_user_none() -> None:
     """Test NavienAuthClient.current_user when not authenticated."""
     client = NavienAuthClient(
         user_id="test@example.com", password="test_password"
@@ -413,7 +413,7 @@ def test_navien_auth_client_current_user_none():
     assert client.current_user is None
 
 
-def test_navien_auth_client_current_user():
+def test_navien_auth_client_current_user() -> None:
     """Test NavienAuthClient.current_user when authenticated."""
     client = NavienAuthClient(
         user_id="test@example.com", password="test_password"
@@ -440,7 +440,7 @@ def test_navien_auth_client_current_user():
     assert client.current_user == user_info
 
 
-def test_navien_auth_client_current_tokens_none():
+def test_navien_auth_client_current_tokens_none() -> None:
     """Test NavienAuthClient.current_tokens when not authenticated."""
     client = NavienAuthClient(
         user_id="test@example.com", password="test_password"
@@ -449,7 +449,7 @@ def test_navien_auth_client_current_tokens_none():
     assert client.current_tokens is None
 
 
-def test_navien_auth_client_current_tokens():
+def test_navien_auth_client_current_tokens() -> None:
     """Test NavienAuthClient.current_tokens when authenticated."""
     client = NavienAuthClient(
         user_id="test@example.com", password="test_password"
@@ -476,7 +476,7 @@ def test_navien_auth_client_current_tokens():
     assert client.current_tokens == tokens
 
 
-def test_navien_auth_client_user_email():
+def test_navien_auth_client_user_email() -> None:
     """Test NavienAuthClient.user_email property."""
     client = NavienAuthClient(
         user_id="test@example.com", password="test_password"
@@ -487,7 +487,7 @@ def test_navien_auth_client_user_email():
     assert client.user_email == "test@example.com"
 
 
-def test_navien_auth_client_get_auth_headers():
+def test_navien_auth_client_get_auth_headers() -> None:
     """Test NavienAuthClient.get_auth_headers method."""
     client = NavienAuthClient(
         user_id="test@example.com", password="test_password"
@@ -521,7 +521,7 @@ def test_navien_auth_client_get_auth_headers():
 
 
 @pytest.mark.asyncio
-async def test_ensure_valid_token_no_auth_response():
+async def test_ensure_valid_token_no_auth_response() -> None:
     """Test ensure_valid_token when not authenticated."""
     client = NavienAuthClient(
         user_id="test@example.com", password="test_password"
@@ -533,7 +533,7 @@ async def test_ensure_valid_token_no_auth_response():
 
 
 @pytest.mark.asyncio
-async def test_ensure_valid_token_valid_tokens():
+async def test_ensure_valid_token_valid_tokens() -> None:
     """Test ensure_valid_token when tokens are still valid."""
     client = NavienAuthClient(
         user_id="test@example.com", password="test_password"
@@ -567,7 +567,7 @@ async def test_ensure_valid_token_valid_tokens():
 
 
 @pytest.mark.asyncio
-async def test_ensure_valid_token_aws_credentials_expired():
+async def test_ensure_valid_token_aws_credentials_expired() -> None:
     """Test ensure_valid_token when AWS credentials are expired."""
     client = NavienAuthClient(
         user_id="test@example.com", password="test_password"
@@ -656,7 +656,7 @@ async def test_ensure_valid_token_aws_credentials_expired():
 
 
 @pytest.mark.asyncio
-async def test_ensure_valid_token_jwt_expired():
+async def test_ensure_valid_token_jwt_expired() -> None:
     """Test ensure_valid_token when JWT token is expired."""
     client = NavienAuthClient(
         user_id="test@example.com", password="test_password"
@@ -704,7 +704,7 @@ async def test_ensure_valid_token_jwt_expired():
 
 
 @pytest.mark.asyncio
-async def test_ensure_session():
+async def test_ensure_session() -> None:
     """Test _ensure_session creates session if needed."""
     client = NavienAuthClient(
         user_id="test@example.com", password="test_password"
@@ -723,7 +723,7 @@ async def test_ensure_session():
 
 
 @pytest.mark.asyncio
-async def test_close_owned_session():
+async def test_close_owned_session() -> None:
     """Test close() closes owned session."""
     client = NavienAuthClient(
         user_id="test@example.com", password="test_password"
@@ -740,7 +740,7 @@ async def test_close_owned_session():
 
 
 @pytest.mark.asyncio
-async def test_close_not_owned_session():
+async def test_close_not_owned_session() -> None:
     """Test close() doesn't close external session."""
     external_session = MagicMock(spec=aiohttp.ClientSession)
     external_session.close = AsyncMock()
@@ -761,7 +761,7 @@ async def test_close_not_owned_session():
 
 
 @pytest.mark.asyncio
-async def test_context_manager():
+async def test_context_manager() -> None:
     """Test async context manager functionality."""
     with patch.object(
         NavienAuthClient, "sign_in", new_callable=AsyncMock
@@ -793,7 +793,7 @@ async def test_context_manager():
         # (Can't easily test this without more complex mocking)
 
 
-def test_aws_credentials_preservation_in_token_refresh():
+def test_aws_credentials_preservation_in_token_refresh() -> None:
     """Test that AWS credentials are preserved during token refresh."""
     old_time = datetime.now(UTC) - timedelta(seconds=1800)  # 30 minutes ago
 
@@ -843,7 +843,7 @@ def test_aws_credentials_preservation_in_token_refresh():
 
 
 # Test token restoration functionality
-def test_auth_tokens_to_dict():
+def test_auth_tokens_to_dict() -> None:
     """Test AuthTokens.to_dict serialization."""
     issued_at = datetime.now(UTC)
     tokens = AuthTokens(
@@ -872,7 +872,7 @@ def test_auth_tokens_to_dict():
     assert result["issued_at"] == expected_issued_at
 
 
-def test_auth_tokens_model_validate_validate_with_issued_at():
+def test_auth_tokens_model_validate_validate_with_issued_at() -> None:
     """Test AuthTokens.model_validate with issued_at timestamp."""
     issued_at = datetime.now(UTC) - timedelta(seconds=1800)
     data = {
@@ -901,7 +901,7 @@ def test_auth_tokens_model_validate_validate_with_issued_at():
     assert abs((tokens.issued_at - issued_at).total_seconds()) < 1
 
 
-def test_auth_tokens_serialization_roundtrip():
+def test_auth_tokens_serialization_roundtrip() -> None:
     """Test that tokens can be serialized and deserialized without data loss."""
     issued_at = datetime.now(UTC) - timedelta(seconds=1800)
     original = AuthTokens(
@@ -940,7 +940,7 @@ def test_auth_tokens_serialization_roundtrip():
     assert restored.is_expired == original.is_expired
 
 
-def test_auth_tokens_model_validate_validate_with_empty_strings():
+def test_auth_tokens_model_validate_validate_with_empty_strings() -> None:
     """Test AuthTokens.model_validate handles empty strings in camelCase."""
     # Simulate API response with empty optional fields (camelCase)
     # Should fall back to snake_case alternatives
@@ -969,7 +969,7 @@ def test_auth_tokens_model_validate_validate_with_empty_strings():
     assert tokens.session_token == "test_session"
 
 
-def test_navien_auth_client_initialization_with_stored_tokens():
+def test_navien_auth_client_initialization_with_stored_tokens() -> None:
     """Test NavienAuthClient initialization with stored tokens."""
     stored_tokens = AuthTokens(
         id_token="stored_id",
@@ -995,7 +995,7 @@ def test_navien_auth_client_initialization_with_stored_tokens():
 
 
 @pytest.mark.asyncio
-async def test_context_manager_with_valid_stored_tokens():
+async def test_context_manager_with_valid_stored_tokens() -> None:
     """Test async context manager skips auth with valid stored tokens."""
     stored_tokens = AuthTokens(
         id_token="stored_id",
@@ -1023,7 +1023,7 @@ async def test_context_manager_with_valid_stored_tokens():
 
 
 @pytest.mark.asyncio
-async def test_context_manager_with_expired_jwt_stored_tokens():
+async def test_context_manager_with_expired_jwt_stored_tokens() -> None:
     """Test async context manager with expired JWT refreshes tokens."""
     old_time = datetime.now(UTC) - timedelta(seconds=3900)  # 65 minutes ago
     stored_tokens = AuthTokens(
@@ -1057,7 +1057,7 @@ async def test_context_manager_with_expired_jwt_stored_tokens():
 
 
 @pytest.mark.asyncio
-async def test_context_manager_with_expired_aws_credentials():
+async def test_context_manager_with_expired_aws_credentials() -> None:
     """Test async context manager re-authenticates on AWS creds expiry."""
     old_time = datetime.now(UTC) - timedelta(seconds=3900)  # 65 minutes ago
     stored_tokens = AuthTokens(

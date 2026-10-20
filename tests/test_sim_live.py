@@ -187,7 +187,7 @@ def _tou_on(status: DeviceStatus) -> DeviceStatus:
 class TestTheHeater:
     async def test_state_settings_air_and_tank_size(
         self, device, status, feature
-    ):
+    ) -> None:
         mqtt = FakeMqtt(status=status, feature=feature)
         reading = await sim_live.LiveHeaterSource(mqtt, device).read()
         assert reading.state.upper_f == pytest.approx(137.48)
@@ -200,12 +200,12 @@ class TestTheHeater:
 
     async def test_it_leaves_no_subscription_behind(
         self, device, status, feature
-    ):
+    ) -> None:
         mqtt = FakeMqtt(status=status, feature=feature)
         await sim_live.LiveHeaterSource(mqtt, device).read()
         assert all(not subs for subs in mqtt.subscribed.values())
 
-    async def test_no_status_is_an_error(self, device, feature):
+    async def test_no_status_is_an_error(self, device, feature) -> None:
         mqtt = FakeMqtt(feature=feature)
         source = sim_live.LiveHeaterSource(mqtt, device, timeout=FAST)
         with pytest.raises(sim_live.LiveReadError, match="no device status"):
@@ -214,7 +214,7 @@ class TestTheHeater:
 
     async def test_no_feature_leaves_the_tank_size_unknown(
         self, device, status, caplog
-    ):
+    ) -> None:
         mqtt = FakeMqtt(status=status)
         source = sim_live.LiveHeaterSource(mqtt, device, timeout=FAST)
         reading = await source.read()
@@ -227,7 +227,7 @@ class TestTheHeater:
 class TestTheSchedules:
     async def test_reservations_tou_periods_and_switch(
         self, device, status, feature, reservations
-    ):
+    ) -> None:
         mqtt = FakeMqtt(_tou_on(status), feature, reservations)
         api = _api()
         schedules = await sim_live.LiveScheduleSource(mqtt, api, device).read()
@@ -249,7 +249,7 @@ class TestTheSchedules:
 
     async def test_no_reservation_reply_is_an_error(
         self, device, status, feature
-    ):
+    ) -> None:
         mqtt = FakeMqtt(status, feature)
         source = sim_live.LiveScheduleSource(mqtt, _api(), device, timeout=FAST)
         with pytest.raises(sim_live.LiveReadError, match="reservation"):
@@ -257,7 +257,7 @@ class TestTheSchedules:
 
     async def test_no_feature_with_tou_on_is_an_error(
         self, device, status, reservations
-    ):
+    ) -> None:
         mqtt = FakeMqtt(_tou_on(status), None, reservations)
         api = _api()
         source = sim_live.LiveScheduleSource(mqtt, api, device, timeout=FAST)
@@ -267,7 +267,7 @@ class TestTheSchedules:
 
     async def test_no_feature_with_tou_off_reads_no_periods(
         self, device, status, reservations, caplog
-    ):
+    ) -> None:
         mqtt = FakeMqtt(status, None, reservations)
         source = sim_live.LiveScheduleSource(mqtt, _api(), device, timeout=FAST)
         schedules = await source.read()
@@ -278,7 +278,7 @@ class TestTheSchedules:
 
     async def test_a_failed_tou_read_with_tou_on_is_an_error(
         self, device, status, feature, reservations
-    ):
+    ) -> None:
         mqtt = FakeMqtt(_tou_on(status), feature, reservations)
         source = sim_live.LiveScheduleSource(
             mqtt, _api(APIError("no TOU")), device
@@ -293,7 +293,7 @@ class TestTheSchedules:
     )
     async def test_a_failed_tou_read_with_tou_off_reads_no_periods(
         self, device, status, feature, reservations, error
-    ):
+    ) -> None:
         mqtt = FakeMqtt(status, feature, reservations)
         source = sim_live.LiveScheduleSource(mqtt, _api(error), device)
         assert (await source.read()).tou_periods == ()
@@ -305,7 +305,7 @@ class TestTheSchedules:
     )
     async def test_a_timed_out_or_bad_tou_reply_with_tou_on_is_an_error(
         self, device, status, feature, reservations, error
-    ):
+    ) -> None:
         mqtt = FakeMqtt(_tou_on(status), feature, reservations)
         source = sim_live.LiveScheduleSource(mqtt, _api(error), device)
         with pytest.raises(sim_live.LiveReadError, match="TOU read failed"):
@@ -323,7 +323,7 @@ class TestCompose:
             **kw,
         )
 
-    async def test_the_heater_alone(self, device, status, feature):
+    async def test_the_heater_alone(self, device, status, feature) -> None:
         composed = await self._compose(device, status, feature)
         s = composed.scenario
         assert (s.start, s.horizon, s.tz) == (
@@ -338,7 +338,9 @@ class TestCompose:
         assert s.commands == sim.Commands()
         assert composed.params == sim.default_params(3)
 
-    async def test_history_is_left_unknown(self, device, status, feature):
+    async def test_history_is_left_unknown(
+        self, device, status, feature
+    ) -> None:
         composed = await self._compose(device, status, feature)
         assert "history" not in composed.scenario.model_fields_set
         result = sim.simulate(composed.scenario, composed.params)
@@ -348,7 +350,7 @@ class TestCompose:
 
     async def test_given_sources_take_their_parts(
         self, device, status, feature
-    ):
+    ) -> None:
         env = sim.Environment(ambient_f=55.0, inlet_f=50.0)
         loads = sim.Loads(draws=(sim.Draw(at=START, gallons=10.0),))
         commands = sim.Commands(tou_enabled=True)
@@ -367,7 +369,9 @@ class TestCompose:
         assert s.commands == commands
         assert s.schedules.tou_enabled is True
 
-    async def test_an_override_is_a_model_copy(self, device, status, feature):
+    async def test_an_override_is_a_model_copy(
+        self, device, status, feature
+    ) -> None:
         composed = await self._compose(device, status, feature)
         hotter = composed.scenario.model_copy(
             update={"settings": sim.Settings(setpoint_f=120.0)}

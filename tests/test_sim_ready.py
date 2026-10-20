@@ -62,18 +62,18 @@ def _assess(tank, recovery=Recovery("unavailable"), **kw):
 
 
 class TestWholeShowers:
-    def test_it_floors(self):
+    def test_it_floors(self) -> None:
         assert whole_showers(2.99) == 2
 
-    def test_a_float_just_under_a_whole_number_is_that_number(self):
+    def test_a_float_just_under_a_whole_number_is_that_number(self) -> None:
         assert whole_showers(1.9999999999) == 2
 
-    def test_never_negative(self):
+    def test_never_negative(self) -> None:
         assert whole_showers(0.0) == 0
 
 
 class TestAssess:
-    def test_colder_than_every_evidence_draw_says_so(self):
+    def test_colder_than_every_evidence_draw_says_so(self) -> None:
         """A warm tank below all the evidence answers 0 for want of
         evidence, and must say that rather than look empty."""
         a = _assess(_tank(118.0, 110.0))
@@ -82,17 +82,17 @@ class TestAssess:
         assert "colder_than_all_evidence" in a["reasons"]
         assert "colder_than_all_evidence" not in _assess(_tank())["reasons"]
 
-    def test_an_idle_heater_has_no_time_and_says_why(self):
+    def test_an_idle_heater_has_no_time_and_says_why(self) -> None:
         a = _assess(_tank(125.0, 110.0), Recovery("idle"))
         assert a["bath"]["ready_in_minutes"] is None
         assert "heating_not_triggered" in a["reasons"]
 
-    def test_every_v1_answer_is_low_confidence_and_says_why(self):
+    def test_every_v1_answer_is_low_confidence_and_says_why(self) -> None:
         a = _assess(_tank())
         assert a["status"] == "low_confidence"
         assert a["reasons"][: len(ALWAYS)] == list(ALWAYS)
 
-    def test_a_full_tank_runs_a_bath_now(self):
+    def test_a_full_tank_runs_a_bath_now(self) -> None:
         a = _assess(_tank())
         assert a["bath"]["ready"] is True
         assert a["bath"]["ready_in_minutes"] == 0.0
@@ -101,7 +101,7 @@ class TestAssess:
             OBSERVED_MAX_GAL + LAG - 30.5, abs=0.05
         )
 
-    def test_a_stale_book_on_a_tank_at_its_setpoint_runs_the_bath(self):
+    def test_a_stale_book_on_a_tank_at_its_setpoint_runs_the_bath(self) -> None:
         """2026-09-28 14:41 PDT: with no book the evidence said 25.1 gal and
         not ready; the floor at the setpoint says ready, now, in every
         mode."""
@@ -111,7 +111,7 @@ class TestAssess:
         assert a["bath"]["ready"] is True
         assert {r["ready_in_minutes"] for r in a["bath"]["by_mode"]} == {0.0}
 
-    def test_a_running_compressor_withholds_the_floor_now(self):
+    def test_a_running_compressor_withholds_the_floor_now(self) -> None:
         a = _assess(
             _tank(141.08, 141.26, compressor_on=True),
             setpoint_f=141.8,
@@ -120,7 +120,7 @@ class TestAssess:
         assert a["deliverable_gal"] == 25.1
         assert a["bath"]["ready"] is False
 
-    def test_a_projected_recovery_has_the_floor_only_at_its_end(self):
+    def test_a_projected_recovery_has_the_floor_only_at_its_end(self) -> None:
         """The floor waits for the heater to stop, in a projection as
         in the live state: a 35 gal bath the evidence never covers is
         ready when the recovery ends, not as it passes setpoint - 2."""
@@ -143,7 +143,7 @@ class TestAssess:
         assert a["bath"]["ready"] is False
         assert _modes(a)["heat_pump"]["ready_in_minutes"] == 20.0
 
-    def test_ready_is_decided_on_the_numbers_it_reports(self):
+    def test_ready_is_decided_on_the_numbers_it_reports(self) -> None:
         """A bath 0.04 gal over the deliverable volume is reported at the
         same one-decimal value; it must read ready with a zero margin,
         not show two equal numbers and say not ready."""
@@ -153,7 +153,7 @@ class TestAssess:
         assert a["bath"]["ready"] is True
         assert a["bath"]["margin_gal"] == 0.0
 
-    def test_near_an_evidence_step_it_says_the_probe_decides(self):
+    def test_near_an_evidence_step_it_says_the_probe_decides(self) -> None:
         u, lo, g = max(EVIDENCE, key=lambda e: e[2])
         on_step = _assess(_tank(u + 0.5, lo + 0.5), bath_gal=g + LAG)
         assert on_step["bath"]["ready"] is True
@@ -161,7 +161,9 @@ class TestAssess:
         clear = _assess(_tank(), bath_gal=5.0)
         assert "bath_ready_within_probe_resolution" not in clear["reasons"]
 
-    def test_time_to_ready_is_the_first_state_that_covers_the_bath(self):
+    def test_time_to_ready_is_the_first_state_that_covers_the_bath(
+        self,
+    ) -> None:
         points = [
             (NOW + timedelta(minutes=10 * i), 125.0 + 2.5 * i, 110.0 + 4 * i)
             for i in range(10)
@@ -177,13 +179,13 @@ class TestAssess:
         assert a["bath"]["ready"] is False
         assert 10.0 * (first - 1) < a["bath"]["ready_in_minutes"] <= 10 * first
 
-    def test_a_recovery_that_never_covers_it_says_so(self):
+    def test_a_recovery_that_never_covers_it_says_so(self) -> None:
         points = [(NOW + timedelta(minutes=10), 126.0, 112.0)]
         a = _assess(_tank(125.0, 110.0), Recovery("ok", points))
         assert a["bath"]["ready_in_minutes"] is None
         assert "bath_not_reached_by_full_recovery" in a["reasons"]
 
-    def test_inside_a_tou_window_the_bath_waits_for_its_end(self):
+    def test_inside_a_tou_window_the_bath_waits_for_its_end(self) -> None:
         points = [(NOW + timedelta(minutes=10), 126.0, 112.0)]
         a = _assess(
             _tank(125.0, 110.0, tou_window=True),
@@ -193,17 +195,17 @@ class TestAssess:
         assert "bath_waits_for_tou_window_end" in a["reasons"]
         assert "bath_not_reached_by_full_recovery" not in a["reasons"]
 
-    def test_vacation_has_no_time_to_ready(self):
+    def test_vacation_has_no_time_to_ready(self) -> None:
         a = _assess(_tank(120.0, 95.0), Recovery("not_scheduled"))
         assert a["bath"]["ready_in_minutes"] is None
         assert "heating_not_scheduled" in a["reasons"]
 
-    def test_a_request_volume_is_labelled_as_one(self):
+    def test_a_request_volume_is_labelled_as_one(self) -> None:
         a = _assess(_tank(), bath_source="request", bath_gal=20.0)
         assert a["bath"]["volume_source"] == "request"
         assert "bath_volume_inferred" not in a["reasons"]
 
-    def test_live_conditions_become_reasons(self):
+    def test_live_conditions_become_reasons(self) -> None:
         a = _assess(
             _tank(drawing=True, element_on=True, tou_window=True),
             shower_source="default",
@@ -238,7 +240,7 @@ def _modes(a):
 class TestByMode:
     """Time to bath-ready per heating mode."""
 
-    def test_all_four_modes_in_the_contracts_order(self):
+    def test_all_four_modes_in_the_contracts_order(self) -> None:
         a = _assess(_tank(125.0, 110.0), _hp(), setpoint_f=141.8)
         assert [r["mode"] for r in a["bath"]["by_mode"]] == [
             "heat_pump",
@@ -247,13 +249,13 @@ class TestByMode:
             "electric",
         ]
 
-    def test_the_heat_pump_row_is_the_bath_answer(self):
+    def test_the_heat_pump_row_is_the_bath_answer(self) -> None:
         a = _assess(_tank(125.0, 110.0), _hp(), setpoint_f=141.8)
         hp = _modes(a)["heat_pump"]
         assert hp["ready_in_minutes"] == a["bath"]["ready_in_minutes"]
         assert hp["ready_in_minutes"] is not None
 
-    def test_an_element_is_never_slower_than_the_heat_pump_alone(self):
+    def test_an_element_is_never_slower_than_the_heat_pump_alone(self) -> None:
         m = _modes(_assess(_tank(125.0, 110.0), _hp(), setpoint_f=141.8))
         for mode in ("energy_saver", "high_demand"):
             assert (
@@ -261,7 +263,9 @@ class TestByMode:
                 <= m["heat_pump"]["ready_in_minutes"]
             )
 
-    def test_the_element_heats_the_upper_zone_the_heat_pump_leaves(self):
+    def test_the_element_heats_the_upper_zone_the_heat_pump_leaves(
+        self,
+    ) -> None:
         """With the upper zone the limit, High Demand and Energy Saver are
         faster than the heat pump because their element heats it.
         Deleting that heating makes them equal, which this must catch."""
@@ -285,7 +289,7 @@ class TestByMode:
             got = m[mode]["ready_in_minutes"]
             assert hp is None or got < hp
 
-    def test_element_rows_carry_the_element_models_caveats(self):
+    def test_element_rows_carry_the_element_models_caveats(self) -> None:
         m = _modes(_assess(_tank(125.0, 110.0), _hp(), setpoint_f=141.8))
         assert m["heat_pump"]["reasons"] == []
         for mode in ("energy_saver", "high_demand", "electric"):
@@ -294,7 +298,7 @@ class TestByMode:
             "upper_zone_dips_during_the_lower_phase" in m["electric"]["reasons"]
         )
 
-    def test_element_energy_is_counted_at_cop_one(self):
+    def test_element_energy_is_counted_at_cop_one(self) -> None:
         """High Demand's energy is the heat pump's input to that minute
         plus 5,148 W of element for as long as the element runs."""
         m = _modes(_assess(_tank(125.0, 110.0), _hp(), setpoint_f=141.8))
@@ -313,7 +317,7 @@ class TestByMode:
             hp_kwh_per_min * t + 5.148 * element_min / 60.0, abs=0.01
         )
 
-    def test_energy_saver_charges_its_element_to_the_off_point(self):
+    def test_energy_saver_charges_its_element_to_the_off_point(self) -> None:
         """Energy Saver's element stops 1.62 °F short of the setpoint
         (2026-10-02): its energy stops there, while the zone
         coasts on to the setpoint at the same rate, so a ready time past
@@ -330,7 +334,7 @@ class TestByMode:
             300.0 / 10.0 / 1000.0 * t + 5.148 * off_min / 60.0, abs=0.01
         )
 
-    def test_electric_needs_no_heat_pump_trajectory(self):
+    def test_electric_needs_no_heat_pump_trajectory(self) -> None:
         m = _modes(
             _assess(
                 _tank(125.0, 110.0), Recovery("unavailable"), setpoint_f=141.8
@@ -341,7 +345,9 @@ class TestByMode:
         assert m["electric"]["ready_in_minutes"] is not None
         assert m["electric"]["energy_kwh"] > 0
 
-    def test_a_recovery_ending_between_grid_points_is_still_scored(self):
+    def test_a_recovery_ending_between_grid_points_is_still_scored(
+        self,
+    ) -> None:
         """Electric from 140/138 finishes 4.9 min in: upper element 2.1
         min (its 1.21-min lag and 0.9 of rise), lower 2.8. The finished
         tank covers a bath of what it delivers even though no whole
@@ -359,7 +365,7 @@ class TestByMode:
         e = m["electric"]["ready_in_minutes"]
         assert e is not None and 4.0 < e < 5.0
 
-    def test_inside_a_tou_window_only_the_heat_pump_is_reachable(self):
+    def test_inside_a_tou_window_only_the_heat_pump_is_reachable(self) -> None:
         m = _modes(
             _assess(
                 _tank(125.0, 110.0, tou_window=True), _hp(), setpoint_f=141.8
@@ -371,7 +377,7 @@ class TestByMode:
             for x in ("energy_saver", "high_demand", "electric")
         )
 
-    def test_vacation_reaches_nothing(self):
+    def test_vacation_reaches_nothing(self) -> None:
         m = _modes(
             _assess(
                 _tank(125.0, 110.0), Recovery("not_scheduled"), setpoint_f=141.8
@@ -380,11 +386,11 @@ class TestByMode:
         assert not any(r["reachable_now"] for r in m.values())
         assert all(r["ready_in_minutes"] is None for r in m.values())
 
-    def test_a_ready_bath_is_ready_in_every_mode(self):
+    def test_a_ready_bath_is_ready_in_every_mode(self) -> None:
         m = _modes(_assess(_tank(), setpoint_f=141.8))
         assert all(r["ready_in_minutes"] == 0.0 for r in m.values())
 
-    def test_no_setpoint_no_element_projection(self):
+    def test_no_setpoint_no_element_projection(self) -> None:
         m = _modes(_assess(_tank(125.0, 110.0), _hp(), setpoint_f=None))
         assert m["heat_pump"]["ready_in_minutes"] is not None
         assert m["electric"]["ready_in_minutes"] is None

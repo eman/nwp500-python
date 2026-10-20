@@ -44,7 +44,7 @@ def _units():
 
 
 class TestTheProjection:
-    def test_it_is_the_damped_lagged_outdoor_air(self):
+    def test_it_is_the_damped_lagged_outdoor_air(self) -> None:
         model = LocationAirModel(0.5, timedelta(hours=2), 30.0)
         out = dict(_outdoor())
         air = project(
@@ -55,10 +55,10 @@ class TestTheProjection:
         )
         assert len(air) == 13
 
-    def test_no_forecast_is_no_projection(self):
+    def test_no_forecast_is_no_projection(self) -> None:
         assert project(SITE_LOCATION_AIR, [], T0, T0 + timedelta(hours=1)) == ()
 
-    def test_it_holds_past_the_forecasts_ends(self):
+    def test_it_holds_past_the_forecasts_ends(self) -> None:
         model = LocationAirModel(1.0, timedelta(0), 0.0)
         out = _outdoor(6)
         late = project(
@@ -66,7 +66,9 @@ class TestTheProjection:
         )
         assert {v for _, v in late} == {out[-1][1]}
 
-    def test_an_anchor_moves_it_through_the_reading_at_its_own_instant(self):
+    def test_an_anchor_moves_it_through_the_reading_at_its_own_instant(
+        self,
+    ) -> None:
         reading = (T0 + timedelta(hours=7), 66.0)
         air = project(
             SITE_LOCATION_AIR,
@@ -91,7 +93,7 @@ class TestTheProjection:
 
 
 class TestTheFit:
-    def test_it_recovers_a_known_model(self):
+    def test_it_recovers_a_known_model(self) -> None:
         truth = LocationAirModel(0.6, timedelta(hours=2), 25.0)
         when = [T0 + timedelta(hours=6, minutes=10 * k) for k in range(150)]
         readings = list(zip(when, truth.at(_outdoor(), when), strict=True))
@@ -101,7 +103,7 @@ class TestTheFit:
         assert got.model.offset_f == pytest.approx(25.0)
         assert got.r == pytest.approx(1.0)
 
-    def test_it_needs_readings(self):
+    def test_it_needs_readings(self) -> None:
         with pytest.raises(ValueError, match="three"):
             fit([], _outdoor())
 
@@ -116,13 +118,13 @@ class TestTheAdapters:
 
     def test_the_heaters_reading_only_while_the_compressor_runs(
         self, device_status_dict
-    ):
+    ) -> None:
         running = self._status(device_status_dict, compUse=2)
         idle = self._status(device_status_dict, compUse=1)
         assert sa.location_air_reading(running) == pytest.approx(68.0)
         assert sa.location_air_reading(idle) is None
 
-    def test_the_projection_in_the_preferred_unit(self):
+    def test_the_projection_in_the_preferred_unit(self) -> None:
         set_unit_system("metric")
         outdoor_c = [(t, (v - 32) * 5 / 9) for t, v in _outdoor()]
         air = sa.location_air(
@@ -153,7 +155,7 @@ class TestElapsedTime:
     so local and UTC instants are the same projection."""
 
     @pytest.mark.parametrize("step", [timedelta(0), timedelta(minutes=-10)])
-    def test_a_step_must_be_positive(self, step):
+    def test_a_step_must_be_positive(self, step) -> None:
         with pytest.raises(ValueError, match="positive"):
             project(
                 SITE_LOCATION_AIR,
@@ -178,7 +180,7 @@ class TestElapsedTime:
             ),
         ],
     )
-    def test_a_local_span_is_its_utc_span(self, start, end):
+    def test_a_local_span_is_its_utc_span(self, start, end) -> None:
         outdoor = [
             (start.astimezone(UTC) + timedelta(hours=h), 50.0 + h)
             for h in range(-4, 8)
@@ -196,7 +198,7 @@ class TestElapsedTime:
         )
         assert len(local) == int(span) + 1
 
-    def test_a_repeated_hours_readings_sort_by_instant(self):
+    def test_a_repeated_hours_readings_sort_by_instant(self) -> None:
         """The third review of #162: 01:45 PDT comes before 01:15 PST
         but sorts after it by wall clock; local readings must be the
         same series as their UTC instants."""
@@ -210,7 +212,7 @@ class TestElapsedTime:
         assert model.at(local, when) == model.at(utc, when)
         assert model.at(local, when)[0] == pytest.approx(55.0)
 
-    def test_the_lag_is_elapsed_time(self):
+    def test_the_lag_is_elapsed_time(self) -> None:
         when = datetime(2026, 11, 1, 2, 0, tzinfo=LA)
         outdoor = [
             (when.astimezone(UTC) + timedelta(hours=h), 50.0 + h)

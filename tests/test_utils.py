@@ -9,7 +9,7 @@ from nwp500.utils import log_performance
 
 
 @pytest.mark.asyncio
-async def test_log_performance_basic():
+async def test_log_performance_basic() -> None:
     """Test basic functionality of log_performance decorator."""
 
     @log_performance
@@ -22,7 +22,7 @@ async def test_log_performance_basic():
 
 
 @pytest.mark.asyncio
-async def test_log_performance_with_args():
+async def test_log_performance_with_args() -> None:
     """Test log_performance with function arguments."""
 
     @log_performance
@@ -35,11 +35,11 @@ async def test_log_performance_with_args():
 
 
 @pytest.mark.asyncio
-async def test_log_performance_with_exception():
+async def test_log_performance_with_exception() -> None:
     """Test log_performance still logs when function raises exception."""
 
     @log_performance
-    async def failing_func():
+    async def failing_func() -> None:
         await asyncio.sleep(0.05)
         raise ValueError("test error")
 
@@ -48,7 +48,7 @@ async def test_log_performance_with_exception():
 
 
 @pytest.mark.asyncio
-async def test_log_performance_logs_at_debug_level(caplog):
+async def test_log_performance_logs_at_debug_level(caplog) -> None:
     """Test that execution time is logged at DEBUG level."""
     caplog.set_level(logging.DEBUG)
 
@@ -69,7 +69,7 @@ async def test_log_performance_logs_at_debug_level(caplog):
 
 
 @pytest.mark.asyncio
-async def test_log_performance_no_log_when_debug_disabled(caplog):
+async def test_log_performance_no_log_when_debug_disabled(caplog) -> None:
     """Test that no logging occurs when DEBUG level is not enabled."""
     caplog.set_level(logging.INFO)  # Above DEBUG
 
@@ -86,14 +86,14 @@ async def test_log_performance_no_log_when_debug_disabled(caplog):
 
 
 @pytest.mark.asyncio
-async def test_log_performance_timing_accuracy(caplog):
+async def test_log_performance_timing_accuracy(caplog) -> None:
     """Test that logged timing is reasonably accurate."""
     caplog.set_level(logging.DEBUG)
 
     sleep_duration = 0.1
 
     @log_performance
-    async def sleep_func():
+    async def sleep_func() -> None:
         await asyncio.sleep(sleep_duration)
 
     await sleep_func()
@@ -109,7 +109,7 @@ async def test_log_performance_timing_accuracy(caplog):
     assert abs(logged_time - sleep_duration) < 0.05
 
 
-def test_log_performance_rejects_sync_functions():
+def test_log_performance_rejects_sync_functions() -> None:
     """Test that decorator raises TypeError for non-async functions."""
     with pytest.raises(
         TypeError, match="can only be applied to async functions"
@@ -121,7 +121,7 @@ def test_log_performance_rejects_sync_functions():
 
 
 @pytest.mark.asyncio
-async def test_log_performance_preserves_metadata():
+async def test_log_performance_preserves_metadata() -> None:
     """Test that decorator preserves function metadata."""
 
     @log_performance
@@ -143,12 +143,12 @@ async def test_log_performance_preserves_metadata():
 
 
 @pytest.mark.asyncio
-async def test_log_performance_exception_still_logs(caplog):
+async def test_log_performance_exception_still_logs(caplog) -> None:
     """Test that timing is logged even when function raises exception."""
     caplog.set_level(logging.DEBUG)
 
     @log_performance
-    async def error_func():
+    async def error_func() -> None:
         await asyncio.sleep(0.05)
         raise RuntimeError("oops")
 
@@ -161,7 +161,7 @@ async def test_log_performance_exception_still_logs(caplog):
 
 
 @pytest.mark.asyncio
-async def test_log_performance_multiple_calls(caplog):
+async def test_log_performance_multiple_calls(caplog) -> None:
     """Test decorator works correctly with multiple calls."""
     caplog.set_level(logging.DEBUG)
 
@@ -182,7 +182,7 @@ async def test_log_performance_multiple_calls(caplog):
 
 
 @pytest.mark.asyncio
-async def test_log_performance_concurrent_calls(caplog):
+async def test_log_performance_concurrent_calls(caplog) -> None:
     """Test decorator works correctly with concurrent calls."""
     caplog.set_level(logging.DEBUG)
 

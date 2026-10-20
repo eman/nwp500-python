@@ -148,7 +148,7 @@ def _matches(pattern: re.Pattern[str], text: str) -> list[tuple[int, str]]:
     ]
 
 
-def test_the_core_has_modules_to_check():
+def test_the_core_has_modules_to_check() -> None:
     names = set(IDS)
     assert {
         "params.py",
@@ -166,7 +166,7 @@ def test_the_core_has_modules_to_check():
 
 
 @pytest.mark.parametrize("path", SOURCES, ids=IDS)
-def test_no_source_imports_outside_the_core(path: Path):
+def test_no_source_imports_outside_the_core(path: Path) -> None:
     bad = [
         f"{path.name}:{line}: {module}"
         for line, module in _imports(path)
@@ -176,7 +176,7 @@ def test_no_source_imports_outside_the_core(path: Path):
 
 
 @pytest.mark.parametrize("path", SOURCES, ids=IDS)
-def test_no_source_knows_a_control_adapter(path: Path):
+def test_no_source_knows_a_control_adapter(path: Path) -> None:
     """The heater takes entries, writes and its TOU switch; a plan's
     segments, an integration's declaration and its protocol are the
     caller's."""
@@ -188,7 +188,7 @@ def test_no_source_knows_a_control_adapter(path: Path):
 
 
 @pytest.mark.parametrize("path", SOURCES, ids=IDS)
-def test_no_source_mentions_the_integration_or_a_brand(path: Path):
+def test_no_source_mentions_the_integration_or_a_brand(path: Path) -> None:
     bad = [
         f"{path.name}:{n}: {w}"
         for n, w in _matches(OFF_TOPIC, path.read_text())
@@ -197,7 +197,7 @@ def test_no_source_mentions_the_integration_or_a_brand(path: Path):
 
 
 @pytest.mark.parametrize("path", SOURCES, ids=IDS)
-def test_no_source_knows_a_pump_or_a_loop(path: Path):
+def test_no_source_knows_a_pump_or_a_loop(path: Path) -> None:
     """A circulation run is a draw, which the caller makes of it; the
     core has no pump, loop or recirculation concept."""
     bad = [
@@ -206,7 +206,7 @@ def test_no_source_knows_a_pump_or_a_loop(path: Path):
     assert not bad, "the core knows the plumbing:\n" + "\n".join(bad)
 
 
-def test_the_import_check_sees_a_violation():
+def test_the_import_check_sees_a_violation() -> None:
     """Each kind of import the check must refuse is refused, and an
     import inside the core, or of numpy and pandas, is not."""
     for module in (
@@ -236,7 +236,7 @@ def test_the_import_check_sees_a_violation():
         assert not _violation(module), module
 
 
-def test_the_adapter_check_sees_a_violation():
+def test_the_adapter_check_sees_a_violation() -> None:
     """Each concept is found as a name, in any case, and
     ``typing.Protocol`` and words in a docstring or comment are not."""
     source = (
@@ -264,7 +264,7 @@ def test_the_adapter_check_sees_a_violation():
     ]
 
 
-def test_the_mention_check_sees_a_violation():
+def test_the_mention_check_sees_a_violation() -> None:
     text = "# as eman/ha_nwp500#158 says\n# the Adapter's names\nx = 1\n"
     text += '"""metered by the Droplet, pumped by a Grundfos"""\n'
     assert [w.lower() for _, w in _matches(OFF_TOPIC, text)] == [
@@ -275,13 +275,13 @@ def test_the_mention_check_sees_a_violation():
     ]
 
 
-def test_the_plumbing_check_spares_the_heat_pump():
+def test_the_plumbing_check_spares_the_heat_pump() -> None:
     """The heater is a heat pump, in any spelling."""
     text = "heat pump, heat-pump, HEAT_PUMP, HeatPump, heatpump\n"
     assert _matches(PLUMBING, text) == []
 
 
-def test_the_plumbing_check_sees_a_violation():
+def test_the_plumbing_check_sees_a_violation() -> None:
     """It finds each word as a name, in a comment and in a docstring,
     in any case, and passes the heater's heat pump."""
     text = (
@@ -325,7 +325,7 @@ def _loaded_after(statement: str) -> list[str]:
     return loaded
 
 
-def test_the_simulator_does_not_load_the_clients():
+def test_the_simulator_does_not_load_the_clients() -> None:
     """``nwp500.sim``, its adapters and its live sources import without
     the network clients' dependencies: the package root loads its
     exports on first use, and the live sources name the clients only
@@ -339,13 +339,13 @@ def test_the_simulator_does_not_load_the_clients():
     assert "nwp500.mqtt" not in loaded and "nwp500.auth" not in loaded
 
 
-def test_importing_nwp500_does_not_load_the_simulator():
+def test_importing_nwp500_does_not_load_the_simulator() -> None:
     loaded = _loaded_after("import nwp500")
     assert "nwp500" in loaded
     assert not [m for m in loaded if m.split(".")[:2] == ["nwp500", "sim"]]
 
 
-def test_no_name_shadows_a_submodule():
+def test_no_name_shadows_a_submodule() -> None:
     """The replacement review of #162: ``import nwp500.sim.X as m``
     binds the package's attribute ``X``, so an export named as a
     submodule would hand back the export instead of the module."""
@@ -363,7 +363,7 @@ def test_no_name_shadows_a_submodule():
         assert bound is module, info.name
 
 
-def test_the_names_a_caller_matches_on_are_documented():
+def test_the_names_a_caller_matches_on_are_documented() -> None:
     """The re-check of the replacement review: the reason strings and
     constants a service imports are listed on the API page, whose rule
     makes every public name in its modules public."""

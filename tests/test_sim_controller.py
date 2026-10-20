@@ -157,7 +157,9 @@ def element_on(mode, upper, lower=120.0, setpoint=140.0, s=None):
 
 
 class TestTheCompressor:
-    def test_a_compressor_running_at_the_start_runs_on_with_its_hold(self):
+    def test_a_compressor_running_at_the_start_runs_on_with_its_hold(
+        self,
+    ) -> None:
         """A start holds before the lower zone climbs, and a compressor
         already running at the walk's start holds for what is left of
         its own start's hold. Electric runs no heat pump (0 of 6)."""
@@ -176,7 +178,7 @@ class TestTheCompressor:
         )
         assert not of(acts, StartCompressor)
 
-    def test_a_start_holds_by_how_long_the_compressor_was_off(self):
+    def test_a_start_holds_by_how_long_the_compressor_was_off(self) -> None:
         """The start hold: a start holds the longer the longer the
         compressor was off, by a fitted function of the minutes since
         the last stop; ``holding`` until it ends, then ``heating``."""
@@ -195,7 +197,7 @@ class TestTheCompressor:
         st, _ = step(st, StartHoldEnds(at=at(4)), s)
         assert st.compressor.phase == "heating"
 
-    def test_the_restart_lockout_holds_a_start_330_s_after_a_stop(self):
+    def test_the_restart_lockout_holds_a_start_330_s_after_a_stop(self) -> None:
         """After it stops, the compressor does not start again for
         330 s: two device write-test restarts on 2026-09-23 came
         5 min 28 s and 5 min 31 s after the stop; on the record, starts
@@ -233,7 +235,7 @@ class TestTheCompressor:
         st, _ = step(st, LockoutEnds(at=T0 + LOCKOUT))
         assert st.compressor.phase == "idle"
 
-    def test_the_lower_zone_at_hp_lower_on_starts_it(self):
+    def test_the_lower_zone_at_hp_lower_on_starts_it(self) -> None:
         """Outside a window, the lower zone falling to
         ``hp_lower_on`` starts the compressor: 104 of 104 crossings in
         heat_pump that reached two probe steps under it started within
@@ -266,7 +268,7 @@ class TestTheCompressor:
 
     def test_the_lower_trigger_waits_while_the_upper_zone_is_at_setpoint(
         self,
-    ):
+    ) -> None:
         """A device test on 2026-10-03: the hold-off entry left the upper
         zone 14.04 °F above a 120.2 °F setpoint, the lower zone fell to
         99.5 °F, and nothing started, in heat_pump. Energy Saver is not
@@ -288,7 +290,7 @@ class TestTheCompressor:
         )
         assert ahead is not None and ahead.trigger == "lower"
 
-    def test_the_upper_zone_short_in_a_window_starts_it(self):
+    def test_the_upper_zone_short_in_a_window_starts_it(self) -> None:
         """Inside a window the heater starts when the upper
         zone is more than 14.4 °F short of the setpoint: 17 of 17
         openings 15.48 °F or more short started 25-34 s later, and none
@@ -301,7 +303,9 @@ class TestTheCompressor:
         warm = [(T0, 130.0, 120.0), (at(20), 129.9, 119.9)]
         assert trigger_ahead(fresh(), s, P, warm, [], T0)[0] is None
 
-    def test_the_lower_trigger_inside_a_window_waits_for_its_close(self):
+    def test_the_lower_trigger_inside_a_window_waits_for_its_close(
+        self,
+    ) -> None:
         """9 of 9 window closes with the lower zone below
         ``hp_lower_on`` started at once; of 19 in-window crossings with
         the compressor off (2026-04-08 to 10-01), none started on the
@@ -317,7 +321,7 @@ class TestTheCompressor:
 
     def test_a_raise_releasing_the_lower_trigger_is_answered_as_a_write(
         self,
-    ):
+    ) -> None:
         """The closing entry of a device test on 2026-10-03: the raise
         released a held lower trigger and the compressor started 31.6 s after it
         landed, as a write's start, not the heater's own at once."""
@@ -331,7 +335,7 @@ class TestTheCompressor:
         )
         assert trigger_ahead(pending, settings(), P, coast, [], T0)[0] is None
 
-    def test_a_trigger_cannot_read_the_tank_a_recovery_just_left(self):
+    def test_a_trigger_cannot_read_the_tank_a_recovery_just_left(self) -> None:
         """A recovery that ended has left the lower zone at its target:
         no start reads that tank at the same instant (on the record,
         starts within ten minutes of a stop waited a median 86 s and up
@@ -341,7 +345,7 @@ class TestTheCompressor:
         assert st.compressor.finished_at == T0
         assert trigger_ahead(st, settings(), P, coast, [], T0)[0] is None
 
-    def test_a_pending_start_comes_due(self):
+    def test_a_pending_start_comes_due(self) -> None:
         """A write's start lands about 30 s after the write (a median
         over the record's starts more than ten minutes after a stop;
         118 of 120 writes leaving the upper zone short started); one
@@ -364,7 +368,7 @@ class TestTheCompressor:
         _, acts = step(again, StartDue(at=at(5), tank=tank(130, 125)))
         assert not of(acts, StartCompressor)
 
-    def test_the_horizon_cuts_what_runs(self):
+    def test_the_horizon_cuts_what_runs(self) -> None:
         """The walk's end: a recovery and an element running there end
         at it, ``horizon``."""
         st = running(element_on("energy_saver", upper=130.0))
@@ -377,7 +381,7 @@ class TestTheCompressor:
 
 
 class TestSetpointWrites:
-    def test_a_write_leaving_the_upper_zone_short_starts_it(self):
+    def test_a_write_leaving_the_upper_zone_short_starts_it(self) -> None:
         """Outside a window, a write that left the upper zone short
         of the new setpoint started the compressor in 118 of 120 writes
         (120 of 122 to 2026-10-03), 30 s after it (median); inside the
@@ -399,7 +403,9 @@ class TestSetpointWrites:
         assert locked.compressor.pending is not None
         assert locked.compressor.pending.at == at(-1) + LOCKOUT
 
-    def test_a_write_left_at_or_above_the_upper_zone_starts_nothing(self):
+    def test_a_write_left_at_or_above_the_upper_zone_starts_nothing(
+        self,
+    ) -> None:
         """Lowerings that left the upper zone at or above the new
         setpoint started 0 of 15 (the hold-off entry of a device test on
         2026-10-03, 120.2 °F with the upper zone at 137.1, among them):
@@ -424,7 +430,9 @@ class TestSetpointWrites:
         )
         assert acts == ()
 
-    def test_in_a_window_a_write_starts_it_only_more_than_4_f_short(self):
+    def test_in_a_window_a_write_starts_it_only_more_than_4_f_short(
+        self,
+    ) -> None:
         """Inside a TOU window: writes more than 4 °F short started
         16 of 17; 0-4 °F short, 3 of 15 (device runs 2026-09-25 at
         1.8 °F and 09-26 at 2.7 °F started nothing; 09-26's 3.8 °F
@@ -444,7 +452,7 @@ class TestSetpointWrites:
         assert st.compressor.pending is None
         assert "write_start_uncertain" in notes(acts)
 
-    def test_a_write_that_starts_nothing_cancels_a_writes_start(self):
+    def test_a_write_that_starts_nothing_cancels_a_writes_start(self) -> None:
         """Each write decides afresh, so a later write that would
         not start the compressor cancels a start an earlier write set
         going (a count over stepped sequences credited the later, larger
@@ -466,7 +474,7 @@ class TestSetpointWrites:
         )
         assert st.compressor.pending == own
 
-    def test_a_lowering_to_the_upper_zone_stops_a_recovery(self):
+    def test_a_lowering_to_the_upper_zone_stops_a_recovery(self) -> None:
         """With the compressor on, a lowering to at or below the
         upper zone ends the call for heat: 19 of 25 so stopped, against
         10 of 44 left above it; two device runs on 2026-09-23 both
@@ -484,7 +492,9 @@ class TestSetpointWrites:
         assert of(acts, Retarget) == [Retarget(at(1))]
         assert not of(acts, StopCompressor)
 
-    def test_in_a_window_a_write_ends_a_recovery_at_the_caps_level(self):
+    def test_in_a_window_a_write_ends_a_recovery_at_the_caps_level(
+        self,
+    ) -> None:
         """The TOU cap with the write rule: the lower zone already at
         the new setpoint is a finished recovery, and inside a window
         that is the cap's level, 3.6 °F short (the device references its
@@ -509,7 +519,9 @@ class TestSetpointWrites:
 
 
 class TestTheTouCap:
-    def test_a_recovery_ending_in_a_window_stops_short_of_its_target(self):
+    def test_a_recovery_ending_in_a_window_stops_short_of_its_target(
+        self,
+    ) -> None:
         """A recovery that ends inside a window stops 3.6 °F short of
         its target, judged at its end: judging at the start caught 17 of
         59 capped cycles against 43 at the end
@@ -545,7 +557,7 @@ class TestTheTouCap:
             == "at_level"
         )
 
-    def test_a_capped_stop_is_capped_until_the_window_closes(self):
+    def test_a_capped_stop_is_capped_until_the_window_closes(self) -> None:
         """A recovery reaching the cap's level stops there, ``cap``,
         and the compressor is ``capped`` until the window closes (the
         cap holds while the window is in force,
@@ -574,7 +586,7 @@ class TestTheTouCap:
 
 
 class TestEntries:
-    def test_an_entry_sets_the_setpoint_then_the_mode(self):
+    def test_an_entry_sets_the_setpoint_then_the_mode(self) -> None:
         """The device fires an entry in its minute whatever runs,
         setting both its setpoint and its mode (the reservation spec;
         02:08:02 on 2026-09-20's reservation run): the setpoint first,
@@ -599,7 +611,7 @@ class TestEntries:
         assert of(acts, ModeSet) == [ModeSet(T0, "energy_saver", "write")]
         assert (st.setpoint_f, st.mode.in_force) == (130.0, "energy_saver")
 
-    def test_an_entry_repeating_the_heaters_state_starts_nothing(self):
+    def test_an_entry_repeating_the_heaters_state_starts_nothing(self) -> None:
         """An entry repeating the heater's mode and setpoint started
         nothing, 0 of 4 (the reservation spec's device test
         ``unchanged_entry_starts_recovery``)."""
@@ -616,7 +628,7 @@ class TestEntries:
         assert acts == (EntryFired(0),)
         assert st.compressor.pending is None
 
-    def test_an_entry_in_vacation_is_skipped(self):
+    def test_an_entry_in_vacation_is_skipped(self) -> None:
         """In Vacation the device skips an entry as its minute passes and
         does not run it late (the reservation spec's device test
         ``entries_fire_in_vacation``)."""
@@ -634,7 +646,7 @@ class TestEntries:
         assert acts == (EntrySkipped(2),)
         assert st.setpoint_f == 140.0
 
-    def test_an_entry_turns_a_powered_off_heater_on(self):
+    def test_an_entry_turns_a_powered_off_heater_on(self) -> None:
         """Powered off, the device fires an entry and turns the heater
         on, in the entry's mode (two device runs, 2026-09-24): judged as
         a mode write out of power-off, which with the tank short starts
@@ -655,7 +667,7 @@ class TestEntries:
         assert st.powered_on
         assert st.compressor.pending is not None
 
-    def test_a_powered_off_heater_with_no_entry_stays_off(self):
+    def test_a_powered_off_heater_with_no_entry_stays_off(self) -> None:
         """With no entry, a powered-off heater starts nothing (six
         minutes, the same device test)."""
         s = settings(powered_off=True)
@@ -670,7 +682,7 @@ class TestEntries:
 
 
 class TestModeWrites:
-    def test_an_entrys_mode_in_a_window_is_held_to_its_close(self):
+    def test_an_entrys_mode_in_a_window_is_held_to_its_close(self) -> None:
         """An entry's mode does not take inside a TOU window while its
         setpoint does (the reservation spec's
         ``entry_mode_in_tou_window: held`` and its device test of it; a
@@ -699,7 +711,7 @@ class TestModeWrites:
             "mode_write_start_projected",
         } <= notes(acts)
 
-    def test_a_held_heat_pump_entry_rests_on_the_specs_letter(self):
+    def test_a_held_heat_pump_entry_rests_on_the_specs_letter(self) -> None:
         """The reservation spec's device test measured an element
         mode's entry only; a ``heat_pump`` entry held in a window rests
         on the spec's letter, and says so."""
@@ -719,7 +731,7 @@ class TestModeWrites:
 
     def test_a_direct_element_mode_is_held_and_a_direct_heat_pump_takes(
         self,
-    ):
+    ) -> None:
         """Four in-window direct writes of Energy Saver did not take
         (device runs at 01:17, 01:26 and 02:15 UTC on 2026-09-20 and at
         23:24 UTC on 2026-09-21); five direct Electric to Heat Pump
@@ -744,7 +756,7 @@ class TestModeWrites:
         assert of(acts, ModeTook) == [ModeTook(0, T0)]
         assert st.mode.in_force == "heat_pump"
 
-    def test_a_write_over_a_held_one_withdraws_it(self):
+    def test_a_write_over_a_held_one_withdraws_it(self) -> None:
         """A mode write over a held one withdraws it (a device run at
         23:24 UTC on 2026-09-21)."""
         s = settings(windows=[WINDOW])
@@ -766,7 +778,7 @@ class TestModeWrites:
         assert st.mode.held is None
         assert st.mode.commanded == "heat_pump"
 
-    def test_a_held_mode_lands_as_its_window_closes(self):
+    def test_a_held_mode_lands_as_its_window_closes(self) -> None:
         """A held entry lands as its window ends (the reservation
         spec's device test saw its entry land as its window ended)."""
         s = settings(windows=[WINDOW])
@@ -789,7 +801,7 @@ class TestModeWrites:
         assert st.mode.in_force == "energy_saver"
         assert st.mode.held is None
 
-    def test_an_element_mode_is_dropped_at_a_windows_opening(self):
+    def test_an_element_mode_is_dropped_at_a_windows_opening(self) -> None:
         """The heater dropped Energy Saver to the heat pump within
         11 s of TOU being switched on in-window (a device run at
         01:35 UTC on 2026-09-20),
@@ -834,7 +846,7 @@ class TestModeWrites:
     )
     def test_a_mode_taking_effect_starts_the_compressor_by_its_record(
         self, previous, mode, upper, lower, starts
-    ):
+    ) -> None:
         """The write rule for mode writes: 91 sustained mode writes on
         the device's record to 2026-09-25, by the mode left and the one
         named."""
@@ -844,7 +856,7 @@ class TestModeWrites:
         )
         assert (st.compressor.pending is not None) is starts
 
-    def test_electric_ends_a_recovery(self):
+    def test_electric_ends_a_recovery(self) -> None:
         """Electric runs no heat pump (0 of 6): a write
         into it ends a running recovery, ``mode``, and drops a start a
         write set going."""
@@ -858,7 +870,7 @@ class TestModeWrites:
         assert of(acts, StopCompressor) == [StopCompressor(at(1), "mode")]
         assert st.compressor.pending is None
 
-    def test_a_mode_write_in_vacation_takes_nothing(self):
+    def test_a_mode_write_in_vacation_takes_nothing(self) -> None:
         """Out of Vacation or power-off the heater starts afresh (38 of
         39 started), a rule the simulation does not hold: the write is
         recorded and takes nothing."""
@@ -876,7 +888,7 @@ class TestModeWrites:
         assert acts == (RecordModeWrite(T0, "energy_saver", "raw", "w"),)
         assert st.mode.commanded == "heat_pump"
 
-    def test_direct_writes_at_one_instant_apply_setpoints_first(self):
+    def test_direct_writes_at_one_instant_apply_setpoints_first(self) -> None:
         """Direct writes at one instant apply every setpoint, then
         every mode, as an entry does; the device's own order there is
         unmeasured (no mode and setpoint write on the record share an
@@ -920,7 +932,7 @@ class TestTheElements:
     )
     def test_a_mode_starts_its_element_at_its_entry_deficit(
         self, mode, on, off
-    ):
+    ) -> None:
         """On entry to an element mode the upper element starts
         when the upper zone is at least the mode's entry deficit short:
         Energy Saver 1.8 °F, High Demand 0.72, Electric 0.54, each
@@ -952,7 +964,9 @@ class TestTheElements:
         )
         assert "deficit_inside_the_start_threshold_bracket" in notes(acts)
 
-    def test_electric_runs_the_lower_element_when_the_upper_is_done(self):
+    def test_electric_runs_the_lower_element_when_the_upper_is_done(
+        self,
+    ) -> None:
         """Electric ran its element at 0.54 °F short (a device run on
         2026-09-20); with the upper zone at the setpoint, its lower
         element heats the lower zone."""
@@ -971,7 +985,7 @@ class TestTheElements:
         )
         assert [a.zone for a in of(acts, StartElement)] == ["lower"]
 
-    def test_energy_savers_element_reengages_at_he_upper_on(self):
+    def test_energy_savers_element_reengages_at_he_upper_on(self) -> None:
         """Energy Saver's element engages as the upper zone reaches
         ``he_upper_on``, an absolute 104.9 °F: a device run at 13:54 UTC
         on 2026-09-21 at a 107.6 °F setpoint engaged at 103.64,
@@ -994,7 +1008,7 @@ class TestTheElements:
         )
         assert not of(acts, StartElement)
 
-    def test_a_coast_to_he_upper_on_starts_it_there(self):
+    def test_a_coast_to_he_upper_on_starts_it_there(self) -> None:
         """The same rule met on a coast: where the upper zone falls
         through 104.9 °F the element starts (every engagement on record
         came with water moving through the tank)."""
@@ -1007,7 +1021,7 @@ class TestTheElements:
             "energy_saver_upper_on"
         )
 
-    def test_a_setpoint_raise_in_energy_saver_starts_the_element(self):
+    def test_a_setpoint_raise_in_energy_saver_starts_the_element(self) -> None:
         """In Energy Saver a raise leaving the upper zone the entry
         deficit short started the element (n = 1, the 2026-09 heating
         modes study), unless a mode write at the instant changes the
@@ -1030,7 +1044,7 @@ class TestTheElements:
         )
         assert not of(acts, StartElement)
 
-    def test_energy_savers_upper_element_stops_1_62_f_short(self):
+    def test_energy_savers_upper_element_stops_1_62_f_short(self) -> None:
         """Energy Saver's upper element switches off 1.62 °F short
         of the setpoint (n = 21 off-edges on 15 days, 2026-10-02) and
         the zone coasts on with the heat in transit; High Demand's stops
@@ -1049,7 +1063,7 @@ class TestTheElements:
         _, acts = step(hd, ElementCheck(at=at(5), tank=tank(139.96, 120)))
         assert of(acts, StopElement) == [StopElement(at(5), "target")]
 
-    def test_electric_hands_the_upper_element_to_the_lower(self):
+    def test_electric_hands_the_upper_element_to_the_lower(self) -> None:
         """Electric runs its upper element, then its lower (nine
         lower-element runs)."""
         st = element_on("electric", upper=130.0)
@@ -1064,7 +1078,7 @@ class TestTheElements:
         )
         assert st.element.zone == "lower"
 
-    def test_an_upper_element_waits_out_its_dead_time(self):
+    def test_an_upper_element_waits_out_its_dead_time(self) -> None:
         """The upper zone does not move for 1.21 min after an upper
         element's on-edge (n = 29 on 21 days, 2026-10-02); one on at the
         walk's start has the rest of it left when its on-edge is known,
@@ -1091,7 +1105,7 @@ class TestTheElements:
         )
         assert unknown.element.phase == "heating"
 
-    def test_a_setpoint_write_moves_the_elements_off_point(self):
+    def test_a_setpoint_write_moves_the_elements_off_point(self) -> None:
         """An element's off setting follows the setpoint: a raise
         moves it, and a write bringing it to or below
         the zone ends the run, as at its own off point."""
@@ -1107,7 +1121,7 @@ class TestTheElements:
             StopElement(at(1), "write", "ENERGY_SAVER")
         ]
 
-    def test_leaving_the_element_modes_stops_the_element(self):
+    def test_leaving_the_element_modes_stops_the_element(self) -> None:
         """In heat_pump no element runs: a mode write out of the
         element modes ends the run, ``mode``."""
         st = element_on("energy_saver", upper=130.0)
@@ -1120,7 +1134,7 @@ class TestTheElements:
         assert of(acts, StopElement) == [StopElement(at(1), "mode")]
         assert not st.element.running
 
-    def test_an_element_on_at_the_start_runs_on(self):
+    def test_an_element_on_at_the_start_runs_on(self) -> None:
         """An element on at the walk's start (the record's flags) runs
         on in an element mode: the upper while the upper zone is short,
         else the lower."""
@@ -1135,7 +1149,7 @@ class TestTheElements:
         _, acts = step(fresh(), ElementWasOn(at=T0, tank=tank(130, 120)))
         assert acts == ()
 
-    def test_later_starts_are_modelled_for_energy_saver_only(self):
+    def test_later_starts_are_modelled_for_energy_saver_only(self) -> None:
         """Mid-stint re-engagement is measured for Energy
         Saver alone (16 of 21 starts just under 104.9 °F); High
         Demand's and Electric's later starts are not projected, and the
@@ -1150,7 +1164,7 @@ class TestTheElements:
         assert "element_later_starts_not_modelled" not in notes(acts)
 
 
-def test_the_controller_wakes_at_its_own_instants():
+def test_the_controller_wakes_at_its_own_instants() -> None:
     """What the walk must stop at for the controller: a pending start,
     the dead time's end, a held mode's landing, and a window opening
     while an element mode is in force."""
@@ -1176,7 +1190,7 @@ def test_the_controller_wakes_at_its_own_instants():
     assert wake_times(es, s) == {T0 + LAG, live, WINDOW[0], at(120)}
 
 
-def test_a_transition_is_pure():
+def test_a_transition_is_pure() -> None:
     """The same state and event give the same answer, and the state
     handed in is left as it was."""
     st = fresh()

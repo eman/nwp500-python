@@ -16,7 +16,7 @@ from nwp500.models import (
 
 
 class TestReservationEntryCanonicalKey:
-    def test_matches_known_decoded_vector(self):
+    def test_matches_known_decoded_vector(self) -> None:
         """Golden vector from decode_reservation_hex's own docstring
         example: "013e061e0478" -> enable=1, week=62, hour=6, min=30,
         mode=4, param=120."""
@@ -24,7 +24,7 @@ class TestReservationEntryCanonicalKey:
         entry = ReservationEntry(**decoded)
         assert entry.canonical_key() == (1, 62, 6, 30, 4, 120)
 
-    def test_key_is_hashable(self):
+    def test_key_is_hashable(self) -> None:
         entry = ReservationEntry(
             enable=2, week=84, hour=6, min=30, mode=3, param=120
         )
@@ -42,7 +42,7 @@ class TestReservationScheduleCanonical:
             ),
         ]
 
-    def test_order_independent_equality(self):
+    def test_order_independent_equality(self) -> None:
         entries = self._entries()
         a = ReservationSchedule(reservationUse=2, reservation=entries)
         b = ReservationSchedule(
@@ -50,7 +50,7 @@ class TestReservationScheduleCanonical:
         )
         assert a.canonical() == b.canonical()
 
-    def test_hash_stable_and_order_independent(self):
+    def test_hash_stable_and_order_independent(self) -> None:
         entries = self._entries()
         a = ReservationSchedule(reservationUse=2, reservation=entries)
         b = ReservationSchedule(
@@ -58,7 +58,7 @@ class TestReservationScheduleCanonical:
         )
         assert hash(a.canonical()) == hash(b.canonical())
 
-    def test_differing_programs_are_unequal(self):
+    def test_differing_programs_are_unequal(self) -> None:
         a = ReservationSchedule(
             reservationUse=2,
             reservation=[
@@ -77,7 +77,7 @@ class TestReservationScheduleCanonical:
         )
         assert a.canonical() != b.canonical()
 
-    def test_enabled_flag_is_part_of_canonical_form(self):
+    def test_enabled_flag_is_part_of_canonical_form(self) -> None:
         entries = self._entries()
         enabled = ReservationSchedule(reservationUse=2, reservation=entries)
         disabled = ReservationSchedule(reservationUse=1, reservation=entries)
@@ -85,7 +85,7 @@ class TestReservationScheduleCanonical:
 
 
 class TestTOUPeriodCanonicalKey:
-    def test_matches_built_period(self):
+    def test_matches_built_period(self) -> None:
         period_dict = build_tou_period(
             season_months=[6, 7, 8],
             week_days=["MO", "TU", "WE", "TH", "FR"],
@@ -138,7 +138,7 @@ class TestTOUReservationScheduleCanonical:
             ),
         ]
 
-    def test_order_independent_equality(self):
+    def test_order_independent_equality(self) -> None:
         periods = self._periods()
         a = TOUReservationSchedule(reservationUse=2, reservation=periods)
         b = TOUReservationSchedule(
@@ -146,7 +146,7 @@ class TestTOUReservationScheduleCanonical:
         )
         assert a.canonical() == b.canonical()
 
-    def test_hash_stable_and_order_independent(self):
+    def test_hash_stable_and_order_independent(self) -> None:
         periods = self._periods()
         a = TOUReservationSchedule(reservationUse=2, reservation=periods)
         b = TOUReservationSchedule(
@@ -154,7 +154,7 @@ class TestTOUReservationScheduleCanonical:
         )
         assert hash(a.canonical()) == hash(b.canonical())
 
-    def test_differing_programs_are_unequal(self):
+    def test_differing_programs_are_unequal(self) -> None:
         periods = self._periods()
         a = TOUReservationSchedule(reservationUse=2, reservation=periods)
         b = TOUReservationSchedule(reservationUse=2, reservation=[periods[0]])

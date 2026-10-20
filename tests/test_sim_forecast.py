@@ -37,7 +37,7 @@ def at(h: float) -> datetime:
 
 
 class TestReadyByATime:
-    def test_it_starts_a_duration_before_the_target(self, params):
+    def test_it_starts_a_duration_before_the_target(self, params) -> None:
         f = forecast(
             HeaterState(upper_f=125.0, lower_f=100.0),
             SETTINGS,
@@ -57,7 +57,7 @@ class TestReadyByATime:
         assert f.trajectory[0].at == f.start_at
         assert f.trajectory[-1].at == f.ready_at
 
-    def test_too_soon_is_infeasible_and_starts_now(self, params):
+    def test_too_soon_is_infeasible_and_starts_now(self, params) -> None:
         f = forecast(
             HeaterState(upper_f=125.0, lower_f=100.0),
             SETTINGS,
@@ -71,7 +71,7 @@ class TestReadyByATime:
         assert f.ready_at == T0 + timedelta(minutes=f.duration_minutes)
         assert f.shortfall_minutes == pytest.approx(f.duration_minutes - 30.0)
 
-    def test_a_partial_charge_heats_to_its_own_target(self, params):
+    def test_a_partial_charge_heats_to_its_own_target(self, params) -> None:
         state = HeaterState(upper_f=125.0, lower_f=100.0)
         full = forecast(state, SETTINGS, ENV, params, at=T0, target_time=at(8))
         part = forecast(
@@ -86,7 +86,9 @@ class TestReadyByATime:
         assert part.status == "partial_charge" and part.target_f == 120.0
         assert part.duration_minutes < full.duration_minutes
 
-    def test_without_the_stop_threshold_it_heats_to_the_setpoint(self, params):
+    def test_without_the_stop_threshold_it_heats_to_the_setpoint(
+        self, params
+    ) -> None:
         f = forecast(
             HeaterState(upper_f=125.0, lower_f=100.0),
             Settings(setpoint_f=138.0),
@@ -98,7 +100,7 @@ class TestReadyByATime:
         assert f.target_f == 138.0
         assert "hp_lower_off_f=setpoint_f" in f.defaults_used
 
-    def test_vacation_is_not_scheduled(self, params):
+    def test_vacation_is_not_scheduled(self, params) -> None:
         f = forecast(
             HeaterState(upper_f=125.0, lower_f=100.0),
             SETTINGS.model_copy(update={"mode": VACATION}),
@@ -111,7 +113,7 @@ class TestReadyByATime:
         assert f.start_at is None and f.ready_at is None and not f.feasible
         assert f.duration_minutes > 0
 
-    def test_a_target_past_the_horizon_is_refused(self, params):
+    def test_a_target_past_the_horizon_is_refused(self, params) -> None:
         with pytest.raises(ValueError, match="ahead"):
             forecast(
                 HeaterState(upper_f=125.0, lower_f=100.0),
@@ -124,7 +126,7 @@ class TestReadyByATime:
 
 
 class TestAlreadyReady:
-    def test_a_lower_zone_at_its_target(self, params):
+    def test_a_lower_zone_at_its_target(self, params) -> None:
         f = forecast(
             HeaterState(upper_f=141.0, lower_f=140.0),
             SETTINGS,
@@ -137,7 +139,7 @@ class TestAlreadyReady:
         assert f.start_at == f.ready_at == T0 and f.duration_minutes == 0.0
         assert f.estimator == "no_heating_required"
 
-    def test_a_zero_count_outside_a_tou_window(self, params):
+    def test_a_zero_count_outside_a_tou_window(self, params) -> None:
         f = forecast(
             HeaterState(upper_f=139.0, lower_f=137.0, energy_to_setpoint_wh=0),
             SETTINGS,
@@ -148,7 +150,7 @@ class TestAlreadyReady:
         )
         assert f.status == "no_heating_required"
 
-    def test_a_zero_count_inside_one_is_a_counterfactual(self, params):
+    def test_a_zero_count_inside_one_is_a_counterfactual(self, params) -> None:
         raised = SETTINGS.model_copy(update={"hp_upper_on_f": 139.0})
         f = forecast(
             HeaterState(upper_f=139.0, lower_f=137.0, energy_to_setpoint_wh=0),
@@ -160,7 +162,7 @@ class TestAlreadyReady:
         )
         assert f.status == "ok" and f.tou_capped
 
-    def test_the_counter_test(self):
+    def test_the_counter_test(self) -> None:
         assert counter_measures_to_setpoint(104.0, 140.0)
         assert counter_measures_to_setpoint(105.8, 140.0)
         assert not counter_measures_to_setpoint(106.0, 140.0)
@@ -169,7 +171,7 @@ class TestAlreadyReady:
 
 
 class TestTheRunningCycle:
-    def test_an_idle_compressor_is_not_heating(self, params):
+    def test_an_idle_compressor_is_not_heating(self, params) -> None:
         a = active_cycle(
             HeaterState(upper_f=125.0, lower_f=100.0),
             SETTINGS,
@@ -179,7 +181,7 @@ class TestTheRunningCycle:
         )
         assert a.status == "not_heating" and a.remaining_minutes is None
 
-    def test_what_is_left_and_the_physics_beside_it(self, params):
+    def test_what_is_left_and_the_physics_beside_it(self, params) -> None:
         state = HeaterState(
             upper_f=125.0, lower_f=110.0, compressor_running=True
         )
@@ -199,7 +201,9 @@ class TestTheRunningCycle:
         assert cold.remaining_minutes == a.remaining_minutes
 
     @pytest.mark.parametrize("lower", [140.0, 141.0])
-    def test_a_cycle_at_its_target_has_nothing_left(self, params, lower):
+    def test_a_cycle_at_its_target_has_nothing_left(
+        self, params, lower
+    ) -> None:
         a = active_cycle(
             HeaterState(upper_f=141.0, lower_f=lower, compressor_running=True),
             SETTINGS,
@@ -217,7 +221,7 @@ class TestTheAdapters:
 
         return DeviceStatus.model_validate(d | kw)
 
-    def test_the_thresholds_and_the_count(self, device_status_dict):
+    def test_the_thresholds_and_the_count(self, device_status_dict) -> None:
         from nwp500 import sim_adapters as sa
 
         s = self._status(
@@ -231,7 +235,9 @@ class TestTheAdapters:
         assert settings.hp_upper_on_f == pytest.approx(104.9)
         assert sa.heater_state(s).energy_to_setpoint_wh == s.energy_to_setpoint
 
-    def test_the_coil_only_while_the_compressor_runs(self, device_status_dict):
+    def test_the_coil_only_while_the_compressor_runs(
+        self, device_status_dict
+    ) -> None:
         from nwp500 import sim_adapters as sa
 
         running = self._status(
@@ -241,7 +247,7 @@ class TestTheAdapters:
         assert sa.evaporator_f(self._status(device_status_dict)) is None
 
 
-def test_recovery_says_why_none_comes_on_vacation(params):
+def test_recovery_says_why_none_comes_on_vacation(params) -> None:
     from nwp500.sim import recovery
 
     r = recovery(

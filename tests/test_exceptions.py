@@ -23,7 +23,7 @@ from nwp500.exceptions import (
 class TestExceptionHierarchy:
     """Test exception inheritance relationships."""
 
-    def test_base_exception_hierarchy(self):
+    def test_base_exception_hierarchy(self) -> None:
         """Test that all exceptions inherit from Nwp500Error."""
         assert issubclass(AuthenticationError, Nwp500Error)
         assert issubclass(APIError, Nwp500Error)
@@ -31,24 +31,24 @@ class TestExceptionHierarchy:
         assert issubclass(ValidationError, Nwp500Error)
         assert issubclass(DeviceError, Nwp500Error)
 
-    def test_authentication_exception_hierarchy(self):
+    def test_authentication_exception_hierarchy(self) -> None:
         """Test authentication exception inheritance."""
         assert issubclass(InvalidCredentialsError, AuthenticationError)
         assert issubclass(TokenRefreshError, AuthenticationError)
 
-    def test_mqtt_exception_hierarchy(self):
+    def test_mqtt_exception_hierarchy(self) -> None:
         """Test MQTT exception inheritance."""
         assert issubclass(MqttConnectionError, MqttError)
         assert issubclass(MqttNotConnectedError, MqttError)
         assert issubclass(MqttPublishError, MqttError)
         assert issubclass(MqttCredentialsError, MqttError)
 
-    def test_validation_exception_hierarchy(self):
+    def test_validation_exception_hierarchy(self) -> None:
         """Test validation exception inheritance."""
         assert issubclass(ParameterValidationError, ValidationError)
         assert issubclass(RangeValidationError, ValidationError)
 
-    def test_all_inherit_from_base_exception(self):
+    def test_all_inherit_from_base_exception(self) -> None:
         """Test that all custom exceptions inherit from Exception."""
         assert issubclass(Nwp500Error, Exception)
         assert issubclass(AuthenticationError, Exception)
@@ -58,7 +58,7 @@ class TestExceptionHierarchy:
 class TestBaseExceptionAttributes:
     """Test Nwp500Error base class attributes and methods."""
 
-    def test_basic_error_creation(self):
+    def test_basic_error_creation(self) -> None:
         """Test creating a basic error with just a message."""
         error = Nwp500Error("Test error message")
         assert error.message == "Test error message"
@@ -66,26 +66,26 @@ class TestBaseExceptionAttributes:
         assert error.details == {}
         assert error.retriable is False
 
-    def test_error_with_code(self):
+    def test_error_with_code(self) -> None:
         """Test creating an error with an error code."""
         error = Nwp500Error("Test error", error_code="TEST_001")
         assert error.error_code == "TEST_001"
         assert "TEST_001" in str(error)
         assert "[TEST_001]" in str(error)
 
-    def test_error_with_details(self):
+    def test_error_with_details(self) -> None:
         """Test creating an error with additional details."""
         details = {"foo": "bar", "baz": 123}
         error = Nwp500Error("Test error", details=details)
         assert error.details == details
 
-    def test_retriable_error(self):
+    def test_retriable_error(self) -> None:
         """Test creating a retriable error."""
         error = Nwp500Error("Test error", retriable=True)
         assert error.retriable is True
         assert "(retriable)" in str(error)
 
-    def test_error_to_dict(self):
+    def test_error_to_dict(self) -> None:
         """Test serializing error to dictionary."""
         error = Nwp500Error(
             "Test error",
@@ -101,7 +101,7 @@ class TestBaseExceptionAttributes:
         assert error_dict["details"] == {"key": "value"}
         assert error_dict["retriable"] is True
 
-    def test_error_string_representation(self):
+    def test_error_string_representation(self) -> None:
         """Test error string formatting."""
         # Basic error
         error1 = Nwp500Error("Simple error")
@@ -130,7 +130,7 @@ class TestBaseExceptionAttributes:
 class TestAuthenticationExceptions:
     """Test authentication-related exceptions."""
 
-    def test_authentication_error_attributes(self):
+    def test_authentication_error_attributes(self) -> None:
         """Test AuthenticationError attributes."""
         error = AuthenticationError(
             "Auth failed",
@@ -141,14 +141,14 @@ class TestAuthenticationExceptions:
         assert error.status_code == 401
         assert error.response == {"code": 401, "msg": "Unauthorized"}
 
-    def test_invalid_credentials_error(self):
+    def test_invalid_credentials_error(self) -> None:
         """Test InvalidCredentialsError."""
         error = InvalidCredentialsError("Invalid password", status_code=401)
         assert isinstance(error, AuthenticationError)
         assert error.message == "Invalid password"
         assert error.status_code == 401
 
-    def test_token_refresh_error(self):
+    def test_token_refresh_error(self) -> None:
         """Test TokenRefreshError."""
         error = TokenRefreshError("Refresh failed", status_code=400)
         assert isinstance(error, AuthenticationError)
@@ -158,7 +158,7 @@ class TestAuthenticationExceptions:
 class TestAPIExceptions:
     """Test API-related exceptions."""
 
-    def test_api_error_attributes(self):
+    def test_api_error_attributes(self) -> None:
         """Test APIError attributes."""
         error = APIError(
             "API request failed",
@@ -173,20 +173,20 @@ class TestAPIExceptions:
 class TestMQTTExceptions:
     """Test MQTT-related exceptions."""
 
-    def test_mqtt_connection_error(self):
+    def test_mqtt_connection_error(self) -> None:
         """Test MqttConnectionError."""
         error = MqttConnectionError("Connection failed", error_code="CONN_001")
         assert isinstance(error, MqttError)
         assert error.message == "Connection failed"
         assert error.error_code == "CONN_001"
 
-    def test_mqtt_not_connected_error(self):
+    def test_mqtt_not_connected_error(self) -> None:
         """Test MqttNotConnectedError."""
         error = MqttNotConnectedError("Not connected to broker")
         assert isinstance(error, MqttError)
         assert "Not connected" in error.message
 
-    def test_mqtt_publish_error(self):
+    def test_mqtt_publish_error(self) -> None:
         """Test MqttPublishError."""
         error = MqttPublishError(
             "Publish failed", error_code="PUB_001", retriable=True
@@ -195,7 +195,7 @@ class TestMQTTExceptions:
         assert error.retriable is True
         assert error.error_code == "PUB_001"
 
-    def test_mqtt_credentials_error(self):
+    def test_mqtt_credentials_error(self) -> None:
         """Test MqttCredentialsError."""
         error = MqttCredentialsError("AWS credentials expired")
         assert isinstance(error, MqttError)
@@ -204,7 +204,7 @@ class TestMQTTExceptions:
 class TestValidationExceptions:
     """Test validation-related exceptions."""
 
-    def test_parameter_validation_error(self):
+    def test_parameter_validation_error(self) -> None:
         """Test ParameterValidationError."""
         error = ParameterValidationError(
             "Invalid parameter",
@@ -215,7 +215,7 @@ class TestValidationExceptions:
         assert error.parameter == "username"
         assert error.value == ""
 
-    def test_range_validation_error(self):
+    def test_range_validation_error(self) -> None:
         """Test RangeValidationError."""
         error = RangeValidationError(
             "Value out of range",
@@ -230,7 +230,7 @@ class TestValidationExceptions:
         assert error.min_value == 100
         assert error.max_value == 140
 
-    def test_range_validation_error_message(self):
+    def test_range_validation_error_message(self) -> None:
         """Test RangeValidationError with detailed message."""
         error = RangeValidationError(
             "Temperature must be between 100 and 140",
@@ -250,7 +250,7 @@ class TestDeviceExceptions:
 class TestExceptionChaining:
     """Test exception chaining with 'from' clause."""
 
-    def test_exception_chain_preserved(self):
+    def test_exception_chain_preserved(self) -> None:
         """Test that exception chains are preserved."""
         original = ValueError("Original error")
 
@@ -263,7 +263,7 @@ class TestExceptionChaining:
             assert e.__cause__ is original
             assert isinstance(e.__cause__, ValueError)
 
-    def test_exception_chain_with_details(self):
+    def test_exception_chain_with_details(self) -> None:
         """Test exception chain with additional details."""
         original = KeyError("missing_key")
 
@@ -284,22 +284,22 @@ class TestExceptionChaining:
 class TestExceptionUsagePatterns:
     """Test common exception usage patterns."""
 
-    def test_catching_base_exception(self):
+    def test_catching_base_exception(self) -> None:
         """Test catching all nwp500 exceptions."""
         with pytest.raises(Nwp500Error):
             raise MqttNotConnectedError("Not connected")
 
-    def test_catching_specific_mqtt_error(self):
+    def test_catching_specific_mqtt_error(self) -> None:
         """Test catching specific MQTT error."""
         with pytest.raises(MqttNotConnectedError):
             raise MqttNotConnectedError("Not connected")
 
-    def test_catching_mqtt_base_class(self):
+    def test_catching_mqtt_base_class(self) -> None:
         """Test catching all MQTT errors."""
         with pytest.raises(MqttError):
             raise MqttPublishError("Publish failed")
 
-    def test_catching_validation_errors(self):
+    def test_catching_validation_errors(self) -> None:
         """Test catching validation errors."""
         with pytest.raises(ValidationError):
             raise RangeValidationError(
@@ -310,10 +310,10 @@ class TestExceptionUsagePatterns:
                 max_value=100,
             )
 
-    def test_multiple_exception_handling(self):
+    def test_multiple_exception_handling(self) -> None:
         """Test handling multiple exception types."""
 
-        def operation_that_may_fail(fail_type):
+        def operation_that_may_fail(fail_type) -> None:
             if fail_type == "connection":
                 raise MqttConnectionError("Connection failed")
             elif fail_type == "credentials":

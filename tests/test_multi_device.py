@@ -15,7 +15,7 @@ from nwp500.mqtt_events import (
 )
 
 
-def test_models_have_mac_address():
+def test_models_have_mac_address() -> None:
     """Test that DeviceStatus and DeviceFeature have mac_address field."""
     # Use model_construct to avoid providing all required fields
     status = DeviceStatus.model_construct(
@@ -29,7 +29,7 @@ def test_models_have_mac_address():
     assert feature.mac_address == "00:11:22:33:44:55"
 
 
-def test_events_have_device_mac():
+def test_events_have_device_mac() -> None:
     """Test that events carry device_mac."""
     status = DeviceStatus.model_construct(command=0)
     event = StatusReceivedEvent(device_mac="00:11:22:33:44:55", status=status)
@@ -44,7 +44,7 @@ def test_events_have_device_mac():
 
 
 @pytest.mark.asyncio
-async def test_state_tracker_emits_with_mac():
+async def test_state_tracker_emits_with_mac() -> None:
     """Test that DeviceStateTracker includes mac_address in events."""
     emitter = MagicMock(spec=EventEmitter)
     emitter.emit = AsyncMock(return_value=1)
@@ -107,7 +107,7 @@ async def test_state_tracker_emits_with_mac():
     assert event.device_mac == mac2
 
 
-def test_make_handler_injects_mac():
+def test_make_handler_injects_mac() -> None:
     """Test that MqttSubscriptionManager._make_handler injects mac_address."""
     # Mock dependencies for MqttSubscriptionManager
     connection = MagicMock()
@@ -124,7 +124,7 @@ def test_make_handler_injects_mac():
     mac = "00:11:22:33:44:55"
     callback_called = []
 
-    def my_callback(parsed):
+    def my_callback(parsed) -> None:
         callback_called.append(parsed)
 
     handler = manager._make_handler(
@@ -278,7 +278,9 @@ def _manager() -> MqttSubscriptionManager:
     ],
     ids=["topic-suffix", "no-data", "other-device"],
 )
-def test_a_declined_message_says_why(kwargs, topic, message, expected, caplog):
+def test_a_declined_message_says_why(
+    kwargs, topic, message, expected, caplog
+) -> None:
     """Every branch that drops a message logs its reason.
 
     Silence here cost real diagnosis time: a reply that never reaches its
@@ -297,7 +299,7 @@ def test_a_declined_message_says_why(kwargs, topic, message, expected, caplog):
     assert any(expected in r.getMessage() for r in caplog.records), caplog.text
 
 
-def test_a_declined_message_never_logs_a_raw_identifier(caplog):
+def test_a_declined_message_never_logs_a_raw_identifier(caplog) -> None:
     """The reason is logged; the MAC in it is not.
 
     These lines carry a topic and a MAC straight from the wire, so the
@@ -332,7 +334,7 @@ def test_a_declined_message_never_logs_a_raw_identifier(caplog):
 )
 def test_declining_a_message_redacts_only_when_debug_is_on(
     level, redactions, monkeypatch
-):
+) -> None:
     """The guard, not just the log level.
 
     redact_topic is a dozen regexes, and a handler registered under the
@@ -370,7 +372,7 @@ def test_declining_a_message_redacts_only_when_debug_is_on(
     assert len(calls) == redactions
 
 
-def test_a_message_for_this_device_is_still_delivered(caplog):
+def test_a_message_for_this_device_is_still_delivered(caplog) -> None:
     """The mac filter accepts its own device, and says nothing about it."""
     mac = "00:11:22:33:44:55"
     delivered = []

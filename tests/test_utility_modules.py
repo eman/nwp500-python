@@ -30,40 +30,40 @@ def _reset_units():
 
 
 class TestMqttTopicBuilder:
-    def test_device_topic(self):
+    def test_device_topic(self) -> None:
         assert MqttTopicBuilder.device_topic(MAC) == f"navilink-{MAC}"
 
-    def test_command_topic_default_suffix(self):
+    def test_command_topic_default_suffix(self) -> None:
         assert (
             MqttTopicBuilder.command_topic("52", MAC)
             == f"cmd/52/navilink-{MAC}/ctrl"
         )
 
-    def test_command_topic_custom_suffix(self):
+    def test_command_topic_custom_suffix(self) -> None:
         assert (
             MqttTopicBuilder.command_topic("52", MAC, "ctrl/rsv/rd")
             == f"cmd/52/navilink-{MAC}/ctrl/rsv/rd"
         )
 
-    def test_command_topic_wildcard(self):
+    def test_command_topic_wildcard(self) -> None:
         assert (
             MqttTopicBuilder.command_topic("52", MAC, "#")
             == f"cmd/52/navilink-{MAC}/#"
         )
 
-    def test_response_ack_topic(self):
+    def test_response_ack_topic(self) -> None:
         assert (
             MqttTopicBuilder.response_ack_topic("52", MAC, "client-1")
             == f"cmd/52/navilink-{MAC}/client-1/res"
         )
 
-    def test_response_topic(self):
+    def test_response_topic(self) -> None:
         assert (
             MqttTopicBuilder.response_topic("52", "client-1", "rsv/rd")
             == "cmd/52/client-1/res/rsv/rd"
         )
 
-    def test_event_topic(self):
+    def test_event_topic(self) -> None:
         assert (
             MqttTopicBuilder.event_topic("52", MAC, "st")
             == f"evt/52/navilink-{MAC}/st"
@@ -71,7 +71,7 @@ class TestMqttTopicBuilder:
 
 
 class TestFieldFactory:
-    def test_temperature_field_metadata(self):
+    def test_temperature_field_metadata(self) -> None:
         class Model(BaseModel):
             temp: float = temperature_field("DHW temperature", default=0.0)
 
@@ -83,14 +83,14 @@ class TestFieldFactory:
         }
         assert Model.model_fields["temp"].description == "DHW temperature"
 
-    def test_temperature_field_custom_unit(self):
+    def test_temperature_field_custom_unit(self) -> None:
         class Model(BaseModel):
             temp: float = temperature_field("t", unit="°C", default=0.0)
 
         extra = Model.model_fields["temp"].json_schema_extra
         assert extra["unit_of_measurement"] == "°C"
 
-    def test_caller_json_schema_extra_merged(self):
+    def test_caller_json_schema_extra_merged(self) -> None:
         class Model(BaseModel):
             temp: float = temperature_field(
                 "t",
@@ -111,7 +111,9 @@ class TestFieldFactory:
             (power_field, "power", "W"),
         ],
     )
-    def test_other_factories_metadata(self, factory, device_class, unit):
+    def test_other_factories_metadata(
+        self, factory, device_class, unit
+    ) -> None:
         class Model(BaseModel):
             value: float = factory("desc", default=0.0)
 
@@ -121,26 +123,26 @@ class TestFieldFactory:
 
 
 class TestModelConverters:
-    def test_fahrenheit_to_half_celsius(self):
+    def test_fahrenheit_to_half_celsius(self) -> None:
         assert fahrenheit_to_half_celsius(140.0) == 120
 
-    def test_preferred_to_half_celsius_us_customary(self):
+    def test_preferred_to_half_celsius_us_customary(self) -> None:
         set_unit_system("us_customary")
         assert preferred_to_half_celsius(140.0) == 120
 
-    def test_preferred_to_half_celsius_metric(self):
+    def test_preferred_to_half_celsius_metric(self) -> None:
         set_unit_system("metric")
         assert preferred_to_half_celsius(60.0) == 120
 
-    def test_reservation_param_to_preferred_metric(self):
+    def test_reservation_param_to_preferred_metric(self) -> None:
         set_unit_system("metric")
         assert reservation_param_to_preferred(120) == 60.0
 
-    def test_reservation_param_to_preferred_us_customary(self):
+    def test_reservation_param_to_preferred_us_customary(self) -> None:
         set_unit_system("us_customary")
         assert reservation_param_to_preferred(120) == 140.0
 
-    def test_roundtrip_us_customary(self):
+    def test_roundtrip_us_customary(self) -> None:
         set_unit_system("us_customary")
         for temp in (100.0, 120.0, 130.0, 140.0, 150.0):
             param = preferred_to_half_celsius(temp)

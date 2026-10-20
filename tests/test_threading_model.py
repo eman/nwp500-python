@@ -40,7 +40,7 @@ def _reset_units():
 
 
 def _make_manager(loop: asyncio.AbstractEventLoop) -> MqttSubscriptionManager:
-    def schedule(coro):
+    def schedule(coro) -> None:
         asyncio.run_coroutine_threadsafe(coro, loop)
 
     return MqttSubscriptionManager(
@@ -56,7 +56,7 @@ class TestDispatchThreading:
     thread."""
 
     @pytest.mark.asyncio
-    async def test_message_from_foreign_thread_dispatches_on_loop(self):
+    async def test_message_from_foreign_thread_dispatches_on_loop(self) -> None:
         """Regression: JSON decode, model validation, and user callbacks
         all ran on the AWS CRT network thread — blocking callbacks
         stalled MQTT processing and shared state was touched off-loop."""
@@ -66,7 +66,7 @@ class TestDispatchThreading:
         received = asyncio.Event()
         seen: dict = {}
 
-        def handler(topic, message):
+        def handler(topic, message) -> None:
             seen["thread"] = threading.get_ident()
             seen["message"] = message
             loop.call_soon(received.set)
@@ -89,7 +89,7 @@ class TestDispatchThreading:
         assert seen["thread"] == threading.get_ident()  # event loop thread
 
     @pytest.mark.asyncio
-    async def test_handler_mutating_registry_during_dispatch(self):
+    async def test_handler_mutating_registry_during_dispatch(self) -> None:
         """Regression: dispatch iterated the live handler dict; a
         subscribe/unsubscribe during delivery raised 'dictionary changed
         size during iteration' and dropped the message."""
@@ -98,7 +98,7 @@ class TestDispatchThreading:
 
         calls = []
 
-        def mutating_handler(topic, message):
+        def mutating_handler(topic, message) -> None:
             calls.append("mutating")
             # Mutate both registries mid-dispatch
             manager._message_handlers["cmd/52/other/topic"] = [
@@ -106,7 +106,7 @@ class TestDispatchThreading:
             ]
             manager._message_handlers.pop("cmd/52/+/st", None)
 
-        def second_handler(topic, message):
+        def second_handler(topic, message) -> None:
             calls.append("second")
 
         manager._message_handlers["cmd/52/+/st"] = [
@@ -121,7 +121,7 @@ class TestDispatchThreading:
         assert calls == ["mutating", "second"]
 
     @pytest.mark.asyncio
-    async def test_raising_handler_does_not_block_others(self):
+    async def test_raising_handler_does_not_block_others(self) -> None:
         """Regression: only (TypeError, AttributeError, KeyError) were
         caught; a handler raising ValueError escaped into the awscrt
         callback machinery and aborted delivery to remaining handlers."""
@@ -130,10 +130,10 @@ class TestDispatchThreading:
 
         calls = []
 
-        def bad_handler(topic, message):
+        def bad_handler(topic, message) -> None:
             raise ValueError("boom")
 
-        def good_handler(topic, message):
+        def good_handler(topic, message) -> None:
             calls.append("good")
 
         manager._message_handlers["cmd/52/+/st"] = [bad_handler, good_handler]
@@ -145,7 +145,7 @@ class TestDispatchThreading:
         assert calls == ["good"]
 
     @pytest.mark.asyncio
-    async def test_invalid_json_is_logged_not_raised(self, caplog):
+    async def test_invalid_json_is_logged_not_raised(self, caplog) -> None:
         loop = asyncio.get_running_loop()
         manager = _make_manager(loop)
         manager._message_handlers["t"] = [lambda t, m: None]
@@ -160,7 +160,7 @@ class TestUnitSystemVisibility:
     """The unit system preference must be process-wide."""
 
     @pytest.mark.asyncio
-    async def test_visible_in_task_scheduled_from_foreign_thread(self):
+    async def test_visible_in_task_scheduled_from_foreign_thread(self) -> None:
         """Regression: the preference was a ContextVar set in the main
         task; tasks scheduled via run_coroutine_threadsafe from the CRT
         thread never inherited it, so --unit-system was silently ignored
@@ -171,11 +171,11 @@ class TestUnitSystemVisibility:
         result: dict = {}
         done = asyncio.Event()
 
-        async def read_preference():
+        async def read_preference() -> None:
             result["unit_system"] = get_unit_system()
             done.set()
 
-        def foreign_thread():
+        def foreign_thread() -> None:
             asyncio.run_coroutine_threadsafe(read_preference(), loop)
 
         thread = threading.Thread(target=foreign_thread)
@@ -185,11 +185,11 @@ class TestUnitSystemVisibility:
         await asyncio.wait_for(done.wait(), timeout=2.0)
         assert result["unit_system"] == "metric"
 
-    def test_visible_across_plain_threads(self):
+    def test_visible_across_plain_threads(self) -> None:
         set_unit_system("us_customary")
         seen = {}
 
-        def reader():
+        def reader() -> None:
             seen["value"] = get_unit_system()
 
         thread = threading.Thread(target=reader)
@@ -198,7 +198,7 @@ class TestUnitSystemVisibility:
 
         assert seen["value"] == "us_customary"
 
-    def test_reset_restores_auto_detect(self):
+    def test_reset_restores_auto_detect(self) -> None:
         set_unit_system("metric")
         reset_unit_system()
         assert get_unit_system() is None
@@ -208,14 +208,14 @@ class TestOnceListeners:
     """Once-listeners must fire exactly once, no matter what."""
 
     @pytest.mark.asyncio
-    async def test_raising_once_listener_is_still_removed(self):
+    async def test_raising_once_listener_is_still_removed(self) -> None:
         """Regression: removal happened after the callback inside the
         try block; a raising callback skipped removal and fired on every
         subsequent emit."""
         emitter = EventEmitter()
         calls = []
 
-        def bad_handler():
+        def bad_handler() -> None:
             calls.append(1)
             raise ValueError("boom")
 
@@ -228,14 +228,14 @@ class TestOnceListeners:
         assert emitter.listener_count("evt") == 0
 
     @pytest.mark.asyncio
-    async def test_concurrent_emits_fire_once_listener_once(self):
+    async def test_concurrent_emits_fire_once_listener_once(self) -> None:
         """Regression: removal was deferred until after the (awaited)
         iteration; overlapping emits each snapshotted the listener list
         before either removed, double-firing once-listeners."""
         emitter = EventEmitter()
         calls = []
 
-        async def slow_handler():
+        async def slow_handler() -> None:
             calls.append(1)
             await asyncio.sleep(0.01)
 
@@ -246,7 +246,7 @@ class TestOnceListeners:
         assert len(calls) == 1
 
     @pytest.mark.asyncio
-    async def test_regular_listeners_survive_emit(self):
+    async def test_regular_listeners_survive_emit(self) -> None:
         emitter = EventEmitter()
         calls = []
         emitter.on("evt", lambda: calls.append(1))
@@ -262,7 +262,7 @@ class TestWaitForCleanup:
     """wait_for() must never leak its listener."""
 
     @pytest.mark.asyncio
-    async def test_cancellation_removes_listener(self):
+    async def test_cancellation_removes_listener(self) -> None:
         """Regression: only TimeoutError removed the listener; a
         cancelled waiter left it registered until the event next fired,
         setting a result on a dead future."""
@@ -281,7 +281,7 @@ class TestWaitForCleanup:
         await emitter.emit("evt")
 
     @pytest.mark.asyncio
-    async def test_timeout_removes_listener(self):
+    async def test_timeout_removes_listener(self) -> None:
         emitter = EventEmitter()
 
         with pytest.raises(TimeoutError):
@@ -290,10 +290,10 @@ class TestWaitForCleanup:
         assert emitter.listener_count("evt") == 0
 
     @pytest.mark.asyncio
-    async def test_successful_wait_returns_args(self):
+    async def test_successful_wait_returns_args(self) -> None:
         emitter = EventEmitter()
 
-        async def fire():
+        async def fire() -> None:
             await asyncio.sleep(0.01)
             await emitter.emit("evt", "payload")
 

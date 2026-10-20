@@ -38,11 +38,11 @@ from nwp500.ble import (
 from nwp500.models import TOUPeriod
 
 
-def test_crc16_is_modbus():
+def test_crc16_is_modbus() -> None:
     assert crc16(b"123456789") == 0x4B37
 
 
-def test_crc16_matches_app_table_algorithm():
+def test_crc16_matches_app_table_algorithm() -> None:
     # The NaviLink app's CRC16Checker table is the CRC-16/ARC table used
     # with an 0xFFFF seed; this reproduces that computation independently.
     tab = []
@@ -62,7 +62,7 @@ def test_crc16_matches_app_table_algorithm():
         assert crc16(sample) == app_crc(sample)
 
 
-def test_build_read_did_matches_app_bytes():
+def test_build_read_did_matches_app_bytes() -> None:
     # NaviLink: new SendPacket(3, ClassCode.CODE_DID, new byte[]{58})
     pkt = build_read(ClassCode.DID)
     assert pkt[:9] == bytes([0xF7, 0x20, 0x01, 0x03, 3, 3, 240, 0, 58])
@@ -70,7 +70,7 @@ def test_build_read_did_matches_app_bytes():
     assert pkt[9:] == bytes([crc & 0xFF, crc >> 8])
 
 
-def test_round_trip_narrow_address():
+def test_round_trip_narrow_address() -> None:
     pkt = build_packet(Command.WRITE, ClassCode.SPD, bytes(range(59)))
     parsed = parse_packet(pkt)
     assert parsed.command == Command.WRITE
@@ -82,7 +82,7 @@ def test_round_trip_narrow_address():
     assert not parsed.is_reply
 
 
-def test_round_trip_wide_address_firmware_classes():
+def test_round_trip_wide_address_firmware_classes() -> None:
     pkt = build_packet(
         Command.WRITE, ClassCode.SFBD, b"\xaa\xbb", address=0x01020304
     )
@@ -94,7 +94,7 @@ def test_round_trip_wide_address_firmware_classes():
     assert parsed.crc_ok
 
 
-def test_parse_detects_bad_crc_and_short_packets():
+def test_parse_detects_bad_crc_and_short_packets() -> None:
     pkt = bytearray(build_read(ClassCode.MSCD))
     pkt[-1] ^= 0xFF
     assert parse_packet(bytes(pkt)).crc_ok is False
@@ -104,13 +104,13 @@ def test_parse_detects_bad_crc_and_short_packets():
         parse_packet(b"\x00" * 12)
 
 
-def test_build_read_requires_length_for_unknown_class():
+def test_build_read_requires_length_for_unknown_class() -> None:
     with pytest.raises(ValueError):
         build_read(ClassCode.SDOD)
     assert build_read(ClassCode.SDOD, 10)[8] == 10
 
 
-def test_device_info_parse():
+def test_device_info_parse() -> None:
     data = bytearray(58)
     data[0], data[1] = 2, 10  # version 10.2
     data[16], data[17] = (
@@ -139,7 +139,7 @@ def test_device_info_parse():
         DeviceInfoBlock.parse(b"\x00" * 10)
 
 
-def test_controller_serials_parse():
+def test_controller_serials_parse() -> None:
     data = bytearray(40)
     data[0:14] = b"56496061BT2223"
     data[20:32] = b"PCB-123456AB"
@@ -151,22 +151,22 @@ def test_controller_serials_parse():
 class FakeTransport:
     """Echoes a canned reply for each class it is asked to read."""
 
-    def __init__(self, replies: dict[int, bytes]):
+    def __init__(self, replies: dict[int, bytes]) -> None:
         self.replies = replies
         self.written: list[bytes] = []
         self._cb = None
         self.connected = False
 
-    async def connect(self):
+    async def connect(self) -> None:
         self.connected = True
 
-    async def disconnect(self):
+    async def disconnect(self) -> None:
         self.connected = False
 
-    async def start_notify(self, callback):
+    async def start_notify(self, callback) -> None:
         self._cb = callback
 
-    async def write(self, data: bytes):
+    async def write(self, data: bytes) -> None:
         self.written.append(data)
         req = parse_packet(data)
         if req.class_code in self.replies:
@@ -183,7 +183,7 @@ class FakeTransport:
 
 
 @pytest.mark.asyncio
-async def test_client_reads_and_parses_blocks():
+async def test_client_reads_and_parses_blocks() -> None:
     did = bytes(58)
     mscd = bytearray(40)
     mscd[0:5] = b"SERIAL"[:5]
@@ -221,7 +221,7 @@ async def test_client_reads_and_parses_blocks():
 
 
 @pytest.mark.asyncio
-async def test_client_times_out_without_reply():
+async def test_client_times_out_without_reply() -> None:
     transport = FakeTransport({})
     async with NavienBleClient(transport=transport, reply_timeout=0.05) as ble:
         with pytest.raises(TimeoutError):
@@ -229,9 +229,9 @@ async def test_client_times_out_without_reply():
 
 
 @pytest.mark.asyncio
-async def test_client_ignores_replies_for_other_classes():
+async def test_client_ignores_replies_for_other_classes() -> None:
     class Noisy(FakeTransport):
-        async def write(self, data: bytes):
+        async def write(self, data: bytes) -> None:
             # an unrelated status packet arrives first, then the real reply
             self._cb(
                 build_packet(Command.READ_RESPONSE, ClassCode.SSD, bytes(59))
@@ -245,7 +245,7 @@ async def test_client_ignores_replies_for_other_classes():
 
 
 @pytest.mark.asyncio
-async def test_write_block_sends_write_command():
+async def test_write_block_sends_write_command() -> None:
     transport = FakeTransport({ClassCode.SPD: b"\x01"})
     async with NavienBleClient(transport=transport) as ble:
         reply = await ble.write_block(ClassCode.SPD, bytes(59))
@@ -253,12 +253,12 @@ async def test_write_block_sends_write_command():
     assert parse_packet(transport.written[0]).command == Command.WRITE
 
 
-def test_client_requires_address_or_transport():
+def test_client_requires_address_or_transport() -> None:
     with pytest.raises(ValueError):
         NavienBleClient()
 
 
-def test_device_info_min_operation_temperature():
+def test_device_info_min_operation_temperature() -> None:
     # DID byte 17 = Min Operation Temp in half-degrees C; 81 -> 40.5C / 104.9F
     data = bytearray(58)
     data[21] = 240  # model type (HPWH)
@@ -272,7 +272,7 @@ def test_device_info_min_operation_temperature():
 class CorruptTransport(FakeTransport):
     """Delivers each reply with its CRC bytes flipped."""
 
-    async def write(self, data: bytes):
+    async def write(self, data: bytes) -> None:
         self.written.append(data)
         req = parse_packet(data)
         if req.class_code in self.replies:
@@ -288,7 +288,7 @@ class CorruptTransport(FakeTransport):
 
 
 @pytest.mark.asyncio
-async def test_decoding_readers_refuse_a_bad_crc():
+async def test_decoding_readers_refuse_a_bad_crc() -> None:
     transport = CorruptTransport(
         {
             ClassCode.DID: bytes(58),
@@ -312,9 +312,9 @@ async def test_decoding_readers_refuse_a_bad_crc():
 @pytest.mark.parametrize(
     "error", [RuntimeError("gatt"), asyncio.CancelledError()]
 )
-async def test_failed_subscribe_disconnects(error: BaseException):
+async def test_failed_subscribe_disconnects(error: BaseException) -> None:
     class FailingNotify(FakeTransport):
-        async def start_notify(self, callback):
+        async def start_notify(self, callback) -> None:
             raise error
 
     transport = FailingNotify({})
@@ -325,12 +325,12 @@ async def test_failed_subscribe_disconnects(error: BaseException):
 
 
 @pytest.mark.asyncio
-async def test_failed_subscribe_keeps_its_error_if_disconnect_fails():
+async def test_failed_subscribe_keeps_its_error_if_disconnect_fails() -> None:
     class Broken(FakeTransport):
-        async def start_notify(self, callback):
+        async def start_notify(self, callback) -> None:
             raise RuntimeError("subscribe failed")
 
-        async def disconnect(self):
+        async def disconnect(self) -> None:
             raise RuntimeError("disconnect failed")
 
     with pytest.raises(RuntimeError, match="subscribe failed"):
@@ -353,7 +353,9 @@ def _run_read(monkeypatch, transport, argv):
     return cli.main(["read", "--address", "AA:BB", *argv])
 
 
-def test_cli_read_defaults_to_the_classes_the_heater_answers(monkeypatch):
+def test_cli_read_defaults_to_the_classes_the_heater_answers(
+    monkeypatch,
+) -> None:
     transport = FakeTransport(
         {c: bytes(DEFAULT_READ_LENGTHS[c]) for c in NWP500_RESPONDING_CLASSES}
     )
@@ -364,7 +366,7 @@ def test_cli_read_defaults_to_the_classes_the_heater_answers(monkeypatch):
     assert not {51, 52, 53, 54} & set(asked)
 
 
-def test_cli_read_fails_when_nothing_answers(monkeypatch, tmp_path):
+def test_cli_read_fails_when_nothing_answers(monkeypatch, tmp_path) -> None:
     out = tmp_path / "blocks.json"
     transport = FakeTransport({})
     status = _run_read(monkeypatch, transport, ["--out", str(out), "SPID"])
@@ -372,7 +374,7 @@ def test_cli_read_fails_when_nothing_answers(monkeypatch, tmp_path):
     assert not out.exists()
 
 
-def test_cli_read_succeeds_on_a_partial_dump(monkeypatch, tmp_path):
+def test_cli_read_succeeds_on_a_partial_dump(monkeypatch, tmp_path) -> None:
     out = tmp_path / "blocks.json"
     transport = FakeTransport({ClassCode.DID: bytes(58)})
     status = _run_read(
@@ -382,12 +384,12 @@ def test_cli_read_succeeds_on_a_partial_dump(monkeypatch, tmp_path):
     assert '"name": "DID"' in out.read_text()
 
 
-def test_every_default_cli_class_has_a_read_length():
+def test_every_default_cli_class_has_a_read_length() -> None:
     assert NWP500_RESPONDING_CLASSES <= set(DEFAULT_READ_LENGTHS)
 
 
 @pytest.mark.asyncio
-async def test_scan_without_bleak_gives_the_install_hint(monkeypatch):
+async def test_scan_without_bleak_gives_the_install_hint(monkeypatch) -> None:
     import sys
 
     from nwp500.ble import scan
@@ -397,7 +399,7 @@ async def test_scan_without_bleak_gives_the_install_hint(monkeypatch):
         await scan(0)
 
 
-def test_transport_without_bleak_gives_the_install_hint(monkeypatch):
+def test_transport_without_bleak_gives_the_install_hint(monkeypatch) -> None:
     import sys
 
     monkeypatch.setitem(sys.modules, "bleak", None)
@@ -452,14 +454,14 @@ def _cloud_period(season, week, start, end, price):
     )
 
 
-def test_tou_records_equal_the_cloud_periods():
+def test_tou_records_equal_the_cloud_periods() -> None:
     records = parse_tou_records(TOU_PLAN_PAGE)
     assert all(isinstance(r, TOUPeriod) for r in records)
     assert records == [_cloud_period(*iv) for iv in CLOUD_INTERVALS]
     assert records[6].decoded_price_max == pytest.approx(0.55214)
 
 
-def test_tou_record_field_positions():
+def test_tou_record_field_positions() -> None:
     raw = (
         bytes([0x34, 0x12, 0x82, 1, 2, 3, 4, 2])
         + (1000).to_bytes(4, "little")
@@ -472,7 +474,9 @@ def test_tou_record_field_positions():
     assert r.decoded_price_min == pytest.approx(2.5)
 
 
-def test_parse_tou_records_drops_empty_slots_and_rejects_partial_records():
+def test_parse_tou_records_drops_empty_slots_and_rejects_partial_records() -> (
+    None
+):
     padded = TOU_PLAN_PAGE[:32] + bytes(48)
     assert len(parse_tou_records(padded)) == 2
     assert parse_tou_records(b"") == []
@@ -502,7 +506,7 @@ class TouTableTransport(FakeTransport):
     address is answered with 04 and clears the table.
     """
 
-    def __init__(self, table: bytes = b"", accept: bool = True):
+    def __init__(self, table: bytes = b"", accept: bool = True) -> None:
         super().__init__({})
         size = TOU_RECORD_SIZE * TOU_PLAN_SLOTS
         self.table = bytearray(table.ljust(size, b"\0"))
@@ -513,7 +517,7 @@ class TouTableTransport(FakeTransport):
         packet = build_packet(command, ClassCode.TOU_PLAN, data)
         asyncio.get_running_loop().call_soon(self._cb, packet)
 
-    async def write(self, data: bytes):
+    async def write(self, data: bytes) -> None:
         self.written.append(data)
         req = parse_packet(data)
         if req.command == Command.READ:
@@ -536,7 +540,7 @@ class TouTableTransport(FakeTransport):
         self._reply(Command.WRITE_RESPONSE, b"\x01")
 
 
-def test_build_tou_read_sends_the_last_slot_as_the_payload():
+def test_build_tou_read_sends_the_last_slot_as_the_payload() -> None:
     request = parse_packet(build_tou_read(14, 27))
     assert (request.class_code, request.address) == (ClassCode.TOU_PLAN, 14)
     assert request.data == bytes([27])
@@ -545,14 +549,14 @@ def test_build_tou_read_sends_the_last_slot_as_the_payload():
             build_tou_read(first, last)
 
 
-def test_tou_record_encodes_back_to_the_bytes_read():
+def test_tou_record_encodes_back_to_the_bytes_read() -> None:
     page = TOU_PLAN_PAGE + TOU_PLAN_REST
     for o in range(0, len(page), 16):
         raw = page[o : o + 16]
         assert encode_tou_record(parse_tou_record(raw)) == raw
 
 
-def test_tou_record_encoding_rejects_empty_and_oversized_fields():
+def test_tou_record_encoding_rejects_empty_and_oversized_fields() -> None:
     with pytest.raises(ValueError, match="empty slot"):
         encode_tou_record(TOUPeriod(decimal_point=0))
     with pytest.raises(ValueError, match="season"):
@@ -561,7 +565,7 @@ def test_tou_record_encoding_rejects_empty_and_oversized_fields():
         encode_tou_record(TOUPeriod(season=1, price_min=-1))
 
 
-def test_build_tou_write_puts_the_clock_header_before_the_records():
+def test_build_tou_write_puts_the_clock_header_before_the_records() -> None:
     periods = parse_tou_records(TOU_PLAN_PAGE[:48])
     # A Monday: java.util.Calendar numbers it 2 (Sunday = 1).
     now = datetime.datetime(2026, 10, 19, 17, 5, 9, tzinfo=datetime.UTC)
@@ -577,7 +581,7 @@ def test_build_tou_write_puts_the_clock_header_before_the_records():
     assert sunday.data[4] == 1
 
 
-def test_build_tou_write_limits_the_plan_to_twelve_intervals():
+def test_build_tou_write_limits_the_plan_to_twelve_intervals() -> None:
     periods = parse_tou_records(TOU_PLAN_PAGE + TOU_PLAN_REST)
     assert len(parse_packet(build_tou_write(periods[:12])).data) == 8 + 192
     for count in (0, 13):
@@ -585,12 +589,12 @@ def test_build_tou_write_limits_the_plan_to_twelve_intervals():
             build_tou_write(periods[:count])
 
 
-def test_tou_plan_is_the_only_class_written_so_far():
+def test_tou_plan_is_the_only_class_written_so_far() -> None:
     assert NWP500_WRITABLE_CLASSES == {ClassCode.TOU_PLAN}
 
 
 @pytest.mark.asyncio
-async def test_client_reads_the_whole_tou_table():
+async def test_client_reads_the_whole_tou_table() -> None:
     transport = TouTableTransport(TOU_PLAN_PAGE + TOU_PLAN_REST)
     async with NavienBleClient(transport=transport) as ble:
         records = await ble.read_tou_records()
@@ -603,7 +607,7 @@ async def test_client_reads_the_whole_tou_table():
 
 
 @pytest.mark.asyncio
-async def test_client_writes_a_tou_plan_and_checks_it():
+async def test_client_writes_a_tou_plan_and_checks_it() -> None:
     periods = parse_tou_records(TOU_PLAN_PAGE)
     transport = TouTableTransport(TOU_PLAN_PAGE[:64])
     async with NavienBleClient(transport=transport) as ble:
@@ -619,7 +623,7 @@ async def test_client_writes_a_tou_plan_and_checks_it():
 
 
 @pytest.mark.asyncio
-async def test_client_refuses_to_leave_a_longer_plan_behind():
+async def test_client_refuses_to_leave_a_longer_plan_behind() -> None:
     transport = TouTableTransport(TOU_PLAN_PAGE + TOU_PLAN_REST)
     async with NavienBleClient(transport=transport) as ble:
         with pytest.raises(TouWriteError, match="cloud"):
@@ -630,11 +634,11 @@ async def test_client_refuses_to_leave_a_longer_plan_behind():
 
 
 @pytest.mark.asyncio
-async def test_client_reports_a_refused_or_unstored_tou_write():
+async def test_client_reports_a_refused_or_unstored_tou_write() -> None:
     periods = parse_tou_records(TOU_PLAN_PAGE[:32])
 
     class Refusing(TouTableTransport):
-        async def write(self, data: bytes):
+        async def write(self, data: bytes) -> None:
             if parse_packet(data).command == Command.WRITE:
                 self.written.append(data)
                 self._reply(Command.WRITE_RESPONSE, b"\x04")
@@ -652,9 +656,9 @@ async def test_client_reports_a_refused_or_unstored_tou_write():
 
 
 @pytest.mark.asyncio
-async def test_client_retries_a_read_the_heater_did_not_answer():
+async def test_client_retries_a_read_the_heater_did_not_answer() -> None:
     class DropsFirst(FakeTransport):
-        async def write(self, data: bytes):
+        async def write(self, data: bytes) -> None:
             if not self.written:
                 self.written.append(data)
                 return
@@ -668,18 +672,18 @@ async def test_client_retries_a_read_the_heater_did_not_answer():
 
 
 @pytest.mark.asyncio
-async def test_client_refuses_a_tou_reply_with_a_bad_crc():
+async def test_client_refuses_a_tou_reply_with_a_bad_crc() -> None:
     transport = CorruptTransport({ClassCode.TOU_PLAN: TOU_PLAN_PAGE})
     async with NavienBleClient(transport=transport) as ble:
         with pytest.raises(CrcMismatchError):
             await ble.read_tou_records()
 
 
-def test_build_read_carries_the_address():
+def test_build_read_carries_the_address() -> None:
     assert parse_packet(build_read(ClassCode.TOU_PLAN, None, 15)).address == 15
 
 
-def test_cli_read_prints_the_whole_tou_plan(monkeypatch, capsys):
+def test_cli_read_prints_the_whole_tou_plan(monkeypatch, capsys) -> None:
     transport = TouTableTransport(TOU_PLAN_PAGE + TOU_PLAN_REST)
     assert _run_read(monkeypatch, transport, ["TOU_PLAN"]) == 0
     out = capsys.readouterr().out
@@ -697,47 +701,47 @@ SSD_BLOCK = bytes.fromhex(
 )
 
 
-def test_sub_status_reads_the_toolkit_dip_switch_words():
+def test_sub_status_reads_the_toolkit_dip_switch_words() -> None:
     assert len(SSD_BLOCK) == 59
     ssd = SubStatus.parse(SSD_BLOCK)
     assert (ssd.dip_switch_1, ssd.dip_switch_2) == (0x0004, 0x0000)
     assert ssd.raw == SSD_BLOCK
 
 
-def test_sub_status_words_are_little_endian():
+def test_sub_status_words_are_little_endian() -> None:
     data = bytearray(60)  # the boiler block length the toolkit expects
     data[16:20] = bytes([0x01, 0x80, 0x34, 0x12])
     ssd = SubStatus.parse(bytes(data))
     assert (ssd.dip_switch_1, ssd.dip_switch_2) == (0x8001, 0x1234)
 
 
-def test_sub_status_rejects_a_short_block():
+def test_sub_status_rejects_a_short_block() -> None:
     with pytest.raises(ValueError):
         SubStatus.parse(bytes(19))
 
 
 @pytest.mark.asyncio
-async def test_client_reads_sub_status():
+async def test_client_reads_sub_status() -> None:
     transport = FakeTransport({ClassCode.SSD: SSD_BLOCK})
     async with NavienBleClient(transport=transport) as ble:
         assert (await ble.read_sub_status()).dip_switch_1 == 4
 
 
 @pytest.mark.asyncio
-async def test_client_refuses_an_ssd_reply_with_a_bad_crc():
+async def test_client_refuses_an_ssd_reply_with_a_bad_crc() -> None:
     transport = CorruptTransport({ClassCode.SSD: SSD_BLOCK})
     async with NavienBleClient(transport=transport) as ble:
         with pytest.raises(CrcMismatchError):
             await ble.read_sub_status()
 
 
-def test_cli_read_prints_decoded_sub_status(monkeypatch, capsys):
+def test_cli_read_prints_decoded_sub_status(monkeypatch, capsys) -> None:
     transport = FakeTransport({ClassCode.SSD: SSD_BLOCK})
     assert _run_read(monkeypatch, transport, ["SSD"]) == 0
     assert "dip_switch_1=0x0004 dip_switch_2=0x0000" in capsys.readouterr().out
 
 
-def test_software_info_block_reads_the_controller_sw_code():
+def test_software_info_block_reads_the_controller_sw_code() -> None:
     from nwp500.ble import SoftwareInfoBlock
 
     sw = SoftwareInfoBlock.parse(bytes.fromhex("110700020b05") + bytes(53))
@@ -746,7 +750,7 @@ def test_software_info_block_reads_the_controller_sw_code():
         SoftwareInfoBlock.parse(bytes(3))
 
 
-def test_session_command_is_a_30_byte_class_50_write():
+def test_session_command_is_a_30_byte_class_50_write() -> None:
     packet = parse_packet(build_session_command(200))
     assert packet.crc_ok
     assert (packet.command, packet.class_code) == (Command.WRITE, 50)
@@ -755,14 +759,14 @@ def test_session_command_is_a_30_byte_class_50_write():
         build_session_command(256)
 
 
-def test_scan_filter_matches_both_advertised_names():
+def test_scan_filter_matches_both_advertised_names() -> None:
     for name in ("HPWH1A2B", "HPWH4610"):
         assert ADVERTISED_NAME_FRAGMENT in name
     assert answers_class_codes("hpwh1a2b")
     assert not answers_class_codes("HPWH4610")
 
 
-def test_best_heater_skips_the_wifi_setup_mode():
+def test_best_heater_skips_the_wifi_setup_mode() -> None:
     setup = ("AA", "HPWH4610", -30)
     weak, strong = ("BB", "HPWH1X", -80), ("CC", "HPWH1Y", -50)
     assert best_heater([setup, weak, strong]) == strong

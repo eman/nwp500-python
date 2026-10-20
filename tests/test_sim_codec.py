@@ -74,7 +74,7 @@ def _scenario() -> Scenario:
     )
 
 
-def test_a_scenario_round_trips():
+def test_a_scenario_round_trips() -> None:
     s = _scenario()
     doc = scenario_to_document(s)
     assert doc["schema_version"] == SCHEMA_VERSION
@@ -83,34 +83,34 @@ def test_a_scenario_round_trips():
     assert params is None
 
 
-def test_a_scenario_with_its_parameters_round_trips():
+def test_a_scenario_with_its_parameters_round_trips() -> None:
     s, p = _scenario(), default_params(3)
     back, params = scenario_from_document(scenario_to_document(s, p))
     assert back == s
     assert params == p
 
 
-def test_the_document_is_plain_json():
+def test_the_document_is_plain_json() -> None:
     doc = scenario_to_document(_scenario(), default_params())
     text = json.dumps(doc)
     assert json.loads(text) == doc
     assert doc["scenario"]["start"] == "2026-10-04T19:00:00Z"
 
 
-def test_another_schema_version_is_refused():
+def test_another_schema_version_is_refused() -> None:
     doc = scenario_to_document(_scenario()) | {"schema_version": 2}
     with pytest.raises(ValueError, match="schema_version"):
         scenario_from_document(doc)
 
 
-def test_an_unknown_field_is_refused():
+def test_an_unknown_field_is_refused() -> None:
     doc = scenario_to_document(_scenario())
     doc["scenario"]["state"]["middle_f"] = 120.0
     with pytest.raises(ValueError, match="middle_f"):
         scenario_from_document(doc)
 
 
-def test_a_result_is_plain_json():
+def test_a_result_is_plain_json() -> None:
     result = simulate(_scenario(), default_params())
     doc = result_to_document(result)
     assert json.loads(json.dumps(doc)) == doc
@@ -123,7 +123,7 @@ def test_a_result_is_plain_json():
     assert doc["defaults_used"] == list(result.defaults_used)
 
 
-def test_a_default_is_still_a_default_after_a_round_trip():
+def test_a_default_is_still_a_default_after_a_round_trip() -> None:
     """A field left out is written as left out, so the replayed answer
     names the same defaults."""
     s = _scenario().model_copy(
@@ -143,7 +143,7 @@ def test_a_default_is_still_a_default_after_a_round_trip():
     )
 
 
-def test_a_horizon_is_elapsed_time_across_a_clock_change():
+def test_a_horizon_is_elapsed_time_across_a_clock_change() -> None:
     """Midnight 2026-11-01 in Los Angeles plus three hours is 03:00 UTC
     later by three hours, though the wall clock falls back an hour; the
     same instant given in UTC is the same scenario."""

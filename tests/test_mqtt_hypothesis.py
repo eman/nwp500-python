@@ -120,7 +120,7 @@ BASE_PAYLOAD = {
 )
 def test_device_status_fuzzing(
     temperature_type_int, dhw_temp_raw, tank_temp_raw, flow_rate_raw
-):
+) -> None:
     """
     Fuzz test parsing of DeviceStatus with varying temperature types and values.
     """

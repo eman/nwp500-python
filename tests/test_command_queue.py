@@ -8,7 +8,7 @@ from nwp500.mqtt.types import QoS
 from nwp500.mqtt.utils import QueuedCommand
 
 
-def test_queued_command_dataclass():
+def test_queued_command_dataclass() -> None:
     """Test QueuedCommand dataclass creation."""
     topic = "test/topic"
     payload = {"key": "value"}
@@ -25,7 +25,7 @@ def test_queued_command_dataclass():
     assert command.timestamp == timestamp
 
 
-def test_mqtt_config_default_queue_settings():
+def test_mqtt_config_default_queue_settings() -> None:
     """Test default command queue configuration."""
     config = MqttConnectionConfig()
 
@@ -33,7 +33,7 @@ def test_mqtt_config_default_queue_settings():
     assert config.max_queued_commands == 100
 
 
-def test_mqtt_config_custom_queue_settings():
+def test_mqtt_config_custom_queue_settings() -> None:
     """Test custom command queue configuration."""
     config = MqttConnectionConfig(
         enable_command_queue=False, max_queued_commands=50
@@ -43,7 +43,7 @@ def test_mqtt_config_custom_queue_settings():
     assert config.max_queued_commands == 50
 
 
-def test_deque_maxlen():
+def test_deque_maxlen() -> None:
     """Test that deque with maxlen drops oldest items."""
     max_size = 5
     queue = deque(maxlen=max_size)
@@ -61,7 +61,7 @@ def test_deque_maxlen():
     assert list(queue) == [1, 2, 3, 4, 5]
 
 
-def test_queued_command_fifo_order():
+def test_queued_command_fifo_order() -> None:
     """Test that queued commands maintain FIFO order."""
     queue = deque()
     timestamps = []

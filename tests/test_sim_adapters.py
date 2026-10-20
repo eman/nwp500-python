@@ -72,20 +72,20 @@ def _units():
 class TestTheHeater:
     def test_the_tank_in_fahrenheit_from_the_raw_fields(
         self, status: DeviceStatus
-    ):
+    ) -> None:
         state = sa.heater_state(status)
         assert state.upper_f == pytest.approx(58.6 * 9 / 5 + 32)
         assert state.lower_f == pytest.approx(43.1 * 9 / 5 + 32)
         assert state.compressor_running is True
         assert state.element_running is False
 
-    def test_the_settings(self, status: DeviceStatus):
+    def test_the_settings(self, status: DeviceStatus) -> None:
         s = sa.settings(status)
         assert s.setpoint_f == pytest.approx(140.9)
         assert s.hp_lower_on_f == pytest.approx(104.9)
         assert s.mode == 3
 
-    def test_a_standby_status_is_refused(self, status: DeviceStatus):
+    def test_a_standby_status_is_refused(self, status: DeviceStatus) -> None:
         standby_status = status.model_copy(update={"dhw_operation_setting": 0})
         with pytest.raises(ValueError, match="Standby"):
             sa.settings(standby_status)
@@ -93,14 +93,16 @@ class TestTheHeater:
     @pytest.mark.parametrize("units", ["metric", "us_customary", None])
     def test_the_unit_preference_changes_nothing(
         self, status: DeviceStatus, units: Any
-    ):
+    ) -> None:
         set_unit_system(units)
         assert sa.heater_state(status).upper_f == pytest.approx(
             58.6 * 9 / 5 + 32
         )
         assert sa.settings(status).setpoint_f == pytest.approx(140.9)
 
-    def test_an_element_running(self, device_status_dict: dict[str, Any]):
+    def test_an_element_running(
+        self, device_status_dict: dict[str, Any]
+    ) -> None:
         s = DeviceStatus.model_validate(
             device_status_dict | {"heatLowerUse": 2, "compUse": 1}
         )
@@ -108,7 +110,9 @@ class TestTheHeater:
         assert state.element_running and not state.compressor_running
 
     @pytest.mark.parametrize(("code", "gal"), [(1, 50), (2, 65), (3, 80)])
-    def test_the_parameters_follow_the_tank_size(self, code: int, gal: int):
+    def test_the_parameters_follow_the_tank_size(
+        self, code: int, gal: int
+    ) -> None:
         p = sa.params(
             DeviceFeature.model_validate(FEATURE | {"volumeCode": code})
         )
@@ -117,7 +121,7 @@ class TestTheHeater:
 
 
 class TestTheSchedules:
-    def test_reservations_keep_the_devices_terms(self):
+    def test_reservations_keep_the_devices_terms(self) -> None:
         sched = ReservationSchedule.model_validate(
             {
                 "reservationUse": 2,
@@ -152,7 +156,7 @@ class TestTheSchedules:
         )
         assert second.enabled is False
 
-    def test_entries_in_any_stored_mode_are_read(self):
+    def test_entries_in_any_stored_mode_are_read(self) -> None:
         sched = ReservationSchedule.model_validate(
             {
                 "reservationUse": 2,
@@ -172,13 +176,13 @@ class TestTheSchedules:
         modes = [e.mode for e in sa.schedules(reservations=sched).reservations]
         assert modes == [0, 5, 6]
 
-    def test_a_switched_off_reservation_schedule(self):
+    def test_a_switched_off_reservation_schedule(self) -> None:
         sched = ReservationSchedule.model_validate(
             {"reservationUse": 1, "reservation": []}
         )
         assert sa.schedules(reservations=sched).reservations_enabled is False
 
-    def test_tou_from_the_rest_read(self):
+    def test_tou_from_the_rest_read(self) -> None:
         info = TOUInfo.model_validate(
             {
                 "touInfo": {
@@ -222,7 +226,7 @@ class TestTheSchedules:
         ]
         assert s.tou_periods[1].price_max == 50000
 
-    def test_tou_from_the_mqtt_confirmation_carries_its_switch(self):
+    def test_tou_from_the_mqtt_confirmation_carries_its_switch(self) -> None:
         conf = TOUReservationSchedule.model_validate(
             {
                 "reservationUse": 2,
@@ -289,7 +293,7 @@ class TestThePreferredUnits:
             ),
         )
 
-    def test_metric_and_us_inputs_build_the_same_parts(self):
+    def test_metric_and_us_inputs_build_the_same_parts(self) -> None:
         metric, us = self._metric(), self._us()
         env_m, env_u = metric[0], us[0]
         assert [v for _, v in env_m.ambient_f] == pytest.approx(
@@ -304,7 +308,7 @@ class TestThePreferredUnits:
         assert metric[3].week == 64
         assert metric[3].setpoint_half_c == 120
 
-    def test_with_no_preference_inputs_are_fahrenheit(self):
+    def test_with_no_preference_inputs_are_fahrenheit(self) -> None:
         set_unit_system(None)
         assert sa.write(T0, setpoint=140.0).setpoint_f == 140.0
         assert sa.temperature_unit() == "°F"
@@ -312,7 +316,7 @@ class TestThePreferredUnits:
 
     def test_the_ambient_from_the_status_ignores_the_preference(
         self, device_status_dict: dict[str, Any]
-    ):
+    ) -> None:
         s = DeviceStatus.model_validate(
             device_status_dict | {"ambientTemperature": 200}  # 20.0 degC
         )
@@ -320,11 +324,11 @@ class TestThePreferredUnits:
             set_unit_system(units)  # type: ignore[arg-type]
             assert sa.environment(s).ambient_f == pytest.approx(68.0)
 
-    def test_an_ambient_or_a_status_is_needed(self):
+    def test_an_ambient_or_a_status_is_needed(self) -> None:
         with pytest.raises(ValueError, match="ambient"):
             sa.environment()
 
-    def test_left_out_is_the_simulators_default(self):
+    def test_left_out_is_the_simulators_default(self) -> None:
         env = sa.environment(ambient=20.0)
         assert "humidity" not in env.model_fields_set
         assert env.inlet_f is None
@@ -338,13 +342,13 @@ class TestThePreferredUnits:
     )
     def test_results_come_back_in_the_preferred_units(
         self, units: Any, temp: float, vol: float, symbols: tuple[str, str]
-    ):
+    ) -> None:
         set_unit_system(units)
         assert sa.temperature(140.0) == pytest.approx(temp)
         assert sa.volume(10.0) == pytest.approx(vol)
         assert (sa.temperature_unit(), sa.volume_unit()) == symbols
 
-    def test_the_path_in_the_preferred_units(self):
+    def test_the_path_in_the_preferred_units(self) -> None:
         state = HeaterState(upper_f=131.0, lower_f=113.0)
         env = Environment(ambient_f=68.0)
         params = default_params()
@@ -372,7 +376,7 @@ class TestThePreferredUnits:
 
 
 class TestSpansBetweenSamples:
-    def test_a_span_between_two_samples_marks_the_first(self):
+    def test_a_span_between_two_samples_marks_the_first(self) -> None:
         import pandas as pd
 
         t0 = datetime(2026, 1, 5, tzinfo=UTC)

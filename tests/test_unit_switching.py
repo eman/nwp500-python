@@ -10,7 +10,7 @@ from nwp500.models import DeviceStatus
 
 def test_device_status_converts_to_fahrenheit_by_default(
     device_status_dict: dict[str, Any],
-):
+) -> None:
     """Test temperatures convert to Fahrenheit when default."""
     data = device_status_dict.copy()
     # 120 (raw) / 2 = 60°C -> 140°F
@@ -29,7 +29,7 @@ def test_device_status_converts_to_fahrenheit_by_default(
 
 def test_device_status_respects_celsius_type(
     device_status_dict: dict[str, Any],
-):
+) -> None:
     """Test temperatures stay in Celsius when temperature_type is CELSIUS."""
     data = device_status_dict.copy()
     data["temperatureType"] = 1  # CELSIUS
@@ -47,7 +47,7 @@ def test_device_status_respects_celsius_type(
 
 def test_device_status_respects_fahrenheit_explicit(
     device_status_dict: dict[str, Any],
-):
+) -> None:
     """Test temperatures convert to Fahrenheit when explicitly FAHRENHEIT."""
     data = device_status_dict.copy()
     data["temperatureType"] = 2  # FAHRENHEIT
@@ -60,7 +60,9 @@ def test_device_status_respects_fahrenheit_explicit(
     assert status.dhw_temperature == 122.0
 
 
-def test_celsius_conversion_edge_cases(device_status_dict: dict[str, Any]):
+def test_celsius_conversion_edge_cases(
+    device_status_dict: dict[str, Any],
+) -> None:
     """Test precision handling for Celsius conversions."""
     # Test HalfCelsius precision (0.5 steps)
     half_c_data = device_status_dict.copy()
@@ -81,7 +83,7 @@ def test_celsius_conversion_edge_cases(device_status_dict: dict[str, Any]):
 
 def test_missing_temperature_type_defaults_to_fahrenheit(
     device_status_dict: dict[str, Any],
-):
+) -> None:
     """Test missing temperature_type field results in Fahrenheit conversion."""
     data = device_status_dict.copy()
     if "temperatureType" in data:
@@ -95,7 +97,7 @@ def test_missing_temperature_type_defaults_to_fahrenheit(
     assert status.dhw_temperature == 122.0
 
 
-def test_flow_rate_conversion(device_status_dict: dict[str, Any]):
+def test_flow_rate_conversion(device_status_dict: dict[str, Any]) -> None:
     """Test flow rate conversion (LPM <-> GPM)."""
     # Case 1: Fahrenheit (Imperial) -> GPM
     # Raw value is LPM * 10
@@ -130,7 +132,7 @@ def test_flow_rate_conversion(device_status_dict: dict[str, Any]):
 )
 def test_flow_rate_matches_navilink_app(
     device_status_dict: dict[str, Any], raw: int, alias: str, attr: str
-):
+) -> None:
     """Flow rates decode the way the NaviLink app shows them (#154).
 
     The app's status screen (2.01.02, MgppStatusFragment) shows
@@ -173,7 +175,7 @@ def test_superheat_is_a_difference(
     attr: str,
     temperature_type: int,
     expected: float,
-):
+) -> None:
     """Superheat converts as a difference, without the +32 offset (#153).
 
     Raw 50 is 5.0 degC of superheat, which is 9.0 degF, not 41.0 degF.
@@ -185,7 +187,7 @@ def test_superheat_is_a_difference(
     assert getattr(status, attr) == expected
 
 
-def test_volume_conversion(device_status_dict: dict[str, Any]):
+def test_volume_conversion(device_status_dict: dict[str, Any]) -> None:
     """cumulatedDhwFlowRate is whole litres in either unit system (#154).
 
     The app never parses this field. The firmware keeps its other hot-water
@@ -214,7 +216,7 @@ def test_volume_conversion(device_status_dict: dict[str, Any]):
     assert status_c.cumulated_dhw_flow_rate == 100.0
 
 
-def test_device_feature_celsius_temperature_ranges():
+def test_device_feature_celsius_temperature_ranges() -> None:
     """Test that DeviceFeature respects CELSIUS for temperature ranges."""
     from nwp500.models import DeviceFeature
 
@@ -264,7 +266,7 @@ def test_device_feature_celsius_temperature_ranges():
     assert feature.get_field_unit("recirc_temperature_min") == " °C"
 
 
-def test_device_feature_fahrenheit_temperature_ranges():
+def test_device_feature_fahrenheit_temperature_ranges() -> None:
     """Test that DeviceFeature respects FAHRENHEIT for temperature ranges."""
     from nwp500.models import DeviceFeature
 
@@ -314,7 +316,7 @@ def test_device_feature_fahrenheit_temperature_ranges():
     assert feature.get_field_unit("recirc_temperature_min") == " °F"
 
 
-def test_device_feature_cli_output_celsius():
+def test_device_feature_cli_output_celsius() -> None:
     """Test that CLI formatter correctly displays Celsius for DeviceFeature."""
     from contextlib import redirect_stdout
     from io import StringIO
@@ -377,7 +379,7 @@ def test_device_feature_cli_output_celsius():
     )
 
 
-def test_unit_system_context_override_affects_field_units():
+def test_unit_system_context_override_affects_field_units() -> None:
     """Test that unit system context override affects get_field_unit()."""
     from nwp500 import reset_unit_system, set_unit_system
     from nwp500.models import DeviceFeature
@@ -432,7 +434,7 @@ def test_unit_system_context_override_affects_field_units():
     reset_unit_system()
 
 
-def test_unit_system_context_override_with_flow_rate_units():
+def test_unit_system_context_override_with_flow_rate_units() -> None:
     """Test unit system context override affects flow rate units."""
     from nwp500 import reset_unit_system, set_unit_system
     from nwp500.models import DeviceStatus
@@ -555,7 +557,7 @@ def test_unit_system_context_override_with_flow_rate_units():
     reset_unit_system()
 
 
-def test_unit_system_context_override_with_volume_units():
+def test_unit_system_context_override_with_volume_units() -> None:
     """Test unit system context override affects volume units."""
     from nwp500 import reset_unit_system, set_unit_system
     from nwp500.models import DeviceStatus

@@ -53,10 +53,10 @@ def issue(long_at: dict[int, float] | None = None) -> list[F.ForecastSlot]:
 
 
 class TestTheIssue:
-    def test_a_whole_week_answers(self):
+    def test_a_whole_week_answers(self) -> None:
         assert F.check_issue(issue()) is None
 
-    def test_a_missing_family_or_slot_does_not(self):
+    def test_a_missing_family_or_slot_does_not(self) -> None:
         slots = issue()
         slots[3] = replace(slots[3], short_volume_support=None)
         assert F.check_issue(slots) == F.FAMILY_NULL
@@ -65,7 +65,7 @@ class TestTheIssue:
 
 
 class TestTheWindow:
-    def test_an_issue_answers_only_the_window_it_covers(self):
+    def test_an_issue_answers_only_the_window_it_covers(self) -> None:
         slots = issue()
         week_end = T0 + timedelta(days=7)
         assert F.check_issue(slots, T0, week_end) is None
@@ -80,7 +80,7 @@ class TestTheWindow:
                 week_end + timedelta(hours=24),
             )
 
-    def test_an_old_issue_answers_nothing(self):
+    def test_an_old_issue_answers_nothing(self) -> None:
         slots = issue()
         assert (
             F.check_issue(slots, issued_at=T0, now=T0 + timedelta(hours=36))
@@ -89,7 +89,7 @@ class TestTheWindow:
         old = F.check_issue(slots, issued_at=T0, now=T0 + timedelta(hours=37))
         assert old == F.NO_COVERING_ISSUE
 
-    def test_a_shifted_issue_is_judged_where_it_was_moved(self):
+    def test_a_shifted_issue_is_judged_where_it_was_moved(self) -> None:
         moved = F.shifted(issue(), timedelta(days=7))
         assert F.check_issue(
             moved, T0, T0 + timedelta(hours=1), shift=timedelta(days=7)
@@ -97,7 +97,9 @@ class TestTheWindow:
 
 
 class TestTheProfile:
-    def test_expected_draws_are_fractional_with_their_per_draw_volume(self):
+    def test_expected_draws_are_fractional_with_their_per_draw_volume(
+        self,
+    ) -> None:
         p = F.draw_profile(issue({60: 0.4}), T0, T0 + timedelta(hours=12))
         (shower,) = [d for d in p.draws if d.draw_class == "long"]
         assert shower.volume_gal == pytest.approx(8.0)
@@ -105,7 +107,7 @@ class TestTheProfile:
         assert shower.duration_s == pytest.approx(240.0)
         assert p.expected_onsets == pytest.approx(72 * 0.1 + 0.4)
 
-    def test_a_window_reaches_an_hour_before_its_draw(self):
+    def test_a_window_reaches_an_hour_before_its_draw(self) -> None:
         (w,) = F.draw_profile(
             issue({60: 0.4}), T0, T0 + timedelta(hours=24)
         ).windows
@@ -113,7 +115,7 @@ class TestTheProfile:
         assert w.expected_count == pytest.approx(0.4)
         assert w.volume_mean_gal == pytest.approx(8.0)
 
-    def test_the_worst_case_draws_first(self):
+    def test_the_worst_case_draws_first(self) -> None:
         p = F.draw_profile(issue({60: 0.4}), T0, T0 + timedelta(hours=24))
         draws, (span,) = F.draws_first(p, T0)
         (w,) = p.windows
@@ -122,7 +124,7 @@ class TestTheProfile:
 
 
 class TestTheShower:
-    def test_it_is_the_rate_weighted_long_draw(self):
+    def test_it_is_the_rate_weighted_long_draw(self) -> None:
         slots = issue({60: 0.4, 80: 0.1})
         slots[80] = replace(slots[80], long_volume_mean_gal=10.0)
         p = F.draw_profile(slots, T0, T0 + timedelta(hours=24))
@@ -144,7 +146,7 @@ class TestInAWalk:
             loads=Loads(draws=draws),
         )
 
-    def test_an_expected_draw_is_judged_by_its_per_draw_volume(self):
+    def test_an_expected_draw_is_judged_by_its_per_draw_volume(self) -> None:
         p = site_example_params()
         small = (Draw(at=T0 + timedelta(hours=1), gallons=0.3),)
         expected = (
@@ -157,7 +159,7 @@ class TestInAWalk:
             simulate(self._scenario(expected), p).reasons
         )
 
-    def test_the_forecast_as_loads_and_withheld_windows(self):
+    def test_the_forecast_as_loads_and_withheld_windows(self) -> None:
         p = F.draw_profile(issue({60: 0.4}), T0, T0 + timedelta(hours=24))
         loads, withheld = F.forecast_loads(p, T0, worst_case=True)
         assert withheld and loads.windows

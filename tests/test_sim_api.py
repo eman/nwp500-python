@@ -161,7 +161,7 @@ def params() -> HeaterParams:
 
 
 class TestSimulateIsTheEngine:
-    def test_a_coast_into_the_tou_window(self, params: HeaterParams):
+    def test_a_coast_into_the_tou_window(self, params: HeaterParams) -> None:
         s = _scenario(
             state=HeaterState(upper_f=125.0, lower_f=118.6),
             schedules=Schedules(tou_periods=_peak(23, 4), tou_enabled=True),
@@ -177,11 +177,11 @@ class TestSimulateIsTheEngine:
         assert got == want
         assert got.heating
 
-    def test_tou_off_has_no_window(self, params: HeaterParams):
+    def test_tou_off_has_no_window(self, params: HeaterParams) -> None:
         s = _scenario(schedules=Schedules(tou_periods=_peak(23, 4)))
         assert simulate(s, params).simulation == _by_hand(params, s)
 
-    def test_the_commands_switch_tou_on(self, params: HeaterParams):
+    def test_the_commands_switch_tou_on(self, params: HeaterParams) -> None:
         s = _scenario(
             schedules=Schedules(tou_periods=_peak(23, 4)),
             commands=Commands(tou_enabled=True),
@@ -195,7 +195,9 @@ class TestSimulateIsTheEngine:
         )
         assert simulate(s, params).simulation == want
 
-    def test_reservations_through_every_mode(self, params: HeaterParams):
+    def test_reservations_through_every_mode(
+        self, params: HeaterParams
+    ) -> None:
         # (hour, minute, device mode, setpoint in half-degrees C)
         rows = [(19, 30, 3, 124), (20, 30, 4, 124), (21, 30, 2, 124)]
         rows += [(22, 30, 1, 121)]
@@ -235,7 +237,9 @@ class TestSimulateIsTheEngine:
             "electric",
         }
 
-    def test_an_entry_turns_a_powered_off_heater_on(self, params: HeaterParams):
+    def test_an_entry_turns_a_powered_off_heater_on(
+        self, params: HeaterParams
+    ) -> None:
         """Powered off, an entry fires and the heater heats after it (two
         device runs, 2026-09-24); in Vacation the same entry is skipped."""
         e = ReservationEntry(
@@ -263,7 +267,7 @@ class TestSimulateIsTheEngine:
     @pytest.mark.parametrize("mode", [0, 5, 6])
     def test_an_entry_outside_1_to_4_is_not_modelled(
         self, params: HeaterParams, mode: int
-    ):
+    ) -> None:
         """Entry modes are ``ReservationMode`` ids: 5 is Power Off and 0 an
         unused slot; 6 is what earlier library versions wrote for Power
         Off. None is modelled, and each says so."""
@@ -277,7 +281,7 @@ class TestSimulateIsTheEngine:
 
     def test_a_disabled_reservation_schedule_is_not_walked(
         self, params: HeaterParams
-    ):
+    ) -> None:
         e = ReservationEntry(
             week=EVERY_DAY, hour=20, minute=0, mode=3, setpoint_half_c=124
         )
@@ -286,7 +290,7 @@ class TestSimulateIsTheEngine:
         )
         assert simulate(s, params).simulation == _by_hand(params, s)
 
-    def test_writes_and_an_element_running(self, params: HeaterParams):
+    def test_writes_and_an_element_running(self, params: HeaterParams) -> None:
         s = _scenario(
             state=HeaterState(
                 upper_f=103.9,
@@ -324,7 +328,7 @@ class TestSimulateIsTheEngine:
         assert got == want
         assert "element" in {h.source for h in got.heating}
 
-    def test_draws(self, params: HeaterParams):
+    def test_draws(self, params: HeaterParams) -> None:
         showers = tuple(
             Draw(at=at(0.4) + timedelta(minutes=i), gallons=1.6)
             for i in range(8)
@@ -333,7 +337,7 @@ class TestSimulateIsTheEngine:
         want = _by_hand(params, s, draws=[(d.at, d.gallons) for d in showers])
         assert simulate(s, params).simulation == want
 
-    def test_vacation_starts_no_heating(self, params: HeaterParams):
+    def test_vacation_starts_no_heating(self, params: HeaterParams) -> None:
         s = _scenario(
             state=HeaterState(upper_f=110.0, lower_f=95.0),
             settings=Settings(setpoint_f=140.9, mode=5, hp_lower_on_f=105.0),
@@ -408,7 +412,9 @@ class TestAModelsInputs:
         )
         return got, want, model
 
-    def test_none_given_is_the_engines_defaults(self, params: HeaterParams):
+    def test_none_given_is_the_engines_defaults(
+        self, params: HeaterParams
+    ) -> None:
         s = _scenario(state=COLD)
         got, want, model = self._both(params, s)
         assert got == want
@@ -416,7 +422,7 @@ class TestAModelsInputs:
         assert all(c.start_hold_minutes == 0.0 for c in model.asked)
         assert all(c.draw_load == 0.0 for c in model.asked)
 
-    def test_the_start_hold(self, params: HeaterParams):
+    def test_the_start_hold(self, params: HeaterParams) -> None:
         s = _scenario(state=COLD)
         got, want, model = self._both(params, s, start_hold=_hold)
         assert got == want
@@ -424,7 +430,7 @@ class TestAModelsInputs:
         assert model.asked[0].start_hold_minutes == pytest.approx(20.0)
         assert got != simulate(s, params, recovery=_Model()).simulation
 
-    def test_a_running_compressors_hold(self, params: HeaterParams):
+    def test_a_running_compressors_hold(self, params: HeaterParams) -> None:
         s = _scenario(
             state=HeaterState(
                 upper_f=128.0, lower_f=100.0, compressor_running=True
@@ -436,7 +442,7 @@ class TestAModelsInputs:
 
     def test_lead_draws_are_the_first_recoverys_load(
         self, params: HeaterParams
-    ):
+    ) -> None:
         s = _scenario(state=COLD)
         got, want, model = self._both(
             params, s, lead_draws=(EARLY, *LEAD), draw_hold_factor=0.5
@@ -450,13 +456,13 @@ class TestAModelsInputs:
         )
         assert alone.asked[0].draw_load == model.asked[0].draw_load
 
-    def test_lead_draws_need_a_hold_factor(self, params: HeaterParams):
+    def test_lead_draws_need_a_hold_factor(self, params: HeaterParams) -> None:
         s = _scenario(state=COLD)
         got, want, model = self._both(params, s, lead_draws=LEAD)
         assert got == want
         assert model.asked[0].draw_load == 0.0
 
-    def test_the_draw_hold_factor(self, params: HeaterParams):
+    def test_the_draw_hold_factor(self, params: HeaterParams) -> None:
         s = _scenario(
             state=COLD,
             loads=Loads(draws=(Draw(at=at(0.5), gallons=10.0),)),
@@ -468,7 +474,9 @@ class TestAModelsInputs:
         alone = simulate(s, params, draw_hold_factor=0.5).simulation
         assert alone != simulate(s, params).simulation
 
-    def test_with_no_model_the_holds_change_nothing(self, params: HeaterParams):
+    def test_with_no_model_the_holds_change_nothing(
+        self, params: HeaterParams
+    ) -> None:
         s = _scenario(state=COLD)
         plain = simulate(s, params).simulation
         assert simulate(s, params, start_hold=_hold).simulation == plain
@@ -482,14 +490,16 @@ class TestAModelsInputs:
             == simulate(running, params).simulation
         )
 
-    def test_physics_not_usable(self, params: HeaterParams):
+    def test_physics_not_usable(self, params: HeaterParams) -> None:
         s = _scenario(state=COLD)
         got, want, model = self._both(params, s, physics_usable=False)
         assert got == want
         assert all(c.physics.estimate is None for c in model.asked)
         assert "unusable" in got.reasons
 
-    def test_lead_draws_read_carry_the_draw_reasons(self, params: HeaterParams):
+    def test_lead_draws_read_carry_the_draw_reasons(
+        self, params: HeaterParams
+    ) -> None:
         s = _scenario(state=COLD)
         got = simulate(
             s, params, recovery=_Model(), lead_draws=LEAD, draw_hold_factor=0.5
@@ -523,19 +533,21 @@ class TestAModelsInputs:
     )
     def test_lead_draws_not_read_carry_none(
         self, params: HeaterParams, kw: dict[str, Any]
-    ):
+    ) -> None:
         got = simulate(_scenario(state=COLD), params, **kw).reasons
         assert "draw_uncalibrated" not in got
         assert "inlet_temp_modelled" not in got
 
-    def test_lead_draws_need_a_draw_response(self, params: HeaterParams):
+    def test_lead_draws_need_a_draw_response(
+        self, params: HeaterParams
+    ) -> None:
         bare = replace(params, draw=replace(params.draw, observability=None))
         with pytest.raises(SimulationError, match="draw_model_unsupported"):
             simulate(_scenario(state=COLD), bare, lead_draws=LEAD)
 
 
 class TestWhatTheResultSays:
-    def test_defaults_are_named(self, params: HeaterParams):
+    def test_defaults_are_named(self, params: HeaterParams) -> None:
         s = _scenario(
             history=History(),
             environment=Environment(ambient_f=AMBIENT_F),
@@ -548,7 +560,7 @@ class TestWhatTheResultSays:
         assert any(d.startswith("compressor_stopped_at=None") for d in used)
         assert any(d.startswith("hp_lower_on_f=None") for d in used)
 
-    def test_given_inputs_are_not_defaults(self, params: HeaterParams):
+    def test_given_inputs_are_not_defaults(self, params: HeaterParams) -> None:
         s = _scenario(
             environment=Environment(
                 ambient_f=AMBIENT_F, humidity=50.0, inlet_f=60.0
@@ -559,13 +571,15 @@ class TestWhatTheResultSays:
 
     def test_a_mode_the_engine_does_not_model_is_a_reason(
         self, params: HeaterParams
-    ):
+    ) -> None:
         s = _scenario(
             commands=Commands(writes=(Write(at=at(1.0), mode=6),)),
         )
         assert "write_mode_not_modelled" in simulate(s, params).reasons
 
-    def test_a_write_into_vacation_is_dropped_whole(self, params: HeaterParams):
+    def test_a_write_into_vacation_is_dropped_whole(
+        self, params: HeaterParams
+    ) -> None:
         s = _scenario(
             commands=Commands(
                 writes=(Write(at=at(1.0), mode=5, setpoint_f=120.0),)
@@ -577,7 +591,7 @@ class TestWhatTheResultSays:
 
     def test_a_truncated_recovery_is_refused_by_name(
         self, params: HeaterParams
-    ):
+    ) -> None:
         weak = replace(
             params,
             compressor=replace(params.compressor, compressor_constant=0.02),
@@ -593,7 +607,7 @@ class TestWhatTheResultSays:
 
     def test_no_gap_constant_takes_the_prior_and_says_so(
         self, params: HeaterParams
-    ):
+    ) -> None:
         bare = replace(
             params, tank=replace(params.tank, stratification_gap_tau_h=None)
         )
@@ -606,7 +620,9 @@ class TestWhatTheResultSays:
         )
         assert "tau_gap_prior" in drawn.reasons
 
-    def test_an_unmeasured_inlet_with_draws_says_so(self, params: HeaterParams):
+    def test_an_unmeasured_inlet_with_draws_says_so(
+        self, params: HeaterParams
+    ) -> None:
         s = _scenario(loads=Loads(draws=(Draw(at=at(1.0), gallons=10.0),)))
         assert "inlet_temp_modelled" in simulate(s, params).reasons
         measured = simulate(s, params, inlet_measured=True)
@@ -617,7 +633,7 @@ class TestWhatTheResultSays:
 
     def test_standby_says_when_no_tou_schedule_was_laid_out(
         self, params: HeaterParams
-    ):
+    ) -> None:
         s = _scenario()
         t = standby(
             s.state,
@@ -643,7 +659,7 @@ class TestWhatTheResultSays:
 
     def test_draws_without_a_draw_response_are_refused(
         self, params: HeaterParams
-    ):
+    ) -> None:
         bare = replace(params, draw=replace(params.draw, observability=None))
         s = _scenario(loads=Loads(draws=(Draw(at=at(1.0), gallons=30.0),)))
         with pytest.raises(SimulationError, match="draw_model_unsupported"):
@@ -660,7 +676,7 @@ class TestWhatTheResultSays:
 
     def test_a_written_setpoint_is_held_as_the_device_holds_it(
         self, params: HeaterParams
-    ):
+    ) -> None:
         s = _scenario(
             commands=Commands(writes=(Write(at=at(1.0), setpoint_f=146.0),)),
         )
@@ -668,7 +684,7 @@ class TestWhatTheResultSays:
         assert w.setpoint_f == 146.3
 
     @pytest.mark.parametrize("slot", [timedelta(0), timedelta(minutes=-10)])
-    def test_a_slot_must_be_positive(self, params: HeaterParams, slot):
+    def test_a_slot_must_be_positive(self, params: HeaterParams, slot) -> None:
         """Copilot's review of #162: a negative slot walked backwards
         forever, and a zero one divided by zero."""
         r = simulate(
@@ -679,7 +695,7 @@ class TestWhatTheResultSays:
         with pytest.raises(ValueError, match="positive"):
             r.energy_by_source(slot)
 
-    def test_energy_adds_up(self, params: HeaterParams):
+    def test_energy_adds_up(self, params: HeaterParams) -> None:
         r = simulate(
             _scenario(state=HeaterState(upper_f=110.0, lower_f=100.0)), params
         )
@@ -694,7 +710,7 @@ class TestWhatTheResultSays:
             assert a == b
             assert total == pytest.approx((comp or 0.0) + element)
 
-    def test_ambient_readings_are_used(self, params: HeaterParams):
+    def test_ambient_readings_are_used(self, params: HeaterParams) -> None:
         cold = _scenario(
             state=HeaterState(upper_f=110.0, lower_f=100.0),
             environment=Environment(
@@ -710,7 +726,9 @@ class TestWhatTheResultSays:
 
 
 class TestRecoveryAndStandby:
-    def test_recovery_is_the_first_heating_interval(self, params: HeaterParams):
+    def test_recovery_is_the_first_heating_interval(
+        self, params: HeaterParams
+    ) -> None:
         state = HeaterState(upper_f=110.0, lower_f=100.0)
         settings = Settings(setpoint_f=140.9, hp_lower_on_f=105.0)
         env = Environment(ambient_f=AMBIENT_F, humidity=48.0)
@@ -733,7 +751,7 @@ class TestRecoveryAndStandby:
         )
         assert r.path[-1].at <= r.ready_at  # type: ignore[operator]
 
-    def test_a_full_tank_has_no_recovery(self, params: HeaterParams):
+    def test_a_full_tank_has_no_recovery(self, params: HeaterParams) -> None:
         r = recovery(
             HeaterState(upper_f=141.0, lower_f=140.5),
             Settings(setpoint_f=140.9, hp_lower_on_f=105.0),
@@ -745,7 +763,7 @@ class TestRecoveryAndStandby:
         assert r.interval is None and r.ready_at is None
         assert "no_recovery_within_horizon" in r.reasons
 
-    def test_tou_caps_a_recovery(self, params: HeaterParams):
+    def test_tou_caps_a_recovery(self, params: HeaterParams) -> None:
         state = HeaterState(upper_f=110.0, lower_f=100.0)
         settings = Settings(setpoint_f=140.9, hp_lower_on_f=105.0)
         env = Environment(ambient_f=AMBIENT_F, humidity=48.0)
@@ -761,7 +779,9 @@ class TestRecoveryAndStandby:
         cap = params.controller.tou_cap_f
         assert held.path[-1].lower_f == pytest.approx(140.9 - cap, abs=0.1)
 
-    def test_standby_cools_and_draws_take_heat(self, params: HeaterParams):
+    def test_standby_cools_and_draws_take_heat(
+        self, params: HeaterParams
+    ) -> None:
         state = HeaterState(upper_f=140.0, lower_f=138.0)
         env = Environment(ambient_f=AMBIENT_F)
         quiet = standby(state, env, Loads(), params, start=T0, until=at(6.0))

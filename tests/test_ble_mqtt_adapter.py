@@ -79,7 +79,7 @@ class FakeTransport:
         self,
         replies: dict[int, bytes],
         stream: tuple[bytes, ...] = (RTMD_STALE, RTMD),
-    ):
+    ) -> None:
         self.replies = replies
         self.stream = stream
         self.streaming = False
@@ -93,16 +93,16 @@ class FakeTransport:
         assert self._cb is not None, "push before start_notify"
         asyncio.get_running_loop().call_soon(self._cb, packet)
 
-    async def connect(self):
+    async def connect(self) -> None:
         self.connected = True
 
-    async def disconnect(self):
+    async def disconnect(self) -> None:
         self.connected = False
 
-    async def start_notify(self, callback):
+    async def start_notify(self, callback) -> None:
         self._cb = callback
 
-    async def write(self, data: bytes):
+    async def write(self, data: bytes) -> None:
         self.written.append(data)
         req = parse_packet(data)
         if req.class_code == ClassCode.SAPCD and req.data[:1] == b"\xc8":
@@ -125,7 +125,7 @@ def _heater() -> FakeTransport:
     )
 
 
-def test_feature_carries_only_the_fields_checked_against_mqtt():
+def test_feature_carries_only_the_fields_checked_against_mqtt() -> None:
     feature = device_feature_from_blocks(
         DeviceInfoBlock.parse(DID),
         ControllerSerials.parse(MSCD),
@@ -143,7 +143,7 @@ def test_feature_carries_only_the_fields_checked_against_mqtt():
 
 
 @pytest.mark.asyncio
-async def test_adapter_answers_a_device_feature_request():
+async def test_adapter_answers_a_device_feature_request() -> None:
     transport = _heater()
     got = []
     async with BleMqttAdapter(NavienBleClient(transport=transport)) as mqtt:
@@ -158,7 +158,7 @@ async def test_adapter_answers_a_device_feature_request():
 
 
 @pytest.mark.asyncio
-async def test_controller_serial_helper_runs_unchanged_over_bluetooth():
+async def test_controller_serial_helper_runs_unchanged_over_bluetooth() -> None:
     pytest.importorskip("click")
     from nwp500.cli.handlers import get_controller_serial_number
 
@@ -170,7 +170,7 @@ async def test_controller_serial_helper_runs_unchanged_over_bluetooth():
 @pytest.mark.parametrize(
     "name", ["set_dhw_temperature", "set_power", "control", "client_id"]
 )
-def test_other_mqtt_attributes_raise_a_clear_error(name: str):
+def test_other_mqtt_attributes_raise_a_clear_error(name: str) -> None:
     mqtt = BleMqttAdapter(NavienBleClient(transport=_heater()))
     with pytest.raises(
         BleUnsupportedError, match="not available over Bluetooth"
@@ -178,12 +178,12 @@ def test_other_mqtt_attributes_raise_a_clear_error(name: str):
         getattr(mqtt, name)
 
 
-def test_unsupported_error_is_a_library_error():
+def test_unsupported_error_is_a_library_error() -> None:
     assert issubclass(BleUnsupportedError, Nwp500Error)
     assert BleUnsupportedError("set_power").operation == "set_power"
 
 
-def test_private_attributes_are_plain_attribute_errors():
+def test_private_attributes_are_plain_attribute_errors() -> None:
     mqtt = BleMqttAdapter(NavienBleClient(transport=_heater()))
     assert not hasattr(mqtt, "_not_there")
 
@@ -216,13 +216,15 @@ def cli_with_fake_heater(monkeypatch):
     return invoke
 
 
-def test_cli_serial_over_bluetooth(cli_with_fake_heater):
+def test_cli_serial_over_bluetooth(cli_with_fake_heater) -> None:
     result = cli_with_fake_heater("serial")
     assert result.exit_code == 0, result.output
     assert "56496061BT22230408" in result.output
 
 
-def test_cli_info_over_bluetooth_shows_only_block_fields(cli_with_fake_heater):
+def test_cli_info_over_bluetooth_shows_only_block_fields(
+    cli_with_fake_heater,
+) -> None:
     result = cli_with_fake_heater("info")
     assert result.exit_code == 0, result.output
     out = result.output
@@ -234,7 +236,7 @@ def test_cli_info_over_bluetooth_shows_only_block_fields(cli_with_fake_heater):
     assert "firmware" not in out.lower() and "supported" not in out.lower()
 
 
-def test_cli_info_raw_over_bluetooth(cli_with_fake_heater):
+def test_cli_info_raw_over_bluetooth(cli_with_fake_heater) -> None:
     result = cli_with_fake_heater("info", "--raw")
     assert result.exit_code == 0, result.output
     for block in (DID, MSCD, MSWD):
@@ -246,14 +248,14 @@ def test_cli_info_raw_over_bluetooth(cli_with_fake_heater):
 )
 def test_cli_refuses_other_commands_before_connecting(
     cli_with_fake_heater, args
-):
+) -> None:
     result = cli_with_fake_heater(*args)
     assert result.exit_code == 2
     assert "not available over Bluetooth" in result.output
     assert cli_with_fake_heater.transport.written == []
 
 
-def test_cli_mqtt_backend_does_not_load_bluetooth(monkeypatch):
+def test_cli_mqtt_backend_does_not_load_bluetooth(monkeypatch) -> None:
     pytest.importorskip("click")
     from click.testing import CliRunner
 
@@ -269,7 +271,9 @@ def test_cli_mqtt_backend_does_not_load_bluetooth(monkeypatch):
 
 
 @pytest.mark.parametrize("backend", [[], ["--backend", "mqtt"]])
-def test_cli_without_ble_backend_takes_the_cloud_path(monkeypatch, backend):
+def test_cli_without_ble_backend_takes_the_cloud_path(
+    monkeypatch, backend
+) -> None:
     pytest.importorskip("click")
     from click.testing import CliRunner
 
@@ -298,14 +302,14 @@ def unit_system():
 
 def test_cli_info_over_bluetooth_honours_unit_system(
     cli_with_fake_heater, unit_system
-):
+) -> None:
     result = cli_with_fake_heater("info", options=("--unit-system", "metric"))
     assert result.exit_code == 0, result.output
     assert "40.5 - 65.5 °C" in result.output
     assert "Min operation temp  40.5 °C" in result.output
 
 
-def test_ble_feature_converts_like_device_feature(unit_system):
+def test_ble_feature_converts_like_device_feature(unit_system) -> None:
     from nwp500.models import DeviceFeature
 
     ble = device_feature_from_blocks(
@@ -330,7 +334,7 @@ def test_ble_feature_converts_like_device_feature(unit_system):
     assert ble.get_field_unit("country_code") == ""
 
 
-def test_min_operation_temperature_follows_unit_system(unit_system):
+def test_min_operation_temperature_follows_unit_system(unit_system) -> None:
     info = DeviceInfoBlock.parse(DID)
     assert info.min_operation_temperature() == pytest.approx(104.9)
     unit_system("metric")
@@ -342,7 +346,7 @@ def test_min_operation_temperature_follows_unit_system(unit_system):
 # --- live status (RTMD) ------------------------------------------------
 
 
-def test_rtmd_decodes_the_fields_checked_against_mqtt():
+def test_rtmd_decodes_the_fields_checked_against_mqtt() -> None:
     status = RealTimeStatus.parse(RTMD)
     assert status.operation_mode is CurrentOperationMode.STANDBY
     assert status.current_statenum == 20
@@ -362,7 +366,7 @@ def test_rtmd_decodes_the_fields_checked_against_mqtt():
         status.comp_use  # type: ignore[attr-defined]
 
 
-def test_rtmd_operation_mode_while_heating_and_unknown():
+def test_rtmd_operation_mode_while_heating_and_unknown() -> None:
     # MQTT reported operationMode 32 and currentStatenum 50 while heating
     heating = RealTimeStatus.parse(RTMD_STALE)
     assert heating.operation_mode is CurrentOperationMode.HEAT_PUMP_MODE
@@ -371,12 +375,12 @@ def test_rtmd_operation_mode_while_heating_and_unknown():
     assert unknown.operation_mode == 7
 
 
-def test_rtmd_rejects_a_block_of_the_wrong_length():
+def test_rtmd_rejects_a_block_of_the_wrong_length() -> None:
     with pytest.raises(ValueError, match="156 bytes"):
         RealTimeStatus.parse(RTMD[:-1])
 
 
-def test_rtmd_converts_like_device_status(unit_system):
+def test_rtmd_converts_like_device_status(unit_system) -> None:
     from nwp500.models import DeviceStatus
 
     ble = RealTimeStatus.parse(RTMD)
@@ -405,7 +409,7 @@ def test_rtmd_converts_like_device_status(unit_system):
 
 
 @pytest.mark.asyncio
-async def test_read_status_starts_the_stream_once_and_skips_the_stale_block():
+async def test_read_status_starts_stream_once_and_skips_stale_block() -> None:
     transport = _heater()
     async with NavienBleClient(transport=transport) as ble:
         first = await ble.read_status()
@@ -422,7 +426,7 @@ async def test_read_status_starts_the_stream_once_and_skips_the_stale_block():
 
 
 @pytest.mark.asyncio
-async def test_read_status_restarts_the_stream_after_a_reconnect():
+async def test_read_status_restarts_the_stream_after_a_reconnect() -> None:
     transport = _heater()
     ble = NavienBleClient(transport=transport)
     for _ in range(2):
@@ -432,21 +436,21 @@ async def test_read_status_restarts_the_stream_after_a_reconnect():
 
 
 @pytest.mark.asyncio
-async def test_read_status_times_out_when_nothing_is_pushed():
+async def test_read_status_times_out_when_nothing_is_pushed() -> None:
     transport = FakeTransport({}, stream=())
     async with NavienBleClient(transport=transport) as ble:
         with pytest.raises(TimeoutError, match="no status block"):
             await ble.read_status(timeout=0.05)
 
 
-def test_status_waits_longer_than_a_reply():
+def test_status_waits_longer_than_a_reply() -> None:
     from nwp500.ble import STATUS_TIMEOUT
 
     assert STATUS_TIMEOUT > NavienBleClient(transport=_heater())._reply_timeout
 
 
 @pytest.mark.asyncio
-async def test_status_blocks_do_not_answer_a_read():
+async def test_status_blocks_do_not_answer_a_read() -> None:
     transport = _heater()
     async with NavienBleClient(transport=transport, reply_timeout=0.1) as ble:
         await ble.read_status()
@@ -457,7 +461,7 @@ async def test_status_blocks_do_not_answer_a_read():
 
 
 @pytest.mark.asyncio
-async def test_read_status_restarts_the_stream_a_read_ended():
+async def test_read_status_restarts_the_stream_a_read_ended() -> None:
     transport = _heater()
     async with NavienBleClient(transport=transport) as ble:
         assert (await ble.read_status()).raw == RTMD
@@ -474,7 +478,7 @@ async def test_read_status_restarts_the_stream_a_read_ended():
 
 
 @pytest.mark.asyncio
-async def test_adapter_answers_a_device_status_request():
+async def test_adapter_answers_a_device_status_request() -> None:
     got: list[RealTimeStatus] = []
     async with BleMqttAdapter(NavienBleClient(transport=_heater())) as mqtt:
         await mqtt.subscribe_device_status(None, got.append)
@@ -482,7 +486,7 @@ async def test_adapter_answers_a_device_status_request():
     assert [s.tank_upper_temperature_raw for s in got] == [553]
 
 
-def test_cli_status_over_bluetooth(cli_with_fake_heater, unit_system):
+def test_cli_status_over_bluetooth(cli_with_fake_heater, unit_system) -> None:
     result = cli_with_fake_heater("status")
     assert result.exit_code == 0, result.output
     out = result.output
@@ -497,14 +501,14 @@ def test_cli_status_over_bluetooth(cli_with_fake_heater, unit_system):
 
 def test_cli_status_over_bluetooth_honours_unit_system(
     cli_with_fake_heater, unit_system
-):
+) -> None:
     result = cli_with_fake_heater("status", options=("--unit-system", "metric"))
     assert result.exit_code == 0, result.output
     assert "Tank upper       55.3 °C" in result.output
     assert "Superheat        -1.6 °C" in result.output
 
 
-def test_cli_status_raw_over_bluetooth(cli_with_fake_heater):
+def test_cli_status_raw_over_bluetooth(cli_with_fake_heater) -> None:
     result = cli_with_fake_heater("status", "--raw")
     assert result.exit_code == 0, result.output
     assert RTMD.hex() in result.output

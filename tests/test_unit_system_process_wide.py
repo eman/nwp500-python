@@ -37,7 +37,7 @@ def _reset_unit_system() -> Any:
 
 def test_set_unit_system_affects_existing_instance_at_access_time(
     device_status_dict: dict[str, Any],
-):
+) -> None:
     """Changing the global preference affects a pre-built instance's fields."""
     from nwp500.models import DeviceStatus
 
@@ -57,7 +57,7 @@ def test_set_unit_system_affects_existing_instance_at_access_time(
     assert status.dhw_temperature == 140.0
 
 
-def test_reservation_entry_unit_follows_global_preference():
+def test_reservation_entry_unit_follows_global_preference() -> None:
     """ReservationEntry temperature/unit reflect the global preference."""
     entry = ReservationEntry(param=120)  # 60.0°C
 
@@ -70,7 +70,7 @@ def test_reservation_entry_unit_follows_global_preference():
     assert entry.unit == "°F"
 
 
-def test_preference_set_in_one_task_seen_in_another_task():
+def test_preference_set_in_one_task_seen_in_another_task() -> None:
     """A preference set in one asyncio task is visible in another task.
 
     A ``contextvars.ContextVar`` would isolate the value per task; the
@@ -100,7 +100,7 @@ def test_preference_set_in_one_task_seen_in_another_task():
     assert unit == "°C"
 
 
-def test_preference_set_in_one_thread_seen_in_another_thread():
+def test_preference_set_in_one_thread_seen_in_another_thread() -> None:
     """A preference set in one thread is visible from another thread.
 
     Model validation triggered by MQTT callbacks runs in AWS CRT callback

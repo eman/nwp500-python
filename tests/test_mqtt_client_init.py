@@ -93,7 +93,7 @@ class TestMqttClientInitValidation:
 
     def test_mqtt_client_init_with_valid_tokens(
         self, auth_client_with_valid_tokens
-    ):
+    ) -> None:
         """Test MQTT client initializes successfully with valid tokens."""
         mqtt_client = NavienMqttClient(auth_client_with_valid_tokens)
         assert mqtt_client is not None
@@ -101,7 +101,7 @@ class TestMqttClientInitValidation:
 
     def test_mqtt_client_init_rejects_not_authenticated(
         self, auth_client_not_authenticated
-    ):
+    ) -> None:
         """Test MQTT client rejects non-authenticated auth client."""
         with pytest.raises(MqttCredentialsError) as exc_info:
             NavienMqttClient(auth_client_not_authenticated)
@@ -110,7 +110,7 @@ class TestMqttClientInitValidation:
 
     def test_mqtt_client_init_accepts_expired_jwt(
         self, auth_client_with_expired_jwt
-    ):
+    ) -> None:
         """Test MQTT client can be created with expired JWT tokens.
 
         Token refresh happens in connect(), not in __init__().
@@ -122,7 +122,7 @@ class TestMqttClientInitValidation:
 
     def test_mqtt_client_init_accepts_expired_aws_credentials(
         self, auth_client_with_expired_aws_credentials
-    ):
+    ) -> None:
         """Test MQTT client can be created with expired AWS credentials.
 
         Token refresh happens in connect(), not in __init__().
@@ -134,7 +134,7 @@ class TestMqttClientInitValidation:
 
     def test_mqtt_client_init_accepts_expired_tokens_without_error(
         self, auth_client_with_expired_jwt
-    ):
+    ) -> None:
         """Test MQTT client accepts expired tokens without error.
 
         Token validation moved to connect() which handles refresh automatically.
@@ -147,31 +147,31 @@ class TestMqttClientInitValidation:
 class TestHasValidTokensProperty:
     """Test the has_valid_tokens property on NavienAuthClient."""
 
-    def test_has_valid_tokens_true(self, auth_client_with_valid_tokens):
+    def test_has_valid_tokens_true(self, auth_client_with_valid_tokens) -> None:
         """Test has_valid_tokens returns True for valid tokens."""
         assert auth_client_with_valid_tokens.has_valid_tokens is True
 
     def test_has_valid_tokens_false_not_authenticated(
         self, auth_client_not_authenticated
-    ):
+    ) -> None:
         """Test has_valid_tokens returns False when not authenticated."""
         assert auth_client_not_authenticated.has_valid_tokens is False
 
     def test_has_valid_tokens_false_expired_jwt(
         self, auth_client_with_expired_jwt
-    ):
+    ) -> None:
         """Test has_valid_tokens returns False with expired JWT."""
         assert auth_client_with_expired_jwt.has_valid_tokens is False
 
     def test_has_valid_tokens_false_expired_aws_credentials(
         self, auth_client_with_expired_aws_credentials
-    ):
+    ) -> None:
         """Test has_valid_tokens returns False with expired AWS credentials."""
         assert (
             auth_client_with_expired_aws_credentials.has_valid_tokens is False
         )
 
-    def test_has_valid_tokens_true_with_no_aws_expiration(self):
+    def test_has_valid_tokens_true_with_no_aws_expiration(self) -> None:
         """Test has_valid_tokens returns True when AWS expiration is unknown."""
         auth_client = NavienAuthClient("test@example.com", "password")
         tokens = AuthTokens(
@@ -193,7 +193,7 @@ class TestHasValidTokensProperty:
 
     def test_mqtt_client_creation_succeeds_with_valid_tokens(
         self, auth_client_with_valid_tokens
-    ):
+    ) -> None:
         """Test that MQTT client creation succeeds with valid tokens.
 
         Verifies MQTT client can be created successfully when auth_client has
@@ -208,7 +208,7 @@ class TestHasValidTokensProperty:
 class TestHasValidTokensPropertyComprehensive:
     """Comprehensive test coverage for has_valid_tokens property."""
 
-    def test_has_valid_tokens_no_auth_response(self):
+    def test_has_valid_tokens_no_auth_response(self) -> None:
         """Test scenario 1: No auth response."""
         auth_client = NavienAuthClient("test@example.com", "password")
 
@@ -216,7 +216,7 @@ class TestHasValidTokensPropertyComprehensive:
         assert auth_client._auth_response is None
         assert auth_client.has_valid_tokens is False
 
-    def test_has_valid_tokens_expired_jwt_only(self):
+    def test_has_valid_tokens_expired_jwt_only(self) -> None:
         """Test scenario 2: Expired JWT tokens only."""
         auth_client = NavienAuthClient("test@example.com", "password")
 
@@ -243,7 +243,7 @@ class TestHasValidTokensPropertyComprehensive:
         assert expired_jwt_tokens.are_aws_credentials_expired is False
         assert auth_client.has_valid_tokens is False
 
-    def test_has_valid_tokens_expired_aws_credentials_only(self):
+    def test_has_valid_tokens_expired_aws_credentials_only(self) -> None:
         """Test scenario 3: Expired AWS credentials only."""
         auth_client = NavienAuthClient("test@example.com", "password")
 
@@ -270,7 +270,7 @@ class TestHasValidTokensPropertyComprehensive:
         assert expired_aws_tokens.are_aws_credentials_expired is True
         assert auth_client.has_valid_tokens is False
 
-    def test_has_valid_tokens_both_expired(self):
+    def test_has_valid_tokens_both_expired(self) -> None:
         """Test scenario 4: Both JWT and AWS credentials expired."""
         auth_client = NavienAuthClient("test@example.com", "password")
 
@@ -297,7 +297,7 @@ class TestHasValidTokensPropertyComprehensive:
         assert both_expired_tokens.are_aws_credentials_expired is True
         assert auth_client.has_valid_tokens is False
 
-    def test_has_valid_tokens_both_valid(self):
+    def test_has_valid_tokens_both_valid(self) -> None:
         """Test scenario 5: Both JWT and AWS credentials valid."""
         auth_client = NavienAuthClient("test@example.com", "password")
 
@@ -322,7 +322,7 @@ class TestHasValidTokensPropertyComprehensive:
         assert valid_tokens.are_aws_credentials_expired is False
         assert auth_client.has_valid_tokens is True
 
-    def test_has_valid_tokens_property_type(self):
+    def test_has_valid_tokens_property_type(self) -> None:
         """Test that has_valid_tokens always returns bool."""
         auth_client = NavienAuthClient("test@example.com", "password")
 
@@ -346,7 +346,7 @@ class TestHasValidTokensPropertyComprehensive:
         assert isinstance(auth_client.has_valid_tokens, bool)
         assert auth_client.has_valid_tokens is True
 
-    def test_has_valid_tokens_jwt_near_expiry_buffer(self):
+    def test_has_valid_tokens_jwt_near_expiry_buffer(self) -> None:
         """Test JWT expiration within 5-minute buffer."""
         auth_client = NavienAuthClient("test@example.com", "password")
 
@@ -371,7 +371,7 @@ class TestHasValidTokensPropertyComprehensive:
         assert near_expiry_tokens.is_expired is True
         assert auth_client.has_valid_tokens is False
 
-    def test_has_valid_tokens_aws_near_expiry_buffer(self):
+    def test_has_valid_tokens_aws_near_expiry_buffer(self) -> None:
         """Test AWS credentials expiration within 5-minute buffer."""
         auth_client = NavienAuthClient("test@example.com", "password")
 
@@ -396,7 +396,7 @@ class TestHasValidTokensPropertyComprehensive:
         assert near_expiry_tokens.are_aws_credentials_expired is True
         assert auth_client.has_valid_tokens is False
 
-    def test_has_valid_tokens_consistent_checks(self):
+    def test_has_valid_tokens_consistent_checks(self) -> None:
         """Test that multiple calls to has_valid_tokens are consistent."""
         auth_client = NavienAuthClient("test@example.com", "password")
 
@@ -427,7 +427,9 @@ class TestHasValidTokensPropertyComprehensive:
 class TestMqttClientInitTokenValidationSequence:
     """Test the validation sequence in MQTT client initialization."""
 
-    def test_validation_checks_order(self, auth_client_with_valid_tokens):
+    def test_validation_checks_order(
+        self, auth_client_with_valid_tokens
+    ) -> None:
         """Test that initialization performs checks in correct order."""
         # Create a mock auth client to track check order
         auth_client = auth_client_with_valid_tokens
@@ -450,7 +452,7 @@ class TestMqttClientInitTokenValidationSequence:
         mqtt_client = NavienMqttClient(auth_client)
         assert mqtt_client is not None
 
-    def test_missing_aws_credentials_is_caught(self):
+    def test_missing_aws_credentials_is_caught(self) -> None:
         """Test that missing AWS credentials are caught even with valid JWT."""
         auth_client = NavienAuthClient("test@example.com", "password")
         tokens = AuthTokens(
@@ -474,7 +476,7 @@ class TestMqttClientInitTokenValidationSequence:
 class TestTokenValidationEdgeCases:
     """Test edge cases in token validation."""
 
-    def test_expired_jwt_near_expiry_buffer(self):
+    def test_expired_jwt_near_expiry_buffer(self) -> None:
         """Test token considered expired within 5-minute buffer.
 
         MQTT init no longer rejects expired tokens since validation
@@ -509,7 +511,7 @@ class TestTokenValidationEdgeCases:
 
     def test_multiple_validation_checks_mqtt_init(
         self, auth_client_with_valid_tokens
-    ):
+    ) -> None:
         """Test multiple MQTT clients can be created from same auth client."""
         # First MQTT client should succeed
         mqtt_client1 = NavienMqttClient(auth_client_with_valid_tokens)
@@ -528,7 +530,7 @@ class TestRecoverConnectionMethod:
 
     def test_recover_connection_method_exists(
         self, auth_client_with_valid_tokens
-    ):
+    ) -> None:
         """Test that recover_connection method exists and is callable."""
         mqtt_client = NavienMqttClient(auth_client_with_valid_tokens)
 
@@ -543,7 +545,7 @@ class TestRecoverConnectionMethod:
     @pytest.mark.asyncio
     async def test_recover_connection_already_connected(
         self, auth_client_with_valid_tokens
-    ):
+    ) -> None:
         """Test recover_connection when already connected after refresh."""
         mqtt_client = NavienMqttClient(auth_client_with_valid_tokens)
 
@@ -559,7 +561,7 @@ class TestRecoverConnectionMethod:
     @pytest.mark.asyncio
     async def test_recover_connection_token_refresh_failure(
         self, auth_client_with_valid_tokens
-    ):
+    ) -> None:
         """Test recover_connection when token refresh fails."""
         from unittest.mock import AsyncMock, patch
 
@@ -583,7 +585,7 @@ class TestRecoverConnectionMethod:
     @pytest.mark.asyncio
     async def test_recover_connection_auth_error_on_refresh(
         self, auth_client_with_valid_tokens
-    ):
+    ) -> None:
         """Test recover_connection when re-authentication fails."""
         from unittest.mock import AsyncMock, patch
 
@@ -605,7 +607,7 @@ class TestRecoverConnectionMethod:
     @pytest.mark.asyncio
     async def test_recover_connection_not_connected_state(
         self, auth_client_with_valid_tokens
-    ):
+    ) -> None:
         """Test recover_connection behavior when not yet connected."""
         from unittest.mock import AsyncMock, patch
 
@@ -636,7 +638,7 @@ class TestRecoverConnectionMethod:
     @pytest.mark.asyncio
     async def test_recover_connection_successful_flow(
         self, auth_client_with_valid_tokens
-    ):
+    ) -> None:
         """Test successful recover_connection: token refresh then reconnect."""
         from unittest.mock import AsyncMock, patch
 
@@ -673,7 +675,7 @@ class TestRecoverConnectionMethod:
     @pytest.mark.asyncio
     async def test_recover_connection_returns_bool(
         self, auth_client_with_valid_tokens
-    ):
+    ) -> None:
         """Test that recover_connection always returns a boolean."""
         from unittest.mock import AsyncMock, patch
 
@@ -719,7 +721,7 @@ class TestRecoverConnectionIntegration:
 
     def test_recover_connection_method_signature(
         self, auth_client_with_valid_tokens
-    ):
+    ) -> None:
         """Test that recover_connection has correct signature and docstring."""
         mqtt_client = NavienMqttClient(auth_client_with_valid_tokens)
 
@@ -735,7 +737,7 @@ class TestRecoverConnectionIntegration:
         assert "recover" in mqtt_client.recover_connection.__doc__.lower()
         assert "connection" in mqtt_client.recover_connection.__doc__.lower()
 
-    def test_recover_connection_error_handling_docstring(self):
+    def test_recover_connection_error_handling_docstring(self) -> None:
         """Test that recover_connection docstring documents error handling."""
         # Check class attribute directly to avoid bound method issues
         doc = NavienMqttClient.recover_connection.__doc__
@@ -754,7 +756,7 @@ class TestRecoverConnectionIntegration:
     @pytest.mark.asyncio
     async def test_recover_connection_with_expired_auth_client(
         self, auth_client_with_valid_tokens
-    ):
+    ) -> None:
         """Test recover_connection when client tokens expire after creation."""
         from datetime import timedelta
         from unittest.mock import AsyncMock, patch
@@ -796,7 +798,7 @@ class TestRecoverConnectionIntegration:
     @pytest.mark.asyncio
     async def test_recover_connection_sequence_calls_in_order(
         self, auth_client_with_valid_tokens
-    ):
+    ) -> None:
         """Test that recover_connection calls methods in correct order."""
         from unittest.mock import AsyncMock, patch
 
@@ -838,7 +840,7 @@ class TestDeviceControllerProxies:
     @pytest.mark.asyncio
     async def test_configure_reservation_water_program_delegates(
         self, auth_client_with_valid_tokens
-    ):
+    ) -> None:
         """Regression: this proxy referenced a nonexistent self._control."""
         from unittest.mock import AsyncMock, MagicMock
 
@@ -857,7 +859,7 @@ class TestDeviceControllerProxies:
             device
         )
 
-    def test_no_references_to_undefined_control_attribute(self):
+    def test_no_references_to_undefined_control_attribute(self) -> None:
         """No code may reference self._control (never assigned).
 
         Uses an AST walk rather than a source substring search so that

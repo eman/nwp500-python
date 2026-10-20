@@ -79,7 +79,7 @@ def _terms(done: cal_cli.Calibrated) -> dict[str, cal_cli.Term]:
 
 
 class TestTheFits:
-    def test_a_constant_air_fits_the_standby_loss(self, history):
+    def test_a_constant_air_fits_the_standby_loss(self, history) -> None:
         done = cal_cli.calibrate(cal_cli.read_history(history), ambient=AIR_F)
         assert done.calibration.standby.ua_ref == pytest.approx(UA, rel=0.05)
         assert "standby" not in done.calibration.params.unfitted
@@ -87,7 +87,7 @@ class TestTheFits:
         assert loss.fitted
         assert loss.samples == "1 of 1 quiet windows"
 
-    def test_a_sensors_readings_fit_it_too(self, history, tmp_path):
+    def test_a_sensors_readings_fit_it_too(self, history, tmp_path) -> None:
         air = tmp_path / "air.csv"
         air.write_text(
             "time,temperature\n"
@@ -101,14 +101,14 @@ class TestTheFits:
         assert done.air == "readings"
         assert done.calibration.standby.ua_ref == pytest.approx(UA, rel=0.05)
 
-    def test_the_air_in_the_preferred_unit(self, history):
+    def test_the_air_in_the_preferred_unit(self, history) -> None:
         set_unit_system("metric")
         done = cal_cli.calibrate(
             cal_cli.read_history(history), ambient=(AIR_F - 32) / 1.8
         )
         assert done.calibration.standby.ua_ref == pytest.approx(UA, rel=0.05)
 
-    def test_without_air_the_standby_loss_keeps_the_base(self, history):
+    def test_without_air_the_standby_loss_keeps_the_base(self, history) -> None:
         done = cal_cli.calibrate(cal_cli.read_history(history))
         assert done.air is None
         assert "standby" in done.calibration.params.unfitted
@@ -117,7 +117,7 @@ class TestTheFits:
         assert loss.why == "no air given"
         assert any("no air given" in n for n in done.notes)
 
-    def test_each_fit_without_evidence_says_why(self, history):
+    def test_each_fit_without_evidence_says_why(self, history) -> None:
         terms = _terms(
             cal_cli.calibrate(cal_cli.read_history(history), ambient=AIR_F)
         )
@@ -134,7 +134,7 @@ class TestTheFits:
         assert not power.fitted
         assert power.why == "the compressor is not fitted"
 
-    def test_a_compressor_fit_reports_its_errors(self, history):
+    def test_a_compressor_fit_reports_its_errors(self, history) -> None:
         done = cal_cli.calibrate(cal_cli.read_history(history), ambient=AIR_F)
         fit = cal.CompressorFit(
             compressor_constant=0.06,
@@ -178,7 +178,9 @@ class TestTheFits:
         assert not k.fitted
         assert "pinned on a bound" in k.why
 
-    def test_without_humidity_the_air_is_50_percent(self, history, monkeypatch):
+    def test_without_humidity_the_air_is_50_percent(
+        self, history, monkeypatch
+    ) -> None:
         seen: list[Any] = []
         real = cal.calibrate
 
@@ -198,7 +200,7 @@ class TestTheFits:
 
     def test_a_stopped_recording_is_not_one_quiet_window(
         self, tmp_path, device_status_dict
-    ):
+    ) -> None:
         # Recorded 0-8 h and 11-24 h; the tank was heated back to 130 °F
         # in between, unobserved.
         lines = quiet_lines(device_status_dict, hours=8) + quiet_lines(
@@ -225,7 +227,7 @@ class TestTheFits:
     )
     def test_the_gap_scales_with_the_spacing(
         self, device_status_dict, spacing_s, expected
-    ):
+    ) -> None:
         status = DeviceStatus.model_validate(device_status_dict)
         readings = [
             (T0 + timedelta(seconds=spacing_s * i), status) for i in range(10)
@@ -233,7 +235,7 @@ class TestTheFits:
         assert cal_cli.max_gap(readings) == expected
         assert cal_cli.max_gap(readings[:1]) == cal_cli.MIN_GAP
 
-    def test_a_sources_record_fits_over_what_it_covers(self, history):
+    def test_a_sources_record_fits_over_what_it_covers(self, history) -> None:
         from nwp500.sim_home_assistant import RecordInputs
 
         readings = cal_cli.read_history(history)
@@ -269,7 +271,7 @@ class TestTheFits:
     )
     def test_the_meter_and_circulation_go_together(
         self, history, monkeypatch, drawing, circulating
-    ):
+    ) -> None:
         from nwp500.sim_home_assistant import RecordInputs
 
         seen: list[Any] = []
@@ -286,7 +288,7 @@ class TestTheFits:
         assert done.calibration.standby.quiet_by == "dhw_in_use"
         assert any("together or not at all" in n for n in done.notes)
 
-    def test_unobserved_air_and_humidity(self, history, monkeypatch):
+    def test_unobserved_air_and_humidity(self, history, monkeypatch) -> None:
         from nwp500.sim_home_assistant import RecordInputs
 
         seen: list[Any] = []
@@ -318,7 +320,7 @@ class TestTheFits:
         assert (frame.loc[late, "humidity_pct"] == 50.0).all()
         assert frame.loc[late, "air_f"].notna().all()
 
-    def test_no_window_spans_an_air_outage(self, history):
+    def test_no_window_spans_an_air_outage(self, history) -> None:
         from nwp500.sim_home_assistant import RecordInputs
 
         gap = (T0 + timedelta(hours=10), T0 + timedelta(hours=10, minutes=20))
@@ -336,7 +338,7 @@ class TestTheFits:
 
     def test_a_later_reading_does_not_reach_back_over_an_outage(
         self, history, monkeypatch
-    ):
+    ) -> None:
         from nwp500.sim_home_assistant import RecordInputs
 
         seen: list[Any] = []
@@ -365,7 +367,9 @@ class TestTheFits:
         )
         assert (frame.loc[before, "humidity_pct"] == 30.0).all()
 
-    def test_source_states_hold_until_the_next(self, history, monkeypatch):
+    def test_source_states_hold_until_the_next(
+        self, history, monkeypatch
+    ) -> None:
         from nwp500.sim_home_assistant import RecordInputs
 
         seen: list[Any] = []
@@ -396,7 +400,7 @@ class TestTheFits:
         ]
         assert (frame.loc[after, "humidity_pct"] == 70.0).all()
 
-    def test_stepped(self):
+    def test_stepped(self) -> None:
         h = timedelta(hours=1)
         tick = timedelta(microseconds=1)
         assert cal_cli._stepped([(T0 + 6 * h, 70.0), (T0, 60.0)]) == [
@@ -405,7 +409,9 @@ class TestTheFits:
             (T0 + 6 * h, 70.0),
         ]
 
-    def test_no_recovery_spans_unobserved_air(self, history, monkeypatch):
+    def test_no_recovery_spans_unobserved_air(
+        self, history, monkeypatch
+    ) -> None:
         import numpy as np
 
         from nwp500.sim_home_assistant import RecordInputs
@@ -442,7 +448,9 @@ class TestTheFits:
         assert len(found) == 1
         assert found["start_time"].iloc[0] < T0 + 10 * h
 
-    def test_a_rejected_reading_masks_the_air(self, history, monkeypatch):
+    def test_a_rejected_reading_masks_the_air(
+        self, history, monkeypatch
+    ) -> None:
         import asyncio
 
         from nwp500 import sim_home_assistant as ha
@@ -500,7 +508,7 @@ class TestTheFits:
         assert frame.loc[gap, "air_unobserved"].all()
         assert frame.loc[gap, "excluded"].all()
 
-    def test_flags_win_over_the_sources(self, history):
+    def test_flags_win_over_the_sources(self, history) -> None:
         from nwp500.sim_home_assistant import RecordInputs
 
         record = RecordInputs([(T0, 30.0)], None, None, None)
@@ -510,7 +518,7 @@ class TestTheFits:
         assert done.air == "constant"
         assert done.calibration.standby.ua_ref == pytest.approx(UA, rel=0.05)
 
-    def test_the_base_is_the_one_given(self, history):
+    def test_the_base_is_the_one_given(self, history) -> None:
         base = replace(sim.default_params(1), unfitted=())
         done = cal_cli.calibrate(
             cal_cli.read_history(history),
@@ -520,7 +528,7 @@ class TestTheFits:
         assert done.calibration.params.tank == base.tank
         assert not done.notes
 
-    def test_air_and_ambient_together_are_refused(self, history):
+    def test_air_and_ambient_together_are_refused(self, history) -> None:
         with pytest.raises(InputError, match="not both"):
             cal_cli.calibrate(
                 cal_cli.read_history(history),
@@ -530,19 +538,21 @@ class TestTheFits:
 
 
 class TestTheFiles:
-    def test_an_empty_history_is_refused(self, tmp_path):
+    def test_an_empty_history_is_refused(self, tmp_path) -> None:
         empty = tmp_path / "h.jsonl"
         empty.write_text("\n")
         with pytest.raises(InputError, match="holds no statuses"):
             cal_cli.read_history(empty)
 
-    def test_a_bad_history_line_is_named(self, tmp_path, device_status_dict):
+    def test_a_bad_history_line_is_named(
+        self, tmp_path, device_status_dict
+    ) -> None:
         bad = tmp_path / "h.jsonl"
         bad.write_text(status_history.line(T0, device_status_dict) + "\n{\n")
         with pytest.raises(InputError, match="line 2 is not"):
             cal_cli.read_history(bad)
 
-    def test_readings_without_a_header(self, tmp_path):
+    def test_readings_without_a_header(self, tmp_path) -> None:
         f = tmp_path / "air.csv"
         f.write_text(f"{T0.isoformat()},61.5\n\n{T0.isoformat()},nan\n")
         assert cal_cli.read_readings(f, "air") == [(T0, 61.5)]
@@ -555,7 +565,7 @@ class TestTheFiles:
             ("time,temperature\n", "holds no readings"),
         ],
     )
-    def test_bad_readings(self, tmp_path, text, match):
+    def test_bad_readings(self, tmp_path, text, match) -> None:
         f = tmp_path / "air.csv"
         f.write_text(text)
         with pytest.raises(InputError, match=match):
@@ -565,7 +575,7 @@ class TestTheFiles:
 class TestTheCommand:
     def test_it_prints_the_report_and_writes_the_parameters(
         self, history, tmp_path, monkeypatch
-    ):
+    ) -> None:
         async def no_device(*_: Any) -> int:
             raise AssertionError("connected")
 
@@ -589,7 +599,7 @@ class TestTheCommand:
         params = params_from_document(json.loads(out.read_text()))
         assert params.loss.ua_btu_hr_f == pytest.approx(UA, rel=0.05)
 
-    def test_a_bad_input_is_a_usage_error(self, history):
+    def test_a_bad_input_is_a_usage_error(self, history) -> None:
         result = CliRunner().invoke(
             cli_main.cli,
             [
@@ -605,7 +615,7 @@ class TestTheCommand:
         assert result.exit_code == 2
         assert "not both" in result.output
 
-    def test_the_report_alone(self, history):
+    def test_the_report_alone(self, history) -> None:
         done = cal_cli.calibrate(cal_cli.read_history(history))
         out = io.StringIO()
         cal_cli.run(done, None, out)

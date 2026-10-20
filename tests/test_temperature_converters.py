@@ -20,48 +20,48 @@ class TestHalfCelsius:
     Example: raw_value=120 → 60°C → 140°F
     """
 
-    def test_zero_celsius(self):
+    def test_zero_celsius(self) -> None:
         """0°C = 32°F."""
         temp = HalfCelsius(0)
         assert temp.to_fahrenheit() == 32.0
 
-    def test_freezing_point(self):
+    def test_freezing_point(self) -> None:
         """0°C = 32°F (freezing point of water)."""
         temp = HalfCelsius(0)
         assert temp.to_celsius() == 0.0
         assert temp.to_fahrenheit() == 32.0
 
-    def test_boiling_point(self):
+    def test_boiling_point(self) -> None:
         """100°C = 212°F (boiling point of water)."""
         temp = HalfCelsius(200)  # 200 half-degrees = 100°C
         assert temp.to_celsius() == 100.0
         assert temp.to_fahrenheit() == pytest.approx(212.0)
 
-    def test_body_temperature(self):
+    def test_body_temperature(self) -> None:
         """37°C ≈ 98.6°F (normal body temperature)."""
         temp = HalfCelsius(74)  # 74 half-degrees = 37°C
         assert temp.to_celsius() == pytest.approx(37.0)
         assert temp.to_fahrenheit() == pytest.approx(98.6)
 
-    def test_room_temperature(self):
+    def test_room_temperature(self) -> None:
         """20°C = 68°F (typical room temperature)."""
         temp = HalfCelsius(40)  # 40 half-degrees = 20°C
         assert temp.to_celsius() == 20.0
         assert temp.to_fahrenheit() == pytest.approx(68.0)
 
-    def test_typical_dhw_temperature(self):
+    def test_typical_dhw_temperature(self) -> None:
         """60°C = 140°F (typical DHW temperature)."""
         temp = HalfCelsius(120)  # 120 half-degrees = 60°C
         assert temp.to_celsius() == 60.0
         assert temp.to_fahrenheit() == pytest.approx(140.0)
 
-    def test_high_dhw_temperature(self):
+    def test_high_dhw_temperature(self) -> None:
         """80°C = 176°F (high DHW temperature)."""
         temp = HalfCelsius(160)  # 160 half-degrees = 80°C
         assert temp.to_celsius() == 80.0
         assert temp.to_fahrenheit() == pytest.approx(176.0)
 
-    def test_negative_temperature(self):
+    def test_negative_temperature(self) -> None:
         """-10°C = 14°F (freezing outdoor temp)."""
         temp = HalfCelsius(-20)  # -20 half-degrees = -10°C
         assert temp.to_celsius() == -10.0
@@ -86,7 +86,7 @@ class TestHalfCelsius:
     )
     def test_known_conversions(
         self, raw_value, expected_celsius, expected_fahrenheit
-    ):
+    ) -> None:
         """Test known temperature conversion points."""
         temp = HalfCelsius(raw_value)
         assert temp.to_celsius() == pytest.approx(expected_celsius, abs=0.01)
@@ -94,19 +94,19 @@ class TestHalfCelsius:
             expected_fahrenheit, abs=0.1
         )
 
-    def test_from_fahrenheit_zero(self):
+    def test_from_fahrenheit_zero(self) -> None:
         """32°F = 0°C = 0 in HalfCelsius."""
         temp = HalfCelsius.from_fahrenheit(32.0)
         assert temp.raw_value == 0
         assert temp.to_celsius() == pytest.approx(0.0)
 
-    def test_from_fahrenheit_room_temp(self):
+    def test_from_fahrenheit_room_temp(self) -> None:
         """68°F ≈ 20°C ≈ 40 in HalfCelsius."""
         temp = HalfCelsius.from_fahrenheit(68.0)
         assert temp.raw_value == pytest.approx(40, abs=1)
         assert temp.to_fahrenheit() == pytest.approx(68.0, abs=0.1)
 
-    def test_from_fahrenheit_typical_dhw(self):
+    def test_from_fahrenheit_typical_dhw(self) -> None:
         """140°F ≈ 60°C ≈ 120 in HalfCelsius."""
         temp = HalfCelsius.from_fahrenheit(140.0)
         assert temp.raw_value == pytest.approx(120, abs=1)
@@ -129,13 +129,15 @@ class TestHalfCelsius:
             (-4.0, -40),
         ],
     )
-    def test_from_fahrenheit_known_points(self, fahrenheit, expected_raw):
+    def test_from_fahrenheit_known_points(
+        self, fahrenheit, expected_raw
+    ) -> None:
         """Test reverse conversion from Fahrenheit to raw value."""
         temp = HalfCelsius.from_fahrenheit(fahrenheit)
         # Allow some rounding tolerance
         assert temp.raw_value == pytest.approx(expected_raw, abs=1)
 
-    def test_from_celsius_known_points(self):
+    def test_from_celsius_known_points(self) -> None:
         """Test conversion from Celsius to raw value."""
         # 60°C = 120 raw
         temp = HalfCelsius.from_celsius(60.0)
@@ -149,7 +151,7 @@ class TestHalfCelsius:
         temp = HalfCelsius.from_celsius(-10.0)
         assert temp.raw_value == -20
 
-    def test_from_preferred(self):
+    def test_from_preferred(self) -> None:
         """Test from_preferred factory method."""
         # Celsius mode
         temp = HalfCelsius.from_preferred(60.0, is_celsius=True)
@@ -159,7 +161,7 @@ class TestHalfCelsius:
         temp = HalfCelsius.from_preferred(140.0, is_celsius=False)
         assert temp.raw_value == 120
 
-    def test_roundtrip_conversion(self):
+    def test_roundtrip_conversion(self) -> None:
         """Test roundtrip: raw → Celsius → Fahrenheit → raw."""
         original_raw = 120
         temp = HalfCelsius(original_raw)
@@ -168,20 +170,20 @@ class TestHalfCelsius:
         temp2 = HalfCelsius.from_fahrenheit(fahrenheit)
         assert temp2.raw_value == pytest.approx(original_raw, abs=1)
 
-    def test_float_raw_value(self):
+    def test_float_raw_value(self) -> None:
         """Test handling of float raw values."""
         temp = HalfCelsius(120.5)
         assert temp.raw_value == 120.5
         assert temp.to_celsius() == pytest.approx(60.25)
         assert temp.to_fahrenheit() == pytest.approx(140.45)
 
-    def test_very_large_value(self):
+    def test_very_large_value(self) -> None:
         """Test handling of very large temperature values."""
         temp = HalfCelsius(10000)  # 5000°C
         assert temp.to_celsius() == 5000.0
         assert temp.to_fahrenheit() == pytest.approx(9032.0)
 
-    def test_very_small_value(self):
+    def test_very_small_value(self) -> None:
         """Test handling of very small temperature values."""
         temp = HalfCelsius(-10000)  # -5000°C
         assert temp.to_celsius() == -5000.0
@@ -195,48 +197,48 @@ class TestDeciCelsius:
     Example: raw_value=600 → 60°C → 140°F
     """
 
-    def test_zero_celsius(self):
+    def test_zero_celsius(self) -> None:
         """0°C = 32°F."""
         temp = DeciCelsius(0)
         assert temp.to_fahrenheit() == 32.0
 
-    def test_freezing_point(self):
+    def test_freezing_point(self) -> None:
         """0°C = 32°F (freezing point)."""
         temp = DeciCelsius(0)
         assert temp.to_celsius() == 0.0
         assert temp.to_fahrenheit() == 32.0
 
-    def test_boiling_point(self):
+    def test_boiling_point(self) -> None:
         """100°C = 212°F (boiling point)."""
         temp = DeciCelsius(1000)  # 1000 deci-degrees = 100°C
         assert temp.to_celsius() == 100.0
         assert temp.to_fahrenheit() == pytest.approx(212.0)
 
-    def test_body_temperature(self):
+    def test_body_temperature(self) -> None:
         """37°C ≈ 98.6°F (normal body temperature)."""
         temp = DeciCelsius(370)  # 370 deci-degrees = 37°C
         assert temp.to_celsius() == pytest.approx(37.0)
         assert temp.to_fahrenheit() == pytest.approx(98.6)
 
-    def test_room_temperature(self):
+    def test_room_temperature(self) -> None:
         """20°C = 68°F (typical room temperature)."""
         temp = DeciCelsius(200)  # 200 deci-degrees = 20°C
         assert temp.to_celsius() == 20.0
         assert temp.to_fahrenheit() == pytest.approx(68.0)
 
-    def test_typical_dhw_temperature(self):
+    def test_typical_dhw_temperature(self) -> None:
         """60°C = 140°F (typical DHW temperature)."""
         temp = DeciCelsius(600)  # 600 deci-degrees = 60°C
         assert temp.to_celsius() == 60.0
         assert temp.to_fahrenheit() == pytest.approx(140.0)
 
-    def test_high_precision_value(self):
+    def test_high_precision_value(self) -> None:
         """60.5°C = 140.9°F (tests 0.1°C precision)."""
         temp = DeciCelsius(605)  # 605 deci-degrees = 60.5°C
         assert temp.to_celsius() == 60.5
         assert temp.to_fahrenheit() == pytest.approx(140.9)
 
-    def test_negative_temperature(self):
+    def test_negative_temperature(self) -> None:
         """-10°C = 14°F (freezing outdoor temp)."""
         temp = DeciCelsius(-100)  # -100 deci-degrees = -10°C
         assert temp.to_celsius() == -10.0
@@ -261,7 +263,7 @@ class TestDeciCelsius:
     )
     def test_known_conversions(
         self, raw_value, expected_celsius, expected_fahrenheit
-    ):
+    ) -> None:
         """Test known temperature conversion points."""
         temp = DeciCelsius(raw_value)
         assert temp.to_celsius() == pytest.approx(expected_celsius, abs=0.01)
@@ -269,19 +271,19 @@ class TestDeciCelsius:
             expected_fahrenheit, abs=0.1
         )
 
-    def test_from_fahrenheit_zero(self):
+    def test_from_fahrenheit_zero(self) -> None:
         """32°F = 0°C = 0 in DeciCelsius."""
         temp = DeciCelsius.from_fahrenheit(32.0)
         assert temp.raw_value == 0
         assert temp.to_celsius() == pytest.approx(0.0)
 
-    def test_from_fahrenheit_room_temp(self):
+    def test_from_fahrenheit_room_temp(self) -> None:
         """68°F ≈ 20°C ≈ 200 in DeciCelsius."""
         temp = DeciCelsius.from_fahrenheit(68.0)
         assert temp.raw_value == pytest.approx(200, abs=1)
         assert temp.to_fahrenheit() == pytest.approx(68.0, abs=0.1)
 
-    def test_from_fahrenheit_typical_dhw(self):
+    def test_from_fahrenheit_typical_dhw(self) -> None:
         """140°F ≈ 60°C ≈ 600 in DeciCelsius."""
         temp = DeciCelsius.from_fahrenheit(140.0)
         assert temp.raw_value == pytest.approx(600, abs=1)
@@ -304,12 +306,14 @@ class TestDeciCelsius:
             (-4.0, -200),
         ],
     )
-    def test_from_fahrenheit_known_points(self, fahrenheit, expected_raw):
+    def test_from_fahrenheit_known_points(
+        self, fahrenheit, expected_raw
+    ) -> None:
         """Test reverse conversion from Fahrenheit to raw value."""
         temp = DeciCelsius.from_fahrenheit(fahrenheit)
         assert temp.raw_value == pytest.approx(expected_raw, abs=1)
 
-    def test_roundtrip_conversion(self):
+    def test_roundtrip_conversion(self) -> None:
         """Test roundtrip: raw → Celsius → Fahrenheit → raw."""
         original_raw = 600
         temp = DeciCelsius(original_raw)
@@ -318,20 +322,20 @@ class TestDeciCelsius:
         temp2 = DeciCelsius.from_fahrenheit(fahrenheit)
         assert temp2.raw_value == pytest.approx(original_raw, abs=1)
 
-    def test_float_raw_value(self):
+    def test_float_raw_value(self) -> None:
         """Test handling of float raw values."""
         temp = DeciCelsius(600.5)
         assert temp.raw_value == 600.5
         assert temp.to_celsius() == pytest.approx(60.05)
         assert temp.to_fahrenheit() == pytest.approx(140.09)
 
-    def test_very_large_value(self):
+    def test_very_large_value(self) -> None:
         """Test handling of very large temperature values."""
         temp = DeciCelsius(100000)  # 10000°C
         assert temp.to_celsius() == 10000.0
         assert temp.to_fahrenheit() == pytest.approx(18032.0)
 
-    def test_very_small_value(self):
+    def test_very_small_value(self) -> None:
         """Test handling of very small temperature values."""
         temp = DeciCelsius(-100000)  # -10000°C
         assert temp.to_celsius() == -10000.0
@@ -341,7 +345,7 @@ class TestDeciCelsius:
 class TestTemperatureComparison:
     """Compare HalfCelsius and DeciCelsius for same temperature."""
 
-    def test_same_temperature_different_precision(self):
+    def test_same_temperature_different_precision(self) -> None:
         """HalfCelsius(120) and DeciCelsius(600) represent same 60°C."""
         half_temp = HalfCelsius(120)
         deci_temp = DeciCelsius(600)
@@ -365,7 +369,7 @@ class TestTemperatureComparison:
             (200, 1000, 100.0),
         ],
     )
-    def test_equivalent_temperatures(self, half_raw, deci_raw, celsius):
+    def test_equivalent_temperatures(self, half_raw, deci_raw, celsius) -> None:
         """Test that half and deci celsius represent same actual temp."""
         # HalfCelsius: raw/2 = celsius
         # DeciCelsius: raw/10 = celsius

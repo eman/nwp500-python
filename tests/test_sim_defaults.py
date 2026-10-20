@@ -30,25 +30,25 @@ from nwp500.sim.params import (
 )
 
 
-def test_the_65_round_trips_as_a_document():
+def test_the_65_round_trips_as_a_document() -> None:
     p = default_params()
     assert params_from_document(params_to_document(p)) == p
 
 
 @pytest.mark.parametrize(("code", "gal"), [(1, 50.0), (3, 80.0)])
-def test_other_sizes_scale_the_tank_volume_only(code: int, gal: float):
+def test_other_sizes_scale_the_tank_volume_only(code: int, gal: float) -> None:
     base, other = default_params(2), default_params(code)
     assert other.tank.volume_gal == pytest.approx(63.2 * gal / 65.0)
     assert other.book.tank_gal == pytest.approx(63.2 * gal / 65.0)
     assert replace(other, tank=base.tank, book=base.book) == base
 
 
-def test_an_unknown_size_is_refused():
+def test_an_unknown_size_is_refused() -> None:
     with pytest.raises(ValueError, match="volume_code"):
         default_params(4)
 
 
-def test_the_constants_say_where_they_came_from():
+def test_the_constants_say_where_they_came_from() -> None:
     p = default_params()
     assert provenance_of(p.compressor, "compressor_constant") == FITTED
     assert provenance_of(p.controller, "restart_lockout_s") == MEASURED
@@ -57,7 +57,7 @@ def test_the_constants_say_where_they_came_from():
     assert p.controller.tou_cap_f == 3.6
 
 
-def test_the_65_is_ready_to_simulate():
+def test_the_65_is_ready_to_simulate() -> None:
     p = default_params()
     assert p.tank.stratification_gap_tau_h is not None
     assert p.compressor.compressor_constant > 0.0
@@ -71,7 +71,7 @@ FITTED_DOC = (
 )
 
 
-def test_a_fitted_document_reads_to_its_values_bit_for_bit():
+def test_a_fitted_document_reads_to_its_values_bit_for_bit() -> None:
     doc = json.loads(FITTED_DOC.read_text())
     p = params_from_document(doc)
     for part, values in doc.items():
@@ -83,7 +83,7 @@ def test_a_fitted_document_reads_to_its_values_bit_for_bit():
     assert unknown_fields(doc) == []
 
 
-def test_a_fitted_document_writes_back_as_it_was():
+def test_a_fitted_document_writes_back_as_it_was() -> None:
     """What it carries is written back unchanged; the parts and fields
     added since it was written are their defaults."""
     doc = json.loads(FITTED_DOC.read_text())
@@ -101,7 +101,7 @@ def test_a_fitted_document_writes_back_as_it_was():
     assert params_from_document(written) == params_from_document(doc)
 
 
-def test_the_site_example_is_that_fitted_model():
+def test_the_site_example_is_that_fitted_model() -> None:
     """The document carries no circulation (its bundle keeps that
     apart); the site example adds the installation's."""
     # Nor its readiness evidence, which the model kept in its code.
@@ -117,7 +117,7 @@ def test_the_site_example_is_that_fitted_model():
     assert site_example_params().circulation == SITE_CIRCULATION
 
 
-def test_the_default_is_the_site_without_its_mixing_valve():
+def test_the_default_is_the_site_without_its_mixing_valve() -> None:
     d, site = default_params(), site_example_params()
     assert (d.draw.delivery_intercept_f, d.draw.delivery_slope) == NO_VALVE
     book = d.book_terms()
@@ -135,7 +135,7 @@ def test_the_default_is_the_site_without_its_mixing_valve():
     )
 
 
-def test_the_defaults_installation_terms_are_named_unfitted():
+def test_the_defaults_installation_terms_are_named_unfitted() -> None:
     """The replacement review of #162: one installation's book,
     readiness and draw terms stand in for another's, and every answer
     they reach says so; the site's own example is its fit."""
@@ -143,7 +143,7 @@ def test_the_defaults_installation_terms_are_named_unfitted():
     assert site_example_params().unfitted == ()
 
 
-def test_one_valve_drives_the_draw_and_the_book():
+def test_one_valve_drives_the_draw_and_the_book() -> None:
     p = replace(
         default_params(),
         draw=replace(default_params().draw, delivery_intercept_f=50.0),
@@ -152,7 +152,7 @@ def test_one_valve_drives_the_draw_and_the_book():
     assert p.book_terms().delivery_slope == 1.0
 
 
-def test_without_a_valve_every_gallon_is_tank_water():
+def test_without_a_valve_every_gallon_is_tank_water() -> None:
     """The same tank delivers fewer gallons through no valve: each one is
     all tank water."""
     from nwp500.sim import HeaterState, Settings, full_tank_book, readiness
@@ -185,12 +185,12 @@ def test_without_a_valve_every_gallon_is_tank_water():
         ("readiness", "dip_f", HEATER),
     ],
 )
-def test_each_parameter_says_what_it_describes(part, name, scope):
+def test_each_parameter_says_what_it_describes(part, name, scope) -> None:
     p = default_params()
     assert scope_of(getattr(p, part), name) == scope
 
 
-def test_the_fitted_frames_are_noted():
+def test_the_fitted_frames_are_noted() -> None:
     p = default_params()
     assert "where the heater stands" in (note_of(p.loss, "ua_btu_hr_f") or "")
     assert "recoveries" in (note_of(p.compressor, "compressor_constant") or "")

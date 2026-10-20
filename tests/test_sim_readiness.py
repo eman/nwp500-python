@@ -162,26 +162,26 @@ def _bath(gal=30.0):
 
 
 class TestDeliverable:
-    def test_it_never_promises_more_than_history_has_shown(self):
+    def test_it_never_promises_more_than_history_has_shown(self) -> None:
         d = deliverable(*FULL)
         assert d.gal == pytest.approx(OBSERVED_MAX_GAL + LAG, abs=0.05)
         assert d.at_observed_max
 
-    def test_below_the_threshold_nothing_is_deliverable(self):
+    def test_below_the_threshold_nothing_is_deliverable(self) -> None:
         assert deliverable(DEPLETION_THRESHOLD_F - 0.1, 104.0).gal == 0.0
 
-    def test_a_state_colder_than_every_evidence_draw_is_zero(self):
+    def test_a_state_colder_than_every_evidence_draw_is_zero(self) -> None:
         coldest = min(u for u, _, _ in EVIDENCE)
         assert demonstrated_gal(coldest - 0.1, 150.0) == 0.0
 
-    def test_after_a_bath_it_does_not_promise_what_crashed(self):
+    def test_after_a_bath_it_does_not_promise_what_crashed(self) -> None:
         """2026-04-14 03:58: a 10 gal top-up took the upper probe from
         141.3 to 100.9 °F with the lower at 89.6."""
         d = deliverable(141.26, 89.60)
         assert d.thermocline_unlocated
         assert d.gal <= P.cold_lower_cap_gal < 10.0
 
-    def test_the_cold_lower_cap_only_ever_lowers_the_evidence(self):
+    def test_the_cold_lower_cap_only_ever_lowers_the_evidence(self) -> None:
         for upper, lower in ((147.0, 95.0), (128.0, 99.0)):
             d = deliverable(upper, lower)
             raw = demonstrated_gal(upper, lower)
@@ -190,7 +190,7 @@ class TestDeliverable:
                 probe + LAG if probe > 0 else 0.0, abs=0.05
             )
 
-    def test_the_book_is_not_capped_its_cold_bottom_is_withheld(self):
+    def test_the_book_is_not_capped_its_cold_bottom_is_withheld(self) -> None:
         """From the book the cold lower probe does not cap the answer;
         the heat that landed in the cold region comes off it.
         (38,000 BTU: under the 40,586 a whole tank at 147 °F can hold.)"""
@@ -207,14 +207,14 @@ class TestDeliverable:
         assert full + LAG - w.gal == pytest.approx(8000.0 / per_gal, abs=0.1)
 
     @pytest.mark.parametrize("fixed", [110.0, 125.0, 140.0])
-    def test_a_warmer_tank_never_delivers_less(self, fixed):
+    def test_a_warmer_tank_never_delivers_less(self, fixed) -> None:
         steps = [100.0 + 2.0 * i for i in range(26)]
         by_upper = [demonstrated_gal(u, fixed) for u in steps]
         by_lower = [demonstrated_gal(fixed, lo) for lo in steps]
         assert by_upper == sorted(by_upper)
         assert by_lower == sorted(by_lower)
 
-    def test_a_tank_at_its_setpoint_has_the_full_tank_floor(self):
+    def test_a_tank_at_its_setpoint_has_the_full_tank_floor(self) -> None:
         """2026-09-28 14:41 PDT, a tank just off a recovery to
         141.8 °F read 25.1 gal from the evidence, 0.18 °F under the 33.4
         gal step, and a 22.4 gal bath then left the upper probe at
@@ -225,7 +225,7 @@ class TestDeliverable:
         assert 30.5 < d.gal == pytest.approx(35.7, abs=0.05)
         assert deliverable(141.08, 141.26, P0, setpoint_f=143.2).gal == 25.1
 
-    def test_a_running_heater_withholds_the_floor(self):
+    def test_a_running_heater_withholds_the_floor(self) -> None:
         """In a recovery's last minutes the probes reach the setpoint
         over cold water the heater is still warming; the book clears at
         the quiet end that follows."""
@@ -234,7 +234,7 @@ class TestDeliverable:
             == 25.1
         )
 
-    def test_the_book_is_read_no_higher_than_the_tank_can_hold(self):
+    def test_the_book_is_read_no_higher_than_the_tank_can_hold(self) -> None:
         """2026-09-28 17:56 PDT: the 13:29 anchor carried through a
         bath and a TOU-capped recovery booked 39,027 BTU over probes of
         140.18/138.2 °F, 61.1 gal. A whole tank at 140.18 holds 36,991."""
@@ -247,32 +247,32 @@ class TestDeliverable:
         assert got == pytest.approx(whole, abs=0.05)
         assert got < deliverable_from_heat(b.heat_btu, 140.18, 76.66) - 5.0
 
-    def test_the_floor_above_the_evidence_is_not_its_cap(self):
+    def test_the_floor_above_the_evidence_is_not_its_cap(self) -> None:
         """``at_observed_max`` says the evidence ran out; the floor
         answering above it is not the evidence."""
         d = deliverable(146.0, 146.0, setpoint_f=146.0)
         assert d.gal > OBSERVED_MAX_GAL
         assert not d.at_observed_max
 
-    def test_every_evidence_point_answers_for_itself(self):
+    def test_every_evidence_point_answers_for_itself(self) -> None:
         for u, lo, g in EVIDENCE:
             assert demonstrated_gal(u, lo) == g
 
 
 class TestBookkeeping:
-    def test_a_full_tank_is_known_exactly(self):
+    def test_a_full_tank_is_known_exactly(self) -> None:
         b = _booked(FULL_TANK)
         assert b.heat_btu == pytest.approx(TANK_BTU_PER_F * 71.8)
         assert b.anchor_age_h == 0.0
 
-    def test_a_full_tank_delivers_about_48_gallons(self):
+    def test_a_full_tank_delivers_about_48_gallons(self) -> None:
         """The calibration's answer for a 141.8 °F tank; a 30.5 gal bath
         is ready with room to spare."""
         b = _booked(FULL_TANK)
         gal = deliverable_from_heat(b.heat_btu, 141.8, 70.0)
         assert 44.0 < gal < 53.0
 
-    def test_a_draw_takes_what_the_valve_delivers(self):
+    def test_a_draw_takes_what_the_valve_delivers(self) -> None:
         """One minute at 2 GPM from a 140 °F tank: 2 gal at the valve's
         121.5 °F, from a 70 °F inlet."""
         draw = [_step(140.0, 140.0, flow=2.0) for _ in range(6)]
@@ -282,7 +282,7 @@ class TestBookkeeping:
         expected = TANK_BTU_PER_F * 70.0 - 2.0 * 8.34 * (121.46 - 70.0)
         assert b.heat_btu == pytest.approx(expected, rel=1e-3)
 
-    def test_the_bath_the_probes_cannot_see_is_counted(self):
+    def test_the_bath_the_probes_cannot_see_is_counted(self) -> None:
         """After a 30 gal draw the probes can read 141/90, which the
         evidence cannot place. The book knows the heat left."""
         bath = [_step(141.0, 141.0 - i * 0.2, flow=3.0) for i in range(60)]
@@ -297,14 +297,14 @@ class TestWhereTheHeatLands:
     in the cold water a draw left is booked but not drawable; the upper
     element's lands in a thin layer at the top, and is."""
 
-    def test_a_draw_leaves_its_cold_water_at_the_bottom(self):
+    def test_a_draw_leaves_its_cold_water_at_the_bottom(self) -> None:
         b = _bath(30.0)
         # 30 delivered gallons from a 141 °F tank through the valve.
         hot = (53.56 + 0.485 * 141.0 - 70.0) / (141.0 - 70.0)
         assert b.cold_gal == pytest.approx(30.0 * hot, rel=0.02)
         assert b.cold_f == pytest.approx(70.0)
 
-    def test_compressor_heat_in_the_cold_bottom_is_withheld(self):
+    def test_compressor_heat_in_the_cold_bottom_is_withheld(self) -> None:
         """2026-03-31: after a bath the heat pump lifted the lower zone
         82 -> 98 °F while the upper held near 137. The book counted that
         heat as drawable and over-promised by 13.7 gal."""
@@ -318,14 +318,14 @@ class TestWhereTheHeatLands:
             b.deliverable_gal(141.0), abs=0.6
         )
 
-    def test_the_lower_elements_heat_lands_there_too(self):
+    def test_the_lower_elements_heat_lands_there_too(self) -> None:
         b = _bath(30.0)
         lower = _step(141.0, 90.0, el=True, s=600.0, lower_element=True)
         assert _apply(b, lower).deliverable_gal(141.0) == pytest.approx(
             b.deliverable_gal(141.0), abs=0.2
         )
 
-    def test_the_upper_elements_heat_is_drawable_but_only_its_own(self):
+    def test_the_upper_elements_heat_is_drawable_but_only_its_own(self) -> None:
         """2026-04-14: six minutes of the upper element lifted the upper
         probe 126 -> 141 °F over a cold bottom. That is 1,757 BTU at the
         top: about four delivered gallons, not a full tank."""
@@ -338,7 +338,9 @@ class TestWhereTheHeatLands:
         heat = EP.element_w * 3.412 * 0.1
         assert gained == pytest.approx(heat / per_gal, abs=0.2)
 
-    def test_the_cold_bottom_rejoins_once_the_heat_pump_has_warmed_it(self):
+    def test_the_cold_bottom_rejoins_once_the_heat_pump_has_warmed_it(
+        self,
+    ) -> None:
         b = _bath(30.0)
         need = 8.34 * b.cold_gal * (EP.cold_release_f - 70.0)
         warm = b.heated(bottom_btu=need + 1.0)
@@ -349,7 +351,7 @@ class TestWhereTheHeatLands:
             141.0
         ) == pytest.approx((need + 1.0) / per_gal, abs=0.05)
 
-    def test_a_colder_inlet_takes_only_the_hot_water_that_left(self):
+    def test_a_colder_inlet_takes_only_the_hot_water_that_left(self) -> None:
         """Below the 70 °F reference the cold region's heat is negative,
         and so is `withheld_btu`. That is the accounting, not a slip:
         the draw charged the book the valve's heat down to the colder
@@ -380,7 +382,9 @@ class TestWhereTheHeatLands:
             b = _apply(b, st)
         return b
 
-    def test_a_region_the_probe_saw_rejoins_when_it_reads_the_line(self):
+    def test_a_region_the_probe_saw_rejoins_when_it_reads_the_line(
+        self,
+    ) -> None:
         """The heat the compressor put into the cold bottom is
         withheld until the book's region passes 100 °F, or until the
         lower probe, having read the region below the line, reads the
@@ -396,12 +400,12 @@ class TestWhereTheHeatLands:
         below = _apply(b, _step(141.0, EP.cold_release_f - 0.1))
         assert below.cold_gal == b.cold_gal
 
-    def test_not_while_a_draw_runs(self):
+    def test_not_while_a_draw_runs(self) -> None:
         b = self._seen_bath()
         drawing = _apply(b, _step(141.0, EP.cold_release_f + 5.0, flow=3.0))
         assert drawing.cold_gal > b.cold_gal
 
-    def test_nor_a_region_the_probe_never_saw(self):
+    def test_nor_a_region_the_probe_never_saw(self) -> None:
         """A shower from a full tank leaves its cold water under the
         lower probe, which reads hot throughout (63 of 73 draws of
         15-25 gal from a tank at 125 °F or more still read 100 °F or
@@ -414,14 +418,14 @@ class TestWhereTheHeatLands:
             quiet = _apply(quiet, st)
         assert quiet.cold_gal == b.cold_gal
 
-    def test_a_new_region_must_be_seen_again(self):
+    def test_a_new_region_must_be_seen_again(self) -> None:
         b = replace(self._seen_bath(), cold_gal=0.0)  # a flag left over
         again = b.drawn(10.0, 141.0)
         assert again.cold_gal > 0.0 and not again.cold_seen
         grown = self._seen_bath().drawn(5.0, 141.0)
         assert grown.cold_seen
 
-    def test_the_booked_answer_is_the_placed_one(self):
+    def test_the_booked_answer_is_the_placed_one(self) -> None:
 
         b = _bath(30.0).heated(bottom_btu=4000.0)
         d = booked_deliverable(b, 141.0, 90.0)
@@ -439,7 +443,7 @@ class TestWhenItRunsOut:
     """The delivery temperature reads the same state as
     ``deliverable_gal``, so the two agree on whether it has run out."""
 
-    def test_the_delivery_reads_the_heat_the_tank_can_hold(self):
+    def test_the_delivery_reads_the_heat_the_tank_can_hold(self) -> None:
         """The clamp holds for the delivery temperature too, so
         zero gallons and a delivery under the line still go together."""
 
@@ -449,11 +453,11 @@ class TestWhenItRunsOut:
         assert booked_deliverable(b, 112.0, 100.0, P0).gal == 0.0
         assert delivery_temp_f(b, 112.0, P0, lower_f=100.0) < 105.0
 
-    def test_while_there_is_drawable_heat_it_is_the_upper_zone(self):
+    def test_while_there_is_drawable_heat_it_is_the_upper_zone(self) -> None:
 
         assert delivery_temp_f(_bath(10.0), 139.0) == 139.0
 
-    def test_spent_it_falls_below_the_line_and_on_per_gallon(self):
+    def test_spent_it_falls_below_the_line_and_on_per_gallon(self) -> None:
 
         b = _bath(30.0)
         # Past the probe's line by the lag: the delivered line.
@@ -468,7 +472,9 @@ class TestWhenItRunsOut:
         far = b.drawn(left + 40.0, 141.0)
         assert delivery_temp_f(far, 141.0) == pytest.approx(far.cold_f)
 
-    def test_it_agrees_with_the_gallons_on_whether_the_tank_is_empty(self):
+    def test_it_agrees_with_the_gallons_on_whether_the_tank_is_empty(
+        self,
+    ) -> None:
 
         b = _bath(20.0)
         for tenth in range(0, 400, 7):
@@ -500,10 +506,10 @@ class TestTheZoneThroughADraw:
             cold_f=cold_f,
         )
 
-    def test_the_zone_point_is_the_refit_one_and_after_the_served(self):
+    def test_the_zone_point_is_the_refit_one_and_after_the_served(self) -> None:
         assert EP.zone_empty_btu == 12636.0 < EP.empty_btu
 
-    def test_two_degrees_per_gallon_left_over_the_line(self):
+    def test_two_degrees_per_gallon_left_over_the_line(self) -> None:
 
         assert zone_after_draw_f(self._left(5.0), 140.0, 90.0) == (
             pytest.approx(105.0 + P.fall_f_per_gal * 5.0)
@@ -515,12 +521,14 @@ class TestTheZoneThroughADraw:
             pytest.approx(105.0 - P.fall_f_per_gal * 3.0)
         )
 
-    def test_never_warmer_than_the_draw_left_it_nor_below_the_lower(self):
+    def test_never_warmer_than_the_draw_left_it_nor_below_the_lower(
+        self,
+    ) -> None:
 
         assert zone_after_draw_f(self._left(40.0), 140.0, 120.0) == 140.0
         assert zone_after_draw_f(self._left(-40.0), 140.0, 92.0) == 92.0
 
-    def test_the_cold_regions_heat_is_withheld_from_it(self):
+    def test_the_cold_regions_heat_is_withheld_from_it(self) -> None:
         """Heat the compressor put into a cold bottom is no hot water
         above the zone: withheld, it is not counted."""
 
@@ -531,7 +539,7 @@ class TestTheZoneThroughADraw:
             105.0 + P.fall_f_per_gal * (5.0 - withheld / per_gal)
         )
 
-    def test_the_zone_mixes_down_faster_the_less_is_left(self):
+    def test_the_zone_mixes_down_faster_the_less_is_left(self) -> None:
         """The water above the rising front mixes, so
         the zone falls ``zone_mix_f_per_gal · exp(-left / zone_mix_gal)``
         °F per delivered gallon before the empty point, integrated over
@@ -555,7 +563,7 @@ class TestTheZoneThroughADraw:
             s * lam * (1.0 - math.exp(-2.0 / lam)) + s * 1.0
         )
 
-    def test_mixing_is_the_same_in_one_draw_or_several(self):
+    def test_mixing_is_the_same_in_one_draw_or_several(self) -> None:
         """The rate is integrated over the gallons, so a draw split into
         pieces at one zone comes out where the whole of it does."""
 
@@ -566,7 +574,7 @@ class TestTheZoneThroughADraw:
 
     def test_mixing_never_warms_the_zone_nor_takes_it_below_the_lower(
         self,
-    ):
+    ) -> None:
 
         # The draw's own response is colder than the mixing: it stands.
         assert zone_mixed_f(self._left(40.0), 2.0, 140.0, 130.0, 60.0) == (
@@ -579,7 +587,7 @@ class TestTheZoneThroughADraw:
 
     def test_where_the_served_point_is_spent_it_is_still_over_the_line(
         self,
-    ):
+    ) -> None:
 
         per_gal = 8.34 * (delivery_f(140.0) - 70.0)
         spent = Booked(EP.empty_btu, 1.0, 70.0)
@@ -599,7 +607,7 @@ class TestTheLowerZoneThroughADraw:
     def _region(cold_gal: float, cold_f: float = 70.0) -> Booked:
         return Booked(30000.0, 1.0, 70.0, cold_gal=cold_gal, cold_f=cold_f)
 
-    def test_the_probe_reads_hot_until_the_front_reaches_it(self):
+    def test_the_probe_reads_hot_until_the_front_reaches_it(self) -> None:
 
         start = EP.lower_probe_gal - EP.front_width_gal / 2.0
         assert front_start_gal(EP) == start == 9.0
@@ -610,14 +618,14 @@ class TestTheLowerZoneThroughADraw:
         # Linear across the front.
         assert front_share(17.0, EP) == pytest.approx(0.75)
 
-    def test_a_draw_below_the_front_leaves_the_zone_alone(self):
+    def test_a_draw_below_the_front_leaves_the_zone_alone(self) -> None:
 
         before = self._region(0.0)
         after = before.drawn(10.0, 140.0, EP)
         assert 0.0 < after.cold_gal < 9.0
         assert lower_after_draw_f(before, after, 140.0, 131.0, EP) == 131.0
 
-    def test_one_across_it_takes_the_share_it_crossed(self):
+    def test_one_across_it_takes_the_share_it_crossed(self) -> None:
 
         before = self._region(15.0)
         after = before.drawn(10.0, 140.0, EP)
@@ -627,7 +635,7 @@ class TestTheLowerZoneThroughADraw:
             pytest.approx(127.0 - crossed * (140.0 - after.cold_f))
         )
 
-    def test_never_below_the_region_nor_warmed(self):
+    def test_never_below_the_region_nor_warmed(self) -> None:
 
         before = self._region(30.0)
         after = before.drawn(20.0, 140.0, EP)
@@ -635,7 +643,7 @@ class TestTheLowerZoneThroughADraw:
         # A zone already colder than the region stays where it was.
         assert lower_after_draw_f(before, after, 140.0, 65.0, EP) == 65.0
 
-    def test_it_reads_the_front_and_settles_to_the_colder(self):
+    def test_it_reads_the_front_and_settles_to_the_colder(self) -> None:
 
         # The front far below the probe: the zone stays at 130 and
         # settles to the calibrated response priced from where it was
@@ -647,7 +655,7 @@ class TestTheLowerZoneThroughADraw:
         assert settled_lower_f(90.0, 60.0, 72.0) == (90.0, 18.0)
         assert settled_lower_f(65.0, 50.0, 72.0) == (65.0, 0.0)
 
-    def test_one_time_constant(self):
+    def test_one_time_constant(self) -> None:
 
         tau = EP.front_settle_min
         assert unsettled_after_f(8.0, 0.0, tau) == 8.0
@@ -656,7 +664,7 @@ class TestTheLowerZoneThroughADraw:
         )
         assert unsettled_after_f(0.0, 30.0, tau) == 0.0
 
-    def test_the_bound_holds_while_the_front_cannot_reach(self):
+    def test_the_bound_holds_while_the_front_cannot_reach(self) -> None:
 
         before = self._region(3.0)
         assert front_cannot_move(before, 5.9, EP)
@@ -685,26 +693,26 @@ class TestTheDeliveredLine:
         per_gal = 8.34 * (delivery_f(upper) - 70.0)
         return Booked(EP.empty_btu + gal * per_gal, 1.0, 70.0)
 
-    def test_the_lag_is_the_one_measurement_rounded_down(self):
+    def test_the_lag_is_the_one_measurement_rounded_down(self) -> None:
         # Provisional, n = 1: the lower of the spout's 7.3 and the
         # gauge's 5.3. (09-21 14:08's > 2.4 is no geometric bound: an
         # element heated the lag volume.)
         assert LAG == 5.0 < 5.3 < 7.32
 
-    def test_the_answer_is_the_probe_lines_plus_the_lag(self):
+    def test_the_answer_is_the_probe_lines_plus_the_lag(self) -> None:
 
         b = self._left(12.0)
         assert booked_deliverable(b, 141.0, 140.0, P0).gal == 12.0
         assert booked_deliverable(b, 141.0, 140.0).gal == 12.0 + LAG
 
-    def test_past_the_probe_line_the_lag_counts_down(self):
+    def test_past_the_probe_line_the_lag_counts_down(self) -> None:
 
         b = self._left(-2.0)
         assert booked_deliverable(b, 141.0, 140.0, P0).gal == 0.0
         assert booked_deliverable(b, 141.0, 140.0).gal == LAG - 2.0
         assert booked_deliverable(self._left(-LAG - 1.0), 141.0, 140.0).gal == 0
 
-    def test_a_probe_below_the_line_has_spent_the_probe_line(self):
+    def test_a_probe_below_the_line_has_spent_the_probe_line(self) -> None:
         """The probe reading under the line says its line is spent,
         whatever the book says: the lag is what is left at most, less
         what the book says went past it."""
@@ -714,13 +722,13 @@ class TestTheDeliveredLine:
             self._left(-2.0, 103.0), 103.0, 90.0
         ).gal == pytest.approx(LAG - 2.0, abs=0.05)
 
-    def test_without_a_book_a_probe_below_the_line_is_empty(self):
+    def test_without_a_book_a_probe_below_the_line_is_empty(self) -> None:
         """Nothing says how far past its line the draw went."""
         assert deliverable(104.9, 104.0).gal == 0.0
         u, lo, g = min(EVIDENCE, key=lambda e: e[0])
         assert deliverable(u, lo).gal == pytest.approx(g + LAG, abs=0.05)
 
-    def test_colder_than_all_evidence_promises_nothing(self):
+    def test_colder_than_all_evidence_promises_nothing(self) -> None:
         """The lag rides on a probe line the evidence
         vouches for. 2026-04-14 04:02 the upper element lifted a spent
         top back to 105.4 °F: with no book that state must answer 0,
@@ -728,14 +736,14 @@ class TestTheDeliveredLine:
         d = deliverable(105.2, 95.0)
         assert d.colder_than_evidence and d.gal == 0.0
 
-    def test_the_full_tank_floor_carries_the_lag_once(self):
+    def test_the_full_tank_floor_carries_the_lag_once(self) -> None:
         """35.7 gal on the probe's line, 40.7 delivered."""
         d = deliverable(141.08, 141.26, setpoint_f=141.8)
         assert d.gal == pytest.approx(35.7 + LAG, abs=0.05) == 40.7
 
     def test_the_cold_lower_cap_is_on_the_probe_line_not_the_delivered(
         self,
-    ):
+    ) -> None:
         """The cap is the evidence's, on the probe's line; the lag
         comes after it."""
         u, lo = 150.0, 99.5
@@ -744,7 +752,7 @@ class TestTheDeliveredLine:
         assert d.thermocline_unlocated
         assert d.gal == pytest.approx(P.cold_lower_cap_gal + LAG, abs=0.05)
 
-    def test_capped_at_observed_volume_reads_the_probe_line(self):
+    def test_capped_at_observed_volume_reads_the_probe_line(self) -> None:
         """``at_observed_max`` says the evidence ran out: its largest
         volume on the probe's line, not the delivered answer."""
         below = [
@@ -759,7 +767,9 @@ class TestTheDeliveredLine:
         assert not d.at_observed_max
         assert deliverable(*FULL).at_observed_max
 
-    def test_between_the_lines_the_delivery_is_at_the_line_not_under(self):
+    def test_between_the_lines_the_delivery_is_at_the_line_not_under(
+        self,
+    ) -> None:
 
         b = self._left(-2.0, 103.0)
         assert delivery_temp_f(b, 103.0) == DEPLETION_THRESHOLD_F
@@ -769,7 +779,7 @@ class TestTheDeliveredLine:
         spent = self._left(-LAG - 1.0, 103.0)
         assert delivery_temp_f(spent, 103.0) < DEPLETION_THRESHOLD_F
 
-    def test_past_the_lag_it_falls_from_the_line_not_to_the_zone(self):
+    def test_past_the_lag_it_falls_from_the_line_not_to_the_zone(self) -> None:
         """The delivered water is warmer than the probe, so once the lag
         is spent it falls from the line per gallon, not straight to the
         zone the probe reads (the measured bath's spout crossed 105 °F
@@ -786,7 +796,9 @@ class TestTheDeliveredLine:
         # With no lag the probe is the delivery, and bounds it.
         assert delivery_temp_f(self._left(-0.1, 103.0), 103.0, P0) == 103.0
 
-    def test_without_a_book_the_zone_holds_at_the_line_for_the_lag(self):
+    def test_without_a_book_the_zone_holds_at_the_line_for_the_lag(
+        self,
+    ) -> None:
         """Without a book the depletion view is on the same delivered
         line as ``deliverable_gal``."""
 
@@ -802,7 +814,7 @@ class TestTheDeliveredLine:
     @pytest.mark.parametrize("upper", [103.0, 120.0, 138.0])
     def test_the_delivery_and_the_gallons_agree_across_both_lines(
         self, upper, p
-    ):
+    ) -> None:
 
         for tenth in range(-120, 60, 3):
             b = self._left(tenth / 10.0, upper)
@@ -812,7 +824,7 @@ class TestTheDeliveredLine:
 
 
 class TestTheReviewOfDepletion:
-    def test_a_draw_at_the_windows_onset_counts_its_cold_side(self):
+    def test_a_draw_at_the_windows_onset_counts_its_cold_side(self) -> None:
         """110 °F before the onset, 100 °F just after a draw there, 110
         °F at the window's end: the dip past the tolerance is the
         window's."""

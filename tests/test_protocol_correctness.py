@@ -72,7 +72,9 @@ class TestSchedulePayloads:
     """Schedule commands must send flat, raw protocol payloads."""
 
     @pytest.mark.asyncio
-    async def test_recirculation_schedule_payload_shape(self, mock_device):
+    async def test_recirculation_schedule_payload_shape(
+        self, mock_device
+    ) -> None:
         """The app publishes RECIR_RESERVATION on ctrl/recirc-rsv/rd with
         the same reservationUse/reservation envelope as the weekly
         schedule. The library used to publish {"schedule": [...]} on the
@@ -129,7 +131,7 @@ class TestSchedulePayloads:
     )
     async def test_recirculation_schedule_rejects_out_of_range_entries(
         self, mock_device, field, value
-    ):
+    ) -> None:
         controller, publish = _make_controller()
         entry = {"enable": 2, "week": 124, "hour": 6, "min": 0, "mode": 2}
         entry[field] = value
@@ -144,7 +146,9 @@ class TestSchedulePayloads:
         publish.assert_not_awaited()
 
     @pytest.mark.asyncio
-    async def test_recirculation_schedule_caps_entries(self, mock_device):
+    async def test_recirculation_schedule_caps_entries(
+        self, mock_device
+    ) -> None:
         controller, publish = _make_controller()
         entry = {"enable": 2, "week": 124, "hour": 6, "min": 0, "mode": 2}
         schedule = RecirculationSchedule.model_validate(
@@ -157,7 +161,7 @@ class TestSchedulePayloads:
             )
         publish.assert_not_awaited()
 
-    def test_to_protocol_dict_excludes_computed_fields(self):
+    def test_to_protocol_dict_excludes_computed_fields(self) -> None:
         entry = ReservationEntry(
             enable=2, week=84, hour=6, min=30, mode=3, param=120
         )
@@ -175,7 +179,7 @@ class TestSchedulePayloads:
         assert "temperature" in display
         assert "days" in display
 
-    def test_recirculation_entry_to_protocol_dict_is_raw(self):
+    def test_recirculation_entry_to_protocol_dict_is_raw(self) -> None:
         entry = RecirculationScheduleEntry(enable=2, week=84, hour=6, min=0)
         assert entry.to_protocol_dict() == {
             "enable": 2,
@@ -192,7 +196,9 @@ class TestQueryPayloads:
     """Every st/ query publishes the app's topic, code and reply topic."""
 
     @pytest.mark.asyncio
-    async def test_diagnostics_uses_app_form_response_topic(self, mock_device):
+    async def test_diagnostics_uses_app_form_response_topic(
+        self, mock_device
+    ) -> None:
         """The cloud only decodes the td/rd hex into JSON when the reply
         topic has the app's five-segment form; the sequence numbers are
         not checked, so home_seq from the device info and 0 are used."""
@@ -209,7 +215,9 @@ class TestQueryPayloads:
         )
 
     @pytest.mark.asyncio
-    async def test_firmware_download_info_uses_device_topic(self, mock_device):
+    async def test_firmware_download_info_uses_device_topic(
+        self, mock_device
+    ) -> None:
         """The device answers dl-sw-info on its own topic, not a client one."""
         controller, publish = _make_controller()
 
@@ -224,7 +232,7 @@ class TestQueryPayloads:
         )
 
     @pytest.mark.asyncio
-    async def test_monthly_energy_query(self, mock_device):
+    async def test_monthly_energy_query(self, mock_device) -> None:
         controller, publish = _make_controller()
 
         await controller.request_energy_usage_monthly(mock_device, [2025, 2026])
@@ -240,7 +248,9 @@ class TestQueryPayloads:
         assert "month" not in request
 
     @pytest.mark.asyncio
-    async def test_monthly_energy_query_dedupes_years(self, mock_device):
+    async def test_monthly_energy_query_dedupes_years(
+        self, mock_device
+    ) -> None:
         controller, publish = _make_controller()
 
         await controller.request_energy_usage_monthly(
@@ -254,21 +264,23 @@ class TestQueryPayloads:
     @pytest.mark.parametrize("years", [[0], [-1], [99999], [1999]])
     async def test_monthly_energy_query_rejects_out_of_range_years(
         self, mock_device, years
-    ):
+    ) -> None:
         controller, publish = _make_controller()
         with pytest.raises(RangeValidationError):
             await controller.request_energy_usage_monthly(mock_device, years)
         publish.assert_not_awaited()
 
     @pytest.mark.asyncio
-    async def test_monthly_energy_query_rejects_empty_years(self, mock_device):
+    async def test_monthly_energy_query_rejects_empty_years(
+        self, mock_device
+    ) -> None:
         controller, publish = _make_controller()
         with pytest.raises(ParameterValidationError):
             await controller.request_energy_usage_monthly(mock_device, [])
         publish.assert_not_awaited()
 
     @pytest.mark.asyncio
-    async def test_hourly_energy_query(self, mock_device):
+    async def test_hourly_energy_query(self, mock_device) -> None:
         controller, publish = _make_controller()
 
         await controller.request_energy_usage_hourly(mock_device, 2026, 9, [3])
@@ -288,7 +300,7 @@ class TestQueryPayloads:
     )
     async def test_hourly_energy_query_rejects_non_integers(
         self, mock_device, month, days
-    ):
+    ) -> None:
         controller, publish = _make_controller()
         with pytest.raises(ParameterValidationError):
             await controller.request_energy_usage_hourly(
@@ -309,14 +321,14 @@ class TestQueryPayloads:
     )
     async def test_daily_energy_query_validates(
         self, mock_device, year, months, error
-    ):
+    ) -> None:
         controller, publish = _make_controller()
         with pytest.raises(error):
             await controller.request_energy_usage(mock_device, year, months)
         publish.assert_not_awaited()
 
     @pytest.mark.asyncio
-    async def test_hourly_energy_query_validates(self, mock_device):
+    async def test_hourly_energy_query_validates(self, mock_device) -> None:
         controller, publish = _make_controller()
         with pytest.raises(RangeValidationError):
             await controller.request_energy_usage_hourly(
@@ -329,7 +341,7 @@ class TestQueryPayloads:
         publish.assert_not_awaited()
 
     @pytest.mark.asyncio
-    async def test_recirculation_schedule_read(self, mock_device):
+    async def test_recirculation_schedule_read(self, mock_device) -> None:
         controller, publish = _make_controller()
 
         await controller.request_recirculation_schedule(mock_device)
@@ -342,7 +354,7 @@ class TestQueryPayloads:
         )
 
     @pytest.mark.asyncio
-    async def test_end_session(self, mock_device):
+    async def test_end_session(self, mock_device) -> None:
         controller, publish = _make_controller()
 
         await controller.end_session(mock_device)
@@ -357,7 +369,7 @@ class TestControlPayloads:
     """Mode/param payloads match the app's request builder."""
 
     @pytest.mark.asyncio
-    async def test_ota_commit_uses_commit_ota_topics(self, mock_device):
+    async def test_ota_commit_uses_commit_ota_topics(self, mock_device) -> None:
         """The app publishes OTA_COMMIT on ctrl/commit-ota and asks for the
         reply on res/commit-ota in its five-segment topic form."""
         from nwp500.models import OtaCommitPayload
@@ -377,7 +389,9 @@ class TestControlPayloads:
         assert command["request"]["commitOta"] == {"swCode": 1, "swVersion": 7}
 
     @pytest.mark.asyncio
-    async def test_air_filter_life_rejects_non_integers(self, mock_device):
+    async def test_air_filter_life_rejects_non_integers(
+        self, mock_device
+    ) -> None:
         controller, publish = _make_controller()
         with pytest.raises(ParameterValidationError):
             await controller.set_air_filter_life(mock_device, 3000.0)
@@ -386,7 +400,7 @@ class TestControlPayloads:
         publish.assert_not_awaited()
 
     @pytest.mark.asyncio
-    async def test_vacation_duration_sends_goout_day(self, mock_device):
+    async def test_vacation_duration_sends_goout_day(self, mock_device) -> None:
         controller, publish = _make_controller()
 
         await controller.set_vacation_duration(mock_device, 7)
@@ -402,7 +416,7 @@ class TestControlPayloads:
     @pytest.mark.parametrize("days", [True, 7.0])
     async def test_vacation_duration_rejects_non_integers(
         self, mock_device, days
-    ):
+    ) -> None:
         controller, publish = _make_controller()
         with pytest.raises(ParameterValidationError):
             await controller.set_vacation_duration(mock_device, days)
@@ -410,7 +424,7 @@ class TestControlPayloads:
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize("days", [0, 100])
-    async def test_vacation_duration_range(self, mock_device, days):
+    async def test_vacation_duration_range(self, mock_device, days) -> None:
         controller, publish = _make_controller()
         with pytest.raises(RangeValidationError):
             await controller.set_vacation_duration(mock_device, days)
@@ -418,7 +432,9 @@ class TestControlPayloads:
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize("days", [1, 31, 99])
-    async def test_vacation_days_accept_1_to_99(self, mock_device, days):
+    async def test_vacation_days_accept_1_to_99(
+        self, mock_device, days
+    ) -> None:
         """The app's vacation picker and the front panel both offer 1-99
         days (#155); the library used to stop at 30."""
         controller, publish = _make_controller()
@@ -433,7 +449,7 @@ class TestControlPayloads:
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize("days", [0, 100])
-    async def test_vacation_days_range(self, mock_device, days):
+    async def test_vacation_days_range(self, mock_device, days) -> None:
         controller, publish = _make_controller()
         with pytest.raises(RangeValidationError):
             await controller.set_vacation_days(mock_device, days)
@@ -441,7 +457,7 @@ class TestControlPayloads:
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize("mode_id", [0, 7, -1])
-    async def test_dhw_mode_range(self, mock_device, mode_id):
+    async def test_dhw_mode_range(self, mock_device, mode_id) -> None:
         """``dhw-mode`` takes 1-6; Standby (0) is status-only."""
         controller, publish = _make_controller()
         with pytest.raises(RangeValidationError):
@@ -450,7 +466,9 @@ class TestControlPayloads:
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize("mode_id", [3.0, True, "3"])
-    async def test_dhw_mode_rejects_non_integers(self, mock_device, mode_id):
+    async def test_dhw_mode_rejects_non_integers(
+        self, mock_device, mode_id
+    ) -> None:
         controller, publish = _make_controller()
         with pytest.raises(ParameterValidationError):
             await controller.set_dhw_mode(mock_device, mode_id)
@@ -458,7 +476,7 @@ class TestControlPayloads:
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize("mode_id", [1, 4, 6])
-    async def test_dhw_mode_sends_valid_ids(self, mock_device, mode_id):
+    async def test_dhw_mode_sends_valid_ids(self, mock_device, mode_id) -> None:
         controller, publish = _make_controller()
         await controller.set_dhw_mode(mock_device, mode_id)
         _topic, command = publish.await_args.args
@@ -470,7 +488,7 @@ class TestControlPayloads:
     )
     async def test_air_filter_life_sends_hours_over_500(
         self, mock_device, hours, param
-    ):
+    ) -> None:
         """The app's picker offers 0 or 1000-10000 h in 500 h steps and
         sends hours / 500 on the wire."""
         controller, publish = _make_controller()
@@ -487,14 +505,14 @@ class TestControlPayloads:
     @pytest.mark.parametrize("hours", [500, 1250, 12000, -500])
     async def test_air_filter_life_rejects_values_off_the_picker(
         self, mock_device, hours
-    ):
+    ) -> None:
         controller, publish = _make_controller()
         with pytest.raises(ParameterValidationError):
             await controller.set_air_filter_life(mock_device, hours)
         publish.assert_not_awaited()
 
     @pytest.mark.asyncio
-    async def test_condenser_fault_reset(self, mock_device):
+    async def test_condenser_fault_reset(self, mock_device) -> None:
         controller, publish = _make_controller()
 
         await controller.reset_condenser_fault(mock_device)
@@ -517,7 +535,7 @@ class TestCommandQueueOrdering:
     """A failed flush must preserve command order."""
 
     @pytest.mark.asyncio
-    async def test_failed_command_requeued_at_front(self):
+    async def test_failed_command_requeued_at_front(self) -> None:
         """Regression: a failed command was re-queued at the TAIL behind
         newer commands, so [power_on, set_temp] became [set_temp,
         power_on] on the next flush."""
@@ -549,7 +567,7 @@ class TestCommandQueueExpiry:
     """Stale commands must not be replayed to the appliance."""
 
     @pytest.mark.asyncio
-    async def test_expired_commands_discarded_on_flush(self):
+    async def test_expired_commands_discarded_on_flush(self) -> None:
         queue = _queue(max_age=300.0)
         queue.enqueue("topic/old", {"cmd": "old"}, QoS.AT_LEAST_ONCE)
         queue.enqueue("topic/new", {"cmd": "new"}, QoS.AT_LEAST_ONCE)
@@ -564,7 +582,7 @@ class TestCommandQueueExpiry:
         assert sent_topics == ["topic/new"]
 
     @pytest.mark.asyncio
-    async def test_expiry_disabled_with_none(self):
+    async def test_expiry_disabled_with_none(self) -> None:
         queue = _queue(max_age=None)
         queue.enqueue("topic/old", {"cmd": "old"}, QoS.AT_LEAST_ONCE)
         queue._queue[0].timestamp = datetime.now(UTC) - timedelta(days=1)
@@ -574,7 +592,7 @@ class TestCommandQueueExpiry:
 
         assert (sent, failed) == (1, 0)
 
-    def test_overflow_drops_oldest(self):
+    def test_overflow_drops_oldest(self) -> None:
         config = MqttConnectionConfig(
             client_id="test-client", max_queued_commands=2
         )
@@ -589,7 +607,7 @@ class TestCommandQueueExpiry:
 class TestAsymmetricNegativeTemperatures:
     """Firmware uses truncated remainder; Python's % is floored."""
 
-    def test_negative_raw_matches_firmware_rounding(self):
+    def test_negative_raw_matches_firmware_rounding(self) -> None:
         """Regression: raw -11 (-5.5degC) gave -11 % 10 == 9 -> floor ->
         22degF, while the firmware/app's truncated remainder (-1) applies
         ceil -> 23degF."""
@@ -598,7 +616,7 @@ class TestAsymmetricNegativeTemperatures:
             temp.to_fahrenheit_with_formula(TempFormulaType.ASYMMETRIC) == 23.0
         )
 
-    def test_positive_raw_behavior_unchanged(self):
+    def test_positive_raw_behavior_unchanged(self) -> None:
         # raw 119 -> 59.5degC -> 139.1degF; remainder 9 -> floor -> 139
         assert (
             RawCelsius(119).to_fahrenheit_with_formula(
@@ -614,7 +632,7 @@ class TestAsymmetricNegativeTemperatures:
             == 140.0
         )
 
-    def test_negative_raw_with_remainder_nine_equivalent(self):
+    def test_negative_raw_with_remainder_nine_equivalent(self) -> None:
         # raw -19 -> -9.5degC -> 14.9degF; truncated remainder -9 -> ceil -> 15
         assert (
             RawCelsius(-19).to_fahrenheit_with_formula(
@@ -627,7 +645,9 @@ class TestAsymmetricNegativeTemperatures:
 class TestFreezeProtectionDefaults:
     """Defaults must be raw half-Celsius values (43degF / 50degF)."""
 
-    def test_defaults_decode_to_documented_range(self, device_status_dict):
+    def test_defaults_decode_to_documented_range(
+        self, device_status_dict
+    ) -> None:
         """Regression: defaults 43/65 were Fahrenheit display values
         pasted into raw half-Celsius fields, decoding to 70.7degF/90.5degF
         instead of the documented fixed 43degF/50degF limits."""
@@ -649,7 +669,7 @@ class TestDemandResponseCapabilityGate:
     """enable/disable_demand_response must be gated on dr_setting_use."""
 
     @pytest.mark.asyncio
-    async def test_enable_blocked_when_unsupported(self, mock_device):
+    async def test_enable_blocked_when_unsupported(self, mock_device) -> None:
         from nwp500.exceptions import DeviceCapabilityError
 
         controller, publish = _make_controller()
@@ -662,7 +682,7 @@ class TestDemandResponseCapabilityGate:
         publish.assert_not_awaited()
 
     @pytest.mark.asyncio
-    async def test_disable_blocked_when_unsupported(self, mock_device):
+    async def test_disable_blocked_when_unsupported(self, mock_device) -> None:
         from nwp500.exceptions import DeviceCapabilityError
 
         controller, publish = _make_controller()
@@ -675,7 +695,7 @@ class TestDemandResponseCapabilityGate:
         publish.assert_not_awaited()
 
     @pytest.mark.asyncio
-    async def test_enable_allowed_when_supported(self, mock_device):
+    async def test_enable_allowed_when_supported(self, mock_device) -> None:
         controller, publish = _make_controller()
         controller._get_device_features = AsyncMock(
             return_value=MagicMock(dr_setting_use=True)
@@ -685,7 +705,7 @@ class TestDemandResponseCapabilityGate:
         publish.assert_awaited_once()
 
     @pytest.mark.asyncio
-    async def test_disable_allowed_when_supported(self, mock_device):
+    async def test_disable_allowed_when_supported(self, mock_device) -> None:
         controller, publish = _make_controller()
         controller._get_device_features = AsyncMock(
             return_value=MagicMock(dr_setting_use=True)
@@ -701,7 +721,7 @@ class TestErrorCodeChangeEvents:
     @pytest.mark.asyncio
     async def test_error_code_change_emits_error_detected(
         self, device_status_dict
-    ):
+    ) -> None:
         """Regression: only 0 -> non-zero emitted error_detected; a
         transition E799 -> E407 emitted nothing, so consumers kept
         displaying the stale error."""
@@ -721,7 +741,7 @@ class TestErrorCodeChangeEvents:
     @pytest.mark.asyncio
     async def test_unchanged_error_code_not_re_emitted(
         self, device_status_dict
-    ):
+    ) -> None:
         emitter = EventEmitter()
         tracker = DeviceStateTracker(emitter)
 
@@ -735,7 +755,9 @@ class TestErrorCodeChangeEvents:
         assert events == [799]
 
     @pytest.mark.asyncio
-    async def test_error_cleared_still_emitted(self, device_status_dict):
+    async def test_error_cleared_still_emitted(
+        self, device_status_dict
+    ) -> None:
         emitter = EventEmitter()
         tracker = DeviceStateTracker(emitter)
 
@@ -752,14 +774,14 @@ class TestErrorCodeChangeEvents:
 class TestTouPriceEncoding:
     """Price encoding must round half-up and reject bool as int."""
 
-    def test_encode_price_rounds_half_up(self):
+    def test_encode_price_rounds_half_up(self) -> None:
         """Regression: round() applies banker's rounding, under-encoding
         exact halves at even boundaries."""
         assert encode_price(0.125, 2) == 13
         assert encode_price(0.135, 2) == 14
         assert encode_price(12.34, 2) == 1234
 
-    def test_build_tou_period_bool_price_not_treated_as_encoded(self):
+    def test_build_tou_period_bool_price_not_treated_as_encoded(self) -> None:
         """Regression: bool is an int subclass, so True passed the
         'already encoded' isinstance check and was sent as price 1."""
         period = build_tou_period(
@@ -776,7 +798,7 @@ class TestTouPriceEncoding:
         assert period["priceMin"] == 100  # encode_price(1.0, 2)
         assert period["priceMax"] == 250
 
-    def test_build_tou_period_int_passthrough(self):
+    def test_build_tou_period_int_passthrough(self) -> None:
         period = build_tou_period(
             week_days=["Monday"],
             season_months=[1],
@@ -795,29 +817,29 @@ class TestTouPriceEncoding:
 class TestConfigValidation:
     """MqttConnectionConfig must reject unusable queue settings."""
 
-    def test_zero_max_queued_commands_rejected(self):
+    def test_zero_max_queued_commands_rejected(self) -> None:
         with pytest.raises(ValueError, match="max_queued_commands"):
             MqttConnectionConfig(client_id="t", max_queued_commands=0)
 
-    def test_negative_max_queued_commands_rejected(self):
+    def test_negative_max_queued_commands_rejected(self) -> None:
         with pytest.raises(ValueError, match="max_queued_commands"):
             MqttConnectionConfig(client_id="t", max_queued_commands=-5)
 
-    def test_negative_max_age_rejected(self):
+    def test_negative_max_age_rejected(self) -> None:
         with pytest.raises(ValueError, match="max_queued_command_age"):
             MqttConnectionConfig(client_id="t", max_queued_command_age=-1.0)
 
-    def test_none_max_age_allowed(self):
+    def test_none_max_age_allowed(self) -> None:
         config = MqttConnectionConfig(
             client_id="t", max_queued_command_age=None
         )
         assert config.max_queued_command_age is None
 
-    def test_zero_max_age_allowed(self):
+    def test_zero_max_age_allowed(self) -> None:
         config = MqttConnectionConfig(client_id="t", max_queued_command_age=0.0)
         assert config.max_queued_command_age == 0.0
 
-    def test_nonpositive_operation_timeout_rejected(self):
+    def test_nonpositive_operation_timeout_rejected(self) -> None:
         with pytest.raises(ValueError, match="operation_timeout"):
             MqttConnectionConfig(client_id="t", operation_timeout=0)
 
@@ -825,25 +847,25 @@ class TestConfigValidation:
 class TestEncodePriceDecimalPrecision:
     """encode_price must not lose precision by round-tripping via float."""
 
-    def test_decimal_input_used_directly(self):
+    def test_decimal_input_used_directly(self) -> None:
         from decimal import Decimal
 
         # A value that is exact as Decimal but not as binary float
         assert encode_price(Decimal("0.145"), 2) == 15  # HALF_UP on exact half
 
-    def test_high_precision_decimal(self):
+    def test_high_precision_decimal(self) -> None:
         from decimal import Decimal
 
         assert encode_price(Decimal("0.1234567895"), 10) == 1234567895
 
-    def test_int_input(self):
+    def test_int_input(self) -> None:
         assert encode_price(100, 0) == 100
 
-    def test_float_input_unchanged_behavior(self):
+    def test_float_input_unchanged_behavior(self) -> None:
         assert encode_price(12.34, 2) == 1234
         assert encode_price(0.125, 2) == 13
 
-    def test_rawcelsius_to_fahrenheit_returns_float(self):
+    def test_rawcelsius_to_fahrenheit_returns_float(self) -> None:
         result = RawCelsius(120).to_fahrenheit()
         assert result == 140.0
         assert isinstance(result, float)

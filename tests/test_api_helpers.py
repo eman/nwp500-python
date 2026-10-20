@@ -23,7 +23,7 @@ from nwp500.models import PushSettings, format_maintenance_date
 from nwp500.models.device import push_flag_to_python, python_to_push_flag
 
 
-def test_encode_decode_week_bitfield():
+def test_encode_decode_week_bitfield() -> None:
     days = ["Monday", "Wednesday", "Friday"]
     bitfield = encode_week_bitfield(days)
     assert bitfield == (64 | 16 | 4)  # Mon=64, Wed=16, Fri=4 → 84
@@ -80,7 +80,7 @@ def test_encode_decode_week_bitfield():
         encode_week_bitfield([7])  # type: ignore[arg-type]
 
 
-def test_encode_decode_season_bitfield():
+def test_encode_decode_season_bitfield() -> None:
     months = [1, 6, 12]
     bitfield = encode_season_bitfield(months)
     assert bitfield == (1 | 32 | 2048)
@@ -91,7 +91,7 @@ def test_encode_decode_season_bitfield():
         encode_season_bitfield([0])
 
 
-def test_price_encoding_round_trip():
+def test_price_encoding_round_trip() -> None:
     encoded = encode_price(0.34831, 5)
     assert encoded == 34831
     decoded = decode_price(encoded, 5)
@@ -101,7 +101,7 @@ def test_price_encoding_round_trip():
         encode_price(1.23, -1)
 
 
-def test_build_reservation_entry():
+def test_build_reservation_entry() -> None:
     reservation = build_reservation_entry(
         enabled=True,
         days=["Monday", "Tuesday"],
@@ -151,7 +151,7 @@ def test_build_reservation_entry():
         )
 
 
-def test_build_tou_period():
+def test_build_tou_period() -> None:
     period = build_tou_period(
         season_months=range(1, 13),
         week_days=["Monday", "Friday"],
@@ -185,7 +185,7 @@ def test_build_tou_period():
         )
 
 
-def test_format_maintenance_date_is_not_zero_padded():
+def test_format_maintenance_date_is_not_zero_padded() -> None:
     """The NaviLink app joins the picker's integers with "-"."""
     assert format_maintenance_date(date(2025, 3, 7)) == "2025-3-7"
     assert format_maintenance_date(date(2025, 12, 25)) == "2025-12-25"
@@ -195,7 +195,7 @@ def test_format_maintenance_date_is_not_zero_padded():
     ("raw", "expected"),
     [(1, True), (2, False), (0, None), (None, None), ("1", True), ("x", None)],
 )
-def test_push_flag_to_python(raw, expected):
+def test_push_flag_to_python(raw, expected) -> None:
     """Push flags are 1=on, 2=off, 0=unknown - inverted from DeviceBool."""
     assert push_flag_to_python(raw) is expected
 
@@ -203,11 +203,11 @@ def test_push_flag_to_python(raw, expected):
 @pytest.mark.parametrize(
     ("value", "expected"), [(True, 1), (False, 2), (None, None)]
 )
-def test_python_to_push_flag(value, expected):
+def test_python_to_push_flag(value, expected) -> None:
     assert python_to_push_flag(value) == expected
 
 
-def test_push_settings_request_dict_omits_unknown():
+def test_push_settings_request_dict_omits_unknown() -> None:
     settings = PushSettings(is_error_alarm=True, is_etc_alarm=False)
 
     assert settings.to_request_dict() == {"isErrorAlarm": 1, "isEtcAlarm": 2}

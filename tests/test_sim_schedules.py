@@ -49,7 +49,7 @@ def _period(
 
 
 class TestMasks:
-    def test_the_week_bit_is_the_libraries_encoding(self):
+    def test_the_week_bit_is_the_libraries_encoding(self) -> None:
         for offset, name in enumerate(
             (
                 "Monday",
@@ -64,27 +64,27 @@ class TestMasks:
             day = date(2026, 9, 21) + timedelta(days=offset)  # a Monday
             assert week_bit(day) == encode_week_bitfield([name]), name
 
-    def test_weekdays_and_the_weekend(self):
+    def test_weekdays_and_the_weekend(self) -> None:
         monday = date(2026, 9, 21)
         days = [monday + timedelta(days=i) for i in range(7)]
         assert sum(week_bit(d) for d in days[:5]) == WEEKDAYS
         assert sum(week_bit(d) for d in days[5:]) == WEEKEND
 
-    def test_the_month_bit(self):
+    def test_the_month_bit(self) -> None:
         assert month_bit(date(2026, 1, 5)) == 1
         assert month_bit(date(2026, 12, 5)) == 1 << 11
 
 
 class TestTouWindows:
-    def test_the_window_is_the_highest_priced_run(self):
+    def test_the_window_is_the_highest_priced_run(self) -> None:
         periods = [_period(0, 15, 1), _period(16, 20, 5), _period(21, 23, 1)]
         ((rule),) = tou_rules(periods)
         assert (rule.opens, rule.closes) == (time(16, 0), time(21, 0))
 
-    def test_a_flat_schedule_has_no_window(self):
+    def test_a_flat_schedule_has_no_window(self) -> None:
         assert tou_rules([_period(0, 23, 3)]) == ()
 
-    def test_every_peak_is_a_window(self):
+    def test_every_peak_is_a_window(self) -> None:
         periods = [
             _period(0, 5, 3),
             _period(6, 6, 5),
@@ -95,7 +95,7 @@ class TestTouWindows:
         spans = sorted((r.opens, r.closes) for r in tou_rules(periods))
         assert spans == [(time(6, 0), time(7, 0)), (time(17, 0), time(20, 0))]
 
-    def test_a_peak_across_midnight_is_one_window(self):
+    def test_a_peak_across_midnight_is_one_window(self) -> None:
         periods = [_period(0, 5, 5), _period(6, 21, 1), _period(22, 23, 5)]
         w = tou_windows(
             periods, LA, _local(2026, 9, 22, 12), _local(2026, 9, 23, 12)
@@ -105,7 +105,7 @@ class TestTouWindows:
             _local(2026, 9, 23, 6).astimezone(UTC),
         ) in w
 
-    def test_the_masks_select_the_day(self):
+    def test_the_masks_select_the_day(self) -> None:
         sept = 1 << 8
         periods = [
             _period(0, 15, 1, season=sept, week=WEEKDAYS),
@@ -123,7 +123,7 @@ class TestTouWindows:
             date(2026, 9, 30),
         ]
 
-    def test_windows_are_utc_instants_across_days(self):
+    def test_windows_are_utc_instants_across_days(self) -> None:
         periods = [_period(0, 15, 1), _period(16, 20, 5), _period(21, 23, 1)]
         w = tou_windows(
             periods, LA, _local(2026, 9, 21, 12), _local(2026, 9, 23, 12)
@@ -140,7 +140,7 @@ class TestTouWindows:
         )
         assert all(o.tzinfo is UTC for o, _ in w)
 
-    def test_a_window_open_at_the_start_is_found(self):
+    def test_a_window_open_at_the_start_is_found(self) -> None:
         periods = [_period(0, 5, 5), _period(6, 21, 1), _period(22, 23, 5)]
         w = tou_windows(
             periods, LA, _local(2026, 9, 23, 3), _local(2026, 9, 23, 4)
@@ -152,7 +152,7 @@ class TestTouWindows:
             ),
         )
 
-    def test_the_day_the_clocks_go_back(self):
+    def test_the_day_the_clocks_go_back(self) -> None:
         # 2026-11-01: 01:00-02:00 repeats; a 00:00-04:59 peak is 6 h.
         periods = [_period(0, 4, 5), _period(5, 23, 1)]
         ((o, c),) = tou_windows(
@@ -175,7 +175,7 @@ def _entry(
 
 
 class TestReservationFirings:
-    def test_each_selected_day_fires_once(self):
+    def test_each_selected_day_fires_once(self) -> None:
         firings = reservation_firings(
             [_entry(WEEKDAYS, 6, 30)],
             LA,
@@ -187,7 +187,7 @@ class TestReservationFirings:
             _local(2026, 9, 28, 6, 30).astimezone(UTC),
         ]
 
-    def test_the_span_is_half_open(self):
+    def test_the_span_is_half_open(self) -> None:
         e = [_entry(EVERY_DAY, 6)]
         at = _local(2026, 9, 25, 6)
         assert [
@@ -195,14 +195,14 @@ class TestReservationFirings:
         ] == [at.astimezone(UTC)]
         assert reservation_firings(e, LA, at - timedelta(hours=1), at) == ()
 
-    def test_a_disabled_entry_does_not_fire(self):
+    def test_a_disabled_entry_does_not_fire(self) -> None:
         e = [_entry(EVERY_DAY, 6, enabled=False)]
         assert (
             reservation_firings(e, LA, _local(2026, 9, 25), _local(2026, 9, 27))
             == ()
         )
 
-    def test_firings_are_in_time_order_then_schedule_order(self):
+    def test_firings_are_in_time_order_then_schedule_order(self) -> None:
         e = [_entry(EVERY_DAY, 9), _entry(EVERY_DAY, 6), _entry(EVERY_DAY, 6)]
         firings = reservation_firings(
             e, LA, _local(2026, 9, 25), _local(2026, 9, 26)
@@ -213,7 +213,7 @@ class TestReservationFirings:
             (9, 0),
         ]
 
-    def test_a_skipped_local_time_fires_at_its_standard_reading(self):
+    def test_a_skipped_local_time_fires_at_its_standard_reading(self) -> None:
         # 2026-03-08: 02:00-03:00 does not exist in Los Angeles.
         (f,) = reservation_firings(
             [_entry(EVERY_DAY, 2, 30)],
@@ -223,7 +223,7 @@ class TestReservationFirings:
         )
         assert f.at == datetime(2026, 3, 8, 10, 30, tzinfo=UTC)
 
-    def test_a_repeated_local_time_fires_once(self):
+    def test_a_repeated_local_time_fires_once(self) -> None:
         firings = reservation_firings(
             [_entry(EVERY_DAY, 1, 30)],
             LA,
@@ -238,12 +238,12 @@ class TestReservationFirings:
 @pytest.mark.parametrize(
     ("half_c", "f"), [(121, 140.9), (124, 143.6), (117, 137.3), (100, 122.0)]
 )
-def test_a_half_celsius_setpoint_in_fahrenheit(half_c: int, f: float):
+def test_a_half_celsius_setpoint_in_fahrenheit(half_c: int, f: float) -> None:
     assert half_c_to_f(half_c) == pytest.approx(f)
 
 
 class TestTheReviewOfTheWindows:
-    def test_prices_are_compared_decoded(self):
+    def test_prices_are_compared_decoded(self) -> None:
         """1000 at four places is 0.10; 20 at two is 0.20: the 0.20
         period is the peak, whatever the encoded integers say."""
         cheap = _period(0, 15, 1000).model_copy(update={"decimal_point": 4})
@@ -256,7 +256,9 @@ class TestTheReviewOfTheWindows:
             _local(2026, 10, 6, 0).astimezone(UTC),
         )
 
-    def test_a_peak_across_midnight_joins_only_dates_the_masks_select(self):
+    def test_a_peak_across_midnight_joins_only_dates_the_masks_select(
+        self,
+    ) -> None:
         """Weekday peaks 00:00-05:59 and 22:00-23:59: Monday morning has
         its window, and Friday night's does not run into Saturday."""
         periods = [
@@ -285,14 +287,14 @@ class TestLearnedRules:
     (a schedule learned from a heater's history) are laid out as the
     periods' own are."""
 
-    def test_the_periods_rules_lay_out_as_their_windows(self):
+    def test_the_periods_rules_lay_out_as_their_windows(self) -> None:
         periods = [_period(0, 16, 1), _period(17, 20, 3), _period(21, 23, 1)]
         start, end = _local(2026, 10, 5), _local(2026, 10, 9)
         assert rule_windows(tou_rules(periods), LA, start, end) == (
             tou_windows(periods, LA, start, end)
         )
 
-    def test_a_learned_overnight_rule_joins_only_selected_dates(self):
+    def test_a_learned_overnight_rule_joins_only_selected_dates(self) -> None:
         weekday_nights = TouRule(ALL_MONTHS, WEEKDAYS, time(22), time(6))
         windows = rule_windows(
             [weekday_nights], LA, _local(2026, 10, 9), _local(2026, 10, 13)
@@ -311,7 +313,7 @@ class TestTheSkippedHour:
 
     SPRING = (_local(2026, 3, 8), _local(2026, 3, 8, 12))
 
-    def test_a_window_inside_the_skipped_hour_is_none(self):
+    def test_a_window_inside_the_skipped_hour_is_none(self) -> None:
         skipped = TouRule(ALL_MONTHS, EVERY_DAY, time(2, 30), time(3, 0))
         assert rule_windows([skipped], LA, *self.SPRING) == ()
         # The next night it is half an hour long again.
@@ -320,12 +322,12 @@ class TestTheSkippedHour:
         )
         assert closes - opens == timedelta(minutes=30)
 
-    def test_a_window_across_it_keeps_its_elapsed_time(self):
+    def test_a_window_across_it_keeps_its_elapsed_time(self) -> None:
         across = TouRule(ALL_MONTHS, EVERY_DAY, time(1, 30), time(3, 30))
         ((opens, closes),) = rule_windows([across], LA, *self.SPRING)
         assert closes - opens == timedelta(hours=1)
 
-    def test_no_run_is_reversed(self):
+    def test_no_run_is_reversed(self) -> None:
         from nwp500.sim.schedules import weekly_runs
 
         runs = weekly_runs(

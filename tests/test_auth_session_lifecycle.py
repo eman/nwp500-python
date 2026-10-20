@@ -62,7 +62,7 @@ class TestConcurrentRefresh:
     """Token refresh must be serialized across concurrent callers."""
 
     @pytest.mark.asyncio
-    async def test_concurrent_ensure_valid_token_single_refresh(self):
+    async def test_concurrent_ensure_valid_token_single_refresh(self) -> None:
         """Regression: N concurrent callers at token expiry fired N
         parallel refresh requests; with rotation the losers held
         invalidated tokens."""
@@ -88,7 +88,7 @@ class TestConcurrentRefresh:
         assert all(r is not None and not r.is_expired for r in results)
 
     @pytest.mark.asyncio
-    async def test_stale_explicit_token_gets_fresh_tokens(self):
+    async def test_stale_explicit_token_gets_fresh_tokens(self) -> None:
         """A 401-retry caller holding a pre-rotation refresh token must
         receive the already-refreshed tokens, not refresh with a stale
         token."""
@@ -103,7 +103,7 @@ class TestConcurrentRefresh:
         assert result is fresh
 
     @pytest.mark.asyncio
-    async def test_forced_refresh_with_current_token_proceeds(self):
+    async def test_forced_refresh_with_current_token_proceeds(self) -> None:
         """Explicitly refreshing with the current refresh token is a
         forced refresh (used by deep reconnect) and must not be skipped."""
         tokens = _valid_tokens()
@@ -120,7 +120,7 @@ class TestRefreshTokenPreservation:
     """Fields omitted from the refresh response must be preserved."""
 
     @pytest.mark.asyncio
-    async def test_refresh_response_without_refresh_token(self):
+    async def test_refresh_response_without_refresh_token(self) -> None:
         """Regression: the merge preserved AWS fields but not
         refresh_token/id_token; a response omitting them wiped the stored
         refresh token so every subsequent refresh posted ''."""
@@ -162,7 +162,7 @@ class TestAenterLifecycle:
     """__aenter__ must not leak sessions and must be idempotent."""
 
     @pytest.mark.asyncio
-    async def test_owned_session_closed_when_aenter_fails(self):
+    async def test_owned_session_closed_when_aenter_fails(self) -> None:
         """Regression: __aexit__ is never called when __aenter__ raises,
         leaking the owned ClientSession on bad credentials."""
         client = NavienAuthClient("test@example.com", "wrong-password")
@@ -193,7 +193,7 @@ class TestAenterLifecycle:
         assert client._session is None
 
     @pytest.mark.asyncio
-    async def test_aenter_is_idempotent_for_owned_session(self):
+    async def test_aenter_is_idempotent_for_owned_session(self) -> None:
         """Regression: the factory pre-enters the context and its
         docstring tells users to enter again; the second __aenter__
         created a new session and orphaned the first."""
@@ -211,7 +211,9 @@ class TestAenterLifecycle:
         assert client._session is None
 
     @pytest.mark.asyncio
-    async def test_stored_token_refresh_failure_falls_back_to_sign_in(self):
+    async def test_stored_token_refresh_failure_falls_back_to_sign_in(
+        self,
+    ) -> None:
         """Regression: restoring week-old tokens raised TokenRefreshError
         even though credentials for a full sign-in were stored."""
         client = _client_with_tokens(_expired_jwt_tokens())
@@ -237,7 +239,7 @@ class TestApiClientSessionResolution:
     """The API client must not pin the auth client's session."""
 
     @pytest.mark.asyncio
-    async def test_uses_recreated_auth_session(self):
+    async def test_uses_recreated_auth_session(self) -> None:
         """Regression: the session was captured at construction; if the
         auth client recreated its session, the API client kept issuing
         requests on the closed one."""
@@ -256,7 +258,7 @@ class TestApiClientSessionResolution:
         assert api._session is second_session
 
     @pytest.mark.asyncio
-    async def test_explicit_session_override_wins(self):
+    async def test_explicit_session_override_wins(self) -> None:
         client = _client_with_tokens(_valid_tokens())
         client._session = MagicMock()
         client._owned_session = False
@@ -267,7 +269,7 @@ class TestApiClientSessionResolution:
         client._session = MagicMock()
         assert api._session is override
 
-    def test_construction_requires_some_session(self):
+    def test_construction_requires_some_session(self) -> None:
         client = _client_with_tokens(_valid_tokens())
         client._session = None
 

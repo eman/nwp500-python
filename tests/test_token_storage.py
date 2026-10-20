@@ -22,7 +22,9 @@ def tokens():
     )
 
 
-def test_save_tokens_owner_only_permissions(tmp_path, monkeypatch, tokens):
+def test_save_tokens_owner_only_permissions(
+    tmp_path, monkeypatch, tokens
+) -> None:
     """Token file must not be readable by group/others."""
     token_file = tmp_path / "tokens.json"
     monkeypatch.setattr(token_storage, "TOKEN_FILE", token_file)
@@ -35,7 +37,7 @@ def test_save_tokens_owner_only_permissions(tmp_path, monkeypatch, tokens):
 
 def test_save_tokens_tightens_existing_permissions(
     tmp_path, monkeypatch, tokens
-):
+) -> None:
     """Saving over a pre-existing world-readable file fixes its mode."""
     token_file = tmp_path / "tokens.json"
     token_file.write_text("{}")
@@ -47,7 +49,7 @@ def test_save_tokens_tightens_existing_permissions(
     assert token_file.stat().st_mode & 0o777 == 0o600
 
 
-def test_save_and_load_roundtrip(tmp_path, monkeypatch, tokens):
+def test_save_and_load_roundtrip(tmp_path, monkeypatch, tokens) -> None:
     token_file = tmp_path / "tokens.json"
     monkeypatch.setattr(token_storage, "TOKEN_FILE", token_file)
 

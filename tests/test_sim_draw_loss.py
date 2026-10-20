@@ -23,18 +23,18 @@ COLD = 60.0
 
 
 class TestHotFraction:
-    def test_a_hotter_tank_gives_up_less_water(self):
+    def test_a_hotter_tank_gives_up_less_water(self) -> None:
         """The valve blends more cold in, so the same shower costs the
         tank fewer gallons."""
         assert hot_fraction(140.0, DELIVERY, COLD) < hot_fraction(
             132.0, DELIVERY, COLD
         )
 
-    def test_at_the_setpoint_the_valve_stops_blending(self):
+    def test_at_the_setpoint_the_valve_stops_blending(self) -> None:
         assert hot_fraction(DELIVERY, DELIVERY, COLD) == 1.0
         assert hot_fraction(DELIVERY - 10, DELIVERY, COLD) == 1.0
 
-    def test_it_matches_the_mixing_identity(self):
+    def test_it_matches_the_mixing_identity(self) -> None:
         """V_hot·T_up + V_cold·T_cold = V_del·T_del, checked rather
         than asserted from the rearranged form the module uses."""
         t_upper = 145.0
@@ -42,13 +42,13 @@ class TestHotFraction:
         delivered = frac * t_upper + (1 - frac) * COLD
         assert delivered == pytest.approx(DELIVERY)
 
-    def test_a_tank_at_or_below_the_inlet_delivers_nothing(self):
+    def test_a_tank_at_or_below_the_inlet_delivers_nothing(self) -> None:
         assert hot_fraction(COLD, DELIVERY, COLD) == 0.0
         assert hot_fraction(COLD - 5, DELIVERY, COLD) == 0.0
 
 
 class TestDrawEnergy:
-    def test_observability_scales_the_whole_term(self):
+    def test_observability_scales_the_whole_term(self) -> None:
         """It is a multiplier on apparent energy, nothing subtler —
         so a calibration without it (0.0) removes no heat at all."""
         full = draw_energy_btu(9.5, 140.0, DELIVERY, COLD, 1.0)
@@ -56,7 +56,7 @@ class TestDrawEnergy:
         assert half == pytest.approx(full / 2)
         assert draw_energy_btu(9.5, 140.0, DELIVERY, COLD, 0.0) == 0.0
 
-    def test_the_tank_temperature_cancels_while_the_valve_mixes(self):
+    def test_the_tank_temperature_cancels_while_the_valve_mixes(self) -> None:
         """The result that makes this term cheap to trust: a hotter
         tank gives up proportionally less water for the same delivered
         shower, and the two effects are exactly inverse.
@@ -66,7 +66,7 @@ class TestDrawEnergy:
         assert hot == pytest.approx(hotter)
         assert hot == pytest.approx(9.5 * WATER_BTU_PER_GAL_F * (128.0 - 60.0))
 
-    def test_below_the_setpoint_a_colder_tank_loses_less(self):
+    def test_below_the_setpoint_a_colder_tank_loses_less(self) -> None:
         """Once the valve has nothing to blend with, tank temperature
         re-enters and the draw becomes a smaller loss."""
         warm = draw_energy_btu(9.5, 120.0, DELIVERY, COLD)
@@ -74,20 +74,20 @@ class TestDrawEnergy:
         assert cold < warm
         assert cold == pytest.approx(9.5 * WATER_BTU_PER_GAL_F * (100.0 - 60.0))
 
-    def test_the_two_regimes_meet_at_the_setpoint(self):
+    def test_the_two_regimes_meet_at_the_setpoint(self) -> None:
         """No step at the boundary: the mixing branch and the
         pass-through branch agree where they meet."""
         just_above = draw_energy_btu(9.5, DELIVERY + 1e-9, DELIVERY, COLD)
         just_below = draw_energy_btu(9.5, DELIVERY - 1e-9, DELIVERY, COLD)
         assert just_above == pytest.approx(just_below, abs=1e-6)
 
-    def test_a_tank_below_the_inlet_never_gains_heat(self):
+    def test_a_tank_below_the_inlet_never_gains_heat(self) -> None:
         assert draw_energy_btu(9.5, 55.0, DELIVERY, COLD) == 0.0
 
-    def test_no_volume_is_no_heat(self):
+    def test_no_volume_is_no_heat(self) -> None:
         assert draw_energy_btu(0.0, 140.0, DELIVERY, COLD) == 0.0
 
-    def test_energy_and_withdrawal_agree(self):
+    def test_energy_and_withdrawal_agree(self) -> None:
         """The collapsed form must equal the long one it came from,
         or the module is quietly using two different physics."""
         for t_upper in (100.0, 128.0, 135.0, 150.0):
@@ -106,14 +106,14 @@ class TestCalibration:
     pair.
     """
 
-    def test_the_fitted_values_are_the_ones_the_report_publishes(self):
+    def test_the_fitted_values_are_the_ones_the_report_publishes(self) -> None:
         assert pytest.approx(0.633) == DEFAULT_OBSERVABILITY
         assert pytest.approx(1.235) == DEFAULT_GAP_OPEN_F_PER_GAL
         assert pytest.approx(72.4) == DEFAULT_INLET_TEMP_F
         assert pytest.approx(53.56) == DEFAULT_TMV_DELIVERY_INTERCEPT_F
         assert pytest.approx(0.485) == DEFAULT_TMV_DELIVERY_SLOPE
 
-    def test_observability_is_the_first_fit_rescaled_twice(self):
+    def test_observability_is_the_first_fit_rescaled_twice(self) -> None:
         """0.454 against 128 °F and 60 °F, times the ×1.113 the
         measured delivery line (2026-09) moves the fit by, times the
         ×1.254 the measured inlet does. A value that is not that
@@ -122,7 +122,7 @@ class TestCalibration:
             DEFAULT_OBSERVABILITY
         )
 
-    def test_the_probes_inlet_keeps_the_calibration(self):
+    def test_the_probes_inlet_keeps_the_calibration(self) -> None:
         """Served the probe's measured inlet, the refitted pair gives
         the per-gallon heat and the front the corpus shows. The
         pair fitted against 60 °F, served the same inlet, would cut a
@@ -142,7 +142,7 @@ class TestCalibration:
         # And the swap without the refit, for the record.
         assert draw_energy_btu(1.0, 139.0, t_del, probe, 0.505) < 0.82 * heat
 
-    def test_the_line_reproduces_the_gauge_plateaus(self):
+    def test_the_line_reproduces_the_gauge_plateaus(self) -> None:
         """The five full draw plateaus from the gauge cam, each
         within the dial's ±1.5 °F."""
         for t_upper, plateau in (
@@ -156,7 +156,7 @@ class TestCalibration:
                 plateau, abs=1.5
             )
 
-    def test_the_pair_reproduces_the_measured_per_gallon_response(self):
+    def test_the_pair_reproduces_the_measured_per_gallon_response(self) -> None:
         """The observability is fitted *against a reference inlet*,
         so only their product is identified. Changing either alone
         silently changes the model:
@@ -182,17 +182,17 @@ class TestFront:
     #: binds, so each test below exercises the bound it names.
     ROOMY = 50.0
 
-    def test_it_scales_with_the_cold_admitted(self):
+    def test_it_scales_with_the_cold_admitted(self) -> None:
         small = gap_opened_f(2.0, 1.5, self.ROOMY, 135.0, COLD)
         large = gap_opened_f(6.0, 1.5, self.ROOMY, 135.0, COLD)
         assert large > small
 
-    def test_a_zero_coefficient_disables_it(self):
+    def test_a_zero_coefficient_disables_it(self) -> None:
         """What a calibration fitted before the front existed
         carries."""
         assert gap_opened_f(9.5, 0.0, self.ROOMY, 135.0, COLD) == 0.0
 
-    def test_a_draw_cannot_warm_the_upper_zone(self):
+    def test_a_draw_cannot_warm_the_upper_zone(self) -> None:
         """The gap is split evenly about the bulk, so an opening
         wider than twice the bulk drop raises the top of the tank.
         No draw does that. With the fitted coefficient it is not a
@@ -205,7 +205,7 @@ class TestFront:
         # be positive.
         assert opened / 2.0 - drop <= 1e-9
 
-    def test_the_lower_zone_cannot_be_driven_below_the_inlet(self):
+    def test_the_lower_zone_cannot_be_driven_below_the_inlet(self) -> None:
         """Bounds the *gap half* only — the bulk drop is applied
         separately and is not bounded here, which the docstring now
         says rather than claiming more.
@@ -221,5 +221,5 @@ class TestFront:
         assert opened == pytest.approx(2.0 * (65.0 - COLD))
         assert 65.0 - opened / 2.0 == pytest.approx(COLD)
 
-    def test_no_withdrawal_opens_nothing(self):
+    def test_no_withdrawal_opens_nothing(self) -> None:
         assert gap_opened_f(0.0, 1.5, self.ROOMY, 135.0, COLD) == 0.0

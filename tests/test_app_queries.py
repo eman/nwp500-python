@@ -118,7 +118,7 @@ MONTHLY_RESPONSE: dict[str, Any] = {
 
 
 class TestDiagnosticsModel:
-    def test_parses_captured_response(self):
+    def test_parses_captured_response(self) -> None:
         diag = DeviceDiagnostics.from_response(TD_RD_RESPONSE)
 
         assert diag.type_of_td == 2
@@ -135,14 +135,14 @@ class TestDiagnosticsModel:
         assert diag.ta_data.mixing_valve_op_avg_mixing_rate == 5
         assert diag.ta_data.cumulated_op_time_inv_comp4 == 0
 
-    def test_every_wire_key_maps_to_a_field(self):
+    def test_every_wire_key_maps_to_a_field(self) -> None:
         """No wire key may be silently dropped by a wrong alias."""
         diag = DeviceDiagnostics.from_response(TD_RD_RESPONSE)
         dumped = diag.model_dump(by_alias=True)
         for block in ("tsData", "tdData", "taData"):
             assert dumped[block] == TD_RD_RESPONSE["data"][block], block
 
-    def test_missing_blocks_default(self):
+    def test_missing_blocks_default(self) -> None:
         diag = DeviceDiagnostics.from_response(
             {"deviceType": 52, "typeOfTD": 2, "data": {"tcData": {}}}
         )
@@ -151,7 +151,7 @@ class TestDiagnosticsModel:
 
 
 class TestFirmwareDownloadInfoModel:
-    def test_parses_captured_all_zero_entry(self):
+    def test_parses_captured_all_zero_entry(self) -> None:
         info = FirmwareDownloadInfo.model_validate(
             {
                 "deviceType": 52,
@@ -167,7 +167,7 @@ class TestFirmwareDownloadInfoModel:
         assert entry.component_name == "Unknown"
         assert entry.sw_version == 0
 
-    def test_component_name_from_sw_code(self):
+    def test_component_name_from_sw_code(self) -> None:
         info = FirmwareDownloadInfo.model_validate(
             {"downloadSwInfo": [{"swCode": 1, "swVersion": 184614912}]}
         )
@@ -175,7 +175,7 @@ class TestFirmwareDownloadInfoModel:
 
 
 class TestEnergyModelShapes:
-    def test_monthly_response(self):
+    def test_monthly_response(self) -> None:
         res = EnergyUsageResponse.model_validate(MONTHLY_RESPONSE)
 
         assert res.type_of_usage == 1
@@ -189,7 +189,7 @@ class TestEnergyModelShapes:
         # A monthly entry is not a month entry
         assert res.get_month_data(2026, 1) is None
 
-    def test_daily_response_still_parses(self):
+    def test_daily_response_still_parses(self) -> None:
         res = EnergyUsageResponse.model_validate(
             {
                 "total": {"heUsage": 1, "hpUsage": 2},
@@ -205,14 +205,14 @@ class TestEnergyModelShapes:
 
 
 class TestRecirculationScheduleModel:
-    def test_json_list_read_back(self):
+    def test_json_list_read_back(self) -> None:
         schedule = RecirculationSchedule.model_validate(
             {"reservationUse": 1, "reservation": []}
         )
         assert schedule.enabled is False
         assert schedule.reservation == []
 
-    def test_hex_read_back(self):
+    def test_hex_read_back(self) -> None:
         """The legacy res/recirc-rsv topic delivers a hex string."""
         schedule = RecirculationSchedule.model_validate(
             {"reservationUse": 2, "reservation": "023e06000200"}
@@ -228,7 +228,7 @@ class TestRecirculationScheduleModel:
         )
         assert entry.pump_on is True
 
-    def test_hex_and_json_read_backs_compare_equal(self):
+    def test_hex_and_json_read_backs_compare_equal(self) -> None:
         """The hex form carries param as unsigned 0xFF, JSON as -1."""
         from_hex = RecirculationSchedule.model_validate(
             {"reservationUse": 2, "reservation": "023e060002ff"}
@@ -259,7 +259,7 @@ class TestRecirculationScheduleModel:
             {"week": "124", "hour": 6, "min": 0},
         ],
     )
-    def test_entry_fields_are_strict(self, entry):
+    def test_entry_fields_are_strict(self, entry) -> None:
         """Regression: Pydantic coerced True and 6.0 to ints, so they passed
         write validation and were published."""
         from pydantic import ValidationError
@@ -268,7 +268,9 @@ class TestRecirculationScheduleModel:
             RecirculationScheduleEntry.model_validate(entry)
 
     @pytest.mark.parametrize("param", [255.0, True])
-    def test_param_normalization_does_not_bypass_strictness(self, param):
+    def test_param_normalization_does_not_bypass_strictness(
+        self, param
+    ) -> None:
         """Regression: the before-validator mapped 255.0 to -1, so a float
         param passed the strict check."""
         from pydantic import ValidationError
@@ -278,7 +280,7 @@ class TestRecirculationScheduleModel:
                 {"week": 124, "hour": 6, "min": 0, "param": param}
             )
 
-    def test_reservation_use_is_strict(self):
+    def test_reservation_use_is_strict(self) -> None:
         from pydantic import ValidationError
 
         with pytest.raises(ValidationError):
@@ -286,7 +288,7 @@ class TestRecirculationScheduleModel:
                 {"reservationUse": True, "reservation": []}
             )
 
-    def test_canonical_is_order_independent(self):
+    def test_canonical_is_order_independent(self) -> None:
         a = RecirculationSchedule.model_validate(
             {
                 "reservationUse": 2,
@@ -358,7 +360,7 @@ async def _deliver(
 
 class TestTypedSubscriptions:
     @pytest.mark.asyncio
-    async def test_diagnostics_subscribes_app_form_topic(self):
+    async def test_diagnostics_subscribes_app_form_topic(self) -> None:
         manager = _manager()
         received = []
 
@@ -374,7 +376,7 @@ class TestTypedSubscriptions:
         assert topic not in manager.subscriptions
 
     @pytest.mark.asyncio
-    async def test_firmware_info_rides_the_device_wildcard(self):
+    async def test_firmware_info_rides_the_device_wildcard(self) -> None:
         """No extra broker subscription; only /res/dl-sw-info fires."""
         manager = _manager()
         received = []
@@ -404,7 +406,7 @@ class TestTypedSubscriptions:
         assert received[0].download_sw_info[0].component_name == "Controller"
 
     @pytest.mark.asyncio
-    async def test_subscribe_device_tracks_devices(self):
+    async def test_subscribe_device_tracks_devices(self) -> None:
         manager = _manager()
         assert manager.subscribed_devices == []
 
@@ -417,7 +419,7 @@ class TestTypedSubscriptions:
         assert manager.subscribed_devices == []
 
     @pytest.mark.asyncio
-    async def test_monthly_energy_subscription_parses(self):
+    async def test_monthly_energy_subscription_parses(self) -> None:
         manager = _manager()
         received = []
 
@@ -433,7 +435,7 @@ class TestTypedSubscriptions:
 
 class TestSubscriptionLifecycle:
     @pytest.mark.asyncio
-    async def test_unsubscribe_removes_only_the_matching_kind(self):
+    async def test_unsubscribe_removes_only_the_matching_kind(self) -> None:
         """Regression: one callback registered for status and firmware info
         on the same wildcard topic; unsubscribing firmware info removed the
         status handler instead."""
@@ -483,7 +485,7 @@ class TestSubscriptionLifecycle:
     )
     async def test_typed_subscribe_and_unsubscribe(
         self, subscribe, unsubscribe, topic
-    ):
+    ) -> None:
         manager = _manager()
         device = _device()
 
@@ -497,7 +499,7 @@ class TestSubscriptionLifecycle:
         assert topic not in manager.subscriptions
 
     @pytest.mark.asyncio
-    async def test_firmware_unsubscribe(self):
+    async def test_firmware_unsubscribe(self) -> None:
         manager = _manager()
         device = _device()
         received: list[Any] = []
@@ -510,7 +512,7 @@ class TestSubscriptionLifecycle:
         assert manager.subscriptions == {}
 
     @pytest.mark.asyncio
-    async def test_replies_for_another_device_are_ignored(self):
+    async def test_replies_for_another_device_are_ignored(self) -> None:
         """Client-keyed reply topics are shared by every device a client
         queries; each typed callback must only see its own device."""
         manager = _manager()
@@ -552,7 +554,7 @@ class TestSubscriptionLifecycle:
         assert len(got_second) == 3
 
     @pytest.mark.asyncio
-    async def test_firmware_commit_reply_subscription(self):
+    async def test_firmware_commit_reply_subscription(self) -> None:
         manager = _manager()
         device = _device()
         received: list[Any] = []
@@ -576,7 +578,7 @@ class TestSubscriptionLifecycle:
         assert topic not in manager.subscriptions
 
     @pytest.mark.asyncio
-    async def test_typed_response_subscriptions_record_the_device(self):
+    async def test_typed_response_subscriptions_record_the_device(self) -> None:
         """Regression: only wildcard subscriptions recorded the device, so a
         client using only energy or diagnostics subscriptions sent no
         st/end on disconnect."""
@@ -596,7 +598,7 @@ requires_cli = pytest.mark.skipif(
 
 @requires_cli
 class TestYearlyEnergyReport:
-    def test_each_year_totals_its_own_months(self):
+    def test_each_year_totals_its_own_months(self) -> None:
         """Regression: every year's summary showed the device's lifetime
         total instead of that year's months."""
         from nwp500.cli.presentation import build_yearly_energy_report
@@ -612,7 +614,7 @@ class TestYearlyEnergyReport:
         assert report.lifetime.total_usage_wh == 1266585 + 146337
         assert [row.label for row in report.days][:2] == ["January", "February"]
 
-    def test_daily_and_monthly_summaries_are_per_period(self):
+    def test_daily_and_monthly_summaries_are_per_period(self) -> None:
         from nwp500.cli.presentation import (
             build_daily_energy_report,
             build_energy_report,
@@ -639,7 +641,7 @@ class TestYearlyEnergyReport:
         assert summary.lifetime is not None
         assert summary.lifetime.total_usage_wh == 1005000
 
-    def test_lifetime_printed_once_for_several_years(self, monkeypatch):
+    def test_lifetime_printed_once_for_several_years(self, monkeypatch) -> None:
         from nwp500.cli import output_formatters
 
         calls: list[str] = []
@@ -661,7 +663,7 @@ class TestYearlyEnergyReport:
 
     def test_lifetime_printed_when_no_requested_year_has_data(
         self, monkeypatch
-    ):
+    ) -> None:
         """Regression: with every requested year missing from the reply, the
         lifetime total was never printed."""
         from nwp500.cli import output_formatters
@@ -752,7 +754,7 @@ def _connected_client(
 
 class TestSessionEndOnDisconnect:
     @pytest.mark.asyncio
-    async def test_sends_st_end_for_each_subscribed_device(self):
+    async def test_sends_st_end_for_each_subscribed_device(self) -> None:
         sdk = _FakeSdkConnection()
         client = _connected_client(
             sdk, [_device("aaaaaaaaaaaa"), _device("bbbbbbbbbbbb")]
@@ -768,7 +770,7 @@ class TestSessionEndOnDisconnect:
         assert client.is_connected is False
 
     @pytest.mark.asyncio
-    async def test_can_be_turned_off(self):
+    async def test_can_be_turned_off(self) -> None:
         sdk = _FakeSdkConnection()
         client = _connected_client(
             sdk, [_device()], send_session_end_on_disconnect=False
@@ -780,7 +782,7 @@ class TestSessionEndOnDisconnect:
         assert sdk.disconnect_calls == 1
 
     @pytest.mark.asyncio
-    async def test_nothing_sent_when_not_connected(self):
+    async def test_nothing_sent_when_not_connected(self) -> None:
         sdk = _FakeSdkConnection()
         client = _connected_client(sdk, [_device()])
         client._connected = False
@@ -792,7 +794,7 @@ class TestSessionEndOnDisconnect:
         assert sdk.disconnect_calls == 1
 
     @pytest.mark.asyncio
-    async def test_destroyed_connection_is_still_closed(self):
+    async def test_destroyed_connection_is_still_closed(self) -> None:
         """Regression: a destroyed-connection error on st/end marks the
         connection manager disconnected while the client flag stays set;
         its disconnect() then returned early and left the SDK connection
@@ -814,7 +816,7 @@ class TestSessionEndOnDisconnect:
         assert client.is_connected is False
 
     @pytest.mark.asyncio
-    async def test_interruption_midway_queues_nothing(self):
+    async def test_interruption_midway_queues_nothing(self) -> None:
         """Regression: after an interruption flipped the client flag, the
         remaining st/end went through publish() into the offline queue
         and would have been replayed on the next connect."""
@@ -836,7 +838,7 @@ class TestSessionEndOnDisconnect:
         assert sdk.disconnect_calls == 1
 
     @pytest.mark.asyncio
-    async def test_failed_st_end_does_not_block_disconnect(self):
+    async def test_failed_st_end_does_not_block_disconnect(self) -> None:
         def boom(topic: str) -> None:
             raise RuntimeError("broker gone")
 
@@ -849,7 +851,7 @@ class TestSessionEndOnDisconnect:
         assert client.is_connected is False
 
     @pytest.mark.asyncio
-    async def test_slow_st_end_is_bounded(self, monkeypatch):
+    async def test_slow_st_end_is_bounded(self, monkeypatch) -> None:
         sdk = _FakeSdkConnection()
         client = _connected_client(sdk, [_device()])
 
@@ -865,7 +867,7 @@ class TestSessionEndOnDisconnect:
         assert sdk.disconnect_calls == 1
 
     @pytest.mark.asyncio
-    async def test_public_end_session_is_never_queued(self):
+    async def test_public_end_session_is_never_queued(self) -> None:
         """Regression: end_session() went through publish(), which queues
         while disconnected and would replay st/end after a reconnect."""
         from nwp500.exceptions import MqttNotConnectedError
@@ -881,7 +883,7 @@ class TestSessionEndOnDisconnect:
         assert sdk.published == []
 
     @pytest.mark.asyncio
-    async def test_public_end_session_publishes_when_connected(self):
+    async def test_public_end_session_publishes_when_connected(self) -> None:
         sdk = _FakeSdkConnection()
         client = _connected_client(sdk, [])
 
@@ -890,7 +892,7 @@ class TestSessionEndOnDisconnect:
         assert sdk.published == ["cmd/52/navilink-04786332fca0/st/end"]
 
     @pytest.mark.asyncio
-    async def test_no_subscription_manager(self):
+    async def test_no_subscription_manager(self) -> None:
         sdk = _FakeSdkConnection()
         client = _connected_client(sdk, [])
         client._subscription_manager = None

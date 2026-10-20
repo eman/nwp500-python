@@ -87,7 +87,7 @@ def tank(
 
 
 class TestTheLag:
-    def test_the_line_recovers_the_lag_and_the_rate(self):
+    def test_the_line_recovers_the_lag_and_the_rate(self) -> None:
         record, _ = tank()
         stints = cal.element_stints(record, draws=[])
         fit = cal.fit_element_lag(stints, n_boot=200)
@@ -96,19 +96,19 @@ class TestTheLag:
         assert fit.upper_dead_time_min == pytest.approx(LAG_S / 60, abs=0.15)
         assert fit.lag_interval[0] <= fit.upper_dead_time_min
 
-    def test_a_stint_with_a_draw_is_left_out(self):
+    def test_a_stint_with_a_draw_is_left_out(self) -> None:
         record, draws = tank(draw_at=4)
         stints = cal.element_stints(record, draws=draws)
         assert stints["draw"].sum() == 1
         assert stints["draw_known"].iloc[4]
 
-    def test_without_a_meter_no_draw_is_known(self):
+    def test_without_a_meter_no_draw_is_known(self) -> None:
         record, _ = tank()
         assert not cal.element_stints(record)["draw_known"].any()
 
 
 class TestTheOffPoint:
-    def test_energy_saver_stops_short(self):
+    def test_energy_saver_stops_short(self) -> None:
         record, _ = tank()
         off = cal.element_off_points(record)
         upper = off[(off["which"] == "upper") & off["clean"]]
@@ -118,14 +118,14 @@ class TestTheOffPoint:
         # mode; Energy Saver stops 1.6 °F before the others.
         assert saver.median() - others.median() == pytest.approx(1.6, abs=0.2)
 
-    def test_the_power_of_a_metered_stint(self):
+    def test_the_power_of_a_metered_stint(self) -> None:
         record, _ = tank()
         power = cal.element_power(record, cal.element_off_points(record))
         assert power["net_w"].median() == pytest.approx(5150.0, rel=0.01)
 
 
 class TestTheGridRates:
-    def test_the_zones_rates_and_power(self):
+    def test_the_zones_rates_and_power(self) -> None:
         record, _ = tank()
         fit = cal.fit_element_rates(cal.element_grid(record), n_boot=200)
         assert fit.lower_f_per_min == pytest.approx(1.4, abs=0.05)

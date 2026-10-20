@@ -187,18 +187,18 @@ def _mutable_state(source: str) -> list[tuple[int, str]]:
 
 
 @pytest.mark.parametrize("path", SOURCES, ids=IDS)
-def test_no_source_reads_the_clock(path: Path):
+def test_no_source_reads_the_clock(path: Path) -> None:
     bad = [f"{path.name}:{n}: {c}" for n, c in _clock_reads(path.read_text())]
     assert not bad, "the core reads the clock:\n" + "\n".join(bad)
 
 
 @pytest.mark.parametrize("path", SOURCES, ids=IDS)
-def test_no_source_holds_mutable_module_state(path: Path):
+def test_no_source_holds_mutable_module_state(path: Path) -> None:
     bad = [f"{path.name}:{n}: {w}" for n, w in _mutable_state(path.read_text())]
     assert not bad, "the core holds mutable state:\n" + "\n".join(bad)
 
 
-def test_the_clock_check_sees_a_violation():
+def test_the_clock_check_sees_a_violation() -> None:
     """Each clock is found, however it was imported, and arithmetic on
     a value named ``now`` is not a read."""
     source = (
@@ -237,7 +237,7 @@ def test_the_clock_check_sees_a_violation():
     ]
 
 
-def test_the_state_check_sees_a_violation():
+def test_the_state_check_sees_a_violation() -> None:
     """Each mutable binding is found, at the top level and in a class
     body, as is a ``global``; read-only tables and per-instance
     defaults are not."""
@@ -325,7 +325,7 @@ def _mutable(value: object) -> bool:
     return False
 
 
-def test_no_module_is_bound_to_a_mutable_value():
+def test_no_module_is_bound_to_a_mutable_value() -> None:
     bad = [
         f"{module.__name__}.{name}: {type(value).__name__}"
         for module in _modules()
@@ -335,7 +335,7 @@ def test_no_module_is_bound_to_a_mutable_value():
     assert not bad, "the core holds mutable state:\n" + "\n".join(bad)
 
 
-def test_the_value_check_sees_a_violation():
+def test_the_value_check_sees_a_violation() -> None:
     @dataclasses.dataclass
     class Loose:
         x: int = 0

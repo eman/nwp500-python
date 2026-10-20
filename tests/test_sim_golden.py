@@ -329,11 +329,11 @@ def _check(case: str, answer: dict[str, Any]) -> None:
 
 
 @pytest.mark.parametrize("case", sorted(CASES))
-def test_the_answer_is_the_held_one(case: str):
+def test_the_answer_is_the_held_one(case: str) -> None:
     _check(case, _outputs(_run(CASES[case])))
 
 
-def test_the_cases_cover_what_they_claim():
+def test_the_cases_cover_what_they_claim() -> None:
     held = {k: v["summary"] for k, v in _load().items()}
     assert set(held) == set(CASES)
     every = {m[1] for m in held["entries_every_mode"]["modes"]}
@@ -353,7 +353,7 @@ def _on_a_thread(fn: Callable[[], Simulation]) -> Simulation:
 
 
 @pytest.mark.parametrize("case", sorted(CASES))
-def test_the_walk_is_deterministic(case: str):
+def test_the_walk_is_deterministic(case: str) -> None:
     first = _run(CASES[case])
     assert _run(CASES[case]) == first
     assert _on_a_thread(lambda: _run(CASES[case])) == first

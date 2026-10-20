@@ -59,28 +59,28 @@ DEVICE_INFO_ENTRY = {
 
 
 class TestDeviceListEntry:
-    def test_error_summary_is_parsed(self):
+    def test_error_summary_is_parsed(self) -> None:
         device = Device.model_validate(DEVICE_LIST_ENTRY)
 
         assert device.error is not None
         assert device.error.error_code == ErrorCode.NO_ERROR
         assert device.error.error_occurred_time == "2025-12-07T11:58:02"
 
-    def test_descaling_window_is_parsed(self):
+    def test_descaling_window_is_parsed(self) -> None:
         device = Device.model_validate(DEVICE_LIST_ENTRY)
 
         assert device.descaling is not None
         assert device.descaling.descaling_start_time is None
         assert device.descaling.descaling_end_time is None
 
-    def test_device_info_extras_are_parsed(self):
+    def test_device_info_extras_are_parsed(self) -> None:
         info = Device.model_validate(DEVICE_LIST_ENTRY).device_info
 
         assert info.model_type_code is None
         assert info.installer_id is None
 
     @pytest.mark.parametrize("code", [0, 96, 326])
-    def test_known_error_code_becomes_an_enum(self, code):
+    def test_known_error_code_becomes_an_enum(self, code) -> None:
         """Not just ``== ErrorCode(code)``: an int compares equal to its
         member, so only the type tells the two union branches apart."""
         payload = DEVICE_LIST_ENTRY | {"error": {"errorCode": code}}
@@ -90,7 +90,7 @@ class TestDeviceListEntry:
         assert isinstance(error_code, ErrorCode)
         assert error_code is ErrorCode(code)
 
-    def test_null_error_code_does_not_break_the_response(self):
+    def test_null_error_code_does_not_break_the_response(self) -> None:
         """The cloud sends ``"errorCode": null`` on some devices, which must
         not fail the listing and so make the whole integration unusable."""
         payload = DEVICE_LIST_ENTRY | {
@@ -102,14 +102,14 @@ class TestDeviceListEntry:
         assert device.error is not None
         assert device.error.error_code is None
 
-    def test_absent_error_code_is_not_reported(self):
+    def test_absent_error_code_is_not_reported(self) -> None:
         """No code in the block reads the same as an explicit null: the
         cloud has told us nothing, not that the device is fault-free."""
         payload = DEVICE_LIST_ENTRY | {"error": {}}
 
         assert Device.model_validate(payload).error.error_code is None
 
-    def test_unknown_error_code_does_not_break_the_response(self):
+    def test_unknown_error_code_does_not_break_the_response(self) -> None:
         """A code the enum doesn't know must not fail the whole listing."""
         payload = DEVICE_LIST_ENTRY | {"error": {"errorCode": 9999}}
 
@@ -120,26 +120,26 @@ class TestDeviceListEntry:
 
 
 class TestDeviceInfoEntry:
-    def test_missing_error_block_is_none(self):
+    def test_missing_error_block_is_none(self) -> None:
         """``/device/info`` carries no ``error`` section."""
         device = Device.model_validate(DEVICE_INFO_ENTRY)
 
         assert device.error is None
         assert device.descaling is not None
 
-    def test_install_type_is_parsed(self):
+    def test_install_type_is_parsed(self) -> None:
         device = Device.model_validate(DEVICE_INFO_ENTRY)
 
         assert device.device_info.install_type == "R"
 
-    def test_installer_without_details_is_parsed(self):
+    def test_installer_without_details_is_parsed(self) -> None:
         device = Device.model_validate(DEVICE_INFO_ENTRY)
 
         assert isinstance(device.installer, DeviceInstaller)
         assert device.installer.installer_id is None
         assert device.installer.installer_first_name is None
 
-    def test_installer_details_are_parsed(self):
+    def test_installer_details_are_parsed(self) -> None:
         payload = DEVICE_INFO_ENTRY | {
             "installer": {
                 "installerId": "installer@example.com",
@@ -156,7 +156,7 @@ class TestDeviceInfoEntry:
         assert installer.installer_last_name is None
         assert installer.installer_phone_number == "5550100"
 
-    def test_alarm_info_uses_push_encoding(self):
+    def test_alarm_info_uses_push_encoding(self) -> None:
         """``alarmInfo`` flags are 1=on, 2=off - not the device's 1=off,
         2=on - and a missing flag reads as unknown, not off."""
         device = Device.model_validate(DEVICE_INFO_ENTRY)
@@ -166,7 +166,7 @@ class TestDeviceInfoEntry:
         assert device.alarm_info.is_etc_alarm is True
         assert device.alarm_info.is_descaling_alarm is None
 
-    def test_alarm_info_off_flag(self):
+    def test_alarm_info_off_flag(self) -> None:
         payload = DEVICE_INFO_ENTRY | {
             "alarmInfo": {
                 "isEtcAlarm": 2,
@@ -181,7 +181,7 @@ class TestDeviceInfoEntry:
         assert alarm.is_error_alarm is True
         assert alarm.is_descaling_alarm is None
 
-    def test_list_entry_has_no_installer_or_alarm_info(self):
+    def test_list_entry_has_no_installer_or_alarm_info(self) -> None:
         device = Device.model_validate(DEVICE_LIST_ENTRY)
 
         assert device.installer is None
@@ -200,14 +200,14 @@ FIRMWARE_ENTRY = {
 
 
 class TestFirmwareInfo:
-    def test_null_device_group(self):
+    def test_null_device_group(self) -> None:
         fw = FirmwareInfo.model_validate(FIRMWARE_ENTRY)
 
         assert fw.device_group is None
         assert fw.device_group_unit_no is None
         assert fw.cur_sw_code == 33556241
 
-    def test_device_group_object(self):
+    def test_device_group_object(self) -> None:
         """The app reads ``deviceGroup`` as ``{groupSeq, unitNum}``."""
         payload = FIRMWARE_ENTRY | {
             "deviceGroup": {"groupSeq": 7, "unitNum": 2},
@@ -221,7 +221,7 @@ class TestFirmwareInfo:
         assert fw.device_group.unit_num == 2
         assert fw.device_group_unit_no == 2
 
-    def test_device_group_bare_string_still_accepted(self):
+    def test_device_group_bare_string_still_accepted(self) -> None:
         payload = FIRMWARE_ENTRY | {"deviceGroup": "NWP500"}
 
         assert FirmwareInfo.model_validate(payload).device_group == "NWP500"

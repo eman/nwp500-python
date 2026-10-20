@@ -31,38 +31,38 @@ class TestDeviceBoolConverter:
     NOTE: Uses comparison `value == 2`, so string "2" does NOT equal int 2.
     """
 
-    def test_off_value(self):
+    def test_off_value(self) -> None:
         """Device value 1 converts to False."""
         assert device_bool_to_python(1) is False
 
-    def test_on_value(self):
+    def test_on_value(self) -> None:
         """Device value 2 converts to True."""
         assert device_bool_to_python(2) is True
 
-    def test_string_off(self):
+    def test_string_off(self) -> None:
         """String '1' is not equal to int 2, so returns False."""
         assert device_bool_to_python("1") is False
 
-    def test_string_on(self):
+    def test_string_on(self) -> None:
         """String '2' is not equal to int 2, so returns False."""
         # String "2" != int 2 in Python, so result is False
         assert device_bool_to_python("2") is False
 
-    def test_int_off(self):
+    def test_int_off(self) -> None:
         """Integer 1 converts to False."""
         result = device_bool_to_python(1)
         assert result is False
 
-    def test_int_on(self):
+    def test_int_on(self) -> None:
         """Integer 2 converts to True."""
         result = device_bool_to_python(2)
         assert result is True
 
-    def test_float_off(self):
+    def test_float_off(self) -> None:
         """Float 1.0 is not equal to 2."""
         assert device_bool_to_python(1.0) is False
 
-    def test_zero_collapses_to_false_for_capability_flags(self):
+    def test_zero_collapses_to_false_for_capability_flags(self) -> None:
         """0 stays False here; that is correct for capability flags.
 
         The NaviLink app hides a feature's entire UI when its DID ``Use``
@@ -72,33 +72,33 @@ class TestDeviceBoolConverter:
         """
         assert device_bool_to_python(0) is False
 
-    def test_float_on(self):
+    def test_float_on(self) -> None:
         """Float 2.0 equals int 2 in Python."""
         assert device_bool_to_python(2.0) is True
 
-    def test_invalid_value_zero(self):
+    def test_invalid_value_zero(self) -> None:
         """Invalid value 0 returns False (0 != 2)."""
         result = device_bool_to_python(0)
         assert result is False
 
-    def test_invalid_value_three(self):
+    def test_invalid_value_three(self) -> None:
         """Invalid value 3 returns False (3 != 2)."""
         result = device_bool_to_python(3)
         assert result is False
 
-    def test_invalid_value_negative(self):
+    def test_invalid_value_negative(self) -> None:
         """Invalid value -1 returns False (-1 != 2)."""
         result = device_bool_to_python(-1)
         assert result is False
 
     @pytest.mark.parametrize("on_value", [2, 2.0])
-    def test_on_value_variations(self, on_value):
+    def test_on_value_variations(self, on_value) -> None:
         """Test various representations that equal 2."""
         # Numeric 2 and float 2.0 equal int 2
         assert device_bool_to_python(on_value) is True
 
     @pytest.mark.parametrize("off_value", [1, "1", 1.0, 0, 3, -1, "2"])
-    def test_off_value_variations(self, off_value):
+    def test_off_value_variations(self, off_value) -> None:
         """Test various representations of False value."""
         assert device_bool_to_python(off_value) is False
 
@@ -112,19 +112,19 @@ class TestDeviceTriStateConverter:
     become False.
     """
 
-    def test_unknown_value(self):
+    def test_unknown_value(self) -> None:
         """Device value 0 converts to None, not False."""
         assert device_tristate_to_python(0) is None
 
-    def test_off_value(self):
+    def test_off_value(self) -> None:
         """Device value 1 converts to False."""
         assert device_tristate_to_python(1) is False
 
-    def test_on_value(self):
+    def test_on_value(self) -> None:
         """Device value 2 converts to True."""
         assert device_tristate_to_python(2) is True
 
-    def test_none_passes_through(self):
+    def test_none_passes_through(self) -> None:
         """A missing value stays None rather than becoming False."""
         assert device_tristate_to_python(None) is None
 
@@ -132,7 +132,7 @@ class TestDeviceTriStateConverter:
         ("raw", "expected"),
         [("0", None), ("1", False), ("2", True), (0.0, None), (2.0, True)],
     )
-    def test_coerces_numeric_strings_and_floats(self, raw, expected):
+    def test_coerces_numeric_strings_and_floats(self, raw, expected) -> None:
         """Unlike device_bool_to_python, this coerces before comparing.
 
         device_bool_to_python compares with ``== 2`` and so reports False
@@ -142,11 +142,11 @@ class TestDeviceTriStateConverter:
         """
         assert device_tristate_to_python(raw) is expected
 
-    def test_unparseable_value_does_not_raise(self):
+    def test_unparseable_value_does_not_raise(self) -> None:
         """A non-numeric value falls back rather than blowing up."""
         assert device_tristate_to_python("garbage") is False
 
-    def test_three_states_are_distinguishable(self):
+    def test_three_states_are_distinguishable(self) -> None:
         """The whole point: 0, 1 and 2 map to three distinct results."""
         results = [device_tristate_to_python(v) for v in (0, 1, 2)]
         assert results == [None, False, True]
@@ -159,27 +159,27 @@ class TestBuiltinBoolForTouStatus:
     bool() is sufficient - no custom converter needed.
     """
 
-    def test_enabled_state(self):
+    def test_enabled_state(self) -> None:
         """TOU enabled: 1 = True."""
         assert bool(1) is True
 
-    def test_disabled_state(self):
+    def test_disabled_state(self) -> None:
         """TOU disabled: 0 = False."""
         assert bool(0) is False
 
-    def test_nonzero_is_true(self):
+    def test_nonzero_is_true(self) -> None:
         """Any non-zero value is truthy."""
         assert bool(2) is True
         assert bool(99) is True
         assert bool(-1) is True
 
     @pytest.mark.parametrize("value", [0, 0.0, "", [], {}, None])
-    def test_falsy_values(self, value):
+    def test_falsy_values(self, value) -> None:
         """Test various falsy values."""
         assert bool(value) is False
 
     @pytest.mark.parametrize("value", [1, 2, -1, "text", [1], {1: 1}])
-    def test_truthy_values(self, value):
+    def test_truthy_values(self, value) -> None:
         """Test various truthy values."""
         assert bool(value) is True
 
@@ -192,50 +192,50 @@ class TestTouOverrideConverter:
     NOTE: String values are NOT converted to int before comparison.
     """
 
-    def test_override_active(self):
+    def test_override_active(self) -> None:
         """Override active state: 1 = True."""
         result = tou_override_to_python(1)
         assert isinstance(result, bool)
         assert result is True
 
-    def test_override_inactive(self):
+    def test_override_inactive(self) -> None:
         """Override inactive state: 2 = False."""
         result = tou_override_to_python(2)
         assert isinstance(result, bool)
         assert result is False
 
-    def test_string_active(self):
+    def test_string_active(self) -> None:
         """String '1' is not equal to int 1, so returns False."""
         # tou_override_to_python uses: bool(value == 1)
         # String "1" != int 1, so result is False
         assert tou_override_to_python("1") is False
 
-    def test_string_inactive(self):
+    def test_string_inactive(self) -> None:
         """String '2' is not equal to int 1, so returns False."""
         result = tou_override_to_python("2")
         assert isinstance(result, bool)
         assert result is False
 
-    def test_zero_value(self):
+    def test_zero_value(self) -> None:
         """Value 0 is not equal to 1."""
         result = tou_override_to_python(0)
         assert isinstance(result, bool)
         assert result is False
 
-    def test_other_value(self):
+    def test_other_value(self) -> None:
         """Other non-1 values are False."""
         result = tou_override_to_python(99)
         assert isinstance(result, bool)
         assert result is False
 
     @pytest.mark.parametrize("active_value", [1, 1.0])
-    def test_active_variations(self, active_value):
+    def test_active_variations(self, active_value) -> None:
         """Test numeric variations of active (value == 1)."""
         # Only numeric 1 and float 1.0 equal int 1
         assert tou_override_to_python(active_value) is True
 
     @pytest.mark.parametrize("inactive_value", [2, "2", 2.0, 0, 3, -1, "1"])
-    def test_inactive_variations(self, inactive_value):
+    def test_inactive_variations(self, inactive_value) -> None:
         """Test various representations of inactive (value != 1)."""
         assert tou_override_to_python(inactive_value) is False
 
@@ -247,40 +247,40 @@ class TestDiv10Converter:
     Divides all input types (converts to float first if needed).
     """
 
-    def test_zero(self):
+    def test_zero(self) -> None:
         """0 / 10 = 0.0."""
         assert div_10(0) == 0.0
 
-    def test_positive_value(self):
+    def test_positive_value(self) -> None:
         """100 / 10 = 10.0."""
         assert div_10(100) == 10.0
 
-    def test_negative_value(self):
+    def test_negative_value(self) -> None:
         """-50 / 10 = -5.0."""
         assert div_10(-50) == -5.0
 
-    def test_single_digit(self):
+    def test_single_digit(self) -> None:
         """5 / 10 = 0.5."""
         assert div_10(5) == 0.5
 
-    def test_float_input(self):
+    def test_float_input(self) -> None:
         """50.5 / 10 = 5.05."""
         assert div_10(50.5) == pytest.approx(5.05)
 
-    def test_string_numeric(self):
+    def test_string_numeric(self) -> None:
         """String '100' is converted to float and divided."""
         result = div_10("100")
         assert result == pytest.approx(10.0)
 
-    def test_large_value(self):
+    def test_large_value(self) -> None:
         """1000 / 10 = 100.0."""
         assert div_10(1000) == 100.0
 
-    def test_very_small_value(self):
+    def test_very_small_value(self) -> None:
         """0.1 / 10 = 0.01."""
         assert div_10(0.1) == pytest.approx(0.01)
 
-    def test_negative_small_value(self):
+    def test_negative_small_value(self) -> None:
         """-0.5 / 10 = -0.05."""
         assert div_10(-0.5) == pytest.approx(-0.05)
 
@@ -297,7 +297,7 @@ class TestDiv10Converter:
             (99.9, 9.99),
         ],
     )
-    def test_known_values(self, input_value, expected):
+    def test_known_values(self, input_value, expected) -> None:
         """Test known div_10 conversions for numeric types."""
         result = div_10(input_value)
         assert result == pytest.approx(expected, abs=0.001)
@@ -314,27 +314,27 @@ class TestEnergyCountToWh:
     overstating reported energy by 2.5x.
     """
 
-    def test_zero(self):
+    def test_zero(self) -> None:
         """0 counts is 0 Wh."""
         assert energy_count_to_wh(0) == 0.0
 
-    def test_positive_value(self):
+    def test_positive_value(self) -> None:
         """100 counts at 4 Wh each is 400 Wh."""
         assert energy_count_to_wh(100) == 100 * WH_PER_ENERGY_COUNT
 
-    def test_float_input(self):
+    def test_float_input(self) -> None:
         """Fractional counts scale linearly."""
         assert energy_count_to_wh(50.5) == pytest.approx(
             50.5 * WH_PER_ENERGY_COUNT
         )
 
-    def test_string_numeric(self):
+    def test_string_numeric(self) -> None:
         """String input is converted to float first."""
         assert energy_count_to_wh("100") == pytest.approx(
             100 * WH_PER_ENERGY_COUNT
         )
 
-    def test_observed_full_recovery(self):
+    def test_observed_full_recovery(self) -> None:
         """A real reading: 1580 counts at a 145.4 degF setpoint.
 
         1580 * 4 Wh = 6320 Wh. Sanity-check that against physics: the
@@ -351,7 +351,7 @@ class TestEnergyCountToWh:
         """
         assert energy_count_to_wh(1580) == pytest.approx(6320.0)
 
-    def test_quantum_matches_physics(self):
+    def test_quantum_matches_physics(self) -> None:
         """The quantum must stay within measurement scatter of 4.11 Wh.
 
         Guards against a regression to the pre-10.0 value of 10, which
@@ -359,7 +359,7 @@ class TestEnergyCountToWh:
         """
         assert 3.4 < WH_PER_ENERGY_COUNT < 4.5
 
-    def test_linearity(self):
+    def test_linearity(self) -> None:
         """Conversion is linear, so sums are preserved."""
         assert energy_count_to_wh(300) == pytest.approx(
             energy_count_to_wh(100) + energy_count_to_wh(200)
@@ -369,7 +369,7 @@ class TestEnergyCountToWh:
         "counts",
         [0, 1, 10, 250, 1166, 1580, 1685],
     )
-    def test_known_values(self, counts):
+    def test_known_values(self, counts) -> None:
         """Raw counts scale by exactly the documented quantum."""
         assert energy_count_to_wh(counts) == pytest.approx(
             counts * WH_PER_ENERGY_COUNT, abs=0.001
@@ -382,42 +382,42 @@ class TestEnumValidator:
     Creates validators that convert integer device values to enum values.
     """
 
-    def test_validator_creation(self):
+    def test_validator_creation(self) -> None:
         """Enum validator can be created."""
         validator = enum_validator(OnOffFlag)
         assert callable(validator)
 
-    def test_onoff_flag_off(self):
+    def test_onoff_flag_off(self) -> None:
         """OnOffFlag: 1 = OFF."""
         validator = enum_validator(OnOffFlag)
         result = validator(OnOffFlag.OFF)
         assert result == OnOffFlag.OFF
 
-    def test_onoff_flag_on(self):
+    def test_onoff_flag_on(self) -> None:
         """OnOffFlag: 2 = ON."""
         validator = enum_validator(OnOffFlag)
         result = validator(OnOffFlag.ON)
         assert result == OnOffFlag.ON
 
-    def test_onoff_flag_by_value_off(self):
+    def test_onoff_flag_by_value_off(self) -> None:
         """Convert enum value 1 to OFF."""
         validator = enum_validator(OnOffFlag)
         result = validator(1)
         assert result == OnOffFlag.OFF
 
-    def test_onoff_flag_by_value_on(self):
+    def test_onoff_flag_by_value_on(self) -> None:
         """Convert enum value 2 to ON."""
         validator = enum_validator(OnOffFlag)
         result = validator(2)
         assert result == OnOffFlag.ON
 
-    def test_dhw_operation_setting(self):
+    def test_dhw_operation_setting(self) -> None:
         """Test DhwOperationSetting enum validator."""
         validator = enum_validator(DhwOperationSetting)
         result = validator(DhwOperationSetting.HEAT_PUMP)
         assert result == DhwOperationSetting.HEAT_PUMP
 
-    def test_dhw_all_values(self):
+    def test_dhw_all_values(self) -> None:
         """Test all DhwOperationSetting values."""
         validator = enum_validator(DhwOperationSetting)
 
@@ -432,13 +432,13 @@ class TestEnumValidator:
         vac = DhwOperationSetting.VACATION
         assert validator(vac) == vac
 
-    def test_invalid_enum_value(self):
+    def test_invalid_enum_value(self) -> None:
         """Invalid enum value should raise."""
         validator = enum_validator(OnOffFlag)
         with pytest.raises((ValueError, KeyError)):
             validator(99)
 
-    def test_enum_pass_through(self):
+    def test_enum_pass_through(self) -> None:
         """Passing enum object returns same enum."""
         validator = enum_validator(OnOffFlag)
         enum_obj = OnOffFlag.ON
@@ -454,13 +454,13 @@ class TestEnumValidator:
             (OnOffFlag.ON, OnOffFlag.ON),
         ],
     )
-    def test_onoff_conversions(self, input_val, expected_enum):
+    def test_onoff_conversions(self, input_val, expected_enum) -> None:
         """Test various input formats for OnOffFlag."""
         validator = enum_validator(OnOffFlag)
         result = validator(input_val)
         assert result == expected_enum
 
-    def test_multiple_validators_independent(self):
+    def test_multiple_validators_independent(self) -> None:
         """Multiple validators are independent."""
         onoff_validator = enum_validator(OnOffFlag)
         dhw_validator = enum_validator(DhwOperationSetting)
@@ -468,7 +468,7 @@ class TestEnumValidator:
         assert onoff_validator(1) == OnOffFlag.OFF
         assert dhw_validator(1) == DhwOperationSetting.HEAT_PUMP
 
-    def test_validator_consistency(self):
+    def test_validator_consistency(self) -> None:
         """Validator gives consistent results."""
         validator = enum_validator(OnOffFlag)
         result1 = validator(2)
@@ -476,7 +476,7 @@ class TestEnumValidator:
         assert result1 == result2
         assert result1 is result2
 
-    def test_string_integer_conversion(self):
+    def test_string_integer_conversion(self) -> None:
         """String integers are converted to enum."""
         validator = enum_validator(OnOffFlag)
         result = validator("1")
