@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import datetime
 
 import pytest
 
@@ -10,6 +11,8 @@ from nwp500.ble import (
     ADVERTISED_NAME_FRAGMENT,
     DEFAULT_READ_LENGTHS,
     NWP500_RESPONDING_CLASSES,
+    NWP500_WRITABLE_CLASSES,
+    TOU_PLAN_SLOTS,
     TOU_RECORD_SIZE,
     ClassCode,
     Command,
@@ -18,12 +21,16 @@ from nwp500.ble import (
     DeviceInfoBlock,
     NavienBleClient,
     SubStatus,
+    TouWriteError,
     answers_class_codes,
     best_heater,
     build_packet,
     build_read,
     build_session_command,
+    build_tou_read,
+    build_tou_write,
     crc16,
+    encode_tou_record,
     parse_packet,
     parse_tou_record,
     parse_tou_records,
@@ -351,8 +358,9 @@ def test_cli_read_defaults_to_the_classes_the_heater_answers(monkeypatch):
         {c: bytes(DEFAULT_READ_LENGTHS[c]) for c in NWP500_RESPONDING_CLASSES}
     )
     assert _run_read(monkeypatch, transport, []) == 0
+    # TOU_PLAN is also read whole, after its block, to decode the plan.
     asked = [parse_packet(w).class_code for w in transport.written]
-    assert asked == sorted(NWP500_RESPONDING_CLASSES)
+    assert list(dict.fromkeys(asked)) == sorted(NWP500_RESPONDING_CLASSES)
     assert not {51, 52, 53, 54} & set(asked)
 
 
@@ -475,15 +483,188 @@ def test_parse_tou_records_drops_empty_slots_and_rejects_partial_records():
     assert TOU_RECORD_SIZE == 16
 
 
+# Slots 12-19 of the same heater's table (2026-10-20): the rest of its plan.
+TOU_PLAN_REST = bytes.fromhex(
+    "000e7c00000e3b05346f0000346f0000000e7c0f000f3b059e7400009e740000"
+    "000e7c1000143b054e8200004e820000000e7c1500173b059e7400009e740000"
+    "1f0e8200000e3b05346f0000346f00001f0e820f000f3b059e7400009e740000"
+    "1f0e821000143b053f7d00003f7d00001f0e821500173b059e7400009e740000"
+)
+
+
+class TouTableTransport(FakeTransport):
+    """The heater's TOU table, as it behaved on an NWP500 (2026-10-20).
+
+    A read's address is the first slot and its payload byte the last; the
+    reply's byte count wraps at 256, and more than 224 bytes is never
+    sent. Slots past the table hold other data. A write is stored at
+    address 0 only, up to twelve records with none all zero; any other
+    address is answered with 04 and clears the table.
+    """
+
+    def __init__(self, table: bytes = b"", accept: bool = True):
+        super().__init__({})
+        size = TOU_RECORD_SIZE * TOU_PLAN_SLOTS
+        self.table = bytearray(table.ljust(size, b"\0"))
+        self.after = bytes.fromhex("01000001ff002410011a000000000000") * 4
+        self.accept = accept
+
+    def _reply(self, command: int, data: bytes) -> None:
+        packet = build_packet(command, ClassCode.TOU_PLAN, data)
+        asyncio.get_running_loop().call_soon(self._cb, packet)
+
+    async def write(self, data: bytes):
+        self.written.append(data)
+        req = parse_packet(data)
+        if req.command == Command.READ:
+            count = TOU_RECORD_SIZE * (req.data[0] - req.address + 1) & 0xFF
+            if count <= 224:
+                start = TOU_RECORD_SIZE * req.address
+                memory = bytes(self.table) + self.after
+                self._reply(Command.READ_RESPONSE, memory[start:][:count])
+            return
+        records = req.data[8:]
+        if req.address != 0:
+            self.table[:] = bytes(len(self.table))
+            self._reply(Command.WRITE_RESPONSE, b"\x04")
+            return
+        slots = [records[o : o + 16] for o in range(0, len(records), 16)]
+        if len(records) % 16 or len(slots) > 12 or not all(map(any, slots)):
+            return
+        if self.accept:
+            self.table[: len(records)] = records
+        self._reply(Command.WRITE_RESPONSE, b"\x01")
+
+
+def test_build_tou_read_sends_the_last_slot_as_the_payload():
+    request = parse_packet(build_tou_read(14, 27))
+    assert (request.class_code, request.address) == (ClassCode.TOU_PLAN, 14)
+    assert request.data == bytes([27])
+    for first, last in ((5, 4), (0, 14), (30, 40), (-1, 3)):
+        with pytest.raises(ValueError):
+            build_tou_read(first, last)
+
+
+def test_tou_record_encodes_back_to_the_bytes_read():
+    page = TOU_PLAN_PAGE + TOU_PLAN_REST
+    for o in range(0, len(page), 16):
+        raw = page[o : o + 16]
+        assert encode_tou_record(parse_tou_record(raw)) == raw
+
+
+def test_tou_record_encoding_rejects_empty_and_oversized_fields():
+    with pytest.raises(ValueError, match="empty slot"):
+        encode_tou_record(TOUPeriod(decimal_point=0))
+    with pytest.raises(ValueError, match="season"):
+        encode_tou_record(TOUPeriod(season=0x10000, week=0x7C))
+    with pytest.raises(ValueError, match="price_min"):
+        encode_tou_record(TOUPeriod(season=1, price_min=-1))
+
+
+def test_build_tou_write_puts_the_clock_header_before_the_records():
+    periods = parse_tou_records(TOU_PLAN_PAGE[:48])
+    # A Monday: java.util.Calendar numbers it 2 (Sunday = 1).
+    now = datetime.datetime(2026, 10, 19, 17, 5, 9, tzinfo=datetime.UTC)
+    request = parse_packet(build_tou_write(periods, now))
+    assert (request.command, request.class_code) == (
+        Command.WRITE,
+        ClassCode.TOU_PLAN,
+    )
+    assert request.address == 0
+    assert request.data[:8] == bytes([0xEA, 0x07, 10, 19, 2, 17, 5, 9])
+    assert request.data[8:] == TOU_PLAN_PAGE[:48]
+    sunday = parse_packet(build_tou_write(periods, now.replace(day=18)))
+    assert sunday.data[4] == 1
+
+
+def test_build_tou_write_limits_the_plan_to_twelve_intervals():
+    periods = parse_tou_records(TOU_PLAN_PAGE + TOU_PLAN_REST)
+    assert len(parse_packet(build_tou_write(periods[:12])).data) == 8 + 192
+    for count in (0, 13):
+        with pytest.raises(ValueError):
+            build_tou_write(periods[:count])
+
+
+def test_tou_plan_is_the_writable_class():
+    assert NWP500_WRITABLE_CLASSES == {ClassCode.TOU_PLAN}
+
+
 @pytest.mark.asyncio
-async def test_client_reads_tou_records_at_an_address():
-    transport = FakeTransport({ClassCode.TOU_PLAN: TOU_PLAN_PAGE[64:]})
+async def test_client_reads_the_whole_tou_table():
+    transport = TouTableTransport(TOU_PLAN_PAGE + TOU_PLAN_REST)
     async with NavienBleClient(transport=transport) as ble:
-        records = await ble.read_tou_records(4)
-    assert len(records) == 8
-    assert records[0].season == 0x1E0
-    request = parse_packet(transport.written[0])
-    assert (request.class_code, request.address) == (ClassCode.TOU_PLAN, 4)
+        records = await ble.read_tou_records()
+    assert len(records) == 20
+    assert records == parse_tou_records(TOU_PLAN_PAGE + TOU_PLAN_REST)
+    spans = [
+        (r.address, r.data[0]) for r in map(parse_packet, transport.written)
+    ]
+    assert spans == [(0, 13), (14, 27), (28, 39)]
+
+
+@pytest.mark.asyncio
+async def test_client_writes_a_tou_plan_and_checks_it():
+    periods = parse_tou_records(TOU_PLAN_PAGE)
+    transport = TouTableTransport(TOU_PLAN_PAGE[:64])
+    async with NavienBleClient(transport=transport) as ble:
+        await ble.write_tou_records(periods)
+        assert await ble.read_tou_records() == periods
+    writes = [
+        p
+        for p in map(parse_packet, transport.written)
+        if p.command == Command.WRITE
+    ]
+    assert len(writes) == 1
+    assert writes[0].address == 0
+
+
+@pytest.mark.asyncio
+async def test_client_refuses_to_leave_a_longer_plan_behind():
+    transport = TouTableTransport(TOU_PLAN_PAGE + TOU_PLAN_REST)
+    async with NavienBleClient(transport=transport) as ble:
+        with pytest.raises(TouWriteError, match="cloud"):
+            await ble.write_tou_records(parse_tou_records(TOU_PLAN_PAGE))
+    assert all(
+        parse_packet(w).command == Command.READ for w in transport.written
+    )
+
+
+@pytest.mark.asyncio
+async def test_client_reports_a_refused_or_unstored_tou_write():
+    periods = parse_tou_records(TOU_PLAN_PAGE[:32])
+
+    class Refusing(TouTableTransport):
+        async def write(self, data: bytes):
+            if parse_packet(data).command == Command.WRITE:
+                self.written.append(data)
+                self._reply(Command.WRITE_RESPONSE, b"\x04")
+                return
+            await super().write(data)
+
+    async with NavienBleClient(transport=Refusing()) as ble:
+        with pytest.raises(TouWriteError, match="refused"):
+            await ble.write_tou_records(periods)
+    async with NavienBleClient(
+        transport=TouTableTransport(accept=False)
+    ) as ble:
+        with pytest.raises(TouWriteError, match="differs"):
+            await ble.write_tou_records(periods)
+
+
+@pytest.mark.asyncio
+async def test_client_retries_a_read_the_heater_did_not_answer():
+    class DropsFirst(FakeTransport):
+        async def write(self, data: bytes):
+            if not self.written:
+                self.written.append(data)
+                return
+            await super().write(data)
+
+    transport = DropsFirst({ClassCode.DID: bytes(58)})
+    async with NavienBleClient(transport=transport, reply_timeout=0.05) as ble:
+        info = await ble.read_device_info()
+    assert info.raw == bytes(58)
+    assert len(transport.written) == 2
 
 
 @pytest.mark.asyncio
@@ -498,12 +679,13 @@ def test_build_read_carries_the_address():
     assert parse_packet(build_read(ClassCode.TOU_PLAN, None, 15)).address == 15
 
 
-def test_cli_read_prints_decoded_tou_records(monkeypatch, capsys):
-    transport = FakeTransport({ClassCode.TOU_PLAN: TOU_PLAN_PAGE})
+def test_cli_read_prints_the_whole_tou_plan(monkeypatch, capsys):
+    transport = TouTableTransport(TOU_PLAN_PAGE + TOU_PLAN_REST)
     assert _run_read(monkeypatch, transport, ["TOU_PLAN"]) == 0
     out = capsys.readouterr().out
     assert "season=0x01f week=0x7c 00:00-14:59 price=0.28468-0.28468" in out
-    assert out.count("season=") == 12
+    assert "season=0xe1f week=0x82 21:00-23:59" in out
+    assert out.count("season=") == 20
 
 
 # --- SSD ---------------------------------------------------------------

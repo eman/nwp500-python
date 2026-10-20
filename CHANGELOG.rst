@@ -19,7 +19,7 @@ Added
   matched request/reply client; ``python -m nwp500.ble scan`` and
   ``python -m nwp500.ble read`` dump the blocks. Checked on a unit: it
   answers a DIP-switch block, error history, four diagnostics counters, the stored
-  192-byte TOU plan, device info, the controller serial numbers and a
+  time-of-use plan, device info, the controller serial numbers and a
   software-data block; the boiler parameter classes 51-54 do not answer, so
   installer parameters are not reachable yet. ``write_block()`` exists for
   the eventual parameter write and is marked experimental. ``read``
@@ -27,8 +27,17 @@ Added
   answered; the readers that decode a block raise ``CrcMismatchError``
   on a reply that failed its checksum.
   ``read_tou_records()`` decodes the stored time-of-use plan into
-  ``TOUPeriod``, the cloud's model; one read returns up to the first
-  twelve intervals. ``DeviceInfoBlock`` (``DID``), ``ControllerSerials``
+  ``TOUPeriod``, the cloud's model, reading the controller's 40-slot table
+  whole (a ``TOU_PLAN`` read's payload byte is the last slot, not a
+  length; ``build_tou_read()``). ``write_tou_records()`` stores a plan of
+  up to twelve intervals (``build_tou_write()``: the NaviLink app's clock
+  header, then the records in the read layout) and reads it back. It
+  refuses to write over a longer stored plan, whose extra intervals no
+  Bluetooth write can clear, and raises ``TouWriteError`` when the
+  heater refuses or stores something else. ``TOU_PLAN`` is the one
+  writable class (``NWP500_WRITABLE_CLASSES``). A read that gets no reply
+  is sent once more, since the first request on a new connection
+  sometimes goes unanswered. ``DeviceInfoBlock`` (``DID``), ``ControllerSerials``
   (``MSCD``) and ``SoftwareInfoBlock`` (``MSWD``) use the cloud models'
   field names for the fields matched against them.
   ``read_sub_status()`` decodes the ``SSD`` block into two DIP-switch

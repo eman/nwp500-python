@@ -9,9 +9,10 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from typing import Any, Protocol
 
+from ..exceptions import Nwp500Error
 from ..models.tou import TOUPeriod
 from .protocol import (
     ADVERTISED_NAME_FRAGMENT,
@@ -19,6 +20,10 @@ from .protocol import (
     NOTIFY_CHAR_UUID,
     SERVICE_UUID,
     START_STATUS_STREAM,
+    TOU_PLAN_SLOTS,
+    TOU_READ_MAX_RECORDS,
+    TOU_RECORD_SIZE,
+    TOU_WRITE_ACCEPTED,
     WRITE_CHAR_UUID,
     ClassCode,
     Command,
@@ -32,6 +37,8 @@ from .protocol import (
     build_packet,
     build_read,
     build_session_command,
+    build_tou_read,
+    build_tou_write,
     parse_packet,
     parse_tou_records,
 )
@@ -124,6 +131,10 @@ NOT_ADVERTISING_HINT = (
 STATUS_TIMEOUT = 15.0
 
 
+class TouWriteError(Nwp500Error):
+    """The heater did not store a time-of-use plan as written."""
+
+
 def answers_class_codes(name: str) -> bool:
     """Whether a heater advertising ``name`` answers the protocol."""
     return name.upper().startswith(_ANSWERING_NAME_PREFIX)
@@ -157,6 +168,9 @@ class NavienBleClient:
     :meth:`read_status` starts the heater's live status stream, after
     which the heater answers no reads on the connection; reconnect to
     read blocks again.
+
+    :meth:`write_tou_records` stores a time-of-use plan of up to twelve
+    intervals and checks it by reading it back.
 
     :meth:`write_block` sends a write and is marked experimental: the
     parameter block layouts are not yet mapped, so only write bytes you
@@ -269,9 +283,23 @@ class NavienBleClient:
         ``address`` selects within a class; only ``TOU_PLAN`` uses it on
         an NWP500 (see :meth:`read_tou_records`).
         """
-        return await self.request(
+        return await self._request_read(
             build_read(class_code, expected_length, address), class_code
         )
+
+    async def _request_read(self, packet: bytes, class_code: int) -> Packet:
+        """:meth:`request`, sent once more if no reply came.
+
+        On an NWP500 the first request on a new connection has gone
+        unanswered a few times in a dozen connections, and the same request
+        sent again was answered. Only reads are retried; they change
+        nothing.
+        """
+        try:
+            return await self.request(packet, class_code)
+        except TimeoutError:
+            _logger.debug("No reply for class %s; retrying once", class_code)
+            return await self.request(packet, class_code)
 
     async def _read_checked(
         self,
@@ -322,30 +350,93 @@ class NavienBleClient:
         """
         return SubStatus.parse(await self._read_checked(ClassCode.SSD))
 
-    async def read_tou_records(self, address: int = 0) -> list[TOUPeriod]:
-        """Read the stored TOU plan from record ``address`` on.
+    async def read_tou_records(self) -> list[TOUPeriod]:
+        """Read the stored TOU plan: every interval, in slot order.
 
         Each interval decodes into :class:`~nwp500.models.TOUPeriod`, the
         model the MQTT client and REST API use, so the plan compares
         directly with the cloud's (e.g. with ``TOUPeriod.canonical()``).
-
-        The address is a record index, and one reply runs from it to the
-        end of a page, empty slots dropped. On an NWP500 the first page is
-        records 0-11, so the default read returns up to the first twelve
-        intervals, which is the whole plan when it has no more. The next
-        page ends at record 27, and its first records did not come back:
-        starting at 12 returned an empty reply, and 13 and 14 none. Reads
-        from 15 onward return the rest. A plan of more than twelve
-        intervals therefore cannot yet be read whole over Bluetooth;
-        :meth:`nwp500.NavienAPIClient.get_tou_info` returns all of it.
+        The controller's table has :data:`~nwp500.ble.protocol.TOU_PLAN_SLOTS`
+        slots, read in three requests (see
+        :func:`~nwp500.ble.protocol.build_tou_read`); empty slots are
+        dropped.
 
         Raises:
-            CrcMismatchError: The reply failed its checksum.
-            ValueError: The reply is not a whole number of records.
+            CrcMismatchError: A reply failed its checksum.
+            ValueError: A reply did not hold the records asked for.
         """
-        return parse_tou_records(
-            await self._read_checked(ClassCode.TOU_PLAN, None, address)
-        )
+        return parse_tou_records(await self._read_tou_slots())
+
+    async def _read_tou_slots(self) -> bytes:
+        """The whole ``TOU_PLAN`` table, empty slots included."""
+        data = b""
+        for first in range(0, TOU_PLAN_SLOTS, TOU_READ_MAX_RECORDS):
+            last = min(first + TOU_READ_MAX_RECORDS, TOU_PLAN_SLOTS) - 1
+            packet = await self._request_read(
+                build_tou_read(first, last), ClassCode.TOU_PLAN
+            )
+            if not packet.crc_ok:
+                raise CrcMismatchError(
+                    "reply for class TOU_PLAN failed its CRC"
+                )
+            want = TOU_RECORD_SIZE * (last - first + 1)
+            if len(packet.data) != want:
+                raise ValueError(
+                    f"TOU records {first}-{last}: expected {want} bytes, "
+                    f"got {len(packet.data)}"
+                )
+            data += packet.data
+        return data
+
+    async def write_tou_records(self, periods: Sequence[TOUPeriod]) -> None:
+        """Store a time-of-use plan of up to twelve intervals.
+
+        The heater takes one write into slots 0 onward, of at most
+        :data:`~nwp500.ble.protocol.TOU_WRITE_MAX_RECORDS` intervals (see
+        :func:`~nwp500.ble.protocol.build_tou_write`), and leaves the slots
+        after it as they were. Nothing written over Bluetooth empties a
+        slot: a record of zeros makes the heater drop the whole write. So
+        this reads the table first and refuses a plan shorter than the one
+        stored, which would leave the old plan's last intervals running.
+        After the write it reads the table back and checks that it holds
+        exactly ``periods``.
+
+        A longer plan, or a shorter one replacing it, needs the cloud:
+        :meth:`nwp500.NavienMqttClient.configure_tou_schedule` replaces the
+        whole plan. The heater does not report a Bluetooth write to the
+        cloud, whose copy (:meth:`nwp500.NavienAPIClient.get_tou_info`)
+        stays as it was. On the unit checked, a write into an empty table
+        also turned TOU scheduling on (``tou_status``).
+
+        Raises:
+            ValueError: ``periods`` is empty, too long, or does not encode.
+            TouWriteError: A longer plan is stored, the heater refused the
+                write, or the table read back differs from ``periods``.
+            TimeoutError: The heater did not answer. It drops a write it
+                cannot take without answering or changing the table.
+            CrcMismatchError: A reply failed its checksum.
+        """
+        packet = build_tou_write(periods)
+        stored = await self._read_tou_slots()
+        tail = stored[TOU_RECORD_SIZE * len(periods) :]
+        if any(tail):
+            raise TouWriteError(
+                f"the heater holds a plan of more than {len(periods)} "
+                "intervals, whose extra intervals a Bluetooth write would "
+                "leave in place; use the cloud to replace it"
+            )
+        reply = await self.request(packet, ClassCode.TOU_PLAN)
+        if reply.command != Command.WRITE_RESPONSE or reply.data != bytes(
+            [TOU_WRITE_ACCEPTED]
+        ):
+            raise TouWriteError(
+                f"the heater refused the TOU write (reply {reply.data.hex()})"
+            )
+        stored_after = parse_tou_records(await self._read_tou_slots())
+        if [p.canonical_key() for p in stored_after] != [
+            p.canonical_key() for p in periods
+        ]:
+            raise TouWriteError("the TOU plan read back differs from the write")
 
     async def read_parameter_blocks(self) -> dict[ClassCode, bytes]:
         """Read the four boiler parameter blocks (classes 51-54).
@@ -442,6 +533,7 @@ __all__ = [
     "BleTransport",
     "BleakTransport",
     "NavienBleClient",
+    "TouWriteError",
     "answers_class_codes",
     "best_heater",
     "scan",

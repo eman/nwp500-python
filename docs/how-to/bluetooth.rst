@@ -14,6 +14,8 @@ installer parameters (Installer Menu > Parameter Settings). The
    NWP500 are not mapped yet; :meth:`~nwp500.ble.NavienBleClient.write_block`
    is experimental and should only replay bytes you read from the same
    block with a deliberate change.
+   :meth:`~nwp500.ble.NavienBleClient.write_tou_records` replaces the
+   stored time-of-use plan and checks it by reading it back.
 
 Install the extra
 -----------------
@@ -119,10 +121,11 @@ parameter classes 51-54 that the service app uses on boilers, with any
 expected length or sub-address, so its installer parameters live behind
 a class the heat-pump-specific service app knows and this library does
 not yet. :data:`nwp500.ble.NWP500_RESPONDING_CLASSES` lists the
-responding set. Every one of them is read-only: writing a block's own bytes
-back is answered as a read (:data:`nwp500.ble.NWP500_WRITABLE_CLASSES` is
-empty). The boiler parameter classes 51-54 are not implemented on this
-controller at all.
+responding set. Writing a block's own bytes back is answered as a read by
+every one of them, but ``TOU_PLAN`` takes a write in its own format (see
+`Write the time-of-use plan`_), so it is the one writable class
+(:data:`nwp500.ble.NWP500_WRITABLE_CLASSES`). The boiler parameter classes
+51-54 are not implemented on this controller at all.
 
 Min Operation Temp is readable but not writable here: it is DID byte 17
 (:meth:`~nwp500.ble.DeviceInfoBlock.min_operation_temperature`), confirmed equal
@@ -131,7 +134,7 @@ class is selected from a per-model table the service app downloads from
 Navien's server, so it is not reachable from this interface alone.
 
 The address byte is ignored by every answering class except ``TOU_PLAN``,
-where it is a record index (see below).
+where it is a slot index (see below).
 
 Read the time-of-use plan
 -------------------------
@@ -145,14 +148,61 @@ client and REST API use, so a plan read here compares directly with the
 cloud's (for example with ``TOUPeriod.canonical()``). Checked on a unit,
 the decoded intervals equal the cloud's copy of its plan.
 
-The address is a record index, and one reply runs from it to the end of a
-page. The first page is records 0-11, so the default read returns up to
-the first twelve intervals. Records 12-14 did not come back from any start
-address (12 returns an empty reply, 13 and 14 none), and reads from 15 on
-return the rest. A plan of more than twelve intervals therefore cannot yet
-be read whole over Bluetooth; :meth:`~nwp500.NavienAPIClient.get_tou_info`
-returns all of it. ``python -m nwp500.ble read`` prints the decoded
-records under the ``TOU_PLAN`` line.
+The controller keeps the plan in a table of 40 slots, and a read names a
+span of it. The address byte is the first slot, and the payload byte, which
+the other classes treat as the expected length, is the last.
+The reply holds ``16 * (last - first + 1)`` bytes, a count the controller
+keeps in one byte, so it wraps past 255. A plain read of the class (payload
+59) therefore returns slots 0-11 from address 0, and from address 12
+nothing. Spans of more than 14 slots are never answered, since 240 bytes do
+not fit in one notification. ``read_tou_records()`` reads the table in
+three spans (:func:`~nwp500.ble.build_tou_read`) and returns every
+interval. Checked on a unit, all twenty intervals of its plan equal the
+cloud's copy. ``python -m nwp500.ble read`` prints the decoded plan under
+the ``TOU_PLAN`` line.
+
+Write the time-of-use plan
+--------------------------
+
+:meth:`~nwp500.ble.NavienBleClient.write_tou_records` stores a plan of up
+to twelve intervals:
+
+.. code-block:: python
+
+   plan = await ble.read_tou_records()
+   await ble.write_tou_records(plan[:4])
+
+The write is the NaviLink app's: an 8-byte clock header (year, month, day,
+weekday, time) and then the records, in the layout the controller returns
+on a read (:func:`~nwp500.ble.build_tou_write`). The heater answers ``01``
+when it stores them. On the unit checked it behaved as follows:
+
+* The write goes into slots 0 onward and leaves later slots as they were.
+  A second write at address 0 overwrites the first rather than
+  continuing it. A write at any other address is answered with ``04`` and
+  clears the whole table.
+* A write of more than twelve records goes unanswered and changes
+  nothing.
+* A record of zeros, which is how the table marks an empty slot, makes the
+  heater drop the whole write, so no Bluetooth write empties a slot.
+
+So a plan cannot be shortened over Bluetooth: writing four intervals over
+a stored plan of six would leave the last two running. The method
+therefore reads the table first and raises
+:class:`~nwp500.ble.TouWriteError` when the stored plan is longer than the
+new one, so the example above only succeeds on a plan of four intervals
+or fewer. After the write it reads the table back and raises the same
+error if the heater refused or stored something else.
+
+A plan of more than twelve intervals, or a shorter one replacing it, needs
+the cloud: :meth:`~nwp500.NavienMqttClient.configure_tou_schedule`
+replaces the whole plan. The heater does not report a Bluetooth write to
+the cloud, so :meth:`~nwp500.NavienAPIClient.get_tou_info` keeps returning
+the cloud's earlier copy. On the unit checked, a write into an empty table
+also turned TOU scheduling on, and clearing the table turned it off; check
+``tou_status`` afterwards. NaviLink's own Bluetooth path sends a longer
+plan as several pages at address 0, which on this heater leaves only the
+last page stored.
 
 Read live status
 ----------------

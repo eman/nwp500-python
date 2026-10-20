@@ -16,7 +16,6 @@ from . import (
     SubStatus,
     answers_class_codes,
     best_heater,
-    parse_tou_records,
     scan,
 )
 
@@ -38,11 +37,13 @@ def _parse_class(text: str) -> tuple[int, int | None]:
     return int(code), (int(length) if length else None)
 
 
-def _print_tou(data: bytes) -> None:
+async def _print_tou(ble: NavienBleClient) -> None:
+    # The block read above holds only the first twelve slots; the plan is
+    # read whole here.
     try:
-        records = parse_tou_records(data)
-    except ValueError as e:
-        print(f"  (not decoded: {e})")
+        records = await ble.read_tou_records()
+    except (TimeoutError, ValueError) as e:
+        print(f"  (not decoded: {e or 'no reply'})")
         return
     for r in records:
         print(
@@ -104,7 +105,7 @@ async def _read(args: argparse.Namespace) -> int:
                 f"crc_ok={pkt.crc_ok} {pkt.data.hex()}"
             )
             if pkt.class_code == ClassCode.TOU_PLAN and pkt.crc_ok:
-                _print_tou(pkt.data)
+                await _print_tou(ble)
             elif pkt.class_code == ClassCode.SSD and pkt.crc_ok:
                 _print_sub_status(pkt.data)
             results.append(

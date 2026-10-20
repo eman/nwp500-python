@@ -29,6 +29,8 @@ caller expects back.
 
 from __future__ import annotations
 
+import datetime
+from collections.abc import Sequence
 from dataclasses import dataclass
 from enum import IntEnum
 
@@ -84,7 +86,7 @@ class ClassCode(IntEnum):
     SPHD = 53  # parameter block: high grade (59 bytes)
     SPD = 54  # parameter block: settings (59 bytes); written as a whole
     SDOD = 164
-    TOU_PLAN = 170  # time-of-use plan (written by NaviLink)
+    TOU_PLAN = 170  # time-of-use plan; see read_tou_records
     SFHD = 210  # firmware: header
     SFBD = 211  # firmware: block
     SFDD = 212  # firmware: done
@@ -123,14 +125,15 @@ NWP500_RESPONDING_CLASSES: frozenset[int] = frozenset(
 )
 
 #: Of the classes an NWP500 answers, which accept a write (command 16).
-#: Checked 2026-10-16 by writing each block's own bytes back and reading the
-#: reply code: every readable class echoes a *read* response, so none is
-#: writable over this interface. The boiler parameter classes 51-54 do not
-#: respond to reads or writes at all on this controller. The writable
+#: Writing a block's own bytes back (2026-10-16) was answered as a read by
+#: every class, but ``TOU_PLAN`` takes a write in its own format, a clock
+#: header before the records (see :func:`build_tou_write`), and answers it
+#: with a write response (2026-10-19). The boiler parameter classes 51-54 do
+#: not respond to reads or writes at all on this controller. The writable
 #: parameter class is selected from the per-model table the service app
 #: downloads from Navien's server; it is not one of the classes below and
 #: cannot be found by safe probing.
-NWP500_WRITABLE_CLASSES: frozenset[int] = frozenset()
+NWP500_WRITABLE_CLASSES: frozenset[int] = frozenset({ClassCode.TOU_PLAN})
 
 #: Bytes in a ``SAPCD`` (class 50) session command.
 SESSION_COMMAND_LENGTH = 30
@@ -676,11 +679,12 @@ def parse_tou_record(data: bytes) -> TOUPeriod:
         8-11   price max
         12-15  price min
 
-    This is the layout the NaviLink app writes. Checked on an NWP500
-    (2026-10-16): the twelve intervals read at address 0 equal the first
-    twelve of the plan the cloud holds for that heater, field for field.
-    Price max and min were equal in every interval checked, so their order
-    is taken from the app.
+    Checked on an NWP500 (2026-10-16): the intervals read equal the plan
+    the cloud holds for that heater, field for field. Price max and min
+    were equal in every interval checked, so their order is taken from the
+    NaviLink app. The controller takes the same layout in a write
+    (:func:`build_tou_write`); the app's own encoder writes the season
+    differently, which the controller does not read back as written.
 
     Raises:
         ValueError: If ``data`` is not 16 bytes.
@@ -725,6 +729,121 @@ def parse_tou_records(data: bytes) -> list[TOUPeriod]:
     ]
 
 
+#: Slots in the controller's ``TOU_PLAN`` table. Reads past the last slot
+#: return other data. The NaviLink app also refuses plans of more than 40
+#: intervals.
+TOU_PLAN_SLOTS = 40
+
+#: Most records one ``TOU_PLAN`` read returns. Fifteen (240 bytes) do not
+#: fit in one notification, and the heater sends nothing.
+TOU_READ_MAX_RECORDS = 14
+
+#: Most records one ``TOU_PLAN`` write may carry. On an NWP500 a write of
+#: 13 or 14 records went unanswered and changed nothing, though it fit
+#: the connection's MTU.
+TOU_WRITE_MAX_RECORDS = 12
+
+#: Reply byte to a ``TOU_PLAN`` write the controller stored. NaviLink treats
+#: any other value as a failure.
+TOU_WRITE_ACCEPTED = 0x01
+
+
+def build_tou_read(first: int, last: int) -> bytes:
+    """Frame a read of ``TOU_PLAN`` records ``first`` to ``last`` inclusive.
+
+    The address byte is the first record's index, and the payload byte,
+    which the other classes treat as the expected length, is the last
+    record's. The controller replies with ``16 * (last - first + 1)``
+    bytes, a count it keeps in one byte, so a span that would overflow it
+    comes back truncated. Checked on an NWP500 (2026-10-20) at every
+    address and several payloads. The span is limited to
+    :data:`TOU_READ_MAX_RECORDS`.
+
+    Raises:
+        ValueError: If the span is empty, too long or outside the table.
+    """
+    if not 0 <= first <= last < TOU_PLAN_SLOTS:
+        raise ValueError(
+            f"TOU records {first}-{last} are outside 0-{TOU_PLAN_SLOTS - 1}"
+        )
+    if last - first + 1 > TOU_READ_MAX_RECORDS:
+        raise ValueError(
+            f"one TOU read returns at most {TOU_READ_MAX_RECORDS} records"
+        )
+    return build_packet(Command.READ, ClassCode.TOU_PLAN, bytes([last]), first)
+
+
+def encode_tou_record(period: TOUPeriod) -> bytes:
+    """Encode one interval in the layout of :func:`parse_tou_record`.
+
+    Raises:
+        ValueError: If a field does not fit its bytes, or the record would
+            be all zeros, which the controller treats as an empty slot.
+    """
+    fields = (
+        ("season", period.season, 2),
+        ("week", period.week, 1),
+        ("start_hour", period.start_hour, 1),
+        ("start_min", period.start_min, 1),
+        ("end_hour", period.end_hour, 1),
+        ("end_min", period.end_min, 1),
+        ("decimal_point", period.decimal_point, 1),
+        ("price_max", period.price_max, 4),
+        ("price_min", period.price_min, 4),
+    )
+    out = b""
+    for name, value, size in fields:
+        if not 0 <= value < 1 << (8 * size):
+            raise ValueError(f"TOU {name}={value} does not fit {size} byte(s)")
+        out += value.to_bytes(size, "little")
+    if not any(out):
+        raise ValueError("an all-zero TOU record is an empty slot")
+    return out
+
+
+def build_tou_write(
+    periods: Sequence[TOUPeriod], now: datetime.datetime | None = None
+) -> bytes:
+    """Frame a ``TOU_PLAN`` write of ``periods`` into slots 0 onward.
+
+    The payload is the NaviLink app's: an 8-byte clock header (year
+    little-endian, month, day, weekday with Sunday = 1, hour, minute,
+    second), then the records. The address is always 0. On an NWP500
+    (2026-10-19, 2026-10-20) any other address was answered with ``04``
+    and cleared the whole table, and a second write at address 0
+    overwrites the first instead of continuing it. So one write sets
+    slots ``0`` to ``len(periods) - 1`` and leaves the rest as they were.
+
+    Args:
+        periods: One to :data:`TOU_WRITE_MAX_RECORDS` intervals.
+        now: The clock to send; the local time when omitted. Its fields
+            are sent as they are, whatever its time zone.
+
+    Raises:
+        ValueError: If there are no periods or too many, or one does not
+            encode (see :func:`encode_tou_record`).
+    """
+    if not 1 <= len(periods) <= TOU_WRITE_MAX_RECORDS:
+        raise ValueError(
+            f"a TOU write carries 1-{TOU_WRITE_MAX_RECORDS} intervals, "
+            f"got {len(periods)}"
+        )
+    # The heater's clock is local time, as the app sends it.
+    now = now or datetime.datetime.now().astimezone()
+    header = now.year.to_bytes(2, "little") + bytes(
+        [
+            now.month,
+            now.day,
+            now.isoweekday() % 7 + 1,
+            now.hour,
+            now.minute,
+            now.second,
+        ]
+    )
+    body = b"".join(encode_tou_record(p) for p in periods)
+    return build_packet(Command.WRITE, ClassCode.TOU_PLAN, header + body)
+
+
 __all__ = [
     "SERVICE_UUID",
     "WRITE_CHAR_UUID",
@@ -737,6 +856,10 @@ __all__ = [
     "SESSION_COMMAND_LENGTH",
     "START_STATUS_STREAM",
     "TOU_RECORD_SIZE",
+    "TOU_PLAN_SLOTS",
+    "TOU_READ_MAX_RECORDS",
+    "TOU_WRITE_MAX_RECORDS",
+    "TOU_WRITE_ACCEPTED",
     "crc16",
     "build_packet",
     "build_read",
@@ -750,4 +873,7 @@ __all__ = [
     "RealTimeStatus",
     "parse_tou_record",
     "parse_tou_records",
+    "build_tou_read",
+    "encode_tou_record",
+    "build_tou_write",
 ]
