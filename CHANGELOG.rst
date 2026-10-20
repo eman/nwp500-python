@@ -49,7 +49,8 @@ Added
   against the MQTT status report, in standby and while heating (operation
   mode, state number, DHW temperature and setpoint, the six thermistors,
   superheat and EEV step), under the ``DeviceStatus`` names and
-  conversions. The heater answers no reads while the stream runs. The
+  conversions. A read ends the stream, and the next ``read_status()``
+  starts it again. The
   heater's display unit is in no Bluetooth block, so Bluetooth
   temperatures follow the unit-system preference.
 - ``nwp-cli --backend ble`` (with ``--ble-address`` or a scan) runs

@@ -71,7 +71,8 @@ class FakeTransport:
     """Answers reads of the classes it was given, like the heater.
 
     Like the heater, the session command 200 starts a status stream: the
-    blocks in ``stream`` are pushed, and reads go unanswered after it.
+    blocks in ``stream`` are pushed. A read is answered and ends the
+    stream.
     """
 
     def __init__(
@@ -108,7 +109,8 @@ class FakeTransport:
             self.streaming = True
             for block in self.stream:
                 self.push(block)
-        elif req.class_code in self.replies and not self.streaming:
+        elif req.class_code in self.replies:
+            self.streaming = False
             reply = build_packet(
                 Command.READ_RESPONSE,
                 req.class_code,
@@ -448,11 +450,27 @@ async def test_status_blocks_do_not_answer_a_read():
     transport = _heater()
     async with NavienBleClient(transport=transport, reply_timeout=0.1) as ble:
         await ble.read_status()
-        # the heater answers no reads while streaming, and the blocks it
-        # pushes are not taken for the reply
+        # the blocks the heater pushes are not taken for the reply
         transport.push(RTMD)
         with pytest.raises(TimeoutError):
             await ble.read(ClassCode.RTMD, 156)
+
+
+@pytest.mark.asyncio
+async def test_read_status_restarts_the_stream_a_read_ended():
+    transport = _heater()
+    async with NavienBleClient(transport=transport) as ble:
+        assert (await ble.read_status()).raw == RTMD
+        info = await ble.read_device_info()
+        assert not transport.streaming
+        assert (await ble.read_status()).raw == RTMD
+    assert info.raw == DID
+    starts = [
+        w
+        for w in map(parse_packet, transport.written)
+        if w.class_code == ClassCode.SAPCD
+    ]
+    assert len(starts) == 2
 
 
 @pytest.mark.asyncio

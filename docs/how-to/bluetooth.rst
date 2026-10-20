@@ -210,14 +210,16 @@ Read live status
 The heater does not answer a read of the real-time monitoring class
 (``RTMD``, 48). It pushes that block instead, once it receives the
 class-50 session command 200 that Navien's service apps send on
-connecting: a 156-byte block about every 300 ms until the connection
-closes. While the stream runs, the heater answers no reads, so read any
-other blocks first.
+connecting: a 156-byte block about every 300 ms. A read ends the stream:
+the heater answers it and pushes no more blocks until the next command.
+The service app's monitoring graph sends 202 for its Stop button, which on
+the heater runs the stream at about one block a second instead, and 201
+stops it.
 
 :meth:`~nwp500.ble.NavienBleClient.read_status` starts the stream and
-returns the newest block as a :class:`~nwp500.ble.RealTimeStatus`. It
-drops the first block after the command, which on the unit checked held
-values from earlier. The decoded fields have the
+returns the newest block as a :class:`~nwp500.ble.RealTimeStatus`, and
+starts the stream again when a read has ended it. It drops the first block
+after each start, which on the unit checked held values from earlier. The decoded fields have the
 :class:`~nwp500.models.DeviceStatus` names, raw encodings and conversions,
 and each was checked against the same heater's MQTT status report
 (2026-10-19):

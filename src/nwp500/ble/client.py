@@ -165,9 +165,8 @@ class NavienBleClient:
     :class:`CrcMismatchError` instead of decoding bytes that failed their
     checksum.
 
-    :meth:`read_status` starts the heater's live status stream, after
-    which the heater answers no reads on the connection; reconnect to
-    read blocks again.
+    :meth:`read_status` starts the heater's live status stream. A read
+    ends the stream, and the next :meth:`read_status` starts it again.
 
     :meth:`write_tou_records` stores a time-of-use plan of up to twelve
     intervals and checks it by reading it back.
@@ -258,6 +257,10 @@ class NavienBleClient:
         async with self._lock:
             while not self._replies.empty():
                 self._replies.get_nowait()
+            # The heater answers a request sent during the status stream
+            # and stops pushing blocks (checked 2026-10-20), so the next
+            # read_status() starts the stream again.
+            self._streaming = False
             await self._transport.write(packet)
             deadline = asyncio.get_running_loop().time() + self._reply_timeout
             while True:
@@ -470,10 +473,11 @@ class NavienBleClient:
         and drops the first block that follows: on an NWP500 that block
         held values from earlier, with temperatures 3 degC away from the
         blocks after it and from the MQTT report. The heater then pushes a
-        block about every 300 ms until the connection closes, and later
-        calls return the newest one that has arrived, or wait for the
-        next. While the stream runs the heater answers no reads, so read
-        any other blocks before calling this.
+        block about every 300 ms, and later calls return the newest one
+        that has arrived, or wait for the next. A read or write ends the
+        stream: the heater answers it and pushes no more blocks. The next
+        call then starts the stream again, dropping its first block once
+        more.
 
         Args:
             timeout: Seconds to wait for each block. Longer than the reply

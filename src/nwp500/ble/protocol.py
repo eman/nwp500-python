@@ -204,9 +204,18 @@ def build_session_command(code: int) -> bytes:
 
     The command is a write of a 30-byte block whose first byte is
     ``code`` and whose other bytes are zero, as Navien's service apps
-    send it. The heater sends no reply to it. Only
-    :data:`START_STATUS_STREAM` has been tried on an NWP500; the apps'
-    other codes change controller state and are not exposed here.
+    send it. The heater sends no reply to it. On an NWP500 (2026-10-19,
+    2026-10-20):
+
+    * 200 (:data:`START_STATUS_STREAM`) starts the ``RTMD`` stream, a
+      block about every 300 ms.
+    * 202, the service app's Stop on its monitoring graph, starts the
+      stream at about one block a second, or slows a running one.
+    * 201 stops the stream, after one more block. A read or write does too.
+    * 210, which the service app sends other models on connecting, pushed
+      one block after a 201 and nothing otherwise.
+
+    The service app's 220 resets the stored error history.
     """
     if not 0 <= code <= 0xFF:
         raise ValueError("session command code must fit in one byte")

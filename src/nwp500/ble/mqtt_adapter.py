@@ -115,8 +115,8 @@ class BleMqttAdapter:
     as the MQTT client does. Where the MQTT client delivers a
     ``DeviceStatus``, the adapter delivers a
     :class:`~nwp500.ble.RealTimeStatus`, which has the status fields
-    Bluetooth carries under the same names. The heater answers no reads
-    once status is streaming, so request device info before status.
+    Bluetooth carries under the same names. A device info request ends a
+    status stream, which the next status request starts again.
     :attr:`device_info` and :attr:`controller_serials` keep the last blocks
     read, for callers that want the whole blocks rather than the
     :class:`BleDeviceFeature` subset.
