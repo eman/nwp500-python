@@ -940,7 +940,9 @@ def standby(
         draw_out_of_domain_at=out_of_domain_at,
         draw_volume_gal=coast.draw_volume_gal if draws else None,
         draw_heat_wh=coast.draw_heat_btu / BTU_PER_WH if draws else None,
-        circulation_minutes=flowing.minutes if circulating else None,
+        circulation_minutes=(
+            flowing.minutes if isinstance(flowing, CirculationDraws) else None
+        ),
         circulation_heat_wh=(
             coast.flowing_heat_btu / BTU_PER_WH if circulating else None
         ),

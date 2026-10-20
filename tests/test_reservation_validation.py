@@ -7,7 +7,7 @@ are now held to the protocol's field ranges, and ``param`` to the setpoint
 range the heater reports in its feature data.
 """
 
-from typing import Any
+from typing import Any, cast
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -218,7 +218,7 @@ class TestControllerUpdateReservations:
 
         await controller.update_reservations(mock_device, entries, kept=[1])
 
-        _topic, command = publish.await_args.args
+        _topic, command = cast(Any, publish.await_args).args
         assert command["request"]["reservation"] == entries
 
     @pytest.mark.asyncio

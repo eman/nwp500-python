@@ -13,8 +13,10 @@ from __future__ import annotations
 
 import asyncio
 from datetime import UTC, datetime, timedelta
+from typing import Any, cast
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import aiohttp
 import pytest
 
 from nwp500.api_client import NavienAPIClient
@@ -27,8 +29,8 @@ from nwp500.auth import (
 from nwp500.exceptions import AuthenticationError, TokenRefreshError
 
 
-def _valid_tokens(**overrides) -> AuthTokens:
-    defaults = {
+def _valid_tokens(**overrides: Any) -> AuthTokens:
+    defaults: dict[str, Any] = {
         "id_token": "id",
         "access_token": "access",
         "refresh_token": "refresh",
@@ -42,7 +44,7 @@ def _valid_tokens(**overrides) -> AuthTokens:
     return AuthTokens(**defaults)
 
 
-def _expired_jwt_tokens(**overrides) -> AuthTokens:
+def _expired_jwt_tokens(**overrides: Any) -> AuthTokens:
     """JWT expired, AWS credentials still valid (refresh path)."""
     old_time = datetime.now(UTC) - timedelta(seconds=7200)
     overrides.setdefault("authorization_expires_in", 100000)
@@ -62,19 +64,23 @@ class TestConcurrentRefresh:
     """Token refresh must be serialized across concurrent callers."""
 
     @pytest.mark.asyncio
-    async def test_concurrent_ensure_valid_token_single_refresh(self):
+    async def test_concurrent_ensure_valid_token_single_refresh(self) -> None:
         """Regression: N concurrent callers at token expiry fired N
         parallel refresh requests; with rotation the losers held
         invalidated tokens."""
         client = _client_with_tokens(_expired_jwt_tokens())
         refresh_calls = 0
 
-        async def fake_refresh(refresh_token=None):
+        async def fake_refresh(
+            refresh_token: str | None = None,
+        ) -> AuthTokens:
             nonlocal refresh_calls
             refresh_calls += 1
             await asyncio.sleep(0.01)  # let other callers pile up
             new_tokens = _valid_tokens(refresh_token="rotated")
-            client._auth_response.tokens = new_tokens
+            cast(
+                AuthenticationResponse, client._auth_response
+            ).tokens = new_tokens
             return new_tokens
 
         with patch.object(
@@ -88,7 +94,7 @@ class TestConcurrentRefresh:
         assert all(r is not None and not r.is_expired for r in results)
 
     @pytest.mark.asyncio
-    async def test_stale_explicit_token_gets_fresh_tokens(self):
+    async def test_stale_explicit_token_gets_fresh_tokens(self) -> None:
         """A 401-retry caller holding a pre-rotation refresh token must
         receive the already-refreshed tokens, not refresh with a stale
         token."""
@@ -103,7 +109,7 @@ class TestConcurrentRefresh:
         assert result is fresh
 
     @pytest.mark.asyncio
-    async def test_forced_refresh_with_current_token_proceeds(self):
+    async def test_forced_refresh_with_current_token_proceeds(self) -> None:
         """Explicitly refreshing with the current refresh token is a
         forced refresh (used by deep reconnect) and must not be skipped."""
         tokens = _valid_tokens()
@@ -120,7 +126,7 @@ class TestRefreshTokenPreservation:
     """Fields omitted from the refresh response must be preserved."""
 
     @pytest.mark.asyncio
-    async def test_refresh_response_without_refresh_token(self):
+    async def test_refresh_response_without_refresh_token(self) -> None:
         """Regression: the merge preserved AWS fields but not
         refresh_token/id_token; a response omitting them wiped the stored
         refresh token so every subsequent refresh posted ''."""
@@ -162,7 +168,7 @@ class TestAenterLifecycle:
     """__aenter__ must not leak sessions and must be idempotent."""
 
     @pytest.mark.asyncio
-    async def test_owned_session_closed_when_aenter_fails(self):
+    async def test_owned_session_closed_when_aenter_fails(self) -> None:
         """Regression: __aexit__ is never called when __aenter__ raises,
         leaking the owned ClientSession on bad credentials."""
         client = NavienAuthClient("test@example.com", "wrong-password")
@@ -170,7 +176,7 @@ class TestAenterLifecycle:
         created_sessions = []
         real_create = client._create_session
 
-        def tracking_create():
+        def tracking_create() -> aiohttp.ClientSession:
             session = real_create()
             created_sessions.append(session)
             return session
@@ -193,7 +199,7 @@ class TestAenterLifecycle:
         assert client._session is None
 
     @pytest.mark.asyncio
-    async def test_aenter_is_idempotent_for_owned_session(self):
+    async def test_aenter_is_idempotent_for_owned_session(self) -> None:
         """Regression: the factory pre-enters the context and its
         docstring tells users to enter again; the second __aenter__
         created a new session and orphaned the first."""
@@ -211,7 +217,9 @@ class TestAenterLifecycle:
         assert client._session is None
 
     @pytest.mark.asyncio
-    async def test_stored_token_refresh_failure_falls_back_to_sign_in(self):
+    async def test_stored_token_refresh_failure_falls_back_to_sign_in(
+        self,
+    ) -> None:
         """Regression: restoring week-old tokens raised TokenRefreshError
         even though credentials for a full sign-in were stored."""
         client = _client_with_tokens(_expired_jwt_tokens())
@@ -237,7 +245,7 @@ class TestApiClientSessionResolution:
     """The API client must not pin the auth client's session."""
 
     @pytest.mark.asyncio
-    async def test_uses_recreated_auth_session(self):
+    async def test_uses_recreated_auth_session(self) -> None:
         """Regression: the session was captured at construction; if the
         auth client recreated its session, the API client kept issuing
         requests on the closed one."""
@@ -256,7 +264,7 @@ class TestApiClientSessionResolution:
         assert api._session is second_session
 
     @pytest.mark.asyncio
-    async def test_explicit_session_override_wins(self):
+    async def test_explicit_session_override_wins(self) -> None:
         client = _client_with_tokens(_valid_tokens())
         client._session = MagicMock()
         client._owned_session = False
@@ -267,7 +275,7 @@ class TestApiClientSessionResolution:
         client._session = MagicMock()
         assert api._session is override
 
-    def test_construction_requires_some_session(self):
+    def test_construction_requires_some_session(self) -> None:
         client = _client_with_tokens(_valid_tokens())
         client._session = None
 

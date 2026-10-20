@@ -7,6 +7,7 @@ import json
 import os
 import subprocess
 import sys
+from collections.abc import Iterator
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -33,7 +34,7 @@ TZ = "America/Los_Angeles"
 
 
 @pytest.fixture(autouse=True)
-def _units():
+def _units() -> Iterator[None]:
     yield
     reset_unit_system()
 
@@ -92,7 +93,7 @@ def _doc(scenario: dict[str, Any], **extra: Any) -> dict[str, Any]:
 
 
 class TestMerge:
-    def test_objects_merge_and_other_values_replace(self):
+    def test_objects_merge_and_other_values_replace(self) -> None:
         base = {"a": {"x": 1, "y": 2}, "b": [1, 2], "c": 1}
         over = {"a": {"y": 3}, "b": [9], "d": 4}
         assert sim_cli.merge(base, over) == {
@@ -105,26 +106,26 @@ class TestMerge:
 
 
 class TestInputs:
-    def test_ambient_and_environment_are_exclusive(self):
+    def test_ambient_and_environment_are_exclusive(self) -> None:
         with pytest.raises(sim_cli.InputError, match="not both"):
             sim_cli.Inputs(ambient=60.0, environment={"ambient_f": 60.0})
 
-    def test_a_start_needs_its_offset(self):
+    def test_a_start_needs_its_offset(self) -> None:
         with pytest.raises(sim_cli.InputError, match="offset"):
             sim_cli.Inputs(start=datetime(2026, 10, 18, 7))  # noqa: DTZ001
 
-    def test_a_scenario_of_another_version_is_refused(self):
+    def test_a_scenario_of_another_version_is_refused(self) -> None:
         with pytest.raises(sim_cli.InputError, match="schema_version"):
             sim_cli.Inputs(scenario={"schema_version": 2, "scenario": {}})
 
-    def test_the_device_is_read_without_a_scenario_or_with_live(self):
+    def test_the_device_is_read_without_a_scenario_or_with_live(self) -> None:
         assert sim_cli.Inputs().needs_device
         assert not sim_cli.Inputs(scenario=_doc({})).needs_device
         assert sim_cli.Inputs(scenario=_doc({}), live=True).needs_device
 
     def test_the_zone_is_the_flag_then_the_scenario_then_the_machine(
-        self, monkeypatch
-    ):
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         monkeypatch.setattr(sim_cli, "local_zone", lambda: "Europe/Berlin")
         doc = _doc({"tz": "America/Denver"})
         assert sim_cli.Inputs(tz="UTC", scenario=doc).zone() == "UTC"
@@ -137,17 +138,17 @@ class TestInputs:
 
 class TestBadInputs:
     @pytest.mark.parametrize("text", ["null", "[1]", "3"])
-    def test_a_document_is_an_object(self, tmp_path, text):
+    def test_a_document_is_an_object(self, tmp_path: Path, text: str) -> None:
         path = tmp_path / "doc.json"
         path.write_text(text)
         with pytest.raises(sim_cli.InputError, match="not a JSON object"):
             sim_cli.read_document(path, "scenario")
 
-    def test_an_unknown_zone_flag(self):
+    def test_an_unknown_zone_flag(self) -> None:
         with pytest.raises(sim_cli.InputError, match="unknown time zone"):
             sim_cli.Inputs(tz="Mars/Base")
 
-    def test_an_unknown_zone_in_the_scenario(self):
+    def test_an_unknown_zone_in_the_scenario(self) -> None:
         doc = scenario_to_document(_scenario())
         doc["scenario"]["tz"] = "Mars/Base"
         inputs = sim_cli.Inputs(scenario=doc)
@@ -156,13 +157,13 @@ class TestBadInputs:
         with pytest.raises(sim_cli.InputError, match="unknown time zone"):
             sim_cli.build(inputs, None, NOW)
 
-    def test_a_good_zone_flag_wins_over_a_bad_one_in_the_scenario(self):
+    def test_a_good_zone_flag_wins_over_a_bad_one_in_the_scenario(self) -> None:
         doc = scenario_to_document(_scenario())
         doc["scenario"]["tz"] = "Mars/Base"
         built = sim_cli.build(sim_cli.Inputs(scenario=doc, tz="UTC"), None, NOW)
         assert built.scenario.tz == "UTC"
 
-    def test_parameters_that_are_not_a_document(self):
+    def test_parameters_that_are_not_a_document(self) -> None:
         doc = scenario_to_document(_scenario())
         with pytest.raises(sim_cli.InputError, match="--params"):
             sim_cli.build(sim_cli.Inputs(scenario=doc, params={}), None, NOW)
@@ -171,11 +172,13 @@ class TestBadInputs:
                 sim_cli.Inputs(scenario={**doc, "params": {}}), None, NOW
             )
 
-    def test_a_scenario_the_simulator_refuses(self, monkeypatch):
+    def test_a_scenario_the_simulator_refuses(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         def refuse(*_: Any, **__: Any) -> Any:
             raise SimulationError("no fitted draw response")
 
-        monkeypatch.setattr(sim_cli.sim, "simulate", refuse)
+        monkeypatch.setattr(sim, "simulate", refuse)
         with pytest.raises(sim_cli.InputError, match="cannot be simulated"):
             sim_cli.run(
                 sim_cli.Inputs(scenario=scenario_to_document(_scenario())),
@@ -187,14 +190,14 @@ class TestBadInputs:
 
 
 class TestPrecedence:
-    def test_live_alone(self):
+    def test_live_alone(self) -> None:
         live = _live()
         built = sim_cli.build(sim_cli.Inputs(), live, NOW)
         assert built.scenario == live.scenario
         assert built.params == sim.default_params(2)
         assert built.notes == ()
 
-    def test_a_scenario_alone_reads_nothing_live(self):
+    def test_a_scenario_alone_reads_nothing_live(self) -> None:
         s = _scenario()
         built = sim_cli.build(
             sim_cli.Inputs(scenario=scenario_to_document(s)), None, NOW
@@ -203,7 +206,7 @@ class TestPrecedence:
         assert built.params == sim.default_params()
         assert "65 gal defaults" in built.notes[0]
 
-    def test_a_scenario_laid_on_live_wins_where_it_speaks(self):
+    def test_a_scenario_laid_on_live_wins_where_it_speaks(self) -> None:
         overlay = _doc({"settings": {"setpoint_f": 120.0}, "horizon": "PT6H"})
         live = _live()
         built = sim_cli.build(
@@ -218,7 +221,7 @@ class TestPrecedence:
         assert s.schedules == live.scenario.schedules
         assert s.environment == live.scenario.environment
 
-    def test_flags_win_over_the_scenario(self):
+    def test_flags_win_over_the_scenario(self) -> None:
         s = _scenario()
         start = NOW + timedelta(hours=1)
         built = sim_cli.build(
@@ -242,7 +245,7 @@ class TestPrecedence:
         assert b.commands == sim.Commands(tou_enabled=True)
         assert b.state == s.state
 
-    def test_flags_win_over_live(self):
+    def test_flags_win_over_live(self) -> None:
         built = sim_cli.build(
             sim_cli.Inputs(environment={"ambient_f": 40.0, "humidity": 30.0}),
             _live(),
@@ -252,7 +255,7 @@ class TestPrecedence:
             ambient_f=40.0, humidity=30.0
         )
 
-    def test_the_air_and_inlet_flags_are_in_the_preferred_unit(self):
+    def test_the_air_and_inlet_flags_are_in_the_preferred_unit(self) -> None:
         set_unit_system("metric")
         built = sim_cli.build(
             sim_cli.Inputs(ambient=10.0, inlet=15.0), _live(), NOW
@@ -260,7 +263,9 @@ class TestPrecedence:
         assert built.scenario.environment.ambient_f == pytest.approx(50.0)
         assert built.scenario.environment.inlet_f == pytest.approx(59.0)
 
-    def test_without_a_start_or_horizon_now_and_a_day(self, monkeypatch):
+    def test_without_a_start_or_horizon_now_and_a_day(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         monkeypatch.setattr(sim_cli, "local_zone", lambda: TZ)
         doc = scenario_to_document(_scenario())
         for key in ("start", "horizon", "tz"):
@@ -268,7 +273,9 @@ class TestPrecedence:
         b = sim_cli.build(sim_cli.Inputs(scenario=doc), None, NOW).scenario
         assert (b.start, b.horizon, b.tz) == (NOW, timedelta(hours=24), TZ)
 
-    def test_the_parameters_flag_then_the_document_then_the_device(self):
+    def test_the_parameters_flag_then_the_document_then_the_device(
+        self,
+    ) -> None:
         p80, p50 = sim.default_params(3), sim.default_params(1)
         doc = scenario_to_document(_scenario(), p50)
         live = _live()
@@ -286,13 +293,13 @@ class TestPrecedence:
             sim.default_params(2)
         )
 
-    def test_an_incomplete_scenario_is_an_input_error(self):
+    def test_an_incomplete_scenario_is_an_input_error(self) -> None:
         with pytest.raises(sim_cli.InputError, match="do not make a scenario"):
             sim_cli.build(sim_cli.Inputs(scenario=_doc({"tz": TZ})), None, NOW)
 
 
 class TestSnapshot:
-    def test_a_snapshot_replays_as_the_live_run(self):
+    def test_a_snapshot_replays_as_the_live_run(self) -> None:
         live = _live()
         text = json.dumps(sim_cli.snapshot_document(live))
         replayed = sim_cli.build(
@@ -318,13 +325,13 @@ class TestOutput:
         )
         return out.getvalue()
 
-    def test_json_is_the_result_document(self):
+    def test_json_is_the_result_document(self) -> None:
         doc = json.loads(self._run("json"))
         assert doc["schema_version"] == 1
         assert doc["heating"]
         assert doc["windows"]
 
-    def test_csv_is_the_path(self):
+    def test_csv_is_the_path(self) -> None:
         rows = list(csv.reader(io.StringIO(self._run("csv"))))
         assert rows[0] == [
             "at",
@@ -339,12 +346,12 @@ class TestOutput:
         ]
         assert rows[1][:4] == [NOW.isoformat(), "118.0", "95.0", "130.0"]
 
-    def test_csv_in_celsius_says_so(self):
+    def test_csv_in_celsius_says_so(self) -> None:
         set_unit_system("metric")
         header = self._run("csv").splitlines()[0]
         assert header.startswith("at,upper_c,lower_c,setpoint_c,delivery_c")
 
-    def test_the_table(self):
+    def test_the_table(self) -> None:
         text = self._run("table")
         assert "Heating" in text
         assert "compressor" in text
@@ -359,8 +366,8 @@ class TestTheCommand:
         return str(path)
 
     def test_a_scenario_run_never_touches_the_device(
-        self, tmp_path, monkeypatch
-    ):
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         async def no_device(*_: Any) -> int:
             raise AssertionError("connected")
 
@@ -375,7 +382,9 @@ class TestTheCommand:
         assert result.exit_code == 0, result.output
         assert json.loads(result.stdout)["schema_version"] == 1
 
-    def test_live_runs_connect(self, tmp_path, monkeypatch):
+    def test_live_runs_connect(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         called: list[Any] = []
 
         async def device(ctx: Any, command: Any) -> int:
@@ -398,7 +407,7 @@ class TestTheCommand:
         )
         assert len(called) == 3
 
-    def test_a_bad_input_is_a_usage_error(self, tmp_path):
+    def test_a_bad_input_is_a_usage_error(self, tmp_path: Path) -> None:
         scenario = self._write(
             tmp_path, "s.json", scenario_to_document(_scenario())
         )
@@ -419,8 +428,8 @@ class TestTheCommand:
         assert "not both" in result.output
 
     def test_a_null_scenario_never_reads_the_device(
-        self, tmp_path, monkeypatch
-    ):
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         async def no_device(*_: Any) -> int:
             raise AssertionError("connected")
 
@@ -432,7 +441,7 @@ class TestTheCommand:
         assert result.exit_code == 2
         assert "not a JSON object" in result.output
 
-    def test_an_unreadable_file_is_a_usage_error(self, tmp_path):
+    def test_an_unreadable_file_is_a_usage_error(self, tmp_path: Path) -> None:
         bad = tmp_path / "bad.json"
         bad.write_text("{")
         result = CliRunner().invoke(
@@ -441,7 +450,7 @@ class TestTheCommand:
         assert result.exit_code == 2
         assert "cannot read the scenario" in result.output
 
-    def test_without_the_extra_a_one_line_hint(self):
+    def test_without_the_extra_a_one_line_hint(self) -> None:
         code = (
             "import sys; "
             "sys.modules.update(numpy=None, pandas=None, scipy=None); "
@@ -468,7 +477,7 @@ class TestTheExamples:
     def _doc(self, name: str) -> Any:
         return json.loads((self.EXAMPLES / name).read_text())
 
-    def test_the_scenario_and_its_plan_run(self):
+    def test_the_scenario_and_its_plan_run(self) -> None:
         inputs = sim_cli.Inputs(
             scenario=self._doc("scenario.json"),
             commands=self._doc("plan.json"),
@@ -480,7 +489,7 @@ class TestTheExamples:
         assert result.heating
         assert result.windows
 
-    def test_the_overlay_lowers_the_live_setpoint(self):
+    def test_the_overlay_lowers_the_live_setpoint(self) -> None:
         inputs = sim_cli.Inputs(
             scenario=self._doc("lower-setpoint.json"), live=True
         )
@@ -492,13 +501,13 @@ class TestTheExamples:
 class TestTheSourcesWindow:
     NOW = datetime(2026, 10, 18, 15, tzinfo=UTC)
 
-    def test_now_and_the_default(self):
+    def test_now_and_the_default(self) -> None:
         assert sim_cli.window(sim_cli.Inputs(), self.NOW) == (
             self.NOW,
             timedelta(hours=sim_cli.DEFAULT_HOURS),
         )
 
-    def test_the_scenarios_then_the_flags(self):
+    def test_the_scenarios_then_the_flags(self) -> None:
         doc = {
             "schema_version": 1,
             "scenario": {

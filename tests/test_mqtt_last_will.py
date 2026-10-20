@@ -13,13 +13,18 @@ from __future__ import annotations
 import asyncio
 import concurrent.futures
 import json
-from typing import Any
+from typing import Any, cast
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from awscrt import mqtt as awscrt_mqtt
 
-from nwp500.auth import AuthenticationResponse, AuthTokens, UserInfo
+from nwp500.auth import (
+    AuthenticationResponse,
+    AuthTokens,
+    NavienAuthClient,
+    UserInfo,
+)
 from nwp500.events import EventEmitter
 from nwp500.models.mqtt_models import (
     APP_CONNECTION_OS,
@@ -49,7 +54,9 @@ def _device(mac: str = MAC) -> MagicMock:
     return device
 
 
-def _app_message(status: int, client_id: str = "navilink-phone") -> dict:
+def _app_message(
+    status: int, client_id: str = "navilink-phone"
+) -> dict[str, Any]:
     """A ``RequestLastWill`` message as the app's Gson serializes it."""
     return {
         "clientID": client_id,
@@ -66,9 +73,7 @@ def _app_message(status: int, client_id: str = "navilink-phone") -> dict:
     }
 
 
-def _auth_client():
-    from nwp500.auth import NavienAuthClient
-
+def _auth_client() -> NavienAuthClient:
     client = NavienAuthClient("test@example.com", "password")
     client._auth_response = AuthenticationResponse(
         user_info=UserInfo(user_first_name="T", user_last_name="U"),
@@ -87,12 +92,12 @@ def _auth_client():
 
 
 class TestTopicBuilder:
-    def test_app_connection_topic(self):
+    def test_app_connection_topic(self) -> None:
         assert MqttTopicBuilder.app_connection_topic("52", MAC) == TOPIC
 
 
 class TestAppConnectionModel:
-    def test_parses_the_apps_last_will(self):
+    def test_parses_the_apps_last_will(self) -> None:
         parsed = AppConnectionEvent.model_validate(_app_message(0))
 
         assert parsed.client_id == "navilink-phone"
@@ -109,12 +114,14 @@ class TestAppConnectionModel:
     @pytest.mark.parametrize(
         ("status", "connected"), [(1, True), (0, False), (-1, False)]
     )
-    def test_connected_follows_the_apps_threshold(self, status, connected):
+    def test_connected_follows_the_apps_threshold(
+        self, status: int, connected: bool
+    ) -> None:
         """The app treats ``status <= 0`` as disconnected."""
         parsed = AppConnectionEvent.model_validate(_app_message(status))
         assert parsed.connected is connected
 
-    def test_parses_the_apps_event_status_shape(self):
+    def test_parses_the_apps_event_status_shape(self) -> None:
         """Screens parse the topic with ``EventStatus``, whose connection
         has ``sessionNumber`` and no ``os``; both must be accepted."""
         parsed = AppConnectionEvent.model_validate(
@@ -131,7 +138,7 @@ class TestAppConnectionModel:
         assert parsed.event.connection.os is None
         assert parsed.connected is True
 
-    def test_build_renders_the_apps_shape(self):
+    def test_build_renders_the_apps_shape(self) -> None:
         event = AppConnectionEvent.build(
             client_id="navien-client-1",
             session_id="s1",
@@ -157,7 +164,7 @@ class TestAppConnectionModel:
             },
         }
 
-    def test_build_omits_unknown_model_type_code(self):
+    def test_build_omits_unknown_model_type_code(self) -> None:
         event = AppConnectionEvent.build(
             client_id="c",
             session_id="s",
@@ -172,7 +179,7 @@ class TestAppConnectionModel:
         assert "sessionNumber" not in payload["event"]["connection"]
         assert payload["event"]["connection"]["status"] == 1
 
-    def test_payload_round_trips(self):
+    def test_payload_round_trips(self) -> None:
         event = AppConnectionEvent.build(
             client_id="c",
             session_id="s",
@@ -199,13 +206,13 @@ class TestSignalAppConnection:
         return controller, publish
 
     @pytest.mark.asyncio
-    async def test_publishes_connected_announcement(self):
+    async def test_publishes_connected_announcement(self) -> None:
         controller, publish = self._controller()
 
         await controller.signal_app_connection(_device())
 
         publish.assert_awaited_once()
-        topic, payload = publish.await_args.args[:2]
+        topic, payload = publish.await_args.args[:2]  # type: ignore[union-attr]
         assert topic == TOPIC
         assert payload == {
             "clientID": "navien-client-1",
@@ -222,7 +229,7 @@ class TestSignalAppConnection:
         }
         assert "timestamp" not in payload
 
-    def test_build_app_connection_for_the_will(self):
+    def test_build_app_connection_for_the_will(self) -> None:
         controller, _publish = self._controller()
 
         topic, payload = controller.build_app_connection(
@@ -235,7 +242,7 @@ class TestSignalAppConnection:
 
 
 class TestWillTypes:
-    def test_to_awscrt_will(self):
+    def test_to_awscrt_will(self) -> None:
         will = MqttWill(topic=TOPIC, payload={"a": 1}, qos=QoS.AT_LEAST_ONCE)
 
         converted = to_awscrt_will(will)
@@ -271,9 +278,9 @@ class TestConnectionBuilderWill:
                 assert await connection.connect()
 
         asyncio.run(run())
-        return builder.call_args.kwargs
+        return cast("dict[str, Any]", builder.call_args.kwargs)
 
-    def test_will_is_passed_to_the_builder(self):
+    def test_will_is_passed_to_the_builder(self) -> None:
         will = MqttWill(topic=TOPIC, payload={"event": {}})
 
         kwargs = self._connect_with(will)
@@ -283,12 +290,12 @@ class TestConnectionBuilderWill:
         assert kwargs["will"].qos == awscrt_mqtt.QoS.AT_LEAST_ONCE
         assert json.loads(kwargs["will"].payload) == {"event": {}}
 
-    def test_no_will_without_a_device(self):
+    def test_no_will_without_a_device(self) -> None:
         kwargs = self._connect_with(None)
 
         assert "will" not in kwargs
 
-    def test_will_property(self):
+    def test_will_property(self) -> None:
         will = MqttWill(topic=TOPIC)
         connection = MqttConnection(
             config=MqttConnectionConfig(client_id="c"),
@@ -301,7 +308,7 @@ class TestConnectionBuilderWill:
 class TestClientWill:
     """``NavienMqttClient`` derives the will from the configured device."""
 
-    def test_will_from_last_will_device(self):
+    def test_will_from_last_will_device(self) -> None:
         client = NavienMqttClient(
             _auth_client(),
             MqttConnectionConfig(
@@ -321,14 +328,14 @@ class TestClientWill:
             "os": APP_CONNECTION_OS,
         }
 
-    def test_no_will_by_default(self):
+    def test_no_will_by_default(self) -> None:
         client = NavienMqttClient(_auth_client())
 
         assert client._build_will() is None
         assert client._create_connection_manager().will is None
 
     @pytest.mark.asyncio
-    async def test_every_connection_manager_carries_the_will(self):
+    async def test_every_connection_manager_carries_the_will(self) -> None:
         """First connect and rebuilds all go through one factory, so a
         reconnected session registers the will again."""
         client = NavienMqttClient(
@@ -407,7 +414,7 @@ class TestSubscribeAppConnection:
         )
 
     @pytest.mark.asyncio
-    async def test_subscribes_to_the_event_topic(self):
+    async def test_subscribes_to_the_event_topic(self) -> None:
         manager, _events = self._emitting_manager()
 
         packet = await manager.subscribe_app_connection(
@@ -418,7 +425,7 @@ class TestSubscribeAppConnection:
         assert list(manager.subscriptions) == [TOPIC]
 
     @pytest.mark.asyncio
-    async def test_callback_and_event_on_a_last_will(self):
+    async def test_callback_and_event_on_a_last_will(self) -> None:
         manager, events = self._emitting_manager()
         received: list[AppConnectionEvent] = []
         await manager.subscribe_app_connection(_device(), received.append)
@@ -439,7 +446,7 @@ class TestSubscribeAppConnection:
         assert event.event == received[0]
 
     @pytest.mark.asyncio
-    async def test_two_callbacks_emit_the_event_once(self):
+    async def test_two_callbacks_emit_the_event_once(self) -> None:
         manager, events = self._emitting_manager()
         first: list[AppConnectionEvent] = []
         second: list[AppConnectionEvent] = []
@@ -456,7 +463,7 @@ class TestSubscribeAppConnection:
         assert len(events) == 1
 
     @pytest.mark.asyncio
-    async def test_own_announcement_is_delivered_with_client_id(self):
+    async def test_own_announcement_is_delivered_with_client_id(self) -> None:
         manager, events = self._emitting_manager()
         await manager.subscribe_app_connection(_device(), lambda e: None)
 
@@ -470,7 +477,7 @@ class TestSubscribeAppConnection:
         assert events[0].client_id == "navien-client-1"
 
     @pytest.mark.asyncio
-    async def test_does_not_record_a_device_session(self):
+    async def test_does_not_record_a_device_session(self) -> None:
         """Watching presence is not a device session: no st/end for it."""
         manager, _events = self._emitting_manager()
 
@@ -479,7 +486,7 @@ class TestSubscribeAppConnection:
         assert manager.subscribed_devices == []
 
     @pytest.mark.asyncio
-    async def test_unsubscribe(self):
+    async def test_unsubscribe(self) -> None:
         manager, _events = self._emitting_manager()
         received: list[AppConnectionEvent] = []
         await manager.subscribe_app_connection(_device(), received.append)
@@ -494,7 +501,7 @@ class TestSubscribeAppConnection:
         assert TOPIC not in manager.subscriptions
 
     @pytest.mark.asyncio
-    async def test_mixin_delegates(self):
+    async def test_mixin_delegates(self) -> None:
         client: Any = DeviceSubscriptionsMixin()
         client._connected = True
         client._subscription_manager = MagicMock()

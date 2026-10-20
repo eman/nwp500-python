@@ -1,20 +1,24 @@
 """Tests for MQTT reconnection: old connection cleanup."""
 
 import concurrent.futures
+from typing import Any, cast
 from unittest.mock import MagicMock
 
 import pytest
 
-from nwp500.auth import AuthenticationResponse, AuthTokens, UserInfo
+from nwp500.auth import (
+    AuthenticationResponse,
+    AuthTokens,
+    NavienAuthClient,
+    UserInfo,
+)
 from nwp500.mqtt.connection import MqttConnection
 from nwp500.mqtt.utils import MqttConnectionConfig
 
 
 @pytest.fixture
-def mock_auth_client():
+def mock_auth_client() -> NavienAuthClient:
     """Create a mock auth client with valid tokens."""
-    from nwp500.auth import NavienAuthClient
-
     client = NavienAuthClient("test@example.com", "password")
     valid_tokens = AuthTokens(
         id_token="test_id",
@@ -34,13 +38,15 @@ def mock_auth_client():
 
 
 @pytest.fixture
-def config():
+def config() -> MqttConnectionConfig:
     return MqttConnectionConfig(client_id="test-client")
 
 
-def _make_cf_future(result=None, exception=None):
+def _make_cf_future(
+    result: object = None, exception: BaseException | None = None
+) -> concurrent.futures.Future[Any]:
     """Return a resolved concurrent.futures.Future matching SDK behaviour."""
-    f = concurrent.futures.Future()
+    f: concurrent.futures.Future[Any] = concurrent.futures.Future()
     if exception is not None:
         f.set_exception(exception)
     else:
@@ -52,7 +58,11 @@ class TestMqttConnectionClose:
     """Tests for MqttConnection.close() method."""
 
     @pytest.mark.asyncio(loop_scope="function")
-    async def test_close_on_none_connection(self, config, mock_auth_client):
+    async def test_close_on_none_connection(
+        self,
+        config: MqttConnectionConfig,
+        mock_auth_client: NavienAuthClient,
+    ) -> None:
         """close() should be safe to call when _connection is None."""
         conn = MqttConnection(config, mock_auth_client)
         assert conn._connection is None
@@ -62,7 +72,11 @@ class TestMqttConnectionClose:
         assert conn._connection is None
 
     @pytest.mark.asyncio(loop_scope="function")
-    async def test_close_clears_state(self, config, mock_auth_client):
+    async def test_close_clears_state(
+        self,
+        config: MqttConnectionConfig,
+        mock_auth_client: NavienAuthClient,
+    ) -> None:
         """close() should clear _connection and _connected regardless.
 
         Uses concurrent.futures.Future to match what the AWS IoT SDK
@@ -71,7 +85,7 @@ class TestMqttConnectionClose:
         conn = MqttConnection(config, mock_auth_client)
         mock_sdk_conn = MagicMock()
         mock_sdk_conn.disconnect.return_value = _make_cf_future()
-        conn._connection = mock_sdk_conn
+        conn._connection = cast(Any, mock_sdk_conn)
         conn._connected = False  # Interrupted state
 
         await conn.close()
@@ -82,12 +96,14 @@ class TestMqttConnectionClose:
 
     @pytest.mark.asyncio(loop_scope="function")
     async def test_disconnect_skips_when_not_connected(
-        self, config, mock_auth_client
-    ):
+        self,
+        config: MqttConnectionConfig,
+        mock_auth_client: NavienAuthClient,
+    ) -> None:
         """disconnect() should skip when _connected is False."""
         conn = MqttConnection(config, mock_auth_client)
         mock_sdk_conn = MagicMock()
-        conn._connection = mock_sdk_conn
+        conn._connection = cast(Any, mock_sdk_conn)
         conn._connected = False  # Interrupted state
 
         await conn.disconnect()
@@ -97,8 +113,10 @@ class TestMqttConnectionClose:
 
     @pytest.mark.asyncio(loop_scope="function")
     async def test_close_handles_already_dead_connection(
-        self, config, mock_auth_client
-    ):
+        self,
+        config: MqttConnectionConfig,
+        mock_auth_client: NavienAuthClient,
+    ) -> None:
         """close() should handle errors from SDK disconnect gracefully."""
         from awscrt.exceptions import AwsCrtError
 
@@ -111,7 +129,7 @@ class TestMqttConnectionClose:
                 message="Connection destroyed",
             )
         )
-        conn._connection = mock_sdk_conn
+        conn._connection = cast(Any, mock_sdk_conn)
         conn._connected = False
 
         # Should not raise
@@ -119,7 +137,11 @@ class TestMqttConnectionClose:
         assert conn._connection is None
 
     @pytest.mark.asyncio(loop_scope="function")
-    async def test_close_idempotent(self, config, mock_auth_client):
+    async def test_close_idempotent(
+        self,
+        config: MqttConnectionConfig,
+        mock_auth_client: NavienAuthClient,
+    ) -> None:
         """close() should be safe to call multiple times."""
         conn = MqttConnection(config, mock_auth_client)
         # Call twice - should not raise

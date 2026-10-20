@@ -35,7 +35,11 @@ Bug 3 — on_connection_resumed calls Task.cancel() directly from an AWS SDK
   Task operations are safe.
 """
 
+from __future__ import annotations
+
 import asyncio
+from collections.abc import Coroutine
+from typing import TYPE_CHECKING, Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -48,6 +52,9 @@ from nwp500.auth import (
 )
 from nwp500.mqtt.reconnection import MqttReconnectionHandler
 from nwp500.mqtt.utils import MqttConnectionConfig
+
+if TYPE_CHECKING:
+    from nwp500.mqtt import NavienMqttClient
 
 # ---------------------------------------------------------------------------
 # Shared helpers
@@ -78,15 +85,17 @@ def _make_handler(
     connected: bool = False,
     auto_reconnect: bool = True,
     max_reconnect_attempts: int = -1,
-) -> tuple[MqttReconnectionHandler, list[asyncio.Task]]:
+) -> tuple[MqttReconnectionHandler, list[asyncio.Task[Any]]]:
     """Return a handler and a list that records every scheduled coroutine."""
     config = MqttConnectionConfig(
         auto_reconnect=auto_reconnect,
         max_reconnect_attempts=max_reconnect_attempts,
     )
-    scheduled: list[asyncio.Task] = []
+    scheduled: list[asyncio.Task[Any]] = []
 
-    def _schedule(coro):  # replaces run_coroutine_threadsafe in real code
+    def _schedule(
+        coro: Coroutine[Any, Any, Any],
+    ) -> asyncio.Task[Any]:  # replaces run_coroutine_threadsafe
         t = asyncio.ensure_future(coro)
         scheduled.append(t)
         return t
@@ -94,7 +103,7 @@ def _make_handler(
     handler = MqttReconnectionHandler(
         config=config,
         is_connected_func=lambda: connected,
-        schedule_coroutine_func=_schedule,
+        schedule_coroutine_func=_schedule,  # type: ignore[arg-type]
         reconnect_func=AsyncMock(),
         deep_reconnect_func=None,
         emit_event_func=None,
@@ -114,7 +123,7 @@ class TestReconnectionHandlerIsConnectedGuard:
     @pytest.mark.asyncio(loop_scope="function")
     async def test_on_connection_interrupted_does_not_start_task_when_connected(
         self,
-    ):
+    ) -> None:
         """on_connection_interrupted is a no-op when connected."""
         connected = True
         config = MqttConnectionConfig(auto_reconnect=True)
@@ -138,7 +147,7 @@ class TestReconnectionHandlerIsConnectedGuard:
     @pytest.mark.asyncio(loop_scope="function")
     async def test_on_connection_interrupted_starts_task_when_disconnected(
         self,
-    ):
+    ) -> None:
         """on_connection_interrupted schedules a task when disconnected."""
         handler, scheduled = _make_handler(connected=False)
 
@@ -150,7 +159,7 @@ class TestReconnectionHandlerIsConnectedGuard:
         await asyncio.gather(*scheduled, return_exceptions=True)
 
     @pytest.mark.asyncio(loop_scope="function")
-    async def test_start_reconnect_task_no_op_when_connected(self):
+    async def test_start_reconnect_task_no_op_when_connected(self) -> None:
         """_start_reconnect_task must not create a Task when connected."""
         connected = True
         config = MqttConnectionConfig(auto_reconnect=True)
@@ -168,7 +177,9 @@ class TestReconnectionHandlerIsConnectedGuard:
         assert handler._reconnect_task is None
 
     @pytest.mark.asyncio(loop_scope="function")
-    async def test_start_reconnect_task_creates_task_when_disconnected(self):
+    async def test_start_reconnect_task_creates_task_when_disconnected(
+        self,
+    ) -> None:
         """_start_reconnect_task creates a Task when genuinely disconnected."""
         handler, _ = _make_handler(connected=False)
 
@@ -181,7 +192,9 @@ class TestReconnectionHandlerIsConnectedGuard:
         await asyncio.gather(handler._reconnect_task, return_exceptions=True)
 
     @pytest.mark.asyncio(loop_scope="function")
-    async def test_stale_interrupt_after_resume_does_not_spawn_extra_task(self):
+    async def test_stale_interrupt_after_resume_does_not_spawn_extra_task(
+        self,
+    ) -> None:
         """
         Simulate the race that caused the reconnection storm:
 
@@ -226,7 +239,9 @@ class TestReconnectionHandlerIsConnectedGuard:
         assert handler._reconnect_task is None
 
     @pytest.mark.asyncio(loop_scope="function")
-    async def test_multiple_simultaneous_interrupts_create_only_one_task(self):
+    async def test_multiple_simultaneous_interrupts_create_only_one_task(
+        self,
+    ) -> None:
         """
         Multiple concurrent on_connection_interrupted calls (from different
         SDK threads) must not spawn more than one backoff task.
@@ -266,7 +281,7 @@ class TestThreadSafeTaskCancellation:
     @pytest.mark.asyncio(loop_scope="function")
     async def test_on_connection_resumed_schedules_cancel_not_direct_call(
         self,
-    ):
+    ) -> None:
         """
         on_connection_resumed must schedule _cancel_pending_reconnect via
         _schedule_coroutine rather than calling task.cancel() directly.
@@ -299,7 +314,9 @@ class TestThreadSafeTaskCancellation:
         assert handler._reconnect_task is None
 
     @pytest.mark.asyncio(loop_scope="function")
-    async def test_cancel_pending_reconnect_is_idempotent_with_no_task(self):
+    async def test_cancel_pending_reconnect_is_idempotent_with_no_task(
+        self,
+    ) -> None:
         """_cancel_pending_reconnect is a no-op when _reconnect_task is None."""
         handler, _ = _make_handler(connected=True)
         assert handler._reconnect_task is None
@@ -310,7 +327,7 @@ class TestThreadSafeTaskCancellation:
         assert handler._reconnect_task is None
 
     @pytest.mark.asyncio(loop_scope="function")
-    async def test_cancel_pending_reconnect_clears_completed_task(self):
+    async def test_cancel_pending_reconnect_clears_completed_task(self) -> None:
         """_cancel_pending_reconnect clears a stale reference to a done task."""
         handler, scheduled = _make_handler(connected=False)
 
@@ -332,7 +349,7 @@ class TestThreadSafeTaskCancellation:
         assert handler._reconnect_task is None
 
     @pytest.mark.asyncio(loop_scope="function")
-    async def test_resumed_then_interrupted_creates_new_task(self):
+    async def test_resumed_then_interrupted_creates_new_task(self) -> None:
         """
         After resume cancels an existing task, a subsequent genuine drop must
         still be able to start a fresh reconnect task.
@@ -365,7 +382,8 @@ class TestThreadSafeTaskCancellation:
         assert handler._reconnect_task is None
 
         # Connection drops again (genuine)
-        state["connected"] = False
+        # mypy can't see the handler mutate _reconnect_task above
+        state["connected"] = False  # type: ignore[unreachable]
         handler.on_connection_interrupted(Exception("second drop"))
         await asyncio.gather(*scheduled, return_exceptions=True)
         scheduled.clear()
@@ -384,12 +402,12 @@ class TestThreadSafeTaskCancellation:
 class TestActivelyReconnectingFlag:
     """Bug 2 – old connection teardown must not trigger a new backoff loop."""
 
-    def _make_mqtt_client(self) -> NavienMqttClient:  # noqa: F821
+    def _make_mqtt_client(self) -> NavienMqttClient:
         from nwp500.mqtt import NavienMqttClient
 
         return NavienMqttClient(_make_auth_client())
 
-    def test_actively_reconnecting_initialises_false(self):
+    def test_actively_reconnecting_initialises_false(self) -> None:
         """_actively_reconnecting starts False."""
         client = self._make_mqtt_client()
         assert client._actively_reconnecting is False
@@ -397,7 +415,7 @@ class TestActivelyReconnectingFlag:
     @pytest.mark.asyncio(loop_scope="function")
     async def test_interrupted_internal_skips_handler_when_flag_set(
         self,
-    ):
+    ) -> None:
         """
         While _actively_reconnecting is True (old connection being closed),
         _on_connection_interrupted_internal must NOT forward the event to the
@@ -428,7 +446,7 @@ class TestActivelyReconnectingFlag:
     @pytest.mark.asyncio(loop_scope="function")
     async def test_on_connection_interrupted_internal_forwards_when_flag_clear(
         self,
-    ):
+    ) -> None:
         """
         When _actively_reconnecting is False (genuine drop), the event IS
         forwarded to the reconnection handler.
@@ -455,7 +473,9 @@ class TestActivelyReconnectingFlag:
         mock_handler.on_connection_interrupted.assert_called_once_with(error)
 
     @pytest.mark.asyncio(loop_scope="function")
-    async def test_active_reconnect_sets_and_clears_flag_on_success(self):
+    async def test_active_reconnect_sets_and_clears_flag_on_success(
+        self,
+    ) -> None:
         """_active_reconnect sets the flag, does its work, then clears it."""
         client = self._make_mqtt_client()
         client._connected = False
@@ -463,7 +483,7 @@ class TestActivelyReconnectingFlag:
 
         flag_during = []
 
-        async def fake_reconnect():
+        async def fake_reconnect() -> bool:
             flag_during.append(client._actively_reconnecting)
             client._connected = True
             return True
@@ -477,7 +497,7 @@ class TestActivelyReconnectingFlag:
         with patch(
             "nwp500.mqtt.client.MqttConnection", return_value=mock_conn_mgr
         ):
-            client._auth_client.ensure_valid_token = AsyncMock()
+            client._auth_client.ensure_valid_token = AsyncMock()  # type: ignore[method-assign]
             client._subscription_manager = None
             await client._active_reconnect()
 
@@ -485,7 +505,7 @@ class TestActivelyReconnectingFlag:
         assert not client._actively_reconnecting, "Flag must be cleared after"
 
     @pytest.mark.asyncio(loop_scope="function")
-    async def test_active_reconnect_clears_flag_on_exception(self):
+    async def test_active_reconnect_clears_flag_on_exception(self) -> None:
         """_active_reconnect clears the flag even on exception."""
         from awscrt.exceptions import AwsCrtError
 
@@ -505,7 +525,7 @@ class TestActivelyReconnectingFlag:
         with patch(
             "nwp500.mqtt.client.MqttConnection", return_value=mock_conn_mgr
         ):
-            client._auth_client.ensure_valid_token = AsyncMock()
+            client._auth_client.ensure_valid_token = AsyncMock()  # type: ignore[method-assign]
             with pytest.raises(AwsCrtError):
                 await client._active_reconnect()
 
@@ -530,7 +550,7 @@ class TestActivelyReconnectingFlag:
         assert not client._connected
 
     @pytest.mark.asyncio(loop_scope="function")
-    async def test_deep_reconnect_sets_and_clears_flag(self):
+    async def test_deep_reconnect_sets_and_clears_flag(self) -> None:
         """_deep_reconnect also sets and clears _actively_reconnecting."""
         client = self._make_mqtt_client()
         client._connected = False
@@ -538,7 +558,7 @@ class TestActivelyReconnectingFlag:
 
         flag_during = []
 
-        async def fake_connect():
+        async def fake_connect() -> bool:
             flag_during.append(client._actively_reconnecting)
             client._connected = True
             return True
@@ -552,10 +572,10 @@ class TestActivelyReconnectingFlag:
         with patch(
             "nwp500.mqtt.client.MqttConnection", return_value=mock_conn_mgr
         ):
-            client._auth_client.ensure_valid_token = AsyncMock()
-            client._auth_client.current_tokens.refresh_token = "ref"
-            client._auth_client.refresh_token = AsyncMock()
-            client._auth_client.refresh_session = AsyncMock()
+            client._auth_client.ensure_valid_token = AsyncMock()  # type: ignore[method-assign]
+            client._auth_client.current_tokens.refresh_token = "ref"  # type: ignore[union-attr]
+            client._auth_client.refresh_token = AsyncMock()  # type: ignore[method-assign]
+            client._auth_client.refresh_session = AsyncMock()  # type: ignore[method-assign]
             client._subscription_manager = None
             await client._deep_reconnect()
 
@@ -563,7 +583,7 @@ class TestActivelyReconnectingFlag:
         assert not client._actively_reconnecting, "Flag must be cleared after"
 
     @pytest.mark.asyncio(loop_scope="function")
-    async def test_deep_reconnect_clears_flag_on_exception(self):
+    async def test_deep_reconnect_clears_flag_on_exception(self) -> None:
         """_deep_reconnect clears the flag even when an exception is raised."""
         from awscrt.exceptions import AwsCrtError
 
@@ -583,10 +603,10 @@ class TestActivelyReconnectingFlag:
         with patch(
             "nwp500.mqtt.client.MqttConnection", return_value=mock_conn_mgr
         ):
-            client._auth_client.ensure_valid_token = AsyncMock()
-            client._auth_client.current_tokens.refresh_token = "ref"
-            client._auth_client.refresh_token = AsyncMock()
-            client._auth_client.refresh_session = AsyncMock()
+            client._auth_client.ensure_valid_token = AsyncMock()  # type: ignore[method-assign]
+            client._auth_client.current_tokens.refresh_token = "ref"  # type: ignore[union-attr]
+            client._auth_client.refresh_token = AsyncMock()  # type: ignore[method-assign]
+            client._auth_client.refresh_session = AsyncMock()  # type: ignore[method-assign]
             with pytest.raises(AwsCrtError):
                 await client._deep_reconnect()
 

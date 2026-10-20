@@ -19,13 +19,17 @@ DEV_FULL = Path("/dev/full")
 
 
 class TestTheLines:
-    def test_a_line_reads_back_as_the_status(self, device_status_dict):
+    def test_a_line_reads_back_as_the_status(
+        self, device_status_dict: dict[str, Any]
+    ) -> None:
         text = status_history.line(AT, device_status_dict)
         ((at, status),) = status_history.read([text])
         assert at == AT
         assert status == DeviceStatus.model_validate(device_status_dict)
 
-    def test_a_line_is_one_line_of_json(self, device_status_dict):
+    def test_a_line_is_one_line_of_json(
+        self, device_status_dict: dict[str, Any]
+    ) -> None:
         text = status_history.line(AT, device_status_dict)
         assert "\n" not in text
         assert json.loads(text) == {
@@ -33,7 +37,9 @@ class TestTheLines:
             "status": device_status_dict,
         }
 
-    def test_the_offset_is_kept(self, device_status_dict):
+    def test_the_offset_is_kept(
+        self, device_status_dict: dict[str, Any]
+    ) -> None:
         pdt = AT.astimezone(timezone(timedelta(hours=-7)))
         ((at, _),) = status_history.read(
             [status_history.line(pdt, device_status_dict)]
@@ -41,11 +47,15 @@ class TestTheLines:
         assert at == AT
         assert at.utcoffset() == timedelta(hours=-7)
 
-    def test_a_naive_instant_is_refused(self, device_status_dict):
+    def test_a_naive_instant_is_refused(
+        self, device_status_dict: dict[str, Any]
+    ) -> None:
         with pytest.raises(ValueError, match="UTC offset"):
             status_history.line(AT.replace(tzinfo=None), device_status_dict)
 
-    def test_blank_lines_are_skipped_and_order_kept(self, device_status_dict):
+    def test_blank_lines_are_skipped_and_order_kept(
+        self, device_status_dict: dict[str, Any]
+    ) -> None:
         later = AT + timedelta(minutes=1)
         lines = [
             status_history.line(later, device_status_dict) + "\n",
@@ -69,7 +79,9 @@ class TestBadLines:
             ('{"t": 5, "status": {}}', "must be str"),
         ],
     )
-    def test_a_bad_line_names_its_number(self, device_status_dict, text, why):
+    def test_a_bad_line_names_its_number(
+        self, device_status_dict: dict[str, Any], text: str, why: str
+    ) -> None:
         good = status_history.line(AT, device_status_dict)
         with pytest.raises(ValueError, match="line 2 is not") as raised:
             status_history.read([good, text])
@@ -90,7 +102,9 @@ def Recorder() -> Any:
 
 
 class TestTheRecorder:
-    def test_it_writes_a_line_per_status(self, Recorder, device_status_dict):
+    def test_it_writes_a_line_per_status(
+        self, Recorder: Any, device_status_dict: dict[str, Any]
+    ) -> None:
         out = io.StringIO()
         record = Recorder(out, clock=lambda: AT)
         record("cmd/52/navilink-x/st", _message(device_status_dict))
@@ -100,14 +114,14 @@ class TestTheRecorder:
         assert [at for at, _ in readings] == [AT, AT]
 
     def test_it_keeps_the_raw_payload_but_not_the_address(
-        self, Recorder, device_status_dict
-    ):
+        self, Recorder: Any, device_status_dict: dict[str, Any]
+    ) -> None:
         out = io.StringIO()
         raw = device_status_dict | {"macAddress": "aa:bb"}
         Recorder(out, clock=lambda: AT)("topic", _message(raw))
         assert json.loads(out.getvalue())["status"] == device_status_dict
 
-    def test_other_messages_are_ignored(self, Recorder):
+    def test_other_messages_are_ignored(self, Recorder: Any) -> None:
         out = io.StringIO()
         record = Recorder(out, clock=lambda: AT)
         record("topic", {"response": {"feature": {"volumeCode": 3}}})
@@ -115,22 +129,26 @@ class TestTheRecorder:
         assert record.written == 0
         assert out.getvalue() == ""
 
-    def test_a_status_that_does_not_parse_is_skipped(self, Recorder, caplog):
+    def test_a_status_that_does_not_parse_is_skipped(
+        self, Recorder: Any, caplog: pytest.LogCaptureFixture
+    ) -> None:
         out = io.StringIO()
         record = Recorder(out, clock=lambda: AT)
         record("topic", _message({"dhwUse": 1}))
         assert record.written == 0
         assert "does not parse" in caplog.text
 
-    def test_the_default_clock_is_utc(self, Recorder, device_status_dict):
+    def test_the_default_clock_is_utc(
+        self, Recorder: Any, device_status_dict: dict[str, Any]
+    ) -> None:
         out = io.StringIO()
         Recorder(out)("topic", _message(device_status_dict))
         ((at, _),) = status_history.read([out.getvalue()])
         assert at.utcoffset() == timedelta(0)
 
     def test_a_failed_write_is_reported_once_and_stops_it(
-        self, Recorder, device_status_dict
-    ):
+        self, Recorder: Any, device_status_dict: dict[str, Any]
+    ) -> None:
         class Full(io.StringIO):
             def write(self, text: str) -> int:
                 raise OSError(28, "No space left on device")
@@ -176,8 +194,8 @@ class TestHandleRecording:
     @pytest.mark.asyncio
     @pytest.mark.skipif(not DEV_FULL.exists(), reason="needs /dev/full")
     async def test_a_failed_write_stops_the_recording(
-        self, recording, device_status_dict
-    ):
+        self, recording: Any, device_status_dict: dict[str, Any]
+    ) -> None:
         with pytest.raises(recording.RecordingError, match="recording stopped"):
             await asyncio.wait_for(
                 recording.handle_recording(
@@ -188,8 +206,8 @@ class TestHandleRecording:
 
     @pytest.mark.asyncio
     async def test_it_appends_on_a_line_of_its_own(
-        self, recording, tmp_path, device_status_dict
-    ):
+        self, recording: Any, tmp_path: Path, device_status_dict: dict[str, Any]
+    ) -> None:
         path = tmp_path / "h.jsonl"
         # A history written without its final newline.
         path.write_text(status_history.line(AT, device_status_dict))
@@ -208,8 +226,8 @@ class TestHandleRecording:
         assert len(status_history.read(path.read_text().splitlines())) == 2
 
     def test_an_empty_or_missing_file_needs_no_separator(
-        self, recording, tmp_path
-    ):
+        self, recording: Any, tmp_path: Path
+    ) -> None:
         assert recording._ends_a_line(tmp_path / "missing.jsonl")
         empty = tmp_path / "empty.jsonl"
         empty.write_text("")

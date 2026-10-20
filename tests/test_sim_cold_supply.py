@@ -20,7 +20,13 @@ from nwp500.sim.params import BookParams
 T0 = datetime(2026, 9, 20, 12, 0, tzinfo=UTC)
 
 
-def a_draw(minutes: int, at: datetime = T0, mains: float = 72.0):
+def a_draw(
+    minutes: int, at: datetime = T0, mains: float = 72.0
+) -> tuple[
+    list[tuple[datetime, float]],
+    list[datetime],
+    list[tuple[datetime, float]],
+]:
     """A draw of ``minutes`` at 2 gal/min, the probe settling from 77
     degF to the mains after 5 minutes."""
     ticks = [at + timedelta(seconds=s) for s in range(0, 60 * minutes, 10)]
@@ -34,14 +40,14 @@ def a_draw(minutes: int, at: datetime = T0, mains: float = 72.0):
 
 
 class TestThePlateau:
-    def test_a_long_draw_reads_the_mains(self):
+    def test_a_long_draw_reads_the_mains(self) -> None:
         probe, ticks, flow = a_draw(15)
         got = plateau_t_cold(
             probe, ticks, [], T0 + timedelta(hours=1), flow=flow
         )
         assert (got.t_cold_f, got.draws) == (72.0, 1)
 
-    def test_a_short_draw_or_one_with_circulation_has_none(self):
+    def test_a_short_draw_or_one_with_circulation_has_none(self) -> None:
         probe, ticks, flow = a_draw(9)
         assert (
             plateau_t_cold(
@@ -58,7 +64,7 @@ class TestThePlateau:
             is None
         )
 
-    def test_unrecorded_is_not_idle(self):
+    def test_unrecorded_is_not_idle(self) -> None:
         probe, ticks, flow = a_draw(15)
         at = T0 + timedelta(hours=1)
         assert (
@@ -66,7 +72,7 @@ class TestThePlateau:
         )
         assert plateau_t_cold(probe, ticks, [], at, flow=None).t_cold_f is None
 
-    def test_old_or_implausible_draws_do_not_count(self):
+    def test_old_or_implausible_draws_do_not_count(self) -> None:
         probe, ticks, flow = a_draw(15)
         late = T0 + timedelta(hours=80)
         assert (
@@ -80,14 +86,14 @@ class TestThePlateau:
             is None
         )
 
-    def test_the_adapter_reads_the_preferred_units(self):
+    def test_the_adapter_reads_the_preferred_units(self) -> None:
         probe, _, flow = a_draw(15)
         got = sa.cold_supply(probe, at=T0 + timedelta(hours=1), flow=flow)
         assert got.t_cold_f == 72.0
 
 
 class TestWhatTheReadingsAre:
-    def test_a_meter_reporting_each_minute_still_has_a_plateau(self):
+    def test_a_meter_reporting_each_minute_still_has_a_plateau(self) -> None:
         probe, _, _ = a_draw(15)
         each_minute = [(T0 + timedelta(minutes=m), 2.0) for m in range(15)] + [
             (T0 + timedelta(minutes=15), 0.0)
@@ -97,7 +103,7 @@ class TestWhatTheReadingsAre:
         )
         assert got.t_cold_f == 72.0
 
-    def test_a_missing_reading_is_left_out(self):
+    def test_a_missing_reading_is_left_out(self) -> None:
         probe, ticks, flow = a_draw(15)
         tail = T0 + timedelta(minutes=14)
         probe = [*probe, (tail + timedelta(seconds=5), float("nan"))]
@@ -106,7 +112,7 @@ class TestWhatTheReadingsAre:
         assert plateau_t_cold(probe, ticks, [], at, flow=flow).t_cold_f == 72.0
         assert sa.cold_supply(probe, at=at, flow=flow).t_cold_f == 72.0
 
-    def test_runs_closer_than_the_gap_are_one(self):
+    def test_runs_closer_than_the_gap_are_one(self) -> None:
         """Runs closer than the gap are one run: a draw between them is a
         draw with circulation on."""
         probe, ticks, flow = a_draw(15)
@@ -121,7 +127,7 @@ class TestWhatTheReadingsAre:
         joined = plateau_t_cold(probe, ticks, runs, at, wide, flow=flow)
         assert joined.t_cold_f is None
 
-    def test_unrecorded_circulation_gives_no_estimate(self):
+    def test_unrecorded_circulation_gives_no_estimate(self) -> None:
         probe, _, flow = a_draw(15)
         at = T0 + timedelta(hours=1)
         assert (
@@ -130,7 +136,7 @@ class TestWhatTheReadingsAre:
         )
 
 
-def test_on_the_mains():
+def test_on_the_mains() -> None:
     book = full_tank_book(140.0, 139.5, BookParams())
     moved, measured = on_the_mains(book, ColdSupply(71.5, 3))
     assert moved is not None and moved.inlet_f == 71.5 and measured

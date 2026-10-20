@@ -1,5 +1,6 @@
 """Tests for CLI command handlers."""
 
+from collections.abc import Callable
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -8,7 +9,7 @@ import pytest
 try:
     # click ships in the optional "cli" extra, not "testing", so it has to be
     # imported inside the guard for this module to skip cleanly without it.
-    from click.testing import CliRunner
+    from click.testing import CliRunner, Result
 
     from nwp500.cli.handlers import (
         get_controller_serial_number,
@@ -22,9 +23,13 @@ except ImportError:
     pytest.skip("CLI dependencies not installed", allow_module_level=True)
 from nwp500.models import Device, DeviceFeature, DeviceStatus
 
+# The ``energy_cli`` fixture returns a callable: CLI args in, the Click
+# result and the recorded handler calls out.
+EnergyInvoke = Callable[[list[str]], tuple[Result, list[dict[str, Any]]]]
+
 
 @pytest.fixture
-def mock_device():
+def mock_device() -> MagicMock:
     device = MagicMock(spec=Device)
     device.device_info = MagicMock()
     device.device_info.device_type = 123
@@ -32,7 +37,7 @@ def mock_device():
 
 
 @pytest.fixture
-def mock_mqtt():
+def mock_mqtt() -> MagicMock:
     mqtt = MagicMock()
     # Control attribute contains device control methods
 
@@ -49,14 +54,16 @@ def mock_mqtt():
 
 
 @pytest.mark.asyncio
-async def test_get_controller_serial_number_success(mock_mqtt, mock_device):
+async def test_get_controller_serial_number_success(
+    mock_mqtt: MagicMock, mock_device: MagicMock
+) -> None:
     """Test successful retrieval of controller serial number."""
     # Setup the feature that will be returned
     feature = MagicMock(spec=DeviceFeature)
     feature.controller_serial_number = "TEST_SERIAL_123"
 
     # When subscribe is called, capture the callback and call it immediately
-    async def side_effect_subscribe(device, callback):
+    async def side_effect_subscribe(device: Any, callback: Any) -> None:
         callback(feature)
         return None
 
@@ -71,7 +78,9 @@ async def test_get_controller_serial_number_success(mock_mqtt, mock_device):
 
 
 @pytest.mark.asyncio
-async def test_get_controller_serial_number_timeout(mock_mqtt, mock_device):
+async def test_get_controller_serial_number_timeout(
+    mock_mqtt: MagicMock, mock_device: MagicMock
+) -> None:
     """Test timeout when retrieving controller serial number."""
     # Do nothing when subscribe is called, so future never completes
     mock_mqtt.subscribe_device_feature.return_value = None
@@ -86,12 +95,16 @@ async def test_get_controller_serial_number_timeout(mock_mqtt, mock_device):
 
 
 @pytest.mark.asyncio
-async def test_handle_status_request(mock_mqtt, mock_device, capsys):
+async def test_handle_status_request(
+    mock_mqtt: MagicMock,
+    mock_device: MagicMock,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
     """Test status request handler prints output."""
     status = MagicMock(spec=DeviceStatus)
     status.model_dump.return_value = {"some": "data"}
 
-    async def side_effect_subscribe(device, callback):
+    async def side_effect_subscribe(device: Any, callback: Any) -> None:
         callback(status)
         return None
 
@@ -107,7 +120,9 @@ async def test_handle_status_request(mock_mqtt, mock_device, capsys):
 
 
 @pytest.mark.asyncio
-async def test_handle_set_mode_request_success(mock_mqtt, mock_device):
+async def test_handle_set_mode_request_success(
+    mock_mqtt: MagicMock, mock_device: MagicMock
+) -> None:
     """Test successful mode setting."""
     status = MagicMock(spec=DeviceStatus)
     # Configure nested mock explicitly to avoid spec issues with Pydantic
@@ -116,7 +131,7 @@ async def test_handle_set_mode_request_success(mock_mqtt, mock_device):
     status.operation_mode = operation_mode
     status.model_dump.return_value = {"mode": "HEAT_PUMP"}
 
-    async def side_effect_subscribe(device, callback):
+    async def side_effect_subscribe(device: Any, callback: Any) -> None:
         # Invoke callback immediately; handler waits on completed future
         callback(status)
         return None
@@ -130,7 +145,9 @@ async def test_handle_set_mode_request_success(mock_mqtt, mock_device):
 
 
 @pytest.mark.asyncio
-async def test_handle_set_mode_request_invalid_mode(mock_mqtt, mock_device):
+async def test_handle_set_mode_request_invalid_mode(
+    mock_mqtt: MagicMock, mock_device: MagicMock
+) -> None:
     """Test setting an invalid mode."""
     await handle_set_mode_request(mock_mqtt, mock_device, "invalid-mode")
 
@@ -140,8 +157,8 @@ async def test_handle_set_mode_request_invalid_mode(mock_mqtt, mock_device):
 @pytest.mark.asyncio
 @pytest.mark.parametrize("mode_name", ["standby", "vacation"])
 async def test_handle_set_mode_request_unsupported_modes(
-    mock_mqtt, mock_device, mode_name
-):
+    mock_mqtt: MagicMock, mock_device: MagicMock, mode_name: str
+) -> None:
     """Standby/vacation are not settable via the mode command.
 
     Vacation requires a day count (dedicated ``vacation`` command) and
@@ -153,13 +170,15 @@ async def test_handle_set_mode_request_unsupported_modes(
 
 
 @pytest.mark.asyncio
-async def test_handle_set_dhw_temp_request_success(mock_mqtt, mock_device):
+async def test_handle_set_dhw_temp_request_success(
+    mock_mqtt: MagicMock, mock_device: MagicMock
+) -> None:
     """Test successful temperature setting."""
     status = MagicMock(spec=DeviceStatus)
     status.dhw_target_temperature_setting = 120
     status.model_dump.return_value = {"temp": 120}
 
-    async def side_effect_subscribe(device, callback):
+    async def side_effect_subscribe(device: Any, callback: Any) -> None:
         callback(status)
         return None
 
@@ -172,12 +191,14 @@ async def test_handle_set_dhw_temp_request_success(mock_mqtt, mock_device):
 
 @pytest.mark.asyncio
 async def test_handle_status_request_raw_with_st_key(
-    mock_mqtt, mock_device, capsys
-):
+    mock_mqtt: MagicMock,
+    mock_device: MagicMock,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
     """Raw status request handles the 'st' alt key from Navien devices."""
     status_data = {"operationMode": 1, "hotWaterTemperature": 500}
 
-    async def subscribe_and_invoke(device, callback):
+    async def subscribe_and_invoke(device: Any, callback: Any) -> None:
         callback("cmd/52/device/st", {"response": {"st": status_data}})
 
     mock_mqtt.subscribe_device = AsyncMock(side_effect=subscribe_and_invoke)
@@ -191,12 +212,14 @@ async def test_handle_status_request_raw_with_st_key(
 
 @pytest.mark.asyncio
 async def test_handle_device_info_request_raw_with_did_key(
-    mock_mqtt, mock_device, capsys
-):
+    mock_mqtt: MagicMock,
+    mock_device: MagicMock,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
     """Raw device info request handles the 'did' alt key from Navien devices."""
     feature_data = {"serialNumber": "ABC123", "modelName": "NWP500"}
 
-    async def subscribe_and_invoke(device, callback):
+    async def subscribe_and_invoke(device: Any, callback: Any) -> None:
         callback("cmd/52/device/st/did", {"response": {"did": feature_data}})
 
     mock_mqtt.subscribe_device = AsyncMock(side_effect=subscribe_and_invoke)
@@ -210,12 +233,14 @@ async def test_handle_device_info_request_raw_with_did_key(
 
 @pytest.mark.asyncio
 async def test_handle_status_request_raw_with_standard_key(
-    mock_mqtt, mock_device, capsys
-):
+    mock_mqtt: MagicMock,
+    mock_device: MagicMock,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
     """Raw status request handles the standard 'status' key."""
     status_data = {"operationMode": 2, "hotWaterTemperature": 600}
 
-    async def subscribe_and_invoke(device, callback):
+    async def subscribe_and_invoke(device: Any, callback: Any) -> None:
         callback("cmd/52/device/st", {"response": {"status": status_data}})
 
     mock_mqtt.subscribe_device = AsyncMock(side_effect=subscribe_and_invoke)
@@ -227,9 +252,9 @@ async def test_handle_status_request_raw_with_standard_key(
 
 
 @pytest.fixture
-def energy_views(monkeypatch):
+def energy_views(monkeypatch: pytest.MonkeyPatch) -> list[str]:
     """Record which energy view a handler call renders."""
-    rendered = []
+    rendered: list[str] = []
     monkeypatch.setattr(
         "nwp500.cli.handlers.print_energy_usage",
         lambda response: rendered.append("monthly"),
@@ -242,10 +267,10 @@ def energy_views(monkeypatch):
 
 
 @pytest.fixture
-def energy_mqtt(mock_mqtt):
+def energy_mqtt(mock_mqtt: MagicMock) -> MagicMock:
     """MQTT mock that answers an energy usage request immediately."""
 
-    async def subscribe_and_invoke(device, callback):
+    async def subscribe_and_invoke(device: Any, callback: Any) -> None:
         callback(MagicMock())
 
     mock_mqtt.subscribe_energy_usage = AsyncMock(
@@ -257,8 +282,8 @@ def energy_mqtt(mock_mqtt):
 
 @pytest.mark.asyncio
 async def test_handle_get_energy_request_daily(
-    energy_mqtt, mock_device, energy_views
-):
+    energy_mqtt: MagicMock, mock_device: MagicMock, energy_views: list[str]
+) -> None:
     """--month asks for the daily breakdown."""
     await handle_get_energy_request(
         energy_mqtt, mock_device, 2025, [5], daily=True
@@ -269,8 +294,8 @@ async def test_handle_get_energy_request_daily(
 
 @pytest.mark.asyncio
 async def test_handle_get_energy_request_single_month_summary(
-    energy_mqtt, mock_device, energy_views
-):
+    energy_mqtt: MagicMock, mock_device: MagicMock, energy_views: list[str]
+) -> None:
     """A one-month --months list still gets the monthly summary."""
     await handle_get_energy_request(
         energy_mqtt, mock_device, 2025, [5], daily=False
@@ -281,8 +306,8 @@ async def test_handle_get_energy_request_single_month_summary(
 
 @pytest.mark.asyncio
 async def test_handle_get_energy_request_multi_month_summary(
-    energy_mqtt, mock_device, energy_views
-):
+    energy_mqtt: MagicMock, mock_device: MagicMock, energy_views: list[str]
+) -> None:
     """Multiple months get the monthly summary."""
     await handle_get_energy_request(
         energy_mqtt, mock_device, 2025, [1, 2, 3], daily=False
@@ -292,7 +317,7 @@ async def test_handle_get_energy_request_multi_month_summary(
 
 
 @pytest.fixture
-def energy_cli():
+def energy_cli() -> EnergyInvoke:
     """Invoke the real ``energy`` command with the network stubbed out.
 
     Returns a callable taking CLI args and giving back
@@ -303,13 +328,19 @@ def energy_cli():
     """
     from nwp500.cli.__main__ import cli
 
-    def invoke(args):
-        calls = []
+    def invoke(args: list[str]) -> tuple[Result, list[dict[str, Any]]]:
+        calls: list[dict[str, Any]] = []
 
-        async def record(mqtt, device, year, months, daily=False):
+        async def record(
+            mqtt: Any,
+            device: Any,
+            year: Any,
+            months: Any,
+            daily: bool = False,
+        ) -> None:
             calls.append({"year": year, "months": months, "daily": daily})
 
-        async def record_monthly(mqtt, device, years):
+        async def record_monthly(mqtt: Any, device: Any, years: Any) -> None:
             calls.append({"years": years})
 
         auth = MagicMock()
@@ -360,13 +391,17 @@ def energy_cli():
 class TestEnergyCommandDispatch:
     """The option that was passed picks the view, not the month count."""
 
-    def test_month_asks_for_the_daily_breakdown(self, energy_cli):
+    def test_month_asks_for_the_daily_breakdown(
+        self, energy_cli: EnergyInvoke
+    ) -> None:
         result, calls = energy_cli(["energy", "--year", "2025", "--month", "5"])
 
         assert result.exit_code == 0
         assert calls == [{"year": 2025, "months": [5], "daily": True}]
 
-    def test_single_month_list_asks_for_the_summary(self, energy_cli):
+    def test_single_month_list_asks_for_the_summary(
+        self, energy_cli: EnergyInvoke
+    ) -> None:
         """The regression: ``--months 5`` must not become a daily view."""
         result, calls = energy_cli(
             ["energy", "--year", "2025", "--months", "5"]
@@ -375,7 +410,9 @@ class TestEnergyCommandDispatch:
         assert result.exit_code == 0
         assert calls == [{"year": 2025, "months": [5], "daily": False}]
 
-    def test_month_list_asks_for_the_summary(self, energy_cli):
+    def test_month_list_asks_for_the_summary(
+        self, energy_cli: EnergyInvoke
+    ) -> None:
         result, calls = energy_cli(
             ["energy", "--year", "2025", "--months", "1,2,3"]
         )
@@ -383,7 +420,7 @@ class TestEnergyCommandDispatch:
         assert result.exit_code == 0
         assert calls == [{"year": 2025, "months": [1, 2, 3], "daily": False}]
 
-    def test_months_tolerates_spaces(self, energy_cli):
+    def test_months_tolerates_spaces(self, energy_cli: EnergyInvoke) -> None:
         result, calls = energy_cli(
             ["energy", "--year", "2025", "--months", "1, 2, 3"]
         )
@@ -391,13 +428,15 @@ class TestEnergyCommandDispatch:
         assert result.exit_code == 0
         assert calls == [{"year": 2025, "months": [1, 2, 3], "daily": False}]
 
-    def test_years_are_deduplicated(self, energy_cli):
+    def test_years_are_deduplicated(self, energy_cli: EnergyInvoke) -> None:
         result, calls = energy_cli(["energy", "--years", "2026,2025,2026"])
 
         assert result.exit_code == 0, result.output
         assert calls == [{"years": [2026, 2025]}]
 
-    def test_years_asks_for_the_monthly_query(self, energy_cli):
+    def test_years_asks_for_the_monthly_query(
+        self, energy_cli: EnergyInvoke
+    ) -> None:
         """--years is the device's monthly query, not the daily one."""
         result, calls = energy_cli(["energy", "--years", "2025, 2026"])
 
@@ -436,7 +475,9 @@ class TestEnergyCommandUsageErrors:
             (["--years", "2025,99999"], "not in the range"),
         ],
     )
-    def test_rejected_during_parsing(self, args, expected):
+    def test_rejected_during_parsing(
+        self, args: list[str], expected: str
+    ) -> None:
         from nwp500.cli.__main__ import cli
 
         result = CliRunner().invoke(
@@ -453,11 +494,11 @@ class TestEnergyCommandUsageErrors:
 
 
 @pytest.fixture
-def query_mqtt(mock_mqtt):
+def query_mqtt(mock_mqtt: MagicMock) -> MagicMock:
     """MQTT mock whose new query subscriptions answer immediately."""
 
-    def answering(payload):
-        async def subscribe_and_invoke(device, callback):
+    def answering(payload: Any) -> AsyncMock:
+        async def subscribe_and_invoke(device: Any, callback: Any) -> None:
             callback(payload)
 
         return AsyncMock(side_effect=subscribe_and_invoke)
@@ -507,7 +548,12 @@ def query_mqtt(mock_mqtt):
 
 class TestNewQueryHandlers:
     @pytest.mark.asyncio
-    async def test_diagnostics_table(self, query_mqtt, mock_device, capsys):
+    async def test_diagnostics_table(
+        self,
+        query_mqtt: MagicMock,
+        mock_device: MagicMock,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
         from nwp500.cli.handlers import handle_diagnostics_request
 
         await handle_diagnostics_request(query_mqtt, mock_device)
@@ -519,7 +565,12 @@ class TestNewQueryHandlers:
         assert "3124 h" in out
 
     @pytest.mark.asyncio
-    async def test_diagnostics_json(self, query_mqtt, mock_device, capsys):
+    async def test_diagnostics_json(
+        self,
+        query_mqtt: MagicMock,
+        mock_device: MagicMock,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
         from nwp500.cli.handlers import handle_diagnostics_request
 
         await handle_diagnostics_request(
@@ -530,7 +581,12 @@ class TestNewQueryHandlers:
         assert '"cumulated_pwr_hp": 1266585' in out
 
     @pytest.mark.asyncio
-    async def test_firmware_info(self, query_mqtt, mock_device, capsys):
+    async def test_firmware_info(
+        self,
+        query_mqtt: MagicMock,
+        mock_device: MagicMock,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
         from nwp500.cli.handlers import (
             handle_firmware_download_info_request,
         )
@@ -546,8 +602,11 @@ class TestNewQueryHandlers:
 
     @pytest.mark.asyncio
     async def test_recirculation_schedule_get(
-        self, query_mqtt, mock_device, capsys
-    ):
+        self,
+        query_mqtt: MagicMock,
+        mock_device: MagicMock,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
         from nwp500.cli.handlers import (
             handle_get_recirculation_schedule_request,
         )
@@ -562,7 +621,9 @@ class TestNewQueryHandlers:
         assert "06:00" in out
 
     @pytest.mark.asyncio
-    async def test_recirculation_schedule_set(self, query_mqtt, mock_device):
+    async def test_recirculation_schedule_set(
+        self, query_mqtt: MagicMock, mock_device: MagicMock
+    ) -> None:
         from nwp500.cli.handlers import (
             handle_set_recirculation_schedule_request,
         )
@@ -590,8 +651,8 @@ class TestNewQueryHandlers:
 
     @pytest.mark.asyncio
     async def test_recirculation_schedule_set_rejects_bad_json(
-        self, query_mqtt, mock_device
-    ):
+        self, query_mqtt: MagicMock, mock_device: MagicMock
+    ) -> None:
         from nwp500.cli.handlers import (
             handle_set_recirculation_schedule_request,
         )
@@ -605,17 +666,19 @@ class TestNewQueryHandlers:
 
 class TestNewControlHandlers:
     @pytest.fixture
-    def status_mqtt(self, query_mqtt):
+    def status_mqtt(self, query_mqtt: MagicMock) -> MagicMock:
         status = MagicMock(spec=DeviceStatus)
 
-        async def subscribe_and_invoke(device, callback):
+        async def subscribe_and_invoke(device: Any, callback: Any) -> None:
             callback(status)
 
         query_mqtt.subscribe_device_status.side_effect = subscribe_and_invoke
         return query_mqtt
 
     @pytest.mark.asyncio
-    async def test_air_filter_life(self, status_mqtt, mock_device):
+    async def test_air_filter_life(
+        self, status_mqtt: MagicMock, mock_device: MagicMock
+    ) -> None:
         from nwp500.cli.handlers import handle_set_air_filter_life_request
 
         await handle_set_air_filter_life_request(status_mqtt, mock_device, 3000)
@@ -625,7 +688,9 @@ class TestNewControlHandlers:
         )
 
     @pytest.mark.asyncio
-    async def test_vacation_duration(self, status_mqtt, mock_device):
+    async def test_vacation_duration(
+        self, status_mqtt: MagicMock, mock_device: MagicMock
+    ) -> None:
         from nwp500.cli.handlers import (
             handle_set_vacation_duration_request,
         )
@@ -637,7 +702,9 @@ class TestNewControlHandlers:
         )
 
     @pytest.mark.asyncio
-    async def test_condenser_fault_reset(self, status_mqtt, mock_device):
+    async def test_condenser_fault_reset(
+        self, status_mqtt: MagicMock, mock_device: MagicMock
+    ) -> None:
         from nwp500.cli.handlers import handle_reset_condenser_fault_request
 
         await handle_reset_condenser_fault_request(status_mqtt, mock_device)
@@ -697,7 +764,9 @@ class TestParseTimeValidation:
             ),
         ],
     )
-    def test_rejected_during_parsing(self, args, expected):
+    def test_rejected_during_parsing(
+        self, args: list[str], expected: str
+    ) -> None:
         from nwp500.cli.__main__ import cli
 
         result = CliRunner().invoke(
@@ -712,7 +781,7 @@ class TestParseTimeValidation:
         assert result.exit_code == 2, result.output
         assert expected in result.output
 
-    def test_too_many_recirculation_entries(self):
+    def test_too_many_recirculation_entries(self) -> None:
         import json as _json
 
         from nwp500.cli.handlers import parse_recirculation_schedule_json
@@ -727,14 +796,18 @@ class TestNoAnswer:
 
     @pytest.mark.asyncio
     async def test_diagnostics_timeout_is_reported(
-        self, mock_mqtt, mock_device, monkeypatch, capsys
-    ):
+        self,
+        mock_mqtt: MagicMock,
+        mock_device: MagicMock,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
         from nwp500.cli import handlers
 
         mock_mqtt.subscribe_diagnostics = AsyncMock()
         mock_mqtt.request_diagnostics = AsyncMock()
 
-        async def no_answer(*args, **kwargs):
+        async def no_answer(*args: Any, **kwargs: Any) -> None:
             raise TimeoutError
 
         monkeypatch.setattr(handlers, "_wait_for_response", no_answer)
@@ -747,8 +820,11 @@ class TestNoAnswer:
 
     @pytest.mark.asyncio
     async def test_recirculation_write_without_echo(
-        self, mock_mqtt, mock_device, capsys
-    ):
+        self,
+        mock_mqtt: MagicMock,
+        mock_device: MagicMock,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
         from nwp500.cli import handlers
 
         mock_mqtt.subscribe_recirculation_schedule_response = AsyncMock()
@@ -788,15 +864,17 @@ class TestRecirculationWriteConfirmation:
     """A write is confirmed only by an echo matching what was written."""
 
     @staticmethod
-    def _mqtt_replying(mock_mqtt, replies):
+    def _mqtt_replying(
+        mock_mqtt: MagicMock, replies: list[dict[str, Any]]
+    ) -> MagicMock:
         from nwp500.models import RecirculationSchedule
 
-        callbacks = []
+        callbacks: list[Any] = []
 
-        async def subscribe(device, callback):
+        async def subscribe(device: Any, callback: Any) -> None:
             callbacks.append(callback)
 
-        async def configure(device, schedule):
+        async def configure(device: Any, schedule: Any) -> None:
             for reply in replies:
                 callbacks[0](RecirculationSchedule.model_validate(reply))
 
@@ -812,7 +890,12 @@ class TestRecirculationWriteConfirmation:
     WRITTEN = '[{"week": 124, "hour": 6, "min": 0, "mode": 2}]'
 
     @pytest.mark.asyncio
-    async def test_matching_echo_confirms(self, mock_mqtt, mock_device, capsys):
+    async def test_matching_echo_confirms(
+        self,
+        mock_mqtt: MagicMock,
+        mock_device: MagicMock,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
         from nwp500.cli import handlers
 
         mqtt = self._mqtt_replying(mock_mqtt, [_RECIRC_MATCHING])
@@ -826,8 +909,11 @@ class TestRecirculationWriteConfirmation:
 
     @pytest.mark.asyncio
     async def test_stale_reply_then_match_confirms(
-        self, mock_mqtt, mock_device, capsys
-    ):
+        self,
+        mock_mqtt: MagicMock,
+        mock_device: MagicMock,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
         from nwp500.cli import handlers
 
         mqtt = self._mqtt_replying(mock_mqtt, [_RECIRC_STALE, _RECIRC_MATCHING])
@@ -839,8 +925,11 @@ class TestRecirculationWriteConfirmation:
 
     @pytest.mark.asyncio
     async def test_mismatched_reply_is_not_success(
-        self, mock_mqtt, mock_device, capsys
-    ):
+        self,
+        mock_mqtt: MagicMock,
+        mock_device: MagicMock,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
         """Regression: the first reply was printed as success even when it
         was the device's previous schedule."""
         from nwp500.cli import handlers

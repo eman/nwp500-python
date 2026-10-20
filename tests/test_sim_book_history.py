@@ -6,6 +6,7 @@ checks run with the port; these hold the anchor's rules and the
 adapter's.
 """
 
+from collections.abc import Callable
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -48,17 +49,17 @@ def recovery_then(after: list[Step]) -> list[Step]:
 
 
 class TestTheAnchor:
-    def test_a_quiet_full_tank_re_anchors_until_disturbed(self):
+    def test_a_quiet_full_tank_re_anchors_until_disturbed(self) -> None:
         """The anchor is the latest quiet full step after a clean
         recovery: a tank left alone stays anchored now."""
         b = book_steps(recovery_then([step()] * 30), P)
         assert b is not None
         assert b.anchor_age_h == 0.0 and not b.aged(P)
 
-    def test_no_recovery_is_no_anchor(self):
+    def test_no_recovery_is_no_anchor(self) -> None:
         assert book_steps([step()] * 100, P) is None
 
-    def test_a_draw_after_the_anchor_takes_its_heat(self):
+    def test_a_draw_after_the_anchor_takes_its_heat(self) -> None:
         quiet = book_steps(recovery_then([step()] * 60), P)
         drawn = book_steps(
             recovery_then([step()] * 30 + [step(flow_gpm=2.0)] * 30), P
@@ -67,7 +68,7 @@ class TestTheAnchor:
         # 10 gal at 2 gal/min for 5 minutes.
         assert drawn.heat_btu < quiet.heat_btu - 3000
 
-    def test_a_draw_through_the_recoverys_end_anchors_there(self):
+    def test_a_draw_through_the_recoverys_end_anchors_there(self) -> None:
         """A short wash spanning the compressor's stop: the full tank
         it stopped at still anchors, the wash booked from its start."""
         heating = [step(compressor_on=True)] * 20
@@ -79,7 +80,7 @@ class TestTheAnchor:
         quiet = book_steps(heating + [step()] * 16, P)
         assert quiet is not None and b.heat_btu < quiet.heat_btu
 
-    def test_the_quiet_after_a_draw_is_no_anchor(self):
+    def test_the_quiet_after_a_draw_is_no_anchor(self) -> None:
         steps = (
             recovery_then([step()] * 5)
             + [step(flow_gpm=2.0)] * 30
@@ -91,7 +92,7 @@ class TestTheAnchor:
         # after it.
         assert b.anchor_age_h == pytest.approx(60 * 10 / 3600)
 
-    def test_past_the_history_none_and_past_the_fresh_age_aged(self):
+    def test_past_the_history_none_and_past_the_fresh_age_aged(self) -> None:
         p = replace(P, history_h=1.0, max_anchor_age_h=0.5)
         hour = int(3600 / 10)
 
@@ -104,7 +105,7 @@ class TestTheAnchor:
         aged = book_steps(since_a_draw(int(hour * 0.75)), p)
         assert aged is not None and aged.aged(p)
 
-    def test_the_inlet_is_the_median_of_the_measured(self):
+    def test_the_inlet_is_the_median_of_the_measured(self) -> None:
         """Since the anchor (fixed by a draw): the measured readings'
         median, not the last one."""
         after = [step(), step(flow_gpm=2.0)] + [
@@ -117,14 +118,14 @@ class TestTheAnchor:
 
 
 class TestTheHouseholdsFlow:
-    def test_the_meter_less_circulations_share(self):
+    def test_the_meter_less_circulations_share(self) -> None:
         s = step(flow_gpm=1.5, circulating=True, circulation_gpm=1.4)
         assert house_gpm(s, LOOP) == pytest.approx(1.5 - 0.81 * 1.4)
         # A meter circulation does not pass reads it all as draws.
         assert house_gpm(s, replace(LOOP, meter_share=0.0)) == 1.5
         assert house_gpm(step(flow_gpm=0.4), LOOP) == 0.4
 
-    def test_circulating_disturbs_the_anchor(self):
+    def test_circulating_disturbs_the_anchor(self) -> None:
         steps = recovery_then(
             [step(circulating=True, circulation_gpm=1.4)] * 30
         )
@@ -135,7 +136,9 @@ class TestTheHouseholdsFlow:
 
 
 @pytest.fixture
-def heater(device_status_dict):
+def heater(
+    device_status_dict: dict[str, Any],
+) -> Callable[..., list[Any]]:
     def readings(hours: float, recovery_at: float) -> list[Any]:
         out = []
         t = T0 - timedelta(hours=hours)
@@ -187,7 +190,9 @@ def with_a_draw(rows: list[Any], hours_ago: float) -> list[Any]:
 
 
 class TestFromTheHistory:
-    def test_it_books_from_the_recovery(self, heater):
+    def test_it_books_from_the_recovery(
+        self, heater: Callable[..., list[Any]]
+    ) -> None:
         p = site_example_params()
         b = sa.book_from_history(
             heater(20, recovery_at=4),
@@ -200,7 +205,9 @@ class TestFromTheHistory:
         assert b.anchor_age_h == pytest.approx(2.0, abs=0.01)
         assert not b.aged(p.book_terms())
 
-    def test_past_the_fresh_window_it_reads_the_long_one(self, heater):
+    def test_past_the_fresh_window_it_reads_the_long_one(
+        self, heater: Callable[..., list[Any]]
+    ) -> None:
         p = site_example_params()
         b = sa.book_from_history(
             heater(72, recovery_at=30),
@@ -210,7 +217,9 @@ class TestFromTheHistory:
         )
         assert b is not None and b.aged(p.book_terms())
 
-    def test_a_silent_meter_is_refused(self, heater):
+    def test_a_silent_meter_is_refused(
+        self, heater: Callable[..., list[Any]]
+    ) -> None:
         p = site_example_params()
         gappy = [
             r for r in meter(20) if not T0 - timedelta(hours=8) < r[0] < T0
@@ -220,7 +229,9 @@ class TestFromTheHistory:
                 heater(20, recovery_at=4), p, at=T0, flow=gappy
             )
 
-    def test_a_missing_meter_reading_is_no_reading(self, heater):
+    def test_a_missing_meter_reading_is_no_reading(
+        self, heater: Callable[..., list[Any]]
+    ) -> None:
         """A NaN in the meter's flow is a reading not taken: the anchor
         and the booked heat are what they are without it."""
         p = site_example_params()

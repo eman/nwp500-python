@@ -97,20 +97,20 @@ async def _deliver(
 
 
 class TestTopicBuilder:
-    def test_control_fail_response_topic(self):
+    def test_control_fail_response_topic(self) -> None:
         assert (
             MqttTopicBuilder.control_fail_response_topic("52", MAC)
             == CTRL_FAIL_TOPIC
         )
 
-    def test_wildcard_covers_control_fail_topic(self):
+    def test_wildcard_covers_control_fail_topic(self) -> None:
         from nwp500.mqtt.utils import topic_matches_pattern
 
         assert topic_matches_pattern(CTRL_FAIL_TOPIC, WILDCARD)
 
 
 class TestControlFailModel:
-    def test_parses_the_apps_shape(self):
+    def test_parses_the_apps_shape(self) -> None:
         parsed = ControlFailResponse.model_validate(_ctrl_fail_message())
 
         assert parsed.client_id == "test-client"
@@ -122,22 +122,23 @@ class TestControlFailModel:
         assert parsed.response.additional_value == "5322"
         assert parsed.response.sw_version == 1234
 
-    def test_known_fail_code_is_an_enum(self):
+    def test_known_fail_code_is_an_enum(self) -> None:
         parsed = ControlFailResponse.model_validate(_ctrl_fail_message(2))
 
         assert parsed.fail_code is ControlFailCode.DHW_CONTROL_INTERVAL_EXCEEDED
-        assert parsed.fail_code == 2
+        # IntEnum compares equal to its int value at runtime
+        assert parsed.fail_code == 2  # type: ignore[comparison-overlap]
         assert parsed.reason == "DHW control interval exceeded"
         assert parsed.mac_address == MAC
 
-    def test_unknown_fail_code_stays_an_int(self):
+    def test_unknown_fail_code_stays_an_int(self) -> None:
         parsed = ControlFailResponse.model_validate(_ctrl_fail_message(7))
 
         assert parsed.fail_code == 7
         assert not isinstance(parsed.fail_code, ControlFailCode)
         assert parsed.reason == "unknown failure code 7"
 
-    def test_envelope_fields_are_optional(self):
+    def test_envelope_fields_are_optional(self) -> None:
         """Only ``response`` is required: a future sender might omit the
         envelope and the failure should still be understood."""
         parsed = ControlFailResponse.model_validate(
@@ -148,7 +149,7 @@ class TestControlFailModel:
         assert parsed.response.sw_version is None
         assert parsed.fail_code is ControlFailCode.DHW_CONTROL_INTERVAL_EXCEEDED
 
-    def test_detail_requires_fail_code(self):
+    def test_detail_requires_fail_code(self) -> None:
         with pytest.raises(ValueError):
             ControlFailDetail.model_validate(
                 {"deviceType": 52, "macAddress": MAC}
@@ -157,7 +158,7 @@ class TestControlFailModel:
 
 class TestTypedSubscription:
     @pytest.mark.asyncio
-    async def test_callback_receives_parsed_message(self):
+    async def test_callback_receives_parsed_message(self) -> None:
         manager = _manager()
         received: list[ControlFailResponse] = []
 
@@ -172,7 +173,7 @@ class TestTypedSubscription:
         assert received[0].client_id == "test-client"
 
     @pytest.mark.asyncio
-    async def test_registers_under_the_device_wildcard(self):
+    async def test_registers_under_the_device_wildcard(self) -> None:
         """No new broker subscription: the device wildcard carries it."""
         manager = _manager()
 
@@ -182,7 +183,7 @@ class TestTypedSubscription:
         manager._connection.subscribe.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_other_device_messages_are_ignored(self):
+    async def test_other_device_messages_are_ignored(self) -> None:
         manager = _manager()
         received: list[ControlFailResponse] = []
 
@@ -203,7 +204,7 @@ class TestTypedSubscription:
         assert received == []
 
     @pytest.mark.asyncio
-    async def test_unsubscribe_removes_only_that_callback(self):
+    async def test_unsubscribe_removes_only_that_callback(self) -> None:
         manager = _manager()
         device = _device()
         failures: list[ControlFailResponse] = []
@@ -222,7 +223,9 @@ class TestTypedSubscription:
         assert failures == []
 
     @pytest.mark.asyncio
-    async def test_unparseable_message_is_logged_not_raised(self, caplog):
+    async def test_unparseable_message_is_logged_not_raised(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
         manager = _manager()
         received: list[ControlFailResponse] = []
 
@@ -260,7 +263,7 @@ class TestControlFailedEvent:
         return _manager(emitter, run), events
 
     @pytest.mark.asyncio
-    async def test_emitted_from_a_status_subscription(self):
+    async def test_emitted_from_a_status_subscription(self) -> None:
         import asyncio
 
         manager, events = self._emitting_manager()
@@ -279,7 +282,7 @@ class TestControlFailedEvent:
         assert event.response.session_id == "session-1"
 
     @pytest.mark.asyncio
-    async def test_other_clients_failure_is_not_own(self):
+    async def test_other_clients_failure_is_not_own(self) -> None:
         import asyncio
 
         manager, events = self._emitting_manager()
@@ -295,7 +298,7 @@ class TestControlFailedEvent:
         assert events[0].own_command is False
 
     @pytest.mark.asyncio
-    async def test_emitted_once_regardless_of_handler_count(self):
+    async def test_emitted_once_regardless_of_handler_count(self) -> None:
         """The event comes from dispatch, not from each handler."""
         import asyncio
 
@@ -311,7 +314,7 @@ class TestControlFailedEvent:
         assert len(events) == 1
 
     @pytest.mark.asyncio
-    async def test_not_emitted_for_other_topics(self):
+    async def test_not_emitted_for_other_topics(self) -> None:
         import asyncio
 
         manager, events = self._emitting_manager()
@@ -327,7 +330,9 @@ class TestControlFailedEvent:
         assert events == []
 
     @pytest.mark.asyncio
-    async def test_unparseable_failure_logs_and_skips_event(self, caplog):
+    async def test_unparseable_failure_logs_and_skips_event(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
         import asyncio
 
         manager, events = self._emitting_manager()
@@ -346,7 +351,9 @@ class TestControlFailedEvent:
         )
 
     @pytest.mark.asyncio
-    async def test_failure_is_logged_with_reason(self, caplog):
+    async def test_failure_is_logged_with_reason(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
         import asyncio
 
         manager, _events = self._emitting_manager()
@@ -380,7 +387,7 @@ class TestClientMixin:
         return client
 
     @pytest.mark.asyncio
-    async def test_subscribe_delegates(self):
+    async def test_subscribe_delegates(self) -> None:
         client = self._client()
         device = _device()
         callback = MagicMock()
@@ -392,7 +399,7 @@ class TestClientMixin:
         )
 
     @pytest.mark.asyncio
-    async def test_subscribe_requires_connection(self):
+    async def test_subscribe_requires_connection(self) -> None:
         from nwp500.exceptions import MqttNotConnectedError
 
         client = self._client(connected=False)
@@ -400,7 +407,7 @@ class TestClientMixin:
             await client.subscribe_control_fail_response(_device(), MagicMock())
 
     @pytest.mark.asyncio
-    async def test_unsubscribe_delegates_and_tolerates_disconnect(self):
+    async def test_unsubscribe_delegates_and_tolerates_disconnect(self) -> None:
         client = self._client()
         device = _device()
         callback = MagicMock()

@@ -3,8 +3,9 @@
 environment source against a fake client."""
 
 import math
+from collections.abc import Iterable
 from datetime import UTC, datetime, timedelta
-from typing import Any, ClassVar
+from typing import Any, ClassVar, TypedDict, cast
 
 import pytest
 
@@ -32,7 +33,7 @@ def _state(
 
 
 class TestParsing:
-    def test_a_state(self):
+    def test_a_state(self) -> None:
         s = ha.parse_state(_state("sensor.air", "61.5", "°F"))
         assert (s.entity, s.value, s.unit, s.at) == (
             "sensor.air",
@@ -42,10 +43,10 @@ class TestParsing:
         )
 
     @pytest.mark.parametrize("value", ["unavailable", "unknown", "nan", "x"])
-    def test_no_value_is_none(self, value):
+    def test_no_value_is_none(self, value: str) -> None:
         assert ha.parse_state(_state("sensor.air", value, "°F")).value is None
 
-    def test_freshness_is_the_last_update(self):
+    def test_freshness_is_the_last_update(self) -> None:
         doc = _state("sensor.air", "61.5", "°F") | {
             "last_updated": (NOW - timedelta(hours=2)).isoformat(),
             "last_reported": NOW.isoformat(),
@@ -55,11 +56,11 @@ class TestParsing:
         assert not ha.fresh(s, NOW)
         assert ha.fresh(ha.parse_state(_state("sensor.air", 1, "°F")), NOW)
 
-    def test_not_a_state(self):
+    def test_not_a_state(self) -> None:
         with pytest.raises(ha.HomeAssistantError):
             ha.parse_state(["no"])
 
-    def test_a_history(self):
+    def test_a_history(self) -> None:
         doc = [
             [
                 {
@@ -91,7 +92,7 @@ class TestParsing:
             (datetime(2026, 10, 18, 14, tzinfo=UTC), 1.0)
         ]
 
-    def test_a_forecast(self):
+    def test_a_forecast(self) -> None:
         doc = {
             "service_response": {
                 "weather.home": {
@@ -116,14 +117,14 @@ class TestParsing:
 
 
 class TestUnits:
-    def test_temperatures(self):
+    def test_temperatures(self) -> None:
         assert ha.to_f(20.0, "°C") == pytest.approx(68.0)
         assert ha.to_f(68.0, "°F") == 68.0
         assert ha.to_f(293.15, "K") == pytest.approx(68.0)
         with pytest.raises(ValueError, match="not a temperature"):
             ha.to_f(1.0, "%")
 
-    def test_flows_and_volumes(self):
+    def test_flows_and_volumes(self) -> None:
         assert ha.to_gpm(3.785411784, "L/min") == pytest.approx(1.0)
         assert ha.to_gpm(1.0, "gal/min") == 1.0
         assert ha.to_gal(3.785411784, "L") == pytest.approx(1.0)
@@ -139,19 +140,19 @@ def _t(minutes: float) -> datetime:
 
 
 class TestPumpRuns:
-    def test_no_reading_is_unknown(self):
+    def test_no_reading_is_unknown(self) -> None:
         assert ha.pump_runs([], _t(0), _t(60)) is None
 
-    def test_runs_from_the_speed(self):
+    def test_runs_from_the_speed(self) -> None:
         speed = [(_t(-10), 0.0), (_t(5), 2800.0), (_t(7), 2810.0), (_t(9), 0.0)]
         assert ha.pump_runs(speed, _t(0), _t(60)) == [(_t(5), _t(9))]
 
-    def test_a_silent_run_ends_after_five_minutes(self):
+    def test_a_silent_run_ends_after_five_minutes(self) -> None:
         assert ha.pump_runs([(_t(5), 2800.0)], _t(0), _t(60)) == [
             (_t(5), _t(10))
         ]
 
-    def test_a_run_in_force_at_the_start(self):
+    def test_a_run_in_force_at_the_start(self) -> None:
         speed = [(_t(-1), 2800.0), (_t(2), 0.0)]
         assert ha.pump_runs(speed, _t(0), _t(60)) == [(_t(0), _t(2))]
 
@@ -165,7 +166,7 @@ class TestTheConfiguration:
         "location_air": {"damping": 0.638, "lag_hours": 2, "offset_f": 24.5},
     }
 
-    def test_it_reads(self):
+    def test_it_reads(self) -> None:
         s = ha.sources_from(self.DOC, {"HA_TOKEN": "secret"})
         assert s.url == "http://ha.local:8123"
         assert s.token == "secret"
@@ -188,19 +189,24 @@ class TestTheConfiguration:
             ({"entities": {"air": "air"}}, {"HA_TOKEN": "x"}, "entity id"),
         ],
     )
-    def test_what_is_wrong_is_named(self, change, environ, match):
+    def test_what_is_wrong_is_named(
+        self,
+        change: dict[str, Any],
+        environ: dict[str, str],
+        match: str,
+    ) -> None:
         doc = {"home_assistant": self.DOC["home_assistant"] | change}
         with pytest.raises(ValueError, match=match):
             ha.sources_from(doc, environ)
 
-    def test_the_token_variable_is_named(self):
+    def test_the_token_variable_is_named(self) -> None:
         doc = {
             "home_assistant": self.DOC["home_assistant"]
             | {"token_env": "MY_HA"}
         }
         assert ha.sources_from(doc, {"MY_HA": "t"}).token == "t"
 
-    def test_a_model_needs_every_term(self):
+    def test_a_model_needs_every_term(self) -> None:
         doc = self.DOC | {"location_air": {"damping": 1}}
         with pytest.raises(ValueError, match="location_air"):
             ha.sources_from(doc, {"HA_TOKEN": "x"})
@@ -229,27 +235,42 @@ class FakeClient:
             raise ha.HomeAssistantError(f"GET /api/states/{entity}: HTTP 404")
         return self.states[entity]
 
-    async def history(self, entities, start, end):
+    async def history(
+        self, entities: Iterable[str], start: datetime, end: datetime
+    ) -> dict[str, list[ha.Reading]]:
         return (await self.read_history(entities, start, end)).readings
 
-    async def read_history(self, entities, start, end):
+    async def read_history(
+        self, entities: Iterable[str], start: datetime, end: datetime
+    ) -> ha.History:
         self.history_calls.append((list(entities), start, end))
         return ha.History(
             {e: self.series.get(e, []) for e in entities},
             {e: self.down.get(e, []) for e in entities},
         )
 
-    async def forecast(self, entity: str):
+    async def forecast(
+        self, entity: str
+    ) -> tuple[list[ha.Reading], str | None]:
         if self.hours is None:
             raise ha.HomeAssistantError("no forecast")
         return self.hours
 
 
-def _s(entity: str, value: float | None, unit: str, age_min: float = 0):
+def _s(
+    entity: str, value: float | None, unit: str, age_min: float = 0
+) -> ha.State:
     return ha.State(entity, value, unit, NOW - timedelta(minutes=age_min))
 
 
-def _source(client: Any, *, model=None, **entities: str) -> Any:
+def _source(
+    client: Any,
+    *,
+    # ``Any``: with a precise type, mypy rejects the ``**entities``
+    # unpacking of a ``dict[str, str]`` as a possible ``model`` keyword.
+    model: Any = None,
+    **entities: str,
+) -> Any:
     return ha.HomeAssistantEnvironment(
         client,  # pyright: ignore[reportArgumentType]
         ha.Entities(**entities),
@@ -265,7 +286,7 @@ OUTDOOR = ([(NOW + timedelta(hours=h), 50.0 + h) for h in range(-3, 9)], "°F")
 
 @pytest.mark.asyncio
 class TestTheAir:
-    async def test_projected_and_anchored(self):
+    async def test_projected_and_anchored(self) -> None:
         client = FakeClient(
             {"sensor.air": _s("sensor.air", 62.0, "°F", age_min=10)},
             forecast=OUTDOOR,
@@ -284,7 +305,7 @@ class TestTheAir:
         assert first == pytest.approx(expected)
         assert any("anchored" in n for n in source.notes)
 
-    async def test_a_stale_reading_leaves_it_unanchored(self):
+    async def test_a_stale_reading_leaves_it_unanchored(self) -> None:
         client = FakeClient(
             {"sensor.air": _s("sensor.air", 62.0, "°F", age_min=90)},
             forecast=OUTDOOR,
@@ -300,12 +321,12 @@ class TestTheAir:
         assert any("stale (1.5 h old)" in n for n in source.notes)
         assert any("unanchored" in n for n in source.notes)
 
-    async def test_without_a_model_the_reading_is_held(self):
+    async def test_without_a_model_the_reading_is_held(self) -> None:
         client = FakeClient({"sensor.air": _s("sensor.air", 20.0, "°C")})
         env = await _source(client, air="sensor.air").read()
         assert env.ambient_f == pytest.approx(68.0)
 
-    async def test_nothing_read_is_no_air(self):
+    async def test_nothing_read_is_no_air(self) -> None:
         source = _source(FakeClient(), air="sensor.air")
         env = await source.read()
         assert env.ambient_defaulted
@@ -314,12 +335,12 @@ class TestTheAir:
 
 @pytest.mark.asyncio
 class TestTheHumidity:
-    async def test_fresh(self):
+    async def test_fresh(self) -> None:
         client = FakeClient({"sensor.rh": _s("sensor.rh", 41.0, "%")})
         env = await _source(client, humidity="sensor.rh").read()
         assert env.humidity == 41.0
 
-    async def test_stale_is_the_default(self):
+    async def test_stale_is_the_default(self) -> None:
         client = FakeClient({"sensor.rh": _s("sensor.rh", 41.0, "%", 61)})
         env = await _source(client, humidity="sensor.rh").read()
         assert env.humidity == sim.Environment(ambient_f=60.0).humidity
@@ -347,7 +368,12 @@ def long_draw(
     return {"sensor.inlet": probe, "sensor.volume": volume}
 
 
-INLET = {
+class _InletEntities(TypedDict):
+    inlet: str
+    meter_volume: str
+
+
+INLET: _InletEntities = {
     "inlet": "sensor.inlet",
     "meter_volume": "sensor.volume",
 }
@@ -360,7 +386,7 @@ UNITS = {
 
 @pytest.mark.asyncio
 class TestTheInlet:
-    async def test_the_plateau_of_a_long_draw(self):
+    async def test_the_plateau_of_a_long_draw(self) -> None:
         client = FakeClient(UNITS, long_draw(ended_hours_ago=5))
         source = _source(client, **INLET)
         env = await source.read()
@@ -370,17 +396,17 @@ class TestTheInlet:
         assert set(names) == {"sensor.inlet", "sensor.volume"}
         assert (since, until) == (NOW - timedelta(hours=72), NOW)
 
-    async def test_a_short_draw_has_none(self):
+    async def test_a_short_draw_has_none(self) -> None:
         client = FakeClient(UNITS, long_draw(ended_hours_ago=5, minutes=8))
         source = _source(client, **INLET)
         assert (await source.read()).inlet_f is None
         assert any("no long draw" in n for n in source.notes)
 
-    async def test_a_draw_beyond_72_hours_has_none(self):
+    async def test_a_draw_beyond_72_hours_has_none(self) -> None:
         client = FakeClient(UNITS, long_draw(ended_hours_ago=73))
         assert (await _source(client, **INLET).read()).inlet_f is None
 
-    async def test_a_draw_during_circulation_has_none(self):
+    async def test_a_draw_during_circulation_has_none(self) -> None:
         series = long_draw(ended_hours_ago=5)
         start = NOW - timedelta(hours=5, minutes=10)
         series["sensor.pump"] = [
@@ -392,7 +418,7 @@ class TestTheInlet:
         source = _source(client, circulation_speed="sensor.pump", **INLET)
         assert (await source.read()).inlet_f is None
 
-    async def test_unknown_circulation_has_none(self):
+    async def test_unknown_circulation_has_none(self) -> None:
         client = FakeClient(UNITS, long_draw(ended_hours_ago=5))
         source = _source(client, circulation_speed="sensor.pump", **INLET)
         assert (await source.read()).inlet_f is None
@@ -401,12 +427,12 @@ class TestTheInlet:
             for n in source.notes
         )
 
-    async def test_without_the_meters_volume(self):
+    async def test_without_the_meters_volume(self) -> None:
         source = _source(FakeClient(UNITS), inlet="sensor.inlet")
         assert (await source.read()).inlet_f is None
         assert any("meter's volume" in n for n in source.notes)
 
-    async def test_a_failed_read_is_the_default(self):
+    async def test_a_failed_read_is_the_default(self) -> None:
         client = FakeClient(UNITS, long_draw(ended_hours_ago=5))
         client.fail = {"sensor.volume"}
         source = _source(client, **INLET)
@@ -416,7 +442,7 @@ class TestTheInlet:
 
 @pytest.mark.asyncio
 class TestCompose:
-    async def test_no_air_from_the_source_is_the_heaters(self):
+    async def test_no_air_from_the_source_is_the_heaters(self) -> None:
         heater_env = sim.Environment(ambient_f=75.0)
 
         class Heater:
@@ -426,7 +452,7 @@ class TestCompose:
                     settings=sim.Settings(setpoint_f=140.0),
                     environment=heater_env,
                     params=None,
-                    status=None,  # pyright: ignore[reportArgumentType]
+                    status=None,  # type: ignore[arg-type]  # pyright: ignore[reportArgumentType]
                     feature=None,
                 )
 
@@ -445,11 +471,11 @@ class TestCompose:
 
 
 class TestDrawSpans:
-    def test_runs_joined_across_short_gaps(self):
+    def test_runs_joined_across_short_gaps(self) -> None:
         flow = [(_t(0), 2.0), (_t(10 / 60), 2.0), (_t(0.5), 2.0), (_t(5), 0.0)]
         assert ha.draw_spans(flow) == [(_t(0), _t(0.5) + timedelta(seconds=10))]
 
-    def test_a_long_gap_is_two_draws(self):
+    def test_a_long_gap_is_two_draws(self) -> None:
         flow = [(_t(0), 2.0), (_t(1), 2.0)]
         assert len(ha.draw_spans(flow)) == 2
 
@@ -458,7 +484,7 @@ class TestDrawSpans:
 class TestTheRecord:
     START = NOW - timedelta(days=2)
 
-    async def test_the_air_humidity_draws_and_runs(self):
+    async def test_the_air_humidity_draws_and_runs(self) -> None:
         series = long_draw(ended_hours_ago=5)
         # The meter's row in force at the start repeats an old report.
         series["sensor.volume"].insert(0, (self.START, 5.0))
@@ -472,7 +498,7 @@ class TestTheRecord:
             "sensor.rh": _s("sensor.rh", 40.0, "%"),
         }
         got = await ha.record_inputs(
-            FakeClient(states, series),  # pyright: ignore[reportArgumentType]
+            FakeClient(states, series),  # type: ignore[arg-type]  # pyright: ignore[reportArgumentType]
             ha.Entities(
                 air="sensor.air",
                 humidity="sensor.rh",
@@ -489,10 +515,10 @@ class TestTheRecord:
         assert drawn[1] - drawn[0] > timedelta(minutes=15)
         assert got.notes == ()
 
-    async def test_coverage_and_missing_parts_are_noted(self):
+    async def test_coverage_and_missing_parts_are_noted(self) -> None:
         late = NOW - timedelta(hours=10)
         got = await ha.record_inputs(
-            FakeClient(  # pyright: ignore[reportArgumentType]
+            FakeClient(  # type: ignore[arg-type]  # pyright: ignore[reportArgumentType]
                 {
                     "sensor.air": _s("sensor.air", 60.0, "°F"),
                     "sensor.pump": _s("sensor.pump", 0.0, "rpm"),
@@ -511,10 +537,10 @@ class TestTheRecord:
             for n in got.notes
         )
 
-    async def test_a_failed_read_is_noted(self):
+    async def test_a_failed_read_is_noted(self) -> None:
         client = FakeClient()
         got = await ha.record_inputs(
-            client,  # pyright: ignore[reportArgumentType]
+            client,  # type: ignore[arg-type]  # pyright: ignore[reportArgumentType]
             ha.Entities(air="sensor.air"),
             self.START,
             NOW,
@@ -524,13 +550,18 @@ class TestTheRecord:
             "sensor.air: unit not read (GET /api/states/sensor.air: HTTP 404)",
         )
 
-    async def test_a_failed_history_is_noted(self):
+    async def test_a_failed_history_is_noted(self) -> None:
         class Down(FakeClient):
-            async def read_history(self, entities, start, end):
+            async def read_history(
+                self,
+                entities: Iterable[str],
+                start: datetime,
+                end: datetime,
+            ) -> ha.History:
                 raise ha.HomeAssistantError("GET /api/history: HTTP 502")
 
         got = await ha.record_inputs(
-            Down(),  # pyright: ignore[reportArgumentType]
+            Down(),  # type: ignore[arg-type]  # pyright: ignore[reportArgumentType]
             ha.Entities(air="sensor.air"),
             self.START,
             NOW,
@@ -540,7 +571,7 @@ class TestTheRecord:
 
 
 class TestReviewRegressions:
-    def test_an_omitted_entity_is_an_empty_series(self):
+    def test_an_omitted_entity_is_an_empty_series(self) -> None:
         doc = [
             [
                 {
@@ -556,14 +587,14 @@ class TestReviewRegressions:
         }
         assert ha.history_for([], ["sensor.a"]) == {"sensor.a": []}
 
-    def test_humidity_is_a_percentage(self):
+    def test_humidity_is_a_percentage(self) -> None:
         assert ha.percent(41.0, "%") == 41.0
         with pytest.raises(ValueError, match="not a relative humidity unit"):
             ha.percent(10.0, "g/m³")
         with pytest.raises(ValueError, match="not a relative humidity"):
             ha.percent(140.0, "%")
 
-    def test_covers_start(self):
+    def test_covers_start(self) -> None:
         assert ha.covers_start([(NOW, 1.0)], NOW)
         assert not ha.covers_start([(NOW + timedelta(minutes=6), 1.0)], NOW)
         assert not ha.covers_start([], NOW)
@@ -573,20 +604,20 @@ class TestReviewRegressions:
 class TestReviewRegressionsLive:
     START = NOW - timedelta(days=2)
 
-    async def test_humidity_in_another_unit_is_the_default(self):
+    async def test_humidity_in_another_unit_is_the_default(self) -> None:
         client = FakeClient({"sensor.rh": _s("sensor.rh", 10.0, "g/m³")})
         source = _source(client, humidity="sensor.rh")
         env = await source.read()
         assert env.humidity == sim.Environment(ambient_f=60.0).humidity
         assert any("not a relative humidity unit" in n for n in source.notes)
 
-    async def test_recorded_humidity_is_checked(self):
+    async def test_recorded_humidity_is_checked(self) -> None:
         client = FakeClient(
             {"sensor.rh": _s("sensor.rh", 40.0, "%")},
             {"sensor.rh": [(self.START, 40.0), (NOW, 140.0)]},
         )
         got = await ha.record_inputs(
-            client,  # pyright: ignore[reportArgumentType]
+            client,  # type: ignore[arg-type]  # pyright: ignore[reportArgumentType]
             ha.Entities(humidity="sensor.rh"),
             self.START,
             NOW,
@@ -598,20 +629,20 @@ class TestReviewRegressionsLive:
             {"sensor.rh": [(self.START, 4.0)]},
         )
         got = await ha.record_inputs(
-            wrong,  # pyright: ignore[reportArgumentType]
+            wrong,  # type: ignore[arg-type]  # pyright: ignore[reportArgumentType]
             ha.Entities(humidity="sensor.rh"),
             self.START,
             NOW,
         )
         assert got.humidity is None
 
-    async def test_part_histories_leave_the_heaters_flag(self):
+    async def test_part_histories_leave_the_heaters_flag(self) -> None:
         late = NOW - timedelta(hours=10)
         series = long_draw(ended_hours_ago=5)
         series["sensor.pump"] = [(late, 0.0)]
         client = FakeClient(UNITS, series)
         got = await ha.record_inputs(
-            client,  # pyright: ignore[reportArgumentType]
+            client,  # type: ignore[arg-type]  # pyright: ignore[reportArgumentType]
             ha.Entities(
                 meter_volume="sensor.volume", circulation_speed="sensor.pump"
             ),
@@ -621,7 +652,7 @@ class TestReviewRegressionsLive:
         assert (got.drawing, got.circulating) == (None, None)
         assert sum("covers only part" in n for n in got.notes) == 2
 
-    async def test_a_pump_read_only_late_is_unknown_for_the_inlet(self):
+    async def test_a_pump_read_only_late_is_unknown_for_the_inlet(self) -> None:
         series = long_draw(ended_hours_ago=5)
         # One idle reading an hour ago: before it, nobody knows.
         series["sensor.pump"] = [(NOW - timedelta(hours=1), 0.0)]
@@ -633,13 +664,18 @@ class TestReviewRegressionsLive:
             for n in source.notes
         )
 
-    async def test_an_omitted_entity_in_the_record_is_no_history(self):
+    async def test_an_omitted_entity_in_the_record_is_no_history(self) -> None:
         class Omits(FakeClient):
-            async def read_history(self, entities, start, end):
+            async def read_history(
+                self,
+                entities: Iterable[str],
+                start: datetime,
+                end: datetime,
+            ) -> ha.History:
                 return ha.History({}, {})
 
         got = await ha.record_inputs(
-            Omits({"sensor.air": _s("sensor.air", 60.0, "°F")}),  # pyright: ignore[reportArgumentType]
+            Omits({"sensor.air": _s("sensor.air", 60.0, "°F")}),  # type: ignore[arg-type]  # pyright: ignore[reportArgumentType]
             ha.Entities(air="sensor.air", circulation_speed="sensor.pump"),
             self.START,
             NOW,
@@ -649,8 +685,8 @@ class TestReviewRegressionsLive:
 
 
 class TestTheSecondReview:
-    def test_outages_run_to_the_next_number(self):
-        def row(at, state):
+    def test_outages_run_to_the_next_number(self) -> None:
+        def row(at: datetime, state: str) -> dict[str, str]:
             return {
                 "entity_id": "sensor.m",
                 "state": state,
@@ -667,12 +703,12 @@ class TestTheSecondReview:
         # Left out of the readings, as before.
         assert ha.parse_history(doc) == {"sensor.m": [(a, 0.0), (c, 0.1)]}
 
-    def test_a_null_forecast_is_an_error(self):
+    def test_a_null_forecast_is_an_error(self) -> None:
         doc = {"service_response": {"weather.home": {"forecast": None}}}
         with pytest.raises(ha.HomeAssistantError, match="no forecast"):
             ha.parse_forecast(doc, "weather.home")
 
-    def test_rpm(self):
+    def test_rpm(self) -> None:
         assert ha.to_rpm(1200.0, "RPM") == 1200.0
         assert ha.to_rpm(5.0, "Hz") == 300.0
         with pytest.raises(ValueError, match="rotational speed"):
@@ -680,7 +716,7 @@ class TestTheSecondReview:
         with pytest.raises(ValueError, match="rotational speed"):
             ha.to_rpm(40.0, None)
 
-    def test_busy(self):
+    def test_busy(self) -> None:
         x = [(_t(0), _t(1)), (_t(3), _t(4))]
         assert ha.busy(x, [(_t(0.5), _t(2))]) == [
             (_t(0), _t(2)),
@@ -692,7 +728,7 @@ class TestTheSecondReview:
 class TestTheSecondReviewLive:
     START = NOW - timedelta(days=2)
 
-    async def test_a_pump_in_hz_is_running(self):
+    async def test_a_pump_in_hz_is_running(self) -> None:
         series = long_draw(ended_hours_ago=5)
         since = NOW - ha.INLET_LOOKBACK
         # 5 Hz, 300 rpm, through the draw: it overlapped a run.
@@ -707,7 +743,7 @@ class TestTheSecondReviewLive:
         assert (await source.read()).inlet_f is None
         assert "inlet: the plateau of 0 long draws" not in source.notes
 
-    async def test_a_pump_in_no_speed_unit_is_unknown(self):
+    async def test_a_pump_in_no_speed_unit_is_unknown(self) -> None:
         series = long_draw(ended_hours_ago=5)
         series["sensor.pump"] = [(NOW - ha.INLET_LOOKBACK, 0.0)]
         states = UNITS | {"sensor.pump": _s("sensor.pump", 0.0, "%")}
@@ -717,7 +753,7 @@ class TestTheSecondReviewLive:
         assert (await source.read()).inlet_f is None
         assert any("not a rotational speed unit" in n for n in source.notes)
         got = await ha.record_inputs(
-            FakeClient(states, {"sensor.pump": [(self.START, 0.0)]}),  # pyright: ignore[reportArgumentType]
+            FakeClient(states, {"sensor.pump": [(self.START, 0.0)]}),  # type: ignore[arg-type]  # pyright: ignore[reportArgumentType]
             ha.Entities(circulation_speed="sensor.pump"),
             self.START,
             NOW,
@@ -725,7 +761,7 @@ class TestTheSecondReviewLive:
         assert got.circulating is None
         assert any("not a rotational speed unit" in n for n in got.notes)
 
-    async def test_a_pump_outage_skips_the_draw_for_the_inlet(self):
+    async def test_a_pump_outage_skips_the_draw_for_the_inlet(self) -> None:
         series = long_draw(ended_hours_ago=5)
         series["sensor.pump"] = [(NOW - ha.INLET_LOOKBACK, 0.0)]
         down = {
@@ -744,7 +780,7 @@ class TestTheSecondReviewLive:
         )
         assert (await clear.read()).inlet_f == pytest.approx(58.0)
 
-    async def test_outages_after_valid_readings_count_as_busy(self):
+    async def test_outages_after_valid_readings_count_as_busy(self) -> None:
         gap = (NOW - timedelta(hours=10), NOW - timedelta(hours=8))
         client = FakeClient(
             UNITS,
@@ -755,7 +791,7 @@ class TestTheSecondReviewLive:
             outages={"sensor.volume": [gap], "sensor.pump": [gap]},
         )
         got = await ha.record_inputs(
-            client,  # pyright: ignore[reportArgumentType]
+            client,  # type: ignore[arg-type]  # pyright: ignore[reportArgumentType]
             ha.Entities(
                 meter_volume="sensor.volume", circulation_speed="sensor.pump"
             ),
@@ -766,9 +802,11 @@ class TestTheSecondReviewLive:
         assert got.circulating == [gap]
         assert sum("counted as busy" in n for n in got.notes) == 2
 
-    async def test_a_null_forecast_falls_back(self):
+    async def test_a_null_forecast_falls_back(self) -> None:
         class Null(FakeClient):
-            async def forecast(self, entity):
+            async def forecast(
+                self, entity: str
+            ) -> tuple[list[ha.Reading], str | None]:
                 return ha.parse_forecast(
                     {"service_response": {entity: {"forecast": None}}}, entity
                 )
@@ -785,7 +823,7 @@ class TestTheSecondReviewLive:
 class TestTheThirdReview:
     START = NOW - timedelta(days=2)
 
-    async def test_a_short_draw_without_a_rate_is_drawing(self):
+    async def test_a_short_draw_without_a_rate_is_drawing(self) -> None:
         at = NOW - timedelta(hours=3)
         client = FakeClient(
             UNITS,
@@ -799,7 +837,7 @@ class TestTheThirdReview:
             },
         )
         got = await ha.record_inputs(
-            client,  # pyright: ignore[reportArgumentType]
+            client,  # type: ignore[arg-type]  # pyright: ignore[reportArgumentType]
             ha.Entities(
                 meter_volume="sensor.volume", circulation_speed="sensor.pump"
             ),
@@ -809,7 +847,7 @@ class TestTheThirdReview:
         (drawn,) = got.drawing or []
         assert drawn[0] <= at <= drawn[1]
 
-    async def test_air_and_humidity_outages_are_carried(self):
+    async def test_air_and_humidity_outages_are_carried(self) -> None:
         gap = (NOW - timedelta(hours=10), NOW - timedelta(hours=8))
         client = FakeClient(
             {
@@ -823,7 +861,7 @@ class TestTheThirdReview:
             outages={"sensor.air": [gap], "sensor.rh": [gap]},
         )
         got = await ha.record_inputs(
-            client,  # pyright: ignore[reportArgumentType]
+            client,  # type: ignore[arg-type]  # pyright: ignore[reportArgumentType]
             ha.Entities(air="sensor.air", humidity="sensor.rh"),
             self.START,
             NOW,
@@ -834,7 +872,7 @@ class TestTheThirdReview:
 
 
 class TestFullRows:
-    def test_last_updated_wins(self):
+    def test_last_updated_wins(self) -> None:
         changed = NOW - timedelta(minutes=10)
         doc = [
             [
@@ -850,7 +888,9 @@ class TestFullRows:
 
 
 class TestTheSixthReview:
-    def test_pump_runs_hold_their_silence_across_a_change_of_clocks(self):
+    def test_pump_runs_hold_their_silence_across_a_change_of_clocks(
+        self,
+    ) -> None:
         from zoneinfo import ZoneInfo
 
         la = ZoneInfo("America/Los_Angeles")
@@ -867,7 +907,7 @@ class TestTheSixthReview:
         ((a, b),) = local or []
         assert b - a == ha.PUMP_STALE
 
-    def test_a_small_report_is_water_moving(self):
+    def test_a_small_report_is_water_moving(self) -> None:
         at = NOW - timedelta(hours=1)
         spans = ha.volume_spans(
             [(at - timedelta(seconds=30), 0.002), (at, 0.25)]
@@ -881,7 +921,7 @@ class TestTheSixthReview:
 class TestTheSixthReviewLive:
     START = NOW - timedelta(days=2)
 
-    async def test_a_quarter_gallon_draw_is_drawing(self):
+    async def test_a_quarter_gallon_draw_is_drawing(self) -> None:
         at = NOW - timedelta(hours=3)
         client = FakeClient(
             UNITS,
@@ -891,7 +931,7 @@ class TestTheSixthReviewLive:
             },
         )
         got = await ha.record_inputs(
-            client,  # pyright: ignore[reportArgumentType]
+            client,  # type: ignore[arg-type]  # pyright: ignore[reportArgumentType]
             ha.Entities(
                 meter_volume="sensor.volume", circulation_speed="sensor.pump"
             ),
@@ -906,19 +946,21 @@ class TestTheSixthReviewLive:
 class TestTheToken:
     TOKEN = "secret-token-value"
 
-    def client_raising(self, exc: BaseException):
+    def client_raising(
+        self, exc: BaseException
+    ) -> tuple[ha.HomeAssistantClient, Any]:
         class Response:
-            async def __aenter__(self):
+            async def __aenter__(self) -> None:
                 raise exc
 
-            async def __aexit__(self, *a):
+            async def __aexit__(self, *a: object) -> bool:
                 return False
 
         class Session:
-            def __init__(self):
+            def __init__(self) -> None:
                 self.kw: dict[str, Any] = {}
 
-            def request(self, method, url, **kw):
+            def request(self, method: str, url: str, **kw: Any) -> Any:
                 self.kw = kw
                 return Response()
 
@@ -932,7 +974,7 @@ class TestTheToken:
             session,
         )
 
-    async def test_a_request_error_never_carries_the_token(self):
+    async def test_a_request_error_never_carries_the_token(self) -> None:
         import aiohttp
         from multidict import CIMultiDict, CIMultiDictProxy
         from yarl import URL
@@ -953,22 +995,22 @@ class TestTheToken:
         assert "TooManyRedirects" in str(err.value)
         assert session.kw["allow_redirects"] is False
 
-    async def test_an_error_body_is_scrubbed(self):
+    async def test_an_error_body_is_scrubbed(self) -> None:
         class Response:
             status = 401
 
-            async def text(self):
+            async def text(self) -> str:
                 # The token across the 200-character cut.
                 return "x" * 190 + f" {TestTheToken.TOKEN} bad token"
 
-            async def __aenter__(self):
+            async def __aenter__(self) -> Response:
                 return self
 
-            async def __aexit__(self, *a):
+            async def __aexit__(self, *a: object) -> bool:
                 return False
 
         class Session:
-            def request(self, method, url, **kw):
+            def request(self, method: str, url: str, **kw: Any) -> Any:
                 return Response()
 
         client = ha.HomeAssistantClient(
@@ -984,9 +1026,12 @@ class TestTheToken:
 
 class TestRecordedUnits:
     @staticmethod
-    def doc():
-        def row(at, state, unit):
-            r = {
+    def doc() -> tuple[
+        list[list[dict[str, Any]]],
+        tuple[datetime, datetime, datetime],
+    ]:
+        def row(at: datetime, state: str, unit: str | None) -> dict[str, Any]:
+            r: dict[str, Any] = {
                 "entity_id": "sensor.air",
                 "state": state,
                 "last_updated": at.isoformat(),
@@ -1005,7 +1050,7 @@ class TestRecordedUnits:
             [row(a, "68.0", "°F"), row(b, "20.0", "°C"), row(c, "21.0", None)]
         ], (a, b, c)
 
-    def test_each_row_in_its_own_unit(self):
+    def test_each_row_in_its_own_unit(self) -> None:
         doc, (a, b, _) = self.doc()
         assert ha.parse_units(doc) == {"sensor.air": ["°F", "°C", None]}
         got = ha.History(
@@ -1016,14 +1061,15 @@ class TestRecordedUnits:
         # The unitless row, unknown from itself to the end.
         assert unread == [(NOW - timedelta(hours=1), NOW)]
 
-    def test_without_recorded_units_todays_unit(self):
+    def test_without_recorded_units_todays_unit(self) -> None:
         doc, (a, _, _) = self.doc()
         got = ha.History(ha.history_for(doc, ["sensor.air"]), {})
         rows, unread = got.converted("sensor.air", "°C", ha.to_f)
-        assert rows[0] == (a, pytest.approx(154.4))
+        # cast keeps the tuple's element type open against approx.
+        assert cast(object, rows[0]) == (a, pytest.approx(154.4))
         assert unread == []
 
-    def test_todays_unit_must_read(self):
+    def test_todays_unit_must_read(self) -> None:
         doc, _ = self.doc()
         got = ha.History(
             ha.history_for(doc, ["sensor.air"]), {}, ha.parse_units(doc)
@@ -1036,9 +1082,14 @@ class TestRecordedUnits:
 class TestRecordedUnitsLive:
     START = NOW - timedelta(days=2)
 
-    async def test_a_unit_change_in_the_record(self):
+    async def test_a_unit_change_in_the_record(self) -> None:
         class Changed(FakeClient):
-            async def read_history(self, entities, start, end):
+            async def read_history(
+                self,
+                entities: Iterable[str],
+                start: datetime,
+                end: datetime,
+            ) -> ha.History:
                 doc, _ = TestRecordedUnits.doc()
                 return ha.History(
                     ha.history_for(doc, list(entities)),
@@ -1047,7 +1098,7 @@ class TestRecordedUnitsLive:
                 )
 
         got = await ha.record_inputs(
-            Changed({"sensor.air": _s("sensor.air", 21.0, "°C")}),  # pyright: ignore[reportArgumentType]
+            Changed({"sensor.air": _s("sensor.air", 21.0, "°C")}),  # type: ignore[arg-type]  # pyright: ignore[reportArgumentType]
             ha.Entities(air="sensor.air"),
             self.START,
             NOW,
@@ -1056,12 +1107,17 @@ class TestRecordedUnitsLive:
         assert any("1 readings in no unit" in n for n in got.notes)
 
 
-def _history_client(doc, states):
+def _history_client(doc: Any, states: dict[str, ha.State]) -> FakeClient:
     """A client answering ``read_history`` from a raw history document,
     through the real parsers."""
 
     class Raw(FakeClient):
-        async def read_history(self, entities, start, end):
+        async def read_history(
+            self,
+            entities: Iterable[str],
+            start: datetime,
+            end: datetime,
+        ) -> ha.History:
             names = list(entities)
             units = ha.parse_units(doc)
             return ha.History(
@@ -1073,8 +1129,14 @@ def _history_client(doc, states):
     return Raw(states)
 
 
-def _row(entity, at, state, unit):
-    r = {"entity_id": entity, "state": state, "last_updated": at.isoformat()}
+def _row(
+    entity: str, at: datetime, state: str, unit: str | None
+) -> dict[str, Any]:
+    r: dict[str, Any] = {
+        "entity_id": entity,
+        "state": state,
+        "last_updated": at.isoformat(),
+    }
     if unit is not None:
         r["attributes"] = {"unit_of_measurement": unit}
     return r
@@ -1084,7 +1146,7 @@ def _row(entity, at, state, unit):
 class TestTheThirteenthReview:
     START = NOW - timedelta(days=2)
 
-    async def test_a_rejected_air_reading_is_unobserved(self):
+    async def test_a_rejected_air_reading_is_unobserved(self) -> None:
         h = timedelta(hours=1)
         doc = [
             [
@@ -1094,7 +1156,7 @@ class TestTheThirteenthReview:
             ]
         ]
         got = await ha.record_inputs(
-            _history_client(doc, {"sensor.air": _s("sensor.air", 80.0, "°F")}),  # pyright: ignore[reportArgumentType]
+            _history_client(doc, {"sensor.air": _s("sensor.air", 80.0, "°F")}),  # type: ignore[arg-type]  # pyright: ignore[reportArgumentType]
             ha.Entities(air="sensor.air"),
             self.START,
             NOW,
@@ -1102,7 +1164,7 @@ class TestTheThirteenthReview:
         assert got.air_outages == ((self.START + 4 * h, self.START + 8 * h),)
         assert any("unobserved" in n for n in got.notes)
 
-    async def test_a_rejected_volume_report_is_drawing(self):
+    async def test_a_rejected_volume_report_is_drawing(self) -> None:
         at = NOW - timedelta(hours=3)
         doc = [
             [
@@ -1113,7 +1175,7 @@ class TestTheThirteenthReview:
             [_row("sensor.pump", self.START, "0", "rpm")],
         ]
         got = await ha.record_inputs(
-            _history_client(doc, UNITS),  # pyright: ignore[reportArgumentType]
+            _history_client(doc, UNITS),  # type: ignore[arg-type]  # pyright: ignore[reportArgumentType]
             ha.Entities(
                 meter_volume="sensor.volume", circulation_speed="sensor.pump"
             ),
@@ -1122,19 +1184,23 @@ class TestTheThirteenthReview:
         )
         assert got.drawing == [(at, at + timedelta(minutes=2))]
 
-    async def test_a_first_reading_after_the_start_is_not_the_start(self):
+    async def test_a_first_reading_after_the_start_is_not_the_start(
+        self,
+    ) -> None:
         late = self.START + timedelta(minutes=4)
         assert not ha.covers_start([(late, 0.0)], self.START)
         assert ha.covers_start([(self.START, 0.0)], self.START)
         got = await ha.record_inputs(
-            FakeClient(UNITS, {"sensor.pump": [(late, 0.0)]}),  # pyright: ignore[reportArgumentType]
+            FakeClient(UNITS, {"sensor.pump": [(late, 0.0)]}),  # type: ignore[arg-type]  # pyright: ignore[reportArgumentType]
             ha.Entities(circulation_speed="sensor.pump"),
             self.START,
             NOW,
         )
         assert got.circulating is None
 
-    async def test_a_pump_read_four_minutes_late_is_unknown_for_the_inlet(self):
+    async def test_a_pump_read_four_minutes_late_is_unknown_for_the_inlet(
+        self,
+    ) -> None:
         series = long_draw(ended_hours_ago=5)
         series["sensor.pump"] = [
             (NOW - ha.INLET_LOOKBACK + timedelta(minutes=4), 0.0)

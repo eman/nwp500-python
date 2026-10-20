@@ -2,6 +2,7 @@
 
 import logging
 import sys
+from collections.abc import Iterator
 from unittest.mock import patch
 
 import pytest
@@ -13,7 +14,7 @@ except ImportError:
 
 
 @pytest.fixture(autouse=True)
-def _restore_log_levels():
+def _restore_log_levels() -> Iterator[None]:
     """The CLI group callback mutates global logger levels; undo it."""
     names = (None, "nwp500", "nwp500.cli.__main__", "aiohttp")
     saved = {name: logging.getLogger(name).level for name in names}
@@ -22,7 +23,7 @@ def _restore_log_levels():
         logging.getLogger(name).setLevel(level)
 
 
-def test_cli_help():
+def test_cli_help() -> None:
     """Test that CLI help command works."""
     with patch.object(sys, "argv", ["nwp-cli", "--help"]):
         with pytest.raises(SystemExit) as excinfo:
@@ -30,7 +31,7 @@ def test_cli_help():
         assert excinfo.value.code == 0
 
 
-def test_cli_no_args():
+def test_cli_no_args() -> None:
     """Test that CLI without args shows help."""
     with patch.object(sys, "argv", ["nwp-cli"]):
         with pytest.raises(SystemExit) as excinfo:
@@ -38,7 +39,7 @@ def test_cli_no_args():
         assert excinfo.value.code != 0
 
 
-def test_cli_mode_rejects_vacation():
+def test_cli_mode_rejects_vacation() -> None:
     """Vacation is not a valid mode argument (use the vacation command)."""
     with patch.object(sys, "argv", ["nwp-cli", "mode", "vacation"]):
         with pytest.raises(SystemExit) as excinfo:
@@ -46,7 +47,7 @@ def test_cli_mode_rejects_vacation():
         assert excinfo.value.code == 2  # click usage error
 
 
-def test_cli_mode_rejects_standby():
+def test_cli_mode_rejects_standby() -> None:
     """Standby (0) is not a writable operation mode."""
     with patch.object(sys, "argv", ["nwp-cli", "mode", "standby"]):
         with pytest.raises(SystemExit) as excinfo:
@@ -54,7 +55,7 @@ def test_cli_mode_rejects_standby():
         assert excinfo.value.code == 2  # click usage error
 
 
-def test_cli_exits_nonzero_on_missing_credentials():
+def test_cli_exits_nonzero_on_missing_credentials() -> None:
     """Command failures must produce a non-zero exit code."""
     import os
 
@@ -73,7 +74,7 @@ def test_cli_exits_nonzero_on_missing_credentials():
         assert excinfo.value.code == 1
 
 
-def test_cli_discards_cached_tokens_for_different_email():
+def test_cli_discards_cached_tokens_for_different_email() -> None:
     """Cached tokens for account A must not be reused for account B."""
     from unittest.mock import MagicMock
 

@@ -37,7 +37,9 @@ class Booked(_book.Booked):
     def drawable_btu(self, p: BookParams | None = None) -> float:
         return super().drawable_btu(p or EP)
 
-    def drawn(self, gal: float, upper_f: float, p: BookParams | None = None):
+    def drawn(
+        self, gal: float, upper_f: float, p: BookParams | None = None
+    ) -> _book.Booked:
         return super().drawn(gal, upper_f, p or EP)
 
     def heated(
@@ -45,15 +47,21 @@ class Booked(_book.Booked):
         bottom_btu: float = 0.0,
         top_btu: float = 0.0,
         p: BookParams | None = None,
-    ):
+    ) -> _book.Booked:
         return super().heated(bottom_btu, top_btu, p or EP)
 
     def observed(
-        self, lower_f: float, p: BookParams | None = None, *, drawing=False
-    ):
+        self,
+        lower_f: float,
+        p: BookParams | None = None,
+        *,
+        drawing: bool = False,
+    ) -> _book.Booked:
         return super().observed(lower_f, p or EP, drawing=drawing)
 
-    def deliverable_gal(self, upper_f: float, p: BookParams | None = None):
+    def deliverable_gal(
+        self, upper_f: float, p: BookParams | None = None
+    ) -> float:
         return super().deliverable_gal(upper_f, p or EP)
 
     def aged(self, p: BookParams | None = None) -> bool:
@@ -76,45 +84,85 @@ def delivery_f(upper_f: float, p: Any = None) -> float:
     return _book.delivery_f(upper_f, p or EP)
 
 
-def deliverable_from_heat(heat, upper_f, inlet_f, p=None, **kw):
+def deliverable_from_heat(
+    heat: float,
+    upper_f: float,
+    inlet_f: float,
+    p: BookParams | None = None,
+    **kw: Any,
+) -> float:
     return _book.deliverable_from_heat(heat, upper_f, inlet_f, p or EP, **kw)
 
 
-def tank_max_btu(upper_f, lower_f, ep=None):
+def tank_max_btu(
+    upper_f: float, lower_f: float, ep: BookParams | None = None
+) -> float:
     return _book.tank_max_btu(upper_f, lower_f, ep or EP)
 
 
-def zone_after_draw_f(b, upper_f, lower_f, fall=FALL_F_PER_GAL, ep=None, **kw):
+def zone_after_draw_f(
+    b: _book.Booked,
+    upper_f: float,
+    lower_f: float,
+    fall: float = FALL_F_PER_GAL,
+    ep: BookParams | None = None,
+    **kw: Any,
+) -> float:
     return _book.zone_after_draw_f(b, upper_f, lower_f, fall, ep or EP, **kw)
 
 
-def zone_mixed_f(b, gal, upper_before_f, upper_f, lower_f, ep=None):
+def zone_mixed_f(
+    b: _book.Booked,
+    gal: float,
+    upper_before_f: float,
+    upper_f: float,
+    lower_f: float,
+    ep: BookParams | None = None,
+) -> float:
     return _book.zone_mixed_f(
         b, gal, upper_before_f, upper_f, lower_f, ep or EP
     )
 
 
-def lower_after_draw_f(before, after, upper_f, lower_f, ep=None):
+def lower_after_draw_f(
+    before: _book.Booked,
+    after: _book.Booked,
+    upper_f: float,
+    lower_f: float,
+    ep: BookParams | None = None,
+) -> float:
     return _book.lower_after_draw_f(before, after, upper_f, lower_f, ep or EP)
 
 
-def front_share(cold_gal, ep=None):
+def front_share(cold_gal: float, ep: BookParams | None = None) -> float:
     return _book.front_share(cold_gal, ep or EP)
 
 
-def front_start_gal(ep=None):
+def front_start_gal(ep: BookParams | None = None) -> float:
     return _book.front_start_gal(ep or EP)
 
 
-def front_cannot_move(b, gal, ep=None):
+def front_cannot_move(
+    b: _book.Booked, gal: float, ep: BookParams | None = None
+) -> bool:
     return _book.front_cannot_move(b, gal, ep or EP)
 
 
-def walk_booked(start, points, heating, draws, ambient_at, p=None, **kw):
+def walk_booked(
+    start: _book.Booked,
+    points: Any,
+    heating: Any,
+    draws: Any,
+    ambient_at: Any,
+    p: BookParams | None = None,
+    **kw: Any,
+) -> _book.BookedPath:
     return _book.walk_booked(
         start, points, heating, draws, ambient_at, p or EP, **kw
     )
 
 
-def BookedHeatLedger(start, ambient_at, p=None, **kw):
+def BookedHeatLedger(
+    start: _book.Booked, ambient_at: Any, p: BookParams | None = None, **kw: Any
+) -> _book.BookedHeatLedger:
     return _book.BookedHeatLedger(start, ambient_at, p or EP, **kw)

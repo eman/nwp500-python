@@ -7,10 +7,10 @@ import pytest
 from nwp500.events import EventEmitter, EventListener
 
 
-def test_event_listener_creation():
+def test_event_listener_creation() -> None:
     """Test EventListener dataclass creation."""
 
-    def callback():
+    def callback() -> None:
         return None
 
     listener = EventListener(callback=callback, once=False, priority=50)
@@ -20,7 +20,7 @@ def test_event_listener_creation():
     assert listener.priority == 50
 
 
-def test_event_emitter_initialization():
+def test_event_emitter_initialization() -> None:
     """Test EventEmitter initialization."""
     emitter = EventEmitter()
 
@@ -30,12 +30,12 @@ def test_event_emitter_initialization():
     assert len(emitter._event_counts) == 0
 
 
-def test_register_listener():
+def test_register_listener() -> None:
     """Test registering an event listener."""
     emitter = EventEmitter()
     called = []
 
-    def handler():
+    def handler() -> None:
         called.append(True)
 
     emitter.on("test_event", handler)
@@ -44,18 +44,18 @@ def test_register_listener():
     assert "test_event" in emitter.event_names()
 
 
-def test_multiple_listeners_same_event():
+def test_multiple_listeners_same_event() -> None:
     """Test multiple listeners for the same event."""
     emitter = EventEmitter()
     results = []
 
-    def handler1():
+    def handler1() -> None:
         results.append(1)
 
-    def handler2():
+    def handler2() -> None:
         results.append(2)
 
-    def handler3():
+    def handler3() -> None:
         results.append(3)
 
     emitter.on("test_event", handler1)
@@ -66,12 +66,12 @@ def test_multiple_listeners_same_event():
 
 
 @pytest.mark.asyncio
-async def test_emit_event():
+async def test_emit_event() -> None:
     """Test emitting an event."""
     emitter = EventEmitter()
     called = []
 
-    def handler(value):
+    def handler(value: int) -> None:
         called.append(value)
 
     emitter.on("test_event", handler)
@@ -84,12 +84,12 @@ async def test_emit_event():
 
 
 @pytest.mark.asyncio
-async def test_emit_multiple_args():
+async def test_emit_multiple_args() -> None:
     """Test emitting event with multiple arguments."""
     emitter = EventEmitter()
     results = []
 
-    def handler(a, b, c):
+    def handler(a: int, b: int, c: int) -> None:
         results.append((a, b, c))
 
     emitter.on("test_event", handler)
@@ -100,12 +100,12 @@ async def test_emit_multiple_args():
 
 
 @pytest.mark.asyncio
-async def test_emit_kwargs():
+async def test_emit_kwargs() -> None:
     """Test emitting event with keyword arguments."""
     emitter = EventEmitter()
     results = []
 
-    def handler(name, value):
+    def handler(name: str, value: int) -> None:
         results.append({"name": name, "value": value})
 
     emitter.on("test_event", handler)
@@ -116,12 +116,12 @@ async def test_emit_kwargs():
 
 
 @pytest.mark.asyncio
-async def test_async_handler():
+async def test_async_handler() -> None:
     """Test async event handler."""
     emitter = EventEmitter()
     results = []
 
-    async def async_handler(value):
+    async def async_handler(value: str) -> None:
         await asyncio.sleep(0.01)  # Simulate async operation
         results.append(value)
 
@@ -133,18 +133,18 @@ async def test_async_handler():
 
 
 @pytest.mark.asyncio
-async def test_priority_ordering():
+async def test_priority_ordering() -> None:
     """Test handlers execute in priority order."""
     emitter = EventEmitter()
     results = []
 
-    def low_priority():
+    def low_priority() -> None:
         results.append("low")
 
-    def medium_priority():
+    def medium_priority() -> None:
         results.append("medium")
 
-    def high_priority():
+    def high_priority() -> None:
         results.append("high")
 
     # Register in mixed order
@@ -159,12 +159,12 @@ async def test_priority_ordering():
 
 
 @pytest.mark.asyncio
-async def test_once_listener():
+async def test_once_listener() -> None:
     """Test one-time listener."""
     emitter = EventEmitter()
     called_count = []
 
-    def handler():
+    def handler() -> None:
         called_count.append(1)
 
     emitter.once("test_event", handler)
@@ -179,14 +179,14 @@ async def test_once_listener():
     assert len(called_count) == 1  # Still 1
 
 
-def test_remove_specific_listener():
+def test_remove_specific_listener() -> None:
     """Test removing a specific listener."""
     emitter = EventEmitter()
 
-    def handler1():
+    def handler1() -> None:
         pass
 
-    def handler2():
+    def handler2() -> None:
         pass
 
     emitter.on("test_event", handler1)
@@ -201,7 +201,7 @@ def test_remove_specific_listener():
     assert emitter.listener_count("test_event") == 1
 
 
-def test_remove_all_listeners_for_event():
+def test_remove_all_listeners_for_event() -> None:
     """Test removing all listeners for an event."""
     emitter = EventEmitter()
 
@@ -218,7 +218,7 @@ def test_remove_all_listeners_for_event():
     assert emitter.listener_count("test_event") == 0
 
 
-def test_remove_all_listeners():
+def test_remove_all_listeners() -> None:
     """Test removing all listeners for all events."""
     emitter = EventEmitter()
 
@@ -236,11 +236,11 @@ def test_remove_all_listeners():
 
 
 @pytest.mark.asyncio
-async def test_wait_for_event():
+async def test_wait_for_event() -> None:
     """Test waiting for an event."""
     emitter = EventEmitter()
 
-    async def emit_later():
+    async def emit_later() -> None:
         await asyncio.sleep(0.1)
         await emitter.emit("test_event", "test_value")
 
@@ -255,7 +255,7 @@ async def test_wait_for_event():
 
 
 @pytest.mark.asyncio
-async def test_wait_for_timeout():
+async def test_wait_for_timeout() -> None:
     """Test wait_for with timeout."""
     emitter = EventEmitter()
 
@@ -264,15 +264,15 @@ async def test_wait_for_timeout():
 
 
 @pytest.mark.asyncio
-async def test_event_error_handling():
+async def test_event_error_handling() -> None:
     """Test that errors in handlers don't stop other handlers."""
     emitter = EventEmitter()
     results = []
 
-    def bad_handler():
+    def bad_handler() -> None:
         raise ValueError("Handler error")
 
-    def good_handler():
+    def good_handler() -> None:
         results.append("success")
 
     emitter.on("test_event", bad_handler)
@@ -286,7 +286,7 @@ async def test_event_error_handling():
     assert results == ["success"]  # Good handler succeeded
 
 
-def test_event_names():
+def test_event_names() -> None:
     """Test getting list of event names."""
     emitter = EventEmitter()
 
@@ -303,7 +303,7 @@ def test_event_names():
 
 
 @pytest.mark.asyncio
-async def test_event_count_tracking():
+async def test_event_count_tracking() -> None:
     """Test event emission counting."""
     emitter = EventEmitter()
 
@@ -320,7 +320,7 @@ async def test_event_count_tracking():
 
 
 @pytest.mark.asyncio
-async def test_no_listeners_emit():
+async def test_no_listeners_emit() -> None:
     """Test emitting event with no listeners."""
     emitter = EventEmitter()
 

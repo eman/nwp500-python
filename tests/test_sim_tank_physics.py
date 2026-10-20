@@ -77,17 +77,17 @@ def _context(*, truncated: bool) -> RecoveryContext:
 
 
 class TestDraws:
-    def test_with_draws_off_a_draw_moves_nothing(self):
+    def test_with_draws_off_a_draw_moves_nothing(self) -> None:
         assert _physics(draws_on=False).draw(T0, 130.0, 110.0, 10.0) == (
             130.0,
             110.0,
         )
 
-    def test_a_draw_cools_the_tank(self):
+    def test_a_draw_cools_the_tank(self) -> None:
         upper, lower = _physics().draw(T0, 130.0, 110.0, 10.0)
         assert upper + lower < 240.0
 
-    def test_a_larger_tank_loses_less_to_the_same_draw(self):
+    def test_a_larger_tank_loses_less_to_the_same_draw(self) -> None:
         p = _params()
         big = dataclasses.replace(
             p, tank=dataclasses.replace(p.tank, volume_gal=80.0)
@@ -100,14 +100,14 @@ class TestDraws:
 
 
 class TestRecoveryReasons:
-    def test_a_models_reasons_reach_the_heat(self):
+    def test_a_models_reasons_reach_the_heat(self) -> None:
         heat = _physics(recovery_model=_Model(("model_extrapolated",))).heat(
             T0, 125.0, 100.0, 140.0
         )
         assert heat is not None
         assert "model_extrapolated" in heat.reasons
 
-    def test_low_confidence_is_added_not_substituted(self):
+    def test_low_confidence_is_added_not_substituted(self) -> None:
         heat = _physics(
             recovery_model=_Model(("model_extrapolated",)),
             low_confidence_floor=2.0,
@@ -117,16 +117,16 @@ class TestRecoveryReasons:
 
 
 class TestTruncatedPhysics:
-    def test_alone_it_is_no_recovery(self):
+    def test_alone_it_is_no_recovery(self) -> None:
         """The bound is not a duration, and nothing reached the target."""
         assert recovery(_context(truncated=True)) is None
 
-    def test_a_converged_one_is_served(self):
+    def test_a_converged_one_is_served(self) -> None:
         served = recovery(_context(truncated=False))
         assert served is not None
         assert served.minutes == 150.0
 
-    def test_a_model_given_it_says_so(self):
+    def test_a_model_given_it_says_so(self) -> None:
         served = recovery(_context(truncated=True), model=_Model(("m",)))
         assert served is not None
         assert served.reasons == ("m", PHYSICS_TRUNCATED)
@@ -137,7 +137,7 @@ class TestTheAmbientSeries:
     """The replacement review of #162: an absent ``ambient_f`` column
     is an error, not a silent coast at the default air."""
 
-    def test_an_absent_column_is_an_error(self):
+    def test_an_absent_column_is_an_error(self) -> None:
         from nwp500.sim.decay import AmbientSampler, project_decay
         from nwp500.sim.defaults import default_params
 
@@ -158,7 +158,7 @@ class TestTheAmbientSeries:
                 tau_gap_hours=60.0,
             )
 
-    def test_no_usable_reading_is_the_default_said(self):
+    def test_no_usable_reading_is_the_default_said(self) -> None:
         from nwp500.sim.decay import AmbientSampler, project_decay
         from nwp500.sim.units import DEFAULT_AMBIENT_F
 

@@ -43,7 +43,8 @@ class TestRecirculationMode:
         assert RecirculationMode(value) is member
 
     def test_always_alias(self) -> None:
-        assert RecirculationMode.ALWAYS is RecirculationMode.ALWAYS_ON
+        always: RecirculationMode = RecirculationMode.ALWAYS
+        assert always is RecirculationMode.ALWAYS_ON
         assert RecirculationMode(1).name == "ALWAYS_ON"
 
     def test_old_wrong_members_removed(self) -> None:
@@ -115,7 +116,8 @@ class TestDhwOperationSettingStandby:
     """App ``MgppOperationMode.STANDBY(0)``."""
 
     def test_standby_member(self) -> None:
-        assert DhwOperationSetting.STANDBY == 0
+        standby: DhwOperationSetting = DhwOperationSetting.STANDBY
+        assert standby == 0
         text = DHW_OPERATION_SETTING_TEXT[DhwOperationSetting.STANDBY]
         assert text == "Standby"
 
@@ -127,8 +129,10 @@ class TestDhwOperationSettingStandby:
         assert status.dhw_operation_setting is DhwOperationSetting.STANDBY
 
     def test_other_values_unchanged(self) -> None:
-        assert DhwOperationSetting.VACATION == 5
-        assert DhwOperationSetting.POWER_OFF == 6
+        vacation: DhwOperationSetting = DhwOperationSetting.VACATION
+        assert vacation == 5
+        power_off: DhwOperationSetting = DhwOperationSetting.POWER_OFF
+        assert power_off == 6
 
 
 class TestDREvent:
@@ -136,8 +140,8 @@ class TestDREvent:
     GRID_ENERGY ("Grid Emergency") is index 6."""
 
     def test_cpe_and_grid_emergency(self) -> None:
-        assert DREvent.CPE == 5
-        assert DREvent.GRID_EMERGENCY == 6
+        assert DREvent.CPE == 5  # type: ignore[comparison-overlap]
+        assert DREvent.GRID_EMERGENCY == 6  # type: ignore[comparison-overlap]
         assert DR_EVENT_TEXT[DREvent.CPE] == "Customer Peak Event"
         assert DR_EVENT_TEXT[DREvent.GRID_EMERGENCY] == "Grid Emergency"
 
@@ -153,23 +157,26 @@ class TestDREvent:
 
 class TestUnitAndDeviceType:
     def test_new_unit_types(self) -> None:
-        assert UnitType.NCB700 == 22
-        assert UnitType.NFB700_H == 24
-        assert UnitType.CAS_NFB700_H == 25
-        assert UnitType.NPF_SYSTEM == 514
-        assert UnitType.NPF == 513
+        assert UnitType.NCB700 == 22  # type: ignore[comparison-overlap]
+        assert UnitType.NFB700_H == 24  # type: ignore[comparison-overlap]
+        assert UnitType.CAS_NFB700_H == 25  # type: ignore[comparison-overlap]
+        assert UnitType.NPF_SYSTEM == 514  # type: ignore[comparison-overlap]
+        assert UnitType.NPF == 513  # type: ignore[comparison-overlap]
 
     def test_device_type_names_and_aliases(self) -> None:
-        assert DeviceType.IOT_MODULE == 8
-        assert DeviceType.NFB700_MAIN == 50
-        assert DeviceType.NFB700_SUB == 51
-        assert DeviceType.NPF700_MAIN is DeviceType.NFB700_MAIN
-        assert DeviceType.NPF700_SUB is DeviceType.NFB700_SUB
+        assert DeviceType.IOT_MODULE == 8  # type: ignore[comparison-overlap]
+        assert DeviceType.NFB700_MAIN == 50  # type: ignore[comparison-overlap]
+        assert DeviceType.NFB700_SUB == 51  # type: ignore[comparison-overlap]
+        main: DeviceType = DeviceType.NPF700_MAIN
+        assert main is DeviceType.NFB700_MAIN
+        sub: DeviceType = DeviceType.NPF700_SUB
+        assert sub is DeviceType.NFB700_SUB
         assert DeviceType(50).name == "NFB700_MAIN"
 
     def test_hpwh_alias(self) -> None:
-        assert DeviceType.HPWH == 52
-        assert DeviceType.HPWH is DeviceType.NPF700_WIFI
+        assert DeviceType.HPWH == 52  # type: ignore[comparison-overlap]
+        hpwh: DeviceType = DeviceType.HPWH
+        assert hpwh is DeviceType.NPF700_WIFI
         assert DeviceType(52).name == "NPF700_WIFI"
 
 

@@ -7,9 +7,10 @@ port; these hold what each recovers, screens and reports.
 
 import dataclasses
 import math
+from collections.abc import Iterator, Sequence
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
-from typing import Any
+from typing import Any, cast
 
 import pytest
 
@@ -36,12 +37,16 @@ from nwp500.sim import (
 from nwp500.sim import calibration as cal
 from nwp500.sim.params import (
     CompressorParams,
+    HeaterParams,
     LossParams,
     TankParams,
     params_from_document,
     params_to_document,
 )
-from nwp500.sim.physics.compressor import predict_physics_detailed
+from nwp500.sim.physics.compressor import (
+    PhysicsPath,
+    predict_physics_detailed,
+)
 from nwp500.unit_system import reset_unit_system, set_unit_system
 
 T0 = datetime(2026, 1, 5, tzinfo=UTC)
@@ -49,7 +54,7 @@ MASS = TankParams().thermal_mass_btu_f
 
 
 @pytest.fixture(autouse=True)
-def _units():
+def _units() -> Iterator[None]:
     yield
     reset_unit_system()
 
@@ -85,7 +90,7 @@ def decay(
 
 
 class TestQuiet:
-    def test_heating_and_water_are_busy_and_settle(self):
+    def test_heating_and_water_are_busy_and_settle(self) -> None:
         h = decay(12, 5.0)
         h.loc[
             T0 + timedelta(hours=4) : T0 + timedelta(hours=5), "dhw_in_use"
@@ -95,7 +100,7 @@ class TestQuiet:
         # The draw's last "on" sample, its next "off", then 45 minutes.
         assert windows[1][0] == T0 + timedelta(hours=5, minutes=46)
 
-    def test_a_meter_replaces_the_heaters_flag(self):
+    def test_a_meter_replaces_the_heaters_flag(self) -> None:
         h = decay(12, 5.0)
         h["dhw_in_use"] = True
         h["drawing"] = False
@@ -103,7 +108,7 @@ class TestQuiet:
         assert cal.quiet_windows(h) == [(T0, h.index[-1].to_pydatetime())]
         assert cal.fit_standby(h, MASS).quiet_by == "meter"
 
-    def test_a_meter_without_circulation_keeps_the_heaters_flag(self):
+    def test_a_meter_without_circulation_keeps_the_heaters_flag(self) -> None:
         """Only draws recorded: the heater's flag still stands in for
         circulation, which it also fires on."""
         h = decay(12, 5.0)
@@ -114,37 +119,37 @@ class TestQuiet:
         windows = cal.quiet_windows(h)
         assert windows[0] == (T0, T0 + timedelta(hours=4))
 
-    def test_short_gaps_are_not_windows(self):
+    def test_short_gaps_are_not_windows(self) -> None:
         h = decay(5, 5.0)
         h.loc[T0 + timedelta(hours=2), "compressor_on"] = True
         assert cal.quiet_windows(h) == []
 
 
 class TestStandby:
-    def test_a_window_recovers_its_ua(self):
+    def test_a_window_recovers_its_ua(self) -> None:
         h = decay(24, 6.0)
         fit = cal.fit_window(h, (T0, T0 + timedelta(hours=24)), MASS)
         assert fit is not None
         assert fit.ua_btu_hr_f == pytest.approx(6.0, rel=0.02)
         assert fit.delta_t_mean_f > 0
 
-    def test_a_window_without_air_is_not_fitted(self):
+    def test_a_window_without_air_is_not_fitted(self) -> None:
         h = decay(24, 6.0).drop(columns="air_f")
         assert cal.fit_window(h, (T0, T0 + timedelta(hours=24)), MASS) is None
 
-    def test_the_law_is_constant_without_the_range(self):
+    def test_the_law_is_constant_without_the_range(self) -> None:
         ua, exponent = cal.fit_ua_law([50, 52, 55, 51], [5, 6, 5, 6])
         assert exponent == 0.0
         assert ua == pytest.approx(5.5)
 
-    def test_the_law_recovers_an_exponent(self):
+    def test_the_law_recovers_an_exponent(self) -> None:
         dt = [20.0, 35.0, 50.0, 70.0, 90.0]
         ua = [5.0 * (x / 50.0) ** 0.3 for x in dt]
         ref, exponent = cal.fit_ua_law(dt, ua)
         assert exponent == pytest.approx(0.3)
         assert ref == pytest.approx(5.0)
 
-    def test_the_gap_needs_enough_windows(self):
+    def test_the_gap_needs_enough_windows(self) -> None:
         t = np.arange(0, 10, 1 / 12)
         few = [(t, 5.0 * np.exp(-t / 50.0))] * (cal.MIN_GAP_FIT_WINDOWS - 1)
         assert cal.fit_gap_tau(few) == (None, cal.MIN_GAP_FIT_WINDOWS - 1)
@@ -152,7 +157,7 @@ class TestStandby:
         assert tau == pytest.approx(50.0, rel=1e-3)
         assert n == cal.MIN_GAP_FIT_WINDOWS
 
-    def test_fit_standby_and_its_parameters(self):
+    def test_fit_standby_and_its_parameters(self) -> None:
         h = decay(24, 6.0)
         fit = cal.fit_standby(h, MASS)
         assert (fit.n_quiet, fit.n_dropped) == (1, 0)
@@ -199,7 +204,7 @@ def recovery_history(
 
 
 class TestRecoveries:
-    def test_a_clean_run(self):
+    def test_a_clean_run(self) -> None:
         (row,) = cal.recoveries(
             recovery_history([(2, 100, 100.0)])
         ).itertuples()
@@ -213,7 +218,7 @@ class TestRecoveries:
         assert math.isnan(row.h_amb_start)
         assert row.reached
 
-    def test_a_dip_below_the_start_moves_the_row_after_it(self):
+    def test_a_dip_below_the_start_moves_the_row_after_it(self) -> None:
         h = recovery_history([(2, 160, 100.0)])
         # A draw takes the lower probe to 95 °F around the 30-minute
         # snapshot; it then recovers to the target by the end.
@@ -225,7 +230,7 @@ class TestRecoveries:
         assert row.delta_t_lower == 45.0
         assert row.reached
 
-    def test_the_air_falls_back_to_the_last_reading(self):
+    def test_the_air_falls_back_to_the_last_reading(self) -> None:
         h = recovery_history([(2, 160, 100.0)])
         start = T0 + timedelta(hours=2)
         h.loc[start:, "heater_air_f"] = np.nan
@@ -240,30 +245,30 @@ class TestRecoveries:
         assert row.start_time == start + timedelta(minutes=30)
         assert row.t_amb_mean == 61.0
 
-    def test_a_cycle_without_air_is_no_recovery(self):
+    def test_a_cycle_without_air_is_no_recovery(self) -> None:
         h = recovery_history([(2, 100, 100.0)])
         h["heater_air_f"] = np.nan
         assert cal.recoveries(h).empty
 
-    def test_the_snapshots(self):
+    def test_the_snapshots(self) -> None:
         start = T0
         assert cal._snapshots(start, start + timedelta(minutes=14)) == []
         assert cal._snapshots(start, start + timedelta(minutes=75)) == [
             start + timedelta(minutes=m) for m in (0, 30, 60)
         ]
 
-    def test_one_stopped_short_is_not_reached(self):
+    def test_one_stopped_short_is_not_reached(self) -> None:
         h = recovery_history([(2, 100, 100.0)])
         h.loc[h["compressor_on"], "lower_f"] -= 3.4
         assert not cal.recoveries(h)["reached"].item()
 
-    def test_an_element_or_a_hybrid_mode_rules_it_out(self):
+    def test_an_element_or_a_hybrid_mode_rules_it_out(self) -> None:
         h = recovery_history([(2, 100, 100.0), (10, 100, 100.0)])
         h.loc[T0 + timedelta(hours=1, minutes=55), "element_on"] = True
         h.loc[T0 + timedelta(hours=10, minutes=30), "excluded"] = True
         assert cal.recoveries(h).empty
 
-    def test_one_cut_short_is_no_recovery(self):
+    def test_one_cut_short_is_no_recovery(self) -> None:
         h = recovery_history([(2, 100, 100.0)])
         h["energy_to_setpoint_wh"] = 0.0
         end = T0 + timedelta(hours=2, minutes=100)
@@ -276,12 +281,12 @@ class TestRecoveries:
         assert len(cal.recoveries(h)) == 1
 
     @pytest.mark.parametrize("minutes", [60, 900])
-    def test_an_implausible_rate_is_no_recovery(self, minutes):
+    def test_an_implausible_rate_is_no_recovery(self, minutes: int) -> None:
         # 40 °F in an hour is faster than the heat pump heats; in 15
         # hours, an interruption nobody saw.
         assert cal.recoveries(recovery_history([(2, minutes, 100.0)])).empty
 
-    def test_a_target_below_the_probe_is_no_recovery(self):
+    def test_a_target_below_the_probe_is_no_recovery(self) -> None:
         assert cal.recoveries(
             recovery_history([(2, 100, 141.0)], target_f=140.0)
         ).empty
@@ -322,11 +327,11 @@ def physics_durations(
 
 
 class TestCompressor:
-    def test_too_few_recoveries_fit_nothing(self):
+    def test_too_few_recoveries_fit_nothing(self) -> None:
         df = physics_durations([100.0] * 4, [60.0] * 4, 0.08, 12.0)
         assert cal.fit_compressor(df, CompressorParams(), LossParams()) is None
 
-    def test_it_recovers_known_physics(self):
+    def test_it_recovers_known_physics(self) -> None:
         starts = [80.0, 90.0, 100.0, 110.0, 85.0, 95.0, 105.0, 115.0]
         air = [50.0, 80.0, 60.0, 70.0, 75.0, 55.0, 65.0, 85.0]
         df = physics_durations(starts, air, 0.08, 12.0)
@@ -338,7 +343,7 @@ class TestCompressor:
         assert (fit.n_fitted, fit.n_heldout, fit.two_zone) == (8, 0, True)
         assert not fit.hit_bounds
 
-    def test_without_gaps_it_fits_one_zone(self):
+    def test_without_gaps_it_fits_one_zone(self) -> None:
         df = physics_durations([100.0] * 6, [60.0] * 6, 0.08, 12.0)
         fit = cal.fit_compressor(
             df.drop(columns="stratification_gap"),
@@ -347,7 +352,7 @@ class TestCompressor:
         )
         assert fit is not None and not fit.two_zone
 
-    def test_it_fits_on_the_heaters_tank(self):
+    def test_it_fits_on_the_heaters_tank(self) -> None:
         """The replacement review of #162: durations recorded on a
         50 gal tank fit the constant that made them only when the fit
         integrates that tank, as the simulation will."""
@@ -365,7 +370,7 @@ class TestCompressor:
         assert wrong is not None
         assert wrong.compressor_constant != pytest.approx(0.08, rel=0.02)
 
-    def test_a_cycles_path_is_walked_on_the_heaters_tank(self):
+    def test_a_cycles_path_is_walked_on_the_heaters_tank(self) -> None:
         row = {
             "t_start_lower": 100.0,
             "delta_t_lower": 30.0,
@@ -380,21 +385,21 @@ class TestCompressor:
         assert full is not None and short is not None
         assert short.elapsed_s[-1] < full.elapsed_s[-1]
 
-    def test_a_pinned_fit_is_not_applied(self):
+    def test_a_pinned_fit_is_not_applied(self) -> None:
         fit = cal.CompressorFit(0.3, 4.0, 1.0, None, 8, 0, True, True)
         base = default_params()
         assert cal.with_compressor(base, fit) is base
 
 
 class TestCalibrate:
-    def test_an_unrecorded_stop_threshold_is_the_usual_one(self):
+    def test_an_unrecorded_stop_threshold_is_the_usual_one(self) -> None:
         h = recovery_history([(2, 100, 100.0)]).drop(columns=["target_f"])
         (row,) = cal.recoveries(h).itertuples()
         assert row.delta_t_lower == pytest.approx(
             cal.UNRECORDED_TARGET_F - row.t_start_lower
         )
 
-    def test_too_little_history_keeps_the_base(self):
+    def test_too_little_history_keeps_the_base(self) -> None:
         base = default_params()
         got = cal.calibrate(recovery_history([(2, 100, 100.0)]), base)
         assert got.compressor is None
@@ -423,7 +428,7 @@ class TestCalibrate:
         assert got.power is None
         assert len(got.recoveries) == 1
 
-    def test_what_was_not_fitted_says_so_in_its_answers(self):
+    def test_what_was_not_fitted_says_so_in_its_answers(self) -> None:
         got = cal.calibrate(
             recovery_history([(2, 100, 100.0)]), default_params()
         )
@@ -459,7 +464,9 @@ class TestTheHistoryAdapter:
     def _status(self, d: dict[str, Any], **kw: Any) -> DeviceStatus:
         return DeviceStatus.model_validate(d | kw)
 
-    def test_it_reads_the_status(self, device_status_dict):
+    def test_it_reads_the_status(
+        self, device_status_dict: dict[str, Any]
+    ) -> None:
         on = self._status(
             device_status_dict, compUse=2, dhwUse=2, ambientTemperature=200
         )
@@ -481,13 +488,17 @@ class TestTheHistoryAdapter:
         # The air in °F, its preferred unit by default.
         assert second.air_f == pytest.approx(21.0)
 
-    def test_the_air_in_the_preferred_unit(self, device_status_dict):
+    def test_the_air_in_the_preferred_unit(
+        self, device_status_dict: dict[str, Any]
+    ) -> None:
         set_unit_system("metric")
         s = self._status(device_status_dict)
         h = sa.history([(T0, s)], air=[(T0, 20.0)])
         assert h.iloc[0].air_f == pytest.approx(68.0)
 
-    def test_a_gap_in_the_readings_is_unobserved(self, device_status_dict):
+    def test_a_gap_in_the_readings_is_unobserved(
+        self, device_status_dict: dict[str, Any]
+    ) -> None:
         s = self._status(device_status_dict)
         minutes = [0, 1, 2, 30, 31]
         readings = [(T0 + timedelta(minutes=m), s) for m in minutes]
@@ -497,7 +508,9 @@ class TestTheHistoryAdapter:
         # Without it, every span is taken as observed.
         assert not sa.history(readings)["dhw_in_use"].any()
 
-    def test_a_gap_splits_the_quiet_windows(self, device_status_dict):
+    def test_a_gap_splits_the_quiet_windows(
+        self, device_status_dict: dict[str, Any]
+    ) -> None:
         s = self._status(device_status_dict)
         readings = [
             (T0 + timedelta(minutes=m), s)
@@ -511,7 +524,9 @@ class TestTheHistoryAdapter:
             for a, b in windows
         )
 
-    def test_a_gap_with_a_meter_marks_its_draws(self, device_status_dict):
+    def test_a_gap_with_a_meter_marks_its_draws(
+        self, device_status_dict: dict[str, Any]
+    ) -> None:
         s = self._status(device_status_dict)
         readings = [(T0 + timedelta(minutes=m), s) for m in (0, 30)]
         h = sa.history(
@@ -523,7 +538,7 @@ class TestTheHistoryAdapter:
         assert list(h["drawing"]) == [True, False]
         assert not h["circulating"].any()
 
-    def test_a_meters_spans(self, device_status_dict):
+    def test_a_meters_spans(self, device_status_dict: dict[str, Any]) -> None:
         s = self._status(device_status_dict)
         h = sa.history(
             [(T0 + timedelta(minutes=m), s) for m in range(4)],
@@ -534,7 +549,7 @@ class TestTheHistoryAdapter:
         assert not h["circulating"].any()
 
 
-def power_rows(n: int, params) -> pd.DataFrame:
+def power_rows(n: int, params: HeaterParams) -> pd.DataFrame:
     """``n`` cycles' first snapshots, metered from the integrator itself
     at a power scale of 0.55 and a COP scale of 1.3 with 150 Wh of
     start-up, no lift term."""
@@ -559,7 +574,7 @@ def power_rows(n: int, params) -> pd.DataFrame:
 
 
 class TestPower:
-    def _fitted(self):
+    def _fitted(self) -> HeaterParams:
         base = default_params()
         return replace(
             base,
@@ -571,7 +586,7 @@ class TestPower:
             ),
         )
 
-    def test_the_energy_integral_holds_each_reading(self):
+    def test_the_energy_integral_holds_each_reading(self) -> None:
         s = np.array([0.0, 600.0, 1200.0]) + T0.timestamp()
         w = np.array([400.0, 500.0, 300.0])
         end = T0 + timedelta(minutes=30)
@@ -584,7 +599,7 @@ class TestPower:
         )
         assert cal._energy_wh(np.array([]), np.array([]), T0, end) is None
 
-    def test_the_power_scale_is_a_ratio_of_sums(self):
+    def test_the_power_scale_is_a_ratio_of_sums(self) -> None:
         params = self._fitted()
         rows = power_rows(12, params)
         modelled = []
@@ -600,34 +615,44 @@ class TestPower:
         assert n == 12
         assert cal.fit_power_scale(rows.head(9), params) == (None, 9)
 
-    def test_the_cop_recovers_its_scale_and_start_up(self):
+    def test_the_cop_recovers_its_scale_and_start_up(self) -> None:
         params = self._fitted()
         rows = power_rows(14, params)
         wh_per_f = params.tank.thermal_mass_btu_f / 3.412141633
         metered = []
         for row in rows.to_dict("records"):
-            path = cal.path_to_end(row, params)
-            cop = cal.path_cop(
-                path, 0.0, path.elapsed_s[-1], True, row["t_start_upper"]
+            path = cast(PhysicsPath, cal.path_to_end(row, params))
+            cop = cast(
+                float,
+                cal.path_cop(  # type: ignore[attr-defined]  # re-export
+                    path,
+                    0.0,
+                    path.elapsed_s[-1],
+                    True,
+                    row["t_start_upper"],
+                ),
             )
             heat = wh_per_f * (
                 140.0 - (row["t_start_lower"] + row["t_start_upper"]) / 2
             )
             metered.append(150.0 + heat / (1.3 * cop))
         rows["metered_input_wh"] = metered
-        (scale, startup, share, lift), n = cal.fit_cop_scale(rows, params)
+        (scale, startup, share, lift), n = cast(
+            tuple[tuple[float, float, float, float], int],
+            cal.fit_cop_scale(rows, params),
+        )
         assert scale == pytest.approx(1.3, rel=1e-6)
         assert startup == pytest.approx(150.0, rel=1e-6)
         assert lift == 0.0 and share == 0.0 and n == 14
 
-    def test_without_a_meter_only_draw_free_cycles_count(self):
+    def test_without_a_meter_only_draw_free_cycles_count(self) -> None:
         params = self._fitted()
         rows = power_rows(14, params)
         rows["metered_input_wh"] = 1000.0
         rows.loc[rows.index[:5], "draw_free"] = False
         assert cal.fit_cop_scale(rows, params) == (None, 9)
 
-    def test_the_fit_applies_where_it_had_the_evidence(self):
+    def test_the_fit_applies_where_it_had_the_evidence(self) -> None:
         base = default_params()
         fit = cal.PowerFit(0.6, 12, None, None, None, None, 4)
         got = cal.with_power(base, fit)
@@ -639,7 +664,7 @@ class TestMeteredPricing:
     """With a meter, the COP fit prices what each cycle's draws and
     circulation took instead of keeping only draw-free cycles."""
 
-    def _row(self, **kw):
+    def _row(self, **kw: Any) -> dict[str, Any]:
         return {
             "draw_gal": 0.0,
             "draw_t_upper": None,
@@ -649,14 +674,14 @@ class TestMeteredPricing:
             "t_start_upper": 130.0,
         } | kw
 
-    def test_nothing_drawn_is_nothing_withdrawn(self):
+    def test_nothing_drawn_is_nothing_withdrawn(self) -> None:
         from nwp500.sim import site_example_params
 
         w = cal.metered_withdrawn(site_example_params())
         assert w(self._row()) == 0.0
         assert w(self._row(draw_gal=None)) is None
 
-    def test_draws_and_runs_are_priced(self):
+    def test_draws_and_runs_are_priced(self) -> None:
         from nwp500.sim import site_example_params
 
         p = site_example_params()
@@ -677,10 +702,10 @@ class TestMeteredPricing:
         bare = cal.metered_withdrawn(replace(p, circulation=None))
         assert bare(self._row(circulation_runs=((10.0, 130.0),))) is None
         lead = cal.metered_lead(p)
-        assert lead(self._row(draw_lead_gal=4.0)) > 0
+        assert cast(float, lead(self._row(draw_lead_gal=4.0))) > 0
         assert lead(self._row()) == 0.0
 
-    def test_a_run_is_priced_at_the_flow_it_ran_at(self):
+    def test_a_run_is_priced_at_the_flow_it_ran_at(self) -> None:
         """A slower circulation displaces its volume later, so a short
         run priced at the flow it ran at takes less heat."""
         from nwp500.sim import site_example_params
@@ -696,7 +721,7 @@ class TestMeteredPricing:
         unknown = cal.metered_withdrawn(p, flow_at=lambda _: None)(row)
         assert unknown == today
 
-    def test_snapshots_carry_the_cycles_draws(self):
+    def test_snapshots_carry_the_cycles_draws(self) -> None:
         h = recovery_history([(2, 100, 100.0)])
         start = T0 + timedelta(hours=2)
         draws = [
@@ -715,7 +740,11 @@ class TestMeteredPricing:
 class TestTheProbesShareOfCirculation:
     """``circulation_windows`` and ``fit_ungated_observability``."""
 
-    def _history(self, runs, compressor=()):
+    def _history(
+        self,
+        runs: Sequence[tuple[datetime, datetime]],
+        compressor: Sequence[tuple[datetime, datetime]] = (),
+    ) -> pd.DataFrame:
         times = [T0 + timedelta(minutes=m) for m in range(24 * 60)]
         upper, lower = [], []
         u, lo = 138.0, 130.0
@@ -736,7 +765,7 @@ class TestTheProbesShareOfCirculation:
             index=pd.DatetimeIndex(times),
         )
 
-    def test_a_chain_of_runs_is_one_window(self):
+    def test_a_chain_of_runs_is_one_window(self) -> None:
         from nwp500.sim import site_example_params
 
         runs = [
@@ -755,7 +784,7 @@ class TestTheProbesShareOfCirculation:
         assert w[0].runs[0][0] == pytest.approx(25.0)
         assert all(x.apparent_btu > 0 for x in w)
 
-    def test_a_compressor_or_an_unsized_draw_rules_one_out(self):
+    def test_a_compressor_or_an_unsized_draw_rules_one_out(self) -> None:
         from nwp500.sim import site_example_params
 
         runs = [
@@ -775,7 +804,7 @@ class TestTheProbesShareOfCirculation:
         )
         assert len(w) == 1
 
-    def test_too_few_windows_fit_nothing(self):
+    def test_too_few_windows_fit_nothing(self) -> None:
         from nwp500.sim import site_example_params
 
         runs = [(T0 + timedelta(hours=2), T0 + timedelta(hours=2, minutes=10))]
@@ -812,14 +841,14 @@ class TestTheLeadByInterval:
         )
         return h.loc[keep]
 
-    def test_the_sample_before_the_lead_counts(self):
+    def test_the_sample_before_the_lead_counts(self) -> None:
         h = self.frame()
         before = h.index[h.index < T0 + timedelta(hours=2) - cal.DRAW_LEAD][-1]
         assert cal.recoveries(h, air="heater_air_f")["draw_free"].item()
         h.loc[before, "drawing"] = True
         assert not cal.recoveries(h, air="heater_air_f")["draw_free"].item()
 
-    def test_activity_after_the_recovery_does_not_count(self):
+    def test_activity_after_the_recovery_does_not_count(self) -> None:
         h = self.frame()
         end = h.index[
             ~h["compressor_on"] & (h.index > T0 + timedelta(hours=2))
@@ -827,7 +856,7 @@ class TestTheLeadByInterval:
         h.loc[end, "circulating"] = True
         assert cal.recoveries(h, air="heater_air_f")["draw_free"].item()
 
-    def test_not_for_the_heaters_own_flag(self):
+    def test_not_for_the_heaters_own_flag(self) -> None:
         h = self.frame().drop(columns=["drawing", "circulating"])
         before = h.index[h.index < T0 + timedelta(hours=2) - cal.DRAW_LEAD][-1]
         h.loc[before, "dhw_in_use"] = True

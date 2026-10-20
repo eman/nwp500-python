@@ -28,36 +28,36 @@ P = ElementParams(
 
 
 class TestHighDemand:
-    def test_the_upper_element_runs_to_the_setpoint(self):
+    def test_the_upper_element_runs_to_the_setpoint(self) -> None:
         r = mode_recovery("HIGH_DEMAND", 120.0, 90.0, 140.0, params=P)
         assert r.upper_setpoint_minutes == pytest.approx(10.0)
         assert r.element_minutes == pytest.approx(10.0)
 
-    def test_the_heat_pump_decides_when_it_is_slower(self):
+    def test_the_heat_pump_decides_when_it_is_slower(self) -> None:
         r = mode_recovery(
             "HIGH_DEMAND", 120.0, 90.0, 140.0, hp_lower_minutes=180.0, params=P
         )
         assert r.full_minutes == pytest.approx(180.0)
 
-    def test_the_element_decides_when_it_is_slower(self):
+    def test_the_element_decides_when_it_is_slower(self) -> None:
         r = mode_recovery(
             "HIGH_DEMAND", 100.0, 135.0, 140.0, hp_lower_minutes=5.0, params=P
         )
         assert r.full_minutes == pytest.approx(20.0)
 
-    def test_without_the_heat_pump_the_full_recovery_is_unknown(self):
+    def test_without_the_heat_pump_the_full_recovery_is_unknown(self) -> None:
         r = mode_recovery("HIGH_DEMAND", 120.0, 90.0, 140.0, params=P)
         assert r.full_minutes is None
         assert "hp_lower_not_given" in r.confidence_reasons
 
-    def test_a_ready_threshold_is_reached_before_the_setpoint(self):
+    def test_a_ready_threshold_is_reached_before_the_setpoint(self) -> None:
         r = mode_recovery(
             "HIGH_DEMAND", 100.0, 90.0, 140.0, ready_upper_f=116.0, params=P
         )
         assert r.upper_ready_minutes == pytest.approx(8.0)
         assert r.upper_setpoint_minutes == pytest.approx(20.0)
 
-    def test_an_upper_zone_already_ready_is_ready_now(self):
+    def test_an_upper_zone_already_ready_is_ready_now(self) -> None:
         r = mode_recovery(
             "HIGH_DEMAND", 130.0, 90.0, 140.0, ready_upper_f=116.0, params=P
         )
@@ -67,7 +67,7 @@ class TestHighDemand:
 class TestWhenTheElementDoesNotStart:
     """The element starts only once the zone is far enough below."""
 
-    def test_just_inside_the_edge_it_stays_off(self):
+    def test_just_inside_the_edge_it_stays_off(self) -> None:
         r = mode_recovery(
             "HIGH_DEMAND", 137.0, 120.0, 140.0, ready_upper_f=139.0, params=P
         )
@@ -79,24 +79,24 @@ class TestWhenTheElementDoesNotStart:
         )
         assert "upper_element_does_not_start" in r.confidence_reasons
 
-    def test_just_outside_the_edge_it_runs(self):
+    def test_just_outside_the_edge_it_runs(self) -> None:
         r = mode_recovery("HIGH_DEMAND", 136.0, 120.0, 140.0, params=P)
         assert r.upper_setpoint_minutes == pytest.approx(2.0)
 
-    def test_already_at_the_setpoint_is_zero_not_none(self):
+    def test_already_at_the_setpoint_is_zero_not_none(self) -> None:
         r = mode_recovery("HIGH_DEMAND", 141.0, 120.0, 140.0, params=P)
         assert r.upper_setpoint_minutes == 0.0
         assert r.upper_ready_minutes == 0.0
         assert r.element_minutes == 0.0
 
     @pytest.mark.parametrize("t_upper", [137.0, 141.0])
-    def test_the_zone_ends_where_it_was(self, t_upper: float):
+    def test_the_zone_ends_where_it_was(self, t_upper: float) -> None:
         """Off, or with nothing to do, the element moves nothing: the
         zone neither reaches the setpoint nor cools to it."""
         r = mode_recovery("HIGH_DEMAND", t_upper, 120.0, 140.0, params=P)
         assert r.upper_end_f == t_upper
 
-    def test_a_target_above_the_setpoint_is_never_reached(self):
+    def test_a_target_above_the_setpoint_is_never_reached(self) -> None:
         """The element stops at the setpoint, so 145 never arrives."""
         r = mode_recovery(
             "HIGH_DEMAND", 120.0, 90.0, 140.0, ready_upper_f=145.0, params=P
@@ -106,18 +106,18 @@ class TestWhenTheElementDoesNotStart:
 
 
 class TestElectric:
-    def test_upper_then_lower_never_together(self):
+    def test_upper_then_lower_never_together(self) -> None:
         r = mode_recovery("ELECTRIC", 120.0, 100.0, 140.0, params=P)
         assert r.upper_setpoint_minutes == pytest.approx(10.0)
         # lower: 40 °F at 1 °F/min, after the upper element finishes
         assert r.full_minutes == pytest.approx(10.0 + 40.0)
         assert r.element_minutes == pytest.approx(50.0)
 
-    def test_a_lower_zone_already_at_setpoint_adds_nothing(self):
+    def test_a_lower_zone_already_at_setpoint_adds_nothing(self) -> None:
         r = mode_recovery("ELECTRIC", 120.0, 141.0, 140.0, params=P)
         assert r.full_minutes == pytest.approx(10.0)
 
-    def test_the_lower_element_still_runs_when_the_upper_does_not(self):
+    def test_the_lower_element_still_runs_when_the_upper_does_not(self) -> None:
         r = mode_recovery("ELECTRIC", 137.0, 100.0, 140.0, params=P)
         assert r.upper_setpoint_minutes is None
         assert r.full_minutes == pytest.approx(40.0)
@@ -138,7 +138,7 @@ P_LAG = ElementParams(
 
 
 class TestEnergySaver:
-    def test_a_switch_with_the_tank_short_boosts_the_upper_zone(self):
+    def test_a_switch_with_the_tank_short_boosts_the_upper_zone(self) -> None:
         r = mode_recovery(
             "ENERGY_SAVER",
             120.0,
@@ -151,7 +151,7 @@ class TestEnergySaver:
         assert r.full_minutes == pytest.approx(200.0)
         assert "energy_saver_later_starts_not_modelled" in r.confidence_reasons
 
-    def test_it_uses_the_same_rate_as_the_other_modes(self):
+    def test_it_uses_the_same_rate_as_the_other_modes(self) -> None:
         """History gives one rate for every mode, not one per mode."""
         es = mode_recovery(
             "ENERGY_SAVER",
@@ -192,13 +192,13 @@ class TestWhereTheElementStops:
         upper_dead_time_min=1.0,
     )
 
-    def test_an_off_point_at_or_past_entry_is_rejected(self):
+    def test_an_off_point_at_or_past_entry_is_rejected(self) -> None:
         with pytest.raises(ValueError, match="below energy_saver_entry"):
             ElementParams(energy_saver_upper_off_below_setpoint_f=1.8)
         with pytest.raises(ValueError):
             ElementParams(energy_saver_upper_off_below_setpoint_f=-0.1)
 
-    def test_a_run_just_past_entry_coasts_to_the_setpoint(self):
+    def test_a_run_just_past_entry_coasts_to_the_setpoint(self) -> None:
         # Entry at 2.5 °F short, off at 2: the element lifts the zone
         # 0.5 after its dead time and stops; the 2 °F its dead time put
         # in is still in transit, so the zone coasts on to the setpoint,
@@ -226,7 +226,7 @@ class TestWhereTheElementStops:
         )
         assert ready.upper_ready_minutes == pytest.approx(1.75)
 
-    def test_the_coast_is_capped_at_what_is_in_transit(self):
+    def test_the_coast_is_capped_at_what_is_in_transit(self) -> None:
         # Half the dead time: 1 °F in transit, under the 2 °F off
         # deficit. The zone coasts 1 °F and ends short of the setpoint;
         # nothing is credited that was not charged.
@@ -265,7 +265,7 @@ class TestWhereTheElementStops:
         )
         assert none.upper_end_f == pytest.approx(140.0 - 1.62)
 
-    def test_the_default_entry_run_coasts_to_the_setpoint(self):
+    def test_the_default_entry_run_coasts_to_the_setpoint(self) -> None:
         # The served numbers: entry 1.8 short, off 1.62, 2.43 °F in
         # transit, so a run started at entry lifts the zone 0.18 °F and
         # coasts the last 1.62 to the setpoint. Energy Saver runs that
@@ -280,7 +280,7 @@ class TestWhereTheElementStops:
         )
         assert r.element_kwh == pytest.approx(minutes / 60.0 * 5.148, rel=1e-3)
 
-    def test_a_long_run_earns_the_full_coast(self):
+    def test_a_long_run_earns_the_full_coast(self) -> None:
         r = mode_recovery("ENERGY_SAVER", 120.0, 90.0, 140.0, params=self.OFF)
         assert r.upper_end_f == pytest.approx(140.0)
         assert r.upper_setpoint_minutes == pytest.approx(11.0)
@@ -289,18 +289,20 @@ class TestWhereTheElementStops:
             not in r.confidence_reasons
         )
 
-    def test_the_measured_off_point_is_the_default(self):
+    def test_the_measured_off_point_is_the_default(self) -> None:
         assert ElementParams().energy_saver_upper_off_below_setpoint_f == (
             pytest.approx(1.62)
         )
 
-    def test_energy_saver_runs_and_is_charged_to_its_off_point(self):
+    def test_energy_saver_runs_and_is_charged_to_its_off_point(self) -> None:
         r = mode_recovery("ENERGY_SAVER", 120.0, 90.0, 140.0, params=self.OFF)
         assert r.upper_element_minutes == pytest.approx(10.0)
         assert r.element_minutes == pytest.approx(10.0)
         assert r.element_kwh == pytest.approx(10.0 / 60.0 * 6.0)
 
-    def test_the_zone_still_reaches_the_setpoint_on_the_same_clock(self):
+    def test_the_zone_still_reaches_the_setpoint_on_the_same_clock(
+        self,
+    ) -> None:
         # Time to ready is unchanged: the coast keeps the fitted rate.
         r = mode_recovery(
             "ENERGY_SAVER",
@@ -313,7 +315,7 @@ class TestWhereTheElementStops:
         assert r.upper_setpoint_minutes == pytest.approx(11.0)
         assert r.upper_ready_minutes == pytest.approx(10.0)
 
-    def test_high_demand_and_electric_run_to_the_setpoint(self):
+    def test_high_demand_and_electric_run_to_the_setpoint(self) -> None:
         hd = mode_recovery("HIGH_DEMAND", 120.0, 90.0, 140.0, params=self.OFF)
         assert hd.upper_element_minutes == pytest.approx(11.0)
         assert hd.element_minutes == pytest.approx(11.0)
@@ -321,7 +323,9 @@ class TestWhereTheElementStops:
         assert el.upper_element_minutes == pytest.approx(11.0)
         assert el.element_minutes == pytest.approx(11.0 + 10.0)
 
-    def test_the_plan_ends_at_the_off_point_with_the_coast_credited(self):
+    def test_the_plan_ends_at_the_off_point_with_the_coast_credited(
+        self,
+    ) -> None:
         plan = mode_plan(
             "ENERGY_SAVER",
             120.0,
@@ -337,7 +341,7 @@ class TestWhereTheElementStops:
         # The probe peaks at about the setpoint after the off-edge.
         assert plan.end_upper_f == pytest.approx(140.0)
 
-    def test_a_switch_back_during_the_coast_does_not_cut_it(self):
+    def test_a_switch_back_during_the_coast_does_not_cut_it(self) -> None:
         plan = mode_plan(
             "ENERGY_SAVER",
             120.0,
@@ -350,7 +354,7 @@ class TestWhereTheElementStops:
         assert plan.upper_setpoint_minutes == pytest.approx(11.0)
         assert plan.end_upper_f == pytest.approx(140.0)
 
-    def test_a_switch_back_before_the_off_point_gets_no_coast(self):
+    def test_a_switch_back_before_the_off_point_gets_no_coast(self) -> None:
         plan = mode_plan(
             "ENERGY_SAVER",
             120.0,
@@ -384,14 +388,14 @@ class TestTheDeadTime:
         upper_dead_time_min=1.0,
     )
 
-    def test_a_negative_or_unset_lag_is_rejected(self):
+    def test_a_negative_or_unset_lag_is_rejected(self) -> None:
         with pytest.raises(ValueError, match="upper_dead_time_min"):
             ElementParams(upper_dead_time_min=-0.1)
         with pytest.raises(ValueError, match="upper_dead_time_min"):
             ElementParams(upper_dead_time_min=float("nan"))
         assert ElementParams(upper_dead_time_min=0.0).upper_dead_time_min == 0
 
-    def test_every_upper_time_is_the_lag_later_and_charged(self):
+    def test_every_upper_time_is_the_lag_later_and_charged(self) -> None:
         r = mode_recovery(
             "HIGH_DEMAND",
             120.0,
@@ -406,7 +410,7 @@ class TestTheDeadTime:
         assert r.element_minutes == pytest.approx(11.0)
         assert r.element_kwh == pytest.approx(11.0 / 60.0 * 6.0)
 
-    def test_a_tank_already_there_waits_for_no_lag(self):
+    def test_a_tank_already_there_waits_for_no_lag(self) -> None:
         r = mode_recovery(
             "HIGH_DEMAND",
             141.0,
@@ -418,7 +422,7 @@ class TestTheDeadTime:
         assert r.upper_ready_minutes == 0.0
         assert r.element_kwh == 0.0
 
-    def test_the_zone_does_not_move_inside_the_lag(self):
+    def test_the_zone_does_not_move_inside_the_lag(self) -> None:
         plan = mode_plan(
             "HIGH_DEMAND",
             120.0,
@@ -439,7 +443,7 @@ class TestTheDeadTime:
         )
         assert later.end_upper_f == pytest.approx(120.0 + 2.0 * 2.0)
 
-    def test_the_lags_heat_is_the_coast_credited_once(self):
+    def test_the_lags_heat_is_the_coast_credited_once(self) -> None:
         # Entry 2.5 short, off 2: charged 1.25 min, lifted 0.5 during
         # the run; the 2 °F the dead time put in arrives as the coast,
         # and the zone ends at the setpoint, not past it.
@@ -449,13 +453,15 @@ class TestTheDeadTime:
         assert r.upper_end_f == pytest.approx(140.0)
         assert r.upper_end_minutes == pytest.approx(2.25)
 
-    def test_a_long_energy_saver_run_reaches_the_setpoint_lag_late(self):
+    def test_a_long_energy_saver_run_reaches_the_setpoint_lag_late(
+        self,
+    ) -> None:
         r = mode_recovery("ENERGY_SAVER", 120.0, 90.0, 140.0, params=self.LAG)
         assert r.upper_element_minutes == pytest.approx(10.0)
         assert r.upper_setpoint_minutes == pytest.approx(11.0)
         assert r.upper_end_f == pytest.approx(140.0)
 
-    def test_electric_lower_element_has_no_lag(self):
+    def test_electric_lower_element_has_no_lag(self) -> None:
         r = mode_recovery("ELECTRIC", 120.0, 130.0, 140.0, params=self.LAG)
         assert r.upper_element_minutes == pytest.approx(11.0)
         assert r.element_minutes == pytest.approx(11.0 + 10.0)
@@ -463,25 +469,25 @@ class TestTheDeadTime:
 
 
 class TestEnergy:
-    def test_kwh_follows_the_running_minutes_and_the_fitted_power(self):
+    def test_kwh_follows_the_running_minutes_and_the_fitted_power(self) -> None:
         r = mode_recovery("ELECTRIC", 120.0, 100.0, 140.0, params=P)
         assert r.element_kwh == pytest.approx(50.0 / 60.0 * 6.0)
 
-    def test_no_element_is_no_energy(self):
+    def test_no_element_is_no_energy(self) -> None:
         r = mode_recovery("HIGH_DEMAND", 137.0, 120.0, 140.0, params=P)
         assert r.element_kwh == 0.0
 
 
 class TestScope:
-    def test_a_mode_without_an_element_is_rejected(self):
+    def test_a_mode_without_an_element_is_rejected(self) -> None:
         with pytest.raises(ValueError, match="not modelled"):
             mode_recovery("HEAT_PUMP", 120.0, 100.0, 140.0)  # type: ignore[arg-type]
 
-    def test_every_result_says_it_is_small_n(self):
+    def test_every_result_says_it_is_small_n(self) -> None:
         r = mode_recovery("ELECTRIC", 120.0, 100.0, 140.0)
         assert "element_model_small_n" in r.confidence_reasons
 
-    def test_the_defaults_are_the_fitted_terms(self):
+    def test_the_defaults_are_the_fitted_terms(self) -> None:
         """The rates are history's; the start "threshold" is gone.
 
         It was 3.8, then 3.6, from the smallest start seen in an
@@ -528,22 +534,22 @@ class TestTheModesAreNotMerged:
     #: these tests fail.
     BETWEEN = 0.63
 
-    def test_electric_starts_between_the_two_thresholds(self):
+    def test_electric_starts_between_the_two_thresholds(self) -> None:
         r = mode_recovery("ELECTRIC", 140.0 - self.BETWEEN, 120.0, 140.0)
         assert r.element_minutes > 0.0
         assert "upper_element_does_not_start" not in r.confidence_reasons
 
-    def test_high_demand_does_not(self):
+    def test_high_demand_does_not(self) -> None:
         r = mode_recovery("HIGH_DEMAND", 140.0 - self.BETWEEN, 120.0, 140.0)
         assert r.element_minutes == 0.0
         assert "upper_element_does_not_start" in r.confidence_reasons
 
-    def test_high_demand_starts_at_its_own_edge(self):
+    def test_high_demand_starts_at_its_own_edge(self) -> None:
         """0.72 is the smallest deficit it was actually seen to run at."""
         r = mode_recovery("HIGH_DEMAND", 140.0 - 0.72, 120.0, 140.0)
         assert r.element_minutes > 0.0
 
-    def test_high_demand_starts_where_it_was_seen_to_in_september(self):
+    def test_high_demand_starts_where_it_was_seen_to_in_september(self) -> None:
         """0.90 and 0.72 °F (2026-09-21); 0.8 was a negative until then."""
         for deficit in (0.90, 0.8):
             r = mode_recovery("HIGH_DEMAND", 140.0 - deficit, 120.0, 140.0)
@@ -553,7 +559,7 @@ class TestTheModesAreNotMerged:
 # --- mode_plan: pricing and chaining ------------------------------------
 
 
-def test_the_profile_sums_to_the_recovery_energy():
+def test_the_profile_sums_to_the_recovery_energy() -> None:
     """A plan that crosses a tariff boundary is a per-slot sum, so the
     slots must add up to what the recovery says it costs."""
     plan = mode_plan("ELECTRIC", 118.0, 116.0, 140.0)
@@ -564,14 +570,14 @@ def test_the_profile_sums_to_the_recovery_energy():
     )
 
 
-def test_slots_are_whole_except_the_last():
+def test_slots_are_whole_except_the_last() -> None:
     plan = mode_plan("ELECTRIC", 100.0, 100.0, 140.0, slot_minutes=10.0)
     ends = [s.end_minute for s in plan.profile]
     assert ends[:3] == [10.0, 20.0, 30.0]
     assert ends[-1] == pytest.approx(plan.recovery.element_minutes, abs=0.001)
 
 
-def test_switching_back_early_truncates_the_energy_and_the_tank():
+def test_switching_back_early_truncates_the_energy_and_the_tank() -> None:
     """The scheduler prices a bounded make-up, not a full recovery,
     and needs the tank it hands back."""
     full = mode_plan("ELECTRIC", 120.0, 118.0, 140.0)
@@ -590,14 +596,14 @@ def test_switching_back_early_truncates_the_energy_and_the_tank():
     assert "truncated_by_switch_back" in short.confidence_reasons
 
 
-def test_a_switch_back_after_the_recovery_is_not_a_truncation():
+def test_a_switch_back_after_the_recovery_is_not_a_truncation() -> None:
     plan = mode_plan(
         "ELECTRIC", 138.0, 139.0, 140.0, switch_back_after_minutes=90.0
     )
     assert "truncated_by_switch_back" not in plan.confidence_reasons
 
 
-def test_the_upper_zone_never_projects_past_the_setpoint():
+def test_the_upper_zone_never_projects_past_the_setpoint() -> None:
     plan = mode_plan(
         "HIGH_DEMAND",
         139.0,
@@ -609,7 +615,7 @@ def test_the_upper_zone_never_projects_past_the_setpoint():
     assert plan.end_upper_f <= 140.0
 
 
-def test_the_lower_zone_is_left_alone_when_the_heat_pump_owns_it():
+def test_the_lower_zone_is_left_alone_when_the_heat_pump_owns_it() -> None:
     """High Demand and Energy Saver heat the lower zone with the
     compressor, which this module does not model — so it must not
     invent a number for it."""
@@ -621,7 +627,7 @@ def test_the_lower_zone_is_left_alone_when_the_heat_pump_owns_it():
         )
 
 
-def test_electric_does_project_its_lower_zone():
+def test_electric_does_project_its_lower_zone() -> None:
     plan = mode_plan("ELECTRIC", 139.5, 120.0, 140.0)
     assert plan.end_lower_f == pytest.approx(140.0)
     assert "lower_zone_not_projected_under_heat_pump" not in (
@@ -629,19 +635,19 @@ def test_electric_does_project_its_lower_zone():
     )
 
 
-def test_a_tank_already_at_setpoint_costs_nothing():
+def test_a_tank_already_at_setpoint_costs_nothing() -> None:
     plan = mode_plan("ENERGY_SAVER", 141.0, 141.0, 140.0, hp_lower_minutes=0.0)
     assert plan.profile == ()
     assert plan.recovery.element_kwh == 0.0
     assert plan.end_upper_f == 141.0
 
 
-def test_every_plan_carries_the_small_n_warning():
+def test_every_plan_carries_the_small_n_warning() -> None:
     plan = mode_plan("ELECTRIC", 120.0, 118.0, 140.0)
     assert "element_model_small_n" in plan.confidence_reasons
 
 
-def test_a_plan_rejects_nonsense_bounds():
+def test_a_plan_rejects_nonsense_bounds() -> None:
     with pytest.raises(ValueError, match="slot_minutes"):
         mode_plan("ELECTRIC", 120.0, 118.0, 140.0, slot_minutes=0)
     with pytest.raises(ValueError, match="switch_back"):
@@ -650,7 +656,7 @@ def test_a_plan_rejects_nonsense_bounds():
         )
 
 
-def test_electric_warns_that_the_upper_zone_dips():
+def test_electric_warns_that_the_upper_zone_dips() -> None:
     """Measured 2026-09-20: once the lower element takes over, the upper
     probe falls — 3.4 °F in that run — before the tank mixes back. A
     readiness answer that assumes the upper zone holds is not safe."""
@@ -658,14 +664,14 @@ def test_electric_warns_that_the_upper_zone_dips():
     assert "upper_zone_dips_during_the_lower_phase" in (plan.confidence_reasons)
 
 
-def test_no_dip_warning_when_the_lower_zone_needs_nothing():
+def test_no_dip_warning_when_the_lower_zone_needs_nothing() -> None:
     plan = mode_plan("ELECTRIC", 120.0, 141.0, 140.0)
     assert "upper_zone_dips_during_the_lower_phase" not in (
         plan.confidence_reasons
     )
 
 
-def test_the_heat_pump_modes_do_not_carry_the_dip_warning():
+def test_the_heat_pump_modes_do_not_carry_the_dip_warning() -> None:
     # Their lower zone is the compressor's, and this was measured under
     # the lower *element*.
     plan = mode_plan("HIGH_DEMAND", 120.0, 118.0, 140.0, hp_lower_minutes=50.0)
@@ -674,7 +680,7 @@ def test_the_heat_pump_modes_do_not_carry_the_dip_warning():
     )
 
 
-def test_electric_starts_the_element_at_the_measured_differential():
+def test_electric_starts_the_element_at_the_measured_differential() -> None:
     """Measured 2026-09-20: 1.8 °F short and the element came on at
     once. The old 3.6 °F floor would have said it stays off."""
     r = mode_recovery("ELECTRIC", 144.5, 143.6, 146.3)
@@ -683,12 +689,12 @@ def test_electric_starts_the_element_at_the_measured_differential():
     assert "upper_element_does_not_start" not in r.confidence_reasons
 
 
-def test_high_demand_starts_the_element_just_under_the_setpoint():
+def test_high_demand_starts_the_element_just_under_the_setpoint() -> None:
     r = mode_recovery("HIGH_DEMAND", 144.5, 120.0, 146.3, hp_lower_minutes=30.0)
     assert r.upper_setpoint_minutes is not None
 
 
-def test_the_start_threshold_matches_the_sweep():
+def test_the_start_threshold_matches_the_sweep() -> None:
     """A sweep: off at 0.54 and 1.44 °F, on at 1.80 and 2.16.
 
     Bracketed on both sides, which is what distinguishes it from the
@@ -707,7 +713,7 @@ def test_the_start_threshold_matches_the_sweep():
     assert on.upper_element_minutes is not None
 
 
-def test_a_deficit_inside_the_bracket_says_so():
+def test_a_deficit_inside_the_bracket_says_so() -> None:
     """1.44–1.80 °F is where the device's decision actually lives, and
     no run has been made inside it."""
     edge = mode_recovery(
@@ -725,7 +731,7 @@ def test_a_deficit_inside_the_bracket_says_so():
     )
 
 
-def test_a_tank_at_or_above_setpoint_still_needs_no_element():
+def test_a_tank_at_or_above_setpoint_still_needs_no_element() -> None:
     """History: 2 of 10 engaged with the tank at or above setpoint, and
     there is nothing for the element to do there anyway."""
     r = mode_recovery(
@@ -735,7 +741,7 @@ def test_a_tank_at_or_above_setpoint_still_needs_no_element():
     assert r.element_minutes == 0.0
 
 
-def test_electric_and_energy_saver_do_not_share_a_threshold():
+def test_electric_and_energy_saver_do_not_share_a_threshold() -> None:
     """Measured 2026-09-20 at the same 0.54 °F deficit: Electric ran the
     element, Energy Saver did not.
 
@@ -753,7 +759,7 @@ def test_electric_and_energy_saver_do_not_share_a_threshold():
     assert "upper_element_does_not_start" in eco.confidence_reasons
 
 
-def test_electric_leaves_the_element_off_above_the_setpoint():
+def test_electric_leaves_the_element_off_above_the_setpoint() -> None:
     """The control that brackets Electric from beneath: 1.08 °F above
     setpoint, element off for the whole watch."""
     r = mode_recovery("ELECTRIC", 141.08, 141.8, 140.0)
@@ -761,7 +767,7 @@ def test_electric_leaves_the_element_off_above_the_setpoint():
     assert r.element_minutes == 0.0
 
 
-def test_only_energy_saver_gets_the_bracket_warning():
+def test_only_energy_saver_gets_the_bracket_warning() -> None:
     """Electric's bracket, (0, 0.54], is narrower than the probe's
     0.18 °F resolution, so there is no band to warn about."""
     electric = mode_recovery("ELECTRIC", 140.2, 141.8, 141.8)
@@ -776,7 +782,7 @@ def test_only_energy_saver_gets_the_bracket_warning():
     )
 
 
-def test_high_demand_shares_electrics_threshold_not_energy_savers():
+def test_high_demand_shares_electrics_threshold_not_energy_savers() -> None:
     """High Demand stayed off at 0.36 °F and ran at 1.26, then
     at 0.90 and 0.72 (2026-09-21).
 
@@ -801,7 +807,7 @@ def test_high_demand_shares_electrics_threshold_not_energy_savers():
     assert eco.upper_setpoint_minutes is None
 
 
-def test_each_mode_warns_inside_its_own_bracket():
+def test_each_mode_warns_inside_its_own_bracket() -> None:
     hd = mode_recovery(
         "HIGH_DEMAND", 141.8 - 0.45, 120.0, 141.8, hp_lower_minutes=40.0
     )
@@ -817,7 +823,7 @@ def test_each_mode_warns_inside_its_own_bracket():
     )
 
 
-def test_the_entry_threshold_is_not_the_reengage_threshold():
+def test_the_entry_threshold_is_not_the_reengage_threshold() -> None:
     """They are different questions and history separates them.
 
     Every device run measured entry — what happens within a poll of a
@@ -834,7 +840,7 @@ def test_the_entry_threshold_is_not_the_reengage_threshold():
     )
 
 
-def test_the_two_mid_stint_figures_are_recorded_with_their_references():
+def test_the_two_mid_stint_figures_are_recorded_with_their_references() -> None:
     """A **value** guard, and deliberately not claimed as more.
 
     Neither figure is consumed by any computation — they are recorded

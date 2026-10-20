@@ -107,36 +107,67 @@ class FakeMqtt:
                 loop.call_soon(callback, reply)
         return len(self.requests)
 
-    async def subscribe_device_status(self, device: Any, cb: Any) -> int:
+    async def subscribe_device_status(
+        self,
+        device: Any,
+        cb: Any,
+    ) -> int:
         self.subscribed["status"].append(cb)
         return 1
 
-    async def unsubscribe_device_status(self, device: Any, cb: Any) -> None:
+    async def unsubscribe_device_status(
+        self,
+        device: Any,
+        cb: Any,
+    ) -> None:
         self.subscribed["status"].remove(cb)
 
-    async def request_device_status(self, device: Any) -> int:
+    async def request_device_status(
+        self,
+        device: Any,
+    ) -> int:
         return self._reply("status")
 
-    async def subscribe_device_feature(self, device: Any, cb: Any) -> int:
+    async def subscribe_device_feature(
+        self,
+        device: Any,
+        cb: Any,
+    ) -> int:
         self.subscribed["feature"].append(cb)
         return 1
 
-    async def unsubscribe_device_feature(self, device: Any, cb: Any) -> None:
+    async def unsubscribe_device_feature(
+        self,
+        device: Any,
+        cb: Any,
+    ) -> None:
         self.subscribed["feature"].remove(cb)
 
-    async def request_device_info(self, device: Any) -> int:
+    async def request_device_info(
+        self,
+        device: Any,
+    ) -> int:
         return self._reply("feature")
 
-    async def subscribe_reservation_response(self, device: Any, cb: Any) -> int:
+    async def subscribe_reservation_response(
+        self,
+        device: Any,
+        cb: Any,
+    ) -> int:
         self.subscribed["reservations"].append(cb)
         return 1
 
     async def unsubscribe_reservation_response(
-        self, device: Any, cb: Any
+        self,
+        device: Any,
+        cb: Any,
     ) -> None:
         self.subscribed["reservations"].remove(cb)
 
-    async def request_reservations(self, device: Any) -> int:
+    async def request_reservations(
+        self,
+        device: Any,
+    ) -> int:
         return self._reply("reservations")
 
 
@@ -186,10 +217,13 @@ def _tou_on(status: DeviceStatus) -> DeviceStatus:
 
 class TestTheHeater:
     async def test_state_settings_air_and_tank_size(
-        self, device, status, feature
-    ):
+        self,
+        device: Device,
+        status: DeviceStatus,
+        feature: DeviceFeature,
+    ) -> None:
         mqtt = FakeMqtt(status=status, feature=feature)
-        reading = await sim_live.LiveHeaterSource(mqtt, device).read()
+        reading = await sim_live.LiveHeaterSource(mqtt, device).read()  # type: ignore[arg-type]  # fake mqtt client
         assert reading.state.upper_f == pytest.approx(137.48)
         assert reading.state.lower_f == pytest.approx(109.58)
         assert reading.settings.setpoint_f == pytest.approx(140.9)
@@ -199,24 +233,34 @@ class TestTheHeater:
         assert reading.feature is feature
 
     async def test_it_leaves_no_subscription_behind(
-        self, device, status, feature
-    ):
+        self,
+        device: Device,
+        status: DeviceStatus,
+        feature: DeviceFeature,
+    ) -> None:
         mqtt = FakeMqtt(status=status, feature=feature)
-        await sim_live.LiveHeaterSource(mqtt, device).read()
+        await sim_live.LiveHeaterSource(mqtt, device).read()  # type: ignore[arg-type]  # fake mqtt client
         assert all(not subs for subs in mqtt.subscribed.values())
 
-    async def test_no_status_is_an_error(self, device, feature):
+    async def test_no_status_is_an_error(
+        self,
+        device: Device,
+        feature: DeviceFeature,
+    ) -> None:
         mqtt = FakeMqtt(feature=feature)
-        source = sim_live.LiveHeaterSource(mqtt, device, timeout=FAST)
+        source = sim_live.LiveHeaterSource(mqtt, device, timeout=FAST)  # type: ignore[arg-type]  # fake mqtt client
         with pytest.raises(sim_live.LiveReadError, match="no device status"):
             await source.read()
         assert not mqtt.subscribed["status"]
 
     async def test_no_feature_leaves_the_tank_size_unknown(
-        self, device, status, caplog
-    ):
+        self,
+        device: Device,
+        status: DeviceStatus,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
         mqtt = FakeMqtt(status=status)
-        source = sim_live.LiveHeaterSource(mqtt, device, timeout=FAST)
+        source = sim_live.LiveHeaterSource(mqtt, device, timeout=FAST)  # type: ignore[arg-type]  # fake mqtt client
         reading = await source.read()
         assert reading.params is None
         assert reading.feature is None
@@ -226,11 +270,15 @@ class TestTheHeater:
 
 class TestTheSchedules:
     async def test_reservations_tou_periods_and_switch(
-        self, device, status, feature, reservations
-    ):
+        self,
+        device: Device,
+        status: DeviceStatus,
+        feature: DeviceFeature,
+        reservations: ReservationSchedule,
+    ) -> None:
         mqtt = FakeMqtt(_tou_on(status), feature, reservations)
         api = _api()
-        schedules = await sim_live.LiveScheduleSource(mqtt, api, device).read()
+        schedules = await sim_live.LiveScheduleSource(mqtt, api, device).read()  # type: ignore[arg-type]  # fake mqtt client
         assert schedules.tou_enabled is True
         assert schedules.reservations_enabled is True
         (entry,) = schedules.reservations
@@ -248,28 +296,38 @@ class TestTheSchedules:
         )
 
     async def test_no_reservation_reply_is_an_error(
-        self, device, status, feature
-    ):
+        self,
+        device: Device,
+        status: DeviceStatus,
+        feature: DeviceFeature,
+    ) -> None:
         mqtt = FakeMqtt(status, feature)
-        source = sim_live.LiveScheduleSource(mqtt, _api(), device, timeout=FAST)
+        source = sim_live.LiveScheduleSource(mqtt, _api(), device, timeout=FAST)  # type: ignore[arg-type]  # fake mqtt client
         with pytest.raises(sim_live.LiveReadError, match="reservation"):
             await source.read()
 
     async def test_no_feature_with_tou_on_is_an_error(
-        self, device, status, reservations
-    ):
+        self,
+        device: Device,
+        status: DeviceStatus,
+        reservations: ReservationSchedule,
+    ) -> None:
         mqtt = FakeMqtt(_tou_on(status), None, reservations)
         api = _api()
-        source = sim_live.LiveScheduleSource(mqtt, api, device, timeout=FAST)
+        source = sim_live.LiveScheduleSource(mqtt, api, device, timeout=FAST)  # type: ignore[arg-type]  # fake mqtt client
         with pytest.raises(sim_live.LiveReadError, match="TOU is on"):
             await source.read()
         api.get_tou_info.assert_not_awaited()
 
     async def test_no_feature_with_tou_off_reads_no_periods(
-        self, device, status, reservations, caplog
-    ):
+        self,
+        device: Device,
+        status: DeviceStatus,
+        reservations: ReservationSchedule,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
         mqtt = FakeMqtt(status, None, reservations)
-        source = sim_live.LiveScheduleSource(mqtt, _api(), device, timeout=FAST)
+        source = sim_live.LiveScheduleSource(mqtt, _api(), device, timeout=FAST)  # type: ignore[arg-type]  # fake mqtt client
         schedules = await source.read()
         assert schedules.tou_enabled is False
         assert schedules.tou_periods == ()
@@ -277,11 +335,17 @@ class TestTheSchedules:
         assert "TOU periods not read" in caplog.text
 
     async def test_a_failed_tou_read_with_tou_on_is_an_error(
-        self, device, status, feature, reservations
-    ):
+        self,
+        device: Device,
+        status: DeviceStatus,
+        feature: DeviceFeature,
+        reservations: ReservationSchedule,
+    ) -> None:
         mqtt = FakeMqtt(_tou_on(status), feature, reservations)
         source = sim_live.LiveScheduleSource(
-            mqtt, _api(APIError("no TOU")), device
+            mqtt,  # type: ignore[arg-type]  # fake mqtt client
+            _api(APIError("no TOU")),
+            device,
         )
         with pytest.raises(sim_live.LiveReadError, match="no TOU"):
             await source.read()
@@ -292,10 +356,15 @@ class TestTheSchedules:
         ids=["rest", "timeout", "bad reply"],
     )
     async def test_a_failed_tou_read_with_tou_off_reads_no_periods(
-        self, device, status, feature, reservations, error
-    ):
+        self,
+        device: Device,
+        status: DeviceStatus,
+        feature: DeviceFeature,
+        reservations: ReservationSchedule,
+        error: Exception,
+    ) -> None:
         mqtt = FakeMqtt(status, feature, reservations)
-        source = sim_live.LiveScheduleSource(mqtt, _api(error), device)
+        source = sim_live.LiveScheduleSource(mqtt, _api(error), device)  # type: ignore[arg-type]  # fake mqtt client
         assert (await source.read()).tou_periods == ()
 
     @pytest.mark.parametrize(
@@ -304,26 +373,42 @@ class TestTheSchedules:
         ids=["timeout", "bad reply"],
     )
     async def test_a_timed_out_or_bad_tou_reply_with_tou_on_is_an_error(
-        self, device, status, feature, reservations, error
-    ):
+        self,
+        device: Device,
+        status: DeviceStatus,
+        feature: DeviceFeature,
+        reservations: ReservationSchedule,
+        error: Exception,
+    ) -> None:
         mqtt = FakeMqtt(_tou_on(status), feature, reservations)
-        source = sim_live.LiveScheduleSource(mqtt, _api(error), device)
+        source = sim_live.LiveScheduleSource(mqtt, _api(error), device)  # type: ignore[arg-type]  # fake mqtt client
         with pytest.raises(sim_live.LiveReadError, match="TOU read failed"):
             await source.read()
 
 
 class TestCompose:
-    async def _compose(self, device, status, feature, **kw: Any):
+    async def _compose(
+        self,
+        device: Device,
+        status: DeviceStatus,
+        feature: DeviceFeature,
+        **kw: Any,
+    ) -> sim_live.Composed:
         mqtt = FakeMqtt(status, feature, None)
         return await sim_live.compose(
             start=START,
             horizon=timedelta(hours=6),
             tz="America/Los_Angeles",
-            heater=sim_live.LiveHeaterSource(mqtt, device),
+            heater=sim_live.LiveHeaterSource(mqtt, device),  # type: ignore[arg-type]  # fake mqtt client
             **kw,
         )
 
-    async def test_the_heater_alone(self, device, status, feature):
+    async def test_the_heater_alone(
+        self,
+        device: Device,
+        status: DeviceStatus,
+        feature: DeviceFeature,
+    ) -> None:
         composed = await self._compose(device, status, feature)
         s = composed.scenario
         assert (s.start, s.horizon, s.tz) == (
@@ -338,17 +423,25 @@ class TestCompose:
         assert s.commands == sim.Commands()
         assert composed.params == sim.default_params(3)
 
-    async def test_history_is_left_unknown(self, device, status, feature):
+    async def test_history_is_left_unknown(
+        self,
+        device: Device,
+        status: DeviceStatus,
+        feature: DeviceFeature,
+    ) -> None:
         composed = await self._compose(device, status, feature)
         assert "history" not in composed.scenario.model_fields_set
-        result = sim.simulate(composed.scenario, composed.params)
+        result = sim.simulate(composed.scenario, composed.params)  # type: ignore[arg-type]  # feature sets params
         assert any(
             d.startswith("compressor_stopped_at=") for d in result.defaults_used
         )
 
     async def test_given_sources_take_their_parts(
-        self, device, status, feature
-    ):
+        self,
+        device: Device,
+        status: DeviceStatus,
+        feature: DeviceFeature,
+    ) -> None:
         env = sim.Environment(ambient_f=55.0, inlet_f=50.0)
         loads = sim.Loads(draws=(sim.Draw(at=START, gallons=10.0),))
         commands = sim.Commands(tou_enabled=True)
@@ -367,7 +460,12 @@ class TestCompose:
         assert s.commands == commands
         assert s.schedules.tou_enabled is True
 
-    async def test_an_override_is_a_model_copy(self, device, status, feature):
+    async def test_an_override_is_a_model_copy(
+        self,
+        device: Device,
+        status: DeviceStatus,
+        feature: DeviceFeature,
+    ) -> None:
         composed = await self._compose(device, status, feature)
         hotter = composed.scenario.model_copy(
             update={"settings": sim.Settings(setpoint_f=120.0)}

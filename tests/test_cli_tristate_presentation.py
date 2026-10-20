@@ -10,6 +10,8 @@ is silent, since ``None`` is falsy and a two-way ternary happily prints
 "No".
 """
 
+from typing import Any
+
 import pytest
 
 # The CLI package pulls in the optional `cli` extra (click/rich). Skip
@@ -39,16 +41,16 @@ TRISTATE_ALIASES = {
 class TestYesNoUnknown:
     """The formatter itself."""
 
-    def test_none_is_unknown(self):
+    def test_none_is_unknown(self) -> None:
         assert _yes_no_unknown(None) == "Unknown"
 
-    def test_true_is_yes(self):
+    def test_true_is_yes(self) -> None:
         assert _yes_no_unknown(True) == "Yes"
 
-    def test_false_is_no(self):
+    def test_false_is_no(self) -> None:
         assert _yes_no_unknown(False) == "No"
 
-    def test_all_three_are_distinct(self):
+    def test_all_three_are_distinct(self) -> None:
         rendered = [_yes_no_unknown(v) for v in (None, False, True)]
         assert len(set(rendered)) == 3
 
@@ -56,7 +58,9 @@ class TestYesNoUnknown:
 class TestTriStateRendering:
     """End-to-end: a 0 on the wire must reach the CLI as "Unknown"."""
 
-    def _rows(self, status_data, alias, raw):
+    def _rows(
+        self, status_data: dict[str, Any], alias: str, raw: int
+    ) -> dict[tuple[str, str], str]:
         """Build the CLI rows, keyed by (section, label)."""
         data = dict(status_data)
         data[alias] = raw
@@ -70,7 +74,12 @@ class TestTriStateRendering:
     @pytest.mark.parametrize(
         ("field", "location"), list(RENDERED_TRISTATE_ROWS.items())
     )
-    def test_zero_renders_unknown(self, device_status_dict, field, location):
+    def test_zero_renders_unknown(
+        self,
+        device_status_dict: dict[str, Any],
+        field: str,
+        location: tuple[str, str],
+    ) -> None:
         """0 must not be presented as "No"."""
         rows = self._rows(device_status_dict, TRISTATE_ALIASES[field], 0)
         assert rows[location] == "Unknown"
@@ -78,7 +87,12 @@ class TestTriStateRendering:
     @pytest.mark.parametrize(
         ("field", "location"), list(RENDERED_TRISTATE_ROWS.items())
     )
-    def test_one_renders_no(self, device_status_dict, field, location):
+    def test_one_renders_no(
+        self,
+        device_status_dict: dict[str, Any],
+        field: str,
+        location: tuple[str, str],
+    ) -> None:
         """1 is a real OFF and still reads "No"."""
         rows = self._rows(device_status_dict, TRISTATE_ALIASES[field], 1)
         assert rows[location] == "No"
@@ -86,13 +100,18 @@ class TestTriStateRendering:
     @pytest.mark.parametrize(
         ("field", "location"), list(RENDERED_TRISTATE_ROWS.items())
     )
-    def test_two_renders_yes(self, device_status_dict, field, location):
+    def test_two_renders_yes(
+        self,
+        device_status_dict: dict[str, Any],
+        field: str,
+        location: tuple[str, str],
+    ) -> None:
         """2 is a real ON and still reads "Yes"."""
         rows = self._rows(device_status_dict, TRISTATE_ALIASES[field], 2)
         assert rows[location] == "Yes"
 
 
-def test_no_tristate_field_uses_a_two_way_ternary():
+def test_no_tristate_field_uses_a_two_way_ternary() -> None:
     """Structural guard against the miss this test module exists for.
 
     A two-way ``"Yes" if <tristate> else "No"`` compiles and passes any

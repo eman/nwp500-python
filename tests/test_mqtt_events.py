@@ -22,7 +22,7 @@ from nwp500.mqtt_events import (
 )
 
 
-def test_registry_lists_all_event_names():
+def test_registry_lists_all_event_names() -> None:
     """get_all_events returns every declared event constant name."""
     events = MqttClientEvents.get_all_events()
 
@@ -44,7 +44,7 @@ def test_registry_lists_all_event_names():
     assert set(events) == expected
 
 
-def test_get_event_value_returns_string_constant():
+def test_get_event_value_returns_string_constant() -> None:
     """get_event_value resolves a constant name to its wire string."""
     assert (
         MqttClientEvents.get_event_value("TEMPERATURE_CHANGED")
@@ -53,7 +53,7 @@ def test_get_event_value_returns_string_constant():
     assert MqttClientEvents.TEMPERATURE_CHANGED == "temperature_changed"
 
 
-def test_get_event_value_unknown_raises():
+def test_get_event_value_unknown_raises() -> None:
     """Unknown event names raise AttributeError."""
     with pytest.raises(AttributeError):
         MqttClientEvents.get_event_value("DOES_NOT_EXIST")
@@ -80,7 +80,11 @@ def test_get_event_value_unknown_raises():
         ),
         (
             MqttClientEvents.MODE_CHANGED,
-            ModeChangedEvent(device_mac="aabbccddeeff", old_mode=1, new_mode=2),
+            ModeChangedEvent(
+                device_mac="aabbccddeeff",
+                old_mode=1,  # type: ignore[arg-type]  # int for enum
+                new_mode=2,  # type: ignore[arg-type]  # int for enum
+            ),
         ),
         (
             MqttClientEvents.POWER_CHANGED,
@@ -90,14 +94,17 @@ def test_get_event_value_unknown_raises():
         ),
         (
             MqttClientEvents.ERROR_CLEARED,
-            ErrorClearedEvent(device_mac="aabbccddeeff", error_code=799),
+            ErrorClearedEvent(
+                device_mac="aabbccddeeff",
+                error_code=799,  # type: ignore[arg-type]  # int for enum
+            ),
         ),
     ],
 )
 @pytest.mark.asyncio
 async def test_typed_payload_delivered_via_registry_constant(
-    event_name, payload
-):
+    event_name: str, payload: object
+) -> None:
     """Subscribing with a registry constant delivers the typed payload."""
     emitter = EventEmitter()
     received: list[object] = []
@@ -111,7 +118,7 @@ async def test_typed_payload_delivered_via_registry_constant(
     assert received[0] is payload
 
 
-def test_event_payloads_are_frozen():
+def test_event_payloads_are_frozen() -> None:
     """Typed event payloads are immutable (frozen dataclasses)."""
     event = TemperatureChangedEvent(
         device_mac="aabbccddeeff",

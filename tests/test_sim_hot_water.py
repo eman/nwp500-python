@@ -8,6 +8,7 @@ it calls are held to their source in ``test_sim_readiness`` and
 """
 
 import json
+from collections.abc import Iterator
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -80,7 +81,7 @@ def _no_evidence(p: HeaterParams) -> HeaterParams:
 
 
 @pytest.fixture(autouse=True)
-def _units():
+def _units() -> Iterator[None]:
     yield
     reset_unit_system()
 
@@ -134,7 +135,7 @@ def _by_hand(params: HeaterParams, s: Scenario, book: Any) -> Any:
 class TestTheBookInASimulation:
     def test_simulate_with_a_book_is_the_engine_with_its_ledger(
         self, params: HeaterParams
-    ):
+    ) -> None:
         s = _scenario()
         book = full_tank_book(*FULL, params.book)
         assert simulate(s, params, book=book).simulation == _by_hand(
@@ -143,14 +144,16 @@ class TestTheBookInASimulation:
 
     def test_the_book_takes_the_upper_zone_down_through_a_big_draw(
         self, params: HeaterParams
-    ):
+    ) -> None:
         s = _scenario()
         with_book = simulate(s, params, book=full_tank_book(*FULL, params.book))
         without = simulate(s, params)
         assert min(p.upper_f for p in with_book.points) < 105.0
         assert min(p.upper_f for p in without.points) > 130.0
 
-    def test_without_a_book_the_result_says_so(self, params: HeaterParams):
+    def test_without_a_book_the_result_says_so(
+        self, params: HeaterParams
+    ) -> None:
         r = simulate(_scenario(), params)
         assert "no_heat_book" in r.reasons
         assert r.booked is None
@@ -160,13 +163,15 @@ class TestTheBookInASimulation:
         assert "no_heat_book" not in with_book.reasons
         assert with_book.booked is not None
 
-    def test_an_aged_book_says_so(self, params: HeaterParams):
+    def test_an_aged_book_says_so(self, params: HeaterParams) -> None:
         book = replace(full_tank_book(*FULL, params.book), anchor_age_h=20.0)
         assert (
             "heat_book_aged" in simulate(_scenario(), params, book=book).reasons
         )
 
-    def test_the_delivery_is_the_books_or_the_zones(self, params: HeaterParams):
+    def test_the_delivery_is_the_books_or_the_zones(
+        self, params: HeaterParams
+    ) -> None:
         s = _scenario()
         draws = [(d.at, d.gallons) for d in s.loads.draws]
         r = simulate(s, params)
@@ -183,7 +188,7 @@ class TestTheBookInASimulation:
 class TestDrawWindows:
     def test_a_window_the_tank_cannot_supply_runs_cold_with_a_book(
         self, params: HeaterParams
-    ):
+    ) -> None:
         r = simulate(
             _scenario(), params, book=full_tank_book(*FULL, params.book)
         )
@@ -195,7 +200,7 @@ class TestDrawWindows:
 
     def test_without_one_the_margin_still_says_it_is_short(
         self, params: HeaterParams
-    ):
+    ) -> None:
         """The zones alone hold the upper zone up through the draw, so
         the delivery does not fall; the full-tank floor still prices the
         window short."""
@@ -203,7 +208,9 @@ class TestDrawWindows:
         assert not w.depleted
         assert w.margin_gal is not None and w.margin_gal < -30.0
 
-    def test_a_window_the_tank_can_supply_does_not(self, params: HeaterParams):
+    def test_a_window_the_tank_can_supply_does_not(
+        self, params: HeaterParams
+    ) -> None:
         small = tuple(
             Draw(at=at(0.5) + timedelta(minutes=i), gallons=1.6)
             for i in range(8)
@@ -216,18 +223,22 @@ class TestDrawWindows:
         assert not w.depleted
         assert w.margin_gal is not None and w.margin_gal > 20.0
 
-    def test_a_windows_edges_are_on_the_path(self, params: HeaterParams):
+    def test_a_windows_edges_are_on_the_path(
+        self, params: HeaterParams
+    ) -> None:
         r = simulate(_scenario(), params)
         instants = {p.at for p in r.points}
         assert BIG_WINDOW.start in instants and BIG_WINDOW.end in instants
 
-    def test_a_window_must_end_after_it_starts(self):
+    def test_a_window_must_end_after_it_starts(self) -> None:
         with pytest.raises(ValueError, match="ends after"):
             DrawWindow(start=at(1.0), end=at(1.0))
 
 
 class TestReadiness:
-    def test_with_a_book_the_booked_heat_answers(self, params: HeaterParams):
+    def test_with_a_book_the_booked_heat_answers(
+        self, params: HeaterParams
+    ) -> None:
         d = readiness(
             HeaterState(upper_f=FULL[0], lower_f=FULL[1]),
             Settings(setpoint_f=140.9),
@@ -237,7 +248,9 @@ class TestReadiness:
         assert d.basis == "energy"
         assert d.gal == pytest.approx(53.1, abs=0.05)
 
-    def test_without_one_a_full_tank_has_its_floor(self, params: HeaterParams):
+    def test_without_one_a_full_tank_has_its_floor(
+        self, params: HeaterParams
+    ) -> None:
         d = readiness(
             HeaterState(upper_f=FULL[0], lower_f=FULL[1]),
             Settings(setpoint_f=140.9),
@@ -246,7 +259,9 @@ class TestReadiness:
         assert d.basis == "evidence"
         assert d.gal == pytest.approx(39.6, abs=0.05)
 
-    def test_a_running_heater_withholds_the_floor(self, params: HeaterParams):
+    def test_a_running_heater_withholds_the_floor(
+        self, params: HeaterParams
+    ) -> None:
         d = readiness(
             HeaterState(
                 upper_f=FULL[0], lower_f=FULL[1], compressor_running=True
@@ -256,7 +271,7 @@ class TestReadiness:
         )
         assert d.gal == 0.0 and d.colder_than_evidence
 
-    def test_any_other_state_needs_evidence(self, params: HeaterParams):
+    def test_any_other_state_needs_evidence(self, params: HeaterParams) -> None:
         state = HeaterState(upper_f=135.86, lower_f=135.5)
         settings = Settings(setpoint_f=140.9)
         bare = _no_evidence(params)
@@ -267,7 +282,7 @@ class TestReadiness:
             23.6 + params.readiness.delivered_lag_gal
         )
 
-    def test_the_lag_is_the_installations(self, params: HeaterParams):
+    def test_the_lag_is_the_installations(self, params: HeaterParams) -> None:
         state = HeaterState(upper_f=FULL[0], lower_f=FULL[1])
         settings = Settings(setpoint_f=140.9)
         none = replace(
@@ -281,7 +296,7 @@ class TestReadiness:
 class TestTheParameters:
     def test_readiness_and_the_book_round_trip_as_a_document(
         self, params: HeaterParams
-    ):
+    ) -> None:
         p = replace(params, readiness=with_example_evidence(params.readiness))
         doc = json.loads(json.dumps(params_to_document(p)))
         assert params_from_document(doc) == p
@@ -289,18 +304,18 @@ class TestTheParameters:
 
     def test_a_document_without_them_takes_the_defaults(
         self, params: HeaterParams
-    ):
+    ) -> None:
         doc = params_to_document(params)
         del doc["readiness"], doc["book"]
         assert params_from_document(doc) == replace(
             params, readiness=ReadinessParams(), book=params.book
         )
 
-    def test_the_example_evidence_is_refused_at_another_line(self):
+    def test_the_example_evidence_is_refused_at_another_line(self) -> None:
         with pytest.raises(ValueError, match="105"):
             with_example_evidence(ReadinessParams(line_f=110.0))
 
-    def test_the_line_moves_the_answer(self, params: HeaterParams):
+    def test_the_line_moves_the_answer(self, params: HeaterParams) -> None:
         state = HeaterState(upper_f=108.0, lower_f=100.0)
         settings = Settings(setpoint_f=140.9)
         p = replace(params, readiness=with_example_evidence(params.readiness))
@@ -309,7 +324,7 @@ class TestTheParameters:
 
 
 class TestTheAdaptersAndTheCodec:
-    def test_windows_in_the_preferred_units(self):
+    def test_windows_in_the_preferred_units(self) -> None:
         set_unit_system("metric")
         loads = sa.loads(
             [(at(0.5), 37.85411784)], windows=[(at(0.5), at(1.0), 75.70823568)]
@@ -317,7 +332,7 @@ class TestTheAdaptersAndTheCodec:
         assert loads.draws[0].gallons == pytest.approx(10.0)
         assert loads.windows[0].expected_gal == pytest.approx(20.0)
 
-    def test_the_path_carries_the_delivery(self, params: HeaterParams):
+    def test_the_path_carries_the_delivery(self, params: HeaterParams) -> None:
         r = simulate(
             _scenario(), params, book=full_tank_book(*FULL, params.book)
         )
@@ -327,14 +342,16 @@ class TestTheAdaptersAndTheCodec:
             (r.delivery[-1] - 32.0) * 5.0 / 9.0
         )
 
-    def test_a_scenario_with_windows_round_trips(self, params: HeaterParams):
+    def test_a_scenario_with_windows_round_trips(
+        self, params: HeaterParams
+    ) -> None:
         s = _scenario()
         back, _ = scenario_from_document(json.dumps(scenario_to_document(s)))
         assert back == s
 
     def test_a_result_document_holds_the_delivery_and_the_windows(
         self, params: HeaterParams
-    ):
+    ) -> None:
         r = simulate(
             _scenario(), params, book=full_tank_book(*FULL, params.book)
         )

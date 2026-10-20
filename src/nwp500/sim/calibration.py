@@ -521,7 +521,9 @@ def fit_compressor(
             np.asarray(frame["duration_minutes"], dtype=float),
         )
 
-    def predicted(cols: tuple[np.ndarray, ...], k: float, approach: float):
+    def predicted(
+        cols: tuple[np.ndarray, ...], k: float, approach: float
+    ) -> np.ndarray:
         start, target, air, humidity, gap, _ = cols
         return np.array(
             [
@@ -635,7 +637,7 @@ def _floats(history: pd.DataFrame, name: str) -> np.ndarray:
     """A column as floats, NaN throughout when the history lacks it."""
     if name not in history.columns:
         return np.full(len(history), np.nan)
-    return history[name].to_numpy(dtype=float, na_value=np.nan)
+    return np.asarray(history[name].to_numpy(dtype=float, na_value=np.nan))
 
 
 def _snapshots(start: datetime, end: datetime) -> list[datetime]:
@@ -1800,7 +1802,7 @@ class RecordedBook:
 
     def probe_heat(self, p: BookParams) -> np.ndarray:
         """The heat the probes read, BTU above the reference."""
-        return (
+        return np.asarray(
             WATER_BTU_PER_GAL_F
             * p.tank_gal
             * ((self.u + self.l) / 2 - p.reference_f)
@@ -2384,8 +2386,8 @@ def fit_zone_mix(
         zone_mix_gal=float(lam),
         mae_train=float(e[tr].mean()),
         mae_held=float(e[~tr].mean()) if (~tr).any() else float("nan"),
-        s_interval=tuple(np.percentile(pk[:, 0], [2.5, 50, 97.5])),  # type: ignore[arg-type]
-        lam_interval=tuple(np.percentile(pk[:, 1], [2.5, 50, 97.5])),  # type: ignore[arg-type]
+        s_interval=tuple(np.percentile(pk[:, 0], [2.5, 50, 97.5])),
+        lam_interval=tuple(np.percentile(pk[:, 1], [2.5, 50, 97.5])),
     )
 
 
@@ -2492,7 +2494,7 @@ def _front_run(f: pd.DataFrame, vp: float, w: float) -> np.ndarray:
         dfront = min(-(th[i - 1] - th[i]) * (up[i] - cf[i]), 0.0)
         step = dphys + dfront if dphys >= 0.0 else dfront
         out[i] = max(min(cf[i], out[i - 1]), out[i - 1] + step)
-    return out
+    return np.asarray(out)
 
 
 def fit_front(
@@ -2529,10 +2531,10 @@ def fit_front(
         mae_held=float(E[best][~tr].mean()) if (~tr).any() else float("nan"),
         place_interval=tuple(
             np.percentile([p[0] for p in picks], [2.5, 50, 97.5])
-        ),  # type: ignore[arg-type]
+        ),
         width_interval=tuple(
             np.percentile([p[1] for p in picks], [2.5, 50, 97.5])
-        ),  # type: ignore[arg-type]
+        ),
     )
 
 
@@ -2634,7 +2636,7 @@ def _settle_model(t: dict[str, Any], tau: float) -> np.ndarray:
         z = np.full_like(t["hrs"], t["front"])
     else:
         z = s + (t["front"] - s) * np.exp(-t["hrs"] * 60 / tau)
-    return z - t["drift"]
+    return np.asarray(z - t["drift"])
 
 
 def _settle_err(tails: Sequence[dict[str, Any]], tau: float) -> float:
@@ -2677,7 +2679,7 @@ def fit_front_settle(
         front_settle_min_fine=float(fine),
         mae_train=_settle_err(tr, best),
         mae_held=_settle_err(te, best),
-        interval=tuple(np.percentile(picks, [2.5, 50, 97.5])),  # type: ignore[arg-type]
+        interval=tuple(np.percentile(picks, [2.5, 50, 97.5])),
     )
 
 
@@ -3139,8 +3141,8 @@ def fit_element_lag(
     return ElementLagFit(
         upper_dead_time_min=lag,
         upper_f_per_min=1 / slope,
-        lag_interval=tuple(np.quantile(lags, [0.05, 0.95])),  # type: ignore[arg-type]
-        rate_interval=tuple(np.quantile(rates, [0.05, 0.95])),  # type: ignore[arg-type]
+        lag_interval=tuple(np.quantile(lags, [0.05, 0.95])),
+        rate_interval=tuple(np.quantile(rates, [0.05, 0.95])),
         n=len(q),
     )
 

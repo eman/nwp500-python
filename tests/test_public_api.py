@@ -3,13 +3,13 @@
 import nwp500
 
 
-def test_all_names_resolve():
+def test_all_names_resolve() -> None:
     """Every name in __all__ must exist on the package."""
     missing = [name for name in nwp500.__all__ if not hasattr(nwp500, name)]
     assert missing == []
 
 
-def test_internal_plumbing_not_exported():
+def test_internal_plumbing_not_exported() -> None:
     """Internal helpers must not be part of the public surface."""
     internal = [
         "requires_capability",
@@ -29,7 +29,7 @@ def test_internal_plumbing_not_exported():
     assert exported == []
 
 
-def test_removed_exceptions_are_gone():
+def test_removed_exceptions_are_gone() -> None:
     """Dead exception classes were removed (never raised anywhere)."""
     removed = [
         "TokenExpiredError",
@@ -42,7 +42,7 @@ def test_removed_exceptions_are_gone():
     assert still_present == []
 
 
-def test_encoding_helpers_importable_from_submodule():
+def test_encoding_helpers_importable_from_submodule() -> None:
     """Encoding helpers remain available from nwp500.encoding."""
     from nwp500.encoding import (
         build_reservation_entry,
@@ -61,7 +61,7 @@ def test_encoding_helpers_importable_from_submodule():
     assert callable(decode_week_bitfield)
 
 
-def test_mqtt_tou_read_is_gone():
+def test_mqtt_tou_read_is_gone() -> None:
     """There is no MQTT read for the TOU schedule; ctrl/tou/rd is the write.
 
     ``request_tou_settings`` published a TOU_RESERVATION control message with
@@ -74,7 +74,7 @@ def test_mqtt_tou_read_is_gone():
     assert hasattr(NavienAPIClient, "get_tou_info")
 
 
-def test_invented_mqtt_commands_are_gone():
+def test_invented_mqtt_commands_are_gone() -> None:
     """Commands the NaviLink app declares but never sends were removed.
 
     The app's request builder has no case for OTA check, WiFi reset or
@@ -101,7 +101,7 @@ def test_invented_mqtt_commands_are_gone():
     assert not hasattr(nwp500, "WeeklyReservationEntry")
 
 
-def test_app_queries_and_controls_are_exposed():
+def test_app_queries_and_controls_are_exposed() -> None:
     """Every query and control the NaviLink app sends has a client method."""
     from nwp500 import NavienMqttClient
 
@@ -133,7 +133,7 @@ def test_app_queries_and_controls_are_exposed():
         assert name in nwp500.__all__
 
 
-def test_the_lazy_exports_are_the_typed_ones():
+def test_the_lazy_exports_are_the_typed_ones() -> None:
     """The exports load on first use (``_EXPORTS``); the imports type
     checkers read under ``TYPE_CHECKING`` must name the same objects,
     and ``__all__`` the same names."""
