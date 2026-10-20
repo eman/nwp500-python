@@ -29,12 +29,15 @@ def _class_name(code: int) -> str:
 
 def _parse_class(text: str) -> tuple[int, int | None]:
     name, _, length = text.partition(":")
-    code = (
-        ClassCode[name.upper()]
-        if name.upper() in ClassCode.__members__
-        else int(name)
-    )
-    return int(code), (int(length) if length else None)
+    if name.upper() in ClassCode.__members__:
+        code = int(ClassCode[name.upper()])
+    elif name.isdigit():
+        code = int(name)
+    else:
+        raise ValueError(
+            f"unknown class {name!r}: use a ClassCode name or a number"
+        )
+    return code, (int(length) if length else None)
 
 
 async def _print_tou(ble: NavienBleClient) -> None:
@@ -78,6 +81,16 @@ async def _scan(args: argparse.Namespace) -> int:
 
 
 async def _read(args: argparse.Namespace) -> int:
+    if args.classes:
+        try:
+            targets = [_parse_class(c) for c in args.classes]
+        except ValueError as e:
+            print(e)
+            return 2
+    else:
+        # The classes an NWP500 answers; the boiler parameter classes
+        # 51-54 only time out on it and are read when named.
+        targets = [(c, None) for c in sorted(NWP500_RESPONDING_CLASSES)]
     address = args.address
     if not address:
         best = best_heater(await scan(args.seconds))
@@ -88,12 +101,6 @@ async def _read(args: argparse.Namespace) -> int:
         print(f"using {name} at {address}")
     results: list[dict[str, object]] = []
     async with NavienBleClient(address) as ble:
-        if args.classes:
-            targets = [_parse_class(c) for c in args.classes]
-        else:
-            # The classes an NWP500 answers; the boiler parameter classes
-            # 51-54 only time out on it and are read when named.
-            targets = [(c, None) for c in sorted(NWP500_RESPONDING_CLASSES)]
         for code, length in targets:
             try:
                 pkt = await ble.read(code, length)

@@ -429,8 +429,10 @@ class NavienBleClient:
                 "leave in place; use the cloud to replace it"
             )
         reply = await self.request(packet, ClassCode.TOU_PLAN)
-        if reply.command != Command.WRITE_RESPONSE or reply.data != bytes(
-            [TOU_WRITE_ACCEPTED]
+        if (
+            not reply.crc_ok
+            or reply.command != Command.WRITE_RESPONSE
+            or reply.data != bytes([TOU_WRITE_ACCEPTED])
         ):
             raise TouWriteError(
                 f"the heater refused the TOU write (reply {reply.data.hex()})"

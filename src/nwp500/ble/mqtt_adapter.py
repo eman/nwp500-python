@@ -5,8 +5,8 @@ handlers, for one) can run over Bluetooth for the operations the heater
 supports there: the device-feature request, answered from the ``DID``,
 ``MSCD`` and ``MSWD`` blocks, and the status request, answered from the
 ``RTMD`` stream. Every other MQTT client attribute raises
-:class:`BleUnsupportedError`, since every class the heater answers is
-read-only.
+:class:`BleUnsupportedError`: those two reads are the only operations the
+adapter maps.
 """
 
 from __future__ import annotations
