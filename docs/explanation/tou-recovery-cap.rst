@@ -123,6 +123,14 @@ Test it at the moment the cycle *ended*, not when it began: a recovery
 that starts off-peak and runs into a period is still capped, and testing
 the start catches 17 of 59 against 43 testing the end.
 
+A recovery a reservation entry starts is capped the same way. In a
+device test on 2026-10-04 (local time), an entry at 15:24 raised the
+setpoint from 141.8 to 146.3 degF with the compressor off, and the
+compressor started 34 s later. The window opened at 16:00, while it
+ran. It stopped at 17:48:50 with the lower probe at 142.88 degF,
+3.42 degF short of the setpoint, and the upper probe at 142.16 degF.
+This is one run.
+
 Two plausible explanations were tested and **refuted**:
 
 - *The upper zone satisfied its own cut-out first.* No:

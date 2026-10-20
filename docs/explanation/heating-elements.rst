@@ -327,7 +327,13 @@ and one morning; the counts are given so they can be weighed.
   stopped about 0.9 degC under ``heUpperOffTempSetting``, which follows
   the setpoint. At a 42.0 degC setpoint that was 41.1 degC; historical
   runs at a 60.5 degC setpoint stop around 59. Only the *engagement*
-  point is fixed.
+  point is fixed. Across the record, read on the element's off-edge,
+  Energy Saver's upper element stopped a median **1.62 degF (0.9 degC)
+  short** of the setpoint (21 runs on 15 days, at six setpoints from
+  107.6 to 147.2 degF), and the probe then peaked a median 0.36 degF
+  above the setpoint within 5 minutes. High Demand stopped a median
+  0.18 degF over the setpoint (10 runs on 4 days), and Electric's upper
+  element at the setpoint (5 runs).
 * **Raising the setpoint in** ``ENERGY_SAVER`` **starts the element.**
   With the tank at 41.7 degC, a setpoint raise to 61.0 degC switched the
   heat source to heat pump plus element in the same second (n = 1). It
@@ -408,7 +414,7 @@ is the element alone:
 
 The reference gives 3,755 W at 208 V or 5,000 W at 240 V. The measured
 figure is 4 % above the 240 V rating on this unit, which is one unit at
-one supply voltage: worth knowing when integrating energy, but not a
+one supply voltage. Use it when integrating energy; it is not a
 correction to the specification.
 
 For the record, the upper zone rose at 0.86-0.89 degC/min
@@ -421,6 +427,86 @@ higher leaving out the first 42 s. The lower zone rose at
 element for the first 40-60 seconds, which is most of the difference.
 Those are tank-specific and are offered as an order of magnitude only.
 
+**The probe lags the element.** Over 29 upper-element runs on 21 days
+that ran to their own off point with no draw, a run's length was
+**1.21 min** (90 % CI 0.95-1.60) plus the rise on the upper probe at
+**2.01 degF/min** (1.86-2.29). The element draws full power from its
+on-edge, and the probe's first step up came a median 0.54 min (32 s)
+later (19 runs on 12 days). The heat put in before the probe saw it
+arrives after the element stops: after an Energy Saver run the probe
+kept rising a median 1.98 degF, whatever the run's own rise.
+
+
+Hours and energy by mode
+========================
+
+From the status history, 2025-12-28 to 2026-09-19, with energy from
+``currentInstPower``:
+
+.. list-table::
+   :header-rows: 1
+   :widths: 22 13 13 13 13 13 13
+
+   * - Mode
+     - Hours in it
+     - Compressor on
+     - Element on
+     - Element and compressor
+     - Energy
+     - Energy while an element ran
+   * - ``ENERGY_SAVER``
+     - 615.6 h
+     - 356.5 h
+     - 13.0 h
+     - 12.8 h
+     - 206.0 kWh
+     - 69.4 kWh (34 %)
+   * - ``HIGH_DEMAND``
+     - 20.5 h
+     - 8.4 h
+     - 3.9 h
+     - 3.6 h
+     - 22.9 kWh
+     - 20.8 kWh
+   * - ``ELECTRIC``
+     - 2.6 h
+     - 0
+     - 2.5 h
+     - 0
+     - 12.4 kWh
+     - 12.3 kWh
+   * - ``HEAT_PUMP``
+     - 5,234.3 h
+     - 1,340.2 h
+     - 0
+     - 0
+     - 539.7 kWh
+     - 0
+
+* **Energy Saver is the heat pump almost all the time.** An element ran
+  for 3.6 % of Energy Saver's heating time, and only the upper element:
+  the lower element never ran in this mode. 34 of the 86 compressor
+  cycles in Energy Saver had no element at all. In the other 52 the
+  element came in briefly: 75 runs, median **7 min**, 90th percentile
+  22 min, longest 41 min.
+* **When an element runs, it dominates the energy.** That 3.6 % of the
+  time was **34 %** of Energy Saver's energy. One element alone reads
+  about 5.1 kW, about 5.5 kW with the compressor, and the highest reading
+  was 5.75 kW. The heat pump alone runs at about 0.41 kW and puts
+  2.5-3.1 times its electricity into the tank, depending on the air
+  (:doc:`recovery-speed`); an element puts in about its own.
+* **In** ``HEAT_PUMP`` **no write starts an element.** Of 556 writes
+  made in ``HEAT_PUMP`` from 2026-04-01 to 2026-10-01 (472 setpoint
+  writes and 84 mode writes to it), none was followed by an element run
+  within 10 minutes: the chance a write starts one is below 0.54 %
+  (one-sided 95 %). They include 95 writes with the compressor off,
+  outside a TOU window, that left the upper tank 8 degF or more short,
+  and one that left it 59 degF short, below the 104.9 degF
+  ``heUpperOnTempSetting`` the heater reports in this mode. No element
+  ran in the 4,029 h of ``HEAT_PUMP`` with no write in the 10 minutes
+  before either. All 68 element runs the meter confirmed from April on
+  started in an element mode.
+
 
 Writing the mode while a TOU window is in force
 ===============================================
@@ -430,6 +516,14 @@ window in force, a mode write may not take effect. Measured on the same
 unit, four minutes with no change and nothing logged, twice. The
 command was not discarded either: it took effect one poll after the TOU
 switch was turned off, with nothing else commanded.
+
+The hold is not universal. In the status history from 2025-12-28 to
+2026-09-20, 35 switches into an element mode were made with TOU
+scheduling on, and **2 of them took effect inside the window**, one to
+``ENERGY_SAVER`` and one to ``HIGH_DEMAND``. The element also ran inside
+the window, 3 times. With an element mode set and the tank more than
+5 degF short, the element ran in 4.17 % of minutes with TOU scheduling
+on and 4.90 % with it off.
 
 Whether the device queues the command or accepts it and masks the
 read-back is undetermined. Either way, **confirm a mode write by reading
@@ -446,7 +540,9 @@ Limits
 One unit, one supply voltage, 2026-09-19 and 2026-09-20. **Twenty-two**
 bounded runs in all: thirteen on the elements and the thresholds, nine
 on mode writes and reservation entries under TOU, plus two High Demand
-threshold runs on 2026-09-21. **Not** established:
+threshold runs on 2026-09-21. The hours and energy by mode, the off
+point and the probe's lag come from the unit's recorded history to
+2026-10-02, not from commanded runs. **Not** established:
 
 * **where inside (0.2, 0.4] degC** ``HIGH_DEMAND``'s **boundary falls**,
   and so whether it shares Electric's. Its top and Electric's are one

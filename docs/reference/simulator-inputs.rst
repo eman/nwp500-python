@@ -739,6 +739,187 @@ what a simulation needs of it:
    * - ``loss.ua_btu_hr_f``
      - The jacket loss falls back to ``loss.ua_baseline_btu_hr_f``.
 
+Where the defaults come from
+----------------------------
+
+Every value in ``site_example_params(2)``, with what it was measured or
+fitted on. "Retrain" values come from the weekly refit of one NWP500-65's
+record on 2026-10-11, over the record to that date (from 2025-12-28).
+They move a little at each retrain as the record grows; the range is
+the one seen over the retrains from 2026-08-08 to 2026-10-18.
+
+**Fitted at each retrain**
+
+.. list-table::
+   :header-rows: 1
+   :widths: 26 14 34 26
+
+   * - Field
+     - Value
+     - Fitted on, and its error
+     - Range over retrains
+   * - ``loss.ua_btu_hr_f``, ``loss.ua_exponent``
+     - 4.605, 0.186
+     - 393 quiet windows, tank 11.2-90.7 degF above the air; each window
+       kept only if it tracks the probes within 2 degF. The August
+       evaluation of the same rule on 301 windows gave 4.47 and 0.227
+       (:doc:`/explanation/standby-loss`).
+     - 4.47-4.61, 0.184-0.225; both move steadily as windows accrue
+   * - ``tank.stratification_gap_tau_h``
+     - 60.06 h
+     - 155 quiet windows that opened with a gap of 2 degF or more. A
+       separate fit on 146 windows gave 59 h (95 % CI 47-94 h).
+     - 60.0-60.4 h
+   * - ``compressor.compressor_constant``, ``compressor.evap_approach_f``
+     - 0.0514, 18.55 degF
+     - 162 recoveries, in time order; mean absolute error 29.3 min on
+       them and 38.6 min on the 40 that followed. The approach is a
+       fitted term, not a measured temperature: two pairs, near
+       (0.048, 12.9 degF) and (0.051, 18.6 degF), fit about equally
+       well, and retrains have landed on each.
+     - 0.047-0.052, 12.2-18.8 degF
+   * - ``power.power_scale``
+     - 0.530
+     - The heater's own power readings over 323 compressor cycles.
+     - 0.528-0.551
+   * - ``power.cop_scale``, ``power.startup_wh``, ``power.cop_lift_coeff``
+     - 2.184, 160.3 Wh, 0.005
+     - 257 cycles against an energy meter on the heater's circuit. The
+       lift term corrects the model's efficiency for the gap between the
+       tank and the air, which the refrigerant model alone under-states.
+       No error is recorded for these coefficients. An evaluation of the
+       same fit on 2026-09-18, on the record to then, gave a median error
+       of 4.8 % per recovery (Accuracy in :doc:`/explanation/simulator`).
+     - 2.08-2.22, 158-171 Wh, 0.004-0.0065
+   * - ``draw.ungated_observability``
+     - 0.398
+     - 156 windows around circulation runs, at a loop of 6.27 gal fitted
+       on 139 runs. September's measurement on 136 windows was 0.44
+       (90 % CI 0.38-0.50, :doc:`/explanation/standby-loss`).
+     - 0.395-0.44, falling as windows accrue
+   * - ``SITE_CIRCULATION``
+     - 6.2746 gal, 1.397 gal/min
+     - The loop's volume from 139 runs (mean absolute error 865 BTU a
+       run); the flow is the median over the 14 days before.
+     - 6.22-6.27 gal
+
+**Measured on the heater**
+
+.. list-table::
+   :header-rows: 1
+   :widths: 30 18 52
+
+   * - Field
+     - Value
+     - Evidence
+   * - ``tank.volume_gal``, ``tank.lower_zone_share``
+     - 63.2 gal, 0.5
+     - The heater's own energy fields put the tank at 156.6 Wh per degF
+       (:doc:`/explanation/tank-energy`). Recoveries heat 0.44-0.48 of
+       the tank while it is stratified and 0.96 once mixed, over 269
+       recoveries (:doc:`/explanation/recovery-speed`).
+   * - ``element.element_w``
+     - 5,148 W
+     - Element-only minutes in the record (90 % CI 5,104-5,176 W,
+       168 min). A later refit over 95 element runs gave 5,143 W. Two
+       commanded runs on one evening read 5,219 and 5,242 W.
+   * - ``element.upper_f_per_min``, ``element.upper_dead_time_min``
+     - 2.01 degF/min, 1.21 min
+     - 29 upper-element runs on 21 days (:doc:`/explanation/heating-elements`).
+   * - ``element.lower_f_per_min``
+     - 1.38 degF/min
+     - 9 lower-element runs (90 % CI 1.21-1.62). One commanded run read
+       1.19-1.55, depending on how the rise is measured.
+   * - ``element`` start and stop thresholds
+     - 0.54, 0.72, 1.44, 1.8, 1.62 degF; 104.9 degF
+     - The entry-threshold sweeps and the off point
+       (:doc:`/explanation/heating-elements`).
+   * - ``element.upper_reengages_below_setpoint_f``
+     - 4.1 degF
+     - 12 High Demand restarts mid-stint (90 % CI 3.8-4.5 degF).
+   * - ``controller.write_start_lag_s``, ``restart_lockout_s``,
+       ``window_write_starts_f``
+     - 30 s, 330 s, 4.0 degF
+     - Setpoint writes and their starts, and two restarts at 5 min 28 s
+       and 5 min 31 s (:doc:`/explanation/what-starts-a-recovery`).
+   * - ``controller.mode_write_starts_f``
+     - 2.0 degF
+     - A mode write into a compressor mode with the upper tank this far
+       short started it: 7 of 7 out of ``ENERGY_SAVER``.
+   * - ``controller.mode_write_lower_starts_f``
+     - 3.6 degF
+     - A mode write into a compressor mode with the lower tank this far
+       short started it: 19 of 19 out of an element mode; the most short
+       with no start was 2.70 degF.
+   * - ``controller.energy_saver_write_seen_f``
+     - 1.44 degF
+     - The least shortfall at which a write into ``ENERGY_SAVER`` was
+       seen to start the compressor (7 of 7, from 1.44 to 13.9 degF).
+   * - ``controller.tou_cap_f``
+     - 3.6 degF
+     - The device's 2 degC reduced target; capped recoveries stopped
+       3.42 degF short (:doc:`/explanation/tou-recovery-cap`).
+
+**Fitted at one installation** (``unfitted`` in ``default_params``)
+
+.. list-table::
+   :header-rows: 1
+   :widths: 30 18 52
+
+   * - Field
+     - Value
+     - Evidence
+   * - ``draw.observability``, ``draw.gap_open_f_per_gal``
+     - 0.633, 1.235 degF/gal
+     - Draws with the compressor off, metered, refitted on 2026-09-26
+       with the inlet probe (earlier fits 0.454 and 0.505, 1.043 and
+       1.167). Held-out accuracy in :doc:`/explanation/draws`.
+   * - ``draw.inlet_temp_f``, the valve line
+     - 72.4 degF, (53.56, 0.485)
+     - Long-draw plateaus on the cold supply, and five plateaus at the
+       valve outlet (:doc:`/explanation/draws`).
+   * - ``draw.lower_gate_f``, ``draw.pool_f_per_hour``
+     - 5.0 degF, 0.015 degF/h
+     - 146 circulation runs with no draw: the gap above which a run's
+       heat lands on the lower probe (interval 3.5-6.0 degF), and the
+       slow cooling of the water below it
+       (:doc:`/explanation/standby-loss`).
+   * - ``book.hp_btu_per_h``, ``book.hp_btu_per_h_per_f``, ``book.ua_btu_per_h_f``
+     - 4,252, 76.1, 2.88
+     - The book's heat-pump rate and standby, refitted on 2026-09-26 on
+       pairs of moments when the tank read full; against those anchors
+       its mean absolute error was 1,987 BTU, against 3,761 BTU with
+       textbook constants.
+   * - ``book.empty_btu``, ``book.zone_empty_btu``
+     - 16,169, 12,636 BTU
+     - The heat left at five recorded drawdowns to the line
+       (14,237-19,616 BTU), counted all ways and leaving out heat held
+       in a draw's cold water.
+   * - ``book.lower_probe_gal``, ``book.front_width_gal``,
+       ``book.front_settle_min``
+     - 25 gal, 32 gal, 300 min
+     - 316 draws over 119 days. A refit on the full record to
+       2026-10-03 gave 24, 32 and 360-420 min, inside the original
+       intervals.
+   * - ``book.zone_mix_f_per_gal``, ``book.zone_mix_gal``
+     - 1.25 degF/gal, 14 gal
+     - 112 draws. A refit on the full record gave 0.65 degF/gal over
+       16 gal, on fewer draws and with three times its fit error held
+       out; the shipped pair is unchanged.
+   * - ``book.error_btu``, ``book.aged_error_btu``
+     - 3,000, 4,100 BTU
+     - The book's drift from the anchors, fresh and after 18 h. A refit
+       on the full record gave 3,000 and 3,900.
+   * - ``readiness``
+     - the Readiness section above
+     - The bath tests, the outlet lag and the readiness evidence
+       (:doc:`/explanation/draws`).
+
+**Engineering values**, not measured on the heater: the condenser
+approach (10 degF), clearance ratio (0.05), polytropic exponent (1.17),
+the fan's airflow (229 CFM, the specification), the jacket loss
+fallback (5.0 BTU/hr per degF) and the lift reference (62 degF).
+
 ``params_to_document`` and ``params_from_document`` in
 ``nwp500.sim.params`` write and read parameters as a JSON document
 (schema ``heater-params/1``). ``sim.codec`` writes a scenario with its

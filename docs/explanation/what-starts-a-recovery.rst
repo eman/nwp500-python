@@ -35,8 +35,9 @@ Summary
    * - A TOU window
      - ``hp_upper_on_temp_setting`` is raised to the setpoint. An upper
        tank more than **14.4 degF** short starts a cycle, at the opening
-       or later in the window, and the lower trigger waits for the window
-       to close.
+       or later in the window. The lower trigger waits for the window to
+       close: it started nothing in the window, and every close with the
+       lower tank below its setting started the compressor (9 of 9).
    * - A setpoint write
      - Outside a TOU window, a write that leaves the upper tank below the
        new setpoint started the compressor in **120 of 122** writes held
@@ -70,6 +71,12 @@ with the setpoint.** In ``HEAT_PUMP``, though, it waits while the upper
 tank is at or above the setpoint, so a setpoint lowered to the upper tank
 holds it off (below).
 
+A recirculation run can reach this trigger without a tap opening. Where
+the loop returns into the cold inlet, a run into a stratified tank drops
+the lower probe about 7 degF within ten minutes while the upper probe
+does not move (:doc:`standby-loss`). A lower probe a few degrees above
+104.9 degF can cross it that way.
+
 Inside a TOU window
 -------------------
 
@@ -92,7 +99,14 @@ From every heat-pump start since 2026-04-08:
   reached 14.22 degF short without a start, and one start came 33 s after
   it read 14.76 degF short. A 13.7 degF rule tested at the opening alone
   missed that mid-window start.
-* **The lower-tank trigger waits for the window to close** (9 of 9).
+* **The lower-tank trigger waits for the window to close.** Of 19
+  in-window crossings of ``hp_lower_on_temp_setting`` with the compressor
+  off, from 2026-04-08 to 2026-10-01, 13 started nothing before the
+  close. The other six started early for other reasons: the upper trigger
+  twice, a mode write ending ``VACATION`` twice, and a device test twice.
+  The lower tank itself never started the heater inside the window. All
+  9 closes with the lower tank still below its setting started the
+  compressor at once.
 
 **"Upper tank below** ``hp_upper_on_temp_setting`` **" is a condition,
 not a predictor.** In-window that setting equals the setpoint, so the

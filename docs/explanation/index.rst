@@ -9,6 +9,9 @@ Understanding-oriented deep dives into the library's design and advanced feature
 
    architecture
    heating-elements
+   recovery-speed
+   standby-loss
+   draws
    tank-energy
    simulator
    tou-recovery-cap

@@ -586,11 +586,21 @@ Important Notes
 * A list write can be lost with no error: the device keeps its previous
   list (2 of about 30 writes on the unit tested). Read the list back after
   writing; ``update_reservations_confirmed()`` returns ``None`` when the
-  device does not echo the new list.
+  device does not echo the new list. A list that did land read back
+  within 3-6 s in each of 9 writes.
 * A list write starts no heating by itself: none of 8 writes started a
   recovery within 3 minutes, with the tank 2.2 degF below the setpoint.
 * Reservations execute at the exact minute specified; the device
   checks every minute.
+* In a device test (2026-09-24) six entries fired at their minute, each
+  change seen within 5 s, and after a 6-minute power cut the next two
+  fired within 3 s of their minute.
+* An entry that falls during a power cut is skipped, not run late. The
+  list itself survives the cut.
+* A setpoint write, by an entry or directly, does not always land by
+  the next status poll. Most appeared within one poll (about 10 s); one
+  had not landed 16 s later, and a retry given 60 s did. Read the
+  setpoint back before acting on it.
 * Reservations execute while the device is powered off: in two runs of
   a device test (2026-09-24) an entry fired with the heater powered off
   and turned it on, in the entry's mode.
@@ -815,6 +825,13 @@ failed.** See also :doc:`../explanation/heating-elements`.
   can therefore take effect hours later. Here the tank was 18.7 degF above
   its setpoint when it did, so nothing heated; with the tank short, it
   could start an element.
+* **A held entry mode lands at the window's end, and a recovery can
+  follow.** On 2026-09-24 an entry at 16:30, inside the peak, set Energy
+  Saver at the current setpoint. The heater stayed in Heat Pump through
+  20:57. At 21:00:05 it switched to Energy Saver and started a recovery:
+  the upper element ran for about 3 minutes, then the compressor. The
+  window's end alone may have started it; this one run cannot tell them
+  apart.
 * **Writing** ``HEAT_PUMP`` **over a held mode withdraws it.** On
   2026-09-21, inside the peak, Energy Saver was held for 2 minutes,
   ``HEAT_PUMP`` was written over it, and TOU was then switched off for

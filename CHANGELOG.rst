@@ -595,6 +595,26 @@ Fixed
 
 Documentation
 -------------
+- **What the device tests and the record measured.** Three new
+  explanation pages: :doc:`/explanation/recovery-speed` (heat output,
+  minutes per degF, compressor power and efficiency, start-up energy,
+  the air's effect, how much of the tank heats),
+  :doc:`/explanation/standby-loss` (the jacket loss, a circulation run's
+  heat and where it shows) and :doc:`/explanation/draws` (the delivered
+  temperature, the probes through a draw, how much hot water is left,
+  reading a cold-supply probe). The element pages gain hours and energy
+  by mode, the off point and the probe's lag; scheduling gains write and
+  entry timing; the simulator's Accuracy section gains time to ready and
+  the lower zone after a draw.
+- **Where the simulator's defaults come from.** A table in
+  :doc:`/reference/simulator-inputs` gives each default parameter's
+  evidence: what it was measured or fitted on, its error, and how far
+  the per-retrain values move between retrains.
+- **Accuracy figures corrected.** ``simulator.rst`` gave 18 % and the
+  13 and 45 min deficit-band errors as physics alone; they scored the
+  physics with a learned correction, and are removed. The "cold starts
+  about 55 min short" figure is replaced by the recorded errors by time
+  left. The lower trigger's in-window wait is given with its full count.
 - ``unknown-values``, ``tank-energy`` and the MQTT protocol reference now
   cite the current NaviLink app release they were checked against.
 - ``docs/openapi.yaml`` and ``rest_api.rst`` describe every endpoint above
