@@ -170,6 +170,10 @@ module = "aiohttp.*"
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
+module = "bleak.*"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
 module = "click.*"
 ignore_missing_imports = true
 

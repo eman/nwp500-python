@@ -20,3 +20,4 @@ Practical step-by-step recipes for specific tasks.
    diagnose-mqtt
    maintenance
    home-assistant
+   bluetooth

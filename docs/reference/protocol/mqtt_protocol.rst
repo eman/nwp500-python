@@ -194,7 +194,9 @@ Request Object
 * ``deviceType`` (int): Device type (52 for NWP500)
 * ``macAddress`` (str): Device MAC address
 * ``additionalValue`` (str): Additional device identifier
-* ``mode`` (str): Control commands only: the command's mode string
+* ``mode`` (str): Control commands only: the command's mode string.
+  The device acts on the numeric ``command`` code; the mode string is
+  sent to match the app but does not select the action.
 * ``param`` (array): Control commands only: integer parameters
 * ``paramStr`` (str): Control commands only: always ``""``
 * ``year``, ``month``, ``day``: Energy queries only (see below)
@@ -211,6 +213,18 @@ The codes mirror the app's ``DeviceControlMGPP`` enum. Codes marked
 *declared only* exist in that enum but the app has no code path that
 sends them; their payloads are unknown and the library has no method for
 them.
+
+.. note::
+
+   **Installer protection settings are not remotely settable.** Minimum
+   operation temperature and freeze-protection temperature are readable
+   (``heatMinOpTemperature``, ``freezeProtectionTemperature``) but no
+   command code in the enumerated range sets them. This was checked
+   exhaustively: the full code range was swept with in-range payloads and
+   none moved these fields, and ``FREZ_TEMP`` (33554451, *declared only*)
+   had no effect. They are changed from the front-panel Installer Menu, or
+   by Navien's service tool through its authenticated server. The same is
+   true over Bluetooth, where these blocks are read-only.
 
 Queries
 -------

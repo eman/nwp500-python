@@ -105,6 +105,12 @@ async def _with_device(
     Returns the exit code: 0 when ``command`` ran, 1 when it failed or
     no device was reached. The API client is in ``ctx.obj["api"]``.
     """
+    if ctx.obj.get("backend") == "ble":
+        # Imported here so the MQTT path never loads nwp500.ble.
+        from .ble_backend import run_with_ble
+
+        return await run_with_ble(ctx, command)
+
     email = ctx.obj.get("email")
     password = ctx.obj.get("password")
     unit_system = ctx.obj.get("unit_system")
@@ -221,6 +227,20 @@ def async_command(f: Any) -> Any:
     type=click.Choice(["metric", "us_customary"], case_sensitive=False),
     help="Unit system: metric (C/LPM/L) or us_customary (F/GPM/gal)",
 )
+@click.option(
+    "--backend",
+    type=click.Choice(["mqtt", "ble"], case_sensitive=False),
+    default=None,
+    help="How to reach the heater. Default (or mqtt): through Navien's "
+    "cloud, over MQTT and REST. ble: directly over Bluetooth LE, without "
+    "signing in (needs the ble extra and the heater in pairing mode: with it "
+    "off, hold Back + Power for 5 s; supports info, serial and status).",
+)
+@click.option(
+    "--ble-address",
+    envvar="NAVIEN_BLE_ADDRESS",
+    help="Bluetooth address of the heater (default: scan for it)",
+)
 @click.option("-v", "--verbose", count=True, help="Increase verbosity")
 @click.version_option(version=__version__)
 @click.pass_context
@@ -229,6 +249,8 @@ def cli(
     email: str | None,
     password: str | None,
     unit_system: str | None,
+    backend: str | None,
+    ble_address: str | None,
     verbose: int,
 ) -> None:
     """Navien NWP500 Control CLI."""
@@ -236,6 +258,8 @@ def cli(
     ctx.obj["email"] = email
     ctx.obj["password"] = password
     ctx.obj["unit_system"] = unit_system
+    ctx.obj["backend"] = backend.lower() if backend else None
+    ctx.obj["ble_address"] = ble_address
 
     log_level = logging.WARNING
     if verbose == 1:
@@ -259,6 +283,12 @@ def cli(
 @async_command
 async def info(mqtt: NavienMqttClient, device: Any, raw: bool) -> None:
     """Show device information (firmware, capabilities)."""
+    if click.get_current_context().obj.get("backend") == "ble":
+        # Bluetooth carries only some of these fields; show just those.
+        from .ble_backend import print_info
+
+        await print_info(mqtt, raw)  # type: ignore[arg-type]
+        return
     await handlers.handle_device_info_request(mqtt, device, raw)
 
 
@@ -286,6 +316,12 @@ async def device_info(
 @async_command
 async def status(mqtt: NavienMqttClient, device: Any, raw: bool) -> None:
     """Show current device status (temps, mode, etc)."""
+    if click.get_current_context().obj.get("backend") == "ble":
+        # Bluetooth carries only some of these fields; show just those.
+        from .ble_backend import print_status
+
+        await print_status(mqtt, raw)  # type: ignore[arg-type]
+        return
     await handlers.handle_status_request(mqtt, device, raw)
 
 

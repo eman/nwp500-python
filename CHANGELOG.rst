@@ -7,6 +7,61 @@ Unreleased
 
 Added
 -----
+- **Bluetooth LE access to the controller** (``nwp500.ble``, optional
+  ``ble`` extra). The NWP500 exposes a GATT service that carries the
+  controller's native class-code protocol once the heater is put in pairing
+  mode (with the heater off, hold Back and Power for five seconds; it
+  advertises as ``HPWH1…``). The scan also lists a heater in Wi-Fi setup
+  mode (``HPWH4610``), which answers nothing, and the CLIs pick an
+  ``HPWH1`` heater over it.
+  The package frames and parses those packets (header, class code, address,
+  CRC-16/MODBUS), scans for the heater, and reads data classes with a
+  matched request/reply client; ``python -m nwp500.ble scan`` and
+  ``python -m nwp500.ble read`` dump the blocks. Checked on a unit: it
+  answers a DIP-switch block, error history, four diagnostics counters, the stored
+  time-of-use plan, device info, the controller serial numbers and a
+  software-data block; the boiler parameter classes 51-54 do not answer, so
+  installer parameters are not reachable yet. ``write_block()`` exists for
+  the eventual parameter write and is marked experimental. ``read``
+  dumps the classes the heater answers by default and exits 1 when none
+  answered; the readers that decode a block raise ``CrcMismatchError``
+  on a reply that failed its checksum.
+  ``read_tou_records()`` decodes the stored time-of-use plan into
+  ``TOUPeriod``, the cloud's model, reading the controller's 40-slot table
+  whole (a ``TOU_PLAN`` read's payload byte is the last slot, not a
+  length; ``build_tou_read()``). ``write_tou_records()`` stores a plan of
+  up to twelve intervals (``build_tou_write()``: the NaviLink app's clock
+  header, then the records in the read layout) and reads it back. It
+  refuses to write over a longer stored plan, whose extra intervals no
+  Bluetooth write can clear, and raises ``TouWriteError`` when the
+  heater refuses or stores something else. ``TOU_PLAN`` is the only
+  class written so far (``NWP500_WRITABLE_CLASSES``). A read that gets no reply
+  is sent once more, since the first request on a new connection
+  sometimes goes unanswered. ``DeviceInfoBlock`` (``DID``), ``ControllerSerials``
+  (``MSCD``) and ``SoftwareInfoBlock`` (``MSWD``) use the cloud models'
+  field names for the fields matched against them.
+  ``read_sub_status()`` decodes the ``SSD`` block into two DIP-switch
+  words (``SubStatus``), using the layout Navien's boiler service toolkit
+  reads; it is unconfirmed on the NWP500.
+  ``read_status()`` returns live status: the class-50 session command 200
+  makes the heater push the ``RTMD`` block about every 300 ms until the
+  connection closes, and ``RealTimeStatus`` decodes the fields checked
+  against the MQTT status report, in standby and while heating (operation
+  mode, state number, DHW temperature and setpoint, the six thermistors,
+  superheat and EEV step), under the ``DeviceStatus`` names and
+  conversions. A read ends the stream, and the next ``read_status()``
+  starts it again. The
+  heater's display unit is in no Bluetooth block, so Bluetooth
+  temperatures follow the unit-system preference.
+- ``nwp-cli --backend ble`` (with ``--ble-address`` or a scan) runs
+  ``serial``, ``info`` and ``status`` over Bluetooth without signing in,
+  and refuses other commands. Without ``--backend``, commands use the cloud as before.
+  The handlers run unchanged against ``nwp500.ble.BleMqttAdapter``, which
+  offers the MQTT client methods the heater serves over Bluetooth and
+  raises ``BleUnsupportedError`` for the rest. Bluetooth temperatures use
+  the cloud models' conversion and unit-system preference;
+  ``DeviceInfoBlock.min_operation_temperature()`` follows the preference
+  when ``celsius`` is not given (Fahrenheit without one, as before).
 - **New REST endpoints.** ``NavienAPIClient`` gains
   ``get_push_settings()`` / ``set_push_settings()``
   (``/user/get-push-settings``, ``/user/set-push-settings``),
