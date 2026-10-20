@@ -249,10 +249,10 @@ def parse_history(doc: Any) -> dict[str, list[Reading]]:
     if not isinstance(doc, list):
         raise HomeAssistantError("not a history")
     out: dict[str, list[Reading]] = {}
-    for series in cast(list[Any], doc):
+    for series in doc:
         if not isinstance(series, list) or not series:
             continue
-        rows = cast(list[Any], series)
+        rows = series
         first = rows[0]
         if not isinstance(first, Mapping) or "entity_id" not in first:
             raise HomeAssistantError("a history series names no entity")
@@ -278,13 +278,11 @@ def parse_outages(doc: Any, end: datetime) -> dict[str, list[Span]]:
     if not isinstance(doc, list):
         raise HomeAssistantError("not a history")
     out: dict[str, list[Span]] = {}
-    for series in cast(list[Any], doc):
+    for series in doc:
         if not isinstance(series, list) or not series:
             continue
         rows = [
-            cast(Mapping[str, Any], r)
-            for r in cast(list[Any], series)
-            if isinstance(r, Mapping)
+            cast(Mapping[str, Any], r) for r in series if isinstance(r, Mapping)
         ]
         if not rows or "entity_id" not in rows[0]:
             continue
@@ -358,13 +356,11 @@ def parse_units(doc: Any) -> dict[str, list[str | None]]:
     if not isinstance(doc, list):
         raise HomeAssistantError("not a history")
     out: dict[str, list[str | None]] = {}
-    for series in cast(list[Any], doc):
+    for series in doc:
         if not isinstance(series, list) or not series:
             continue
         rows = [
-            cast(Mapping[str, Any], r)
-            for r in cast(list[Any], series)
-            if isinstance(r, Mapping)
+            cast(Mapping[str, Any], r) for r in series if isinstance(r, Mapping)
         ]
         if not rows or "entity_id" not in rows[0]:
             continue
@@ -407,7 +403,7 @@ def parse_forecast(doc: Any, entity: str) -> tuple[list[Reading], str | None]:
     if not isinstance(hours, list):
         raise HomeAssistantError(f"no forecast for {entity}")
     out: list[Reading] = []
-    for hour in cast(list[Any], hours):
+    for hour in hours:
         if not isinstance(hour, Mapping):
             continue
         h = cast(Mapping[str, Any], hour)
@@ -739,7 +735,9 @@ class HomeAssistantEnvironment:
             return default
 
     async def _fresh_state(self, what: str, entity: str) -> State | None:
-        state = await self._guard(what, lambda: self.client.state(entity), None)
+        state: State | None = await self._guard(
+            what, lambda: self.client.state(entity), None
+        )
         if state is None:
             return None
         if not fresh(state, self.now):
@@ -860,7 +858,9 @@ class HomeAssistantEnvironment:
             # A draw while any of them was unavailable may have
             # overlapped a run or ended unseen: the plateau skips it, as
             # it skips one that overlaps a run.
-            runs = busy(runs, unread, *(got.outages.get(n, []) for n in names))
+            runs = busy(
+                runs or [], unread, *(got.outages.get(n, []) for n in names)
+            )
             # The adapter takes the preferred unit; these are °F and gal.
             cold = sa.cold_supply(
                 [(t, sa.temperature(v)) for t, v in probe],
@@ -878,7 +878,7 @@ class HomeAssistantEnvironment:
             self.notes.append(f"inlet: the plateau of {cold.draws} long draws")
             return cold.t_cold_f
 
-        return await self._guard("inlet", read, None)
+        return cast("float | None", await self._guard("inlet", read, None))
 
     async def _pump_runs(
         self, pump_id: str, got: History, since: datetime

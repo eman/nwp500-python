@@ -185,6 +185,14 @@ ignore_errors = true
 module = "pydantic.*"
 ignore_missing_imports = true
 
+[[tool.mypy.overrides]]
+module = "pandas.*"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "scipy.*"
+ignore_missing_imports = true
+
 [tool.pyright]
 # Pyright configuration for strict type checking
 pythonVersion = "3.14"
