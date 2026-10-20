@@ -122,10 +122,12 @@ expected length or sub-address, so its installer parameters live behind
 a class the heat-pump-specific service app knows and this library does
 not yet. :data:`nwp500.ble.NWP500_RESPONDING_CLASSES` lists the
 responding set. Writing a block's own bytes back is answered as a read by
-every one of them, but ``TOU_PLAN`` takes a write in its own format (see
-`Write the time-of-use plan`_), so it is the one writable class
-(:data:`nwp500.ble.NWP500_WRITABLE_CLASSES`). The boiler parameter classes
-51-54 are not implemented on this controller at all.
+every one of them, ``TOU_PLAN`` included, yet ``TOU_PLAN`` stores a write in
+its own format (see `Write the time-of-use plan`_). So it is the only class
+written so far (:data:`nwp500.ble.NWP500_WRITABLE_CLASSES`), not the only
+writable one: the others may take a format not yet known. The session
+commands are writes too, to class 50, which answers no reads. The boiler
+parameter classes 51-54 answered neither reads nor the writes tried.
 
 Min Operation Temp is readable but not writable here: it is DID byte 17
 (:meth:`~nwp500.ble.DeviceInfoBlock.min_operation_temperature`), confirmed equal

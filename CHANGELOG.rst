@@ -34,8 +34,8 @@ Added
   header, then the records in the read layout) and reads it back. It
   refuses to write over a longer stored plan, whose extra intervals no
   Bluetooth write can clear, and raises ``TouWriteError`` when the
-  heater refuses or stores something else. ``TOU_PLAN`` is the one
-  writable class (``NWP500_WRITABLE_CLASSES``). A read that gets no reply
+  heater refuses or stores something else. ``TOU_PLAN`` is the only
+  class written so far (``NWP500_WRITABLE_CLASSES``). A read that gets no reply
   is sent once more, since the first request on a new connection
   sometimes goes unanswered. ``DeviceInfoBlock`` (``DID``), ``ControllerSerials``
   (``MSCD``) and ``SoftwareInfoBlock`` (``MSWD``) use the cloud models'

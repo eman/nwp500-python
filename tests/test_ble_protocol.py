@@ -585,7 +585,7 @@ def test_build_tou_write_limits_the_plan_to_twelve_intervals():
             build_tou_write(periods[:count])
 
 
-def test_tou_plan_is_the_writable_class():
+def test_tou_plan_is_the_only_class_written_so_far():
     assert NWP500_WRITABLE_CLASSES == {ClassCode.TOU_PLAN}
 
 
