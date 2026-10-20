@@ -126,7 +126,8 @@ class TestControlFailModel:
         parsed = ControlFailResponse.model_validate(_ctrl_fail_message(2))
 
         assert parsed.fail_code is ControlFailCode.DHW_CONTROL_INTERVAL_EXCEEDED
-        assert parsed.fail_code == 2
+        # IntEnum compares equal to its int value at runtime
+        assert parsed.fail_code == 2  # type: ignore[comparison-overlap]
         assert parsed.reason == "DHW control interval exceeded"
         assert parsed.mac_address == MAC
 
@@ -223,7 +224,7 @@ class TestTypedSubscription:
 
     @pytest.mark.asyncio
     async def test_unparseable_message_is_logged_not_raised(
-        self, caplog
+        self, caplog: pytest.LogCaptureFixture
     ) -> None:
         manager = _manager()
         received: list[ControlFailResponse] = []
@@ -330,7 +331,7 @@ class TestControlFailedEvent:
 
     @pytest.mark.asyncio
     async def test_unparseable_failure_logs_and_skips_event(
-        self, caplog
+        self, caplog: pytest.LogCaptureFixture
     ) -> None:
         import asyncio
 
@@ -350,7 +351,9 @@ class TestControlFailedEvent:
         )
 
     @pytest.mark.asyncio
-    async def test_failure_is_logged_with_reason(self, caplog) -> None:
+    async def test_failure_is_logged_with_reason(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
         import asyncio
 
         manager, _events = self._emitting_manager()

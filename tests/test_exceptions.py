@@ -313,7 +313,7 @@ class TestExceptionUsagePatterns:
     def test_multiple_exception_handling(self) -> None:
         """Test handling multiple exception types."""
 
-        def operation_that_may_fail(fail_type) -> None:
+        def operation_that_may_fail(fail_type: str) -> None:
             if fail_type == "connection":
                 raise MqttConnectionError("Connection failed")
             elif fail_type == "credentials":

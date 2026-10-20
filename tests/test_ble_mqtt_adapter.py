@@ -4,10 +4,13 @@ from __future__ import annotations
 
 import asyncio
 import sys
+from collections.abc import Callable, Iterator
+from typing import TYPE_CHECKING, cast
 
 import pytest
 
 from nwp500.ble import (
+    BleDeviceFeature,
     BleMqttAdapter,
     BleUnsupportedError,
     ClassCode,
@@ -23,6 +26,9 @@ from nwp500.ble import (
 )
 from nwp500.enums import CurrentOperationMode
 from nwp500.exceptions import Nwp500Error
+
+if TYPE_CHECKING:
+    from click.testing import Result
 
 # Read from an NWP500 on 2026-10-16. Its MQTT device-info report on
 # 2026-10-19 had controllerSerialNumber 56496061BT22230408,
@@ -85,7 +91,7 @@ class FakeTransport:
         self.streaming = False
         self.written: list[bytes] = []
         self.connected = False
-        self._cb = None
+        self._cb: Callable[[bytes], None] | None = None
 
     def push(self, block: bytes) -> None:
         """Push one status block, as the heater does while streaming."""
@@ -99,7 +105,7 @@ class FakeTransport:
     async def disconnect(self) -> None:
         self.connected = False
 
-    async def start_notify(self, callback) -> None:
+    async def start_notify(self, callback: Callable[[bytes], None]) -> None:
         self._cb = callback
 
     async def write(self, data: bytes) -> None:
@@ -116,7 +122,8 @@ class FakeTransport:
                 req.class_code,
                 self.replies[req.class_code],
             )
-            asyncio.get_running_loop().call_soon(self._cb, reply)
+            cb = cast(Callable[[bytes], None], self._cb)
+            asyncio.get_running_loop().call_soon(cb, reply)
 
 
 def _heater() -> FakeTransport:
@@ -145,13 +152,15 @@ def test_feature_carries_only_the_fields_checked_against_mqtt() -> None:
 @pytest.mark.asyncio
 async def test_adapter_answers_a_device_feature_request() -> None:
     transport = _heater()
-    got = []
+    got: list[BleDeviceFeature] = []
     async with BleMqttAdapter(NavienBleClient(transport=transport)) as mqtt:
         assert transport.connected
         await mqtt.subscribe_device_feature(None, got.append)
         assert await mqtt.request_device_info(None) == 0
     assert not transport.connected
-    assert [f.controller_serial_number for f in got] == ["56496061BT22230408"]
+    assert [  # type: ignore[unreachable]  # __aexit__ disconnects
+        f.controller_serial_number for f in got
+    ] == ["56496061BT22230408"]
     assert mqtt.device_info is not None and mqtt.device_info.raw == DID
     asked = [parse_packet(w).class_code for w in transport.written]
     assert asked == [ClassCode.DID, ClassCode.MSCD, ClassCode.MSWD]
@@ -192,7 +201,9 @@ def test_private_attributes_are_plain_attribute_errors() -> None:
 
 
 @pytest.fixture
-def cli_with_fake_heater(monkeypatch):
+def cli_with_fake_heater(
+    monkeypatch: pytest.MonkeyPatch,
+) -> Callable[..., Result]:
     pytest.importorskip("click")
     from nwp500.cli import ble_backend
 
@@ -206,7 +217,7 @@ def cli_with_fake_heater(monkeypatch):
 
     from nwp500.cli.__main__ import cli
 
-    def invoke(*args: str, options: tuple[str, ...] = ()):
+    def invoke(*args: str, options: tuple[str, ...] = ()) -> Result:
         return CliRunner().invoke(
             cli,
             [*options, "--backend", "ble", "--ble-address", "AA:BB", *args],
@@ -216,14 +227,16 @@ def cli_with_fake_heater(monkeypatch):
     return invoke
 
 
-def test_cli_serial_over_bluetooth(cli_with_fake_heater) -> None:
+def test_cli_serial_over_bluetooth(
+    cli_with_fake_heater: Callable[..., Result],
+) -> None:
     result = cli_with_fake_heater("serial")
     assert result.exit_code == 0, result.output
     assert "56496061BT22230408" in result.output
 
 
 def test_cli_info_over_bluetooth_shows_only_block_fields(
-    cli_with_fake_heater,
+    cli_with_fake_heater: Callable[..., Result],
 ) -> None:
     result = cli_with_fake_heater("info")
     assert result.exit_code == 0, result.output
@@ -236,7 +249,9 @@ def test_cli_info_over_bluetooth_shows_only_block_fields(
     assert "firmware" not in out.lower() and "supported" not in out.lower()
 
 
-def test_cli_info_raw_over_bluetooth(cli_with_fake_heater) -> None:
+def test_cli_info_raw_over_bluetooth(
+    cli_with_fake_heater: Callable[..., Result],
+) -> None:
     result = cli_with_fake_heater("info", "--raw")
     assert result.exit_code == 0, result.output
     for block in (DID, MSCD, MSWD):
@@ -247,15 +262,20 @@ def test_cli_info_raw_over_bluetooth(cli_with_fake_heater) -> None:
     "args", [["power", "on"], ["temp", "120"], ["reservations", "get"]]
 )
 def test_cli_refuses_other_commands_before_connecting(
-    cli_with_fake_heater, args
+    cli_with_fake_heater: Callable[..., Result], args: list[str]
 ) -> None:
     result = cli_with_fake_heater(*args)
     assert result.exit_code == 2
     assert "not available over Bluetooth" in result.output
-    assert cli_with_fake_heater.transport.written == []
+    assert (
+        cli_with_fake_heater.transport.written  # type: ignore[attr-defined]
+        == []
+    )
 
 
-def test_cli_mqtt_backend_does_not_load_bluetooth(monkeypatch) -> None:
+def test_cli_mqtt_backend_does_not_load_bluetooth(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     pytest.importorskip("click")
     from click.testing import CliRunner
 
@@ -272,7 +292,7 @@ def test_cli_mqtt_backend_does_not_load_bluetooth(monkeypatch) -> None:
 
 @pytest.mark.parametrize("backend", [[], ["--backend", "mqtt"]])
 def test_cli_without_ble_backend_takes_the_cloud_path(
-    monkeypatch, backend
+    monkeypatch: pytest.MonkeyPatch, backend: list[str]
 ) -> None:
     pytest.importorskip("click")
     from click.testing import CliRunner
@@ -293,7 +313,7 @@ def test_cli_without_ble_backend_takes_the_cloud_path(
 
 
 @pytest.fixture
-def unit_system():
+def unit_system() -> Iterator[Callable[..., None]]:
     from nwp500.unit_system import reset_unit_system, set_unit_system
 
     yield set_unit_system
@@ -301,7 +321,8 @@ def unit_system():
 
 
 def test_cli_info_over_bluetooth_honours_unit_system(
-    cli_with_fake_heater, unit_system
+    cli_with_fake_heater: Callable[..., Result],
+    unit_system: Callable[..., None],
 ) -> None:
     result = cli_with_fake_heater("info", options=("--unit-system", "metric"))
     assert result.exit_code == 0, result.output
@@ -309,7 +330,9 @@ def test_cli_info_over_bluetooth_honours_unit_system(
     assert "Min operation temp  40.5 °C" in result.output
 
 
-def test_ble_feature_converts_like_device_feature(unit_system) -> None:
+def test_ble_feature_converts_like_device_feature(
+    unit_system: Callable[..., None],
+) -> None:
     from nwp500.models import DeviceFeature
 
     ble = device_feature_from_blocks(
@@ -334,7 +357,9 @@ def test_ble_feature_converts_like_device_feature(unit_system) -> None:
     assert ble.get_field_unit("country_code") == ""
 
 
-def test_min_operation_temperature_follows_unit_system(unit_system) -> None:
+def test_min_operation_temperature_follows_unit_system(
+    unit_system: Callable[..., None],
+) -> None:
     info = DeviceInfoBlock.parse(DID)
     assert info.min_operation_temperature() == pytest.approx(104.9)
     unit_system("metric")
@@ -380,7 +405,9 @@ def test_rtmd_rejects_a_block_of_the_wrong_length() -> None:
         RealTimeStatus.parse(RTMD[:-1])
 
 
-def test_rtmd_converts_like_device_status(unit_system) -> None:
+def test_rtmd_converts_like_device_status(
+    unit_system: Callable[..., None],
+) -> None:
     from nwp500.models import DeviceStatus
 
     ble = RealTimeStatus.parse(RTMD)
@@ -486,7 +513,10 @@ async def test_adapter_answers_a_device_status_request() -> None:
     assert [s.tank_upper_temperature_raw for s in got] == [553]
 
 
-def test_cli_status_over_bluetooth(cli_with_fake_heater, unit_system) -> None:
+def test_cli_status_over_bluetooth(
+    cli_with_fake_heater: Callable[..., Result],
+    unit_system: Callable[..., None],
+) -> None:
     result = cli_with_fake_heater("status")
     assert result.exit_code == 0, result.output
     out = result.output
@@ -500,7 +530,8 @@ def test_cli_status_over_bluetooth(cli_with_fake_heater, unit_system) -> None:
 
 
 def test_cli_status_over_bluetooth_honours_unit_system(
-    cli_with_fake_heater, unit_system
+    cli_with_fake_heater: Callable[..., Result],
+    unit_system: Callable[..., None],
 ) -> None:
     result = cli_with_fake_heater("status", options=("--unit-system", "metric"))
     assert result.exit_code == 0, result.output
@@ -508,7 +539,9 @@ def test_cli_status_over_bluetooth_honours_unit_system(
     assert "Superheat        -1.6 °C" in result.output
 
 
-def test_cli_status_raw_over_bluetooth(cli_with_fake_heater) -> None:
+def test_cli_status_raw_over_bluetooth(
+    cli_with_fake_heater: Callable[..., Result],
+) -> None:
     result = cli_with_fake_heater("status", "--raw")
     assert result.exit_code == 0, result.output
     assert RTMD.hex() in result.output

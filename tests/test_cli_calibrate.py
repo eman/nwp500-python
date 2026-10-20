@@ -3,10 +3,11 @@ parameters and a report out."""
 
 import io
 import json
+from collections.abc import Iterator
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import pytest
 
@@ -35,7 +36,7 @@ MASS = sim.default_params().tank.thermal_mass_btu_f
 
 
 @pytest.fixture(autouse=True)
-def _units():
+def _units() -> Iterator[None]:
     yield
     reset_unit_system()
 
@@ -68,7 +69,7 @@ def quiet_lines(
 
 
 @pytest.fixture
-def history(tmp_path: Path, device_status_dict) -> str:
+def history(tmp_path: Path, device_status_dict: dict[str, Any]) -> str:
     path = tmp_path / "history.jsonl"
     path.write_text("\n".join(quiet_lines(device_status_dict)) + "\n")
     return str(path)
@@ -79,7 +80,7 @@ def _terms(done: cal_cli.Calibrated) -> dict[str, cal_cli.Term]:
 
 
 class TestTheFits:
-    def test_a_constant_air_fits_the_standby_loss(self, history) -> None:
+    def test_a_constant_air_fits_the_standby_loss(self, history: str) -> None:
         done = cal_cli.calibrate(cal_cli.read_history(history), ambient=AIR_F)
         assert done.calibration.standby.ua_ref == pytest.approx(UA, rel=0.05)
         assert "standby" not in done.calibration.params.unfitted
@@ -87,7 +88,9 @@ class TestTheFits:
         assert loss.fitted
         assert loss.samples == "1 of 1 quiet windows"
 
-    def test_a_sensors_readings_fit_it_too(self, history, tmp_path) -> None:
+    def test_a_sensors_readings_fit_it_too(
+        self, history: str, tmp_path: Path
+    ) -> None:
         air = tmp_path / "air.csv"
         air.write_text(
             "time,temperature\n"
@@ -101,14 +104,16 @@ class TestTheFits:
         assert done.air == "readings"
         assert done.calibration.standby.ua_ref == pytest.approx(UA, rel=0.05)
 
-    def test_the_air_in_the_preferred_unit(self, history) -> None:
+    def test_the_air_in_the_preferred_unit(self, history: str) -> None:
         set_unit_system("metric")
         done = cal_cli.calibrate(
             cal_cli.read_history(history), ambient=(AIR_F - 32) / 1.8
         )
         assert done.calibration.standby.ua_ref == pytest.approx(UA, rel=0.05)
 
-    def test_without_air_the_standby_loss_keeps_the_base(self, history) -> None:
+    def test_without_air_the_standby_loss_keeps_the_base(
+        self, history: str
+    ) -> None:
         done = cal_cli.calibrate(cal_cli.read_history(history))
         assert done.air is None
         assert "standby" in done.calibration.params.unfitted
@@ -117,7 +122,7 @@ class TestTheFits:
         assert loss.why == "no air given"
         assert any("no air given" in n for n in done.notes)
 
-    def test_each_fit_without_evidence_says_why(self, history) -> None:
+    def test_each_fit_without_evidence_says_why(self, history: str) -> None:
         terms = _terms(
             cal_cli.calibrate(cal_cli.read_history(history), ambient=AIR_F)
         )
@@ -134,7 +139,7 @@ class TestTheFits:
         assert not power.fitted
         assert power.why == "the compressor is not fitted"
 
-    def test_a_compressor_fit_reports_its_errors(self, history) -> None:
+    def test_a_compressor_fit_reports_its_errors(self, history: str) -> None:
         done = cal_cli.calibrate(cal_cli.read_history(history), ambient=AIR_F)
         fit = cal.CompressorFit(
             compressor_constant=0.06,
@@ -179,7 +184,7 @@ class TestTheFits:
         assert "pinned on a bound" in k.why
 
     def test_without_humidity_the_air_is_50_percent(
-        self, history, monkeypatch
+        self, history: str, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         seen: list[Any] = []
         real = cal.calibrate
@@ -188,7 +193,7 @@ class TestTheFits:
             seen.append(frame)
             return real(frame, *args, **kw)
 
-        monkeypatch.setattr(cal_cli.cal, "calibrate", spy)
+        monkeypatch.setattr(cal, "calibrate", spy)
         cal_cli.calibrate(cal_cli.read_history(history), ambient=AIR_F)
         assert (seen[0]["humidity_pct"] == 50.0).all()
         cal_cli.calibrate(
@@ -199,7 +204,7 @@ class TestTheFits:
         assert (seen[1]["humidity_pct"] == 35.0).all()
 
     def test_a_stopped_recording_is_not_one_quiet_window(
-        self, tmp_path, device_status_dict
+        self, tmp_path: Path, device_status_dict: dict[str, Any]
     ) -> None:
         # Recorded 0-8 h and 11-24 h; the tank was heated back to 130 °F
         # in between, unobserved.
@@ -226,7 +231,10 @@ class TestTheFits:
         [(30, timedelta(minutes=5)), (120, timedelta(minutes=8))],
     )
     def test_the_gap_scales_with_the_spacing(
-        self, device_status_dict, spacing_s, expected
+        self,
+        device_status_dict: dict[str, Any],
+        spacing_s: int,
+        expected: timedelta,
     ) -> None:
         status = DeviceStatus.model_validate(device_status_dict)
         readings = [
@@ -235,7 +243,9 @@ class TestTheFits:
         assert cal_cli.max_gap(readings) == expected
         assert cal_cli.max_gap(readings[:1]) == cal_cli.MIN_GAP
 
-    def test_a_sources_record_fits_over_what_it_covers(self, history) -> None:
+    def test_a_sources_record_fits_over_what_it_covers(
+        self, history: str
+    ) -> None:
         from nwp500.sim_home_assistant import RecordInputs
 
         readings = cal_cli.read_history(history)
@@ -270,7 +280,11 @@ class TestTheFits:
         ("drawing", "circulating"), [(None, []), ([], None)]
     )
     def test_the_meter_and_circulation_go_together(
-        self, history, monkeypatch, drawing, circulating
+        self,
+        history: str,
+        monkeypatch: pytest.MonkeyPatch,
+        drawing: list[Any] | None,
+        circulating: list[Any] | None,
     ) -> None:
         from nwp500.sim_home_assistant import RecordInputs
 
@@ -281,14 +295,16 @@ class TestTheFits:
             seen.append(frame)
             return real(frame, *args, **kw)
 
-        monkeypatch.setattr(cal_cli.cal, "calibrate", spy)
+        monkeypatch.setattr(cal, "calibrate", spy)
         record = RecordInputs([(T0, AIR_F)], None, drawing, circulating)
         done = cal_cli.calibrate(cal_cli.read_history(history), record=record)
         assert not {"drawing", "circulating"} & set(seen[0].columns)
         assert done.calibration.standby.quiet_by == "dhw_in_use"
         assert any("together or not at all" in n for n in done.notes)
 
-    def test_unobserved_air_and_humidity(self, history, monkeypatch) -> None:
+    def test_unobserved_air_and_humidity(
+        self, history: str, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         from nwp500.sim_home_assistant import RecordInputs
 
         seen: list[Any] = []
@@ -298,7 +314,7 @@ class TestTheFits:
             seen.append(frame)
             return real(frame, *args, **kw)
 
-        monkeypatch.setattr(cal_cli.cal, "calibrate", spy)
+        monkeypatch.setattr(cal, "calibrate", spy)
         gap = (T0 + timedelta(hours=4), T0 + timedelta(hours=6))
         record = RecordInputs(
             air=[(T0, AIR_F), (T0 + timedelta(days=1), AIR_F)],
@@ -320,7 +336,7 @@ class TestTheFits:
         assert (frame.loc[late, "humidity_pct"] == 50.0).all()
         assert frame.loc[late, "air_f"].notna().all()
 
-    def test_no_window_spans_an_air_outage(self, history) -> None:
+    def test_no_window_spans_an_air_outage(self, history: str) -> None:
         from nwp500.sim_home_assistant import RecordInputs
 
         gap = (T0 + timedelta(hours=10), T0 + timedelta(hours=10, minutes=20))
@@ -337,7 +353,7 @@ class TestTheFits:
         assert all(w.end <= gap[0] or w.start >= gap[1] for w in windows)
 
     def test_a_later_reading_does_not_reach_back_over_an_outage(
-        self, history, monkeypatch
+        self, history: str, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         from nwp500.sim_home_assistant import RecordInputs
 
@@ -348,7 +364,7 @@ class TestTheFits:
             seen.append(frame)
             return real(frame, *args, **kw)
 
-        monkeypatch.setattr(cal_cli.cal, "calibrate", spy)
+        monkeypatch.setattr(cal, "calibrate", spy)
         gap = (T0 + timedelta(hours=4), T0 + timedelta(hours=8))
         record = RecordInputs(
             air=[(T0, AIR_F), (gap[1], AIR_F + 20.0)],
@@ -368,7 +384,7 @@ class TestTheFits:
         assert (frame.loc[before, "humidity_pct"] == 30.0).all()
 
     def test_source_states_hold_until_the_next(
-        self, history, monkeypatch
+        self, history: str, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         from nwp500.sim_home_assistant import RecordInputs
 
@@ -379,7 +395,7 @@ class TestTheFits:
             seen.append(frame)
             return real(frame, *args, **kw)
 
-        monkeypatch.setattr(cal_cli.cal, "calibrate", spy)
+        monkeypatch.setattr(cal, "calibrate", spy)
         h = timedelta(hours=1)
         record = RecordInputs(
             air=[(T0, AIR_F), (T0 + 8 * h, AIR_F + 20.0), (T0 + 24 * h, AIR_F)],
@@ -410,7 +426,7 @@ class TestTheFits:
         ]
 
     def test_no_recovery_spans_unobserved_air(
-        self, history, monkeypatch
+        self, history: str, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         import numpy as np
 
@@ -423,7 +439,7 @@ class TestTheFits:
             seen.append(frame)
             return real(frame, *args, **kw)
 
-        monkeypatch.setattr(cal_cli.cal, "calibrate", spy)
+        monkeypatch.setattr(cal, "calibrate", spy)
         h = timedelta(hours=1)
         # Recorded to 10 h: the air's span ends at 11 h.
         record = RecordInputs(
@@ -449,7 +465,7 @@ class TestTheFits:
         assert found["start_time"].iloc[0] < T0 + 10 * h
 
     def test_a_rejected_reading_masks_the_air(
-        self, history, monkeypatch
+        self, history: str, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         import asyncio
 
@@ -457,8 +473,8 @@ class TestTheFits:
 
         h = timedelta(hours=1)
 
-        def row(at, state, unit):
-            r = {"entity_id": "sensor.air", "state": state}
+        def row(at: datetime, state: str, unit: str | None) -> dict[str, Any]:
+            r: dict[str, Any] = {"entity_id": "sensor.air", "state": state}
             r["last_updated"] = at.isoformat()
             if unit:
                 r["attributes"] = {"unit_of_measurement": unit}
@@ -473,10 +489,12 @@ class TestTheFits:
         ]
 
         class Client:
-            async def state(self, entity):
+            async def state(self, entity: str) -> ha.State:
                 return ha.State(entity, AIR_F, "°F", T0)
 
-            async def read_history(self, entities, start, end):
+            async def read_history(
+                self, entities: Any, start: Any, end: Any
+            ) -> ha.History:
                 names = list(entities)
                 return ha.History(
                     ha.history_for(doc, names),
@@ -486,7 +504,7 @@ class TestTheFits:
 
         record = asyncio.run(
             ha.record_inputs(
-                Client(),  # pyright: ignore[reportArgumentType]
+                cast("ha.HomeAssistantClient", Client()),
                 ha.Entities(air="sensor.air"),
                 T0,
                 T0 + 24 * h,
@@ -499,7 +517,7 @@ class TestTheFits:
             seen.append(frame)
             return real(frame, *args, **kw)
 
-        monkeypatch.setattr(cal_cli.cal, "calibrate", spy)
+        monkeypatch.setattr(cal, "calibrate", spy)
         cal_cli.calibrate(cal_cli.read_history(history), record=record)
         frame = seen[0]
         gap = (frame.index > T0 + 4 * h) & (frame.index < T0 + 8 * h)
@@ -508,7 +526,7 @@ class TestTheFits:
         assert frame.loc[gap, "air_unobserved"].all()
         assert frame.loc[gap, "excluded"].all()
 
-    def test_flags_win_over_the_sources(self, history) -> None:
+    def test_flags_win_over_the_sources(self, history: str) -> None:
         from nwp500.sim_home_assistant import RecordInputs
 
         record = RecordInputs([(T0, 30.0)], None, None, None)
@@ -518,7 +536,7 @@ class TestTheFits:
         assert done.air == "constant"
         assert done.calibration.standby.ua_ref == pytest.approx(UA, rel=0.05)
 
-    def test_the_base_is_the_one_given(self, history) -> None:
+    def test_the_base_is_the_one_given(self, history: str) -> None:
         base = replace(sim.default_params(1), unfitted=())
         done = cal_cli.calibrate(
             cal_cli.read_history(history),
@@ -528,7 +546,7 @@ class TestTheFits:
         assert done.calibration.params.tank == base.tank
         assert not done.notes
 
-    def test_air_and_ambient_together_are_refused(self, history) -> None:
+    def test_air_and_ambient_together_are_refused(self, history: str) -> None:
         with pytest.raises(InputError, match="not both"):
             cal_cli.calibrate(
                 cal_cli.read_history(history),
@@ -538,21 +556,21 @@ class TestTheFits:
 
 
 class TestTheFiles:
-    def test_an_empty_history_is_refused(self, tmp_path) -> None:
+    def test_an_empty_history_is_refused(self, tmp_path: Path) -> None:
         empty = tmp_path / "h.jsonl"
         empty.write_text("\n")
         with pytest.raises(InputError, match="holds no statuses"):
             cal_cli.read_history(empty)
 
     def test_a_bad_history_line_is_named(
-        self, tmp_path, device_status_dict
+        self, tmp_path: Path, device_status_dict: dict[str, Any]
     ) -> None:
         bad = tmp_path / "h.jsonl"
         bad.write_text(status_history.line(T0, device_status_dict) + "\n{\n")
         with pytest.raises(InputError, match="line 2 is not"):
             cal_cli.read_history(bad)
 
-    def test_readings_without_a_header(self, tmp_path) -> None:
+    def test_readings_without_a_header(self, tmp_path: Path) -> None:
         f = tmp_path / "air.csv"
         f.write_text(f"{T0.isoformat()},61.5\n\n{T0.isoformat()},nan\n")
         assert cal_cli.read_readings(f, "air") == [(T0, 61.5)]
@@ -565,7 +583,7 @@ class TestTheFiles:
             ("time,temperature\n", "holds no readings"),
         ],
     )
-    def test_bad_readings(self, tmp_path, text, match) -> None:
+    def test_bad_readings(self, tmp_path: Path, text: str, match: str) -> None:
         f = tmp_path / "air.csv"
         f.write_text(text)
         with pytest.raises(InputError, match=match):
@@ -574,7 +592,10 @@ class TestTheFiles:
 
 class TestTheCommand:
     def test_it_prints_the_report_and_writes_the_parameters(
-        self, history, tmp_path, monkeypatch
+        self,
+        history: str,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         async def no_device(*_: Any) -> int:
             raise AssertionError("connected")
@@ -599,7 +620,7 @@ class TestTheCommand:
         params = params_from_document(json.loads(out.read_text()))
         assert params.loss.ua_btu_hr_f == pytest.approx(UA, rel=0.05)
 
-    def test_a_bad_input_is_a_usage_error(self, history) -> None:
+    def test_a_bad_input_is_a_usage_error(self, history: str) -> None:
         result = CliRunner().invoke(
             cli_main.cli,
             [
@@ -615,7 +636,7 @@ class TestTheCommand:
         assert result.exit_code == 2
         assert "not both" in result.output
 
-    def test_the_report_alone(self, history) -> None:
+    def test_the_report_alone(self, history: str) -> None:
         done = cal_cli.calibrate(cal_cli.read_history(history))
         out = io.StringIO()
         cal_cli.run(done, None, out)

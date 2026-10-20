@@ -151,7 +151,9 @@ class TestTheRecord:
 
 
 @pytest.fixture
-def statuses(device_status_dict):
+def statuses(
+    device_status_dict: dict[str, Any],
+) -> list[tuple[datetime, DeviceStatus]]:
     """A status a minute for a day: a compressor run from 13:00 to
     14:00 at 450 W, idle at 5 W."""
 
@@ -235,7 +237,7 @@ class TestTheRecordsCadence:
     record passes its own."""
 
     def test_a_slower_meters_power_corroborates_its_run(self) -> None:
-        rows = {
+        rows: dict[str, Any] = {
             "upper_element": ((at(0), 0.0), (at(10), 1.0), (at(20), 0.0)),
             "power_w": ((at(0), 3.0), (at(22), 5000.0), (at(23), 3.0)),
         }
@@ -246,7 +248,7 @@ class TestTheRecordsCadence:
         assert [(s.start, s.source) for s in o.sources] == [(at(10), "element")]
 
     def test_a_slower_polls_drop_is_the_heaters(self) -> None:
-        rows = {
+        rows: dict[str, Any] = {
             "mode": ((at(0), 3.0), (at(10.5), 1.0)),
             "tou": ((at(0), 0.0), (at(10), 1.0)),
         }
@@ -258,7 +260,9 @@ class TestTheRecordsCadence:
         assert slow.dropped
 
     def test_another_resting_threshold(self) -> None:
-        rows = {"hp_upper_on_f": ((at(0), 100.4), (at(10), 102.0))}
+        rows: dict[str, Any] = {
+            "hp_upper_on_f": ((at(0), 100.4), (at(10), 102.0))
+        }
         assert Record(**rows).upper_on_edges(at(1), at(60)) == ([], [])
         other = Record(**rows, resting_upper_on_f=100.4)
         assert other.upper_on_edges(at(1), at(60)) == ([at(10)], [])
@@ -304,7 +308,9 @@ class TestTheProfile:
 
 
 class TestObserve:
-    def test_the_run_its_energy_and_what_it_was(self, statuses) -> None:
+    def test_the_run_its_energy_and_what_it_was(
+        self, statuses: list[tuple[datetime, DeviceStatus]]
+    ) -> None:
         o = sa.observe(statuses, start=at(0), end=at(240), now=at(600))
         assert [(s.start, s.end, s.source) for s in o.sources] == [
             (at(60), at(120), "compressor")
@@ -317,7 +323,9 @@ class TestObserve:
         assert {m.name for m in o.modes} == {"heat_pump"}
         assert any(m.effective for m in o.modes)
 
-    def test_past_now_nothing_is_claimed(self, statuses) -> None:
+    def test_past_now_nothing_is_claimed(
+        self, statuses: list[tuple[datetime, DeviceStatus]]
+    ) -> None:
         o = sa.observe(statuses, start=at(0), end=at(240), now=at(180))
         late = [g for g in o.gaps if g.reason == "not_yet_recorded"]
         assert {g.signal for g in late} == {
@@ -331,7 +339,9 @@ class TestObserve:
         }
         assert all(g.start == at(180) for g in late)
 
-    def test_record_keeps_only_changes(self, statuses) -> None:
+    def test_record_keeps_only_changes(
+        self, statuses: list[tuple[datetime, DeviceStatus]]
+    ) -> None:
         rec = sa.record(statuses)
         assert [v for _, v in rec.compressor] == [0.0, 1.0, 0.0]
         assert [t for t, _ in rec.compressor][1:] == [at(60), at(120)]

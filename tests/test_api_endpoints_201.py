@@ -5,6 +5,7 @@ app sends, and parses a response shaped like the app's own parser expects.
 """
 
 from datetime import UTC, date, datetime, timedelta
+from typing import Any, cast
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -45,11 +46,11 @@ def _make_api_client(
 
     client = NavienAPIClient(auth_client=mock_auth)
     mock_request = AsyncMock()
-    client._make_request = mock_request
+    client._make_request = mock_request  # type: ignore[method-assign]
     return client, mock_request
 
 
-def _ok(data: object) -> dict:
+def _ok(data: object) -> dict[str, object]:
     return {"code": 200, "msg": "SUCCESS", "data": data}
 
 
@@ -167,7 +168,7 @@ async def test_record_maintenance_accepts_enum_device_type() -> None:
         MAC, ADD, date(2025, 12, 25), device_type=DeviceType.HPWH
     )
 
-    body = mock_request.await_args.kwargs["json_data"]
+    body = cast(Any, mock_request.await_args).kwargs["json_data"]
     assert body["deviceType"] == 52
     assert body["maintenanceDate"] == "2025-12-25"
 
@@ -373,7 +374,7 @@ async def test_delete_tou_explicit_user_type_and_controller() -> None:
         MAC, ADD, register_path="bt", controller_id="CTRL1", user_type="O"
     )
 
-    params = mock_request.await_args.kwargs["params"]
+    params = cast(Any, mock_request.await_args).kwargs["params"]
     assert params["registerPath"] == "bt"
     assert params["controllerId"] == "CTRL1"
     assert params["userType"] == "O"
@@ -406,7 +407,10 @@ async def test_convert_tou_uses_signed_in_user_type() -> None:
 
     await client.convert_tou([])
 
-    assert mock_request.await_args.kwargs["json_data"]["userType"] == "M"
+    assert (
+        cast(Any, mock_request.await_args).kwargs["json_data"]["userType"]
+        == "M"
+    )
 
 
 @pytest.mark.asyncio
@@ -417,7 +421,10 @@ async def test_convert_tou_defaults_to_owner(user_type: str | None) -> None:
 
     await client.convert_tou([])
 
-    assert mock_request.await_args.kwargs["json_data"]["userType"] == "O"
+    assert (
+        cast(Any, mock_request.await_args).kwargs["json_data"]["userType"]
+        == "O"
+    )
 
 
 def test_user_type_ignores_non_string_mock_attribute() -> None:
@@ -518,7 +525,7 @@ async def test_get_error_history_next_page_and_installer_override() -> None:
     )
 
     assert entries == []
-    body = mock_request.await_args.kwargs["json_data"]
+    body = cast(Any, mock_request.await_args).kwargs["json_data"]
     assert body["continuousKey"] == 1733572682000
     assert body["count"] == 5
     assert body["installerId"] == "installer@example.com"
@@ -570,7 +577,7 @@ async def test_update_device_info_omits_empty_location_values() -> None:
         ),
     )
 
-    body = mock_request.await_args.kwargs["json_data"]
+    body = cast(Any, mock_request.await_args).kwargs["json_data"]
     assert body["deviceInfo"]["installType"] == "R"
     assert body["location"] == {
         "state": "California",
@@ -591,7 +598,9 @@ async def test_update_device_info_drops_location_without_address_parts() -> (
         MAC, ADD, "NWP500", location=Location(latitude=1.0, longitude=2.0)
     )
 
-    assert "location" not in mock_request.await_args.kwargs["json_data"]
+    assert (
+        "location" not in cast(Any, mock_request.await_args).kwargs["json_data"]
+    )
 
 
 @pytest.mark.asyncio
@@ -636,7 +645,7 @@ async def test_list_simple_devices_for_another_user() -> None:
 
     await client.list_simple_devices("owner@example.com", offset=20, count=5)
 
-    assert mock_request.await_args.kwargs["json_data"] == {
+    assert cast(Any, mock_request.await_args).kwargs["json_data"] == {
         "userId": USER,
         "targetUserId": "owner@example.com",
         "offset": 20,
@@ -648,11 +657,11 @@ async def test_list_simple_devices_for_another_user() -> None:
 
 
 class _FakeResponse:
-    def __init__(self, status: int, payload: dict) -> None:
+    def __init__(self, status: int, payload: dict[str, object]) -> None:
         self.status = status
         self._payload = payload
 
-    async def json(self) -> dict:
+    async def json(self) -> dict[str, object]:
         return self._payload
 
     async def __aenter__(self) -> _FakeResponse:
@@ -663,7 +672,7 @@ class _FakeResponse:
 
 
 def _client_with_session(
-    status: int, payload: dict
+    status: int, payload: dict[str, object]
 ) -> tuple[NavienAPIClient, MagicMock]:
     session = MagicMock()
     session.post = MagicMock(return_value=_FakeResponse(status, payload))
@@ -782,7 +791,9 @@ async def test_tou_explicit_user_type_wins() -> None:
 
     await client.get_tou_info(MAC, ADD, "CTRL1", user_type="O")
 
-    assert mock_request.await_args.kwargs["params"]["userType"] == "O"
+    assert (
+        cast(Any, mock_request.await_args).kwargs["params"]["userType"] == "O"
+    )
 
 
 def test_firmware_detail_reads_null_as_zero() -> None:

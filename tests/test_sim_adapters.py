@@ -1,6 +1,7 @@
 """Building the simulator's inputs from the library's models
 (``nwp500.sim_adapters``)."""
 
+from collections.abc import Iterator
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -64,7 +65,7 @@ def status(device_status_dict: dict[str, Any]) -> DeviceStatus:
 
 
 @pytest.fixture(autouse=True)
-def _units():
+def _units() -> Iterator[None]:
     yield
     reset_unit_system()
 
@@ -321,7 +322,7 @@ class TestThePreferredUnits:
             device_status_dict | {"ambientTemperature": 200}  # 20.0 degC
         )
         for units in ("metric", "us_customary", None):
-            set_unit_system(units)  # type: ignore[arg-type]
+            set_unit_system(units)
             assert sa.environment(s).ambient_f == pytest.approx(68.0)
 
     def test_an_ambient_or_a_status_is_needed(self) -> None:

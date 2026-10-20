@@ -102,7 +102,7 @@ def _make_api_client() -> tuple[NavienAPIClient, AsyncMock]:
 
     client = NavienAPIClient(auth_client=mock_auth)
     mock_request = AsyncMock()
-    client._make_request = mock_request
+    client._make_request = mock_request  # type: ignore[method-assign]
     return client, mock_request
 
 

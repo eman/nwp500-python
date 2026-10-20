@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import asyncio
 from datetime import UTC, datetime, timedelta
+from typing import Any, cast
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import aiohttp
@@ -36,8 +37,8 @@ EMAIL = "test@example.com"
 PASSWORD = "password"
 
 
-def _tokens(**overrides) -> AuthTokens:
-    defaults = {
+def _tokens(**overrides: Any) -> AuthTokens:
+    defaults: dict[str, Any] = {
         "id_token": "id",
         "access_token": "access",
         "refresh_token": "refresh",
@@ -51,7 +52,7 @@ def _tokens(**overrides) -> AuthTokens:
     return AuthTokens(**defaults)
 
 
-def _aws_expired_tokens(**overrides) -> AuthTokens:
+def _aws_expired_tokens(**overrides: Any) -> AuthTokens:
     """AWS credentials expired, JWT still valid."""
     old_time = datetime.now(UTC) - timedelta(seconds=3900)
     overrides.setdefault("authentication_expires_in", 7200)
@@ -59,14 +60,16 @@ def _aws_expired_tokens(**overrides) -> AuthTokens:
     return _tokens(issued_at=old_time, **overrides)
 
 
-def _both_expired_tokens(**overrides) -> AuthTokens:
+def _both_expired_tokens(**overrides: Any) -> AuthTokens:
     old_time = datetime.now(UTC) - timedelta(seconds=7200)
     overrides.setdefault("authentication_expires_in", 3600)
     overrides.setdefault("authorization_expires_in", 3600)
     return _tokens(issued_at=old_time, **overrides)
 
 
-def _client(tokens: AuthTokens | None, password: str = PASSWORD):
+def _client(
+    tokens: AuthTokens | None, password: str = PASSWORD
+) -> NavienAuthClient:
     client = NavienAuthClient(EMAIL, password)
     if tokens is not None:
         client._auth_response = AuthenticationResponse(
@@ -77,7 +80,12 @@ def _client(tokens: AuthTokens | None, password: str = PASSWORD):
     return client
 
 
-def _mock_post(client: NavienAuthClient, payload, status=200, ok=True):
+def _mock_post(
+    client: NavienAuthClient,
+    payload: Any,
+    status: int = 200,
+    ok: bool = True,
+) -> MagicMock:
     """Attach a mocked aiohttp session whose post() yields `payload`."""
     mock_resp = MagicMock()
     mock_resp.ok = ok
@@ -93,7 +101,7 @@ def _mock_post(client: NavienAuthClient, payload, status=200, ok=True):
     return mock_session
 
 
-def _sign_in_payload(**token_overrides):
+def _sign_in_payload(**token_overrides: Any) -> dict[str, Any]:
     token = {
         "idToken": "new_id",
         "accessToken": "new_access",
@@ -126,7 +134,7 @@ class TestRefreshSession:
     @pytest.mark.asyncio
     async def test_success_updates_only_aws_fields(self) -> None:
         client = _client(_aws_expired_tokens())
-        old = client.current_tokens
+        old = cast(AuthTokens, client.current_tokens)
         session = _mock_post(
             client,
             {
@@ -231,11 +239,15 @@ class TestRefreshSession:
             await client.refresh_session()
 
         # Stored tokens untouched
-        assert client.current_tokens.access_key_id == "old_key"
+        assert (
+            cast(AuthTokens, client.current_tokens).access_key_id == "old_key"
+        )
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize("status", [401, 403])
-    async def test_http_error_maps_to_token_refresh_error(self, status) -> None:
+    async def test_http_error_maps_to_token_refresh_error(
+        self, status: int
+    ) -> None:
         client = _client(_aws_expired_tokens())
         _mock_post(
             client,
@@ -250,7 +262,9 @@ class TestRefreshSession:
         assert excinfo.value.status_code == status
         assert isinstance(excinfo.value, AuthenticationError)
         assert not isinstance(excinfo.value, InvalidCredentialsError)
-        assert client.current_tokens.access_key_id == "old_key"
+        assert (
+            cast(AuthTokens, client.current_tokens).access_key_id == "old_key"
+        )
 
     @pytest.mark.asyncio
     async def test_network_error_is_retriable(self) -> None:
@@ -285,13 +299,13 @@ class TestSecuredSignIn:
         release = asyncio.Event()
         order: list[str] = []
 
-        async def slow_refresh():
+        async def slow_refresh() -> AuthTokens | None:
             order.append("refresh-start")
             await release.wait()
             order.append("refresh-end")
             return client.current_tokens
 
-        async def secured():
+        async def secured() -> MagicMock:
             order.append("secured")
             return MagicMock(tokens=client.current_tokens)
 
@@ -315,7 +329,7 @@ class TestSecuredSignIn:
     @pytest.mark.asyncio
     async def test_success_replaces_auth_response(self) -> None:
         client = _client(_aws_expired_tokens())
-        old_access = client.current_tokens.access_token
+        old_access = cast(AuthTokens, client.current_tokens).access_token
         session = _mock_post(client, _sign_in_payload())
 
         response = await client.secured_sign_in()
@@ -402,7 +416,7 @@ class TestSecuredSignIn:
     @pytest.mark.asyncio
     @pytest.mark.parametrize("status", [401, 403])
     async def test_http_error_maps_to_authentication_error(
-        self, status
+        self, status: int
     ) -> None:
         client = _client(_aws_expired_tokens())
         _mock_post(
@@ -418,7 +432,7 @@ class TestSecuredSignIn:
         assert excinfo.value.status_code == status
         # A rejected token is not a wrong password
         assert not isinstance(excinfo.value, InvalidCredentialsError)
-        assert client.current_tokens.access_token == "access"
+        assert cast(AuthTokens, client.current_tokens).access_token == "access"
 
     @pytest.mark.asyncio
     async def test_malformed_response_raises(self) -> None:
@@ -441,7 +455,14 @@ class TestSecuredSignIn:
 class TestEnsureValidTokenFallbackOrder:
     """AWS credentials expired: session refresh, secured sign-in, password."""
 
-    def _patch_chain(self, client, *, refresh, secured, sign_in):
+    def _patch_chain(
+        self,
+        client: NavienAuthClient,
+        *,
+        refresh: Any,
+        secured: Any,
+        sign_in: Any,
+    ) -> tuple[Any, Any, Any]:
         return (
             patch.object(client, "_refresh_session_unlocked", new=refresh),
             patch.object(client, "_secured_sign_in_unlocked", new=secured),
@@ -453,8 +474,8 @@ class TestEnsureValidTokenFallbackOrder:
         client = _client(_aws_expired_tokens())
         fresh = _tokens()
 
-        async def fake_refresh():
-            client._auth_response.tokens = fresh
+        async def fake_refresh() -> AuthTokens:
+            cast(AuthenticationResponse, client._auth_response).tokens = fresh
             return fresh
 
         refresh = AsyncMock(side_effect=fake_refresh)
@@ -476,7 +497,7 @@ class TestEnsureValidTokenFallbackOrder:
         client = _client(_aws_expired_tokens())
         fresh = AuthenticationResponse(user_info=UserInfo(), tokens=_tokens())
 
-        async def fake_secured():
+        async def fake_secured() -> AuthenticationResponse:
             client._auth_response = fresh
             return fresh
 
@@ -499,7 +520,9 @@ class TestEnsureValidTokenFallbackOrder:
         client = _client(_aws_expired_tokens())
         fresh = AuthenticationResponse(user_info=UserInfo(), tokens=_tokens())
 
-        async def fake_sign_in(user_id, password):
+        async def fake_sign_in(
+            user_id: str, password: str
+        ) -> AuthenticationResponse:
             client._auth_response = fresh
             return fresh
 
@@ -542,20 +565,27 @@ class TestEnsureValidTokenFallbackOrder:
         client = _client(_both_expired_tokens())
         order: list[str] = []
 
-        async def fake_jwt_refresh(refresh_token=None):
+        async def fake_jwt_refresh(
+            refresh_token: str | None = None,
+        ) -> AuthTokens:
             order.append("jwt")
             new = _tokens(
                 access_token="fresh_access",
-                aws_credentials_issued_at=client.current_tokens.issued_at,
+                aws_credentials_issued_at=cast(
+                    AuthTokens, client.current_tokens
+                ).issued_at,
             )
-            client._auth_response.tokens = new
+            cast(AuthenticationResponse, client._auth_response).tokens = new
             return new
 
-        async def fake_session_refresh():
+        async def fake_session_refresh() -> AuthTokens:
             order.append("session")
-            assert client.current_tokens.access_token == "fresh_access"
+            assert (
+                cast(AuthTokens, client.current_tokens).access_token
+                == "fresh_access"
+            )
             fresh = _tokens(access_token="fresh_access")
-            client._auth_response.tokens = fresh
+            cast(AuthenticationResponse, client._auth_response).tokens = fresh
             return fresh
 
         with (
@@ -571,7 +601,7 @@ class TestEnsureValidTokenFallbackOrder:
             ),
             patch.object(client, "sign_in", new=AsyncMock()) as sign_in,
         ):
-            result = await client.ensure_valid_token()
+            result = cast(AuthTokens, await client.ensure_valid_token())
 
         assert order == ["jwt", "session"]
         assert result.access_token == "fresh_access"
@@ -634,12 +664,12 @@ class TestEnsureValidTokenFallbackOrder:
         client = _client(_aws_expired_tokens())
         calls = 0
 
-        async def fake_refresh():
+        async def fake_refresh() -> AuthTokens:
             nonlocal calls
             calls += 1
             await asyncio.sleep(0.01)
             fresh = _tokens()
-            client._auth_response.tokens = fresh
+            cast(AuthenticationResponse, client._auth_response).tokens = fresh
             return fresh
 
         with patch.object(
@@ -652,7 +682,9 @@ class TestEnsureValidTokenFallbackOrder:
             )
 
         assert calls == 1
-        assert all(not r.are_aws_credentials_expired for r in results)
+        assert all(
+            not cast(AuthTokens, r).are_aws_credentials_expired for r in results
+        )
 
 
 class TestReAuthenticate:
@@ -774,7 +806,7 @@ class TestMergeTokenFields:
         issued = datetime.now(UTC) - timedelta(minutes=50)
         current = _tokens(issued_at=issued)
         before = current.time_until_expiry
-        aws_left = current._aws_expires_at - datetime.now(UTC)
+        aws_left = cast(datetime, current._aws_expires_at) - datetime.now(UTC)
 
         merged, updated = NavienAuthClient._merge_token_fields(
             current, {"accessToken": "renewed"}
@@ -784,7 +816,7 @@ class TestMergeTokenFields:
         assert merged.access_token == "renewed"
         assert merged.time_until_expiry > before
         assert merged.aws_credentials_issued_at == issued
-        merged_left = merged._aws_expires_at - datetime.now(UTC)
+        merged_left = cast(datetime, merged._aws_expires_at) - datetime.now(UTC)
         assert abs(merged_left - aws_left) < timedelta(seconds=5)
 
         restored = AuthTokens.model_validate(merged.to_dict())
@@ -811,5 +843,5 @@ class TestMergeTokenFields:
             current, {"accessToken": "renewed", "accessKeyId": "new_key"}
         )
 
-        assert merged.aws_credentials_issued_at > issued
+        assert cast(datetime, merged.aws_credentials_issued_at) > issued
         assert not merged.are_aws_credentials_expired

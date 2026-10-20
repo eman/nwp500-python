@@ -1,4 +1,5 @@
 import logging
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -124,7 +125,7 @@ def test_make_handler_injects_mac() -> None:
     mac = "00:11:22:33:44:55"
     callback_called = []
 
-    def my_callback(parsed) -> None:
+    def my_callback(parsed: Any) -> None:
         callback_called.append(parsed)
 
     handler = manager._make_handler(
@@ -279,7 +280,11 @@ def _manager() -> MqttSubscriptionManager:
     ids=["topic-suffix", "no-data", "other-device"],
 )
 def test_a_declined_message_says_why(
-    kwargs, topic, message, expected, caplog
+    kwargs: dict[str, Any],
+    topic: str,
+    message: dict[str, Any],
+    expected: str,
+    caplog: pytest.LogCaptureFixture,
 ) -> None:
     """Every branch that drops a message logs its reason.
 
@@ -287,7 +292,7 @@ def test_a_declined_message_says_why(
     callback looks identical to one the cloud never sent, and the two want
     opposite fixes.
     """
-    delivered = []
+    delivered: list[Any] = []
     handler = _manager()._make_handler(
         model=DeviceStatus, callback=delivered.append, **kwargs
     )
@@ -299,7 +304,9 @@ def test_a_declined_message_says_why(
     assert any(expected in r.getMessage() for r in caplog.records), caplog.text
 
 
-def test_a_declined_message_never_logs_a_raw_identifier(caplog) -> None:
+def test_a_declined_message_never_logs_a_raw_identifier(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
     """The reason is logged; the MAC in it is not.
 
     These lines carry a topic and a MAC straight from the wire, so the
@@ -308,7 +315,7 @@ def test_a_declined_message_never_logs_a_raw_identifier(caplog) -> None:
     mac = "04786332fca0"
     other = "aabbccddeeff"
     topic = f"cmd/52/navilink-{mac}/st/td/rd"
-    delivered = []
+    delivered: list[Any] = []
     handler = _manager()._make_handler(
         model=DeviceStatus,
         callback=delivered.append,
@@ -333,7 +340,7 @@ def test_a_declined_message_never_logs_a_raw_identifier(caplog) -> None:
     ids=["debug-off", "debug-on"],
 )
 def test_declining_a_message_redacts_only_when_debug_is_on(
-    level, redactions, monkeypatch
+    level: int, redactions: int, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """The guard, not just the log level.
 
@@ -342,9 +349,9 @@ def test_declining_a_message_redacts_only_when_debug_is_on(
     would run them on the normal dispatch path for nothing.
     """
     calls = []
-    real = subscriptions_module.redact_topic
+    real = subscriptions_module.redact_topic  # type: ignore[attr-defined]
 
-    def counting_redact_topic(topic):
+    def counting_redact_topic(topic: str) -> str:
         calls.append(topic)
         return real(topic)
 
@@ -372,10 +379,12 @@ def test_declining_a_message_redacts_only_when_debug_is_on(
     assert len(calls) == redactions
 
 
-def test_a_message_for_this_device_is_still_delivered(caplog) -> None:
+def test_a_message_for_this_device_is_still_delivered(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
     """The mac filter accepts its own device, and says nothing about it."""
     mac = "00:11:22:33:44:55"
-    delivered = []
+    delivered: list[Any] = []
     handler = _manager()._make_handler(
         model=DeviceStatus,
         callback=delivered.append,

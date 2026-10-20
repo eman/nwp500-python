@@ -6,6 +6,7 @@ checks run with the port; these hold the anchor's rules and the
 adapter's.
 """
 
+from collections.abc import Callable
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -135,7 +136,9 @@ class TestTheHouseholdsFlow:
 
 
 @pytest.fixture
-def heater(device_status_dict):
+def heater(
+    device_status_dict: dict[str, Any],
+) -> Callable[..., list[Any]]:
     def readings(hours: float, recovery_at: float) -> list[Any]:
         out = []
         t = T0 - timedelta(hours=hours)
@@ -187,7 +190,9 @@ def with_a_draw(rows: list[Any], hours_ago: float) -> list[Any]:
 
 
 class TestFromTheHistory:
-    def test_it_books_from_the_recovery(self, heater) -> None:
+    def test_it_books_from_the_recovery(
+        self, heater: Callable[..., list[Any]]
+    ) -> None:
         p = site_example_params()
         b = sa.book_from_history(
             heater(20, recovery_at=4),
@@ -200,7 +205,9 @@ class TestFromTheHistory:
         assert b.anchor_age_h == pytest.approx(2.0, abs=0.01)
         assert not b.aged(p.book_terms())
 
-    def test_past_the_fresh_window_it_reads_the_long_one(self, heater) -> None:
+    def test_past_the_fresh_window_it_reads_the_long_one(
+        self, heater: Callable[..., list[Any]]
+    ) -> None:
         p = site_example_params()
         b = sa.book_from_history(
             heater(72, recovery_at=30),
@@ -210,7 +217,9 @@ class TestFromTheHistory:
         )
         assert b is not None and b.aged(p.book_terms())
 
-    def test_a_silent_meter_is_refused(self, heater) -> None:
+    def test_a_silent_meter_is_refused(
+        self, heater: Callable[..., list[Any]]
+    ) -> None:
         p = site_example_params()
         gappy = [
             r for r in meter(20) if not T0 - timedelta(hours=8) < r[0] < T0
@@ -220,7 +229,9 @@ class TestFromTheHistory:
                 heater(20, recovery_at=4), p, at=T0, flow=gappy
             )
 
-    def test_a_missing_meter_reading_is_no_reading(self, heater) -> None:
+    def test_a_missing_meter_reading_is_no_reading(
+        self, heater: Callable[..., list[Any]]
+    ) -> None:
         """A NaN in the meter's flow is a reading not taken: the anchor
         and the booked heat are what they are without it."""
         p = site_example_params()

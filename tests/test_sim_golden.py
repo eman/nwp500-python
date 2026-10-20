@@ -222,7 +222,7 @@ def _default(value: object) -> object:
     if isinstance(value, datetime):
         return value.isoformat()
     if isinstance(value, frozenset | set):
-        return sorted(value)  # type: ignore[type-var]
+        return sorted(value)
     raise TypeError(f"not held: {type(value).__name__}")
 
 

@@ -1,6 +1,7 @@
 """Test fixtures for nwp500."""
 
 import logging
+from collections.abc import Iterator
 from typing import Any
 
 import pytest
@@ -122,7 +123,7 @@ def device_status_dict() -> dict[str, Any]:
 
 
 @pytest.fixture(autouse=True)
-def _restore_logging():
+def _restore_logging() -> Iterator[None]:
     """Undo the logging setup the CLI group performs on every invocation.
 
     ``cli()`` calls ``logging.basicConfig`` and pins the ``nwp500`` logger

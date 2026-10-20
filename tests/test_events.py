@@ -10,7 +10,7 @@ from nwp500.events import EventEmitter, EventListener
 def test_event_listener_creation() -> None:
     """Test EventListener dataclass creation."""
 
-    def callback():
+    def callback() -> None:
         return None
 
     listener = EventListener(callback=callback, once=False, priority=50)
@@ -71,7 +71,7 @@ async def test_emit_event() -> None:
     emitter = EventEmitter()
     called = []
 
-    def handler(value) -> None:
+    def handler(value: int) -> None:
         called.append(value)
 
     emitter.on("test_event", handler)
@@ -89,7 +89,7 @@ async def test_emit_multiple_args() -> None:
     emitter = EventEmitter()
     results = []
 
-    def handler(a, b, c) -> None:
+    def handler(a: int, b: int, c: int) -> None:
         results.append((a, b, c))
 
     emitter.on("test_event", handler)
@@ -105,7 +105,7 @@ async def test_emit_kwargs() -> None:
     emitter = EventEmitter()
     results = []
 
-    def handler(name, value) -> None:
+    def handler(name: str, value: int) -> None:
         results.append({"name": name, "value": value})
 
     emitter.on("test_event", handler)
@@ -121,7 +121,7 @@ async def test_async_handler() -> None:
     emitter = EventEmitter()
     results = []
 
-    async def async_handler(value) -> None:
+    async def async_handler(value: str) -> None:
         await asyncio.sleep(0.01)  # Simulate async operation
         results.append(value)
 

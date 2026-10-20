@@ -4,11 +4,14 @@ The payloads below are trimmed from live ``/device/list`` and
 ``/device/info`` responses (identifiers replaced).
 """
 
+from typing import cast
+
 import pytest
 
 from nwp500.enums import ErrorCode
 from nwp500.models import (
     Device,
+    DeviceErrorSummary,
     DeviceInstaller,
     FirmwareDeviceGroup,
     FirmwareInfo,
@@ -80,12 +83,14 @@ class TestDeviceListEntry:
         assert info.installer_id is None
 
     @pytest.mark.parametrize("code", [0, 96, 326])
-    def test_known_error_code_becomes_an_enum(self, code) -> None:
+    def test_known_error_code_becomes_an_enum(self, code: int) -> None:
         """Not just ``== ErrorCode(code)``: an int compares equal to its
         member, so only the type tells the two union branches apart."""
         payload = DEVICE_LIST_ENTRY | {"error": {"errorCode": code}}
 
-        error_code = Device.model_validate(payload).error.error_code
+        error_code = cast(
+            DeviceErrorSummary, Device.model_validate(payload).error
+        ).error_code
 
         assert isinstance(error_code, ErrorCode)
         assert error_code is ErrorCode(code)
@@ -107,13 +112,20 @@ class TestDeviceListEntry:
         cloud has told us nothing, not that the device is fault-free."""
         payload = DEVICE_LIST_ENTRY | {"error": {}}
 
-        assert Device.model_validate(payload).error.error_code is None
+        assert (
+            cast(
+                DeviceErrorSummary, Device.model_validate(payload).error
+            ).error_code
+            is None
+        )
 
     def test_unknown_error_code_does_not_break_the_response(self) -> None:
         """A code the enum doesn't know must not fail the whole listing."""
         payload = DEVICE_LIST_ENTRY | {"error": {"errorCode": 9999}}
 
-        error_code = Device.model_validate(payload).error.error_code
+        error_code = cast(
+            DeviceErrorSummary, Device.model_validate(payload).error
+        ).error_code
 
         assert not isinstance(error_code, ErrorCode)
         assert error_code == 9999
@@ -149,7 +161,9 @@ class TestDeviceInfoEntry:
             }
         }
 
-        installer = Device.model_validate(payload).installer
+        installer = cast(
+            DeviceInstaller, Device.model_validate(payload).installer
+        )
 
         assert installer.installer_id == "installer@example.com"
         assert installer.installer_first_name == "Pat"
@@ -175,7 +189,7 @@ class TestDeviceInfoEntry:
             }
         }
 
-        alarm = Device.model_validate(payload).alarm_info
+        alarm = cast(PushSettings, Device.model_validate(payload).alarm_info)
 
         assert alarm.is_etc_alarm is False
         assert alarm.is_error_alarm is True

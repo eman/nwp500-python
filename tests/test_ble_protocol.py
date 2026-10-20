@@ -4,6 +4,9 @@ from __future__ import annotations
 
 import asyncio
 import datetime
+from collections.abc import Callable
+from pathlib import Path
+from typing import cast
 
 import pytest
 
@@ -154,7 +157,7 @@ class FakeTransport:
     def __init__(self, replies: dict[int, bytes]) -> None:
         self.replies = replies
         self.written: list[bytes] = []
-        self._cb = None
+        self._cb: Callable[[bytes], None] | None = None
         self.connected = False
 
     async def connect(self) -> None:
@@ -163,7 +166,7 @@ class FakeTransport:
     async def disconnect(self) -> None:
         self.connected = False
 
-    async def start_notify(self, callback) -> None:
+    async def start_notify(self, callback: Callable[[bytes], None]) -> None:
         self._cb = callback
 
     async def write(self, data: bytes) -> None:
@@ -179,7 +182,8 @@ class FakeTransport:
                 body,
             )
             # deliver asynchronously, like a GATT notification
-            asyncio.get_running_loop().call_soon(self._cb, reply)
+            cb = cast(Callable[[bytes], None], self._cb)
+            asyncio.get_running_loop().call_soon(cb, reply)
 
 
 @pytest.mark.asyncio
@@ -214,7 +218,7 @@ async def test_client_reads_and_parses_blocks() -> None:
         }
     assert not transport.connected
     # every request was a read with the app's expected-length byte
-    assert all(
+    assert all(  # type: ignore[unreachable]  # __aexit__ disconnects
         parse_packet(w).command == Command.READ for w in transport.written
     )
     assert parse_packet(transport.written[0]).data == bytes([58])
@@ -233,9 +237,8 @@ async def test_client_ignores_replies_for_other_classes() -> None:
     class Noisy(FakeTransport):
         async def write(self, data: bytes) -> None:
             # an unrelated status packet arrives first, then the real reply
-            self._cb(
-                build_packet(Command.READ_RESPONSE, ClassCode.SSD, bytes(59))
-            )
+            cb = cast(Callable[[bytes], None], self._cb)
+            cb(build_packet(Command.READ_RESPONSE, ClassCode.SSD, bytes(59)))
             await super().write(data)
 
     transport = Noisy({ClassCode.DID: bytes(58)})
@@ -284,7 +287,8 @@ class CorruptTransport(FakeTransport):
                 )
             )
             reply[-1] ^= 0xFF
-            asyncio.get_running_loop().call_soon(self._cb, bytes(reply))
+            cb = cast(Callable[[bytes], None], self._cb)
+            asyncio.get_running_loop().call_soon(cb, bytes(reply))
 
 
 @pytest.mark.asyncio
@@ -314,7 +318,7 @@ async def test_decoding_readers_refuse_a_bad_crc() -> None:
 )
 async def test_failed_subscribe_disconnects(error: BaseException) -> None:
     class FailingNotify(FakeTransport):
-        async def start_notify(self, callback) -> None:
+        async def start_notify(self, callback: Callable[[bytes], None]) -> None:
             raise error
 
     transport = FailingNotify({})
@@ -327,7 +331,7 @@ async def test_failed_subscribe_disconnects(error: BaseException) -> None:
 @pytest.mark.asyncio
 async def test_failed_subscribe_keeps_its_error_if_disconnect_fails() -> None:
     class Broken(FakeTransport):
-        async def start_notify(self, callback) -> None:
+        async def start_notify(self, callback: Callable[[bytes], None]) -> None:
             raise RuntimeError("subscribe failed")
 
         async def disconnect(self) -> None:
@@ -340,7 +344,11 @@ async def test_failed_subscribe_keeps_its_error_if_disconnect_fails() -> None:
 # --- python -m nwp500.ble read ---------------------------------------
 
 
-def _run_read(monkeypatch, transport, argv):
+def _run_read(
+    monkeypatch: pytest.MonkeyPatch,
+    transport: FakeTransport,
+    argv: list[str],
+) -> int:
     from nwp500.ble import __main__ as cli
 
     monkeypatch.setattr(
@@ -354,7 +362,7 @@ def _run_read(monkeypatch, transport, argv):
 
 
 def test_cli_read_defaults_to_the_classes_the_heater_answers(
-    monkeypatch,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     transport = FakeTransport(
         {c: bytes(DEFAULT_READ_LENGTHS[c]) for c in NWP500_RESPONDING_CLASSES}
@@ -366,7 +374,9 @@ def test_cli_read_defaults_to_the_classes_the_heater_answers(
     assert not {51, 52, 53, 54} & set(asked)
 
 
-def test_cli_read_fails_when_nothing_answers(monkeypatch, tmp_path) -> None:
+def test_cli_read_fails_when_nothing_answers(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     out = tmp_path / "blocks.json"
     transport = FakeTransport({})
     status = _run_read(monkeypatch, transport, ["--out", str(out), "SPID"])
@@ -374,7 +384,9 @@ def test_cli_read_fails_when_nothing_answers(monkeypatch, tmp_path) -> None:
     assert not out.exists()
 
 
-def test_cli_read_succeeds_on_a_partial_dump(monkeypatch, tmp_path) -> None:
+def test_cli_read_succeeds_on_a_partial_dump(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     out = tmp_path / "blocks.json"
     transport = FakeTransport({ClassCode.DID: bytes(58)})
     status = _run_read(
@@ -389,7 +401,9 @@ def test_every_default_cli_class_has_a_read_length() -> None:
 
 
 @pytest.mark.asyncio
-async def test_scan_without_bleak_gives_the_install_hint(monkeypatch) -> None:
+async def test_scan_without_bleak_gives_the_install_hint(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     import sys
 
     from nwp500.ble import scan
@@ -399,7 +413,9 @@ async def test_scan_without_bleak_gives_the_install_hint(monkeypatch) -> None:
         await scan(0)
 
 
-def test_transport_without_bleak_gives_the_install_hint(monkeypatch) -> None:
+def test_transport_without_bleak_gives_the_install_hint(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     import sys
 
     monkeypatch.setitem(sys.modules, "bleak", None)
@@ -437,7 +453,13 @@ CLOUD_INTERVALS = [
 ]
 
 
-def _cloud_period(season, week, start, end, price):
+def _cloud_period(
+    season: int,
+    week: int,
+    start: tuple[int, int],
+    end: tuple[int, int],
+    price: int,
+) -> TOUPeriod:
     """A TOUPeriod as the MQTT client and REST API build it."""
     return TOUPeriod.model_validate(
         {
@@ -515,7 +537,8 @@ class TouTableTransport(FakeTransport):
 
     def _reply(self, command: int, data: bytes) -> None:
         packet = build_packet(command, ClassCode.TOU_PLAN, data)
-        asyncio.get_running_loop().call_soon(self._cb, packet)
+        cb = cast(Callable[[bytes], None], self._cb)
+        asyncio.get_running_loop().call_soon(cb, packet)
 
     async def write(self, data: bytes) -> None:
         self.written.append(data)
@@ -558,11 +581,13 @@ def test_tou_record_encodes_back_to_the_bytes_read() -> None:
 
 def test_tou_record_encoding_rejects_empty_and_oversized_fields() -> None:
     with pytest.raises(ValueError, match="empty slot"):
-        encode_tou_record(TOUPeriod(decimal_point=0))
+        encode_tou_record(TOUPeriod(decimal_point=0))  # type: ignore[call-arg]
     with pytest.raises(ValueError, match="season"):
         encode_tou_record(TOUPeriod(season=0x10000, week=0x7C))
     with pytest.raises(ValueError, match="price_min"):
-        encode_tou_record(TOUPeriod(season=1, price_min=-1))
+        encode_tou_record(
+            TOUPeriod(season=1, price_min=-1)  # type: ignore[call-arg]
+        )
 
 
 def test_build_tou_write_puts_the_clock_header_before_the_records() -> None:
@@ -683,7 +708,9 @@ def test_build_read_carries_the_address() -> None:
     assert parse_packet(build_read(ClassCode.TOU_PLAN, None, 15)).address == 15
 
 
-def test_cli_read_prints_the_whole_tou_plan(monkeypatch, capsys) -> None:
+def test_cli_read_prints_the_whole_tou_plan(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
     transport = TouTableTransport(TOU_PLAN_PAGE + TOU_PLAN_REST)
     assert _run_read(monkeypatch, transport, ["TOU_PLAN"]) == 0
     out = capsys.readouterr().out
@@ -735,7 +762,9 @@ async def test_client_refuses_an_ssd_reply_with_a_bad_crc() -> None:
             await ble.read_sub_status()
 
 
-def test_cli_read_prints_decoded_sub_status(monkeypatch, capsys) -> None:
+def test_cli_read_prints_decoded_sub_status(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
     transport = FakeTransport({ClassCode.SSD: SSD_BLOCK})
     assert _run_read(monkeypatch, transport, ["SSD"]) == 0
     assert "dip_switch_1=0x0004 dip_switch_2=0x0000" in capsys.readouterr().out

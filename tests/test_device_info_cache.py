@@ -2,16 +2,21 @@
 
 import asyncio
 from datetime import UTC, datetime, timedelta
+from typing import cast
 
 import pytest
 
 from nwp500.device_info_cache import MqttDeviceInfoCache
+from nwp500.models import DeviceFeature
 
 
 @pytest.fixture
-def device_feature() -> dict:
+def device_feature() -> DeviceFeature:
     """Create a mock device feature."""
-    return {"mac": "AA:BB:CC:DD:EE:FF", "data": "feature_data"}
+    return cast(
+        DeviceFeature,
+        {"mac": "AA:BB:CC:DD:EE:FF", "data": "feature_data"},
+    )
 
 
 @pytest.fixture
@@ -39,7 +44,9 @@ class TestMqttDeviceInfoCache:
 
     @pytest.mark.asyncio
     async def test_cache_set_and_get(
-        self, cache_with_updates: MqttDeviceInfoCache, device_feature: dict
+        self,
+        cache_with_updates: MqttDeviceInfoCache,
+        device_feature: DeviceFeature,
     ) -> None:
         """Test basic set and get operations."""
         mac = "AA:BB:CC:DD:EE:FF"
@@ -53,8 +60,8 @@ class TestMqttDeviceInfoCache:
     ) -> None:
         """Test that set overwrites previous cache entry."""
         mac = "AA:BB:CC:DD:EE:FF"
-        feature1 = {"data": "first"}
-        feature2 = {"data": "second"}
+        feature1 = cast(DeviceFeature, {"data": "first"})
+        feature2 = cast(DeviceFeature, {"data": "second"})
 
         await cache_with_updates.set(mac, feature1)
         result1 = await cache_with_updates.get(mac)
@@ -72,8 +79,8 @@ class TestMqttDeviceInfoCache:
         mac1 = "AA:BB:CC:DD:EE:FF"
         mac2 = "11:22:33:44:55:66"
 
-        feature1 = {"data": "device1"}
-        feature2 = {"data": "device2"}
+        feature1 = cast(DeviceFeature, {"data": "device1"})
+        feature2 = cast(DeviceFeature, {"data": "device2"})
 
         await cache_with_updates.set(mac1, feature1)
         await cache_with_updates.set(mac2, feature2)
@@ -89,7 +96,7 @@ class TestMqttDeviceInfoCache:
         """Test that cache entries expire."""
         cache_exp = MqttDeviceInfoCache(update_interval_minutes=1)
         mac = "AA:BB:CC:DD:EE:FF"
-        feature = {"data": "test"}
+        feature = cast(DeviceFeature, {"data": "test"})
         old_time = datetime.now(UTC) - timedelta(minutes=2)
         cache_exp._cache[mac] = (feature, old_time)
 
@@ -127,7 +134,7 @@ class TestMqttDeviceInfoCache:
     ) -> None:
         """Test cache invalidation."""
         mac = "AA:BB:CC:DD:EE:FF"
-        feature = {"data": "test"}
+        feature = cast(DeviceFeature, {"data": "test"})
         await cache_with_updates.set(mac, feature)
         assert await cache_with_updates.get(mac) is not None
 
@@ -149,7 +156,7 @@ class TestMqttDeviceInfoCache:
         """Test clearing entire cache."""
         mac1 = "AA:BB:CC:DD:EE:FF"
         mac2 = "11:22:33:44:55:66"
-        feature = {"data": "test"}
+        feature = cast(DeviceFeature, {"data": "test"})
 
         await cache_with_updates.set(mac1, feature)
         await cache_with_updates.set(mac2, feature)
@@ -170,8 +177,8 @@ class TestMqttDeviceInfoCache:
         mac1 = "AA:BB:CC:DD:EE:FF"
         mac2 = "11:22:33:44:55:66"
 
-        feature1 = {"data": "device1"}
-        feature2 = {"data": "device2"}
+        feature1 = cast(DeviceFeature, {"data": "device1"})
+        feature2 = cast(DeviceFeature, {"data": "device2"})
 
         await cache_with_updates.set(mac1, feature1)
         await cache_with_updates.set(mac2, feature2)
@@ -188,7 +195,7 @@ class TestMqttDeviceInfoCache:
         cache = MqttDeviceInfoCache(update_interval_minutes=1)
         mac1 = "AA:BB:CC:DD:EE:FF"
         mac2 = "11:22:33:44:55:66"
-        feature = {"data": "test"}
+        feature = cast(DeviceFeature, {"data": "test"})
 
         # Set one fresh and one expired
         await cache.set(mac1, feature)
@@ -208,7 +215,7 @@ class TestMqttDeviceInfoCache:
     ) -> None:
         """Test get_cache_info returns correct information."""
         mac = "AA:BB:CC:DD:EE:FF"
-        feature = {"data": "test"}
+        feature = cast(DeviceFeature, {"data": "test"})
         await cache_with_updates.set(mac, feature)
 
         info = await cache_with_updates.get_cache_info()
@@ -227,7 +234,7 @@ class TestMqttDeviceInfoCache:
     ) -> None:
         """Test get_cache_info with auto-updates disabled."""
         mac = "AA:BB:CC:DD:EE:FF"
-        feature = {"data": "test"}
+        feature = cast(DeviceFeature, {"data": "test"})
         await cache_no_updates.set(mac, feature)
 
         info = await cache_no_updates.get_cache_info()
@@ -242,7 +249,7 @@ class TestMqttDeviceInfoCache:
     ) -> None:
         """Test concurrent cache operations."""
         macs = [f"AA:BB:CC:DD:EE:{i:02X}" for i in range(10)]
-        feature = {"data": "test"}
+        feature = cast(DeviceFeature, {"data": "test"})
 
         # Concurrent sets
         await asyncio.gather(

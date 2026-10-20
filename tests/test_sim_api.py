@@ -684,7 +684,9 @@ class TestWhatTheResultSays:
         assert w.setpoint_f == 146.3
 
     @pytest.mark.parametrize("slot", [timedelta(0), timedelta(minutes=-10)])
-    def test_a_slot_must_be_positive(self, params: HeaterParams, slot) -> None:
+    def test_a_slot_must_be_positive(
+        self, params: HeaterParams, slot: timedelta
+    ) -> None:
         """Copilot's review of #162: a negative slot walked backwards
         forever, and a zero one divided by zero."""
         r = simulate(
@@ -747,9 +749,9 @@ class TestRecoveryAndStandby:
         assert r.interval == whole.heating[0]
         assert r.ready_at == whole.heating[0].end
         assert r.minutes == pytest.approx(
-            (r.ready_at - T0).total_seconds() / 60  # type: ignore[operator]
+            (r.ready_at - T0).total_seconds() / 60
         )
-        assert r.path[-1].at <= r.ready_at  # type: ignore[operator]
+        assert r.path[-1].at <= r.ready_at
 
     def test_a_full_tank_has_no_recovery(self, params: HeaterParams) -> None:
         r = recovery(

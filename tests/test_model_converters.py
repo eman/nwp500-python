@@ -92,13 +92,13 @@ class TestDeviceBoolConverter:
         assert result is False
 
     @pytest.mark.parametrize("on_value", [2, 2.0])
-    def test_on_value_variations(self, on_value) -> None:
+    def test_on_value_variations(self, on_value: float) -> None:
         """Test various representations that equal 2."""
         # Numeric 2 and float 2.0 equal int 2
         assert device_bool_to_python(on_value) is True
 
     @pytest.mark.parametrize("off_value", [1, "1", 1.0, 0, 3, -1, "2"])
-    def test_off_value_variations(self, off_value) -> None:
+    def test_off_value_variations(self, off_value: object) -> None:
         """Test various representations of False value."""
         assert device_bool_to_python(off_value) is False
 
@@ -132,7 +132,9 @@ class TestDeviceTriStateConverter:
         ("raw", "expected"),
         [("0", None), ("1", False), ("2", True), (0.0, None), (2.0, True)],
     )
-    def test_coerces_numeric_strings_and_floats(self, raw, expected) -> None:
+    def test_coerces_numeric_strings_and_floats(
+        self, raw: object, expected: bool | None
+    ) -> None:
         """Unlike device_bool_to_python, this coerces before comparing.
 
         device_bool_to_python compares with ``== 2`` and so reports False
@@ -174,12 +176,12 @@ class TestBuiltinBoolForTouStatus:
         assert bool(-1) is True
 
     @pytest.mark.parametrize("value", [0, 0.0, "", [], {}, None])
-    def test_falsy_values(self, value) -> None:
+    def test_falsy_values(self, value: object) -> None:
         """Test various falsy values."""
         assert bool(value) is False
 
     @pytest.mark.parametrize("value", [1, 2, -1, "text", [1], {1: 1}])
-    def test_truthy_values(self, value) -> None:
+    def test_truthy_values(self, value: object) -> None:
         """Test various truthy values."""
         assert bool(value) is True
 
@@ -229,13 +231,13 @@ class TestTouOverrideConverter:
         assert result is False
 
     @pytest.mark.parametrize("active_value", [1, 1.0])
-    def test_active_variations(self, active_value) -> None:
+    def test_active_variations(self, active_value: float) -> None:
         """Test numeric variations of active (value == 1)."""
         # Only numeric 1 and float 1.0 equal int 1
         assert tou_override_to_python(active_value) is True
 
     @pytest.mark.parametrize("inactive_value", [2, "2", 2.0, 0, 3, -1, "1"])
-    def test_inactive_variations(self, inactive_value) -> None:
+    def test_inactive_variations(self, inactive_value: object) -> None:
         """Test various representations of inactive (value != 1)."""
         assert tou_override_to_python(inactive_value) is False
 
@@ -297,7 +299,7 @@ class TestDiv10Converter:
             (99.9, 9.99),
         ],
     )
-    def test_known_values(self, input_value, expected) -> None:
+    def test_known_values(self, input_value: float, expected: float) -> None:
         """Test known div_10 conversions for numeric types."""
         result = div_10(input_value)
         assert result == pytest.approx(expected, abs=0.001)
@@ -369,7 +371,7 @@ class TestEnergyCountToWh:
         "counts",
         [0, 1, 10, 250, 1166, 1580, 1685],
     )
-    def test_known_values(self, counts) -> None:
+    def test_known_values(self, counts: int) -> None:
         """Raw counts scale by exactly the documented quantum."""
         assert energy_count_to_wh(counts) == pytest.approx(
             counts * WH_PER_ENERGY_COUNT, abs=0.001
@@ -454,7 +456,9 @@ class TestEnumValidator:
             (OnOffFlag.ON, OnOffFlag.ON),
         ],
     )
-    def test_onoff_conversions(self, input_val, expected_enum) -> None:
+    def test_onoff_conversions(
+        self, input_val: object, expected_enum: OnOffFlag
+    ) -> None:
         """Test various input formats for OnOffFlag."""
         validator = enum_validator(OnOffFlag)
         result = validator(input_val)

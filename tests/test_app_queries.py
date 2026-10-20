@@ -8,7 +8,7 @@ import asyncio
 import concurrent.futures
 import importlib.util
 import json
-from typing import Any
+from typing import Any, cast
 from unittest.mock import MagicMock
 
 import pytest
@@ -259,7 +259,7 @@ class TestRecirculationScheduleModel:
             {"week": "124", "hour": 6, "min": 0},
         ],
     )
-    def test_entry_fields_are_strict(self, entry) -> None:
+    def test_entry_fields_are_strict(self, entry: dict[str, Any]) -> None:
         """Regression: Pydantic coerced True and 6.0 to ints, so they passed
         write validation and were published."""
         from pydantic import ValidationError
@@ -269,7 +269,7 @@ class TestRecirculationScheduleModel:
 
     @pytest.mark.parametrize("param", [255.0, True])
     def test_param_normalization_does_not_bypass_strictness(
-        self, param
+        self, param: object
     ) -> None:
         """Regression: the before-validator mapped 255.0 to -1, so a float
         param passed the strict check."""
@@ -362,7 +362,7 @@ class TestTypedSubscriptions:
     @pytest.mark.asyncio
     async def test_diagnostics_subscribes_app_form_topic(self) -> None:
         manager = _manager()
-        received = []
+        received: list[Any] = []
 
         await manager.subscribe_diagnostics(_device(), received.append)
 
@@ -379,7 +379,7 @@ class TestTypedSubscriptions:
     async def test_firmware_info_rides_the_device_wildcard(self) -> None:
         """No extra broker subscription; only /res/dl-sw-info fires."""
         manager = _manager()
-        received = []
+        received: list[Any] = []
 
         await manager.subscribe_firmware_download_info(
             _device(), received.append
@@ -421,7 +421,7 @@ class TestTypedSubscriptions:
     @pytest.mark.asyncio
     async def test_monthly_energy_subscription_parses(self) -> None:
         manager = _manager()
-        received = []
+        received: list[Any] = []
 
         await manager.subscribe_energy_usage_monthly(_device(), received.append)
 
@@ -484,7 +484,7 @@ class TestSubscriptionLifecycle:
         ],
     )
     async def test_typed_subscribe_and_unsubscribe(
-        self, subscribe, unsubscribe, topic
+        self, subscribe: str, unsubscribe: str, topic: str
     ) -> None:
         manager = _manager()
         device = _device()
@@ -641,7 +641,9 @@ class TestYearlyEnergyReport:
         assert summary.lifetime is not None
         assert summary.lifetime.total_usage_wh == 1005000
 
-    def test_lifetime_printed_once_for_several_years(self, monkeypatch) -> None:
+    def test_lifetime_printed_once_for_several_years(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         from nwp500.cli import output_formatters
 
         calls: list[str] = []
@@ -662,7 +664,7 @@ class TestYearlyEnergyReport:
         assert calls == ["year:2025", "year:2026", "lifetime"]
 
     def test_lifetime_printed_when_no_requested_year_has_data(
-        self, monkeypatch
+        self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """Regression: with every requested year missing from the reply, the
         lifetime total was never printed."""
@@ -812,7 +814,7 @@ class TestSessionEndOnDisconnect:
         await client.disconnect()
 
         assert sdk.disconnect_calls == 1
-        assert client._connection_manager._connection is None
+        assert cast(Any, client._connection_manager)._connection is None
         assert client.is_connected is False
 
     @pytest.mark.asyncio
@@ -851,7 +853,9 @@ class TestSessionEndOnDisconnect:
         assert client.is_connected is False
 
     @pytest.mark.asyncio
-    async def test_slow_st_end_is_bounded(self, monkeypatch) -> None:
+    async def test_slow_st_end_is_bounded(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         sdk = _FakeSdkConnection()
         client = _connected_client(sdk, [_device()])
 

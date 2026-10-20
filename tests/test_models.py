@@ -1,4 +1,4 @@
-from typing import ClassVar
+from typing import Any, ClassVar
 
 import pytest
 
@@ -12,7 +12,7 @@ from nwp500.unit_system import reset_unit_system, set_unit_system
 
 
 @pytest.fixture
-def default_status_data():
+def default_status_data() -> dict[str, Any]:
     """Provides a default dictionary for DeviceStatus model."""
     return {
         "command": 0,
@@ -119,21 +119,25 @@ def default_status_data():
     }
 
 
-def test_device_status_half_celsius_to_fahrenheit(default_status_data) -> None:
+def test_device_status_half_celsius_to_fahrenheit(
+    default_status_data: dict[str, Any],
+) -> None:
     """Test HalfCelsiusToF conversion."""
     default_status_data["dhwTemperature"] = 122
     status = DeviceStatus.model_validate(default_status_data)
     assert status.dhw_temperature == pytest.approx(141.8)
 
 
-def test_device_status_deci_celsius_to_fahrenheit(default_status_data) -> None:
+def test_device_status_deci_celsius_to_fahrenheit(
+    default_status_data: dict[str, Any],
+) -> None:
     """Test DeciCelsiusToF conversion."""
     default_status_data["tankUpperTemperature"] = 489
     status = DeviceStatus.model_validate(default_status_data)
     assert status.tank_upper_temperature == pytest.approx(120.0, abs=0.1)
 
 
-def test_device_status_div10(default_status_data) -> None:
+def test_device_status_div10(default_status_data: dict[str, Any]) -> None:
     """Test currentInletTemperature HalfCelsiusToF conversion."""
     # Raw value 100 = 50°C = (50 * 1.8) + 32 = 122°F
     default_status_data["currentInletTemperature"] = 100
@@ -236,7 +240,8 @@ class TestReservationSchedule:
         set_unit_system("metric")
         # Hex: 02=enabled, 3e=week62, 06=hour6, 1e=min30, 04=mode4, 78=param120
         schedule = ReservationSchedule(
-            reservationUse=2, reservation="023e061e0478"
+            reservationUse=2,
+            reservation="023e061e0478",  # type: ignore[arg-type]
         )
         assert schedule.enabled is True
         assert len(schedule.reservation) == 1
@@ -248,7 +253,7 @@ class TestReservationSchedule:
         schedule = ReservationSchedule(
             reservationUse=1,
             reservation=[
-                {
+                {  # type: ignore[list-item]
                     "enable": 1,
                     "week": 1,
                     "hour": 7,
@@ -263,7 +268,10 @@ class TestReservationSchedule:
         assert schedule.reservation[0].hour == 7
 
     def test_empty_schedule(self) -> None:
-        schedule = ReservationSchedule(reservationUse=0, reservation="")
+        schedule = ReservationSchedule(
+            reservationUse=0,
+            reservation="",  # type: ignore[arg-type]
+        )
         assert schedule.enabled is False
         assert len(schedule.reservation) == 0
 
@@ -271,7 +279,7 @@ class TestReservationSchedule:
         # 12 hex chars of zeros = one empty 6-byte entry
         schedule = ReservationSchedule(
             reservationUse=1,
-            reservation="000000000000013e061e0478",
+            reservation="000000000000013e061e0478",  # type: ignore[arg-type]
         )
         assert len(schedule.reservation) == 1
         assert schedule.reservation[0].week == 62
@@ -310,28 +318,34 @@ class TestTriStateFlags:
     }
 
     @pytest.mark.parametrize("field", TRISTATE_FIELDS)
-    def test_zero_becomes_none(self, default_status_data, field) -> None:
+    def test_zero_becomes_none(
+        self, default_status_data: dict[str, Any], field: str
+    ) -> None:
         """0 surfaces as None rather than a fabricated OFF."""
         data = dict(default_status_data)
         data[self.ALIASES[field]] = 0
         assert getattr(DeviceStatus(**data), field) is None
 
     @pytest.mark.parametrize("field", TRISTATE_FIELDS)
-    def test_one_is_off(self, default_status_data, field) -> None:
+    def test_one_is_off(
+        self, default_status_data: dict[str, Any], field: str
+    ) -> None:
         """1 is a real OFF and stays False."""
         data = dict(default_status_data)
         data[self.ALIASES[field]] = 1
         assert getattr(DeviceStatus(**data), field) is False
 
     @pytest.mark.parametrize("field", TRISTATE_FIELDS)
-    def test_two_is_on(self, default_status_data, field) -> None:
+    def test_two_is_on(
+        self, default_status_data: dict[str, Any], field: str
+    ) -> None:
         """2 is a real ON and stays True."""
         data = dict(default_status_data)
         data[self.ALIASES[field]] = 2
         assert getattr(DeviceStatus(**data), field) is True
 
     def test_unknown_is_falsy_but_distinguishable(
-        self, default_status_data
+        self, default_status_data: dict[str, Any]
     ) -> None:
         """None is falsy, so naive `if flag:` keeps its old behaviour.
 
@@ -344,7 +358,9 @@ class TestTriStateFlags:
         assert not status.comp_use
         assert status.comp_use is not False
 
-    def test_capability_flags_are_unaffected(self, default_status_data) -> None:
+    def test_capability_flags_are_unaffected(
+        self, default_status_data: dict[str, Any]
+    ) -> None:
         """Plain DeviceBool status fields still collapse 0 to False."""
         data = dict(default_status_data)
         data["dhwUse"] = 0
@@ -359,13 +375,17 @@ class TestEnergyFields:
     4 Wh/count rather than the 10 Wh assumed before 10.0.
     """
 
-    def test_wire_aliases_still_parse(self, device_status_dict) -> None:
+    def test_wire_aliases_still_parse(
+        self, device_status_dict: dict[str, Any]
+    ) -> None:
         """The protocol field names are unchanged on the wire."""
         status = DeviceStatus(**device_status_dict)
         assert status.full_recovery_energy == pytest.approx(6320.0)
         assert status.energy_to_setpoint == pytest.approx(4664.0)
 
-    def test_old_names_are_gone(self, device_status_dict) -> None:
+    def test_old_names_are_gone(
+        self, device_status_dict: dict[str, Any]
+    ) -> None:
         """The misleading names are removed, not aliased.
 
         Per the project's backward compatibility policy, renamed fields
@@ -376,13 +396,15 @@ class TestEnergyFields:
         assert not hasattr(status, "available_energy_capacity")
 
     def test_deficit_is_smaller_than_full_recovery(
-        self, device_status_dict
+        self, device_status_dict: dict[str, Any]
     ) -> None:
         """A partly charged tank needs less than a full recovery costs."""
         status = DeviceStatus(**device_status_dict)
         assert status.energy_to_setpoint < status.full_recovery_energy
 
-    def test_protocol_dump_uses_wire_names(self, device_status_dict) -> None:
+    def test_protocol_dump_uses_wire_names(
+        self, device_status_dict: dict[str, Any]
+    ) -> None:
         """Renaming the Python fields must not change what is sent."""
         status = DeviceStatus(**device_status_dict)
         dumped = status.to_protocol_dict()
@@ -394,31 +416,39 @@ class TestEnergyFields:
 class TestUsableEnergy:
     """Drawable energy, derived by cancelling the setpoint."""
 
-    def test_is_the_difference(self, device_status_dict) -> None:
+    def test_is_the_difference(
+        self, device_status_dict: dict[str, Any]
+    ) -> None:
         """Usable energy is full recovery minus the remaining deficit."""
         status = DeviceStatus(**device_status_dict)
         assert status.usable_energy == pytest.approx(
             status.full_recovery_energy - status.energy_to_setpoint
         )
 
-    def test_known_value(self, device_status_dict) -> None:
+    def test_known_value(self, device_status_dict: dict[str, Any]) -> None:
         """1580 and 1166 raw counts at 4 Wh give 6320 - 4664 Wh."""
         status = DeviceStatus(**device_status_dict)
         assert status.usable_energy == pytest.approx(1656.0)
 
-    def test_zero_when_tank_at_reference(self, device_status_dict) -> None:
+    def test_zero_when_tank_at_reference(
+        self, device_status_dict: dict[str, Any]
+    ) -> None:
         """A tank at the reference temperature has nothing drawable."""
         d = dict(device_status_dict)
         d["availableEnergyCapacity"] = d["totalEnergyCapacity"]
         assert DeviceStatus(**d).usable_energy == 0.0
 
-    def test_clamped_below_reference(self, device_status_dict) -> None:
+    def test_clamped_below_reference(
+        self, device_status_dict: dict[str, Any]
+    ) -> None:
         """Below the reference the result clamps rather than going negative."""
         d = dict(device_status_dict)
         d["availableEnergyCapacity"] = d["totalEnergyCapacity"] + 500
         assert DeviceStatus(**d).usable_energy == 0.0
 
-    def test_independent_of_setpoint(self, device_status_dict) -> None:
+    def test_independent_of_setpoint(
+        self, device_status_dict: dict[str, Any]
+    ) -> None:
         """The setpoint cancels, so raising it must not change the result.
 
         This is the property that makes usable_energy a state of charge
@@ -434,7 +464,9 @@ class TestUsableEnergy:
             base.usable_energy
         )
 
-    def test_excluded_from_protocol_dump(self, device_status_dict) -> None:
+    def test_excluded_from_protocol_dump(
+        self, device_status_dict: dict[str, Any]
+    ) -> None:
         """Computed fields must never be sent back to the device."""
         status = DeviceStatus(**device_status_dict)
         assert "usable_energy" not in status.to_protocol_dict()

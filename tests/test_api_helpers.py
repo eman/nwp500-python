@@ -3,7 +3,7 @@
 import math
 from datetime import date
 
-import pytest  # type: ignore[import]
+import pytest
 
 from nwp500.encoding import (
     build_reservation_entry,
@@ -69,15 +69,15 @@ def test_encode_decode_week_bitfield() -> None:
 
     # Invalid weekday name raises ParameterValidationError
     with pytest.raises(ParameterValidationError):
-        encode_week_bitfield(["Funday"])  # type: ignore[arg-type]
+        encode_week_bitfield(["Funday"])
 
     # Invalid weekday index raises RangeValidationError
     with pytest.raises(RangeValidationError):
-        encode_week_bitfield([10])  # type: ignore[arg-type]
+        encode_week_bitfield([10])
 
     # Value 7 is out of range (0-6 only)
     with pytest.raises(RangeValidationError):
-        encode_week_bitfield([7])  # type: ignore[arg-type]
+        encode_week_bitfield([7])
 
 
 def test_encode_decode_season_bitfield() -> None:
@@ -159,8 +159,8 @@ def test_build_tou_period() -> None:
         start_minute=0,
         end_hour=14,
         end_minute=59,
-        price_min=0.34831,
-        price_max=0.36217,
+        price_min=0.34831,  # type: ignore[arg-type]
+        price_max=0.36217,  # type: ignore[arg-type]
         decimal_point=5,
     )
 
@@ -179,8 +179,8 @@ def test_build_tou_period() -> None:
             start_minute=0,
             end_hour=1,
             end_minute=0,
-            price_min=0.1,
-            price_max=0.2,
+            price_min=0.1,  # type: ignore[arg-type]
+            price_max=0.2,  # type: ignore[arg-type]
             decimal_point=5,
         )
 
@@ -195,7 +195,7 @@ def test_format_maintenance_date_is_not_zero_padded() -> None:
     ("raw", "expected"),
     [(1, True), (2, False), (0, None), (None, None), ("1", True), ("x", None)],
 )
-def test_push_flag_to_python(raw, expected) -> None:
+def test_push_flag_to_python(raw: object, expected: bool | None) -> None:
     """Push flags are 1=on, 2=off, 0=unknown - inverted from DeviceBool."""
     assert push_flag_to_python(raw) is expected
 
@@ -203,7 +203,7 @@ def test_push_flag_to_python(raw, expected) -> None:
 @pytest.mark.parametrize(
     ("value", "expected"), [(True, 1), (False, 2), (None, None)]
 )
-def test_python_to_push_flag(value, expected) -> None:
+def test_python_to_push_flag(value: bool | None, expected: int | None) -> None:
     assert python_to_push_flag(value) == expected
 
 

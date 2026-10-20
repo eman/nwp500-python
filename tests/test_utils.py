@@ -2,6 +2,7 @@
 
 import asyncio
 import logging
+from typing import cast
 
 import pytest
 
@@ -13,7 +14,7 @@ async def test_log_performance_basic() -> None:
     """Test basic functionality of log_performance decorator."""
 
     @log_performance
-    async def sample_async_func():
+    async def sample_async_func() -> str:
         await asyncio.sleep(0.1)
         return "result"
 
@@ -26,7 +27,7 @@ async def test_log_performance_with_args() -> None:
     """Test log_performance with function arguments."""
 
     @log_performance
-    async def func_with_args(x: int, y: str, z: bool = False):
+    async def func_with_args(x: int, y: str, z: bool = False) -> str:
         await asyncio.sleep(0.05)
         return f"{x}-{y}-{z}"
 
@@ -48,12 +49,14 @@ async def test_log_performance_with_exception() -> None:
 
 
 @pytest.mark.asyncio
-async def test_log_performance_logs_at_debug_level(caplog) -> None:
+async def test_log_performance_logs_at_debug_level(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
     """Test that execution time is logged at DEBUG level."""
     caplog.set_level(logging.DEBUG)
 
     @log_performance
-    async def timed_func():
+    async def timed_func() -> str:
         await asyncio.sleep(0.05)
         return "done"
 
@@ -69,12 +72,14 @@ async def test_log_performance_logs_at_debug_level(caplog) -> None:
 
 
 @pytest.mark.asyncio
-async def test_log_performance_no_log_when_debug_disabled(caplog) -> None:
+async def test_log_performance_no_log_when_debug_disabled(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
     """Test that no logging occurs when DEBUG level is not enabled."""
     caplog.set_level(logging.INFO)  # Above DEBUG
 
     @log_performance
-    async def quiet_func():
+    async def quiet_func() -> str:
         await asyncio.sleep(0.05)
         return "result"
 
@@ -86,7 +91,9 @@ async def test_log_performance_no_log_when_debug_disabled(caplog) -> None:
 
 
 @pytest.mark.asyncio
-async def test_log_performance_timing_accuracy(caplog) -> None:
+async def test_log_performance_timing_accuracy(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
     """Test that logged timing is reasonably accurate."""
     caplog.set_level(logging.DEBUG)
 
@@ -116,7 +123,7 @@ def test_log_performance_rejects_sync_functions() -> None:
     ):
 
         @log_performance
-        def sync_func():
+        def sync_func() -> str:
             return "sync"
 
 
@@ -138,12 +145,14 @@ async def test_log_performance_preserves_metadata() -> None:
 
     # Check that metadata is preserved
     assert documented_func.__name__ == "documented_func"
-    assert "This is a test function" in documented_func.__doc__
+    assert "This is a test function" in cast(str, documented_func.__doc__)
     assert documented_func.__module__ == __name__
 
 
 @pytest.mark.asyncio
-async def test_log_performance_exception_still_logs(caplog) -> None:
+async def test_log_performance_exception_still_logs(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
     """Test that timing is logged even when function raises exception."""
     caplog.set_level(logging.DEBUG)
 
@@ -161,12 +170,14 @@ async def test_log_performance_exception_still_logs(caplog) -> None:
 
 
 @pytest.mark.asyncio
-async def test_log_performance_multiple_calls(caplog) -> None:
+async def test_log_performance_multiple_calls(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
     """Test decorator works correctly with multiple calls."""
     caplog.set_level(logging.DEBUG)
 
     @log_performance
-    async def multi_call_func(value: int):
+    async def multi_call_func(value: int) -> int:
         await asyncio.sleep(0.01)
         return value * 2
 
@@ -182,12 +193,14 @@ async def test_log_performance_multiple_calls(caplog) -> None:
 
 
 @pytest.mark.asyncio
-async def test_log_performance_concurrent_calls(caplog) -> None:
+async def test_log_performance_concurrent_calls(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
     """Test decorator works correctly with concurrent calls."""
     caplog.set_level(logging.DEBUG)
 
     @log_performance
-    async def concurrent_func(delay: float):
+    async def concurrent_func(delay: float) -> float:
         await asyncio.sleep(delay)
         return delay
 

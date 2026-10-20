@@ -6,6 +6,7 @@ port; these hold their rules.
 """
 
 from datetime import UTC, datetime, timedelta
+from typing import Any, cast
 
 import pytest
 
@@ -23,7 +24,7 @@ T0 = datetime(2026, 3, 1, tzinfo=UTC)
 GRID = timedelta(seconds=cal.DRAW_GRID_S)
 
 
-def frame(n: int, **cols) -> pd.DataFrame:
+def frame(n: int, **cols: Any) -> pd.DataFrame:
     """``n`` draw-grid steps of a quiet full tank, ``cols`` laid over."""
     base = {
         "flow_gpm": np.zeros(n),
@@ -39,7 +40,13 @@ def frame(n: int, **cols) -> pd.DataFrame:
     )
 
 
-def a_draw(n=400, at=100, steps=60, gpm=2.0, **kw) -> pd.DataFrame:
+def a_draw(
+    n: int = 400,
+    at: int = 100,
+    steps: int = 60,
+    gpm: float = 2.0,
+    **kw: Any,
+) -> pd.DataFrame:
     flow = np.zeros(n)
     flow[at : at + steps] = gpm
     return frame(n, flow_gpm=flow, **kw)
@@ -102,7 +109,7 @@ class TestTheBooksTerms:
     def test_re_anchors_need_an_hour_between(self) -> None:
         p = BookParams()
 
-        def s(**kw) -> Step:
+        def s(**kw: Any) -> Step:
             d = {
                 "seconds": 10.0,
                 "upper_f": 140.0,
@@ -216,7 +223,7 @@ class TestTheDrawResponseFits:
 
 
 class TestCirculationFits:
-    def _runs(self, displaced: float, n: int = 30) -> list:
+    def _runs(self, displaced: float, n: int = 30) -> list[cal.MeasuredRun]:
         rng = np.random.default_rng(4)
         out = []
         for k in range(n):
@@ -251,7 +258,9 @@ class TestCirculationFits:
         runs = self._runs(6.0)
         until = runs[-1].start
         flows = sorted(
-            r.flow_gpm for r in runs if until - timedelta(days=14) <= r.start
+            cast(float, r.flow_gpm)
+            for r in runs
+            if until - timedelta(days=14) <= r.start
         )
         assert cal.recent_flow_gpm(runs, until) == pytest.approx(
             float(np.median(flows))

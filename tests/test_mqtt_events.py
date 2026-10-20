@@ -80,7 +80,11 @@ def test_get_event_value_unknown_raises() -> None:
         ),
         (
             MqttClientEvents.MODE_CHANGED,
-            ModeChangedEvent(device_mac="aabbccddeeff", old_mode=1, new_mode=2),
+            ModeChangedEvent(
+                device_mac="aabbccddeeff",
+                old_mode=1,  # type: ignore[arg-type]  # int for enum
+                new_mode=2,  # type: ignore[arg-type]  # int for enum
+            ),
         ),
         (
             MqttClientEvents.POWER_CHANGED,
@@ -90,13 +94,16 @@ def test_get_event_value_unknown_raises() -> None:
         ),
         (
             MqttClientEvents.ERROR_CLEARED,
-            ErrorClearedEvent(device_mac="aabbccddeeff", error_code=799),
+            ErrorClearedEvent(
+                device_mac="aabbccddeeff",
+                error_code=799,  # type: ignore[arg-type]  # int for enum
+            ),
         ),
     ],
 )
 @pytest.mark.asyncio
 async def test_typed_payload_delivered_via_registry_constant(
-    event_name, payload
+    event_name: str, payload: object
 ) -> None:
     """Subscribing with a registry constant delivers the typed payload."""
     emitter = EventEmitter()

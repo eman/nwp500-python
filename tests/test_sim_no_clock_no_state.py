@@ -346,20 +346,18 @@ def test_the_value_check_sees_a_violation() -> None:
 
     sealed = np.zeros(3)
     sealed.setflags(write=False)
-    assert [
-        _mutable(v)
-        for v in (
-            [],
-            {},
-            set(),
-            np.zeros(3),
-            pd.Series(dtype=float),
-            Loose(),
-            (),
-            frozenset(),
-            types.MappingProxyType({}),
-            sealed,
-            sealed[:1],
-            Frozen(),
-        )
-    ] == [True] * 6 + [False] * 6
+    values: tuple[object, ...] = (
+        [],
+        {},
+        set(),
+        np.zeros(3),
+        pd.Series(dtype=float),
+        Loose(),
+        (),
+        frozenset(),
+        types.MappingProxyType({}),
+        sealed,
+        sealed[:1],
+        Frozen(),
+    )
+    assert [_mutable(v) for v in values] == [True] * 6 + [False] * 6

@@ -6,9 +6,10 @@ port; these hold the API to the core and the runs to their schedule.
 """
 
 import json
+from collections.abc import Iterable
 from dataclasses import replace
 from datetime import UTC, datetime, time, timedelta
-from typing import Any
+from typing import Any, cast
 from zoneinfo import ZoneInfo
 
 import pytest
@@ -45,6 +46,7 @@ from nwp500.sim.codec import (  # noqa: E402
     scenario_to_document,
 )
 from nwp500.sim.params import (  # noqa: E402
+    CirculationParams,
     params_from_document,
     params_to_document,
 )
@@ -61,7 +63,9 @@ def at(h: float) -> datetime:
 RUNS = ((at(0.2), at(0.3)), (at(1.0), at(1.5)), (at(4.0), at(4.05)))
 
 
-def _loads(runs=RUNS, **kw: Any) -> Loads:
+def _loads(
+    runs: Iterable[tuple[datetime, datetime]] = RUNS, **kw: Any
+) -> Loads:
     return Loads(
         circulation=tuple(CirculationRun(start=a, end=b) for a, b in runs),
         **kw,
@@ -134,7 +138,9 @@ class TestTheRuns:
 
 
 class TestThroughTheAPI:
-    def test_it_cools_the_tank_only_while_it_runs(self, params) -> None:
+    def test_it_cools_the_tank_only_while_it_runs(
+        self, params: HeaterParams
+    ) -> None:
         quiet = simulate(_scenario(loads=Loads()), params)
         circulated = simulate(_scenario(), params)
         before = [p for p in circulated.points if p.at <= at(0.2)]
@@ -143,7 +149,9 @@ class TestThroughTheAPI:
         ]
         assert circulated.points[-1].lower_f < quiet.points[-1].lower_f
 
-    def test_unknown_runs_say_so_and_quiet_ones_do_not(self, params) -> None:
+    def test_unknown_runs_say_so_and_quiet_ones_do_not(
+        self, params: HeaterParams
+    ) -> None:
         unknown = simulate(_scenario(loads=Loads()), params)
         assert "circulation_unknown" in unknown.reasons
         quiet = simulate(_scenario(loads=_loads(())), params)
@@ -172,29 +180,38 @@ class TestThroughTheAPI:
         bare = simulate(_scenario(loads=Loads()), default_params())
         assert "circulation_unknown" not in bare.reasons
 
-    def test_the_merge_gap_is_the_installations(self, params) -> None:
+    def test_the_merge_gap_is_the_installations(
+        self, params: HeaterParams
+    ) -> None:
         """Runs 20 minutes apart are two runs at the default gap and one
         at 30 minutes, which displaces its volume once."""
         runs = ((at(0.2), at(0.3)), (at(0.633), at(0.733)))
         apart = simulate(_scenario(loads=_loads(runs)), params)
         wide = replace(
             params,
-            circulation=replace(params.circulation, run_gap_min=30.0),
+            circulation=replace(
+                cast(CirculationParams, params.circulation),
+                run_gap_min=30.0,
+            ),
         )
         joined = simulate(_scenario(loads=_loads(runs)), wide)
         assert joined.points[-1].lower_f > apart.points[-1].lower_f
 
-    def test_runs_need_the_installations_terms(self, params) -> None:
+    def test_runs_need_the_installations_terms(
+        self, params: HeaterParams
+    ) -> None:
         with pytest.raises(ValueError, match=r"HeaterParams\.circulation"):
             simulate(_scenario(), default_params())
 
-    def test_the_site_terms_are_named(self, params) -> None:
+    def test_the_site_terms_are_named(self, params: HeaterParams) -> None:
         assert any(
             d.startswith("circulation=")
             for d in simulate(_scenario(), params).defaults_used
         )
 
-    def test_with_a_book_the_runs_are_its_loss(self, params) -> None:
+    def test_with_a_book_the_runs_are_its_loss(
+        self, params: HeaterParams
+    ) -> None:
         book = full_tank_book(139.0, 138.5, params.book_terms())
         quiet = simulate(_scenario(loads=Loads()), params, book=book)
         circulated = simulate(_scenario(), params, book=book)
@@ -203,14 +220,16 @@ class TestThroughTheAPI:
             quiet.booked.states[-1].heat_btu
         )
 
-    def test_standby_charges_them_too(self, params) -> None:
+    def test_standby_charges_them_too(self, params: HeaterParams) -> None:
         s = _scenario()
         args = (s.state, s.environment)
         quiet = standby(*args, Loads(), params, start=T0, until=at(6))
         circulated = standby(*args, s.loads, params, start=T0, until=at(6))
         assert circulated.points[-1].lower_f < quiet.points[-1].lower_f
 
-    def test_standby_reports_what_they_and_the_draws_took(self, params) -> None:
+    def test_standby_reports_what_they_and_the_draws_took(
+        self, params: HeaterParams
+    ) -> None:
         s = _scenario()
         args = (s.state, s.environment)
         quiet = standby(*args, Loads(), params, start=T0, until=at(6))
@@ -228,7 +247,9 @@ class TestThroughTheAPI:
         assert both.draw_volume_gal == pytest.approx(3.0)
         assert both.draw_heat_wh is not None and both.draw_heat_wh > 0
 
-    def test_it_is_the_core_walked_with_the_runs(self, params) -> None:
+    def test_it_is_the_core_walked_with_the_runs(
+        self, params: HeaterParams
+    ) -> None:
         """The API's runs are the core's flowing draws: the same walk
         as ``TankPhysics`` with ``CirculationDraws`` by hand."""
         from nwp500.sim.decay import AmbientSampler
@@ -313,7 +334,7 @@ class TestDocuments:
         assert back == s
 
     def test_the_parameters_round_trip_with_and_without_it(
-        self, params
+        self, params: HeaterParams
     ) -> None:
         for p in (params, replace(params, circulation=None)):
             doc = json.loads(json.dumps(params_to_document(p)))
@@ -341,7 +362,9 @@ class TestASplitCoast:
         assert first.at == at(0.0) and first.gallons == 6.0
         assert first.until == self.RUNS[1][1]
 
-    def test_one_coast_or_two_cool_the_tank_alike(self, params) -> None:
+    def test_one_coast_or_two_cool_the_tank_alike(
+        self, params: HeaterParams
+    ) -> None:
         from nwp500.sim.tank_physics import TankPhysics
 
         stamps = pd.date_range(at(-1), at(4), freq="10min")

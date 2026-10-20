@@ -119,7 +119,10 @@ BASE_PAYLOAD = {
     flow_rate_raw=st.integers(min_value=0, max_value=500),  # 0 to 50 LPM
 )
 def test_device_status_fuzzing(
-    temperature_type_int, dhw_temp_raw, tank_temp_raw, flow_rate_raw
+    temperature_type_int: int,
+    dhw_temp_raw: int,
+    tank_temp_raw: int,
+    flow_rate_raw: int,
 ) -> None:
     """
     Fuzz test parsing of DeviceStatus with varying temperature types and values.

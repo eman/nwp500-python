@@ -135,7 +135,7 @@ class TestTheShower:
 
 
 class TestInAWalk:
-    def _scenario(self, draws):
+    def _scenario(self, draws: tuple[Draw, ...]) -> Scenario:
         return Scenario(
             start=T0,
             horizon=timedelta(hours=6),

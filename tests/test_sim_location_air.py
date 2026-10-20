@@ -6,6 +6,7 @@ port; these hold its anchoring, the fit and the units.
 """
 
 import math
+from collections.abc import Iterator
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -38,7 +39,7 @@ def _outdoor(hours: int = 48) -> list[tuple[datetime, float]]:
 
 
 @pytest.fixture(autouse=True)
-def _units():
+def _units() -> Iterator[None]:
     yield
     reset_unit_system()
 
@@ -117,7 +118,7 @@ class TestTheAdapters:
         )
 
     def test_the_heaters_reading_only_while_the_compressor_runs(
-        self, device_status_dict
+        self, device_status_dict: dict[str, Any]
     ) -> None:
         running = self._status(device_status_dict, compUse=2)
         idle = self._status(device_status_dict, compUse=1)
@@ -155,7 +156,7 @@ class TestElapsedTime:
     so local and UTC instants are the same projection."""
 
     @pytest.mark.parametrize("step", [timedelta(0), timedelta(minutes=-10)])
-    def test_a_step_must_be_positive(self, step) -> None:
+    def test_a_step_must_be_positive(self, step: timedelta) -> None:
         with pytest.raises(ValueError, match="positive"):
             project(
                 SITE_LOCATION_AIR,
@@ -180,7 +181,9 @@ class TestElapsedTime:
             ),
         ],
     )
-    def test_a_local_span_is_its_utc_span(self, start, end) -> None:
+    def test_a_local_span_is_its_utc_span(
+        self, start: datetime, end: datetime
+    ) -> None:
         outdoor = [
             (start.astimezone(UTC) + timedelta(hours=h), 50.0 + h)
             for h in range(-4, 8)

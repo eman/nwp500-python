@@ -1,5 +1,6 @@
 """Tests for OpenEI client module."""
 
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -74,7 +75,7 @@ SAMPLE_OPENEI_ITEMS = [
 ]
 
 
-def _make_mock_response(items: list) -> MagicMock:
+def _make_mock_response(items: list[dict[str, Any]]) -> MagicMock:
     """Create a mock aiohttp response."""
     mock_resp = MagicMock()
     mock_resp.raise_for_status = MagicMock()

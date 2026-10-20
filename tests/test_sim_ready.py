@@ -9,12 +9,13 @@ did.
 
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
+from typing import Any
 
 import pytest
 
 pytest.importorskip("pandas")
 
-from _sim_site import EP
+from _sim_site import EP  # type: ignore[import-not-found]  # test helper
 
 from nwp500.sim import delivery as rd
 from nwp500.sim.params import ElementParams, ReadinessParams
@@ -38,16 +39,25 @@ P0 = replace(P, delivered_lag_gal=0.0)
 FULL = (150.0, 150.0)
 
 
-def deliverable(upper, lower, p=None, **kw):
+def deliverable(
+    upper: float,
+    lower: float,
+    p: ReadinessParams | None = None,
+    **kw: Any,
+) -> rd.Deliverable:
     return rd.deliverable(upper, lower, P if p is None else p, ep=EP, **kw)
 
 
-def _tank(upper=FULL[0], lower=FULL[1], **kw) -> TankNow:
+def _tank(upper: float = FULL[0], lower: float = FULL[1], **kw: Any) -> TankNow:
     base = {"drawing": False, "element_on": False, "tou_window": False}
     return TankNow(upper_f=upper, lower_f=lower, **{**base, **kw})
 
 
-def _assess(tank, recovery=Recovery("unavailable"), **kw):
+def _assess(
+    tank: TankNow,
+    recovery: Recovery = Recovery("unavailable"),
+    **kw: Any,
+) -> dict[str, Any]:
     args = {
         "bath_gal": 30.5,
         "bath_source": "configured",
@@ -219,7 +229,7 @@ class TestAssess:
             assert reason in a["reasons"]
 
 
-def _hp(minutes=200, step=10, wh=300.0):
+def _hp(minutes: int = 200, step: int = 10, wh: float = 300.0) -> Recovery:
     """A heat-pump recovery from 125/110 to full, linear in time."""
     n = minutes // step
     pts = [
@@ -233,7 +243,7 @@ def _hp(minutes=200, step=10, wh=300.0):
     return Recovery("ok", pts, input_wh=[0.0] + [wh] * n)
 
 
-def _modes(a):
+def _modes(a: dict[str, Any]) -> dict[str, Any]:
     return {r["mode"]: r for r in a["bath"]["by_mode"]}
 
 

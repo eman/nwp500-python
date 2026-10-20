@@ -13,13 +13,18 @@ from __future__ import annotations
 import asyncio
 import concurrent.futures
 import json
-from typing import Any
+from typing import Any, cast
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from awscrt import mqtt as awscrt_mqtt
 
-from nwp500.auth import AuthenticationResponse, AuthTokens, UserInfo
+from nwp500.auth import (
+    AuthenticationResponse,
+    AuthTokens,
+    NavienAuthClient,
+    UserInfo,
+)
 from nwp500.events import EventEmitter
 from nwp500.models.mqtt_models import (
     APP_CONNECTION_OS,
@@ -49,7 +54,9 @@ def _device(mac: str = MAC) -> MagicMock:
     return device
 
 
-def _app_message(status: int, client_id: str = "navilink-phone") -> dict:
+def _app_message(
+    status: int, client_id: str = "navilink-phone"
+) -> dict[str, Any]:
     """A ``RequestLastWill`` message as the app's Gson serializes it."""
     return {
         "clientID": client_id,
@@ -66,9 +73,7 @@ def _app_message(status: int, client_id: str = "navilink-phone") -> dict:
     }
 
 
-def _auth_client():
-    from nwp500.auth import NavienAuthClient
-
+def _auth_client() -> NavienAuthClient:
     client = NavienAuthClient("test@example.com", "password")
     client._auth_response = AuthenticationResponse(
         user_info=UserInfo(user_first_name="T", user_last_name="U"),
@@ -110,7 +115,7 @@ class TestAppConnectionModel:
         ("status", "connected"), [(1, True), (0, False), (-1, False)]
     )
     def test_connected_follows_the_apps_threshold(
-        self, status, connected
+        self, status: int, connected: bool
     ) -> None:
         """The app treats ``status <= 0`` as disconnected."""
         parsed = AppConnectionEvent.model_validate(_app_message(status))
@@ -207,7 +212,7 @@ class TestSignalAppConnection:
         await controller.signal_app_connection(_device())
 
         publish.assert_awaited_once()
-        topic, payload = publish.await_args.args[:2]
+        topic, payload = publish.await_args.args[:2]  # type: ignore[union-attr]
         assert topic == TOPIC
         assert payload == {
             "clientID": "navien-client-1",
@@ -273,7 +278,7 @@ class TestConnectionBuilderWill:
                 assert await connection.connect()
 
         asyncio.run(run())
-        return builder.call_args.kwargs
+        return cast("dict[str, Any]", builder.call_args.kwargs)
 
     def test_will_is_passed_to_the_builder(self) -> None:
         will = MqttWill(topic=TOPIC, payload={"event": {}})

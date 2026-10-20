@@ -15,6 +15,8 @@ from __future__ import annotations
 import asyncio
 import json
 import threading
+from collections.abc import Iterator
+from typing import Any
 
 import pytest
 
@@ -28,7 +30,7 @@ from nwp500.unit_system import (
 
 
 @pytest.fixture(autouse=True)
-def _reset_units():
+def _reset_units() -> Iterator[None]:
     """Reset the process-wide unit preference before AND after each test.
 
     Resetting only in teardown would let the first test in this module
@@ -40,7 +42,7 @@ def _reset_units():
 
 
 def _make_manager(loop: asyncio.AbstractEventLoop) -> MqttSubscriptionManager:
-    def schedule(coro) -> None:
+    def schedule(coro: Any) -> None:
         asyncio.run_coroutine_threadsafe(coro, loop)
 
     return MqttSubscriptionManager(
@@ -64,9 +66,9 @@ class TestDispatchThreading:
         manager = _make_manager(loop)
 
         received = asyncio.Event()
-        seen: dict = {}
+        seen: dict[str, Any] = {}
 
-        def handler(topic, message) -> None:
+        def handler(topic: str, message: Any) -> None:
             seen["thread"] = threading.get_ident()
             seen["message"] = message
             loop.call_soon(received.set)
@@ -98,7 +100,7 @@ class TestDispatchThreading:
 
         calls = []
 
-        def mutating_handler(topic, message) -> None:
+        def mutating_handler(topic: str, message: Any) -> None:
             calls.append("mutating")
             # Mutate both registries mid-dispatch
             manager._message_handlers["cmd/52/other/topic"] = [
@@ -106,7 +108,7 @@ class TestDispatchThreading:
             ]
             manager._message_handlers.pop("cmd/52/+/st", None)
 
-        def second_handler(topic, message) -> None:
+        def second_handler(topic: str, message: Any) -> None:
             calls.append("second")
 
         manager._message_handlers["cmd/52/+/st"] = [
@@ -130,10 +132,10 @@ class TestDispatchThreading:
 
         calls = []
 
-        def bad_handler(topic, message) -> None:
+        def bad_handler(topic: str, message: Any) -> None:
             raise ValueError("boom")
 
-        def good_handler(topic, message) -> None:
+        def good_handler(topic: str, message: Any) -> None:
             calls.append("good")
 
         manager._message_handlers["cmd/52/+/st"] = [bad_handler, good_handler]
@@ -145,7 +147,9 @@ class TestDispatchThreading:
         assert calls == ["good"]
 
     @pytest.mark.asyncio
-    async def test_invalid_json_is_logged_not_raised(self, caplog) -> None:
+    async def test_invalid_json_is_logged_not_raised(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
         loop = asyncio.get_running_loop()
         manager = _make_manager(loop)
         manager._message_handlers["t"] = [lambda t, m: None]
@@ -168,7 +172,7 @@ class TestUnitSystemVisibility:
         loop = asyncio.get_running_loop()
         set_unit_system("metric")
 
-        result: dict = {}
+        result: dict[str, Any] = {}
         done = asyncio.Event()
 
         async def read_preference() -> None:

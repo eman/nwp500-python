@@ -8,6 +8,7 @@ it calls are held to their source in ``test_sim_readiness`` and
 """
 
 import json
+from collections.abc import Iterator
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -80,7 +81,7 @@ def _no_evidence(p: HeaterParams) -> HeaterParams:
 
 
 @pytest.fixture(autouse=True)
-def _units():
+def _units() -> Iterator[None]:
     yield
     reset_unit_system()
 

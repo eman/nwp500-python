@@ -17,14 +17,20 @@ def _at(seconds: float) -> datetime:
     return T0 + timedelta(seconds=seconds)
 
 
-def steady(gpm: float, minutes: float, *, every_s: float = 30.0, sign=1):
+def steady(
+    gpm: float,
+    minutes: float,
+    *,
+    every_s: float = 30.0,
+    sign: int = 1,
+) -> list[meter.Reading]:
     """Volume reports for a steady draw, each the volume since the last."""
     n = int(minutes * 60 / every_s)
     gal = gpm * every_s / 60.0
     return [(_at(every_s * (i + 1)), sign * gal) for i in range(n)]
 
 
-def _value(flow, seconds: float) -> float:
+def _value(flow: list[meter.Reading], seconds: float) -> float:
     return dict(flow)[_at(seconds)]
 
 
@@ -124,12 +130,22 @@ class TestZones:
             ("Asia/Kolkata", (2026, 10, 18, 7, 3), (2026, 10, 18, 8, 3)),
         ],
     )
-    def test_local_instants_read_as_utc(self, zone, start, end) -> None:
+    def test_local_instants_read_as_utc(
+        self,
+        zone: str,
+        start: tuple[int, ...],
+        end: tuple[int, ...],
+    ) -> None:
         from zoneinfo import ZoneInfo
 
         z = ZoneInfo(zone)
-        a = datetime(*start[:5], tzinfo=z)
-        b = datetime(*end[:5], tzinfo=z, fold=end[5] if len(end) > 5 else 0)
+        # mypy cannot track the variadic int tuple unpacked into datetime.
+        a = datetime(*start[:5], tzinfo=z)  # type: ignore[misc, arg-type]
+        b = datetime(  # type: ignore[misc]
+            *end[:5],  # type: ignore[arg-type]
+            tzinfo=z,
+            fold=end[5] if len(end) > 5 else 0,
+        )
         reports = [
             (a + timedelta(seconds=30 * (i + 1)), 1.0) for i in range(20)
         ]

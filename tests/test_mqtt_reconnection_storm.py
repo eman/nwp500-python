@@ -35,7 +35,11 @@ Bug 3 — on_connection_resumed calls Task.cancel() directly from an AWS SDK
   Task operations are safe.
 """
 
+from __future__ import annotations
+
 import asyncio
+from collections.abc import Coroutine
+from typing import TYPE_CHECKING, Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -48,6 +52,9 @@ from nwp500.auth import (
 )
 from nwp500.mqtt.reconnection import MqttReconnectionHandler
 from nwp500.mqtt.utils import MqttConnectionConfig
+
+if TYPE_CHECKING:
+    from nwp500.mqtt import NavienMqttClient
 
 # ---------------------------------------------------------------------------
 # Shared helpers
@@ -78,15 +85,17 @@ def _make_handler(
     connected: bool = False,
     auto_reconnect: bool = True,
     max_reconnect_attempts: int = -1,
-) -> tuple[MqttReconnectionHandler, list[asyncio.Task]]:
+) -> tuple[MqttReconnectionHandler, list[asyncio.Task[Any]]]:
     """Return a handler and a list that records every scheduled coroutine."""
     config = MqttConnectionConfig(
         auto_reconnect=auto_reconnect,
         max_reconnect_attempts=max_reconnect_attempts,
     )
-    scheduled: list[asyncio.Task] = []
+    scheduled: list[asyncio.Task[Any]] = []
 
-    def _schedule(coro):  # replaces run_coroutine_threadsafe in real code
+    def _schedule(
+        coro: Coroutine[Any, Any, Any],
+    ) -> asyncio.Task[Any]:  # replaces run_coroutine_threadsafe
         t = asyncio.ensure_future(coro)
         scheduled.append(t)
         return t
@@ -94,7 +103,7 @@ def _make_handler(
     handler = MqttReconnectionHandler(
         config=config,
         is_connected_func=lambda: connected,
-        schedule_coroutine_func=_schedule,
+        schedule_coroutine_func=_schedule,  # type: ignore[arg-type]
         reconnect_func=AsyncMock(),
         deep_reconnect_func=None,
         emit_event_func=None,
@@ -373,7 +382,8 @@ class TestThreadSafeTaskCancellation:
         assert handler._reconnect_task is None
 
         # Connection drops again (genuine)
-        state["connected"] = False
+        # mypy can't see the handler mutate _reconnect_task above
+        state["connected"] = False  # type: ignore[unreachable]
         handler.on_connection_interrupted(Exception("second drop"))
         await asyncio.gather(*scheduled, return_exceptions=True)
         scheduled.clear()
@@ -392,7 +402,7 @@ class TestThreadSafeTaskCancellation:
 class TestActivelyReconnectingFlag:
     """Bug 2 – old connection teardown must not trigger a new backoff loop."""
 
-    def _make_mqtt_client(self) -> NavienMqttClient:  # noqa: F821
+    def _make_mqtt_client(self) -> NavienMqttClient:
         from nwp500.mqtt import NavienMqttClient
 
         return NavienMqttClient(_make_auth_client())
@@ -473,7 +483,7 @@ class TestActivelyReconnectingFlag:
 
         flag_during = []
 
-        async def fake_reconnect():
+        async def fake_reconnect() -> bool:
             flag_during.append(client._actively_reconnecting)
             client._connected = True
             return True
@@ -487,7 +497,7 @@ class TestActivelyReconnectingFlag:
         with patch(
             "nwp500.mqtt.client.MqttConnection", return_value=mock_conn_mgr
         ):
-            client._auth_client.ensure_valid_token = AsyncMock()
+            client._auth_client.ensure_valid_token = AsyncMock()  # type: ignore[method-assign]
             client._subscription_manager = None
             await client._active_reconnect()
 
@@ -515,7 +525,7 @@ class TestActivelyReconnectingFlag:
         with patch(
             "nwp500.mqtt.client.MqttConnection", return_value=mock_conn_mgr
         ):
-            client._auth_client.ensure_valid_token = AsyncMock()
+            client._auth_client.ensure_valid_token = AsyncMock()  # type: ignore[method-assign]
             with pytest.raises(AwsCrtError):
                 await client._active_reconnect()
 
@@ -548,7 +558,7 @@ class TestActivelyReconnectingFlag:
 
         flag_during = []
 
-        async def fake_connect():
+        async def fake_connect() -> bool:
             flag_during.append(client._actively_reconnecting)
             client._connected = True
             return True
@@ -562,10 +572,10 @@ class TestActivelyReconnectingFlag:
         with patch(
             "nwp500.mqtt.client.MqttConnection", return_value=mock_conn_mgr
         ):
-            client._auth_client.ensure_valid_token = AsyncMock()
-            client._auth_client.current_tokens.refresh_token = "ref"
-            client._auth_client.refresh_token = AsyncMock()
-            client._auth_client.refresh_session = AsyncMock()
+            client._auth_client.ensure_valid_token = AsyncMock()  # type: ignore[method-assign]
+            client._auth_client.current_tokens.refresh_token = "ref"  # type: ignore[union-attr]
+            client._auth_client.refresh_token = AsyncMock()  # type: ignore[method-assign]
+            client._auth_client.refresh_session = AsyncMock()  # type: ignore[method-assign]
             client._subscription_manager = None
             await client._deep_reconnect()
 
@@ -593,10 +603,10 @@ class TestActivelyReconnectingFlag:
         with patch(
             "nwp500.mqtt.client.MqttConnection", return_value=mock_conn_mgr
         ):
-            client._auth_client.ensure_valid_token = AsyncMock()
-            client._auth_client.current_tokens.refresh_token = "ref"
-            client._auth_client.refresh_token = AsyncMock()
-            client._auth_client.refresh_session = AsyncMock()
+            client._auth_client.ensure_valid_token = AsyncMock()  # type: ignore[method-assign]
+            client._auth_client.current_tokens.refresh_token = "ref"  # type: ignore[union-attr]
+            client._auth_client.refresh_token = AsyncMock()  # type: ignore[method-assign]
+            client._auth_client.refresh_session = AsyncMock()  # type: ignore[method-assign]
             with pytest.raises(AwsCrtError):
                 await client._deep_reconnect()
 

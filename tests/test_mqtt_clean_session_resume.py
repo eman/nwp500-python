@@ -4,15 +4,18 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from nwp500.auth import AuthenticationResponse, AuthTokens, UserInfo
+from nwp500.auth import (
+    AuthenticationResponse,
+    AuthTokens,
+    NavienAuthClient,
+    UserInfo,
+)
 from nwp500.mqtt import NavienMqttClient
 
 
 @pytest.fixture
-def auth_client_with_valid_tokens():
+def auth_client_with_valid_tokens() -> NavienAuthClient:
     """Create an auth client with valid tokens."""
-    from nwp500.auth import NavienAuthClient
-
     auth_client = NavienAuthClient("test@example.com", "password")
     valid_tokens = AuthTokens(
         id_token="test_id",
@@ -36,7 +39,7 @@ class TestMqttCleanSessionResume:
 
     @pytest.mark.asyncio(loop_scope="function")
     async def test_on_connection_resumed_with_clean_session_resubscribes(
-        self, auth_client_with_valid_tokens
+        self, auth_client_with_valid_tokens: NavienAuthClient
     ) -> None:
         """Resubscribe when session_present=False on connection resume."""
         client = NavienMqttClient(auth_client_with_valid_tokens)
@@ -52,7 +55,7 @@ class TestMqttCleanSessionResume:
         client._connection_manager = mock_connection_manager
 
         # Mock the event emitter and diagnostics
-        client.emit = AsyncMock()
+        client.emit = AsyncMock()  # type: ignore[method-assign]
         client._diagnostics = MagicMock()
         client._diagnostics.record_connection_success = AsyncMock()
 
@@ -75,7 +78,7 @@ class TestMqttCleanSessionResume:
 
     @pytest.mark.asyncio(loop_scope="function")
     async def test_resubscribe_before_queued_commands(
-        self, auth_client_with_valid_tokens
+        self, auth_client_with_valid_tokens: NavienAuthClient
     ) -> None:
         """Resubscribe completes before queued commands are sent."""
         client = NavienMqttClient(auth_client_with_valid_tokens)
@@ -106,7 +109,7 @@ class TestMqttCleanSessionResume:
             call_order.append("send_queued")
             await original_send()
 
-        client._send_queued_commands_internal = mock_send
+        client._send_queued_commands_internal = mock_send  # type: ignore[method-assign]
 
         # Call the method
         await client._handle_clean_session_resume()
@@ -121,7 +124,7 @@ class TestMqttCleanSessionResume:
 
     @pytest.mark.asyncio(loop_scope="function")
     async def test_skip_when_no_subscription_manager(
-        self, auth_client_with_valid_tokens
+        self, auth_client_with_valid_tokens: NavienAuthClient
     ) -> None:
         """Return early if subscription_manager is None."""
         client = NavienMqttClient(auth_client_with_valid_tokens)
@@ -132,7 +135,7 @@ class TestMqttCleanSessionResume:
 
     @pytest.mark.asyncio(loop_scope="function")
     async def test_handle_clean_session_resume_skips_when_no_connection(
-        self, auth_client_with_valid_tokens
+        self, auth_client_with_valid_tokens: NavienAuthClient
     ) -> None:
         """Return early if connection is None."""
         client = NavienMqttClient(auth_client_with_valid_tokens)
@@ -152,7 +155,7 @@ class TestMqttCleanSessionResume:
 
     @pytest.mark.asyncio(loop_scope="function")
     async def test_on_connection_resumed_with_session_sends_queued_commands(
-        self, auth_client_with_valid_tokens
+        self, auth_client_with_valid_tokens: NavienAuthClient
     ) -> None:
         """Send queued commands normally when session_present=True."""
         client = NavienMqttClient(auth_client_with_valid_tokens)
@@ -163,7 +166,7 @@ class TestMqttCleanSessionResume:
         client.config.enable_command_queue = True
 
         # Mock the event emitter and diagnostics
-        client.emit = AsyncMock()
+        client.emit = AsyncMock()  # type: ignore[method-assign]
         client._diagnostics = MagicMock()
         client._diagnostics.record_connection_success = AsyncMock()
 

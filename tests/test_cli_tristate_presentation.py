@@ -10,6 +10,8 @@ is silent, since ``None`` is falsy and a two-way ternary happily prints
 "No".
 """
 
+from typing import Any
+
 import pytest
 
 # The CLI package pulls in the optional `cli` extra (click/rich). Skip
@@ -56,7 +58,9 @@ class TestYesNoUnknown:
 class TestTriStateRendering:
     """End-to-end: a 0 on the wire must reach the CLI as "Unknown"."""
 
-    def _rows(self, status_data, alias, raw):
+    def _rows(
+        self, status_data: dict[str, Any], alias: str, raw: int
+    ) -> dict[tuple[str, str], str]:
         """Build the CLI rows, keyed by (section, label)."""
         data = dict(status_data)
         data[alias] = raw
@@ -71,7 +75,10 @@ class TestTriStateRendering:
         ("field", "location"), list(RENDERED_TRISTATE_ROWS.items())
     )
     def test_zero_renders_unknown(
-        self, device_status_dict, field, location
+        self,
+        device_status_dict: dict[str, Any],
+        field: str,
+        location: tuple[str, str],
     ) -> None:
         """0 must not be presented as "No"."""
         rows = self._rows(device_status_dict, TRISTATE_ALIASES[field], 0)
@@ -80,7 +87,12 @@ class TestTriStateRendering:
     @pytest.mark.parametrize(
         ("field", "location"), list(RENDERED_TRISTATE_ROWS.items())
     )
-    def test_one_renders_no(self, device_status_dict, field, location) -> None:
+    def test_one_renders_no(
+        self,
+        device_status_dict: dict[str, Any],
+        field: str,
+        location: tuple[str, str],
+    ) -> None:
         """1 is a real OFF and still reads "No"."""
         rows = self._rows(device_status_dict, TRISTATE_ALIASES[field], 1)
         assert rows[location] == "No"
@@ -88,7 +100,12 @@ class TestTriStateRendering:
     @pytest.mark.parametrize(
         ("field", "location"), list(RENDERED_TRISTATE_ROWS.items())
     )
-    def test_two_renders_yes(self, device_status_dict, field, location) -> None:
+    def test_two_renders_yes(
+        self,
+        device_status_dict: dict[str, Any],
+        field: str,
+        location: tuple[str, str],
+    ) -> None:
         """2 is a real ON and still reads "Yes"."""
         rows = self._rows(device_status_dict, TRISTATE_ALIASES[field], 2)
         assert rows[location] == "Yes"

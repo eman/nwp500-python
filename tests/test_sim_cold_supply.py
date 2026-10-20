@@ -20,7 +20,13 @@ from nwp500.sim.params import BookParams
 T0 = datetime(2026, 9, 20, 12, 0, tzinfo=UTC)
 
 
-def a_draw(minutes: int, at: datetime = T0, mains: float = 72.0):
+def a_draw(
+    minutes: int, at: datetime = T0, mains: float = 72.0
+) -> tuple[
+    list[tuple[datetime, float]],
+    list[datetime],
+    list[tuple[datetime, float]],
+]:
     """A draw of ``minutes`` at 2 gal/min, the probe settling from 77
     degF to the mains after 5 minutes."""
     ticks = [at + timedelta(seconds=s) for s in range(0, 60 * minutes, 10)]

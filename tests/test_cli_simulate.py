@@ -7,6 +7,7 @@ import json
 import os
 import subprocess
 import sys
+from collections.abc import Iterator
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -33,7 +34,7 @@ TZ = "America/Los_Angeles"
 
 
 @pytest.fixture(autouse=True)
-def _units():
+def _units() -> Iterator[None]:
     yield
     reset_unit_system()
 
@@ -123,7 +124,7 @@ class TestInputs:
         assert sim_cli.Inputs(scenario=_doc({}), live=True).needs_device
 
     def test_the_zone_is_the_flag_then_the_scenario_then_the_machine(
-        self, monkeypatch
+        self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         monkeypatch.setattr(sim_cli, "local_zone", lambda: "Europe/Berlin")
         doc = _doc({"tz": "America/Denver"})
@@ -137,7 +138,7 @@ class TestInputs:
 
 class TestBadInputs:
     @pytest.mark.parametrize("text", ["null", "[1]", "3"])
-    def test_a_document_is_an_object(self, tmp_path, text) -> None:
+    def test_a_document_is_an_object(self, tmp_path: Path, text: str) -> None:
         path = tmp_path / "doc.json"
         path.write_text(text)
         with pytest.raises(sim_cli.InputError, match="not a JSON object"):
@@ -171,11 +172,13 @@ class TestBadInputs:
                 sim_cli.Inputs(scenario={**doc, "params": {}}), None, NOW
             )
 
-    def test_a_scenario_the_simulator_refuses(self, monkeypatch) -> None:
+    def test_a_scenario_the_simulator_refuses(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         def refuse(*_: Any, **__: Any) -> Any:
             raise SimulationError("no fitted draw response")
 
-        monkeypatch.setattr(sim_cli.sim, "simulate", refuse)
+        monkeypatch.setattr(sim, "simulate", refuse)
         with pytest.raises(sim_cli.InputError, match="cannot be simulated"):
             sim_cli.run(
                 sim_cli.Inputs(scenario=scenario_to_document(_scenario())),
@@ -261,7 +264,7 @@ class TestPrecedence:
         assert built.scenario.environment.inlet_f == pytest.approx(59.0)
 
     def test_without_a_start_or_horizon_now_and_a_day(
-        self, monkeypatch
+        self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         monkeypatch.setattr(sim_cli, "local_zone", lambda: TZ)
         doc = scenario_to_document(_scenario())
@@ -363,7 +366,7 @@ class TestTheCommand:
         return str(path)
 
     def test_a_scenario_run_never_touches_the_device(
-        self, tmp_path, monkeypatch
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         async def no_device(*_: Any) -> int:
             raise AssertionError("connected")
@@ -379,7 +382,9 @@ class TestTheCommand:
         assert result.exit_code == 0, result.output
         assert json.loads(result.stdout)["schema_version"] == 1
 
-    def test_live_runs_connect(self, tmp_path, monkeypatch) -> None:
+    def test_live_runs_connect(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         called: list[Any] = []
 
         async def device(ctx: Any, command: Any) -> int:
@@ -402,7 +407,7 @@ class TestTheCommand:
         )
         assert len(called) == 3
 
-    def test_a_bad_input_is_a_usage_error(self, tmp_path) -> None:
+    def test_a_bad_input_is_a_usage_error(self, tmp_path: Path) -> None:
         scenario = self._write(
             tmp_path, "s.json", scenario_to_document(_scenario())
         )
@@ -423,7 +428,7 @@ class TestTheCommand:
         assert "not both" in result.output
 
     def test_a_null_scenario_never_reads_the_device(
-        self, tmp_path, monkeypatch
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         async def no_device(*_: Any) -> int:
             raise AssertionError("connected")
@@ -436,7 +441,7 @@ class TestTheCommand:
         assert result.exit_code == 2
         assert "not a JSON object" in result.output
 
-    def test_an_unreadable_file_is_a_usage_error(self, tmp_path) -> None:
+    def test_an_unreadable_file_is_a_usage_error(self, tmp_path: Path) -> None:
         bad = tmp_path / "bad.json"
         bad.write_text("{")
         result = CliRunner().invoke(

@@ -13,8 +13,10 @@ from __future__ import annotations
 
 import asyncio
 from datetime import UTC, datetime, timedelta
+from typing import Any, cast
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import aiohttp
 import pytest
 
 from nwp500.api_client import NavienAPIClient
@@ -27,8 +29,8 @@ from nwp500.auth import (
 from nwp500.exceptions import AuthenticationError, TokenRefreshError
 
 
-def _valid_tokens(**overrides) -> AuthTokens:
-    defaults = {
+def _valid_tokens(**overrides: Any) -> AuthTokens:
+    defaults: dict[str, Any] = {
         "id_token": "id",
         "access_token": "access",
         "refresh_token": "refresh",
@@ -42,7 +44,7 @@ def _valid_tokens(**overrides) -> AuthTokens:
     return AuthTokens(**defaults)
 
 
-def _expired_jwt_tokens(**overrides) -> AuthTokens:
+def _expired_jwt_tokens(**overrides: Any) -> AuthTokens:
     """JWT expired, AWS credentials still valid (refresh path)."""
     old_time = datetime.now(UTC) - timedelta(seconds=7200)
     overrides.setdefault("authorization_expires_in", 100000)
@@ -69,12 +71,16 @@ class TestConcurrentRefresh:
         client = _client_with_tokens(_expired_jwt_tokens())
         refresh_calls = 0
 
-        async def fake_refresh(refresh_token=None):
+        async def fake_refresh(
+            refresh_token: str | None = None,
+        ) -> AuthTokens:
             nonlocal refresh_calls
             refresh_calls += 1
             await asyncio.sleep(0.01)  # let other callers pile up
             new_tokens = _valid_tokens(refresh_token="rotated")
-            client._auth_response.tokens = new_tokens
+            cast(
+                AuthenticationResponse, client._auth_response
+            ).tokens = new_tokens
             return new_tokens
 
         with patch.object(
@@ -170,7 +176,7 @@ class TestAenterLifecycle:
         created_sessions = []
         real_create = client._create_session
 
-        def tracking_create():
+        def tracking_create() -> aiohttp.ClientSession:
             session = real_create()
             created_sessions.append(session)
             return session

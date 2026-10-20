@@ -2,6 +2,7 @@
 
 import logging
 import sys
+from collections.abc import Iterator
 from unittest.mock import patch
 
 import pytest
@@ -13,7 +14,7 @@ except ImportError:
 
 
 @pytest.fixture(autouse=True)
-def _restore_log_levels():
+def _restore_log_levels() -> Iterator[None]:
     """The CLI group callback mutates global logger levels; undo it."""
     names = (None, "nwp500", "nwp500.cli.__main__", "aiohttp")
     saved = {name: logging.getLogger(name).level for name in names}

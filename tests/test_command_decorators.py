@@ -158,7 +158,7 @@ class TestRequiresCapabilityDecorator:
         class MockController(BaseMockController):
             def __init__(self) -> None:
                 super().__init__(cache)
-                self.received_args = None
+                self.received_args: tuple[str, int, str] | None = None
 
             @requires_capability("power_use")
             async def command(

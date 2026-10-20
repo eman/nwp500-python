@@ -9,13 +9,13 @@ import itertools
 from collections.abc import Sequence
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
-from typing import Literal
+from typing import Any, Literal, cast
 
 import pytest
 
 pytest.importorskip("pandas")
 
-from _sim_site import (
+from _sim_site import (  # type: ignore[import-not-found]  # test helper
     EP,
     Booked,
     BookedHeatLedger,
@@ -25,6 +25,7 @@ from _sim_site import (
     walk_booked,
 )
 
+from nwp500.sim.book import BookedPath
 from nwp500.sim.controller import Source, Start, StopReason
 from nwp500.sim.engine import Draw, HeatingInterval, PathPoint
 
@@ -44,7 +45,9 @@ def m(minutes: float) -> datetime:
     return T0 + timedelta(minutes=minutes)
 
 
-def flat(*minutes: float, upper=130.0, lower=100.0) -> list[PathPoint]:
+def flat(
+    *minutes: float, upper: float = 130.0, lower: float = 100.0
+) -> list[PathPoint]:
     return [PathPoint(m(x), upper, lower, 140.0, False, 0.0) for x in minutes]
 
 
@@ -75,12 +78,23 @@ def walk(
     heat: Sequence[HeatingInterval] = (),
     draws: Sequence[Draw] = (),
     start: Booked = AFTER_BATH,
-):
-    return walk_booked(start, points, list(heat), list(draws), lambda _: 65.0)
+) -> BookedPath:
+    return cast(
+        BookedPath,
+        walk_booked(start, points, list(heat), list(draws), lambda _: 65.0),
+    )
 
 
-def standby(minutes, upper=130.0, lower=100.0, ambient=65.0):
-    return EP.ua_btu_per_h_f * ((upper + lower) / 2 - ambient) * minutes / 60
+def standby(
+    minutes: float,
+    upper: float = 130.0,
+    lower: float = 100.0,
+    ambient: float = 65.0,
+) -> float:
+    return cast(
+        float,
+        EP.ua_btu_per_h_f * ((upper + lower) / 2 - ambient) * minutes / 60,
+    )
 
 
 class TestTheWalk:
@@ -363,7 +377,9 @@ class Circulation:
     is on, which disturbs the tank."""
 
     def __init__(
-        self, runs: Sequence[tuple[datetime, datetime]], btu_per_min=318.0
+        self,
+        runs: Sequence[tuple[datetime, datetime]],
+        btu_per_min: float = 318.0,
     ) -> None:
         self.runs = list(runs)
         self.rate = btu_per_min
@@ -383,14 +399,19 @@ class Circulation:
         )
 
 
-def walk_with(points, extra, **kw):
-    return walk_booked(
-        kw.pop("start", AFTER_BATH),
-        points,
-        list(kw.pop("heat", ())),
-        list(kw.pop("draws", ())),
-        lambda _: 65.0,
-        extra=extra,
+def walk_with(
+    points: Sequence[PathPoint], extra: object, **kw: Any
+) -> BookedPath:
+    return cast(
+        BookedPath,
+        walk_booked(
+            kw.pop("start", AFTER_BATH),
+            points,
+            list(kw.pop("heat", ())),
+            list(kw.pop("draws", ())),
+            lambda _: 65.0,
+            extra=extra,
+        ),
     )
 
 

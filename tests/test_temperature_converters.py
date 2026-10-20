@@ -85,7 +85,10 @@ class TestHalfCelsius:
         ],
     )
     def test_known_conversions(
-        self, raw_value, expected_celsius, expected_fahrenheit
+        self,
+        raw_value: int,
+        expected_celsius: float,
+        expected_fahrenheit: float,
     ) -> None:
         """Test known temperature conversion points."""
         temp = HalfCelsius(raw_value)
@@ -130,7 +133,7 @@ class TestHalfCelsius:
         ],
     )
     def test_from_fahrenheit_known_points(
-        self, fahrenheit, expected_raw
+        self, fahrenheit: float, expected_raw: int
     ) -> None:
         """Test reverse conversion from Fahrenheit to raw value."""
         temp = HalfCelsius.from_fahrenheit(fahrenheit)
@@ -262,7 +265,10 @@ class TestDeciCelsius:
         ],
     )
     def test_known_conversions(
-        self, raw_value, expected_celsius, expected_fahrenheit
+        self,
+        raw_value: int,
+        expected_celsius: float,
+        expected_fahrenheit: float,
     ) -> None:
         """Test known temperature conversion points."""
         temp = DeciCelsius(raw_value)
@@ -307,7 +313,7 @@ class TestDeciCelsius:
         ],
     )
     def test_from_fahrenheit_known_points(
-        self, fahrenheit, expected_raw
+        self, fahrenheit: float, expected_raw: int
     ) -> None:
         """Test reverse conversion from Fahrenheit to raw value."""
         temp = DeciCelsius.from_fahrenheit(fahrenheit)
@@ -369,7 +375,9 @@ class TestTemperatureComparison:
             (200, 1000, 100.0),
         ],
     )
-    def test_equivalent_temperatures(self, half_raw, deci_raw, celsius) -> None:
+    def test_equivalent_temperatures(
+        self, half_raw: int, deci_raw: int, celsius: float
+    ) -> None:
         """Test that half and deci celsius represent same actual temp."""
         # HalfCelsius: raw/2 = celsius
         # DeciCelsius: raw/10 = celsius

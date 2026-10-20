@@ -5,6 +5,7 @@ the measurement or record the rule rests on. The engine's walk over
 these is tested on its own.
 """
 
+from collections.abc import Callable, Iterable, Sequence
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 
@@ -16,6 +17,7 @@ pytest.importorskip("pandas")
 from nwp500.sim import controller
 from nwp500.sim.controller import (
     POWERED_ON_BY_ENTRY,
+    Action,
     Begins,
     Cap,
     DeadTimeEnds,
@@ -26,6 +28,7 @@ from nwp500.sim.controller import (
     EntryFired,
     EntryFires,
     EntrySkipped,
+    Event,
     HeaterTrigger,
     Horizon,
     LockoutEnds,
@@ -68,8 +71,9 @@ from nwp500.sim.controller import (
     wake_times,
 )
 from nwp500.sim.params import ControllerParams, ElementParams
+from nwp500.sim.physics.element import HeaterMode
 from nwp500.sim.tank_physics import Point
-from nwp500.sim.tou_triggers import LOWER_TRIGGER_HELD
+from nwp500.sim.tou_triggers import LOWER_TRIGGER_HELD, Window
 
 P = ControllerParams()
 EP = ElementParams()
@@ -88,11 +92,11 @@ WINDOW = (at(-10), at(60))
 
 def settings(
     *,
-    windows=(),
-    hp_lower_on=104.9,
-    disabled=False,
-    powered_off=False,
-    start_hold=None,
+    windows: Sequence[Window] = (),
+    hp_lower_on: float | None = 104.9,
+    disabled: bool = False,
+    powered_off: bool = False,
+    start_hold: Callable[[float | None], float] | None = None,
 ) -> Settings:
     return Settings(
         hp_lower_on_f=hp_lower_on,
@@ -104,7 +108,11 @@ def settings(
 
 
 def fresh(
-    *, setpoint=140.0, mode="heat_pump", stopped_at=None, now=T0
+    *,
+    setpoint: float = 140.0,
+    mode: HeaterMode = "heat_pump",
+    stopped_at: datetime | None = None,
+    now: datetime = T0,
 ) -> State:
     return initial_state(
         at=now,
@@ -116,7 +124,9 @@ def fresh(
     )
 
 
-def step(state, event, s=None):
+def step(
+    state: State, event: Event, s: Settings | None = None
+) -> tuple[State, tuple[Action, ...]]:
     return transition(state, event, s or settings(), P)
 
 
@@ -124,15 +134,21 @@ def tank(upper: float, lower: float) -> Tank:
     return Tank(upper, lower)
 
 
-def of(actions, kind) -> list:
+def of[A](actions: Iterable[Action], kind: type[A]) -> list[A]:
     return [a for a in actions if isinstance(a, kind)]
 
 
-def notes(actions) -> set[str]:
+def notes(actions: Iterable[Action]) -> set[str]:
     return {a.reason for a in actions if isinstance(a, Note)}
 
 
-def running(state, minutes=0.0, s=None, upper=120.0, lower=100.0):
+def running(
+    state: State,
+    minutes: float = 0.0,
+    s: Settings | None = None,
+    upper: float = 120.0,
+    lower: float = 100.0,
+) -> State:
     """``state`` with the compressor started by its own trigger."""
     st, _ = step(
         state,
@@ -142,7 +158,13 @@ def running(state, minutes=0.0, s=None, upper=120.0, lower=100.0):
     return st
 
 
-def element_on(mode, upper, lower=120.0, setpoint=140.0, s=None):
+def element_on(
+    mode: HeaterMode,
+    upper: float,
+    lower: float = 120.0,
+    setpoint: float = 140.0,
+    s: Settings | None = None,
+) -> State:
     """``mode`` in force with an element on at the walk's start."""
     st, _ = step(
         fresh(mode=mode, setpoint=setpoint),
@@ -845,7 +867,12 @@ class TestModeWrites:
         ],
     )
     def test_a_mode_taking_effect_starts_the_compressor_by_its_record(
-        self, previous, mode, upper, lower, starts
+        self,
+        previous: HeaterMode,
+        mode: HeaterMode,
+        upper: float,
+        lower: float,
+        starts: bool,
     ) -> None:
         """The write rule for mode writes: 91 sustained mode writes on
         the device's record to 2026-09-25, by the mode left and the one
@@ -931,7 +958,7 @@ class TestTheElements:
         ],
     )
     def test_a_mode_starts_its_element_at_its_entry_deficit(
-        self, mode, on, off
+        self, mode: HeaterMode, on: float, off: float
     ) -> None:
         """On entry to an element mode the upper element starts
         when the upper zone is at least the mode's entry deficit short:

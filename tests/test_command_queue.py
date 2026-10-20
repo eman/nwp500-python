@@ -46,7 +46,7 @@ def test_mqtt_config_custom_queue_settings() -> None:
 def test_deque_maxlen() -> None:
     """Test that deque with maxlen drops oldest items."""
     max_size = 5
-    queue = deque(maxlen=max_size)
+    queue: deque[int] = deque(maxlen=max_size)
 
     # Fill the queue
     for i in range(max_size):
@@ -63,7 +63,7 @@ def test_deque_maxlen() -> None:
 
 def test_queued_command_fifo_order() -> None:
     """Test that queued commands maintain FIFO order."""
-    queue = deque()
+    queue: deque[QueuedCommand] = deque()
     timestamps = []
 
     # Add commands

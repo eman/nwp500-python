@@ -17,12 +17,19 @@ from __future__ import annotations
 import asyncio
 import concurrent.futures
 import logging
+from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime, timedelta
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from nwp500.auth import AuthenticationResponse, AuthTokens, UserInfo
+from nwp500.auth import (
+    AuthenticationResponse,
+    AuthTokens,
+    NavienAuthClient,
+    UserInfo,
+)
 from nwp500.exceptions import (
     InvalidCredentialsError,
     MqttNotConnectedError,
@@ -36,10 +43,8 @@ from nwp500.mqtt.utils import MqttConnectionConfig, PeriodicRequestType
 
 
 @pytest.fixture
-def mock_auth_client():
+def mock_auth_client() -> NavienAuthClient:
     """Create a mock auth client with valid tokens."""
-    from nwp500.auth import NavienAuthClient
-
     client = NavienAuthClient("test@example.com", "password")
     valid_tokens = AuthTokens(
         id_token="test_id",
@@ -58,18 +63,23 @@ def mock_auth_client():
     return client
 
 
-def _fast_config(**overrides):
-    defaults = {
+def _fast_config(**overrides: object) -> MqttConnectionConfig:
+    defaults: dict[str, object] = {
         "client_id": "test-client",
         "initial_reconnect_delay": 0.001,
         "max_reconnect_delay": 0.005,
         "max_reconnect_attempts": 3,
     }
     defaults.update(overrides)
-    return MqttConnectionConfig(**defaults)
+    return MqttConnectionConfig(**defaults)  # type: ignore[arg-type]
 
 
-def _make_handler(config, is_connected, reconnect_func, **kwargs):
+def _make_handler(
+    config: MqttConnectionConfig,
+    is_connected: Callable[[], bool],
+    reconnect_func: Callable[[], Awaitable[None]],
+    **kwargs: Any,
+) -> MqttReconnectionHandler:
     return MqttReconnectionHandler(
         config=config,
         is_connected_func=is_connected,
@@ -149,7 +159,7 @@ class TestReconnectLoopExceptionHandling:
             attempts.append(1)
             raise InvalidCredentialsError("bad password")
 
-        async def emit(event, *args) -> None:
+        async def emit(event: object, *args: object) -> None:
             events.append((event, args))
 
         handler = _make_handler(
@@ -177,7 +187,7 @@ class TestReconnectLoopExceptionHandling:
 
         events = []
 
-        async def emit(event, *args) -> None:
+        async def emit(event: object, *args: object) -> None:
             events.append(event)
 
         config = _fast_config(
@@ -225,7 +235,7 @@ class TestReconnectLoopExceptionHandling:
 
         real_sleep = asyncio.sleep
 
-        async def fake_sleep(delay) -> None:
+        async def fake_sleep(delay: float) -> None:
             sleeps.append(delay)
             await real_sleep(0)
 
@@ -241,7 +251,7 @@ class TestReconnectLoopExceptionHandling:
     @pytest.mark.asyncio
     @pytest.mark.parametrize("deep", [False, True])
     async def test_successful_reconnect_resets_attempt_count(
-        self, deep
+        self, deep: bool
     ) -> None:
         """Regression: a quick or deep reconnect makes a new connection, so
         on_connection_resumed never fires and the counter kept growing
@@ -285,7 +295,7 @@ class TestDisconnectDuringInterruption:
 
     @pytest.mark.asyncio
     async def test_disconnect_while_interrupted_stops_everything(
-        self, mock_auth_client
+        self, mock_auth_client: NavienAuthClient
     ) -> None:
         """Regression: disconnect() returned early when _connected was
         False, leaving the reconnect loop and periodic tasks running to
@@ -317,7 +327,7 @@ class TestDisconnectDuringInterruption:
 
     @pytest.mark.asyncio
     async def test_disconnect_while_connected_uses_graceful_path(
-        self, mock_auth_client
+        self, mock_auth_client: NavienAuthClient
     ) -> None:
         from nwp500.mqtt import NavienMqttClient
 
@@ -345,7 +355,7 @@ class TestQueueFlushAfterReconnect:
 
     @pytest.mark.asyncio
     async def test_active_reconnect_flushes_command_queue(
-        self, mock_auth_client
+        self, mock_auth_client: NavienAuthClient
     ) -> None:
         """Regression: a rebuilt connection never fires the SDK's
         on_connection_resumed callback, so queued commands were only sent
@@ -358,7 +368,7 @@ class TestQueueFlushAfterReconnect:
 
         flushed = []
 
-        async def fake_send_all(publish_func, is_connected) -> None:
+        async def fake_send_all(publish_func: Any, is_connected: Any) -> None:
             flushed.append(1)
 
         client._command_queue = MagicMock()
@@ -393,7 +403,7 @@ class TestQueueFlushAfterReconnect:
 
     @pytest.mark.asyncio
     async def test_deep_reconnect_flushes_command_queue(
-        self, mock_auth_client
+        self, mock_auth_client: NavienAuthClient
     ) -> None:
         from nwp500.mqtt import NavienMqttClient
 
@@ -438,7 +448,7 @@ class TestQueueFlushAfterReconnect:
 
     @pytest.mark.asyncio
     async def test_deep_reconnect_renews_aws_session_after_token_refresh(
-        self, mock_auth_client
+        self, mock_auth_client: NavienAuthClient
     ) -> None:
         """After the forced token refresh, deep reconnect also renews the
         AWS SigV4 credentials, as the app does on an MQTT auth failure:
@@ -456,7 +466,7 @@ class TestQueueFlushAfterReconnect:
 
         calls: list[str] = []
 
-        async def fake_refresh_token(token) -> None:
+        async def fake_refresh_token(token: Any) -> None:
             calls.append("refresh_token")
 
         async def fake_refresh_session() -> None:
@@ -485,7 +495,7 @@ class TestQueueFlushAfterReconnect:
 
     @pytest.mark.asyncio
     async def test_deep_reconnect_reauths_when_session_refresh_fails(
-        self, mock_auth_client
+        self, mock_auth_client: NavienAuthClient
     ) -> None:
         """A failed session refresh takes the same re-authentication path
         as a failed token refresh (the fixture stores credentials)."""
@@ -522,7 +532,7 @@ class TestQueueFlushAfterReconnect:
 
     @pytest.mark.asyncio
     async def test_token_only_client_recovers_with_secured_sign_in(
-        self, mock_auth_client
+        self, mock_auth_client: NavienAuthClient
     ) -> None:
         """No stored password: a rejected session refresh after a good
         token refresh still re-authenticates, by secured sign-in."""
@@ -539,7 +549,8 @@ class TestQueueFlushAfterReconnect:
         new_manager.connect = AsyncMock(return_value=True)
         new_manager.connection = MagicMock()
         fresh = AuthenticationResponse(
-            user_info=UserInfo(), tokens=mock_auth_client.current_tokens
+            user_info=UserInfo(),
+            tokens=mock_auth_client.current_tokens,  # type: ignore[arg-type]
         )
 
         with (
@@ -568,7 +579,7 @@ class TestQueueFlushAfterReconnect:
 
     @pytest.mark.asyncio
     async def test_token_only_client_with_dead_token_reraises(
-        self, mock_auth_client
+        self, mock_auth_client: NavienAuthClient
     ) -> None:
         """No stored password and no live access token: nothing can
         re-authenticate, so the refresh error propagates."""
@@ -576,12 +587,12 @@ class TestQueueFlushAfterReconnect:
 
         mock_auth_client._password = ""
         client = NavienMqttClient(mock_auth_client)
-        expired = mock_auth_client.current_tokens.model_copy(
+        expired = mock_auth_client.current_tokens.model_copy(  # type: ignore[union-attr]
             update={"issued_at": datetime.now(UTC) - timedelta(hours=2)}
         )
         expired.model_post_init(None)
         assert expired.is_expired
-        mock_auth_client._auth_response.tokens = expired
+        mock_auth_client._auth_response.tokens = expired  # type: ignore[union-attr]
         client._connected = False
         client._loop = asyncio.get_running_loop()
         client._connection_manager = None
@@ -612,7 +623,7 @@ class TestPeriodicLoopResilience:
         silently killed the periodic task."""
         calls = []
 
-        async def request_status(device) -> None:
+        async def request_status(device: Any) -> None:
             calls.append(1)
             if len(calls) == 1:
                 raise MqttNotConnectedError("connection dropped mid-loop")
@@ -667,10 +678,12 @@ class TestPeriodicLoopResilience:
 class TestScheduledCoroutineExceptions:
     """Exceptions from scheduled coroutines must be logged, not dropped."""
 
-    def test_failed_future_is_logged(self, caplog) -> None:
+    def test_failed_future_is_logged(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
         from nwp500.mqtt.client import _log_scheduled_coroutine_result
 
-        future = concurrent.futures.Future()
+        future: concurrent.futures.Future[Any] = concurrent.futures.Future()
         future.set_exception(MqttNotConnectedError("resubscribe failed"))
 
         with caplog.at_level(logging.ERROR, logger="nwp500.mqtt.client"):
@@ -679,10 +692,12 @@ class TestScheduledCoroutineExceptions:
         assert "Scheduled coroutine failed" in caplog.text
         assert "resubscribe failed" in caplog.text
 
-    def test_cancelled_future_is_silent(self, caplog) -> None:
+    def test_cancelled_future_is_silent(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
         from nwp500.mqtt.client import _log_scheduled_coroutine_result
 
-        future = concurrent.futures.Future()
+        future: concurrent.futures.Future[Any] = concurrent.futures.Future()
         future.cancel()
 
         with caplog.at_level(logging.ERROR, logger="nwp500.mqtt.client"):
@@ -692,7 +707,9 @@ class TestScheduledCoroutineExceptions:
 
     @pytest.mark.asyncio
     async def test_schedule_coroutine_attaches_done_callback(
-        self, mock_auth_client, caplog
+        self,
+        mock_auth_client: NavienAuthClient,
+        caplog: pytest.LogCaptureFixture,
     ) -> None:
         """End-to-end: a scheduled coroutine that raises produces a log."""
         from nwp500.mqtt import NavienMqttClient
@@ -717,14 +734,16 @@ class TestOperationTimeouts:
 
     @pytest.mark.asyncio
     async def test_publish_times_out_without_ack(
-        self, mock_auth_client
+        self, mock_auth_client: NavienAuthClient
     ) -> None:
         config = MqttConnectionConfig(
             client_id="test-client", operation_timeout=0.05
         )
         conn = MqttConnection(config, mock_auth_client)
 
-        never_acked = concurrent.futures.Future()  # never resolves
+        never_acked: concurrent.futures.Future[Any] = (
+            concurrent.futures.Future()
+        )  # never resolves
         sdk_conn = MagicMock()
         sdk_conn.publish.return_value = (never_acked, 42)
         conn._connection = sdk_conn
@@ -735,14 +754,16 @@ class TestOperationTimeouts:
 
     @pytest.mark.asyncio
     async def test_subscribe_times_out_without_ack(
-        self, mock_auth_client
+        self, mock_auth_client: NavienAuthClient
     ) -> None:
         config = MqttConnectionConfig(
             client_id="test-client", operation_timeout=0.05
         )
         conn = MqttConnection(config, mock_auth_client)
 
-        never_acked = concurrent.futures.Future()
+        never_acked: concurrent.futures.Future[Any] = (
+            concurrent.futures.Future()
+        )
         sdk_conn = MagicMock()
         sdk_conn.subscribe.return_value = (never_acked, 7)
         conn._connection = sdk_conn
@@ -753,14 +774,14 @@ class TestOperationTimeouts:
 
     @pytest.mark.asyncio
     async def test_publish_resolves_before_timeout(
-        self, mock_auth_client
+        self, mock_auth_client: NavienAuthClient
     ) -> None:
         config = MqttConnectionConfig(
             client_id="test-client", operation_timeout=1.0
         )
         conn = MqttConnection(config, mock_auth_client)
 
-        acked = concurrent.futures.Future()
+        acked: concurrent.futures.Future[Any] = concurrent.futures.Future()
         acked.set_result({"packet_id": 42})
         sdk_conn = MagicMock()
         sdk_conn.publish.return_value = (acked, 42)
@@ -775,7 +796,7 @@ class TestScheduleCoroutineCleanup:
     """Scheduling failures must not leak un-awaited coroutines."""
 
     def test_coroutine_closed_when_no_loop_available(
-        self, mock_auth_client
+        self, mock_auth_client: NavienAuthClient
     ) -> None:
         from nwp500.mqtt import NavienMqttClient
 
@@ -793,7 +814,7 @@ class TestScheduleCoroutineCleanup:
             coro.send(None)
 
     def test_coroutine_closed_when_loop_is_closed(
-        self, mock_auth_client
+        self, mock_auth_client: NavienAuthClient
     ) -> None:
         from nwp500.mqtt import NavienMqttClient
 
@@ -811,7 +832,9 @@ class TestScheduleCoroutineCleanup:
         with pytest.raises(RuntimeError, match="cannot reuse already"):
             coro.send(None)
 
-    def test_done_callback_logs_traceback(self, caplog) -> None:
+    def test_done_callback_logs_traceback(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
         """The log record must carry the coroutine's traceback."""
         import logging
 
@@ -820,7 +843,7 @@ class TestScheduleCoroutineCleanup:
         def boom() -> None:
             raise MqttNotConnectedError("scheduled failure")
 
-        future: concurrent.futures.Future = concurrent.futures.Future()
+        future: concurrent.futures.Future[Any] = concurrent.futures.Future()
         try:
             boom()
         except MqttNotConnectedError as e:
@@ -850,14 +873,16 @@ class TestAbandonedAckFutureConsumed:
 
     @pytest.mark.asyncio
     async def test_timeout_then_late_exception_is_consumed(
-        self, mock_auth_client, caplog
+        self,
+        mock_auth_client: NavienAuthClient,
+        caplog: pytest.LogCaptureFixture,
     ) -> None:
         config = MqttConnectionConfig(
             client_id="test-client", operation_timeout=0.05
         )
         conn = MqttConnection(config, mock_auth_client)
 
-        raw_future: concurrent.futures.Future = concurrent.futures.Future()
+        raw_future: concurrent.futures.Future[Any] = concurrent.futures.Future()
         sdk_conn = MagicMock()
         sdk_conn.subscribe.return_value = (raw_future, 7)
         conn._connection = sdk_conn
@@ -884,14 +909,16 @@ class TestAbandonedAckFutureConsumed:
 
     @pytest.mark.asyncio
     async def test_cancelled_then_late_exception_is_consumed(
-        self, mock_auth_client, caplog
+        self,
+        mock_auth_client: NavienAuthClient,
+        caplog: pytest.LogCaptureFixture,
     ) -> None:
         config = MqttConnectionConfig(
             client_id="test-client", operation_timeout=5.0
         )
         conn = MqttConnection(config, mock_auth_client)
 
-        raw_future: concurrent.futures.Future = concurrent.futures.Future()
+        raw_future: concurrent.futures.Future[Any] = concurrent.futures.Future()
         sdk_conn = MagicMock()
         sdk_conn.subscribe.return_value = (raw_future, 7)
         conn._connection = sdk_conn
@@ -924,18 +951,22 @@ class TestAwaitAckFutureTypes:
     """_await_ack must accept both concurrent and asyncio futures."""
 
     @pytest.mark.asyncio
-    async def test_concurrent_future(self, mock_auth_client) -> None:
+    async def test_concurrent_future(
+        self, mock_auth_client: NavienAuthClient
+    ) -> None:
         config = MqttConnectionConfig(client_id="t", operation_timeout=1.0)
         conn = MqttConnection(config, mock_auth_client)
 
-        future: concurrent.futures.Future = concurrent.futures.Future()
+        future: concurrent.futures.Future[Any] = concurrent.futures.Future()
         future.set_result({"ok": True})
 
         result = await conn._await_ack(future, "Test")
         assert result == {"ok": True}
 
     @pytest.mark.asyncio
-    async def test_asyncio_future(self, mock_auth_client) -> None:
+    async def test_asyncio_future(
+        self, mock_auth_client: NavienAuthClient
+    ) -> None:
         config = MqttConnectionConfig(client_id="t", operation_timeout=1.0)
         conn = MqttConnection(config, mock_auth_client)
 

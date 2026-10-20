@@ -41,7 +41,9 @@ class TestTheProfile:
             ("vacation", None),
         ],
     )
-    def test_a_recorded_mode_value(self, reported, name) -> None:
+    def test_a_recorded_mode_value(
+        self, reported: object, name: str | None
+    ) -> None:
         """The replacement review of #162: a record holds the mode as
         its ``DhwOperationSetting`` value."""
         assert P.heater_profile().name_of(reported) == name

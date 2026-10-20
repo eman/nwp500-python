@@ -603,7 +603,13 @@ async def test_add_reservation_with_legacy_entry_passes_validation(
     schedule = _make_schedule([_entry(mode=6)])
     mqtt = MagicMock()
 
-    async def checked_update(device, reservations, *, enabled, kept):
+    async def checked_update(
+        device: Any,
+        reservations: Any,
+        *,
+        enabled: bool,
+        kept: Any,
+    ) -> int:
         validate_reservation_entries(reservations, kept=kept)
         return 1
 

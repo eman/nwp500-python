@@ -3,6 +3,9 @@
 Covers topic_builder, field_factory, and models/_converters.
 """
 
+from collections.abc import Callable, Iterator
+from typing import Any, cast
+
 import pytest
 from pydantic import BaseModel
 
@@ -24,7 +27,7 @@ MAC = "aa:bb:cc:dd:ee:ff"
 
 
 @pytest.fixture(autouse=True)
-def _reset_units():
+def _reset_units() -> Iterator[None]:
     yield
     reset_unit_system()
 
@@ -75,7 +78,9 @@ class TestFieldFactory:
         class Model(BaseModel):
             temp: float = temperature_field("DHW temperature", default=0.0)
 
-        extra = Model.model_fields["temp"].json_schema_extra
+        extra = cast(
+            dict[str, Any], Model.model_fields["temp"].json_schema_extra
+        )
         assert extra == {
             "unit_of_measurement": "°F",
             "device_class": "temperature",
@@ -87,7 +92,9 @@ class TestFieldFactory:
         class Model(BaseModel):
             temp: float = temperature_field("t", unit="°C", default=0.0)
 
-        extra = Model.model_fields["temp"].json_schema_extra
+        extra = cast(
+            dict[str, Any], Model.model_fields["temp"].json_schema_extra
+        )
         assert extra["unit_of_measurement"] == "°C"
 
     def test_caller_json_schema_extra_merged(self) -> None:
@@ -98,7 +105,9 @@ class TestFieldFactory:
                 json_schema_extra={"custom": True, "device_class": "override"},
             )
 
-        extra = Model.model_fields["temp"].json_schema_extra
+        extra = cast(
+            dict[str, Any], Model.model_fields["temp"].json_schema_extra
+        )
         assert extra["custom"] is True
         assert extra["device_class"] == "override"  # caller wins
         assert extra["unit_of_measurement"] == "°F"  # base preserved
@@ -112,12 +121,17 @@ class TestFieldFactory:
         ],
     )
     def test_other_factories_metadata(
-        self, factory, device_class, unit
+        self,
+        factory: Callable[..., Any],
+        device_class: str,
+        unit: str,
     ) -> None:
         class Model(BaseModel):
             value: float = factory("desc", default=0.0)
 
-        extra = Model.model_fields["value"].json_schema_extra
+        extra = cast(
+            dict[str, Any], Model.model_fields["value"].json_schema_extra
+        )
         assert extra["device_class"] == device_class
         assert extra["unit_of_measurement"] == unit
 

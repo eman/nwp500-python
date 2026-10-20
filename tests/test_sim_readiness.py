@@ -12,12 +12,13 @@ wrappers below pass it as the source's defaults did.
 
 import math
 from dataclasses import dataclass, replace
+from typing import Any
 
 import pytest
 
 pytest.importorskip("pandas")
 
-from _sim_site import (
+from _sim_site import (  # type: ignore[import-not-found]  # test helper
     DEPLETION_THRESHOLD_F,
     EP,
     Booked,
@@ -58,27 +59,45 @@ P0 = replace(P, delivered_lag_gal=0.0)
 FULL = (150.0, 150.0)
 
 
-def deliverable(upper, lower, p=None, **kw):
+def deliverable(
+    upper: float,
+    lower: float,
+    p: ReadinessParams | None = None,
+    **kw: Any,
+) -> rd.Deliverable:
     return rd.deliverable(upper, lower, P if p is None else p, ep=EP, **kw)
 
 
-def booked_deliverable(booked, upper, lower, p=None):
+def booked_deliverable(
+    booked: Booked,
+    upper: float,
+    lower: float,
+    p: ReadinessParams | None = None,
+) -> rd.Deliverable:
     return rd.booked_deliverable(
         booked, upper, lower, P if p is None else p, EP
     )
 
 
-def delivery_temp_f(booked, upper, p=None, *, lower_f=None):
+def delivery_temp_f(
+    booked: Booked,
+    upper: float,
+    p: ReadinessParams | None = None,
+    *,
+    lower_f: float | None = None,
+) -> float:
     return rd.delivery_temp_f(
         booked, upper, P if p is None else p, EP, lower_f=lower_f
     )
 
 
-def zone_delivery_f(upper, past, p=None):
+def zone_delivery_f(
+    upper: float, past: float | None, p: ReadinessParams | None = None
+) -> float:
     return rd.zone_delivery_f(upper, past, P if p is None else p)
 
 
-def demonstrated_gal(upper, lower):
+def demonstrated_gal(upper: float, lower: float) -> float:
     return rd.demonstrated_gal(upper, lower, EVIDENCE)
 
 
@@ -101,7 +120,15 @@ class Step:
     lower_element: bool = False
 
 
-def _step(u=141.8, lo=141.8, flow=0.0, comp=False, el=False, s=10.0, **kw):
+def _step(
+    u: float = 141.8,
+    lo: float = 141.8,
+    flow: float = 0.0,
+    comp: bool = False,
+    el: bool = False,
+    s: float = 10.0,
+    **kw: bool,
+) -> Step:
     return Step(u, lo, flow, comp, el, s, **kw)
 
 
@@ -154,7 +181,7 @@ def _booked(steps: list[Step]) -> Booked:
 FULL_TANK = [_step(comp=True), _step()]
 
 
-def _bath(gal=30.0):
+def _bath(gal: float = 30.0) -> Booked:
     """A full 141.8 °F tank that has just run a bath of ``gal``."""
     n = round(gal * 2)  # 3 GPM over 10 s steps: half a gallon each
     steps = [_step(141.0, 141.0 - i * 0.1, flow=3.0) for i in range(n)]
@@ -207,7 +234,7 @@ class TestDeliverable:
         assert full + LAG - w.gal == pytest.approx(8000.0 / per_gal, abs=0.1)
 
     @pytest.mark.parametrize("fixed", [110.0, 125.0, 140.0])
-    def test_a_warmer_tank_never_delivers_less(self, fixed) -> None:
+    def test_a_warmer_tank_never_delivers_less(self, fixed: float) -> None:
         steps = [100.0 + 2.0 * i for i in range(26)]
         by_upper = [demonstrated_gal(u, fixed) for u in steps]
         by_lower = [demonstrated_gal(fixed, lo) for lo in steps]
@@ -548,9 +575,10 @@ class TestTheZoneThroughADraw:
         s, lam = EP.zone_mix_f_per_gal, EP.zone_mix_gal
 
         def fall(left: float, gal: float) -> float:
-            return 140.0 - zone_mixed_f(
+            mixed: float = zone_mixed_f(
                 self._left(left), gal, 140.0, 140.0, 60.0
             )
+            return 140.0 - mixed
 
         assert fall(30.0, 4.0) == pytest.approx(
             s * lam * (math.exp(-30.0 / lam) - math.exp(-34.0 / lam))
@@ -813,7 +841,7 @@ class TestTheDeliveredLine:
     @pytest.mark.parametrize("p", [P, P0], ids=["lag", "no_lag"])
     @pytest.mark.parametrize("upper", [103.0, 120.0, 138.0])
     def test_the_delivery_and_the_gallons_agree_across_both_lines(
-        self, upper, p
+        self, upper: float, p: ReadinessParams
     ) -> None:
 
         for tenth in range(-120, 60, 3):

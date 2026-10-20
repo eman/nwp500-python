@@ -21,6 +21,7 @@ from nwp500.sim.params import (
     INSTALLATION,
     INSTALLATION_TERMS,
     MEASURED,
+    Scope,
     note_of,
     params_from_document,
     params_to_document,
@@ -185,7 +186,9 @@ def test_without_a_valve_every_gallon_is_tank_water() -> None:
         ("readiness", "dip_f", HEATER),
     ],
 )
-def test_each_parameter_says_what_it_describes(part, name, scope) -> None:
+def test_each_parameter_says_what_it_describes(
+    part: str, name: str, scope: Scope
+) -> None:
     p = default_params()
     assert scope_of(getattr(p, part), name) == scope
 

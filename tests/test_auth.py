@@ -1,6 +1,7 @@
 """Tests for authentication functionality."""
 
 from datetime import UTC, datetime, timedelta
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import aiohttp
@@ -84,7 +85,7 @@ def test_user_info_model_validate_validate() -> None:
 
 def test_user_info_model_validate_validate_with_missing_fields() -> None:
     """Test UserInfo.model_validate with missing fields."""
-    data = {}
+    data: dict[str, Any] = {}
 
     user_info = UserInfo.model_validate(data)
 
@@ -276,7 +277,7 @@ def test_auth_tokens_model_validate_validate() -> None:
 
 def test_auth_tokens_model_validate_validate_minimal() -> None:
     """Test AuthTokens.model_validate with minimal data."""
-    data = {}
+    data: dict[str, Any] = {}
 
     tokens = AuthTokens.model_validate(data)
 
@@ -715,7 +716,9 @@ async def test_ensure_session() -> None:
     await client._ensure_session()
 
     assert client._session is not None
-    assert isinstance(client._session, aiohttp.ClientSession)
+    assert isinstance(  # type: ignore[unreachable]
+        client._session, aiohttp.ClientSession
+    )
     assert client._owned_session is True
 
     # Clean up

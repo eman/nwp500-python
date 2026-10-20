@@ -2,7 +2,7 @@
 
 import asyncio
 import json
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -125,7 +125,7 @@ class TestBuildReservationEntryTempValidation:
     """Tests for unit-aware temperature validation."""
 
     @patch("nwp500.unit_system.get_unit_system", return_value="metric")
-    def test_celsius_defaults(self, _mock_unit) -> None:
+    def test_celsius_defaults(self, _mock_unit: MagicMock) -> None:
         """Metric mode should use Celsius defaults (35-65)."""
         # 50°C is valid in metric mode
         result = build_reservation_entry(
@@ -139,7 +139,9 @@ class TestBuildReservationEntryTempValidation:
         assert "param" in result
 
     @patch("nwp500.unit_system.get_unit_system", return_value="metric")
-    def test_celsius_rejects_fahrenheit_values(self, _mock_unit) -> None:
+    def test_celsius_rejects_fahrenheit_values(
+        self, _mock_unit: MagicMock
+    ) -> None:
         """Values outside Celsius range should be rejected in metric mode."""
         from nwp500.exceptions import RangeValidationError
 
@@ -154,7 +156,7 @@ class TestBuildReservationEntryTempValidation:
             )
 
     @patch("nwp500.unit_system.get_unit_system", return_value="us_customary")
-    def test_fahrenheit_defaults(self, _mock_unit) -> None:
+    def test_fahrenheit_defaults(self, _mock_unit: MagicMock) -> None:
         """US customary mode should use Fahrenheit defaults (95-150)."""
         result = build_reservation_entry(
             enabled=True,
@@ -167,7 +169,9 @@ class TestBuildReservationEntryTempValidation:
         assert "param" in result
 
     @patch("nwp500.unit_system.get_unit_system", return_value="us_customary")
-    def test_fahrenheit_rejects_low_celsius(self, _mock_unit) -> None:
+    def test_fahrenheit_rejects_low_celsius(
+        self, _mock_unit: MagicMock
+    ) -> None:
         """Values outside Fahrenheit range should be rejected in US mode."""
         from nwp500.exceptions import RangeValidationError
 
@@ -182,7 +186,9 @@ class TestBuildReservationEntryTempValidation:
             )
 
     @patch("nwp500.unit_system.get_unit_system", return_value="metric")
-    def test_explicit_limits_override_defaults(self, _mock_unit) -> None:
+    def test_explicit_limits_override_defaults(
+        self, _mock_unit: MagicMock
+    ) -> None:
         """Explicit temperature_min/max should override unit defaults."""
         result = build_reservation_entry(
             enabled=True,
