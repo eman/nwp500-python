@@ -18,9 +18,7 @@ Features
 * **Monitoring:** Real-time tracking of temperature, power usage, tank charge, and component status.
 * **Control:** Remote control of target temperatures, operation modes, and vacation settings.
 * **Scheduling:** Reservations, time-of-use (TOU) schedules and anti-legionella cycles.
-* **Typed models:** Pydantic models with validation and unit handling.
-* **Async:** Built on asyncio.
-* **Simulator (optional):** A physics model of the heater, ``nwp500.sim``, that answers "when will the tank be hot?", "how much hot water is there?" and "what would this change do?", and calibrates from a heater's own history. ``nwp-cli simulate`` runs it on the heater as it is now or on a scenario file. Install it with ``pip install nwp500-python[sim]``.
+* **Simulator (optional):** ``nwp500.sim``, a physics model of the heater. It estimates recovery time and available hot water, projects the effect of a change to the schedule or settings, and calibrates against a heater's own history. ``nwp-cli simulate`` runs it against the live heater or a scenario file. Install with ``pip install nwp500-python[sim]``.
 
 Getting Started
 ===============
