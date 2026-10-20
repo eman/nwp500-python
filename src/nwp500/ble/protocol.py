@@ -215,7 +215,10 @@ def build_session_command(code: int) -> bytes:
     * 210, which the service app sends other models on connecting, pushed
       one block after a 201 and nothing otherwise.
 
-    The service app's 220 resets the stored error history.
+    * 220, the service app's error-history reset, left the ``EHD`` block
+      unchanged.
+
+    Each of 201, 202, 210 and 220 drew one ``RTMD`` block in reply.
     """
     if not 0 <= code <= 0xFF:
         raise ValueError("session command code must fit in one byte")
