@@ -769,6 +769,163 @@ def add_inputs(
     return frame
 
 
+# ── a heater's history from its values' changes ───────────────────
+
+#: A value's changes: each instant it took a new value, and the value.
+Changes = Sequence[tuple[datetime, Any]]
+
+
+@dataclass(frozen=True)
+class ChangeRows:
+    """A heater's history as the changes of each value a status carries
+    (Home Assistant's entity history, say): each series the instants a
+    value changed and what it changed to, in time order. A value holds
+    until its next change. Temperatures are °F, power W, energy Wh.
+
+    Only the probes are needed. Without a value, its column keeps
+    ``history``'s default: the flags off, a number unknown.
+    """
+
+    upper_f: Changes
+    lower_f: Changes
+    compressor_on: Changes = ()
+    upper_element_on: Changes = ()
+    lower_element_on: Changes = ()
+    #: ``HeatSource`` values.
+    heat_source: Changes = ()
+    dhw_in_use: Changes = ()
+    #: The lower probe's heat-pump stop threshold.
+    target_f: Changes = ()
+    #: ``CurrentOperationMode`` values.
+    operation_mode: Changes = ()
+    anti_legionella: Changes = ()
+    #: ``ErrorCode`` values.
+    error_code: Changes = ()
+    power_w: Changes = ()
+    energy_to_setpoint_wh: Changes = ()
+    #: The heater's own air reading, used only while its compressor runs.
+    heater_air_f: Changes = ()
+    #: The spans a value was unknown (Home Assistant's ``unavailable``
+    #: or ``unknown``): unobserved, like a gap between statuses.
+    outages: Sequence[tuple[datetime, datetime]] = ()
+
+
+def _ns(instants: Iterable[datetime]) -> np.ndarray:
+    """``instants`` as UTC nanoseconds."""
+    import pandas as pd
+
+    return np.asarray(
+        pd.to_datetime(list(instants), utc=True).as_unit("ns").asi8,
+        dtype=np.int64,
+    )
+
+
+def _held_at(
+    changes: Changes, at: np.ndarray, missing: Any, dtype: Any
+) -> np.ndarray:
+    """``changes`` held from each change to the next, read at ``at``
+    (ns); ``missing`` before the first."""
+    out = np.full(len(at), missing, dtype=dtype)
+    if not changes:
+        return out
+    rows = sorted(changes, key=lambda r: r[0])
+    times = _ns(t for t, _ in rows)
+    values = np.array([v for _, v in rows], dtype=dtype)
+    i = np.searchsorted(times, at, side="right") - 1
+    seen = i >= 0
+    out[seen] = values[i[seen]]
+    return out
+
+
+def change_history(
+    rows: ChangeRows, observed: Iterable[datetime]
+) -> pd.DataFrame:
+    """``history``'s frame from a heater's values' changes (``rows``).
+
+    A value that holds writes no change, so the changes cannot tell an
+    observed span from one nobody saw: ``observed`` is the instants the
+    heater was heard from (an entity that changes on every status
+    response, say). The frame has a row at each of them and at each
+    change between the first and the last, each value as it stood
+    then. Rows over an outage are marked water in use and excluded, as
+    ``add_inputs`` marks a gap.
+    """
+    import pandas as pd
+
+    heard = _ns(observed)
+    if not len(heard):
+        at = heard
+    else:
+        first, last = heard.min(), heard.max()
+        changed = [
+            _ns(t for t, _ in series)
+            for series in (
+                rows.upper_f,
+                rows.lower_f,
+                rows.compressor_on,
+                rows.upper_element_on,
+                rows.lower_element_on,
+                rows.heat_source,
+                rows.dhw_in_use,
+                rows.target_f,
+                rows.operation_mode,
+                rows.anti_legionella,
+                rows.error_code,
+                rows.power_w,
+                rows.energy_to_setpoint_wh,
+                rows.heater_air_f,
+            )
+            if series
+        ]
+        at = np.unique(np.concatenate([heard, *changed]))
+        at = at[(at >= first) & (at <= last)]
+    nan = float("nan")
+    compressor = _held_at(rows.compressor_on, at, False, bool)
+    source = _held_at(rows.heat_source, at, -1, np.int64)
+    mode = _held_at(rows.operation_mode, at, -1, np.int64)
+    error = _held_at(rows.error_code, at, int(ErrorCode.NO_ERROR), np.int64)
+
+    def optional(series: Changes) -> np.ndarray | None:
+        return _held_at(series, at, nan, float) if series else None
+
+    columns: dict[str, np.ndarray | None] = {
+        "upper_f": _held_at(rows.upper_f, at, nan, float),
+        "lower_f": _held_at(rows.lower_f, at, nan, float),
+        "compressor_on": compressor,
+        "element_on": _held_at(rows.upper_element_on, at, False, bool)
+        | _held_at(rows.lower_element_on, at, False, bool)
+        | np.isin(
+            source,
+            [int(HeatSource.HEATELEMENT), int(HeatSource.HEATPUMP_HEATELEMENT)],
+        ),
+        "dhw_in_use": _held_at(rows.dhw_in_use, at, False, bool),
+        "target_f": optional(rows.target_f),
+        "excluded": np.isin(
+            mode,
+            [
+                int(CurrentOperationMode.HYBRID_EFFICIENCY_MODE),
+                int(CurrentOperationMode.HYBRID_BOOST_MODE),
+            ],
+        )
+        | _held_at(rows.anti_legionella, at, False, bool)
+        | (error != int(ErrorCode.NO_ERROR)),
+        "power_w": optional(rows.power_w),
+        "energy_to_setpoint_wh": optional(rows.energy_to_setpoint_wh),
+        "heater_air_f": np.where(
+            compressor, _held_at(rows.heater_air_f, at, nan, float), nan
+        ),
+    }
+    # ``history``'s columns, in its order, less the values not given.
+    data = {k: v for k, v in columns.items() if v is not None}
+    index = pd.DatetimeIndex(pd.to_datetime(at, unit="ns", utc=True))
+    frame = pd.DataFrame(data, index=index)
+    if rows.outages and len(frame):
+        down = np.asarray(_interval_column(index, rows.outages))
+        for name in ("dhw_in_use", "excluded"):
+            frame[name] = frame[name].to_numpy(dtype=bool) | down
+    return frame
+
+
 # ── a past scenario, from the statuses the heater reported ─────────
 
 #: A tank reading older than this at the instant is no state to start

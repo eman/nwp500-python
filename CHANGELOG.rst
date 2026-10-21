@@ -2,6 +2,28 @@
 Changelog
 =========
 
+Unreleased
+==========
+
+Added
+-----
+- **Calibrate from Home Assistant's history** (#179), for a heater with
+  no recording of its statuses.
+  ``sim_home_assistant.read_heater_history`` reads the heater's own
+  entities a day at a time: the probes, what is heating, the in-use
+  flag, the stop threshold, the operation mode, the error code, the
+  power, the energy to setpoint and the heater's own air, each number
+  from the unit it was recorded in. An entity that changes on every
+  response (``heard``) says when the heater was observed.
+  ``sim_calibrate.calibrate_changes`` fits on what it read, and gives
+  the same ``Calibrated`` and ``report()`` as ``calibrate``.
+- ``sim_adapters.ChangeRows`` and ``sim_adapters.change_history``: the
+  calibration frame from each value's changes and the instants the
+  heater was heard from, for any store of that history.
+- ``History.states``: every row's state as written, numbers or not.
+  ``HomeAssistantClient.read_history`` fills it (``parse_states``).
+- ``sim_home_assistant.to_w`` and ``to_wh``.
+
 Version 9.6.0 (2026-10-21)
 ==========================
 

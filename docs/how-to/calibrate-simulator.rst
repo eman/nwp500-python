@@ -232,6 +232,83 @@ the draw response and the elements also run there: see "Improve
 accuracy" and "Fit the elements" in :doc:`simulate-heater`.
 
 
+Calibrate from Home Assistant's history
+=======================================
+
+A heater whose integration writes its values to Home Assistant can be
+calibrated from that history, with no recording of its statuses. Home
+Assistant keeps each entity's changes, and a value that holds writes
+none, so the history also needs an entity that changes every time the
+heater answers, such as the integration's last response time. Its
+changes are when the heater was heard from; a silence between them
+longer than 4 times their usual spacing (and at least 5 minutes) is
+unobserved, as a gap between statuses is.
+
+.. code-block:: python
+
+   from datetime import UTC, datetime, timedelta
+
+   from nwp500 import sim_calibrate
+   from nwp500 import sim_home_assistant as ha
+
+   entities = ha.HeaterEntities(
+       heard="sensor.water_heater_last_mqtt_response",
+       upper="sensor.water_heater_tank_upper_temperature",
+       lower="sensor.water_heater_tank_lower_temperature",
+       compressor="binary_sensor.water_heater_compressor_running",
+       upper_element="binary_sensor.water_heater_upper_element",
+       lower_element="binary_sensor.water_heater_lower_element",
+       heat_source="sensor.water_heater_current_heat_source",
+       dhw_in_use="binary_sensor.water_heater_dhw_in_use",
+       target="sensor.water_heater_hp_lower_off_temperature",
+       operation_mode="sensor.water_heater_current_operation_mode",
+       error_code="sensor.water_heater_error_code",
+       power="sensor.water_heater_current_power",
+       energy_to_setpoint="sensor.water_heater_energy_to_setpoint",
+       ambient="sensor.water_heater_ambient_temperature",
+   )
+   end = datetime.now(UTC)
+   start = end - timedelta(days=60)
+   async with ha.HomeAssistantClient(url, token) as client:
+       history = await ha.read_heater_history(client, entities, start, end)
+       record = await ha.record_inputs(client, ha.Entities(air=..., humidity=...),
+                                       start, end)
+   done = sim_calibrate.calibrate_changes(
+       history.rows, history.observed, record=record, notes=history.notes
+   )
+
+Use your own entity ids. Only ``heard`` and the two probes are needed;
+leave out what your installation does not record. ``read_heater_history``:
+
+- reads a day at a time, so the heartbeat's rows are never all held as
+  Home Assistant gives them;
+- takes each number from the unit it was recorded in (°F, °C or K; W or
+  kW; Wh or kWh), ``on`` and ``off`` from the binary sensors, and the
+  heat source, operation mode and error code by their enum names
+  (``HeatSource``, ``CurrentOperationMode``, ``ErrorCode``);
+- takes ``unavailable`` or ``unknown`` on any of the entities as an
+  outage of the heater, unobserved;
+- notes a value it could not read, and an entity whose history starts
+  after ``start``.
+
+Give ``anti_legionella`` where it is recorded. Without it an
+anti-legionella cycle is not kept out of the recoveries, and the notes
+say so.
+
+Home Assistant keeps 10 days of history by default, so ``start`` reaches
+back only that far unless the recorder's ``purge_keep_days`` is raised
+to cover the record you want to fit. The same is true of the air.
+
+Rows from another store of the same history (an export, say) go in as
+``sim_adapters.ChangeRows``, each value's changes as ``(instant,
+value)`` pairs, with the instants heard from:
+``sim_calibrate.calibrate_changes(rows, observed, ...)``.
+
+On a desktop computer, 60 days with a heartbeat every 10 seconds
+(about 550,000 rows) took about 13 seconds to read, not counting Home
+Assistant's own queries, and 11 to fit, in about 180 MB.
+
+
 Limitations
 ===========
 
@@ -252,4 +329,6 @@ See also
 
 * :doc:`simulate-heater`: run the simulator with your parameters
 * :doc:`/reference/python_api/sim`: ``sim_calibrate``,
-  ``sim.calibration``, ``sim_adapters.history`` and ``status_history``
+  ``sim.calibration``, ``sim_adapters.history``,
+  ``sim_adapters.change_history``, ``status_history`` and
+  ``sim_home_assistant.read_heater_history``
