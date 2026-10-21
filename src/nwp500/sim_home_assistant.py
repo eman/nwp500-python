@@ -222,9 +222,11 @@ class State:
 
 
 def parse_state(doc: Any) -> State:
-    """``/api/states/<entity>``'s answer. ``at`` is the entity's last
-    state or attribute change (``last_updated``), as the reference
-    implementation's change rows date a reading."""
+    """``/api/states/<entity>``'s answer. ``at`` is when the entity
+    last reported (``last_reported``), so a sensor that keeps reporting
+    the same value stays fresh. Home Assistant before 2024.3 has no
+    ``last_reported``; then ``at`` is the last state or attribute change
+    (``last_updated``, else ``last_changed``)."""
     if not isinstance(doc, Mapping) or "state" not in doc:
         raise HomeAssistantError("not an entity state")
     d = cast(Mapping[str, Any], doc)
@@ -233,7 +235,9 @@ def parse_state(doc: Any) -> State:
     if isinstance(attributes, Mapping):
         u = cast(Mapping[str, Any], attributes).get("unit_of_measurement")
         unit = u if isinstance(u, str) else None
-    stamp = d.get("last_updated") or d.get("last_changed")
+    stamp = (
+        d.get("last_reported") or d.get("last_updated") or d.get("last_changed")
+    )
     return State(
         entity=str(d.get("entity_id", "")),
         value=_number(d.get("state")),

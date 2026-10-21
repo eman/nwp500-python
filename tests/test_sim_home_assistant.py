@@ -46,15 +46,27 @@ class TestParsing:
     def test_no_value_is_none(self, value: str) -> None:
         assert ha.parse_state(_state("sensor.air", value, "°F")).value is None
 
-    def test_freshness_is_the_last_update(self) -> None:
-        doc = _state("sensor.air", "61.5", "°F") | {
-            "last_updated": (NOW - timedelta(hours=2)).isoformat(),
+    def test_freshness_is_the_last_report(self) -> None:
+        # A steady sensor: its value last changed 2 h ago, but it
+        # reported just now.
+        doc = _state("sensor.air", "61.5", "°F", timedelta(hours=2)) | {
             "last_reported": NOW.isoformat(),
+        }
+        s = ha.parse_state(doc)
+        assert s.at == NOW
+        assert ha.fresh(s, NOW)
+
+    def test_without_a_report_the_last_update_then_change(self) -> None:
+        # Home Assistant before 2024.3 sends no last_reported.
+        doc = _state("sensor.air", "61.5", "°F") | {
+            "last_changed": (NOW - timedelta(hours=3)).isoformat(),
+            "last_updated": (NOW - timedelta(hours=2)).isoformat(),
         }
         s = ha.parse_state(doc)
         assert s.at == NOW - timedelta(hours=2)
         assert not ha.fresh(s, NOW)
-        assert ha.fresh(ha.parse_state(_state("sensor.air", 1, "°F")), NOW)
+        del doc["last_updated"]
+        assert ha.parse_state(doc).at == NOW - timedelta(hours=3)
 
     def test_not_a_state(self) -> None:
         with pytest.raises(ha.HomeAssistantError):
