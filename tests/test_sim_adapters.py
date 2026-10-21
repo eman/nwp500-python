@@ -383,7 +383,49 @@ class TestSpansBetweenSamples:
         t0 = datetime(2026, 1, 5, tzinfo=UTC)
         index = pd.DatetimeIndex([t0, t0 + timedelta(seconds=120)])
         between = [(t0 + timedelta(seconds=10), t0 + timedelta(seconds=100))]
-        assert sa._interval_column(index, between) == [True, False]
-        assert sa._interval_column(index, []) == [False, False]
+        assert sa._interval_column(index, between).tolist() == [True, False]
+        assert sa._interval_column(index, []).tolist() == [False, False]
         last = [(t0 + timedelta(seconds=120), t0 + timedelta(seconds=130))]
-        assert sa._interval_column(index, last) == [False, True]
+        assert sa._interval_column(index, last).tolist() == [False, True]
+
+    def test_spans_across_a_change_of_clocks(self) -> None:
+        from datetime import timezone
+
+        import pandas as pd
+
+        pst, pdt = timezone(timedelta(hours=-8)), timezone(timedelta(hours=-7))
+        t0 = datetime(2026, 3, 8, 9, 59, tzinfo=UTC)
+        index = pd.DatetimeIndex([t0, t0 + timedelta(minutes=2)])
+        # 01:59:30 PST to 03:00:30 PDT: one minute, across the change.
+        span = (
+            datetime(2026, 3, 8, 1, 59, 30, tzinfo=pst),
+            datetime(2026, 3, 8, 3, 0, 30, tzinfo=pdt),
+        )
+        assert sa._interval_column(index, [span]).tolist() == [True, False]
+
+    def test_every_overlap_is_marked(self) -> None:
+        import numpy as np
+        import pandas as pd
+
+        rng = np.random.default_rng(7)
+        t0 = datetime(2026, 1, 5, tzinfo=UTC)
+
+        def at(n: Any) -> datetime:
+            return t0 + timedelta(seconds=int(n))
+
+        # Repeated instants and spans of no length or backwards too.
+        times = sorted(at(n) for n in rng.integers(0, 60, 40))
+        spans = [
+            (at(a), at(b)) for a, b in rng.integers(-5, 65, (15, 2)).tolist()
+        ]
+        index = pd.DatetimeIndex(times)
+        expected = [
+            any(
+                a <= t < b
+                if i + 1 == len(times)
+                else a < times[i + 1] and b > t
+                for a, b in spans
+            )
+            for i, t in enumerate(times)
+        ]
+        assert sa._interval_column(index, spans).tolist() == expected
