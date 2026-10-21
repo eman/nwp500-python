@@ -297,6 +297,11 @@ Recorded history
 .. automodule:: nwp500.status_history
    :members:
 
+.. automodule:: nwp500.sim_calibrate
+   :members: calibrate, Calibrated, report, Term, max_gap,
+      CalibrationInputError, DEFAULT_HUMIDITY_PCT, GAP_SAMPLES, MIN_GAP,
+      DEFAULT_BASE_NOTE, NO_AIR_NOTE
+
 
 Home Assistant sources
 ======================

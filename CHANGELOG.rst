@@ -2,6 +2,43 @@
 Changelog
 =========
 
+Unreleased
+==========
+
+Added
+-----
+- **Calibration outside the CLI** (``nwp500.sim_calibrate``, #177).
+  ``calibrate``, ``Calibrated``, ``report``, ``Term`` and ``max_gap``
+  moved here from ``nwp500.cli.calibration`` so an application can
+  calibrate without ``click`` or ``rich``. ``calibrate`` takes
+  ``HeaterParams`` or a parameters document as ``params`` and raises
+  ``CalibrationInputError`` (a ``ValueError``). Its notes no longer name
+  the command's options; ``nwp-cli simulate calibrate`` adds them.
+- ``status_history.iter_read`` yields a recording's statuses one at a
+  time.
+- ``sim_adapters.add_inputs`` adds the air, its humidity, a meter's
+  draws, the circulation's runs and the unobserved gaps to a frame
+  ``sim_adapters.history`` built.
+
+Changed
+-------
+- **A long history calibrates in bounded memory** (#177).
+  ``sim_adapters.history`` reads its statuses one at a time and keeps
+  only the frame's values, and ``sim_calibrate.calibrate`` takes the
+  record's span and gaps from the frame, so a generator over day files
+  is read once. 60 days of statuses (about 540,000) now take about
+  150 MB instead of about 6 GB of parsed statuses. The drawing and
+  circulating columns are computed per span instead of per row and
+  span.
+
+Documentation
+-------------
+- The calibration how-to says the recorder writes every status the
+  heater sends and what that costs on disk, shows calibrating from
+  day files with ``sim_calibrate``, adds calibrating in an
+  application, and says what Home Assistant's 10-day retention means
+  for a longer record.
+
 Version 9.5.1 (2026-10-21)
 ==========================
 

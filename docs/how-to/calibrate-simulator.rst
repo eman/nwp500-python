@@ -14,9 +14,13 @@ fit its standby loss, its compressor and its power to that record.
 Record the history
 ==================
 
-``nwp-cli simulate record`` asks the heater for its status every 30
-seconds and appends each one to a file until you stop it (Ctrl+C). It
-needs the ``cli`` extra and no other:
+``nwp-cli simulate record`` appends every status the heater sends to a
+file until you stop it (Ctrl+C): the answers to the status requests it
+makes every 30 seconds (``--every``), and the statuses the heater sends
+between them. One heater sent about 370 an hour, about half of them
+identical to the one before. A line is about 2.3 kB, so a day of
+recording is about 20 MB, or 0.2 MB gzipped. The command needs the
+``cli`` extra and no other:
 
 .. code-block:: bash
 
@@ -35,11 +39,15 @@ can have gaps. The heater may have heated or delivered water during a
 gap, so ``calibrate`` takes any spacing between statuses of more than
 4 times the record's usual spacing (and at least 5 minutes) as
 unobserved. No quiet window and no recovery spans such a gap, and the
-report counts them. Write the file any other way you like (an MQTT callback, an
-export from a home-automation recorder) as long as each line has this
-shape: ``nwp500.status_history.line(instant, raw_status)`` writes one,
-and ``status_history.read(lines)`` reads them back as
-``(instant, DeviceStatus)`` pairs.
+report counts them. The identical statuses are what show the heater was
+observed between changes, so keep them.
+
+Write the file any other way you like (an MQTT callback, an export
+from a home-automation recorder) as long as each line has this shape:
+``nwp500.status_history.line(instant, raw_status)`` writes one.
+``status_history.read(lines)`` reads them back as
+``(instant, DeviceStatus)`` pairs, and ``status_history.iter_read(lines)``
+yields them one at a time, for a long recording.
 
 Record through quiet nights and full recoveries. The standby fit needs
 windows of 3 hours or more with no heating and no hot water in use. The
@@ -75,10 +83,14 @@ Idle, it reads the cabinet, about 6 °F warm. So give one of these:
   air beside the heater and its humidity over the record. It also reads
   the meter's draws and the circulation's runs, which make the quiet
   test exact: the heater's own "hot water in use" flag also fires on
-  circulation. Home Assistant keeps 10 days of history by default. The
-  air is used only over the span its history covers, and not while its
-  sensor was ``unavailable``; the humidity takes the 50 % default
-  outside that span, and the report says how much that is. Where the
+  circulation. The air is used only over the span its history covers,
+  and not while its sensor was ``unavailable``; the humidity takes the
+  50 % default outside that span, and the report says how much that
+  is. Home Assistant keeps 10 days of history by default, so of a
+  60-day record only the last 10 days have the air, and the standby
+  loss is fitted from those alone. For the whole record, raise the
+  recorder's ``purge_keep_days`` to cover it before you start
+  recording, or give the air another way (``--air``). Where the
   meter's or the circulation's history doesn't cover the whole record,
   the heater's own flag is used instead. ``--air``, ``--ambient`` and
   ``--humidity`` override the sources.
@@ -158,37 +170,66 @@ meter's draws, which the command does not take (see below).
 From Python
 ===========
 
-The command runs ``sim.calibration.calibrate``:
+``nwp500.sim_calibrate.calibrate`` does what the command does, and
+``report`` gives the command's rows as ``Term`` values. It takes the
+statuses one at a time, so a recording kept as a file per day can be
+read in order without holding every status:
 
 .. code-block:: python
 
-   from datetime import timedelta
+   from pathlib import Path
 
-   from nwp500 import sim, sim_adapters as sa, status_history
-   from nwp500.sim import calibration
+   from nwp500 import sim, sim_calibrate, status_history
 
-   with open("history.jsonl") as f:
-       readings = status_history.read(f)
-   history = sa.history(
-       readings,
+   def recorded(days):
+       for day in days:
+           with day.open(encoding="utf-8") as f:
+               yield from status_history.iter_read(f)
+
+   done = sim_calibrate.calibrate(
+       recorded(sorted(Path("history").glob("*.jsonl"))),
        air=air_readings,            # [(instant, temperature), ...]
        humidity=humidity_readings,  # [(instant, %RH), ...]
-       max_gap=timedelta(minutes=5),
+       params=sim.default_params(),  # or your own HeaterParams
    )
-   fitted = calibration.calibrate(history, sim.default_params(),
-                                  recovery_air="air_f")
-   params = fitted.params
+   params = done.calibration.params
+   for term in sim_calibrate.report(done):
+       print(term.name, term.value, "fitted" if term.fitted else term.why)
 
-Give the humidity; if you have none, pass a constant 50 %, as the
-command does. ``max_gap`` is what
-marks a recording's gaps as unobserved; without it every span between
-two statuses is taken as observed.
+Give ``ambient`` instead of ``air`` for a constant, or neither: the
+standby loss then keeps the base's value. Without ``humidity`` the fits
+get 50 %. An input it cannot use raises ``CalibrationInputError``.
 
-From Python you can also give a meter's draws and the circulation's
-runs, which make the quiet test exact and price the heat each cycle's
-draws took. The fits for the readiness terms, the heat book, the draw
-response and the elements also run there: see "Improve accuracy"
-and "Fit the elements" in :doc:`simulate-heater`.
+On a desktop computer, 60 days of statuses (about 540,000) took about
+40 seconds to read and 10 to fit, in about 150 MB.
+
+Calibrate in an application
+---------------------------
+
+An application that records the heater itself, such as a Home
+Assistant integration, can calibrate the same way:
+
+1. Write each status it receives with ``status_history.line``, a file
+   per UTC day, and keep as many days as the fit should cover.
+2. Read the air beside the heater and its humidity over the same span
+   with ``sim_home_assistant.record_inputs(client, entities, start,
+   end)``, and pass the result as ``record=``. It also brings the
+   meter's draws and the circulation's runs. Any client with the same
+   ``read_history`` as ``HomeAssistantClient`` works. The recorder's
+   retention limits the air, as above.
+3. Call ``sim_calibrate.calibrate`` in a worker thread. It takes the
+   gaps from the statuses' own spacing: a span longer than 4 times
+   their usual spacing, and at least 5 minutes, is unobserved.
+4. Store ``params_to_document(done.calibration.params)``, and show the
+   ``report(done)`` rows and ``done.notes``.
+
+``sim.calibration.calibrate`` underneath takes the frame
+``sim_adapters.history`` builds; ``sim_adapters.add_inputs`` adds the
+air, the humidity, a meter's draws and the circulation's runs to it.
+From there you can also give the draws that price the heat each
+cycle's draws took. The fits for the readiness terms, the heat book,
+the draw response and the elements also run there: see "Improve
+accuracy" and "Fit the elements" in :doc:`simulate-heater`.
 
 
 Limitations
@@ -202,13 +243,13 @@ Limitations
   heater's own "hot water in use" flag, which also fires on
   circulation. A loop's heat that does not trip the flag is invisible
   to the heater and lands in the standby loss. From Python, pass the
-  circulation's runs (``sa.history(..., circulating=...)``) to keep
-  them out of the quiet windows.
+  circulation's runs (``record=`` or ``sa.history(...,
+  circulating=...)``) to keep them out of the quiet windows.
 
 
 See also
 ========
 
 * :doc:`simulate-heater`: run the simulator with your parameters
-* :doc:`/reference/python_api/sim`: ``sim.calibration``,
-  ``sim_adapters.history`` and ``status_history``
+* :doc:`/reference/python_api/sim`: ``sim_calibrate``,
+  ``sim.calibration``, ``sim_adapters.history`` and ``status_history``
