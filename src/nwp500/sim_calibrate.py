@@ -51,6 +51,7 @@ from nwp500.sim.params import (
     UA_REF_DELTA_T_F,
     UNFITTED_TERMS,
     HeaterParams,
+    LossParams,
     params_from_document,
 )
 
@@ -207,12 +208,14 @@ class Judged:
 class HeldOut:
     """The latest of each group's evidence, held out of its refit: the
     quiet windows, the windows that open a gap, the reached recoveries,
-    and the cycles' snapshot rows."""
+    and the snapshot rows of the cycles the power scale's and the COP's
+    fits could use."""
 
     windows: tuple[cal.StandbyWindow, ...]
     gap_windows: tuple[cal.StandbyWindow, ...]
     recoveries: pd.DataFrame
-    cycles: pd.DataFrame
+    power_cycles: pd.DataFrame
+    cop_cycles: pd.DataFrame
 
 
 def _split(n: int) -> int:
@@ -227,16 +230,16 @@ def _law_error(
     windows: Sequence[cal.StandbyWindow],
     ua_ref: float | None,
     exponent: float | None,
+    ref: float = UA_REF_DELTA_T_F,
 ) -> float | None:
     """The loss law's error on ``windows``, as ``fit_ua_law`` fits it:
     the squared error in log UA against each window's own, weighted by
-    its hours."""
+    its hours. ``ua_ref`` is quoted at ``ref`` °F."""
     usable = [
         w for w in windows if w.ua_btu_hr_f > 0.0 and w.delta_t_mean_f > 0.0
     ]
     if not usable or ua_ref is None or exponent is None or not ua_ref > 0.0:
         return None
-    ref = UA_REF_DELTA_T_F
     errors = [
         (
             np.log(w.ua_btu_hr_f)
@@ -248,6 +251,20 @@ def _law_error(
     ]
     hours = [w.duration_hours for w in usable]
     return float(np.average(errors, weights=hours))
+
+
+def _loss_error(
+    windows: Sequence[cal.StandbyWindow], loss: LossParams
+) -> float | None:
+    """``_law_error`` of the law ``loss`` holds, at its own reference;
+    without a fitted UA, the baseline it runs on."""
+    ua = loss.ua_btu_hr_f
+    return _law_error(
+        windows,
+        loss.ua_baseline_btu_hr_f if ua is None else ua,
+        loss.ua_exponent,
+        loss.ua_ref_delta_t_f,
+    )
 
 
 def _gap_error(
@@ -349,13 +366,13 @@ def score(done: Calibrated, params: HeaterParams) -> dict[str, float | None]:
         )
     loss = params.loss
     return {
-        "standby": _law_error(held.windows, loss.ua_btu_hr_f, loss.ua_exponent),
+        "standby": _loss_error(held.windows, loss),
         "gap_tau": _gap_error(
             held.gap_windows, params.tank.stratification_gap_tau_h
         ),
         "compressor": _recovery_error(held.recoveries, params),
-        "power_scale": _power_error(held.cycles, params),
-        "cop": _cop_error(held.cycles, params),
+        "power_scale": _power_error(held.power_cycles, params),
+        "cop": _cop_error(held.cop_cycles, params),
     }
 
 
@@ -371,7 +388,15 @@ def _judge(
     """Which of base and refit ``group`` keeps: the refit only when it
     scores better on the ``n_held`` latest ``what`` held out of it."""
     if not refit_exists:
-        return Judged(group, "base", base, None, n_held, "")
+        return Judged(
+            group,
+            "base",
+            base,
+            None,
+            n_held,
+            f"kept the base: too few {what} to refit on "
+            f"({cal.MIN_POWER_EVENTS} needed)",
+        )
     if not n_held:
         return Judged(
             group,
@@ -443,9 +468,7 @@ def _keep_better(
             "standby",
             "quiet windows",
             n_held,
-            _law_error(
-                held_windows, base.loss.ua_btu_hr_f, base.loss.ua_exponent
-            ),
+            _loss_error(held_windows, base.loss),
             _law_error(held_windows, ua_ref, exponent),
         )
         judged.append(j)
@@ -521,64 +544,82 @@ def _keep_better(
             judged.append(j)
             if j.kept == "refit":
                 params = cal.with_compressor(params, compressor)
-    # The cycles in time order, each read whole: the latest held out.
-    if len(rows):
-        starts = rows.loc[rows["offset_minutes"] == 0.0].drop_duplicates(
-            subset=["cycle"]
-        )
-        order = starts.sort_values("start_time")["cycle"].tolist()
-    else:
-        order = []
-    n_cycles_held = _split(len(order))
-    held_ids = order[len(order) - n_cycles_held :]
-    held_cycles = rows.loc[rows["cycle"].isin(held_ids)] if len(rows) else rows
-    train_rows = rows.loc[~rows["cycle"].isin(held_ids)] if len(rows) else rows
     power = None
-    if "compressor" not in unfitted:
-        power = cal.fit_power(train_rows, params)
+    held_power = held_cop = rows.iloc[0:0]
+
+    def split_on(
+        starts: Iterable[datetime | None],
+    ) -> tuple[pd.DataFrame, pd.DataFrame, int]:
+        """``rows`` without and with the latest of the cycles starting at
+        ``starts`` (a fit's usable ones), and how many those are."""
+        ordered = sorted(t for t in starts if t is not None)
+        n = _split(len(ordered))
+        held_at = rows["start_time"].isin(ordered[len(ordered) - n :])
+        return rows.loc[~held_at], rows.loc[held_at], n
+
+    if "compressor" not in unfitted and "power" in unfitted:
+        power = cal.fit_power(rows, params)
+        if power.power_scale is not None and power.cop_scale is not None:
+            unfitted.discard("power")
+        params = cal.with_power(params, power)
+    elif "compressor" not in unfitted and len(rows):
+        # Each fit's own usable cycles, in time order: the latest held
+        # out of it.
+        train_power, held_power, n_power_held = split_on(
+            t for t, _, _ in cal.power_cycles(rows, params)
+        )
+        train_cop, held_cop, n_cop_held = split_on(
+            c.start for c in cal.cop_cycles(rows, params)
+        )
+        scale, n_power = cal.fit_power_scale(train_power, params)
+        cop, n_cop = cal.fit_cop_scale(train_cop, params)
+        power = cal.PowerFit(
+            power_scale=scale,
+            n_power=n_power,
+            cop_scale=None if cop is None else cop[0],
+            startup_wh=None if cop is None else cop[1],
+            cop_lift_coeff=None if cop is None else cop[3],
+            lead_share=None if cop is None else cop[2],
+            n_cop=n_cop,
+        )
         refit = cal.with_power(params, power)
-        if "power" in unfitted:
-            if power.power_scale is not None and power.cop_scale is not None:
-                unfitted.discard("power")
-            params = refit
-        else:
-            j = _judge(
-                "power_scale",
-                "cycles",
-                n_cycles_held,
-                _power_error(held_cycles, params),
-                _power_error(held_cycles, refit),
-                refit_exists=power.power_scale is not None,
+        j = _judge(
+            "power_scale",
+            "cycles",
+            n_power_held,
+            _power_error(held_power, params),
+            _power_error(held_power, refit),
+            refit_exists=scale is not None,
+        )
+        judged.append(j)
+        if j.kept == "refit":
+            params = replace(
+                params,
+                power=replace(params.power, power_scale=scale),
             )
-            judged.append(j)
-            if j.kept == "refit":
-                params = replace(
-                    params,
-                    power=replace(
-                        params.power, power_scale=refit.power.power_scale
-                    ),
-                )
-            j = _judge(
-                "cop",
-                "cycles",
-                n_cycles_held,
-                _cop_error(held_cycles, params),
-                _cop_error(held_cycles, refit),
-                refit_exists=power.cop_scale is not None,
+        j = _judge(
+            "cop",
+            "cycles",
+            n_cop_held,
+            _cop_error(held_cop, params),
+            _cop_error(held_cop, refit),
+            refit_exists=cop is not None,
+        )
+        judged.append(j)
+        if j.kept == "refit":
+            params = replace(
+                params,
+                power=replace(
+                    refit.power, power_scale=params.power.power_scale
+                ),
             )
-            judged.append(j)
-            if j.kept == "refit":
-                params = replace(
-                    params,
-                    power=replace(
-                        refit.power, power_scale=params.power.power_scale
-                    ),
-                )
     params = replace(
         params,
         unfitted=tuple(t for t in UNFITTED_TERMS if t in unfitted),
     )
-    held = HeldOut(held_windows, held_gaps, held_recoveries, held_cycles)
+    held = HeldOut(
+        held_windows, held_gaps, held_recoveries, held_power, held_cop
+    )
     return (
         cal.Calibration(params, fitted_standby, compressor, power, found),
         tuple(judged),
@@ -923,7 +964,7 @@ def _judged(terms: list[Term], done: Calibrated) -> list[Term]:
     for j in done.judged:
         for name in _GROUP_TERMS[j.group]:
             t = out[name]
-            if j.kept == "base" and j.why:
+            if j.kept == "base":
                 out[name] = replace(
                     t,
                     value=_num(values[name]),

@@ -996,8 +996,13 @@ def with_standby(params: HeaterParams, fit: StandbyFit) -> HeaterParams:
     """``params`` with the standby fit's values where it had them."""
     loss, tank = params.loss, params.tank
     if fit.ua_ref is not None and fit.ua_exponent is not None:
+        # Quoted at the ΔT ``fit_standby``'s law was fitted at, not
+        # whatever ``params`` held.
         loss = replace(
-            loss, ua_btu_hr_f=fit.ua_ref, ua_exponent=fit.ua_exponent
+            loss,
+            ua_btu_hr_f=fit.ua_ref,
+            ua_exponent=fit.ua_exponent,
+            ua_ref_delta_t_f=UA_REF_DELTA_T_F,
         )
     if fit.tau_gap_hours is not None:
         tank = replace(tank, stratification_gap_tau_h=fit.tau_gap_hours)

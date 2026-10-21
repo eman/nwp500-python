@@ -7,6 +7,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any, cast
 
+import numpy as np
 import pytest
 
 pytest.importorskip("pandas")
@@ -743,7 +744,10 @@ class TestTheJudgement:
             "kept the base: under 10 cycles to judge a refit by"
         )
         no_refit = sc._judge("cop", "cycles", 3, 1.0, None, refit_exists=False)
-        assert (no_refit.kept, no_refit.why) == ("base", "")
+        assert no_refit.kept == "base"
+        assert no_refit.why == (
+            "kept the base: too few cycles to refit on (10 needed)"
+        )
 
     def test_the_split_is_the_recoveries(self) -> None:
         assert [sc._split(n) for n in (9, 10, 12, 20, 50)] == [0, 2, 2, 4, 10]
@@ -753,7 +757,6 @@ def recovery_days(days: int) -> Any:
     """A frame of ``days``: a quiet decay, a draw, then a heat-pump
     recovery to 140 °F each day, a sample a minute, the heater drawing
     its compressor's power."""
-    import numpy as np
     import pandas as pd
 
     parts = []
@@ -842,3 +845,75 @@ class TestKeepBetterEveryGroup:
             )
         names = {t.name for t in sc.report(done)}
         assert "Compressor constant" in names
+
+
+class TestKeepBetterFirstReview:
+    def test_a_law_is_scored_at_its_own_reference(self) -> None:
+        window = cal.StandbyWindow(
+            start=T0,
+            end=T0 + timedelta(hours=4),
+            ua_btu_hr_f=7.0,
+            rmse_f=0.1,
+            delta_t_mean_f=40.0,
+            duration_hours=4.0,
+            gap_hours=np.zeros(2),
+            gap_f=np.zeros(2),
+        )
+        u30, e = 6.0, 0.3
+        loss = replace(
+            sim.default_params().loss,
+            ua_btu_hr_f=u30,
+            ua_exponent=e,
+            ua_ref_delta_t_f=30.0,
+        )
+        # The same law, quoted at 50 °F.
+        same = sc._law_error([window], u30 * (50 / 30) ** e, e)
+        assert sc._loss_error([window], loss) == pytest.approx(same)
+        assert sc._loss_error([window], loss) != pytest.approx(
+            sc._law_error([window], u30, e)
+        )
+
+    def test_a_refit_law_takes_its_own_reference(self) -> None:
+        base = sim.default_params()
+        base = replace(base, loss=replace(base.loss, ua_ref_delta_t_f=30.0))
+        fit = cal.StandbyFit(
+            windows=(),
+            n_quiet=0,
+            n_dropped=0,
+            ua_ref=6.0,
+            ua_exponent=0.2,
+            tau_gap_hours=None,
+            n_gap_windows=0,
+            quiet_by="dhw_in_use",
+        )
+        loss = cal.with_standby(base, fit).loss
+        assert (loss.ua_btu_hr_f, loss.ua_ref_delta_t_f) == (6.0, 50.0)
+
+    def test_power_and_cop_hold_out_their_own_cycles(self) -> None:
+        frame = recovery_days(14)
+        base = sim.default_params()
+        fitted, judged, held = sc._keep_better(frame, base, "air_f")
+        groups = {j.group: j for j in judged}
+        # A draw leads every cycle: none is the COP's, all the power's.
+        assert groups["cop"].n_held == 0
+        assert held.cop_cycles.empty
+        assert groups["power_scale"].n_held == 3
+        starts = held.power_cycles["start_time"].unique()
+        assert len(starts) == 3
+        done = sc.Calibrated(
+            fitted,
+            "constant",
+            len(frame),
+            timedelta(minutes=5),
+            0,
+            (),
+            judged=judged,
+            held=held,
+        )
+        # A kept base shows its values, and the refit's own reason.
+        cop = {t.name: t for t in sc.report(done)}["COP scale"]
+        assert cop.value == f"{base.power.cop_scale:.3g}"
+        assert not cop.fitted
+        assert cop.why == (
+            "kept the base: too few cycles to refit on (10 needed)"
+        )

@@ -31,6 +31,10 @@ Fixed
   runs (``n_runs``, ``n_runs_without_air``), and the compressor term's
   reason and the notes say how many had no air
   (``sim_calibrate.air_unread_note``).
+- ``sim.calibration.with_standby`` quotes the fitted UA at the ΔT the
+  law was fitted at (50 °F). It kept the ``ua_ref_delta_t_f`` of the
+  parameters it was given, so a refit applied over parameters quoted at
+  another ΔT ran as a different loss law.
 
 Version 9.7.0 (2026-10-21)
 ==========================

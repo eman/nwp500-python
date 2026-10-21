@@ -244,8 +244,9 @@ Each group of terms holds out its latest evidence from its refit:
 - the zone gap time constant: its windows that open a gap;
 - the compressor constant and the evaporator approach: its reached
   recoveries;
-- the power scale: its compressor cycles;
-- the COP terms: its compressor cycles.
+- the power scale: the metered compressor cycles it can use;
+- the COP terms: the cycles the COP fit can use (without a meter of
+  draws, those no water was drawn around).
 
 Once a group has 10 items, the latest fifth (at least 2) is held out.
 The refit replaces the existing values only where it scores better on
