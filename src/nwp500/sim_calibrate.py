@@ -436,11 +436,19 @@ def _keep_better(
     judged: list[Judged] = []
     standby = cal.fit_standby(frame, base.tank.thermal_mass_btu_f)
     windows = sorted(standby.windows, key=lambda w: w.start)
-    # A group the base has not fitted takes its refit unjudged, on all
-    # its evidence.
-    n_held = 0 if "standby" in unfitted else _split(len(windows))
-    train = windows[: len(windows) - n_held]
-    held_windows = tuple(windows[len(windows) - n_held :])
+    # The windows the law can use (``fit_ua_law``'s test), split. A
+    # group the base has not fitted takes its refit unjudged, on all its
+    # evidence.
+    law = [
+        w
+        for w in windows
+        if w.ua_btu_hr_f > 0.0
+        and w.delta_t_mean_f > 0.0
+        and w.duration_hours > 0.0
+    ]
+    n_held = 0 if "standby" in unfitted else _split(len(law))
+    train = law[: len(law) - n_held]
+    held_windows = tuple(law[len(law) - n_held :])
     ua_ref = exponent = None
     if train:
         ua_ref, exponent = cal.fit_ua_law(
@@ -1027,8 +1035,12 @@ def _judged(terms: list[Term], done: Calibrated) -> list[Term]:
                 and j.base_error is not None
                 and j.refit_error is not None
             ):
+                # A plain fit's reason for having none does not hold
+                # for a refit that won.
                 out[name] = replace(
                     t,
+                    fitted=True,
+                    why="",
                     note=(f"{t.note}; " if t.note else "")
                     + f"scores {j.refit_error:.3g} against the base's "
                     f"{j.base_error:.3g} on the {j.n_held} latest held out",

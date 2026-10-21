@@ -7,11 +7,13 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any, cast
 
-import numpy as np
 import pytest
 
+pytest.importorskip("numpy")
 pytest.importorskip("pandas")
 pytest.importorskip("scipy")
+
+import numpy as np
 
 from nwp500 import sim, status_history
 from nwp500 import sim_adapters as sa
@@ -964,3 +966,69 @@ class TestKeepBetterSecondReview:
         assert done.held.windows == ()
         plain = sc.calibrate(readings, ambient=AIR_F, params=base)
         assert done.calibration.params.loss == plain.calibration.params.loss
+
+
+class TestKeepBetterThirdReview:
+    def test_windows_the_law_cannot_use_are_not_its_evidence(self) -> None:
+        def window(day: int, delta_t: float) -> cal.StandbyWindow:
+            return cal.StandbyWindow(
+                start=T0 + timedelta(days=day),
+                end=T0 + timedelta(days=day, hours=4),
+                ua_btu_hr_f=UA,
+                rmse_f=0.1,
+                delta_t_mean_f=delta_t,
+                duration_hours=4.0,
+                gap_hours=np.zeros(2),
+                gap_f=np.zeros(2),
+            )
+
+        # Eight windows with the tank at or below the air, then two the
+        # law can use: too few to judge by, and no error from a refit
+        # on none.
+        windows = tuple(
+            [window(d, 0.0) for d in range(8)]
+            + [window(d, 50.0) for d in (8, 9)]
+        )
+        fit = cal.StandbyFit(
+            windows=windows,
+            n_quiet=10,
+            n_dropped=0,
+            ua_ref=UA,
+            ua_exponent=0.0,
+            tau_gap_hours=None,
+            n_gap_windows=0,
+            quiet_by="dhw_in_use",
+        )
+        base = _fitted(12.0)
+        frame = recovery_days(1)
+        with pytest.MonkeyPatch.context() as m:
+            m.setattr(cal, "fit_standby", lambda *_: fit)
+            _, judged, held = sc._keep_better(frame, base, "air_f")
+        (standby,) = [j for j in judged if j.group == "standby"]
+        assert standby.n_held == 0
+        assert held.windows == ()
+
+    def test_a_power_refit_that_wins_drops_the_compressors_reason(
+        self,
+    ) -> None:
+        frame = recovery_days(14)
+        fitted, judged, held = sc._keep_better(
+            frame, sim.default_params(), "air_f"
+        )
+        groups = {j.group: j for j in judged}
+        assert groups["compressor"].kept == "base"
+        assert groups["power_scale"].kept == "refit"
+        done = sc.Calibrated(
+            fitted,
+            "constant",
+            len(frame),
+            timedelta(minutes=5),
+            0,
+            (),
+            judged=judged,
+            held=held,
+        )
+        term = _terms(done)["Input power scale"]
+        assert term.fitted
+        assert term.why == ""
+        assert "against the base's" in term.note
