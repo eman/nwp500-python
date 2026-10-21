@@ -66,6 +66,7 @@ __all__ = (
     "CalibrationInputError",
     "Calibrated",
     "Term",
+    "air_unread_note",
     "calibrate",
     "calibrate_changes",
     "max_gap",
@@ -161,6 +162,43 @@ class Calibrated:
     max_gap: timedelta
     n_gaps: int
     notes: tuple[str, ...]
+    #: The compressor's runs, and how many had no air temperature for
+    #: the recoveries (``air_unread_note``): those are no recovery.
+    n_runs: int = 0
+    n_runs_without_air: int = 0
+
+
+def _runs_without_air(frame: pd.DataFrame, air: str) -> tuple[int, int]:
+    """How many compressor runs ``frame`` holds, and how many of them
+    have no reading in its ``air`` column: a recovery is timed against
+    the air, so those are left out of the recoveries."""
+    on = frame["compressor_on"].to_numpy(dtype=bool)
+    if air in frame.columns:
+        known = np.isfinite(frame[air].to_numpy(dtype=float))
+    else:
+        known = np.zeros(len(frame), dtype=bool)
+    starts = np.flatnonzero(on & ~np.r_[False, on[:-1]])
+    ends = np.flatnonzero(on & ~np.r_[on[1:], False]) + 1
+    unread = sum(
+        not known[a:b].any() for a, b in zip(starts, ends, strict=True)
+    )
+    return len(starts), int(unread)
+
+
+def air_unread_note(done: Calibrated) -> str:
+    """Why ``done``'s compressor runs without an air temperature are no
+    recovery, or "" when every run had one."""
+    if not done.n_runs_without_air:
+        return ""
+    why = (
+        "no air given, and no heater ambient reading while the compressor runs"
+        if done.air is None
+        else "the air given does not cover them"
+    )
+    return (
+        f"{done.n_runs_without_air} of {done.n_runs} compressor runs have "
+        f"no air temperature ({why})"
+    )
 
 
 def _base(params: HeaterParams | Any) -> HeaterParams:
@@ -352,12 +390,22 @@ def _fit(
         ] = DEFAULT_HUMIDITY_PCT
     if how is None:
         notes.append(NO_AIR_NOTE)
-    fitted = cal.calibrate(
-        frame,
-        base,
-        recovery_air="heater_air_f" if how is None else "air_f",
+    recovery_air = "heater_air_f" if how is None else "air_f"
+    n_runs, unread = _runs_without_air(frame, recovery_air)
+    fitted = cal.calibrate(frame, base, recovery_air=recovery_air)
+    done = Calibrated(
+        fitted,
+        how,
+        len(frame),
+        gap,
+        n_gaps,
+        tuple(notes),
+        n_runs=n_runs,
+        n_runs_without_air=unread,
     )
-    return Calibrated(fitted, how, len(frame), gap, n_gaps, tuple(notes))
+    if unread:
+        done = replace(done, notes=(*done.notes, air_unread_note(done)))
+    return done
 
 
 # ── the report ──────────────────────────────────────────────────────
@@ -445,6 +493,9 @@ def report(done: Calibrated) -> list[Term]:
             f"{reached} recoveries reached their target; "
             f"{cal.MIN_RECOVERIES} needed"
         )
+        if done.n_runs_without_air:
+            # The runs left out are the cause, not the heater.
+            comp_why = f"{air_unread_note(done)}; {comp_why}"
     elif comp.hit_bounds:
         comp_why = "the fit is pinned on a bound: not applied"
     else:
