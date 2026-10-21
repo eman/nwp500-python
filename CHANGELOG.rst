@@ -2,6 +2,20 @@
 Changelog
 =========
 
+Version 9.5.1 (2026-10-21)
+==========================
+
+Fixed
+-----
+- **A steady Home Assistant sensor no longer goes stale in the
+  simulator** (#174). ``sim_home_assistant.parse_state`` dated a state by
+  ``last_updated``, which moves only when the value or its attributes
+  change. An air sensor holding the same value for over an hour failed
+  ``fresh()``, and the simulation fell back to the default air
+  temperature. A state is now dated by ``last_reported`` (Home Assistant
+  2024.3 and later), then ``last_updated``, then ``last_changed``. The
+  history parsers still date each change row by its change.
+
 Version 9.5.0 (2026-10-20)
 ==========================
 
