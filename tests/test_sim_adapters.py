@@ -388,6 +388,21 @@ class TestSpansBetweenSamples:
         last = [(t0 + timedelta(seconds=120), t0 + timedelta(seconds=130))]
         assert sa._interval_column(index, last).tolist() == [False, True]
 
+    def test_spans_across_a_change_of_clocks(self) -> None:
+        from datetime import timezone
+
+        import pandas as pd
+
+        pst, pdt = timezone(timedelta(hours=-8)), timezone(timedelta(hours=-7))
+        t0 = datetime(2026, 3, 8, 9, 59, tzinfo=UTC)
+        index = pd.DatetimeIndex([t0, t0 + timedelta(minutes=2)])
+        # 01:59:30 PST to 03:00:30 PDT: one minute, across the change.
+        span = (
+            datetime(2026, 3, 8, 1, 59, 30, tzinfo=pst),
+            datetime(2026, 3, 8, 3, 0, 30, tzinfo=pdt),
+        )
+        assert sa._interval_column(index, [span]).tolist() == [True, False]
+
     def test_every_overlap_is_marked(self) -> None:
         import numpy as np
         import pandas as pd

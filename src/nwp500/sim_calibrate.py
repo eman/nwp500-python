@@ -34,7 +34,7 @@ statuses::
 This module needs the ``sim`` extra.
 """
 
-from collections.abc import Iterable, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import TYPE_CHECKING, Any, cast
@@ -113,7 +113,7 @@ def _steps(instants: Iterable[datetime]) -> np.ndarray:
     index: Any = (
         instants
         if isinstance(instants, pd.DatetimeIndex)
-        else pd.DatetimeIndex(list(instants))
+        else pd.to_datetime(list(instants), utc=True)
     )
     return np.diff(np.sort(index.as_unit("ns").asi8))
 
@@ -164,9 +164,13 @@ class Calibrated:
 def _base(params: HeaterParams | Any) -> HeaterParams:
     if isinstance(params, HeaterParams):
         return params
+    if not isinstance(params, Mapping):
+        raise CalibrationInputError(
+            "params is not a parameters document: not an object"
+        )
     try:
-        return params_from_document(params)
-    except ValueError as e:
+        return params_from_document(cast(Mapping[str, Any], params))
+    except (TypeError, ValueError) as e:
         raise CalibrationInputError(
             f"params is not a parameters document: {e}"
         ) from None

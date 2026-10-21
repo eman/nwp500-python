@@ -528,9 +528,21 @@ class TestTheInputs:
         assert done.calibration.params.tank == base.tank
         assert not done.notes
 
-    def test_a_bad_document_is_refused(self, history: str) -> None:
+    @pytest.mark.parametrize("params", [{"tank": "no"}, [], "params", 3])
+    def test_a_bad_document_is_refused(self, history: str, params: Any) -> None:
         with pytest.raises(sc.CalibrationInputError, match="parameters"):
-            sc.calibrate(_read(history), params={"tank": "no"})
+            sc.calibrate(_read(history), params=params)
+
+    def test_instants_across_a_change_of_clocks(self) -> None:
+        from datetime import timezone
+
+        pst, pdt = timezone(timedelta(hours=-8)), timezone(timedelta(hours=-7))
+        times = [
+            datetime(2026, 3, 8, 1, 59, 30, tzinfo=pst),
+            datetime(2026, 3, 8, 3, 0, tzinfo=pdt),
+            datetime(2026, 3, 8, 3, 0, 30, tzinfo=pdt),
+        ]
+        assert sc.max_gap(times) == sc.MIN_GAP
 
     def test_no_statuses_are_refused(self) -> None:
         with pytest.raises(sc.CalibrationInputError, match="no statuses"):

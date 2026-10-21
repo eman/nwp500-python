@@ -594,8 +594,10 @@ def _interval_column(
     spans = list(spans)
     if not spans or not n:
         return out
-    starts = pd.DatetimeIndex([a for a, _ in spans]).tz_convert("UTC")
-    ends = pd.DatetimeIndex([b for _, b in spans]).tz_convert("UTC")
+    # utc=True takes instants with differing offsets (across a change
+    # of clocks).
+    starts = pd.to_datetime([a for a, _ in spans], utc=True)
+    ends = pd.to_datetime([b for _, b in spans], utc=True)
     a = starts.as_unit("ns").asi8
     b = ends.as_unit("ns").asi8
     # Row i < n - 1 is marked when a < t[i + 1] and b > t[i]: from the
