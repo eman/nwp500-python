@@ -525,3 +525,48 @@ class TestTheFirstReview:
         got = _read(WindowedClient(rows, UNITS))
         assert got.rows.lower_f == [(T0, 120.0)]
         assert any("lower_f: 1 states" in n for n in got.notes)
+
+
+class TestRunsWithoutAir:
+    @staticmethod
+    def _runs(air: bool) -> tuple[sa.ChangeRows, list[datetime]]:
+        """Five days, a 1 h compressor run each, the lower probe rising
+        from 100 °F to its 140 °F target."""
+        lower: list[tuple[datetime, Any]] = []
+        compressor: list[tuple[datetime, Any]] = []
+        for d in range(5):
+            on = T0 + timedelta(days=d, hours=6)
+            compressor += [(on, True), (on + H, False)]
+            lower += [
+                (on + timedelta(minutes=5 * i), 100.0 + 40.0 * i / 12)
+                for i in range(13)
+            ]
+        rows = sa.ChangeRows(
+            upper_f=[(T0, 140.0)],
+            lower_f=lower,
+            compressor_on=compressor,
+            target_f=[(T0, 140.0)],
+            heater_air_f=[(T0, 65.0)] if air else (),
+        )
+        step = timedelta(seconds=30)
+        heard = [T0 + i * step for i in range(int(timedelta(days=5) / step))]
+        return rows, heard
+
+    def test_the_report_names_the_missing_air(self) -> None:
+        rows, heard = self._runs(air=False)
+        done = sc.calibrate_changes(rows, heard)
+        assert (done.n_runs, done.n_runs_without_air) == (5, 5)
+        why = {t.name: t.why for t in sc.report(done)}["Compressor constant"]
+        assert why.startswith(
+            "5 of 5 compressor runs have no air temperature (no air given, "
+            "and no heater ambient reading while the compressor runs)"
+        )
+        assert sc.air_unread_note(done) in done.notes
+
+    def test_with_the_heaters_air_every_run_is_read(self) -> None:
+        rows, heard = self._runs(air=True)
+        done = sc.calibrate_changes(rows, heard)
+        assert (done.n_runs, done.n_runs_without_air) == (5, 0)
+        why = {t.name: t.why for t in sc.report(done)}["Compressor constant"]
+        assert "no air temperature" not in why
+        assert sc.air_unread_note(done) == ""

@@ -2,6 +2,20 @@
 Changelog
 =========
 
+Unreleased
+==========
+
+Fixed
+-----
+- **The report names compressor runs without an air temperature.**
+  A recovery is timed against the air, so a run with none (no air
+  given, and no heater ambient reading while the compressor runs) is
+  left out of the recoveries. The report blamed the heater instead:
+  "0 recoveries reached their target". ``Calibrated`` now counts the
+  runs (``n_runs``, ``n_runs_without_air``), and the compressor term's
+  reason and the notes say how many had no air
+  (``sim_calibrate.air_unread_note``).
+
 Version 9.7.0 (2026-10-21)
 ==========================
 

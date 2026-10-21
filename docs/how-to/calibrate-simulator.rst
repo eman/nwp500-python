@@ -294,6 +294,12 @@ leave out what your installation does not record. ``read_heater_history``:
 - notes a value it could not read, and an entity whose history starts
   after ``start``.
 
+A recovery is timed against the air, so the compressor and power fits
+need an air temperature over each compressor run: the air beside the
+heater (``record=``, ``air`` or ``ambient``), or the heater's own reading
+(``ambient`` in ``HeaterEntities``). Runs without one are no recovery,
+and the report says how many there were.
+
 Give ``anti_legionella`` where it is recorded. Without it an
 anti-legionella cycle is not kept out of the recoveries, and the notes
 say so.
