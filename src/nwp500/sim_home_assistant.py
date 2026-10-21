@@ -1265,6 +1265,18 @@ HISTORY_WINDOW = timedelta(days=1)
 _Read = Callable[[float, str | None], float] | type[enum.Enum] | None
 
 
+def _missing(state: str, read: _Read) -> bool:
+    """Whether ``state`` is Home Assistant's for a value it does not
+    have. An enum's own ``UNKNOWN`` is a value."""
+    text = state.strip()
+    is_name = (
+        isinstance(read, type)
+        and issubclass(read, enum.Enum)
+        and text in read.__members__
+    )
+    return not is_name and text.lower() in _NO_VALUE
+
+
 def _value(state: str, read: _Read, unit: str | None) -> Any:
     """``state`` as ``read`` takes it, a number from ``unit``; None when
     it is not one."""
@@ -1310,6 +1322,8 @@ async def read_heater_history(
     (``History.states``)."""
     from nwp500.enums import CurrentOperationMode, ErrorCode, HeatSource
 
+    if window <= timedelta(0):
+        raise ValueError(f"window {window} is not a positive span")
     e = entities
     roles: dict[str, tuple[str, _Read]] = {
         name: (entity, read)
@@ -1362,12 +1376,23 @@ async def read_heater_history(
             raise HomeAssistantError(
                 "the client's history carries no states (History.states)"
             )
-        # The window opens with the state in force at its start, which
-        # is no response inside it.
-        heard.extend(t for t, _ in got.states.get(e.heard, []) if t > a)
+        was: datetime | None = None
+        for t, state in got.states.get(e.heard, []):
+            if _missing(state, None):
+                was = t if was is None else was
+                continue
+            if was is not None:
+                down.append((was, t))
+                was = None
+            # The window opens with the state in force at its start,
+            # which is no response inside it.
+            if t > a:
+                heard.append(t)
+        if was is not None:
+            down.append((was, b))
         for name, (entity, read) in roles.items():
             series = changes[name]
-            was: datetime | None = None
+            was = None
             # The unit each number was recorded in, where the history
             # says; today's where it does not.
             recorded = dict(
@@ -1378,13 +1403,14 @@ async def read_heater_history(
                 )
             )
             for t, state in got.states.get(entity, []):
-                if state.strip().lower() in _NO_VALUE:
+                if _missing(state, read):
                     was = t if was is None else was
                     continue
                 if was is not None:
                     down.append((was, t))
                     was = None
-                value = _value(state, read, recorded.get(t) or units.get(name))
+                unit = recorded[t] if t in recorded else units.get(name)
+                value = _value(state, read, unit)
                 if value is None:
                     # Counted once, not again as the next window opens.
                     if t > a or a == start:

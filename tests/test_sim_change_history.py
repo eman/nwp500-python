@@ -416,3 +416,112 @@ class TestTheReader:
         assert ha.to_wh(1.5, "kWh") == 1500.0
         with pytest.raises(ValueError, match="power"):
             ha.to_w(1.0, "V")
+
+
+class TestTheFirstReview:
+    def test_a_window_must_move_forward(self) -> None:
+        client = WindowedClient(_heater_rows(), UNITS)
+        for window in (timedelta(0), -H):
+            with pytest.raises(ValueError, match="positive"):
+                asyncio.run(
+                    ha.read_heater_history(
+                        cast(ha.HomeAssistantClient, client),
+                        ENTITIES,
+                        T0,
+                        T0 + H,
+                        window=window,
+                    )
+                )
+        assert client.windows == []
+
+    def test_the_heat_source_says_when_the_compressor_runs(self) -> None:
+        rows = sa.ChangeRows(
+            upper_f=[(T0, 130.0)],
+            lower_f=[(T0, 120.0)],
+            heat_source=[
+                (T0, HeatSource.UNKNOWN),
+                (T0 + H, HeatSource.HEATPUMP),
+                (T0 + 2 * H, HeatSource.HEATPUMP_HEATELEMENT),
+                (T0 + 3 * H, HeatSource.HEATELEMENT),
+            ],
+            heater_air_f=[(T0, 61.0)],
+        )
+        frame = sa.change_history(rows, [T0 + i * H for i in range(4)])
+        assert frame["compressor_on"].tolist() == [False, True, True, False]
+        assert frame["element_on"].tolist() == [False, False, True, True]
+        assert frame["heater_air_f"].iloc[1] == 61.0
+
+    def test_an_outage_reaches_the_meters_draws(self) -> None:
+        rows = sa.ChangeRows(
+            upper_f=[(T0, 130.0)],
+            lower_f=[(T0, 120.0)],
+            outages=[(T0 + H + timedelta(minutes=5), T0 + 2 * H)],
+        )
+        frame = sa.change_history(rows, [T0 + i * H for i in range(4)])
+        sa.add_inputs(frame, drawing=[], circulating=[])
+        assert frame["drawing"].tolist() == [False, True, False, False]
+        assert not frame["circulating"].any()
+
+    def test_an_unavailable_heartbeat_is_no_response(self) -> None:
+        # Down from 22 h to 26 h: across the second window's start.
+        down = T0 + 22 * H + timedelta(minutes=1)
+        rows = [
+            *_heater_rows(),
+            _row("sensor.last_response", down, "unavailable"),
+        ]
+        rows = [
+            r
+            for r in rows
+            if not (
+                r["entity_id"] == "sensor.last_response"
+                and T0 + 22 * H + timedelta(minutes=1)
+                < ha._instant(r["last_updated"])
+                < T0 + 26 * H
+            )
+        ]
+        rows.append(_row("sensor.last_response", T0 + 26 * H, "back"))
+        got = _read(WindowedClient(rows, UNITS))
+        assert not any(
+            T0 + 22 * H + timedelta(minutes=1) <= t < T0 + 26 * H
+            for t in got.observed
+        )
+        assert (
+            T0 + 22 * H + timedelta(minutes=1),
+            T0 + 26 * H,
+        ) in got.rows.outages
+
+    def test_an_enums_own_unknown_is_a_value(self) -> None:
+        rows = [
+            *_heater_rows(),
+            _row("sensor.source", T0, "HEATPUMP"),
+            _row("sensor.source", T0 + 2 * H, "UNKNOWN"),
+            _row("sensor.source", T0 + 4 * H, "unknown"),
+            _row("sensor.source", T0 + 5 * H, "HEATPUMP"),
+        ]
+        entities = ha.HeaterEntities(
+            heard=ENTITIES.heard,
+            upper=ENTITIES.upper,
+            lower=ENTITIES.lower,
+            heat_source="sensor.source",
+        )
+        got = asyncio.run(
+            ha.read_heater_history(
+                cast(ha.HomeAssistantClient, WindowedClient(rows, UNITS)),
+                entities,
+                T0,
+                T0 + timedelta(days=1),
+            )
+        )
+        assert got.rows.heat_source == [
+            (T0, HeatSource.HEATPUMP),
+            (T0 + 2 * H, HeatSource.UNKNOWN),
+            (T0 + 5 * H, HeatSource.HEATPUMP),
+        ]
+        assert list(got.rows.outages) == [(T0 + 4 * H, T0 + 5 * H)]
+
+    def test_a_row_recorded_in_no_unit_is_left_out(self) -> None:
+        # Today in °F; this row was recorded with no unit at all.
+        rows = [*_heater_rows(), _row("sensor.lower", T0 + 5 * H, "20.0")]
+        got = _read(WindowedClient(rows, UNITS))
+        assert got.rows.lower_f == [(T0, 120.0)]
+        assert any("lower_f: 1 states" in n for n in got.notes)

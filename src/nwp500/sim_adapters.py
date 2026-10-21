@@ -760,9 +760,13 @@ def add_inputs(
     for name, spans in (("drawing", drawing), ("circulating", circulating)):
         if spans is not None:
             frame[name] = _interval_column(index, spans)
+    unobserved = np.zeros(len(frame), dtype=bool)
     if max_gap is not None and len(frame) > 1:
-        unobserved = np.zeros(len(frame), dtype=bool)
         unobserved[:-1] = np.diff(seconds) > max_gap.total_seconds()
+    if "heater_unobserved" in frame.columns:
+        # ``change_history``'s outages, into the draws added here too.
+        unobserved |= frame["heater_unobserved"].to_numpy(dtype=bool)
+    if unobserved.any():
         for name in ("dhw_in_use", "drawing", "excluded"):
             if name in frame.columns:
                 frame[name] = frame[name].to_numpy(dtype=bool) | unobserved
@@ -848,7 +852,8 @@ def change_history(
     response, say). The frame has a row at each of them and at each
     change between the first and the last, each value as it stood
     then. Rows over an outage are marked water in use and excluded, as
-    ``add_inputs`` marks a gap.
+    ``add_inputs`` marks a gap, and ``heater_unobserved``. Without a
+    compressor flag, the heat source says when the compressor runs.
     """
     import pandas as pd
 
@@ -880,8 +885,16 @@ def change_history(
         at = np.unique(np.concatenate([heard, *changed]))
         at = at[(at >= first) & (at <= last)]
     nan = float("nan")
-    compressor = _held_at(rows.compressor_on, at, False, bool)
     source = _held_at(rows.heat_source, at, -1, np.int64)
+    compressor = (
+        _held_at(rows.compressor_on, at, False, bool)
+        if rows.compressor_on
+        # Without its own flag, the heat source says when it runs.
+        else np.isin(
+            source,
+            [int(HeatSource.HEATPUMP), int(HeatSource.HEATPUMP_HEATELEMENT)],
+        )
+    )
     mode = _held_at(rows.operation_mode, at, -1, np.int64)
     error = _held_at(rows.error_code, at, int(ErrorCode.NO_ERROR), np.int64)
 
@@ -923,6 +936,8 @@ def change_history(
         down = np.asarray(_interval_column(index, rows.outages))
         for name in ("dhw_in_use", "excluded"):
             frame[name] = frame[name].to_numpy(dtype=bool) | down
+        # Kept, so ``add_inputs`` marks a meter's draws over them too.
+        frame["heater_unobserved"] = down
     return frame
 
 

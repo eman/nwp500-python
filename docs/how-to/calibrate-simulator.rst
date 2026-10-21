@@ -287,7 +287,10 @@ leave out what your installation does not record. ``read_heater_history``:
   heat source, operation mode and error code by their enum names
   (``HeatSource``, ``CurrentOperationMode``, ``ErrorCode``);
 - takes ``unavailable`` or ``unknown`` on any of the entities as an
-  outage of the heater, unobserved;
+  outage of the heater, unobserved (an enum's own ``UNKNOWN`` is a
+  value);
+- takes the heat source as the compressor's state where no compressor
+  entity is given;
 - notes a value it could not read, and an entity whose history starts
   after ``start``.
 
