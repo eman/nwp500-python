@@ -35,6 +35,10 @@ Fixed
   law was fitted at (50 °F). It kept the ``ua_ref_delta_t_f`` of the
   parameters it was given, so a refit applied over parameters quoted at
   another ΔT ran as a different loss law.
+- ``sim.calibration.fit_cop_scale`` takes the integrator's COP on the
+  heater's own tank (``HeaterParams.tank``), as the simulation does. It
+  used the default tank's mass, so a heater with another tank was fitted
+  against a COP the simulation does not run.
 
 Version 9.7.0 (2026-10-21)
 ==========================

@@ -1148,7 +1148,9 @@ def report(done: Calibrated) -> list[Term]:
         ),
     ]
     p = c.power
-    no_power = comp_why and "the compressor is not fitted"
+    # Power is fitted over the compressor the parameters hold: with
+    # ``keep_better``, a base's when this refit has none.
+    no_power = p is None and comp_why and "the compressor is not fitted"
     few = f"too few cycles ({cal.MIN_POWER_EVENTS} needed)"
     terms += [
         Term(

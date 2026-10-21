@@ -1032,3 +1032,53 @@ class TestKeepBetterThirdReview:
         assert term.fitted
         assert term.why == ""
         assert "against the base's" in term.note
+
+
+class TestKeepBetterFourthReview:
+    def test_the_cop_is_the_heaters_own_tanks(self) -> None:
+        from nwp500.sim.heating_trajectory import path_cop
+
+        base = sim.default_params()
+        params = replace(base, tank=replace(base.tank, volume_gal=40.0))
+        rows = cal.snapshots(recovery_days(3), air="air_f")
+        cycles = cal.cop_cycles(rows, params, withdrawn=lambda _: 0.0)
+        assert cycles
+        row = rows.loc[rows["offset_minutes"] == 0.0].iloc[0].to_dict()
+        path = cal.path_to_end(row, params)
+        assert path is not None
+        assert cycles[0].modelled_cop == pytest.approx(
+            path_cop(
+                path,
+                0.0,
+                path.elapsed_s[-1],
+                params.compressor.two_zone,
+                float(row["t_start_upper"]),
+                tank=params.tank,
+            )
+        )
+
+    def test_power_fitted_over_a_kept_compressor_has_no_failure_reason(
+        self,
+    ) -> None:
+        # The compressor's refit is pinned, so the base's is kept; the
+        # power, unfitted in the base, is fitted over it.
+        frame = recovery_days(14)
+        base = sim.default_params()
+        base = replace(base, unfitted=(*base.unfitted, "power"))
+        fitted, judged, held = sc._keep_better(frame, base, "air_f")
+        assert {j.group: j.kept for j in judged}["compressor"] == "base"
+        assert fitted.power is not None
+        assert fitted.power.power_scale is not None
+        done = sc.Calibrated(
+            fitted,
+            "constant",
+            len(frame),
+            timedelta(minutes=5),
+            0,
+            (),
+            judged=judged,
+            held=held,
+        )
+        term = _terms(done)["Input power scale"]
+        assert term.fitted
+        assert term.why == ""

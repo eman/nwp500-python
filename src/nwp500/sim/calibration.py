@@ -1395,6 +1395,7 @@ def cop_cycles(
             path.elapsed_s[-1],
             params.compressor.two_zone,
             float(row["t_start_upper"]),
+            tank=params.tank,
         )
         if modelled is None or not math.isfinite(modelled) or modelled <= 0:
             continue
