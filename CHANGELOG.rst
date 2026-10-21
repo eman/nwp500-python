@@ -5,6 +5,22 @@ Changelog
 Unreleased
 ==========
 
+Added
+-----
+- **Refine a fit without making it worse** (``keep_better=True`` on
+  ``sim_calibrate.calibrate`` and ``calibrate_changes``, #184). Each
+  group of terms holds out its latest evidence from its refit (the last
+  fifth, once it has 10 items) and keeps the existing values unless the
+  refit scores better there, by the error its own fit minimizes. The
+  terms in a group are kept or replaced together. ``Calibrated.judged``
+  records each judgement, and the report's reasons give both scores.
+  ``sim_calibrate.score(done, params)`` scores any parameters on that
+  held-out evidence.
+- ``sim.calibration.split_recoveries``, ``recovery_minutes``,
+  ``power_cycles`` and ``cop_cycles``: the evidence the compressor and
+  power fits use, and their predictions, which ``fit_compressor``,
+  ``fit_power_scale`` and ``fit_cop_scale`` now take from.
+
 Fixed
 -----
 - **The report names compressor runs without an air temperature.**

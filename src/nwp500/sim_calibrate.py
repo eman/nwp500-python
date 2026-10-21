@@ -46,7 +46,13 @@ from nwp500 import sim
 from nwp500 import sim_adapters as sa
 from nwp500.models import DeviceStatus
 from nwp500.sim import calibration as cal
-from nwp500.sim.params import HeaterParams, params_from_document
+from nwp500.sim.params import (
+    UA_MIN_DELTA_T_F,
+    UA_REF_DELTA_T_F,
+    UNFITTED_TERMS,
+    HeaterParams,
+    params_from_document,
+)
 
 if TYPE_CHECKING:
     import pandas as pd
@@ -65,10 +71,14 @@ __all__ = (
     "NO_AIR_NOTE",
     "CalibrationInputError",
     "Calibrated",
+    "GROUPS",
+    "HeldOut",
+    "Judged",
     "Term",
     "air_unread_note",
     "calibrate",
     "calibrate_changes",
+    "score",
     "max_gap",
     "report",
 )
@@ -166,6 +176,414 @@ class Calibrated:
     #: the recoveries (``air_unread_note``): those are no recovery.
     n_runs: int = 0
     n_runs_without_air: int = 0
+    #: With ``keep_better``: each group of terms, judged on the evidence
+    #: held out of its refit, and that evidence (``score``).
+    judged: tuple[Judged, ...] = ()
+    held: HeldOut | None = None
+
+
+# ── keeping the better fit ──────────────────────────────────────────
+
+#: The groups of terms ``keep_better`` judges, each kept or replaced
+#: whole: the terms one fit fits together.
+GROUPS = ("standby", "gap_tau", "compressor", "power_scale", "cop")
+
+
+@dataclass(frozen=True)
+class Judged:
+    """A group of terms judged on the evidence held out of its refit:
+    which was kept, both errors, and how many items they were scored
+    on. ``kept`` is ``refit`` or ``base``."""
+
+    group: str
+    kept: str
+    base_error: float | None
+    refit_error: float | None
+    n_held: int
+    why: str
+
+
+@dataclass(frozen=True)
+class HeldOut:
+    """The latest of each group's evidence, held out of its refit: the
+    quiet windows, the windows that open a gap, the reached recoveries,
+    and the cycles' snapshot rows."""
+
+    windows: tuple[cal.StandbyWindow, ...]
+    gap_windows: tuple[cal.StandbyWindow, ...]
+    recoveries: pd.DataFrame
+    cycles: pd.DataFrame
+
+
+def _split(n: int) -> int:
+    """How many of ``n`` items, the latest, are held out: as
+    ``sim.calibration.split_recoveries`` holds out recoveries."""
+    if n < cal.MIN_RECOVERIES_FOR_SPLIT:
+        return 0
+    return max(cal.MIN_HELDOUT, round(n * cal.HELDOUT_FRACTION))
+
+
+def _law_error(
+    windows: Sequence[cal.StandbyWindow],
+    ua_ref: float | None,
+    exponent: float | None,
+) -> float | None:
+    """The loss law's error on ``windows``, as ``fit_ua_law`` fits it:
+    the squared error in log UA against each window's own, weighted by
+    its hours."""
+    usable = [
+        w for w in windows if w.ua_btu_hr_f > 0.0 and w.delta_t_mean_f > 0.0
+    ]
+    if not usable or ua_ref is None or exponent is None or not ua_ref > 0.0:
+        return None
+    ref = UA_REF_DELTA_T_F
+    errors = [
+        (
+            np.log(w.ua_btu_hr_f)
+            - np.log(ua_ref)
+            - exponent * np.log(max(w.delta_t_mean_f, UA_MIN_DELTA_T_F) / ref)
+        )
+        ** 2
+        for w in usable
+    ]
+    hours = [w.duration_hours for w in usable]
+    return float(np.average(errors, weights=hours))
+
+
+def _gap_error(
+    windows: Sequence[cal.StandbyWindow], tau_hours: float | None
+) -> float | None:
+    """The gap decay's mean squared error on ``windows``, °F²."""
+    if tau_hours is None:
+        return None
+    errors = [
+        (w.gap_f - w.gap_f[0] * np.exp(-w.gap_hours / tau_hours)) ** 2
+        for w in windows
+    ]
+    if not errors or not tau_hours > 0.0:
+        return None
+    return float(np.mean(np.concatenate(errors)))
+
+
+def _gap_windows(
+    windows: Sequence[cal.StandbyWindow],
+) -> list[cal.StandbyWindow]:
+    """The windows ``fit_gap_tau`` fits on: opening with a gap."""
+    return [
+        w
+        for w in windows
+        if len(w.gap_f) >= 2
+        and bool(np.isfinite(w.gap_f).all())
+        and w.gap_f[0] >= cal.MIN_GAP_FIT_START_F
+    ]
+
+
+def _recovery_error(
+    recoveries: pd.DataFrame, params: HeaterParams
+) -> float | None:
+    """The mean absolute error of ``params``' recovery durations, in
+    minutes, as ``fit_compressor`` scores its held-out recoveries."""
+    if recoveries.empty:
+        return None
+    predicted = cal.recovery_minutes(
+        recoveries,
+        params.compressor.compressor_constant,
+        params.compressor.evap_approach_f,
+        compressor=params.compressor,
+        loss=params.loss,
+        tank=params.tank,
+        two_zone=params.compressor.two_zone,
+        gaps="stratification_gap" in recoveries.columns
+        and bool(recoveries["stratification_gap"].notna().all()),
+    )
+    actual = np.asarray(recoveries["duration_minutes"], dtype=float)
+    return float(np.mean(np.abs(predicted - actual)))
+
+
+def _power_error(cycles: pd.DataFrame, params: HeaterParams) -> float | None:
+    """The power scale's mean relative error in each cycle's metered
+    energy."""
+    scale = params.power.power_scale
+    rows = cal.power_cycles(cycles, params)
+    if scale is None or not rows:
+        return None
+    return float(np.mean([abs(m - scale * e) / m for _, m, e in rows]))
+
+
+def _cop_error(cycles: pd.DataFrame, params: HeaterParams) -> float | None:
+    """The COP terms' squared error in each cycle's metered energy,
+    weighted ``1 / metered``, as ``solve_cop_fit`` fits them. The
+    parameters hold no lead share, so none is counted."""
+    p = params.power
+    rows = cal.cop_cycles(cycles, params)
+    if p.cop_scale is None or not rows:
+        return None
+    errors = []
+    for c in rows:
+        cop = c.modelled_cop * np.exp(
+            -p.cop_lift_coeff * (c.lift_f - p.cop_lift_ref_f)
+        )
+        predicted = p.startup_wh + c.heat_wh / (p.cop_scale * cop)
+        errors.append((predicted - c.metered_wh) ** 2 / c.metered_wh)
+    return float(np.mean(errors))
+
+
+def score(done: Calibrated, params: HeaterParams) -> dict[str, float | None]:
+    """Each group's error for ``params`` on the evidence ``done`` held
+    out of its refits (``keep_better``), by ``GROUPS``; None where none
+    was held out. Lower is better; each group's error is its own fit's:
+
+    - ``standby``: the law's weighted squared error in log UA;
+    - ``gap_tau``: the gap decay's mean squared error, °F²;
+    - ``compressor``: the recovery durations' mean absolute error, min;
+    - ``power_scale``: the mean relative error in metered energy;
+    - ``cop``: the squared error in metered energy weighted
+      ``1 / metered``.
+
+    Raises ``CalibrationInputError`` for a ``done`` not made with
+    ``keep_better``."""
+    held = done.held
+    if held is None:
+        raise CalibrationInputError(
+            "nothing was held out: calibrate with keep_better=True"
+        )
+    loss = params.loss
+    return {
+        "standby": _law_error(held.windows, loss.ua_btu_hr_f, loss.ua_exponent),
+        "gap_tau": _gap_error(
+            held.gap_windows, params.tank.stratification_gap_tau_h
+        ),
+        "compressor": _recovery_error(held.recoveries, params),
+        "power_scale": _power_error(held.cycles, params),
+        "cop": _cop_error(held.cycles, params),
+    }
+
+
+def _judge(
+    group: str,
+    what: str,
+    n_held: int,
+    base: float | None,
+    refit: float | None,
+    *,
+    refit_exists: bool = True,
+) -> Judged:
+    """Which of base and refit ``group`` keeps: the refit only when it
+    scores better on the ``n_held`` latest ``what`` held out of it."""
+    if not refit_exists:
+        return Judged(group, "base", base, None, n_held, "")
+    if not n_held:
+        return Judged(
+            group,
+            "base",
+            None,
+            None,
+            0,
+            f"kept the base: under {cal.MIN_RECOVERIES_FOR_SPLIT} {what} "
+            "to judge a refit by",
+        )
+    if refit is None or (base is not None and base <= refit):
+        scores = (
+            f"{base:.3g} against the refit's {refit:.3g}"
+            if base is not None and refit is not None
+            else "the refit has no score"
+        )
+        return Judged(
+            group,
+            "base",
+            base,
+            refit,
+            n_held,
+            f"kept the base: it scores {scores} on the {n_held} latest {what}",
+        )
+    return Judged(group, "refit", base, refit, n_held, "")
+
+
+def _keep_better(
+    frame: pd.DataFrame, base: HeaterParams, recovery_air: str
+) -> tuple[cal.Calibration, tuple[Judged, ...], HeldOut]:
+    """``sim.calibration.calibrate``'s fits in its order, each group's
+    latest evidence held out of its refit, and the refit kept only where
+    it scores better there than ``base``. A group ``base`` lists as
+    unfitted takes its refit as ``calibrate`` would."""
+    unfitted = set(base.unfitted)
+    judged: list[Judged] = []
+    standby = cal.fit_standby(frame, base.tank.thermal_mass_btu_f)
+    windows = sorted(standby.windows, key=lambda w: w.start)
+    n_held = _split(len(windows))
+    train = windows[: len(windows) - n_held]
+    held_windows = tuple(windows[len(windows) - n_held :])
+    ua_ref = exponent = None
+    if train:
+        ua_ref, exponent = cal.fit_ua_law(
+            [w.delta_t_mean_f for w in train],
+            [w.ua_btu_hr_f for w in train],
+            [w.duration_hours for w in train],
+        )
+    gap_all = _gap_windows(windows)
+    n_gap_held = _split(len(gap_all))
+    gap_train = gap_all[: len(gap_all) - n_gap_held]
+    held_gaps = tuple(gap_all[len(gap_all) - n_gap_held :])
+    tau, n_gap = cal.fit_gap_tau([(w.gap_hours, w.gap_f) for w in gap_train])
+    params = base
+    if "standby" in unfitted or ua_ref is None or exponent is None:
+        if ua_ref is not None and exponent is not None:
+            params = cal.with_standby(
+                params,
+                replace(
+                    standby,
+                    ua_ref=ua_ref,
+                    ua_exponent=exponent,
+                    tau_gap_hours=None,
+                ),
+            )
+            unfitted.discard("standby")
+    else:
+        j = _judge(
+            "standby",
+            "quiet windows",
+            n_held,
+            _law_error(
+                held_windows, base.loss.ua_btu_hr_f, base.loss.ua_exponent
+            ),
+            _law_error(held_windows, ua_ref, exponent),
+        )
+        judged.append(j)
+        if j.kept == "refit":
+            params = cal.with_standby(
+                params,
+                replace(
+                    standby,
+                    ua_ref=ua_ref,
+                    ua_exponent=exponent,
+                    tau_gap_hours=None,
+                ),
+            )
+    if tau is not None:
+        if "gap_tau" in unfitted:
+            params = replace(
+                params,
+                tank=replace(params.tank, stratification_gap_tau_h=tau),
+            )
+            unfitted.discard("gap_tau")
+        else:
+            j = _judge(
+                "gap_tau",
+                "windows that open a gap",
+                n_gap_held,
+                _gap_error(held_gaps, base.tank.stratification_gap_tau_h),
+                _gap_error(held_gaps, tau),
+            )
+            judged.append(j)
+            if j.kept == "refit":
+                params = replace(
+                    params,
+                    tank=replace(params.tank, stratification_gap_tau_h=tau),
+                )
+    fitted_standby = replace(
+        standby,
+        ua_ref=ua_ref,
+        ua_exponent=exponent,
+        tau_gap_hours=tau,
+        n_gap_windows=n_gap,
+    )
+    rows = cal.snapshots(frame, air=recovery_air)
+    found = cal.recoveries(frame, air=recovery_air)
+    reached = found.loc[found["reached"].astype(bool)] if len(found) else found
+    compressor = cal.fit_compressor(
+        reached, params.compressor, params.loss, tank=params.tank
+    )
+    _, held_recoveries = cal.split_recoveries(reached)
+    if "compressor" in unfitted:
+        if compressor is not None and not compressor.hit_bounds:
+            params = cal.with_compressor(params, compressor)
+            unfitted.discard("compressor")
+    elif compressor is not None:
+        if compressor.hit_bounds:
+            judged.append(
+                Judged(
+                    "compressor",
+                    "base",
+                    _recovery_error(held_recoveries, params),
+                    compressor.heldout_mae_minutes,
+                    compressor.n_heldout,
+                    "kept the base: the refit is pinned on a bound",
+                )
+            )
+        else:
+            j = _judge(
+                "compressor",
+                "reached recoveries",
+                compressor.n_heldout,
+                _recovery_error(held_recoveries, params),
+                compressor.heldout_mae_minutes,
+            )
+            judged.append(j)
+            if j.kept == "refit":
+                params = cal.with_compressor(params, compressor)
+    # The cycles in time order, each read whole: the latest held out.
+    if len(rows):
+        starts = rows.loc[rows["offset_minutes"] == 0.0].drop_duplicates(
+            subset=["cycle"]
+        )
+        order = starts.sort_values("start_time")["cycle"].tolist()
+    else:
+        order = []
+    n_cycles_held = _split(len(order))
+    held_ids = order[len(order) - n_cycles_held :]
+    held_cycles = rows.loc[rows["cycle"].isin(held_ids)] if len(rows) else rows
+    train_rows = rows.loc[~rows["cycle"].isin(held_ids)] if len(rows) else rows
+    power = None
+    if "compressor" not in unfitted:
+        power = cal.fit_power(train_rows, params)
+        refit = cal.with_power(params, power)
+        if "power" in unfitted:
+            if power.power_scale is not None and power.cop_scale is not None:
+                unfitted.discard("power")
+            params = refit
+        else:
+            j = _judge(
+                "power_scale",
+                "cycles",
+                n_cycles_held,
+                _power_error(held_cycles, params),
+                _power_error(held_cycles, refit),
+                refit_exists=power.power_scale is not None,
+            )
+            judged.append(j)
+            if j.kept == "refit":
+                params = replace(
+                    params,
+                    power=replace(
+                        params.power, power_scale=refit.power.power_scale
+                    ),
+                )
+            j = _judge(
+                "cop",
+                "cycles",
+                n_cycles_held,
+                _cop_error(held_cycles, params),
+                _cop_error(held_cycles, refit),
+                refit_exists=power.cop_scale is not None,
+            )
+            judged.append(j)
+            if j.kept == "refit":
+                params = replace(
+                    params,
+                    power=replace(
+                        refit.power, power_scale=params.power.power_scale
+                    ),
+                )
+    params = replace(
+        params,
+        unfitted=tuple(t for t in UNFITTED_TERMS if t in unfitted),
+    )
+    held = HeldOut(held_windows, held_gaps, held_recoveries, held_cycles)
+    return (
+        cal.Calibration(params, fitted_standby, compressor, power, found),
+        tuple(judged),
+        held,
+    )
 
 
 def _runs_without_air(frame: pd.DataFrame, air: str) -> tuple[int, int]:
@@ -238,6 +656,7 @@ def calibrate(
     humidity: Sequence[Reading] | None = None,
     params: HeaterParams | Any = None,
     record: RecordInputs | None = None,
+    keep_better: bool = False,
 ) -> Calibrated:
     """``params`` (``HeaterParams`` or a parameters document; default
     the 65 gal defaults) refitted on ``readings``, the statuses the
@@ -257,12 +676,31 @@ def calibrate(
     observed, and no fit spans one. Raises ``CalibrationInputError``
     for both ``air`` and ``ambient``, a ``params`` that is not a
     parameters document, or no readings.
+
+    ``keep_better``: refine ``params`` without making it worse. Each
+    group of terms (``GROUPS``) holds out its latest evidence (the last
+    fifth, once it has 10 items) from its refit, and the refit replaces
+    ``params``' values only where it scores better there (``score``).
+    With fewer items, the group keeps ``params``' values. A group
+    ``params`` lists as unfitted takes its refit as without it. Each
+    judgement is in ``judged``, and in the report's reasons. Use it over
+    a fit of this heater: the defaults are another heater's fit, and
+    would be kept wherever the evidence is too little to judge by.
     """
     base, notes = _begin(air, ambient, params)
     frame = sa.history(readings)
     if frame.empty:
         raise CalibrationInputError("the history holds no statuses")
-    return _fit(frame, base, notes, air, ambient, humidity, record)
+    return _fit(
+        frame,
+        base,
+        notes,
+        air,
+        ambient,
+        humidity,
+        record,
+        keep_better=keep_better,
+    )
 
 
 def calibrate_changes(
@@ -275,6 +713,7 @@ def calibrate_changes(
     params: HeaterParams | Any = None,
     record: RecordInputs | None = None,
     notes: Iterable[str] = (),
+    keep_better: bool = False,
 ) -> Calibrated:
     """``calibrate`` on a heater's values' changes (``rows``) instead of
     its statuses, with ``observed`` the instants it was heard from
@@ -282,7 +721,8 @@ def calibrate_changes(
     read_heater_history`` reads both from Home Assistant). ``notes``
     open the result's (a reader's). The rows are counted in
     ``n_statuses``. Raises ``CalibrationInputError`` as ``calibrate``
-    does, or for no ``observed`` instants.
+    does, or for no ``observed`` instants. ``keep_better`` as for
+    ``calibrate``.
     """
     base, more = _begin(air, ambient, params)
     heard = sorted(observed)
@@ -304,6 +744,7 @@ def calibrate_changes(
         humidity,
         record,
         gaps=(gap, len(silences)),
+        keep_better=keep_better,
     )
 
 
@@ -316,6 +757,7 @@ def _fit(
     humidity: Sequence[Reading] | None,
     record: RecordInputs | None,
     gaps: tuple[timedelta, int] | None = None,
+    keep_better: bool = False,
 ) -> Calibrated:
     """The fits on ``frame`` (``history``'s or ``change_history``'s),
     with the air, the humidity, the record's spans and the gaps added:
@@ -392,7 +834,12 @@ def _fit(
         notes.append(NO_AIR_NOTE)
     recovery_air = "heater_air_f" if how is None else "air_f"
     n_runs, unread = _runs_without_air(frame, recovery_air)
-    fitted = cal.calibrate(frame, base, recovery_air=recovery_air)
+    judged: tuple[Judged, ...] = ()
+    held: HeldOut | None = None
+    if keep_better:
+        fitted, judged, held = _keep_better(frame, base, recovery_air)
+    else:
+        fitted = cal.calibrate(frame, base, recovery_air=recovery_air)
     done = Calibrated(
         fitted,
         how,
@@ -402,6 +849,8 @@ def _fit(
         tuple(notes),
         n_runs=n_runs,
         n_runs_without_air=unread,
+        judged=judged,
+        held=held,
     )
     if unread:
         done = replace(done, notes=(*done.notes, air_unread_note(done)))
@@ -430,8 +879,75 @@ def _num(value: float | None, digits: int = 3) -> str:
     return "-" if value is None else f"{value:.{digits}g}"
 
 
+#: The report's terms of each group ``keep_better`` judges.
+_GROUP_TERMS = {
+    "standby": (
+        "Standby loss (UA at ref ΔT, BTU/h·°F)",
+        "Standby loss exponent",
+    ),
+    "gap_tau": ("Zone gap time constant (h)",),
+    "compressor": ("Compressor constant", "Evaporator approach (°F)"),
+    "power_scale": ("Input power scale",),
+    "cop": (
+        "COP scale",
+        "Start-up energy (Wh)",
+        "COP lift coefficient (1/°F)",
+    ),
+}
+
+
+def _values(params: HeaterParams) -> dict[str, float | None]:
+    """The value each judged term holds in ``params``, by report name."""
+    loss, power = params.loss, params.power
+    values = (
+        loss.ua_btu_hr_f,
+        loss.ua_exponent,
+        params.tank.stratification_gap_tau_h,
+        params.compressor.compressor_constant,
+        params.compressor.evap_approach_f,
+        power.power_scale,
+        power.cop_scale,
+        power.startup_wh,
+        power.cop_lift_coeff,
+    )
+    names = [n for group in _GROUP_TERMS.values() for n in group]
+    return dict(zip(names, values, strict=True))
+
+
+def _judged(terms: list[Term], done: Calibrated) -> list[Term]:
+    """``terms`` with ``keep_better``'s judgements: a group that kept the
+    base shows the base's values and why; one whose refit won says by
+    how much."""
+    values = _values(done.calibration.params)
+    out = {t.name: t for t in terms}
+    for j in done.judged:
+        for name in _GROUP_TERMS[j.group]:
+            t = out[name]
+            if j.kept == "base" and j.why:
+                out[name] = replace(
+                    t,
+                    value=_num(values[name]),
+                    fitted=False,
+                    why=j.why,
+                    note="",
+                )
+            elif (
+                j.kept == "refit"
+                and j.base_error is not None
+                and j.refit_error is not None
+            ):
+                out[name] = replace(
+                    t,
+                    note=(f"{t.note}; " if t.note else "")
+                    + f"scores {j.refit_error:.3g} against the base's "
+                    f"{j.base_error:.3g} on the {j.n_held} latest held out",
+                )
+    return [out[t.name] for t in terms]
+
+
 def report(done: Calibrated) -> list[Term]:
-    """What each fit found, in the order they run."""
+    """What each fit found, in the order they run, and with
+    ``keep_better`` which of base and refit each group kept."""
     c = done.calibration
     s = c.standby
     kept = len(s.windows)
@@ -565,4 +1081,4 @@ def report(done: Calibrated) -> list[Term]:
             no_power or ("" if p and p.cop_lift_coeff is not None else few),
         ),
     ]
-    return terms
+    return _judged(terms, done) if done.judged else terms

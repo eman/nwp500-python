@@ -223,6 +223,43 @@ Assistant integration, can calibrate the same way:
 4. Store ``params_to_document(done.calibration.params)``, and show the
    ``report(done)`` rows and ``done.notes``.
 
+Refine an existing fit
+----------------------
+
+A fit made on months of history should not give way to one made on the
+last ten days unless the new one predicts better. Pass the existing
+fit as ``params`` with ``keep_better=True``:
+
+.. code-block:: python
+
+   done = sim_calibrate.calibrate(
+       recorded(days), ambient=65.0, params=existing, keep_better=True
+   )
+   for j in done.judged:
+       print(j.group, j.kept, j.base_error, j.refit_error, j.why)
+
+Each group of terms holds out its latest evidence from its refit:
+
+- the standby loss and its exponent: its quiet windows;
+- the zone gap time constant: its windows that open a gap;
+- the compressor constant and the evaporator approach: its reached
+  recoveries;
+- the power scale: its compressor cycles;
+- the COP terms: its compressor cycles.
+
+Once a group has 10 items, the latest fifth (at least 2) is held out.
+The refit replaces the existing values only where it scores better on
+them, by the error its own fit minimizes. With fewer items the existing
+values stay. The terms in a group are kept or replaced together, and the
+report's reasons say which, with both scores.
+``sim_calibrate.score(done, params)`` gives those errors for any
+parameters.
+
+Use it over a fit of this heater. The defaults are another heater's fit,
+and ``keep_better`` keeps them wherever there is too little evidence to
+judge by. A group the existing fit lists as unfitted takes its refit, as
+without ``keep_better``.
+
 ``sim.calibration.calibrate`` underneath takes the frame
 ``sim_adapters.history`` builds; ``sim_adapters.add_inputs`` adds the
 air, the humidity, a meter's draws and the circulation's runs to it.

@@ -449,6 +449,92 @@ class CompressorFit:
     two_zone: bool
 
 
+_RECOVERY_NEED = (
+    "t_start_lower",
+    "delta_t_lower",
+    "t_amb_mean",
+    "duration_minutes",
+)
+
+
+def split_recoveries(
+    recoveries: pd.DataFrame,
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """``(fitted, held_out)``: the recoveries a compressor fit uses, in
+    time order where ``start_time`` says, the latest ``HELDOUT_FRACTION``
+    (at least ``MIN_HELDOUT``) held out once there are
+    ``MIN_RECOVERIES_FOR_SPLIT``. Usable: the figures known and a
+    duration from ``MIN_RECOVERY_MINUTES`` to ``MAX_RECOVERY_MINUTES``."""
+    if any(c not in recoveries.columns for c in _RECOVERY_NEED):
+        empty = recoveries.iloc[0:0]
+        return empty, empty
+    df = recoveries.dropna(subset=list(_RECOVERY_NEED))
+    minutes = df["duration_minutes"]
+    df = df.loc[
+        (minutes >= MIN_RECOVERY_MINUTES) & (minutes <= MAX_RECOVERY_MINUTES)
+    ].copy()
+    if "start_time" in df.columns:
+        df = df.sort_values("start_time").reset_index(drop=True)
+    n = len(df)
+    n_held = (
+        max(MIN_HELDOUT, round(n * HELDOUT_FRACTION))
+        if n >= MIN_RECOVERIES_FOR_SPLIT
+        else 0
+    )
+    return df.iloc[: n - n_held], df.iloc[n - n_held :]
+
+
+def recovery_minutes(
+    recoveries: pd.DataFrame,
+    compressor_constant: float,
+    evap_approach_f: float,
+    *,
+    compressor: CompressorParams,
+    loss: LossParams,
+    tank: TankParams,
+    two_zone: bool,
+    gaps: bool,
+) -> np.ndarray:
+    """Each recovery's duration as the physics predicts it, minutes, on
+    ``fit_compressor``'s columns; ``gaps`` uses its
+    ``stratification_gap``, else none."""
+    rows = len(recoveries)
+    start = np.asarray(recoveries["t_start_lower"], dtype=float)
+    target = start + np.asarray(recoveries["delta_t_lower"], dtype=float)
+    air = np.asarray(recoveries["t_amb_mean"], dtype=float)
+    humidity = np.asarray(
+        recoveries["h_amb_start"]
+        if "h_amb_start" in recoveries.columns
+        else np.full(rows, 50.0),
+        dtype=float,
+    )
+    gap = np.asarray(
+        recoveries["stratification_gap"] if gaps else np.zeros(rows),
+        dtype=float,
+    )
+    return np.array(
+        [
+            predict_physics_detailed(
+                t_start_lower=float(start[i]),
+                hp_lower_off=float(target[i]),
+                t_amb_mean=float(air[i]),
+                compressor_constant=compressor_constant,
+                evap_approach_f=evap_approach_f,
+                compressor=compressor,
+                loss=loss,
+                h_amb_start=float(humidity[i]),
+                ua_btu_hr_f=loss.ua_btu_hr_f,
+                ua_exponent=loss.ua_exponent,
+                ua_ref_delta_t=loss.ua_ref_delta_t_f,
+                stratification_gap=float(gap[i]),
+                two_zone=two_zone,
+                tank=tank,
+            ).minutes
+            for i in range(rows)
+        ]
+    )
+
+
 def fit_compressor(
     recoveries: pd.DataFrame,
     compressor: CompressorParams,
@@ -470,27 +556,13 @@ def fit_compressor(
     ``stratification_gap`` (upper minus lower at the start; without it
     the fit falls back to the one-zone integrator, so the constant stays
     the one the simulation will use) and ``start_time`` (to hold out the
-    latest). None with fewer than ``MIN_RECOVERIES`` usable.
+    latest, ``split_recoveries``). None with fewer than
+    ``MIN_RECOVERIES`` usable.
     """
-    need = ["t_start_lower", "delta_t_lower", "t_amb_mean", "duration_minutes"]
-    if any(c not in recoveries.columns for c in need):
+    fit_df, held_df = split_recoveries(recoveries)
+    if len(fit_df) + len(held_df) < MIN_RECOVERIES:
         return None
-    df = recoveries.dropna(subset=need)
-    minutes = df["duration_minutes"]
-    df = df.loc[
-        (minutes >= MIN_RECOVERY_MINUTES) & (minutes <= MAX_RECOVERY_MINUTES)
-    ].copy()
-    if len(df) < MIN_RECOVERIES:
-        return None
-    if "start_time" in df.columns:
-        df = df.sort_values("start_time").reset_index(drop=True)
-    n = len(df)
-    n_held = (
-        max(MIN_HELDOUT, round(n * HELDOUT_FRACTION))
-        if n >= MIN_RECOVERIES_FOR_SPLIT
-        else 0
-    )
-    fit_df, held_df = df.iloc[: n - n_held], df.iloc[n - n_held :]
+    n_held = len(held_df)
     # Usable gaps are judged on the rows fitted, as the model's fit did:
     # a gap the fit has not got cannot be the mass model's.
     has_gaps = "stratification_gap" in fit_df.columns and bool(
@@ -498,56 +570,21 @@ def fit_compressor(
     )
     two_zone = two_zone and has_gaps
 
-    def columns(
-        frame: pd.DataFrame, gaps: bool = has_gaps
-    ) -> tuple[np.ndarray, ...]:
-        rows = len(frame)
-        return (
-            np.asarray(frame["t_start_lower"], dtype=float),
-            np.asarray(
-                frame["t_start_lower"] + frame["delta_t_lower"], dtype=float
-            ),
-            np.asarray(frame["t_amb_mean"], dtype=float),
-            np.asarray(
-                frame["h_amb_start"]
-                if "h_amb_start" in frame.columns
-                else np.full(rows, 50.0),
-                dtype=float,
-            ),
-            np.asarray(
-                frame["stratification_gap"] if gaps else np.zeros(rows),
-                dtype=float,
-            ),
-            np.asarray(frame["duration_minutes"], dtype=float),
-        )
-
     def predicted(
-        cols: tuple[np.ndarray, ...], k: float, approach: float
+        frame: pd.DataFrame, k: float, approach: float, gaps: bool = has_gaps
     ) -> np.ndarray:
-        start, target, air, humidity, gap, _ = cols
-        return np.array(
-            [
-                predict_physics_detailed(
-                    t_start_lower=float(start[i]),
-                    hp_lower_off=float(target[i]),
-                    t_amb_mean=float(air[i]),
-                    compressor_constant=k,
-                    evap_approach_f=approach,
-                    compressor=compressor,
-                    loss=loss,
-                    h_amb_start=float(humidity[i]),
-                    ua_btu_hr_f=loss.ua_btu_hr_f,
-                    ua_exponent=loss.ua_exponent,
-                    ua_ref_delta_t=loss.ua_ref_delta_t_f,
-                    stratification_gap=float(gap[i]),
-                    two_zone=two_zone,
-                    tank=tank,
-                ).minutes
-                for i in range(len(start))
-            ]
+        return recovery_minutes(
+            frame,
+            k,
+            approach,
+            compressor=compressor,
+            loss=loss,
+            tank=tank,
+            two_zone=two_zone,
+            gaps=gaps,
         )
 
-    fit_cols = columns(fit_df)
+    actual = np.asarray(fit_df["duration_minutes"], dtype=float)
 
     def objective(x: np.ndarray) -> float:
         k, approach = float(x[0]), float(x[1])
@@ -556,9 +593,7 @@ def fit_compressor(
             and APPROACH_BOUNDS[0] <= approach <= APPROACH_BOUNDS[1]
         ):
             return 1e12
-        return float(
-            np.sum((predicted(fit_cols, k, approach) - fit_cols[5]) ** 2)
-        )
+        return float(np.sum((predicted(fit_df, k, approach) - actual) ** 2))
 
     found = minimize(
         objective,
@@ -573,15 +608,22 @@ def fit_compressor(
         for value, bounds in ((k, K_BOUNDS), (approach, APPROACH_BOUNDS))
         for bound in bounds
     )
-    mae = float(np.mean(np.abs(predicted(fit_cols, k, approach) - fit_cols[5])))
+    mae = float(np.mean(np.abs(predicted(fit_df, k, approach) - actual)))
     held_mae = None
     if n_held:
         # The held-out rows' gaps as recorded, wherever the column is.
-        held_cols = columns(
-            held_df, gaps="stratification_gap" in held_df.columns
-        )
         held_mae = float(
-            np.mean(np.abs(predicted(held_cols, k, approach) - held_cols[5]))
+            np.mean(
+                np.abs(
+                    predicted(
+                        held_df,
+                        k,
+                        approach,
+                        gaps="stratification_gap" in held_df.columns,
+                    )
+                    - np.asarray(held_df["duration_minutes"], dtype=float)
+                )
+            )
         )
     return CompressorFit(
         compressor_constant=k,
@@ -1060,15 +1102,14 @@ class PowerFit:
     n_cop: int
 
 
-def fit_power_scale(
+def power_cycles(
     rows: pd.DataFrame, params: HeaterParams
-) -> tuple[float | None, int]:
-    """``(metered / modelled, cycles)``: each cycle charged at the
-    integrator's own mean power for its real duration, so both sides
-    are energy over the same clock. ``(None, n)`` with fewer than
-    ``MIN_POWER_EVENTS``."""
-    metered_total = modelled_total = 0.0
-    n = 0
+) -> list[tuple[datetime | None, float, float]]:
+    """Each cycle's ``(start, metered, modelled)`` Wh for the power scale
+    (``start`` None where the rows carry no ``start_time``):
+    the integrator's own mean power over the cycle's real duration, so
+    both sides are energy over the same clock."""
+    out: list[tuple[datetime | None, float, float]] = []
     for row in _records(_starts(rows)):
         raw = row["metered_input_wh"]
         if raw is None or pd.isna(raw):
@@ -1085,9 +1126,19 @@ def fit_power_scale(
         modelled = power_w * real_minutes / 60
         if not math.isfinite(modelled) or modelled <= 0.0:
             continue
-        metered_total += metered
-        modelled_total += modelled
-        n += 1
+        out.append((row.get("start_time"), metered, modelled))
+    return out
+
+
+def fit_power_scale(
+    rows: pd.DataFrame, params: HeaterParams
+) -> tuple[float | None, int]:
+    """``(metered / modelled, cycles)`` over ``power_cycles``, a ratio
+    of sums. ``(None, n)`` with fewer than ``MIN_POWER_EVENTS``."""
+    cycles = power_cycles(rows, params)
+    metered_total = sum(m for _, m, _ in cycles)
+    modelled_total = sum(e for _, _, e in cycles)
+    n = len(cycles)
     if n < MIN_POWER_EVENTS or modelled_total <= 0.0:
         return None, n
     return metered_total / modelled_total, n
@@ -1278,24 +1329,29 @@ def draw_free_withdrawn(row: Mapping[str, Any]) -> float | None:
     return 0.0 if bool(row.get("draw_free")) else None
 
 
-def fit_cop_scale(
+@dataclass(frozen=True)
+class CopCycle:
+    """One cycle's figures for the apparent COP: when it started, the
+    heat it stored plus what draws took, the lead draws' heat, the
+    integrator's COP, the metered energy (Wh) and the lift (°F).
+    ``start`` is None where the rows carry no ``start_time``."""
+
+    start: datetime | None
+    heat_wh: float
+    lead_wh: float
+    modelled_cop: float
+    metered_wh: float
+    lift_f: float
+
+
+def cop_cycles(
     rows: pd.DataFrame,
     params: HeaterParams,
     *,
     withdrawn: Withdrawn = draw_free_withdrawn,
     lead: Withdrawn | None = None,
-) -> tuple[tuple[float, float, float, float] | None, int]:
-    """``((scale, startup_wh, lead_share, lift_coeff), cycles)`` for the
-    apparent COP, the heat a cycle stored (the full tank's mass times
-    the rise of the probes' mean) plus what ``withdrawn`` says draws
-    took during it, and ``lead`` those just before it, whose cold water
-    the start reading had not yet seen. ``(None, n)`` with fewer than
-    ``MIN_POWER_EVENTS``.
-
-    Without a meter the default keeps only the cycles no water was
-    drawn around: the heat drawn during a cycle is otherwise missing
-    from its heat and pulls the scale low.
-    """
+) -> list[CopCycle]:
+    """The cycles ``fit_cop_scale`` fits on, and their figures."""
     needed = [
         "metered_input_wh",
         "t_start_lower",
@@ -1304,13 +1360,9 @@ def fit_cop_scale(
         "t_upper_end",
     ]
     if not set(needed) <= set(rows.columns):
-        return None, 0
+        return []
     wh_per_f = params.tank.thermal_mass_btu_f / BTU_PER_WH
-    heat: list[float] = []
-    before: list[float] = []
-    cop: list[float] = []
-    metered_wh: list[float] = []
-    lift: list[float] = []
+    out: list[CopCycle] = []
     for row in _records(_starts(rows)):
         if any(row[c] is None or pd.isna(row[c]) for c in needed):
             continue
@@ -1350,15 +1402,51 @@ def fit_cop_scale(
             + float(row["t_start_lower"])
             + float(row["t_start_upper"])
         ) / 4
-        heat.append(stored + took)
-        before.append(lead_wh)
-        cop.append(modelled)
-        metered_wh.append(metered)
-        lift.append(mean - float(air))
-    n = len(heat)
+        out.append(
+            CopCycle(
+                start=row.get("start_time"),
+                heat_wh=stored + took,
+                lead_wh=lead_wh,
+                modelled_cop=modelled,
+                metered_wh=metered,
+                lift_f=mean - float(air),
+            )
+        )
+    return out
+
+
+def fit_cop_scale(
+    rows: pd.DataFrame,
+    params: HeaterParams,
+    *,
+    withdrawn: Withdrawn = draw_free_withdrawn,
+    lead: Withdrawn | None = None,
+) -> tuple[tuple[float, float, float, float] | None, int]:
+    """``((scale, startup_wh, lead_share, lift_coeff), cycles)`` for the
+    apparent COP, the heat a cycle stored (the full tank's mass times
+    the rise of the probes' mean) plus what ``withdrawn`` says draws
+    took during it, and ``lead`` those just before it, whose cold water
+    the start reading had not yet seen (``cop_cycles``). ``(None, n)``
+    with fewer than ``MIN_POWER_EVENTS``.
+
+    Without a meter the default keeps only the cycles no water was
+    drawn around: the heat drawn during a cycle is otherwise missing
+    from its heat and pulls the scale low.
+    """
+    cycles = cop_cycles(rows, params, withdrawn=withdrawn, lead=lead)
+    n = len(cycles)
     if n < MIN_POWER_EVENTS:
         return None, n
-    return solve_cop_fit(heat, cop, metered_wh, before, lift), n
+    return (
+        solve_cop_fit(
+            [c.heat_wh for c in cycles],
+            [c.modelled_cop for c in cycles],
+            [c.metered_wh for c in cycles],
+            [c.lead_wh for c in cycles],
+            [c.lift_f for c in cycles],
+        ),
+        n,
+    )
 
 
 def fit_power(
