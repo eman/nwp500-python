@@ -384,9 +384,11 @@ def _judge(
     refit: float | None,
     *,
     refit_exists: bool = True,
+    needed: int = cal.MIN_POWER_EVENTS,
 ) -> Judged:
     """Which of base and refit ``group`` keeps: the refit only when it
-    scores better on the ``n_held`` latest ``what`` held out of it."""
+    scores better on the ``n_held`` latest ``what`` held out of it. No
+    refit (fewer than ``needed`` ``what`` to make one) keeps the base."""
     if not refit_exists:
         return Judged(
             group,
@@ -394,8 +396,7 @@ def _judge(
             base,
             None,
             n_held,
-            f"kept the base: too few {what} to refit on "
-            f"({cal.MIN_POWER_EVENTS} needed)",
+            f"kept the base: too few {what} to refit on ({needed} needed)",
         )
     if not n_held:
         return Judged(
@@ -435,7 +436,9 @@ def _keep_better(
     judged: list[Judged] = []
     standby = cal.fit_standby(frame, base.tank.thermal_mass_btu_f)
     windows = sorted(standby.windows, key=lambda w: w.start)
-    n_held = _split(len(windows))
+    # A group the base has not fitted takes its refit unjudged, on all
+    # its evidence.
+    n_held = 0 if "standby" in unfitted else _split(len(windows))
     train = windows[: len(windows) - n_held]
     held_windows = tuple(windows[len(windows) - n_held :])
     ua_ref = exponent = None
@@ -446,12 +449,23 @@ def _keep_better(
             [w.duration_hours for w in train],
         )
     gap_all = _gap_windows(windows)
-    n_gap_held = _split(len(gap_all))
+    n_gap_held = 0 if "gap_tau" in unfitted else _split(len(gap_all))
     gap_train = gap_all[: len(gap_all) - n_gap_held]
     held_gaps = tuple(gap_all[len(gap_all) - n_gap_held :])
     tau, n_gap = cal.fit_gap_tau([(w.gap_hours, w.gap_f) for w in gap_train])
     params = base
-    if "standby" in unfitted or ua_ref is None or exponent is None:
+    if "standby" not in unfitted and (ua_ref is None or exponent is None):
+        judged.append(
+            Judged(
+                "standby",
+                "base",
+                None,
+                None,
+                0,
+                "kept the base: no quiet window to refit on",
+            )
+        )
+    elif "standby" in unfitted:
         if ua_ref is not None and exponent is not None:
             params = cal.with_standby(
                 params,
@@ -482,7 +496,19 @@ def _keep_better(
                     tau_gap_hours=None,
                 ),
             )
-    if tau is not None:
+    if tau is None and "gap_tau" not in unfitted:
+        judged.append(
+            _judge(
+                "gap_tau",
+                "windows that open a gap",
+                n_gap_held,
+                _gap_error(held_gaps, base.tank.stratification_gap_tau_h),
+                None,
+                refit_exists=False,
+                needed=cal.MIN_GAP_FIT_WINDOWS,
+            )
+        )
+    elif tau is not None:
         if "gap_tau" in unfitted:
             params = replace(
                 params,
@@ -517,7 +543,19 @@ def _keep_better(
         reached, params.compressor, params.loss, tank=params.tank
     )
     _, held_recoveries = cal.split_recoveries(reached)
-    if "compressor" in unfitted:
+    if compressor is None and "compressor" not in unfitted:
+        judged.append(
+            _judge(
+                "compressor",
+                "reached recoveries",
+                0,
+                None,
+                None,
+                refit_exists=False,
+                needed=cal.MIN_RECOVERIES,
+            )
+        )
+    elif "compressor" in unfitted:
         if compressor is not None and not compressor.hit_bounds:
             params = cal.with_compressor(params, compressor)
             unfitted.discard("compressor")
@@ -613,6 +651,18 @@ def _keep_better(
                     refit.power, power_scale=params.power.power_scale
                 ),
             )
+    elif "power" not in unfitted:
+        # No refit to judge: no compressor to fit it over, or no cycles.
+        why = (
+            "kept the base: the compressor is not fitted"
+            if "compressor" in unfitted
+            else f"kept the base: too few cycles to refit on "
+            f"({cal.MIN_POWER_EVENTS} needed)"
+        )
+        judged.extend(
+            Judged(group, "base", None, None, 0, why)
+            for group in ("power_scale", "cop")
+        )
     params = replace(
         params,
         unfitted=tuple(t for t in UNFITTED_TERMS if t in unfitted),

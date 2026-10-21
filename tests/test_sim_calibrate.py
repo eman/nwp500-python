@@ -917,3 +917,50 @@ class TestKeepBetterFirstReview:
         assert cop.why == (
             "kept the base: too few cycles to refit on (10 needed)"
         )
+
+
+class TestKeepBetterSecondReview:
+    def test_every_kept_group_is_judged_and_reported(
+        self, device_status_dict: dict[str, Any]
+    ) -> None:
+        # Quiet days only: nothing to refit the gap, compressor or power
+        # on, so each keeps the base and says why.
+        readings = days_of_quiet(device_status_dict, [UA] * 4)
+        base = _fitted(12.0)
+        done = sc.calibrate(
+            readings, ambient=AIR_F, params=base, keep_better=True
+        )
+        judged = {j.group: j for j in done.judged}
+        assert set(judged) == set(sc.GROUPS)
+        assert all(j.kept == "base" for j in judged.values())
+        assert done.calibration.params.compressor == base.compressor
+        assert done.calibration.params.power == base.power
+        assert judged["compressor"].why == (
+            "kept the base: too few reached recoveries to refit on (5 needed)"
+        )
+        assert judged["gap_tau"].why == (
+            "kept the base: too few windows that open a gap to refit on "
+            "(20 needed)"
+        )
+        terms = _terms(done)
+        for name, value in (
+            ("Compressor constant", base.compressor.compressor_constant),
+            ("Zone gap time constant (h)", base.tank.stratification_gap_tau_h),
+            ("COP scale", base.power.cop_scale),
+        ):
+            assert terms[name].value == f"{value:.3g}"
+            assert terms[name].why.startswith("kept the base: ")
+
+    def test_an_unfitted_group_is_refitted_on_all_its_evidence(
+        self, device_status_dict: dict[str, Any]
+    ) -> None:
+        readings = days_of_quiet(device_status_dict, [UA] * 12)
+        base = sim.default_params()
+        base = replace(base, unfitted=(*base.unfitted, "standby"))
+        done = sc.calibrate(
+            readings, ambient=AIR_F, params=base, keep_better=True
+        )
+        assert done.held is not None
+        assert done.held.windows == ()
+        plain = sc.calibrate(readings, ambient=AIR_F, params=base)
+        assert done.calibration.params.loss == plain.calibration.params.loss
