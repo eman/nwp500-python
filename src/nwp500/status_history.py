@@ -16,16 +16,20 @@ Example::
 
     with open("history.jsonl") as f:
         readings = status_history.read(f)   # [(instant, DeviceStatus)]
+
+A long recording is better taken a status at a time: ``iter_read``
+yields them as it reads, so a consumer such as ``sim_adapters.history``
+holds only what it keeps of each.
 """
 
 import json
-from collections.abc import Iterable, Mapping
+from collections.abc import Iterable, Iterator, Mapping
 from datetime import datetime
 from typing import Any, cast
 
 from nwp500.models import DeviceStatus
 
-__all__ = ("TimedStatus", "line", "read")
+__all__ = ("TimedStatus", "iter_read", "line", "read")
 
 #: A status and the instant it arrived.
 TimedStatus = tuple[datetime, DeviceStatus]
@@ -45,7 +49,11 @@ def read(lines: Iterable[str]) -> list[TimedStatus]:
     """The statuses on ``lines`` (``line``'s), in their order. Blank
     lines are skipped; any other line that is not one raises
     ``ValueError`` naming its number."""
-    out: list[TimedStatus] = []
+    return list(iter_read(lines))
+
+
+def iter_read(lines: Iterable[str]) -> Iterator[TimedStatus]:
+    """``read``'s statuses one at a time, each as its line is read."""
     for number, text in enumerate(lines, start=1):
         if not text.strip():
             continue
@@ -64,5 +72,4 @@ def read(lines: Iterable[str]) -> list[TimedStatus]:
             raise ValueError(
                 f"line {number} is not a recorded status: {reason}"
             ) from None
-        out.append((at, status))
-    return out
+        yield at, status

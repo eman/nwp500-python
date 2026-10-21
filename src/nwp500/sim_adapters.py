@@ -44,10 +44,11 @@ Example::
 
 import itertools
 import math
+from array import array
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime, time, timedelta
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 from zoneinfo import ZoneInfo
 
 import numpy as np
@@ -581,19 +582,76 @@ def _hybrid(status: DeviceStatus) -> bool:
 
 def _interval_column(
     index: pd.DatetimeIndex, spans: Iterable[tuple[datetime, datetime]]
-) -> list[bool]:
+) -> np.ndarray:
     """Each row's interval (its instant to the next row's) that overlaps
-    a span: a span wholly between two samples marks the first."""
+    a span: a span wholly between two samples marks the first. The
+    index is in time order."""
+    import pandas as pd
+
+    t = index.as_unit("ns").asi8
+    n = len(t)
+    out = np.zeros(n, dtype=bool)
     spans = list(spans)
-    times = list(index)
-    out: list[bool] = []
-    for i, t in enumerate(times):
-        if i + 1 < len(times):
-            nxt = times[i + 1]
-            out.append(any(a < nxt and b > t for a, b in spans))
-        else:
-            out.append(any(a <= t < b for a, b in spans))
+    if not spans or not n:
+        return out
+    starts = pd.DatetimeIndex([a for a, _ in spans]).tz_convert("UTC")
+    ends = pd.DatetimeIndex([b for _, b in spans]).tz_convert("UTC")
+    a = starts.as_unit("ns").asi8
+    b = ends.as_unit("ns").asi8
+    # Row i < n - 1 is marked when a < t[i + 1] and b > t[i]: from the
+    # last row at or before a to the last row before b.
+    lo = np.maximum(np.searchsorted(t, a, side="right") - 1, 0)
+    hi = np.minimum(np.searchsorted(t, b, side="left"), n - 1)
+    keep = hi > lo
+    marks = np.zeros(n + 1, dtype=np.int64)
+    np.add.at(marks, lo[keep], 1)
+    np.add.at(marks, hi[keep], -1)
+    out[:] = np.cumsum(marks[:n]) > 0
+    # The last row has no next: a span holding its instant marks it.
+    out[-1] = bool(((a <= t[-1]) & (t[-1] < b)).any())
     return out
+
+
+#: The epoch, for an instant as whole microseconds.
+_EPOCH = datetime(1970, 1, 1, tzinfo=UTC)
+_US = timedelta(microseconds=1)
+
+#: The history's columns from a status, in order, and their type code.
+_COLUMNS = (
+    ("upper_f", "d"),
+    ("lower_f", "d"),
+    ("compressor_on", "b"),
+    ("element_on", "b"),
+    ("dhw_in_use", "b"),
+    ("target_f", "d"),
+    ("excluded", "b"),
+    ("power_w", "d"),
+    ("energy_to_setpoint_wh", "d"),
+    ("heater_air_f", "d"),
+)
+
+
+def _row(s: DeviceStatus) -> tuple[float | bool, ...]:
+    """A status's values, in ``_COLUMNS``' order."""
+    return (
+        _from_device(DeciCelsius(s.tank_upper_temperature_raw)),
+        _from_device(DeciCelsius(s.tank_lower_temperature_raw)),
+        bool(s.comp_use),
+        bool(s.heat_upper_use)
+        or bool(s.heat_lower_use)
+        or s.current_heat_use
+        in (HeatSource.HEATELEMENT, HeatSource.HEATPUMP_HEATELEMENT),
+        bool(s.dhw_use),
+        _from_device(HalfCelsius(s.hp_lower_off_temp_setting_raw)),
+        _hybrid(s)
+        or bool(s.anti_legionella_operation_busy)
+        or s.error_code != ErrorCode.NO_ERROR,
+        float(s.current_inst_power),
+        float(s.energy_to_setpoint),
+        _from_device(DeciCelsius(s.ambient_temperature_raw))
+        if s.comp_use
+        else float("nan"),
+    )
 
 
 def history(
@@ -611,10 +669,59 @@ def history(
     Everything a status carries is read from it: the probes, what is
     heating, ``dhw_use``, the lower probe's stop threshold, what rules a
     sample out of a heat-pump recovery, the power it draws, the energy
-    still to heat, and
-    the heater's own air
-    reading while its compressor runs. What it does not carry is the
-    caller's, in the preferred unit:
+    still to heat, and the heater's own air reading while its compressor
+    runs. ``readings`` is taken one at a time and only those values are
+    kept, so a generator over a long recording
+    (``status_history.iter_read``) needs memory for the history, not
+    for its statuses.
+
+    What a status does not carry is the caller's, as
+    ``add_inputs`` takes it.
+    """
+    import pandas as pd
+
+    times: array[int] = array("q")
+    values: list[array[Any]] = [array(code) for _, code in _COLUMNS]
+    for at, status in readings:
+        times.append((at - _EPOCH) // _US)
+        for column, value in zip(values, _row(status), strict=True):
+            column.append(value)
+    stamps = (
+        np.frombuffer(times, dtype=np.int64) if times else np.empty(0, np.int64)
+    )
+    order = np.argsort(stamps, kind="stable")
+    ordered = bool(np.all(order == np.arange(len(order))))
+    data: dict[str, np.ndarray] = {}
+    for (name, code), column in zip(_COLUMNS, values, strict=True):
+        a = np.array(column, dtype=float if code == "d" else bool)
+        data[name] = a if ordered else a[order]
+    index = pd.DatetimeIndex(
+        pd.to_datetime(
+            stamps if ordered else stamps[order], unit="us", utc=True
+        )
+    ).as_unit("ns")
+    frame = pd.DataFrame(data, index=index)
+    return add_inputs(
+        frame,
+        air=air,
+        humidity=humidity,
+        drawing=drawing,
+        circulating=circulating,
+        max_gap=max_gap,
+    )
+
+
+def add_inputs(
+    frame: pd.DataFrame,
+    *,
+    air: Iterable[tuple[datetime, float]] | None = None,
+    humidity: Iterable[tuple[datetime, float]] | None = None,
+    drawing: Iterable[tuple[datetime, datetime]] | None = None,
+    circulating: Iterable[tuple[datetime, datetime]] | None = None,
+    max_gap: timedelta | None = None,
+) -> pd.DataFrame:
+    """``frame`` (``history``'s) with what its statuses do not carry,
+    added in place, in the preferred unit:
 
     - ``air``: the air where the heater stands, interpolated in time onto
       the readings (a sensor's, or ``location_air``'s projection); the
@@ -634,53 +741,8 @@ def history(
     window and no recovery spans it. Without it, every span between two
     readings is taken as observed.
     """
-    import pandas as pd
-
-    rows = sorted(readings, key=lambda r: r[0])
-    index = pd.DatetimeIndex([at for at, _ in rows]).tz_convert("UTC")
-    frame = pd.DataFrame(
-        {
-            "upper_f": [
-                _from_device(DeciCelsius(s.tank_upper_temperature_raw))
-                for _, s in rows
-            ],
-            "lower_f": [
-                _from_device(DeciCelsius(s.tank_lower_temperature_raw))
-                for _, s in rows
-            ],
-            "compressor_on": [bool(s.comp_use) for _, s in rows],
-            "element_on": [
-                bool(s.heat_upper_use)
-                or bool(s.heat_lower_use)
-                or s.current_heat_use
-                in (HeatSource.HEATELEMENT, HeatSource.HEATPUMP_HEATELEMENT)
-                for _, s in rows
-            ],
-            "dhw_in_use": [bool(s.dhw_use) for _, s in rows],
-            "target_f": [
-                _from_device(HalfCelsius(s.hp_lower_off_temp_setting_raw))
-                for _, s in rows
-            ],
-            "excluded": [
-                _hybrid(s)
-                or bool(s.anti_legionella_operation_busy)
-                or s.error_code != ErrorCode.NO_ERROR
-                for _, s in rows
-            ],
-            "power_w": [float(s.current_inst_power) for _, s in rows],
-            "energy_to_setpoint_wh": [
-                float(s.energy_to_setpoint) for _, s in rows
-            ],
-            "heater_air_f": [
-                _from_device(DeciCelsius(s.ambient_temperature_raw))
-                if s.comp_use
-                else float("nan")
-                for _, s in rows
-            ],
-        },
-        index=index,
-    )
-    seconds = [t.timestamp() for t in index]
+    index = cast("pd.DatetimeIndex", frame.index)
+    seconds = index.as_unit("ns").asi8 / 1e9
     for name, series in (("air_f", air), ("humidity_pct", humidity)):
         if series is None:
             continue
