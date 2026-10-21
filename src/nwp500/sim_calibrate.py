@@ -34,8 +34,9 @@ statuses::
 This module needs the ``sim`` extra.
 """
 
+import itertools
 from collections.abc import Iterable, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timedelta
 from typing import TYPE_CHECKING, Any, cast
 
@@ -66,6 +67,7 @@ __all__ = (
     "Calibrated",
     "Term",
     "calibrate",
+    "calibrate_changes",
     "max_gap",
     "report",
 )
@@ -176,6 +178,20 @@ def _base(params: HeaterParams | Any) -> HeaterParams:
         ) from None
 
 
+def _begin(
+    air: Sequence[Reading] | None,
+    ambient: float | None,
+    params: HeaterParams | Any,
+) -> tuple[HeaterParams, list[str]]:
+    """The base to refit and the notes so far; the inputs checked before
+    a history is read."""
+    if air is not None and ambient is not None:
+        raise CalibrationInputError("give air or ambient, not both")
+    if params is None:
+        return sim.default_params(), [DEFAULT_BASE_NOTE]
+    return _base(params), []
+
+
 def calibrate(
     readings: Iterable[tuple[datetime, DeviceStatus]],
     *,
@@ -204,17 +220,69 @@ def calibrate(
     for both ``air`` and ``ambient``, a ``params`` that is not a
     parameters document, or no readings.
     """
-    if air is not None and ambient is not None:
-        raise CalibrationInputError("give air or ambient, not both")
-    notes: list[str] = []
-    if params is None:
-        base = sim.default_params()
-        notes.append(DEFAULT_BASE_NOTE)
-    else:
-        base = _base(params)
+    base, notes = _begin(air, ambient, params)
     frame = sa.history(readings)
     if frame.empty:
         raise CalibrationInputError("the history holds no statuses")
+    return _fit(frame, base, notes, air, ambient, humidity, record)
+
+
+def calibrate_changes(
+    rows: sa.ChangeRows,
+    observed: Iterable[datetime],
+    *,
+    air: Sequence[Reading] | None = None,
+    ambient: float | None = None,
+    humidity: Sequence[Reading] | None = None,
+    params: HeaterParams | Any = None,
+    record: RecordInputs | None = None,
+    notes: Iterable[str] = (),
+) -> Calibrated:
+    """``calibrate`` on a heater's values' changes (``rows``) instead of
+    its statuses, with ``observed`` the instants it was heard from
+    (``sim_adapters.change_history``; ``sim_home_assistant.
+    read_heater_history`` reads both from Home Assistant). ``notes``
+    open the result's (a reader's). The rows are counted in
+    ``n_statuses``. Raises ``CalibrationInputError`` as ``calibrate``
+    does, or for no ``observed`` instants.
+    """
+    base, more = _begin(air, ambient, params)
+    heard = sorted(observed)
+    # The gaps are the silences between the instants heard from: a
+    # change inside one says nothing of the time around it.
+    gap = max_gap(heard)
+    silences = [(a, b) for a, b in itertools.pairwise(heard) if b - a > gap]
+    frame = sa.change_history(
+        replace(rows, outages=(*rows.outages, *silences)), heard
+    )
+    if frame.empty:
+        raise CalibrationInputError("the history holds no observed instants")
+    return _fit(
+        frame,
+        base,
+        [*notes, *more],
+        air,
+        ambient,
+        humidity,
+        record,
+        gaps=(gap, len(silences)),
+    )
+
+
+def _fit(
+    frame: pd.DataFrame,
+    base: HeaterParams,
+    notes: list[str],
+    air: Sequence[Reading] | None,
+    ambient: float | None,
+    humidity: Sequence[Reading] | None,
+    record: RecordInputs | None,
+    gaps: tuple[timedelta, int] | None = None,
+) -> Calibrated:
+    """The fits on ``frame`` (``history``'s or ``change_history``'s),
+    with the air, the humidity, the record's spans and the gaps added:
+    ``gaps``' longest spacing taken as observed and how many spans are
+    longer, else the frame's own."""
     index = cast("pd.DatetimeIndex", frame.index)
     # Timestamps, which are datetimes.
     first, last = cast(datetime, index[0]), cast(datetime, index[-1])
@@ -254,8 +322,11 @@ def calibrate(
         # The fits' own default, given explicitly: an absent humidity
         # reaches the evaporator's dew point as NaN, which reads as 100 %.
         humidity = [(first, DEFAULT_HUMIDITY_PCT), (last, DEFAULT_HUMIDITY_PCT)]
-    gap = max_gap(index)
-    n_gaps = int((_steps(index) > gap.total_seconds() * 1e9).sum())
+    if gaps is None:
+        gap = max_gap(index)
+        n_gaps = int((_steps(index) > gap.total_seconds() * 1e9).sum())
+    else:
+        gap, n_gaps = gaps
     sa.add_inputs(
         frame,
         air=series,

@@ -33,6 +33,7 @@ Units come from each entity's ``unit_of_measurement``. Entity ids come
 from the caller's configuration (``sources_from``).
 """
 
+import enum
 import logging
 import math
 from collections.abc import Awaitable, Callable, Iterable, Mapping, Sequence
@@ -322,6 +323,10 @@ class History:
     #: Aligned with ``readings``; None where the history carries no
     #: attributes, when each reading is taken to be in today's unit.
     units: dict[str, list[str | None]] | None = None
+    #: Every row's instant and state as Home Assistant wrote it, numbers
+    #: or not, ``unavailable`` and ``unknown`` included, in time order;
+    #: None from a client that does not give them.
+    states: dict[str, list[tuple[datetime, str]]] | None = None
 
     def converted(
         self,
@@ -385,6 +390,34 @@ def parse_units(doc: Any) -> dict[str, list[str | None]]:
         out[str(rows[0]["entity_id"])] = [
             u for _, u in sorted(units, key=lambda x: x[0])
         ]
+    return out
+
+
+def parse_states(doc: Any) -> dict[str, list[tuple[datetime, str]]]:
+    """Every row of ``/api/history/period``'s answer, by entity: its
+    instant (``last_updated``, else ``last_changed``) and its state as
+    written, in time order. ``parse_history`` keeps only the numbers;
+    these keep a binary sensor's ``on``, an enum's name and an outage's
+    ``unavailable`` too."""
+    if not isinstance(doc, list):
+        raise HomeAssistantError("not a history")
+    out: dict[str, list[tuple[datetime, str]]] = {}
+    for series in doc:
+        if not isinstance(series, list) or not series:
+            continue
+        rows = [
+            cast(Mapping[str, Any], r) for r in series if isinstance(r, Mapping)
+        ]
+        if not rows or "entity_id" not in rows[0]:
+            continue
+        out[str(rows[0]["entity_id"])] = sorted(
+            (
+                (_instant(stamp), str(r.get("state")))
+                for r in rows
+                if (stamp := r.get("last_updated") or r.get("last_changed"))
+            ),
+            key=lambda x: x[0],
+        )
     return out
 
 
@@ -485,6 +518,26 @@ def to_gal(value: float, unit: str | None) -> float:
     if u in ("ft³", "ft3"):
         return value * 7.480519480519
     raise ValueError(f"{unit!r} is not a volume unit")
+
+
+def to_w(value: float, unit: str | None) -> float:
+    """A power in ``unit`` (W, kW), in W."""
+    u = (unit or "").strip()
+    if u == "W":
+        return value
+    if u == "kW":
+        return value * 1000.0
+    raise ValueError(f"{unit!r} is not a power unit")
+
+
+def to_wh(value: float, unit: str | None) -> float:
+    """An energy in ``unit`` (Wh, kWh), in Wh."""
+    u = (unit or "").strip()
+    if u == "Wh":
+        return value
+    if u == "kWh":
+        return value * 1000.0
+    raise ValueError(f"{unit!r} is not an energy unit")
 
 
 def covers_start(series: Sequence[Reading], start: datetime) -> bool:
@@ -656,10 +709,12 @@ class HomeAssistantClient:
         )
         outages = parse_outages(doc, end)
         units = parse_units(doc)
+        states = parse_states(doc)
         return History(
             history_for(doc, names),
             {n: outages.get(n, []) for n in names},
             {n: units.get(n, []) for n in names},
+            {n: states.get(n, []) for n in names},
         )
 
     async def forecast(self, entity: str) -> tuple[list[Reading], str | None]:
@@ -1155,3 +1210,236 @@ async def record_inputs(
         air_outages=air_down,
         humidity_outages=rh_down,
     )
+
+
+# ── the heater's own history, for its calibration ───────────────────
+
+
+@dataclass(frozen=True)
+class HeaterEntities:
+    """The heater's own entities in Home Assistant, by the value each
+    holds (``sim_adapters.ChangeRows``); None for one the installation
+    does not record."""
+
+    #: An entity that changes on every status the heater answers with,
+    #: such as the integration's last response time: when the heater was
+    #: heard from.
+    heard: str
+    upper: str
+    lower: str
+    compressor: str | None = None
+    upper_element: str | None = None
+    lower_element: str | None = None
+    #: The heat source, by ``HeatSource`` name.
+    heat_source: str | None = None
+    dhw_in_use: str | None = None
+    #: The lower probe's heat-pump stop threshold.
+    target: str | None = None
+    #: The operation mode, by ``CurrentOperationMode`` name.
+    operation_mode: str | None = None
+    anti_legionella: str | None = None
+    #: The error code, by ``ErrorCode`` name.
+    error_code: str | None = None
+    power: str | None = None
+    energy_to_setpoint: str | None = None
+    #: The heater's own air reading.
+    ambient: str | None = None
+
+
+@dataclass(frozen=True)
+class HeaterHistory:
+    """A heater's history from Home Assistant, as
+    ``sim_calibrate.calibrate_changes`` takes it: its values' changes,
+    the instants it was heard from, and what the reading noted."""
+
+    rows: sa.ChangeRows
+    observed: list[datetime]
+    notes: tuple[str, ...] = ()
+
+
+#: How much history ``read_heater_history`` asks for at once.
+HISTORY_WINDOW = timedelta(days=1)
+
+#: A role's value from an entity's state, and its unit: a number through
+#: a unit converter, ``on``/``off``, or an enum's name.
+_Read = Callable[[float, str | None], float] | type[enum.Enum] | None
+
+
+def _missing(state: str, read: _Read) -> bool:
+    """Whether ``state`` is Home Assistant's for a value it does not
+    have. An enum's own ``UNKNOWN`` is a value."""
+    text = state.strip()
+    is_name = (
+        isinstance(read, type)
+        and issubclass(read, enum.Enum)
+        and text in read.__members__
+    )
+    return not is_name and text.lower() in _NO_VALUE
+
+
+def _value(state: str, read: _Read, unit: str | None) -> Any:
+    """``state`` as ``read`` takes it, a number from ``unit``; None when
+    it is not one."""
+    text = state.strip()
+    if read is None:
+        return {"on": True, "off": False}.get(text.lower())
+    if isinstance(read, type) and issubclass(read, enum.Enum):
+        try:
+            return read[text]
+        except KeyError:
+            number = _number(text)
+            try:
+                return None if number is None else read(int(number))
+            except ValueError:
+                return None
+    number = _number(text)
+    if number is None:
+        return None
+    convert = cast(Callable[[float, str | None], float], read)
+    try:
+        return convert(number, unit)
+    except ValueError:
+        return None
+
+
+async def read_heater_history(
+    client: HomeAssistantClient,
+    entities: HeaterEntities,
+    start: datetime,
+    end: datetime,
+    *,
+    window: timedelta = HISTORY_WINDOW,
+) -> HeaterHistory:
+    """The heater's history from ``start`` to ``end``, read a ``window``
+    at a time so that no more than a window's rows are held as Home
+    Assistant gives them.
+
+    Each number is taken from the unit it was recorded in. A state
+    ``unavailable`` or ``unknown`` is an outage, and an outage of any
+    entity leaves the heater unobserved over it: the integration's
+    entities go unavailable together. Raises ``HomeAssistantError`` when
+    a probe cannot be read, or the client gives no states
+    (``History.states``)."""
+    from nwp500.enums import CurrentOperationMode, ErrorCode, HeatSource
+
+    if window <= timedelta(0):
+        raise ValueError(f"window {window} is not a positive span")
+    e = entities
+    roles: dict[str, tuple[str, _Read]] = {
+        name: (entity, read)
+        for name, entity, read in (
+            ("upper_f", e.upper, to_f),
+            ("lower_f", e.lower, to_f),
+            ("compressor_on", e.compressor, None),
+            ("upper_element_on", e.upper_element, None),
+            ("lower_element_on", e.lower_element, None),
+            ("heat_source", e.heat_source, HeatSource),
+            ("dhw_in_use", e.dhw_in_use, None),
+            ("target_f", e.target, to_f),
+            ("operation_mode", e.operation_mode, CurrentOperationMode),
+            ("anti_legionella", e.anti_legionella, None),
+            ("error_code", e.error_code, ErrorCode),
+            ("power_w", e.power, to_w),
+            ("energy_to_setpoint_wh", e.energy_to_setpoint, to_wh),
+            ("heater_air_f", e.ambient, to_f),
+        )
+        if entity
+    }
+    notes: list[str] = []
+    if not e.anti_legionella:
+        notes.append(
+            "anti_legionella: not recorded; an anti-legionella cycle is not "
+            "excluded from the fits"
+        )
+    units: dict[str, str | None] = {}
+    for name, (entity, read) in list(roles.items()):
+        if read is None or isinstance(read, type):
+            continue
+        try:
+            units[name] = (await client.state(entity)).unit
+            read(50.0, units[name])
+        except (HomeAssistantError, ValueError) as err:
+            if name in ("upper_f", "lower_f"):
+                raise HomeAssistantError(f"{entity}: {err}") from None
+            notes.append(f"{name}: not read ({err})")
+            del roles[name]
+    changes: dict[str, list[tuple[datetime, Any]]] = {n: [] for n in roles}
+    unread: dict[str, int] = {}
+    down: list[Span] = []
+    heard: list[datetime] = []
+    names = sorted({e.heard, *(entity for entity, _ in roles.values())})
+    a = start
+    while a < end:
+        b = min(a + window, end)
+        got = await client.read_history(names, a, b)
+        if got.states is None:
+            raise HomeAssistantError(
+                "the client's history carries no states (History.states)"
+            )
+        was: datetime | None = None
+        for t, state in got.states.get(e.heard, []):
+            if _missing(state, None):
+                was = t if was is None else was
+                continue
+            if was is not None:
+                down.append((was, t))
+                was = None
+            # The window opens with the state in force at its start,
+            # which is no response inside it.
+            if t > a:
+                heard.append(t)
+        if was is not None:
+            down.append((was, b))
+        for name, (entity, read) in roles.items():
+            series = changes[name]
+            was = None
+            # The unit each number was recorded in, where the history
+            # says; today's where it does not.
+            recorded = dict(
+                zip(
+                    (t for t, _ in got.readings.get(entity, [])),
+                    (got.units or {}).get(entity, []),
+                    strict=False,
+                )
+            )
+            for t, state in got.states.get(entity, []):
+                if _missing(state, read):
+                    was = t if was is None else was
+                    continue
+                if was is not None:
+                    down.append((was, t))
+                    was = None
+                unit = recorded[t] if t in recorded else units.get(name)
+                value = _value(state, read, unit)
+                if value is None:
+                    # Counted once, not again as the next window opens.
+                    if t > a or a == start:
+                        unread[name] = unread.get(name, 0) + 1
+                    continue
+                # A window's first row repeats the last one before it, and
+                # a value that comes back unchanged is no change.
+                if not series or (t > series[-1][0] and value != series[-1][1]):
+                    series.append((t, value))
+            if was is not None:
+                down.append((was, b))
+        a = b
+    for name, series in changes.items():
+        if not series:
+            notes.append(f"{name}: no history over the record")
+        elif series[0][0] > start:
+            notes.append(
+                f"{name}: history covers only from {series[0][0].isoformat()}"
+            )
+    for name, count in unread.items():
+        notes.append(f"{name}: {count} states this does not read, left out")
+    outages = busy(down)
+    if outages:
+        hours = sum((b - a).total_seconds() for a, b in outages) / 3600
+        notes.append(
+            f"heater: unavailable {len(outages)} times ({hours:.1f} h), "
+            "left unobserved"
+        )
+    if not changes.get("upper_f") or not changes.get("lower_f"):
+        raise HomeAssistantError("the probes have no history over the record")
+    rows = sa.ChangeRows(**changes, outages=tuple(outages))
+    return HeaterHistory(rows, sorted(set(heard)), tuple(notes))

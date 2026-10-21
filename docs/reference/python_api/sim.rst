@@ -298,7 +298,7 @@ Recorded history
    :members:
 
 .. automodule:: nwp500.sim_calibrate
-   :members: calibrate, Calibrated, report, Term, max_gap,
+   :members: calibrate, calibrate_changes, Calibrated, report, Term, max_gap,
       CalibrationInputError, DEFAULT_HUMIDITY_PCT, GAP_SAMPLES, MIN_GAP,
       DEFAULT_BASE_NOTE, NO_AIR_NOTE
 
@@ -309,6 +309,8 @@ Home Assistant sources
 .. automodule:: nwp500.sim_home_assistant
    :members: HomeAssistantEnvironment, HomeAssistantClient, record_inputs,
       RecordInputs, Sources, Entities, sources_from, State, parse_state,
-      parse_history, parse_outages, History, history_for, parse_forecast,
+      parse_history, parse_outages, parse_states, History, history_for,
+      parse_forecast, read_heater_history, HeaterEntities, HeaterHistory,
+      HISTORY_WINDOW, to_w, to_wh,
       pump_runs, draw_spans, busy, covers_start, reports_after, percent,
       fresh, to_f, to_gpm, to_gal, to_rpm, HomeAssistantError
