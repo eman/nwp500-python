@@ -417,6 +417,8 @@ def overlay(
     if live is not None:
         data = scenario_to_document(live.scenario)["scenario"]
     if doc is not None:
+        if not isinstance(doc, Mapping):  # pyright: ignore[reportUnnecessaryIsInstance]
+            raise ValueError("a scenario document is an object")
         version = doc.get("schema_version")
         if version != SCHEMA_VERSION:
             raise ValueError(f"unsupported scenario schema_version {version!r}")

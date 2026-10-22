@@ -133,6 +133,9 @@ class TestOverlay:
     @pytest.mark.parametrize(
         ("doc", "match"),
         [
+            ([], "is an object"),
+            ("{}", "is an object"),
+            (1, "is an object"),
             ({"schema_version": 2, "scenario": {}}, "schema_version"),
             ({"schema_version": 1}, "scenario object"),
             (_doc({}, params={}), "scenario's params"),
@@ -141,9 +144,7 @@ class TestOverlay:
             (_doc({"tz": TZ}), "do not make a scenario"),
         ],
     )
-    def test_a_document_it_cannot_read(
-        self, doc: dict[str, Any], match: str
-    ) -> None:
-        live = None if "params" not in doc else _live()
+    def test_a_document_it_cannot_read(self, doc: Any, match: str) -> None:
+        live = _live() if isinstance(doc, dict) and "params" in doc else None
         with pytest.raises(ValueError, match=match):
             sim_live.overlay(live, doc, now=NOW)
