@@ -661,3 +661,43 @@ def test_whole_number_base_terms_fit_fractional_ones() -> None:
     got = fit(params, no_pump(params, 16, truth=OTHER))
     assert got.kept == "refit", got.why
     assert_book(got.book, OTHER)
+
+
+def test_runs_mixing_zoned_and_naive_instants() -> None:
+    """``run_flow`` takes runs as the book does: a naive instant in the
+    local zone, sorted with zoned ones by the instant it names."""
+    a = T0 + timedelta(hours=2)
+    naive = (a.astimezone().replace(tzinfo=None), a + timedelta(minutes=1))
+    zoned = (T0, T0 + timedelta(minutes=1))
+    got = sa.run_flow([naive, zoned], 1.0)
+    assert [t for t, _ in got] == sorted(t for t, _ in got)
+    assert got[0][0] == T0
+    assert got[-1][0] == a + timedelta(seconds=50)
+
+
+def test_a_probe_gap_across_the_repeated_hour() -> None:
+    """Across a clock set back, an unread reading at 01:50 EDT and the
+    next at 01:10 EST, 20 minutes later: the gap is those 20 minutes,
+    whatever the wall clock says."""
+    from zoneinfo import ZoneInfo
+
+    ny = ZoneInfo("America/New_York")
+    before = datetime(2026, 11, 1, 1, 0, tzinfo=ny)
+    gone = datetime(2026, 11, 1, 1, 50, tzinfo=ny)
+    back = datetime(2026, 11, 1, 1, 10, fold=1, tzinfo=ny)
+    end = datetime(2026, 11, 2, tzinfo=UTC)
+    got = sim_calibrate._unread_spans(  # pyright: ignore[reportPrivateUsage]
+        [(before, 120.0), (gone, None), (back, 121.0)], end
+    )
+    assert got == [(gone.astimezone(UTC), back.astimezone(UTC))]
+    assert got[0][1] - got[0][0] == timedelta(minutes=20)
+
+
+def test_a_probe_gap_mixing_zoned_and_naive_instants() -> None:
+    a = T0 + timedelta(hours=1)
+    naive = (a.astimezone().replace(tzinfo=None), math.nan)
+    got = sim_calibrate._unread_spans(  # pyright: ignore[reportPrivateUsage]
+        [(T0, 120.0), naive, (a + timedelta(minutes=5), 121.0)],
+        T0 + timedelta(hours=2),
+    )
+    assert got == [(a, a + timedelta(minutes=5))]

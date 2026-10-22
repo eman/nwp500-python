@@ -1290,9 +1290,9 @@ def run_flow(
     over it stays a draw."""
     out: list[tuple[datetime, float]] = []
     step = timedelta(seconds=BOOK_GRID_S)
-    for a, b in sorted(runs):
-        t = a.astimezone(UTC)
-        end = b.astimezone(UTC)
+    for t, end in sorted(
+        (a.astimezone(UTC), b.astimezone(UTC)) for a, b in runs
+    ):
         while t < end:
             out.append((t, flow_gpm))
             t += step

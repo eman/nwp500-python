@@ -1454,31 +1454,13 @@ def fit_book(
         if b - a > sa.METER_MAX_GAP or not (beats[0] <= a and b <= beats[-1])
     ]
 
-    def unknown(
-        probe: Iterable[tuple[datetime, float | None]],
-    ) -> list[tuple[datetime, datetime]]:
-        """The spans a probe's held reading is none (None, NaN): the
-        book has no step there."""
-        out: list[tuple[datetime, datetime]] = []
-        began: datetime | None = None
-        for t, v in sorted(probe, key=lambda r: r[0]):
-            known = v is not None and math.isfinite(v)
-            if not known and began is None:
-                began = t.astimezone(UTC)
-            elif known and began is not None:
-                out.append((began, t.astimezone(UTC)))
-                began = None
-        if began is not None:
-            out.append((began, heard[-1]))
-        return out
-
     dark = sorted(
         [
             *silences(heard, max_gap(heard)),
             *((a.astimezone(UTC), b.astimezone(UTC)) for a, b in rows.outages),
             *meter_dark,
-            *unknown(rows.upper_f),
-            *unknown(rows.lower_f),
+            *_unread_spans(rows.upper_f, heard[-1]),
+            *_unread_spans(rows.lower_f, heard[-1]),
         ]
     )
     segments: list[tuple[datetime, datetime]] = []
@@ -1740,3 +1722,25 @@ def _independent(x: np.ndarray, terms: Iterable[int]) -> list[int]:
         if np.linalg.matrix_rank(cols, tol=1e-6) == len(trial):
             taken.append(j)
     return sorted(taken)
+
+
+def _unread_spans(
+    probe: Iterable[tuple[datetime, float | None]], end: datetime
+) -> list[tuple[datetime, datetime]]:
+    """The spans a probe's held reading is none (None, NaN), to ``end``
+    for one never read again: the book has no step there. In instant
+    order, UTC, whatever zone (or none, local) each reading is in."""
+    out: list[tuple[datetime, datetime]] = []
+    began: datetime | None = None
+    for t, v in sorted(
+        ((t.astimezone(UTC), v) for t, v in probe), key=lambda r: r[0]
+    ):
+        known = v is not None and math.isfinite(v)
+        if not known and began is None:
+            began = t
+        elif known and began is not None:
+            out.append((began, t))
+            began = None
+    if began is not None:
+        out.append((began, end))
+    return out
