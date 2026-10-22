@@ -747,3 +747,39 @@ def test_the_fits_balance_is_the_books() -> None:
         ]
     )
     assert got == pytest.approx(want)
+
+
+def test_two_close_runs_share_the_water_between_them() -> None:
+    """Two 80 s runs at 2 gal/min, 10 s apart, on 30 s volume reports
+    15 s off them, with a 90 s lag: their water either side, and in the
+    gap, is all circulation, none of it a draw."""
+    from nwp500.sim.book import house_gpm
+
+    assert SITE.circulation is not None
+    terms = replace(SITE.circulation, flow_gpm=2.0, meter_share=1.0)
+    params = replace(SITE, circulation=terms)
+    a = T0 + timedelta(minutes=30)
+    runs = [
+        (a, a + timedelta(seconds=80)),
+        (a + timedelta(seconds=90), a + timedelta(seconds=170)),
+    ]
+    n = 6 * 60
+    truth = [
+        (
+            T0 + i * STEP,
+            2.0 if any(x <= T0 + i * STEP < y for x, y in runs) else 0.0,
+        )
+        for i in range(n)
+    ]
+    steps = sa.book_steps_from_changes(
+        sa.ChangeRows(upper_f=[(T0, 120.0)], lower_f=[(T0, 120.0)]),
+        start=T0,
+        end=T0 + n * STEP,
+        flow=reports(truth),
+        circulation=runs,
+        circulation_flow=sa.run_flow(runs, terms.flow_gpm),
+        meter_lag=timedelta(seconds=90),
+        params=params,
+    )
+    house = sum(house_gpm(s, terms) * s.seconds / 60 for s in steps)
+    assert house == pytest.approx(0.0, abs=1e-9)

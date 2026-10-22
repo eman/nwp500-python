@@ -1554,7 +1554,10 @@ def _carried(
     the rest. That shortfall, at each edge, is the run's water outside
     it: it is marked as circulation (``circulation_in_meter_gpm``) on
     the steps outside the edge, nearest first, as far as each shows,
-    and no farther than ``lag``. A tap opened past it keeps its own."""
+    and no farther than ``lag``. A tap opened past it keeps its own.
+    Runs closer than twice ``lag`` share the steps between them, so
+    their shortfalls are given together, nearest any run's edge
+    first."""
     out = list(steps)
     carried = [0.0] * len(out)
     per_min = BOOK_GRID_S / 60.0
@@ -1576,32 +1579,62 @@ def _carried(
             carried[i] += take
             gal -= take
 
-    for a, b in runs:
+    def edges(a: datetime, b: datetime) -> tuple[float, float]:
+        """A run's shortfall near its edges, gal: at its start and at
+        its end; for a run no longer than twice ``lag``, all of it
+        first and none second."""
         first = bisect.bisect_left(times, a)
         end = bisect.bisect_left(times, b)
-        if first >= end:
-            continue
-        before = bisect.bisect_left(times, a - lag)
-        after = bisect.bisect_left(times, b + lag)
-        outside_before = [
-            i
-            for i in range(first - 1, before - 1, -1)
-            if not out[i].circulating
-        ]
-        outside_after = [i for i in range(end, after) if not out[i].circulating]
         if b - a <= 2 * lag:
-            # Edges this close share their shortfall: it goes to the
-            # steps outside either, nearest its edge first.
-            near = sorted(
-                [*outside_before, *outside_after],
-                key=lambda i: max(a - times[i], times[i] - b),
-            )
-            give(shortfall(first, end), near)
-            continue
+            return shortfall(first, end), 0.0
         head = bisect.bisect_left(times, a + lag, first, end)
         tail = bisect.bisect_left(times, b - lag, first, end)
-        give(shortfall(first, head), outside_before)
-        give(shortfall(tail, end), outside_after)
+        return shortfall(first, head), shortfall(tail, end)
+
+    def outside(lo: datetime, hi: datetime) -> list[int]:
+        """The steps from ``lo`` to ``hi`` no run is on."""
+        return [
+            i
+            for i in range(
+                bisect.bisect_left(times, lo), bisect.bisect_left(times, hi)
+            )
+            if not out[i].circulating
+        ]
+
+    # Runs whose lag windows meet share the steps between them: their
+    # shortfalls are given together.
+    groups: list[list[tuple[datetime, datetime]]] = []
+    for run in sorted(runs):
+        if groups and run[0] - groups[-1][-1][1] < 2 * lag:
+            groups[-1].append(run)
+        else:
+            groups.append([run])
+    for group in groups:
+        if len(group) == 1:
+            ((a, b),) = group
+            head, tail = edges(a, b)
+            if b - a <= 2 * lag:
+                # Edges this close share their shortfall: it goes to the
+                # steps outside either, nearest its edge first.
+                give(
+                    head,
+                    sorted(
+                        outside(a - lag, b + lag),
+                        key=lambda i: max(a - times[i], times[i] - b),
+                    ),
+                )
+                continue
+            give(head, reversed(outside(a - lag, a)))
+            give(tail, outside(b, b + lag))
+            continue
+        # Each step outside the runs, nearest any run's edge first.
+        near = sorted(
+            outside(group[0][0] - lag, group[-1][1] + lag),
+            key=lambda i: min(
+                max(ra - times[i], times[i] - rb) for ra, rb in group
+            ),
+        )
+        give(sum(sum(edges(ra, rb)) for ra, rb in group), near)
     for i, gal in enumerate(carried):
         if gal > 0.0:
             out[i] = replace(
