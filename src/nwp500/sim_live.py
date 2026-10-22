@@ -12,7 +12,9 @@ caller. This module is that driver's part:
 - the live sources, ``LiveHeaterSource`` and ``LiveScheduleSource``,
   which read the device through the library's clients and build the
   inputs with ``nwp500.sim_adapters``;
-- ``compose()``, which awaits the sources into a ``Scenario``.
+- ``compose()``, which awaits the sources into a ``Scenario``;
+- ``overlay()``, which lays a scenario document over a composed
+  scenario, as ``nwp-cli simulate`` does.
 
 An override is ``scenario.model_copy(update=...)`` on the result, so
 scenario data can always stand in for the device's current state.
@@ -45,10 +47,11 @@ Example::
 
 import asyncio
 import logging
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from typing import TYPE_CHECKING, Any, Protocol, TypeVar
+from typing import TYPE_CHECKING, Any, Protocol, TypeVar, cast
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from nwp500 import sim_adapters as sa
 from nwp500.exceptions import Nwp500Error
@@ -67,7 +70,10 @@ from nwp500.sim import (
     Scenario,
     Schedules,
     Settings,
+    default_params,
 )
+from nwp500.sim.codec import SCHEMA_VERSION, merge, scenario_to_document
+from nwp500.sim.params import params_from_document
 
 if TYPE_CHECKING:
     from nwp500.api_client import NavienAPIClient
@@ -85,6 +91,10 @@ T_co = TypeVar("T_co", covariant=True)
 
 #: How long a live source waits for the device's reply, seconds.
 DEFAULT_TIMEOUT = 10.0
+#: The horizon ``overlay`` gives a scenario that has none.
+DEFAULT_HORIZON = timedelta(hours=24)
+#: ``overlay``'s note when no part gives the parameters.
+DEFAULT_PARAMS_NOTE = "the tank size is unknown: using the 65 gal defaults"
 
 
 class LiveReadError(Nwp500Error):
@@ -358,3 +368,97 @@ async def compose(
     return Composed(
         scenario=Scenario(**parts), params=reading.params, heater=reading
     )
+
+
+@dataclass(frozen=True)
+class Built:
+    """A scenario ready to walk, with its parameters."""
+
+    scenario: Scenario
+    params: HeaterParams
+    #: What was assumed, for the user to see.
+    notes: tuple[str, ...] = ()
+
+
+def zone_name(name: str) -> str:
+    """``name``, when it is an IANA zone this machine knows; otherwise a
+    ``ValueError``."""
+    try:
+        ZoneInfo(name)
+    except ZoneInfoNotFoundError, ValueError:
+        raise ValueError(f"unknown time zone {name!r}") from None
+    return name
+
+
+def overlay(
+    live: Composed | None,
+    doc: Mapping[str, Any] | None = None,
+    *,
+    now: datetime,
+    tz: str | None = None,
+    params: HeaterParams | None = None,
+    replace: Mapping[str, Any] | None = None,
+    over: Mapping[str, Any] | None = None,
+) -> Built:
+    """The scenario document ``doc`` (``sim.codec``) laid over the
+    heater's live scenario (``live``, from ``compose``), as ``nwp-cli
+    simulate`` lays one: objects merge key by key, and any other value
+    replaces the one under it. Either may be None. Then each of
+    ``replace``'s keys replaces the scenario's, and ``over`` is laid on
+    as ``doc`` is.
+
+    The start is ``now`` and the horizon ``DEFAULT_HORIZON`` where none
+    of them gives one, and the time zone ``tz``. The parameters are
+    ``params``, then ``doc``'s, then the heater's, then the defaults
+    for a 65 gal tank, with a note. A ``ValueError`` when ``doc`` is not
+    a scenario document, a zone is unknown, there is no zone, or the
+    whole is not a scenario."""
+    data: dict[str, Any] = {}
+    if live is not None:
+        data = scenario_to_document(live.scenario)["scenario"]
+    if doc is not None:
+        if not isinstance(doc, Mapping):  # pyright: ignore[reportUnnecessaryIsInstance]
+            raise ValueError("a scenario document is an object")
+        version = doc.get("schema_version")
+        if version != SCHEMA_VERSION:
+            raise ValueError(f"unsupported scenario schema_version {version!r}")
+        scenario = doc.get("scenario")
+        if not isinstance(scenario, Mapping):
+            raise ValueError("a scenario document has a scenario object")
+        data = merge(data, cast(Mapping[str, Any], scenario))
+    if replace is not None:
+        data.update(replace)
+    if over is not None:
+        data = merge(data, over)
+    data.setdefault("start", now)
+    data.setdefault("horizon", DEFAULT_HORIZON)
+    if "tz" not in data:
+        if tz is None:
+            raise ValueError(
+                "the scenario has no time zone: give one (an IANA zone "
+                "such as America/Los_Angeles)"
+            )
+        data["tz"] = tz
+    if isinstance(data["tz"], str):
+        # The model's own check raises a KeyError for an unknown zone.
+        zone_name(data["tz"])
+    try:
+        built = Scenario.model_validate(data)
+    except ValueError as e:
+        raise ValueError(f"the inputs do not make a scenario: {e}") from None
+
+    notes: list[str] = []
+    doc_params = None if doc is None else doc.get("params")
+    if params is None and doc_params is not None:
+        try:
+            params = params_from_document(doc_params)
+        except ValueError as e:
+            raise ValueError(
+                f"the scenario's params is not a parameters document: {e}"
+            ) from None
+    if params is None and live is not None:
+        params = live.params
+    if params is None:
+        params = default_params()
+        notes.append(DEFAULT_PARAMS_NOTE)
+    return Built(built, params, tuple(notes))

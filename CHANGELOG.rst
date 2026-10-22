@@ -50,6 +50,13 @@ Added
   loop's flow readings within its runs, each run's first held from its
   start, as the fit takes them, and ``sim_adapters.run_flow`` gives runs
   at a flow.
+- **A scenario document over the live scenario** (#201).
+  ``sim_live.overlay`` lays a scenario document over the heater's
+  composed scenario, as ``nwp-cli simulate --live`` does, and the CLI
+  now calls it: objects merge key by key (``sim.codec.merge``) and any
+  other value replaces. The start, horizon and zone take defaults, and
+  the parameters come from the caller, then the document, then the
+  heater, then the defaults (``Built``).
 
 Fixed
 -----

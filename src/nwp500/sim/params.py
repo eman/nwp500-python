@@ -1199,8 +1199,11 @@ def params_from_document(doc: Mapping[str, Any]) -> HeaterParams:
     a ``ValueError``. Parts and fields this code does not know are left
     out (``unknown_fields`` names them): the code reading the document
     runs no rule that could use them. A schema other than
-    ``PARAMS_SCHEMA`` is a ``ValueError``.
+    ``PARAMS_SCHEMA`` is a ``ValueError``, and so is a ``doc`` that is
+    not an object.
     """
+    if not isinstance(doc, Mapping):  # pyright: ignore[reportUnnecessaryIsInstance]
+        raise ValueError("a parameters document is an object")
     if doc.get("schema") != PARAMS_SCHEMA:
         raise ValueError(
             f"not a {PARAMS_SCHEMA} document: schema {doc.get('schema')!r}"

@@ -32,6 +32,9 @@ from nwp500.sim.codec import (
     result_to_document,
     scenario_to_document,
 )
+from nwp500.sim.codec import (
+    merge as merge,
+)
 from nwp500.sim.engine import SimulationError
 from nwp500.sim.params import params_from_document
 
@@ -47,7 +50,7 @@ __license__ = "MIT"
 _logger = logging.getLogger(__name__)
 
 #: How far a run looks ahead when nothing else says.
-DEFAULT_HOURS = 24.0
+DEFAULT_HOURS = sim_live.DEFAULT_HORIZON / timedelta(hours=1)
 
 
 class InputError(ValueError):
@@ -69,23 +72,9 @@ def read_document(path: str | Path, what: str) -> dict[str, Any]:
 def zone_name(name: str) -> str:
     """``name``, when it is an IANA zone this machine knows."""
     try:
-        ZoneInfo(name)
-    except ZoneInfoNotFoundError, ValueError:
-        raise InputError(f"unknown time zone {name!r}") from None
-    return name
-
-
-def merge(base: Mapping[str, Any], over: Mapping[str, Any]) -> dict[str, Any]:
-    """``base`` with ``over`` laid on it: objects merge key by key; any
-    other value, a list included, replaces the one under it."""
-    out = dict(base)
-    for key, value in over.items():
-        under = out.get(key)
-        if isinstance(value, Mapping) and isinstance(under, Mapping):
-            out[key] = merge(under, value)  # pyright: ignore[reportUnknownArgumentType]
-        else:
-            out[key] = value
-    return out
+        return sim_live.zone_name(name)
+    except ValueError as e:
+        raise InputError(str(e)) from None
 
 
 def local_zone() -> str | None:
@@ -108,6 +97,16 @@ def local_zone() -> str | None:
             continue
         return name
     return None
+
+
+#: A scenario ready to walk, with its parameters.
+Built = sim_live.Built
+
+#: The library's notes, naming the command's options.
+_OPTION_NOTES = {
+    sim_live.DEFAULT_PARAMS_NOTE: "the tank size is unknown: using the 65 "
+    "gal defaults (give --params)",
+}
 
 
 @dataclass(frozen=True)
@@ -169,78 +168,48 @@ class Inputs:
         )
 
 
-@dataclass(frozen=True)
-class Built:
-    """A scenario ready to walk, with its parameters."""
-
-    scenario: sim.Scenario
-    params: sim.HeaterParams
-    #: What the driver assumed, for the user to see.
-    notes: tuple[str, ...] = ()
-
-
 def build(
     inputs: Inputs, live: sim_live.Composed | None, now: datetime
 ) -> Built:
     """The scenario: the device's parts (``live``), the scenario
-    document's laid over them, then the flags'. ``now`` is the start
-    when nothing gives one."""
-    data: dict[str, Any] = {}
-    if live is not None:
-        data = scenario_to_document(live.scenario)["scenario"]
-    if inputs.scenario is not None:
-        data = merge(data, inputs.scenario["scenario"])
+    document's laid over them (``sim_live.overlay``), then the flags'.
+    ``now`` is the start when nothing gives one."""
+    replace: dict[str, Any] = {}
     if inputs.start is not None:
-        data["start"] = inputs.start
-    data.setdefault("start", now)
+        replace["start"] = inputs.start
     if inputs.hours is not None:
-        data["horizon"] = timedelta(hours=inputs.hours)
-    data.setdefault("horizon", timedelta(hours=DEFAULT_HOURS))
+        replace["horizon"] = timedelta(hours=inputs.hours)
     if inputs.tz is not None:
-        data["tz"] = inputs.tz
-    elif "tz" not in data:
-        data["tz"] = inputs.zone()
-    elif isinstance(data["tz"], str):
-        # The model's own check raises a KeyError for an unknown zone.
-        zone_name(data["tz"])
+        replace["tz"] = inputs.tz
     if inputs.environment is not None:
-        data["environment"] = dict(inputs.environment)
-    if inputs.ambient is not None:
-        data["environment"] = {
-            **data.get("environment", {}),
-            "ambient_f": sa.to_sim_temperature(inputs.ambient),
-        }
-    if inputs.inlet is not None:
-        data["environment"] = {
-            **data.get("environment", {}),
-            "inlet_f": sa.to_sim_temperature(inputs.inlet),
-        }
+        replace["environment"] = dict(inputs.environment)
     if inputs.loads is not None:
-        data["loads"] = dict(inputs.loads)
+        replace["loads"] = dict(inputs.loads)
     if inputs.commands is not None:
-        data["commands"] = dict(inputs.commands)
-    try:
-        scenario = sim.Scenario.model_validate(data)
-    except ValueError as e:
-        raise InputError(f"the inputs do not make a scenario: {e}") from None
-
-    notes: list[str] = []
-    doc_params = (
-        None if inputs.scenario is None else inputs.scenario.get("params")
-    )
+        replace["commands"] = dict(inputs.commands)
+    environment: dict[str, float] = {}
+    if inputs.ambient is not None:
+        environment["ambient_f"] = sa.to_sim_temperature(inputs.ambient)
+    if inputs.inlet is not None:
+        environment["inlet_f"] = sa.to_sim_temperature(inputs.inlet)
+    params = None
     if inputs.params is not None:
         params = read_params(inputs.params, "--params")
-    elif doc_params is not None:
-        params = read_params(doc_params, "the scenario's params")
-    elif live is not None and live.params is not None:
-        params = live.params
-    else:
-        params = sim.default_params()
-        notes.append(
-            "the tank size is unknown: using the 65 gal defaults "
-            "(give --params)"
+    try:
+        built = sim_live.overlay(
+            live,
+            inputs.scenario,
+            now=now,
+            # A live scenario carries its zone.
+            tz=None if live is not None else inputs.zone(),
+            params=params,
+            replace=replace,
+            over={"environment": environment} if environment else None,
         )
-    return Built(scenario, params, tuple(notes))
+    except ValueError as e:
+        raise InputError(str(e)) from None
+    notes = tuple(_OPTION_NOTES.get(n, n) for n in built.notes)
+    return Built(built.scenario, built.params, notes)
 
 
 def read_params(doc: Any, what: str) -> sim.HeaterParams:
