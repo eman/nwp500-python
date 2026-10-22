@@ -1151,10 +1151,14 @@ def book_flow(
     before it, whichever is later; on a step no report reaches, the
     forward ``rate`` held ``meter.RATE_HOLD`` when it is over
     ``meter.DRAW_GPM``. Every report's volume is kept, however small or
-    brief (the book's own draw line decides what is a draw). ``dark``
-    spans the meter was unread: no step overlapping one is given, and a
-    report's interval leaves them out, so its volume lands where the
-    meter was read."""
+    brief (the book's own draw line decides what is a draw).
+
+    No step overlapping a ``dark`` span (the meter unread) is given.
+    A report's volume goes only to steps that are given: over the part
+    of its interval they cover, else to the nearest given step. Each
+    stretch of steps ends with a zero just after its last, so the book,
+    which holds a reading ``sim_adapters.FLOW_HOLD``, carries nothing
+    past it, while the gap after it stays unobserved."""
     step = meter.STEP
     start, end = start.astimezone(UTC), end.astimezone(UTC)
     if end < start:
@@ -1164,31 +1168,57 @@ def book_flow(
     n = math.ceil((end - first) / step) + 1
     if n <= 0:
         return []
+    spans = sorted(dark)
+
+    def cell(k: int) -> Span:
+        """Step ``k``'s interval: (its instant - step, its instant]."""
+        hi = first + k * step
+        return hi - step, hi
 
     def index(t: datetime) -> int:
-        """The step whose interval, (its instant - step, its instant],
-        holds ``t``."""
+        """The step whose interval holds ``t``."""
         return math.ceil((t - first) / step)
 
+    given = [
+        not any(x < cell(k)[1] and cell(k)[0] < y for x, y in spans)
+        for k in range(n)
+    ]
+    # The given steps as spans of time, joined where they meet.
+    open_spans: list[Span] = []
+    for k in range(n):
+        if given[k]:
+            lo, hi = cell(k)
+            if open_spans and open_spans[-1][1] == lo:
+                open_spans[-1] = (open_spans[-1][0], hi)
+            else:
+                open_spans.append((lo, hi))
     gal = [0.0] * n
     reached = [False] * n
-    spans = sorted(dark)
+
+    def nearest(t: datetime) -> int | None:
+        k = min(max(index(t), 0), n - 1)
+        after = next((j for j in range(k, n) if given[j]), None)
+        if after is not None:
+            return after
+        return next((j for j in range(k, -1, -1) if given[j]), None)
+
     prev: datetime | None = None
     for t, v in sorted((t.astimezone(UTC), v) for t, v in volume):
         a = t - meter.WINDOW if prev is None else max(prev, t - meter.WINDOW)
         prev = t
-        parts = _without([(a, t)], spans)
+        parts = [
+            (max(a, x), min(t, y)) for x, y in open_spans if x < t and a < y
+        ]
         length = sum((y - x).total_seconds() for x, y in parts)
         if length <= 0:
-            k = index(t)
-            if 0 <= k < n:
+            k = nearest(t)
+            if k is not None:
                 gal[k] += v
                 reached[k] = True
             continue
         for x, y in parts:
             for k in range(max(index(x), 0), min(index(y), n - 1) + 1):
-                hi = first + k * step
-                lo = hi - step
+                lo, hi = cell(k)
                 overlap = (min(hi, y) - max(lo, x)).total_seconds()
                 if overlap > 0:
                     gal[k] += v * overlap / length
@@ -1198,35 +1228,19 @@ def book_flow(
     r = -1
     per_min = step.total_seconds() / 60.0
     for k in range(n):
-        hi = first + k * step
-        lo = hi - step
-        if any(x < hi and lo < y for x, y in spans):
+        if not given[k]:
             continue
+        hi = cell(k)[1]
         if reached[k]:
             out.append((hi, abs(gal[k]) / per_min))
-            continue
-        while r + 1 < len(rates) and rates[r + 1][0] <= hi:
-            r += 1
-        held = r >= 0 and hi - rates[r][0] <= meter.RATE_HOLD
-        forward = rates[r][1] if held else 0.0
-        out.append((hi, forward if forward > meter.DRAW_GPM else 0.0))
-    return out
-
-
-def _without(spans: list[Span], cut: Sequence[Span]) -> list[Span]:
-    """``spans`` less ``cut``'s."""
-    out = spans
-    for c0, c1 in cut:
-        nxt: list[Span] = []
-        for x, y in out:
-            if c1 <= x or y <= c0:
-                nxt.append((x, y))
-                continue
-            if x < c0:
-                nxt.append((x, c0))
-            if c1 < y:
-                nxt.append((c1, y))
-        out = nxt
+        else:
+            while r + 1 < len(rates) and rates[r + 1][0] <= hi:
+                r += 1
+            held = r >= 0 and hi - rates[r][0] <= meter.RATE_HOLD
+            forward = rates[r][1] if held else 0.0
+            out.append((hi, forward if forward > meter.DRAW_GPM else 0.0))
+        if (k + 1 == n or not given[k + 1]) and out[-1][1] > 0:
+            out.append((hi + timedelta(microseconds=1), 0.0))
     return out
 
 

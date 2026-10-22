@@ -1531,7 +1531,9 @@ class TestTheWaterUse:
         assert use.flow
         # No step's interval, (t - 10 s, t], reaches into it.
         step = timedelta(seconds=10)
-        assert not any(down[0] < t and t - step < down[1] for t, _ in use.flow)
+        assert not any(
+            v > 0 and down[0] < t and t - step < down[1] for t, v in use.flow
+        )
         assert any("left out of the flow" in n for n in use.notes)
 
     async def test_a_pump_outage_leaves_the_runs_unknown(self) -> None:
@@ -1784,7 +1786,9 @@ async def test_a_report_before_an_outage_keeps_its_volume() -> None:
     assert sum(v for _, v in use.flow) * step / timedelta(minutes=1) == (
         pytest.approx(1.0)
     )
-    assert not any(down[0] < t and t - step < down[1] for t, _ in use.flow)
+    assert not any(
+        v > 0 and down[0] < t and t - step < down[1] for t, v in use.flow
+    )
 
 
 def test_the_book_flow_keeps_every_reports_volume() -> None:
@@ -1800,3 +1804,58 @@ def test_the_book_flow_keeps_every_reports_volume() -> None:
     rate = [(start + timedelta(minutes=40), 2.0)]
     flow = ha.book_flow([], rate, start, NOW)
     assert max(v for _, v in flow) == pytest.approx(2.0)
+
+
+def test_a_first_report_after_the_baseline_keeps_its_volume() -> None:
+    """A rise 30 s after the start: its interval reaches before the
+    grid, and its gallon all lands on it."""
+    start = datetime(2026, 10, 18, 12, tzinfo=UTC)
+    flow = ha.book_flow([(start + timedelta(seconds=30), 1.0)], [], start, NOW)
+    assert sum(v for _, v in flow) * (10 / 60) == pytest.approx(1.0)
+
+
+def test_an_off_grid_outage_keeps_the_volume_before_it() -> None:
+    """1 gal reported at 12:02:04, an outage from 12:02:05: the step
+    the outage touches isn't given, and the gallon lands on the steps
+    before it."""
+    base = datetime(2026, 10, 18, 12, tzinfo=UTC)
+    reports = [
+        (base + timedelta(minutes=2, seconds=1), 0.0),
+        (base + timedelta(minutes=2, seconds=4), 1.0),
+    ]
+    down = (
+        base + timedelta(minutes=2, seconds=5),
+        base + timedelta(minutes=4, seconds=5),
+    )
+    flow = ha.book_flow(reports, [], base, base + timedelta(minutes=10), [down])
+    assert sum(v for _, v in flow) * (10 / 60) == pytest.approx(1.0)
+    assert not any(
+        v > 0 and down[0] < t and t - timedelta(seconds=10) < down[1]
+        for t, v in flow
+    )
+
+
+def test_the_book_takes_a_final_report_once() -> None:
+    """The book holds a reading a minute: the flow ends with a zero
+    just after its last report, so a final 1-gal report is booked as
+    1 gal, not more."""
+    from nwp500 import sim_adapters as sa
+    from nwp500.sim import site_example_params
+
+    start = datetime(2026, 10, 18, 12, tzinfo=UTC)
+    last = start + timedelta(minutes=30)
+    flow = ha.book_flow(
+        [(start, 0.0), (last - timedelta(seconds=30), 0.0), (last, 1.0)],
+        [],
+        start,
+        last,
+    )
+    steps = sa.book_steps_from_changes(
+        sa.ChangeRows(upper_f=[(start, 120.0)], lower_f=[(start, 120.0)]),
+        start=start,
+        end=last + timedelta(minutes=2),
+        flow=flow,
+        params=site_example_params(),
+    )
+    booked = sum(s.flow_gpm * s.seconds / 60 for s in steps)
+    assert booked == pytest.approx(1.0)
