@@ -1245,8 +1245,8 @@ def snapshots(
         first = int(np.argmax(lead)) if lead.any() else len(lead)
         if (
             0 < first < len(lead)
-            and index[first] > start - DRAW_LEAD
-            and interval_water[first - 1]
+            and bool(index[first] > start - DRAW_LEAD)
+            and bool(interval_water[first - 1])
         ):
             draw_free = False
         for at in _snapshots(start, end):
@@ -3752,7 +3752,10 @@ def element_power(record: Record, off_points: pd.DataFrame) -> pd.DataFrame:
             if s["which"] == "upper"
             else record.upper_element
         )
-        if any((v := _asof_row(other, t)) is not None and v > 0 for t in clock):
+        if any(
+            (v := _asof_row(other, t)) is not None and bool(v > 0)
+            for t in clock
+        ):
             continue
         inside = [(t, v) for t, v in w if on <= t < off]
         if len(inside) < 2:
@@ -3886,7 +3889,10 @@ def element_runs(
                 "start": index[0],
                 "mode": int(mode),
                 "which": col["which"][0],
-                "elapsed_min": (index[-1] - index[0]).total_seconds() / 60.0,
+                "elapsed_min": (
+                    pd.Timestamp(index[-1]) - pd.Timestamp(index[0])
+                ).total_seconds()
+                / 60.0,
                 "rise": col[zone][-1] - col[zone][0],
                 "start_probe": col[zone][0],
                 "setpoint": col["setpoint"][0],

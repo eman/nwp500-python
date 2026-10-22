@@ -36,7 +36,6 @@ This module needs the ``sim`` extra.
 
 import itertools
 import math
-from bisect import bisect_left
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, replace
 from dataclasses import fields as dataclass_fields
@@ -1342,21 +1341,23 @@ def fit_book(
         )
 
     flow_rows = finite(flow)
-    loop_rows = finite(circulation_flow)
     run_spans = sorted((a.astimezone(UTC), b.astimezone(UTC)) for a, b in runs)
-    # Each run's flow is its own readings, its first from its start; one
-    # without any is booked at ``_UNPRICED_GPM``, and isn't priced.
-    # Readings outside the runs are none of theirs.
-    loop_times = [t for t, _ in loop_rows]
-    priced: list[bool] = []
-    run_rows: list[tuple[datetime, float]] = []
-    for a, b in run_spans:
-        inside = loop_rows[
-            bisect_left(loop_times, a) : bisect_left(loop_times, b)
+    # Each run's flow is its own readings (``sim_adapters.run_readings``,
+    # as booking takes them); one without any is booked at
+    # ``_UNPRICED_GPM``, and isn't priced.
+    run_rows = sa.run_readings(run_spans, circulation_flow)
+    read_from = {t for t, _ in run_rows}
+    priced = [a in read_from for a, _ in run_spans]
+    run_rows = sorted(
+        [
+            *run_rows,
+            *(
+                (a, _UNPRICED_GPM)
+                for (a, _), ok in zip(run_spans, priced, strict=True)
+                if not ok
+            ),
         ]
-        priced.append(bool(inside))
-        run_rows.append((a, inside[0][1] if inside else _UNPRICED_GPM))
-        run_rows.extend(inside)
+    )
     inlets, airs = list(inlet), list(air)
     seen_n = {"pairs": 0, "run_pairs": 0}
 
@@ -1535,23 +1536,6 @@ def fit_book(
             x[:, free],
             [bounds[j] for j in free],
         )
-        on_bound = [
-            j
-            for j in free
-            if min(got[j] - bounds[j][0], bounds[j][1] - got[j])
-            <= 1e-6 * (bounds[j][1] - bounds[j][0])
-        ]
-        named = ", ".join(
-            f"{cal.BOOK_TERMS[j]} {got[j]:.4g} ({bounds[j][0]:g} to "
-            f"{bounds[j][1]:g})"
-            for j in on_bound
-        )
-        if on_bound == [3]:
-            return f"the loop's loss on its bound, not a fit: {named}"
-        if on_bound:
-            return keep(because(f"on its bound, not a fit: {named}"))
-        kh, xh = system(held)
-        refit_err = float(np.mean(np.abs(kh + xh @ got)))
         by_book: dict[int, list[tuple[int, int]]] = {}
         for _, i, pair, *_ in held:
             by_book.setdefault(i, []).append(pair)
@@ -1567,6 +1551,23 @@ def fit_book(
                 )
             )
         )
+        on_bound = [
+            j
+            for j in free
+            if min(got[j] - bounds[j][0], bounds[j][1] - got[j])
+            <= 1e-6 * (bounds[j][1] - bounds[j][0])
+        ]
+        named = ", ".join(
+            f"{cal.BOOK_TERMS[j]} {got[j]:.4g} ({bounds[j][0]:g} to "
+            f"{bounds[j][1]:g})"
+            for j in on_bound
+        )
+        if on_bound == [3]:
+            return f"the loop's loss on its bound, not a fit: {named}"
+        if on_bound:
+            return keep(because(f"on its bound, not a fit: {named}"), base_err)
+        kh, xh = system(held)
+        refit_err = float(np.mean(np.abs(kh + xh @ got)))
         versus = (
             f"held out, {refit_err:.0f} BTU against the base's {base_err:.0f}"
         )

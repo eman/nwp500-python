@@ -42,6 +42,7 @@ Example::
     result = sim.simulate(scenario, sa.params(feature))
 """
 
+import bisect
 import itertools
 import math
 from array import array
@@ -1294,6 +1295,32 @@ def run_flow(
         while t < end:
             out.append((t, flow_gpm))
             t += step
+    return out
+
+
+def run_readings(
+    runs: Iterable[tuple[datetime, datetime]],
+    readings: Iterable[tuple[datetime, float | None]],
+) -> list[tuple[datetime, float]]:
+    """The loop's flow ``readings`` (gal/min) within ``runs``, for
+    ``book_from_changes``'s ``circulation_flow``: each run's own, its
+    first held from the run's start. A reading outside every run (a
+    pump read as 0 while off) is none of theirs, and a missing one
+    (None, NaN) is none; a run with no reading has none here."""
+    rows = sorted(
+        (t.astimezone(UTC), float(v))
+        for t, v in readings
+        if v is not None and math.isfinite(v)
+    )
+    times = [t for t, _ in rows]
+    out: list[tuple[datetime, float]] = []
+    for a, b in sorted((a.astimezone(UTC), b.astimezone(UTC)) for a, b in runs):
+        inside = rows[
+            bisect.bisect_left(times, a) : bisect.bisect_left(times, b)
+        ]
+        if inside:
+            out.append((a, inside[0][1]))
+            out.extend(inside)
     return out
 
 

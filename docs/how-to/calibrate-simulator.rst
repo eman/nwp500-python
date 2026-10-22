@@ -437,7 +437,9 @@ Assistant's ``purge_keep_days`` to keep them.
 Book with the same inputs. Runs are priced with the loop's loss, in a
 ``CirculationParams`` of your installation's with ``meter_share`` 0,
 since the draws hold none of the loop's water; without a loss, they
-can't be booked:
+can't be booked. ``sa.run_readings`` gives the book each run's flow as
+the fit takes it: its own readings, the first from its start, and none
+read outside the runs.
 
 .. code-block:: python
 
@@ -454,7 +456,8 @@ can't be booked:
            )
        book = sa.book_from_changes(
            history.rows, history.observed, replace(params, circulation=loop),
-           at=end, flow=draws, circulation=runs, circulation_flow=loop_flow,
+           at=end, flow=draws, circulation=runs,
+           circulation_flow=sa.run_readings(runs, loop_flow),
            air=record.air or (),
        )
 

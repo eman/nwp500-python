@@ -55,8 +55,10 @@ Added
   refit books the held-out latest fifth no worse, and unless a term
   reaches its bound (``BookTermsFit``). ``sim.calibration.fit_terms_l1``
   fits the terms exactly on ``RecordedBook.pair_terms``, within
-  ``BOOK_TERM_BOUNDS``. ``sim_adapters.run_flow`` gives runs at a flow
-  as the book's ``circulation_flow``.
+  ``BOOK_TERM_BOUNDS``. ``sim_adapters.run_readings`` gives the book a
+  loop's flow readings within its runs, each run's first held from its
+  start, as the fit takes them, and ``sim_adapters.run_flow`` gives runs
+  at a flow.
 
 Fixed
 -----

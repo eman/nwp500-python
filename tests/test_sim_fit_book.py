@@ -236,6 +236,9 @@ class TestTheBook:
         assert got.kept == "base"
         assert "ua_btu_per_h_f" in got.why
         assert "bound" in got.why
+        # The base's error on the held-out pairs.
+        assert got.error_btu is not None
+        assert math.isfinite(got.error_btu)
 
     def test_no_meter_keeps_the_base(self) -> None:
         h = history(NO_BASE, 16, 150.0)
@@ -649,3 +652,44 @@ def test_readings_outside_the_runs_are_none_of_theirs() -> None:
     got = fit(SITE, h | {"circulation_flow": zeros})
     assert got == fit(SITE, h | {"circulation_flow": []})
     assert got.run_pairs == 0
+
+
+def test_booking_takes_the_runs_flow_as_the_fit_does() -> None:
+    """Runs at 2 and 1.5 gal/min, each first read halfway through it,
+    with a 0 read before each: through ``run_readings`` the book takes
+    each run at its own flow from its start, as if read all through
+    it."""
+    a = T0 + timedelta(minutes=30)
+    runs = [
+        (a, a + timedelta(minutes=15)),
+        (a + timedelta(minutes=60), a + timedelta(minutes=75)),
+    ]
+    gpm = [2.0, 1.5]
+    late: list[tuple[datetime, float | None]] = []
+    for (x, y), v in zip(runs, gpm, strict=True):
+        late += [(x - timedelta(seconds=5), 0.0), (x + (y - x) / 2, v)]
+    full = [
+        r
+        for (x, y), v in zip(runs, gpm, strict=True)
+        for r in sa.run_flow([(x, y)], v)
+    ]
+
+    def book(flow: list[tuple[datetime, float]]) -> list[Any]:
+        return sa.book_steps_from_changes(
+            sa.ChangeRows(upper_f=[(T0, 120.0)], lower_f=[(T0, 120.0)]),
+            start=T0,
+            end=T0 + timedelta(hours=2),
+            flow=[(T0, 0.0)],
+            circulation=runs,
+            circulation_flow=flow,
+            params=SITE,
+        )
+
+    assert book(sa.run_readings(runs, late)) == book(full)
+    per_min = STEP.total_seconds() / 60
+    gal = sum(
+        s.circulation_gpm * per_min
+        for s in book(sa.run_readings(runs, late))
+        if s.circulating
+    )
+    assert gal == pytest.approx(15 * 2.0 + 15 * 1.5)
