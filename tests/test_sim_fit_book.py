@@ -5,6 +5,7 @@ The histories are walked by the book's own heat balance, so the terms
 they were made with are the ones a fit should find.
 """
 
+import math
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -73,6 +74,7 @@ def history(
     air_f: float | None = None,
     tied: bool = False,
     run_every: int = 1,
+    runs_in: int | None = None,
 ) -> dict[str, Any]:
     """A history of ``cycles`` six-hour cycles walked by the book's own
     balance (``truth``, else ``params``' book), each run taking ``loss``
@@ -111,7 +113,11 @@ def history(
         heating = RECOVERY[0] <= minute < recovers_to(cycle) or (
             cycle == 0 and first[0] <= minute < first[1]
         )
-        running = RUN[0] <= minute < runs_to(cycle) and cycle % run_every == 0
+        running = (
+            RUN[0] <= minute < runs_to(cycle)
+            and cycle % run_every == 0
+            and (runs_in is None or cycle < runs_in)
+        )
         # A tap open for the run's first minute, and one for the minute
         # after it.
         tap = tap_gpm if minute == RUN[0] else 0.0
@@ -566,4 +572,23 @@ def test_a_late_probe_starts_the_book_where_both_read() -> None:
     got = fit(NO_BASE, h | {"rows": rows})
     assert got.circulation is not None, got.why
     assert got.circulation.loss_btu_per_gal == pytest.approx(150.0, abs=1.0)
+    # Readings before then that are none: the same.
+    unread: list[Any] = [(T0, None), (T0 + timedelta(hours=1), math.nan)]
+    rows = replace(rows, lower_f=[*unread, *rows.lower_f])
+    got = fit(NO_BASE, h | {"rows": rows})
+    assert got.circulation is not None, got.why
+    assert got.circulation.loss_btu_per_gal == pytest.approx(150.0, abs=1.0)
     assert_book(got.book, SITE.book)
+
+
+def test_runs_without_terms_still_break_the_quiet() -> None:
+    """Runs in the first 9 of 24 cycles, unseen by the meter and too
+    few to read the loop by, with no base: each run still breaks the
+    quiet before it, so every pair across one has a run in it and is
+    left out, and the book is refitted on the 15 without."""
+    h = history(NO_BASE, 24, 150.0, meter_sees=False, runs_in=9, truth=OTHER)
+    got = fit(NO_BASE, h)
+    assert got.circulation is None
+    assert (got.pairs, got.run_pairs) == (15, 0)
+    assert got.kept == "refit", got.why
+    assert_book(got.book, OTHER)

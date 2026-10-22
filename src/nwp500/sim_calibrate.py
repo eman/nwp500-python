@@ -1467,7 +1467,14 @@ def fit_book(
         segments.append((at, heard[-1]))
     # The book has no step before both probes read: each span starts
     # there, so its steps' instants are its own.
-    firsts = [min(t for t, _ in r) for r in (rows.upper_f, rows.lower_f) if r]
+    firsts = [
+        min(read)
+        for read in (
+            [t for t, v in r if v is not None and math.isfinite(v)]
+            for r in (rows.upper_f, rows.lower_f)
+        )
+        if read
+    ]
     probed = max(firsts) if len(firsts) == 2 else heard[-1]
     segments = [(max(a, probed), b) for a, b in segments]
     segments = [
@@ -1476,7 +1483,19 @@ def fit_book(
         if (b - a).total_seconds() >= _MIN_SEGMENT_H * 3600
     ]
 
-    def books(terms: CirculationParams | None) -> list[cal.RecordedBook]:
+    # Runs without terms to price them still disturb the tank: booked at
+    # a nominal flow the meter doesn't see, with no loss, they break the
+    # quiet anchors, and their pairs are left out.
+    unpriced = CirculationParams(
+        displaced_gal=SITE_CIRCULATION.displaced_gal,
+        flow_gpm=NOMINAL_CIRCULATION_GPM,
+        loss_btu_per_gal=0.0,
+        meter_share=0.0,
+        run_gap_min=SITE_CIRCULATION.run_gap_min,
+    )
+
+    def books(given: CirculationParams | None) -> list[cal.RecordedBook]:
+        terms = given if given is not None or not run_spans else unpriced
         with_terms = replace(params, circulation=terms)
         return [
             cal.RecordedBook(
