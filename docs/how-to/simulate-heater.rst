@@ -843,9 +843,11 @@ with the instants the heater was heard from:
        history.observed,
        params,
        at=now,
-       flow=meter_flow,
+       flow=meter_gpm,        # gal/min, whatever the preferred units
    )
 
+Like the history's rows, its ``flow`` and ``circulation_flow`` are
+gal/min and its ``inlet`` and ``air`` °F, whatever the preferred units.
 A span the heater wasn't heard from (an outage, or a silence much
 longer than its usual reporting) breaks the book: it is walked only
 from an anchor after the last one, and is None while the heater isn't

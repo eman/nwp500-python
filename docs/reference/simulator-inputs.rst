@@ -522,7 +522,8 @@ tank over the cold water of a recent draw. Start one only from what you know:
    * - ``sim_adapters.book_from_changes(rows, observed, params, at=...,
        flow=...)``
      - The same, from the heater's values' changes (``ChangeRows``) and
-       the instants it was heard from, as Home Assistant records them.
+       the instants it was heard from, as Home Assistant records them,
+       with the flows in gal/min and the temperatures in °F.
        Only an anchor after the last span the heater wasn't heard from
        counts.
    * - A ``Booked`` from your own record

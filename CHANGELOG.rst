@@ -22,7 +22,9 @@ Added
   ``ChangeRows`` and the instants the heater was heard from (a
   ``HeaterHistory``'s ``rows`` and ``observed``, as
   ``calibrate_changes`` takes them), with the same steps, anchor search
-  and silent-meter refusal as ``book_from_history``. A span the heater
+  and silent-meter refusal as ``book_from_history``. Like the rows, its
+  flows are gal/min and its temperatures °F, whatever the preferred
+  units. A span the heater
   wasn't heard from (a silence longer than ``max_gap`` of the heard
   instants, or an outage) breaks the book: it is read only from after
   the last one, and is None while the heater isn't heard at ``at``.

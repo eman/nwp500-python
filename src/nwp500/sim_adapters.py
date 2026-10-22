@@ -1350,6 +1350,7 @@ def book_steps_from_history(
         inlet=inlet,
         air=air,
         params=params,
+        preferred=True,
     )
 
 
@@ -1367,8 +1368,10 @@ def book_steps_from_changes(
 ) -> list[BookStep]:
     """``book_steps_from_history`` from a heater's values' changes
     (``ChangeRows``) instead of its statuses: each value held until its
-    next change. Without a compressor flag, the heat source says when
-    the compressor runs, and it adds to the elements' flags, as in
+    next change. Like the rows, ``flow`` and ``circulation_flow`` are
+    gal/min and ``inlet`` and ``air`` °F, whatever the preferred units.
+    Without a compressor flag, the heat source says when the compressor
+    runs, and it adds to the elements' flags, as in
     ``change_history``. Whether the heater was heard from over the span
     is the caller's (``book_from_changes``)."""
     grid = _book_grid(start, end)
@@ -1419,6 +1422,7 @@ def book_steps_from_changes(
         inlet=inlet,
         air=air,
         params=params,
+        preferred=False,
     )
 
 
@@ -1436,18 +1440,23 @@ def _book_steps_on(
     inlet: Iterable[tuple[datetime, float]],
     air: Iterable[tuple[datetime, float]],
     params: HeaterParams | None,
+    preferred: bool,
 ) -> list[BookStep]:
     """The book's steps on ``grid``: ``heater``'s columns with the
     meter, the circulation, the inlet and the air
-    (``book_steps_from_history``)."""
+    (``book_steps_from_history``), in the preferred units, or with
+    ``preferred`` False the simulator's (°F, gal/min)."""
     p = (params if params is not None else default_params()).book_terms()
     terms = None if params is None else params.circulation
 
     def series(
-        rows: Iterable[tuple[datetime, float]], to: Any
+        rows: Iterable[tuple[datetime, float]], to: Callable[[float], float]
     ) -> list[tuple[datetime, float]]:
         return sorted(
-            ((t.astimezone(UTC), to(v)) for t, v in _finite(rows)),
+            (
+                (t.astimezone(UTC), to(v) if preferred else v)
+                for t, v in _finite(rows)
+            ),
             key=lambda r: r[0],
         )
 
@@ -1571,7 +1580,9 @@ def book_from_changes(
     from, as ``sim_calibrate.calibrate_changes`` takes them
     (``sim_home_assistant.read_heater_history`` reads both from Home
     Assistant). The same anchor search, and the same refusal of a
-    silent meter.
+    silent meter. Like the rows and the Home Assistant readers'
+    (``read_water_use``), ``flow`` and ``circulation_flow`` are gal/min
+    and ``inlet`` and ``air`` °F, whatever the preferred units.
 
     A value that holds writes no change, so only ``observed`` says the
     heater was heard: a silence between those instants longer than

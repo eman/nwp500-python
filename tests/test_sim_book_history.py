@@ -21,6 +21,7 @@ from nwp500.models import DeviceStatus
 from nwp500.sim import site_example_params
 from nwp500.sim.book import Step, book_steps, house_gpm
 from nwp500.sim.params import BookParams, CirculationParams
+from nwp500.unit_system import reset_unit_system, set_unit_system
 
 T0 = datetime(2026, 10, 5, tzinfo=UTC)
 P = BookParams()
@@ -311,6 +312,28 @@ class TestFromTheChanges:
         assert want is not None and got is not None
         assert got.heat_btu == pytest.approx(want.heat_btu)
         assert got.anchor_age_h == pytest.approx(want.anchor_age_h)
+
+    def test_its_inputs_are_the_simulators_units(
+        self, heater: Callable[..., list[Any]]
+    ) -> None:
+        """gal/min and °F whatever the preferred units: a metric
+        preference books the same from the same inputs."""
+        p = site_example_params()
+        rows, observed = as_changes(heater(20, recovery_at=4))
+        flow = with_a_draw(meter(20), 2.0)
+        air = [(T0 - timedelta(hours=20), 60.0)]
+        want = sa.book_from_changes(
+            rows, observed, p, at=T0, flow=flow, air=air
+        )
+        set_unit_system("metric")
+        try:
+            got = sa.book_from_changes(
+                rows, observed, p, at=T0, flow=flow, air=air
+            )
+        finally:
+            reset_unit_system()
+        assert want is not None and got is not None
+        assert got.heat_btu == pytest.approx(want.heat_btu)
 
     def test_the_heat_source_stands_in_for_the_compressor(
         self, heater: Callable[..., list[Any]]
