@@ -3749,7 +3749,7 @@ def element_power(record: Record, off_points: pd.DataFrame) -> pd.DataFrame:
         ]
         other = (
             record.lower_element
-            if s["which"] == "upper"
+            if str(s["which"]) == "upper"
             else record.upper_element
         )
         if any(
@@ -3890,7 +3890,7 @@ def element_runs(
                 "mode": int(mode),
                 "which": col["which"][0],
                 "elapsed_min": (
-                    pd.Timestamp(index[-1]) - pd.Timestamp(index[0])
+                    cast(pd.Timestamp, index[-1]) - cast(pd.Timestamp, index[0])
                 ).total_seconds()
                 / 60.0,
                 "rise": col[zone][-1] - col[zone][0],
