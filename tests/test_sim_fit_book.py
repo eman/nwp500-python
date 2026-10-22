@@ -701,3 +701,49 @@ def test_a_probe_gap_mixing_zoned_and_naive_instants() -> None:
         T0 + timedelta(hours=2),
     )
     assert got == [(a, a + timedelta(minutes=5))]
+
+
+def test_the_fits_balance_is_the_books() -> None:
+    """With an inlet of 50 °F, off the book's 70 °F reference, and a
+    tap open in each run: each pair's error is the book's own heat
+    (``step_heat_btu``) between its anchors less the probes'."""
+    from nwp500.sim import calibration as cal
+    from nwp500.sim.book import step_heat_btu
+
+    h = history(SITE, 6, 150.0, tap_gpm=2.0)
+    terms = SITE.circulation
+    assert terms is not None
+    steps = sa.book_steps_from_changes(
+        h["rows"],
+        start=T0,
+        end=h["observed"][-1],
+        flow=h["flow"],
+        circulation=h["runs"],
+        circulation_flow=sa.run_flow(h["runs"], terms.flow_gpm),
+        inlet=[(T0, 50.0)],
+        air=h["air"],
+        params=SITE,
+    )
+    p = replace(SITE.book_terms(), element_w=0.0)
+    book = cal.RecordedBook(steps, p, terms, start=T0)
+    pairs = book.reanchors(p.max_anchor_age_h)
+    assert pairs
+    assert any(book.draw[a0:a1].sum() > 0 for a0, a1 in pairs)
+    heat = book.probe_heat(p)
+    want = [
+        heat[a0]
+        + sum(step_heat_btu(s, p, terms) for s in steps[a0:a1])
+        - heat[a1]
+        for a0, a1 in pairs
+    ]
+    assert book.errors(p, terms.loss_btu_per_gal, pairs) == pytest.approx(want)
+    k, x = book.pair_terms(p, pairs)
+    got = k + x @ np.array(
+        [
+            p.hp_btu_per_h,
+            p.hp_btu_per_h_per_f,
+            p.ua_btu_per_h_f,
+            terms.loss_btu_per_gal,
+        ]
+    )
+    assert got == pytest.approx(want)

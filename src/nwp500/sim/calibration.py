@@ -2163,8 +2163,8 @@ class RecordedBook:
     contiguous ``sim_adapters.BOOK_GRID_S`` grid. Its anchors are the
     quiet ones only (a full tank, nothing heating, after a clean
     recovery): a recovery ending mid-draw is no place to check the book
-    against the probes. Draws are priced at the book's reference, the
-    inlet assumed rather than fitted."""
+    against the probes. Draws are priced against each step's inlet, as
+    the book prices them (``book.step_heat_btu``)."""
 
     def __init__(
         self,
@@ -2184,6 +2184,7 @@ class RecordedBook:
         self.u = np.array([s.upper_f for s in self.steps])
         self.l = np.array([s.lower_f for s in self.steps])
         self.air = np.array([s.ambient_f for s in self.steps])
+        self.inlet = np.array([s.inlet_f for s in self.steps])
         house = np.array([house_gpm(s, circulation) for s in self.steps])
         self.draw = np.where(house > p.draw_gpm, house * per_step, 0.0)
         self.circulated = np.array(
@@ -2227,7 +2228,7 @@ class RecordedBook:
             + self.el * p.element_w * BTU_PER_WH_BOOK * h
             - self.draw
             * WATER_BTU_PER_GAL_F
-            * np.clip(delivered - p.reference_f, 0, None)
+            * np.clip(delivered - self.inlet, 0, None)
             - loss_btu_per_gal * self.circulated
             - p.ua_btu_per_h_f
             * np.clip((self.u + self.l) / 2 - self.air, 0, None)
@@ -2290,7 +2291,7 @@ class RecordedBook:
         fixed = self.el * p.element_w * BTU_PER_WH_BOOK * h - (
             self.draw
             * WATER_BTU_PER_GAL_F
-            * np.clip(delivered - p.reference_f, 0, None)
+            * np.clip(delivered - self.inlet, 0, None)
         )
         columns = [
             self.comp * h,

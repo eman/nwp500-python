@@ -72,6 +72,10 @@ Fixed
 
 Changed
 -------
+- ``sim.calibration.RecordedBook`` prices a draw against each step's
+  inlet, as the heat book does (``book.step_heat_btu``), where it priced
+  it against the book's reference. Without an inlet the steps take
+  ``inlet_default_f``, the reference by default, and nothing changes.
 - ``max_gap``, ``GAP_SAMPLES`` and ``MIN_GAP`` are defined in
   ``sim_adapters`` and documented there. ``sim_calibrate`` still exports
   them.
