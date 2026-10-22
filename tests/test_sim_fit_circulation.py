@@ -46,6 +46,7 @@ def history(
     tap_gpm: float = 0.0,
     draw_at_h: float | None = None,
     reported: bool = False,
+    after_gpm: float = 0.0,
 ) -> dict[str, Any]:
     """A history of ``cycles`` six-hour cycles walked by the book's own
     balance, each run taking ``loss`` per gallon (``late_loss`` from
@@ -70,8 +71,11 @@ def history(
             cycle == 0 and first[0] <= minute < first[1]
         )
         running = RUN[0] <= minute < RUN[1]
-        # A tap open for the run's first minute.
+        # A tap open for the run's first minute, and one for the minute
+        # after it.
         tap = tap_gpm if minute == RUN[0] else 0.0
+        if minute == RUN[1]:
+            tap += after_gpm
         if draw_at_h is not None and 0 <= (i * 10 / 3600 - draw_at_h) < 5 / 60:
             # A five-minute draw at 2 gal/min.
             tap = 2.0
@@ -114,22 +118,22 @@ def history(
 
 def reports(flow: list[tuple[datetime, float]]) -> list[tuple[datetime, float]]:
     """``flow`` as a meter reporting its volume every 30 s, 15 s off the
-    minute, each report's volume spread over the 30 s it closes: a run's
-    water reaches into the reports either side of it."""
-    out: list[tuple[datetime, float]] = []
-    start = flow[0][0] + timedelta(seconds=15)
-    per_step = sa.BOOK_GRID_S / 60.0
-    i = 0
-    t = start
-    while i < len(flow):
-        end = t + timedelta(seconds=30)
-        gal = 0.0
-        while i < len(flow) and flow[i][0] < end:
-            gal += flow[i][1] * per_step
-            i += 1
-        out.append((t, gal / 0.5))
-        t = end
-    return out
+    minute, each report's volume spread evenly back over the 30 s it
+    closes, in the book's 10 s steps (as ``read_water_use``'s
+    ``book_flow`` does): a run's water reaches into the steps either
+    side of it."""
+    # The flow in 5 s halves of each step, each report closing six.
+    halves = [v for _, v in flow for _ in range(2)]
+    spread = [0.0] * len(halves)
+    for end in range(3, len(halves) + 1, 6):
+        lo = max(end - 6, 0)
+        mean = sum(halves[lo:end]) / 6
+        for i in range(lo, end):
+            spread[i] = mean
+    return [
+        (t, (spread[2 * i] + spread[2 * i + 1]) / 2)
+        for i, (t, _) in enumerate(flow)
+    ]
 
 
 def fit(
@@ -310,4 +314,15 @@ class TestFitCirculation:
             meter_lag=timedelta(0),
         )
         assert unlagged.params is not None
-        assert unlagged.params.loss_btu_per_gal < 145.0
+        assert unlagged.params.loss_btu_per_gal < 147.0
+
+    def test_a_tap_just_after_a_run_keeps_its_water(self) -> None:
+        """A 2 gal/min tap for the minute after each run, on a meter
+        reporting volumes: only the run's own water past its edge is
+        circulation, and the tap is booked as a draw. The report over the
+        edge spreads 0.04 gal of the tap into the run's last step under
+        the draw line, which the book can't see: about 1 BTU/gal."""
+        h = history(NO_BASE, 16, 150.0, reported=True, after_gpm=2.0)
+        got = fit(NO_BASE, h)
+        assert got.params is not None
+        assert got.params.loss_btu_per_gal == pytest.approx(150.0, abs=1.5)

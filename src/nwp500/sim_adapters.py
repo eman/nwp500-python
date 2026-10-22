@@ -42,6 +42,7 @@ Example::
     result = sim.simulate(scenario, sa.params(feature))
 """
 
+import bisect
 import itertools
 import math
 from array import array
@@ -1497,6 +1498,7 @@ def _book_steps_on(
         (a.astimezone(UTC), b.astimezone(UTC)) for a, b in circulation
     )
     steps: list[BookStep] = []
+    times: list[datetime] = []
     settled: float | None = None
     for i, at in enumerate(grid):
         u, lo, a_f, in_f = upper[i], lower[i], amb[i], probe[i]
@@ -1514,17 +1516,6 @@ def _book_steps_on(
                 gpm = m / terms.meter_share
             elif terms is not None:
                 gpm = terms.flow_gpm
-        # A meter that reports volumes carries a run's water into the
-        # reports either side of it: its share still isn't a draw.
-        in_meter = None
-        if (
-            not on
-            and terms is not None
-            and terms.meter_share > 0.0
-            and meter_lag > timedelta(0)
-            and any(a - meter_lag <= at < b + meter_lag for a, b in runs)
-        ):
-            in_meter = settled if settled is not None else terms.flow_gpm
         steps.append(
             BookStep(
                 seconds=float(BOOK_GRID_S),
@@ -1539,10 +1530,79 @@ def _book_steps_on(
                 circulation_gpm=gpm,
                 inlet_measured=in_f is not None,
                 lower_element=bool(lo_el[i]),
-                circulation_in_meter_gpm=in_meter,
             )
         )
+        times.append(at)
+    if terms is not None and terms.meter_share > 0.0 and meter_lag:
+        steps = _carried(steps, times, runs, terms.meter_share, meter_lag)
     return steps
+
+
+def _carried(
+    steps: list[BookStep],
+    times: list[datetime],
+    runs: Sequence[tuple[datetime, datetime]],
+    share: float,
+    lag: timedelta,
+) -> list[BookStep]:
+    """``steps`` with a run's water that a meter reporting volumes
+    carries past its edges kept out of the draws.
+
+    A report that closes over a run's edge spreads the run's water over
+    its whole interval, so the run's steps within ``lag`` of the edge
+    show less than the run's flow, and the steps just outside it show
+    the rest. That shortfall, at each edge, is the run's water outside
+    it: it is marked as circulation (``circulation_in_meter_gpm``) on
+    the steps outside the edge, nearest first, as far as each shows,
+    and no farther than ``lag``. A tap opened past it keeps its own."""
+    out = list(steps)
+    carried = [0.0] * len(out)
+    per_min = BOOK_GRID_S / 60.0
+
+    def shortfall(lo: int, hi: int) -> float:
+        """The run's water missing from steps ``lo`` to ``hi``, gal."""
+        return sum(
+            max(share * out[i].circulation_gpm - out[i].flow_gpm, 0.0) * per_min
+            for i in range(lo, hi)
+            if out[i].circulating
+        )
+
+    def give(gal: float, order: Iterable[int]) -> None:
+        for i in order:
+            if gal <= 1e-12:
+                return
+            room = out[i].flow_gpm * per_min - carried[i]
+            take = min(max(room, 0.0), gal)
+            carried[i] += take
+            gal -= take
+
+    for a, b in runs:
+        first = bisect.bisect_left(times, a)
+        end = bisect.bisect_left(times, b)
+        if first >= end:
+            continue
+        head = bisect.bisect_left(times, a + lag, first, end)
+        tail = max(bisect.bisect_left(times, b - lag, first, end), head)
+        before = bisect.bisect_left(times, a - lag)
+        after = bisect.bisect_left(times, b + lag)
+        give(
+            shortfall(first, head),
+            (
+                i
+                for i in range(first - 1, before - 1, -1)
+                if not out[i].circulating
+            ),
+        )
+        give(
+            shortfall(tail, end),
+            (i for i in range(end, after) if not out[i].circulating),
+        )
+    for i, gal in enumerate(carried):
+        if gal > 0.0:
+            out[i] = replace(
+                out[i], circulation_in_meter_gpm=gal / per_min / share
+            )
+    return out
 
 
 def book_from_history(
@@ -1620,9 +1680,9 @@ def book_from_changes(
     (``read_water_use``), ``flow`` and ``circulation_flow`` are gal/min
     and ``inlet`` and ``air`` °F, whatever the preferred units.
     ``meter_lag`` is how far a meter's report carries water from either
-    side of it (``sim.meter.WINDOW`` for ``read_water_use``'s flow): that
-    long before and after a circulation run, the run's share of the
-    meter still isn't a draw.
+    side of it (``sim.meter.WINDOW`` for ``read_water_use``'s flow): the
+    run's water a report carries past a run's edge, the run's shortfall
+    within that of the edge, isn't a draw either.
 
     A value that holds writes no change, so only ``observed`` says the
     heater was heard: a silence between those instants longer than
