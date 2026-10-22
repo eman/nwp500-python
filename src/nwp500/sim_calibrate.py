@@ -313,16 +313,24 @@ def _recovery_error(
         gaps="stratification_gap" in recoveries.columns
         and bool(recoveries["stratification_gap"].notna().all()),
     )
+    if not np.isfinite(predicted).all():
+        return None
     actual = np.asarray(recoveries["duration_minutes"], dtype=float)
     return float(np.mean(np.abs(predicted - actual)))
 
 
+def _n_cycles(cycles: pd.DataFrame) -> int:
+    """How many cycles ``cycles``' snapshot rows hold."""
+    return len(set(cycles["cycle"])) if len(cycles) else 0
+
+
 def _power_error(cycles: pd.DataFrame, params: HeaterParams) -> float | None:
     """The power scale's mean relative error in each cycle's metered
-    energy."""
+    energy. None unless ``params`` model every cycle: a score over the
+    ones it can would drop the hard ones."""
     scale = params.power.power_scale
     rows = cal.power_cycles(cycles, params)
-    if scale is None or not rows:
+    if scale is None or not rows or len(rows) < _n_cycles(cycles):
         return None
     return float(np.mean([abs(m - scale * e) / m for _, m, e in rows]))
 
@@ -330,10 +338,11 @@ def _power_error(cycles: pd.DataFrame, params: HeaterParams) -> float | None:
 def _cop_error(cycles: pd.DataFrame, params: HeaterParams) -> float | None:
     """The COP terms' squared error in each cycle's metered energy,
     weighted ``1 / metered``, as ``solve_cop_fit`` fits them. The
-    parameters hold no lead share, so none is counted."""
+    parameters hold no lead share, so none is counted. None unless
+    ``params`` model every cycle, as for ``_power_error``."""
     p = params.power
     rows = cal.cop_cycles(cycles, params)
-    if p.cop_scale is None or not rows:
+    if p.cop_scale is None or not rows or len(rows) < _n_cycles(cycles):
         return None
     errors = []
     for c in rows:
@@ -348,7 +357,8 @@ def _cop_error(cycles: pd.DataFrame, params: HeaterParams) -> float | None:
 def score(done: Calibrated, params: HeaterParams) -> dict[str, float | None]:
     """Each group's error for ``params`` on the evidence ``done`` held
     out of its refits (``keep_better``), by ``GROUPS``; None where none
-    was held out. Lower is better; each group's error is its own fit's:
+    was held out, or ``params`` cannot model all of it. Lower is better;
+    each group's error is its own fit's:
 
     - ``standby``: the law's weighted squared error in log UA;
     - ``gap_tau``: the gap decay's mean squared error, °F²;
@@ -1023,9 +1033,12 @@ def _judged(terms: list[Term], done: Calibrated) -> list[Term]:
         for name in _GROUP_TERMS[j.group]:
             t = out[name]
             if j.kept == "base":
+                # The refit's error is not the kept values'; the reason
+                # gives both scores.
                 out[name] = replace(
                     t,
                     value=_num(values[name]),
+                    error="-",
                     fitted=False,
                     why=j.why,
                     note="",

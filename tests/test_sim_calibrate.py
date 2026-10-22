@@ -1082,3 +1082,40 @@ class TestKeepBetterFourthReview:
         term = _terms(done)["Input power scale"]
         assert term.fitted
         assert term.why == ""
+
+
+class TestKeepBetterFifthReview:
+    def test_a_score_needs_every_held_out_cycle_modelled(self) -> None:
+        params = sim.default_params()
+        rows = cal.snapshots(recovery_days(3), air="air_f")
+        whole = cal.power_cycles(rows, params)
+        assert len(whole) == 3
+        assert sc._power_error(rows, params) is not None
+        cop = cal.CopCycle(T0, 1000.0, 0.0, 3.0, 500.0, 60.0)
+        with pytest.MonkeyPatch.context() as m:
+            m.setattr(cal, "power_cycles", lambda *_: whole[:2])
+            m.setattr(cal, "cop_cycles", lambda *_: [cop, cop])
+            assert sc._power_error(rows, params) is None
+            assert sc._cop_error(rows, params) is None
+            m.setattr(cal, "cop_cycles", lambda *_: [cop] * 3)
+            assert sc._cop_error(rows, params) is not None
+
+    def test_a_kept_compressor_shows_no_refit_error(self) -> None:
+        frame = recovery_days(14)
+        fitted, judged, held = sc._keep_better(
+            frame, sim.default_params(), "air_f"
+        )
+        assert {j.group: j.kept for j in judged}["compressor"] == "base"
+        done = sc.Calibrated(
+            fitted,
+            "constant",
+            len(frame),
+            timedelta(minutes=5),
+            0,
+            (),
+            judged=judged,
+            held=held,
+        )
+        terms = _terms(done)
+        for name in ("Compressor constant", "Evaporator approach (°F)"):
+            assert terms[name].error == "-"
