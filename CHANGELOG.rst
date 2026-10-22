@@ -70,6 +70,10 @@ Fixed
 
 Changed
 -------
+- ``parse_state`` and the simulate how-to say that over Home
+  Assistant's REST API an entity's ``last_reported`` comes from a copy
+  that a report of the same value doesn't renew, so a sensor holding
+  one value for over an hour can read as stale.
 - ``sim.calibration.RecordedBook`` prices a draw against each step's
   inlet, as the heat book does (``book.step_heat_btu``), where it priced
   it against the book's reference. Without an inlet the steps take
