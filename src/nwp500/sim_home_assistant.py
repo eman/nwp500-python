@@ -237,10 +237,12 @@ class State:
 
 def parse_state(doc: Any) -> State:
     """``/api/states/<entity>``'s answer. ``at`` is when the entity
-    last reported (``last_reported``), so a sensor that keeps reporting
-    the same value stays fresh. Home Assistant before 2024.3 has no
-    ``last_reported``; then ``at`` is the last state or attribute change
-    (``last_updated``, else ``last_changed``)."""
+    last reported (``last_reported``). Home Assistant serves that answer
+    from a copy it keeps until the state or its attributes change, and a
+    report of the same value doesn't renew it, so over REST ``at`` can
+    be older than the entity's last report. Home Assistant before 2024.3
+    has no ``last_reported``; then ``at`` is the last state or attribute
+    change (``last_updated``, else ``last_changed``)."""
     if not isinstance(doc, Mapping) or "state" not in doc:
         raise HomeAssistantError("not an entity state")
     d = cast(Mapping[str, Any], doc)

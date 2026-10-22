@@ -171,6 +171,13 @@ give:
   meter. Name the meter's flow rate as well as its volume. A
   circulation pump with no speed reading leaves no estimate.
 
+A reading's age is from when Home Assistant last heard the sensor
+report (``last_reported``). Over the REST API, Home Assistant serves
+that from a copy of the state it keeps until the state changes, and a
+report of the same value doesn't renew the copy. So a sensor that has
+held one value for over an hour can read as over an hour old, and its part
+keeps its default, even while it still reports.
+
 Units come from each entity's ``unit_of_measurement``: the pump's speed
 in rpm or Hz. A meter whose volume is a running total (its
 ``state_class`` is ``total_increasing`` or ``total``) is read as the
