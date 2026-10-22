@@ -546,7 +546,8 @@ median of the probe's readings over the last 3 hours
 (``book.inlet_window_s``), the default without one. The meter must
 report at rest too: a silence over an hour in the window is refused,
 since it would read as a quiet full tank. A missing reading (None or
-NaN) is skipped, and the value before it holds.
+NaN) is skipped, and the value before it holds; it doesn't count as the
+meter reporting.
 
 ``book_from_changes`` grids the changes the same way, each value held
 until its next change; without a compressor flag, the heat source says

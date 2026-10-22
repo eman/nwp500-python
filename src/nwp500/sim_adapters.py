@@ -1520,15 +1520,18 @@ def book_from_history(
 
     ``flow`` is the household meter's flow (per minute, the preferred
     volume) and must report at rest too: a silence over
-    ``METER_MAX_GAP`` in the window is refused, since it would read as a
-    quiet full tank. ``circulation`` are its runs, with
+    ``METER_MAX_GAP`` in the window (missing readings, None or NaN,
+    count as silence) is refused, since it would read as a quiet full
+    tank. ``circulation`` are its runs, with
     ``circulation_flow`` its own flow; ``inlet`` an inlet probe's
     readings; ``air`` the air where the heater stands. Draws are what
     the meter reads less circulation's share of it
     (``CirculationParams.meter_share``)."""
     at = at.astimezone(UTC)
     rows = list(readings)
-    flows = sorted((t.astimezone(UTC), v) for t, v in flow)
+    # A missing reading is none: it neither moves water nor shows the
+    # meter reporting.
+    flows = sorted((t.astimezone(UTC), v) for t, v in _finite(flow))
     runs = list(circulation)
     run_flow = list(circulation_flow)
     probe = list(inlet)
@@ -1590,7 +1593,9 @@ def book_from_changes(
             if b >= at:
                 return None
             since = max(since, b)
-    flows = sorted((t.astimezone(UTC), v) for t, v in flow)
+    # A missing reading is none: it neither moves water nor shows the
+    # meter reporting.
+    flows = sorted((t.astimezone(UTC), v) for t, v in _finite(flow))
     runs = list(circulation)
     run_flow = list(circulation_flow)
     probe = list(inlet)

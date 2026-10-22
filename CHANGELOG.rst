@@ -29,6 +29,13 @@ Added
   ``book_steps_from_changes`` gives the steps, and ``silences`` the
   unheard spans.
 
+Fixed
+-----
+- ``book_from_history`` counted a missing meter reading (None or NaN)
+  as the meter reporting, so a gap filled with them passed the
+  ``METER_MAX_GAP`` check and was booked as no flow. Missing readings
+  now count as silence.
+
 Changed
 -------
 - ``max_gap``, ``GAP_SAMPLES`` and ``MIN_GAP`` are defined in

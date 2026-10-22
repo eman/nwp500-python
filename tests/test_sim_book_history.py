@@ -230,6 +230,23 @@ class TestFromTheHistory:
                 heater(20, recovery_at=4), p, at=T0, flow=gappy
             )
 
+    def test_a_silence_of_missing_readings_is_refused(
+        self, heater: Callable[..., list[Any]]
+    ) -> None:
+        """NaNs reported through a gap are no readings: the meter was
+        silent over it."""
+        p = site_example_params()
+        holed = [
+            (t, float("nan")) if T0 - timedelta(hours=8) < t < T0 else (t, v)
+            for t, v in meter(20)
+        ]
+        readings = heater(20, recovery_at=4)
+        with pytest.raises(ValueError, match="silent"):
+            sa.book_from_history(readings, p, at=T0, flow=holed)
+        rows, observed = as_changes(readings)
+        with pytest.raises(ValueError, match="silent"):
+            sa.book_from_changes(rows, observed, p, at=T0, flow=holed)
+
     def test_a_missing_meter_reading_is_no_reading(
         self, heater: Callable[..., list[Any]]
     ) -> None:
