@@ -1279,6 +1279,25 @@ class _Heater:
     lower_element: list[bool]
 
 
+def run_flow(
+    runs: Iterable[tuple[datetime, datetime]], flow_gpm: float
+) -> list[tuple[datetime, float]]:
+    """``runs`` at ``flow_gpm`` (gal/min) as the circulation's own flow
+    readings on the book's grid, for ``book_from_changes``'s
+    ``circulation_flow`` where no sensor reads the pump: a run is booked
+    at its flow (``CirculationParams.flow_gpm``), and the meter's excess
+    over it stays a draw."""
+    out: list[tuple[datetime, float]] = []
+    step = timedelta(seconds=BOOK_GRID_S)
+    for a, b in sorted(runs):
+        t = a.astimezone(UTC)
+        end = b.astimezone(UTC)
+        while t < end:
+            out.append((t, flow_gpm))
+            t += step
+    return out
+
+
 def book_steps_from_history(
     readings: Iterable[tuple[datetime, DeviceStatus]],
     *,

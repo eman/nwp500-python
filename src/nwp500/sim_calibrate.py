@@ -34,6 +34,7 @@ statuses::
 This module needs the ``sim`` extra.
 """
 
+import itertools
 import math
 from bisect import bisect_left
 from collections.abc import Iterable, Mapping, Sequence
@@ -1283,7 +1284,7 @@ def fit_circulation(
     observed: Iterable[datetime],
     params: HeaterParams,
     *,
-    flow: Iterable[tuple[datetime, float]],
+    flow: Iterable[tuple[datetime, float | None]],
     runs: Iterable[tuple[datetime, datetime]],
     inlet: Iterable[tuple[datetime, float]] = (),
     air: Iterable[tuple[datetime, float]] = (),
@@ -1306,21 +1307,28 @@ def fit_circulation(
     gallon is the one that books best from each quiet full tank to the
     next with a run between (``sim.calibration.RecordedBook``'s
     re-anchors up to ``max_anchor_age_h`` apart), the book's other terms
-    held at ``params.book``. ``displaced_gal`` and ``run_gap_min`` are
-    the base's, else ``site_example_params``': the book can't tell them.
+    held at ``params.book``, each run booked at its terms' flow
+    (``sim_adapters.run_flow``), so the meter's excess over it is a
+    draw. ``displaced_gal`` and ``run_gap_min`` are the base's, else
+    ``site_example_params``': the book can't tell them.
 
     It refits only on ``MIN_CIRCULATION_RUNS`` clean runs over
     ``MIN_CIRCULATION_DAYS`` days. The latest fifth of the pairs (once
     there are 10) is held out of the refit, which replaces the base only
     when it books them no worse. A span the heater wasn't heard from
-    (``sim_adapters.silences``, ``rows.outages``) breaks the book."""
+    (``sim_adapters.silences``, ``rows.outages``) breaks the book, and
+    so does the meter's silence over ``sim_adapters.METER_MAX_GAP``, or
+    before its first reading or after its last."""
     from nwp500.sim.defaults import SITE_CIRCULATION
 
     base = params.circulation
     book_p = params.book_terms()
-    flow_rows = [
-        (t.astimezone(UTC), float(v)) for t, v in flow if math.isfinite(v)
-    ]
+    # A missing reading (None, NaN) is none.
+    flow_rows = sorted(
+        (t.astimezone(UTC), float(v))
+        for t, v in flow
+        if v is not None and math.isfinite(v)
+    )
     run_spans = sorted((a.astimezone(UTC), b.astimezone(UTC)) for a, b in runs)
     inlets, airs = list(inlet), list(air)
 
@@ -1329,6 +1337,8 @@ def fit_circulation(
             base, None if base is None else "base", n_runs, n_pairs, None, why
         )
 
+    if not flow_rows:
+        return keep("no meter flow to read the runs by", 0)
     # The meter's flow over clean run minutes.
     gpm = sorted(flow_rows)
     times = [t for t, _ in gpm]
@@ -1372,15 +1382,26 @@ def fit_circulation(
     heard = sorted(t.astimezone(UTC) for t in observed)
     if not heard:
         return keep("the heater was never heard from", len(clean_runs))
+    # And the meter's: a silence over ``METER_MAX_GAP``, or before its
+    # first reading or after its last, would read as a quiet tank.
+    beats = [t for t, _ in flow_rows]
+    meter_dark = [
+        (a, b)
+        for a, b in itertools.pairwise([heard[0], *beats, heard[-1]])
+        if b - a > sa.METER_MAX_GAP or not (beats[0] <= a and b <= beats[-1])
+    ]
     dark = sorted(
         [
             *silences(heard, max_gap(heard)),
             *((a.astimezone(UTC), b.astimezone(UTC)) for a, b in rows.outages),
+            *meter_dark,
         ]
     )
     segments: list[tuple[datetime, datetime]] = []
     at = heard[0]
     for a, b in dark:
+        if a >= heard[-1]:
+            break
         if a > at:
             segments.append((at, a))
         at = max(at, b)
@@ -1402,6 +1423,9 @@ def fit_circulation(
                     end=b,
                     flow=flow_rows,
                     circulation=run_spans,
+                    # A run at its own flow: the meter's excess over it
+                    # is a draw.
+                    circulation_flow=sa.run_flow(run_spans, terms.flow_gpm),
                     inlet=inlets,
                     air=airs,
                     params=with_terms,
@@ -1440,11 +1464,15 @@ def fit_circulation(
         """Each pair's error without the run's loss, BTU, and the
         gallons it circulated: its error is the first less the loss
         per gallon times the second."""
-        e0, gal = [], []
-        for _, i, (a0, a1) in chosen:
+        by_book: dict[int, list[tuple[int, int]]] = {}
+        for _, i, pair in chosen:
+            by_book.setdefault(i, []).append(pair)
+        e0: list[float] = []
+        gal: list[float] = []
+        for i, these in by_book.items():
             bk = bks[i]
-            e0.append(float(bk.errors(book_p, 0.0, [(a0, a1)])[0]))
-            gal.append(float(bk.circulated[a0:a1].sum()))
+            e0.extend(float(e) for e in bk.errors(book_p, 0.0, these))
+            gal.extend(float(bk.circulated[a0:a1].sum()) for a0, a1 in these)
         return np.array(e0), np.array(gal)
 
     e0, gal = parts(fitted, train)

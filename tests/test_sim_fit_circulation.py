@@ -40,6 +40,8 @@ def history(
     meter_sees: bool = True,
     late_loss: float | None = None,
     late_from: int = 0,
+    tap_gpm: float = 0.0,
+    draw_at_h: float | None = None,
 ) -> dict[str, Any]:
     """A history of ``cycles`` six-hour cycles walked by the book's own
     balance, each run taking ``loss`` per gallon (``late_loss`` from
@@ -64,11 +66,16 @@ def history(
             cycle == 0 and first[0] <= minute < first[1]
         )
         running = RUN[0] <= minute < RUN[1]
+        # A tap open for the run's first minute.
+        tap = tap_gpm if minute == RUN[0] else 0.0
+        if draw_at_h is not None and 0 <= (i * 10 / 3600 - draw_at_h) < 5 / 60:
+            # A five-minute draw at 2 gal/min.
+            tap = 2.0
         if running and minute == RUN[0] and i % 6 == 0:
             runs.append((t, t + timedelta(minutes=RUN[1] - RUN[0])))
         probe.append((t, temp))
         comp.append((t, heating))
-        flow.append((t, RUN_GPM if running and meter_sees else 0.0))
+        flow.append((t, (RUN_GPM if running and meter_sees else 0.0) + tap))
         per_gal = loss if late_loss is None or cycle < late_from else late_loss
         circulated = RUN_GPM * per_step if running else 0.0
         e = (
@@ -78,6 +85,16 @@ def history(
             - per_gal * circulated
             - p.ua_btu_per_h_f * max(temp - AIR_F, 0.0) * h
         )
+        if tap > p.draw_gpm:
+            delivered = min(
+                temp, p.delivery_intercept_f + p.delivery_slope * temp
+            )
+            e -= (
+                tap
+                * per_step
+                * WATER_BTU_PER_GAL_F
+                * max(delivered - p.reference_f, 0.0)
+            )
         temp += e / mass
     rows = sa.ChangeRows(upper_f=probe, lower_f=probe, compressor_on=comp)
     return {
@@ -134,23 +151,45 @@ class TestFitCirculation:
         assert got.params.loss_btu_per_gal == pytest.approx(150.0, abs=1.0)
         assert "doesn't see" in got.why
 
-    def test_a_draw_during_a_run_is_not_its_flow(self) -> None:
+    def test_a_draw_during_a_run_is_a_draw(self) -> None:
         """A tap open for a minute of each run reads over the run's own
-        flow by more than the draw line: those minutes aren't the run's."""
-        h = history(NO_BASE, 16, 150.0)
-        starts = {a for a, _ in h["runs"]}
-        tap = [
-            (
-                t,
-                3.0
-                if any(a <= t < a + timedelta(minutes=1) for a in starts)
-                else v,
-            )
-            for t, v in h["flow"]
-        ]
-        got = fit(NO_BASE, h | {"flow": tap})
+        flow: not the run's flow, and booked as a draw, not as the
+        run's loss."""
+        got = fit(NO_BASE, history(NO_BASE, 16, 150.0, tap_gpm=2.0))
         assert got.params is not None
         assert got.params.flow_gpm == pytest.approx(RUN_GPM)
+        assert got.params.loss_btu_per_gal == pytest.approx(150.0, abs=1.0)
+
+    def test_a_missing_meter_reading_is_none(self) -> None:
+        h = history(NO_BASE, 16, 150.0)
+        flow: list[Any] = [*h["flow"], (T0 + timedelta(seconds=5), None)]
+        got = fit(NO_BASE, h | {"flow": sorted(flow, key=lambda r: r[0])})
+        assert got.params is not None
+        assert got.params.loss_btu_per_gal == pytest.approx(150.0, abs=1.0)
+
+    def test_an_outage_after_the_history_changes_nothing(self) -> None:
+        """Heard until 80 h, the meter and the pump read on: an outage
+        at 90 h doesn't book the unheard 10 h."""
+        h = history(NO_BASE, 16, 150.0)
+        end = T0 + timedelta(hours=80)
+        h["observed"] = [t for t in h["observed"] if t <= end]
+        rows = replace(
+            h["rows"],
+            outages=((end + timedelta(hours=10), end + timedelta(hours=11)),),
+        )
+        want = fit(NO_BASE, h)
+        got = fit(NO_BASE, h | {"rows": rows})
+        assert got.pairs == want.pairs
+
+    def test_a_meter_gap_breaks_the_book(self) -> None:
+        """A draw the meter missed, between two anchors with a run: no
+        pair spans the gap."""
+        h = history(NO_BASE, 16, 150.0, draw_at_h=44.0)
+        whole = fit(NO_BASE, h)
+        gap = (T0 + timedelta(hours=43.5), T0 + timedelta(hours=44.7))
+        flow = [r for r in h["flow"] if not gap[0] < r[0] < gap[1]]
+        got = fit(NO_BASE, h | {"flow": flow})
+        assert got.pairs == whole.pairs - 1
 
     def test_the_refit_replaces_a_worse_base(self) -> None:
         params = site_example_params()

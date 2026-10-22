@@ -405,6 +405,20 @@ per minute:
   full tank to the next with a run between, the book's other terms held
   at ``params.book``.
 
+Book with the terms as they were fitted: each run at its own flow, so a
+tap open during a run stays a draw.
+
+.. code-block:: python
+
+   from nwp500 import sim_adapters as sa
+
+   terms = params.circulation
+   book = sa.book_from_changes(
+       history.rows, history.observed, params, at=end,
+       flow=use.flow, circulation=use.runs,
+       circulation_flow=sa.run_flow(use.runs, terms.flow_gpm),
+   )
+
 ``displaced_gal`` and ``run_gap_min`` come from ``params.circulation``,
 else ``site_example_params``': the book can't tell them. The fit needs
 10 clean runs over 3 days. It holds out the latest fifth of the pairs

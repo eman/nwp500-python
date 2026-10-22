@@ -39,6 +39,8 @@ Added
   gallon that books best between quiet full tanks with a run between.
   It needs 10 clean runs over 3 days, and keeps the base unless the
   refit books the held-out latest fifth no worse (``CirculationFit``).
+  ``sim_adapters.run_flow`` gives the runs at their flow, the book's
+  ``circulation_flow`` where no sensor reads the pump.
 
 Fixed
 -----
