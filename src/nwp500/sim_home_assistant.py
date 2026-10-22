@@ -1211,10 +1211,10 @@ def book_flow(
         ]
         length = sum((y - x).total_seconds() for x, y in parts)
         if length <= 0:
-            k = nearest(t)
-            if k is not None:
-                gal[k] += v
-                reached[k] = True
+            near = nearest(t)
+            if near is not None:
+                gal[near] += v
+                reached[near] = True
             continue
         for x, y in parts:
             for k in range(max(index(x), 0), min(index(y), n - 1) + 1):
