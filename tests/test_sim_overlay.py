@@ -146,6 +146,16 @@ class TestOverlay:
                 _doc({}, params={**params_to_document(P65), "unfitted": None}),
                 "scenario's params.*unfitted",
             ),
+            (
+                _doc(
+                    {},
+                    params=merge(
+                        params_to_document(P65),
+                        {"compressor": {"compressor_constant": None}},
+                    ),
+                ),
+                "compressor.compressor_constant is None, not a number",
+            ),
             (_doc({"tz": TZ}), "do not make a scenario"),
         ],
     )
