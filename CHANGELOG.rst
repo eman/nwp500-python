@@ -41,7 +41,10 @@ Added
   the meter's outages and ends at its last report, so the book refuses
   a silent meter. Unknown pump runs (an outage of its speed among them)
   are None and their spans busy. The live source's inlet now reads through
-  it, with the same result and notes.
+  it, with the same result and notes. ``read_water_history`` (the
+  reading, to a ``WaterHistory``) and ``water_use`` (the rest, with no
+  client) are its two halves, so the work can run off an event loop
+  (#198).
 - ``sim_adapters.cold_supply(..., window=)``: how far back a long draw
   counts (72 hours by default).
 

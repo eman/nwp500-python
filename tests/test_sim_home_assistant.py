@@ -1977,3 +1977,82 @@ def test_many_outages_keep_every_gallon_out_of_them() -> None:
         for t, v in flow[:400]
     )
     assert took < 5.0
+
+
+@pytest.mark.asyncio
+class TestTheWaterHistory:
+    """``read_water_history`` reads; ``water_use`` computes, without
+    the client."""
+
+    @staticmethod
+    def _series() -> dict[str, list[ha.Reading]]:
+        series = recorded_draw(ended_hours_ago=5)
+        start = NOW - ha.INLET_LOOKBACK
+        series["sensor.pump"] = [
+            (start, 0.0),
+            (NOW - timedelta(hours=20), 2500.0),
+            (NOW - timedelta(hours=19, minutes=45), 0.0),
+        ]
+        series["sensor.rate"] = [(start, 0.0)]
+        return series
+
+    @pytest.mark.parametrize(
+        "names",
+        [
+            {},
+            {"meter_volume": "sensor.volume"},
+            {"circulation_speed": "sensor.pump", "meter_flow": "sensor.rate"},
+        ],
+    )
+    async def test_it_is_read_water_use_apart(
+        # ``Any``: mypy reads a ``dict[str, str]`` as maybe the flag.
+        self,
+        names: dict[str, Any],
+    ) -> None:
+        states = UNITS | {"sensor.rate": _s("sensor.rate", 0.0, "gal/min")}
+        entities = replace(ha.Entities(**INLET), **names)
+        client = FakeClient(states, self._series())
+        history = await ha.read_water_history(
+            client,  # type: ignore[arg-type]  # pyright: ignore[reportArgumentType]
+            entities,
+            now=NOW,
+        )
+        whole = await ha.read_water_use(
+            client,  # type: ignore[arg-type]  # pyright: ignore[reportArgumentType]
+            entities,
+            now=NOW,
+        )
+        assert ha.water_use(history) == whole
+        assert whole.flow
+        if "circulation_speed" in names:
+            assert whole.runs
+
+    async def test_a_pump_state_not_read_leaves_its_runs_unknown(
+        self,
+    ) -> None:
+        entities = ha.Entities(circulation_speed="sensor.pump", **INLET)
+        client = FakeClient(UNITS, self._series(), fail={"sensor.pump"})
+        history = await ha.read_water_history(
+            client,  # type: ignore[arg-type]  # pyright: ignore[reportArgumentType]
+            entities,
+            now=NOW,
+        )
+        assert "sensor.pump" in history.unread_states
+        use = ha.water_use(history)
+        assert use.runs is None
+        assert any("HTTP 404" in n for n in use.notes)
+
+    async def test_a_failed_read_raises_and_is_noted(self) -> None:
+        client = FakeClient({}, self._series())
+        with pytest.raises(ha.HomeAssistantError):
+            await ha.read_water_history(
+                client,  # type: ignore[arg-type]  # pyright: ignore[reportArgumentType]
+                ha.Entities(**INLET),
+                now=NOW,
+            )
+        use = await ha.read_water_use(
+            client,  # type: ignore[arg-type]  # pyright: ignore[reportArgumentType]
+            ha.Entities(**INLET),
+            now=NOW,
+        )
+        assert use.notes[0].startswith("not read")

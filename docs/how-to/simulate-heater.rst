@@ -907,6 +907,20 @@ a quiet meter that still reports is live until it goes unavailable or
 its last report (``last_reported``, Home Assistant 2024.3 and later)
 is old. A pump unavailable over the span leaves ``use.runs`` None.
 
+``read_water_use`` builds the flow on a 10-second grid after it reads,
+which over weeks is a lot of work for an event loop. To keep that off
+the loop, read and compute apart: ``read_water_history`` does only the
+reading, and ``water_use`` the rest, with no client. In Home Assistant:
+
+.. code-block:: python
+
+   history = await ha.read_water_history(client, entities, now=now)
+   use = await hass.async_add_executor_job(ha.water_use, history)
+
+``read_water_history`` raises ``HomeAssistantError`` when the history
+can't be read, where ``read_water_use`` gives an empty ``WaterUse``
+with a note.
+
 The mains is the median plateau of the long draws (11 minutes or more,
 with circulation off) over the last 72 hours, read from minute 9 of each
 draw, once the probe has passed the stagnant pipe. There is none
