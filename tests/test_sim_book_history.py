@@ -367,6 +367,12 @@ class TestFromTheChanges:
         )
         down = replace(rows, outages=((T0 - timedelta(minutes=30), T0),))
         assert sa.book_from_changes(down, observed, p, at=T0, flow=flow) is None
+        # Unavailable from the instant booked: unknown then too.
+        now_down = replace(rows, outages=((T0, T0 + timedelta(hours=1)),))
+        assert (
+            sa.book_from_changes(now_down, observed, p, at=T0, flow=flow)
+            is None
+        )
         assert sa.book_from_changes(rows, [], p, at=T0, flow=flow) is None
 
     def test_a_silent_meter_is_refused(

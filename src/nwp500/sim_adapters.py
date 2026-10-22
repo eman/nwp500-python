@@ -1586,7 +1586,7 @@ def book_from_changes(
     since = heard[0]
     for a, b in [*silences(heard, gap), *rows.outages]:
         a, b = a.astimezone(UTC), b.astimezone(UTC)
-        if a < at:
+        if a <= at:
             if b >= at:
                 return None
             since = max(since, b)
