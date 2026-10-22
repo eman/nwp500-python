@@ -1330,9 +1330,10 @@ def fit_book(
     heat rate and its slope with the air, the standby UA and, with
     ``MIN_RUN_PAIRS`` pairs with a run in them, the loop's loss per
     gallon (``sim.calibration.BOOK_TERMS``), for the least mean absolute
-    error. A term the pairs don't move (the slope, with the air never
-    off 65 °F) is held at the base. The rest of the book (the draw line,
-    the anchors' age, the valve's line) is ``params``'.
+    error. A term the pairs can't tell apart from the others (the slope,
+    with the air never off one temperature) is held at the base. The
+    rest of the book (the draw line, the anchors' age, the valve's line)
+    is ``params``'.
 
     The loop's flow is the meter's median over clean run minutes (no
     more than ``book.draw_gpm`` over the run's own median: no draw),
@@ -1513,13 +1514,17 @@ def fit_book(
     def system(
         bks: list[cal.RecordedBook], chosen: Sequence[_Pair]
     ) -> tuple[np.ndarray, np.ndarray]:
-        """The chosen pairs' errors as ``k + x @ terms``."""
-        ks, xs = [], []
-        for _, i, pair, _ in chosen:
-            k, x = bks[i].pair_terms(book_p, [pair])
-            ks.append(k)
-            xs.append(x)
-        return np.concatenate(ks), np.vstack(xs)
+        """The chosen pairs' errors as ``k + x @ terms``, in their
+        order."""
+        rows: dict[int, list[int]] = {}
+        for at, (_, i, _, _) in enumerate(chosen):
+            rows.setdefault(i, []).append(at)
+        k = np.zeros(len(chosen))
+        x = np.zeros((len(chosen), len(cal.BOOK_TERMS)))
+        for i, ats in rows.items():
+            bk, bx = bks[i].pair_terms(book_p, [chosen[at][2] for at in ats])
+            k[ats], x[ats] = bk, bx
+        return k, x
 
     def attempt(
         terms: CirculationParams | None, fit_loss: bool, notes: list[str]
@@ -1564,10 +1569,7 @@ def fit_book(
             ]
         )
         k, x = system(fitted, train)
-        # A term the pairs don't move is held.
-        free = [
-            j for j in range(3 + fit_loss) if np.any(np.abs(x[:, j]) > 1e-9)
-        ]
+        free = _independent(x, range(3 + fit_loss))
         fixed = [j for j in range(4) if j not in free]
         bounds = cal.BOOK_TERM_BOUNDS
         got = start.copy()
@@ -1650,3 +1652,30 @@ def fit_book(
             ]
     # With the loss held, nothing is fitted on its bound but the book.
     return cast(BookTermsFit, attempt(base, False, notes))
+
+
+#: The order ``fit_book`` takes its terms in when the pairs can't tell
+#: them all apart: the slope with the air last, as with the air never
+#: moving it only rescales the heat rate.
+_TERM_PRIORITY = (0, 2, 3, 1)
+
+
+def _independent(x: np.ndarray, terms: Iterable[int]) -> list[int]:
+    """Of ``terms``, the columns of ``x`` the pairs tell apart, in
+    ``_TERM_PRIORITY``: a column no other combination of those taken
+    can make is taken, and the rest are held. A column of zeros (a term
+    the pairs don't move) or one in proportion to another (the slope,
+    with the air at one temperature) is held."""
+    taken: list[int] = []
+    wanted = set(terms)
+    for j in _TERM_PRIORITY:
+        if j not in wanted:
+            continue
+        scale = np.linalg.norm(x[:, j])
+        if scale <= 1e-9:
+            continue
+        trial = [*taken, j]
+        cols = x[:, trial] / np.linalg.norm(x[:, trial], axis=0)
+        if np.linalg.matrix_rank(cols, tol=1e-6) == len(trial):
+            taken.append(j)
+    return sorted(taken)

@@ -70,11 +70,13 @@ def history(
     reported: bool = False,
     after_gpm: float = 0.0,
     truth: BookParams | None = None,
+    air_f: float | None = None,
 ) -> dict[str, Any]:
     """A history of ``cycles`` six-hour cycles walked by the book's own
     balance (``truth``, else ``params``' book), each run taking ``loss``
-    per gallon (``late_loss`` from cycle ``late_from`` on), and what
-    ``fit_book`` takes."""
+    per gallon (``late_loss`` from cycle ``late_from`` on), the air at
+    ``air_f`` throughout or else varying by cycle, and what ``fit_book``
+    takes."""
     p = truth if truth is not None else params.book_terms()
     mass = WATER_BTU_PER_GAL_F * p.tank_gal
     h = sa.BOOK_GRID_S / 3600.0
@@ -91,7 +93,7 @@ def history(
         t = T0 + i * STEP
         minute = (i // 6) % CYCLE
         cycle = i // (6 * CYCLE)
-        air = air_at(cycle)
+        air = air_at(cycle) if air_f is None else air_f
         heating = RECOVERY[0] <= minute < recovery_end(cycle) or (
             cycle == 0 and first[0] <= minute < first[1]
         )
@@ -136,7 +138,10 @@ def history(
         "flow": flow,
         "runs": runs,
         "air": [
-            (T0 + timedelta(minutes=CYCLE * c), air_at(c))
+            (
+                T0 + timedelta(minutes=CYCLE * c),
+                air_at(c) if air_f is None else air_f,
+            )
             for c in range(cycles)
         ],
     }
@@ -481,3 +486,44 @@ def test_the_pairs_errors_are_linear_in_the_terms() -> None:
         assert k + x @ np.array([hp, slope, ua, loss]) == pytest.approx(
             book.errors(q, loss, pairs)
         )
+
+
+def test_a_short_runs_water_past_both_edges_is_circulation() -> None:
+    """A 60 s run at 1 gal/min, on 30 s volume reports 15 s off it, with
+    a 90 s lag: the run's water either side of it is all circulation,
+    none of it a draw."""
+    from nwp500.sim.book import house_gpm
+
+    terms = SITE.circulation
+    assert terms is not None
+    a = T0 + timedelta(minutes=30)
+    run = (a, a + timedelta(minutes=1))
+    n = 6 * 60
+    truth = [
+        (T0 + i * STEP, 1.0 if run[0] <= T0 + i * STEP < run[1] else 0.0)
+        for i in range(n)
+    ]
+    steps = sa.book_steps_from_changes(
+        sa.ChangeRows(upper_f=[(T0, 120.0)], lower_f=[(T0, 120.0)]),
+        start=T0,
+        end=T0 + n * STEP,
+        flow=reports(truth),
+        circulation=[run],
+        circulation_flow=sa.run_flow([run], terms.flow_gpm),
+        meter_lag=timedelta(seconds=90),
+        params=SITE,
+    )
+    house = sum(house_gpm(s, terms) * s.seconds / 60 for s in steps)
+    assert house == pytest.approx(0.0, abs=1e-9)
+
+
+def test_the_air_at_one_temperature_holds_the_slope() -> None:
+    """The air always at 70 °F: the slope only rescales the heat rate,
+    so it is held at the base, and the heat rate takes the rest."""
+    got = fit(NO_BASE, no_pump(NO_BASE, 16, truth=OTHER, air_f=70.0))
+    assert got.kept == "refit", got.why
+    assert got.book.hp_btu_per_h_per_f == SITE.book.hp_btu_per_h_per_f
+    want = OTHER.hp_btu_per_h + 5 * OTHER.hp_btu_per_h_per_f
+    rate = got.book.hp_btu_per_h + 5 * got.book.hp_btu_per_h_per_f
+    assert rate == pytest.approx(want, rel=0.001)
+    assert got.book.ua_btu_per_h_f == pytest.approx(OTHER.ua_btu_per_h_f)

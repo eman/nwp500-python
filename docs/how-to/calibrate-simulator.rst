@@ -412,8 +412,9 @@ absolute error between the book and the probes at the second of each
 pair:
 
 - **The book's terms:** the compressor's heat rate and slope, and the
-  standby UA, on every pair. A term the pairs don't move (the slope,
-  with the air never off 65 °F) stays at ``params.book``. The rest of the
+  standby UA, on every pair. A term the pairs can't tell apart from
+  the others (the slope, with the air never off one temperature) stays
+  at ``params.book``. The rest of the
   book (its draw line, the anchors' age, the valve's line) is
   ``params``'.
 - **What the meter sees of a run:** the median meter flow over the

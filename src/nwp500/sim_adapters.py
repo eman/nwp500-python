@@ -1581,22 +1581,27 @@ def _carried(
         end = bisect.bisect_left(times, b)
         if first >= end:
             continue
-        head = bisect.bisect_left(times, a + lag, first, end)
-        tail = max(bisect.bisect_left(times, b - lag, first, end), head)
         before = bisect.bisect_left(times, a - lag)
         after = bisect.bisect_left(times, b + lag)
-        give(
-            shortfall(first, head),
-            (
-                i
-                for i in range(first - 1, before - 1, -1)
-                if not out[i].circulating
-            ),
-        )
-        give(
-            shortfall(tail, end),
-            (i for i in range(end, after) if not out[i].circulating),
-        )
+        outside_before = [
+            i
+            for i in range(first - 1, before - 1, -1)
+            if not out[i].circulating
+        ]
+        outside_after = [i for i in range(end, after) if not out[i].circulating]
+        if b - a <= 2 * lag:
+            # Edges this close share their shortfall: it goes to the
+            # steps outside either, nearest its edge first.
+            near = sorted(
+                [*outside_before, *outside_after],
+                key=lambda i: max(a - times[i], times[i] - b),
+            )
+            give(shortfall(first, end), near)
+            continue
+        head = bisect.bisect_left(times, a + lag, first, end)
+        tail = bisect.bisect_left(times, b - lag, first, end)
+        give(shortfall(first, head), outside_before)
+        give(shortfall(tail, end), outside_after)
     for i, gal in enumerate(carried):
         if gal > 0.0:
             out[i] = replace(
