@@ -1580,3 +1580,26 @@ class TestALatePump:
             odd,
         ):
             assert any(a <= span[0] and span[1] <= b for a, b in use.busy)
+
+
+@pytest.mark.asyncio
+async def test_the_lookback_is_elapsed_across_a_clock_change() -> None:
+    """72 h before noon after the spring change is 71 h of wall time:
+    the read spans the 72 elapsed hours either way."""
+    from zoneinfo import ZoneInfo
+
+    local = datetime(
+        2026, 3, 9, 12, 0, 1, tzinfo=ZoneInfo("America/Los_Angeles")
+    )
+    calls = []
+    for now in (local, local.astimezone(UTC)):
+        client = FakeClient(UNITS, {})
+        await ha.read_water_use(
+            client,  # type: ignore[arg-type]  # pyright: ignore[reportArgumentType]
+            ha.Entities(meter_volume="sensor.volume"),
+            now=now,
+        )
+        ((_, since, until),) = client.history_calls
+        calls.append((since, until))
+        assert until - since == ha.INLET_LOOKBACK
+    assert calls[0] == calls[1]

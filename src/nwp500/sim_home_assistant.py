@@ -961,6 +961,9 @@ async def _water_use(
     without ``book``, no flow for the book (the live inlet's read)."""
     probe_id, volume_id = e.inlet, e.meter_volume
     rate_id, pump_id = e.meter_flow, e.circulation_speed
+    # In UTC: a lookback across a clock change is the elapsed span, not
+    # the wall time's.
+    now = now.astimezone(UTC)
     since = now - lookback
     names = [n for n in (probe_id, volume_id, rate_id, pump_id) if n]
     if not names:
