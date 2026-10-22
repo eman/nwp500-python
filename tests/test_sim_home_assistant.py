@@ -4,6 +4,7 @@ environment source against a fake client."""
 
 import math
 from collections.abc import Iterable
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from typing import Any, ClassVar, TypedDict, cast
 
@@ -1525,3 +1526,44 @@ class TestTheWaterUseBooked:
         states = UNITS | {"sensor.volume": _s("sensor.volume", 0.0, "gal", 120)}
         with pytest.raises(ValueError, match="silent"):
             await self._book(statuses, states)
+
+
+class TestALatePump:
+    @pytest.mark.asyncio
+    async def test_its_later_runs_and_unread_are_busy(self) -> None:
+        series = recorded_draw(ended_hours_ago=5)
+        first = NOW - timedelta(hours=10)
+        ran = NOW - timedelta(hours=8)
+        odd = (NOW - timedelta(hours=7), NOW - timedelta(hours=6))
+        series["sensor.pump"] = [
+            (first, 0.0),
+            (ran, 2800.0),
+            (ran + timedelta(minutes=2), 0.0),
+            (odd[0], 40.0),
+            (odd[1], 0.0),
+        ]
+
+        class Recorded(FakeClient):
+            """Its pump's fourth reading recorded in a unit no speed is."""
+
+            async def read_history(
+                self, entities: Iterable[str], start: datetime, end: datetime
+            ) -> ha.History:
+                got = await super().read_history(entities, start, end)
+                units: dict[str, list[str | None]] = {
+                    "sensor.pump": ["rpm", "rpm", "rpm", "%", "rpm"]
+                }
+                return replace(got, units=units)
+
+        use = await ha.read_water_use(
+            Recorded(UNITS, series),  # type: ignore[arg-type]  # pyright: ignore[reportArgumentType]
+            ha.Entities(circulation_speed="sensor.pump", **INLET),
+            now=NOW,
+        )
+        assert use.runs is None
+        for span in (
+            (NOW - ha.INLET_LOOKBACK, first),
+            (ran, ran + timedelta(minutes=2)),
+            odd,
+        ):
+            assert any(a <= span[0] and span[1] <= b for a, b in use.busy)

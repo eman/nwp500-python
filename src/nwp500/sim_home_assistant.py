@@ -1085,28 +1085,33 @@ async def _pump_runs_since(
     """The pump's runs since ``since``, or None (and a note) when they
     are unknown: no reading in force at ``since`` (a draw before the
     first may have overlapped a run), or a speed in no unit this
-    reads. The spans it may have run unseen go to ``unread``."""
+    reads. The spans it may have run unseen go to ``unread``, and with
+    the runs unknown, the runs it was seen to make too."""
     why = None
     speed: list[Reading] = []
     rows = got.readings.get(pump_id, [])
+    start = since
     if not covers_start(rows, since):
         why = "no speed reading in force at the start"
         unread.append((since, rows[0][0] if rows else now))
-    else:
+        start = rows[0][0] if rows else now
+    if rows:
         try:
             unit = (await client.state(pump_id)).unit
             speed, left = got.converted(pump_id, unit, to_rpm, now)
             if left:
                 # A reading left out could have been a run.
-                why = f"{len(left)} readings in no speed unit"
+                why = why or f"{len(left)} readings in no speed unit"
                 unread.extend(left)
         except (HomeAssistantError, ValueError) as err:
-            why = str(err)
-            unread.append((since, now))
+            why = why or str(err)
+            unread.append((start, now))
+    runs = pump_runs(speed, start, now) if speed else None
     if why is not None:
         notes.append(f"the circulation's runs are unknown ({why})")
+        unread.extend(runs or [])
         return None
-    return pump_runs(speed, since, now)
+    return runs
 
 
 # ── over a recorded history, for the calibration ────────────────────
