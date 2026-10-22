@@ -1218,7 +1218,21 @@ the ones you want to look at again, or attach one to a bug report:
        scenario, params = codec.scenario_from_document(f.read())
 
 ``codec.result_to_document(result)`` writes a result the same
-way.
+way. The other answers (``time_to_ready``, ``next_recovery``,
+``recovery``, ``forecast``, ``active_cycle``, ``element_mode``,
+``readiness``, ``standby`` and ``heater_profile``) are documents through
+``codec.to_document``:
+
+.. code-block:: python
+
+   doc = codec.to_document(sim.time_to_ready(scenario, params))
+   doc["kind"]             # "readiness"
+   doc["deliverable_gal"]  # the answer's fields, at the top level
+
+Each document has ``schema_version`` and ``kind``, the answer's type
+in snake case (``codec.DOCUMENT_KINDS``). Instants are ISO 8601 strings,
+nested answers are objects, and a number that isn't finite is null, so
+the document is strict JSON.
 
 
 See also
