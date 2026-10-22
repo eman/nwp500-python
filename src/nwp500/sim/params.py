@@ -178,6 +178,10 @@ def note_of(part: object, name: str) -> str | None:
 # hot-standby clusters, so ua_ref is interpolated rather than extrapolated
 # from either.
 UA_REF_DELTA_T_F = 50.0
+#: The gap time constant served when the parameters carry none
+#: (``TankParams.stratification_gap_tau_h``), h: history puts it near
+#: 60 h on this product.
+TAU_GAP_PRIOR_H = 60.0
 
 # ΔT floor inside the power law.  As ΔT → 0 the power law would drive UA
 # → 0 (exponent > 0), which is unphysical: conduction through the jacket
@@ -249,6 +253,19 @@ class LossParams:
     ua_baseline_btu_hr_f: float = field(
         default=5.0, metadata=_p(DEFAULT, "BTU/hr/°F")
     )
+    #: Heat lost at the bottom of the tank, into the lower zone,
+    #: BTU/hr, on top of the UA law's loss from the whole tank. The
+    #: lower probe sees the share ``1 - exp(-gap / bottom_gate_f)`` of
+    #: it: a mixed tank hides it below the probe, a stratified one shows
+    #: it as a falling lower zone and an opening gap
+    #: (``physics.tank.bottom_loss_reach``). 0.0, what a fit from before
+    #: the bottom loss carries, is none, to the bit.
+    bottom_loss_btu_hr: float = field(
+        default=0.0, metadata=_p(FITTED, "BTU/hr", note=_LOCATION_AIR)
+    )
+    #: The gap at which the lower probe sees ``1 - 1/e`` of the bottom
+    #: loss, °F.
+    bottom_gate_f: float = field(default=1.0, metadata=_p(FITTED, "°F"))
 
 
 @dataclass(frozen=True, kw_only=True)

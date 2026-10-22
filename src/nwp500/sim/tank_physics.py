@@ -314,6 +314,8 @@ class TankPhysics:
             ),
             ua_exponent=p.loss.ua_exponent,
             ua_ref_delta_t=p.loss.ua_ref_delta_t_f,
+            bottom_loss_btu_hr=p.loss.bottom_loss_btu_hr,
+            bottom_gate_f=p.loss.bottom_gate_f,
             tau_gap_hours=self.tau_gap_hours,
             target_time=end,
             now=start,

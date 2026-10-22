@@ -78,7 +78,11 @@ zone (about half the tank's mass). Once the gap between the zones
 closes, the tank heats as one body. In standby the gap relaxes on a
 fitted time constant. Standby loss follows a jacket law,
 ``UA(dT) = ua_ref * (max(dT, 5) / 50) ^ n``, with the ambient as the
-other side.
+other side, on the whole tank. A bottom loss ``Q_b`` leaves the lower
+zone alone: the lower probe sees the share ``1 - exp(-gap / gate)`` of
+it, so a stratified tank's lower zone falls faster and its gap opens,
+while a mixed tank hides it below the probe. With ``Q_b = 0`` the loss
+is the jacket law alone.
 
 **The elements.** They follow the device's own rules
 (:doc:`heating-elements`): per-mode entry thresholds, a dead time,
