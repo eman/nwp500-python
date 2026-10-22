@@ -4,7 +4,7 @@ environment source against a fake client."""
 
 import math
 import time
-from collections.abc import Iterable
+from collections.abc import Iterable, Iterator
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from typing import Any, ClassVar, TypedDict, cast
@@ -2056,3 +2056,55 @@ class TestTheWaterHistory:
             now=NOW,
         )
         assert use.notes[0].startswith("not read")
+
+
+@pytest.mark.asyncio
+class TestTheWaterUseReadsNoPreference:
+    """``water_use`` is in °F and gal/min throughout: the preferred
+    units, process-wide, never enter it."""
+
+    @staticmethod
+    async def _history() -> ha.WaterHistory:
+        return await ha.read_water_history(
+            FakeClient(UNITS, recorded_draw(ended_hours_ago=5)),  # type: ignore[arg-type]  # pyright: ignore[reportArgumentType]
+            ha.Entities(**INLET),
+            now=NOW,
+        )
+
+    @pytest.fixture(autouse=True)
+    def _reset(self) -> Iterator[None]:
+        from nwp500.unit_system import reset_unit_system
+
+        yield
+        reset_unit_system()
+
+    async def test_either_preference_reads_the_same_mains(self) -> None:
+        from nwp500.unit_system import set_unit_system
+
+        history = await self._history()
+        set_unit_system("us_customary")
+        us = ha.water_use(history)
+        set_unit_system("metric")
+        assert ha.water_use(history) == us
+        assert us.cold is not None
+
+    async def test_a_preference_changed_midway_changes_nothing(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The preference flips to metric as the plateau's readings are
+        taken in: the mains is what it was."""
+        from nwp500 import sim_adapters as sa
+        from nwp500.unit_system import set_unit_system
+
+        history = await self._history()
+        set_unit_system("us_customary")
+        want = ha.water_use(history)
+        finite = sa._finite  # pyright: ignore[reportPrivateUsage]
+
+        def flipped(rows: Any) -> Any:
+            set_unit_system("metric")
+            return finite(rows)
+
+        monkeypatch.setattr(sa, "_finite", flipped)
+        set_unit_system("us_customary")
+        assert ha.water_use(history) == want

@@ -870,6 +870,10 @@ the air around the pipe:
    readiness = sim.time_to_ready(scenario, params, book=book,
                                  inlet_measured=measured)
 
+``sa.cold_supply`` takes the probe and the flow in the preferred units.
+``sa.cold_supply_f`` takes them in °F and gal/min, and reads no unit
+preference, for a caller whose preference may change while it runs.
+
 With the meter, the pump and the inlet probe in Home Assistant, one
 read gives the book's flow, the circulation's runs, the probe and the
 mains (``read_water_use``). It reads them as the sources file's inlet

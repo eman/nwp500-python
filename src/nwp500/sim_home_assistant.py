@@ -1163,11 +1163,11 @@ def _water_use(
     down = busy(runs or [], unread, *(got.outages.get(n, []) for n in names))
     cold = None
     if probe_id is not None and volume_id is not None and runs is not None:
-        # The adapter takes the preferred unit; these are °F and gal.
-        cold = sa.cold_supply(
-            [(t, sa.temperature(v)) for t, v in probe],
+        # In °F and gal/min, as read: no unit preference is read here.
+        cold = sa.cold_supply_f(
+            probe,
             at=now,
-            flow=[(t, sa.volume(v)) for t, v in sustained],
+            flow=sustained,
             ticks=[t for t, v in sustained if v >= meter.DRAW_GPM],
             circulation=down,
             window=lookback,

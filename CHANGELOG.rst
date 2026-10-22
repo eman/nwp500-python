@@ -44,7 +44,9 @@ Added
   it, with the same result and notes. ``read_water_history`` (the
   reading, to a ``WaterHistory``) and ``water_use`` (the rest, with no
   client) are its two halves, so the work can run off an event loop
-  (#198).
+  (#198). ``water_use`` is in °F and gal/min throughout and reads no unit
+  preference (``sim_adapters.cold_supply_f``, the mains' plateau in the
+  simulator's units).
 - ``sim_adapters.cold_supply(..., window=)``: how far back a long draw
   counts (72 hours by default).
 
