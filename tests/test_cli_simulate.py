@@ -204,7 +204,7 @@ class TestPrecedence:
         )
         assert built.scenario == s
         assert built.params == sim.default_params()
-        assert "65 gal defaults" in built.notes[0]
+        assert "65 gal defaults (give --params)" in built.notes[0]
 
     def test_a_scenario_laid_on_live_wins_where_it_speaks(self) -> None:
         overlay = _doc({"settings": {"setpoint_f": 120.0}, "horizon": "PT6H"})

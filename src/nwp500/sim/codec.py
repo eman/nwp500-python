@@ -50,6 +50,19 @@ def scenario_to_document(
     return doc
 
 
+def merge(base: Mapping[str, Any], over: Mapping[str, Any]) -> dict[str, Any]:
+    """``base`` with ``over`` laid on it: objects merge key by key; any
+    other value, a list included, replaces the one under it."""
+    out = dict(base)
+    for key, value in over.items():
+        under = out.get(key)
+        if isinstance(value, Mapping) and isinstance(under, Mapping):
+            out[key] = merge(under, value)  # pyright: ignore[reportUnknownArgumentType]
+        else:
+            out[key] = value
+    return out
+
+
 def scenario_from_document(
     doc: str | Mapping[str, Any],
 ) -> tuple[Scenario, HeaterParams | None]:

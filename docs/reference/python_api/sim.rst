@@ -292,7 +292,8 @@ Live sources
    :members: compose, Composed, Source, Given, HeaterReading,
       LiveHeaterSource, LiveScheduleSource, LiveReadError, read_status,
       read_feature, read_reservations, HeaterSource, ScheduleSource,
-      EnvironmentSource, LoadSource, DEFAULT_TIMEOUT
+      EnvironmentSource, LoadSource, DEFAULT_TIMEOUT, overlay, Built,
+      DEFAULT_HORIZON, DEFAULT_PARAMS_NOTE, zone_name
 
 
 Recorded history

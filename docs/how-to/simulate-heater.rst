@@ -222,6 +222,25 @@ source when TOU is on and its periods cannot be read. A missing
 feature info leaves ``composed.params`` None (the tank size is
 unknown). Change a part with ``composed.scenario.model_copy(update=...)``.
 
+To lay a scenario document over the heater as it is now, as
+``nwp-cli simulate --scenario ... --live`` does, use ``overlay``:
+
+.. code-block:: python
+
+   built = sim_live.overlay(composed, doc, now=datetime.now(UTC))
+   result = sim.simulate(built.scenario, built.params)
+
+Objects merge key by key, and any other value, a list included,
+replaces the one under it, so ``{"schema_version": 1, "scenario":
+{"settings": {"setpoint_f": 125}}}`` changes the setpoint and keeps
+the rest of the heater's settings. ``composed`` or ``doc`` may be None.
+Where neither gives one, the start is ``now``, the horizon 24 hours,
+and the zone ``tz=``. The parameters are ``params=``, then the
+document's, then the heater's, then the 65 gal defaults (with a note in
+``built.notes``). ``replace=`` takes parts that stand in whole for the
+scenario's, and ``over=`` parts laid on after them. A document that
+doesn't make a scenario raises ``ValueError``.
+
 To have the models themselves, read them directly. Each MQTT read is a
 request answered on a subscription:
 
