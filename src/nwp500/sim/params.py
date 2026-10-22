@@ -45,8 +45,8 @@ from collections.abc import Mapping
 from dataclasses import MISSING, dataclass, field, fields, replace
 from datetime import timedelta
 from enum import StrEnum
-from types import MappingProxyType
-from typing import Any
+from types import MappingProxyType, NoneType, UnionType
+from typing import Any, cast, get_args, get_origin, get_type_hints
 
 from nwp500.sim.units import WATER_BTU_PER_GAL_F
 
@@ -1187,8 +1187,47 @@ def unknown_fields(doc: Mapping[str, Any]) -> list[str]:
     out = [k for k in doc if k not in ("schema", "unfitted") and k not in PARTS]
     for name, cls in PARTS.items():
         known = {f.name for f in fields(cls)}
-        out.extend(f"{name}.{k}" for k in doc.get(name, {}) if k not in known)
+        given = doc.get(name, {})
+        if isinstance(given, Mapping):
+            keys = cast(Mapping[str, Any], given)
+            out.extend(f"{name}.{k}" for k in keys if k not in known)
     return out
+
+
+def _check(where: str, hint: Any, value: Any) -> None:
+    """A ``ValueError`` naming ``where`` when ``value`` is not what a
+    document holds for a field of type ``hint``: a number for a float,
+    a list for a tuple, null for None."""
+    args = get_args(hint)
+    if get_origin(hint) is UnionType:
+        if value is None and NoneType in args:
+            return
+        (hint,) = (a for a in args if a is not NoneType)
+        args = get_args(hint)
+    if get_origin(hint) is tuple:
+        if not isinstance(value, list | tuple):
+            raise ValueError(f"{where} is {value!r}, not a list")
+        items: list[Any] | tuple[Any, ...] = value
+        if len(args) == 2 and args[1] is Ellipsis:
+            args = (args[0],) * len(items)
+        elif len(items) != len(args):
+            raise ValueError(
+                f"{where} has {len(items)} values, not {len(args)}"
+            )
+        for i, (h, v) in enumerate(zip(args, items, strict=True)):
+            _check(f"{where}[{i}]", h, v)
+        return
+    if hint is float:
+        ok = isinstance(value, int | float) and not isinstance(value, bool)
+        kind = "a number"
+    elif hint is bool:
+        ok, kind = isinstance(value, bool), "true or false"
+    elif hint is str:
+        ok, kind = isinstance(value, str), "a string"
+    else:
+        return
+    if not ok:
+        raise ValueError(f"{where} is {value!r}, not {kind}")
 
 
 def params_from_document(doc: Mapping[str, Any]) -> HeaterParams:
@@ -1199,8 +1238,9 @@ def params_from_document(doc: Mapping[str, Any]) -> HeaterParams:
     a ``ValueError``. Parts and fields this code does not know are left
     out (``unknown_fields`` names them): the code reading the document
     runs no rule that could use them. A schema other than
-    ``PARAMS_SCHEMA`` is a ``ValueError``, and so is a ``doc`` that is
-    not an object.
+    ``PARAMS_SCHEMA`` is a ``ValueError``, and so are a ``doc`` that is
+    not an object and a value of the wrong type (a number where a list
+    goes, a string where a number goes).
     """
     if not isinstance(doc, Mapping):  # pyright: ignore[reportUnnecessaryIsInstance]
         raise ValueError("a parameters document is an object")
@@ -1216,10 +1256,14 @@ def params_from_document(doc: Mapping[str, Any]) -> HeaterParams:
         if not isinstance(given, Mapping):
             raise ValueError(f"part {name!r} is not an object")
         values = {}
+        hints = get_type_hints(cls)
         for f in fields(cls):
             if f.name in given:
+                _check(f"{name}.{f.name}", hints[f.name], given[f.name])
                 values[f.name] = given[f.name]
             elif f.default is MISSING and f.default_factory is MISSING:
                 raise ValueError(f"{name}.{f.name} is missing")
         parts[name] = cls(**values)
-    return HeaterParams(**parts, unfitted=tuple(doc.get("unfitted", ())))
+    unfitted = doc.get("unfitted", ())
+    _check("unfitted", tuple[str, ...], unfitted)
+    return HeaterParams(**parts, unfitted=tuple(unfitted))

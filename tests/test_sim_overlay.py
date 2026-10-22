@@ -14,6 +14,7 @@ from nwp500.sim.params import params_to_document
 
 NOW = datetime(2026, 10, 18, 14, tzinfo=UTC)
 TZ = "America/Los_Angeles"
+P65 = sim.default_params()
 
 
 def _doc(scenario: dict[str, Any], **extra: Any) -> dict[str, Any]:
@@ -141,6 +142,10 @@ class TestOverlay:
             (_doc({}, params={}), "scenario's params"),
             (_doc({}, params=[]), "scenario's params"),
             (_doc({}, params="65 gal"), "scenario's params"),
+            (
+                _doc({}, params={**params_to_document(P65), "unfitted": None}),
+                "scenario's params.*unfitted",
+            ),
             (_doc({"tz": TZ}), "do not make a scenario"),
         ],
     )
