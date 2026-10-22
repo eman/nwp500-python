@@ -198,10 +198,11 @@ class TestTheRecovery:
 def windows_of(
     starts: list[tuple[float, float, float, float]],
     loss: LossParams,
+    tau: float = TAU,
 ) -> list[cal.StandbyWindow]:
     """A quiet window for each ``(upper, lower, air, hours)``, a day
-    apart, its probes the simulation's own walk on ``loss``, on a
-    10-minute grid."""
+    apart, its probes the simulation's own walk on ``loss`` and ``tau``,
+    on a 10-minute grid."""
     out = []
     for day, (upper, lower, air, hours) in enumerate(starts):
         start = T0 + timedelta(days=day)
@@ -210,7 +211,7 @@ def windows_of(
             lower,
             _air(air, hours, start),
             cast_ua(loss),
-            TAU,
+            tau,
             start + timedelta(hours=hours),
             start,
             ua_exponent=loss.ua_exponent,
@@ -428,3 +429,121 @@ def cast_fit() -> cal.StandbyFit:
         n_gap_windows=0,
         quiet_by="dhw_in_use",
     )
+
+
+def quiet_history(
+    starts: list[tuple[float, float, float, float]],
+    loss: LossParams,
+    tau: float = TAU,
+) -> pd.DataFrame:
+    """A history of quiet windows, one a day from each ``(upper, lower,
+    air, hours)``, the probes the simulation's own walk on ``loss`` and
+    ``tau`` a sample every 5 minutes, the rest of each day the
+    compressor running."""
+    rows: list[tuple[datetime, float, float, float, bool]] = []
+    for day, (upper, lower, air, hours) in enumerate(starts):
+        start = T0 + timedelta(days=day)
+        walked = project_decay(
+            upper,
+            lower,
+            _air(air, hours, start),
+            cast_ua(loss),
+            tau,
+            start + timedelta(hours=hours),
+            start,
+            tank=TANK,
+            bottom_loss_btu_hr=loss.bottom_loss_btu_hr,
+            bottom_gate_f=loss.bottom_gate_f,
+        )
+        for at, up, lo in walked.trajectory:
+            rows.append((at, up, lo, air, False))
+        t = walked.trajectory[-1][0] + timedelta(minutes=5)
+        while t < start + timedelta(days=1):
+            rows.append((t, 125.0, 125.0, air, True))
+            t += timedelta(minutes=30)
+    frame = pd.DataFrame(
+        [r[1:] for r in rows],
+        columns=["upper_f", "lower_f", "air_f", "compressor_on"],
+        index=pd.DatetimeIndex([r[0] for r in rows]),
+    )
+    frame["element_on"] = False
+    frame["dhw_in_use"] = False
+    return frame
+
+
+class TestTheWholeStandbyFit:
+    def test_it_recovers_the_loss_and_the_gaps_constant(self) -> None:
+        # Windows opening with a draw's wide gap relax on the constant;
+        # those opening 2-8 °F apart widen under the bottom loss.
+        starts = planted_starts(30) + [
+            (140.0, 122.0 + i, 55.0 + i, 10.0) for i in range(12)
+        ]
+        planted_tau = 25.0
+        history = quiet_history(starts, PLANTED, planted_tau)
+        fit = cal.fit_standby(history, TANK.thermal_mass_btu_f, tank=TANK)
+        assert fit.tau_gap_hours is not None
+        assert fit.tau_gap_hours == pytest.approx(planted_tau, rel=0.1)
+        assert fit.ua_ref == pytest.approx(UA, rel=0.05)
+        assert fit.bottom_loss_btu_hr == pytest.approx(Q_B, rel=0.1)
+        # Read as a pure relaxation, the widening gaps drag the constant
+        # far off.
+        unforced, _ = cal.fit_gap_tau(
+            [(w.gap_hours, w.gap_f) for w in fit.windows]
+        )
+        assert unforced is not None
+        assert abs(unforced - planted_tau) > abs(
+            fit.tau_gap_hours - planted_tau
+        )
+
+
+class TestTheGapIsJudgedFirst:
+    def test_a_rejected_gap_constant_does_not_fit_the_loss(self) -> None:
+        # The gap refit loses (the base's constant is the planted one,
+        # the earlier windows relaxing on another), while the loss refit
+        # wins on the UA: it is fitted and scored on the base's
+        # constant, the one the parameters returned relax on.
+        planted_tau = 25.0
+        early = [(140.0, 122.0 + i % 4, 55.0, 10.0) for i in range(20)]
+        base = replace(
+            sim.default_params(),
+            loss=replace(PLANTED, ua_btu_hr_f=5.0),
+            tank=replace(TANK, stratification_gap_tau_h=planted_tau),
+        )
+        gap_windows = windows_of(early, PLANTED, tau=200.0)
+        loss_windows = windows_of(planted_starts(30), PLANTED, tau=planted_tau)
+        windows = tuple(
+            replace(w, start=T0 + timedelta(days=i), end=w.end)
+            for i, w in enumerate([*gap_windows, *loss_windows])
+        )
+        fit = cal.StandbyFit(
+            windows=windows,
+            n_quiet=len(windows),
+            n_dropped=0,
+            ua_ref=UA,
+            ua_exponent=0.0,
+            tau_gap_hours=None,
+            n_gap_windows=0,
+            quiet_by="dhw_in_use",
+        )
+        frame = pd.DataFrame(
+            {
+                "upper_f": [130.0, 130.0],
+                "lower_f": [130.0, 130.0],
+                "compressor_on": False,
+                "element_on": False,
+                "dhw_in_use": False,
+                "air_f": 60.0,
+            },
+            index=pd.DatetimeIndex([T0, T0 + timedelta(minutes=5)]),
+        )
+        with pytest.MonkeyPatch.context() as m:
+            m.setattr(cal, "fit_standby", lambda *_, **__: fit)
+            done, judged, held = sc._keep_better(frame, base, "air_f")
+        groups = {j.group: j for j in judged}
+        assert groups["gap_tau"].kept == "base"
+        assert groups["standby"].kept == "refit"
+        assert done.params.tank.stratification_gap_tau_h == planted_tau
+        assert held.standby_tau_h == planted_tau
+        assert done.params.loss.bottom_loss_btu_hr == pytest.approx(
+            Q_B, rel=0.1
+        )

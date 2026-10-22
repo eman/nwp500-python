@@ -170,6 +170,7 @@ Hot water and the heat book
       path_to_end, with_power, snapshots, recoveries, quiet_windows,
       busy_intervals, fit_window, fit_ua_law, fit_gap_tau, with_standby,
       fit_loss, LossFit, loss_windows, standby_ends, standby_error,
+      walk_tau, gap_paths, gap_error,
       with_compressor, UA_SEARCH_BOUNDS, UA_EXPONENT_BOUNDS, DRAW_LEAD
 
 .. automodule:: nwp500.sim.profile

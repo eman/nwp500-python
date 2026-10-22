@@ -41,6 +41,12 @@ Changed
   held-out window's fall, walked as the simulation walks it, in place of
   the error in log UA, so a loss with a bottom term and one without are
   scored alike.
+- The zone gap time constant is fitted with the bottom loss opening the
+  gaps it relaxes (``fit_gap_tau``'s ``loss``, ``gap_paths``), in turn
+  with the loss until it settles: a gap the bottom loss widens read as a
+  pure relaxation pushed the constant long. ``keep_better`` judges the
+  constant before the standby loss and fits and scores the loss on the
+  constant kept.
 
 Version 9.8.0 (2026-10-21)
 ==========================

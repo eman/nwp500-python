@@ -216,8 +216,8 @@ class HeldOut:
     recoveries: pd.DataFrame
     power_cycles: pd.DataFrame
     cop_cycles: pd.DataFrame
-    #: The gap's constant the standby loss was walked on when judged,
-    #: hours: the refit's where it fitted one, else the base's.
+    #: The gap's constant the standby loss was fitted and judged on,
+    #: hours: the one the gap's judgement kept.
     standby_tau_h: float | None = None
 
 
@@ -242,18 +242,14 @@ def _loss_error(
 
 
 def _gap_error(
-    windows: Sequence[cal.StandbyWindow], tau_hours: float | None
+    windows: Sequence[cal.StandbyWindow],
+    params: HeaterParams,
+    tau_hours: float | None,
 ) -> float | None:
-    """The gap decay's mean squared error on ``windows``, °F²."""
-    if tau_hours is None:
-        return None
-    errors = [
-        (w.gap_f - w.gap_f[0] * np.exp(-w.gap_hours / tau_hours)) ** 2
-        for w in windows
-    ]
-    if not errors or not tau_hours > 0.0:
-        return None
-    return float(np.mean(np.concatenate(errors)))
+    """The gap's mean squared error on ``windows``, °F², relaxing on
+    ``tau_hours`` and opened by ``params``' bottom loss
+    (``sim.calibration.gap_error``)."""
+    return cal.gap_error(windows, tau_hours, params.loss, params.tank)
 
 
 def _gap_windows(
@@ -332,10 +328,12 @@ def score(done: Calibrated, params: HeaterParams) -> dict[str, float | None]:
     """Each group's error for ``params`` on the evidence ``done`` held
     out of its refits (``keep_better``), by ``GROUPS``; None where none
     was held out, or ``params`` cannot model all of it. Lower is better;
-    each group's error is its own fit's:
+    each group's error is its own fit's, or the walk's:
 
-    - ``standby``: the law's weighted squared error in log UA;
-    - ``gap_tau``: the gap decay's mean squared error, °F²;
+    - ``standby``: the probes' mean absolute error in each window's
+      fall, °F/h, walked on ``HeldOut.standby_tau_h``;
+    - ``gap_tau``: the gap's mean squared error, °F², relaxing on the
+      constant and opened by ``params``' bottom loss;
     - ``compressor``: the recovery durations' mean absolute error, min;
     - ``power_scale``: the mean relative error in metered energy;
     - ``cop``: the squared error in metered energy weighted
@@ -357,7 +355,7 @@ def score(done: Calibrated, params: HeaterParams) -> dict[str, float | None]:
             params.tank,
         ),
         "gap_tau": _gap_error(
-            held.gap_windows, params.tank.stratification_gap_tau_h
+            held.gap_windows, params, params.tank.stratification_gap_tau_h
         ),
         "compressor": _recovery_error(held.recoveries, params),
         "power_scale": _power_error(held.power_cycles, params),
@@ -427,15 +425,55 @@ def _keep_better(
         frame, base.tank.thermal_mass_btu_f, tank=base.tank
     )
     windows = sorted(standby.windows, key=lambda w: w.start)
-    # The gap's constant first, as ``fit_standby`` fits it: the loss is
-    # walked on it. A group the base has not fitted takes its refit
-    # unjudged, on all its evidence.
+    params = base
+    # The gap's constant is judged first, its gaps opened by the base's
+    # bottom loss, and the standby loss is then fitted and judged on the
+    # constant kept, so a loss that wins does so on the gaps the
+    # parameters returned will relax on. A group the base has not
+    # fitted takes its refit unjudged, on all its evidence.
     gap_all = _gap_windows(windows)
     n_gap_held = 0 if "gap_tau" in unfitted else _split(len(gap_all))
     gap_train = gap_all[: len(gap_all) - n_gap_held]
     held_gaps = tuple(gap_all[len(gap_all) - n_gap_held :])
-    tau, n_gap = cal.fit_gap_tau([(w.gap_hours, w.gap_f) for w in gap_train])
-    walk_tau = cal.walk_tau(base.tank, tau)
+    tau, n_gap = cal.fit_gap_tau(
+        [(w.gap_hours, w.gap_f) for w in gap_train],
+        loss=base.loss,
+        tank=base.tank,
+    )
+    if tau is None and "gap_tau" not in unfitted:
+        judged.append(
+            _judge(
+                "gap_tau",
+                "windows that open a gap",
+                n_gap_held,
+                _gap_error(held_gaps, base, base.tank.stratification_gap_tau_h),
+                None,
+                refit_exists=False,
+                needed=cal.MIN_GAP_FIT_WINDOWS,
+            )
+        )
+    elif tau is not None:
+        if "gap_tau" in unfitted:
+            params = replace(
+                params,
+                tank=replace(params.tank, stratification_gap_tau_h=tau),
+            )
+            unfitted.discard("gap_tau")
+        else:
+            j = _judge(
+                "gap_tau",
+                "windows that open a gap",
+                n_gap_held,
+                _gap_error(held_gaps, base, base.tank.stratification_gap_tau_h),
+                _gap_error(held_gaps, base, tau),
+            )
+            judged.append(j)
+            if j.kept == "refit":
+                params = replace(
+                    params,
+                    tank=replace(params.tank, stratification_gap_tau_h=tau),
+                )
+    walk_tau = cal.walk_tau(params.tank)
     # The windows the loss can use (``loss_windows``), split.
     law = cal.loss_windows(windows)
     n_held = 0 if "standby" in unfitted else _split(len(law))
@@ -455,7 +493,6 @@ def _keep_better(
             tau_gap_hours=None,
         )
     )
-    params = base
     if "standby" not in unfitted and refit_standby is None:
         judged.append(
             Judged(
@@ -471,8 +508,6 @@ def _keep_better(
         params = cal.with_standby(params, refit_standby)
         unfitted.discard("standby")
     elif refit_standby is not None:
-        # Both walked on the same constant, so the gap's own judgement
-        # below does not tip this one.
         j = _judge(
             "standby",
             "quiet windows",
@@ -488,39 +523,6 @@ def _keep_better(
         judged.append(j)
         if j.kept == "refit":
             params = cal.with_standby(params, refit_standby)
-    if tau is None and "gap_tau" not in unfitted:
-        judged.append(
-            _judge(
-                "gap_tau",
-                "windows that open a gap",
-                n_gap_held,
-                _gap_error(held_gaps, base.tank.stratification_gap_tau_h),
-                None,
-                refit_exists=False,
-                needed=cal.MIN_GAP_FIT_WINDOWS,
-            )
-        )
-    elif tau is not None:
-        if "gap_tau" in unfitted:
-            params = replace(
-                params,
-                tank=replace(params.tank, stratification_gap_tau_h=tau),
-            )
-            unfitted.discard("gap_tau")
-        else:
-            j = _judge(
-                "gap_tau",
-                "windows that open a gap",
-                n_gap_held,
-                _gap_error(held_gaps, base.tank.stratification_gap_tau_h),
-                _gap_error(held_gaps, tau),
-            )
-            judged.append(j)
-            if j.kept == "refit":
-                params = replace(
-                    params,
-                    tank=replace(params.tank, stratification_gap_tau_h=tau),
-                )
     fitted_standby = replace(
         standby if refit_standby is None else refit_standby,
         tau_gap_hours=tau,

@@ -154,7 +154,8 @@ fitted or kept the base's value, and why:
    * - Zone gap time constant
      - How fast the upper and lower probes' gap closes over quiet
        windows; it needs 20 windows that open with a gap of 2 °F or
-       more.
+       more. The bottom loss opens the gaps it relaxes, so the two are
+       fitted in turn until the constant settles.
    * - Compressor constant, evaporator approach
      - Heat-pump recoveries that reached their target, against the loss
        just fitted. The error is the mean absolute error of the
@@ -249,7 +250,9 @@ Each group of terms holds out its latest evidence from its refit:
 - the standby loss, its exponent, the bottom loss and its gate: its
   quiet windows, scored on the probes' error in each window's fall,
   °F/h;
-- the zone gap time constant: its windows that open a gap;
+- the zone gap time constant: its windows that open a gap, judged
+  before the standby loss, which is then fitted and scored on the
+  constant kept;
 - the compressor constant and the evaporator approach: its reached
   recoveries;
 - the power scale: the metered compressor cycles it can use;

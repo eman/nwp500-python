@@ -125,6 +125,11 @@ BOTTOM_GATE_BOUNDS = (0.05, 30.0)
 #: per hour, weighted by the root of its hours, past which a residual
 #: counts linearly (``scipy.optimize.least_squares``' ``soft_l1``).
 _LOSS_FIT_SCALE = 0.05
+#: The gap's constant and the loss are fitted in turn
+#: (``fit_standby``) until the constant moves less than this share, or
+#: this many rounds.
+_STANDBY_ROUNDS_RTOL = 0.005
+_MAX_STANDBY_ROUNDS = 20
 
 
 def _instants(frame: pd.DataFrame) -> list[datetime]:
@@ -212,6 +217,11 @@ def quiet_windows(
     return out
 
 
+def _no_series() -> np.ndarray:
+    """An empty series: a window made without its probes."""
+    return np.zeros(0)
+
+
 @dataclass(frozen=True)
 class StandbyWindow:
     """One quiet window's fit: the UA that decays the tank's mean as
@@ -230,9 +240,9 @@ class StandbyWindow:
     #: The probes and the air on ``gap_hours``' grid, °F: the loss law's
     #: input (``fit_loss``). Empty, a window made without them, is not
     #: fitted on.
-    upper_f: np.ndarray = field(default_factory=lambda: np.zeros(0), repr=False)
-    lower_f: np.ndarray = field(default_factory=lambda: np.zeros(0), repr=False)
-    air_f: np.ndarray = field(default_factory=lambda: np.zeros(0), repr=False)
+    upper_f: np.ndarray = field(default_factory=_no_series, repr=False)
+    lower_f: np.ndarray = field(default_factory=_no_series, repr=False)
+    air_f: np.ndarray = field(default_factory=_no_series, repr=False)
 
 
 def fit_window(
@@ -343,16 +353,55 @@ def fit_ua_law(
     return float(np.exp(intercept)), exponent
 
 
+def gap_paths(
+    windows: Sequence[tuple[np.ndarray, np.ndarray]],
+    tau_gap_hours: float,
+    loss: LossParams | None = None,
+    tank: TankParams = TankParams(),
+) -> list[np.ndarray]:
+    """Each window's gap, ``(hours, gap)``, as the standby walk takes it
+    from its first value: relaxing on ``tau_gap_hours``, and opened by
+    ``loss``' bottom loss (``physics.tank``) where it has one. Without
+    one, the closed form ``gap_0 exp(-t / tau)``."""
+    if loss is None or loss.bottom_loss_btu_hr <= 0.0:
+        return [g[0] * np.exp(-t / tau_gap_hours) for t, g in windows]
+    q, gate = loss.bottom_loss_btu_hr, loss.bottom_gate_f
+    lower_mass = tank.lower_zone_thermal_mass_btu_f
+    n = len(windows)
+    if n == 0:
+        return []
+    steps = max(len(g) for _, g in windows) - 1
+    dt = np.zeros((n, max(steps, 0)))
+    for i, (t, _) in enumerate(windows):
+        dt[i, : len(t) - 1] = np.diff(np.asarray(t, dtype=float))
+    gap = np.maximum(np.array([g[0] for _, g in windows], dtype=float), 0.0)
+    path = np.zeros((n, steps + 1))
+    path[:, 0] = gap
+    for j in range(steps):
+        step = dt[:, j]
+        if gate > 0.0:
+            # The bottom loss at the step's start, as the walk charges it.
+            gap = gap + q * (1.0 - np.exp(-gap / gate)) * step / lower_mass
+        gap = gap * np.exp(-step / tau_gap_hours)
+        path[:, j + 1] = gap
+    return [path[i, : len(g)] for i, (_, g) in enumerate(windows)]
+
+
 def fit_gap_tau(
     windows: Sequence[tuple[np.ndarray, np.ndarray]],
     min_start_gap_f: float = MIN_GAP_FIT_START_F,
     min_windows: int = MIN_GAP_FIT_WINDOWS,
+    *,
+    loss: LossParams | None = None,
+    tank: TankParams = TankParams(),
 ) -> tuple[float | None, int]:
     """The time constant the stratification gap relaxes on, hours: one
-    constant minimising the squared gap error of ``gap_0 exp(-t/tau)``
-    pooled over every sample of every window starting with a gap of at
-    least ``min_start_gap_f``. ``(None, n)`` with fewer than
-    ``min_windows``."""
+    constant minimising the squared gap error of ``gap_paths`` (with no
+    bottom loss, ``gap_0 exp(-t/tau)``) pooled over every sample of
+    every window starting with a gap of at least ``min_start_gap_f``.
+    ``loss``' bottom loss opens the gaps it relaxes, as the walk does,
+    so a gap it widens is not read as one relaxing slowly. ``(None, n)``
+    with fewer than ``min_windows``."""
     used = [
         (t, g)
         for t, g in windows
@@ -362,9 +411,10 @@ def fit_gap_tau(
         return None, len(used)
 
     def sse(log_tau: float) -> float:
-        tau = float(np.exp(log_tau))
+        paths = gap_paths(used, float(np.exp(log_tau)), loss, tank)
         return sum(
-            float(np.sum((g - g[0] * np.exp(-t / tau)) ** 2)) for t, g in used
+            float(np.sum((g - path) ** 2))
+            for (_, g), path in zip(used, paths, strict=True)
         )
 
     low, high = GAP_TAU_BOUNDS_HOURS
@@ -375,6 +425,24 @@ def fit_gap_tau(
         ),
     )
     return float(np.exp(found.x)), len(used)
+
+
+def gap_error(
+    windows: Sequence[StandbyWindow],
+    tau_gap_hours: float | None,
+    loss: LossParams | None = None,
+    tank: TankParams = TankParams(),
+) -> float | None:
+    """The gap's mean squared error on ``windows``, °F², as
+    ``gap_paths`` takes it. None with no window or no constant."""
+    if not windows or tau_gap_hours is None or not tau_gap_hours > 0.0:
+        return None
+    pairs = [(w.gap_hours, w.gap_f) for w in windows]
+    paths = gap_paths(pairs, tau_gap_hours, loss, tank)
+    squared = [
+        (g - path) ** 2 for (_, g), path in zip(pairs, paths, strict=True)
+    ]
+    return float(np.mean(np.concatenate(squared)))
 
 
 def walk_tau(tank: TankParams, tau: float | None = None) -> float:
@@ -627,8 +695,25 @@ def fit_standby(
         fit = fit_window(history, window, thermal_mass_btu_f)
         if fit is not None and fit.rmse_f < MAX_WINDOW_RMSE_F:
             kept.append(fit)
-    tau, n_gap = fit_gap_tau([(w.gap_hours, w.gap_f) for w in kept])
+    # The gap's constant and the bottom loss each shape the other's
+    # evidence: the loss is walked on the constant, and the bottom loss
+    # opens the gaps the constant relaxes. Fitted in turn, the constant
+    # first on the gaps alone, until the constant settles.
+    gaps = [(w.gap_hours, w.gap_f) for w in kept]
+    tau, n_gap = fit_gap_tau(gaps)
     found = fit_loss(kept, walk_tau(tank, tau), tank)
+    for _ in range(_MAX_STANDBY_ROUNDS):
+        if found is None or found.bottom_gate_f is None or tau is None:
+            break
+        opened = LossParams(
+            bottom_loss_btu_hr=found.bottom_loss_btu_hr,
+            bottom_gate_f=found.bottom_gate_f,
+        )
+        before = tau
+        tau, n_gap = fit_gap_tau(gaps, loss=opened, tank=tank)
+        found = fit_loss(kept, walk_tau(tank, tau), tank)
+        if tau is None or abs(tau - before) <= _STANDBY_ROUNDS_RTOL * before:
+            break
     tier1 = [c for c in ("drawing", "circulating") if c in history.columns]
     return StandbyFit(
         windows=tuple(kept),
