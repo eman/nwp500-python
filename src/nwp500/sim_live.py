@@ -47,7 +47,7 @@ Example::
 
 import asyncio
 import logging
-from collections.abc import Awaitable, Callable, Mapping
+from collections.abc import Awaitable, Callable, Iterable, Mapping
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import TYPE_CHECKING, Any, Protocol, TypeVar, cast
@@ -60,6 +60,7 @@ from nwp500.models import (
     DeviceStatus,
     ReservationSchedule,
     TOUInfo,
+    TOUPeriod,
 )
 from nwp500.sim import (
     Commands,
@@ -245,9 +246,10 @@ def heater_reading(
 def live_schedules(
     status: DeviceStatus,
     reservations: ReservationSchedule | None,
-    tou: TOUInfo | None,
+    tou: TOUInfo | Iterable[TOUPeriod] | None,
 ) -> Schedules:
-    """The heater's schedules from its reservations and its TOU periods,
+    """The heater's schedules from its reservations and its TOU periods
+    (the ``TOUInfo`` its TOU read gives, or the periods themselves),
     however they were read, with its TOU switch from ``status``
     (``sim_adapters.schedules``). ``LiveReadError`` when TOU is on and
     ``tou`` is None: a walk without the periods would ignore the

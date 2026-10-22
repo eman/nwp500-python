@@ -229,8 +229,10 @@ periods already read some other way, build the same parts from them:
 ``sim_live.heater_reading(status, feature)`` is what
 ``LiveHeaterSource`` reads, and ``sim_live.live_schedules(status,
 reservations, tou)`` what ``LiveScheduleSource`` reads. Pass either to
-``compose`` as ``sim_live.Given(...)``. ``live_schedules`` raises
-``LiveReadError`` when the status has TOU on and ``tou`` is None.
+``compose`` as ``sim_live.Given(...)``. ``tou`` is the ``TOUInfo`` the
+TOU read gives, or the ``TOUPeriod`` list itself; the TOU switch is the
+status's. ``live_schedules`` raises ``LiveReadError`` when the status
+has TOU on and ``tou`` is None.
 
 To lay a scenario document over the heater as it is now, as
 ``nwp-cli simulate --scenario ... --live`` does, use ``overlay``:

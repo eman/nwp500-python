@@ -19,6 +19,7 @@ from nwp500.models import (
     Location,
     ReservationSchedule,
     TOUInfo,
+    TOUPeriod,
 )
 
 FEATURE: dict[str, Any] = {
@@ -296,6 +297,13 @@ class TestFromWhatWasRead:
         read = await sim_live.LiveScheduleSource(mqtt, _api(), device).read()  # type: ignore[arg-type]  # fake mqtt client
         tou = TOUInfo.model_validate(TOU)
         assert sim_live.live_schedules(on, reservations, tou) == read
+        # The periods alone, as a caller that keeps them flat holds them.
+        periods = [
+            TOUPeriod.model_validate({"season": day.season, **raw})
+            for day in tou.schedule
+            for raw in day.intervals
+        ]
+        assert sim_live.live_schedules(on, reservations, periods) == read
 
     async def test_tou_on_without_its_periods_is_an_error(
         self, status: DeviceStatus, reservations: ReservationSchedule
