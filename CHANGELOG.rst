@@ -30,23 +30,9 @@ Added
   the last one, and is None while the heater isn't heard at ``at``.
   ``book_steps_from_changes`` gives the steps, and ``silences`` the
   unheard spans.
-- **The water at the heater from Home Assistant in one read** (#193).
-  ``sim_home_assistant.read_water_use`` reads the meter's flow, the
-  circulation pump's runs, the inlet probe and the mains (``WaterUse``)
-  over a span (``INLET_LOOKBACK``, 72 hours, by default), as the live
-  source's inlet reads them, for the heat book and ``on_the_mains``. Its
-  flow (``book_flow``) keeps every report's volume, over the interval
-  it closes, in steps the book reads once each on any clock. It starts
-  at the meter's first reading when its history starts late, leaves out
-  the meter's outages and ends at its last report, so the book refuses
-  a silent meter. Unknown pump runs (an outage of its speed among them)
-  are None and their spans busy. The live source's inlet now reads through
-  it, with the same result and notes. ``read_water_history`` (the
-  reading, to a ``WaterHistory``) and ``water_use`` (the rest, with no
-  client) are its two halves, so the work can run off an event loop
-  (#198). ``water_use`` is in °F and gal/min throughout and reads no unit
-  preference (``sim_adapters.cold_supply_f``, the mains' plateau in the
-  simulator's units).
+- ``sim_adapters.cold_supply_f``: the mains' plateau in °F and gal/min,
+  reading no unit preference. The live source's inlet reads through it,
+  so a preference changed while it runs changes nothing.
 - ``sim_adapters.cold_supply(..., window=)``: how far back a long draw
   counts (72 hours by default).
 - **The heat book's terms and the circulation loop's loss, fitted
@@ -67,6 +53,9 @@ Added
 
 Fixed
 -----
+- The live source's inlet looked back 72 hours of wall time, an hour
+  more or less than 72 hours across a clock change. It now looks back
+  72 elapsed hours.
 - ``book_from_history`` counted a missing meter reading (None or NaN)
   as the meter reporting, so a gap filled with them passed the
   ``METER_MAX_GAP`` check and was booked as no flow. Missing readings

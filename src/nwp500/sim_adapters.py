@@ -1625,9 +1625,8 @@ def book_from_changes(
     from, as ``sim_calibrate.calibrate_changes`` takes them
     (``sim_home_assistant.read_heater_history`` reads both from Home
     Assistant). The same anchor search, and the same refusal of a
-    silent meter. Like the rows and the Home Assistant readers'
-    (``read_water_use``), ``flow`` and ``circulation_flow`` are gal/min
-    and ``inlet`` and ``air`` °F, whatever the preferred units.
+    silent meter. Like the rows, ``flow`` and ``circulation_flow`` are
+    gal/min and ``inlet`` and ``air`` °F, whatever the preferred units.
 
     A value that holds writes no change, so only ``observed`` says the
     heater was heard: a silence between those instants longer than
