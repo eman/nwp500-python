@@ -142,6 +142,7 @@ pass it with ``--sources`` (or set ``NWP500_SOURCES``):
    meter_flow = "sensor.water_flow_rate"
    circulation_speed = "sensor.circulation_pump_speed"
    weather = "weather.forecast_home"
+   meter_total = true       # optional: the volume is a running total
 
    [location_air]   # optional: air = damping x outdoor(t - lag) + offset
    damping = 0.638
@@ -171,7 +172,11 @@ give:
   circulation pump with no speed reading leaves no estimate.
 
 Units come from each entity's ``unit_of_measurement``: the pump's speed
-in rpm or Hz. A part that can't be read, or is stale, keeps its
+in rpm or Hz. A meter whose volume is a running total (its
+``state_class`` is ``total_increasing`` or ``total``) is read as the
+rise between readings, and a drop as the meter starting over from the
+new value. Set ``meter_total`` to say which it is when the entity
+carries no ``state_class``. A part that can't be read, or is stale, keeps its
 default, and a warning on stderr says why. ``--ambient``, ``--inlet``
 and ``--environment`` override what the sources give.
 

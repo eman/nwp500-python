@@ -2,6 +2,22 @@
 Changelog
 =========
 
+Unreleased
+==========
+
+Added
+-----
+- **Water meters that report a running total** (#189). A Home Assistant
+  meter whose volume has the ``state_class`` ``total_increasing`` or
+  ``total`` is read as the rise between readings, by the inlet's
+  plateau (``HomeAssistantEnvironment``) and ``record_inputs`` alike. A
+  drop is read as the meter starting over, counted from the new value,
+  and the notes say how many. ``Entities.meter_total`` (``meter_total``
+  in a sources file) says which it is where the entity has no
+  ``state_class``. ``State`` carries the ``state_class``, and
+  ``reports_from_total`` and ``is_running_total`` are public. A meter
+  that reports its volume since the previous report reads as before.
+
 Version 9.9.0 (2026-10-22)
 ==========================
 
