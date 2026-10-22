@@ -50,6 +50,7 @@ from nwp500.sim.params import (  # noqa: E402
     ReadinessParams,
     params_from_document,
     params_to_document,
+    unknown_fields,
 )
 from nwp500.sim.tank_physics import TankPhysics  # noqa: E402
 from nwp500.unit_system import reset_unit_system, set_unit_system  # noqa: E402
@@ -337,6 +338,14 @@ class TestTheParameters:
         doc = params_to_document(params)
         (doc if part is None else doc[part])[name] = value
         with pytest.raises(ValueError, match=match):
+            params_from_document(doc)
+
+    def test_a_part_that_is_not_an_object_has_no_unknown_fields(
+        self, params: HeaterParams
+    ) -> None:
+        doc = {**params_to_document(params), "tank": 5}
+        assert unknown_fields(doc) == []
+        with pytest.raises(ValueError, match="part 'tank' is not an object"):
             params_from_document(doc)
 
     def test_a_null_range_and_a_whole_number_are_read(
