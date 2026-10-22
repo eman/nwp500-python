@@ -282,7 +282,7 @@ def _source(
     # ``Any``: with a precise type, mypy rejects the ``**entities``
     # unpacking of a ``dict[str, str]`` as a possible ``model`` keyword.
     model: Any = None,
-    **entities: str,
+    **entities: Any,
 ) -> Any:
     return ha.HomeAssistantEnvironment(
         client,  # pyright: ignore[reportArgumentType]
@@ -1224,6 +1224,113 @@ class TestTheThirteenthReview:
         assert (await source.read()).inlet_f is None
 
 
+def _running_total(
+    reports: list[ha.Reading], start: float = 1200.0
+) -> list[ha.Reading]:
+    """``reports`` (volume since the previous report) as a running
+    total's readings, from ``start``: a baseline before the first."""
+    first = reports[0][0] - timedelta(seconds=30)
+    total, out = start, [(first, start)]
+    for t, v in reports:
+        total += v
+        out.append((t, total))
+    return out
+
+
+class TestARunningTotal:
+    def test_its_state_class_is_read(self) -> None:
+        doc = _state("sensor.volume", "1234.5", "gal")
+        doc["attributes"]["state_class"] = "total_increasing"
+        s = ha.parse_state(doc)
+        assert s.state_class == "total_increasing"
+        assert (
+            ha.parse_state(_state("sensor.air", "1", "°F")).state_class is None
+        )
+
+    def test_rises_are_reports_and_a_drop_is_a_reset(self) -> None:
+        series = [
+            (_t(0), 100.0),
+            (_t(1), 101.5),
+            (_t(2), 104.0),
+            (_t(3), 3.0),
+            (_t(4), 4.5),
+        ]
+        reports, resets = ha.reports_from_total(series)
+        assert reports == [
+            (_t(1), 1.5),
+            (_t(2), 2.5),
+            (_t(3), 0.0),
+            (_t(4), 1.5),
+        ]
+        assert resets == 1
+        assert ha.reports_from_total([(_t(0), 5.0)]) == ([], 0)
+
+    def test_the_flag_overrides_the_state_class(self) -> None:
+        total = ha.State("sensor.volume", 1.0, "gal", NOW, "total_increasing")
+        plain = ha.State("sensor.volume", 1.0, "gal", NOW, "measurement")
+        unset = ha.Entities(meter_volume="sensor.volume")
+        assert ha.is_running_total(unset, total)
+        assert ha.is_running_total(unset, replace(total, state_class="total"))
+        assert not ha.is_running_total(unset, plain)
+        assert not ha.is_running_total(replace(unset, meter_total=False), total)
+        assert ha.is_running_total(replace(unset, meter_total=True), plain)
+
+    def test_the_configuration_takes_the_flag(self) -> None:
+        doc = {
+            "home_assistant": TestTheConfiguration.DOC["home_assistant"]
+            | {"entities": {"meter_volume": "sensor.v", "meter_total": True}}
+        }
+        s = ha.sources_from(doc, {"HA_TOKEN": "x"})
+        assert s.entities.meter_total is True
+        doc["home_assistant"]["entities"]["meter_total"] = "yes"
+        with pytest.raises(ValueError, match="true or false"):
+            ha.sources_from(doc, {"HA_TOKEN": "x"})
+
+
+TOTAL_UNITS = UNITS | {
+    "sensor.volume": ha.State(
+        "sensor.volume", 0.0, "gal", NOW, "total_increasing"
+    )
+}
+
+
+@pytest.mark.asyncio
+class TestARunningTotalsInputs:
+    async def test_the_inlet_reads_the_same_plateau(self) -> None:
+        series = long_draw(ended_hours_ago=5)
+        series["sensor.volume"] = _running_total(series["sensor.volume"])
+        source = _source(FakeClient(TOTAL_UNITS, series), **INLET)
+        assert (await source.read()).inlet_f == pytest.approx(58.0)
+        assert any("running total" in n for n in source.notes)
+
+    async def test_the_record_reads_the_same_draws(self) -> None:
+        start = NOW - timedelta(days=2)
+        reports = long_draw(ended_hours_ago=5)
+        reports["sensor.volume"].insert(0, (start, 5.0))
+        totals = dict(reports)
+        # The total in force at the start is the baseline.
+        totals["sensor.volume"] = [(start, 900.0)] + [
+            (t, 900.0 + v)
+            for t, v in _running_total(reports["sensor.volume"][1:], 0.0)[1:]
+        ]
+        entities = ha.Entities(meter_volume="sensor.volume")
+        plain = await ha.record_inputs(
+            FakeClient(UNITS, reports),  # type: ignore[arg-type]  # pyright: ignore[reportArgumentType]
+            entities,
+            start,
+            NOW,
+        )
+        total = await ha.record_inputs(
+            FakeClient(TOTAL_UNITS, totals),  # type: ignore[arg-type]  # pyright: ignore[reportArgumentType]
+            entities,
+            start,
+            NOW,
+        )
+        assert total.drawing == plain.drawing
+        assert plain.drawing
+        assert any("running total" in n for n in total.notes)
+
+
 def recorded_draw(
     ended_hours_ago: float, lookback: timedelta = ha.INLET_LOOKBACK
 ) -> dict[str, list[ha.Reading]]:
@@ -1603,3 +1710,30 @@ async def test_the_lookback_is_elapsed_across_a_clock_change() -> None:
         calls.append((since, until))
         assert until - since == ha.INLET_LOOKBACK
     assert calls[0] == calls[1]
+
+
+@pytest.mark.asyncio
+async def test_a_running_total_reads_the_same_water_use() -> None:
+    reports = recorded_draw(ended_hours_ago=5)
+    totals = dict(reports)
+    # The reading in force at the start is the baseline.
+    start = reports["sensor.volume"][0][0]
+    totals["sensor.volume"] = [(start, 900.0)] + [
+        (t, 900.0 + v)
+        for t, v in _running_total(reports["sensor.volume"][1:], 0.0)[1:]
+    ]
+    entities = ha.Entities(**INLET)
+    plain = await ha.read_water_use(
+        FakeClient(UNITS, reports),  # type: ignore[arg-type]  # pyright: ignore[reportArgumentType]
+        entities,
+        now=NOW,
+    )
+    total = await ha.read_water_use(
+        FakeClient(TOTAL_UNITS, totals),  # type: ignore[arg-type]  # pyright: ignore[reportArgumentType]
+        entities,
+        now=NOW,
+    )
+    assert total.flow == plain.flow
+    assert total.cold == plain.cold
+    assert any("running total" in n for n in total.notes)
+    assert not any("covers only" in n for n in total.notes)

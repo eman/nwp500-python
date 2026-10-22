@@ -7,6 +7,29 @@ Unreleased
 
 Added
 -----
+- **Water meters that report a running total** (#189). A Home Assistant
+  meter whose volume has the ``state_class`` ``total_increasing`` or
+  ``total`` is read as the rise between readings, by the inlet's
+  plateau (``HomeAssistantEnvironment``) and ``record_inputs`` alike. A
+  drop is read as the meter starting over, counted from the new value,
+  and the notes say how many. ``Entities.meter_total`` (``meter_total``
+  in a sources file) says which it is where the entity has no
+  ``state_class``. ``State`` carries the ``state_class``, and
+  ``reports_from_total`` and ``is_running_total`` are public. A meter
+  that reports its volume since the previous report reads as before.
+- **The heat book from a heater's values' changes** (#191).
+  ``sim_adapters.book_from_changes`` books the tank's heat from
+  ``ChangeRows`` and the instants the heater was heard from (a
+  ``HeaterHistory``'s ``rows`` and ``observed``, as
+  ``calibrate_changes`` takes them), with the same steps, anchor search
+  and silent-meter refusal as ``book_from_history``. Like the rows, its
+  flows are gal/min and its temperatures °F, whatever the preferred
+  units. A span the heater
+  wasn't heard from (a silence longer than ``max_gap`` of the heard
+  instants, or an outage) breaks the book: it is read only from after
+  the last one, and is None while the heater isn't heard at ``at``.
+  ``book_steps_from_changes`` gives the steps, and ``silences`` the
+  unheard spans.
 - **The water at the heater from Home Assistant in one read** (#193).
   ``sim_home_assistant.read_water_use`` reads the meter's flow, the
   circulation pump's runs, the inlet probe and the mains (``WaterUse``)
@@ -20,6 +43,65 @@ Added
   it, with the same result and notes.
 - ``sim_adapters.cold_supply(..., window=)``: how far back a long draw
   counts (72 hours by default).
+
+Fixed
+-----
+- ``book_from_history`` counted a missing meter reading (None or NaN)
+  as the meter reporting, so a gap filled with them passed the
+  ``METER_MAX_GAP`` check and was booked as no flow. Missing readings
+  now count as silence.
+
+Changed
+-------
+- ``max_gap``, ``GAP_SAMPLES`` and ``MIN_GAP`` are defined in
+  ``sim_adapters`` and documented there. ``sim_calibrate`` still exports
+  them.
+
+Version 9.9.0 (2026-10-22)
+==========================
+
+Added
+-----
+- **A bottom loss in the standby model** (#187). Over one installation's 407
+  quiet windows across ten months, a window that opens stratified loses
+  heat at the bottom: its gap widens, its lower probe falls about 40 %
+  faster than a mixed tank's, and its upper probe hardly moves. One UA
+  on the whole tank could not represent it, and the fitted UA was a
+  blend that cooled a mixed tank too fast, as after a cold season's full
+  recoveries. ``LossParams`` gains ``bottom_loss_btu_hr`` and
+  ``bottom_gate_f``: heat leaving the lower zone, of which the lower
+  probe sees ``1 - exp(-gap / gate)`` (``sim.physics.tank.
+  bottom_loss_reach``). The standby walk (``decay.project_decay``) and
+  the recovery integrator charge it to the lower zone. A bottom loss of
+  0.0, the default and what stored parameter sets carry, reproduces the
+  model before it.
+- ``sim.calibration.fit_loss`` fits the UA law and the bottom loss
+  together, through the standby walk, on the quiet windows opening with
+  a gap of 10 °F or less (``loss_windows``); ``fit_standby`` uses it.
+  On the installation above, the lower probe's median error over ten
+  hours fell from 1.25 to 0.77 °F from March to October and from 1.67
+  to 1.05 °F over the winter (1.15 °F trained without the winter).
+  ``StandbyWindow`` carries each window's probes and air, and
+  ``standby_ends`` and ``standby_error`` walk a loss over windows.
+- The report has the bottom loss and its gate, and ``keep_better``
+  judges them with the standby loss, on the probes' error in each
+  held-out window's fall, °F/h.
+
+Changed
+-------
+- The standby loss is fitted only on quiet windows opening with a gap of
+  10 °F or less: a wider gap is a draw's front closing, which the gap's
+  time constant describes.
+- ``keep_better`` scores the standby group on the probes' error in each
+  held-out window's fall, walked as the simulation walks it, in place of
+  the error in log UA, so a loss with a bottom term and one without are
+  scored alike.
+- The zone gap time constant is fitted with the bottom loss opening the
+  gaps it relaxes (``fit_gap_tau``'s ``loss``, ``gap_paths``), in turn
+  with the loss until it settles: a gap the bottom loss widens read as a
+  pure relaxation pushed the constant long. ``keep_better`` judges the
+  constant before the standby loss and fits and scores the loss on the
+  constant kept.
 
 Version 9.8.0 (2026-10-21)
 ==========================

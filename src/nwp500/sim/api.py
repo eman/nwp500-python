@@ -78,7 +78,7 @@ from nwp500.sim.inputs import (
     Schedules,
     Settings,
 )
-from nwp500.sim.params import HeaterParams
+from nwp500.sim.params import TAU_GAP_PRIOR_H, HeaterParams
 from nwp500.sim.physics.compressor import MAX_MINUTES, predict_physics_detailed
 from nwp500.sim.physics.element import (
     DEVICE_MODE,
@@ -224,10 +224,6 @@ LOW_CONFIDENCE_FLOOR = 0.6
 #: start was never searched (the TOU-opening start still was), so an
 #: answer may miss a start the heater makes.
 HP_LOWER_ON_UNKNOWN = "hp_lower_on_unknown"
-#: The gap time constant served when the parameters carry none
-#: (``TankParams.stratification_gap_tau_h``), h: history puts it near
-#: 60 h on this product.
-TAU_GAP_PRIOR_H = 60.0
 #: Draws opened a gap that closes on that prior, not a fitted constant:
 #: under no draws it only shapes how an existing gap closes.
 TAU_GAP_PRIOR = "tau_gap_prior"

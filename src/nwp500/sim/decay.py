@@ -35,7 +35,7 @@ from nwp500.sim.physics.draw import (
     lower_zone_drop_f,
     withdrawn_gal,
 )
-from nwp500.sim.physics.tank import ua_at
+from nwp500.sim.physics.tank import bottom_loss_drop_f, ua_at
 from nwp500.sim.units import DEFAULT_AMBIENT_F, WATER_BTU_PER_GAL_F
 
 #: A draw's inflow temperature, °F: a value, a function of the instant
@@ -248,6 +248,8 @@ def project_decay(
     last_heated_at: datetime | None = None,
     ambient: AmbientSampler | None = None,
     tank: TankParams = TankParams(),
+    bottom_loss_btu_hr: float = 0.0,
+    bottom_gate_f: float = 1.0,
 ) -> DecayProjection:
     """Project tank temperatures forward to the target time.
 
@@ -316,6 +318,14 @@ def project_decay(
             builds it here; the answer is the same.
         tank: The tank, whose thermal mass the bulk is charged against
             and whose lower zone a flowing draw's inflow mixes into.
+        bottom_loss_btu_hr: Heat lost into the lower zone, BTU/hr
+            (``LossParams.bottom_loss_btu_hr``), of which the lower
+            probe sees ``sim.physics.tank.bottom_loss_reach`` at the
+            gap: it falls the lower zone alone and opens the gap.
+            ``0.0``, the default, is none, and the walk is the one
+            before it to the bit.
+        bottom_gate_f: The gap at which the probe sees ``1 - 1/e`` of
+            the bottom loss, °F.
 
     Returns:
         DecayProjection with projected temperatures at the
@@ -560,6 +570,24 @@ def project_decay(
                         t_bulk - gap_at(sub_elapsed) / 2.0,
                     )
                 )
+
+            if bottom_loss_btu_hr > 0.0:
+                # The bottom loss over the partition, charged at its
+                # start as a flowing draw's inflow is: the lower zone
+                # alone, so the bulk falls half the drop, the gap opens
+                # by all of it, and the upper zone does not move.
+                gap_here = gap_at(sub_elapsed)
+                bottom_drop = bottom_loss_drop_f(
+                    bottom_loss_btu_hr,
+                    gap_here,
+                    bottom_gate_f,
+                    sub_dt,
+                    tank.lower_zone_thermal_mass_btu_f,
+                )
+                if bottom_drop > 0.0:
+                    t_bulk -= bottom_drop / 2.0
+                    gap_ref = gap_here + bottom_drop
+                    gap_ref_at = sub_elapsed
 
             t_amb = t_amb_step if i == 0 else amb.at(sub_start)
             # Bulk tank decay: dT/dt = -(UA/mc_p)(T − T_amb).  Over a

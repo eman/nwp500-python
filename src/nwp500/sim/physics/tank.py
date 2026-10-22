@@ -40,7 +40,46 @@ falls back to the constant-UA behaviour that shipped before it.
 
 ``exponent = 0.0`` reproduces the pre-existing constant-UA model exactly,
 which is also what parameter sets fitted before the law existed carry.
+
+The bottom loss
+---------------
+
+The law above takes heat from the whole tank, and both probes see it.
+Over one installation's 407 quiet windows across ten months, that
+cannot be the whole loss. In a window that opens stratified (the upper
+probe 1-10 °F above the lower), the gap **widens** rather than closing,
+the lower probe falls about 40 % faster than in a mixed tank at the same
+temperatures, and the upper probe hardly moves. A single UA fitted
+across both kinds of window was a blend: about 4.0 BTU/hr·°F on mixed
+windows, 6-7 on stratified ones. Mixed windows dominate after the full
+recoveries a cold season brings, so the blend cooled the tank too fast
+there.
+
+That is heat leaving at the bottom, into the lower zone, where water
+cooled outside the tank comes back in. It is
+the same pattern ``physics.draw.lower_zone_drop_f`` measures for cold
+water let in at the bottom: in a mixed tank it pools below the lower
+probe, unseen, and the probe sees it once the thermocline reaches it.
+So the bottom loss ``Q_b`` (``LossParams.bottom_loss_btu_hr``) is
+charged to the lower zone alone, and the probe sees the share::
+
+    reach = 1 − e^(−gap / gate)
+
+of it (``bottom_loss_reach``). Fitted jointly with the UA law through
+the standby walk on the 306 windows opening with a gap of at most
+10 °F, 76 of them stratified, it came out at ``Q_b`` ≈ 89 BTU/hr and a
+gate of 1.35 °F, and the UA law at a constant 4.6. The lower probe's
+median error over ten hours fell from 1.25 to 0.77 °F from March to
+October, and its bias from +0.58 to +0.06 °F; over the winter, from
+1.67 to 1.05 °F, and to 1.15 °F trained on March to October alone.
+
+The share the probe does not see is not carried: what a mixed tank
+loses below the probe shows up later, through the draw's own pool
+(``physics.draw``), not through this term. ``Q_b = 0.0`` is none, and
+reproduces the law above exactly.
 """
+
+import math
 
 from nwp500.sim.params import UA_MIN_DELTA_T_F, UA_REF_DELTA_T_F
 
@@ -70,3 +109,32 @@ def ua_at(
         return ua_ref
     scaled = max(abs(delta_t), UA_MIN_DELTA_T_F) / ref_delta_t
     return float(ua_ref * scaled**exponent)
+
+
+def bottom_loss_reach(gap_f: float, gate_f: float) -> float:
+    """The share of the bottom loss the lower probe sees at a
+    stratification gap of ``gap_f``: ``1 − e^(−gap / gate)``, 0.0 in a
+    mixed tank (or a gap that does not open, or no gate)."""
+    if gap_f <= 0.0 or gate_f <= 0.0:
+        return 0.0
+    return 1.0 - math.exp(-gap_f / gate_f)
+
+
+def bottom_loss_drop_f(
+    bottom_loss_btu_hr: float,
+    gap_f: float,
+    gate_f: float,
+    hours: float,
+    lower_zone_btu_f: float,
+) -> float:
+    """How far the bottom loss takes the lower probe over ``hours``, °F:
+    the share it sees (``bottom_loss_reach``) of ``bottom_loss_btu_hr``,
+    against the lower zone's mass. 0.0 with no bottom loss."""
+    if bottom_loss_btu_hr <= 0.0 or hours <= 0.0:
+        return 0.0
+    return (
+        bottom_loss_btu_hr
+        * bottom_loss_reach(gap_f, gate_f)
+        * hours
+        / lower_zone_btu_f
+    )

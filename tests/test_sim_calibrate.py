@@ -851,6 +851,7 @@ class TestKeepBetterEveryGroup:
 
 class TestKeepBetterFirstReview:
     def test_a_law_is_scored_at_its_own_reference(self) -> None:
+        hours = np.linspace(0.0, 4.0, 49)
         window = cal.StandbyWindow(
             start=T0,
             end=T0 + timedelta(hours=4),
@@ -858,21 +859,28 @@ class TestKeepBetterFirstReview:
             rmse_f=0.1,
             delta_t_mean_f=40.0,
             duration_hours=4.0,
-            gap_hours=np.zeros(2),
-            gap_f=np.zeros(2),
+            gap_hours=hours,
+            gap_f=np.zeros(49),
+            upper_f=100.0 - 0.6 * hours,
+            lower_f=100.0 - 0.6 * hours,
+            air_f=np.full(49, 60.0),
         )
         u30, e = 6.0, 0.3
+        base = sim.default_params()
         loss = replace(
-            sim.default_params().loss,
-            ua_btu_hr_f=u30,
-            ua_exponent=e,
-            ua_ref_delta_t_f=30.0,
+            base.loss, ua_btu_hr_f=u30, ua_exponent=e, ua_ref_delta_t_f=30.0
         )
         # The same law, quoted at 50 °F.
-        same = sc._law_error([window], u30 * (50 / 30) ** e, e)
-        assert sc._loss_error([window], loss) == pytest.approx(same)
-        assert sc._loss_error([window], loss) != pytest.approx(
-            sc._law_error([window], u30, e)
+        same = replace(loss, ua_btu_hr_f=u30 * (50 / 30) ** e)
+        same = replace(same, ua_ref_delta_t_f=50.0)
+        at = sc._loss_error([window], loss, 60.0, base.tank)
+        assert at == pytest.approx(
+            sc._loss_error([window], same, 60.0, base.tank)
+        )
+        assert at != pytest.approx(
+            sc._loss_error(
+                [window], replace(loss, ua_ref_delta_t_f=50.0), 60.0, base.tank
+            )
         )
 
     def test_a_refit_law_takes_its_own_reference(self) -> None:
@@ -1002,7 +1010,7 @@ class TestKeepBetterThirdReview:
         base = _fitted(12.0)
         frame = recovery_days(1)
         with pytest.MonkeyPatch.context() as m:
-            m.setattr(cal, "fit_standby", lambda *_: fit)
+            m.setattr(cal, "fit_standby", lambda *_, **__: fit)
             _, judged, held = sc._keep_better(frame, base, "air_f")
         (standby,) = [j for j in judged if j.group == "standby"]
         assert standby.n_held == 0
@@ -1155,7 +1163,7 @@ def _keep_gap(
         quiet_by="dhw_in_use",
     )
     with pytest.MonkeyPatch.context() as m:
-        m.setattr(cal, "fit_standby", lambda *_: fit)
+        m.setattr(cal, "fit_standby", lambda *_, **__: fit)
         done, judged, held = sc._keep_better(recovery_days(1), base, "air_f")
     (gap,) = [j for j in judged if j.group == "gap_tau"]
     return done.params, gap, held

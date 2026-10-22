@@ -25,7 +25,7 @@ from nwp500.sim.physics.refrigerant import (
     vapor_density,
     vapor_enthalpy,
 )
-from nwp500.sim.physics.tank import ua_at
+from nwp500.sim.physics.tank import bottom_loss_reach, ua_at
 
 # Tank thermal masses come from ``TankParams``: the lower zone's while
 # the tank is stratified (≈ 263 BTU/°F, half the 63.2-gal tank), the full
@@ -188,7 +188,8 @@ def predict_physics_detailed(
             Its fitted pair and two-zone flag are not read: they are the
             arguments above and below, which calibration searches over.
         loss: Supplies ``ua_baseline_btu_hr_f``, the UA used when
-            ``ua_btu_hr_f`` is None.
+            ``ua_btu_hr_f`` is None, and the bottom loss
+            (``bottom_loss_btu_hr``, ``bottom_gate_f``).
         h_amb_start: Ambient relative humidity at cycle start (%).
             Used to compute dew point for latent heat term.
         t_evap_override: Live evaporator coil temperature (°F).  When
@@ -258,6 +259,10 @@ def predict_physics_detailed(
     # parameters carry an exponent.
     ua_is_flat = ua_exponent == 0.0
     ua_per_s = ua_btu_hr_f / 3600.0
+    # The bottom loss (``LossParams.bottom_loss_btu_hr``), BTU/s; 0.0 is
+    # none, and the integration is the one before it to the bit.
+    bottom_per_s = loss.bottom_loss_btu_hr / 3600.0
+    bottom_gate = loss.bottom_gate_f
 
     cond_approach = compressor.cond_approach_f
     clearance = compressor.clearance_ratio
@@ -353,6 +358,11 @@ def predict_physics_detailed(
                 / 3600.0
             )
         q_loss = ua_per_s * max(0.0, delta_t)
+        if bottom_per_s > 0.0:
+            # The bottom loss leaves the lower zone the condenser is
+            # heating, the share the probe sees at this gap
+            # (``tank.bottom_loss_reach``), as the standby walk charges it.
+            q_loss += bottom_per_s * bottom_loss_reach(gap, bottom_gate)
 
         # Net heat → temperature rise, against whatever mass is
         # resisting it.  While the tank is stratified the condenser warms

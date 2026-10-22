@@ -169,6 +169,8 @@ Hot water and the heat book
       metered_withdrawn, metered_lead,
       path_to_end, with_power, snapshots, recoveries, quiet_windows,
       busy_intervals, fit_window, fit_ua_law, fit_gap_tau, with_standby,
+      fit_loss, LossFit, loss_windows, standby_ends, standby_error,
+      walk_tau, gap_paths, gap_error,
       with_compressor, UA_SEARCH_BOUNDS, UA_EXPONENT_BOUNDS, DRAW_LEAD
 
 .. automodule:: nwp500.sim.profile
@@ -250,7 +252,7 @@ The pieces the entry points are built from.
       vapor_enthalpy, dew_point_f
 
 .. automodule:: nwp500.sim.physics.tank
-   :members: ua_at
+   :members: ua_at, bottom_loss_reach, bottom_loss_drop_f
 
 .. automodule:: nwp500.sim.physics.element
    :members: mode_recovery, ModeRecovery, mode_plan, ModePlan,
@@ -299,9 +301,9 @@ Recorded history
    :members:
 
 .. automodule:: nwp500.sim_calibrate
-   :members: calibrate, calibrate_changes, Calibrated, report, Term, max_gap,
+   :members: calibrate, calibrate_changes, Calibrated, report, Term,
       score, Judged, HeldOut, GROUPS, air_unread_note,
-      CalibrationInputError, DEFAULT_HUMIDITY_PCT, GAP_SAMPLES, MIN_GAP,
+      CalibrationInputError, DEFAULT_HUMIDITY_PCT,
       DEFAULT_BASE_NOTE, NO_AIR_NOTE
 
 
@@ -315,4 +317,5 @@ Home Assistant sources
       parse_forecast, read_heater_history, HeaterEntities, HeaterHistory,
       HISTORY_WINDOW, to_w, to_wh,
       pump_runs, draw_spans, busy, covers_start, reports_after, percent,
+      is_running_total, reports_from_total, TOTAL_STATE_CLASSES,
       fresh, to_f, to_gpm, to_gal, to_rpm, HomeAssistantError

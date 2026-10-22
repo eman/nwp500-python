@@ -142,6 +142,7 @@ pass it with ``--sources`` (or set ``NWP500_SOURCES``):
    meter_flow = "sensor.water_flow_rate"
    circulation_speed = "sensor.circulation_pump_speed"
    weather = "weather.forecast_home"
+   meter_total = true       # optional: the volume is a running total
 
    [location_air]   # optional: air = damping x outdoor(t - lag) + offset
    damping = 0.638
@@ -171,7 +172,11 @@ give:
   circulation pump with no speed reading leaves no estimate.
 
 Units come from each entity's ``unit_of_measurement``: the pump's speed
-in rpm or Hz. A part that can't be read, or is stale, keeps its
+in rpm or Hz. A meter whose volume is a running total (its
+``state_class`` is ``total_increasing`` or ``total``) is read as the
+rise between readings, and a drop as the meter starting over from the
+new value. Set ``meter_total`` to say which it is when the entity
+carries no ``state_class``. A part that can't be read, or is stale, keeps its
 default, and a warning on stderr says why. ``--ambient``, ``--inlet``
 and ``--environment`` override what the sources give.
 
@@ -823,6 +828,30 @@ heater's statuses, book the tank's heat from the record and pass it as
        circulation_flow=pump_flow,
    )
    readiness = sim.time_to_ready(scenario, params, book=book)
+
+With the heater's values recorded as changes instead (Home Assistant's
+entity history, which ``read_heater_history`` reads), book from those,
+with the instants the heater was heard from:
+
+.. code-block:: python
+
+   from nwp500 import sim_home_assistant as ha
+
+   history = await ha.read_heater_history(client, entities, start, now)
+   book = sa.book_from_changes(
+       history.rows,
+       history.observed,
+       params,
+       at=now,
+       flow=meter_gpm,        # gal/min, whatever the preferred units
+   )
+
+Like the history's rows, its ``flow`` and ``circulation_flow`` are
+gal/min and its ``inlet`` and ``air`` °F, whatever the preferred units.
+A span the heater wasn't heard from (an outage, or a silence much
+longer than its usual reporting) breaks the book: it is walked only
+from an anchor after the last one, and is None while the heater isn't
+heard now.
 
 Without a meter, start one only when you know the tank is full and
 quiet (``sa.full_tank_book``).
