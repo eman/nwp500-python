@@ -169,6 +169,7 @@ Hot water and the heat book
       metered_withdrawn, metered_lead,
       path_to_end, with_power, snapshots, recoveries, quiet_windows,
       busy_intervals, fit_window, fit_ua_law, fit_gap_tau, with_standby,
+      fit_loss, LossFit, loss_windows, standby_ends, standby_error,
       with_compressor, UA_SEARCH_BOUNDS, UA_EXPONENT_BOUNDS, DRAW_LEAD
 
 .. automodule:: nwp500.sim.profile
@@ -250,7 +251,7 @@ The pieces the entry points are built from.
       vapor_enthalpy, dew_point_f
 
 .. automodule:: nwp500.sim.physics.tank
-   :members: ua_at
+   :members: ua_at, bottom_loss_reach, bottom_loss_drop_f
 
 .. automodule:: nwp500.sim.physics.element
    :members: mode_recovery, ModeRecovery, mode_plan, ModePlan,

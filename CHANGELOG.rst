@@ -2,6 +2,46 @@
 Changelog
 =========
 
+Unreleased
+==========
+
+Added
+-----
+- **A bottom loss in the standby model** (#187). Over one installation's 407
+  quiet windows across ten months, a window that opens stratified loses
+  heat at the bottom: its gap widens, its lower probe falls about 40 %
+  faster than a mixed tank's, and its upper probe hardly moves. One UA
+  on the whole tank could not represent it, and the fitted UA was a
+  blend that cooled a mixed tank too fast, as after a cold season's full
+  recoveries. ``LossParams`` gains ``bottom_loss_btu_hr`` and
+  ``bottom_gate_f``: heat leaving the lower zone, of which the lower
+  probe sees ``1 - exp(-gap / gate)`` (``sim.physics.tank.
+  bottom_loss_reach``). The standby walk (``decay.project_decay``) and
+  the recovery integrator charge it to the lower zone. A bottom loss of
+  0.0, the default and what stored parameter sets carry, reproduces the
+  model before it.
+- ``sim.calibration.fit_loss`` fits the UA law and the bottom loss
+  together, through the standby walk, on the quiet windows opening with
+  a gap of 10 °F or less (``loss_windows``); ``fit_standby`` uses it.
+  On the installation above, the lower probe's median error over ten
+  hours fell from 1.25 to 0.77 °F from March to October and from 1.67
+  to 1.05 °F over the winter (1.15 °F trained without the winter).
+  ``StandbyWindow`` carries each window's probes and air, and
+  ``standby_ends`` and ``standby_error`` walk a loss over windows.
+- The report has the bottom loss and its gate, and ``keep_better``
+  judges them with the standby loss, on the probes' error in each
+  held-out window's fall, °F/h.
+
+Changed
+-------
+- The standby loss is fitted only on quiet windows opening with a gap of
+  10 °F or less: a wider gap is a draw's front closing, which the gap's
+  time constant describes.
+- ``keep_better`` scores the standby group on the probes' error in each
+  held-out window's fall, walked as the simulation walks it, in place of
+  the error in log UA, so a loss with a bottom term and one without are
+  scored alike.
+
 Version 9.8.0 (2026-10-21)
 ==========================
 

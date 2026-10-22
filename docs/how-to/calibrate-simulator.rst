@@ -139,12 +139,18 @@ fitted or kept the base's value, and why:
 
    * - Term
      - Fitted from
-   * - Standby loss and its exponent
+   * - Standby loss, its exponent, the bottom loss and its gate
      - Quiet windows of 3 h or more, starting 45 minutes after any
-       heating or hot water in use. A window counts only if its fit
-       tracks the probes within 2 °F. The exponent is fitted only when
-       the windows span two 20 °F bands of tank-to-air difference; it
-       is held at 0 (a constant loss) otherwise.
+       heating or hot water in use, that open with a gap of 10 °F or
+       less between the probes. A window counts only if its fit tracks
+       the probes within 2 °F. Each window's upper and lower probe are
+       walked from its start as the simulation walks them, and the
+       terms are fitted to where the probes ended. The exponent is
+       fitted only when the windows span two 20 °F bands of tank-to-air
+       difference; it is held at 0 (a constant loss) otherwise. The
+       bottom loss needs 10 windows that open with a gap of 1 °F or
+       more; with fewer it is 0, and the loss is the jacket law
+       alone.
    * - Zone gap time constant
      - How fast the upper and lower probes' gap closes over quiet
        windows; it needs 20 windows that open with a gap of 2 °F or
@@ -240,7 +246,9 @@ fit as ``params`` with ``keep_better=True``:
 
 Each group of terms holds out its latest evidence from its refit:
 
-- the standby loss and its exponent: its quiet windows;
+- the standby loss, its exponent, the bottom loss and its gate: its
+  quiet windows, scored on the probes' error in each window's fall,
+  °F/h;
 - the zone gap time constant: its windows that open a gap;
 - the compressor constant and the evaporator approach: its reached
   recoveries;

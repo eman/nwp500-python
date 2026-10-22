@@ -47,11 +47,10 @@ from nwp500 import sim_adapters as sa
 from nwp500.models import DeviceStatus
 from nwp500.sim import calibration as cal
 from nwp500.sim.params import (
-    UA_MIN_DELTA_T_F,
-    UA_REF_DELTA_T_F,
     UNFITTED_TERMS,
     HeaterParams,
     LossParams,
+    TankParams,
     params_from_document,
 )
 
@@ -207,15 +206,19 @@ class Judged:
 @dataclass(frozen=True)
 class HeldOut:
     """The latest of each group's evidence, held out of its refit: the
-    quiet windows, the windows that open a gap, the reached recoveries,
-    and the snapshot rows of the cycles the power scale's and the COP's
-    fits could use."""
+    quiet windows the loss is fitted on (``sim.calibration.
+    loss_windows``), the windows that open a gap, the reached
+    recoveries, and the snapshot rows of the cycles the power scale's
+    and the COP's fits could use."""
 
     windows: tuple[cal.StandbyWindow, ...]
     gap_windows: tuple[cal.StandbyWindow, ...]
     recoveries: pd.DataFrame
     power_cycles: pd.DataFrame
     cop_cycles: pd.DataFrame
+    #: The gap's constant the standby loss was walked on when judged,
+    #: hours: the refit's where it fitted one, else the base's.
+    standby_tau_h: float | None = None
 
 
 def _split(n: int) -> int:
@@ -226,45 +229,16 @@ def _split(n: int) -> int:
     return max(cal.MIN_HELDOUT, round(n * cal.HELDOUT_FRACTION))
 
 
-def _law_error(
-    windows: Sequence[cal.StandbyWindow],
-    ua_ref: float | None,
-    exponent: float | None,
-    ref: float = UA_REF_DELTA_T_F,
-) -> float | None:
-    """The loss law's error on ``windows``, as ``fit_ua_law`` fits it:
-    the squared error in log UA against each window's own, weighted by
-    its hours. ``ua_ref`` is quoted at ``ref`` °F."""
-    usable = [
-        w for w in windows if w.ua_btu_hr_f > 0.0 and w.delta_t_mean_f > 0.0
-    ]
-    if not usable or ua_ref is None or exponent is None or not ua_ref > 0.0:
-        return None
-    errors = [
-        (
-            np.log(w.ua_btu_hr_f)
-            - np.log(ua_ref)
-            - exponent * np.log(max(w.delta_t_mean_f, UA_MIN_DELTA_T_F) / ref)
-        )
-        ** 2
-        for w in usable
-    ]
-    hours = [w.duration_hours for w in usable]
-    return float(np.average(errors, weights=hours))
-
-
 def _loss_error(
-    windows: Sequence[cal.StandbyWindow], loss: LossParams
+    windows: Sequence[cal.StandbyWindow],
+    loss: LossParams,
+    tau_gap_hours: float,
+    tank: TankParams,
 ) -> float | None:
-    """``_law_error`` of the law ``loss`` holds, at its own reference;
-    without a fitted UA, the baseline it runs on."""
-    ua = loss.ua_btu_hr_f
-    return _law_error(
-        windows,
-        loss.ua_baseline_btu_hr_f if ua is None else ua,
-        loss.ua_exponent,
-        loss.ua_ref_delta_t_f,
-    )
+    """The standby loss's error on ``windows``: the probes' mean absolute
+    error in each window's fall, °F/h, walked on ``tau_gap_hours``
+    (``sim.calibration.standby_error``)."""
+    return cal.standby_error(windows, loss, tau_gap_hours, tank)
 
 
 def _gap_error(
@@ -376,7 +350,12 @@ def score(done: Calibrated, params: HeaterParams) -> dict[str, float | None]:
         )
     loss = params.loss
     return {
-        "standby": _loss_error(held.windows, loss),
+        "standby": _loss_error(
+            held.windows,
+            loss,
+            cal.walk_tau(params.tank, held.standby_tau_h),
+            params.tank,
+        ),
         "gap_tau": _gap_error(
             held.gap_windows, params.tank.stratification_gap_tau_h
         ),
@@ -444,35 +423,40 @@ def _keep_better(
     unfitted takes its refit as ``calibrate`` would."""
     unfitted = set(base.unfitted)
     judged: list[Judged] = []
-    standby = cal.fit_standby(frame, base.tank.thermal_mass_btu_f)
+    standby = cal.fit_standby(
+        frame, base.tank.thermal_mass_btu_f, tank=base.tank
+    )
     windows = sorted(standby.windows, key=lambda w: w.start)
-    # The windows the law can use (``fit_ua_law``'s test), split. A
-    # group the base has not fitted takes its refit unjudged, on all its
-    # evidence.
-    law = [
-        w
-        for w in windows
-        if w.ua_btu_hr_f > 0.0
-        and w.delta_t_mean_f > 0.0
-        and w.duration_hours > 0.0
-    ]
-    n_held = 0 if "standby" in unfitted else _split(len(law))
-    train = law[: len(law) - n_held]
-    held_windows = tuple(law[len(law) - n_held :])
-    ua_ref = exponent = None
-    if train:
-        ua_ref, exponent = cal.fit_ua_law(
-            [w.delta_t_mean_f for w in train],
-            [w.ua_btu_hr_f for w in train],
-            [w.duration_hours for w in train],
-        )
+    # The gap's constant first, as ``fit_standby`` fits it: the loss is
+    # walked on it. A group the base has not fitted takes its refit
+    # unjudged, on all its evidence.
     gap_all = _gap_windows(windows)
     n_gap_held = 0 if "gap_tau" in unfitted else _split(len(gap_all))
     gap_train = gap_all[: len(gap_all) - n_gap_held]
     held_gaps = tuple(gap_all[len(gap_all) - n_gap_held :])
     tau, n_gap = cal.fit_gap_tau([(w.gap_hours, w.gap_f) for w in gap_train])
+    walk_tau = cal.walk_tau(base.tank, tau)
+    # The windows the loss can use (``loss_windows``), split.
+    law = cal.loss_windows(windows)
+    n_held = 0 if "standby" in unfitted else _split(len(law))
+    train = law[: len(law) - n_held]
+    held_windows = tuple(law[len(law) - n_held :])
+    loss_fit = cal.fit_loss(train, walk_tau, base.tank) if train else None
+    refit_standby = (
+        None
+        if loss_fit is None
+        else replace(
+            standby,
+            ua_ref=loss_fit.ua_ref,
+            ua_exponent=loss_fit.ua_exponent,
+            bottom_loss_btu_hr=loss_fit.bottom_loss_btu_hr,
+            bottom_gate_f=loss_fit.bottom_gate_f,
+            n_stratified=loss_fit.n_stratified,
+            tau_gap_hours=None,
+        )
+    )
     params = base
-    if "standby" not in unfitted and (ua_ref is None or exponent is None):
+    if "standby" not in unfitted and refit_standby is None:
         judged.append(
             Judged(
                 "standby",
@@ -483,37 +467,27 @@ def _keep_better(
                 "kept the base: no quiet window to refit on",
             )
         )
-    elif "standby" in unfitted:
-        if ua_ref is not None and exponent is not None:
-            params = cal.with_standby(
-                params,
-                replace(
-                    standby,
-                    ua_ref=ua_ref,
-                    ua_exponent=exponent,
-                    tau_gap_hours=None,
-                ),
-            )
-            unfitted.discard("standby")
-    else:
+    elif refit_standby is not None and "standby" in unfitted:
+        params = cal.with_standby(params, refit_standby)
+        unfitted.discard("standby")
+    elif refit_standby is not None:
+        # Both walked on the same constant, so the gap's own judgement
+        # below does not tip this one.
         j = _judge(
             "standby",
             "quiet windows",
             n_held,
-            _loss_error(held_windows, base.loss),
-            _law_error(held_windows, ua_ref, exponent),
+            _loss_error(held_windows, base.loss, walk_tau, base.tank),
+            _loss_error(
+                held_windows,
+                cal.with_standby(base, refit_standby).loss,
+                walk_tau,
+                base.tank,
+            ),
         )
         judged.append(j)
         if j.kept == "refit":
-            params = cal.with_standby(
-                params,
-                replace(
-                    standby,
-                    ua_ref=ua_ref,
-                    ua_exponent=exponent,
-                    tau_gap_hours=None,
-                ),
-            )
+            params = cal.with_standby(params, refit_standby)
     if tau is None and "gap_tau" not in unfitted:
         judged.append(
             _judge(
@@ -548,9 +522,7 @@ def _keep_better(
                     tank=replace(params.tank, stratification_gap_tau_h=tau),
                 )
     fitted_standby = replace(
-        standby,
-        ua_ref=ua_ref,
-        ua_exponent=exponent,
+        standby if refit_standby is None else refit_standby,
         tau_gap_hours=tau,
         n_gap_windows=n_gap,
     )
@@ -686,7 +658,12 @@ def _keep_better(
         unfitted=tuple(t for t in UNFITTED_TERMS if t in unfitted),
     )
     held = HeldOut(
-        held_windows, held_gaps, held_recoveries, held_power, held_cop
+        held_windows,
+        held_gaps,
+        held_recoveries,
+        held_power,
+        held_cop,
+        standby_tau_h=walk_tau,
     )
     return (
         cal.Calibration(params, fitted_standby, compressor, power, found),
@@ -993,6 +970,8 @@ _GROUP_TERMS = {
     "standby": (
         "Standby loss (UA at ref ΔT, BTU/h·°F)",
         "Standby loss exponent",
+        "Bottom loss (BTU/h)",
+        "Bottom loss gate (°F)",
     ),
     "gap_tau": ("Zone gap time constant (h)",),
     "compressor": ("Compressor constant", "Evaporator approach (°F)"),
@@ -1011,6 +990,8 @@ def _values(params: HeaterParams) -> dict[str, float | None]:
     values = (
         loss.ua_btu_hr_f,
         loss.ua_exponent,
+        loss.bottom_loss_btu_hr,
+        loss.bottom_gate_f,
         params.tank.stratification_gap_tau_h,
         params.compressor.compressor_constant,
         params.compressor.evap_approach_f,
@@ -1083,6 +1064,13 @@ def report(done: Calibrated) -> list[Term]:
         if s.windows
         else "-"
     )
+    bottom_why = (
+        ""
+        if s.bottom_gate_f is not None
+        else f"{s.n_stratified} windows open stratified (a gap of "
+        f"{cal.MIN_BOTTOM_FIT_GAP_F:g} °F or more); "
+        f"{cal.MIN_BOTTOM_FIT_WINDOWS} needed"
+    )
     terms = [
         Term(
             "Standby loss (UA at ref ΔT, BTU/h·°F)",
@@ -1103,6 +1091,24 @@ def report(done: Calibrated) -> list[Term]:
             if s.ua_exponent != 0.0
             else "0, a constant loss: under 4 windows, under two 20 °F "
             "bands, or the fit clamped to 0",
+        ),
+        Term(
+            "Bottom loss (BTU/h)",
+            _num(s.bottom_loss_btu_hr if s.bottom_gate_f is not None else None),
+            f"{s.n_stratified} stratified windows",
+            "-",
+            s.bottom_gate_f is not None,
+            why or bottom_why,
+            note="heat leaving the lower zone, which the lower probe "
+            "sees only while the tank is stratified",
+        ),
+        Term(
+            "Bottom loss gate (°F)",
+            _num(s.bottom_gate_f),
+            f"{s.n_stratified} stratified windows",
+            "-",
+            s.bottom_gate_f is not None,
+            why or bottom_why,
         ),
         Term(
             "Zone gap time constant (h)",

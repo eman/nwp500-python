@@ -50,7 +50,12 @@ from zoneinfo import ZoneInfo
 
 import numpy as np
 import pandas as pd
-from scipy.optimize import OptimizeResult, minimize, minimize_scalar
+from scipy.optimize import (
+    OptimizeResult,
+    least_squares,
+    minimize,
+    minimize_scalar,
+)
 
 from nwp500.sim.book import Booked, full_tank, house_gpm, is_full
 from nwp500.sim.book import Step as BookStep
@@ -61,6 +66,7 @@ from nwp500.sim.heating_trajectory import path_cop
 from nwp500.sim.inputs import ELECTRIC, ENERGY_SAVER, HIGH_DEMAND
 from nwp500.sim.params import (
     INSTALLATION_TERMS,
+    TAU_GAP_PRIOR_H,
     UA_MIN_DELTA_T_F,
     UA_REF_DELTA_T_F,
     UNFITTED_TERMS,
@@ -104,6 +110,21 @@ _BAND_WIDTH_F = 20.0
 MIN_GAP_FIT_START_F = 2.0
 MIN_GAP_FIT_WINDOWS = 20
 GAP_TAU_BOUNDS_HOURS = (1.0, 2000.0)
+#: The loss law is fitted on windows opening with a gap of at most
+#: this, °F: a wider one is a draw's front closing, the gap's constant's
+#: regime, not the standby loss's.
+MAX_LOSS_FIT_GAP_F = 10.0
+#: A window opening with at least this gap, °F, shows the bottom loss
+#: (``physics.tank``); the bottom loss is fitted only on this many.
+MIN_BOTTOM_FIT_GAP_F = 1.0
+MIN_BOTTOM_FIT_WINDOWS = 10
+#: Bounds of the bottom loss, BTU/hr, and of its gate, °F.
+BOTTOM_LOSS_BOUNDS = (0.0, 1000.0)
+BOTTOM_GATE_BOUNDS = (0.05, 30.0)
+#: The joint fit's soft_l1 scale, °F/h·√h: a window's end error
+#: per hour, weighted by the root of its hours, past which a residual
+#: counts linearly (``scipy.optimize.least_squares``' ``soft_l1``).
+_LOSS_FIT_SCALE = 0.05
 
 
 def _instants(frame: pd.DataFrame) -> list[datetime]:
@@ -206,6 +227,12 @@ class StandbyWindow:
     #: the stratification fit's input.
     gap_hours: np.ndarray = field(repr=False)
     gap_f: np.ndarray = field(repr=False)
+    #: The probes and the air on ``gap_hours``' grid, °F: the loss law's
+    #: input (``fit_loss``). Empty, a window made without them, is not
+    #: fitted on.
+    upper_f: np.ndarray = field(default_factory=lambda: np.zeros(0), repr=False)
+    lower_f: np.ndarray = field(default_factory=lambda: np.zeros(0), repr=False)
+    air_f: np.ndarray = field(default_factory=lambda: np.zeros(0), repr=False)
 
 
 def fit_window(
@@ -272,6 +299,9 @@ def fit_window(
         duration_hours=(end - start).total_seconds() / 3600.0,
         gap_hours=np.concatenate(([0.0], np.cumsum(dt_h))),
         gap_f=(wide["upper_f"] - wide["lower_f"]).to_numpy(dtype=float),
+        upper_f=wide["upper_f"].to_numpy(dtype=float),
+        lower_f=wide["lower_f"].to_numpy(dtype=float),
+        air_f=air,
     )
 
 
@@ -347,6 +377,207 @@ def fit_gap_tau(
     return float(np.exp(found.x)), len(used)
 
 
+def walk_tau(tank: TankParams, tau: float | None = None) -> float:
+    """The gap's constant the standby loss is walked on, hours: ``tau``,
+    else ``tank``'s, else ``TAU_GAP_PRIOR_H``, as the simulation serves
+    an unfitted one."""
+    if tau is not None:
+        return tau
+    if tank.stratification_gap_tau_h is not None:
+        return tank.stratification_gap_tau_h
+    return TAU_GAP_PRIOR_H
+
+
+def loss_windows(
+    windows: Sequence[StandbyWindow],
+) -> list[StandbyWindow]:
+    """The windows ``fit_loss`` fits on: with their probes and air,
+    opening with a gap of at most ``MAX_LOSS_FIT_GAP_F``, and a UA, a
+    ΔT and hours above zero (``fit_ua_law``'s own test)."""
+    return [
+        w
+        for w in windows
+        if len(w.upper_f) >= 2
+        and len(w.upper_f) == len(w.lower_f) == len(w.air_f)
+        and len(w.gap_hours) == len(w.upper_f)
+        and bool(np.isfinite(w.upper_f).all())
+        and bool(np.isfinite(w.lower_f).all())
+        and bool(np.isfinite(w.air_f).all())
+        and w.upper_f[0] - w.lower_f[0] <= MAX_LOSS_FIT_GAP_F
+        and w.ua_btu_hr_f > 0.0
+        and w.delta_t_mean_f > 0.0
+        and w.duration_hours > 0.0
+    ]
+
+
+def standby_ends(
+    windows: Sequence[StandbyWindow],
+    loss: LossParams,
+    tau_gap_hours: float,
+    tank: TankParams = TankParams(),
+) -> tuple[np.ndarray, np.ndarray]:
+    """Each window's upper and lower probe at its end, °F, as the
+    standby walk (``decay.project_decay``) takes them there from its
+    first reading on ``loss``: the UA law on the bulk, the bottom loss
+    on the lower zone, the gap relaxing on ``tau_gap_hours``. Windows
+    from ``loss_windows``; a UA of None is ``ua_baseline_btu_hr_f``."""
+    n = len(windows)
+    if n == 0:
+        return np.zeros(0), np.zeros(0)
+    steps = max(len(w.upper_f) for w in windows) - 1
+    dt = np.zeros((n, steps))
+    air = np.zeros((n, steps))
+    for i, w in enumerate(windows):
+        k = len(w.upper_f) - 1
+        dt[i, :k] = np.diff(np.asarray(w.gap_hours, dtype=float))
+        air[i, :k] = w.air_f[:k]
+    ua_ref = (
+        loss.ua_baseline_btu_hr_f
+        if loss.ua_btu_hr_f is None
+        else loss.ua_btu_hr_f
+    )
+    mass = tank.thermal_mass_btu_f
+    lower_mass = tank.lower_zone_thermal_mass_btu_f
+    upper0 = np.array([w.upper_f[0] for w in windows], dtype=float)
+    lower0 = np.array([w.lower_f[0] for w in windows], dtype=float)
+    bulk = (upper0 + lower0) / 2.0
+    gap = np.maximum(upper0 - lower0, 0.0)
+    q, gate = loss.bottom_loss_btu_hr, loss.bottom_gate_f
+    for j in range(steps):
+        step = dt[:, j]
+        if q > 0.0 and gate > 0.0:
+            # At the step's start, as the walk charges it.
+            drop = q * (1.0 - np.exp(-gap / gate)) * step / lower_mass
+            bulk = bulk - drop / 2.0
+            gap = gap + drop
+        delta = bulk - air[:, j]
+        if loss.ua_exponent == 0.0:
+            ua = np.full(n, ua_ref)
+        else:
+            scaled = (
+                np.maximum(np.abs(delta), UA_MIN_DELTA_T_F)
+                / loss.ua_ref_delta_t_f
+            )
+            ua = ua_ref * scaled**loss.ua_exponent
+        bulk = bulk - ua / mass * delta * step
+        gap = gap * np.exp(-step / tau_gap_hours)
+    return bulk + gap / 2.0, bulk - gap / 2.0
+
+
+def standby_error(
+    windows: Sequence[StandbyWindow],
+    loss: LossParams,
+    tau_gap_hours: float,
+    tank: TankParams = TankParams(),
+) -> float | None:
+    """The probes' mean absolute error in each window's fall, °F/h:
+    ``standby_ends`` against each window's last readings, both probes
+    alike. None with no window."""
+    if not windows:
+        return None
+    upper, lower = standby_ends(windows, loss, tau_gap_hours, tank)
+    hours = np.array([w.duration_hours for w in windows], dtype=float)
+    seen_u = np.array([w.upper_f[-1] for w in windows], dtype=float)
+    seen_l = np.array([w.lower_f[-1] for w in windows], dtype=float)
+    errors = np.concatenate(
+        [np.abs(upper - seen_u) / hours, np.abs(lower - seen_l) / hours]
+    )
+    return float(np.mean(errors))
+
+
+@dataclass(frozen=True)
+class LossFit:
+    """The loss law ``fit_loss`` found: the UA law's pair, the bottom
+    loss and its gate (0.0 and None without the evidence for them), and
+    the windows it stood on, and of those, the stratified ones."""
+
+    ua_ref: float
+    ua_exponent: float
+    bottom_loss_btu_hr: float
+    bottom_gate_f: float | None
+    n_windows: int
+    n_stratified: int
+
+
+def fit_loss(
+    windows: Sequence[StandbyWindow],
+    tau_gap_hours: float,
+    tank: TankParams = TankParams(),
+) -> LossFit | None:
+    """The standby loss on ``windows`` (``loss_windows`` of them).
+
+    With ``MIN_BOTTOM_FIT_WINDOWS`` opening with a gap of at least
+    ``MIN_BOTTOM_FIT_GAP_F``, the UA law and the bottom loss are fitted
+    together through the standby walk (``standby_ends``): each window's
+    upper and lower probe at its end against what it read, per hour,
+    weighted by the root of its hours, ``soft_l1``. A mixed window
+    holds the UA law; a stratified one, the bottom loss and its gate
+    (``physics.tank``). The exponent is fitted only where ``fit_ua_law``
+    would fit one. Without that evidence, ``fit_ua_law``'s law and no
+    bottom loss. None with no window."""
+    used = loss_windows(windows)
+    if not used:
+        return None
+    ua_ref, exponent = fit_ua_law(
+        [w.delta_t_mean_f for w in used],
+        [w.ua_btu_hr_f for w in used],
+        [w.duration_hours for w in used],
+    )
+    stratified = [
+        w for w in used if w.upper_f[0] - w.lower_f[0] >= MIN_BOTTOM_FIT_GAP_F
+    ]
+    if len(stratified) < MIN_BOTTOM_FIT_WINDOWS:
+        return LossFit(ua_ref, exponent, 0.0, None, len(used), len(stratified))
+    bands = np.floor(np.array([w.delta_t_mean_f for w in used]) / _BAND_WIDTH_F)
+    with_exponent = (
+        len(used) >= _MIN_WINDOWS_FOR_LAW
+        and len(np.unique(bands)) >= _MIN_BANDS_FOR_LAW
+    )
+    hours = np.array([w.duration_hours for w in used], dtype=float)
+    seen_u = np.array([w.upper_f[-1] for w in used], dtype=float)
+    seen_l = np.array([w.lower_f[-1] for w in used], dtype=float)
+    weight = np.sqrt(hours) / hours
+
+    def law(x: np.ndarray) -> LossParams:
+        return LossParams(
+            ua_btu_hr_f=float(x[0]),
+            ua_exponent=float(x[3]) if with_exponent else 0.0,
+            bottom_loss_btu_hr=float(x[1]),
+            bottom_gate_f=float(x[2]),
+        )
+
+    def residuals(x: np.ndarray) -> np.ndarray:
+        upper, lower = standby_ends(used, law(x), tau_gap_hours, tank)
+        return np.concatenate(
+            [(upper - seen_u) * weight, (lower - seen_l) * weight]
+        )
+
+    lo = [UA_SEARCH_BOUNDS[0], BOTTOM_LOSS_BOUNDS[0], BOTTOM_GATE_BOUNDS[0]]
+    hi = [UA_SEARCH_BOUNDS[1], BOTTOM_LOSS_BOUNDS[1], BOTTOM_GATE_BOUNDS[1]]
+    x0 = [ua_ref, 50.0, 1.0]
+    if with_exponent:
+        lo.append(UA_EXPONENT_BOUNDS[0])
+        hi.append(UA_EXPONENT_BOUNDS[1])
+        x0.append(min(max(exponent, 0.05), UA_EXPONENT_BOUNDS[1] - 0.05))
+    x0[0] = min(max(x0[0], lo[0] + 1e-6), hi[0] - 1e-6)
+    found = least_squares(
+        residuals,
+        np.array(x0, dtype=float),
+        bounds=(np.array(lo), np.array(hi)),
+        loss="soft_l1",
+        f_scale=_LOSS_FIT_SCALE,
+    )
+    fitted = law(found.x)
+    return LossFit(
+        cast(float, fitted.ua_btu_hr_f),
+        fitted.ua_exponent,
+        fitted.bottom_loss_btu_hr,
+        fitted.bottom_gate_f,
+        len(used),
+        len(stratified),
+    )
+
+
 @dataclass(frozen=True)
 class StandbyFit:
     """The standby fits: the windows kept, the law, the gap's constant,
@@ -364,6 +595,12 @@ class StandbyFit:
     #: The quiet test: ``meter`` with draws and circulation recorded,
     #: ``dhw_in_use`` without them, ``meter+dhw_in_use`` with one.
     quiet_by: str
+    #: The bottom loss and its gate (``fit_loss``): 0.0 and None
+    #: without the stratified windows to fit them on, and how many
+    #: there were.
+    bottom_loss_btu_hr: float = 0.0
+    bottom_gate_f: float | None = None
+    n_stratified: int = 0
 
 
 def fit_standby(
@@ -372,34 +609,38 @@ def fit_standby(
     *,
     min_quiet_hours: float = MIN_QUIET_HOURS,
     settle_minutes: float = SETTLE_MINUTES,
+    tank: TankParams | None = None,
 ) -> StandbyFit:
-    """The standby loss law and the gap's time constant from the
-    history's quiet windows."""
+    """The standby loss and the gap's time constant from the history's
+    quiet windows: the gap's constant first, then the loss
+    (``fit_loss``) walked on it, or on ``tank``'s where too few windows
+    open with a gap to fit one. ``tank`` (default the default tank of
+    ``thermal_mass_btu_f``'s mass) is the walk's lower zone."""
+    if tank is None:
+        tank = replace(
+            TankParams(),
+            volume_gal=thermal_mass_btu_f / WATER_BTU_PER_GAL_F,
+        )
     quiet = quiet_windows(history, min_quiet_hours, settle_minutes)
     kept: list[StandbyWindow] = []
     for window in quiet:
         fit = fit_window(history, window, thermal_mass_btu_f)
         if fit is not None and fit.rmse_f < MAX_WINDOW_RMSE_F:
             kept.append(fit)
-    ua_ref = exponent = None
-    if kept:
-        ua_ref, exponent = fit_ua_law(
-            [w.delta_t_mean_f for w in kept],
-            [w.ua_btu_hr_f for w in kept],
-            # A long cold soak constrains the decay far better than a
-            # short window.
-            [w.duration_hours for w in kept],
-        )
     tau, n_gap = fit_gap_tau([(w.gap_hours, w.gap_f) for w in kept])
+    found = fit_loss(kept, walk_tau(tank, tau), tank)
     tier1 = [c for c in ("drawing", "circulating") if c in history.columns]
     return StandbyFit(
         windows=tuple(kept),
         n_quiet=len(quiet),
         n_dropped=len(quiet) - len(kept),
-        ua_ref=ua_ref,
-        ua_exponent=exponent,
+        ua_ref=None if found is None else found.ua_ref,
+        ua_exponent=None if found is None else found.ua_exponent,
         tau_gap_hours=tau,
         n_gap_windows=n_gap,
+        bottom_loss_btu_hr=0.0 if found is None else found.bottom_loss_btu_hr,
+        bottom_gate_f=None if found is None else found.bottom_gate_f,
+        n_stratified=0 if found is None else found.n_stratified,
         quiet_by=(
             "meter"
             if len(tier1) == 2
@@ -997,12 +1238,20 @@ def with_standby(params: HeaterParams, fit: StandbyFit) -> HeaterParams:
     loss, tank = params.loss, params.tank
     if fit.ua_ref is not None and fit.ua_exponent is not None:
         # Quoted at the ΔT ``fit_standby``'s law was fitted at, not
-        # whatever ``params`` held.
+        # whatever ``params`` held. The bottom loss goes with it: a law
+        # fitted without one has the bottom's heat in its UA, so the
+        # parameters' own would count it twice.
         loss = replace(
             loss,
             ua_btu_hr_f=fit.ua_ref,
             ua_exponent=fit.ua_exponent,
             ua_ref_delta_t_f=UA_REF_DELTA_T_F,
+            bottom_loss_btu_hr=fit.bottom_loss_btu_hr,
+            bottom_gate_f=(
+                loss.bottom_gate_f
+                if fit.bottom_gate_f is None
+                else fit.bottom_gate_f
+            ),
         )
     if fit.tau_gap_hours is not None:
         tank = replace(tank, stratification_gap_tau_h=fit.tau_gap_hours)
@@ -1544,7 +1793,7 @@ def calibrate(
     ``gap_tau``. ``base``'s record of the installation's terms
     (``INSTALLATION_TERMS``) is kept: they are fitted apart, and a
     caller applying its own fits drops each from ``unfitted``."""
-    standby = fit_standby(history, base.tank.thermal_mass_btu_f)
+    standby = fit_standby(history, base.tank.thermal_mass_btu_f, tank=base.tank)
     params = with_standby(base, standby)
     rows = snapshots(
         history, air=recovery_air, draws=draws, circulation=circulation
