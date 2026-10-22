@@ -870,6 +870,43 @@ the air around the pipe:
    readiness = sim.time_to_ready(scenario, params, book=book,
                                  inlet_measured=measured)
 
+With the meter, the pump and the inlet probe in Home Assistant, one
+read gives the book's flow, the circulation's runs, the probe and the
+mains (``read_water_use``). It reads them as the sources file's inlet
+does, over the last 72 hours by default:
+
+.. code-block:: python
+
+   from nwp500 import sim_home_assistant as ha
+
+   use = await ha.read_water_use(client, entities, now=now)
+   if use.runs is not None:
+       book = sa.book_from_history(
+           recorded,
+           params,
+           at=now,
+           # read_water_use gives gal/min and degF; the book takes the
+           # preferred units.
+           flow=[(t, sa.volume(v)) for t, v in use.flow],
+           circulation=use.runs,
+           inlet=[(t, sa.temperature(v)) for t, v in use.probe],
+       )
+       if book is not None and use.cold is not None:
+           book, measured = on_the_mains(book, use.cold)
+
+``use.runs`` is None when the pump's runs are unknown: then the meter's
+circulation share can't be told from draws, so don't book. ``use.cold``
+is None without a long draw to read the mains from; ``use.notes`` say
+why. ``use.flow`` keeps every report's volume, spread over the interval
+the report closes; the book's own draw line decides what is a draw. It
+has no samples
+before the meter's history starts, while the meter was unavailable, or
+after its last report, so the book refuses a meter silent over an hour
+of the window. Home Assistant records no row while a value repeats, so
+a quiet meter that still reports is live until it goes unavailable or
+its last report (``last_reported``, Home Assistant 2024.3 and later)
+is old. A pump unavailable over the span leaves ``use.runs`` None.
+
 The mains is the median plateau of the long draws (11 minutes or more,
 with circulation off) over the last 72 hours, read from minute 9 of each
 draw, once the probe has passed the stagnant pipe. There is none

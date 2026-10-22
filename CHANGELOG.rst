@@ -30,6 +30,20 @@ Added
   the last one, and is None while the heater isn't heard at ``at``.
   ``book_steps_from_changes`` gives the steps, and ``silences`` the
   unheard spans.
+- **The water at the heater from Home Assistant in one read** (#193).
+  ``sim_home_assistant.read_water_use`` reads the meter's flow, the
+  circulation pump's runs, the inlet probe and the mains (``WaterUse``)
+  over a span (``INLET_LOOKBACK``, 72 hours, by default), as the live
+  source's inlet reads them, for the heat book and ``on_the_mains``. Its
+  flow (``book_flow``) keeps every report's volume, over the interval
+  it closes, in steps the book reads once each on any clock. It starts
+  at the meter's first reading when its history starts late, leaves out
+  the meter's outages and ends at its last report, so the book refuses
+  a silent meter. Unknown pump runs (an outage of its speed among them)
+  are None and their spans busy. The live source's inlet now reads through
+  it, with the same result and notes.
+- ``sim_adapters.cold_supply(..., window=)``: how far back a long draw
+  counts (72 hours by default).
 - **The heat book's terms and the circulation's, fitted together**
   (#196). ``sim_calibrate.fit_book`` fits the book's compressor heat
   rate and slope with the air, its standby UA and a circulation loop's
