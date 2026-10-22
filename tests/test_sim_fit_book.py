@@ -71,12 +71,25 @@ def history(
     after_gpm: float = 0.0,
     truth: BookParams | None = None,
     air_f: float | None = None,
+    tied: bool = False,
 ) -> dict[str, Any]:
     """A history of ``cycles`` six-hour cycles walked by the book's own
     balance (``truth``, else ``params``' book), each run taking ``loss``
     per gallon (``late_loss`` from cycle ``late_from`` on), the air at
     ``air_f`` throughout or else varying by cycle, and what ``fit_book``
-    takes."""
+    takes. ``tied`` makes each run a quarter of its cycle's recovery,
+    so the runs' gallons follow the compressor's hours."""
+
+    def runs_to(cycle: int) -> int:
+        if tied:
+            return RUN[0] + (recovers_to(cycle) - RECOVERY[0]) // 4
+        return run_end(cycle)
+
+    def recovers_to(cycle: int) -> int:
+        if tied:
+            return RECOVERY[1] + 20 * (cycle % 2)
+        return recovery_end(cycle)
+
     p = truth if truth is not None else params.book_terms()
     mass = WATER_BTU_PER_GAL_F * p.tank_gal
     h = sa.BOOK_GRID_S / 3600.0
@@ -94,20 +107,20 @@ def history(
         minute = (i // 6) % CYCLE
         cycle = i // (6 * CYCLE)
         air = air_at(cycle) if air_f is None else air_f
-        heating = RECOVERY[0] <= minute < recovery_end(cycle) or (
+        heating = RECOVERY[0] <= minute < recovers_to(cycle) or (
             cycle == 0 and first[0] <= minute < first[1]
         )
-        running = RUN[0] <= minute < run_end(cycle)
+        running = RUN[0] <= minute < runs_to(cycle)
         # A tap open for the run's first minute, and one for the minute
         # after it.
         tap = tap_gpm if minute == RUN[0] else 0.0
-        if minute == run_end(cycle):
+        if minute == runs_to(cycle):
             tap += after_gpm
         if draw_at_h is not None and 0 <= (i * 10 / 3600 - draw_at_h) < 5 / 60:
             # A five-minute draw at 2 gal/min.
             tap = 2.0
         if running and minute == RUN[0] and i % 6 == 0:
-            runs.append((t, t + timedelta(minutes=run_end(cycle) - RUN[0])))
+            runs.append((t, t + timedelta(minutes=runs_to(cycle) - RUN[0])))
         probe.append((t, temp))
         comp.append((t, heating))
         flow.append((t, (RUN_GPM if running and meter_sees else 0.0) + tap))
@@ -527,3 +540,14 @@ def test_the_air_at_one_temperature_holds_the_slope() -> None:
     rate = got.book.hp_btu_per_h + 5 * got.book.hp_btu_per_h_per_f
     assert rate == pytest.approx(want, rel=0.001)
     assert got.book.ua_btu_per_h_f == pytest.approx(OTHER.ua_btu_per_h_f)
+
+
+def test_a_loss_the_pairs_cant_tell_apart_is_no_fit() -> None:
+    """Each run a quarter of its cycle's recovery: the runs' gallons
+    follow the compressor's hours, so the loss can't be told from the
+    heat rate. It is no fit, and the book is refitted without the runs'
+    pairs rather than with a loss of 0."""
+    h = history(NO_BASE, 16, 150.0, tied=True)
+    got = fit(NO_BASE, h)
+    assert got.circulation is None
+    assert "can't be told from the book's terms" in got.why

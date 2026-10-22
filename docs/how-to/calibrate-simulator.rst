@@ -435,8 +435,9 @@ The fit needs 10 pairs. It holds out the latest fifth and replaces the
 base only when it books them no worse. A term on its bound
 (``sim.calibration.BOOK_TERM_BOUNDS``) is no fit: the book misses
 something between those anchors that the term is standing in for. The
-loop's loss on its bound leaves the loss out; any other term on its
-bound keeps the base. ``fit.kept`` says which it kept and ``fit.why``
+loop's loss on its bound, or one the pairs can't tell from the book's
+terms (runs that follow the recoveries), leaves the loss out; any other
+term on its bound keeps the base. ``fit.kept`` says which it kept and ``fit.why``
 why. A span the heater wasn't heard from, or the meter was silent over
 an hour, breaks the book.
 

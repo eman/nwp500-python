@@ -1530,7 +1530,8 @@ def fit_book(
         terms: CirculationParams | None, fit_loss: bool, notes: list[str]
     ) -> BookTermsFit | str:
         """The fit with the loop's ``terms``, its loss fitted or held;
-        why not, as a string, when only the loss is on its bound."""
+        why not, as a string, when only the loss is on its bound or
+        the pairs can't tell it from the book's terms."""
         fitted = books(terms)
         found = pairs_of(fitted)
         if terms is None and run_spans:
@@ -1570,6 +1571,11 @@ def fit_book(
         )
         k, x = system(fitted, train)
         free = _independent(x, range(3 + fit_loss))
+        if fit_loss and 3 not in free:
+            return (
+                "the loop's loss can't be told from the book's terms on "
+                "these pairs, not a fit"
+            )
         fixed = [j for j in range(4) if j not in free]
         bounds = cal.BOOK_TERM_BOUNDS
         got = start.copy()
