@@ -367,72 +367,105 @@ On a desktop computer, 60 days with a heartbeat every 10 seconds
 Assistant's own queries, and 11 to fit, in about 180 MB.
 
 
-Fit the circulation
-===================
+Fit the heat book
+=================
 
-A circulation pump's runs cost the heat book the pipe's loss, and a
-household meter on the loop reads part of their flow. Without
-``CirculationParams`` the book prices a run's metered flow as a draw
-and charges nothing for the loss. ``fit_circulation`` fits them from
-the heater's history, the meter and the pump's runs, with no flow
-sensor on the pump:
+The heat book (``book_from_changes``) counts the heat the tank holds
+from the compressor's heat rate and its slope with the air, the standby
+UA, and, with a circulation pump, the loop's loss per gallon
+(``CirculationParams``). ``fit_book`` fits them together from the
+heater's history, its meter, and the pump's runs, with no flow sensor on
+the pump. Read the water use with the heater's history, in the same
+client:
 
 .. code-block:: python
 
    from dataclasses import replace
 
-   params = done.calibration.params
-   use = await ha.read_water_use(client, ha.Entities(
-       meter_volume=..., circulation_speed=...), now=end,
-       lookback=end - start)
+   from nwp500 import sim_adapters as sa
+
+   async with ha.HomeAssistantClient(url, token) as client:
+       history = await ha.read_heater_history(client, entities, start, end)
+       record = await ha.record_inputs(client, ha.Entities(air=..., humidity=...),
+                                       start, end)
+       use = await ha.read_water_use(client, ha.Entities(
+           meter_volume=..., circulation_speed=...), now=end,
+           lookback=end - start)
+   params = sim_calibrate.calibrate_changes(
+       history.rows, history.observed, record=record, notes=history.notes
+   ).calibration.params
    if use.runs is not None:
-       fit = sim_calibrate.fit_circulation(
+       fit = sim_calibrate.fit_book(
            history.rows, history.observed, params,
            flow=use.flow, runs=use.runs, air=record.air or (),
        )
-       params = replace(params, circulation=fit.params)
+       params = replace(params, book=fit.book, circulation=fit.circulation)
 
-``read_water_use``'s flow is gal/min and ``record_inputs``' air °F, as
-the fit takes them. The fit reads two things of a run,
-per minute:
+``use.runs`` is None when the pump's runs couldn't be read, and empty
+without a pump. ``read_water_use``'s flow is gal/min and
+``record_inputs``' air °F, as the fit takes them. The meter is the
+heater's supply: the book takes every gallon it reads as hot.
 
-- **What the meter sees:** the median meter flow over the runs' clean
-  minutes (no more than ``book.draw_gpm`` over the run's own median, so
-  no tap was open). It is the run's flow, with ``meter_share`` 1. Under
-  0.05 gal/min the meter isn't on the loop: ``meter_share`` is 0 and a
-  run is priced at the base's flow, else 1 gal/min.
-- **The loss per gallon:** the value that books best from each quiet
-  full tank to the next with a run between, the book's other terms held
-  at ``params.book``.
+The fit reads the pairs of quiet full tanks up to
+``book.max_anchor_age_h`` apart, and fits each term for the least mean
+absolute error between the book and the probes at the second of each
+pair:
+
+- **The book's terms:** the compressor's heat rate and slope, and the
+  standby UA, on every pair. A term the pairs don't move (the slope,
+  with the air never off 65 °F) stays at ``params.book``. The rest of the
+  book (its draw line, the anchors' age, the valve's line) is
+  ``params``'.
+- **What the meter sees of a run:** the median meter flow over the
+  runs' clean minutes (no more than ``book.draw_gpm`` over the run's
+  own median, so no tap was open), from 10 clean runs over 3 days. It is
+  the run's flow, with ``meter_share`` 1. Under 0.05 gal/min the meter
+  isn't on the loop: ``meter_share`` is 0 and a run is priced at the
+  base's flow, else 1 gal/min.
+- **The loop's loss per gallon:** on 10 pairs with a run between,
+  with the book's terms. With fewer, the loss is
+  ``params.circulation``'s, and without one, the pairs with a run are
+  left out.
+
+``displaced_gal`` and ``run_gap_min`` come from ``params.circulation``,
+else ``site_example_params``': the book can't tell them.
+
+The fit needs 10 pairs. It holds out the latest fifth and replaces the
+base only when it books them no worse. A term on its bound
+(``sim.calibration.BOOK_TERM_BOUNDS``) is no fit: the book misses
+something between those anchors that the term is standing in for. The
+loop's loss on its bound leaves the loss out; any other term on its
+bound keeps the base. ``fit.kept`` says which it kept and ``fit.why``
+why. A span the heater wasn't heard from, or the meter was silent over
+an hour, breaks the book.
+
+A pair with a run needs a quiet full tank on each side of it, so they
+come slowly. With a pump running about once a day, one installation had
+5 in 14 days and 19 in 42: fit on four weeks or more, and raise Home
+Assistant's ``purge_keep_days`` to keep them.
 
 Book with the terms as they were fitted: each run at its own flow, so a
 tap open during a run stays a draw.
 
 .. code-block:: python
 
-   from nwp500 import sim_adapters as sa
-
    terms = params.circulation
-   book = sa.book_from_changes(
-       history.rows, history.observed, params, at=end,
-       flow=use.flow, circulation=use.runs,
-       circulation_flow=sa.run_flow(use.runs, terms.flow_gpm),
-       meter_lag=sim_calibrate.METER_LAG,
-   )
+   book = None
+   # Unknown runs, or runs without the terms to price them, can't be
+   # booked.
+   if use.runs is not None and (terms is not None or not use.runs):
+       book = sa.book_from_changes(
+           history.rows, history.observed, params, at=end,
+           flow=use.flow, circulation=use.runs,
+           circulation_flow=(
+               sa.run_flow(use.runs, terms.flow_gpm) if terms else ()
+           ),
+           meter_lag=sim_calibrate.METER_LAG,
+       )
 
 A meter that reports volumes carries a run's water into the reports
-either side of it: ``meter_lag`` keeps that share from reading as a
-draw for that long before and after each run.
-
-``displaced_gal`` and ``run_gap_min`` come from ``params.circulation``,
-else ``site_example_params``': the book can't tell them. The fit needs
-10 clean runs over 3 days, and 10 pairs: it holds out the latest fifth
-of them and replaces ``params.circulation`` (or, with none, takes the
-refit) only when it books them no worse. A loss on its bound, 0 or 500
-BTU/gal, is no fit: the book misses something else between those
-anchors. Without a fit, the base is kept, and with none, ``fit.params``
-is None; ``fit.kept`` says which it kept and ``fit.why``
-why. A span the heater wasn't heard from breaks the book.
+either side of it. ``meter_lag`` keeps that water, the run's shortfall
+near each edge, from reading as a draw.
 
 
 Limitations

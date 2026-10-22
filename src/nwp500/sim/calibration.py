@@ -53,6 +53,7 @@ import pandas as pd
 from scipy.optimize import (
     OptimizeResult,
     least_squares,
+    linprog,
     minimize,
     minimize_scalar,
 )
@@ -2274,6 +2275,41 @@ class RecordedBook:
                 out.append((int(prev), int(x)))
         return out
 
+    def pair_terms(
+        self, p: BookParams, pairs: Sequence[tuple[int, int]]
+    ) -> tuple[np.ndarray, np.ndarray]:
+        """Each pair's error (``errors``) as ``k + x @ terms``, linear
+        in the fitted terms (``BOOK_TERMS``: the compressor's heat rate,
+        its slope with the air, the standby UA and circulation's loss
+        per gallon), with ``p``'s others held: ``k`` per pair, BTU, and
+        ``x`` a row per pair."""
+        h = self.seconds / 3600.0
+        delivered = np.minimum(
+            self.u, p.delivery_intercept_f + p.delivery_slope * self.u
+        )
+        fixed = self.el * p.element_w * BTU_PER_WH_BOOK * h - (
+            self.draw
+            * WATER_BTU_PER_GAL_F
+            * np.clip(delivered - p.reference_f, 0, None)
+        )
+        columns = [
+            self.comp * h,
+            self.comp * (self.air - 65.0) * h,
+            -np.clip((self.u + self.l) / 2 - self.air, 0, None) * h,
+            -self.circulated,
+        ]
+
+        def cum(e: np.ndarray) -> np.ndarray:
+            return np.concatenate([[0.0], np.cumsum(np.nan_to_num(e))])
+
+        ep, f = self.probe_heat(p), cum(fixed)
+        cs = [cum(c) for c in columns]
+        k = np.array([ep[a0] - ep[a1] + f[a1] - f[a0] for a0, a1 in pairs])
+        x = np.array([[c[a1] - c[a0] for c in cs] for a0, a1 in pairs]).reshape(
+            len(pairs), len(cs)
+        )
+        return k, x
+
     def errors(
         self,
         p: BookParams,
@@ -2289,6 +2325,18 @@ class RecordedBook:
 
 #: BTU per Wh, at the rounding the book was fitted with.
 BTU_PER_WH_BOOK = 3.412
+
+#: The book's fitted terms, in ``RecordedBook.pair_terms``' order, and
+#: the plausible bounds each is fitted within: the compressor's heat
+#: rate (BTU/h) and its slope with the air (BTU/h/°F), the standby UA
+#: (BTU/h/°F) and circulation's loss per gallon (BTU/gal).
+BOOK_TERMS = (
+    "hp_btu_per_h",
+    "hp_btu_per_h_per_f",
+    "ua_btu_per_h_f",
+    "loss_btu_per_gal",
+)
+BOOK_TERM_BOUNDS = ((2000.0, 9000.0), (-50.0, 200.0), (0.0, 20.0), (0.0, 500.0))
 
 
 @dataclass(frozen=True)
@@ -2324,9 +2372,8 @@ def fit_book_terms(
         )
 
     def loss(x: np.ndarray) -> float:
-        if not (2000 < x[0] < 9000 and -50 <= x[1] <= 200):
-            return 1e12
-        if not (0 <= x[2] <= 20 and 0 <= x[3] <= 500):
+        bounded = zip(x, BOOK_TERM_BOUNDS, strict=True)
+        if not all(lo <= v <= hi for v, (lo, hi) in bounded):
             return 1e12
         return float(np.mean(np.abs(book.errors(terms(x), float(x[3]), pairs))))
 
@@ -2347,6 +2394,32 @@ def fit_book_terms(
         mae_btu=float(np.mean(np.abs(err))) if len(err) else float("nan"),
         mean_btu=float(np.mean(err)) if len(err) else float("nan"),
     )
+
+
+def fit_terms_l1(
+    k: np.ndarray,
+    x: np.ndarray,
+    bounds: Sequence[tuple[float, float]],
+) -> np.ndarray:
+    """The terms minimising ``sum |k + x @ terms|`` within ``bounds``,
+    exactly (a linear program): ``RecordedBook.pair_terms``' errors
+    fitted for the least mean absolute error."""
+    n, m = x.shape
+    # Variables: the terms, then each pair's |error|.
+    cost = np.concatenate([np.zeros(m), np.ones(n)])
+    eye = np.eye(n)
+    a_ub = np.block([[x, -eye], [-x, -eye]])
+    b_ub = np.concatenate([-k, k])
+    r = linprog(
+        cost,
+        A_ub=a_ub,
+        b_ub=b_ub,
+        bounds=[*bounds, *([(0.0, None)] * n)],
+        method="highs",
+    )
+    if not r.success:
+        raise ValueError(f"the book's terms could not be fitted: {r.message}")
+    return np.asarray(r.x[:m])
 
 
 #: The anchor-age bands the book's error is read in, hours.
