@@ -11,21 +11,42 @@ intervals, the writes and mode writes, the modes, the delivery
 temperature along the path, the draw windows, the reasons and the
 defaults used, with instants as ISO 8601 strings and floats as they
 are.
+
+The simulator's other answers (``time_to_ready``'s ``Readiness``,
+``forecast``'s ``Forecast`` and the rest in ``DOCUMENT_KINDS``) are
+documents through ``to_document``: ``{"schema_version": 1, "kind":
+...}`` with the answer's fields, instants as ISO 8601 strings, and a
+number that isn't finite as null.
 """
 
 import dataclasses
+import enum
 import json
+import math
 from collections.abc import Mapping
-from datetime import datetime
+from datetime import datetime, timedelta
+from types import MappingProxyType
 from typing import Any
 
+import numpy as np
+
+from nwp500.sim.delivery import Deliverable
 from nwp500.sim.inputs import Scenario
 from nwp500.sim.params import (
     HeaterParams,
     params_from_document,
     params_to_document,
 )
-from nwp500.sim.result import SimulationResult
+from nwp500.sim.profile import HeaterProfile
+from nwp500.sim.ready import Readiness, Recovery
+from nwp500.sim.result import (
+    ActiveCycle,
+    ElementModeResult,
+    Forecast,
+    RecoveryResult,
+    SimulationResult,
+    Trace,
+)
 
 #: The scenario document's version: it moves only when a reader of the
 #: previous one would misread it.
@@ -102,4 +123,56 @@ def result_to_document(result: SimulationResult) -> dict[str, Any]:
         "windows": [_plain(dataclasses.asdict(w)) for w in result.windows],
         "reasons": list(result.reasons),
         "defaults_used": list(result.defaults_used),
+    }
+
+
+#: The answers ``to_document`` takes, and the kind each document names:
+#: its type's name in snake case.
+DOCUMENT_KINDS: Mapping[type, str] = MappingProxyType(
+    {
+        Readiness: "readiness",
+        Recovery: "recovery",
+        RecoveryResult: "recovery_result",
+        Forecast: "forecast",
+        ActiveCycle: "active_cycle",
+        ElementModeResult: "element_mode_result",
+        Deliverable: "deliverable",
+        Trace: "trace",
+        HeaterProfile: "heater_profile",
+    }
+)
+
+
+def _json(value: Any) -> Any:
+    """``value`` (``dataclasses.asdict``'s) in JSON's types."""
+    if isinstance(value, datetime):
+        return value.isoformat()
+    if isinstance(value, timedelta):
+        return value.total_seconds()
+    if isinstance(value, enum.Enum):
+        return _json(value.value)
+    if isinstance(value, np.generic):
+        return _json(value.item())
+    if isinstance(value, bool | int | str) or value is None:
+        return value
+    if isinstance(value, float):
+        return value if math.isfinite(value) else None
+    if isinstance(value, Mapping):
+        return {str(k): _json(v) for k, v in value.items()}  # pyright: ignore[reportUnknownVariableType]
+    if isinstance(value, list | tuple):
+        return [_json(v) for v in value]  # pyright: ignore[reportUnknownVariableType]
+    raise TypeError(f"no document for a {type(value).__name__}")
+
+
+def to_document(value: Any) -> dict[str, Any]:
+    """``value``, one of the answers in ``DOCUMENT_KINDS``, as a
+    document: ``schema_version``, its ``kind``, and its fields, nested
+    answers as objects. A ``TypeError`` for any other value."""
+    kind = DOCUMENT_KINDS.get(type(value))
+    if kind is None:
+        raise TypeError(f"no document kind for a {type(value).__name__}")
+    return {
+        "schema_version": SCHEMA_VERSION,
+        "kind": kind,
+        **_json(dataclasses.asdict(value)),
     }
