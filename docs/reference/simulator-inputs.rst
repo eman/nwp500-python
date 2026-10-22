@@ -519,6 +519,13 @@ tank over the cold water of a recent draw. Start one only from what you know:
      - You record the heater's statuses and meter the hot water: the
        book is walked from the last time the record shows the tank
        full and quiet after a recovery (below).
+   * - ``sim_adapters.book_from_changes(rows, observed, params, at=...,
+       flow=...)``
+     - The same, from the heater's values' changes (``ChangeRows``) and
+       the instants it was heard from, as Home Assistant records them,
+       with the flows in gal/min and the temperatures in °F.
+       Only an anchor after the last span the heater wasn't heard from
+       counts.
    * - A ``Booked`` from your own record
      - You keep a book of the tank's heat some other way.
 
@@ -540,7 +547,17 @@ median of the probe's readings over the last 3 hours
 (``book.inlet_window_s``), the default without one. The meter must
 report at rest too: a silence over an hour in the window is refused,
 since it would read as a quiet full tank. A missing reading (None or
-NaN) is skipped, and the value before it holds.
+NaN) is skipped, and the value before it holds; it doesn't count as the
+meter reporting.
+
+``book_from_changes`` grids the changes the same way, each value held
+until its next change; without a compressor flag, the heat source says
+when the compressor runs. A value that holds writes no change, so only
+``observed`` says the heater was heard. A silence between those
+instants longer than ``max_gap`` of them (4 times their usual spacing,
+and at least 5 minutes), or one of ``rows.outages``, is a span nobody
+saw. The book is read only from after the last such span, and is None
+when the heater isn't heard at ``at``.
 
 To build the steps yourself, pass them to ``book.book_steps``.
 ``BookStep.circulation_in_meter_gpm`` is
