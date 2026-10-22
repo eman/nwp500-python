@@ -33,18 +33,20 @@ Units come from each entity's ``unit_of_measurement``. Entity ids come
 from the caller's configuration (``sources_from``).
 """
 
+import bisect
 import enum
 import itertools
 import logging
 import math
 from collections.abc import Awaitable, Callable, Iterable, Mapping, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime, timedelta
 from typing import Any, cast
 
 from nwp500 import sim_adapters as sa
 from nwp500.exceptions import Nwp500Error
 from nwp500.sim import Environment, meter
+from nwp500.sim.cold_supply import ColdSupply
 from nwp500.sim.location_air import LocationAirModel
 from nwp500.sim.location_air import project as project_air
 
@@ -928,106 +930,387 @@ class HomeAssistantEnvironment:
 
     async def _inlet(self) -> float | None:
         e = self.entities
-        probe_id, volume_id = e.inlet, e.meter_volume
-        rate_id, pump_id = e.meter_flow, e.circulation_speed
-        if probe_id is None:
+        if e.inlet is None:
             return None
-        if volume_id is None:
+        if e.meter_volume is None:
             self.notes.append(
                 "inlet: needs the meter's volume to find long draws"
             )
             return None
-        since = self.now - INLET_LOOKBACK
-        names = [n for n in (probe_id, volume_id, rate_id, pump_id) if n]
 
         async def read() -> float | None:
-            got = await self.client.read_history(names, since, self.now)
-            unread: list[Span] = []
-
-            async def read_in(
-                entity: str,
-                to: Callable[[float, str | None], float],
-                total: bool = False,
-            ) -> list[Reading]:
-                state = await self.client.state(entity)
-                rows, spans = got.converted(entity, state.unit, to, self.now)
-                if spans:
-                    self.notes.append(
-                        f"inlet: {len(spans)} readings of {entity} in no "
-                        "unit this reads left out"
-                    )
-                    unread.extend(spans)
-                if total and is_running_total(e, state):
-                    rows, resets = reports_from_total(rows)
-                    self.notes.append(f"inlet: {total_note(entity, resets)}")
-                return rows
-
-            probe = await read_in(probe_id, to_f)
-            rate = [] if rate_id is None else await read_in(rate_id, to_gpm)
-            flow = meter.flow_gpm(
-                reports_after(
-                    await read_in(volume_id, to_gal, total=True), since
-                ),
-                rate,
-                since,
-                self.now,
-            )
-            runs: list[Span] | None = []
-            if pump_id is not None:
-                runs = await self._pump_runs(pump_id, got, since)
-                if runs is None:
-                    return None
-            # A draw while any of them was unavailable may have
-            # overlapped a run or ended unseen: the plateau skips it, as
-            # it skips one that overlaps a run.
-            runs = busy(
-                runs or [], unread, *(got.outages.get(n, []) for n in names)
-            )
-            # The adapter takes the preferred unit; these are °F and gal.
-            cold = sa.cold_supply(
-                [(t, sa.temperature(v)) for t, v in probe],
-                at=self.now,
-                flow=[(t, sa.volume(v)) for t, v in flow],
-                ticks=[t for t, v in flow if v >= meter.DRAW_GPM],
-                circulation=runs,
-            )
-            if cold.t_cold_f is None:
-                self.notes.append(
-                    "inlet: no long draw in the last 72 h to read the "
-                    "mains from"
+            notes: list[str] = []
+            try:
+                use = await _water_use(
+                    self.client, e, self.now, INLET_LOOKBACK, notes, book=False
                 )
-                return None
-            self.notes.append(f"inlet: the plateau of {cold.draws} long draws")
-            return cold.t_cold_f
+            finally:
+                self.notes.extend(f"inlet: {n}" for n in notes)
+            return None if use.cold is None else use.cold.t_cold_f
 
         return cast("float | None", await self._guard("inlet", read, None))
 
-    async def _pump_runs(
-        self, pump_id: str, got: History, since: datetime
-    ) -> list[Span] | None:
-        """The pump's runs since ``since``, or None (and a note) when
-        they are unknown: no reading in force at ``since`` (a draw
-        before the first may have overlapped a run), or a speed in no
-        unit this reads."""
-        why = None
-        speed: list[Reading] = []
-        if not covers_start(got.readings.get(pump_id, []), since):
-            why = "no speed reading in force at the start"
-        else:
-            try:
-                unit = (await self.client.state(pump_id)).unit
-                speed, unread = got.converted(pump_id, unit, to_rpm)
-                if unread:
-                    # A reading left out could have been a run.
-                    why = f"{len(unread)} readings in no speed unit"
-            except (HomeAssistantError, ValueError) as err:
-                why = str(err)
-        if why is not None:
-            self.notes.append(
-                f"inlet: the circulation's runs are unknown ({why})"
+
+@dataclass(frozen=True)
+class WaterUse:
+    """The water moving at the heater over a span (``read_water_use``):
+    what the heat book and the inlet's plateau read."""
+
+    #: The meter's flow, gal/min (``book_flow``): every report's volume
+    #: over the interval it closes; from the meter's first reading when
+    #: its history starts late, none while it was unavailable or read in
+    #: no unit this reads, through its last report (``State.at``), and
+    #: empty without a meter or its history. The book refuses the gaps.
+    flow: list[Reading]
+    #: The circulation pump's runs; empty without a pump, None when they
+    #: are unknown (``notes`` say why), its speed unavailable over any of
+    #: the span among them. Unknown runs are no runs to book by: the
+    #: meter's circulation share can't be told from draws.
+    runs: list[Span] | None
+    #: The inlet probe's readings, °F; empty without one.
+    probe: list[Reading]
+    #: The spans water may have moved unseen: the runs, the readings in
+    #: no unit this reads, and each entity's outages.
+    busy: list[Span]
+    #: The mains from the probe's plateau over the span's long draws
+    #: (sustained runs of the meter, none overlapping ``busy``), °F; None
+    #: without a probe and a meter, with no speed reading to know the
+    #: pump's runs by, or with no long draw.
+    cold: ColdSupply | None
+    notes: tuple[str, ...] = ()
+
+
+async def read_water_use(
+    client: HomeAssistantClient,
+    entities: Entities,
+    *,
+    now: datetime,
+    lookback: timedelta = INLET_LOOKBACK,
+) -> WaterUse:
+    """The meter's flow, the circulation's runs, the inlet probe and the
+    mains from ``lookback`` before ``now`` to ``now``, in one history
+    read, as the live source's inlet reads them. The book takes them in
+    the preferred units (``sim_adapters.volume`` and
+    ``sim_adapters.temperature`` convert), and ``cold`` goes to
+    ``sim.cold_supply.on_the_mains``. A part not read leaves its default
+    and a note."""
+    notes: list[str] = []
+    try:
+        return replace(
+            await _water_use(client, entities, now, lookback, notes),
+            notes=tuple(notes),
+        )
+    except (HomeAssistantError, ValueError) as err:
+        notes.append(f"not read ({err})")
+        return WaterUse([], None, [], [], None, tuple(notes))
+
+
+async def _water_use(
+    client: HomeAssistantClient,
+    e: Entities,
+    now: datetime,
+    lookback: timedelta,
+    notes: list[str],
+    *,
+    book: bool = True,
+) -> WaterUse:
+    """``read_water_use``, adding its notes to ``notes`` as it goes;
+    without ``book``, no flow for the book (the live inlet's read)."""
+    probe_id, volume_id = e.inlet, e.meter_volume
+    rate_id, pump_id = e.meter_flow, e.circulation_speed
+    # In UTC: a lookback across a clock change is the elapsed span, not
+    # the wall time's.
+    now = now.astimezone(UTC)
+    since = now - lookback
+    names = [n for n in (probe_id, volume_id, rate_id, pump_id) if n]
+    if not names:
+        return WaterUse([], [], [], [], None)
+    got = await client.read_history(names, since, now)
+    unread: list[Span] = []
+    unread_of: dict[str, list[Span]] = {}
+    reported: dict[str, datetime] = {}
+
+    async def read_in(
+        entity: str, to: Callable[[float, str | None], float]
+    ) -> tuple[list[Reading], State]:
+        state = await client.state(entity)
+        reported[entity] = state.at
+        rows, spans = got.converted(entity, state.unit, to, now)
+        if spans:
+            notes.append(
+                f"{len(spans)} readings of {entity} in no unit this reads "
+                "left out"
             )
-            return None
-        return pump_runs(speed, since, self.now)
+            unread.extend(spans)
+            unread_of[entity] = spans
+        return rows, state
+
+    probe = [] if probe_id is None else (await read_in(probe_id, to_f))[0]
+    rate = [] if rate_id is None else (await read_in(rate_id, to_gpm))[0]
+    # The volume's readings as recorded, for its coverage, and its
+    # reports: a running total's rises between them.
+    volume: list[Reading] = []
+    reports: list[Reading] = []
+    if volume_id is not None:
+        volume, state = await read_in(volume_id, to_gal)
+        reports = volume
+        if is_running_total(e, state):
+            reports, resets = reports_from_total(volume)
+            notes.append(total_note(volume_id, resets))
+        reports = reports_after(reports, since)
+    # The plateau's flow: only sustained runs count as draws.
+    sustained = meter.flow_gpm(reports, rate, since, now)
+    flow: list[Reading] = []
+    if not book or volume_id is None:
+        pass
+    elif not volume:
+        notes.append(f"no history of {volume_id} over the span")
+    else:
+        # The book's: every report's volume, over the interval it
+        # closes. A meter recorded only from later says nothing before
+        # that.
+        begin = since if covers_start(volume, since) else volume[0][0]
+        if begin > since:
+            notes.append(
+                f"{volume_id}: history covers only from {begin.isoformat()}"
+            )
+        # While the meter was unavailable, or said what nobody can read,
+        # it was silent: no flow there, so the book refuses a long one.
+        meter_ids = [n for n in (volume_id, rate_id) if n]
+        dark = busy(
+            *(unread_of.get(n, []) for n in meter_ids),
+            *(got.outages.get(n, []) for n in meter_ids),
+        )
+        if dark:
+            dark_h = sum((b - a).total_seconds() for a, b in dark) / 3600
+            notes.append(
+                f"the meter was unavailable or unread {len(dark)} times "
+                f"({dark_h:.1f} h), left out of the flow"
+            )
+        # Nor after its volume's last report: a meter that stopped
+        # reporting without going unavailable is silent since. The
+        # volume is its record; a rate still reporting doesn't stand in.
+        flow = book_flow(
+            [r for r in reports if r[0] >= begin],
+            rate,
+            begin,
+            min(now, reported[volume_id]),
+            dark,
+        )
+    runs: list[Span] | None = []
+    if pump_id is not None:
+        runs = await _pump_runs_since(
+            client, pump_id, got, since, now, notes, unread
+        )
+    # A draw while any of them was unavailable may have overlapped a run
+    # or ended unseen: the plateau skips it, as it skips one that
+    # overlaps a run.
+    down = busy(runs or [], unread, *(got.outages.get(n, []) for n in names))
+    cold = None
+    if probe_id is not None and volume_id is not None and runs is not None:
+        # The adapter takes the preferred unit; these are °F and gal.
+        cold = sa.cold_supply(
+            [(t, sa.temperature(v)) for t, v in probe],
+            at=now,
+            flow=[(t, sa.volume(v)) for t, v in sustained],
+            ticks=[t for t, v in sustained if v >= meter.DRAW_GPM],
+            circulation=down,
+            window=lookback,
+        )
+        hours = f"{lookback.total_seconds() / 3600:g}"
+        if cold.t_cold_f is None:
+            notes.append(
+                f"no long draw in the last {hours} h to read the mains from"
+            )
+            cold = None
+        else:
+            notes.append(f"the plateau of {cold.draws} long draws")
+    if book and pump_id is not None and runs is not None:
+        # The plateau skips the draws over the pump's outages, but the
+        # book can't: it may have run then.
+        outages = got.outages.get(pump_id, [])
+        if outages:
+            notes.append(
+                f"the circulation's runs are unknown ({len(outages)} "
+                "outages of its speed)"
+            )
+            runs = None
+    return WaterUse(flow, runs, probe, down, cold)
+
+
+def book_flow(
+    volume: Sequence[Reading],
+    rate: Sequence[Reading],
+    start: datetime,
+    end: datetime,
+    dark: Sequence[Span] = (),
+) -> list[Reading]:
+    """A meter's flow for the heat book, gal/min, in ``sim.meter.STEP``
+    steps from ``start`` to ``end``, the last ending at ``end``: each
+    ``volume``
+    report (gallons since the previous one) spread evenly over the
+    interval it closes, from the previous report or ``meter.WINDOW``
+    before it, whichever is later; on a step no report reaches, the
+    forward ``rate`` held ``meter.RATE_HOLD`` when it is over
+    ``meter.DRAW_GPM``. Every report's volume is kept, however small or
+    brief (the book's own draw line decides what is a draw).
+
+    Each step's flow is at its start and holds to the next, as the book
+    holds a reading (``sim_adapters.FLOW_HOLD``), so a book on any clock
+    of the same step, booked to ``end`` or later, reads every step once.
+    No step overlapping a ``dark`` span (the meter unread) is given. A
+    report's volume goes only to steps that are given: over the part of
+    its interval they cover, else to the nearest given step. A report
+    before ``start`` or after ``end`` adds nothing. Each
+    stretch of steps ends with a zero at its end, so the book carries
+    nothing past it, while the gap after it stays unobserved."""
+    step = meter.STEP
+    start, end = start.astimezone(UTC), end.astimezone(UTC)
+    if end < start:
+        return []
+    # The steps end at ``end``, so a book to ``end`` reads the last.
+    n = math.floor((end - start) / step)
+    if n <= 0:
+        return []
+    first = end - n * step
+    spans = sorted(dark)
+
+    def cell(k: int) -> Span:
+        """Step ``k``'s interval: [its start, its start + step)."""
+        lo = first + k * step
+        return lo, lo + step
+
+    def index(t: datetime) -> int:
+        """The step whose interval holds ``t``."""
+        return math.floor((t - first) / step)
+
+    given = [True] * n
+    for x, y in spans:
+        # The steps [lo, lo + step) with x < lo + step and lo < y.
+        lo_k = max(math.floor((x - first) / step), 0)
+        hi_k = min(math.ceil((y - first) / step), n)
+        for k in range(lo_k, hi_k):
+            given[k] = False
+    # The given steps as spans of time, joined where they meet.
+    open_spans: list[Span] = []
+    for k in range(n):
+        if given[k]:
+            lo, hi = cell(k)
+            if open_spans and open_spans[-1][1] == lo:
+                open_spans[-1] = (open_spans[-1][0], hi)
+            else:
+                open_spans.append((lo, hi))
+    shown = [k for k in range(n) if given[k]]
+    if not shown:
+        return []
+    gal = [0.0] * n
+    reached = [False] * n
+
+    def nearest(t: datetime) -> int:
+        """The given step nearest ``t``; the earlier of two as near."""
+        i = bisect.bisect_left(shown, index(t))
+        near = shown[max(i - 1, 0) : i + 1]
+
+        def away(k: int) -> timedelta:
+            lo, hi = cell(k)
+            return max(lo - t, t - hi, timedelta(0))
+
+        return min(near, key=lambda k: (away(k), k))
+
+    starts = [x for x, _ in open_spans]
+    ends = [y for _, y in open_spans]
+    prev: datetime | None = None
+    for t, v in sorted((t.astimezone(UTC), v) for t, v in volume):
+        a = t - meter.WINDOW if prev is None else max(prev, t - meter.WINDOW)
+        prev = t
+        # A report outside the span is no water in it, though it closes
+        # the next report's interval.
+        if not start <= t <= end:
+            continue
+        # The given spans that overlap (a, t): ending after a, starting
+        # before t.
+        parts = [
+            (max(a, open_spans[j][0]), min(t, open_spans[j][1]))
+            for j in range(
+                bisect.bisect_right(ends, a), bisect.bisect_left(starts, t)
+            )
+        ]
+        length = sum((y - x).total_seconds() for x, y in parts)
+        if length <= 0:
+            near = nearest(t)
+            gal[near] += v
+            reached[near] = True
+            continue
+        for x, y in parts:
+            for k in range(max(index(x), 0), min(index(y), n - 1) + 1):
+                lo, hi = cell(k)
+                overlap = (min(hi, y) - max(lo, x)).total_seconds()
+                if overlap > 0:
+                    gal[k] += v * overlap / length
+                    reached[k] = True
+    rates = sorted((t.astimezone(UTC), v) for t, v in rate)
+    out: list[Reading] = []
+    r = -1
+    per_min = step.total_seconds() / 60.0
+    for k in range(n):
+        if not given[k]:
+            continue
+        lo, hi = cell(k)
+        # Each step's flow at its start: the book holds a reading
+        # forward, so a book on any clock reads every step once.
+        if reached[k]:
+            out.append((lo, abs(gal[k]) / per_min))
+        else:
+            # The rate in force at the step's start.
+            while r + 1 < len(rates) and rates[r + 1][0] <= lo:
+                r += 1
+            held = r >= 0 and lo - rates[r][0] <= meter.RATE_HOLD
+            forward = rates[r][1] if held else 0.0
+            out.append((lo, forward if forward > meter.DRAW_GPM else 0.0))
+        if (k + 1 == n or not given[k + 1]) and out[-1][1] > 0:
+            out.append((hi, 0.0))
+    return out
+
+
+async def _pump_runs_since(
+    client: HomeAssistantClient,
+    pump_id: str,
+    got: History,
+    since: datetime,
+    now: datetime,
+    notes: list[str],
+    unread: list[Span],
+) -> list[Span] | None:
+    """The pump's runs since ``since``, or None (and a note) when they
+    are unknown: no reading in force at ``since`` (a draw before the
+    first may have overlapped a run), or a speed in no unit this
+    reads. The spans it may have run unseen go to ``unread``, and with
+    the runs unknown, the runs it was seen to make too."""
+    why = None
+    speed: list[Reading] = []
+    rows = got.readings.get(pump_id, [])
+    start = since
+    if not covers_start(rows, since):
+        why = "no speed reading in force at the start"
+        unread.append((since, rows[0][0] if rows else now))
+        start = rows[0][0] if rows else now
+    if rows:
+        try:
+            unit = (await client.state(pump_id)).unit
+            speed, left = got.converted(pump_id, unit, to_rpm, now)
+            if left:
+                # A reading left out could have been a run.
+                why = why or f"{len(left)} readings in no speed unit"
+                unread.extend(left)
+        except (HomeAssistantError, ValueError) as err:
+            why = why or str(err)
+            unread.append((start, now))
+    runs = pump_runs(speed, start, now) if speed else None
+    if why is not None:
+        notes.append(f"the circulation's runs are unknown ({why})")
+        unread.extend(runs or [])
+        return None
+    return runs
 
 
 # ── over a recorded history, for the calibration ────────────────────

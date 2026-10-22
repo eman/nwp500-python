@@ -1799,6 +1799,7 @@ def cold_supply(
     flow: Iterable[tuple[datetime, float]],
     ticks: Iterable[datetime] | None = None,
     circulation: Iterable[tuple[datetime, datetime]] | None = (),
+    window: timedelta | None = None,
 ) -> ColdSupply:
     """The mains as of ``at`` from an inlet probe's ``probe`` readings
     over recent long draws (``sim.cold_supply``), the probe and the
@@ -1807,13 +1808,17 @@ def cold_supply(
     above the draw line, each standing for the meter's own reporting
     interval. ``circulation`` are its runs: none (the default) for an
     installation without, None for runs not recorded (no estimate). A
-    missing reading (NaN) is left out. The estimate is degF: pass it on as
-    ``environment(inlet=temperature(...))`` or with ``on_the_mains``."""
+    missing reading (NaN) is left out. ``window`` is how far back a long
+    draw counts (``ColdSupplyParams.window_s`` by default). The estimate
+    is degF: pass it on as ``environment(inlet=temperature(...))`` or
+    with ``on_the_mains``."""
     readings = [(t.astimezone(UTC), _to_sim(v)) for t, v in _finite(probe)]
     flows = sorted(
         (t.astimezone(UTC), _volume_to_sim(v)) for t, v in _finite(flow)
     )
     p = ColdSupplyParams()
+    if window is not None:
+        p = replace(p, window_s=window.total_seconds())
     if ticks is not None:
         drawn = [t.astimezone(UTC) for t in ticks]
     else:

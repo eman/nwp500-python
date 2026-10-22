@@ -312,7 +312,7 @@ Home Assistant sources
 
 .. automodule:: nwp500.sim_home_assistant
    :members: HomeAssistantEnvironment, HomeAssistantClient, record_inputs,
-      RecordInputs, Sources, Entities, sources_from, State, parse_state,
+      RecordInputs, read_water_use, WaterUse, INLET_LOOKBACK, book_flow, Sources, Entities, sources_from, State, parse_state,
       parse_history, parse_outages, parse_states, History, history_for,
       parse_forecast, read_heater_history, HeaterEntities, HeaterHistory,
       HISTORY_WINDOW, to_w, to_wh,
