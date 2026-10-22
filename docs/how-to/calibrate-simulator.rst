@@ -463,6 +463,7 @@ tap open during a run stays a draw.
                sa.run_flow(use.runs, terms.flow_gpm) if terms else ()
            ),
            meter_lag=sim_calibrate.METER_LAG,
+           air=record.air or (),
        )
 
 A meter that reports volumes carries a run's water into the reports

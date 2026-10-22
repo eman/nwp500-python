@@ -72,6 +72,7 @@ def history(
     truth: BookParams | None = None,
     air_f: float | None = None,
     tied: bool = False,
+    run_every: int = 1,
 ) -> dict[str, Any]:
     """A history of ``cycles`` six-hour cycles walked by the book's own
     balance (``truth``, else ``params``' book), each run taking ``loss``
@@ -110,7 +111,7 @@ def history(
         heating = RECOVERY[0] <= minute < recovers_to(cycle) or (
             cycle == 0 and first[0] <= minute < first[1]
         )
-        running = RUN[0] <= minute < runs_to(cycle)
+        running = RUN[0] <= minute < runs_to(cycle) and cycle % run_every == 0
         # A tap open for the run's first minute, and one for the minute
         # after it.
         tap = tap_gpm if minute == RUN[0] else 0.0
@@ -551,3 +552,18 @@ def test_a_loss_the_pairs_cant_tell_apart_is_no_fit() -> None:
     got = fit(NO_BASE, h)
     assert got.circulation is None
     assert "can't be told from the book's terms" in got.why
+
+
+def test_a_late_probe_starts_the_book_where_both_read() -> None:
+    """The lower probe's history starts 3 h late, and runs come every
+    other cycle: each pair's instants are its own, so the pairs with a
+    run are told from those without and the loss is found."""
+    h = history(NO_BASE, 24, 150.0, run_every=2)
+    late = T0 + timedelta(hours=3)
+    rows = replace(
+        h["rows"], lower_f=[r for r in h["rows"].lower_f if r[0] >= late]
+    )
+    got = fit(NO_BASE, h | {"rows": rows})
+    assert got.circulation is not None, got.why
+    assert got.circulation.loss_btu_per_gal == pytest.approx(150.0, abs=1.0)
+    assert_book(got.book, SITE.book)

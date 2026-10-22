@@ -1465,6 +1465,11 @@ def fit_book(
         at = max(at, b)
     if heard[-1] > at:
         segments.append((at, heard[-1]))
+    # The book has no step before both probes read: each span starts
+    # there, so its steps' instants are its own.
+    firsts = [min(t for t, _ in r) for r in (rows.upper_f, rows.lower_f) if r]
+    probed = max(firsts) if len(firsts) == 2 else heard[-1]
+    segments = [(max(a, probed), b) for a, b in segments]
     segments = [
         (a, b)
         for a, b in segments
