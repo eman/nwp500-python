@@ -1529,10 +1529,10 @@ class TestTheWaterUse:
             now=NOW,
         )
         assert use.flow
-        # No step's interval, (t - 10 s, t], reaches into it.
+        # No step's interval, [t, t + 10 s), reaches into it.
         step = timedelta(seconds=10)
         assert not any(
-            v > 0 and down[0] < t and t - step < down[1] for t, v in use.flow
+            v > 0 and down[0] < t + step and t < down[1] for t, v in use.flow
         )
         assert any("left out of the flow" in n for n in use.notes)
 
@@ -1787,7 +1787,7 @@ async def test_a_report_before_an_outage_keeps_its_volume() -> None:
         pytest.approx(1.0)
     )
     assert not any(
-        v > 0 and down[0] < t and t - step < down[1] for t, v in use.flow
+        v > 0 and down[0] < t + step and t < down[1] for t, v in use.flow
     )
 
 
@@ -1830,7 +1830,7 @@ def test_an_off_grid_outage_keeps_the_volume_before_it() -> None:
     flow = ha.book_flow(reports, [], base, base + timedelta(minutes=10), [down])
     assert sum(v for _, v in flow) * (10 / 60) == pytest.approx(1.0)
     assert not any(
-        v > 0 and down[0] < t and t - timedelta(seconds=10) < down[1]
+        v > 0 and down[0] < t + timedelta(seconds=10) and t < down[1]
         for t, v in flow
     )
 
@@ -1859,3 +1859,54 @@ def test_the_book_takes_a_final_report_once() -> None:
     )
     booked = sum(s.flow_gpm * s.seconds / 60 for s in steps)
     assert booked == pytest.approx(1.0)
+
+
+def _booked_gal(
+    flow: list[ha.Reading], start: datetime, end: datetime
+) -> float:
+    """The gallons the book takes of ``flow`` from ``start`` to ``end``."""
+    from nwp500 import sim_adapters as sa
+    from nwp500.sim import site_example_params
+
+    steps = sa.book_steps_from_changes(
+        sa.ChangeRows(upper_f=[(start, 120.0)], lower_f=[(start, 120.0)]),
+        start=start,
+        end=end,
+        flow=flow,
+        params=site_example_params(),
+    )
+    return sum(s.flow_gpm * s.seconds / 60 for s in steps)
+
+
+@pytest.mark.asyncio
+async def test_the_book_takes_a_report_at_now() -> None:
+    """A 1-gal report on the grid at ``now``: the book up to ``now``
+    takes its gallon."""
+    series = {
+        "sensor.volume": [
+            (NOW - ha.INLET_LOOKBACK, 0.0),
+            (NOW - timedelta(seconds=10), 0.0),
+            (NOW, 1.0),
+        ]
+    }
+    use = await ha.read_water_use(
+        FakeClient(UNITS, series),  # type: ignore[arg-type]  # pyright: ignore[reportArgumentType]
+        ha.Entities(meter_volume="sensor.volume"),
+        now=NOW,
+    )
+    got = _booked_gal(use.flow, NOW - timedelta(hours=1), NOW)
+    assert got == pytest.approx(1.0)
+
+
+@pytest.mark.parametrize("offset_s", [0, 3, 5, 9])
+def test_a_book_on_any_clock_takes_each_gallon_once(offset_s: int) -> None:
+    """The meter's last reports, 0 and 1 gal at 12:30:01 and 12:30:04: a
+    book whose steps fall anywhere in the meter's takes the gallon
+    once."""
+    base = datetime(2026, 10, 18, 12, tzinfo=UTC)
+    last = base + timedelta(minutes=30, seconds=4)
+    reports = [(last - timedelta(seconds=3), 0.0), (last, 1.0)]
+    flow = ha.book_flow(reports, [], base, last)
+    start = base + timedelta(seconds=offset_s)
+    end = last + timedelta(minutes=2)
+    assert _booked_gal(flow, start, end) == pytest.approx(1.0)

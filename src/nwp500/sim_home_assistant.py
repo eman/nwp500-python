@@ -1153,18 +1153,21 @@ def book_flow(
     ``meter.DRAW_GPM``. Every report's volume is kept, however small or
     brief (the book's own draw line decides what is a draw).
 
-    No step overlapping a ``dark`` span (the meter unread) is given.
-    A report's volume goes only to steps that are given: over the part
-    of its interval they cover, else to the nearest given step. Each
-    stretch of steps ends with a zero just after its last, so the book,
-    which holds a reading ``sim_adapters.FLOW_HOLD``, carries nothing
-    past it, while the gap after it stays unobserved."""
+    Each step's flow is at its start and holds to the next, as the book
+    holds a reading (``sim_adapters.FLOW_HOLD``), so a book on any clock
+    reads every step once. No step overlapping a ``dark`` span (the
+    meter unread) is given. A report's volume goes only to steps that
+    are given: over the part of its interval they cover, else to the
+    nearest given step. Each stretch of steps ends with a zero at its
+    end, so the book carries nothing past it, while the gap after it
+    stays unobserved."""
     step = meter.STEP
     start, end = start.astimezone(UTC), end.astimezone(UTC)
     if end < start:
         return []
     epoch = datetime(1970, 1, 1, tzinfo=UTC)
-    first = epoch + step * math.ceil((start - epoch) / step)
+    # The first step's end: it starts on the grid at or after ``start``.
+    first = epoch + step * math.ceil((start - epoch) / step) + step
     n = math.ceil((end - first) / step) + 1
     if n <= 0:
         return []
@@ -1230,17 +1233,19 @@ def book_flow(
     for k in range(n):
         if not given[k]:
             continue
-        hi = cell(k)[1]
+        lo, hi = cell(k)
+        # Each step's flow at its start: the book holds a reading
+        # forward, so a book on any clock reads every step once.
         if reached[k]:
-            out.append((hi, abs(gal[k]) / per_min))
+            out.append((lo, abs(gal[k]) / per_min))
         else:
             while r + 1 < len(rates) and rates[r + 1][0] <= hi:
                 r += 1
             held = r >= 0 and hi - rates[r][0] <= meter.RATE_HOLD
             forward = rates[r][1] if held else 0.0
-            out.append((hi, forward if forward > meter.DRAW_GPM else 0.0))
+            out.append((lo, forward if forward > meter.DRAW_GPM else 0.0))
         if (k + 1 == n or not given[k + 1]) and out[-1][1] > 0:
-            out.append((hi + timedelta(microseconds=1), 0.0))
+            out.append((hi, 0.0))
     return out
 
 
