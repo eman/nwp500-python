@@ -1098,9 +1098,10 @@ async def _water_use(
         # Nor after its volume's last report: a meter that stopped
         # reporting without going unavailable is silent since. The
         # volume is its record; a rate still reporting doesn't stand in.
-        last = reported[volume_id]
+        # The last report's volume is spread over the window after it.
+        last = reported[volume_id] + meter.WINDOW
         if last < now:
-            flow = [(t, v) for t, v in flow if t <= last]
+            flow = [(t, v) for t, v in flow if t < last]
     runs: list[Span] | None = []
     if pump_id is not None:
         runs = await _pump_runs_since(

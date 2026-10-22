@@ -1571,7 +1571,7 @@ class TestTheWaterUse:
             ),
             now=NOW,
         )
-        assert use.flow[-1][0] <= last
+        assert use.flow[-1][0] < last + timedelta(seconds=90)
 
 
 class TestTheWaterUseBooked:
@@ -1737,3 +1737,22 @@ async def test_a_running_total_reads_the_same_water_use() -> None:
     assert total.cold == plain.cold
     assert any("running total" in n for n in total.notes)
     assert not any("covers only" in n for n in total.notes)
+
+
+@pytest.mark.asyncio
+async def test_the_last_reports_volume_is_kept() -> None:
+    """A lone 1-gal report off the grid, the meter's last: its gallon is
+    in the flow, and the flow ends after it."""
+    last = NOW - timedelta(minutes=10) + timedelta(seconds=5)
+    series = {"sensor.volume": [(NOW - ha.INLET_LOOKBACK, 0.0), (last, 1.0)]}
+    states = UNITS | {
+        "sensor.volume": ha.State("sensor.volume", 1.0, "gal", last)
+    }
+    use = await ha.read_water_use(
+        FakeClient(states, series),  # type: ignore[arg-type]  # pyright: ignore[reportArgumentType]
+        ha.Entities(meter_volume="sensor.volume"),
+        now=NOW,
+    )
+    step_min = 10 / 60
+    assert sum(v for _, v in use.flow) * step_min == pytest.approx(1.0)
+    assert use.flow[-1][0] < last + timedelta(seconds=90)
