@@ -224,6 +224,14 @@ source when TOU is on and its periods cannot be read. A missing
 feature info leaves ``composed.params`` None (the tank size is
 unknown). Change a part with ``composed.scenario.model_copy(update=...)``.
 
+With the status, the feature info, the reservations and the TOU
+periods already read some other way, build the same parts from them:
+``sim_live.heater_reading(status, feature)`` is what
+``LiveHeaterSource`` reads, and ``sim_live.live_schedules(status,
+reservations, tou)`` what ``LiveScheduleSource`` reads. Pass either to
+``compose`` as ``sim_live.Given(...)``. ``live_schedules`` raises
+``LiveReadError`` when the status has TOU on and ``tou`` is None.
+
 To lay a scenario document over the heater as it is now, as
 ``nwp-cli simulate --scenario ... --live`` does, use ``overlay``:
 

@@ -224,6 +224,43 @@ async def read_reservations(
     return schedule
 
 
+def heater_reading(
+    status: DeviceStatus, feature: DeviceFeature | None
+) -> HeaterReading:
+    """The heater as a status and a feature info (None when it did not
+    arrive) found it, however they were read: its state, settings and
+    the air at its intake (``sim_adapters.heater_state``, ``settings``
+    and ``environment``), and the default parameters for its tank size
+    (``sim_adapters.params``; None without the feature info)."""
+    return HeaterReading(
+        state=sa.heater_state(status),
+        settings=sa.settings(status),
+        environment=sa.environment(status),
+        params=None if feature is None else sa.params(feature),
+        status=status,
+        feature=feature,
+    )
+
+
+def live_schedules(
+    status: DeviceStatus,
+    reservations: ReservationSchedule | None,
+    tou: TOUInfo | None,
+) -> Schedules:
+    """The heater's schedules from its reservations and its TOU periods,
+    however they were read, with its TOU switch from ``status``
+    (``sim_adapters.schedules``). ``LiveReadError`` when TOU is on and
+    ``tou`` is None: a walk without the periods would ignore the
+    heater's windows. With TOU off, the schedules have no periods
+    unless ``tou`` gives them."""
+    tou_enabled = bool(status.tou_status)
+    if tou is None and tou_enabled:
+        raise LiveReadError("TOU is on, but its periods were not given")
+    return sa.schedules(
+        reservations=reservations, tou=tou, tou_enabled=tou_enabled
+    )
+
+
 class LiveHeaterSource:
     """The heater's state, settings and tank size, from one status and
     one feature read (``sim_adapters.heater_state``, ``settings`` and
@@ -250,14 +287,7 @@ class LiveHeaterSource:
                 "No device feature info within %g s: the tank size is unknown",
                 self._timeout,
             )
-        return HeaterReading(
-            state=sa.heater_state(status),
-            settings=sa.settings(status),
-            environment=sa.environment(status),
-            params=None if feature is None else sa.params(feature),
-            status=status,
-            feature=feature,
-        )
+        return heater_reading(status, feature)
 
 
 class LiveScheduleSource:
@@ -293,15 +323,12 @@ class LiveScheduleSource:
         reservations = await read_reservations(
             self._mqtt, self._device, self._timeout
         )
-        tou_enabled = bool(status.tou_status)
         tou, why = await self._tou()
         if why is not None:
-            if tou_enabled:
+            if status.tou_status:
                 raise LiveReadError(f"TOU is on, but {why}")
             _logger.warning("TOU periods not read (TOU is off): %s", why)
-        return sa.schedules(
-            reservations=reservations, tou=tou, tou_enabled=tou_enabled
-        )
+        return live_schedules(status, reservations, tou)
 
     async def _tou(self) -> tuple[TOUInfo | None, str | None]:
         """The TOU info, or why it could not be read."""
