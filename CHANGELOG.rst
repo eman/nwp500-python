@@ -30,6 +30,15 @@ Added
   the last one, and is None while the heater isn't heard at ``at``.
   ``book_steps_from_changes`` gives the steps, and ``silences`` the
   unheard spans.
+- **The circulation's terms from the heat book** (#196).
+  ``sim_calibrate.fit_circulation`` fits ``CirculationParams`` from a
+  heater's values' changes, its household meter's flow and the pump's
+  runs, with no flow sensor on the pump: the flow the meter sees of a
+  run (the median over clean run minutes, ``meter_share`` 1; 0 with a
+  nominal flow when the meter isn't on the loop) and the loss per
+  gallon that books best between quiet full tanks with a run between.
+  It needs 10 clean runs over 3 days, and keeps the base unless the
+  refit books the held-out latest fifth no worse (``CirculationFit``).
 
 Fixed
 -----

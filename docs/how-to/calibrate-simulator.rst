@@ -367,6 +367,52 @@ On a desktop computer, 60 days with a heartbeat every 10 seconds
 Assistant's own queries, and 11 to fit, in about 180 MB.
 
 
+Fit the circulation
+===================
+
+A circulation pump's runs cost the heat book the pipe's loss, and a
+household meter on the loop reads part of their flow. Without
+``CirculationParams`` the book prices a run's metered flow as a draw
+and charges nothing for the loss. ``fit_circulation`` fits them from
+the heater's history, the meter and the pump's runs, with no flow
+sensor on the pump:
+
+.. code-block:: python
+
+   from dataclasses import replace
+
+   params = done.calibration.params
+   use = await ha.read_water_use(client, ha.Entities(
+       meter_volume=..., circulation_speed=...), now=end,
+       lookback=end - start)
+   if use.runs is not None:
+       fit = sim_calibrate.fit_circulation(
+           history.rows, history.observed, params,
+           flow=use.flow, runs=use.runs, air=record.air or (),
+       )
+       params = replace(params, circulation=fit.params)
+
+``read_water_use``'s flow is gal/min and ``record_inputs``' air °F, as
+the fit takes them. The fit reads two things of a run,
+per minute:
+
+- **What the meter sees:** the median meter flow over the runs' clean
+  minutes (no more than ``book.draw_gpm`` over the run's own median, so
+  no tap was open). It is the run's flow, with ``meter_share`` 1. Under
+  0.05 gal/min the meter isn't on the loop: ``meter_share`` is 0 and a
+  run is priced at the base's flow, else 1 gal/min.
+- **The loss per gallon:** the value that books best from each quiet
+  full tank to the next with a run between, the book's other terms held
+  at ``params.book``.
+
+``displaced_gal`` and ``run_gap_min`` come from ``params.circulation``,
+else ``site_example_params``': the book can't tell them. The fit needs
+10 clean runs over 3 days. It holds out the latest fifth of the pairs
+(once there are 10) and replaces ``params.circulation`` only when it
+books them no worse; ``fit.kept`` says which it kept and ``fit.why``
+why. A span the heater wasn't heard from breaks the book.
+
+
 Limitations
 ===========
 

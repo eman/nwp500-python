@@ -34,9 +34,12 @@ statuses::
 This module needs the ``sim`` extra.
 """
 
+import math
+from bisect import bisect_left
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, replace
-from datetime import datetime, timedelta
+from dataclasses import fields as dataclass_fields
+from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Any, cast
 
 import numpy as np
@@ -47,6 +50,7 @@ from nwp500.models import DeviceStatus
 from nwp500.sim import calibration as cal
 from nwp500.sim.params import (
     UNFITTED_TERMS,
+    CirculationParams,
     HeaterParams,
     LossParams,
     TankParams,
@@ -71,6 +75,11 @@ __all__ = (
     "NO_AIR_NOTE",
     "CalibrationInputError",
     "Calibrated",
+    "CirculationFit",
+    "METER_SEES_CIRCULATION_GPM",
+    "MIN_CIRCULATION_DAYS",
+    "MIN_CIRCULATION_RUNS",
+    "NOMINAL_CIRCULATION_GPM",
     "GROUPS",
     "HeldOut",
     "Judged",
@@ -78,6 +87,7 @@ __all__ = (
     "air_unread_note",
     "calibrate",
     "calibrate_changes",
+    "fit_circulation",
     "score",
     "max_gap",
     "report",
@@ -1213,3 +1223,298 @@ def report(done: Calibrated) -> list[Term]:
         ),
     ]
     return _judged(terms, done) if done.judged else terms
+
+
+# ── circulation, from the heat book's re-anchors ────────────────────
+
+
+#: The fewest clean circulation runs, and the fewest days they span,
+#: ``fit_circulation`` refits on.
+MIN_CIRCULATION_RUNS = 10
+MIN_CIRCULATION_DAYS = 3
+#: Below this median meter flow over clean run minutes, gal/min, the
+#: meter is taken not to pass the circulation (``meter_share`` 0).
+METER_SEES_CIRCULATION_GPM = 0.05
+#: The flow a run is priced at when the meter doesn't see it, gal/min,
+#: without a base to take it from: the loss per gallon is fitted at it,
+#: so the loss per run minute is what the book reads either way.
+NOMINAL_CIRCULATION_GPM = 1.0
+#: The shortest observed span ``fit_circulation`` books, hours.
+_MIN_SEGMENT_H = 2.0
+#: The largest loss per gallon ``fit_circulation`` fits, BTU/gal.
+_MAX_LOSS_BTU_PER_GAL = 500.0
+
+
+@dataclass(frozen=True)
+class CirculationFit:
+    """``fit_circulation``'s result: the circulation's terms to use
+    (``params``), whether they are the base's or the refit's (``kept``,
+    None with neither), the clean runs and the re-anchor pairs with a
+    run in them it read, the held-out error of the terms kept (mean
+    absolute, BTU; None with nothing held out), and why."""
+
+    params: CirculationParams | None
+    kept: str | None
+    runs: int
+    pairs: int
+    error_btu: float | None
+    why: str
+
+    def as_document(self) -> dict[str, Any]:
+        """The fit as a document: ``circulation`` the terms' fields
+        (None without), and the rest as they are."""
+        return {
+            "circulation": None
+            if self.params is None
+            else {
+                f.name: getattr(self.params, f.name)
+                for f in dataclass_fields(self.params)
+            },
+            "kept": self.kept,
+            "runs": self.runs,
+            "pairs": self.pairs,
+            "error_btu": self.error_btu,
+            "why": self.why,
+        }
+
+
+def fit_circulation(
+    rows: sa.ChangeRows,
+    observed: Iterable[datetime],
+    params: HeaterParams,
+    *,
+    flow: Iterable[tuple[datetime, float]],
+    runs: Iterable[tuple[datetime, datetime]],
+    inlet: Iterable[tuple[datetime, float]] = (),
+    air: Iterable[tuple[datetime, float]] = (),
+) -> CirculationFit:
+    """The circulation's terms (``CirculationParams``) from a heater's
+    values' changes and the instants it was heard from, its household
+    meter's ``flow`` and the circulation pump's ``runs``, as
+    ``sim_adapters.book_from_changes`` takes them, without a flow sensor
+    on the pump. Like the rows, ``flow`` is gal/min and ``inlet`` and
+    ``air`` °F, whatever the preferred units (``read_water_use``'s).
+    ``params.circulation`` is the base.
+
+    The book reads two things of a run per minute: the flow the meter
+    sees, and the heat it takes. The meter's is the median over clean
+    run minutes (no more than ``book.draw_gpm`` over the run's own
+    median: no draw), taken as the run's flow with ``meter_share`` 1;
+    under ``METER_SEES_CIRCULATION_GPM`` the meter doesn't pass the
+    circulation, and a run is priced at the base's flow (else
+    ``NOMINAL_CIRCULATION_GPM``) with ``meter_share`` 0. The loss per
+    gallon is the one that books best from each quiet full tank to the
+    next with a run between (``sim.calibration.RecordedBook``'s
+    re-anchors up to ``max_anchor_age_h`` apart), the book's other terms
+    held at ``params.book``. ``displaced_gal`` and ``run_gap_min`` are
+    the base's, else ``site_example_params``': the book can't tell them.
+
+    It refits only on ``MIN_CIRCULATION_RUNS`` clean runs over
+    ``MIN_CIRCULATION_DAYS`` days. The latest fifth of the pairs (once
+    there are 10) is held out of the refit, which replaces the base only
+    when it books them no worse. A span the heater wasn't heard from
+    (``sim_adapters.silences``, ``rows.outages``) breaks the book."""
+    from nwp500.sim.defaults import SITE_CIRCULATION
+
+    base = params.circulation
+    book_p = params.book_terms()
+    flow_rows = [
+        (t.astimezone(UTC), float(v)) for t, v in flow if math.isfinite(v)
+    ]
+    run_spans = sorted((a.astimezone(UTC), b.astimezone(UTC)) for a, b in runs)
+    inlets, airs = list(inlet), list(air)
+
+    def keep(why: str, n_runs: int, n_pairs: int = 0) -> CirculationFit:
+        return CirculationFit(
+            base, None if base is None else "base", n_runs, n_pairs, None, why
+        )
+
+    # The meter's flow over clean run minutes.
+    gpm = sorted(flow_rows)
+    times = [t for t, _ in gpm]
+    clean: list[float] = []
+    clean_runs: list[datetime] = []
+    for a, b in run_spans:
+        lo, hi = bisect_left(times, a), bisect_left(times, b)
+        inside = [v for _, v in gpm[lo:hi]]
+        if not inside:
+            continue
+        own = float(np.median(inside))
+        quiet = [v for v in inside if v <= own + book_p.draw_gpm]
+        if quiet:
+            clean.extend(quiet)
+            clean_runs.append(a)
+    days = len({t.date() for t in clean_runs})
+    if len(clean_runs) < MIN_CIRCULATION_RUNS or days < MIN_CIRCULATION_DAYS:
+        return keep(
+            f"{len(clean_runs)} clean runs over {days} days: "
+            f"{MIN_CIRCULATION_RUNS} over {MIN_CIRCULATION_DAYS} needed",
+            len(clean_runs),
+        )
+    seen = float(np.median(clean))
+    template = base or SITE_CIRCULATION
+    if seen >= METER_SEES_CIRCULATION_GPM:
+        flow_gpm, share = seen, 1.0
+    else:
+        flow_gpm = (
+            base.flow_gpm if base is not None else NOMINAL_CIRCULATION_GPM
+        )
+        share = 0.0
+    refit = CirculationParams(
+        displaced_gal=template.displaced_gal,
+        flow_gpm=flow_gpm,
+        loss_btu_per_gal=0.0,
+        meter_share=share,
+        run_gap_min=template.run_gap_min,
+    )
+
+    # The observed spans, each booked on its own.
+    heard = sorted(t.astimezone(UTC) for t in observed)
+    if not heard:
+        return keep("the heater was never heard from", len(clean_runs))
+    dark = sorted(
+        [
+            *silences(heard, max_gap(heard)),
+            *((a.astimezone(UTC), b.astimezone(UTC)) for a, b in rows.outages),
+        ]
+    )
+    segments: list[tuple[datetime, datetime]] = []
+    at = heard[0]
+    for a, b in dark:
+        if a > at:
+            segments.append((at, a))
+        at = max(at, b)
+    if heard[-1] > at:
+        segments.append((at, heard[-1]))
+    segments = [
+        (a, b)
+        for a, b in segments
+        if (b - a).total_seconds() >= _MIN_SEGMENT_H * 3600
+    ]
+
+    def books(terms: CirculationParams) -> list[cal.RecordedBook]:
+        with_terms = replace(params, circulation=terms)
+        return [
+            cal.RecordedBook(
+                sa.book_steps_from_changes(
+                    rows,
+                    start=a,
+                    end=b,
+                    flow=flow_rows,
+                    circulation=run_spans,
+                    inlet=inlets,
+                    air=airs,
+                    params=with_terms,
+                ),
+                book_p,
+                terms,
+                start=a,
+            )
+            for a, b in segments
+        ]
+
+    fitted = books(refit)
+    # Each pair with a run between: (its later anchor's instant, the
+    # book, the pair).
+    pairs = sorted(
+        (
+            (bk.at(a1), i, (a0, a1))
+            for i, bk in enumerate(fitted)
+            if len(bk.steps)
+            for a0, a1 in bk.reanchors(book_p.max_anchor_age_h)
+            if bk.circulated[a0:a1].sum() > 0
+        ),
+        key=lambda x: x[0],
+    )
+    if not pairs:
+        return keep(
+            "no quiet full tank on both sides of a run to book it by",
+            len(clean_runs),
+        )
+    n_held = _split(len(pairs))
+    train, held = pairs[: len(pairs) - n_held], pairs[len(pairs) - n_held :]
+
+    def parts(
+        bks: list[cal.RecordedBook], chosen: Sequence[Any]
+    ) -> tuple[np.ndarray, np.ndarray]:
+        """Each pair's error without the run's loss, BTU, and the
+        gallons it circulated: its error is the first less the loss
+        per gallon times the second."""
+        e0, gal = [], []
+        for _, i, (a0, a1) in chosen:
+            bk = bks[i]
+            e0.append(float(bk.errors(book_p, 0.0, [(a0, a1)])[0]))
+            gal.append(float(bk.circulated[a0:a1].sum()))
+        return np.array(e0), np.array(gal)
+
+    e0, gal = parts(fitted, train)
+    loss = min(_weighted_median(e0 / gal, gal), _MAX_LOSS_BTU_PER_GAL)
+    loss = max(loss, 0.0)
+    refit = replace(refit, loss_btu_per_gal=loss)
+    note = (
+        "displaced_gal and run_gap_min kept from the base"
+        if base is not None
+        else "displaced_gal and run_gap_min are one installation's "
+        "(site_example_params): the book can't tell them"
+    )
+    how = (
+        f"the meter sees {seen:.2f} gal/min of a run"
+        if share
+        else "the meter doesn't see the runs"
+    )
+    if not held:
+        if base is None:
+            return CirculationFit(
+                refit,
+                "refit",
+                len(clean_runs),
+                len(pairs),
+                None,
+                f"{how}; {len(pairs)} pairs, too few to hold any out; {note}",
+            )
+        return keep(
+            f"{len(pairs)} pairs with a run: too few to judge a refit by "
+            f"({cal.MIN_RECOVERIES_FOR_SPLIT} needed)",
+            len(clean_runs),
+            len(pairs),
+        )
+    e0h, galh = parts(fitted, held)
+    refit_err = float(np.mean(np.abs(e0h - loss * galh)))
+    if base is None:
+        return CirculationFit(
+            refit,
+            "refit",
+            len(clean_runs),
+            len(pairs),
+            refit_err,
+            f"{how}; {note}",
+        )
+    b0, bgal = parts(books(base), held)
+    base_err = float(np.mean(np.abs(b0 - base.loss_btu_per_gal * bgal)))
+    if refit_err <= base_err:
+        return CirculationFit(
+            refit,
+            "refit",
+            len(clean_runs),
+            len(pairs),
+            refit_err,
+            f"{how}; held out, {refit_err:.0f} BTU against the base's "
+            f"{base_err:.0f}; {note}",
+        )
+    return CirculationFit(
+        base,
+        "base",
+        len(clean_runs),
+        len(pairs),
+        base_err,
+        f"held out, the base's {base_err:.0f} BTU against the refit's "
+        f"{refit_err:.0f}",
+    )
+
+
+def _weighted_median(values: np.ndarray, weights: np.ndarray) -> float:
+    """The value minimising the weighted sum of absolute deviations."""
+    order = np.argsort(values)
+    v, w = values[order], weights[order]
+    cum = np.cumsum(w)
+    return float(v[np.searchsorted(cum, cum[-1] / 2.0)])
