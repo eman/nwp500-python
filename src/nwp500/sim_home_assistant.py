@@ -1027,9 +1027,10 @@ async def _water_use(
                 f"the meter was unavailable or unread {len(dark)} times "
                 f"({dark_h:.1f} h), left out of the flow"
             )
-        # Nor after its last report: a meter that stopped reporting
-        # without going unavailable is silent since.
-        last = max(reported[n] for n in meter_ids)
+        # Nor after its volume's last report: a meter that stopped
+        # reporting without going unavailable is silent since. The
+        # volume is its record; a rate still reporting doesn't stand in.
+        last = reported[volume_id]
         if last < now:
             flow = [(t, v) for t, v in flow if t <= last]
     runs: list[Span] | None = []

@@ -1443,12 +1443,25 @@ class TestTheWaterUse:
         source = _source(client, circulation_speed="sensor.pump", **INLET)
         assert (await source.read()).inlet_f == use.cold.t_cold_f
 
-    async def test_a_meter_silent_since_ends_the_flow(self) -> None:
+    @pytest.mark.parametrize("with_rate", [False, True])
+    async def test_a_meter_silent_since_ends_the_flow(
+        self, with_rate: bool
+    ) -> None:
+        """Its volume's last report ends the flow, a rate still reporting
+        or not."""
         last = NOW - timedelta(hours=2)
-        states = UNITS | {"sensor.volume": _s("sensor.volume", 0.0, "gal", 120)}
+        states = UNITS | {
+            "sensor.volume": _s("sensor.volume", 0.0, "gal", 120),
+            "sensor.rate": _s("sensor.rate", 0.0, "gal/min"),
+        }
+        series = recorded_draw(ended_hours_ago=5)
+        series["sensor.rate"] = [(NOW - ha.INLET_LOOKBACK, 0.0)]
         use = await ha.read_water_use(
-            FakeClient(states, recorded_draw(ended_hours_ago=5)),  # type: ignore[arg-type]  # pyright: ignore[reportArgumentType]
-            ha.Entities(meter_volume="sensor.volume"),
+            FakeClient(states, series),  # type: ignore[arg-type]  # pyright: ignore[reportArgumentType]
+            ha.Entities(
+                meter_volume="sensor.volume",
+                meter_flow="sensor.rate" if with_rate else None,
+            ),
             now=NOW,
         )
         assert use.flow[-1][0] <= last
