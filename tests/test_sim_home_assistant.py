@@ -17,6 +17,10 @@ from nwp500 import sim_home_assistant as ha
 from nwp500.sim.location_air import LocationAirModel
 
 NOW = datetime(2026, 10, 18, 15, tzinfo=UTC)
+#: The household's hot water demand: on while it draws.
+DEMAND = "binary_sensor.demand"
+#: A history row: a number, or a state such as ``on``.
+Row = tuple[datetime, Any]
 MODEL = LocationAirModel(damping=0.638, lag=timedelta(hours=2), offset_f=24.5)
 
 
@@ -170,6 +174,37 @@ class TestPumpRuns:
         assert ha.pump_runs(speed, _t(0), _t(60)) == [(_t(0), _t(2))]
 
 
+class TestDemandSpans:
+    def test_on_is_drawing(self) -> None:
+        rows = [(_t(-10), "off"), (_t(5), "on"), (_t(9), "off")]
+        assert ha.demand_spans(rows, _t(0), _t(60)) == ([(_t(5), _t(9))], [])
+
+    def test_a_draw_in_force_at_either_end_is_cut_there(self) -> None:
+        rows = [(_t(-10), "on"), (_t(2), "off"), (_t(58), "on")]
+        assert ha.demand_spans(rows, _t(0), _t(60)) == (
+            [(_t(0), _t(2)), (_t(58), _t(60))],
+            [],
+        )
+
+    def test_unavailable_unknown_and_before_the_first_row_are_dark(
+        self,
+    ) -> None:
+        rows = [
+            (_t(5), "off"),
+            (_t(10), "unavailable"),
+            (_t(12), "On"),
+            (_t(20), "unknown"),
+            (_t(25), "off"),
+        ]
+        assert ha.demand_spans(rows, _t(0), _t(60)) == (
+            [(_t(12), _t(20))],
+            [(_t(0), _t(5)), (_t(10), _t(12)), (_t(20), _t(25))],
+        )
+
+    def test_no_rows_is_dark_throughout(self) -> None:
+        assert ha.demand_spans([], _t(0), _t(60)) == ([], [(_t(0), _t(60))])
+
+
 class TestTheConfiguration:
     DOC: ClassVar[dict[str, Any]] = {
         "home_assistant": {
@@ -181,6 +216,9 @@ class TestTheConfiguration:
 
     def test_it_reads(self) -> None:
         s = ha.sources_from(self.DOC, {"HA_TOKEN": "secret"})
+        demand = {"entities": {"demand": DEMAND}}
+        doc = {"home_assistant": self.DOC["home_assistant"] | demand}
+        assert ha.sources_from(doc, {"HA_TOKEN": "x"}).entities.demand == DEMAND
         assert s.url == "http://ha.local:8123"
         assert s.token == "secret"
         assert "secret" not in repr(s)
@@ -200,6 +238,12 @@ class TestTheConfiguration:
                 "unknown",
             ),
             ({"entities": {"air": "air"}}, {"HA_TOKEN": "x"}, "entity id"),
+            # The meter's draws are the demand entity's now.
+            (
+                {"entities": {"meter_volume": "sensor.volume"}},
+                {"HA_TOKEN": "x"},
+                "unknown",
+            ),
         ],
     )
     def test_what_is_wrong_is_named(
@@ -231,7 +275,7 @@ class FakeClient:
     def __init__(
         self,
         states: dict[str, ha.State] | None = None,
-        history: dict[str, list[ha.Reading]] | None = None,
+        history: dict[str, list[Row]] | None = None,
         forecast: tuple[list[ha.Reading], str | None] | None = None,
         fail: set[str] | None = None,
         outages: dict[str, list[ha.Span]] | None = None,
@@ -257,9 +301,19 @@ class FakeClient:
         self, entities: Iterable[str], start: datetime, end: datetime
     ) -> ha.History:
         self.history_calls.append((list(entities), start, end))
+        names = list(entities)
         return ha.History(
-            {e: self.series.get(e, []) for e in entities},
-            {e: self.down.get(e, []) for e in entities},
+            {
+                e: [r for r in self.series.get(e, []) if _numeric(r)]
+                for e in names
+            },
+            {e: self.down.get(e, []) for e in names},
+            # Every row as Home Assistant writes it, a binary sensor's
+            # ``on`` and ``off`` included.
+            states={
+                e: [(t, str(v)) for t, v in self.series.get(e, [])]
+                for e in names
+            },
         )
 
     async def forecast(
@@ -268,6 +322,10 @@ class FakeClient:
         if self.hours is None:
             raise ha.HomeAssistantError("no forecast")
         return self.hours
+
+
+def _numeric(row: tuple[datetime, Any]) -> bool:
+    return not isinstance(row[1], str)
 
 
 def _s(
@@ -361,16 +419,21 @@ class TestTheHumidity:
 
 def long_draw(
     *, ended_hours_ago: float, minutes: float = 15, mains_f: float = 58.0
-) -> dict[str, list[ha.Reading]]:
-    """A draw of 2 gal/min: the volume reported every 30 s, and the probe
-    every 30 s, warm at rest and at the mains once the draw has run."""
+) -> dict[str, list[Row]]:
+    """A draw: the demand on through it, off since long before, and the
+    probe every 30 s, warm at rest and at the mains once the draw has
+    run."""
     end = NOW - timedelta(hours=ended_hours_ago)
     start = end - timedelta(minutes=minutes)
-    volume, probe = [], [(start - timedelta(hours=1), 66.0)]
+    demand: list[Row] = [
+        (NOW - timedelta(days=30), "off"),
+        (start, "on"),
+        (end, "off"),
+    ]
+    probe: list[Row] = [(start - timedelta(hours=1), 66.0)]
     t = start
     while t < end:
         t += timedelta(seconds=30)
-        volume.append((t, 1.0))
         into = (t - start).total_seconds()
         probe.append((t, 66.0 - min(into / 300.0, 1.0) * (66.0 - mains_f)))
     # The pipe stays at the mains a few minutes after the draw.
@@ -378,21 +441,17 @@ def long_draw(
         (end + timedelta(seconds=30 * k), mains_f) for k in range(1, 7)
     )
     probe.append((end + timedelta(minutes=20), 65.0))
-    return {"sensor.inlet": probe, "sensor.volume": volume}
+    return {"sensor.inlet": probe, DEMAND: demand}
 
 
 class _InletEntities(TypedDict):
     inlet: str
-    meter_volume: str
+    demand: str
 
 
-INLET: _InletEntities = {
-    "inlet": "sensor.inlet",
-    "meter_volume": "sensor.volume",
-}
+INLET: _InletEntities = {"inlet": "sensor.inlet", "demand": DEMAND}
 UNITS = {
     "sensor.inlet": _s("sensor.inlet", 65.0, "°F"),
-    "sensor.volume": _s("sensor.volume", 0.0, "gal"),
     "sensor.pump": _s("sensor.pump", 0.0, "rpm"),
 }
 
@@ -406,7 +465,7 @@ class TestTheInlet:
         assert env.inlet_f == pytest.approx(58.0)
         assert "inlet: the plateau of 1 long draws" in source.notes
         ((names, since, until),) = client.history_calls
-        assert set(names) == {"sensor.inlet", "sensor.volume"}
+        assert set(names) == {"sensor.inlet", DEMAND}
         assert (since, until) == (NOW - timedelta(hours=72), NOW)
 
     async def test_a_short_draw_has_none(self) -> None:
@@ -440,14 +499,26 @@ class TestTheInlet:
             for n in source.notes
         )
 
-    async def test_without_the_meters_volume(self) -> None:
+    async def test_without_the_demand(self) -> None:
         source = _source(FakeClient(UNITS), inlet="sensor.inlet")
         assert (await source.read()).inlet_f is None
-        assert any("meter's volume" in n for n in source.notes)
+        assert any("demand entity" in n for n in source.notes)
+
+    async def test_a_history_without_states_is_noted(self) -> None:
+        class NoStates(FakeClient):
+            async def read_history(
+                self, entities: Iterable[str], start: datetime, end: datetime
+            ) -> ha.History:
+                got = await super().read_history(entities, start, end)
+                return replace(got, states=None)
+
+        source = _source(NoStates(UNITS, long_draw(ended_hours_ago=5)), **INLET)
+        assert (await source.read()).inlet_f is None
+        assert any("no states in the history" in n for n in source.notes)
 
     async def test_a_failed_read_is_the_default(self) -> None:
         client = FakeClient(UNITS, long_draw(ended_hours_ago=5))
-        client.fail = {"sensor.volume"}
+        client.fail = {"sensor.inlet"}
         source = _source(client, **INLET)
         assert (await source.read()).inlet_f is None
         assert any(n.startswith("inlet: not read") for n in source.notes)
@@ -483,24 +554,12 @@ class TestCompose:
         assert not math.isnan(env.ambient_f)
 
 
-class TestDrawSpans:
-    def test_runs_joined_across_short_gaps(self) -> None:
-        flow = [(_t(0), 2.0), (_t(10 / 60), 2.0), (_t(0.5), 2.0), (_t(5), 0.0)]
-        assert ha.draw_spans(flow) == [(_t(0), _t(0.5) + timedelta(seconds=10))]
-
-    def test_a_long_gap_is_two_draws(self) -> None:
-        flow = [(_t(0), 2.0), (_t(1), 2.0)]
-        assert len(ha.draw_spans(flow)) == 2
-
-
 @pytest.mark.asyncio
 class TestTheRecord:
     START = NOW - timedelta(days=2)
 
     async def test_the_air_humidity_draws_and_runs(self) -> None:
         series = long_draw(ended_hours_ago=5)
-        # The meter's row in force at the start repeats an old report.
-        series["sensor.volume"].insert(0, (self.START, 5.0))
         series |= {
             "sensor.air": [(self.START, 20.0), (NOW, 21.0)],
             "sensor.rh": [(self.START, 40.0)],
@@ -515,7 +574,7 @@ class TestTheRecord:
             ha.Entities(
                 air="sensor.air",
                 humidity="sensor.rh",
-                meter_volume="sensor.volume",
+                demand=DEMAND,
                 circulation_speed="sensor.pump",
             ),
             self.START,
@@ -525,7 +584,7 @@ class TestTheRecord:
         assert got.humidity == [(self.START, 40.0)]
         assert got.circulating == []
         (drawn,) = got.drawing or []
-        assert drawn[1] - drawn[0] > timedelta(minutes=15)
+        assert drawn[1] - drawn[0] == timedelta(minutes=15)
         assert got.notes == ()
 
     async def test_coverage_and_missing_parts_are_noted(self) -> None:
@@ -652,13 +711,12 @@ class TestReviewRegressionsLive:
     async def test_part_histories_leave_the_heaters_flag(self) -> None:
         late = NOW - timedelta(hours=10)
         series = long_draw(ended_hours_ago=5)
+        series[DEMAND] = [(late, "off"), *series[DEMAND][1:]]
         series["sensor.pump"] = [(late, 0.0)]
         client = FakeClient(UNITS, series)
         got = await ha.record_inputs(
             client,  # type: ignore[arg-type]  # pyright: ignore[reportArgumentType]
-            ha.Entities(
-                meter_volume="sensor.volume", circulation_speed="sensor.pump"
-            ),
+            ha.Entities(demand=DEMAND, circulation_speed="sensor.pump"),
             self.START,
             NOW,
         )
@@ -798,16 +856,18 @@ class TestTheSecondReviewLive:
         client = FakeClient(
             UNITS,
             {
-                "sensor.volume": [(self.START, 0.0)],
+                DEMAND: [
+                    (self.START, "off"),
+                    (gap[0], "unavailable"),
+                    (gap[1], "off"),
+                ],
                 "sensor.pump": [(self.START, 0.0)],
             },
-            outages={"sensor.volume": [gap], "sensor.pump": [gap]},
+            outages={"sensor.pump": [gap]},
         )
         got = await ha.record_inputs(
             client,  # type: ignore[arg-type]  # pyright: ignore[reportArgumentType]
-            ha.Entities(
-                meter_volume="sensor.volume", circulation_speed="sensor.pump"
-            ),
+            ha.Entities(demand=DEMAND, circulation_speed="sensor.pump"),
             self.START,
             NOW,
         )
@@ -835,30 +895,6 @@ class TestTheSecondReviewLive:
 @pytest.mark.asyncio
 class TestTheThirdReview:
     START = NOW - timedelta(days=2)
-
-    async def test_a_short_draw_without_a_rate_is_drawing(self) -> None:
-        at = NOW - timedelta(hours=3)
-        client = FakeClient(
-            UNITS,
-            {
-                "sensor.volume": [
-                    (self.START, 0.0),
-                    (at, 1.0),
-                    (at + timedelta(seconds=30), 1.0),
-                ],
-                "sensor.pump": [(self.START, 0.0)],
-            },
-        )
-        got = await ha.record_inputs(
-            client,  # type: ignore[arg-type]  # pyright: ignore[reportArgumentType]
-            ha.Entities(
-                meter_volume="sensor.volume", circulation_speed="sensor.pump"
-            ),
-            self.START,
-            NOW,
-        )
-        (drawn,) = got.drawing or []
-        assert drawn[0] <= at <= drawn[1]
 
     async def test_air_and_humidity_outages_are_carried(self) -> None:
         gap = (NOW - timedelta(hours=10), NOW - timedelta(hours=8))
@@ -919,40 +955,6 @@ class TestTheSixthReview:
         assert local == utc
         ((a, b),) = local or []
         assert b - a == ha.PUMP_STALE
-
-    def test_a_small_report_is_water_moving(self) -> None:
-        at = NOW - timedelta(hours=1)
-        spans = ha.volume_spans(
-            [(at - timedelta(seconds=30), 0.002), (at, 0.25)]
-        )
-        assert spans == [(at - timedelta(seconds=30), at)]
-        # A meter's noise at rest is not.
-        assert ha.volume_spans([(at, -0.0017)]) == []
-
-
-@pytest.mark.asyncio
-class TestTheSixthReviewLive:
-    START = NOW - timedelta(days=2)
-
-    async def test_a_quarter_gallon_draw_is_drawing(self) -> None:
-        at = NOW - timedelta(hours=3)
-        client = FakeClient(
-            UNITS,
-            {
-                "sensor.volume": [(self.START, 0.0), (at, 0.25)],
-                "sensor.pump": [(self.START, 0.0)],
-            },
-        )
-        got = await ha.record_inputs(
-            client,  # type: ignore[arg-type]  # pyright: ignore[reportArgumentType]
-            ha.Entities(
-                meter_volume="sensor.volume", circulation_speed="sensor.pump"
-            ),
-            self.START,
-            NOW,
-        )
-        (drawn,) = got.drawing or []
-        assert drawn[0] < at <= drawn[1]
 
 
 @pytest.mark.asyncio
@@ -1177,26 +1179,6 @@ class TestTheThirteenthReview:
         assert got.air_outages == ((self.START + 4 * h, self.START + 8 * h),)
         assert any("unobserved" in n for n in got.notes)
 
-    async def test_a_rejected_volume_report_is_drawing(self) -> None:
-        at = NOW - timedelta(hours=3)
-        doc = [
-            [
-                _row("sensor.volume", self.START, "0.0", "gal"),
-                _row("sensor.volume", at, "0.0", "furlongs"),
-                _row("sensor.volume", at + timedelta(minutes=2), "0.0", "gal"),
-            ],
-            [_row("sensor.pump", self.START, "0", "rpm")],
-        ]
-        got = await ha.record_inputs(
-            _history_client(doc, UNITS),  # type: ignore[arg-type]  # pyright: ignore[reportArgumentType]
-            ha.Entities(
-                meter_volume="sensor.volume", circulation_speed="sensor.pump"
-            ),
-            self.START,
-            NOW,
-        )
-        assert got.drawing == [(at, at + timedelta(minutes=2))]
-
     async def test_a_first_reading_after_the_start_is_not_the_start(
         self,
     ) -> None:
@@ -1222,113 +1204,6 @@ class TestTheThirteenthReview:
             FakeClient(UNITS, series), circulation_speed="sensor.pump", **INLET
         )
         assert (await source.read()).inlet_f is None
-
-
-def _running_total(
-    reports: list[ha.Reading], start: float = 1200.0
-) -> list[ha.Reading]:
-    """``reports`` (volume since the previous report) as a running
-    total's readings, from ``start``: a baseline before the first."""
-    first = reports[0][0] - timedelta(seconds=30)
-    total, out = start, [(first, start)]
-    for t, v in reports:
-        total += v
-        out.append((t, total))
-    return out
-
-
-class TestARunningTotal:
-    def test_its_state_class_is_read(self) -> None:
-        doc = _state("sensor.volume", "1234.5", "gal")
-        doc["attributes"]["state_class"] = "total_increasing"
-        s = ha.parse_state(doc)
-        assert s.state_class == "total_increasing"
-        assert (
-            ha.parse_state(_state("sensor.air", "1", "°F")).state_class is None
-        )
-
-    def test_rises_are_reports_and_a_drop_is_a_reset(self) -> None:
-        series = [
-            (_t(0), 100.0),
-            (_t(1), 101.5),
-            (_t(2), 104.0),
-            (_t(3), 3.0),
-            (_t(4), 4.5),
-        ]
-        reports, resets = ha.reports_from_total(series)
-        assert reports == [
-            (_t(1), 1.5),
-            (_t(2), 2.5),
-            (_t(3), 0.0),
-            (_t(4), 1.5),
-        ]
-        assert resets == 1
-        assert ha.reports_from_total([(_t(0), 5.0)]) == ([], 0)
-
-    def test_the_flag_overrides_the_state_class(self) -> None:
-        total = ha.State("sensor.volume", 1.0, "gal", NOW, "total_increasing")
-        plain = ha.State("sensor.volume", 1.0, "gal", NOW, "measurement")
-        unset = ha.Entities(meter_volume="sensor.volume")
-        assert ha.is_running_total(unset, total)
-        assert ha.is_running_total(unset, replace(total, state_class="total"))
-        assert not ha.is_running_total(unset, plain)
-        assert not ha.is_running_total(replace(unset, meter_total=False), total)
-        assert ha.is_running_total(replace(unset, meter_total=True), plain)
-
-    def test_the_configuration_takes_the_flag(self) -> None:
-        doc = {
-            "home_assistant": TestTheConfiguration.DOC["home_assistant"]
-            | {"entities": {"meter_volume": "sensor.v", "meter_total": True}}
-        }
-        s = ha.sources_from(doc, {"HA_TOKEN": "x"})
-        assert s.entities.meter_total is True
-        doc["home_assistant"]["entities"]["meter_total"] = "yes"
-        with pytest.raises(ValueError, match="true or false"):
-            ha.sources_from(doc, {"HA_TOKEN": "x"})
-
-
-TOTAL_UNITS = UNITS | {
-    "sensor.volume": ha.State(
-        "sensor.volume", 0.0, "gal", NOW, "total_increasing"
-    )
-}
-
-
-@pytest.mark.asyncio
-class TestARunningTotalsInputs:
-    async def test_the_inlet_reads_the_same_plateau(self) -> None:
-        series = long_draw(ended_hours_ago=5)
-        series["sensor.volume"] = _running_total(series["sensor.volume"])
-        source = _source(FakeClient(TOTAL_UNITS, series), **INLET)
-        assert (await source.read()).inlet_f == pytest.approx(58.0)
-        assert any("running total" in n for n in source.notes)
-
-    async def test_the_record_reads_the_same_draws(self) -> None:
-        start = NOW - timedelta(days=2)
-        reports = long_draw(ended_hours_ago=5)
-        reports["sensor.volume"].insert(0, (start, 5.0))
-        totals = dict(reports)
-        # The total in force at the start is the baseline.
-        totals["sensor.volume"] = [(start, 900.0)] + [
-            (t, 900.0 + v)
-            for t, v in _running_total(reports["sensor.volume"][1:], 0.0)[1:]
-        ]
-        entities = ha.Entities(meter_volume="sensor.volume")
-        plain = await ha.record_inputs(
-            FakeClient(UNITS, reports),  # type: ignore[arg-type]  # pyright: ignore[reportArgumentType]
-            entities,
-            start,
-            NOW,
-        )
-        total = await ha.record_inputs(
-            FakeClient(TOTAL_UNITS, totals),  # type: ignore[arg-type]  # pyright: ignore[reportArgumentType]
-            entities,
-            start,
-            NOW,
-        )
-        assert total.drawing == plain.drawing
-        assert plain.drawing
-        assert any("running total" in n for n in total.notes)
 
 
 @pytest.mark.asyncio

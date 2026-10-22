@@ -138,11 +138,9 @@ pass it with ``--sources`` (or set ``NWP500_SOURCES``):
    air = "sensor.beside_the_heater_temperature"
    humidity = "sensor.beside_the_heater_humidity"
    inlet = "sensor.cold_supply_temperature"
-   meter_volume = "sensor.water_volume"     # volume since the last report
-   meter_flow = "sensor.water_flow_rate"
+   demand = "binary_sensor.hot_water_demand"  # on while hot water is drawn
    circulation_speed = "sensor.circulation_pump_speed"
    weather = "weather.forecast_home"
-   meter_total = true       # optional: the volume is a running total
 
    [location_air]   # optional: air = damping x outdoor(t - lag) + offset
    damping = 0.638
@@ -168,7 +166,8 @@ give:
 - **the humidity:** a reading at most an hour old;
 - **the inlet:** the plateau of the long draws (11 minutes or more,
   circulation off) in the last 72 hours, from the inlet probe and the
-  meter. Name the meter's flow rate as well as its volume. A
+  ``demand`` entity: a binary sensor that is on while the household
+  draws hot water, with the circulation's water not among its draws. A
   circulation pump with no speed reading leaves no estimate.
 
 A reading's age is from when Home Assistant last heard the sensor
@@ -179,11 +178,7 @@ held one value for over an hour can read as over an hour old, and its part
 keeps its default, even while it still reports.
 
 Units come from each entity's ``unit_of_measurement``: the pump's speed
-in rpm or Hz. A meter whose volume is a running total (its
-``state_class`` is ``total_increasing`` or ``total``) is read as the
-rise between readings, and a drop as the meter starting over from the
-new value. Set ``meter_total`` to say which it is when the entity
-carries no ``state_class``. A part that can't be read, or is stale, keeps its
+in rpm or Hz. A part that can't be read, or is stale, keeps its
 default, and a warning on stderr says why. ``--ambient``, ``--inlet``
 and ``--environment`` override what the sources give.
 
@@ -890,15 +885,17 @@ the air around the pipe:
 
    from nwp500.sim.cold_supply import on_the_mains
 
-   cold = sa.cold_supply(inlet_probe, at=now, flow=meter_flow,
+   cold = sa.cold_supply(inlet_probe, at=now, draws=draws,
                          circulation=runs)
    book, measured = on_the_mains(book, cold)
    readiness = sim.time_to_ready(scenario, params, book=book,
                                  inlet_measured=measured)
 
-``sa.cold_supply`` takes the probe and the flow in the preferred units.
-``sa.cold_supply_f`` takes them in °F and gal/min, and reads no unit
-preference, for a caller whose preference may change while it runs.
+``draws`` are the (start, end) spans the household drew hot water,
+without the circulation's water. ``sa.cold_supply`` takes the probe in
+the preferred unit. ``sa.cold_supply_f`` takes it in °F and reads no
+unit preference, for a caller whose preference may change while it
+runs.
 
 The mains is the median plateau of the long draws (11 minutes or more,
 with circulation off) over the last 72 hours, read from minute 9 of each

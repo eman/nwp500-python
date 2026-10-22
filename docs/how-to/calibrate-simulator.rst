@@ -81,7 +81,8 @@ Idle, it reads the cabinet, about 6 °F warm. So give one of these:
 - **Home Assistant:** ``--sources FILE``, the same sources file as
   ``simulate run`` takes (:doc:`simulate-heater`). The command reads the
   air beside the heater and its humidity over the record. It also reads
-  the meter's draws and the circulation's runs, which make the quiet
+  the household's draws (the ``demand`` entity) and the circulation's
+  runs, which make the quiet
   test exact: the heater's own "hot water in use" flag also fires on
   circulation. The air is used only over the span its history covers,
   and not while its sensor was ``unavailable``; the humidity takes the
@@ -91,7 +92,7 @@ Idle, it reads the cabinet, about 6 °F warm. So give one of these:
   loss is fitted from those alone. For the whole record, raise the
   recorder's ``purge_keep_days`` to cover it before you start
   recording, or give the air another way (``--air``). Where the
-  meter's or the circulation's history doesn't cover the whole record,
+  draws' or the circulation's history doesn't cover the whole record,
   the heater's own flag is used instead. ``--air``, ``--ambient`` and
   ``--humidity`` override the sources.
 
@@ -221,7 +222,7 @@ Assistant integration, can calibrate the same way:
 2. Read the air beside the heater and its humidity over the same span
    with ``sim_home_assistant.record_inputs(client, entities, start,
    end)``, and pass the result as ``record=``. It also brings the
-   meter's draws and the circulation's runs. Any client with the same
+   household's draws and the circulation's runs. Any client with the same
    ``read_history`` as ``HomeAssistantClient`` works. The recorder's
    retention limits the air, as above.
 3. Call ``sim_calibrate.calibrate`` in a worker thread. It takes the
@@ -274,7 +275,7 @@ without ``keep_better``.
 
 ``sim.calibration.calibrate`` underneath takes the frame
 ``sim_adapters.history`` builds; ``sim_adapters.add_inputs`` adds the
-air, the humidity, a meter's draws and the circulation's runs to it.
+air, the humidity, the household's draws and the circulation's runs to it.
 From there you can also give the draws that price the heat each
 cycle's draws took. The fits for the readiness terms, the heat book,
 the draw response and the elements also run there: see "Improve
