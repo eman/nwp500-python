@@ -1119,3 +1119,154 @@ class TestKeepBetterFifthReview:
         terms = _terms(done)
         for name in ("Compressor constant", "Evaporator approach (°F)"):
             assert terms[name].error == "-"
+
+
+def gap_windows(taus: list[float]) -> tuple[cal.StandbyWindow, ...]:
+    """A quiet window a day for each of ``taus``: a 6 °F zone gap
+    relaxing on that time constant over 6 h, the loss steady at ``UA``."""
+    hours = np.linspace(0.0, 6.0, 37)
+    return tuple(
+        cal.StandbyWindow(
+            start=T0 + timedelta(days=d),
+            end=T0 + timedelta(days=d, hours=6),
+            ua_btu_hr_f=UA,
+            rmse_f=0.1,
+            delta_t_mean_f=50.0,
+            duration_hours=6.0,
+            gap_hours=hours,
+            gap_f=6.0 * np.exp(-hours / tau),
+        )
+        for d, tau in enumerate(taus)
+    )
+
+
+def _keep_gap(
+    windows: tuple[cal.StandbyWindow, ...], base: sim.HeaterParams
+) -> tuple[sim.HeaterParams, sc.Judged, sc.HeldOut]:
+    """``_keep_better`` over ``windows``' standby, the gap's judgement."""
+    fit = cal.StandbyFit(
+        windows=windows,
+        n_quiet=len(windows),
+        n_dropped=0,
+        ua_ref=UA,
+        ua_exponent=0.0,
+        tau_gap_hours=None,
+        n_gap_windows=0,
+        quiet_by="dhw_in_use",
+    )
+    with pytest.MonkeyPatch.context() as m:
+        m.setattr(cal, "fit_standby", lambda *_: fit)
+        done, judged, held = sc._keep_better(recovery_days(1), base, "air_f")
+    (gap,) = [j for j in judged if j.group == "gap_tau"]
+    return done.params, gap, held
+
+
+def _with_tau(tau: float) -> sim.HeaterParams:
+    base = _fitted(UA)
+    return replace(base, tank=replace(base.tank, stratification_gap_tau_h=tau))
+
+
+#: The COP law the synthetic cycles follow, and another.
+COP_LAW = (0.8, 120.0, 0.01)
+OTHER_COP_LAW = (1.3, 40.0, 0.002)
+
+
+def cop_cycles_by(law_at: Any) -> Any:
+    """A stand-in for ``cop_cycles``: a cycle for each of the rows'
+    cycles, its metered energy what ``law_at(start)``'s ``(scale,
+    start-up Wh, lift coefficient)`` says."""
+
+    def cycles(rows: Any, params: sim.HeaterParams, **_: Any) -> Any:
+        starts = rows.loc[rows["offset_minutes"] == 0.0]["start_time"]
+        out = []
+        for t in sorted(set(starts)):
+            day = (t - T0).days
+            heat = 3000.0 + 150 * (day % 4)
+            lift, cop = 40.0 + 6 * (day % 5), 3.0
+            scale, startup, k = law_at(t)
+            ref = params.power.cop_lift_ref_f
+            metered = startup + heat / (
+                scale * cop * float(np.exp(-k * (lift - ref)))
+            )
+            out.append(cal.CopCycle(t, heat, 0.0, cop, metered, lift))
+        return out
+
+    return cycles
+
+
+def _keep_cop(
+    law_at: Any, base: sim.HeaterParams
+) -> tuple[sim.HeaterParams, dict[str, sc.Judged], sc.HeldOut]:
+    with pytest.MonkeyPatch.context() as m:
+        m.setattr(cal, "cop_cycles", cop_cycles_by(law_at))
+        done, judged, held = sc._keep_better(recovery_days(14), base, "air_f")
+    return done.params, {j.group: j for j in judged}, held
+
+
+def _with_cop(law: tuple[float, float, float]) -> sim.HeaterParams:
+    base = sim.default_params()
+    scale, startup, k = law
+    return replace(
+        base,
+        power=replace(
+            base.power, cop_scale=scale, startup_wh=startup, cop_lift_coeff=k
+        ),
+    )
+
+
+class TestKeepBetterSixthReview:
+    def test_a_gap_refit_that_scores_better_replaces_the_base(self) -> None:
+        params, gap, held = _keep_gap(gap_windows([4.0] * 26), _with_tau(1.0))
+        assert gap.kept == "refit"
+        assert gap.n_held == 5 == len(held.gap_windows)
+        assert gap.base_error is not None and gap.refit_error is not None
+        assert gap.refit_error < gap.base_error
+        assert params.tank.stratification_gap_tau_h == pytest.approx(
+            4.0, rel=0.01
+        )
+
+    def test_a_gap_base_the_latest_windows_favour_stays(self) -> None:
+        windows = gap_windows([1.0] * 21 + [4.0] * 5)
+        params, gap, held = _keep_gap(windows, _with_tau(4.0))
+        assert gap.kept == "base"
+        assert len(held.gap_windows) == 5
+        assert gap.base_error is not None and gap.refit_error is not None
+        assert gap.base_error < gap.refit_error
+        assert params.tank.stratification_gap_tau_h == 4.0
+
+    def test_a_cop_refit_that_scores_better_replaces_the_base(self) -> None:
+        base = _with_cop(OTHER_COP_LAW)
+        params, judged, held = _keep_cop(lambda _: COP_LAW, base)
+        cop = judged["cop"]
+        assert cop.kept == "refit"
+        assert cop.n_held == 3
+        assert held.cop_cycles["cycle"].nunique() == 3
+        assert cop.base_error is not None and cop.refit_error is not None
+        assert cop.refit_error < cop.base_error
+        scale, startup, k = COP_LAW
+        assert params.power.cop_scale == pytest.approx(scale, rel=1e-3)
+        assert params.power.startup_wh == pytest.approx(startup, abs=0.5)
+        assert params.power.cop_lift_coeff == pytest.approx(k)
+        # The power scale is judged on its own.
+        assert judged["power_scale"].kept == "refit"
+        assert params.power.power_scale != base.power.power_scale
+
+    def test_a_cop_base_the_latest_cycles_favour_stays(self) -> None:
+        # The refit learns the other law from the earlier cycles; the
+        # latest follow the base's.
+        last = T0 + timedelta(days=11)
+        base = _with_cop(COP_LAW)
+        params, judged, _ = _keep_cop(
+            lambda t: COP_LAW if t >= last else OTHER_COP_LAW, base
+        )
+        cop = judged["cop"]
+        assert cop.kept == "base"
+        assert cop.base_error is not None and cop.refit_error is not None
+        assert cop.base_error < cop.refit_error
+        assert (
+            params.power.cop_scale,
+            params.power.startup_wh,
+            params.power.cop_lift_coeff,
+        ) == COP_LAW
+        assert judged["power_scale"].kept == "refit"
+        assert params.power.power_scale != base.power.power_scale
