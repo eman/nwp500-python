@@ -1223,10 +1223,20 @@ class TestTheThirteenthReview:
         assert (await source.read()).inlet_f is None
 
 
+def recorded_draw(
+    ended_hours_ago: float, lookback: timedelta = ha.INLET_LOOKBACK
+) -> dict[str, list[ha.Reading]]:
+    """``long_draw`` as Home Assistant records it: the meter's history
+    opens with the report in force at its start."""
+    series = long_draw(ended_hours_ago=ended_hours_ago)
+    series["sensor.volume"].insert(0, (NOW - lookback, 0.5))
+    return series
+
+
 @pytest.mark.asyncio
 class TestTheWaterUse:
     async def test_the_flow_probe_and_mains_in_one_read(self) -> None:
-        client = FakeClient(UNITS, long_draw(ended_hours_ago=5))
+        client = FakeClient(UNITS, recorded_draw(ended_hours_ago=5))
         use = await ha.read_water_use(
             client,  # type: ignore[arg-type]  # pyright: ignore[reportArgumentType]
             ha.Entities(**INLET),
@@ -1244,7 +1254,7 @@ class TestTheWaterUse:
         assert (since, until) == (NOW - ha.INLET_LOOKBACK, NOW)
 
     async def test_the_live_inlet_is_its_mains(self) -> None:
-        series = long_draw(ended_hours_ago=5)
+        series = recorded_draw(ended_hours_ago=5)
         source = _source(FakeClient(UNITS, series), **INLET)
         use = await ha.read_water_use(
             FakeClient(UNITS, series),  # type: ignore[arg-type]  # pyright: ignore[reportArgumentType]
@@ -1268,7 +1278,7 @@ class TestTheWaterUse:
         assert any("runs are unknown" in n for n in use.notes)
 
     async def test_without_a_probe_the_flow_alone(self) -> None:
-        series = long_draw(ended_hours_ago=5)
+        series = recorded_draw(ended_hours_ago=5)
         series["sensor.pump"] = [(NOW - timedelta(hours=80), 0.0)]
         use = await ha.read_water_use(
             FakeClient(UNITS, series),  # type: ignore[arg-type]  # pyright: ignore[reportArgumentType]
@@ -1328,3 +1338,73 @@ class TestTheWaterUse:
         )
         assert use == ha.WaterUse([], [], [], [], None)
         assert client.history_calls == []
+
+    async def test_a_short_draw_is_flow(self) -> None:
+        """Two 1-gal reports 30 s apart: too short for the plateau, but
+        water drawn for the book."""
+        start = NOW - timedelta(hours=2)
+        series = {
+            "sensor.volume": [
+                (NOW - ha.INLET_LOOKBACK, 0.0),
+                (start, 1.0),
+                (start + timedelta(seconds=30), 1.0),
+            ]
+        }
+        use = await ha.read_water_use(
+            FakeClient(UNITS, series),  # type: ignore[arg-type]  # pyright: ignore[reportArgumentType]
+            ha.Entities(meter_volume="sensor.volume"),
+            now=NOW,
+        )
+        assert sum(v for _, v in use.flow) > 0
+
+    async def test_no_meter_history_is_no_flow(self) -> None:
+        use = await ha.read_water_use(
+            FakeClient(UNITS, {}),  # type: ignore[arg-type]  # pyright: ignore[reportArgumentType]
+            ha.Entities(meter_volume="sensor.volume"),
+            now=NOW,
+        )
+        assert use.flow == []
+        assert use.notes == ("no history of sensor.volume over the span",)
+
+    async def test_a_late_meter_history_starts_the_flow(self) -> None:
+        first = NOW - timedelta(hours=10)
+        series = {"sensor.volume": [(first, 0.0), (NOW, 0.0)]}
+        use = await ha.read_water_use(
+            FakeClient(UNITS, series),  # type: ignore[arg-type]  # pyright: ignore[reportArgumentType]
+            ha.Entities(meter_volume="sensor.volume"),
+            now=NOW,
+        )
+        assert use.flow[0][0] >= first
+        assert any("covers only from" in n for n in use.notes)
+
+    async def test_a_longer_lookback_reads_older_draws(self) -> None:
+        lookback = timedelta(hours=96)
+        use = await ha.read_water_use(
+            FakeClient(UNITS, recorded_draw(80, lookback)),  # type: ignore[arg-type]  # pyright: ignore[reportArgumentType]
+            ha.Entities(**INLET),
+            now=NOW,
+            lookback=lookback,
+        )
+        assert use.cold is not None
+        assert use.cold.t_cold_f == pytest.approx(58.0)
+
+    async def test_unknown_pump_spans_are_busy(self) -> None:
+        series = recorded_draw(ended_hours_ago=5)
+        late = NOW - timedelta(hours=10)
+        series["sensor.pump"] = [(late, 0.0)]
+        use = await ha.read_water_use(
+            FakeClient(UNITS, series),  # type: ignore[arg-type]  # pyright: ignore[reportArgumentType]
+            ha.Entities(circulation_speed="sensor.pump", **INLET),
+            now=NOW,
+        )
+        assert use.runs is None
+        assert use.busy == [(NOW - ha.INLET_LOOKBACK, late)]
+        series["sensor.pump"] = [(NOW - ha.INLET_LOOKBACK, 0.0)]
+        odd = UNITS | {"sensor.pump": _s("sensor.pump", 0.0, "%")}
+        use = await ha.read_water_use(
+            FakeClient(odd, series),  # type: ignore[arg-type]  # pyright: ignore[reportArgumentType]
+            ha.Entities(circulation_speed="sensor.pump", **INLET),
+            now=NOW,
+        )
+        assert use.runs is None
+        assert use.busy == [(NOW - ha.INLET_LOOKBACK, NOW)]

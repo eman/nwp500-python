@@ -885,7 +885,7 @@ class HomeAssistantEnvironment:
             notes: list[str] = []
             try:
                 use = await _water_use(
-                    self.client, e, self.now, INLET_LOOKBACK, notes
+                    self.client, e, self.now, INLET_LOOKBACK, notes, book=False
                 )
             finally:
                 self.notes.extend(f"inlet: {n}" for n in notes)
@@ -899,20 +899,23 @@ class WaterUse:
     """The water moving at the heater over a span (``read_water_use``):
     what the heat book and the inlet's plateau read."""
 
-    #: The meter's flow, gal/min, on its grid (``sim.meter.flow_gpm``);
-    #: empty without a meter, or when it was not read.
+    #: The meter's flow, gal/min, on its grid (``sim.meter.flow_gpm``),
+    #: any net flow however brief; from the meter's first reading when
+    #: its history starts late, and empty without a meter or its
+    #: history.
     flow: list[Reading]
     #: The circulation pump's runs; empty without a pump, None when they
-    #: are unknown (``notes`` say why).
+    #: are unknown (``notes`` say why). Unknown runs are no runs to book
+    #: by: the meter's circulation share can't be told from draws.
     runs: list[Span] | None
     #: The inlet probe's readings, °F; empty without one.
     probe: list[Reading]
     #: The spans water may have moved unseen: the runs, the readings in
     #: no unit this reads, and each entity's outages.
     busy: list[Span]
-    #: The mains from the probe's plateau over the long draws, °F; None
-    #: without a probe and a meter, with the runs unknown, or with no
-    #: long draw.
+    #: The mains from the probe's plateau over the span's long draws
+    #: (sustained runs of the meter), °F; None without a probe and a
+    #: meter, with the runs unknown, or with no long draw.
     cold: ColdSupply | None
     notes: tuple[str, ...] = ()
 
@@ -948,8 +951,11 @@ async def _water_use(
     now: datetime,
     lookback: timedelta,
     notes: list[str],
+    *,
+    book: bool = True,
 ) -> WaterUse:
-    """``read_water_use``, adding its notes to ``notes`` as it goes."""
+    """``read_water_use``, adding its notes to ``notes`` as it goes;
+    without ``book``, no flow for the book (the live inlet's read)."""
     probe_id, volume_id = e.inlet, e.meter_volume
     rate_id, pump_id = e.meter_flow, e.circulation_speed
     since = now - lookback
@@ -974,19 +980,35 @@ async def _water_use(
 
     probe = [] if probe_id is None else await read_in(probe_id, to_f)
     rate = [] if rate_id is None else await read_in(rate_id, to_gpm)
-    flow = (
-        []
-        if volume_id is None
-        else meter.flow_gpm(
-            reports_after(await read_in(volume_id, to_gal), since),
+    volume = [] if volume_id is None else await read_in(volume_id, to_gal)
+    reports = reports_after(volume, since)
+    # The plateau's flow: only sustained runs count as draws.
+    sustained = meter.flow_gpm(reports, rate, since, now)
+    flow: list[Reading] = []
+    if not book or volume_id is None:
+        pass
+    elif not volume:
+        notes.append(f"no history of {volume_id} over the span")
+    else:
+        # The book's: any net flow is water drawn, however briefly. A
+        # meter recorded only from later says nothing before that.
+        begin = since if covers_start(volume, since) else volume[0][0]
+        if begin > since:
+            notes.append(
+                f"{volume_id}: history covers only from {begin.isoformat()}"
+            )
+        flow = meter.flow_gpm(
+            [r for r in reports if r[0] >= begin],
             rate,
-            since,
+            begin,
             now,
+            sustain=timedelta(0),
         )
-    )
     runs: list[Span] | None = []
     if pump_id is not None:
-        runs = await _pump_runs_since(client, pump_id, got, since, now, notes)
+        runs = await _pump_runs_since(
+            client, pump_id, got, since, now, notes, unread
+        )
     # A draw while any of them was unavailable may have overlapped a run
     # or ended unseen: the plateau skips it, as it skips one that
     # overlaps a run.
@@ -997,9 +1019,10 @@ async def _water_use(
         cold = sa.cold_supply(
             [(t, sa.temperature(v)) for t, v in probe],
             at=now,
-            flow=[(t, sa.volume(v)) for t, v in flow],
-            ticks=[t for t, v in flow if v >= meter.DRAW_GPM],
+            flow=[(t, sa.volume(v)) for t, v in sustained],
+            ticks=[t for t, v in sustained if v >= meter.DRAW_GPM],
             circulation=down,
+            window=lookback,
         )
         hours = f"{lookback.total_seconds() / 3600:g}"
         if cold.t_cold_f is None:
@@ -1019,24 +1042,29 @@ async def _pump_runs_since(
     since: datetime,
     now: datetime,
     notes: list[str],
+    unread: list[Span],
 ) -> list[Span] | None:
     """The pump's runs since ``since``, or None (and a note) when they
     are unknown: no reading in force at ``since`` (a draw before the
     first may have overlapped a run), or a speed in no unit this
-    reads."""
+    reads. The spans it may have run unseen go to ``unread``."""
     why = None
     speed: list[Reading] = []
-    if not covers_start(got.readings.get(pump_id, []), since):
+    rows = got.readings.get(pump_id, [])
+    if not covers_start(rows, since):
         why = "no speed reading in force at the start"
+        unread.append((since, rows[0][0] if rows else now))
     else:
         try:
             unit = (await client.state(pump_id)).unit
-            speed, unread = got.converted(pump_id, unit, to_rpm)
-            if unread:
+            speed, left = got.converted(pump_id, unit, to_rpm, now)
+            if left:
                 # A reading left out could have been a run.
-                why = f"{len(unread)} readings in no speed unit"
+                why = f"{len(left)} readings in no speed unit"
+                unread.extend(left)
         except (HomeAssistantError, ValueError) as err:
             why = str(err)
+            unread.append((since, now))
     if why is not None:
         notes.append(f"the circulation's runs are unknown ({why})")
         return None

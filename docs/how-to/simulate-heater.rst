@@ -851,22 +851,26 @@ does, over the last 72 hours by default:
    from nwp500 import sim_home_assistant as ha
 
    use = await ha.read_water_use(client, entities, now=now)
-   book = sa.book_from_history(
-       recorded,
-       params,
-       at=now,
-       # read_water_use gives gal/min and degF; the book takes the
-       # preferred units.
-       flow=[(t, sa.volume(v)) for t, v in use.flow],
-       circulation=use.runs or (),
-       inlet=[(t, sa.temperature(v)) for t, v in use.probe],
-   )
-   if use.cold is not None:
-       book, measured = on_the_mains(book, use.cold)
+   if use.runs is not None:
+       book = sa.book_from_history(
+           recorded,
+           params,
+           at=now,
+           # read_water_use gives gal/min and degF; the book takes the
+           # preferred units.
+           flow=[(t, sa.volume(v)) for t, v in use.flow],
+           circulation=use.runs,
+           inlet=[(t, sa.temperature(v)) for t, v in use.probe],
+       )
+       if book is not None and use.cold is not None:
+           book, measured = on_the_mains(book, use.cold)
 
-``use.runs`` is None when the pump's runs are unknown, and ``use.cold``
+``use.runs`` is None when the pump's runs are unknown: then the meter's
+circulation share can't be told from draws, so don't book. ``use.cold``
 is None without a long draw to read the mains from; ``use.notes`` say
-why.
+why. ``use.flow`` counts any net flow, however brief, and starts at the
+meter's first reading when its history starts late, so the book refuses
+the silence before it.
 
 The mains is the median plateau of the long draws (11 minutes or more,
 with circulation off) over the last 72 hours, read from minute 9 of each
