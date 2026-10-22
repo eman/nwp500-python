@@ -34,6 +34,7 @@ from the caller's configuration (``sources_from``).
 """
 
 import enum
+import itertools
 import logging
 import math
 from collections.abc import Awaitable, Callable, Iterable, Mapping, Sequence
@@ -92,7 +93,8 @@ class Entities:
     humidity: str | None = None
     #: A probe on the cold supply.
     inlet: str | None = None
-    #: A hot-water meter's volume since its previous report.
+    #: A hot-water meter's volume since its previous report, or its
+    #: running total (``meter_total``).
     meter_volume: str | None = None
     #: The same meter's forward flow rate.
     meter_flow: str | None = None
@@ -100,6 +102,11 @@ class Entities:
     circulation_speed: str | None = None
     #: A weather entity with an hourly forecast.
     weather: str | None = None
+    #: Whether ``meter_volume`` is a running total rather than the
+    #: volume since its previous report. None reads it from the entity's
+    #: ``state_class``: ``total_increasing`` or ``total`` is a running
+    #: total (``is_running_total``).
+    meter_total: bool | None = None
 
 
 @dataclass(frozen=True)
@@ -129,6 +136,7 @@ def sources_from(doc: Mapping[str, Any], environ: Mapping[str, str]) -> Sources:
         meter_flow = "sensor.water_flow_rate"
         circulation_speed = "sensor.circulation_pump_speed"
         weather = "weather.forecast_home"
+        meter_total = true              # optional: a running total
 
         [location_air]                  # optional
         damping = 0.638
@@ -159,7 +167,10 @@ def sources_from(doc: Mapping[str, Any], environ: Mapping[str, str]) -> Sources:
     if unknown:
         raise ValueError(f"unknown entities: {', '.join(unknown)}")
     for name, value in raw.items():
-        if not isinstance(value, str) or "." not in value:
+        if name == "meter_total":
+            if not isinstance(value, bool):
+                raise ValueError("entities.meter_total must be true or false")
+        elif not isinstance(value, str) or "." not in value:
             raise ValueError(f"entities.{name} must be an entity id")
     model = None
     la = doc.get("location_air")
@@ -214,12 +225,14 @@ def _number(state: Any) -> float | None:
 @dataclass(frozen=True)
 class State:
     """An entity's value now: the number (None for none), its unit, and
-    when it was last reported."""
+    when it was last reported, and its ``state_class`` where it has
+    one."""
 
     entity: str
     value: float | None
     unit: str | None
     at: datetime
+    state_class: str | None = None
 
 
 def parse_state(doc: Any) -> State:
@@ -232,10 +245,13 @@ def parse_state(doc: Any) -> State:
         raise HomeAssistantError("not an entity state")
     d = cast(Mapping[str, Any], doc)
     attributes = d.get("attributes")
-    unit = None
+    unit = state_class = None
     if isinstance(attributes, Mapping):
-        u = cast(Mapping[str, Any], attributes).get("unit_of_measurement")
+        a = cast(Mapping[str, Any], attributes)
+        u = a.get("unit_of_measurement")
         unit = u if isinstance(u, str) else None
+        c = a.get("state_class")
+        state_class = c if isinstance(c, str) else None
     stamp = (
         d.get("last_reported") or d.get("last_updated") or d.get("last_changed")
     )
@@ -244,6 +260,7 @@ def parse_state(doc: Any) -> State:
         value=_number(d.get("state")),
         unit=unit,
         at=_instant(stamp),
+        state_class=state_class,
     )
 
 
@@ -546,6 +563,45 @@ def covers_start(series: Sequence[Reading], start: datetime) -> bool:
     ``start`` itself, when it has one. A first reading any later says
     nothing of the time before it."""
     return bool(series) and series[0][0] <= start
+
+
+#: Home Assistant's state classes of a running total: its value counts
+#: up from a reset, not since its previous report.
+TOTAL_STATE_CLASSES = frozenset({"total", "total_increasing"})
+
+
+def is_running_total(entities: Entities, state: State) -> bool:
+    """Whether the meter's volume (``state``, its entity's) is a running
+    total: ``entities.meter_total`` where set, else its ``state_class``
+    (``TOTAL_STATE_CLASSES``)."""
+    if entities.meter_total is not None:
+        return entities.meter_total
+    return state.state_class in TOTAL_STATE_CLASSES
+
+
+def reports_from_total(series: Sequence[Reading]) -> tuple[list[Reading], int]:
+    """A running total's readings as reports, each the rise since the
+    reading before, at its instant; the first, which nothing precedes,
+    is the baseline and reports nothing. A drop is a reset (a new meter
+    cycle, or a meter replaced): the total counts on from the new value,
+    so that reading reports none. The second item is how many."""
+    reports: list[Reading] = []
+    resets = 0
+    for (_, before), (t, v) in itertools.pairwise(series):
+        if v < before:
+            resets += 1
+            reports.append((t, 0.0))
+        else:
+            reports.append((t, v - before))
+    return reports, resets
+
+
+def total_note(entity: str, resets: int) -> str:
+    """The note a running total's reading leaves."""
+    note = f"{entity} is a running total, read as the rise between readings"
+    if resets:
+        note += f"; {resets} drops read as resets, counted from the new value"
+    return note
 
 
 def reports_after(series: Sequence[Reading], start: datetime) -> list[Reading]:
@@ -889,22 +945,29 @@ class HomeAssistantEnvironment:
             unread: list[Span] = []
 
             async def read_in(
-                entity: str, to: Callable[[float, str | None], float]
+                entity: str,
+                to: Callable[[float, str | None], float],
+                total: bool = False,
             ) -> list[Reading]:
-                unit = (await self.client.state(entity)).unit
-                rows, spans = got.converted(entity, unit, to, self.now)
+                state = await self.client.state(entity)
+                rows, spans = got.converted(entity, state.unit, to, self.now)
                 if spans:
                     self.notes.append(
                         f"inlet: {len(spans)} readings of {entity} in no "
                         "unit this reads left out"
                     )
                     unread.extend(spans)
+                if total and is_running_total(e, state):
+                    rows, resets = reports_from_total(rows)
+                    self.notes.append(f"inlet: {total_note(entity, resets)}")
                 return rows
 
             probe = await read_in(probe_id, to_f)
             rate = [] if rate_id is None else await read_in(rate_id, to_gpm)
             flow = meter.flow_gpm(
-                reports_after(await read_in(volume_id, to_gal), since),
+                reports_after(
+                    await read_in(volume_id, to_gal, total=True), since
+                ),
                 rate,
                 since,
                 self.now,
@@ -1066,6 +1129,7 @@ async def record_inputs(
         return RecordInputs(None, None, None, None, (f"not read ({err})",))
     history = got.readings
     units: dict[str, str | None] = {}
+    states: dict[str, State] = {}
     for n in (
         e.air,
         e.humidity,
@@ -1075,7 +1139,8 @@ async def record_inputs(
     ):
         if n:
             try:
-                units[n] = (await client.state(n)).unit
+                states[n] = await client.state(n)
+                units[n] = states[n].unit
             except HomeAssistantError as err:
                 notes.append(f"{n}: unit not read ({err})")
 
@@ -1142,7 +1207,11 @@ async def record_inputs(
     volume = history.get(volume_id, []) if volume_id else []
     if volume_id and volume_id in units and whole("meter", volume):
         try:
-            gallons = reports_after(read_in("meter", volume_id, to_gal), start)
+            read = read_in("meter", volume_id, to_gal)
+            if is_running_total(e, states[volume_id]):
+                read, resets = reports_from_total(read)
+                notes.append(f"meter: {total_note(volume_id, resets)}")
+            gallons = reports_after(read, start)
             rate = (
                 read_in("meter", rate_id, to_gpm)
                 if rate_id and rate_id in units

@@ -317,4 +317,5 @@ Home Assistant sources
       parse_forecast, read_heater_history, HeaterEntities, HeaterHistory,
       HISTORY_WINDOW, to_w, to_wh,
       pump_runs, draw_spans, busy, covers_start, reports_after, percent,
+      is_running_total, reports_from_total, TOTAL_STATE_CLASSES,
       fresh, to_f, to_gpm, to_gal, to_rpm, HomeAssistantError
