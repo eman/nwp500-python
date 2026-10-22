@@ -1408,3 +1408,120 @@ class TestTheWaterUse:
         )
         assert use.runs is None
         assert use.busy == [(NOW - ha.INLET_LOOKBACK, NOW)]
+
+    async def test_a_meter_outage_is_no_flow(self) -> None:
+        down = (NOW - timedelta(hours=10), NOW - timedelta(hours=8))
+        use = await ha.read_water_use(
+            FakeClient(  # type: ignore[arg-type]  # pyright: ignore[reportArgumentType]
+                UNITS,
+                recorded_draw(ended_hours_ago=5),
+                outages={"sensor.volume": [down]},
+            ),
+            ha.Entities(meter_volume="sensor.volume"),
+            now=NOW,
+        )
+        assert use.flow
+        assert not any(down[0] <= t < down[1] for t, _ in use.flow)
+        assert any("left out of the flow" in n for n in use.notes)
+
+    async def test_a_pump_outage_leaves_the_runs_unknown(self) -> None:
+        series = recorded_draw(ended_hours_ago=5)
+        series["sensor.pump"] = [(NOW - ha.INLET_LOOKBACK, 0.0)]
+        down = (NOW - timedelta(hours=30), NOW - timedelta(hours=28))
+        client = FakeClient(UNITS, series, outages={"sensor.pump": [down]})
+        entities = ha.Entities(circulation_speed="sensor.pump", **INLET)
+        use = await ha.read_water_use(
+            client,  # type: ignore[arg-type]  # pyright: ignore[reportArgumentType]
+            entities,
+            now=NOW,
+        )
+        assert use.runs is None
+        assert down in use.busy
+        # The plateau skips only the draws over it.
+        assert use.cold is not None
+        source = _source(client, circulation_speed="sensor.pump", **INLET)
+        assert (await source.read()).inlet_f == use.cold.t_cold_f
+
+    async def test_a_meter_silent_since_ends_the_flow(self) -> None:
+        last = NOW - timedelta(hours=2)
+        states = UNITS | {"sensor.volume": _s("sensor.volume", 0.0, "gal", 120)}
+        use = await ha.read_water_use(
+            FakeClient(states, recorded_draw(ended_hours_ago=5)),  # type: ignore[arg-type]  # pyright: ignore[reportArgumentType]
+            ha.Entities(meter_volume="sensor.volume"),
+            now=NOW,
+        )
+        assert use.flow[-1][0] <= last
+
+
+class TestTheWaterUseBooked:
+    """``read_water_use``'s flow through the book's silent-meter check."""
+
+    @pytest.fixture
+    def statuses(self, device_status_dict: dict[str, Any]) -> list[Any]:
+        from nwp500.models import DeviceStatus
+
+        out = []
+        t = NOW - timedelta(hours=20)
+        while t <= NOW:
+            heating = NOW - timedelta(hours=4) <= t < NOW - timedelta(hours=3.5)
+            out.append(
+                (
+                    t,
+                    DeviceStatus.model_validate(
+                        device_status_dict
+                        | {
+                            "tankUpperTemperature": 600,
+                            "tankLowerTemperature": 598,
+                            "compUse": 2 if heating else 1,
+                            "heatUpperUse": 1,
+                            "heatLowerUse": 1,
+                        }
+                    ),
+                )
+            )
+            t += timedelta(minutes=1)
+        return out
+
+    async def _book(
+        self,
+        statuses: list[Any],
+        states: dict[str, ha.State],
+        outages: dict[str, list[ha.Span]] | None = None,
+    ) -> Any:
+        from nwp500 import sim_adapters as sa
+        from nwp500.sim import site_example_params
+
+        lookback = timedelta(hours=20)
+        series = {"sensor.volume": [(NOW - lookback, 0.0)]}
+        use = await ha.read_water_use(
+            FakeClient(states, series, outages=outages),  # type: ignore[arg-type]  # pyright: ignore[reportArgumentType]
+            ha.Entities(meter_volume="sensor.volume"),
+            now=NOW,
+            lookback=lookback,
+        )
+        return sa.book_from_history(
+            statuses,
+            site_example_params(),
+            at=NOW,
+            flow=[(t, sa.volume(v)) for t, v in use.flow],
+        )
+
+    @pytest.mark.asyncio
+    async def test_a_quiet_meter_books(self, statuses: list[Any]) -> None:
+        assert await self._book(statuses, UNITS) is not None
+
+    @pytest.mark.asyncio
+    async def test_an_outage_inside_is_refused(
+        self, statuses: list[Any]
+    ) -> None:
+        down = (NOW - timedelta(hours=3), NOW - timedelta(hours=1, minutes=30))
+        with pytest.raises(ValueError, match="silent"):
+            await self._book(statuses, UNITS, {"sensor.volume": [down]})
+
+    @pytest.mark.asyncio
+    async def test_a_meter_silent_since_is_refused(
+        self, statuses: list[Any]
+    ) -> None:
+        states = UNITS | {"sensor.volume": _s("sensor.volume", 0.0, "gal", 120)}
+        with pytest.raises(ValueError, match="silent"):
+            await self._book(statuses, states)

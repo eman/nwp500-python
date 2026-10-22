@@ -868,9 +868,13 @@ does, over the last 72 hours by default:
 ``use.runs`` is None when the pump's runs are unknown: then the meter's
 circulation share can't be told from draws, so don't book. ``use.cold``
 is None without a long draw to read the mains from; ``use.notes`` say
-why. ``use.flow`` counts any net flow, however brief, and starts at the
-meter's first reading when its history starts late, so the book refuses
-the silence before it.
+why. ``use.flow`` counts any net flow, however brief. It has no samples
+before the meter's history starts, while the meter was unavailable, or
+after its last report, so the book refuses a meter silent over an hour
+of the window. Home Assistant records no row while a value repeats, so
+a quiet meter that still reports is live until it goes unavailable or
+its last report (``last_reported``, Home Assistant 2024.3 and later)
+is old. A pump unavailable over the span leaves ``use.runs`` None.
 
 The mains is the median plateau of the long draws (11 minutes or more,
 with circulation off) over the last 72 hours, read from minute 9 of each

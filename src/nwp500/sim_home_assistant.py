@@ -901,12 +901,14 @@ class WaterUse:
 
     #: The meter's flow, gal/min, on its grid (``sim.meter.flow_gpm``),
     #: any net flow however brief; from the meter's first reading when
-    #: its history starts late, and empty without a meter or its
-    #: history.
+    #: its history starts late, none while it was unavailable or read in
+    #: no unit this reads, through its last report (``State.at``), and
+    #: empty without a meter or its history. The book refuses the gaps.
     flow: list[Reading]
     #: The circulation pump's runs; empty without a pump, None when they
-    #: are unknown (``notes`` say why). Unknown runs are no runs to book
-    #: by: the meter's circulation share can't be told from draws.
+    #: are unknown (``notes`` say why), its speed unavailable over any of
+    #: the span among them. Unknown runs are no runs to book by: the
+    #: meter's circulation share can't be told from draws.
     runs: list[Span] | None
     #: The inlet probe's readings, °F; empty without one.
     probe: list[Reading]
@@ -914,8 +916,9 @@ class WaterUse:
     #: no unit this reads, and each entity's outages.
     busy: list[Span]
     #: The mains from the probe's plateau over the span's long draws
-    #: (sustained runs of the meter), °F; None without a probe and a
-    #: meter, with the runs unknown, or with no long draw.
+    #: (sustained runs of the meter, none overlapping ``busy``), °F; None
+    #: without a probe and a meter, with no speed reading to know the
+    #: pump's runs by, or with no long draw.
     cold: ColdSupply | None
     notes: tuple[str, ...] = ()
 
@@ -964,18 +967,22 @@ async def _water_use(
         return WaterUse([], [], [], [], None)
     got = await client.read_history(names, since, now)
     unread: list[Span] = []
+    unread_of: dict[str, list[Span]] = {}
+    reported: dict[str, datetime] = {}
 
     async def read_in(
         entity: str, to: Callable[[float, str | None], float]
     ) -> list[Reading]:
-        unit = (await client.state(entity)).unit
-        rows, spans = got.converted(entity, unit, to, now)
+        state = await client.state(entity)
+        reported[entity] = state.at
+        rows, spans = got.converted(entity, state.unit, to, now)
         if spans:
             notes.append(
                 f"{len(spans)} readings of {entity} in no unit this reads "
                 "left out"
             )
             unread.extend(spans)
+            unread_of[entity] = spans
         return rows
 
     probe = [] if probe_id is None else await read_in(probe_id, to_f)
@@ -1004,6 +1011,27 @@ async def _water_use(
             now,
             sustain=timedelta(0),
         )
+        # While the meter was unavailable, or said what nobody can read,
+        # it was silent: no flow there, so the book refuses a long one.
+        meter_ids = [n for n in (volume_id, rate_id) if n]
+        dark = busy(
+            *(unread_of.get(n, []) for n in meter_ids),
+            *(got.outages.get(n, []) for n in meter_ids),
+        )
+        if dark:
+            flow = [
+                (t, v) for t, v in flow if not any(a <= t < b for a, b in dark)
+            ]
+            dark_h = sum((b - a).total_seconds() for a, b in dark) / 3600
+            notes.append(
+                f"the meter was unavailable or unread {len(dark)} times "
+                f"({dark_h:.1f} h), left out of the flow"
+            )
+        # Nor after its last report: a meter that stopped reporting
+        # without going unavailable is silent since.
+        last = max(reported[n] for n in meter_ids)
+        if last < now:
+            flow = [(t, v) for t, v in flow if t <= last]
     runs: list[Span] | None = []
     if pump_id is not None:
         runs = await _pump_runs_since(
@@ -1032,6 +1060,16 @@ async def _water_use(
             cold = None
         else:
             notes.append(f"the plateau of {cold.draws} long draws")
+    if book and pump_id is not None and runs is not None:
+        # The plateau skips the draws over the pump's outages, but the
+        # book can't: it may have run then.
+        outages = got.outages.get(pump_id, [])
+        if outages:
+            notes.append(
+                f"the circulation's runs are unknown ({len(outages)} "
+                "outages of its speed)"
+            )
+            runs = None
     return WaterUse(flow, runs, probe, down, cold)
 
 
