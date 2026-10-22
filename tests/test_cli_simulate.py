@@ -167,6 +167,8 @@ class TestBadInputs:
         doc = scenario_to_document(_scenario())
         with pytest.raises(sim_cli.InputError, match="--params"):
             sim_cli.build(sim_cli.Inputs(scenario=doc, params={}), None, NOW)
+        with pytest.raises(sim_cli.InputError, match="--params"):
+            sim_cli.build(sim_cli.Inputs(scenario=doc, params=[]), None, NOW)  # type: ignore[arg-type]  # pyright: ignore[reportArgumentType]
         with pytest.raises(sim_cli.InputError, match="scenario's params"):
             sim_cli.build(
                 sim_cli.Inputs(scenario={**doc, "params": {}}), None, NOW

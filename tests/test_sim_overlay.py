@@ -136,6 +136,8 @@ class TestOverlay:
             ({"schema_version": 2, "scenario": {}}, "schema_version"),
             ({"schema_version": 1}, "scenario object"),
             (_doc({}, params={}), "scenario's params"),
+            (_doc({}, params=[]), "scenario's params"),
+            (_doc({}, params="65 gal"), "scenario's params"),
             (_doc({"tz": TZ}), "do not make a scenario"),
         ],
     )
