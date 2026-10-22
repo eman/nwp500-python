@@ -47,12 +47,19 @@ Added
   other value replaces. The start, horizon and zone take defaults, and
   the parameters come from the caller, then the document, then the
   heater, then the defaults (``Built``).
-- **The simulator's answers as documents** (#205). ``sim.codec.to_document``
-  writes ``Readiness``, ``Recovery``, ``RecoveryResult``, ``Forecast``,
-  ``ActiveCycle``, ``ElementModeResult``, ``Deliverable``, ``Trace`` and
+- **The simulator's answers as documents** (#205).
+  ``sim.codec.to_document`` writes ``Readiness``, ``Recovery``,
+  ``RecoveryResult``, ``Forecast``, ``ActiveCycle``,
+  ``ElementModeResult``, ``Deliverable``, ``Trace`` and
   ``HeaterProfile`` as JSON documents with ``schema_version`` and a
   ``kind`` (``DOCUMENT_KINDS``), as ``result_to_document`` does for a
   walk's result.
+- **The live parts from values read** (#207).
+  ``sim_live.heater_reading(status, feature)`` and
+  ``live_schedules(status, reservations, tou)``: what
+  ``LiveHeaterSource`` and ``LiveScheduleSource`` read, from a status,
+  a feature info, the reservations and the TOU periods read any other
+  way. Both sources now build their answers through them.
 
 Fixed
 -----

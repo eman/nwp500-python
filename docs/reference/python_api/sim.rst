@@ -290,7 +290,8 @@ Live sources
       LiveHeaterSource, LiveScheduleSource, LiveReadError, read_status,
       read_feature, read_reservations, HeaterSource, ScheduleSource,
       EnvironmentSource, LoadSource, DEFAULT_TIMEOUT, overlay, Built,
-      DEFAULT_HORIZON, DEFAULT_PARAMS_NOTE, zone_name
+      DEFAULT_HORIZON, DEFAULT_PARAMS_NOTE, zone_name, heater_reading,
+      live_schedules
 
 
 Recorded history

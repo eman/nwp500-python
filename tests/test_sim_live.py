@@ -19,6 +19,7 @@ from nwp500.models import (
     Location,
     ReservationSchedule,
     TOUInfo,
+    TOUPeriod,
 )
 
 FEATURE: dict[str, Any] = {
@@ -266,6 +267,52 @@ class TestTheHeater:
         assert reading.feature is None
         assert reading.state.upper_f == pytest.approx(137.48)
         assert "tank size is unknown" in caplog.text
+
+
+class TestFromWhatWasRead:
+    """``heater_reading`` and ``live_schedules``: the sources' answers
+    from a status, a feature info, the reservations and the TOU periods
+    read any way."""
+
+    async def test_the_heater_reading_is_the_sources(
+        self,
+        device: Device,
+        status: DeviceStatus,
+        feature: DeviceFeature,
+    ) -> None:
+        mqtt = FakeMqtt(status=status, feature=feature)
+        read = await sim_live.LiveHeaterSource(mqtt, device).read()  # type: ignore[arg-type]  # fake mqtt client
+        assert sim_live.heater_reading(status, feature) == read
+        assert sim_live.heater_reading(status, None).params is None
+
+    async def test_the_schedules_are_the_sources(
+        self,
+        device: Device,
+        status: DeviceStatus,
+        feature: DeviceFeature,
+        reservations: ReservationSchedule,
+    ) -> None:
+        on = _tou_on(status)
+        mqtt = FakeMqtt(on, feature, reservations)
+        read = await sim_live.LiveScheduleSource(mqtt, _api(), device).read()  # type: ignore[arg-type]  # fake mqtt client
+        tou = TOUInfo.model_validate(TOU)
+        assert sim_live.live_schedules(on, reservations, tou) == read
+        # The periods alone, as a caller that keeps them flat holds them.
+        periods = [
+            TOUPeriod.model_validate({"season": day.season, **raw})
+            for day in tou.schedule
+            for raw in day.intervals
+        ]
+        assert sim_live.live_schedules(on, reservations, periods) == read
+
+    async def test_tou_on_without_its_periods_is_an_error(
+        self, status: DeviceStatus, reservations: ReservationSchedule
+    ) -> None:
+        with pytest.raises(sim_live.LiveReadError, match="TOU is on"):
+            sim_live.live_schedules(_tou_on(status), reservations, None)
+        off = sim_live.live_schedules(status, reservations, None)
+        assert off.tou_enabled is False
+        assert off.tou_periods == ()
 
 
 class TestTheSchedules:
