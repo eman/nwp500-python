@@ -48,8 +48,9 @@ Added
   the parameters come from the caller, then the document, then the
   heater, then the defaults (``Built``).
 - **The simulator's answers as documents** (#205).
-  ``sim.codec.to_document`` writes ``Readiness``, ``Recovery``, ``RecoveryResult``, ``Forecast``,
-  ``ActiveCycle``, ``ElementModeResult``, ``Deliverable``, ``Trace`` and
+  ``sim.codec.to_document`` writes ``Readiness``, ``Recovery``,
+  ``RecoveryResult``, ``Forecast``, ``ActiveCycle``,
+  ``ElementModeResult``, ``Deliverable``, ``Trace`` and
   ``HeaterProfile`` as JSON documents with ``schema_version`` and a
   ``kind`` (``DOCUMENT_KINDS``), as ``result_to_document`` does for a
   walk's result.
