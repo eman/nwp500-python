@@ -623,3 +623,43 @@ class TestKeepBetterSecondReview:
         for name in ("Bottom loss (BTU/h)", "Bottom loss gate (°F)"):
             assert not terms[name].fitted
             assert terms[name].why.endswith("10 needed")
+
+
+class TestKeepBetterThirdReview:
+    def test_the_gap_is_scored_on_the_loss_it_was_fitted_on(self) -> None:
+        # Only the standby loss unfitted: the gaps are opened by its
+        # refit's bottom loss in the fit and in both scores, so the
+        # planted constant beats the base's slow one.
+        starts = planted_starts(30) + [
+            (140.0, 122.0 + i, 55.0 + i, 10.0) for i in range(12)
+        ]
+        history = quiet_history(starts, PLANTED, 25.0)
+        base = sim.default_params()
+        base = replace(
+            base,
+            tank=replace(TANK, stratification_gap_tau_h=200.0),
+            unfitted=(*base.unfitted, "standby"),
+        )
+        done, judged, _ = sc._keep_better(history, base, "air_f")
+        (gap,) = [j for j in judged if j.group == "gap_tau"]
+        assert gap.kept == "refit"
+        assert done.params.tank.stratification_gap_tau_h == pytest.approx(
+            25.0, rel=0.1
+        )
+        assert done.params.loss.bottom_loss_btu_hr == pytest.approx(
+            Q_B, rel=0.1
+        )
+
+    def test_wide_gaps_alone_are_fitted_on_the_loss_kept(self) -> None:
+        # Every window opens with a draw's front: no loss to fit, so the
+        # parameters keep theirs, and the constant is fitted on the gaps
+        # their bottom loss opens.
+        starts = [(140.0, 124.0 + i % 5, 50.0 + i % 9, 10.0) for i in range(24)]
+        history = quiet_history(starts, PLANTED, 25.0)
+        mass = TANK.thermal_mass_btu_f
+        kept = cal.fit_standby(history, mass, tank=TANK, loss=PLANTED)
+        assert kept.ua_ref is None
+        assert kept.tau_gap_hours == pytest.approx(25.0, rel=0.05)
+        unopened = cal.fit_standby(history, mass, tank=TANK)
+        assert unopened.tau_gap_hours is not None
+        assert abs(unopened.tau_gap_hours - 25.0) > 5.0

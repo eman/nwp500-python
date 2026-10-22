@@ -243,13 +243,14 @@ def _loss_error(
 
 def _gap_error(
     windows: Sequence[cal.StandbyWindow],
-    params: HeaterParams,
+    loss: LossParams,
+    tank: TankParams,
     tau_hours: float | None,
 ) -> float | None:
     """The gap's mean squared error on ``windows``, °F², relaxing on
-    ``tau_hours`` and opened by ``params``' bottom loss
+    ``tau_hours`` and opened by ``loss``' bottom loss
     (``sim.calibration.gap_error``)."""
-    return cal.gap_error(windows, tau_hours, params.loss, params.tank)
+    return cal.gap_error(windows, tau_hours, loss, tank)
 
 
 def _gap_windows(
@@ -355,7 +356,10 @@ def score(done: Calibrated, params: HeaterParams) -> dict[str, float | None]:
             params.tank,
         ),
         "gap_tau": _gap_error(
-            held.gap_windows, params, params.tank.stratification_gap_tau_h
+            held.gap_windows,
+            params.loss,
+            params.tank,
+            params.tank.stratification_gap_tau_h,
         ),
         "compressor": _recovery_error(held.recoveries, params),
         "power_scale": _power_error(held.power_cycles, params),
@@ -422,7 +426,7 @@ def _keep_better(
     unfitted = set(base.unfitted)
     judged: list[Judged] = []
     standby = cal.fit_standby(
-        frame, base.tank.thermal_mass_btu_f, tank=base.tank
+        frame, base.tank.thermal_mass_btu_f, tank=base.tank, loss=base.loss
     )
     windows = sorted(standby.windows, key=lambda w: w.start)
     params = base
@@ -436,19 +440,19 @@ def _keep_better(
     gap_train = gap_all[: len(gap_all) - n_gap_held]
     held_gaps = tuple(gap_all[len(gap_all) - n_gap_held :])
     both_unfitted = {"gap_tau", "standby"} <= unfitted
+    # The gaps are opened by the loss the parameters will carry: the
+    # base's, or where the base has not fitted one, the refit's, which
+    # is taken unjudged. The constant is fitted and scored on it alike.
+    opening = (
+        cal.with_standby(base, standby).loss
+        if "standby" in unfitted
+        else base.loss
+    )
     if both_unfitted:
         # Neither is judged: the joint fit ``calibrate`` takes, the
         # constant and the loss fitted in turn (``fit_standby``).
         tau, n_gap = standby.tau_gap_hours, standby.n_gap_windows
     else:
-        # The gaps opened by the loss the parameters will carry: the
-        # base's, or where the base has not fitted one, the refit's,
-        # which is taken unjudged.
-        opening = (
-            cal.with_standby(base, standby).loss
-            if "standby" in unfitted
-            else base.loss
-        )
         tau, n_gap = cal.fit_gap_tau(
             [(w.gap_hours, w.gap_f) for w in gap_train],
             loss=opening,
@@ -460,7 +464,12 @@ def _keep_better(
                 "gap_tau",
                 "windows that open a gap",
                 n_gap_held,
-                _gap_error(held_gaps, base, base.tank.stratification_gap_tau_h),
+                _gap_error(
+                    held_gaps,
+                    opening,
+                    base.tank,
+                    base.tank.stratification_gap_tau_h,
+                ),
                 None,
                 refit_exists=False,
                 needed=cal.MIN_GAP_FIT_WINDOWS,
@@ -478,8 +487,13 @@ def _keep_better(
                 "gap_tau",
                 "windows that open a gap",
                 n_gap_held,
-                _gap_error(held_gaps, base, base.tank.stratification_gap_tau_h),
-                _gap_error(held_gaps, base, tau),
+                _gap_error(
+                    held_gaps,
+                    opening,
+                    base.tank,
+                    base.tank.stratification_gap_tau_h,
+                ),
+                _gap_error(held_gaps, opening, base.tank, tau),
             )
             judged.append(j)
             if j.kept == "refit":

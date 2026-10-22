@@ -678,12 +678,16 @@ def fit_standby(
     min_quiet_hours: float = MIN_QUIET_HOURS,
     settle_minutes: float = SETTLE_MINUTES,
     tank: TankParams | None = None,
+    loss: LossParams | None = None,
 ) -> StandbyFit:
     """The standby loss and the gap's time constant from the history's
     quiet windows: the gap's constant first, then the loss
     (``fit_loss``) walked on it, or on ``tank``'s where too few windows
     open with a gap to fit one. ``tank`` (default the default tank of
-    ``thermal_mass_btu_f``'s mass) is the walk's lower zone."""
+    ``thermal_mass_btu_f``'s mass) is the walk's lower zone. ``loss``
+    is the loss the parameters hold: where no loss is fitted (no window
+    the loss can use), its bottom loss opens the gaps the constant is
+    fitted on, as the simulation will run them."""
     if tank is None:
         tank = replace(
             TankParams(),
@@ -702,6 +706,10 @@ def fit_standby(
     gaps = [(w.gap_hours, w.gap_f) for w in kept]
     tau, n_gap = fit_gap_tau(gaps)
     found = fit_loss(kept, walk_tau(tank, tau), tank)
+    if found is None and loss is not None and loss.bottom_loss_btu_hr > 0.0:
+        # No loss to fit: the parameters keep theirs, so the constant is
+        # fitted on the gaps their bottom loss opens.
+        tau, n_gap = fit_gap_tau(gaps, loss=loss, tank=tank)
     for _ in range(_MAX_STANDBY_ROUNDS):
         if found is None or found.bottom_gate_f is None or tau is None:
             break
@@ -1878,7 +1886,9 @@ def calibrate(
     ``gap_tau``. ``base``'s record of the installation's terms
     (``INSTALLATION_TERMS``) is kept: they are fitted apart, and a
     caller applying its own fits drops each from ``unfitted``."""
-    standby = fit_standby(history, base.tank.thermal_mass_btu_f, tank=base.tank)
+    standby = fit_standby(
+        history, base.tank.thermal_mass_btu_f, tank=base.tank, loss=base.loss
+    )
     params = with_standby(base, standby)
     rows = snapshots(
         history, air=recovery_air, draws=draws, circulation=circulation
