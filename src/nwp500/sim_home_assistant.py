@@ -955,8 +955,8 @@ class WaterUse:
     """The water moving at the heater over a span (``read_water_use``):
     what the heat book and the inlet's plateau read."""
 
-    #: The meter's flow, gal/min, on its grid (``sim.meter.flow_gpm``),
-    #: any net flow however brief; from the meter's first reading when
+    #: The meter's flow, gal/min (``book_flow``): every report's volume
+    #: over the interval it closes; from the meter's first reading when
     #: its history starts late, none while it was unavailable or read in
     #: no unit this reads, through its last report (``State.at``), and
     #: empty without a meter or its history. The book refuses the gaps.
@@ -1065,20 +1065,14 @@ async def _water_use(
     elif not volume:
         notes.append(f"no history of {volume_id} over the span")
     else:
-        # The book's: any net flow is water drawn, however briefly. A
-        # meter recorded only from later says nothing before that.
+        # The book's: every report's volume, over the interval it
+        # closes. A meter recorded only from later says nothing before
+        # that.
         begin = since if covers_start(volume, since) else volume[0][0]
         if begin > since:
             notes.append(
                 f"{volume_id}: history covers only from {begin.isoformat()}"
             )
-        flow = meter.flow_gpm(
-            [r for r in reports if r[0] >= begin],
-            rate,
-            begin,
-            now,
-            sustain=timedelta(0),
-        )
         # While the meter was unavailable, or said what nobody can read,
         # it was silent: no flow there, so the book refuses a long one.
         meter_ids = [n for n in (volume_id, rate_id) if n]
@@ -1087,9 +1081,6 @@ async def _water_use(
             *(got.outages.get(n, []) for n in meter_ids),
         )
         if dark:
-            flow = [
-                (t, v) for t, v in flow if not any(a <= t < b for a, b in dark)
-            ]
             dark_h = sum((b - a).total_seconds() for a, b in dark) / 3600
             notes.append(
                 f"the meter was unavailable or unread {len(dark)} times "
@@ -1098,10 +1089,13 @@ async def _water_use(
         # Nor after its volume's last report: a meter that stopped
         # reporting without going unavailable is silent since. The
         # volume is its record; a rate still reporting doesn't stand in.
-        # The last report's volume is spread over the window after it.
-        last = reported[volume_id] + meter.WINDOW
-        if last < now:
-            flow = [(t, v) for t, v in flow if t < last]
+        flow = book_flow(
+            [r for r in reports if r[0] >= begin],
+            rate,
+            begin,
+            min(now, reported[volume_id]),
+            dark,
+        )
     runs: list[Span] | None = []
     if pump_id is not None:
         runs = await _pump_runs_since(
@@ -1141,6 +1135,99 @@ async def _water_use(
             )
             runs = None
     return WaterUse(flow, runs, probe, down, cold)
+
+
+def book_flow(
+    volume: Sequence[Reading],
+    rate: Sequence[Reading],
+    start: datetime,
+    end: datetime,
+    dark: Sequence[Span] = (),
+) -> list[Reading]:
+    """A meter's flow for the heat book, gal/min, on ``sim.meter.
+    flow_gpm``'s grid from ``start`` through ``end``: each ``volume``
+    report (gallons since the previous one) spread evenly over the
+    interval it closes, from the previous report or ``meter.WINDOW``
+    before it, whichever is later; on a step no report reaches, the
+    forward ``rate`` held ``meter.RATE_HOLD`` when it is over
+    ``meter.DRAW_GPM``. Every report's volume is kept, however small or
+    brief (the book's own draw line decides what is a draw). ``dark``
+    spans the meter was unread: no step overlapping one is given, and a
+    report's interval leaves them out, so its volume lands where the
+    meter was read."""
+    step = meter.STEP
+    start, end = start.astimezone(UTC), end.astimezone(UTC)
+    if end < start:
+        return []
+    epoch = datetime(1970, 1, 1, tzinfo=UTC)
+    first = epoch + step * math.ceil((start - epoch) / step)
+    n = math.ceil((end - first) / step) + 1
+    if n <= 0:
+        return []
+
+    def index(t: datetime) -> int:
+        """The step whose interval, (its instant - step, its instant],
+        holds ``t``."""
+        return math.ceil((t - first) / step)
+
+    gal = [0.0] * n
+    reached = [False] * n
+    spans = sorted(dark)
+    prev: datetime | None = None
+    for t, v in sorted((t.astimezone(UTC), v) for t, v in volume):
+        a = t - meter.WINDOW if prev is None else max(prev, t - meter.WINDOW)
+        prev = t
+        parts = _without([(a, t)], spans)
+        length = sum((y - x).total_seconds() for x, y in parts)
+        if length <= 0:
+            k = index(t)
+            if 0 <= k < n:
+                gal[k] += v
+                reached[k] = True
+            continue
+        for x, y in parts:
+            for k in range(max(index(x), 0), min(index(y), n - 1) + 1):
+                hi = first + k * step
+                lo = hi - step
+                overlap = (min(hi, y) - max(lo, x)).total_seconds()
+                if overlap > 0:
+                    gal[k] += v * overlap / length
+                    reached[k] = True
+    rates = sorted((t.astimezone(UTC), v) for t, v in rate)
+    out: list[Reading] = []
+    r = -1
+    per_min = step.total_seconds() / 60.0
+    for k in range(n):
+        hi = first + k * step
+        lo = hi - step
+        if any(x < hi and lo < y for x, y in spans):
+            continue
+        if reached[k]:
+            out.append((hi, abs(gal[k]) / per_min))
+            continue
+        while r + 1 < len(rates) and rates[r + 1][0] <= hi:
+            r += 1
+        held = r >= 0 and hi - rates[r][0] <= meter.RATE_HOLD
+        forward = rates[r][1] if held else 0.0
+        out.append((hi, forward if forward > meter.DRAW_GPM else 0.0))
+    return out
+
+
+def _without(spans: list[Span], cut: Sequence[Span]) -> list[Span]:
+    """``spans`` less ``cut``'s."""
+    out = spans
+    for c0, c1 in cut:
+        nxt: list[Span] = []
+        for x, y in out:
+            if c1 <= x or y <= c0:
+                nxt.append((x, y))
+                continue
+            if x < c0:
+                nxt.append((x, c0))
+            if c1 < y:
+                nxt.append((c1, y))
+        out = nxt
+    return out
 
 
 async def _pump_runs_since(

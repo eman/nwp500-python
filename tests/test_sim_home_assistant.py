@@ -1529,7 +1529,9 @@ class TestTheWaterUse:
             now=NOW,
         )
         assert use.flow
-        assert not any(down[0] <= t < down[1] for t, _ in use.flow)
+        # No step's interval, (t - 10 s, t], reaches into it.
+        step = timedelta(seconds=10)
+        assert not any(down[0] < t and t - step < down[1] for t, _ in use.flow)
         assert any("left out of the flow" in n for n in use.notes)
 
     async def test_a_pump_outage_leaves_the_runs_unknown(self) -> None:
@@ -1756,3 +1758,45 @@ async def test_the_last_reports_volume_is_kept() -> None:
     step_min = 10 / 60
     assert sum(v for _, v in use.flow) * step_min == pytest.approx(1.0)
     assert use.flow[-1][0] < last + timedelta(seconds=90)
+
+
+@pytest.mark.asyncio
+async def test_a_report_before_an_outage_keeps_its_volume() -> None:
+    """1 gal reported 5 s before a 2-minute outage: its gallon lands
+    before the outage, none in it."""
+    at = NOW - timedelta(hours=2) - timedelta(seconds=5)
+    down = (at + timedelta(seconds=5), at + timedelta(minutes=2, seconds=5))
+    series = {
+        "sensor.volume": [
+            (NOW - ha.INLET_LOOKBACK, 0.0),
+            (at, 1.0),
+            (NOW - timedelta(minutes=1), 0.0),
+        ]
+    }
+    use = await ha.read_water_use(
+        FakeClient(  # type: ignore[arg-type]
+            UNITS, series, outages={"sensor.volume": [down]}
+        ),
+        ha.Entities(meter_volume="sensor.volume"),
+        now=NOW,
+    )
+    step = timedelta(seconds=10)
+    assert sum(v for _, v in use.flow) * step / timedelta(minutes=1) == (
+        pytest.approx(1.0)
+    )
+    assert not any(down[0] < t and t - step < down[1] for t, _ in use.flow)
+
+
+def test_the_book_flow_keeps_every_reports_volume() -> None:
+    """A slow trickle under the draw line is kept, to the gallon, and a
+    rate fills the steps no report reaches."""
+    start = NOW - timedelta(hours=1)
+    trickle = [
+        (start + timedelta(minutes=10, seconds=30 * k), 0.1) for k in range(12)
+    ]
+    flow = ha.book_flow(trickle, [], start, NOW)
+    total = sum(v for _, v in flow) * (10 / 60)
+    assert total == pytest.approx(1.2)
+    rate = [(start + timedelta(minutes=40), 2.0)]
+    flow = ha.book_flow([], rate, start, NOW)
+    assert max(v for _, v in flow) == pytest.approx(2.0)
