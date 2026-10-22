@@ -1160,7 +1160,8 @@ def book_flow(
     of the same step, booked to ``end`` or later, reads every step once.
     No step overlapping a ``dark`` span (the meter unread) is given. A
     report's volume goes only to steps that are given: over the part of
-    its interval they cover, else to the nearest given step. Each
+    its interval they cover, else to the nearest given step. A report
+    before ``start`` or after ``end`` adds nothing. Each
     stretch of steps ends with a zero at its end, so the book carries
     nothing past it, while the gap after it stays unobserved."""
     step = meter.STEP
@@ -1183,10 +1184,13 @@ def book_flow(
         """The step whose interval holds ``t``."""
         return math.floor((t - first) / step)
 
-    given = [
-        not any(x < cell(k)[1] and cell(k)[0] < y for x, y in spans)
-        for k in range(n)
-    ]
+    given = [True] * n
+    for x, y in spans:
+        # The steps [lo, lo + step) with x < lo + step and lo < y.
+        lo_k = max(math.floor((x - first) / step), 0)
+        hi_k = min(math.ceil((y - first) / step), n)
+        for k in range(lo_k, hi_k):
+            given[k] = False
     # The given steps as spans of time, joined where they meet.
     open_spans: list[Span] = []
     for k in range(n):
@@ -1213,12 +1217,23 @@ def book_flow(
 
         return min(near, key=lambda k: (away(k), k))
 
+    starts = [x for x, _ in open_spans]
+    ends = [y for _, y in open_spans]
     prev: datetime | None = None
     for t, v in sorted((t.astimezone(UTC), v) for t, v in volume):
         a = t - meter.WINDOW if prev is None else max(prev, t - meter.WINDOW)
         prev = t
+        # A report outside the span is no water in it, though it closes
+        # the next report's interval.
+        if not start <= t <= end:
+            continue
+        # The given spans that overlap (a, t): ending after a, starting
+        # before t.
         parts = [
-            (max(a, x), min(t, y)) for x, y in open_spans if x < t and a < y
+            (max(a, open_spans[j][0]), min(t, open_spans[j][1]))
+            for j in range(
+                bisect.bisect_right(ends, a), bisect.bisect_left(starts, t)
+            )
         ]
         length = sum((y - x).total_seconds() for x, y in parts)
         if length <= 0:
@@ -1246,9 +1261,10 @@ def book_flow(
         if reached[k]:
             out.append((lo, abs(gal[k]) / per_min))
         else:
-            while r + 1 < len(rates) and rates[r + 1][0] <= hi:
+            # The rate in force at the step's start.
+            while r + 1 < len(rates) and rates[r + 1][0] <= lo:
                 r += 1
-            held = r >= 0 and hi - rates[r][0] <= meter.RATE_HOLD
+            held = r >= 0 and lo - rates[r][0] <= meter.RATE_HOLD
             forward = rates[r][1] if held else 0.0
             out.append((lo, forward if forward > meter.DRAW_GPM else 0.0))
         if (k + 1 == n or not given[k + 1]) and out[-1][1] > 0:

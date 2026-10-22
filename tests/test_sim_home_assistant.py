@@ -3,6 +3,7 @@
 environment source against a fake client."""
 
 import math
+import time
 from collections.abc import Iterable
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
@@ -1929,3 +1930,50 @@ def test_a_meter_dark_throughout_gives_no_flow() -> None:
     end = start + timedelta(hours=72)
     reports = [(start + timedelta(seconds=30 * i), 0.1) for i in range(1, 8640)]
     assert ha.book_flow(reports, [], start, end, [(start, end)]) == []
+
+
+def test_a_rate_reading_at_the_end_adds_no_earlier_flow() -> None:
+    """The volume still, and the first 2 gal/min rate reading at
+    ``now``: no step before ``now`` takes it."""
+    start = NOW - timedelta(hours=1)
+    flow = ha.book_flow([(start, 0.0)], [(NOW, 2.0)], start, NOW)
+    assert _booked_gal(flow, start, NOW) == pytest.approx(0.0)
+
+
+def test_reports_outside_the_span_add_nothing() -> None:
+    """A gallon the day before, half a gallon in the span, a gallon
+    after it: only the half is booked."""
+    start = datetime(2026, 10, 18, 12, tzinfo=UTC)
+    end = start + timedelta(hours=1)
+    reports = [
+        (start - timedelta(days=1), 1.0),
+        (start + timedelta(minutes=5), 0.5),
+        (end + timedelta(minutes=1), 1.0),
+    ]
+    flow = ha.book_flow(reports, [], start, end)
+    assert _booked_gal(flow, start, end) == pytest.approx(0.5)
+
+
+def test_many_outages_keep_every_gallon_out_of_them() -> None:
+    """72 h, a report every 30 s and an outage of a minute every 2:
+    every reported gallon is kept, none in an outage."""
+    start = datetime(2026, 10, 15, 12, tzinfo=UTC)
+    end = start + timedelta(hours=72)
+    down = [
+        (
+            start + timedelta(minutes=m, seconds=40),
+            start + timedelta(minutes=m + 1, seconds=40),
+        )
+        for m in range(0, 72 * 60, 2)
+    ]
+    reports = [(start + timedelta(seconds=30 * i), 0.1) for i in range(1, 8640)]
+    began = time.perf_counter()
+    flow = ha.book_flow(reports, [], start, end, down)
+    took = time.perf_counter() - began
+    step = timedelta(seconds=10)
+    assert sum(v for _, v in flow) * (10 / 60) == pytest.approx(0.1 * 8639)
+    assert not any(
+        v > 0 and any(x < t + step and t < y for x, y in down[:20])
+        for t, v in flow[:400]
+    )
+    assert took < 5.0
