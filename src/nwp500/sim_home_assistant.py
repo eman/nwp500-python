@@ -19,7 +19,8 @@ this module, a ``sim_live`` source:
     span;
   - **the humidity:** a fresh reading;
   - **the inlet:** the plateau of the long draws in the last 72 h, from
-    the inlet probe, the meter's flow and the circulation's runs
+    the inlet probe, the household's draws (a demand entity) and the
+    circulation's runs
     (``sim_adapters.cold_supply``).
 
 Readings are used by these rules:
@@ -34,7 +35,6 @@ from the caller's configuration (``sources_from``).
 """
 
 import enum
-import itertools
 import logging
 import math
 from collections.abc import Awaitable, Callable, Iterable, Mapping, Sequence
@@ -44,7 +44,7 @@ from typing import Any, cast
 
 from nwp500 import sim_adapters as sa
 from nwp500.exceptions import Nwp500Error
-from nwp500.sim import Environment, meter
+from nwp500.sim import Environment
 from nwp500.sim.location_air import LocationAirModel
 from nwp500.sim.location_air import project as project_air
 
@@ -93,20 +93,13 @@ class Entities:
     humidity: str | None = None
     #: A probe on the cold supply.
     inlet: str | None = None
-    #: A hot-water meter's volume since its previous report, or its
-    #: running total (``meter_total``).
-    meter_volume: str | None = None
-    #: The same meter's forward flow rate.
-    meter_flow: str | None = None
+    #: A binary sensor on while the household draws hot water, the
+    #: circulation's water not among its draws (``demand_spans``).
+    demand: str | None = None
     #: The circulation pump's speed.
     circulation_speed: str | None = None
     #: A weather entity with an hourly forecast.
     weather: str | None = None
-    #: Whether ``meter_volume`` is a running total rather than the
-    #: volume since its previous report. None reads it from the entity's
-    #: ``state_class``: ``total_increasing`` or ``total`` is a running
-    #: total (``is_running_total``).
-    meter_total: bool | None = None
 
 
 @dataclass(frozen=True)
@@ -132,11 +125,9 @@ def sources_from(doc: Mapping[str, Any], environ: Mapping[str, str]) -> Sources:
         air = "sensor.beside_the_heater_temperature"
         humidity = "sensor.beside_the_heater_humidity"
         inlet = "sensor.cold_supply_temperature"
-        meter_volume = "sensor.water_volume"
-        meter_flow = "sensor.water_flow_rate"
+        demand = "binary_sensor.hot_water_demand"
         circulation_speed = "sensor.circulation_pump_speed"
         weather = "weather.forecast_home"
-        meter_total = true              # optional: a running total
 
         [location_air]                  # optional
         damping = 0.638
@@ -167,10 +158,7 @@ def sources_from(doc: Mapping[str, Any], environ: Mapping[str, str]) -> Sources:
     if unknown:
         raise ValueError(f"unknown entities: {', '.join(unknown)}")
     for name, value in raw.items():
-        if name == "meter_total":
-            if not isinstance(value, bool):
-                raise ValueError("entities.meter_total must be true or false")
-        elif not isinstance(value, str) or "." not in value:
+        if not isinstance(value, str) or "." not in value:
             raise ValueError(f"entities.{name} must be an entity id")
     model = None
     la = doc.get("location_air")
@@ -225,14 +213,12 @@ def _number(state: Any) -> float | None:
 @dataclass(frozen=True)
 class State:
     """An entity's value now: the number (None for none), its unit, and
-    when it was last reported, and its ``state_class`` where it has
-    one."""
+    when it was last reported."""
 
     entity: str
     value: float | None
     unit: str | None
     at: datetime
-    state_class: str | None = None
 
 
 def parse_state(doc: Any) -> State:
@@ -245,13 +231,10 @@ def parse_state(doc: Any) -> State:
         raise HomeAssistantError("not an entity state")
     d = cast(Mapping[str, Any], doc)
     attributes = d.get("attributes")
-    unit = state_class = None
+    unit = None
     if isinstance(attributes, Mapping):
-        a = cast(Mapping[str, Any], attributes)
-        u = a.get("unit_of_measurement")
+        u = cast(Mapping[str, Any], attributes).get("unit_of_measurement")
         unit = u if isinstance(u, str) else None
-        c = a.get("state_class")
-        state_class = c if isinstance(c, str) else None
     stamp = (
         d.get("last_reported") or d.get("last_updated") or d.get("last_changed")
     )
@@ -260,7 +243,6 @@ def parse_state(doc: Any) -> State:
         value=_number(d.get("state")),
         unit=unit,
         at=_instant(stamp),
-        state_class=state_class,
     )
 
 
@@ -565,50 +547,35 @@ def covers_start(series: Sequence[Reading], start: datetime) -> bool:
     return bool(series) and series[0][0] <= start
 
 
-#: Home Assistant's state classes of a running total: its value counts
-#: up from a reset, not since its previous report.
-TOTAL_STATE_CLASSES = frozenset({"total", "total_increasing"})
-
-
-def is_running_total(entities: Entities, state: State) -> bool:
-    """Whether the meter's volume (``state``, its entity's) is a running
-    total: ``entities.meter_total`` where set, else its ``state_class``
-    (``TOTAL_STATE_CLASSES``)."""
-    if entities.meter_total is not None:
-        return entities.meter_total
-    return state.state_class in TOTAL_STATE_CLASSES
-
-
-def reports_from_total(series: Sequence[Reading]) -> tuple[list[Reading], int]:
-    """A running total's readings as reports, each the rise since the
-    reading before, at its instant; the first, which nothing precedes,
-    is the baseline and reports nothing. A drop is a reset (a new meter
-    cycle, or a meter replaced): the total counts on from the new value,
-    so that reading reports none. The second item is how many."""
-    reports: list[Reading] = []
-    resets = 0
-    for (_, before), (t, v) in itertools.pairwise(series):
-        if v < before:
-            resets += 1
-            reports.append((t, 0.0))
-        else:
-            reports.append((t, v - before))
-    return reports, resets
-
-
-def total_note(entity: str, resets: int) -> str:
-    """The note a running total's reading leaves."""
-    note = f"{entity} is a running total, read as the rise between readings"
-    if resets:
-        note += f"; {resets} drops read as resets, counted from the new value"
-    return note
-
-
-def reports_after(series: Sequence[Reading], start: datetime) -> list[Reading]:
-    """A report series (a meter's volume since its previous report) from
-    a history, without the row in force at ``start``: that row repeats
-    the last report before the span, not one inside it."""
-    return [(t, v) for t, v in series if t > start]
+def demand_spans(
+    rows: Sequence[tuple[datetime, str]], start: datetime, end: datetime
+) -> tuple[list[Span], list[Span]]:
+    """A demand entity's draws from ``start`` to ``end``, from its
+    history's rows (``History.states``: each instant and state as
+    written, the row in force at ``start`` first): the spans it was
+    ``on``, and the spans it said nothing anyone can read, when a draw
+    may have gone unseen: ``unavailable``, ``unknown``, or before its
+    first row."""
+    start, end = start.astimezone(UTC), end.astimezone(UTC)
+    on: list[Span] = []
+    dark: list[Span] = []
+    ordered = sorted((t.astimezone(UTC), v) for t, v in rows)
+    if not ordered:
+        return [], [(start, end)]
+    if ordered[0][0] > start:
+        dark.append((start, min(ordered[0][0], end)))
+    # Each row holds until the next, the last until ``end``.
+    until = [t for t, _ in ordered[1:]] + [end]
+    for (t, state), nxt in zip(ordered, until, strict=True):
+        a, b = max(t, start), min(nxt, end)
+        if b <= a:
+            continue
+        state = state.strip().lower()
+        if state == "on":
+            on.append((a, b))
+        elif state != "off":
+            dark.append((a, b))
+    return busy(on), busy(dark)
 
 
 def percent(value: float, unit: str | None) -> float:
@@ -928,67 +895,55 @@ class HomeAssistantEnvironment:
 
     async def _inlet(self) -> float | None:
         e = self.entities
-        probe_id, volume_id = e.inlet, e.meter_volume
-        rate_id, pump_id = e.meter_flow, e.circulation_speed
+        probe_id, demand_id, pump_id = e.inlet, e.demand, e.circulation_speed
         if probe_id is None:
             return None
-        if volume_id is None:
+        if demand_id is None:
             self.notes.append(
-                "inlet: needs the meter's volume to find long draws"
+                "inlet: needs the demand entity to find long draws"
             )
             return None
         # In UTC: a lookback across a clock change is the elapsed span,
         # not the wall time's.
         now = self.now.astimezone(UTC)
         since = now - INLET_LOOKBACK
-        names = [n for n in (probe_id, volume_id, rate_id, pump_id) if n]
+        names = [n for n in (probe_id, demand_id, pump_id) if n]
 
         async def read() -> float | None:
             got = await self.client.read_history(names, since, now)
-            unread: list[Span] = []
-
-            async def read_in(
-                entity: str, to: Callable[[float, str | None], float]
-            ) -> tuple[list[Reading], State]:
-                state = await self.client.state(entity)
-                rows, spans = got.converted(entity, state.unit, to, now)
-                if spans:
-                    self.notes.append(
-                        f"inlet: {len(spans)} readings of {entity} in no "
-                        "unit this reads left out"
-                    )
-                    unread.extend(spans)
-                return rows, state
-
-            probe, _ = await read_in(probe_id, to_f)
-            rate = (
-                [] if rate_id is None else (await read_in(rate_id, to_gpm))[0]
-            )
-            reports, state = await read_in(volume_id, to_gal)
-            if is_running_total(e, state):
-                reports, resets = reports_from_total(reports)
-                self.notes.append(f"inlet: {total_note(volume_id, resets)}")
-            flow = meter.flow_gpm(
-                reports_after(reports, since), rate, since, now
-            )
+            if got.states is None:
+                self.notes.append(
+                    f"inlet: {demand_id} not read (no states in the history)"
+                )
+                return None
+            state = await self.client.state(probe_id)
+            probe, unread = got.converted(probe_id, state.unit, to_f, now)
+            if unread:
+                self.notes.append(
+                    f"inlet: {len(unread)} readings of {probe_id} in no "
+                    "unit this reads left out"
+                )
+            # Its outages split its draws, so none overlaps a draw.
+            draws, _ = demand_spans(got.states.get(demand_id, []), since, now)
             runs: list[Span] | None = []
             if pump_id is not None:
                 runs = await self._pump_runs(pump_id, got, since, now)
                 if runs is None:
                     return None
-            # A draw while any of them was unavailable may have
-            # overlapped a run or ended unseen: the plateau skips it, as
-            # it skips one that overlaps a run.
-            runs = busy(
-                runs or [], unread, *(got.outages.get(n, []) for n in names)
+            # A draw while the probe or the pump was unavailable may have
+            # overlapped a run unseen: the plateau skips it, as it skips
+            # one that overlaps a run.
+            busy_spans = busy(
+                runs or [],
+                unread,
+                *(got.outages.get(n, []) for n in (probe_id, pump_id) if n),
             )
-            # In °F and gal/min, as read: no unit preference is read here.
+            # In °F, as read: no unit preference is read here.
             cold = sa.cold_supply_f(
                 probe,
                 at=now,
-                flow=flow,
-                ticks=[t for t, v in flow if v >= meter.DRAW_GPM],
-                circulation=runs,
+                draws=draws,
+                circulation=busy_spans,
                 window=INLET_LOOKBACK,
             )
             if cold.t_cold_f is None:
@@ -1034,16 +989,13 @@ class HomeAssistantEnvironment:
 # ── over a recorded history, for the calibration ────────────────────
 
 
-#: Draw ticks further apart than this are two draws.
-DRAW_GAP = timedelta(seconds=30)
-
-
 @dataclass(frozen=True)
 class RecordInputs:
     """What Home Assistant recorded over a heater's history: the air
-    beside it and that air's humidity (°F, %), the spans a meter saw
-    water drawn, and the circulation's runs. None for a part it does
-    not record, or could not be read (``notes`` say which)."""
+    beside it and that air's humidity (°F, %), the spans the household
+    drew hot water (the demand entity's), and the circulation's runs.
+    None for a part it does not record, or could not be read (``notes``
+    say which)."""
 
     air: list[Reading] | None
     humidity: list[Reading] | None
@@ -1054,50 +1006,6 @@ class RecordInputs:
     #: not observed, whatever the readings either side say.
     air_outages: tuple[Span, ...] = ()
     humidity_outages: tuple[Span, ...] = ()
-
-
-def draw_spans(
-    flow: Sequence[Reading],
-    *,
-    draw_gpm: float = 0.3,
-    gap: timedelta = DRAW_GAP,
-    step: timedelta = timedelta(seconds=10),
-) -> list[Span]:
-    """The spans water moved, from a flow series on a grid
-    (``sim.meter.flow_gpm``): runs of steps at or above ``draw_gpm``,
-    joined across gaps up to ``gap``, each to its last step's end."""
-    out: list[Span] = []
-    for t, v in flow:
-        if v < draw_gpm:
-            continue
-        if out and t - out[-1][1] <= gap:
-            out[-1] = (out[-1][0], t + step)
-        else:
-            out.append((t, t + step))
-    return out
-
-
-def volume_spans(
-    volume: Sequence[Reading],
-    *,
-    min_gal: float = meter.DRAW_GPM * meter.STEP.total_seconds() / 60.0,
-    window: timedelta = meter.WINDOW,
-) -> list[Span]:
-    """The spans a meter's volume reports (each the volume since its
-    previous report, gallons) say water moved: each report of
-    ``min_gal`` or more, either sign, from the previous report (or
-    ``window`` before it, if longer ago) to itself. The default is the
-    draw line held for one step, well above a meter's noise at rest.
-    However short or slow the draw, it is caught here, where the net
-    flow over ``window`` can stay under the line."""
-    out: list[Span] = []
-    prev: datetime | None = None
-    for t, v in sorted((t.astimezone(UTC), v) for t, v in volume):
-        if abs(v) >= min_gal:
-            a = t - window if prev is None else max(prev, t - window)
-            out.append((a, t))
-        prev = t
-    return busy(out)
 
 
 async def record_inputs(
@@ -1111,37 +1019,18 @@ async def record_inputs(
     only its own span; the notes say how much."""
     notes: list[str] = []
     e = entities
-    names = [
-        n
-        for n in (
-            e.air,
-            e.humidity,
-            e.meter_volume,
-            e.meter_flow,
-            e.circulation_speed,
-        )
-        if n
-    ]
+    names = [n for n in (e.air, e.humidity, e.demand, e.circulation_speed) if n]
     if not names:
         return RecordInputs(None, None, None, None, ())
     try:
         got = await client.read_history(names, start, end)
     except HomeAssistantError as err:
         return RecordInputs(None, None, None, None, (f"not read ({err})",))
-    history = got.readings
     units: dict[str, str | None] = {}
-    states: dict[str, State] = {}
-    for n in (
-        e.air,
-        e.humidity,
-        e.meter_volume,
-        e.meter_flow,
-        e.circulation_speed,
-    ):
+    for n in (e.air, e.humidity, e.circulation_speed):
         if n:
             try:
-                states[n] = await client.state(n)
-                units[n] = states[n].unit
+                units[n] = (await client.state(n)).unit
             except HomeAssistantError as err:
                 notes.append(f"{n}: unit not read ({err})")
 
@@ -1157,7 +1046,7 @@ async def record_inputs(
 
     def whole(what: str, series: list[Reading]) -> bool:
         # Spans read as "nothing happened" outside what was recorded,
-        # and a meter's or pump's spans replace the heater's own flag:
+        # and the draws' or pump's spans replace the heater's own flag:
         # a part history is no history.
         if covers_start(series, start):
             return True
@@ -1204,40 +1093,15 @@ async def record_inputs(
         except ValueError as err:
             notes.append(f"humidity: {err}")
     drawing = None
-    volume_id, rate_id = e.meter_volume, e.meter_flow
-    volume = history.get(volume_id, []) if volume_id else []
-    if volume_id and volume_id in units and whole("meter", volume):
-        try:
-            read = read_in("meter", volume_id, to_gal)
-            if is_running_total(e, states[volume_id]):
-                read, resets = reports_from_total(read)
-                notes.append(f"meter: {total_note(volume_id, resets)}")
-            gallons = reports_after(read, start)
-            rate = (
-                read_in("meter", rate_id, to_gpm)
-                if rate_id and rate_id in units
-                else []
-            )
-            # Any net flow at the line is water moving, however briefly:
-            # the quiet test is conservative where the plateau's sustain
-            # filter is not.
-            flow = meter.flow_gpm(
-                gallons, rate, start, end, sustain=timedelta(0)
-            )
-            # While the meter was unavailable, or said what nobody can
-            # read, water may have moved.
-            down = busy(
-                unread.get("meter", []),
-                *(got.outages.get(n, []) for n in (volume_id, rate_id) if n),
-            )
-            drawing = busy(
-                draw_spans(flow),
-                volume_spans(gallons),
-                down,
-            )
-            outage("meter", down)
-        except ValueError as err:
-            notes.append(f"meter: {err}")
+    if e.demand:
+        rows = None if got.states is None else got.states.get(e.demand, [])
+        if rows is None:
+            notes.append("demand: not read (no states in the history)")
+        elif whole("demand", [(t, 0.0) for t, _ in rows]):
+            on, dark = demand_spans(rows, start, end)
+            # While it was unavailable, a draw may have gone unseen.
+            drawing = busy(on, dark)
+            outage("demand", dark)
     circulating = None
     pump_id = e.circulation_speed
     if pump_id and pump_id in units:

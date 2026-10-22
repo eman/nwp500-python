@@ -1276,8 +1276,8 @@ async def simulate_record(
     "--sources",
     type=click.Path(exists=True, dir_okay=False),
     envvar="NWP500_SOURCES",
-    help="A TOML file naming where the air, its humidity, the meter and "
-    "the circulation are recorded (Home Assistant)",
+    help="A TOML file naming where the air, its humidity, the hot water "
+    "demand and the circulation are recorded (Home Assistant)",
 )
 @click.pass_context
 def simulate_calibrate(

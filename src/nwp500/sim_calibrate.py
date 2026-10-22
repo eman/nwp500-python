@@ -896,7 +896,7 @@ def _fit(
             # One alone would replace the heater's in-use flag for the
             # other in the recoveries' draw-free test (``snapshots``).
             notes.append(
-                "the meter and the circulation are used together or not at "
+                "the draws and the circulation are used together or not at "
                 "all: with one unknown, the heater's own in-use flag stands in"
             )
     if humidity is None:

@@ -12,9 +12,10 @@ from above for several more: a window from minute 9 read at most
 0.22 degF above everything after it. So a plateau is read from minute 9
 on, and only a draw of 11 min or more has one.
 
-A draw counts when it ran ``settle_s + tail_s`` or more with
-circulation off throughout and the meter reading water moving over its
-tail; its plateau is the median probe reading over its last ``tail_s``,
+The draws are the caller's: the spans the household drew hot water,
+with the circulation's water not among them. A draw counts when it ran
+``settle_s + tail_s`` or more with circulation off throughout; its
+plateau is the median probe reading over its last ``tail_s``,
 none earlier than ``settle_s`` after its onset, kept within
 ``plausible_f``. The estimate is the median plateau of the counted
 draws that ended within ``window_s`` before the instant asked about;
@@ -41,10 +42,6 @@ class ColdSupplyParams:
     settle_s: float = 540.0
     #: The stretch at a draw's end the plateau is read over, s.
     tail_s: float = 120.0
-    #: Draw instants further apart than this are two draws, s.
-    tick_gap_s: float = 30.0
-    #: How long the interval a draw instant closes is, s.
-    tick_s: float = 10.0
     #: How far back a draw may have ended and still count, s.
     window_s: float = 72.0 * 3600.0
     #: The band a plateau must lie in to be the mains, degF: below is a
@@ -52,8 +49,6 @@ class ColdSupplyParams:
     plausible_f: tuple[float, float] = (40.0, 85.0)
     #: Readings a plateau needs.
     min_readings: int = 3
-    #: The meter's flow that is water moving, gal/min.
-    draw_gpm: float = 0.3
     #: Circulation runs closer than this are one run, s, as the walk
     #: merges them (``circulation.merge_runs``).
     run_gap_s: float = 600.0
@@ -74,72 +69,38 @@ class ColdSupply:
 Readings = Sequence[tuple[datetime, float]]
 
 
-def _runs(
-    ticks: Sequence[datetime], gap: timedelta
-) -> list[tuple[datetime, datetime]]:
-    out: list[tuple[datetime, datetime]] = []
-    for t in sorted(ticks):
-        if out and t - out[-1][1] <= gap:
-            out[-1] = (out[-1][0], t)
-        else:
-            out.append((t, t))
-    return out
-
-
-def _metered(
-    flow: Readings, start: datetime, end: datetime, gpm: float
-) -> bool:
-    """Whether the meter read water moving over ``[start, end)``: the
-    median of the reading in force at ``start`` and every one after it
-    before ``end`` at or above ``gpm`` (a median: the meter reports the
-    close as it ramps down, seconds before the last draw instant)."""
-    before = [v for t, v in flow if t <= start]
-    if not before:
-        return False
-    held = [before[-1], *(v for t, v in flow if start < t < end)]
-    return float(median(held)) >= gpm
-
-
 def plateau_t_cold(
     probe: Readings,
-    ticks: Sequence[datetime],
+    draws: Sequence[tuple[datetime, datetime]],
     circulation: Sequence[tuple[datetime, datetime]] | None,
     at: datetime,
     p: ColdSupplyParams = ColdSupplyParams(),
-    *,
-    flow: Readings | None,
 ) -> ColdSupply:
     """The mains as of ``at`` from the plateaus of recent long draws.
 
-    ``probe`` is the inlet probe's readings, ``ticks`` the instants the
-    meter or a detector saw water drawn (each closes ``tick_s``),
-    ``circulation`` the circulation's runs and ``flow`` the meter's
-    flow, gal/min. Nothing after ``at`` is read. None for
-    ``circulation`` or ``flow`` is unrecorded, which is not idle: no
-    estimate."""
-    if circulation is None or not flow or not probe or not ticks:
+    ``probe`` is the inlet probe's readings, ``draws`` the spans the
+    household drew hot water and ``circulation`` the circulation's runs.
+    Nothing after ``at`` is read. None for ``circulation`` is
+    unrecorded, which is not idle: no estimate."""
+    if circulation is None or not probe or not draws:
         return ColdSupply(None)
     since = at - timedelta(seconds=p.window_s)
     # A missing reading (NaN) is one not taken, never a number.
-    flow = sorted((t, v) for t, v in flow if t <= at and math.isfinite(v))
-    ticks = [t for t in ticks if since <= t <= at]
     probe = sorted((t, v) for t, v in probe if t <= at and math.isfinite(v))
     circulation = merge_runs(circulation, timedelta(seconds=p.run_gap_s))
     settle = timedelta(seconds=p.settle_s)
     tail = timedelta(seconds=p.tail_s)
     plateaus: list[float] = []
     newest: datetime | None = None
-    for onset, last_tick in _runs(ticks, timedelta(seconds=p.tick_gap_s)):
-        end = min(last_tick + timedelta(seconds=p.tick_s), at)
-        if end - onset < settle + tail:
+    for onset, ended in sorted(draws):
+        end = min(ended, at)
+        if end < since or end - onset < settle + tail:
             continue
         if any(a < end and b > onset for a, b in circulation):
             continue
         tail_from = max(onset + settle, end - tail)
         readings = [v for t, v in probe if tail_from <= t <= end]
         if len(readings) < p.min_readings:
-            continue
-        if not _metered(flow, tail_from, end, p.draw_gpm):
             continue
         plateau = float(median(readings))
         if not p.plausible_f[0] <= plateau <= p.plausible_f[1]:

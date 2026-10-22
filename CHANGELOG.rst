@@ -7,16 +7,6 @@ Unreleased
 
 Added
 -----
-- **Water meters that report a running total** (#189). A Home Assistant
-  meter whose volume has the ``state_class`` ``total_increasing`` or
-  ``total`` is read as the rise between readings, by the inlet's
-  plateau (``HomeAssistantEnvironment``) and ``record_inputs`` alike. A
-  drop is read as the meter starting over, counted from the new value,
-  and the notes say how many. ``Entities.meter_total`` (``meter_total``
-  in a sources file) says which it is where the entity has no
-  ``state_class``. ``State`` carries the ``state_class``, and
-  ``reports_from_total`` and ``is_running_total`` are public. A meter
-  that reports its volume since the previous report reads as before.
 - **The heat book from a heater's values' changes** (#191).
   ``sim_adapters.book_from_changes`` books the tank's heat from
   ``ChangeRows`` and the instants the heater was heard from (a
@@ -30,8 +20,8 @@ Added
   the last one, and is None while the heater isn't heard at ``at``.
   ``book_steps_from_changes`` gives the steps, and ``silences`` the
   unheard spans.
-- ``sim_adapters.cold_supply_f``: the mains' plateau in °F and gal/min,
-  reading no unit preference. The live source's inlet reads through it,
+- ``sim_adapters.cold_supply_f``: the mains' plateau with the probe in
+  °F, reading no unit preference. The live source's inlet reads through it,
   so a preference changed while it runs changes nothing.
 - ``sim_adapters.cold_supply(..., window=)``: how far back a long draw
   counts (72 hours by default).
@@ -70,6 +60,24 @@ Changed
 - ``max_gap``, ``GAP_SAMPLES`` and ``MIN_GAP`` are defined in
   ``sim_adapters`` and documented there. ``sim_calibrate`` still exports
   them.
+- **The household's draws come from a demand entity** (#203). The
+  simulator no longer works out when hot water was drawn from a water
+  meter. ``sim_home_assistant.Entities.demand`` (``demand`` in a
+  sources file) is a binary sensor on while the household draws hot
+  water, with the circulation's water not among its draws; the live
+  inlet's long draws and ``record_inputs``' ``drawing`` come from it
+  (``demand_spans``). ``sim.cold_supply.plateau_t_cold``,
+  ``sim_adapters.cold_supply`` and ``cold_supply_f`` take the draws as
+  (start, end) spans (``draws=``) in place of the meter's flow and draw
+  instants; ``ColdSupplyParams`` loses ``tick_s``, ``tick_gap_s`` and
+  ``draw_gpm``.
+
+Removed
+-------
+- ``Entities.meter_volume`` and ``meter_flow`` (and their sources-file
+  keys), ``sim.meter``, ``sim_home_assistant.draw_spans``,
+  ``volume_spans`` and ``reports_after``: the simulator's own reading
+  of draws from a water meter.
 
 Version 9.9.0 (2026-10-22)
 ==========================

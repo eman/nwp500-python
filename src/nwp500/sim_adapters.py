@@ -1840,27 +1840,24 @@ def cold_supply(
     probe: Iterable[tuple[datetime, float]],
     *,
     at: datetime,
-    flow: Iterable[tuple[datetime, float]],
-    ticks: Iterable[datetime] | None = None,
+    draws: Iterable[tuple[datetime, datetime]],
     circulation: Iterable[tuple[datetime, datetime]] | None = (),
     window: timedelta | None = None,
 ) -> ColdSupply:
-    """The mains as of ``at`` from an inlet probe's ``probe`` readings
-    over recent long draws (``sim.cold_supply``), the probe and the
-    meter's ``flow`` (per minute) in the preferred units. ``ticks`` are
-    the instants water was drawn; by default, each flow reading at or
-    above the draw line, each standing for the meter's own reporting
-    interval. ``circulation`` are its runs: none (the default) for an
-    installation without, None for runs not recorded (no estimate). A
-    missing reading (NaN) is left out. ``window`` is how far back a long
-    draw counts (``ColdSupplyParams.window_s`` by default). The estimate
-    is degF: pass it on as ``environment(inlet=temperature(...))`` or
-    with ``on_the_mains``."""
+    """The mains as of ``at`` from an inlet probe's ``probe`` readings,
+    in the preferred unit, over recent long draws
+    (``sim.cold_supply``). ``draws`` are the spans the household drew hot
+    water, without the circulation's water. ``circulation`` are its
+    runs: none (the default) for an installation without, None for runs
+    not recorded (no estimate). A missing reading (NaN) is left out.
+    ``window`` is how far back a long draw counts
+    (``ColdSupplyParams.window_s`` by default). The estimate is degF:
+    pass it on as ``environment(inlet=temperature(...))`` or with
+    ``on_the_mains``."""
     return cold_supply_f(
         [(t, _to_sim(v)) for t, v in _finite(probe)],
         at=at,
-        flow=[(t, _volume_to_sim(v)) for t, v in _finite(flow)],
-        ticks=ticks,
+        draws=draws,
         circulation=circulation,
         window=window,
     )
@@ -1870,50 +1867,21 @@ def cold_supply_f(
     probe: Iterable[tuple[datetime, float]],
     *,
     at: datetime,
-    flow: Iterable[tuple[datetime, float]],
-    ticks: Iterable[datetime] | None = None,
+    draws: Iterable[tuple[datetime, datetime]],
     circulation: Iterable[tuple[datetime, datetime]] | None = (),
     window: timedelta | None = None,
 ) -> ColdSupply:
-    """``cold_supply`` in the simulator's units, the probe °F and the
-    flow gal/min, whatever the preferred units: it reads no unit
-    preference."""
-    readings = [(t.astimezone(UTC), v) for t, v in _finite(probe)]
-    flows = sorted((t.astimezone(UTC), v) for t, v in _finite(flow))
+    """``cold_supply`` with the probe in °F, whatever the preferred
+    unit: it reads no unit preference."""
     p = ColdSupplyParams()
     if window is not None:
         p = replace(p, window_s=window.total_seconds())
-    if ticks is not None:
-        drawn = [t.astimezone(UTC) for t in ticks]
-    else:
-        drawn = [t for t, v in flows if v >= p.draw_gpm]
-        # Each reading stands for the meter's own interval, whatever its
-        # cadence: a meter reporting every minute closes a minute.
-        cadence = _cadence_s([t for t, _ in flows])
-        if cadence is not None and cadence > p.tick_s:
-            p = replace(
-                p,
-                tick_s=cadence,
-                tick_gap_s=max(p.tick_gap_s, 1.5 * cadence),
-            )
     return plateau_t_cold(
-        readings,
-        drawn,
+        [(t.astimezone(UTC), v) for t, v in _finite(probe)],
+        [(a.astimezone(UTC), b.astimezone(UTC)) for a, b in draws],
         None
         if circulation is None
         else [(a.astimezone(UTC), b.astimezone(UTC)) for a, b in circulation],
         at.astimezone(UTC),
         p,
-        flow=flows,
     )
-
-
-def _cadence_s(times: Sequence[datetime]) -> float | None:
-    """The median spacing of consecutive readings, s, those a reporting
-    gap (over 10 min) apart left out; None with fewer than two."""
-    gaps = [
-        (b - a).total_seconds()
-        for a, b in itertools.pairwise(times)
-        if 0 < (b - a).total_seconds() <= 600
-    ]
-    return float(np.median(gaps)) if gaps else None
