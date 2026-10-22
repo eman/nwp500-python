@@ -547,3 +547,79 @@ class TestTheGapIsJudgedFirst:
         assert done.params.loss.bottom_loss_btu_hr == pytest.approx(
             Q_B, rel=0.1
         )
+
+
+class TestKeepBetterSecondReview:
+    def test_both_unfitted_take_the_joint_fit(self) -> None:
+        starts = planted_starts(30) + [
+            (140.0, 122.0 + i, 55.0 + i, 10.0) for i in range(12)
+        ]
+        history = quiet_history(starts, PLANTED, 25.0)
+        base = sim.default_params()
+        base = replace(base, unfitted=(*base.unfitted, "standby", "gap_tau"))
+        done, judged, held = sc._keep_better(history, base, "air_f")
+        assert not [j for j in judged if j.group in ("standby", "gap_tau")]
+        plain = cal.fit_standby(history, TANK.thermal_mass_btu_f, tank=TANK)
+        assert done.params.tank.stratification_gap_tau_h == plain.tau_gap_hours
+        assert done.params.tank.stratification_gap_tau_h == pytest.approx(
+            25.0, rel=0.1
+        )
+        assert done.params.loss.bottom_loss_btu_hr == pytest.approx(
+            Q_B, rel=0.1
+        )
+        assert held.windows == ()
+        assert not {"standby", "gap_tau"} & set(done.params.unfitted)
+
+    def test_a_jacket_refit_that_wins_keeps_the_bottoms_reason(self) -> None:
+        # Mixed windows only: the refit is the jacket law alone, and it
+        # beats a base with the wrong UA.
+        starts = [s for s in planted_starts(45) if s[0] == s[1]]
+        jacket = replace(PLANTED, bottom_loss_btu_hr=0.0)
+        windows = tuple(windows_of(starts, jacket))
+        base = replace(
+            sim.default_params(),
+            loss=replace(PLANTED, ua_btu_hr_f=6.0),
+            tank=replace(TANK, stratification_gap_tau_h=TAU),
+        )
+        fit = cal.StandbyFit(
+            windows=windows,
+            n_quiet=len(windows),
+            n_dropped=0,
+            ua_ref=UA,
+            ua_exponent=0.0,
+            tau_gap_hours=None,
+            n_gap_windows=0,
+            quiet_by="dhw_in_use",
+        )
+        frame = pd.DataFrame(
+            {
+                "upper_f": [130.0, 130.0],
+                "lower_f": [130.0, 130.0],
+                "compressor_on": False,
+                "element_on": False,
+                "dhw_in_use": False,
+                "air_f": 60.0,
+            },
+            index=pd.DatetimeIndex([T0, T0 + timedelta(minutes=5)]),
+        )
+        with pytest.MonkeyPatch.context() as m:
+            m.setattr(cal, "fit_standby", lambda *_, **__: fit)
+            calibration, judged, held = sc._keep_better(frame, base, "air_f")
+        (standby,) = [j for j in judged if j.group == "standby"]
+        assert standby.kept == "refit"
+        assert calibration.params.loss.bottom_loss_btu_hr == 0.0
+        done = sc.Calibrated(
+            calibration,
+            "constant",
+            2,
+            timedelta(minutes=5),
+            0,
+            (),
+            judged=tuple(judged),
+            held=held,
+        )
+        terms = {t.name: t for t in sc.report(done)}
+        assert terms["Standby loss (UA at ref ΔT, BTU/h·°F)"].fitted
+        for name in ("Bottom loss (BTU/h)", "Bottom loss gate (°F)"):
+            assert not terms[name].fitted
+            assert terms[name].why.endswith("10 needed")

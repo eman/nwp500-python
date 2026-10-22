@@ -435,11 +435,25 @@ def _keep_better(
     n_gap_held = 0 if "gap_tau" in unfitted else _split(len(gap_all))
     gap_train = gap_all[: len(gap_all) - n_gap_held]
     held_gaps = tuple(gap_all[len(gap_all) - n_gap_held :])
-    tau, n_gap = cal.fit_gap_tau(
-        [(w.gap_hours, w.gap_f) for w in gap_train],
-        loss=base.loss,
-        tank=base.tank,
-    )
+    both_unfitted = {"gap_tau", "standby"} <= unfitted
+    if both_unfitted:
+        # Neither is judged: the joint fit ``calibrate`` takes, the
+        # constant and the loss fitted in turn (``fit_standby``).
+        tau, n_gap = standby.tau_gap_hours, standby.n_gap_windows
+    else:
+        # The gaps opened by the loss the parameters will carry: the
+        # base's, or where the base has not fitted one, the refit's,
+        # which is taken unjudged.
+        opening = (
+            cal.with_standby(base, standby).loss
+            if "standby" in unfitted
+            else base.loss
+        )
+        tau, n_gap = cal.fit_gap_tau(
+            [(w.gap_hours, w.gap_f) for w in gap_train],
+            loss=opening,
+            tank=base.tank,
+        )
     if tau is None and "gap_tau" not in unfitted:
         judged.append(
             _judge(
@@ -479,9 +493,15 @@ def _keep_better(
     n_held = 0 if "standby" in unfitted else _split(len(law))
     train = law[: len(law) - n_held]
     held_windows = tuple(law[len(law) - n_held :])
-    loss_fit = cal.fit_loss(train, walk_tau, base.tank) if train else None
+    loss_fit = (
+        cal.fit_loss(train, walk_tau, base.tank)
+        if train and not both_unfitted
+        else None
+    )
     refit_standby = (
-        None
+        (None if standby.ua_ref is None else standby)
+        if both_unfitted
+        else None
         if loss_fit is None
         else replace(
             standby,
@@ -1028,6 +1048,7 @@ def _judged(terms: list[Term], done: Calibrated) -> list[Term]:
                 )
             elif (
                 j.kept == "refit"
+                and t.fitted
                 and j.base_error is not None
                 and j.refit_error is not None
             ):
