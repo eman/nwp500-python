@@ -9,8 +9,11 @@ from typing import Any, cast
 
 import pytest
 
+pytest.importorskip("numpy")
 pytest.importorskip("pandas")
 pytest.importorskip("scipy")
+
+import numpy as np
 
 from nwp500 import sim, status_history
 from nwp500 import sim_adapters as sa
@@ -606,3 +609,772 @@ class TestTheFrame:
         assert row["heater_air_f"] == pytest.approx(
             sa._from_device(DeciCelsius(status.ambient_temperature_raw))
         )
+
+
+def days_of_quiet(
+    status: dict[str, Any], uas: list[float]
+) -> list[status_history.TimedStatus]:
+    """A day for each of ``uas``: 20 h of a quiet tank cooling at that
+    UA toward ``AIR_F`` from 130 °F, then 4 h of the upper element
+    heating it back. A status every two minutes."""
+    out: list[status_history.TimedStatus] = []
+    step = timedelta(minutes=2)
+    t = T0
+    for ua in uas:
+        tank, gap = 130.0, 4.0
+        end = t + timedelta(hours=20)
+        while t < end:
+            raw = status | {
+                "tankUpperTemperature": _deci_c(tank + gap / 2),
+                "tankLowerTemperature": _deci_c(tank - gap / 2),
+            }
+            out.append((t, DeviceStatus.model_validate(raw)))
+            tank -= ua / MASS * (tank - AIR_F) * step.total_seconds() / 3600
+            t += step
+        end = t + timedelta(hours=4)
+        while t < end:
+            raw = status | {
+                "heatUpperUse": 2,
+                "tankUpperTemperature": _deci_c(130.0),
+                "tankLowerTemperature": _deci_c(126.0),
+            }
+            out.append((t, DeviceStatus.model_validate(raw)))
+            t += step
+    return out
+
+
+def _fitted(ua: float) -> sim.HeaterParams:
+    """The defaults with a standby loss of ``ua``, taken as fitted."""
+    base = sim.default_params()
+    return replace(
+        base,
+        loss=replace(base.loss, ua_btu_hr_f=ua, ua_exponent=0.0),
+        unfitted=tuple(t for t in base.unfitted if t != "standby"),
+    )
+
+
+class TestKeepBetter:
+    def test_a_better_refit_replaces_the_base(
+        self, device_status_dict: dict[str, Any]
+    ) -> None:
+        readings = days_of_quiet(device_status_dict, [UA] * 12)
+        done = sc.calibrate(
+            readings, ambient=AIR_F, params=_fitted(12.0), keep_better=True
+        )
+        (standby,) = [j for j in done.judged if j.group == "standby"]
+        assert standby.kept == "refit"
+        assert standby.n_held == 2
+        assert standby.refit_error is not None
+        assert standby.base_error is not None
+        assert standby.refit_error < standby.base_error
+        loss = done.calibration.params.loss
+        assert loss.ua_btu_hr_f == pytest.approx(UA, rel=0.05)
+        assert "standby" not in done.calibration.params.unfitted
+        term = _terms(done)["Standby loss (UA at ref ΔT, BTU/h·°F)"]
+        assert term.fitted
+        assert "against the base's" in term.note
+
+    def test_the_base_stays_where_the_latest_evidence_favours_it(
+        self, device_status_dict: dict[str, Any]
+    ) -> None:
+        # The tank lost twice as fast until the last two days.
+        readings = days_of_quiet(device_status_dict, [2 * UA] * 10 + [UA] * 2)
+        base = _fitted(UA)
+        done = sc.calibrate(
+            readings, ambient=AIR_F, params=base, keep_better=True
+        )
+        (standby,) = [j for j in done.judged if j.group == "standby"]
+        assert standby.kept == "base"
+        assert done.calibration.params.loss == base.loss
+        term = _terms(done)["Standby loss (UA at ref ΔT, BTU/h·°F)"]
+        assert not term.fitted
+        assert term.value == "6"
+        assert term.why.startswith("kept the base: it scores ")
+        assert "on the 2 latest quiet windows" in term.why
+        scores = sc.score(done, base)
+        assert scores["standby"] == pytest.approx(standby.base_error)
+
+    def test_too_little_evidence_keeps_the_base(
+        self, device_status_dict: dict[str, Any]
+    ) -> None:
+        readings = days_of_quiet(device_status_dict, [UA] * 4)
+        base = _fitted(12.0)
+        done = sc.calibrate(
+            readings, ambient=AIR_F, params=base, keep_better=True
+        )
+        (standby,) = [j for j in done.judged if j.group == "standby"]
+        assert standby.kept == "base"
+        assert "under 10 quiet windows" in standby.why
+        assert done.calibration.params.loss.ua_btu_hr_f == 12.0
+        assert sc.score(done, base)["standby"] is None
+
+    def test_an_unfitted_base_takes_the_refit(
+        self, device_status_dict: dict[str, Any]
+    ) -> None:
+        readings = days_of_quiet(device_status_dict, [UA] * 4)
+        base = sim.default_params()
+        base = replace(base, unfitted=(*base.unfitted, "standby"))
+        done = sc.calibrate(
+            readings, ambient=AIR_F, params=base, keep_better=True
+        )
+        assert not [j for j in done.judged if j.group == "standby"]
+        loss = done.calibration.params.loss
+        assert loss.ua_btu_hr_f == pytest.approx(UA, rel=0.05)
+        assert "standby" not in done.calibration.params.unfitted
+
+    def test_a_score_needs_keep_better(self, history: str) -> None:
+        done = sc.calibrate(_read(history), ambient=AIR_F)
+        with pytest.raises(sc.CalibrationInputError, match="keep_better"):
+            sc.score(done, sim.default_params())
+
+
+class TestTheJudgement:
+    def test_the_refit_wins_only_by_scoring_better(self) -> None:
+        win = sc._judge("compressor", "reached recoveries", 3, 9.0, 4.0)
+        assert (win.kept, win.why) == ("refit", "")
+        tie = sc._judge("compressor", "reached recoveries", 3, 4.0, 4.0)
+        assert tie.kept == "base"
+        assert tie.why == (
+            "kept the base: it scores 4 against the refit's 4 on the 3 "
+            "latest reached recoveries"
+        )
+        unscored = sc._judge("cop", "cycles", 3, 1.0, None)
+        assert unscored.kept == "base"
+        assert "the refit has no score" in unscored.why
+        none_held = sc._judge("cop", "cycles", 0, None, None)
+        assert none_held.why == (
+            "kept the base: under 10 cycles to judge a refit by"
+        )
+        no_refit = sc._judge("cop", "cycles", 3, 1.0, None, refit_exists=False)
+        assert no_refit.kept == "base"
+        assert no_refit.why == (
+            "kept the base: too few cycles to refit on (10 needed)"
+        )
+
+    def test_the_split_is_the_recoveries(self) -> None:
+        assert [sc._split(n) for n in (9, 10, 12, 20, 50)] == [0, 2, 2, 4, 10]
+
+
+def recovery_days(days: int) -> Any:
+    """A frame of ``days``: a quiet decay, a draw, then a heat-pump
+    recovery to 140 °F each day, a sample a minute, the heater drawing
+    its compressor's power."""
+    import pandas as pd
+
+    parts = []
+    upper, lower = 140.0, 138.0
+    for d in range(days):
+        n = 24 * 60
+        h = np.arange(n) / 60
+        air = 60.0 + 5.0 * np.sin(d)
+        up, lo = np.empty(n), np.empty(n)
+        comp, dhw = np.zeros(n, bool), np.zeros(n, bool)
+        quiet = h < 16
+        mean = air + ((upper + lower) / 2 - air) * np.exp(-UA / MASS * h[quiet])
+        up[quiet], lo[quiet] = mean + 1, mean - 1
+        draw = (h >= 16) & (h < 16.2)
+        dhw[draw] = True
+        drop = 20.0 + 2 * (d % 5)
+        up[draw] = up[quiet][-1] - 3
+        lo[draw] = np.linspace(lo[quiet][-1], lo[quiet][-1] - drop, draw.sum())
+        run_h = (40 + 2.5 * drop) / 60
+        run = (h >= 16.25) & (h < 16.25 + run_h)
+        comp[run] = True
+        lo[run] = np.linspace(lo[draw][-1], 140.0, run.sum())
+        up[run] = np.linspace(up[draw][-1], 140.0, run.sum())
+        between = (h >= 16.2) & (h < 16.25)
+        up[between], lo[between] = up[draw][-1], lo[draw][-1]
+        rest = h >= 16.25 + run_h
+        up[rest], lo[rest] = 140.0, 138.0
+        parts.append(
+            pd.DataFrame(
+                {
+                    "upper_f": up,
+                    "lower_f": lo,
+                    "compressor_on": comp,
+                    "element_on": False,
+                    "dhw_in_use": dhw,
+                    "target_f": 140.0,
+                    "excluded": False,
+                    "power_w": np.where(comp, 450.0 + 3 * (140 - lo), 3.0),
+                    "energy_to_setpoint_wh": np.where(
+                        comp | draw, (140 - lo) * 50.0, 0.0
+                    ),
+                    "heater_air_f": np.where(comp, air, np.nan),
+                    "air_f": air,
+                    "humidity_pct": 50.0,
+                },
+                index=pd.DatetimeIndex(
+                    [T0 + timedelta(days=d, minutes=int(m)) for m in range(n)]
+                ),
+            )
+        )
+    return pd.concat(parts)
+
+
+class TestKeepBetterEveryGroup:
+    def test_each_judgement_follows_its_scores(self) -> None:
+        frame = recovery_days(14)
+        base = sim.default_params()
+        fitted, judged, held = sc._keep_better(frame, base, "air_f")
+        groups = {j.group: j for j in judged}
+        assert {"standby", "compressor"} <= set(groups)
+        assert groups["compressor"].n_held == 3
+        assert len(held.recoveries) == 3
+        for j in judged:
+            if j.kept == "refit":
+                assert j.base_error is not None and j.refit_error is not None
+                assert j.refit_error < j.base_error
+            elif "pinned" not in j.why and j.refit_error is not None:
+                assert j.base_error is not None
+                assert j.base_error <= j.refit_error
+        done = sc.Calibrated(
+            fitted,
+            "constant",
+            len(frame),
+            timedelta(minutes=5),
+            0,
+            (),
+            judged=judged,
+            held=held,
+        )
+        assert set(sc.score(done, base)) == set(sc.GROUPS)
+        # The compressor is judged against the loss kept before it: the
+        # parameters it ends in.
+        if groups["compressor"].kept == "base":
+            assert sc.score(done, fitted.params)["compressor"] == (
+                pytest.approx(groups["compressor"].base_error)
+            )
+        names = {t.name for t in sc.report(done)}
+        assert "Compressor constant" in names
+
+
+class TestKeepBetterFirstReview:
+    def test_a_law_is_scored_at_its_own_reference(self) -> None:
+        window = cal.StandbyWindow(
+            start=T0,
+            end=T0 + timedelta(hours=4),
+            ua_btu_hr_f=7.0,
+            rmse_f=0.1,
+            delta_t_mean_f=40.0,
+            duration_hours=4.0,
+            gap_hours=np.zeros(2),
+            gap_f=np.zeros(2),
+        )
+        u30, e = 6.0, 0.3
+        loss = replace(
+            sim.default_params().loss,
+            ua_btu_hr_f=u30,
+            ua_exponent=e,
+            ua_ref_delta_t_f=30.0,
+        )
+        # The same law, quoted at 50 °F.
+        same = sc._law_error([window], u30 * (50 / 30) ** e, e)
+        assert sc._loss_error([window], loss) == pytest.approx(same)
+        assert sc._loss_error([window], loss) != pytest.approx(
+            sc._law_error([window], u30, e)
+        )
+
+    def test_a_refit_law_takes_its_own_reference(self) -> None:
+        base = sim.default_params()
+        base = replace(base, loss=replace(base.loss, ua_ref_delta_t_f=30.0))
+        fit = cal.StandbyFit(
+            windows=(),
+            n_quiet=0,
+            n_dropped=0,
+            ua_ref=6.0,
+            ua_exponent=0.2,
+            tau_gap_hours=None,
+            n_gap_windows=0,
+            quiet_by="dhw_in_use",
+        )
+        loss = cal.with_standby(base, fit).loss
+        assert (loss.ua_btu_hr_f, loss.ua_ref_delta_t_f) == (6.0, 50.0)
+
+    def test_power_and_cop_hold_out_their_own_cycles(self) -> None:
+        frame = recovery_days(14)
+        base = sim.default_params()
+        fitted, judged, held = sc._keep_better(frame, base, "air_f")
+        groups = {j.group: j for j in judged}
+        # A draw leads every cycle: none is the COP's, all the power's.
+        assert groups["cop"].n_held == 0
+        assert held.cop_cycles.empty
+        assert groups["power_scale"].n_held == 3
+        starts = held.power_cycles["start_time"].unique()
+        assert len(starts) == 3
+        done = sc.Calibrated(
+            fitted,
+            "constant",
+            len(frame),
+            timedelta(minutes=5),
+            0,
+            (),
+            judged=judged,
+            held=held,
+        )
+        # A kept base shows its values, and the refit's own reason.
+        cop = {t.name: t for t in sc.report(done)}["COP scale"]
+        assert cop.value == f"{base.power.cop_scale:.3g}"
+        assert not cop.fitted
+        assert cop.why == (
+            "kept the base: too few cycles to refit on (10 needed)"
+        )
+
+
+class TestKeepBetterSecondReview:
+    def test_every_kept_group_is_judged_and_reported(
+        self, device_status_dict: dict[str, Any]
+    ) -> None:
+        # Quiet days only: nothing to refit the gap, compressor or power
+        # on, so each keeps the base and says why.
+        readings = days_of_quiet(device_status_dict, [UA] * 4)
+        base = _fitted(12.0)
+        done = sc.calibrate(
+            readings, ambient=AIR_F, params=base, keep_better=True
+        )
+        judged = {j.group: j for j in done.judged}
+        assert set(judged) == set(sc.GROUPS)
+        assert all(j.kept == "base" for j in judged.values())
+        assert done.calibration.params.compressor == base.compressor
+        assert done.calibration.params.power == base.power
+        assert judged["compressor"].why == (
+            "kept the base: too few reached recoveries to refit on (5 needed)"
+        )
+        assert judged["gap_tau"].why == (
+            "kept the base: too few windows that open a gap to refit on "
+            "(20 needed)"
+        )
+        terms = _terms(done)
+        for name, value in (
+            ("Compressor constant", base.compressor.compressor_constant),
+            ("Zone gap time constant (h)", base.tank.stratification_gap_tau_h),
+            ("COP scale", base.power.cop_scale),
+        ):
+            assert terms[name].value == f"{value:.3g}"
+            assert terms[name].why.startswith("kept the base: ")
+
+    def test_an_unfitted_group_is_refitted_on_all_its_evidence(
+        self, device_status_dict: dict[str, Any]
+    ) -> None:
+        readings = days_of_quiet(device_status_dict, [UA] * 12)
+        base = sim.default_params()
+        base = replace(base, unfitted=(*base.unfitted, "standby"))
+        done = sc.calibrate(
+            readings, ambient=AIR_F, params=base, keep_better=True
+        )
+        assert done.held is not None
+        assert done.held.windows == ()
+        plain = sc.calibrate(readings, ambient=AIR_F, params=base)
+        assert done.calibration.params.loss == plain.calibration.params.loss
+
+
+class TestKeepBetterThirdReview:
+    def test_windows_the_law_cannot_use_are_not_its_evidence(self) -> None:
+        def window(day: int, delta_t: float) -> cal.StandbyWindow:
+            return cal.StandbyWindow(
+                start=T0 + timedelta(days=day),
+                end=T0 + timedelta(days=day, hours=4),
+                ua_btu_hr_f=UA,
+                rmse_f=0.1,
+                delta_t_mean_f=delta_t,
+                duration_hours=4.0,
+                gap_hours=np.zeros(2),
+                gap_f=np.zeros(2),
+            )
+
+        # Eight windows with the tank at or below the air, then two the
+        # law can use: too few to judge by, and no error from a refit
+        # on none.
+        windows = tuple(
+            [window(d, 0.0) for d in range(8)]
+            + [window(d, 50.0) for d in (8, 9)]
+        )
+        fit = cal.StandbyFit(
+            windows=windows,
+            n_quiet=10,
+            n_dropped=0,
+            ua_ref=UA,
+            ua_exponent=0.0,
+            tau_gap_hours=None,
+            n_gap_windows=0,
+            quiet_by="dhw_in_use",
+        )
+        base = _fitted(12.0)
+        frame = recovery_days(1)
+        with pytest.MonkeyPatch.context() as m:
+            m.setattr(cal, "fit_standby", lambda *_: fit)
+            _, judged, held = sc._keep_better(frame, base, "air_f")
+        (standby,) = [j for j in judged if j.group == "standby"]
+        assert standby.n_held == 0
+        assert held.windows == ()
+
+    def test_a_power_refit_that_wins_drops_the_compressors_reason(
+        self,
+    ) -> None:
+        frame = recovery_days(14)
+        fitted, judged, held = sc._keep_better(
+            frame, sim.default_params(), "air_f"
+        )
+        groups = {j.group: j for j in judged}
+        assert groups["compressor"].kept == "base"
+        assert groups["power_scale"].kept == "refit"
+        done = sc.Calibrated(
+            fitted,
+            "constant",
+            len(frame),
+            timedelta(minutes=5),
+            0,
+            (),
+            judged=judged,
+            held=held,
+        )
+        term = _terms(done)["Input power scale"]
+        assert term.fitted
+        assert term.why == ""
+        assert "against the base's" in term.note
+
+
+class TestKeepBetterFourthReview:
+    def test_the_cop_is_the_heaters_own_tanks(self) -> None:
+        from nwp500.sim.heating_trajectory import path_cop
+
+        base = sim.default_params()
+        params = replace(base, tank=replace(base.tank, volume_gal=40.0))
+        rows = cal.snapshots(recovery_days(3), air="air_f")
+        cycles = cal.cop_cycles(rows, params, withdrawn=lambda _: 0.0)
+        assert cycles
+        row = rows.loc[rows["offset_minutes"] == 0.0].iloc[0].to_dict()
+        path = cal.path_to_end(row, params)
+        assert path is not None
+        assert cycles[0].modelled_cop == pytest.approx(
+            path_cop(
+                path,
+                0.0,
+                path.elapsed_s[-1],
+                params.compressor.two_zone,
+                float(row["t_start_upper"]),
+                tank=params.tank,
+            )
+        )
+
+    def test_power_fitted_over_a_kept_compressor_has_no_failure_reason(
+        self,
+    ) -> None:
+        # The compressor's refit is pinned, so the base's is kept; the
+        # power, unfitted in the base, is fitted over it.
+        frame = recovery_days(14)
+        base = sim.default_params()
+        base = replace(base, unfitted=(*base.unfitted, "power"))
+        fitted, judged, held = sc._keep_better(frame, base, "air_f")
+        assert {j.group: j.kept for j in judged}["compressor"] == "base"
+        assert fitted.power is not None
+        assert fitted.power.power_scale is not None
+        done = sc.Calibrated(
+            fitted,
+            "constant",
+            len(frame),
+            timedelta(minutes=5),
+            0,
+            (),
+            judged=judged,
+            held=held,
+        )
+        term = _terms(done)["Input power scale"]
+        assert term.fitted
+        assert term.why == ""
+
+
+class TestKeepBetterFifthReview:
+    def test_a_score_needs_every_held_out_cycle_modelled(self) -> None:
+        params = sim.default_params()
+        rows = cal.snapshots(recovery_days(3), air="air_f")
+        whole = cal.power_cycles(rows, params)
+        assert len(whole) == 3
+        assert sc._power_error(rows, params) is not None
+        cop = cal.CopCycle(T0, 1000.0, 0.0, 3.0, 500.0, 60.0)
+        with pytest.MonkeyPatch.context() as m:
+            m.setattr(cal, "power_cycles", lambda *_: whole[:2])
+            m.setattr(cal, "cop_cycles", lambda *_: [cop, cop])
+            assert sc._power_error(rows, params) is None
+            assert sc._cop_error(rows, params) is None
+            m.setattr(cal, "cop_cycles", lambda *_: [cop] * 3)
+            assert sc._cop_error(rows, params) is not None
+
+    def test_a_kept_compressor_shows_no_refit_error(self) -> None:
+        frame = recovery_days(14)
+        fitted, judged, held = sc._keep_better(
+            frame, sim.default_params(), "air_f"
+        )
+        assert {j.group: j.kept for j in judged}["compressor"] == "base"
+        done = sc.Calibrated(
+            fitted,
+            "constant",
+            len(frame),
+            timedelta(minutes=5),
+            0,
+            (),
+            judged=judged,
+            held=held,
+        )
+        terms = _terms(done)
+        for name in ("Compressor constant", "Evaporator approach (°F)"):
+            assert terms[name].error == "-"
+
+
+def gap_windows(taus: list[float]) -> tuple[cal.StandbyWindow, ...]:
+    """A quiet window a day for each of ``taus``: a 6 °F zone gap
+    relaxing on that time constant over 6 h, the loss steady at ``UA``."""
+    hours = np.linspace(0.0, 6.0, 37)
+    return tuple(
+        cal.StandbyWindow(
+            start=T0 + timedelta(days=d),
+            end=T0 + timedelta(days=d, hours=6),
+            ua_btu_hr_f=UA,
+            rmse_f=0.1,
+            delta_t_mean_f=50.0,
+            duration_hours=6.0,
+            gap_hours=hours,
+            gap_f=6.0 * np.exp(-hours / tau),
+        )
+        for d, tau in enumerate(taus)
+    )
+
+
+def _keep_gap(
+    windows: tuple[cal.StandbyWindow, ...], base: sim.HeaterParams
+) -> tuple[sim.HeaterParams, sc.Judged, sc.HeldOut]:
+    """``_keep_better`` over ``windows``' standby, the gap's judgement."""
+    fit = cal.StandbyFit(
+        windows=windows,
+        n_quiet=len(windows),
+        n_dropped=0,
+        ua_ref=UA,
+        ua_exponent=0.0,
+        tau_gap_hours=None,
+        n_gap_windows=0,
+        quiet_by="dhw_in_use",
+    )
+    with pytest.MonkeyPatch.context() as m:
+        m.setattr(cal, "fit_standby", lambda *_: fit)
+        done, judged, held = sc._keep_better(recovery_days(1), base, "air_f")
+    (gap,) = [j for j in judged if j.group == "gap_tau"]
+    return done.params, gap, held
+
+
+def _with_tau(tau: float) -> sim.HeaterParams:
+    base = _fitted(UA)
+    return replace(base, tank=replace(base.tank, stratification_gap_tau_h=tau))
+
+
+#: The COP law the synthetic cycles follow, and another.
+COP_LAW = (0.8, 120.0, 0.01)
+OTHER_COP_LAW = (1.3, 40.0, 0.002)
+
+
+def cop_cycles_by(law_at: Any) -> Any:
+    """A stand-in for ``cop_cycles``: a cycle for each of the rows'
+    cycles, its metered energy what ``law_at(start)``'s ``(scale,
+    start-up Wh, lift coefficient)`` says."""
+
+    def cycles(rows: Any, params: sim.HeaterParams, **_: Any) -> Any:
+        starts = rows.loc[rows["offset_minutes"] == 0.0]["start_time"]
+        out = []
+        for t in sorted(set(starts)):
+            day = (t - T0).days
+            heat = 3000.0 + 150 * (day % 4)
+            lift, cop = 40.0 + 6 * (day % 5), 3.0
+            scale, startup, k = law_at(t)
+            ref = params.power.cop_lift_ref_f
+            metered = startup + heat / (
+                scale * cop * float(np.exp(-k * (lift - ref)))
+            )
+            out.append(cal.CopCycle(t, heat, 0.0, cop, metered, lift))
+        return out
+
+    return cycles
+
+
+def _keep_cop(
+    law_at: Any, base: sim.HeaterParams
+) -> tuple[sim.HeaterParams, dict[str, sc.Judged], sc.HeldOut]:
+    with pytest.MonkeyPatch.context() as m:
+        m.setattr(cal, "cop_cycles", cop_cycles_by(law_at))
+        done, judged, held = sc._keep_better(recovery_days(14), base, "air_f")
+    return done.params, {j.group: j for j in judged}, held
+
+
+def _with_cop(law: tuple[float, float, float]) -> sim.HeaterParams:
+    base = sim.default_params()
+    scale, startup, k = law
+    return replace(
+        base,
+        power=replace(
+            base.power, cop_scale=scale, startup_wh=startup, cop_lift_coeff=k
+        ),
+    )
+
+
+class TestKeepBetterSixthReview:
+    def test_a_gap_refit_that_scores_better_replaces_the_base(self) -> None:
+        params, gap, held = _keep_gap(gap_windows([4.0] * 26), _with_tau(1.0))
+        assert gap.kept == "refit"
+        assert gap.n_held == 5 == len(held.gap_windows)
+        assert gap.base_error is not None and gap.refit_error is not None
+        assert gap.refit_error < gap.base_error
+        assert params.tank.stratification_gap_tau_h == pytest.approx(
+            4.0, rel=0.01
+        )
+
+    def test_a_gap_base_the_latest_windows_favour_stays(self) -> None:
+        windows = gap_windows([1.0] * 21 + [4.0] * 5)
+        params, gap, held = _keep_gap(windows, _with_tau(4.0))
+        assert gap.kept == "base"
+        assert len(held.gap_windows) == 5
+        assert gap.base_error is not None and gap.refit_error is not None
+        assert gap.base_error < gap.refit_error
+        assert params.tank.stratification_gap_tau_h == 4.0
+
+    def test_a_cop_refit_that_scores_better_replaces_the_base(self) -> None:
+        base = _with_cop(OTHER_COP_LAW)
+        params, judged, held = _keep_cop(lambda _: COP_LAW, base)
+        cop = judged["cop"]
+        assert cop.kept == "refit"
+        assert cop.n_held == 3
+        assert held.cop_cycles["cycle"].nunique() == 3
+        assert cop.base_error is not None and cop.refit_error is not None
+        assert cop.refit_error < cop.base_error
+        scale, startup, k = COP_LAW
+        assert params.power.cop_scale == pytest.approx(scale, rel=1e-3)
+        assert params.power.startup_wh == pytest.approx(startup, abs=0.5)
+        assert params.power.cop_lift_coeff == pytest.approx(k)
+        # The power scale is judged on its own.
+        assert judged["power_scale"].kept == "refit"
+        assert params.power.power_scale != base.power.power_scale
+
+    def test_a_cop_base_the_latest_cycles_favour_stays(self) -> None:
+        # The refit learns the other law from the earlier cycles; the
+        # latest follow the base's.
+        last = T0 + timedelta(days=11)
+        base = _with_cop(COP_LAW)
+        params, judged, _ = _keep_cop(
+            lambda t: COP_LAW if t >= last else OTHER_COP_LAW, base
+        )
+        cop = judged["cop"]
+        assert cop.kept == "base"
+        assert cop.base_error is not None and cop.refit_error is not None
+        assert cop.base_error < cop.refit_error
+        assert (
+            params.power.cop_scale,
+            params.power.startup_wh,
+            params.power.cop_lift_coeff,
+        ) == COP_LAW
+        assert judged["power_scale"].kept == "refit"
+        assert params.power.power_scale != base.power.power_scale
+
+
+def physics_recoveries(
+    params: sim.HeaterParams, law_at: Any, n: int = 14
+) -> Any:
+    """``n`` reached recoveries a day apart, each lasting what the
+    physics says under ``law_at(day)``'s ``(compressor constant,
+    evaporator approach)`` on ``params``' loss and tank."""
+    import pandas as pd
+
+    frame = pd.DataFrame(
+        {
+            "start_time": [T0 + timedelta(days=d) for d in range(n)],
+            "t_start_lower": [95.0 + 3 * (d % 5) for d in range(n)],
+            "delta_t_lower": [30.0 + 4 * (d % 4) for d in range(n)],
+            "t_amb_mean": [55.0 + 3 * (d % 6) for d in range(n)],
+            "h_amb_start": [50.0] * n,
+            "stratification_gap": [8.0 + (d % 3) for d in range(n)],
+            "reached": [True] * n,
+        }
+    )
+    minutes = [
+        cal.recovery_minutes(
+            frame.iloc[[d]],
+            *law_at(d),
+            compressor=params.compressor,
+            loss=params.loss,
+            tank=params.tank,
+            two_zone=True,
+            gaps=True,
+        )[0]
+        for d in range(n)
+    ]
+    return frame.assign(duration_minutes=minutes)
+
+
+#: Two compressor laws whose recoveries the fit leaves off its bounds.
+COMPRESSOR_LAW = (0.08, 9.0)
+OTHER_COMPRESSOR_LAW = (0.06, 14.0)
+
+
+def _keep_compressor(
+    law_at: Any, base_law: tuple[float, float]
+) -> tuple[cal.Calibration, sc.Judged, sc.HeldOut, sim.HeaterParams]:
+    """``_keep_better`` on a base with ``base_law`` and recoveries under
+    ``law_at``: the calibration, the compressor's judgement, what was
+    held out, and the base."""
+    base = _fitted(UA)
+    k, approach = base_law
+    base = replace(
+        base,
+        compressor=replace(
+            base.compressor,
+            compressor_constant=k,
+            evap_approach_f=approach,
+            two_zone=False,
+        ),
+    )
+    found = physics_recoveries(base, law_at)
+    with pytest.MonkeyPatch.context() as m:
+        m.setattr(cal, "recoveries", lambda *_, **__: found)
+        done, judged, held = sc._keep_better(recovery_days(1), base, "air_f")
+    (comp,) = [j for j in judged if j.group == "compressor"]
+    return done, comp, held, base
+
+
+class TestKeepBetterSeventhReview:
+    def test_an_unpinned_compressor_refit_that_scores_better_wins(
+        self,
+    ) -> None:
+        done, comp, held, base = _keep_compressor(
+            lambda _: COMPRESSOR_LAW, OTHER_COMPRESSOR_LAW
+        )
+        params, refit = done.params, done.compressor
+        assert refit is not None and not refit.hit_bounds
+        assert comp.kept == "refit"
+        assert comp.n_held == 3 == len(held.recoveries)
+        assert comp.base_error is not None and comp.refit_error is not None
+        assert comp.refit_error < comp.base_error
+        # The base's error is on the loss kept before it.
+        assert params.loss == base.loss
+        assert sc._recovery_error(held.recoveries, base) == pytest.approx(
+            comp.base_error
+        )
+        assert comp.refit_error == refit.heldout_mae_minutes
+        c = params.compressor
+        assert (c.compressor_constant, c.evap_approach_f, c.two_zone) == (
+            refit.compressor_constant,
+            refit.evap_approach_f,
+            True,
+        )
+        assert c.compressor_constant != base.compressor.compressor_constant
+
+    def test_a_compressor_base_the_latest_recoveries_favour_stays(
+        self,
+    ) -> None:
+        done, comp, _, base = _keep_compressor(
+            lambda d: COMPRESSOR_LAW if d >= 11 else OTHER_COMPRESSOR_LAW,
+            COMPRESSOR_LAW,
+        )
+        params, refit = done.params, done.compressor
+        assert refit is not None and not refit.hit_bounds
+        assert comp.kept == "base"
+        assert "pinned" not in comp.why
+        assert comp.base_error is not None and comp.refit_error is not None
+        assert comp.base_error < comp.refit_error
+        assert params.compressor == base.compressor
+        assert not params.compressor.two_zone

@@ -150,7 +150,8 @@ Hot water and the heat book
 
 .. automodule:: nwp500.sim.calibration
    :members: calibrate, Calibration, fit_standby, StandbyFit, StandbyWindow,
-      fit_compressor, CompressorFit, clean_draws, CleanDraw, crossing,
+      fit_compressor, CompressorFit, split_recoveries, recovery_minutes,
+      clean_draws, CleanDraw, crossing,
       demonstrated, frontier, capacity, held_out, fit_evidence,
       EvidenceFit, cold_lower_cap, RecordedBook, fit_book_terms, BookFit,
       book_error_bands, book_error_btu, empty_point,
@@ -163,7 +164,7 @@ Hot water and the heat book
       element_off_points, element_power, element_grid, element_runs,
       fit_element_rates, ElementRateFit, day_ci,
       energy_saver_off_deficit, upper_start_edge, fit_power,
-      PowerFit, fit_power_scale,
+      PowerFit, fit_power_scale, power_cycles, cop_cycles, CopCycle,
       fit_cop_scale, solve_cop_fit, solve_cop_scale, draw_free_withdrawn,
       metered_withdrawn, metered_lead,
       path_to_end, with_power, snapshots, recoveries, quiet_windows,
@@ -299,6 +300,7 @@ Recorded history
 
 .. automodule:: nwp500.sim_calibrate
    :members: calibrate, calibrate_changes, Calibrated, report, Term, max_gap,
+      score, Judged, HeldOut, GROUPS, air_unread_note,
       CalibrationInputError, DEFAULT_HUMIDITY_PCT, GAP_SAMPLES, MIN_GAP,
       DEFAULT_BASE_NOTE, NO_AIR_NOTE
 

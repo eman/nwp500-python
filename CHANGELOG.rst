@@ -5,6 +5,22 @@ Changelog
 Unreleased
 ==========
 
+Added
+-----
+- **Refine a fit without making it worse** (``keep_better=True`` on
+  ``sim_calibrate.calibrate`` and ``calibrate_changes``, #184). Each
+  group of terms holds out its latest evidence from its refit (the last
+  fifth, once it has 10 items) and keeps the existing values unless the
+  refit scores better there, by the error its own fit minimizes. The
+  terms in a group are kept or replaced together. ``Calibrated.judged``
+  records each judgement, and the report's reasons give both scores.
+  ``sim_calibrate.score(done, params)`` scores any parameters on that
+  held-out evidence.
+- ``sim.calibration.split_recoveries``, ``recovery_minutes``,
+  ``power_cycles`` and ``cop_cycles``: the evidence the compressor and
+  power fits use, and their predictions, which ``fit_compressor``,
+  ``fit_power_scale`` and ``fit_cop_scale`` now take from.
+
 Fixed
 -----
 - **The report names compressor runs without an air temperature.**
@@ -15,6 +31,14 @@ Fixed
   runs (``n_runs``, ``n_runs_without_air``), and the compressor term's
   reason and the notes say how many had no air
   (``sim_calibrate.air_unread_note``).
+- ``sim.calibration.with_standby`` quotes the fitted UA at the ΔT the
+  law was fitted at (50 °F). It kept the ``ua_ref_delta_t_f`` of the
+  parameters it was given, so a refit applied over parameters quoted at
+  another ΔT ran as a different loss law.
+- ``sim.calibration.fit_cop_scale`` takes the integrator's COP on the
+  heater's own tank (``HeaterParams.tank``), as the simulation does. It
+  used the default tank's mass, so a heater with another tank was fitted
+  against a COP the simulation does not run.
 
 Version 9.7.0 (2026-10-21)
 ==========================
