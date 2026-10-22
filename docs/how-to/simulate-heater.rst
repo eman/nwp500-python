@@ -829,6 +829,28 @@ heater's statuses, book the tank's heat from the record and pass it as
    )
    readiness = sim.time_to_ready(scenario, params, book=book)
 
+With the heater's values recorded as changes instead (Home Assistant's
+entity history, which ``read_heater_history`` reads), book from those,
+with the instants the heater was heard from:
+
+.. code-block:: python
+
+   from nwp500 import sim_home_assistant as ha
+
+   history = await ha.read_heater_history(client, entities, start, now)
+   book = sa.book_from_changes(
+       history.rows,
+       history.observed,
+       params,
+       at=now,
+       flow=meter_flow,
+   )
+
+A span the heater wasn't heard from (an outage, or a silence much
+longer than its usual reporting) breaks the book: it is walked only
+from an anchor after the last one, and is None while the heater isn't
+heard now.
+
 Without a meter, start one only when you know the tank is full and
 quiet (``sa.full_tank_book``).
 

@@ -17,6 +17,23 @@ Added
   ``state_class``. ``State`` carries the ``state_class``, and
   ``reports_from_total`` and ``is_running_total`` are public. A meter
   that reports its volume since the previous report reads as before.
+- **The heat book from a heater's values' changes** (#191).
+  ``sim_adapters.book_from_changes`` books the tank's heat from
+  ``ChangeRows`` and the instants the heater was heard from (a
+  ``HeaterHistory``'s ``rows`` and ``observed``, as
+  ``calibrate_changes`` takes them), with the same steps, anchor search
+  and silent-meter refusal as ``book_from_history``. A span the heater
+  wasn't heard from (a silence longer than ``max_gap`` of the heard
+  instants, or an outage) breaks the book: it is read only from after
+  the last one, and is None while the heater isn't heard at ``at``.
+  ``book_steps_from_changes`` gives the steps, and ``silences`` the
+  unheard spans.
+
+Changed
+-------
+- ``max_gap``, ``GAP_SAMPLES`` and ``MIN_GAP`` are defined in
+  ``sim_adapters`` and documented there. ``sim_calibrate`` still exports
+  them.
 
 Version 9.9.0 (2026-10-22)
 ==========================

@@ -34,7 +34,6 @@ statuses::
 This module needs the ``sim`` extra.
 """
 
-import itertools
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, replace
 from datetime import datetime, timedelta
@@ -53,6 +52,7 @@ from nwp500.sim.params import (
     TankParams,
     params_from_document,
 )
+from nwp500.sim_adapters import GAP_SAMPLES, MIN_GAP, max_gap, silences
 
 if TYPE_CHECKING:
     import pandas as pd
@@ -88,10 +88,6 @@ Reading = tuple[datetime, float]
 
 #: The air's relative humidity when none is given, %: the fits' own.
 DEFAULT_HUMIDITY_PCT = 50.0
-#: Readings further apart than ``GAP_SAMPLES`` times the record's usual
-#: spacing, and at least ``MIN_GAP``, are a span nobody observed.
-GAP_SAMPLES = 4
-MIN_GAP = timedelta(minutes=5)
 
 #: The note when no ``params`` were given.
 DEFAULT_BASE_NOTE = (
@@ -103,32 +99,6 @@ NO_AIR_NOTE = "no air given: the standby loss is not fitted"
 
 class CalibrationInputError(ValueError):
     """An input the calibration cannot use."""
-
-
-def max_gap(instants: Iterable[datetime]) -> timedelta:
-    """The longest spacing between readings at ``instants`` still taken
-    as observed: ``GAP_SAMPLES`` times their median spacing, and at
-    least ``MIN_GAP``. A recorder sees a status every few seconds to
-    every 30 s, so a stop and restart is far longer; an element run can
-    be under a minute, so much longer could hide one."""
-    steps = _steps(instants)
-    steps = np.sort(steps[steps > 0])
-    if not len(steps):
-        return MIN_GAP
-    usual = timedelta(microseconds=int(steps[len(steps) // 2]) // 1000)
-    return max(MIN_GAP, GAP_SAMPLES * usual)
-
-
-def _steps(instants: Iterable[datetime]) -> np.ndarray:
-    """The spacings between ``instants`` in time order, ns."""
-    import pandas as pd
-
-    index: Any = (
-        instants
-        if isinstance(instants, pd.DatetimeIndex)
-        else pd.to_datetime(list(instants), utc=True)
-    )
-    return np.diff(np.sort(index.as_unit("ns").asi8))
 
 
 def _stepped(series: Sequence[Reading]) -> list[Reading]:
@@ -851,9 +821,9 @@ def calibrate_changes(
     # The gaps are the silences between the instants heard from: a
     # change inside one says nothing of the time around it.
     gap = max_gap(heard)
-    silences = [(a, b) for a, b in itertools.pairwise(heard) if b - a > gap]
+    dark = silences(heard, gap)
     frame = sa.change_history(
-        replace(rows, outages=(*rows.outages, *silences)), heard
+        replace(rows, outages=(*rows.outages, *dark)), heard
     )
     if frame.empty:
         raise CalibrationInputError("the history holds no observed instants")
@@ -865,7 +835,7 @@ def calibrate_changes(
         ambient,
         humidity,
         record,
-        gaps=(gap, len(silences)),
+        gaps=(gap, len(dark)),
         keep_better=keep_better,
     )
 
@@ -926,7 +896,7 @@ def _fit(
         humidity = [(first, DEFAULT_HUMIDITY_PCT), (last, DEFAULT_HUMIDITY_PCT)]
     if gaps is None:
         gap = max_gap(index)
-        n_gaps = int((_steps(index) > gap.total_seconds() * 1e9).sum())
+        n_gaps = len(silences(index, gap))
     else:
         gap, n_gaps = gaps
     sa.add_inputs(

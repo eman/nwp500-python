@@ -1318,8 +1318,9 @@ class HeaterEntities:
 @dataclass(frozen=True)
 class HeaterHistory:
     """A heater's history from Home Assistant, as
-    ``sim_calibrate.calibrate_changes`` takes it: its values' changes,
-    the instants it was heard from, and what the reading noted."""
+    ``sim_calibrate.calibrate_changes`` and
+    ``sim_adapters.book_from_changes`` take it: its values' changes, the
+    instants it was heard from, and what the reading noted."""
 
     rows: sa.ChangeRows
     observed: list[datetime]

@@ -16,6 +16,7 @@ import pytest
 pytest.importorskip("pandas")
 
 from nwp500 import sim_adapters as sa
+from nwp500.enums import HeatSource
 from nwp500.models import DeviceStatus
 from nwp500.sim import site_example_params
 from nwp500.sim.book import Step, book_steps, house_gpm
@@ -248,3 +249,141 @@ class TestFromTheHistory:
         assert clean is not None and got is not None
         assert got.heat_btu == pytest.approx(clean.heat_btu)
         assert got.anchor_age_h == clean.anchor_age_h
+
+
+def as_changes(readings: list[Any]) -> tuple[sa.ChangeRows, list[datetime]]:
+    """``readings`` (statuses) as their values' changes and the instants
+    heard from, as a recorder of entity changes keeps them."""
+    rec = sa.record(readings)
+    rows = sa.ChangeRows(
+        upper_f=rec.upper_f,
+        lower_f=rec.lower_f,
+        compressor_on=rec.compressor,
+        upper_element_on=rec.upper_element,
+        lower_element_on=rec.lower_element,
+    )
+    return rows, [t for t, _ in readings]
+
+
+def unheard(observed: list[datetime], a: float, b: float) -> list[datetime]:
+    """``observed`` without the instants from ``a`` to ``b`` hours ago."""
+    return [
+        t
+        for t in observed
+        if not T0 - timedelta(hours=a) < t < T0 - timedelta(hours=b)
+    ]
+
+
+class TestFromTheChanges:
+    @pytest.mark.parametrize(
+        ("hours", "recovery_at", "draw_at"), [(20, 4, 2.0), (72, 30, 25.0)]
+    )
+    def test_it_books_as_the_statuses_do(
+        self,
+        heater: Callable[..., list[Any]],
+        hours: int,
+        recovery_at: float,
+        draw_at: float,
+    ) -> None:
+        p = site_example_params()
+        readings = heater(hours, recovery_at=recovery_at)
+        flow = with_a_draw(meter(hours), draw_at)
+        rows, observed = as_changes(readings)
+        want = sa.book_from_history(readings, p, at=T0, flow=flow)
+        got = sa.book_from_changes(rows, observed, p, at=T0, flow=flow)
+        assert want is not None and got is not None
+        assert got.heat_btu == pytest.approx(want.heat_btu)
+        assert got.anchor_age_h == pytest.approx(want.anchor_age_h)
+
+    def test_the_heat_source_stands_in_for_the_compressor(
+        self, heater: Callable[..., list[Any]]
+    ) -> None:
+        p = site_example_params()
+        readings = heater(20, recovery_at=4)
+        flow = with_a_draw(meter(20), 2.0)
+        rows, observed = as_changes(readings)
+        source = tuple(
+            (t, int(HeatSource.HEATPUMP if on else HeatSource.UNKNOWN))
+            for t, on in rows.compressor_on
+        )
+        by_source = replace(rows, compressor_on=(), heat_source=source)
+        want = sa.book_from_changes(rows, observed, p, at=T0, flow=flow)
+        got = sa.book_from_changes(by_source, observed, p, at=T0, flow=flow)
+        assert want is not None and got is not None
+        assert got.heat_btu == pytest.approx(want.heat_btu)
+        assert got.anchor_age_h == pytest.approx(want.anchor_age_h)
+
+    def test_an_anchor_before_a_silence_does_not_count(
+        self, heater: Callable[..., list[Any]]
+    ) -> None:
+        """Unheard from 3 h to 2.5 h ago, after the only recovery: the
+        heat that left meanwhile is unknown, so there is no book."""
+        p = site_example_params()
+        rows, observed = as_changes(heater(20, recovery_at=4))
+        flow = with_a_draw(meter(20), 2.0)
+        assert (
+            sa.book_from_changes(
+                rows, unheard(observed, 3, 2.5), p, at=T0, flow=flow
+            )
+            is None
+        )
+
+    def test_a_silence_before_the_anchor_changes_nothing(
+        self, heater: Callable[..., list[Any]]
+    ) -> None:
+        p = site_example_params()
+        rows, observed = as_changes(heater(20, recovery_at=4))
+        flow = with_a_draw(meter(20), 2.0)
+        want = sa.book_from_changes(rows, observed, p, at=T0, flow=flow)
+        got = sa.book_from_changes(
+            rows, unheard(observed, 10, 9), p, at=T0, flow=flow
+        )
+        assert want is not None and got is not None
+        assert got.heat_btu == pytest.approx(want.heat_btu)
+
+    def test_an_outage_is_a_silence(
+        self, heater: Callable[..., list[Any]]
+    ) -> None:
+        p = site_example_params()
+        rows, observed = as_changes(heater(20, recovery_at=4))
+        flow = with_a_draw(meter(20), 2.0)
+        out = replace(
+            rows,
+            outages=((T0 - timedelta(hours=3), T0 - timedelta(hours=2.5)),),
+        )
+        assert sa.book_from_changes(out, observed, p, at=T0, flow=flow) is None
+
+    def test_a_heater_not_heard_now_has_no_book(
+        self, heater: Callable[..., list[Any]]
+    ) -> None:
+        p = site_example_params()
+        rows, observed = as_changes(heater(20, recovery_at=4))
+        flow = with_a_draw(meter(20), 2.0)
+        assert (
+            sa.book_from_changes(
+                rows, unheard(observed, 1, -1), p, at=T0, flow=flow
+            )
+            is None
+        )
+        down = replace(rows, outages=((T0 - timedelta(minutes=30), T0),))
+        assert sa.book_from_changes(down, observed, p, at=T0, flow=flow) is None
+        assert sa.book_from_changes(rows, [], p, at=T0, flow=flow) is None
+
+    def test_a_silent_meter_is_refused(
+        self, heater: Callable[..., list[Any]]
+    ) -> None:
+        p = site_example_params()
+        rows, observed = as_changes(heater(20, recovery_at=4))
+        gappy = [
+            r for r in meter(20) if not T0 - timedelta(hours=8) < r[0] < T0
+        ]
+        with pytest.raises(ValueError, match="silent"):
+            sa.book_from_changes(rows, observed, p, at=T0, flow=gappy)
+
+
+class TestTheSilences:
+    def test_spans_longer_than_the_gap(self) -> None:
+        at = [T0 + timedelta(minutes=m) for m in (0, 1, 2, 3, 20, 21, 22)]
+        assert sa.max_gap(at) == sa.MIN_GAP
+        assert sa.silences(at) == [(at[3], at[4])]
+        assert sa.silences(at, timedelta(hours=1)) == []

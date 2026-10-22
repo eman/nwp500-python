@@ -301,9 +301,9 @@ Recorded history
    :members:
 
 .. automodule:: nwp500.sim_calibrate
-   :members: calibrate, calibrate_changes, Calibrated, report, Term, max_gap,
+   :members: calibrate, calibrate_changes, Calibrated, report, Term,
       score, Judged, HeldOut, GROUPS, air_unread_note,
-      CalibrationInputError, DEFAULT_HUMIDITY_PCT, GAP_SAMPLES, MIN_GAP,
+      CalibrationInputError, DEFAULT_HUMIDITY_PCT,
       DEFAULT_BASE_NOTE, NO_AIR_NOTE
 
 

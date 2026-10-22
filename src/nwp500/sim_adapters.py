@@ -1256,6 +1256,29 @@ def _held(
     return out
 
 
+def _book_grid(start: datetime, end: datetime) -> list[datetime]:
+    """The book's grid (``BOOK_GRID_S``) from ``start`` up to ``end``."""
+    start, end = start.astimezone(UTC), end.astimezone(UTC)
+    grid: list[datetime] = []
+    t = start
+    while t < end:
+        grid.append(t)
+        t += timedelta(seconds=BOOK_GRID_S)
+    return grid
+
+
+@dataclass(frozen=True)
+class _Heater:
+    """The heater's columns on the book's grid: the probes (°F; None
+    where unknown), and whether the compressor and each element run."""
+
+    upper: list[float | None]
+    lower: list[float | None]
+    compressor: list[bool]
+    upper_element: list[bool]
+    lower_element: list[bool]
+
+
 def book_steps_from_history(
     readings: Iterable[tuple[datetime, DeviceStatus]],
     *,
@@ -1280,17 +1303,145 @@ def book_steps_from_history(
     reading, this run's or an earlier one's; with none yet, the meter's
     over ``CirculationParams.meter_share`` (all of it circulation), else
     the circulation's priced flow."""
-    p = (params if params is not None else default_params()).book_terms()
-    terms = None if params is None else params.circulation
-    start, end = start.astimezone(UTC), end.astimezone(UTC)
-    grid: list[datetime] = []
-    t = start
-    while t < end:
-        grid.append(t)
-        t += timedelta(seconds=BOOK_GRID_S)
+    grid = _book_grid(start, end)
     statuses = sorted(
         ((t.astimezone(UTC), s) for t, s in readings), key=lambda r: r[0]
     )
+
+    def of(
+        f: Callable[[DeviceStatus], float],
+    ) -> list[tuple[datetime, float]]:
+        return [(t, f(s)) for t, s in statuses]
+
+    def flag(f: Callable[[DeviceStatus], object]) -> list[bool]:
+        return [
+            bool(v) for v in _held(of(lambda s: float(bool(f(s)))), grid, None)
+        ]
+
+    heater = _Heater(
+        upper=_held(
+            of(
+                lambda s: _from_device(
+                    DeciCelsius(s.tank_upper_temperature_raw)
+                )
+            ),
+            grid,
+            None,
+        ),
+        lower=_held(
+            of(
+                lambda s: _from_device(
+                    DeciCelsius(s.tank_lower_temperature_raw)
+                )
+            ),
+            grid,
+            None,
+        ),
+        compressor=flag(lambda s: s.comp_use),
+        upper_element=flag(lambda s: s.heat_upper_use),
+        lower_element=flag(lambda s: s.heat_lower_use),
+    )
+    return _book_steps_on(
+        grid,
+        heater,
+        flow=flow,
+        circulation=circulation,
+        circulation_flow=circulation_flow,
+        inlet=inlet,
+        air=air,
+        params=params,
+    )
+
+
+def book_steps_from_changes(
+    rows: ChangeRows,
+    *,
+    start: datetime,
+    end: datetime,
+    flow: Iterable[tuple[datetime, float]] = (),
+    circulation: Iterable[tuple[datetime, datetime]] = (),
+    circulation_flow: Iterable[tuple[datetime, float]] = (),
+    inlet: Iterable[tuple[datetime, float]] = (),
+    air: Iterable[tuple[datetime, float]] = (),
+    params: HeaterParams | None = None,
+) -> list[BookStep]:
+    """``book_steps_from_history`` from a heater's values' changes
+    (``ChangeRows``) instead of its statuses: each value held until its
+    next change. Without a compressor flag, the heat source says when
+    the compressor runs, and it adds to the elements' flags, as in
+    ``change_history``. Whether the heater was heard from over the span
+    is the caller's (``book_from_changes``)."""
+    grid = _book_grid(start, end)
+
+    def held(changes: Changes) -> list[Any]:
+        return _held(
+            sorted(((t.astimezone(UTC), v) for t, v in changes), key=_at),
+            grid,
+            None,
+        )
+
+    def probe(changes: Changes) -> list[float | None]:
+        return [
+            None if v is None or not math.isfinite(float(v)) else float(v)
+            for v in held(changes)
+        ]
+
+    def flag(changes: Changes) -> list[bool]:
+        return [bool(v) for v in held(changes)]
+
+    source = [-1 if v is None else int(v) for v in held(rows.heat_source)]
+    pump = {int(HeatSource.HEATPUMP), int(HeatSource.HEATPUMP_HEATELEMENT)}
+    element = {
+        int(HeatSource.HEATELEMENT),
+        int(HeatSource.HEATPUMP_HEATELEMENT),
+    }
+    heater = _Heater(
+        upper=probe(rows.upper_f),
+        lower=probe(rows.lower_f),
+        compressor=(
+            flag(rows.compressor_on)
+            if rows.compressor_on
+            # Without its own flag, the heat source says when it runs.
+            else [v in pump for v in source]
+        ),
+        upper_element=[
+            a or v in element
+            for a, v in zip(flag(rows.upper_element_on), source, strict=True)
+        ],
+        lower_element=flag(rows.lower_element_on),
+    )
+    return _book_steps_on(
+        grid,
+        heater,
+        flow=flow,
+        circulation=circulation,
+        circulation_flow=circulation_flow,
+        inlet=inlet,
+        air=air,
+        params=params,
+    )
+
+
+def _at(row: tuple[datetime, Any]) -> datetime:
+    return row[0]
+
+
+def _book_steps_on(
+    grid: list[datetime],
+    heater: _Heater,
+    *,
+    flow: Iterable[tuple[datetime, float]],
+    circulation: Iterable[tuple[datetime, datetime]],
+    circulation_flow: Iterable[tuple[datetime, float]],
+    inlet: Iterable[tuple[datetime, float]],
+    air: Iterable[tuple[datetime, float]],
+    params: HeaterParams | None,
+) -> list[BookStep]:
+    """The book's steps on ``grid``: ``heater``'s columns with the
+    meter, the circulation, the inlet and the air
+    (``book_steps_from_history``)."""
+    p = (params if params is not None else default_params()).book_terms()
+    terms = None if params is None else params.circulation
 
     def series(
         rows: Iterable[tuple[datetime, float]], to: Any
@@ -1300,24 +1451,12 @@ def book_steps_from_history(
             key=lambda r: r[0],
         )
 
-    def of(
-        f: Callable[[DeviceStatus], float],
-    ) -> list[tuple[datetime, float]]:
-        return [(t, f(s)) for t, s in statuses]
-
-    upper = _held(
-        of(lambda s: _from_device(DeciCelsius(s.tank_upper_temperature_raw))),
-        grid,
-        None,
+    upper, lower = heater.upper, heater.lower
+    comp, up_el, lo_el = (
+        heater.compressor,
+        heater.upper_element,
+        heater.lower_element,
     )
-    lower = _held(
-        of(lambda s: _from_device(DeciCelsius(s.tank_lower_temperature_raw))),
-        grid,
-        None,
-    )
-    comp = _held(of(lambda s: float(bool(s.comp_use))), grid, None)
-    up_el = _held(of(lambda s: float(bool(s.heat_upper_use))), grid, None)
-    lo_el = _held(of(lambda s: float(bool(s.heat_lower_use))), grid, None)
     meter = _held(series(flow, _volume_to_sim), grid, FLOW_HOLD)
     run_flow = _held(series(circulation_flow, _volume_to_sim), grid, FLOW_HOLD)
     probe = _held(series(inlet, _to_sim), grid, INLET_HOLD)
@@ -1394,34 +1533,170 @@ def book_from_history(
     run_flow = list(circulation_flow)
     probe = list(inlet)
     airs = list(air)
+    return _book_windows(
+        lambda start: book_steps_from_history(
+            rows,
+            start=start,
+            end=at,
+            flow=flows,
+            circulation=runs,
+            circulation_flow=run_flow,
+            inlet=probe,
+            air=airs,
+            params=params,
+        ),
+        flows,
+        params,
+        at,
+    )
+
+
+def book_from_changes(
+    rows: ChangeRows,
+    observed: Iterable[datetime],
+    params: HeaterParams,
+    *,
+    at: datetime,
+    flow: Iterable[tuple[datetime, float]],
+    circulation: Iterable[tuple[datetime, datetime]] = (),
+    circulation_flow: Iterable[tuple[datetime, float]] = (),
+    inlet: Iterable[tuple[datetime, float]] = (),
+    air: Iterable[tuple[datetime, float]] = (),
+) -> Booked | None:
+    """``book_from_history`` from a heater's values' changes (``rows``)
+    instead of its statuses, with ``observed`` the instants it was heard
+    from, as ``sim_calibrate.calibrate_changes`` takes them
+    (``sim_home_assistant.read_heater_history`` reads both from Home
+    Assistant). The same anchor search, and the same refusal of a
+    silent meter.
+
+    A value that holds writes no change, so only ``observed`` says the
+    heater was heard: a silence between those instants longer than
+    ``max_gap`` of them, or one of ``rows.outages``, is a span nobody
+    saw, and no anchor before it counts (the heat that left meanwhile is
+    unknown). The book is from after the last such span; None when the
+    heater is not heard at ``at``, or there is no anchor since."""
+    at = at.astimezone(UTC)
+    heard = sorted(t for t in (t.astimezone(UTC) for t in observed) if t <= at)
+    if not heard:
+        return None
+    gap = max_gap(heard)
+    if at - heard[-1] > gap:
+        return None
+    since = heard[0]
+    for a, b in [*silences(heard, gap), *rows.outages]:
+        a, b = a.astimezone(UTC), b.astimezone(UTC)
+        if a < at:
+            if b >= at:
+                return None
+            since = max(since, b)
+    flows = sorted((t.astimezone(UTC), v) for t, v in flow)
+    runs = list(circulation)
+    run_flow = list(circulation_flow)
+    probe = list(inlet)
+    airs = list(air)
+    return _book_windows(
+        lambda start: book_steps_from_changes(
+            rows,
+            start=start,
+            end=at,
+            flow=flows,
+            circulation=runs,
+            circulation_flow=run_flow,
+            inlet=probe,
+            air=airs,
+            params=params,
+        ),
+        flows,
+        params,
+        at,
+        since,
+    )
+
+
+def _book_windows(
+    steps: Callable[[datetime], list[BookStep]],
+    flows: Sequence[tuple[datetime, float]],
+    params: HeaterParams,
+    at: datetime,
+    since: datetime | None = None,
+) -> Booked | None:
+    """The book at ``at`` from ``steps`` (the steps from an instant to
+    ``at``): over the last ``max_anchor_age_h`` when that holds an
+    anchor, else the last ``history_h``, neither from before ``since``.
+    Raises ValueError for a meter (``flows``) silent over
+    ``METER_MAX_GAP`` in the window."""
     p = params.book_terms()
 
     def booked(hours: float) -> Booked | None:
         start = at - timedelta(hours=hours)
+        if since is not None:
+            start = max(start, since)
         beats = [start, *(t for t, _ in flows if start <= t <= at), at]
         gap = max(b - a for a, b in itertools.pairwise(beats))
         if gap > METER_MAX_GAP:
             raise ValueError(
                 f"the meter was silent for {gap}; the history is incomplete"
             )
-        return book_steps(
-            book_steps_from_history(
-                rows,
-                start=start,
-                end=at,
-                flow=flows,
-                circulation=runs,
-                circulation_flow=run_flow,
-                inlet=probe,
-                air=airs,
-                params=params,
-            ),
-            p,
-            params.circulation,
-        )
+        return book_steps(steps(start), p, params.circulation)
 
     found = booked(p.max_anchor_age_h)
     return found if found is not None else booked(p.history_h)
+
+
+#: Readings further apart than ``GAP_SAMPLES`` times the record's usual
+#: spacing, and at least ``MIN_GAP``, are a span nobody observed.
+GAP_SAMPLES = 4
+MIN_GAP = timedelta(minutes=5)
+
+
+def max_gap(instants: Iterable[datetime]) -> timedelta:
+    """The longest spacing between readings at ``instants`` still taken
+    as observed: ``GAP_SAMPLES`` times their median spacing, and at
+    least ``MIN_GAP``. A recorder sees a status every few seconds to
+    every 30 s, so a stop and restart is far longer; an element run can
+    be under a minute, so much longer could hide one."""
+    steps = _spacings(instants)
+    steps = np.sort(steps[steps > 0])
+    if not len(steps):
+        return MIN_GAP
+    usual = timedelta(microseconds=int(steps[len(steps) // 2]) // 1000)
+    return max(MIN_GAP, GAP_SAMPLES * usual)
+
+
+def silences(
+    instants: Iterable[datetime], gap: timedelta | None = None
+) -> list[tuple[datetime, datetime]]:
+    """The spans between consecutive ``instants`` longer than ``gap``
+    (``max_gap`` of them by default): spans nobody observed."""
+    import pandas as pd
+
+    index = _instants(instants)
+    if gap is None:
+        gap = max_gap(index)
+    ns = np.sort(index.as_unit("ns").asi8)
+    (wide,) = np.nonzero(np.diff(ns) > gap.total_seconds() * 1e9)
+
+    def instant(i: int) -> datetime:
+        # A Timestamp, which is a datetime (never NaT: a real instant).
+        return cast(datetime, pd.Timestamp(int(ns[i]), tz=UTC))
+
+    return [(instant(i), instant(i + 1)) for i in wide.tolist()]
+
+
+def _instants(instants: Iterable[datetime]) -> pd.DatetimeIndex:
+    import pandas as pd
+
+    return (
+        instants
+        if isinstance(instants, pd.DatetimeIndex)
+        else pd.to_datetime(list(instants), utc=True)
+    )
+
+
+def _spacings(instants: Iterable[datetime]) -> np.ndarray:
+    """The spacings between ``instants`` in time order, ns."""
+    return np.diff(np.sort(_instants(instants).as_unit("ns").asi8))
 
 
 def draw_frame(
