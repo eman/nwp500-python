@@ -33,6 +33,7 @@ Units come from each entity's ``unit_of_measurement``. Entity ids come
 from the caller's configuration (``sources_from``).
 """
 
+import bisect
 import enum
 import itertools
 import logging
@@ -1144,8 +1145,9 @@ def book_flow(
     end: datetime,
     dark: Sequence[Span] = (),
 ) -> list[Reading]:
-    """A meter's flow for the heat book, gal/min, on ``sim.meter.
-    flow_gpm``'s grid from ``start`` through ``end``: each ``volume``
+    """A meter's flow for the heat book, gal/min, in ``sim.meter.STEP``
+    steps from ``start`` to ``end``, the last ending at ``end``: each
+    ``volume``
     report (gallons since the previous one) spread evenly over the
     interval it closes, from the previous report or ``meter.WINDOW``
     before it, whichever is later; on a step no report reaches, the
@@ -1155,32 +1157,31 @@ def book_flow(
 
     Each step's flow is at its start and holds to the next, as the book
     holds a reading (``sim_adapters.FLOW_HOLD``), so a book on any clock
-    reads every step once. No step overlapping a ``dark`` span (the
-    meter unread) is given. A report's volume goes only to steps that
-    are given: over the part of its interval they cover, else to the
-    nearest given step. Each stretch of steps ends with a zero at its
-    end, so the book carries nothing past it, while the gap after it
-    stays unobserved."""
+    of the same step, booked to ``end`` or later, reads every step once.
+    No step overlapping a ``dark`` span (the meter unread) is given. A
+    report's volume goes only to steps that are given: over the part of
+    its interval they cover, else to the nearest given step. Each
+    stretch of steps ends with a zero at its end, so the book carries
+    nothing past it, while the gap after it stays unobserved."""
     step = meter.STEP
     start, end = start.astimezone(UTC), end.astimezone(UTC)
     if end < start:
         return []
-    epoch = datetime(1970, 1, 1, tzinfo=UTC)
-    # The first step's end: it starts on the grid at or after ``start``.
-    first = epoch + step * math.ceil((start - epoch) / step) + step
-    n = math.ceil((end - first) / step) + 1
+    # The steps end at ``end``, so a book to ``end`` reads the last.
+    n = math.floor((end - start) / step)
     if n <= 0:
         return []
+    first = end - n * step
     spans = sorted(dark)
 
     def cell(k: int) -> Span:
-        """Step ``k``'s interval: (its instant - step, its instant]."""
-        hi = first + k * step
-        return hi - step, hi
+        """Step ``k``'s interval: [its start, its start + step)."""
+        lo = first + k * step
+        return lo, lo + step
 
     def index(t: datetime) -> int:
         """The step whose interval holds ``t``."""
-        return math.ceil((t - first) / step)
+        return math.floor((t - first) / step)
 
     given = [
         not any(x < cell(k)[1] and cell(k)[0] < y for x, y in spans)
@@ -1195,15 +1196,22 @@ def book_flow(
                 open_spans[-1] = (open_spans[-1][0], hi)
             else:
                 open_spans.append((lo, hi))
+    shown = [k for k in range(n) if given[k]]
+    if not shown:
+        return []
     gal = [0.0] * n
     reached = [False] * n
 
-    def nearest(t: datetime) -> int | None:
-        k = min(max(index(t), 0), n - 1)
-        after = next((j for j in range(k, n) if given[j]), None)
-        if after is not None:
-            return after
-        return next((j for j in range(k, -1, -1) if given[j]), None)
+    def nearest(t: datetime) -> int:
+        """The given step nearest ``t``; the earlier of two as near."""
+        i = bisect.bisect_left(shown, index(t))
+        near = shown[max(i - 1, 0) : i + 1]
+
+        def away(k: int) -> timedelta:
+            lo, hi = cell(k)
+            return max(lo - t, t - hi, timedelta(0))
+
+        return min(near, key=lambda k: (away(k), k))
 
     prev: datetime | None = None
     for t, v in sorted((t.astimezone(UTC), v) for t, v in volume):
@@ -1215,9 +1223,8 @@ def book_flow(
         length = sum((y - x).total_seconds() for x, y in parts)
         if length <= 0:
             near = nearest(t)
-            if near is not None:
-                gal[near] += v
-                reached[near] = True
+            gal[near] += v
+            reached[near] = True
             continue
         for x, y in parts:
             for k in range(max(index(x), 0), min(index(y), n - 1) + 1):

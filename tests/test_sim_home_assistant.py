@@ -1829,10 +1829,8 @@ def test_an_off_grid_outage_keeps_the_volume_before_it() -> None:
     )
     flow = ha.book_flow(reports, [], base, base + timedelta(minutes=10), [down])
     assert sum(v for _, v in flow) * (10 / 60) == pytest.approx(1.0)
-    assert not any(
-        v > 0 and down[0] < t + timedelta(seconds=10) and t < down[1]
-        for t, v in flow
-    )
+    # It stays on the step nearest it, before the outage.
+    assert all(t < down[0] for t, v in flow if v > 0)
 
 
 def test_the_book_takes_a_final_report_once() -> None:
@@ -1910,3 +1908,24 @@ def test_a_book_on_any_clock_takes_each_gallon_once(offset_s: int) -> None:
     start = base + timedelta(seconds=offset_s)
     end = last + timedelta(minutes=2)
     assert _booked_gal(flow, start, end) == pytest.approx(1.0)
+
+
+@pytest.mark.parametrize("offset_s", [0, 3, 4, 9])
+def test_a_book_to_an_off_grid_now_takes_the_last_gallon(offset_s: int) -> None:
+    """The last reports, 0 and 1 gal at ``now`` - 3 s and ``now``, off
+    the minute: a book only up to ``now`` takes the gallon."""
+    now = datetime(2026, 10, 18, 12, 30, tzinfo=UTC) + timedelta(
+        seconds=offset_s
+    )
+    start = now - timedelta(hours=1)
+    reports = [(now - timedelta(seconds=3), 0.0), (now, 1.0)]
+    flow = ha.book_flow(reports, [], start, now)
+    assert _booked_gal(flow, start, now) == pytest.approx(1.0)
+
+
+def test_a_meter_dark_throughout_gives_no_flow() -> None:
+    """Every step dark: no flow, and no walk of the steps per report."""
+    start = datetime(2026, 10, 15, 12, tzinfo=UTC)
+    end = start + timedelta(hours=72)
+    reports = [(start + timedelta(seconds=30 * i), 0.1) for i in range(1, 8640)]
+    assert ha.book_flow(reports, [], start, end, [(start, end)]) == []
