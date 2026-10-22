@@ -1553,14 +1553,16 @@ def _carried(
     show less than the run's flow, and the steps just outside it show
     the rest. That shortfall, at each edge, is the run's water outside
     it: it is marked as circulation (``circulation_in_meter_gpm``) on
-    the steps outside the edge, nearest first, as far as each shows,
-    and no farther than ``lag``. A tap opened past it keeps its own.
-    Runs closer than twice ``lag`` share the steps between them, so
-    their shortfalls are given together, nearest any run's edge
-    first."""
+    the steps outside that edge within ``lag`` of it, nearest first, as
+    far as each shows. A run no longer than twice ``lag`` has one
+    shortfall, for the steps either side. Where edges' steps overlap
+    (runs close together), what one edge took is moved to another step
+    it may take whenever that lets another edge be covered, so as much
+    of the runs' water as the steps show is marked, and a tap past an
+    edge's reach keeps its own."""
     out = list(steps)
-    carried = [0.0] * len(out)
     per_min = BOOK_GRID_S / 60.0
+    room = [s.flow_gpm * per_min for s in out]
 
     def shortfall(lo: int, hi: int) -> float:
         """The run's water missing from steps ``lo`` to ``hi``, gal."""
@@ -1569,27 +1571,6 @@ def _carried(
             for i in range(lo, hi)
             if out[i].circulating
         )
-
-    def give(gal: float, order: Iterable[int]) -> None:
-        for i in order:
-            if gal <= 1e-12:
-                return
-            room = out[i].flow_gpm * per_min - carried[i]
-            take = min(max(room, 0.0), gal)
-            carried[i] += take
-            gal -= take
-
-    def edges(a: datetime, b: datetime) -> tuple[float, float]:
-        """A run's shortfall near its edges, gal: at its start and at
-        its end; for a run no longer than twice ``lag``, all of it
-        first and none second."""
-        first = bisect.bisect_left(times, a)
-        end = bisect.bisect_left(times, b)
-        if b - a <= 2 * lag:
-            return shortfall(first, end), 0.0
-        head = bisect.bisect_left(times, a + lag, first, end)
-        tail = bisect.bisect_left(times, b - lag, first, end)
-        return shortfall(first, head), shortfall(tail, end)
 
     def outside(lo: datetime, hi: datetime) -> list[int]:
         """The steps from ``lo`` to ``hi`` no run is on."""
@@ -1601,42 +1582,94 @@ def _carried(
             if not out[i].circulating
         ]
 
-    # Runs whose lag windows meet share the steps between them: their
-    # shortfalls are given together.
-    groups: list[list[tuple[datetime, datetime]]] = []
-    for run in sorted(runs):
-        if groups and run[0] - groups[-1][-1][1] < 2 * lag:
-            groups[-1].append(run)
-        else:
-            groups.append([run])
-    for group in groups:
-        if len(group) == 1:
-            ((a, b),) = group
-            head, tail = edges(a, b)
-            if b - a <= 2 * lag:
-                # Edges this close share their shortfall: it goes to the
-                # steps outside either, nearest its edge first.
-                give(
-                    head,
-                    sorted(
-                        outside(a - lag, b + lag),
-                        key=lambda i: max(a - times[i], times[i] - b),
-                    ),
-                )
-                continue
-            give(head, reversed(outside(a - lag, a)))
-            give(tail, outside(b, b + lag))
+    # Each edge's shortfall, gal, and the steps it may go to, nearest
+    # first.
+    need: list[float] = []
+    may: list[list[int]] = []
+    for a, b in sorted(runs):
+        first = bisect.bisect_left(times, a)
+        end = bisect.bisect_left(times, b)
+        if first >= end:
             continue
-        # Each step outside the runs, nearest any run's edge first.
-        near = sorted(
-            outside(group[0][0] - lag, group[-1][1] + lag),
-            key=lambda i: min(
-                max(ra - times[i], times[i] - rb) for ra, rb in group
-            ),
-        )
-        give(sum(sum(edges(ra, rb)) for ra, rb in group), near)
+        if b - a <= 2 * lag:
+            need.append(shortfall(first, end))
+            may.append(
+                sorted(
+                    outside(a - lag, b + lag),
+                    key=lambda i: max(a - times[i], times[i] - b),
+                )
+            )
+            continue
+        head = bisect.bisect_left(times, a + lag, first, end)
+        tail = bisect.bisect_left(times, b - lag, first, end)
+        need.extend([shortfall(first, head), shortfall(tail, end)])
+        may.extend([outside(a - lag, a)[::-1], outside(b, b + lag)])
+    took: list[dict[int, float]] = [{} for _ in need]
+    left = list(need)
+    eps = 1e-12
+    for e, steps_e in enumerate(may):
+        for i in steps_e:
+            if left[e] <= eps:
+                break
+            take = min(room[i], left[e])
+            if take > eps:
+                took[e][i] = took[e].get(i, 0.0) + take
+                room[i] -= take
+                left[e] -= take
+    # An edge left short: free a step it may take by moving what
+    # another edge took there to a step that one may take, and on.
+    holders: dict[int, set[int]] = {}
+    for e, got in enumerate(took):
+        for i in got:
+            holders.setdefault(i, set()).add(e)
+    for e in range(len(need)):
+        while left[e] > eps:
+            # Breadth first over edges: from[edge] = (edge, step) moved.
+            came: dict[int, tuple[int, int] | None] = {e: None}
+            queue = [e]
+            found: tuple[int, int] | None = None
+            while queue and found is None:
+                u = queue.pop(0)
+                for i in may[u]:
+                    if room[i] > eps:
+                        found = (u, i)
+                        break
+                    for v in holders.get(i, ()):
+                        if v not in came and took[v].get(i, 0.0) > eps:
+                            came[v] = (u, i)
+                            queue.append(v)
+            if found is None:
+                break
+            # The path back: the last edge takes free room; each before
+            # takes what the next gave up.
+            path: list[tuple[int, int]] = [found]
+            u = found[0]
+            prev = came[u]
+            while prev is not None:
+                path.append(prev)
+                u = prev[0]
+                prev = came[u]
+            delta = min(left[e], room[found[1]])
+            for (v, _), (_, i) in itertools.pairwise(path):
+                delta = min(delta, took[v].get(i, 0.0))
+            if delta <= eps:
+                break
+            u, i = found
+            took[u][i] = took[u].get(i, 0.0) + delta
+            holders.setdefault(i, set()).add(u)
+            room[i] -= delta
+            for (v, _), (w, j) in itertools.pairwise(path):
+                # ``v`` gives up ``delta`` at ``j``; ``w`` takes it.
+                took[v][j] -= delta
+                took[w][j] = took[w].get(j, 0.0) + delta
+                holders.setdefault(j, set()).add(w)
+            left[e] -= delta
+    carried = [0.0] * len(out)
+    for got in took:
+        for i, gal in got.items():
+            carried[i] += gal
     for i, gal in enumerate(carried):
-        if gal > 0.0:
+        if gal > eps:
             out[i] = replace(
                 out[i], circulation_in_meter_gpm=gal / per_min / share
             )

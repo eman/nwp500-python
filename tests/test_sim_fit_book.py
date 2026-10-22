@@ -783,3 +783,101 @@ def test_two_close_runs_share_the_water_between_them() -> None:
     )
     house = sum(house_gpm(s, terms) * s.seconds / 60 for s in steps)
     assert house == pytest.approx(0.0, abs=1e-9)
+
+
+def every(
+    flow: list[tuple[datetime, float]], period_s: int, offset_s: int = 0
+) -> list[tuple[datetime, float]]:
+    """``flow`` as a meter reporting its volume every ``period_s`` (a
+    multiple of 5 s), the reports ``offset_s`` after the first step,
+    each spread evenly back over the period it closes in the book's
+    10 s steps."""
+    halves = [v for _, v in flow for _ in range(2)]
+    spread = [0.0] * len(halves)
+    k = period_s // 5
+    for end in range(offset_s // 5 or k, len(halves) + 1, k):
+        lo = max(end - k, 0)
+        mean = sum(halves[lo:end]) / k
+        for i in range(lo, end):
+            spread[i] = mean
+    return [
+        (t, (spread[2 * i] + spread[2 * i + 1]) / 2)
+        for i, (t, _) in enumerate(flow)
+    ]
+
+
+@pytest.mark.parametrize("tap", ["before", "after", None])
+def test_close_runs_leave_a_tap_its_water(tap: str | None) -> None:
+    """Two 15 min runs at 2 gal/min, 100 s apart, on 90 s volume
+    reports aligned with the first, and a 2 gal/min tap for 30 s just
+    before the first or after the second: the tap's gallon is the only
+    household water, each edge taking back only its own run's."""
+    from nwp500.sim.book import house_gpm
+
+    assert SITE.circulation is not None
+    terms = replace(SITE.circulation, flow_gpm=2.0, meter_share=1.0)
+    params = replace(SITE, circulation=terms)
+    a = T0 + timedelta(minutes=30)
+    runs = [
+        (a, a + timedelta(minutes=15)),
+        (
+            a + timedelta(minutes=15, seconds=100),
+            a + timedelta(minutes=30, seconds=100),
+        ),
+    ]
+    taps = {
+        "before": (a - timedelta(seconds=30), a),
+        "after": (runs[1][1], runs[1][1] + timedelta(seconds=30)),
+    }
+    n = 6 * 90
+
+    def at(t: datetime) -> float:
+        pump = 2.0 if any(x <= t < y for x, y in runs) else 0.0
+        tapped = tap is not None and taps[tap][0] <= t < taps[tap][1]
+        return pump + (2.0 if tapped else 0.0)
+
+    truth = [(T0 + i * STEP, at(T0 + i * STEP)) for i in range(n)]
+    steps = sa.book_steps_from_changes(
+        sa.ChangeRows(upper_f=[(T0, 120.0)], lower_f=[(T0, 120.0)]),
+        start=T0,
+        end=T0 + n * STEP,
+        flow=every(truth, 90),
+        circulation=runs,
+        circulation_flow=sa.run_flow(runs, terms.flow_gpm),
+        meter_lag=timedelta(seconds=90),
+        params=params,
+    )
+    # Where the household water is: before the first run, after the
+    # last, or anywhere else.
+    where = {"before": 0.0, "after": 0.0, None: 0.0}
+    for i, s in enumerate(steps):
+        t = T0 + i * STEP
+        side = (
+            "before" if t < runs[0][0] else "after" if t >= runs[1][1] else None
+        )
+        where[side] += house_gpm(s, terms) * s.seconds / 60
+    want = {"before": 0.0, "after": 0.0, None: 0.0}
+    if tap is not None:
+        want[tap] = 1.0
+    assert where == pytest.approx(want, abs=1e-9)
+
+
+def test_too_few_run_pairs_keep_the_loops_measured_flow() -> None:
+    """12 clean runs read the loop at 1 gal/min, seen by the meter,
+    but a silence leaves 8 pairs with a run, too few to fit its loss:
+    the loss is the base's, and the flow and share are the runs'."""
+    base = CirculationParams(
+        displaced_gal=5.0, flow_gpm=0.5, loss_btu_per_gal=150.0, meter_share=0.0
+    )
+    params = replace(NO_BASE, circulation=base)
+    h = history(params, 24, 150.0, runs_in=12, truth=OTHER)
+    h["observed"] = [
+        t
+        for t in h["observed"]
+        if not T0 + timedelta(hours=6) < t < T0 + timedelta(hours=24)
+    ]
+    got = fit(params, h)
+    assert got.run_pairs < sim_calibrate.MIN_RUN_PAIRS
+    assert got.kept == "refit", got.why
+    assert got.circulation == replace(base, flow_gpm=RUN_GPM, meter_share=1.0)
+    assert_book(got.book, OTHER)

@@ -426,8 +426,8 @@ pair:
   base's flow, else 1 gal/min.
 - **The loop's loss per gallon:** on 10 pairs with a run between,
   with the book's terms. With fewer, the loss is
-  ``params.circulation``'s, and without one, the pairs with a run are
-  left out.
+  ``params.circulation``'s, with the flow and share read from the runs,
+  and without one, the pairs with a run are left out.
 
 ``displaced_gal`` and ``run_gap_min`` come from ``params.circulation``,
 else ``site_example_params``': the book can't tell them.

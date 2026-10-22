@@ -1694,7 +1694,10 @@ def fit_book(
                 "the loop's loss",
             ]
     # With the loss held, nothing is fitted on its bound but the book.
-    return cast(BookTermsFit, attempt(base, False, notes))
+    # The loop's flow and share, read from its runs, are kept with the
+    # base's loss; without a base, its runs can't be priced.
+    held = loop if loop is not None and base is not None else base
+    return cast(BookTermsFit, attempt(held, False, notes))
 
 
 #: The order ``fit_book`` takes its terms in when the pairs can't tell
