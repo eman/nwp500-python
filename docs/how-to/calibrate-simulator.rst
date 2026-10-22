@@ -373,10 +373,11 @@ Fit the heat book
 The heat book (``book_from_changes``) counts the heat the tank holds
 from the compressor's heat rate and its slope with the air, the standby
 UA, and, with a circulation pump, the loop's loss per gallon
-(``CirculationParams``). ``fit_book`` fits them together from the
-heater's history, its meter, and the pump's runs, with no flow sensor on
-the pump. Read the water use with the heater's history, in the same
-client:
+(``CirculationParams.loss_btu_per_gal``). ``fit_book`` fits them
+together from the heater's history, the household's draws, and the
+pump's runs with the loop's flow. The draws and the loop's flow are
+yours to give, apart from each other: the fit takes every gallon of the
+draws as hot water drawn, and each run at the loop's flow.
 
 .. code-block:: python
 
@@ -388,23 +389,20 @@ client:
        history = await ha.read_heater_history(client, entities, start, end)
        record = await ha.record_inputs(client, ha.Entities(air=..., humidity=...),
                                        start, end)
-       use = await ha.read_water_use(client, ha.Entities(
-           meter_volume=..., circulation_speed=...), now=end,
-           lookback=end - start)
    params = sim_calibrate.calibrate_changes(
        history.rows, history.observed, record=record, notes=history.notes
    ).calibration.params
-   if use.runs is not None:
-       fit = sim_calibrate.fit_book(
-           history.rows, history.observed, params,
-           flow=use.flow, runs=use.runs, air=record.air or (),
-       )
-       params = replace(params, book=fit.book, circulation=fit.circulation)
+   fit = sim_calibrate.fit_book(
+       history.rows, history.observed, params,
+       flow=draws, runs=runs, circulation_flow=loop_flow,
+       air=record.air or (),
+   )
+   params = replace(params, book=fit.book)
 
-``use.runs`` is None when the pump's runs couldn't be read, and empty
-without a pump. ``read_water_use``'s flow is gal/min and
-``record_inputs``' air °F, as the fit takes them. The meter is the
-heater's supply: the book takes every gallon it reads as hot.
+``draws`` and ``loop_flow`` are (instant, gal/min) readings and ``runs``
+the pump's (start, end) spans; ``record_inputs``' air is °F, as the fit
+takes it. ``fit.loss_btu_per_gal`` is the loop's loss for your
+``CirculationParams`` (None without one).
 
 The fit reads the pairs of quiet full tanks up to
 ``book.max_anchor_age_h`` apart, and fits each term for the least mean
@@ -414,62 +412,40 @@ pair:
 - **The book's terms:** the compressor's heat rate and slope, and the
   standby UA, on every pair. A term the pairs can't tell apart from
   the others (the slope, with the air never off one temperature) stays
-  at ``params.book``. The rest of the
-  book (its draw line, the anchors' age, the valve's line) is
-  ``params``'.
-- **What the meter sees of a run:** the median meter flow over the
-  runs' clean minutes (no more than ``book.draw_gpm`` over the run's
-  own median, so no tap was open, and clear of each edge by
-  ``meter_lag``), from 10 clean runs over 3 days. It is
-  the run's flow, with ``meter_share`` 1. Under 0.05 gal/min the meter
-  isn't on the loop: ``meter_share`` is 0 and a run is priced at the
-  base's flow, else 1 gal/min.
+  at ``params.book``. The rest of the book (its draw line, the anchors'
+  age, the valve's line) is ``params``'.
 - **The loop's loss per gallon:** on 10 pairs with a run between,
   with the book's terms. With fewer, the loss is
-  ``params.circulation``'s, with the flow and share read from the runs,
-  and without one, the pairs with a run are left out.
-
-``displaced_gal`` and ``run_gap_min`` come from ``params.circulation``,
-else ``site_example_params``': the book can't tell them.
+  ``params.circulation``'s, and without one, the pairs with a run are
+  left out. A pair with a run that has no flow reading is left out.
 
 The fit needs 10 pairs. It holds out the latest fifth and replaces the
 base only when it books them no worse. A term on its bound
 (``sim.calibration.BOOK_TERM_BOUNDS``) is no fit: the book misses
 something between those anchors that the term is standing in for. The
 loop's loss on its bound, or one the pairs can't tell from the book's
-terms (runs that follow the recoveries), leaves the loss out; any other
-term on its bound keeps the base. ``fit.kept`` says which it kept and ``fit.why``
-why. A span the heater wasn't heard from, a probe read nothing, or the
-meter was silent over an hour, breaks the book.
+terms (runs that follow the recoveries), leaves the loss at the base's;
+any other term on its bound keeps the base. ``fit.kept`` says which it
+kept and ``fit.why`` why. A span the heater wasn't heard from, a probe
+read nothing, or the draws were silent over an hour, breaks the book.
 
 A pair with a run needs a quiet full tank on each side of it, so they
 come slowly. With a pump running about once a day, one installation had
 5 in 14 days and 19 in 42: fit on four weeks or more, and raise Home
 Assistant's ``purge_keep_days`` to keep them.
 
-Book with the terms as they were fitted: each run at its own flow, so a
-tap open during a run stays a draw.
+Book with the same inputs, and a ``CirculationParams`` with
+``meter_share`` 0, since the draws hold none of the loop's water:
 
 .. code-block:: python
 
-   terms = params.circulation
-   book = None
-   # Unknown runs, or runs without the terms to price them, can't be
-   # booked.
-   if use.runs is not None and (terms is not None or not use.runs):
-       book = sa.book_from_changes(
-           history.rows, history.observed, params, at=end,
-           flow=use.flow, circulation=use.runs,
-           circulation_flow=(
-               sa.run_flow(use.runs, terms.flow_gpm) if terms else ()
-           ),
-           meter_lag=sim_calibrate.METER_LAG,
-           air=record.air or (),
-       )
-
-A meter that reports volumes carries a run's water into the reports
-either side of it. ``meter_lag`` keeps that water, the run's shortfall
-near each edge, from reading as a draw.
+   loop = replace(params.circulation, loss_btu_per_gal=fit.loss_btu_per_gal,
+                  meter_share=0.0)
+   book = sa.book_from_changes(
+       history.rows, history.observed, replace(params, circulation=loop),
+       at=end, flow=draws, circulation=runs, circulation_flow=loop_flow,
+       air=record.air or (),
+   )
 
 
 Limitations

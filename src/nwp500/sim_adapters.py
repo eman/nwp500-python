@@ -42,7 +42,6 @@ Example::
     result = sim.simulate(scenario, sa.params(feature))
 """
 
-import bisect
 import itertools
 import math
 from array import array
@@ -1286,8 +1285,7 @@ def run_flow(
     """``runs`` at ``flow_gpm`` (gal/min) as the circulation's own flow
     readings on the book's grid, for ``book_from_changes``'s
     ``circulation_flow`` where no sensor reads the pump: a run is booked
-    at its flow (``CirculationParams.flow_gpm``), and the meter's excess
-    over it stays a draw."""
+    at its flow (``CirculationParams.flow_gpm``)."""
     out: list[tuple[datetime, float]] = []
     step = timedelta(seconds=BOOK_GRID_S)
     for t, end in sorted(
@@ -1385,7 +1383,6 @@ def book_steps_from_changes(
     inlet: Iterable[tuple[datetime, float]] = (),
     air: Iterable[tuple[datetime, float]] = (),
     params: HeaterParams | None = None,
-    meter_lag: timedelta = timedelta(0),
 ) -> list[BookStep]:
     """``book_steps_from_history`` from a heater's values' changes
     (``ChangeRows``) instead of its statuses: each value held until its
@@ -1394,8 +1391,7 @@ def book_steps_from_changes(
     Without a compressor flag, the heat source says when the compressor
     runs, and it adds to the elements' flags, as in
     ``change_history``. Whether the heater was heard from over the span
-    is the caller's (``book_from_changes``). ``meter_lag`` as for
-    ``book_from_changes``."""
+    is the caller's (``book_from_changes``)."""
     grid = _book_grid(start, end)
 
     def held(changes: Changes) -> list[Any]:
@@ -1445,7 +1441,6 @@ def book_steps_from_changes(
         air=air,
         params=params,
         preferred=False,
-        meter_lag=meter_lag,
     )
 
 
@@ -1464,7 +1459,6 @@ def _book_steps_on(
     air: Iterable[tuple[datetime, float]],
     params: HeaterParams | None,
     preferred: bool,
-    meter_lag: timedelta = timedelta(0),
 ) -> list[BookStep]:
     """The book's steps on ``grid``: ``heater``'s columns with the
     meter, the circulation, the inlet and the air
@@ -1498,7 +1492,6 @@ def _book_steps_on(
         (a.astimezone(UTC), b.astimezone(UTC)) for a, b in circulation
     )
     steps: list[BookStep] = []
-    times: list[datetime] = []
     settled: float | None = None
     for i, at in enumerate(grid):
         u, lo, a_f, in_f = upper[i], lower[i], amb[i], probe[i]
@@ -1532,148 +1525,7 @@ def _book_steps_on(
                 lower_element=bool(lo_el[i]),
             )
         )
-        times.append(at)
-    if terms is not None and terms.meter_share > 0.0 and meter_lag:
-        steps = _carried(steps, times, runs, terms.meter_share, meter_lag)
     return steps
-
-
-def _carried(
-    steps: list[BookStep],
-    times: list[datetime],
-    runs: Sequence[tuple[datetime, datetime]],
-    share: float,
-    lag: timedelta,
-) -> list[BookStep]:
-    """``steps`` with a run's water that a meter reporting volumes
-    carries past its edges kept out of the draws.
-
-    A report that closes over a run's edge spreads the run's water over
-    its whole interval, so the run's steps within ``lag`` of the edge
-    show less than the run's flow, and the steps just outside it show
-    the rest. That shortfall, at each edge, is the run's water outside
-    it: it is marked as circulation (``circulation_in_meter_gpm``) on
-    the steps outside that edge within ``lag`` of it, nearest first, as
-    far as each shows. A run no longer than twice ``lag`` has one
-    shortfall, for the steps either side. Where edges' steps overlap
-    (runs close together), what one edge took is moved to another step
-    it may take whenever that lets another edge be covered, so as much
-    of the runs' water as the steps show is marked, and a tap past an
-    edge's reach keeps its own."""
-    out = list(steps)
-    per_min = BOOK_GRID_S / 60.0
-    room = [s.flow_gpm * per_min for s in out]
-
-    def shortfall(lo: int, hi: int) -> float:
-        """The run's water missing from steps ``lo`` to ``hi``, gal."""
-        return sum(
-            max(share * out[i].circulation_gpm - out[i].flow_gpm, 0.0) * per_min
-            for i in range(lo, hi)
-            if out[i].circulating
-        )
-
-    def outside(lo: datetime, hi: datetime) -> list[int]:
-        """The steps from ``lo`` to ``hi`` no run is on."""
-        return [
-            i
-            for i in range(
-                bisect.bisect_left(times, lo), bisect.bisect_left(times, hi)
-            )
-            if not out[i].circulating
-        ]
-
-    # Each edge's shortfall, gal, and the steps it may go to, nearest
-    # first.
-    need: list[float] = []
-    may: list[list[int]] = []
-    for a, b in sorted(runs):
-        first = bisect.bisect_left(times, a)
-        end = bisect.bisect_left(times, b)
-        if first >= end:
-            continue
-        if b - a <= 2 * lag:
-            need.append(shortfall(first, end))
-            may.append(
-                sorted(
-                    outside(a - lag, b + lag),
-                    key=lambda i: max(a - times[i], times[i] - b),
-                )
-            )
-            continue
-        head = bisect.bisect_left(times, a + lag, first, end)
-        tail = bisect.bisect_left(times, b - lag, first, end)
-        need.extend([shortfall(first, head), shortfall(tail, end)])
-        may.extend([outside(a - lag, a)[::-1], outside(b, b + lag)])
-    took: list[dict[int, float]] = [{} for _ in need]
-    left = list(need)
-    eps = 1e-12
-    for e, steps_e in enumerate(may):
-        for i in steps_e:
-            if left[e] <= eps:
-                break
-            take = min(room[i], left[e])
-            if take > eps:
-                took[e][i] = took[e].get(i, 0.0) + take
-                room[i] -= take
-                left[e] -= take
-    # An edge left short: free a step it may take by moving what
-    # another edge took there to a step that one may take, and on.
-    holders: dict[int, set[int]] = {}
-    for e, got in enumerate(took):
-        for i in got:
-            holders.setdefault(i, set()).add(e)
-    for e in range(len(need)):
-        while left[e] > eps:
-            # Breadth first over edges: from[edge] = (edge, step) moved.
-            came: dict[int, tuple[int, int] | None] = {e: None}
-            queue = [e]
-            found: tuple[int, int] | None = None
-            while queue and found is None:
-                u = queue.pop(0)
-                for i in may[u]:
-                    if room[i] > eps:
-                        found = (u, i)
-                        break
-                    for v in holders.get(i, ()):
-                        if v not in came and took[v].get(i, 0.0) > eps:
-                            came[v] = (u, i)
-                            queue.append(v)
-            if found is None:
-                break
-            # The path back: the last edge takes free room; each before
-            # takes what the next gave up.
-            path: list[tuple[int, int]] = [found]
-            u = found[0]
-            prev = came[u]
-            while prev is not None:
-                path.append(prev)
-                u = prev[0]
-                prev = came[u]
-            delta = min(left[e], room[found[1]])
-            for (v, _), (_, i) in itertools.pairwise(path):
-                delta = min(delta, took[v].get(i, 0.0))
-            if delta <= eps:
-                break
-            u, i = found
-            took[u][i] = took[u].get(i, 0.0) + delta
-            holders.setdefault(i, set()).add(u)
-            room[i] -= delta
-            for (v, _), (w, j) in itertools.pairwise(path):
-                # ``v`` gives up ``delta`` at ``j``; ``w`` takes it.
-                took[v][j] -= delta
-                took[w][j] = took[w].get(j, 0.0) + delta
-                holders.setdefault(j, set()).add(w)
-            left[e] -= delta
-    carried = [0.0] * len(out)
-    for got in took:
-        for i, gal in got.items():
-            carried[i] += gal
-    for i, gal in enumerate(carried):
-        if gal > eps:
-            out[i] = replace(
-                out[i], circulation_in_meter_gpm=gal / per_min / share
-            )
-    return out
 
 
 def book_from_history(
@@ -1740,7 +1592,6 @@ def book_from_changes(
     circulation_flow: Iterable[tuple[datetime, float]] = (),
     inlet: Iterable[tuple[datetime, float]] = (),
     air: Iterable[tuple[datetime, float]] = (),
-    meter_lag: timedelta = timedelta(0),
 ) -> Booked | None:
     """``book_from_history`` from a heater's values' changes (``rows``)
     instead of its statuses, with ``observed`` the instants it was heard
@@ -1750,10 +1601,6 @@ def book_from_changes(
     silent meter. Like the rows and the Home Assistant readers'
     (``read_water_use``), ``flow`` and ``circulation_flow`` are gal/min
     and ``inlet`` and ``air`` °F, whatever the preferred units.
-    ``meter_lag`` is how far a meter's report carries water from either
-    side of it (``sim.meter.WINDOW`` for ``read_water_use``'s flow): the
-    run's water a report carries past a run's edge, the run's shortfall
-    within that of the edge, isn't a draw either.
 
     A value that holds writes no change, so only ``observed`` says the
     heater was heard: a silence between those instants longer than
@@ -1793,7 +1640,6 @@ def book_from_changes(
             inlet=probe,
             air=airs,
             params=params,
-            meter_lag=meter_lag,
         ),
         flows,
         params,

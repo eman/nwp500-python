@@ -44,24 +44,19 @@ Added
   it, with the same result and notes.
 - ``sim_adapters.cold_supply(..., window=)``: how far back a long draw
   counts (72 hours by default).
-- **The heat book's terms and the circulation's, fitted together**
-  (#196). ``sim_calibrate.fit_book`` fits the book's compressor heat
-  rate and slope with the air, its standby UA and a circulation loop's
-  ``CirculationParams`` from a heater's values' changes, its meter's
-  flow and the pump's runs, with no flow sensor on the pump. The loop's
-  flow is what the meter sees of a run (the median over clean run
-  minutes, ``meter_share`` 1; 0 with a nominal flow when the meter
-  isn't on the loop), and its loss per gallon is fitted with the book's
-  terms on the pairs of quiet full tanks with a run between. It needs
-  10 pairs (10 with a run for the loss), and keeps the base unless the
+- **The heat book's terms and the circulation loop's loss, fitted
+  together** (#196). ``sim_calibrate.fit_book`` fits the book's
+  compressor heat rate and slope with the air, its standby UA and a
+  circulation loop's loss per gallon from a heater's values' changes,
+  the household's draws, and the pump's runs with the loop's flow, each
+  given apart from the other. The loss is fitted with the book's terms
+  on the pairs of quiet full tanks with a run between. It needs 10
+  pairs (10 with a run for the loss), and keeps the base unless the
   refit books the held-out latest fifth no worse, and unless a term
   reaches its bound (``BookTermsFit``). ``sim.calibration.fit_terms_l1``
   fits the terms exactly on ``RecordedBook.pair_terms``, within
-  ``BOOK_TERM_BOUNDS``. ``sim_adapters.run_flow`` gives the runs at
-  their flow, the book's ``circulation_flow`` where no sensor reads the
-  pump, and ``book_from_changes(..., meter_lag=)`` keeps the run's water
-  a volume-reporting meter's reports carry past its edges from reading
-  as a draw.
+  ``BOOK_TERM_BOUNDS``. ``sim_adapters.run_flow`` gives runs at a flow
+  as the book's ``circulation_flow``.
 
 Fixed
 -----

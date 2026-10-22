@@ -304,9 +304,6 @@ Recorded history
 .. automodule:: nwp500.sim_calibrate
    :members: calibrate, calibrate_changes, Calibrated, report, Term,
       fit_book, BookTermsFit, MIN_BOOK_PAIRS, MIN_RUN_PAIRS,
-      MIN_CIRCULATION_RUNS,
-      MIN_CIRCULATION_DAYS, METER_SEES_CIRCULATION_GPM,
-      NOMINAL_CIRCULATION_GPM, METER_LAG,
       score, Judged, HeldOut, GROUPS, air_unread_note,
       CalibrationInputError, DEFAULT_HUMIDITY_PCT,
       DEFAULT_BASE_NOTE, NO_AIR_NOTE
