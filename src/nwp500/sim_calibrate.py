@@ -1309,8 +1309,10 @@ def fit_book(
     with the air never off one temperature) is held at the base. The
     rest of the book (the draw line, the anchors' age, the valve's line)
     is ``params``'. Without the loss fitted, it is the base's, and
-    without a base, the pairs with a run in them are left out, as are
-    those with a run that has no flow reading.
+    without a base, the pairs with a run in them are left out. A run's
+    flow is its readings, the first from its start; readings outside
+    the runs are not used, and the pairs with a run that has none are
+    left out.
 
     It refits only on ``MIN_BOOK_PAIRS`` pairs: the latest fifth is held
     out of the refit, which replaces the base only when it books them no
@@ -1342,12 +1344,19 @@ def fit_book(
     flow_rows = finite(flow)
     loop_rows = finite(circulation_flow)
     run_spans = sorted((a.astimezone(UTC), b.astimezone(UTC)) for a, b in runs)
-    # A run with a flow reading in it is priced at that flow.
+    # Each run's flow is its own readings, its first from its start; one
+    # without any is booked at ``_UNPRICED_GPM``, and isn't priced.
+    # Readings outside the runs are none of theirs.
     loop_times = [t for t, _ in loop_rows]
-    priced = [
-        bisect_left(loop_times, a) < bisect_left(loop_times, b)
-        for a, b in run_spans
-    ]
+    priced: list[bool] = []
+    run_rows: list[tuple[datetime, float]] = []
+    for a, b in run_spans:
+        inside = loop_rows[
+            bisect_left(loop_times, a) : bisect_left(loop_times, b)
+        ]
+        priced.append(bool(inside))
+        run_rows.append((a, inside[0][1] if inside else _UNPRICED_GPM))
+        run_rows.extend(inside)
     inlets, airs = list(inlet), list(air)
     seen_n = {"pairs": 0, "run_pairs": 0}
 
@@ -1419,8 +1428,7 @@ def fit_book(
         if (b - a).total_seconds() >= _MIN_SEGMENT_H * 3600
     ]
 
-    # The loop's terms for booking: the draws hold none of its water,
-    # and a run without a flow reading is booked at ``_UNPRICED_GPM``.
+    # The loop's terms for booking: the draws hold none of its water.
     # The loss is each fit's own (``errors``, ``pair_terms``).
     template = base or SITE_CIRCULATION
     terms = CirculationParams(
@@ -1439,7 +1447,7 @@ def fit_book(
                 end=b,
                 flow=flow_rows,
                 circulation=run_spans,
-                circulation_flow=loop_rows,
+                circulation_flow=run_rows,
                 inlet=inlets,
                 air=airs,
                 params=with_terms,

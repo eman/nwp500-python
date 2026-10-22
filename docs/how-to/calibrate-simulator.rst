@@ -434,18 +434,29 @@ come slowly. With a pump running about once a day, one installation had
 5 in 14 days and 19 in 42: fit on four weeks or more, and raise Home
 Assistant's ``purge_keep_days`` to keep them.
 
-Book with the same inputs, and a ``CirculationParams`` with
-``meter_share`` 0, since the draws hold none of the loop's water:
+Book with the same inputs. Runs are priced with the loop's loss, in a
+``CirculationParams`` of your installation's with ``meter_share`` 0,
+since the draws hold none of the loop's water; without a loss, they
+can't be booked:
 
 .. code-block:: python
 
-   loop = replace(params.circulation, loss_btu_per_gal=fit.loss_btu_per_gal,
-                  meter_share=0.0)
-   book = sa.book_from_changes(
-       history.rows, history.observed, replace(params, circulation=loop),
-       at=end, flow=draws, circulation=runs, circulation_flow=loop_flow,
-       air=record.air or (),
-   )
+   from nwp500.sim.params import CirculationParams
+
+   book = None
+   loss = fit.loss_btu_per_gal
+   if loss is not None or not runs:
+       loop = None
+       if loss is not None:
+           loop = CirculationParams(
+               displaced_gal=..., flow_gpm=..., loss_btu_per_gal=loss,
+               meter_share=0.0,
+           )
+       book = sa.book_from_changes(
+           history.rows, history.observed, replace(params, circulation=loop),
+           at=end, flow=draws, circulation=runs, circulation_flow=loop_flow,
+           air=record.air or (),
+       )
 
 
 Limitations

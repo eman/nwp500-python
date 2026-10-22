@@ -50,7 +50,7 @@ def air_at(cycle: int) -> float:
 
 
 #: The loop's flow during a run, gal/min.
-RUN_GPM = 1.0
+RUN_GPM = 2.0
 
 
 def no_pump(params: HeaterParams, cycles: int, **kw: Any) -> dict[str, Any]:
@@ -628,3 +628,24 @@ def test_a_run_without_its_flow_leaves_its_pairs_out() -> None:
     assert got.loss_btu_per_gal == SITE_CIRCULATION.loss_btu_per_gal
     assert got.kept == "refit", got.why
     assert_book(got.book, OTHER)
+
+
+def test_a_runs_first_reading_late_in_it_holds_from_its_start() -> None:
+    """Each run's flow first read halfway through it: the run is booked
+    at that flow from its start, as if read all through it."""
+    h = history(SITE, 16, 150.0)
+    late = [(a + (b - a) / 2, RUN_GPM) for a, b in h["runs"]]
+    got = fit(SITE, h | {"circulation_flow": late})
+    assert got == fit(SITE, h)
+    assert got.loss_btu_per_gal == pytest.approx(150.0, abs=1.0)
+
+
+def test_readings_outside_the_runs_are_none_of_theirs() -> None:
+    """The loop's flow read as 0 just before each run and never in it:
+    the runs are unpriced, as with no readings at all, and still break
+    the quiet anchors."""
+    h = history(SITE, 24, 150.0, run_every=2, truth=OTHER)
+    zeros = [(a - timedelta(seconds=5), 0.0) for a, _ in h["runs"]]
+    got = fit(SITE, h | {"circulation_flow": zeros})
+    assert got == fit(SITE, h | {"circulation_flow": []})
+    assert got.run_pairs == 0
