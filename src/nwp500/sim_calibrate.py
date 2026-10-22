@@ -1496,7 +1496,11 @@ def fit_book(
     firsts = [
         min(read)
         for read in (
-            [t for t, v in r if v is not None and math.isfinite(v)]
+            [
+                t.astimezone(UTC)
+                for t, v in r
+                if v is not None and math.isfinite(v)
+            ]
             for r in (rows.upper_f, rows.lower_f)
         )
         if read
@@ -1617,7 +1621,8 @@ def fit_book(
                 book_p.hp_btu_per_h_per_f,
                 book_p.ua_btu_per_h_f,
                 0.0 if terms is None else terms.loss_btu_per_gal,
-            ]
+            ],
+            dtype=float,
         )
         k, x = system(fitted, train)
         free = _independent(x, range(3 + fit_loss))

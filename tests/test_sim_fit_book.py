@@ -622,3 +622,42 @@ def test_a_probe_gap_breaks_the_book() -> None:
     assert got.circulation is not None, got.why
     assert got.circulation.loss_btu_per_gal == pytest.approx(150.0, abs=1.0)
     assert_book(got.book, SITE.book)
+
+
+def test_naive_probe_instants_are_read_as_the_adapters_read_them(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Probe instants without a zone, read in the local zone as the
+    book's adapters read them: here UTC, so the fit is the zoned one."""
+    import time
+
+    monkeypatch.setenv("TZ", "UTC")
+    time.tzset()
+    try:
+        h = history(NO_BASE, 16, 150.0)
+        naive = replace(
+            h["rows"],
+            upper_f=[(t.replace(tzinfo=None), v) for t, v in h["rows"].upper_f],
+            lower_f=[(t.replace(tzinfo=None), v) for t, v in h["rows"].lower_f],
+        )
+        assert fit(NO_BASE, h | {"rows": naive}) == fit(NO_BASE, h)
+    finally:
+        monkeypatch.undo()
+        time.tzset()
+
+
+def test_whole_number_base_terms_fit_fractional_ones() -> None:
+    """A base whose book terms and loop loss are whole numbers: the
+    refit's UA of 3.6 stays 3.6."""
+    book = replace(
+        SITE.book,
+        hp_btu_per_h=4252,
+        hp_btu_per_h_per_f=76,
+        ua_btu_per_h_f=3,
+    )
+    assert SITE.circulation is not None
+    loop = replace(SITE.circulation, loss_btu_per_gal=100)
+    params = replace(SITE, book=book, circulation=loop)
+    got = fit(params, no_pump(params, 16, truth=OTHER))
+    assert got.kept == "refit", got.why
+    assert_book(got.book, OTHER)
