@@ -37,10 +37,14 @@ Added
   run (the median over clean run minutes, ``meter_share`` 1; 0 with a
   nominal flow when the meter isn't on the loop) and the loss per
   gallon that books best between quiet full tanks with a run between.
-  It needs 10 clean runs over 3 days, and keeps the base unless the
-  refit books the held-out latest fifth no worse (``CirculationFit``).
+  It needs 10 clean runs over 3 days and 10 pairs, and keeps the base
+  (None without one) unless the refit books the held-out latest fifth
+  no worse, and unless the loss reaches its bound (``CirculationFit``).
   ``sim_adapters.run_flow`` gives the runs at their flow, the book's
-  ``circulation_flow`` where no sensor reads the pump.
+  ``circulation_flow`` where no sensor reads the pump, and
+  ``book_from_changes(..., meter_lag=)`` keeps a run's water in a
+  volume-reporting meter's reports either side of it from reading as a
+  draw.
 
 Fixed
 -----

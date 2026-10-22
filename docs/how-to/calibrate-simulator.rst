@@ -417,13 +417,21 @@ tap open during a run stays a draw.
        history.rows, history.observed, params, at=end,
        flow=use.flow, circulation=use.runs,
        circulation_flow=sa.run_flow(use.runs, terms.flow_gpm),
+       meter_lag=sim_calibrate.METER_LAG,
    )
+
+A meter that reports volumes carries a run's water into the reports
+either side of it: ``meter_lag`` keeps that share from reading as a
+draw for that long before and after each run.
 
 ``displaced_gal`` and ``run_gap_min`` come from ``params.circulation``,
 else ``site_example_params``': the book can't tell them. The fit needs
-10 clean runs over 3 days. It holds out the latest fifth of the pairs
-(once there are 10) and replaces ``params.circulation`` only when it
-books them no worse; ``fit.kept`` says which it kept and ``fit.why``
+10 clean runs over 3 days, and 10 pairs: it holds out the latest fifth
+of them and replaces ``params.circulation`` (or, with none, takes the
+refit) only when it books them no worse. A loss on its bound, 0 or 500
+BTU/gal, is no fit: the book misses something else between those
+anchors. Without a fit, the base is kept, and with none, ``fit.params``
+is None; ``fit.kept`` says which it kept and ``fit.why``
 why. A span the heater wasn't heard from breaks the book.
 
 

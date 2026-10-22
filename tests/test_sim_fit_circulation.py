@@ -9,10 +9,13 @@ from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-import numpy as np
 import pytest
 
+pytest.importorskip("numpy")
+pytest.importorskip("pandas")
 pytest.importorskip("scipy")
+
+import numpy as np
 
 from nwp500 import sim_adapters as sa
 from nwp500 import sim_calibrate
@@ -42,6 +45,7 @@ def history(
     late_from: int = 0,
     tap_gpm: float = 0.0,
     draw_at_h: float | None = None,
+    reported: bool = False,
 ) -> dict[str, Any]:
     """A history of ``cycles`` six-hour cycles walked by the book's own
     balance, each run taking ``loss`` per gallon (``late_loss`` from
@@ -97,6 +101,8 @@ def history(
             )
         temp += e / mass
     rows = sa.ChangeRows(upper_f=probe, lower_f=probe, compressor_on=comp)
+    if reported:
+        flow = reports(flow)
     return {
         "rows": rows,
         "observed": [t for t, _ in probe[::3]],
@@ -104,6 +110,26 @@ def history(
         "runs": runs,
         "air": [(T0, AIR_F)],
     }
+
+
+def reports(flow: list[tuple[datetime, float]]) -> list[tuple[datetime, float]]:
+    """``flow`` as a meter reporting its volume every 30 s, 15 s off the
+    minute, each report's volume spread over the 30 s it closes: a run's
+    water reaches into the reports either side of it."""
+    out: list[tuple[datetime, float]] = []
+    start = flow[0][0] + timedelta(seconds=15)
+    per_step = sa.BOOK_GRID_S / 60.0
+    i = 0
+    t = start
+    while i < len(flow):
+        end = t + timedelta(seconds=30)
+        gal = 0.0
+        while i < len(flow) and flow[i][0] < end:
+            gal += flow[i][1] * per_step
+            i += 1
+        out.append((t, gal / 0.5))
+        t = end
+    return out
 
 
 def fit(
@@ -239,3 +265,49 @@ class TestFitCirculation:
         assert CirculationParams(**doc["circulation"]) == got.params
         assert doc["kept"] == "refit"
         assert np.isfinite(doc["error_btu"])
+
+    def test_a_loss_on_its_bound_is_no_fit(self) -> None:
+        """Runs walked at 800 BTU/gal: the fit reaches its 500 bound,
+        which says the book misses something, not what a run takes."""
+        params = site_example_params()
+        got = fit(params, history(params, 16, 800.0))
+        assert got.kept == "base"
+        assert got.params == params.circulation
+        assert "bound" in got.why
+        got = fit(NO_BASE, history(NO_BASE, 16, 800.0))
+        assert (got.kept, got.params) == (None, None)
+
+    def test_a_first_fit_needs_pairs_to_judge_it_by(self) -> None:
+        """12 clean runs over 3 days, but the heater unheard for a day:
+        too few pairs to hold any out, so nothing is adopted."""
+        h = history(NO_BASE, 12, 150.0)
+        h["observed"] = [
+            t
+            for t in h["observed"]
+            if not T0 + timedelta(hours=6) < t < T0 + timedelta(hours=40)
+        ]
+        got = fit(NO_BASE, h)
+        assert got.runs == 12
+        assert got.pairs < 10
+        assert (got.kept, got.params) == (None, None)
+        assert "10 needed" in got.why
+
+    def test_a_reporting_meter_carries_runs_into_its_reports(self) -> None:
+        """A meter reporting volumes every 30 s, off the runs' minutes:
+        the reports either side of a run carry its water, which isn't a
+        draw within ``METER_LAG`` of it."""
+        h = history(NO_BASE, 16, 150.0, reported=True)
+        got = fit(NO_BASE, h)
+        assert got.params is not None
+        assert got.params.loss_btu_per_gal == pytest.approx(150.0, abs=1.0)
+        unlagged = sim_calibrate.fit_circulation(
+            h["rows"],
+            h["observed"],
+            NO_BASE,
+            flow=h["flow"],
+            runs=h["runs"],
+            air=h["air"],
+            meter_lag=timedelta(0),
+        )
+        assert unlagged.params is not None
+        assert unlagged.params.loss_btu_per_gal < 145.0

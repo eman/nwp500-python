@@ -1384,6 +1384,7 @@ def book_steps_from_changes(
     inlet: Iterable[tuple[datetime, float]] = (),
     air: Iterable[tuple[datetime, float]] = (),
     params: HeaterParams | None = None,
+    meter_lag: timedelta = timedelta(0),
 ) -> list[BookStep]:
     """``book_steps_from_history`` from a heater's values' changes
     (``ChangeRows``) instead of its statuses: each value held until its
@@ -1392,7 +1393,8 @@ def book_steps_from_changes(
     Without a compressor flag, the heat source says when the compressor
     runs, and it adds to the elements' flags, as in
     ``change_history``. Whether the heater was heard from over the span
-    is the caller's (``book_from_changes``)."""
+    is the caller's (``book_from_changes``). ``meter_lag`` as for
+    ``book_from_changes``."""
     grid = _book_grid(start, end)
 
     def held(changes: Changes) -> list[Any]:
@@ -1442,6 +1444,7 @@ def book_steps_from_changes(
         air=air,
         params=params,
         preferred=False,
+        meter_lag=meter_lag,
     )
 
 
@@ -1460,6 +1463,7 @@ def _book_steps_on(
     air: Iterable[tuple[datetime, float]],
     params: HeaterParams | None,
     preferred: bool,
+    meter_lag: timedelta = timedelta(0),
 ) -> list[BookStep]:
     """The book's steps on ``grid``: ``heater``'s columns with the
     meter, the circulation, the inlet and the air
@@ -1510,6 +1514,17 @@ def _book_steps_on(
                 gpm = m / terms.meter_share
             elif terms is not None:
                 gpm = terms.flow_gpm
+        # A meter that reports volumes carries a run's water into the
+        # reports either side of it: its share still isn't a draw.
+        in_meter = None
+        if (
+            not on
+            and terms is not None
+            and terms.meter_share > 0.0
+            and meter_lag > timedelta(0)
+            and any(a - meter_lag <= at < b + meter_lag for a, b in runs)
+        ):
+            in_meter = settled if settled is not None else terms.flow_gpm
         steps.append(
             BookStep(
                 seconds=float(BOOK_GRID_S),
@@ -1524,6 +1539,7 @@ def _book_steps_on(
                 circulation_gpm=gpm,
                 inlet_measured=in_f is not None,
                 lower_element=bool(lo_el[i]),
+                circulation_in_meter_gpm=in_meter,
             )
         )
     return steps
@@ -1593,6 +1609,7 @@ def book_from_changes(
     circulation_flow: Iterable[tuple[datetime, float]] = (),
     inlet: Iterable[tuple[datetime, float]] = (),
     air: Iterable[tuple[datetime, float]] = (),
+    meter_lag: timedelta = timedelta(0),
 ) -> Booked | None:
     """``book_from_history`` from a heater's values' changes (``rows``)
     instead of its statuses, with ``observed`` the instants it was heard
@@ -1602,6 +1619,10 @@ def book_from_changes(
     silent meter. Like the rows and the Home Assistant readers'
     (``read_water_use``), ``flow`` and ``circulation_flow`` are gal/min
     and ``inlet`` and ``air`` °F, whatever the preferred units.
+    ``meter_lag`` is how far a meter's report carries water from either
+    side of it (``sim.meter.WINDOW`` for ``read_water_use``'s flow): that
+    long before and after a circulation run, the run's share of the
+    meter still isn't a draw.
 
     A value that holds writes no change, so only ``observed`` says the
     heater was heard: a silence between those instants longer than
@@ -1641,6 +1662,7 @@ def book_from_changes(
             inlet=probe,
             air=airs,
             params=params,
+            meter_lag=meter_lag,
         ),
         flows,
         params,

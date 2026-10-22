@@ -49,6 +49,7 @@ from nwp500 import sim
 from nwp500 import sim_adapters as sa
 from nwp500.models import DeviceStatus
 from nwp500.sim import calibration as cal
+from nwp500.sim import meter
 from nwp500.sim.params import (
     UNFITTED_TERMS,
     CirculationParams,
@@ -77,6 +78,7 @@ __all__ = (
     "CalibrationInputError",
     "Calibrated",
     "CirculationFit",
+    "METER_LAG",
     "METER_SEES_CIRCULATION_GPM",
     "MIN_CIRCULATION_DAYS",
     "MIN_CIRCULATION_RUNS",
@@ -1240,6 +1242,10 @@ METER_SEES_CIRCULATION_GPM = 0.05
 #: without a base to take it from: the loss per gallon is fitted at it,
 #: so the loss per run minute is what the book reads either way.
 NOMINAL_CIRCULATION_GPM = 1.0
+#: How far a meter's report carries a circulation run's water either
+#: side of it, by default: the longest interval ``sim_home_assistant.
+#: book_flow`` spreads a volume report over.
+METER_LAG = meter.WINDOW
 #: The shortest observed span ``fit_circulation`` books, hours.
 _MIN_SEGMENT_H = 2.0
 #: The largest loss per gallon ``fit_circulation`` fits, BTU/gal.
@@ -1288,6 +1294,7 @@ def fit_circulation(
     runs: Iterable[tuple[datetime, datetime]],
     inlet: Iterable[tuple[datetime, float]] = (),
     air: Iterable[tuple[datetime, float]] = (),
+    meter_lag: timedelta = METER_LAG,
 ) -> CirculationFit:
     """The circulation's terms (``CirculationParams``) from a heater's
     values' changes and the instants it was heard from, its household
@@ -1295,7 +1302,10 @@ def fit_circulation(
     ``sim_adapters.book_from_changes`` takes them, without a flow sensor
     on the pump. Like the rows, ``flow`` is gal/min and ``inlet`` and
     ``air`` °F, whatever the preferred units (``read_water_use``'s).
-    ``params.circulation`` is the base.
+    ``params.circulation`` is the base. ``meter_lag`` is how far a
+    meter's report carries a run's water either side of it
+    (``sim_adapters.book_from_changes``; by default ``METER_LAG``, a
+    meter that reports volumes as ``read_water_use`` reads it).
 
     The book reads two things of a run per minute: the flow the meter
     sees, and the heat it takes. The meter's is the median over clean
@@ -1313,9 +1323,12 @@ def fit_circulation(
     ``site_example_params``': the book can't tell them.
 
     It refits only on ``MIN_CIRCULATION_RUNS`` clean runs over
-    ``MIN_CIRCULATION_DAYS`` days. The latest fifth of the pairs (once
-    there are 10) is held out of the refit, which replaces the base only
-    when it books them no worse. A span the heater wasn't heard from
+    ``MIN_CIRCULATION_DAYS`` days and 10 pairs: the latest fifth is held
+    out of the refit, which replaces the base (or, with none, is taken)
+    only when it books them no worse. A loss on its bound (0, or 500
+    BTU/gal) is no fit: the book's error between the anchors is then
+    something else it misses. Without a fit, the base is kept, and with
+    none, ``params`` is None. A span the heater wasn't heard from
     (``sim_adapters.silences``, ``rows.outages``) breaks the book, and
     so does the meter's silence over ``sim_adapters.METER_MAX_GAP``, or
     before its first reading or after its last."""
@@ -1426,6 +1439,7 @@ def fit_circulation(
                     # A run at its own flow: the meter's excess over it
                     # is a draw.
                     circulation_flow=sa.run_flow(run_spans, terms.flow_gpm),
+                    meter_lag=meter_lag,
                     inlet=inlets,
                     air=airs,
                     params=with_terms,
@@ -1475,9 +1489,25 @@ def fit_circulation(
             gal.extend(float(bk.circulated[a0:a1].sum()) for a0, a1 in these)
         return np.array(e0), np.array(gal)
 
+    if not held:
+        # Nothing to judge a refit by, nor to adopt one without.
+        return keep(
+            f"{len(pairs)} pairs with a run: {cal.MIN_RECOVERIES_FOR_SPLIT} "
+            "needed to hold the latest out and judge a refit by",
+            len(clean_runs),
+            len(pairs),
+        )
     e0, gal = parts(fitted, train)
-    loss = min(_weighted_median(e0 / gal, gal), _MAX_LOSS_BTU_PER_GAL)
-    loss = max(loss, 0.0)
+    loss = _weighted_median(e0 / gal, gal)
+    if not 0.0 < loss < _MAX_LOSS_BTU_PER_GAL:
+        # On a bound, the book's error between the anchors isn't the
+        # runs' loss: something else the book misses fills it.
+        return keep(
+            f"the loss per gallon reaches its bound ({loss:.0f} BTU/gal, "
+            f"0 to {_MAX_LOSS_BTU_PER_GAL:.0f}): not a fit",
+            len(clean_runs),
+            len(pairs),
+        )
     refit = replace(refit, loss_btu_per_gal=loss)
     note = (
         "displaced_gal and run_gap_min kept from the base"
@@ -1490,22 +1520,6 @@ def fit_circulation(
         if share
         else "the meter doesn't see the runs"
     )
-    if not held:
-        if base is None:
-            return CirculationFit(
-                refit,
-                "refit",
-                len(clean_runs),
-                len(pairs),
-                None,
-                f"{how}; {len(pairs)} pairs, too few to hold any out; {note}",
-            )
-        return keep(
-            f"{len(pairs)} pairs with a run: too few to judge a refit by "
-            f"({cal.MIN_RECOVERIES_FOR_SPLIT} needed)",
-            len(clean_runs),
-            len(pairs),
-        )
     e0h, galh = parts(fitted, held)
     refit_err = float(np.mean(np.abs(e0h - loss * galh)))
     if base is None:
