@@ -1270,3 +1270,111 @@ class TestKeepBetterSixthReview:
         ) == COP_LAW
         assert judged["power_scale"].kept == "refit"
         assert params.power.power_scale != base.power.power_scale
+
+
+def physics_recoveries(
+    params: sim.HeaterParams, law_at: Any, n: int = 14
+) -> Any:
+    """``n`` reached recoveries a day apart, each lasting what the
+    physics says under ``law_at(day)``'s ``(compressor constant,
+    evaporator approach)`` on ``params``' loss and tank."""
+    import pandas as pd
+
+    frame = pd.DataFrame(
+        {
+            "start_time": [T0 + timedelta(days=d) for d in range(n)],
+            "t_start_lower": [95.0 + 3 * (d % 5) for d in range(n)],
+            "delta_t_lower": [30.0 + 4 * (d % 4) for d in range(n)],
+            "t_amb_mean": [55.0 + 3 * (d % 6) for d in range(n)],
+            "h_amb_start": [50.0] * n,
+            "stratification_gap": [8.0 + (d % 3) for d in range(n)],
+            "reached": [True] * n,
+        }
+    )
+    minutes = [
+        cal.recovery_minutes(
+            frame.iloc[[d]],
+            *law_at(d),
+            compressor=params.compressor,
+            loss=params.loss,
+            tank=params.tank,
+            two_zone=True,
+            gaps=True,
+        )[0]
+        for d in range(n)
+    ]
+    return frame.assign(duration_minutes=minutes)
+
+
+#: Two compressor laws whose recoveries the fit leaves off its bounds.
+COMPRESSOR_LAW = (0.08, 9.0)
+OTHER_COMPRESSOR_LAW = (0.06, 14.0)
+
+
+def _keep_compressor(
+    law_at: Any, base_law: tuple[float, float]
+) -> tuple[cal.Calibration, sc.Judged, sc.HeldOut, sim.HeaterParams]:
+    """``_keep_better`` on a base with ``base_law`` and recoveries under
+    ``law_at``: the calibration, the compressor's judgement, what was
+    held out, and the base."""
+    base = _fitted(UA)
+    k, approach = base_law
+    base = replace(
+        base,
+        compressor=replace(
+            base.compressor,
+            compressor_constant=k,
+            evap_approach_f=approach,
+            two_zone=False,
+        ),
+    )
+    found = physics_recoveries(base, law_at)
+    with pytest.MonkeyPatch.context() as m:
+        m.setattr(cal, "recoveries", lambda *_, **__: found)
+        done, judged, held = sc._keep_better(recovery_days(1), base, "air_f")
+    (comp,) = [j for j in judged if j.group == "compressor"]
+    return done, comp, held, base
+
+
+class TestKeepBetterSeventhReview:
+    def test_an_unpinned_compressor_refit_that_scores_better_wins(
+        self,
+    ) -> None:
+        done, comp, held, base = _keep_compressor(
+            lambda _: COMPRESSOR_LAW, OTHER_COMPRESSOR_LAW
+        )
+        params, refit = done.params, done.compressor
+        assert refit is not None and not refit.hit_bounds
+        assert comp.kept == "refit"
+        assert comp.n_held == 3 == len(held.recoveries)
+        assert comp.base_error is not None and comp.refit_error is not None
+        assert comp.refit_error < comp.base_error
+        # The base's error is on the loss kept before it.
+        assert params.loss == base.loss
+        assert sc._recovery_error(held.recoveries, base) == pytest.approx(
+            comp.base_error
+        )
+        assert comp.refit_error == refit.heldout_mae_minutes
+        c = params.compressor
+        assert (c.compressor_constant, c.evap_approach_f, c.two_zone) == (
+            refit.compressor_constant,
+            refit.evap_approach_f,
+            True,
+        )
+        assert c.compressor_constant != base.compressor.compressor_constant
+
+    def test_a_compressor_base_the_latest_recoveries_favour_stays(
+        self,
+    ) -> None:
+        done, comp, _, base = _keep_compressor(
+            lambda d: COMPRESSOR_LAW if d >= 11 else OTHER_COMPRESSOR_LAW,
+            COMPRESSOR_LAW,
+        )
+        params, refit = done.params, done.compressor
+        assert refit is not None and not refit.hit_bounds
+        assert comp.kept == "base"
+        assert "pinned" not in comp.why
+        assert comp.base_error is not None and comp.refit_error is not None
+        assert comp.base_error < comp.refit_error
+        assert params.compressor == base.compressor
+        assert not params.compressor.two_zone
