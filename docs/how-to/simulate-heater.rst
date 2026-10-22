@@ -841,6 +841,33 @@ the air around the pipe:
    readiness = sim.time_to_ready(scenario, params, book=book,
                                  inlet_measured=measured)
 
+With the meter, the pump and the inlet probe in Home Assistant, one
+read gives the book's flow, the circulation's runs, the probe and the
+mains (``read_water_use``). It reads them as the sources file's inlet
+does, over the last 72 hours by default:
+
+.. code-block:: python
+
+   from nwp500 import sim_home_assistant as ha
+
+   use = await ha.read_water_use(client, entities, now=now)
+   book = sa.book_from_history(
+       recorded,
+       params,
+       at=now,
+       # read_water_use gives gal/min and degF; the book takes the
+       # preferred units.
+       flow=[(t, sa.volume(v)) for t, v in use.flow],
+       circulation=use.runs or (),
+       inlet=[(t, sa.temperature(v)) for t, v in use.probe],
+   )
+   if use.cold is not None:
+       book, measured = on_the_mains(book, use.cold)
+
+``use.runs`` is None when the pump's runs are unknown, and ``use.cold``
+is None without a long draw to read the mains from; ``use.notes`` say
+why.
+
 The mains is the median plateau of the long draws (11 minutes or more,
 with circulation off) over the last 72 hours, read from minute 9 of each
 draw, once the probe has passed the stagnant pipe. There is none

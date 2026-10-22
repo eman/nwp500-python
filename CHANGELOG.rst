@@ -2,6 +2,19 @@
 Changelog
 =========
 
+Unreleased
+==========
+
+Added
+-----
+- **The water at the heater from Home Assistant in one read** (#193).
+  ``sim_home_assistant.read_water_use`` reads the meter's flow, the
+  circulation pump's runs, the inlet probe and the mains (``WaterUse``)
+  over a span (``INLET_LOOKBACK``, 72 hours, by default), as the live
+  source's inlet reads them, for the heat book and ``on_the_mains``. The
+  live source's inlet now reads through it, with the same result and
+  notes.
+
 Version 9.8.0 (2026-10-21)
 ==========================
 

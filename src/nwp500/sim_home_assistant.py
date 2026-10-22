@@ -37,13 +37,14 @@ import enum
 import logging
 import math
 from collections.abc import Awaitable, Callable, Iterable, Mapping, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime, timedelta
 from typing import Any, cast
 
 from nwp500 import sim_adapters as sa
 from nwp500.exceptions import Nwp500Error
 from nwp500.sim import Environment, meter
+from nwp500.sim.cold_supply import ColdSupply
 from nwp500.sim.location_air import LocationAirModel
 from nwp500.sim.location_air import project as project_air
 
@@ -872,99 +873,174 @@ class HomeAssistantEnvironment:
 
     async def _inlet(self) -> float | None:
         e = self.entities
-        probe_id, volume_id = e.inlet, e.meter_volume
-        rate_id, pump_id = e.meter_flow, e.circulation_speed
-        if probe_id is None:
+        if e.inlet is None:
             return None
-        if volume_id is None:
+        if e.meter_volume is None:
             self.notes.append(
                 "inlet: needs the meter's volume to find long draws"
             )
             return None
-        since = self.now - INLET_LOOKBACK
-        names = [n for n in (probe_id, volume_id, rate_id, pump_id) if n]
 
         async def read() -> float | None:
-            got = await self.client.read_history(names, since, self.now)
-            unread: list[Span] = []
-
-            async def read_in(
-                entity: str, to: Callable[[float, str | None], float]
-            ) -> list[Reading]:
-                unit = (await self.client.state(entity)).unit
-                rows, spans = got.converted(entity, unit, to, self.now)
-                if spans:
-                    self.notes.append(
-                        f"inlet: {len(spans)} readings of {entity} in no "
-                        "unit this reads left out"
-                    )
-                    unread.extend(spans)
-                return rows
-
-            probe = await read_in(probe_id, to_f)
-            rate = [] if rate_id is None else await read_in(rate_id, to_gpm)
-            flow = meter.flow_gpm(
-                reports_after(await read_in(volume_id, to_gal), since),
-                rate,
-                since,
-                self.now,
-            )
-            runs: list[Span] | None = []
-            if pump_id is not None:
-                runs = await self._pump_runs(pump_id, got, since)
-                if runs is None:
-                    return None
-            # A draw while any of them was unavailable may have
-            # overlapped a run or ended unseen: the plateau skips it, as
-            # it skips one that overlaps a run.
-            runs = busy(
-                runs or [], unread, *(got.outages.get(n, []) for n in names)
-            )
-            # The adapter takes the preferred unit; these are °F and gal.
-            cold = sa.cold_supply(
-                [(t, sa.temperature(v)) for t, v in probe],
-                at=self.now,
-                flow=[(t, sa.volume(v)) for t, v in flow],
-                ticks=[t for t, v in flow if v >= meter.DRAW_GPM],
-                circulation=runs,
-            )
-            if cold.t_cold_f is None:
-                self.notes.append(
-                    "inlet: no long draw in the last 72 h to read the "
-                    "mains from"
+            notes: list[str] = []
+            try:
+                use = await _water_use(
+                    self.client, e, self.now, INLET_LOOKBACK, notes
                 )
-                return None
-            self.notes.append(f"inlet: the plateau of {cold.draws} long draws")
-            return cold.t_cold_f
+            finally:
+                self.notes.extend(f"inlet: {n}" for n in notes)
+            return None if use.cold is None else use.cold.t_cold_f
 
         return cast("float | None", await self._guard("inlet", read, None))
 
-    async def _pump_runs(
-        self, pump_id: str, got: History, since: datetime
-    ) -> list[Span] | None:
-        """The pump's runs since ``since``, or None (and a note) when
-        they are unknown: no reading in force at ``since`` (a draw
-        before the first may have overlapped a run), or a speed in no
-        unit this reads."""
-        why = None
-        speed: list[Reading] = []
-        if not covers_start(got.readings.get(pump_id, []), since):
-            why = "no speed reading in force at the start"
-        else:
-            try:
-                unit = (await self.client.state(pump_id)).unit
-                speed, unread = got.converted(pump_id, unit, to_rpm)
-                if unread:
-                    # A reading left out could have been a run.
-                    why = f"{len(unread)} readings in no speed unit"
-            except (HomeAssistantError, ValueError) as err:
-                why = str(err)
-        if why is not None:
-            self.notes.append(
-                f"inlet: the circulation's runs are unknown ({why})"
+
+@dataclass(frozen=True)
+class WaterUse:
+    """The water moving at the heater over a span (``read_water_use``):
+    what the heat book and the inlet's plateau read."""
+
+    #: The meter's flow, gal/min, on its grid (``sim.meter.flow_gpm``);
+    #: empty without a meter, or when it was not read.
+    flow: list[Reading]
+    #: The circulation pump's runs; empty without a pump, None when they
+    #: are unknown (``notes`` say why).
+    runs: list[Span] | None
+    #: The inlet probe's readings, °F; empty without one.
+    probe: list[Reading]
+    #: The spans water may have moved unseen: the runs, the readings in
+    #: no unit this reads, and each entity's outages.
+    busy: list[Span]
+    #: The mains from the probe's plateau over the long draws, °F; None
+    #: without a probe and a meter, with the runs unknown, or with no
+    #: long draw.
+    cold: ColdSupply | None
+    notes: tuple[str, ...] = ()
+
+
+async def read_water_use(
+    client: HomeAssistantClient,
+    entities: Entities,
+    *,
+    now: datetime,
+    lookback: timedelta = INLET_LOOKBACK,
+) -> WaterUse:
+    """The meter's flow, the circulation's runs, the inlet probe and the
+    mains from ``lookback`` before ``now`` to ``now``, in one history
+    read, as the live source's inlet reads them. The book takes them in
+    the preferred units (``sim_adapters.volume`` and
+    ``sim_adapters.temperature`` convert), and ``cold`` goes to
+    ``sim.cold_supply.on_the_mains``. A part not read leaves its default
+    and a note."""
+    notes: list[str] = []
+    try:
+        return replace(
+            await _water_use(client, entities, now, lookback, notes),
+            notes=tuple(notes),
+        )
+    except (HomeAssistantError, ValueError) as err:
+        notes.append(f"not read ({err})")
+        return WaterUse([], None, [], [], None, tuple(notes))
+
+
+async def _water_use(
+    client: HomeAssistantClient,
+    e: Entities,
+    now: datetime,
+    lookback: timedelta,
+    notes: list[str],
+) -> WaterUse:
+    """``read_water_use``, adding its notes to ``notes`` as it goes."""
+    probe_id, volume_id = e.inlet, e.meter_volume
+    rate_id, pump_id = e.meter_flow, e.circulation_speed
+    since = now - lookback
+    names = [n for n in (probe_id, volume_id, rate_id, pump_id) if n]
+    if not names:
+        return WaterUse([], [], [], [], None)
+    got = await client.read_history(names, since, now)
+    unread: list[Span] = []
+
+    async def read_in(
+        entity: str, to: Callable[[float, str | None], float]
+    ) -> list[Reading]:
+        unit = (await client.state(entity)).unit
+        rows, spans = got.converted(entity, unit, to, now)
+        if spans:
+            notes.append(
+                f"{len(spans)} readings of {entity} in no unit this reads "
+                "left out"
             )
-            return None
-        return pump_runs(speed, since, self.now)
+            unread.extend(spans)
+        return rows
+
+    probe = [] if probe_id is None else await read_in(probe_id, to_f)
+    rate = [] if rate_id is None else await read_in(rate_id, to_gpm)
+    flow = (
+        []
+        if volume_id is None
+        else meter.flow_gpm(
+            reports_after(await read_in(volume_id, to_gal), since),
+            rate,
+            since,
+            now,
+        )
+    )
+    runs: list[Span] | None = []
+    if pump_id is not None:
+        runs = await _pump_runs_since(client, pump_id, got, since, now, notes)
+    # A draw while any of them was unavailable may have overlapped a run
+    # or ended unseen: the plateau skips it, as it skips one that
+    # overlaps a run.
+    down = busy(runs or [], unread, *(got.outages.get(n, []) for n in names))
+    cold = None
+    if probe_id is not None and volume_id is not None and runs is not None:
+        # The adapter takes the preferred unit; these are °F and gal.
+        cold = sa.cold_supply(
+            [(t, sa.temperature(v)) for t, v in probe],
+            at=now,
+            flow=[(t, sa.volume(v)) for t, v in flow],
+            ticks=[t for t, v in flow if v >= meter.DRAW_GPM],
+            circulation=down,
+        )
+        hours = f"{lookback.total_seconds() / 3600:g}"
+        if cold.t_cold_f is None:
+            notes.append(
+                f"no long draw in the last {hours} h to read the mains from"
+            )
+            cold = None
+        else:
+            notes.append(f"the plateau of {cold.draws} long draws")
+    return WaterUse(flow, runs, probe, down, cold)
+
+
+async def _pump_runs_since(
+    client: HomeAssistantClient,
+    pump_id: str,
+    got: History,
+    since: datetime,
+    now: datetime,
+    notes: list[str],
+) -> list[Span] | None:
+    """The pump's runs since ``since``, or None (and a note) when they
+    are unknown: no reading in force at ``since`` (a draw before the
+    first may have overlapped a run), or a speed in no unit this
+    reads."""
+    why = None
+    speed: list[Reading] = []
+    if not covers_start(got.readings.get(pump_id, []), since):
+        why = "no speed reading in force at the start"
+    else:
+        try:
+            unit = (await client.state(pump_id)).unit
+            speed, unread = got.converted(pump_id, unit, to_rpm)
+            if unread:
+                # A reading left out could have been a run.
+                why = f"{len(unread)} readings in no speed unit"
+        except (HomeAssistantError, ValueError) as err:
+            why = str(err)
+    if why is not None:
+        notes.append(f"the circulation's runs are unknown ({why})")
+        return None
+    return pump_runs(speed, since, now)
 
 
 # ── over a recorded history, for the calibration ────────────────────
