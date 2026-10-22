@@ -870,6 +870,10 @@ the air around the pipe:
    readiness = sim.time_to_ready(scenario, params, book=book,
                                  inlet_measured=measured)
 
+``sa.cold_supply`` takes the probe and the flow in the preferred units.
+``sa.cold_supply_f`` takes them in °F and gal/min, and reads no unit
+preference, for a caller whose preference may change while it runs.
+
 With the meter, the pump and the inlet probe in Home Assistant, one
 read gives the book's flow, the circulation's runs, the probe and the
 mains (``read_water_use``). It reads them as the sources file's inlet
@@ -906,6 +910,20 @@ of the window. Home Assistant records no row while a value repeats, so
 a quiet meter that still reports is live until it goes unavailable or
 its last report (``last_reported``, Home Assistant 2024.3 and later)
 is old. A pump unavailable over the span leaves ``use.runs`` None.
+
+``read_water_use`` builds the flow on a 10-second grid after it reads,
+which over weeks is a lot of work for an event loop. To keep that off
+the loop, read and compute apart: ``read_water_history`` does only the
+reading, and ``water_use`` the rest, with no client. In Home Assistant:
+
+.. code-block:: python
+
+   history = await ha.read_water_history(client, entities, now=now)
+   use = await hass.async_add_executor_job(ha.water_use, history)
+
+``read_water_history`` raises ``HomeAssistantError`` when the history
+can't be read, where ``read_water_use`` gives an empty ``WaterUse``
+with a note.
 
 The mains is the median plateau of the long draws (11 minutes or more,
 with circulation off) over the last 72 hours, read from minute 9 of each

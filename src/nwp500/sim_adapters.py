@@ -1812,10 +1812,30 @@ def cold_supply(
     draw counts (``ColdSupplyParams.window_s`` by default). The estimate
     is degF: pass it on as ``environment(inlet=temperature(...))`` or
     with ``on_the_mains``."""
-    readings = [(t.astimezone(UTC), _to_sim(v)) for t, v in _finite(probe)]
-    flows = sorted(
-        (t.astimezone(UTC), _volume_to_sim(v)) for t, v in _finite(flow)
+    return cold_supply_f(
+        [(t, _to_sim(v)) for t, v in _finite(probe)],
+        at=at,
+        flow=[(t, _volume_to_sim(v)) for t, v in _finite(flow)],
+        ticks=ticks,
+        circulation=circulation,
+        window=window,
     )
+
+
+def cold_supply_f(
+    probe: Iterable[tuple[datetime, float]],
+    *,
+    at: datetime,
+    flow: Iterable[tuple[datetime, float]],
+    ticks: Iterable[datetime] | None = None,
+    circulation: Iterable[tuple[datetime, datetime]] | None = (),
+    window: timedelta | None = None,
+) -> ColdSupply:
+    """``cold_supply`` in the simulator's units, the probe °F and the
+    flow gal/min, whatever the preferred units: it reads no unit
+    preference."""
+    readings = [(t.astimezone(UTC), v) for t, v in _finite(probe)]
+    flows = sorted((t.astimezone(UTC), v) for t, v in _finite(flow))
     p = ColdSupplyParams()
     if window is not None:
         p = replace(p, window_s=window.total_seconds())

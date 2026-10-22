@@ -4,7 +4,7 @@ environment source against a fake client."""
 
 import math
 import time
-from collections.abc import Iterable
+from collections.abc import Iterable, Iterator
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from typing import Any, ClassVar, TypedDict, cast
@@ -1977,3 +1977,134 @@ def test_many_outages_keep_every_gallon_out_of_them() -> None:
         for t, v in flow[:400]
     )
     assert took < 5.0
+
+
+@pytest.mark.asyncio
+class TestTheWaterHistory:
+    """``read_water_history`` reads; ``water_use`` computes, without
+    the client."""
+
+    @staticmethod
+    def _series() -> dict[str, list[ha.Reading]]:
+        series = recorded_draw(ended_hours_ago=5)
+        start = NOW - ha.INLET_LOOKBACK
+        series["sensor.pump"] = [
+            (start, 0.0),
+            (NOW - timedelta(hours=20), 2500.0),
+            (NOW - timedelta(hours=19, minutes=45), 0.0),
+        ]
+        series["sensor.rate"] = [(start, 0.0)]
+        return series
+
+    @pytest.mark.parametrize(
+        "names",
+        [
+            {},
+            {"meter_volume": "sensor.volume"},
+            {"circulation_speed": "sensor.pump", "meter_flow": "sensor.rate"},
+        ],
+    )
+    async def test_it_is_read_water_use_apart(
+        # ``Any``: mypy reads a ``dict[str, str]`` as maybe the flag.
+        self,
+        names: dict[str, Any],
+    ) -> None:
+        states = UNITS | {"sensor.rate": _s("sensor.rate", 0.0, "gal/min")}
+        entities = replace(ha.Entities(**INLET), **names)
+        client = FakeClient(states, self._series())
+        history = await ha.read_water_history(
+            client,  # type: ignore[arg-type]  # pyright: ignore[reportArgumentType]
+            entities,
+            now=NOW,
+        )
+        whole = await ha.read_water_use(
+            client,  # type: ignore[arg-type]  # pyright: ignore[reportArgumentType]
+            entities,
+            now=NOW,
+        )
+        assert ha.water_use(history) == whole
+        assert whole.flow
+        if "circulation_speed" in names:
+            assert whole.runs
+
+    async def test_a_pump_state_not_read_leaves_its_runs_unknown(
+        self,
+    ) -> None:
+        entities = ha.Entities(circulation_speed="sensor.pump", **INLET)
+        client = FakeClient(UNITS, self._series(), fail={"sensor.pump"})
+        history = await ha.read_water_history(
+            client,  # type: ignore[arg-type]  # pyright: ignore[reportArgumentType]
+            entities,
+            now=NOW,
+        )
+        assert "sensor.pump" in history.unread_states
+        use = ha.water_use(history)
+        assert use.runs is None
+        assert any("HTTP 404" in n for n in use.notes)
+
+    async def test_a_failed_read_raises_and_is_noted(self) -> None:
+        client = FakeClient({}, self._series())
+        with pytest.raises(ha.HomeAssistantError):
+            await ha.read_water_history(
+                client,  # type: ignore[arg-type]  # pyright: ignore[reportArgumentType]
+                ha.Entities(**INLET),
+                now=NOW,
+            )
+        use = await ha.read_water_use(
+            client,  # type: ignore[arg-type]  # pyright: ignore[reportArgumentType]
+            ha.Entities(**INLET),
+            now=NOW,
+        )
+        assert use.notes[0].startswith("not read")
+
+
+@pytest.mark.asyncio
+class TestTheWaterUseReadsNoPreference:
+    """``water_use`` is in °F and gal/min throughout: the preferred
+    units, process-wide, never enter it."""
+
+    @staticmethod
+    async def _history() -> ha.WaterHistory:
+        return await ha.read_water_history(
+            FakeClient(UNITS, recorded_draw(ended_hours_ago=5)),  # type: ignore[arg-type]  # pyright: ignore[reportArgumentType]
+            ha.Entities(**INLET),
+            now=NOW,
+        )
+
+    @pytest.fixture(autouse=True)
+    def _reset(self) -> Iterator[None]:
+        from nwp500.unit_system import reset_unit_system
+
+        yield
+        reset_unit_system()
+
+    async def test_either_preference_reads_the_same_mains(self) -> None:
+        from nwp500.unit_system import set_unit_system
+
+        history = await self._history()
+        set_unit_system("us_customary")
+        us = ha.water_use(history)
+        set_unit_system("metric")
+        assert ha.water_use(history) == us
+        assert us.cold is not None
+
+    async def test_a_preference_changed_midway_changes_nothing(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The preference flips to metric as the plateau's readings are
+        taken in: the mains is what it was."""
+        from nwp500 import sim_adapters as sa
+        from nwp500.unit_system import set_unit_system
+
+        history = await self._history()
+        set_unit_system("us_customary")
+        want = ha.water_use(history)
+        finite = sa._finite  # pyright: ignore[reportPrivateUsage]
+
+        def flipped(rows: Any) -> Any:
+            set_unit_system("metric")
+            return finite(rows)
+
+        monkeypatch.setattr(sa, "_finite", flipped)
+        set_unit_system("us_customary")
+        assert ha.water_use(history) == want

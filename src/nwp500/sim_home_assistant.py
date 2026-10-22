@@ -941,9 +941,10 @@ class HomeAssistantEnvironment:
         async def read() -> float | None:
             notes: list[str] = []
             try:
-                use = await _water_use(
-                    self.client, e, self.now, INLET_LOOKBACK, notes, book=False
+                history = await read_water_history(
+                    self.client, e, now=self.now, lookback=INLET_LOOKBACK
                 )
+                use = _water_use(history, notes, book=False)
             finally:
                 self.notes.extend(f"inlet: {n}" for n in notes)
             return None if use.cold is None else use.cold.t_cold_f
@@ -980,6 +981,71 @@ class WaterUse:
     notes: tuple[str, ...] = ()
 
 
+@dataclass(frozen=True)
+class WaterHistory:
+    """What ``read_water_history`` read, for ``water_use``: the
+    entities, the span (``now``, in UTC, and ``lookback``), their
+    history over it, and each one's state (its unit and its last
+    report), with why the pump's couldn't be read."""
+
+    entities: Entities
+    now: datetime
+    lookback: timedelta
+    #: None without any of the entities.
+    history: History | None
+    states: Mapping[str, State] = field(default_factory=dict)
+    #: Why an entity's state couldn't be read, by entity: the pump's
+    #: (its runs are then unknown).
+    unread_states: Mapping[str, str] = field(default_factory=dict)
+
+
+async def read_water_history(
+    client: HomeAssistantClient,
+    entities: Entities,
+    *,
+    now: datetime,
+    lookback: timedelta = INLET_LOOKBACK,
+) -> WaterHistory:
+    """The history ``water_use`` reads, from ``lookback`` before
+    ``now`` to ``now``: the meter's, the circulation pump's and the
+    inlet probe's, and each one's state. Nothing after it touches the
+    client. Raises ``HomeAssistantError`` (or ``ValueError``) when the
+    history or a state other than the pump's can't be read."""
+    e = entities
+    probe_id, volume_id = e.inlet, e.meter_volume
+    rate_id, pump_id = e.meter_flow, e.circulation_speed
+    # In UTC: a lookback across a clock change is the elapsed span, not
+    # the wall time's.
+    now = now.astimezone(UTC)
+    names = [n for n in (probe_id, volume_id, rate_id, pump_id) if n]
+    if not names:
+        return WaterHistory(e, now, lookback, None)
+    got = await client.read_history(names, now - lookback, now)
+    states = {
+        n: await client.state(n) for n in (probe_id, rate_id, volume_id) if n
+    }
+    unread: dict[str, str] = {}
+    if pump_id is not None and got.readings.get(pump_id):
+        try:
+            states[pump_id] = await client.state(pump_id)
+        except (HomeAssistantError, ValueError) as err:
+            unread[pump_id] = str(err)
+    return WaterHistory(e, now, lookback, got, states, unread)
+
+
+def water_use(history: WaterHistory) -> WaterUse:
+    """``read_water_use`` from what ``read_water_history`` read, without
+    the client: the meter's flow on its grid, the pump's runs and the
+    mains' plateau, with the notes. It reads nothing, so it can run off
+    an event loop. A part not read leaves its default and a note."""
+    notes: list[str] = []
+    try:
+        return replace(_water_use(history, notes), notes=tuple(notes))
+    except ValueError as err:
+        notes.append(f"not read ({err})")
+        return WaterUse([], None, [], [], None, tuple(notes))
+
+
 async def read_water_use(
     client: HomeAssistantClient,
     entities: Entities,
@@ -993,48 +1059,37 @@ async def read_water_use(
     the preferred units (``sim_adapters.volume`` and
     ``sim_adapters.temperature`` convert), and ``cold`` goes to
     ``sim.cold_supply.on_the_mains``. A part not read leaves its default
-    and a note."""
-    notes: list[str] = []
+    and a note. It is ``water_use(await read_water_history(...))``: on
+    an event loop, run ``water_use`` apart."""
     try:
-        return replace(
-            await _water_use(client, entities, now, lookback, notes),
-            notes=tuple(notes),
+        history = await read_water_history(
+            client, entities, now=now, lookback=lookback
         )
     except (HomeAssistantError, ValueError) as err:
-        notes.append(f"not read ({err})")
-        return WaterUse([], None, [], [], None, tuple(notes))
+        return WaterUse([], None, [], [], None, (f"not read ({err})",))
+    return water_use(history)
 
 
-async def _water_use(
-    client: HomeAssistantClient,
-    e: Entities,
-    now: datetime,
-    lookback: timedelta,
-    notes: list[str],
-    *,
-    book: bool = True,
+def _water_use(
+    history: WaterHistory, notes: list[str], *, book: bool = True
 ) -> WaterUse:
-    """``read_water_use``, adding its notes to ``notes`` as it goes;
-    without ``book``, no flow for the book (the live inlet's read)."""
+    """``water_use``, adding its notes to ``notes`` as it goes; without
+    ``book``, no flow for the book (the live inlet's read)."""
+    e, now, lookback = history.entities, history.now, history.lookback
     probe_id, volume_id = e.inlet, e.meter_volume
     rate_id, pump_id = e.meter_flow, e.circulation_speed
-    # In UTC: a lookback across a clock change is the elapsed span, not
-    # the wall time's.
-    now = now.astimezone(UTC)
     since = now - lookback
     names = [n for n in (probe_id, volume_id, rate_id, pump_id) if n]
-    if not names:
+    got = history.history
+    if got is None or not names:
         return WaterUse([], [], [], [], None)
-    got = await client.read_history(names, since, now)
     unread: list[Span] = []
     unread_of: dict[str, list[Span]] = {}
-    reported: dict[str, datetime] = {}
 
-    async def read_in(
+    def read_in(
         entity: str, to: Callable[[float, str | None], float]
     ) -> tuple[list[Reading], State]:
-        state = await client.state(entity)
-        reported[entity] = state.at
+        state = history.states[entity]
         rows, spans = got.converted(entity, state.unit, to, now)
         if spans:
             notes.append(
@@ -1045,14 +1100,14 @@ async def _water_use(
             unread_of[entity] = spans
         return rows, state
 
-    probe = [] if probe_id is None else (await read_in(probe_id, to_f))[0]
-    rate = [] if rate_id is None else (await read_in(rate_id, to_gpm))[0]
+    probe = [] if probe_id is None else read_in(probe_id, to_f)[0]
+    rate = [] if rate_id is None else read_in(rate_id, to_gpm)[0]
     # The volume's readings as recorded, for its coverage, and its
     # reports: a running total's rises between them.
     volume: list[Reading] = []
     reports: list[Reading] = []
     if volume_id is not None:
-        volume, state = await read_in(volume_id, to_gal)
+        volume, state = read_in(volume_id, to_gal)
         reports = volume
         if is_running_total(e, state):
             reports, resets = reports_from_total(volume)
@@ -1094,13 +1149,13 @@ async def _water_use(
             [r for r in reports if r[0] >= begin],
             rate,
             begin,
-            min(now, reported[volume_id]),
+            min(now, history.states[volume_id].at),
             dark,
         )
     runs: list[Span] | None = []
     if pump_id is not None:
-        runs = await _pump_runs_since(
-            client, pump_id, got, since, now, notes, unread
+        runs = _pump_runs_since(
+            history, pump_id, got, since, now, notes, unread
         )
     # A draw while any of them was unavailable may have overlapped a run
     # or ended unseen: the plateau skips it, as it skips one that
@@ -1108,11 +1163,11 @@ async def _water_use(
     down = busy(runs or [], unread, *(got.outages.get(n, []) for n in names))
     cold = None
     if probe_id is not None and volume_id is not None and runs is not None:
-        # The adapter takes the preferred unit; these are °F and gal.
-        cold = sa.cold_supply(
-            [(t, sa.temperature(v)) for t, v in probe],
+        # In °F and gal/min, as read: no unit preference is read here.
+        cold = sa.cold_supply_f(
+            probe,
             at=now,
-            flow=[(t, sa.volume(v)) for t, v in sustained],
+            flow=sustained,
             ticks=[t for t, v in sustained if v >= meter.DRAW_GPM],
             circulation=down,
             window=lookback,
@@ -1272,8 +1327,8 @@ def book_flow(
     return out
 
 
-async def _pump_runs_since(
-    client: HomeAssistantClient,
+def _pump_runs_since(
+    history: WaterHistory,
     pump_id: str,
     got: History,
     since: datetime,
@@ -1296,13 +1351,15 @@ async def _pump_runs_since(
         start = rows[0][0] if rows else now
     if rows:
         try:
-            unit = (await client.state(pump_id)).unit
+            if pump_id in history.unread_states:
+                raise ValueError(history.unread_states[pump_id])
+            unit = history.states[pump_id].unit
             speed, left = got.converted(pump_id, unit, to_rpm, now)
             if left:
                 # A reading left out could have been a run.
                 why = why or f"{len(left)} readings in no speed unit"
                 unread.extend(left)
-        except (HomeAssistantError, ValueError) as err:
+        except ValueError as err:
             why = why or str(err)
             unread.append((start, now))
     runs = pump_runs(speed, start, now) if speed else None
