@@ -42,6 +42,7 @@ Example::
     result = sim.simulate(scenario, sa.params(feature))
 """
 
+import bisect
 import itertools
 import math
 from array import array
@@ -1277,6 +1278,50 @@ class _Heater:
     compressor: list[bool]
     upper_element: list[bool]
     lower_element: list[bool]
+
+
+def run_flow(
+    runs: Iterable[tuple[datetime, datetime]], flow_gpm: float
+) -> list[tuple[datetime, float]]:
+    """``runs`` at ``flow_gpm`` (gal/min) as the circulation's own flow
+    readings on the book's grid, for ``book_from_changes``'s
+    ``circulation_flow`` where no sensor reads the pump: a run is booked
+    at its flow (``CirculationParams.flow_gpm``)."""
+    out: list[tuple[datetime, float]] = []
+    step = timedelta(seconds=BOOK_GRID_S)
+    for t, end in sorted(
+        (a.astimezone(UTC), b.astimezone(UTC)) for a, b in runs
+    ):
+        while t < end:
+            out.append((t, flow_gpm))
+            t += step
+    return out
+
+
+def run_readings(
+    runs: Iterable[tuple[datetime, datetime]],
+    readings: Iterable[tuple[datetime, float | None]],
+) -> list[tuple[datetime, float]]:
+    """The loop's flow ``readings`` (gal/min) within ``runs``, for
+    ``book_from_changes``'s ``circulation_flow``: each run's own, its
+    first held from the run's start. A reading outside every run (a
+    pump read as 0 while off) is none of theirs, and a missing one
+    (None, NaN) is none; a run with no reading has none here."""
+    rows = sorted(
+        (t.astimezone(UTC), float(v))
+        for t, v in readings
+        if v is not None and math.isfinite(v)
+    )
+    times = [t for t, _ in rows]
+    out: list[tuple[datetime, float]] = []
+    for a, b in sorted((a.astimezone(UTC), b.astimezone(UTC)) for a, b in runs):
+        inside = rows[
+            bisect.bisect_left(times, a) : bisect.bisect_left(times, b)
+        ]
+        if inside:
+            out.append((a, inside[0][1]))
+            out.extend(inside)
+    return out
 
 
 def book_steps_from_history(

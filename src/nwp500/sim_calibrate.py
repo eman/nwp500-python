@@ -34,9 +34,12 @@ statuses::
 This module needs the ``sim`` extra.
 """
 
+import itertools
+import math
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, replace
-from datetime import datetime, timedelta
+from dataclasses import fields as dataclass_fields
+from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Any, cast
 
 import numpy as np
@@ -47,6 +50,8 @@ from nwp500.models import DeviceStatus
 from nwp500.sim import calibration as cal
 from nwp500.sim.params import (
     UNFITTED_TERMS,
+    BookParams,
+    CirculationParams,
     HeaterParams,
     LossParams,
     TankParams,
@@ -71,6 +76,9 @@ __all__ = (
     "NO_AIR_NOTE",
     "CalibrationInputError",
     "Calibrated",
+    "BookTermsFit",
+    "MIN_BOOK_PAIRS",
+    "MIN_RUN_PAIRS",
     "GROUPS",
     "HeldOut",
     "Judged",
@@ -78,6 +86,7 @@ __all__ = (
     "air_unread_note",
     "calibrate",
     "calibrate_changes",
+    "fit_book",
     "score",
     "max_gap",
     "report",
@@ -1213,3 +1222,432 @@ def report(done: Calibrated) -> list[Term]:
         ),
     ]
     return _judged(terms, done) if done.judged else terms
+
+
+# ── the heat book's terms, from its re-anchors ──────────────────────
+
+
+#: The fewest re-anchor pairs ``fit_book`` refits the book on, and the
+#: fewest with a circulation run in them it fits the loop's loss on.
+MIN_BOOK_PAIRS = 10
+MIN_RUN_PAIRS = 10
+#: The flow a run without a flow reading is booked at, gal/min, so that
+#: it breaks the quiet anchors; its pairs are left out.
+_UNPRICED_GPM = 1.0
+#: The shortest observed span ``fit_book`` books, hours.
+_MIN_SEGMENT_H = 2.0
+
+#: A re-anchor pair: its later anchor's instant, its book's index, the
+#: pair, whether a circulation run is in it, and whether every run in it
+#: has its flow.
+_Pair = tuple[datetime, int, tuple[int, int], bool, bool]
+
+
+@dataclass(frozen=True)
+class BookTermsFit:
+    """``fit_book``'s result: the book's terms to use (``book``, for
+    ``HeaterParams.book``) and the circulation loop's loss per gallon
+    (``loss_btu_per_gal``, for ``CirculationParams``; None without),
+    whether they are the base's or the refit's (``kept``), the re-anchor
+    pairs read and those with a circulation run in them, the held-out
+    error of the terms kept (mean absolute, BTU; None with nothing held
+    out), and why."""
+
+    book: BookParams
+    loss_btu_per_gal: float | None
+    kept: str
+    pairs: int
+    run_pairs: int
+    error_btu: float | None
+    why: str
+
+    def as_document(self) -> dict[str, Any]:
+        """The fit as a document: ``book`` the terms' fields, and the
+        rest as they are."""
+        return {
+            "book": {
+                f.name: getattr(self.book, f.name)
+                for f in dataclass_fields(self.book)
+            },
+            "loss_btu_per_gal": self.loss_btu_per_gal,
+            "kept": self.kept,
+            "pairs": self.pairs,
+            "run_pairs": self.run_pairs,
+            "error_btu": self.error_btu,
+            "why": self.why,
+        }
+
+
+def fit_book(
+    rows: sa.ChangeRows,
+    observed: Iterable[datetime],
+    params: HeaterParams,
+    *,
+    flow: Iterable[tuple[datetime, float | None]],
+    runs: Iterable[tuple[datetime, datetime]] = (),
+    circulation_flow: Iterable[tuple[datetime, float | None]] = (),
+    inlet: Iterable[tuple[datetime, float]] = (),
+    air: Iterable[tuple[datetime, float]] = (),
+) -> BookTermsFit:
+    """The heat book's terms (``BookParams``) and a circulation loop's
+    loss per gallon from a heater's values' changes and the instants it
+    was heard from, the household's draws (``flow``), and the
+    circulation pump's ``runs`` with the loop's flow
+    (``circulation_flow``, apart from the draws). Like the rows, the
+    flows are gal/min and ``inlet`` and ``air`` °F, whatever the
+    preferred units. ``params.book`` and ``params.circulation``'s loss
+    are the base.
+
+    The book's terms are fitted together, on every pair of quiet full
+    tanks (``sim.calibration.RecordedBook``'s re-anchors up to
+    ``max_anchor_age_h`` apart) across the history: the compressor's
+    heat rate and its slope with the air, the standby UA and, with
+    ``MIN_RUN_PAIRS`` pairs with a run in them, the loop's loss per
+    gallon (``sim.calibration.BOOK_TERMS``), for the least mean absolute
+    error. A term the pairs can't tell apart from the others (the slope,
+    with the air never off one temperature) is held at the base. The
+    rest of the book (the draw line, the anchors' age, the valve's line)
+    is ``params``'. Without the loss fitted, it is the base's, and
+    without a base, the pairs with a run in them are left out. A run's
+    flow is its readings, the first from its start; readings outside
+    the runs are not used, and the pairs with a run that has none are
+    left out.
+
+    It refits only on ``MIN_BOOK_PAIRS`` pairs: the latest fifth is held
+    out of the refit, which replaces the base only when it books them no
+    worse. A term on its bound (``sim.calibration.BOOK_TERM_BOUNDS``) is
+    no fit: the book then misses something between the anchors that the
+    term is standing in for. Without a fit, the base is kept. A span the
+    heater wasn't heard from (``sim_adapters.silences``,
+    ``rows.outages``) breaks the book, and so do a probe's missing
+    readings (None, NaN) and the draws' silence over
+    ``sim_adapters.METER_MAX_GAP``, or before their first reading or
+    after their last."""
+    from nwp500.sim.defaults import SITE_CIRCULATION
+
+    base = params.circulation
+    base_loss = None if base is None else base.loss_btu_per_gal
+    book_p = params.book_terms()
+
+    def finite(
+        rows: Iterable[tuple[datetime, float | None]],
+    ) -> list[tuple[datetime, float]]:
+        """``rows`` in UTC, in order; a missing reading (None, NaN) is
+        none."""
+        return sorted(
+            (t.astimezone(UTC), float(v))
+            for t, v in rows
+            if v is not None and math.isfinite(v)
+        )
+
+    flow_rows = finite(flow)
+    run_spans = sorted((a.astimezone(UTC), b.astimezone(UTC)) for a, b in runs)
+    # Each run's flow is its own readings (``sim_adapters.run_readings``,
+    # as booking takes them); one without any is booked at
+    # ``_UNPRICED_GPM``, and isn't priced.
+    run_rows = sa.run_readings(run_spans, circulation_flow)
+    read_from = {t for t, _ in run_rows}
+    priced = [a in read_from for a, _ in run_spans]
+    run_rows = sorted(
+        [
+            *run_rows,
+            *(
+                (a, _UNPRICED_GPM)
+                for (a, _), ok in zip(run_spans, priced, strict=True)
+                if not ok
+            ),
+        ]
+    )
+    inlets, airs = list(inlet), list(air)
+    seen_n = {"pairs": 0, "run_pairs": 0}
+
+    def keep(why: str, error: float | None = None) -> BookTermsFit:
+        return BookTermsFit(
+            params.book,
+            base_loss,
+            "base",
+            seen_n["pairs"],
+            seen_n["run_pairs"],
+            error,
+            why,
+        )
+
+    if not flow_rows:
+        return keep("no draws: the book can't see them")
+
+    # The observed spans, each booked on its own.
+    heard = sorted(t.astimezone(UTC) for t in observed)
+    if not heard:
+        return keep("the heater was never heard from")
+    # And the draws': a silence over ``METER_MAX_GAP``, or before their
+    # first reading or after their last, would read as a quiet tank.
+    beats = [t for t, _ in flow_rows]
+    meter_dark = [
+        (a, b)
+        for a, b in itertools.pairwise([heard[0], *beats, heard[-1]])
+        if b - a > sa.METER_MAX_GAP or not (beats[0] <= a and b <= beats[-1])
+    ]
+
+    dark = sorted(
+        [
+            *silences(heard, max_gap(heard)),
+            *((a.astimezone(UTC), b.astimezone(UTC)) for a, b in rows.outages),
+            *meter_dark,
+            *_unread_spans(rows.upper_f, heard[-1]),
+            *_unread_spans(rows.lower_f, heard[-1]),
+        ]
+    )
+    segments: list[tuple[datetime, datetime]] = []
+    at = heard[0]
+    for a, b in dark:
+        if a >= heard[-1]:
+            break
+        if a > at:
+            segments.append((at, a))
+        at = max(at, b)
+    if heard[-1] > at:
+        segments.append((at, heard[-1]))
+    # The book has no step before both probes read: each span starts
+    # there, so its steps' instants are its own.
+    firsts = [
+        min(read)
+        for read in (
+            [
+                t.astimezone(UTC)
+                for t, v in r
+                if v is not None and math.isfinite(v)
+            ]
+            for r in (rows.upper_f, rows.lower_f)
+        )
+        if read
+    ]
+    probed = max(firsts) if len(firsts) == 2 else heard[-1]
+    segments = [(max(a, probed), b) for a, b in segments]
+    segments = [
+        (a, b)
+        for a, b in segments
+        if (b - a).total_seconds() >= _MIN_SEGMENT_H * 3600
+    ]
+
+    # The loop's terms for booking: the draws hold none of its water.
+    # The loss is each fit's own (``errors``, ``pair_terms``).
+    template = base or SITE_CIRCULATION
+    terms = CirculationParams(
+        displaced_gal=template.displaced_gal,
+        flow_gpm=_UNPRICED_GPM,
+        loss_btu_per_gal=0.0,
+        meter_share=0.0,
+        run_gap_min=template.run_gap_min,
+    )
+    with_terms = replace(params, circulation=terms if run_spans else None)
+    fitted = [
+        cal.RecordedBook(
+            sa.book_steps_from_changes(
+                rows,
+                start=a,
+                end=b,
+                flow=flow_rows,
+                circulation=run_spans,
+                circulation_flow=run_rows,
+                inlet=inlets,
+                air=airs,
+                params=with_terms,
+            ),
+            book_p,
+            with_terms.circulation,
+            start=a,
+        )
+        for a, b in segments
+    ]
+
+    def pairs_of() -> list[_Pair]:
+        out: list[_Pair] = []
+        for i, bk in enumerate(fitted):
+            if not bk.steps:
+                continue
+            for a0, a1 in bk.reanchors(book_p.max_anchor_age_h):
+                t0, t1 = bk.at(a0), bk.at(a1)
+                inside = [
+                    ok
+                    for (a, b), ok in zip(run_spans, priced, strict=True)
+                    if a < t1 and t0 < b
+                ]
+                out.append((t1, i, (a0, a1), bool(inside), all(inside)))
+        return sorted(out, key=lambda x: x[0])
+
+    def system(chosen: Sequence[_Pair]) -> tuple[np.ndarray, np.ndarray]:
+        """The chosen pairs' errors as ``k + x @ terms``, in their
+        order."""
+        rows: dict[int, list[int]] = {}
+        for at, (_, i, *_) in enumerate(chosen):
+            rows.setdefault(i, []).append(at)
+        k = np.zeros(len(chosen))
+        x = np.zeros((len(chosen), len(cal.BOOK_TERMS)))
+        for i, ats in rows.items():
+            bk, bx = fitted[i].pair_terms(book_p, [chosen[at][2] for at in ats])
+            k[ats], x[ats] = bk, bx
+        return k, x
+
+    def attempt(fit_loss: bool, notes: list[str]) -> BookTermsFit | str:
+        """The fit with the loop's loss fitted or held at the base's;
+        why not, as a string, when only the loss is on its bound or
+        the pairs can't tell it from the book's terms."""
+        found = [f for f in pairs_of() if f[4]]
+        if not fit_loss and base_loss is None:
+            # Runs the book can't price: their pairs are left out.
+            found = [f for f in found if not f[3]]
+        seen_n["pairs"] = len(found)
+        seen_n["run_pairs"] = sum(f[3] for f in found)
+        note = "; ".join(notes)
+
+        def because(why: str) -> str:
+            return f"{why}; {note}" if note else why
+
+        n_held = _split(len(found))
+        if len(found) < MIN_BOOK_PAIRS or not n_held:
+            return keep(
+                because(
+                    f"{len(found)} re-anchor pairs: {MIN_BOOK_PAIRS} needed "
+                    "to hold the latest out and judge a refit by"
+                )
+            )
+        train, held = found[: len(found) - n_held], found[len(found) - n_held :]
+        start = np.array(
+            [
+                book_p.hp_btu_per_h,
+                book_p.hp_btu_per_h_per_f,
+                book_p.ua_btu_per_h_f,
+                base_loss or 0.0,
+            ],
+            dtype=float,
+        )
+        k, x = system(train)
+        free = _independent(x, range(3 + fit_loss))
+        if fit_loss and 3 not in free:
+            return (
+                "the loop's loss can't be told from the book's terms on "
+                "these pairs, not a fit"
+            )
+        fixed = [j for j in range(4) if j not in free]
+        bounds = cal.BOOK_TERM_BOUNDS
+        got = start.copy()
+        got[free] = cal.fit_terms_l1(
+            k + x[:, fixed] @ start[fixed],
+            x[:, free],
+            [bounds[j] for j in free],
+        )
+        by_book: dict[int, list[tuple[int, int]]] = {}
+        for _, i, pair, *_ in held:
+            by_book.setdefault(i, []).append(pair)
+        base_err = float(
+            np.mean(
+                np.abs(
+                    np.concatenate(
+                        [
+                            fitted[i].errors(book_p, base_loss or 0.0, these)
+                            for i, these in by_book.items()
+                        ]
+                    )
+                )
+            )
+        )
+        on_bound = [
+            j
+            for j in free
+            if min(got[j] - bounds[j][0], bounds[j][1] - got[j])
+            <= 1e-6 * (bounds[j][1] - bounds[j][0])
+        ]
+        named = ", ".join(
+            f"{cal.BOOK_TERMS[j]} {got[j]:.4g} ({bounds[j][0]:g} to "
+            f"{bounds[j][1]:g})"
+            for j in on_bound
+        )
+        if on_bound == [3]:
+            return f"the loop's loss on its bound, not a fit: {named}"
+        if on_bound:
+            return keep(because(f"on its bound, not a fit: {named}"), base_err)
+        kh, xh = system(held)
+        refit_err = float(np.mean(np.abs(kh + xh @ got)))
+        versus = (
+            f"held out, {refit_err:.0f} BTU against the base's {base_err:.0f}"
+        )
+        if refit_err > base_err:
+            return keep(because(versus), base_err)
+        return BookTermsFit(
+            replace(
+                params.book,
+                hp_btu_per_h=float(got[0]),
+                hp_btu_per_h_per_f=float(got[1]),
+                ua_btu_per_h_f=float(got[2]),
+            ),
+            float(got[3]) if fit_loss else base_loss,
+            "refit",
+            seen_n["pairs"],
+            seen_n["run_pairs"],
+            refit_err,
+            because(versus),
+        )
+
+    notes: list[str] = []
+    with_run = sum(f[3] for f in pairs_of() if f[4])
+    if with_run >= MIN_RUN_PAIRS:
+        done = attempt(True, notes)
+        if isinstance(done, BookTermsFit):
+            return done
+        notes = [done]
+    elif run_spans:
+        notes = [
+            f"{with_run} pairs with a run: {MIN_RUN_PAIRS} needed to fit "
+            "the loop's loss"
+        ]
+    # With the loss held, nothing is fitted on its bound but the book.
+    return cast(BookTermsFit, attempt(False, notes))
+
+
+#: The order ``fit_book`` takes its terms in when the pairs can't tell
+#: them all apart: the slope with the air last, as with the air never
+#: moving it only rescales the heat rate.
+_TERM_PRIORITY = (0, 2, 3, 1)
+
+
+def _independent(x: np.ndarray, terms: Iterable[int]) -> list[int]:
+    """Of ``terms``, the columns of ``x`` the pairs tell apart, in
+    ``_TERM_PRIORITY``: a column no other combination of those taken
+    can make is taken, and the rest are held. A column of zeros (a term
+    the pairs don't move) or one in proportion to another (the slope,
+    with the air at one temperature) is held."""
+    taken: list[int] = []
+    wanted = set(terms)
+    for j in _TERM_PRIORITY:
+        if j not in wanted:
+            continue
+        scale = np.linalg.norm(x[:, j])
+        if scale <= 1e-9:
+            continue
+        trial = [*taken, j]
+        cols = x[:, trial] / np.linalg.norm(x[:, trial], axis=0)
+        if np.linalg.matrix_rank(cols, tol=1e-6) == len(trial):
+            taken.append(j)
+    return sorted(taken)
+
+
+def _unread_spans(
+    probe: Iterable[tuple[datetime, float | None]], end: datetime
+) -> list[tuple[datetime, datetime]]:
+    """The spans a probe's held reading is none (None, NaN), to ``end``
+    for one never read again: the book has no step there. In instant
+    order, UTC, whatever zone (or none, local) each reading is in."""
+    out: list[tuple[datetime, datetime]] = []
+    began: datetime | None = None
+    for t, v in sorted(
+        ((t.astimezone(UTC), v) for t, v in probe), key=lambda r: r[0]
+    ):
+        known = v is not None and math.isfinite(v)
+        if not known and began is None:
+            began = t
+        elif known and began is not None:
+            out.append((began, t))
+            began = None
+    if began is not None:
+        out.append((began, end))
+    return out

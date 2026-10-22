@@ -367,6 +367,101 @@ On a desktop computer, 60 days with a heartbeat every 10 seconds
 Assistant's own queries, and 11 to fit, in about 180 MB.
 
 
+Fit the heat book
+=================
+
+The heat book (``book_from_changes``) counts the heat the tank holds
+from the compressor's heat rate and its slope with the air, the standby
+UA, and, with a circulation pump, the loop's loss per gallon
+(``CirculationParams.loss_btu_per_gal``). ``fit_book`` fits them
+together from the heater's history, the household's draws, and the
+pump's runs with the loop's flow. The draws and the loop's flow are
+yours to give, apart from each other: the fit takes every gallon of the
+draws as hot water drawn, and each run at the loop's flow.
+
+.. code-block:: python
+
+   from dataclasses import replace
+
+   from nwp500 import sim_adapters as sa
+
+   async with ha.HomeAssistantClient(url, token) as client:
+       history = await ha.read_heater_history(client, entities, start, end)
+       record = await ha.record_inputs(client, ha.Entities(air=..., humidity=...),
+                                       start, end)
+   params = sim_calibrate.calibrate_changes(
+       history.rows, history.observed, record=record, notes=history.notes
+   ).calibration.params
+   fit = sim_calibrate.fit_book(
+       history.rows, history.observed, params,
+       flow=draws, runs=runs, circulation_flow=loop_flow,
+       air=record.air or (),
+   )
+   params = replace(params, book=fit.book)
+
+``draws`` and ``loop_flow`` are (instant, gal/min) readings and ``runs``
+the pump's (start, end) spans; ``record_inputs``' air is °F, as the fit
+takes it. ``fit.loss_btu_per_gal`` is the loop's loss for your
+``CirculationParams`` (None without one).
+
+The fit reads the pairs of quiet full tanks up to
+``book.max_anchor_age_h`` apart, and fits each term for the least mean
+absolute error between the book and the probes at the second of each
+pair:
+
+- **The book's terms:** the compressor's heat rate and slope, and the
+  standby UA, on every pair. A term the pairs can't tell apart from
+  the others (the slope, with the air never off one temperature) stays
+  at ``params.book``. The rest of the book (its draw line, the anchors'
+  age, the valve's line) is ``params``'.
+- **The loop's loss per gallon:** on 10 pairs with a run between,
+  with the book's terms. With fewer, the loss is
+  ``params.circulation``'s, and without one, the pairs with a run are
+  left out. A pair with a run that has no flow reading is left out.
+
+The fit needs 10 pairs. It holds out the latest fifth and replaces the
+base only when it books them no worse. A term on its bound
+(``sim.calibration.BOOK_TERM_BOUNDS``) is no fit: the book misses
+something between those anchors that the term is standing in for. The
+loop's loss on its bound, or one the pairs can't tell from the book's
+terms (runs that follow the recoveries), leaves the loss at the base's;
+any other term on its bound keeps the base. ``fit.kept`` says which it
+kept and ``fit.why`` why. A span the heater wasn't heard from, a probe
+read nothing, or the draws were silent over an hour, breaks the book.
+
+A pair with a run needs a quiet full tank on each side of it, so they
+come slowly. With a pump running about once a day, one installation had
+5 in 14 days and 19 in 42: fit on four weeks or more, and raise Home
+Assistant's ``purge_keep_days`` to keep them.
+
+Book with the same inputs. Runs are priced with the loop's loss, in a
+``CirculationParams`` of your installation's with ``meter_share`` 0,
+since the draws hold none of the loop's water; without a loss, they
+can't be booked. ``sa.run_readings`` gives the book each run's flow as
+the fit takes it: its own readings, the first from its start, and none
+read outside the runs.
+
+.. code-block:: python
+
+   from nwp500.sim.params import CirculationParams
+
+   book = None
+   loss = fit.loss_btu_per_gal
+   if loss is not None or not runs:
+       loop = None
+       if loss is not None:
+           loop = CirculationParams(
+               displaced_gal=..., flow_gpm=..., loss_btu_per_gal=loss,
+               meter_share=0.0,
+           )
+       book = sa.book_from_changes(
+           history.rows, history.observed, replace(params, circulation=loop),
+           at=end, flow=draws, circulation=runs,
+           circulation_flow=sa.run_readings(runs, loop_flow),
+           air=record.air or (),
+       )
+
+
 Limitations
 ===========
 

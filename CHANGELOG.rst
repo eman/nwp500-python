@@ -49,6 +49,21 @@ Added
   simulator's units).
 - ``sim_adapters.cold_supply(..., window=)``: how far back a long draw
   counts (72 hours by default).
+- **The heat book's terms and the circulation loop's loss, fitted
+  together** (#196). ``sim_calibrate.fit_book`` fits the book's
+  compressor heat rate and slope with the air, its standby UA and a
+  circulation loop's loss per gallon from a heater's values' changes,
+  the household's draws, and the pump's runs with the loop's flow, each
+  given apart from the other. The loss is fitted with the book's terms
+  on the pairs of quiet full tanks with a run between. It needs 10
+  pairs (10 with a run for the loss), and keeps the base unless the
+  refit books the held-out latest fifth no worse, and unless a term
+  reaches its bound (``BookTermsFit``). ``sim.calibration.fit_terms_l1``
+  fits the terms exactly on ``RecordedBook.pair_terms``, within
+  ``BOOK_TERM_BOUNDS``. ``sim_adapters.run_readings`` gives the book a
+  loop's flow readings within its runs, each run's first held from its
+  start, as the fit takes them, and ``sim_adapters.run_flow`` gives runs
+  at a flow.
 
 Fixed
 -----
@@ -59,6 +74,10 @@ Fixed
 
 Changed
 -------
+- ``sim.calibration.RecordedBook`` prices a draw against each step's
+  inlet, as the heat book does (``book.step_heat_btu``), where it priced
+  it against the book's reference. Without an inlet the steps take
+  ``inlet_default_f``, the reference by default, and nothing changes.
 - ``max_gap``, ``GAP_SAMPLES`` and ``MIN_GAP`` are defined in
   ``sim_adapters`` and documented there. ``sim_calibrate`` still exports
   them.

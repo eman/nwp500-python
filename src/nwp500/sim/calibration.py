@@ -53,6 +53,7 @@ import pandas as pd
 from scipy.optimize import (
     OptimizeResult,
     least_squares,
+    linprog,
     minimize,
     minimize_scalar,
 )
@@ -1244,8 +1245,8 @@ def snapshots(
         first = int(np.argmax(lead)) if lead.any() else len(lead)
         if (
             0 < first < len(lead)
-            and index[first] > start - DRAW_LEAD
-            and interval_water[first - 1]
+            and bool(index[first] > start - DRAW_LEAD)
+            and bool(interval_water[first - 1])
         ):
             draw_free = False
         for at in _snapshots(start, end):
@@ -2162,8 +2163,8 @@ class RecordedBook:
     contiguous ``sim_adapters.BOOK_GRID_S`` grid. Its anchors are the
     quiet ones only (a full tank, nothing heating, after a clean
     recovery): a recovery ending mid-draw is no place to check the book
-    against the probes. Draws are priced at the book's reference, the
-    inlet assumed rather than fitted."""
+    against the probes. Draws are priced against each step's inlet, as
+    the book prices them (``book.step_heat_btu``)."""
 
     def __init__(
         self,
@@ -2183,6 +2184,7 @@ class RecordedBook:
         self.u = np.array([s.upper_f for s in self.steps])
         self.l = np.array([s.lower_f for s in self.steps])
         self.air = np.array([s.ambient_f for s in self.steps])
+        self.inlet = np.array([s.inlet_f for s in self.steps])
         house = np.array([house_gpm(s, circulation) for s in self.steps])
         self.draw = np.where(house > p.draw_gpm, house * per_step, 0.0)
         self.circulated = np.array(
@@ -2226,7 +2228,7 @@ class RecordedBook:
             + self.el * p.element_w * BTU_PER_WH_BOOK * h
             - self.draw
             * WATER_BTU_PER_GAL_F
-            * np.clip(delivered - p.reference_f, 0, None)
+            * np.clip(delivered - self.inlet, 0, None)
             - loss_btu_per_gal * self.circulated
             - p.ua_btu_per_h_f
             * np.clip((self.u + self.l) / 2 - self.air, 0, None)
@@ -2274,6 +2276,41 @@ class RecordedBook:
                 out.append((int(prev), int(x)))
         return out
 
+    def pair_terms(
+        self, p: BookParams, pairs: Sequence[tuple[int, int]]
+    ) -> tuple[np.ndarray, np.ndarray]:
+        """Each pair's error (``errors``) as ``k + x @ terms``, linear
+        in the fitted terms (``BOOK_TERMS``: the compressor's heat rate,
+        its slope with the air, the standby UA and circulation's loss
+        per gallon), with ``p``'s others held: ``k`` per pair, BTU, and
+        ``x`` a row per pair."""
+        h = self.seconds / 3600.0
+        delivered = np.minimum(
+            self.u, p.delivery_intercept_f + p.delivery_slope * self.u
+        )
+        fixed = self.el * p.element_w * BTU_PER_WH_BOOK * h - (
+            self.draw
+            * WATER_BTU_PER_GAL_F
+            * np.clip(delivered - self.inlet, 0, None)
+        )
+        columns = [
+            self.comp * h,
+            self.comp * (self.air - 65.0) * h,
+            -np.clip((self.u + self.l) / 2 - self.air, 0, None) * h,
+            -self.circulated,
+        ]
+
+        def cum(e: np.ndarray) -> np.ndarray:
+            return np.concatenate([[0.0], np.cumsum(np.nan_to_num(e))])
+
+        ep, f = self.probe_heat(p), cum(fixed)
+        cs = [cum(c) for c in columns]
+        k = np.array([ep[a0] - ep[a1] + f[a1] - f[a0] for a0, a1 in pairs])
+        x = np.array([[c[a1] - c[a0] for c in cs] for a0, a1 in pairs]).reshape(
+            len(pairs), len(cs)
+        )
+        return k, x
+
     def errors(
         self,
         p: BookParams,
@@ -2289,6 +2326,18 @@ class RecordedBook:
 
 #: BTU per Wh, at the rounding the book was fitted with.
 BTU_PER_WH_BOOK = 3.412
+
+#: The book's fitted terms, in ``RecordedBook.pair_terms``' order, and
+#: the plausible bounds each is fitted within: the compressor's heat
+#: rate (BTU/h) and its slope with the air (BTU/h/°F), the standby UA
+#: (BTU/h/°F) and circulation's loss per gallon (BTU/gal).
+BOOK_TERMS = (
+    "hp_btu_per_h",
+    "hp_btu_per_h_per_f",
+    "ua_btu_per_h_f",
+    "loss_btu_per_gal",
+)
+BOOK_TERM_BOUNDS = ((2000.0, 9000.0), (-50.0, 200.0), (0.0, 20.0), (0.0, 500.0))
 
 
 @dataclass(frozen=True)
@@ -2324,9 +2373,8 @@ def fit_book_terms(
         )
 
     def loss(x: np.ndarray) -> float:
-        if not (2000 < x[0] < 9000 and -50 <= x[1] <= 200):
-            return 1e12
-        if not (0 <= x[2] <= 20 and 0 <= x[3] <= 500):
+        bounded = zip(x, BOOK_TERM_BOUNDS, strict=True)
+        if not all(lo <= v <= hi for v, (lo, hi) in bounded):
             return 1e12
         return float(np.mean(np.abs(book.errors(terms(x), float(x[3]), pairs))))
 
@@ -2347,6 +2395,32 @@ def fit_book_terms(
         mae_btu=float(np.mean(np.abs(err))) if len(err) else float("nan"),
         mean_btu=float(np.mean(err)) if len(err) else float("nan"),
     )
+
+
+def fit_terms_l1(
+    k: np.ndarray,
+    x: np.ndarray,
+    bounds: Sequence[tuple[float, float]],
+) -> np.ndarray:
+    """The terms minimising ``sum |k + x @ terms|`` within ``bounds``,
+    exactly (a linear program): ``RecordedBook.pair_terms``' errors
+    fitted for the least mean absolute error."""
+    n, m = x.shape
+    # Variables: the terms, then each pair's |error|.
+    cost = np.concatenate([np.zeros(m), np.ones(n)])
+    eye = np.eye(n)
+    a_ub = np.block([[x, -eye], [-x, -eye]])
+    b_ub = np.concatenate([-k, k])
+    r = linprog(
+        cost,
+        A_ub=a_ub,
+        b_ub=b_ub,
+        bounds=[*bounds, *([(0.0, None)] * n)],
+        method="highs",
+    )
+    if not r.success:
+        raise ValueError(f"the book's terms could not be fitted: {r.message}")
+    return np.asarray(r.x[:m])
 
 
 #: The anchor-age bands the book's error is read in, hours.
@@ -3675,10 +3749,13 @@ def element_power(record: Record, off_points: pd.DataFrame) -> pd.DataFrame:
         ]
         other = (
             record.lower_element
-            if s["which"] == "upper"
+            if str(s["which"]) == "upper"
             else record.upper_element
         )
-        if any((v := _asof_row(other, t)) is not None and v > 0 for t in clock):
+        if any(
+            (v := _asof_row(other, t)) is not None and bool(v > 0)
+            for t in clock
+        ):
             continue
         inside = [(t, v) for t, v in w if on <= t < off]
         if len(inside) < 2:
@@ -3812,7 +3889,10 @@ def element_runs(
                 "start": index[0],
                 "mode": int(mode),
                 "which": col["which"][0],
-                "elapsed_min": (index[-1] - index[0]).total_seconds() / 60.0,
+                "elapsed_min": (
+                    cast(pd.Timestamp, index[-1]) - cast(pd.Timestamp, index[0])
+                ).total_seconds()
+                / 60.0,
                 "rise": col[zone][-1] - col[zone][0],
                 "start_probe": col[zone][0],
                 "setpoint": col["setpoint"][0],

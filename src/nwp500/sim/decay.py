@@ -1094,7 +1094,9 @@ class AmbientSampler:
         # A plain datetime, not a Timestamp: `at` subtracts from it on
         # every call and that is now the projection's hot path.
         self._base = idx[0].to_pydatetime()  # pyright: ignore[reportAttributeAccessIssue]
-        self._stamps = (idx - idx[0]).total_seconds().to_numpy()
+        self._stamps = np.asarray(
+            (idx - idx[0]) / pd.Timedelta(seconds=1), dtype=float
+        )
         self._values = values
 
     @property
