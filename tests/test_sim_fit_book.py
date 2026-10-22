@@ -75,6 +75,7 @@ def history(
     tied: bool = False,
     run_every: int = 1,
     runs_in: int | None = None,
+    run_min: int | None = None,
 ) -> dict[str, Any]:
     """A history of ``cycles`` six-hour cycles walked by the book's own
     balance (``truth``, else ``params``' book), each run taking ``loss``
@@ -84,6 +85,8 @@ def history(
     so the runs' gallons follow the compressor's hours."""
 
     def runs_to(cycle: int) -> int:
+        if run_min is not None:
+            return RUN[0] + run_min
         if tied:
             return RUN[0] + (recovers_to(cycle) - RECOVERY[0]) // 4
         return run_end(cycle)
@@ -592,3 +595,30 @@ def test_runs_without_terms_still_break_the_quiet() -> None:
     assert (got.pairs, got.run_pairs) == (15, 0)
     assert got.kept == "refit", got.why
     assert_book(got.book, OTHER)
+
+
+def test_runs_too_short_to_read_clear_of_their_edges() -> None:
+    """Minute-long runs on a meter reporting every 30 s: every reading
+    in a run is within a lag of an edge, carrying water from outside
+    it, so none reads the run's flow, and no run is clean."""
+    got = fit(NO_BASE, history(NO_BASE, 16, 150.0, reported=True, run_min=1))
+    assert got.runs == 0
+    assert got.circulation is None
+    assert "0 clean runs" in got.why
+
+
+def test_a_probe_gap_breaks_the_book() -> None:
+    """The lower probe unread from 2 h to 5 h, runs every other cycle:
+    no pair crosses the gap, and the steps after it keep their own
+    instants, so the loss is found."""
+    h = history(NO_BASE, 24, 150.0, run_every=2)
+    gap = (T0 + timedelta(hours=2), T0 + timedelta(hours=5))
+    lower: list[Any] = [
+        *(r for r in h["rows"].lower_f if r[0] < gap[0]),
+        (gap[0], None),
+        *(r for r in h["rows"].lower_f if r[0] >= gap[1]),
+    ]
+    got = fit(NO_BASE, h | {"rows": replace(h["rows"], lower_f=lower)})
+    assert got.circulation is not None, got.why
+    assert got.circulation.loss_btu_per_gal == pytest.approx(150.0, abs=1.0)
+    assert_book(got.book, SITE.book)

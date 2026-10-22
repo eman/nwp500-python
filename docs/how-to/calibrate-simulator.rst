@@ -419,7 +419,8 @@ pair:
   ``params``'.
 - **What the meter sees of a run:** the median meter flow over the
   runs' clean minutes (no more than ``book.draw_gpm`` over the run's
-  own median, so no tap was open), from 10 clean runs over 3 days. It is
+  own median, so no tap was open, and clear of each edge by
+  ``meter_lag``), from 10 clean runs over 3 days. It is
   the run's flow, with ``meter_share`` 1. Under 0.05 gal/min the meter
   isn't on the loop: ``meter_share`` is 0 and a run is priced at the
   base's flow, else 1 gal/min.
@@ -438,8 +439,8 @@ something between those anchors that the term is standing in for. The
 loop's loss on its bound, or one the pairs can't tell from the book's
 terms (runs that follow the recoveries), leaves the loss out; any other
 term on its bound keeps the base. ``fit.kept`` says which it kept and ``fit.why``
-why. A span the heater wasn't heard from, or the meter was silent over
-an hour, breaks the book.
+why. A span the heater wasn't heard from, a probe read nothing, or the
+meter was silent over an hour, breaks the book.
 
 A pair with a run needs a quiet full tank on each side of it, so they
 come slowly. With a pump running about once a day, one installation had

@@ -1336,7 +1336,8 @@ def fit_book(
     is ``params``'.
 
     The loop's flow is the meter's median over clean run minutes (no
-    more than ``book.draw_gpm`` over the run's own median: no draw),
+    more than ``book.draw_gpm`` over the run's own median: no draw;
+    clear of each edge by ``meter_lag``),
     with ``meter_share`` 1, from ``MIN_CIRCULATION_RUNS`` clean runs over
     ``MIN_CIRCULATION_DAYS`` days; under ``METER_SEES_CIRCULATION_GPM``
     the meter doesn't pass the circulation, and a run is priced at the
@@ -1354,7 +1355,8 @@ def fit_book(
     no fit: the book then misses something between the anchors that the
     term is standing in for. Without a fit, the base is kept. A span the
     heater wasn't heard from (``sim_adapters.silences``,
-    ``rows.outages``) breaks the book, and so does the meter's silence
+    ``rows.outages``) breaks the book, and so do a probe's missing
+    readings (None, NaN) and the meter's silence
     over ``sim_adapters.METER_MAX_GAP``, or before its first reading or
     after its last."""
     from nwp500.sim.defaults import SITE_CIRCULATION
@@ -1394,7 +1396,10 @@ def fit_book(
         clean: list[float] = []
         clean_runs: list[datetime] = []
         for a, b in run_spans:
-            lo, hi = bisect_left(times, a), bisect_left(times, b)
+            # Clear of the edges: a report near one carries water from
+            # outside the run.
+            lo = bisect_left(times, a + meter_lag)
+            hi = bisect_left(times, b - meter_lag)
             inside = [v for _, v in flow_rows[lo:hi]]
             if not inside:
                 continue
@@ -1448,11 +1453,32 @@ def fit_book(
         for a, b in itertools.pairwise([heard[0], *beats, heard[-1]])
         if b - a > sa.METER_MAX_GAP or not (beats[0] <= a and b <= beats[-1])
     ]
+
+    def unknown(
+        probe: Iterable[tuple[datetime, float | None]],
+    ) -> list[tuple[datetime, datetime]]:
+        """The spans a probe's held reading is none (None, NaN): the
+        book has no step there."""
+        out: list[tuple[datetime, datetime]] = []
+        began: datetime | None = None
+        for t, v in sorted(probe, key=lambda r: r[0]):
+            known = v is not None and math.isfinite(v)
+            if not known and began is None:
+                began = t.astimezone(UTC)
+            elif known and began is not None:
+                out.append((began, t.astimezone(UTC)))
+                began = None
+        if began is not None:
+            out.append((began, heard[-1]))
+        return out
+
     dark = sorted(
         [
             *silences(heard, max_gap(heard)),
             *((a.astimezone(UTC), b.astimezone(UTC)) for a, b in rows.outages),
             *meter_dark,
+            *unknown(rows.upper_f),
+            *unknown(rows.lower_f),
         ]
     )
     segments: list[tuple[datetime, datetime]] = []
