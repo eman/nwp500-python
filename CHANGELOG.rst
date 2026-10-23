@@ -44,6 +44,10 @@ Added
 
 Changed
 -------
+
+- The simulate how-to's ``book_from_changes`` example passes the
+  circulation's runs and flow, and says to pass the household's draws,
+  separated from any circulation in the meter, with ``meter_share`` 0.
 - With a model, given or fitted, and no fresh reading of the air beside
   the heater, ``HomeAssistantEnvironment`` anchors the projection to
   ``heater``'s newest air reading from the last hour while its
