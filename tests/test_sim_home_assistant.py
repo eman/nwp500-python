@@ -1441,6 +1441,50 @@ class TestTheAirFitted:
         assert env.ambient_f == 60.0
         assert any("held one value" in n for n in source.notes)
 
+    async def test_only_readings_the_outdoor_history_covers(self) -> None:
+        """Outdoor air for the last hour only: the model would hold it
+        flat over three days of readings, so there is no fit."""
+        series = [
+            (NOW - timedelta(hours=72), 60.0),
+            (NOW - timedelta(hours=36), 60.1),
+            (NOW, 66.0),
+        ]
+        client = FakeClient(
+            {"sensor.air": _s("sensor.air", 66.0, "°F")},
+            {"sensor.air": series},
+            forecast=OUTDOOR,
+            outdoor=[(NOW - timedelta(hours=1), 50.0), (NOW, 60.0)],
+        )
+        source = _fitting(client, air="sensor.air")
+        await source.read()
+        assert source.fitted_air is None
+        assert any("outdoor history covers" in n for n in source.notes)
+
+    async def test_a_stale_heater_reading_is_no_anchor(self) -> None:
+        """Still running, but the heater's air last changed 2 h ago."""
+        compressor: list[Row] = [(NOW - timedelta(hours=72), "off")]
+        air: list[Row] = [(NOW - timedelta(hours=72), 80.0)]
+        for h in range(71, 1, -1):
+            at = NOW - timedelta(hours=h)
+            on = h % 3 == 1 or h == 2
+            compressor.append((at, "on" if on else "off"))
+            if on:
+                for m in range(3, 60, 5):
+                    t = at + timedelta(minutes=m)
+                    air.append((t, _at_heater(t)))
+            else:
+                air.append((at, _at_heater(at) + 6.0))
+        client = FakeClient(
+            {"sensor.heater_air": _s("sensor.heater_air", air[-1][1], "°F")},
+            {"sensor.heater_air": air, "binary_sensor.compressor": compressor},
+            forecast=OUTDOOR,
+            outdoor=OUTDOOR_HISTORY,
+        )
+        source = _fitting(client, HEATER)
+        await source.read()
+        assert source.fitted_air is not None
+        assert any("unanchored" in n for n in source.notes)
+
     async def test_without_an_air_reading_there_is_nothing_to_fit(self) -> None:
         client = FakeClient(forecast=OUTDOOR, outdoor=OUTDOOR_HISTORY)
         source = _fitting(client)
@@ -1572,14 +1616,30 @@ class TestWhileRunning:
             (self.ON + timedelta(minutes=1), 75.0),  # not yet settled
             (self.ON + timedelta(minutes=25), 70.0),
         ]
-        got = ha._while_running(air, self.RUNS, NOW)  # pyright: ignore[reportPrivateUsage]
+        got, newest = ha._while_running(air, self.RUNS, NOW)  # pyright: ignore[reportPrivateUsage]
         assert got
         assert {v for _, v in got} == {70.0}
         assert got[0][0] == self.ON + timedelta(minutes=32)
+        assert newest == air[-1]
 
     def test_nothing_while_the_sensor_is_unknown(self) -> None:
         air = [(self.ON + timedelta(minutes=3), 70.0)]
         gap = (self.ON + timedelta(minutes=20), self.ON + timedelta(minutes=40))
-        got = ha._while_running(air, self.RUNS, NOW, [gap])  # pyright: ignore[reportPrivateUsage]
+        got, _ = ha._while_running(air, self.RUNS, NOW, [gap])  # pyright: ignore[reportPrivateUsage]
         assert got
         assert not any(gap[0] <= t < gap[1] for t, _ in got)
+
+    def test_a_repeated_on_row_is_one_run(self) -> None:
+        """An attribute's update writes a row with the same state."""
+        runs = [(self.ON + timedelta(minutes=m), "on") for m in range(60)]
+        air = [(self.ON + timedelta(minutes=3), 70.0)]
+        got, _ = ha._while_running(air, runs, NOW)  # pyright: ignore[reportPrivateUsage]
+        assert len(got) == 5  # from 12 min, after the 3 min reading
+
+    def test_the_newest_reading_keeps_its_own_instant(self) -> None:
+        """Carried to 13:52, a reading from 12:03 is still from 12:03."""
+        on = NOW - timedelta(hours=2)
+        air = [(on + timedelta(minutes=3), 70.0)]
+        got, newest = ha._while_running(air, [(on, "on")], NOW)  # pyright: ignore[reportPrivateUsage]
+        assert got[-1][0] == NOW - timedelta(minutes=8)
+        assert newest == air[0]

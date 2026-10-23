@@ -863,19 +863,28 @@ def _while_running(
     end: datetime,
     unknown: Sequence[Span] = (),
     step: timedelta = timedelta(minutes=10),
-) -> list[Reading]:
+) -> tuple[list[Reading], Reading | None]:
     """``air``'s value in force every ``step`` through each of
     ``compressor``'s runs (its ``on`` states) to its end, or ``end`` for
     one still running, where that value was read ``RUN_SETTLE`` or more
     into the run: one read earlier, or while idle, is not the air the
     heater stands in. None inside ``unknown``, when the sensor said
-    nothing that was read."""
+    nothing that was read. The second item is the newest reading those
+    samples rest on, at its own instant."""
+    # A row that repeats the state (an attribute's update) is not a new
+    # run; a change to anything else, ``unavailable`` included, ends one.
+    changes: list[tuple[datetime, str]] = []
+    for at, state in compressor:
+        text = state.strip().lower()
+        if not changes or changes[-1][1] != text:
+            changes.append((at, text))
     times = [t for t, _ in air]
     out: list[Reading] = []
-    for i, (on_at, state) in enumerate(compressor):
-        if state.strip().lower() != "on":
+    newest: Reading | None = None
+    for i, (on_at, state) in enumerate(changes):
+        if state != "on":
             continue
-        stop = compressor[i + 1][0] if i + 1 < len(compressor) else end
+        stop = changes[i + 1][0] if i + 1 < len(changes) else end
         settled = on_at + RUN_SETTLE
         t = settled
         while t < stop:
@@ -886,8 +895,10 @@ def _while_running(
                 and not any(a <= t < b for a, b in unknown)
             ):
                 out.append((t, air[k - 1][1]))
+                if newest is None or air[k - 1][0] > newest[0]:
+                    newest = air[k - 1]
             t += step
-    return out
+    return out, newest
 
 
 class HomeAssistantEnvironment:
@@ -1051,25 +1062,31 @@ class HomeAssistantEnvironment:
         if not readings:
             self.notes.append(f"air: no readings of {what} to fit to")
             return None
-        span = readings[-1][0] - readings[0][0]
-        if span < LOCATION_AIR_MIN_SPAN:
-            self.notes.append(
-                f"air: {span.total_seconds() / 3600:.0f} h of {what}, "
-                f"under the {LOCATION_AIR_MIN_SPAN.total_seconds() / 3600:g}"
-                " h a fit needs"
-            )
+        if not self._spans_a_day(readings, what, ""):
+            return None
+        lag = timedelta(hours=max(FIT_LAGS_H))
+        # From before the first reading by the longest lag a fit tries.
+        outdoor = await self.client.outdoor_history(weather, since - lag, now)
+        if not outdoor:
+            self.notes.append(f"air: no outdoor air recorded for {weather}")
+            return None
+        # Only readings the outdoor history covers at every lag tried:
+        # past its ends, the model holds the outdoor air flat.
+        first, last = outdoor[0][0] + lag, outdoor[-1][0]
+        readings = [(t, v) for t, v in readings if first <= t <= last]
+        if not readings or not self._spans_a_day(
+            readings, what, " that the outdoor history covers"
+        ):
+            if not readings:
+                self.notes.append(
+                    f"air: no readings of {what} that the outdoor history "
+                    "covers"
+                )
             return None
         if len({v for _, v in readings}) < 2:
             self.notes.append(
                 f"air: {what} held one value, so nothing to fit to"
             )
-            return None
-        # From before the first reading by the longest lag a fit tries.
-        outdoor = await self.client.outdoor_history(
-            weather, since - timedelta(hours=max(FIT_LAGS_H)), now
-        )
-        if not outdoor:
-            self.notes.append(f"air: no outdoor air recorded for {weather}")
             return None
         fitted = fit_air(readings, outdoor)
         days = LOCATION_AIR_WINDOW.total_seconds() / 86400
@@ -1086,6 +1103,21 @@ class HomeAssistantEnvironment:
             f"{fitted.model.lag.total_seconds() / 3600:g} h late)"
         )
         return fitted
+
+    def _spans_a_day(
+        self, readings: Sequence[Reading], what: str, covered: str
+    ) -> bool:
+        """Whether ``readings`` span ``LOCATION_AIR_MIN_SPAN``; a note
+        when they don't."""
+        span = readings[-1][0] - readings[0][0]
+        if span >= LOCATION_AIR_MIN_SPAN:
+            return True
+        self.notes.append(
+            f"air: {span.total_seconds() / 3600:.0f} h of {what}{covered}, "
+            f"under the {LOCATION_AIR_MIN_SPAN.total_seconds() / 3600:g} h "
+            "a fit needs"
+        )
+        return False
 
     async def _air_history(
         self, since: datetime, now: datetime
@@ -1116,14 +1148,14 @@ class HomeAssistantEnvironment:
             return None
         unit = (await self.client.state(h.ambient)).unit
         ambient, unread = got.converted(h.ambient, unit, to_f, now)
-        samples = _while_running(
+        samples, newest = _while_running(
             ambient,
             got.states.get(h.compressor, []),
             now,
             busy(unread, got.outages.get(h.ambient, [])),
         )
-        if samples and now - samples[-1][0] <= FRESH:
-            self._heater_anchor = samples[-1]
+        if newest is not None and now - newest[0] <= FRESH:
+            self._heater_anchor = newest
         return samples, "the heater's own air reading"
 
     async def _humidity(self) -> float | None:
