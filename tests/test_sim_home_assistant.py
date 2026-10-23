@@ -277,6 +277,44 @@ class TestTheConfiguration:
         with pytest.raises(ValueError, match="location_air"):
             ha.sources_from(doc, {"HA_TOKEN": "x"})
 
+    HEATER: ClassVar[dict[str, str]] = {
+        "heard": "sensor.last_status",
+        "upper": "sensor.upper",
+        "lower": "sensor.lower",
+        "compressor": "binary_sensor.compressor",
+        "ambient": "sensor.heater_air",
+    }
+
+    def test_the_heaters_entities(self) -> None:
+        assert ha.sources_from(self.DOC, {"HA_TOKEN": "x"}).heater is None
+        doc = {
+            "home_assistant": self.DOC["home_assistant"]
+            | {"heater": self.HEATER}
+        }
+        got = ha.sources_from(doc, {"HA_TOKEN": "x"}).heater
+        assert got == ha.HeaterEntities(**self.HEATER)
+
+    @pytest.mark.parametrize(
+        ("heater", "match"),
+        [
+            ({"heard": "sensor.x"}, "needs upper, lower"),
+            ({"garden": "sensor.x"}, "unknown heater entities"),
+            (
+                {"heard": "x", "upper": "sensor.u", "lower": "sensor.l"},
+                "entity id",
+            ),
+            ("sensor.x", "must be a table"),
+        ],
+    )
+    def test_what_is_wrong_with_the_heater_is_named(
+        self, heater: Any, match: str
+    ) -> None:
+        doc = {
+            "home_assistant": self.DOC["home_assistant"] | {"heater": heater}
+        }
+        with pytest.raises(ValueError, match=match):
+            ha.sources_from(doc, {"HA_TOKEN": "x"})
+
 
 class FakeClient:
     """Answers as Home Assistant would, from canned states and series."""

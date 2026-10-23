@@ -150,6 +150,9 @@ class Sources:
     token: str = field(repr=False)
     entities: Entities
     location_air: LocationAirModel | None = None
+    #: The heater's own entities, whose air while the compressor runs
+    #: fits and anchors the projection where no air entity does.
+    heater: HeaterEntities | None = None
 
 
 def sources_from(doc: Mapping[str, Any], environ: Mapping[str, str]) -> Sources:
@@ -166,6 +169,13 @@ def sources_from(doc: Mapping[str, Any], environ: Mapping[str, str]) -> Sources:
         demand = "binary_sensor.hot_water_demand"
         circulation_speed = "sensor.circulation_pump_speed"
         weather = "weather.forecast_home"
+
+        [home_assistant.heater]         # optional: the heater's own
+        heard = "sensor.water_heater_last_status"
+        upper = "sensor.water_heater_upper_tank_temperature"
+        lower = "sensor.water_heater_lower_tank_temperature"
+        compressor = "binary_sensor.water_heater_compressor"
+        ambient = "sensor.water_heater_ambient_temperature"
 
         [location_air]                  # optional
         damping = 0.638
@@ -219,7 +229,26 @@ def sources_from(doc: Mapping[str, Any], environ: Mapping[str, str]) -> Sources:
         token=token,
         entities=Entities(**raw),
         location_air=model,
+        heater=_heater_from(ha.get("heater")),
     )
+
+
+def _heater_from(raw: Any) -> HeaterEntities | None:
+    if raw is None:
+        return None
+    if not isinstance(raw, Mapping):
+        raise ValueError("home_assistant.heater must be a table")
+    raw = cast(Mapping[str, Any], raw)
+    unknown = sorted(set(raw) - set(HeaterEntities.__dataclass_fields__))
+    if unknown:
+        raise ValueError(f"unknown heater entities: {', '.join(unknown)}")
+    for name, value in raw.items():
+        if not isinstance(value, str) or "." not in value:
+            raise ValueError(f"heater.{name} must be an entity id")
+    missing = [n for n in ("heard", "upper", "lower") if n not in raw]
+    if missing:
+        raise ValueError(f"home_assistant.heater needs {', '.join(missing)}")
+    return HeaterEntities(**raw)
 
 
 # ── parsing: Home Assistant's answers, as values ────────────────────

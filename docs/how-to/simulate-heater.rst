@@ -142,6 +142,13 @@ pass it with ``--sources`` (or set ``NWP500_SOURCES``):
    circulation_speed = "sensor.circulation_pump_speed"
    weather = "weather.forecast_home"
 
+   [home_assistant.heater]   # optional: the heater's own entities
+   heard = "sensor.water_heater_last_status"
+   upper = "sensor.water_heater_upper_tank_temperature"
+   lower = "sensor.water_heater_lower_tank_temperature"
+   compressor = "binary_sensor.water_heater_compressor"
+   ambient = "sensor.water_heater_ambient_temperature"
+
    [location_air]   # optional: air = damping x outdoor(t - lag) + offset
    damping = 0.638
    lag_hours = 2.0
@@ -162,7 +169,11 @@ give:
   heater that is at most an hour old; without a fresh one, the
   projection is unshifted. Without a ``[location_air]`` model, one is
   fitted on the last 3 days of the ``air`` entity's readings against
-  the ``weather`` entity's outdoor temperature. It is used when the
+  the ``weather`` entity's outdoor temperature. Without an ``air``
+  entity, or one that gives no fit, the ``[home_assistant.heater]``
+  table's ``ambient`` reading while its ``compressor`` runs is fitted
+  instead, and the projection is shifted to pass through its newest
+  such reading. It is used when the
   readings span a day and follow the outdoor air at r 0.5 or more; a
   note gives the fit. Otherwise, and without a ``weather`` entity, the
   reading beside the heater is held over the span;
@@ -171,7 +182,8 @@ give:
   circulation off) in the last 72 hours, from the inlet probe and the
   ``demand`` entity: a binary sensor that is on while the household
   draws hot water, with the circulation's water not among its draws. A
-  circulation pump with no speed reading leaves no estimate.
+  circulation pump with no speed reading leaves no estimate, and a draw
+  before its first reading is skipped.
 
 A reading's age is from when Home Assistant last heard the sensor
 report (``last_reported``). Over the REST API, Home Assistant serves
