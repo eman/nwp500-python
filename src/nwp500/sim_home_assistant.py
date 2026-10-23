@@ -1009,23 +1009,35 @@ def known_runs(
     unit: str | None,
     since: datetime,
     now: datetime,
-) -> tuple[list[Span] | None, str | None]:
+) -> tuple[list[Span] | None, list[Span], str | None]:
     """The pump's runs since ``since`` from its speed in ``history``
-    (``pump_runs``), or None and why they are unknown: no reading in
-    force at ``since`` (a draw before the first may have overlapped a
-    run), or a speed in no unit this reads."""
-    if not covers_start(history.readings.get(pump, []), since):
-        return None, "no speed reading in force at the start"
+    (``pump_runs``), the span before its first reading when that is
+    after ``since`` (unknown: it may have run then), and why the runs
+    are unknown altogether (None for them): no speed reading at all, or
+    one in no unit this reads."""
+    readings = history.readings.get(pump, [])
+    if not readings:
+        return None, [], "no speed reading"
+    unknown: list[Span] = []
+    # Before its first row, a reading or an outage (which the caller
+    # takes as a run), nothing is known of the pump.
+    heard = [
+        *(t for t, _ in readings),
+        *(a for a, _ in history.outages.get(pump, [])),
+    ]
+    first = min(t.astimezone(UTC) for t in heard)
+    if not covers_start(readings, since) and first > since:
+        unknown = [(since, min(first, now))]
     try:
         speed, unread = history.converted(pump, unit, to_rpm, now)
     except ValueError as err:
-        return None, str(err)
+        return None, [], str(err)
     # A reading left out could have been a run: one inside the span
     # leaves the runs unknown.
     inside = [(a, b) for a, b in unread if a < now and b > since]
     if inside:
-        return None, f"{len(inside)} readings in no speed unit"
-    return pump_runs(speed, since, now), None
+        return None, [], f"{len(inside)} readings in no speed unit"
+    return pump_runs(speed, since, now) or [], unknown, None
 
 
 def mains_plateau(
@@ -1059,11 +1071,13 @@ def mains_plateau(
     draws, _ = demand_spans(states.get(demand, []), since, now)
     runs: list[Span] = []
     if pump is not None:
-        known, why = known_runs(history, pump, pump_unit, since, now)
+        known, unknown, why = known_runs(history, pump, pump_unit, since, now)
         if known is None:
             notes.append(f"inlet: the circulation's runs are unknown ({why})")
             return None
-        runs = known
+        # Before the pump's first reading, a draw may have overlapped a
+        # run: skipped, as one that overlaps a run is.
+        runs = busy(known, unknown)
     # A draw while the probe or the pump was unavailable may have
     # overlapped a run unseen: the plateau skips it, as it skips one
     # that overlaps a run.
@@ -2261,7 +2275,7 @@ class HomeAssistantBook:
         flow_out = busy(unread, got.outages.get(self.flow, []), unseen)
         runs: list[Span] = []
         if e.circulation_speed is not None:
-            known, why = known_runs(
+            known, unknown, why = known_runs(
                 got,
                 e.circulation_speed,
                 self._units.get(e.circulation_speed),
@@ -2272,6 +2286,14 @@ class HomeAssistantBook:
                 notes.append(
                     f"book: the circulation's runs are unknown ({why}); "
                     "booked with only its outages"
+                )
+            if unknown:
+                # Before the pump's first reading, the heat its runs
+                # took is unknown: no anchor before it counts.
+                flow_out = busy(flow_out, unknown)
+                notes.append(
+                    "book: the circulation's runs are known only from "
+                    f"{unknown[-1][1].isoformat()}"
                 )
             # While the pump was unavailable or unread, it may have run.
             runs = busy(

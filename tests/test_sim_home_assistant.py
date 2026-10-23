@@ -763,11 +763,10 @@ class TestReviewRegressionsLive:
         series["sensor.pump"] = [(NOW - timedelta(hours=1), 0.0)]
         client = FakeClient(UNITS, series)
         source = _source(client, circulation_speed="sensor.pump", **INLET)
+        # The draw was before the pump's first reading: skipped, as one
+        # that overlapped a run would be.
         assert (await source.read()).inlet_f is None
-        assert any(
-            n.startswith("inlet: the circulation's runs are unknown")
-            for n in source.notes
-        )
+        assert any(n.startswith("inlet: no long draw") for n in source.notes)
 
     async def test_an_omitted_entity_in_the_record_is_no_history(self) -> None:
         class Omits(FakeClient):
@@ -1230,7 +1229,7 @@ class TestTheThirteenthReview:
         )
         assert got.circulating is None
 
-    async def test_a_pump_read_four_minutes_late_is_unknown_for_the_inlet(
+    async def test_a_pump_read_four_minutes_late_is_unknown_only_before_it(
         self,
     ) -> None:
         series = long_draw(ended_hours_ago=5)
@@ -1240,7 +1239,9 @@ class TestTheThirteenthReview:
         source = _source(
             FakeClient(UNITS, series), circulation_speed="sensor.pump", **INLET
         )
-        assert (await source.read()).inlet_f is None
+        # Only the four minutes before it are unknown: the draw after
+        # them reads the mains.
+        assert (await source.read()).inlet_f == pytest.approx(58.0)
 
 
 @pytest.mark.asyncio

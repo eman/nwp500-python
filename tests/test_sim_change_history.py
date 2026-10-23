@@ -902,9 +902,11 @@ class TestThePumpThirdReview:
         ]
         client = WindowedClient(rows, BOOK_UNITS)
         got = asyncio.run(client.read_history(["sensor.pump"], T0, END))
-        runs, why = ha.known_runs(got, "sensor.pump", "rpm", T0 + 2 * H, END)
-        assert runs == [] and why is None
-        runs, why = ha.known_runs(got, "sensor.pump", "rpm", T0, END)
+        runs, unknown, why = ha.known_runs(
+            got, "sensor.pump", "rpm", T0 + 2 * H, END
+        )
+        assert runs == [] and unknown == [] and why is None
+        runs, _, why = ha.known_runs(got, "sensor.pump", "rpm", T0, END)
         assert runs is None and why == "1 readings in no speed unit"
 
     def test_the_pumps_outages_count_when_its_runs_are_unknown(self) -> None:
@@ -1157,3 +1159,52 @@ class TestCirculationTermsDefaulted:
         asyncio.run(quiet.read(END))
         none = quiet.book(END, self.P).booked
         assert none is not None and bare.booked.heat_btu < none.heat_btu
+
+
+class TestAShortPumpHistory:
+    P = sim.default_params()
+
+    def test_known_runs_from_the_first_reading(self) -> None:
+        rows = [
+            _row("sensor.pump", END - 30 * H, "0", "rpm"),
+            _row("sensor.pump", END - 2 * H, "2000", "rpm"),
+            _row("sensor.pump", END - H, "0", "rpm"),
+        ]
+        client = WindowedClient(rows, BOOK_UNITS)
+        got = asyncio.run(client.read_history(["sensor.pump"], T0, END))
+        runs, unknown, why = ha.known_runs(got, "sensor.pump", "rpm", T0, END)
+        assert why is None
+        assert runs == [(END - 2 * H, END - H)]
+        assert unknown == [(T0, END - 30 * H)]
+
+    def test_the_book_prices_the_runs_it_knows(self) -> None:
+        from dataclasses import replace
+
+        from nwp500.sim.defaults import SITE_CIRCULATION
+
+        p = replace(
+            self.P, circulation=replace(SITE_CIRCULATION, meter_share=0.0)
+        )
+        pump = [
+            _row("sensor.pump", END - 30 * H, "0", "rpm"),
+            _row(
+                "sensor.pump", END - 2 * H - timedelta(minutes=1), "2000", "rpm"
+            ),
+            _row("sensor.pump", END - H, "0", "rpm"),
+        ]
+        rows = [r for r in _book_rows() if r["entity_id"] != "sensor.pump"]
+
+        def heat(with_pump: bool) -> ha.BookAnswer:
+            keeper = _keeper(
+                WindowedClient(
+                    [*rows, *(pump if with_pump else [])], BOOK_UNITS
+                ),
+                **({"circulation_speed": "sensor.pump"} if with_pump else {}),
+            )
+            asyncio.run(keeper.read(END))
+            return keeper.book(END, p)
+
+        short, none = heat(True), heat(False)
+        assert short.booked is not None and none.booked is not None
+        assert short.booked.heat_btu < none.booked.heat_btu
+        assert any("known only from" in n for n in short.notes)
