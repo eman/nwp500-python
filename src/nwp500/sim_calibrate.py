@@ -933,12 +933,9 @@ def _fit(
                 ~unseen, frame["heater_air_f"]
             )
             recovery_air = "recovery_air_f"
-            # The heater reads its air only while the compressor runs:
-            # an idle sample's missing air takes no recovery out.
-            running = frame["compressor_on"].fillna(False).to_numpy(dtype=bool)
-            unread = (
-                unseen & running & frame["recovery_air_f"].isna().to_numpy()
-            )
+            # A recovery reads its air from its own run (``snapshots``),
+            # and is no recovery with none there: nothing to take out.
+            unread = np.zeros(len(frame), dtype=bool)
         else:
             unread = unseen
         # Out of any recovery that would take an older reading.

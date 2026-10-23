@@ -1406,3 +1406,31 @@ class TestAPartialAirRecordKeepsRecoveries:
         partial = sc._fit(frame.copy(), base, [], None, None, None, record)
         assert len(alone.calibration.recoveries) == 6
         assert len(partial.calibration.recoveries) == 6
+
+    def test_heater_air_missing_early_in_a_run_keeps_it(self) -> None:
+        import numpy as np
+
+        from nwp500 import sim_home_assistant as ha
+
+        frame = recovery_days(6).drop(columns=["air_f"])
+        on = frame["compressor_on"].to_numpy(dtype=bool)
+        # Each run's first five minutes have no air reading yet.
+        starts = np.flatnonzero(on & ~np.roll(on, 1))
+        for i in starts:
+            frame.iloc[i : i + 5, frame.columns.get_loc("heater_air_f")] = (
+                np.nan
+            )
+        base = sim.default_params()
+        alone = sc._fit(frame.copy(), base, [], None, None, None, None)
+        last = frame.index[-1].to_pydatetime()
+        record = ha.RecordInputs(
+            air=[(last - timedelta(days=1), 60.0), (last, 60.0)],
+            humidity=None,
+            drawing=None,
+            circulating=None,
+        )
+        partial = sc._fit(frame.copy(), base, [], None, None, None, record)
+        assert len(alone.calibration.recoveries) > 0
+        assert len(partial.calibration.recoveries) == len(
+            alone.calibration.recoveries
+        )
