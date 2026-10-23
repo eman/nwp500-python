@@ -935,11 +935,11 @@ def _fit(
             recovery_air = "recovery_air_f"
             # A recovery reads its air from its own run (``snapshots``),
             # and is no recovery with none there: nothing to take out.
-            unread = np.zeros(len(frame), dtype=bool)
+            no_air = np.zeros(len(frame), dtype=bool)
         else:
-            unread = unseen
+            no_air = unseen
         # Out of any recovery that would take an older reading.
-        frame["excluded"] = frame["excluded"].to_numpy(dtype=bool) | unread
+        frame["excluded"] = frame["excluded"].to_numpy(dtype=bool) | no_air
     if rh_covers is not None and record is not None:
         frame.loc[
             _unobserved(index, rh_covers, record.humidity_outages),
