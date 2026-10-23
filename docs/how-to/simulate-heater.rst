@@ -933,7 +933,11 @@ whatever the preferred units. A span the heater wasn't heard from (an
 outage, or a silence much longer than its usual reporting), or the flow
 was unknown (``flow_outages``, from the history's ``outages``), breaks
 the book: it is walked only from an anchor after the last one, and is
-None while the heater isn't heard now. With no flow reading in force
+None while the heater isn't heard now. A record that keeps no instant
+for each of the heater's responses passes ``heard=``, the spans the
+heater was heard over, and an empty ``observed``: a gap between two
+spans breaks the book the same way, and the heater is heard now only
+inside a span. With no flow reading in force
 at the start of the window it books over, it raises ``ValueError``.
 An inlet reading holds except through ``inlet_outages``.
 

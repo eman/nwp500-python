@@ -1733,6 +1733,7 @@ def book_from_changes(
     flow_outages: Iterable[tuple[datetime, datetime]] = (),
     inlet_outages: Iterable[tuple[datetime, datetime]] = (),
     air_outages: Iterable[tuple[datetime, datetime]] = (),
+    heard: Iterable[tuple[datetime, datetime]] | None = None,
 ) -> Booked | None:
     """``book_from_history`` from a heater's values' changes (``rows``)
     instead of its statuses, with ``observed`` the instants it was heard
@@ -1752,16 +1753,32 @@ def book_from_changes(
     ``max_gap`` of them, or one of ``rows.outages``, is a span nobody
     saw, and no anchor before it counts (the heat that left meanwhile is
     unknown). The book is from after the last such span; None when the
-    heater is not heard at ``at``, or there is no anchor since."""
+    heater is not heard at ``at``, or there is no anchor since.
+
+    A record with no instant per response gives ``heard`` instead: the
+    spans the heater was heard over. Then ``observed`` is not read, a
+    gap between two spans is one nobody saw, and the heater is heard at
+    ``at`` only inside a span."""
     at = at.astimezone(UTC)
-    heard = sorted(t for t in (t.astimezone(UTC) for t in observed) if t <= at)
-    if not heard:
-        return None
-    gap = max_gap(heard)
-    if at - heard[-1] > gap:
-        return None
-    since = heard[0]
-    for a, b in [*silences(heard, gap), *rows.outages, *flow_outages]:
+    unseen: list[tuple[datetime, datetime]]
+    if heard is not None:
+        spans = [(a, b) for a, b in join_spans(heard) if a <= at]
+        if not spans or spans[-1][1] < at:
+            return None
+        since = spans[0][0]
+        unseen = [(b, a) for (_, b), (a, _) in itertools.pairwise(spans)]
+    else:
+        instants = sorted(
+            t for t in (t.astimezone(UTC) for t in observed) if t <= at
+        )
+        if not instants:
+            return None
+        gap = max_gap(instants)
+        if at - instants[-1] > gap:
+            return None
+        since = instants[0]
+        unseen = silences(instants, gap)
+    for a, b in [*unseen, *rows.outages, *flow_outages]:
         a, b = a.astimezone(UTC), b.astimezone(UTC)
         if a <= at:
             if b >= at:
