@@ -2,6 +2,21 @@
 Changelog
 =========
 
+Unreleased
+==========
+
+Added
+-----
+- **A history kept current** (#223). ``sim_home_assistant.HeaterHistory``,
+  ``sim_home_assistant.History`` and ``sim_adapters.ChangeRows`` take
+  ``extended(newer)``, which merges a later read in by instant (the
+  later read's row winning at a shared instant) and joins the outages,
+  and ``since(start)``, which trims to ``start`` and keeps each value in
+  force there. A caller that books every few minutes reads only what is
+  new and books from what it holds. ``sim_adapters.merge_changes``,
+  ``changes_since``, ``join_spans`` and ``spans_since`` do it for one
+  series.
+
 Version 9.11.0 (2026-10-22)
 ===========================
 

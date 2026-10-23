@@ -1706,3 +1706,84 @@ class TestHeld:
     def test_a_step_must_be_positive(self) -> None:
         with pytest.raises(ValueError, match="positive"):
             ha.held([], NOW, NOW, timedelta(0))
+
+
+class TestHistoryKeptCurrent:
+    def test_extended_merges_readings_units_states_and_outages(self) -> None:
+        t = [NOW + timedelta(minutes=m) for m in range(4)]
+        older = ha.History(
+            {"sensor.a": [(t[0], 68.0)]},
+            {"sensor.a": [(t[0], t[1])]},
+            {"sensor.a": ["°F"]},
+            {"sensor.a": [(t[0], "68.0")]},
+        )
+        newer = ha.History(
+            {"sensor.a": [(t[1], 20.0), (t[3], 21.0)]},
+            {"sensor.a": [(t[1], t[2])]},
+            {"sensor.a": ["°C", "°C"]},
+            {"sensor.a": [(t[1], "20.0"), (t[3], "21.0")]},
+        )
+        got = older.extended(newer)
+        assert got.readings["sensor.a"] == [
+            (t[0], 68.0),
+            (t[1], 20.0),
+            (t[3], 21.0),
+        ]
+        assert got.units == {"sensor.a": ["°F", "°C", "°C"]}
+        assert got.outages["sensor.a"] == [(t[0], t[2])]
+        assert got.states is not None
+        assert [v for _, v in got.states["sensor.a"]] == [
+            "68.0",
+            "20.0",
+            "21.0",
+        ]
+        f, unread = got.converted("sensor.a", "°C", ha.to_f, t[3])
+        assert [v for _, v in f] == pytest.approx([68.0, 68.0, 69.8])
+        assert unread == []
+
+    def test_units_one_read_lacks_are_none(self) -> None:
+        older = ha.History({"sensor.a": [(NOW, 1.0)]}, {})
+        newer = ha.History({"sensor.a": [(NOW, 1.0)]}, {}, {"sensor.a": ["°F"]})
+        assert older.extended(newer).units is None
+        assert older.extended(newer).states is None
+
+    def test_since_keeps_the_value_in_force(self) -> None:
+        t = [NOW + timedelta(minutes=m) for m in range(4)]
+        h = ha.History(
+            {"sensor.a": [(t[0], 1.0), (t[2], 2.0)]},
+            {"sensor.a": [(t[0], t[1])]},
+            {"sensor.a": ["°F", "°F"]},
+            {"sensor.a": [(t[0], "1.0"), (t[2], "2.0")]},
+        )
+        got = h.since(t[1] + timedelta(seconds=30))
+        assert got.readings["sensor.a"] == [(t[0], 1.0), (t[2], 2.0)]
+        assert got.outages["sensor.a"] == []
+        assert h.since(t[3]).readings["sensor.a"] == [(t[2], 2.0)]
+
+    def test_a_heater_history_extended_and_trimmed(self) -> None:
+        from nwp500 import sim_adapters as sa
+
+        t = [NOW + timedelta(minutes=m) for m in range(4)]
+        a = ha.HeaterHistory(
+            sa.ChangeRows(upper_f=[(t[0], 140.0)], lower_f=[(t[0], 139.0)]),
+            [t[0], t[1]],
+        )
+        b = ha.HeaterHistory(
+            sa.ChangeRows(
+                upper_f=[(t[1], 140.0), (t[2], 130.0)], lower_f=[(t[1], 139.0)]
+            ),
+            [t[1], t[2], t[3]],
+            ("a note",),
+        )
+        got = a.extended(b)
+        assert list(got.rows.upper_f) == [
+            (t[0], 140.0),
+            (t[1], 140.0),
+            (t[2], 130.0),
+        ]
+        assert got.observed == t
+        assert got.notes == ("a note",)
+        trimmed = got.since(t[2])
+        assert list(trimmed.rows.upper_f) == [(t[2], 130.0)]
+        assert list(trimmed.rows.lower_f) == [(t[1], 139.0)]
+        assert trimmed.observed == t[2:]

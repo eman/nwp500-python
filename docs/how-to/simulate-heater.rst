@@ -896,6 +896,26 @@ longer than its usual reporting) breaks the book: it is walked only
 from an anchor after the last one, and is None while the heater isn't
 heard now.
 
+To keep a book current as you walk every few minutes, keep the history
+rather than the book. Read only what is new since your last read,
+extend what you hold with it, trim it to the book's window, and book
+again from memory:
+
+.. code-block:: python
+
+   newer = await ha.read_heater_history(client, entities, last_read, now)
+   history = history.extended(newer).since(now - timedelta(hours=72))
+   flows = flows.extended(
+       await client.read_history([FLOW], last_read, now)
+   ).since(now - timedelta(hours=72))
+   last_read = now
+
+``HeaterHistory`` and ``History`` both take ``extended`` and ``since``.
+Where both reads have a row at one instant (a read repeats the value in
+force at its start), the later read's is kept. ``since`` keeps each
+value in force at the cut. 72 hours is ``BookParams.history_h``, the
+oldest anchor a book reads.
+
 Without a meter, start one only when you know the tank is full and
 quiet (``sa.full_tank_book``).
 
