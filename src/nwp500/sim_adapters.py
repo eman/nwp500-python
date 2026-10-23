@@ -739,9 +739,9 @@ def add_inputs(
     ``max_gap``: readings further apart than this are a span nobody
     observed (a recorder stopped and started again). The sample before
     such a span is marked water in use and excluded, so no quiet
-    window and no recovery spans it, and ``unrecorded``, apart from the
-    other exclusions. Without it, every span between two readings is
-    taken as observed.
+    window and no recovery spans it, and, with any such span,
+    ``unrecorded``, apart from the other exclusions. Without it, every
+    span between two readings is taken as observed.
     """
     index = cast("pd.DatetimeIndex", frame.index)
     seconds = index.as_unit("ns").asi8 / 1e9
@@ -770,7 +770,7 @@ def add_inputs(
         for name in ("dhw_in_use", "drawing", "excluded"):
             if name in frame.columns:
                 frame[name] = frame[name].to_numpy(dtype=bool) | unobserved
-    frame["unrecorded"] = unobserved
+        frame["unrecorded"] = unobserved
     return frame
 
 
