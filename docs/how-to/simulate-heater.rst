@@ -973,7 +973,9 @@ Assistant's entities:
 
 ``read`` reads the history since the last read and holds it; a read
 that fails is noted, and the next one reads from where it would have
-started. ``book`` books from what it holds, with no request, so it can
+started. Until then, ``book`` takes the flow as unknown since the last
+read that worked, rather than holding its last value. An optional
+entity whose unit can't be read is left out of the book. ``book`` books from what it holds, with no request, so it can
 run in an executor. ``answer.notes`` say what the book rests on, or why
 there is none.
 
@@ -982,7 +984,8 @@ water, in gal/min or any unit ``to_gpm`` reads. It is the water
 delivered at the taps, through the mixing valve: the book prices a
 delivered gallon at the valve's delivery line
 (``DrawParams.delivery_intercept_f`` and ``delivery_slope``), not as
-water withdrawn from the tank. A flow entity that reports a draw late
+water withdrawn from the tank. As none of the flow is circulation,
+``book`` takes ``CirculationParams.meter_share`` as 0. A flow entity that reports a draw late
 reaches the book late: the book holds what the history holds at
 ``read``. Each of the other entities is optional:
 ``circulation_speed`` gives the circulation's runs, ``inlet`` the inlet

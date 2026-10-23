@@ -39,7 +39,7 @@ import logging
 import math
 from bisect import bisect_right
 from collections.abc import Awaitable, Callable, Iterable, Mapping, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime, timedelta
 from typing import Any, cast
 
@@ -2077,6 +2077,7 @@ class HomeAssistantBook:
         self._history: History | None = None
         self._heater_read: datetime | None = None
         self._read: datetime | None = None
+        self._tried: datetime | None = None
         self._units: dict[str, str | None] = {}
         self._notes: list[str] = []
 
@@ -2112,11 +2113,9 @@ class HomeAssistantBook:
             self._heater_history = whole.since(cut)
             self._heater_read = now
         start = cut if self._read is None else max(self._read, cut)
+        self._tried = now
         try:
             got = await self.client.read_history(self._others, start, now)
-            for n in self._others:
-                if n not in (self.entities.demand,):
-                    self._units[n] = (await self.client.state(n)).unit
         except HomeAssistantError as err:
             self._notes.append(f"book: the flow's history not read ({err})")
         else:
@@ -2125,6 +2124,15 @@ class HomeAssistantBook:
                 cut
             )
             self._read = now
+        for n in self._others:
+            if n == self.entities.demand:
+                continue
+            try:
+                self._units[n] = (await self.client.state(n)).unit
+            except HomeAssistantError as err:
+                # Without its unit, its readings are left out of the book.
+                self._units.pop(n, None)
+                self._notes.append(f"book: {n}'s unit not read ({err})")
 
     def book(self, at: datetime, params: HeaterParams) -> BookAnswer:
         """The book at ``at`` from the history held, with no request:
@@ -2138,6 +2146,24 @@ class HomeAssistantBook:
             return BookAnswer(None, False, tuple(notes))
         since = at - self.window
         e = self.entities
+        circulation = params.circulation
+        if circulation is not None and circulation.meter_share > 0.0:
+            # The flow is the household's draws, the circulation's water
+            # not in it: none of it is to be taken off as circulation.
+            params = replace(
+                params, circulation=replace(circulation, meter_share=0.0)
+            )
+            notes.append(
+                "book: the flow has no circulation in it, so the "
+                "circulation's meter_share is taken as 0"
+            )
+        # After a read that failed, nothing is known past the last that
+        # didn't: unknown, not held.
+        unseen: list[Span] = []
+        failed = self._tried is not None and self._tried != self._read
+        if failed and self._read is not None and self._read < at:
+            unseen = [(self._read, at)]
+            notes.append(f"book: nothing read since {self._read.isoformat()}")
         try:
             flow, unread = got.converted(
                 self.flow, self._units.get(self.flow), to_gpm, at
@@ -2145,7 +2171,7 @@ class HomeAssistantBook:
         except ValueError as err:
             notes.append(f"book: {self.flow}: {err}")
             return BookAnswer(None, False, tuple(notes))
-        flow_out = busy(unread, got.outages.get(self.flow, []))
+        flow_out = busy(unread, got.outages.get(self.flow, []), unseen)
         runs: list[Span] = []
         if e.circulation_speed is not None:
             known, why = known_runs(
@@ -2161,8 +2187,11 @@ class HomeAssistantBook:
                     "booked without them"
                 )
             else:
-                # While the pump was unavailable, it may have run.
-                runs = busy(known, got.outages.get(e.circulation_speed, []))
+                # While the pump was unavailable or unread, it may have
+                # run.
+                runs = busy(
+                    known, got.outages.get(e.circulation_speed, []), unseen
+                )
         inlet: list[Reading] = []
         inlet_out: list[Span] = []
         if e.inlet is not None:
@@ -2170,7 +2199,7 @@ class HomeAssistantBook:
                 inlet, bad = got.converted(
                     e.inlet, self._units.get(e.inlet), to_f, at
                 )
-                inlet_out = busy(bad, got.outages.get(e.inlet, []))
+                inlet_out = busy(bad, got.outages.get(e.inlet, []), unseen)
             except ValueError as err:
                 notes.append(f"book: {e.inlet}: {err}")
         air: list[Reading] = []
@@ -2198,7 +2227,7 @@ class HomeAssistantBook:
         if booked is None:
             notes.append("book: no anchor since the heater was last unheard")
             return BookAnswer(None, False, tuple(notes))
-        if e.inlet is None or e.demand is None:
+        if e.inlet is None or e.demand is None or not inlet:
             return BookAnswer(booked, False, tuple(notes))
         if got.states is None:
             notes.append(
@@ -2212,7 +2241,7 @@ class HomeAssistantBook:
             e.circulation_speed,
             probe_unit=self._units.get(e.inlet),
             pump_unit=self._units.get(e.circulation_speed or ""),
-            since=at - INLET_LOOKBACK,
+            since=at - min(INLET_LOOKBACK, self.window),
             now=at,
             notes=notes,
         )

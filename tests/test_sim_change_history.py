@@ -734,3 +734,109 @@ class TestTheBookKeptCurrent:
         # failed read.
         assert client.windows[-1][0] == END - ha.BOOK_WINDOW
         assert keeper.book(END, self.P).booked is not None
+
+
+class TestTheBookFirstReview:
+    P = sim.default_params()
+
+    def test_the_flow_is_never_taken_off_as_circulation(self) -> None:
+        from dataclasses import replace
+
+        rows = [
+            *_book_rows(),
+            _row(
+                "sensor.pump", END - 2 * H - timedelta(minutes=1), "2000", "rpm"
+            ),
+            _row(
+                "sensor.pump", END - 2 * H + timedelta(minutes=20), "0", "rpm"
+            ),
+        ]
+
+        def heat(share: float) -> float:
+            p = replace(
+                self.P,
+                circulation=sim.CirculationParams(
+                    displaced_gal=1.0,
+                    flow_gpm=2.0,
+                    loss_btu_per_gal=50.0,
+                    meter_share=share,
+                ),
+            )
+            keeper = _keeper(
+                WindowedClient(rows, BOOK_UNITS),
+                circulation_speed="sensor.pump",
+            )
+            asyncio.run(keeper.read(END))
+            got = keeper.book(END, p)
+            assert got.booked is not None
+            return got.booked.heat_btu
+
+        assert heat(0.81) == pytest.approx(heat(0.0))
+
+    def test_an_optional_unit_unread_leaves_the_rest(self) -> None:
+        class NoInlet(WindowedClient):
+            async def state(self, entity: str) -> ha.State:
+                if entity == "sensor.inlet":
+                    raise ha.HomeAssistantError("404")
+                return await super().state(entity)
+
+        client = NoInlet(_book_rows(mains=True), BOOK_UNITS)
+        keeper = _keeper(
+            client, inlet="sensor.inlet", demand="binary_sensor.demand"
+        )
+        asyncio.run(keeper.read(END))
+        got = keeper.book(END, self.P)
+        assert got.booked is not None and not got.inlet_measured
+        assert any("sensor.inlet's unit not read" in n for n in got.notes)
+
+    def test_an_inlet_in_no_unit_books_without_the_mains(self) -> None:
+        client = WindowedClient(
+            _book_rows(mains=True), BOOK_UNITS | {"sensor.inlet": "lux"}
+        )
+        keeper = _keeper(
+            client, inlet="sensor.inlet", demand="binary_sensor.demand"
+        )
+        asyncio.run(keeper.read(END))
+        got = keeper.book(END, self.P)
+        assert got.booked is not None and not got.inlet_measured
+
+    def test_after_a_failed_read_the_unread_flow_is_unknown(self) -> None:
+        class Failing(WindowedClient):
+            fail = False
+
+            async def read_history(
+                self, entities: Iterable[str], start: datetime, end: datetime
+            ) -> ha.History:
+                if self.fail and FLOW in entities:
+                    raise ha.HomeAssistantError("down")
+                return await super().read_history(entities, start, end)
+
+        client = Failing(_book_rows(), BOOK_UNITS)
+        keeper = _keeper(client)
+        # Read before the draw, then fail across it.
+        asyncio.run(keeper.read(END - 3 * H))
+        client.fail = True
+        asyncio.run(keeper.read(END))
+        got = keeper.book(END, self.P)
+        assert any("nothing read since" in n for n in got.notes)
+        # The unread span is an outage of the flow: no book rather than
+        # one that holds the flow at zero through the draw.
+        assert got.booked is None
+
+    def test_a_short_window_reads_the_mains_within_it(self) -> None:
+        client = WindowedClient(_book_rows(mains=True), BOOK_UNITS)
+        keeper = ha.HomeAssistantBook(
+            cast(ha.HomeAssistantClient, client),
+            BOOK_HEATER,
+            FLOW,
+            ha.Entities(
+                inlet="sensor.inlet",
+                demand="binary_sensor.demand",
+                circulation_speed="sensor.pump",
+            ),
+            window=timedelta(hours=24),
+        )
+        asyncio.run(keeper.read(END))
+        got = keeper.book(END, self.P)
+        assert got.booked is not None
+        assert got.inlet_measured, got.notes
