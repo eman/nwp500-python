@@ -380,7 +380,10 @@ async def compose(
         env = await environment.read()
         if env.ambient_defaulted:
             env = env.model_copy(
-                update={"ambient_f": reading.environment.ambient_f}
+                update={
+                    "ambient_f": reading.environment.ambient_f,
+                    "ambient_cabinet": reading.environment.ambient_cabinet,
+                }
             )
     parts: dict[str, Any] = {
         "start": start,
@@ -461,6 +464,13 @@ def overlay(
         data.update(replace)
     if over is not None:
         data = merge(data, over)
+    env = data.get("environment")
+    if isinstance(env, Mapping) and live is not None:
+        # The heater's idle cabinet reading only while its air stands.
+        live_env = live.scenario.environment.model_dump(mode="json")
+        env = cast(Mapping[str, Any], env)
+        if env.get("ambient_f") != live_env.get("ambient_f"):
+            data["environment"] = {**env, "ambient_cabinet": False}
     data.setdefault("start", now)
     data.setdefault("horizon", DEFAULT_HORIZON)
     if "tz" not in data:

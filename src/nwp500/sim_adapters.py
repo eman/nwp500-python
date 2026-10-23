@@ -338,6 +338,8 @@ def environment(
     else:
         ambient_f = tuple((at, _to_sim(v)) for at, v in _finite(ambient))
     kw: dict[str, Any] = {"ambient_f": ambient_f}
+    if ambient is None and status is not None and not status.comp_use:
+        kw["ambient_cabinet"] = True
     if humidity is not None:
         kw["humidity"] = humidity
     if inlet is not None:

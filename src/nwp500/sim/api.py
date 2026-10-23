@@ -185,12 +185,19 @@ def _at_the_inlet(
 
 #: No usable air reading was given: the answer ran at the default air.
 AMBIENT_DEFAULTED = "ambient_defaulted"
+#: The air is the heater's idle cabinet reading, about 6 °F warm
+#: (``Environment.ambient_cabinet``).
+AMBIENT_FROM_CABINET = "ambient_from_idle_cabinet"
 
 
 def _ambient_reasons(environment: Environment) -> list[str]:
     """``ambient_defaulted`` when the air the answer ran at is the
-    default, not a reading (``Environment.ambient_defaulted``)."""
-    return [AMBIENT_DEFAULTED] if environment.ambient_defaulted else []
+    default, not a reading (``Environment.ambient_defaulted``), and
+    ``ambient_from_idle_cabinet`` when it is the heater's idle cabinet
+    reading (``Environment.ambient_cabinet``)."""
+    if environment.ambient_defaulted:
+        return [AMBIENT_DEFAULTED]
+    return [AMBIENT_FROM_CABINET] if environment.ambient_cabinet else []
 
 
 def _circulation(loads: Loads, params: HeaterParams) -> Circulation | None:

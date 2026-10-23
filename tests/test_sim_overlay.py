@@ -163,3 +163,29 @@ class TestOverlay:
         live = _live() if isinstance(doc, dict) and "params" in doc else None
         with pytest.raises(ValueError, match=match):
             sim_live.overlay(live, doc, now=NOW)
+
+
+class TestTheCabinetFlag:
+    def _cabinet_live(self) -> sim_live.Composed:
+        live = _live()
+        env = live.scenario.environment.model_copy(
+            update={"ambient_cabinet": True}
+        )
+        return sim_live.Composed(
+            live.scenario.model_copy(update={"environment": env}),
+            live.params,
+            live.heater,
+        )
+
+    def test_it_stands_while_the_air_does(self) -> None:
+        live = self._cabinet_live()
+        s = sim_live.overlay(live, now=NOW).scenario
+        assert s.environment.ambient_cabinet
+
+    def test_air_given_in_its_place_clears_it(self) -> None:
+        live = self._cabinet_live()
+        s = sim_live.overlay(
+            live, now=NOW, over={"environment": {"ambient_f": 60.0}}
+        ).scenario
+        assert s.environment.ambient_f == 60.0
+        assert not s.environment.ambient_cabinet
