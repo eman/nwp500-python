@@ -424,6 +424,15 @@ def zone_name(name: str) -> str:
     return name
 
 
+def _gives_air(*layers: Mapping[str, Any] | None) -> bool:
+    """Whether a layer laid over the live scenario gives the air."""
+    for layer in layers:
+        env = None if layer is None else layer.get("environment")
+        if isinstance(env, Mapping) and "ambient_f" in env:
+            return True
+    return False
+
+
 def overlay(
     live: Composed | None,
     doc: Mapping[str, Any] | None = None,
@@ -465,12 +474,13 @@ def overlay(
     if over is not None:
         data = merge(data, over)
     env = data.get("environment")
-    if isinstance(env, Mapping) and live is not None:
+    given = doc.get("scenario") if isinstance(doc, Mapping) else None
+    if isinstance(env, Mapping) and _gives_air(given, replace, over):
         # The heater's idle cabinet reading only while its air stands.
-        live_env = live.scenario.environment.model_dump(mode="json")
-        env = cast(Mapping[str, Any], env)
-        if env.get("ambient_f") != live_env.get("ambient_f"):
-            data["environment"] = {**env, "ambient_cabinet": False}
+        data["environment"] = {
+            **cast(Mapping[str, Any], env),
+            "ambient_cabinet": False,
+        }
     data.setdefault("start", now)
     data.setdefault("horizon", DEFAULT_HORIZON)
     if "tz" not in data:

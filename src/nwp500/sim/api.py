@@ -228,7 +228,9 @@ CIRCULATION_UNKNOWN = "circulation_unknown"
 def _circulation_unknown(
     params: HeaterParams, loads: Loads, until: datetime
 ) -> bool:
-    if params.circulation is None:
+    # Runs given to params without terms are an installation that
+    # circulates, priced at the example terms (``_physics``).
+    if params.circulation is None and loads.circulation is None:
         return False
     return loads.circulation is None or (
         loads.circulation_known_until is not None

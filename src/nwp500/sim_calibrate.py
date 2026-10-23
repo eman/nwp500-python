@@ -925,13 +925,20 @@ def _fit(
         frame.loc[unseen, "air_f"] = float("nan")
         # And out of the standby fit, which would interpolate across.
         frame["air_unobserved"] = unseen
-        if "heater_air_f" in frame.columns:
+        if "heater_air_f" in frame.columns and bool(
+            frame["heater_air_f"].notna().any()
+        ):
             # A recovery there reads the heater's own air instead.
             frame["recovery_air_f"] = frame["air_f"].where(
                 ~unseen, frame["heater_air_f"]
             )
             recovery_air = "recovery_air_f"
-            unread = unseen & frame["recovery_air_f"].isna().to_numpy()
+            # The heater reads its air only while the compressor runs:
+            # an idle sample's missing air takes no recovery out.
+            running = frame["compressor_on"].fillna(False).to_numpy(dtype=bool)
+            unread = (
+                unseen & running & frame["recovery_air_f"].isna().to_numpy()
+            )
         else:
             unread = unseen
         # Out of any recovery that would take an older reading.

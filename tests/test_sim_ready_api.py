@@ -924,3 +924,12 @@ class TestCirculationWithoutItsTerms:
         # And they cost heat: not the same as no runs.
         quiet = simulate(_scenario(), bare)
         assert got.simulation != quiet.simulation
+
+    def test_runs_known_only_partway_say_so(self) -> None:
+        from nwp500.sim import CirculationRun, default_params, simulate
+
+        runs = (CirculationRun(start=at(0.5), end=at(1.5)),)
+        s = _scenario(
+            loads=Loads(circulation=runs, circulation_known_until=at(2.0))
+        )
+        assert "circulation_unknown" in simulate(s, default_params()).reasons

@@ -189,3 +189,17 @@ class TestTheCabinetFlag:
         ).scenario
         assert s.environment.ambient_f == 60.0
         assert not s.environment.ambient_cabinet
+
+    def test_the_same_air_given_clears_it_too(self) -> None:
+        """Given, the air is the caller's, whatever its value."""
+        live = self._cabinet_live()
+        same = live.scenario.environment.ambient_f
+        by_option = sim_live.overlay(
+            live, now=NOW, over={"environment": {"ambient_f": same}}
+        ).scenario
+        by_document = sim_live.overlay(
+            live, _doc({"environment": {"ambient_f": same}}), now=NOW
+        ).scenario
+        for s in (by_option, by_document):
+            assert s.environment.ambient_f == same
+            assert not s.environment.ambient_cabinet

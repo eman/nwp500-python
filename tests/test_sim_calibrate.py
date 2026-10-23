@@ -1386,3 +1386,23 @@ class TestKeepBetterSeventhReview:
         assert comp.base_error < comp.refit_error
         assert params.compressor == base.compressor
         assert not params.compressor.two_zone
+
+
+class TestAPartialAirRecordKeepsRecoveries:
+    def test_each_recovery_outside_it_reads_the_heaters_air(self) -> None:
+        from nwp500 import sim_home_assistant as ha
+
+        frame = recovery_days(6).drop(columns=["air_f"])
+        base = sim.default_params()
+        alone = sc._fit(frame.copy(), base, [], None, None, None, None)
+        # An air record over the last day only.
+        last = frame.index[-1].to_pydatetime()
+        record = ha.RecordInputs(
+            air=[(last - timedelta(days=1), 60.0), (last, 60.0)],
+            humidity=None,
+            drawing=None,
+            circulating=None,
+        )
+        partial = sc._fit(frame.copy(), base, [], None, None, None, record)
+        assert len(alone.calibration.recoveries) == 6
+        assert len(partial.calibration.recoveries) == 6
