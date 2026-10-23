@@ -1753,7 +1753,8 @@ class TestHistoryKeptCurrent:
         h = ha.History({"sensor.a": [(NOW, 20.0)]}, {}, {})
         for got in (h.since(NOW), h.extended(ha.History({}, {}, {}))):
             f, unread = got.converted("sensor.a", "°C", ha.to_f, NOW)
-            assert f == [(NOW, pytest.approx(68.0))]
+            assert [t for t, _ in f] == [NOW]
+            assert f[0][1] == pytest.approx(68.0)
             assert unread == []
 
     def test_a_recorded_unitless_reading_stays_unreadable(self) -> None:
