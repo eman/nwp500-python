@@ -560,6 +560,31 @@ class TestAHistoryKeptCurrent:
         assert want is not None and got is not None
         assert got.heat_btu == pytest.approx(want.heat_btu)
 
+    def test_change_only_reads_book_as_one(
+        self, heater: Callable[..., list[Any]]
+    ) -> None:
+        """A draw as changes, split mid-way by the reads, and a recovery
+        after an outage: the opening row repeats the value in force and
+        changes nothing, the recovery is kept."""
+        p = site_example_params()
+        rows, observed = as_changes(heater(20, recovery_at=4))
+        draw = T0 - timedelta(hours=2)
+        full = [
+            (T0 - timedelta(hours=20), 0.0),
+            (draw, 2.0),
+            (draw + timedelta(minutes=10), 0.0),
+        ]
+        split = draw + timedelta(minutes=5)
+        merged = sa.merge_changes(full[:2], [(split, 2.0), full[2]])
+        want = sa.book_from_changes(rows, observed, p, at=T0, flow=full)
+        got = sa.book_from_changes(rows, observed, p, at=T0, flow=merged)
+        assert want is not None and got is not None
+        assert got.heat_btu == pytest.approx(want.heat_btu)
+        gap = (draw + timedelta(minutes=2), draw + timedelta(minutes=10))
+        rec = [*full[:2], (gap[1], 2.0), (draw + timedelta(minutes=20), 0.0)]
+        joined = sa.merge_changes(rec[:2], rec[2:])
+        assert joined == rec
+
     def test_the_later_read_wins_at_a_shared_instant(self) -> None:
         a = [(T0, 1.0), (T0 + timedelta(minutes=5), 2.0)]
         b = [(T0 + timedelta(minutes=5), 3.0), (T0 + timedelta(minutes=9), 4.0)]
