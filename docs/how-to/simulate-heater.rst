@@ -191,8 +191,27 @@ same parts. Given ``heater=``, a ``HeaterEntities`` with ``ambient`` and
 heater's own air reading every 10 minutes while the compressor runs,
 where the reading was taken 2 minutes or more into the run (earlier, or
 idle, it reads the cabinet), and not while the sensor was unavailable.
-The latest such reading, if under an hour old, anchors the projection.
-``fitted_air`` holds the fit once ``read`` has run.
+With a model, given or fitted, and no fresh reading beside the heater,
+each ``read`` anchors the projection to the heater's newest such
+reading from the last hour. ``fitted_air`` holds the fit once ``read``
+has run.
+
+A caller that builds a new environment every few minutes needn't refit
+each time. Fit on your own cadence, and pass the fit on:
+
+.. code-block:: python
+
+   fitted, notes = await ha.fit_location_air(
+       client, entities, now=now, heater=heater_entities
+   )   # hourly, say; None (and notes why) without enough history
+
+   environment = ha.HomeAssistantEnvironment(
+       client, entities, start=now, until=now + horizon, now=now,
+       heater=heater_entities, fitted_air=fitted,
+   )
+
+Given ``fitted_air``, the environment projects through it, notes its r
+and lag on every ``read``, and doesn't fit again.
 
 
 Fetch what the heater reports
