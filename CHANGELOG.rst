@@ -5,6 +5,24 @@ Changelog
 Unreleased
 ==========
 
+Added
+-----
+- **The air fit carried across reads** (#221).
+  ``sim_home_assistant.fit_location_air`` is the fit
+  ``HomeAssistantEnvironment`` makes where it is given no model, with
+  its notes, as a call of its own. ``HomeAssistantEnvironment`` takes
+  it back as ``fitted_air``, projects through it, and notes its r and
+  lag on every ``read`` without fitting again. A caller that reads
+  every few minutes fits on its own cadence.
+
+Changed
+-------
+- With a model, given or fitted, and no fresh reading of the air beside
+  the heater, ``HomeAssistantEnvironment`` anchors the projection to
+  ``heater``'s newest air reading from the last hour while its
+  compressor ran, on every ``read``. It anchored to one only on the
+  read that fitted the model (#221).
+
 Fixed
 -----
 - ``sim_adapters.book_from_changes`` read its flow as a sampled meter:
