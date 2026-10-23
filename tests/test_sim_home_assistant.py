@@ -2062,3 +2062,34 @@ class TestTheWorkOffTheLoop:
         assert isinstance(env.ambient_f, tuple)
         # The heater's anchor samples, then the inlet's plateau.
         assert run.calls == 2
+
+
+@pytest.mark.asyncio
+class TestTheAirEntityFallsBack:
+    """An air entity that gives no fit leaves the heater's own air to
+    fit, rather than none."""
+
+    async def _fit(self, client: FakeClient) -> tuple[Any, list[str]]:
+        return await ha.fit_location_air(
+            client,  # type: ignore[arg-type]  # pyright: ignore[reportArgumentType]
+            ha.Entities(weather="weather.home", air="sensor.air"),
+            now=NOW,
+            heater=HEATER,
+        )
+
+    async def test_an_unreadable_air_entity(self) -> None:
+        fitted, notes = await self._fit(
+            _heater_client(outdoor=OUTDOOR_HISTORY, fail={"sensor.air"})
+        )
+        assert fitted is not None
+        assert "air: fitting to the heater's own air reading instead" in notes
+
+    async def test_an_air_entity_with_too_little_history(self) -> None:
+        client = _heater_client(outdoor=OUTDOOR_HISTORY)
+        client.states["sensor.air"] = _s("sensor.air", 60.0, "°F")
+        client.series["sensor.air"] = [
+            (NOW - timedelta(hours=h), 60.0 + h % 3) for h in range(12, 0, -1)
+        ]
+        fitted, notes = await self._fit(client)
+        assert fitted is not None
+        assert "air: fitting to the heater's own air reading instead" in notes

@@ -1160,23 +1160,48 @@ async def fit_location_air(
     ``LOCATION_AIR_WINDOW`` of the air entity's readings, or without one
     the heater's own air reading while its compressor runs (``heater``'s
     ``ambient`` and ``compressor``), against ``entities.weather``'s
-    outdoor air. None, and a note why, without enough history or for a
-    loose fit. A caller that reads the environment often fits on its
-    own cadence and passes the fit on as ``fitted_air``. The arithmetic
+    outdoor air. With an air entity that can't be read or gives no fit,
+    the heater's own reading is tried. None, and a note why, without
+    enough history or for a loose fit. A caller that reads the
+    environment often fits on its own cadence and passes the fit on as
+    ``fitted_air``. The arithmetic
     (the samples, the fit) goes through ``run``."""
     notes: list[str] = []
     weather = entities.weather
     if weather is None:
         notes.append("air: no weather entity to fit the air to")
         return None, notes
-    try:
-        fitted = await _fit(
-            client, entities, heater, weather, now.astimezone(UTC), notes, run
+    at = now.astimezone(UTC)
+    fitted = await _try_fit(client, entities, heater, weather, at, notes, run)
+    if (
+        fitted is None
+        and entities.air is not None
+        and heater is not None
+        and heater.ambient is not None
+        and heater.compressor is not None
+    ):
+        # The air entity gave no fit: the heater's own air may.
+        notes.append("air: fitting to the heater's own air reading instead")
+        fitted = await _try_fit(
+            client, replace(entities, air=None), heater, weather, at, notes, run
         )
+    return fitted, notes
+
+
+async def _try_fit(
+    client: HomeAssistantClient,
+    entities: Entities,
+    heater: HeaterEntities | None,
+    weather: str,
+    now: datetime,
+    notes: list[str],
+    run: Run,
+) -> FittedLocationAir | None:
+    try:
+        return await _fit(client, entities, heater, weather, now, notes, run)
     except (HomeAssistantError, ValueError) as e:
         notes.append(f"air: not read ({e})")
-        return None, notes
-    return fitted, notes
+        return None
 
 
 async def _fit(
