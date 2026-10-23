@@ -8,6 +8,16 @@ Unreleased
 Added
 -----
 
+- **The heater's own entities in the sources file** (#232).
+  ``[home_assistant.heater]`` names them (``heard``, ``upper`` and
+  ``lower`` required), so the CLI fits and anchors the projected air to
+  the heater's reading while its compressor runs where no air entity
+  does.
+- **The idle cabinet air, said** (#232). ``Environment.ambient_cabinet``
+  marks air taken from the heater's own reading while the compressor
+  was idle, about 6 °F warm, and answers give the reason
+  ``ambient_from_idle_cabinet``.
+
 - **The heater's heard spans, given** (#230). ``book_from_changes``
   takes ``heard=``, the spans the heater was heard over, for a record
   that keeps no instant for each response. A gap between spans breaks
@@ -61,6 +71,22 @@ Changed
   (``BookParams.empty_btu``) and the full tank's hidden cold water
   (``ReadinessParams.full_hidden_gal``) by tank size, as they scale its
   volume (#234). Both were the 65 gal tank's at every size.
+- Circulation runs given with params that have no circulation terms are
+  priced at one installation's (``SITE_CIRCULATION``), and the answer
+  says so in ``defaults_used`` (#232). They raised in every walk, and a
+  book left them unpriced. ``sim_adapters.with_circulation_terms`` does
+  this for the books.
+- A status in Standby is Power Off, as the NaviLink app counts it (#232).
+  It raised.
+- ``book_from_changes`` books from the flow's first reading when its
+  history starts later than the window, rather than raising (#232).
+- ``known_runs`` returns the pump's runs from its first reading and the
+  span before it as unknown, rather than nothing for a history shorter
+  than the span (#232). The inlet's plateau skips a draw in that span,
+  and ``HomeAssistantBook`` takes no anchor before it.
+- ``read_heater_history`` leaves out a heating flag entity with no
+  history at all, with a note, rather than leaving the whole record
+  unobserved (#232).
 
 - The simulate how-to's ``book_from_changes`` example passes the
   circulation's runs and flow, and says to pass the household's draws,
@@ -78,6 +104,14 @@ Fixed
   the scenario's inlet (``Environment.inlet_f``) where one is given, as
   the walk's draws take it (#234). The gallons ignored a measured inlet,
   and with a book a colder inlet gave warmer delivered water.
+- ``fit_location_air`` fits to the heater's own air when the air entity
+  can't be read or gives no fit (#232).
+- Calibration's recoveries outside a partial air record read the
+  heater's own air, rather than being dropped (#232).
+- The simulate how-to's and ``sim_live``'s ``compose`` example falls
+  back to the 65 gal defaults when the feature info doesn't arrive
+  (#232). It passed None to ``simulate``.
+- ``HomeAssistantBook`` says when the flow is unknown now (#232).
 
 - **A heater read missing a heating flag is unobserved** (#227).
   ``read_heater_history`` reads a day at a time; a window with nothing

@@ -525,7 +525,7 @@ class TestTheCabinetAir:
     """The heater's idle reading is its cabinet's: an answer run at it
     says so, and one run at air given in its place doesn't."""
 
-    def test_an_idle_status_is_flagged(self, status: Any) -> None:
+    async def test_an_idle_status_is_flagged(self, status: Any) -> None:
         from nwp500 import sim_adapters as sa
 
         idle = status.model_copy(update={"comp_use": 0})
@@ -534,7 +534,7 @@ class TestTheCabinetAir:
         assert not sa.environment(running).ambient_cabinet
         assert not sa.environment(idle, ambient=60.0).ambient_cabinet
 
-    def test_the_reason_is_given(self, status: Any) -> None:
+    async def test_the_reason_is_given(self, status: Any) -> None:
         from nwp500.sim.api import AMBIENT_FROM_CABINET, _ambient_reasons
         from nwp500.sim.inputs import Environment
 
