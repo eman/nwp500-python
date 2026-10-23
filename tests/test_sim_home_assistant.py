@@ -479,6 +479,20 @@ class TestTheInlet:
         assert set(names) == {"sensor.inlet", DEMAND}
         assert (since, until) == (NOW - timedelta(hours=72), NOW)
 
+    async def test_a_probe_steady_through_the_tail(self) -> None:
+        """A history writes only changes: a probe at the mains from
+        minute 5 to the end has one row there, and still a plateau."""
+        series = long_draw(ended_hours_ago=5)
+        end = NOW - timedelta(hours=5)
+        start = end - timedelta(minutes=15)
+        series["sensor.inlet"] = [
+            (start - timedelta(hours=1), 66.0),
+            (start + timedelta(minutes=5), 58.0),
+            (end + timedelta(minutes=20), 65.0),
+        ]
+        source = _source(FakeClient(UNITS, series), **INLET)
+        assert (await source.read()).inlet_f == pytest.approx(58.0)
+
     async def test_a_short_draw_has_none(self) -> None:
         client = FakeClient(UNITS, long_draw(ended_hours_ago=5, minutes=8))
         source = _source(client, **INLET)
@@ -1643,3 +1657,52 @@ class TestWhileRunning:
         got, newest = ha._while_running(air, [(on, "on")], NOW)  # pyright: ignore[reportPrivateUsage]
         assert got[-1][0] == NOW - timedelta(minutes=8)
         assert newest == air[0]
+
+
+class TestHeld:
+    def test_the_value_in_force_on_the_grid(self) -> None:
+        rows = [(NOW + timedelta(seconds=25), 2.0), (NOW, 1.0)]
+        got = ha.held(
+            rows, NOW - timedelta(seconds=10), NOW + timedelta(seconds=40)
+        )
+        assert got == [
+            (NOW, 1.0),
+            (NOW + timedelta(seconds=10), 1.0),
+            (NOW + timedelta(seconds=20), 1.0),
+            (NOW + timedelta(seconds=30), 2.0),
+            (NOW + timedelta(seconds=40), 2.0),
+        ]
+
+    def test_across_a_clock_change_by_elapsed_time(self) -> None:
+        from zoneinfo import ZoneInfo
+
+        tz = ZoneInfo("America/Los_Angeles")
+        # 01:30 PDT, then the clock falls back to 01:00 PST.
+        start = datetime(2026, 11, 1, 1, 30, tzinfo=tz)
+        end = start.astimezone(UTC) + timedelta(hours=1)
+        got = ha.held([(start, 1.0)], start, end, timedelta(minutes=30))
+        assert [t - got[0][0] for t, _ in got] == [
+            timedelta(minutes=30 * k) for k in range(3)
+        ]
+
+    def test_readings_in_the_repeated_hour_in_order(self) -> None:
+        """01:40 PDT comes before 01:10 PST, though its wall clock is later."""
+        from zoneinfo import ZoneInfo
+
+        tz = ZoneInfo("America/Los_Angeles")
+        first = datetime(2026, 11, 1, 1, 40, tzinfo=tz)
+        second = datetime(2026, 11, 1, 1, 10, fold=1, tzinfo=tz)
+        assert second.astimezone(UTC) > first.astimezone(UTC)
+        got = ha.held(
+            [(second, 2.0), (first, 1.0)],
+            first,
+            second.astimezone(UTC) + timedelta(minutes=10),
+            timedelta(minutes=10),
+        )
+        assert got[0][1] == 1.0
+        assert got[-1][1] == 2.0
+        assert [v for _, v in got].count(2.0) == 2
+
+    def test_a_step_must_be_positive(self) -> None:
+        with pytest.raises(ValueError, match="positive"):
+            ha.held([], NOW, NOW, timedelta(0))

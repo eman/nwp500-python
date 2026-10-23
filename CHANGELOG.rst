@@ -29,6 +29,12 @@ Fixed
   that ``sim_live.overlay`` and ``nwp-cli simulate`` handle. It read a
   string, null or bool in a number field without complaint. Each is
   now a ``ValueError`` naming the field (#212).
+- ``HomeAssistantEnvironment`` found no inlet plateau for a probe that
+  held one value through a long draw's tail. Home Assistant's history
+  writes a row only when a value changes, so the tail had one reading
+  or none, under the plateau's 3. The probe's history is now read as
+  the value in force every 10 seconds (``held``, ``PROBE_STEP``)
+  (#216).
 
 Version 9.10.0 (2026-10-22)
 ===========================

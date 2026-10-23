@@ -73,6 +73,9 @@ PUMP_ON_RPM = 10.0
 PUMP_STALE = timedelta(seconds=300)
 #: How far back the inlet's plateau looks.
 INLET_LOOKBACK = timedelta(hours=72)
+#: The grid the inlet probe's history is read on (``held``): the
+#: plateau takes readings as samples, and a history keeps only changes.
+PROBE_STEP = timedelta(seconds=10)
 #: How far back the air beside the heater and the outdoor air are read
 #: to fit a ``location_air`` model where none is given.
 LOCATION_AIR_WINDOW = timedelta(days=3)
@@ -546,6 +549,35 @@ def to_rpm(value: float, unit: str | None) -> float:
     if u == "hz":
         return value * 60.0
     raise ValueError(f"{unit!r} is not a rotational speed unit")
+
+
+def held(
+    readings: Sequence[Reading],
+    start: datetime,
+    end: datetime,
+    step: timedelta = PROBE_STEP,
+) -> list[Reading]:
+    """``readings``, a history of changes, as a probe sampled every
+    ``step`` from ``start`` to ``end`` would read them: the value in
+    force at each instant, none before the first reading. A history
+    writes no row for a report of the value it already holds, so a
+    probe steady over a span has one reading there, or none. The grid
+    is in UTC, every ``step`` of elapsed time across a clock change."""
+    if step <= timedelta(0):
+        raise ValueError("step must be positive")
+    # In UTC: two local times in one zone compare, and step, by the wall
+    # clock, which skips or repeats an hour at a daylight-saving change.
+    rows = sorted((t.astimezone(UTC), v) for t, v in readings)
+    out: list[Reading] = []
+    i = -1
+    t, end = start.astimezone(UTC), end.astimezone(UTC)
+    while t <= end:
+        while i + 1 < len(rows) and rows[i + 1][0] <= t:
+            i += 1
+        if i >= 0:
+            out.append((t, rows[i][1]))
+        t += step
+    return out
 
 
 def busy(*spans: Sequence[Span]) -> list[Span]:
@@ -1218,7 +1250,7 @@ class HomeAssistantEnvironment:
             )
             # In °F, as read: no unit preference is read here.
             cold = sa.cold_supply_f(
-                probe,
+                held(probe, since, now),
                 at=now,
                 draws=draws,
                 circulation=busy_spans,
