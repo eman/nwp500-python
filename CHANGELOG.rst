@@ -14,6 +14,18 @@ Added
   it back as ``fitted_air``, projects through it, and notes its r and
   lag on every ``read`` without fitting again. A caller that reads
   every few minutes fits on its own cadence.
+- **The heat book kept current from Home Assistant** (#227).
+  ``sim_home_assistant.HomeAssistantBook`` holds the heater's and the
+  household flow's history, reading only what is new on each ``read``,
+  and books from it with no request (``book``, for an executor). The
+  flow is the household's draws as delivered through the mixing valve.
+  The circulation's speed, an inlet probe and the demand entity, each
+  optional, give the runs, the inlet and the conversion at the mains
+  (``BookAnswer.inlet_measured``). ``mains_plateau`` and ``known_runs``
+  are the inlet's plateau and the pump's runs from a ``History``, as
+  ``HomeAssistantEnvironment`` reads them. ``book_from_changes`` and
+  ``book_steps_from_changes`` take ``air_outages``: while the air is
+  unknown the book takes the default air, not the last reading.
 - **The CPU work off the event loop** (#225). ``fit_location_air`` and
   ``HomeAssistantEnvironment`` take ``run=`` (``Run``), which runs a
   piece of work and awaits its result, such as Home Assistant's
@@ -40,6 +52,12 @@ Changed
 
 Fixed
 -----
+
+- **A heater read missing a heating flag is unobserved** (#227).
+  ``read_heater_history`` reads a day at a time; a window with nothing
+  of the compressor, an element or the heat source (each opens with
+  the value in force) now leaves the heater unobserved over it, with a
+  note, rather than holding the flag from before.
 - ``sim_adapters.book_from_changes`` read its flow as a sampled meter:
   a reading held 60 seconds (``FLOW_HOLD``) and the inlet's an hour,
   and flow rows more than an hour apart refused the book as a silent

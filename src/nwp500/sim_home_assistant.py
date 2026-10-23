@@ -39,14 +39,15 @@ import logging
 import math
 from bisect import bisect_right
 from collections.abc import Awaitable, Callable, Iterable, Mapping, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime, timedelta
 from typing import Any, cast
 
 from nwp500 import sim_adapters as sa
 from nwp500.exceptions import Nwp500Error
 from nwp500.sim import Environment
-from nwp500.sim.cold_supply import ColdSupply
+from nwp500.sim.book import Booked
+from nwp500.sim.cold_supply import ColdSupply, on_the_mains
 from nwp500.sim.location_air import (
     FIT_LAGS_H,
     FittedLocationAir,
@@ -54,6 +55,7 @@ from nwp500.sim.location_air import (
 )
 from nwp500.sim.location_air import fit as fit_air
 from nwp500.sim.location_air import project as project_air
+from nwp500.sim.params import HeaterParams
 
 __author__ = "Emmanuel Levijarvi"
 __copyright__ = "Emmanuel Levijarvi"
@@ -1001,6 +1003,93 @@ class HomeAssistantClient:
         )
 
 
+def known_runs(
+    history: History,
+    pump: str,
+    unit: str | None,
+    since: datetime,
+    now: datetime,
+) -> tuple[list[Span] | None, str | None]:
+    """The pump's runs since ``since`` from its speed in ``history``
+    (``pump_runs``), or None and why they are unknown: no reading in
+    force at ``since`` (a draw before the first may have overlapped a
+    run), or a speed in no unit this reads."""
+    if not covers_start(history.readings.get(pump, []), since):
+        return None, "no speed reading in force at the start"
+    try:
+        speed, unread = history.converted(pump, unit, to_rpm, now)
+    except ValueError as err:
+        return None, str(err)
+    # A reading left out could have been a run: one inside the span
+    # leaves the runs unknown.
+    inside = [(a, b) for a, b in unread if a < now and b > since]
+    if inside:
+        return None, f"{len(inside)} readings in no speed unit"
+    return pump_runs(speed, since, now), None
+
+
+def mains_plateau(
+    history: History,
+    probe: str,
+    demand: str,
+    pump: str | None,
+    *,
+    probe_unit: str | None,
+    pump_unit: str | None,
+    since: datetime,
+    now: datetime,
+    notes: list[str],
+) -> ColdSupply | None:
+    """The mains from the inlet ``probe``'s plateaus over the long draws
+    since ``since`` (``sim_adapters.cold_supply_f``): the draws are the
+    ``demand`` entity's (``demand_spans``), and a draw that overlaps the
+    ``pump``'s runs, or the probe's or the pump's outages, is skipped.
+    The probe's history is read as the value in force every
+    ``PROBE_STEP`` (``held``). None, with ``notes`` saying why, when the
+    pump's runs are unknown or no draw gives a plateau. All of it is CPU
+    work, for a caller's ``Run``."""
+    states = history.states or {}
+    readings, unread = history.converted(probe, probe_unit, to_f, now)
+    if unread:
+        notes.append(
+            f"inlet: {len(unread)} readings of {probe} in no unit this "
+            "reads left out"
+        )
+    # Its outages split its draws, so none overlaps a draw.
+    draws, _ = demand_spans(states.get(demand, []), since, now)
+    runs: list[Span] = []
+    if pump is not None:
+        known, why = known_runs(history, pump, pump_unit, since, now)
+        if known is None:
+            notes.append(f"inlet: the circulation's runs are unknown ({why})")
+            return None
+        runs = known
+    # A draw while the probe or the pump was unavailable may have
+    # overlapped a run unseen: the plateau skips it, as it skips one
+    # that overlaps a run.
+    busy_spans = busy(
+        runs,
+        unread,
+        *(history.outages.get(n, []) for n in (probe, pump) if n),
+    )
+    # In °F, as read: no unit preference is read here.
+    cold = sa.cold_supply_f(
+        held(readings, since, now),
+        at=now,
+        draws=draws,
+        circulation=busy_spans,
+        window=now - since,
+    )
+    if cold.t_cold_f is None:
+        hours = f"{(now - since).total_seconds() / 3600:g}"
+        notes.append(
+            f"inlet: no long draw in the last {hours} h to read the mains from"
+        )
+        return None
+    notes.append(f"inlet: the plateau of {cold.draws} long draws")
+    return cold
+
+
 # ── the environment source ──────────────────────────────────────────
 
 
@@ -1481,80 +1570,39 @@ class HomeAssistantEnvironment:
                     f"inlet: {demand_id} not read (no states in the history)"
                 )
                 return None
-            state = await self.client.state(probe_id)
-            probe, unread = got.converted(probe_id, state.unit, to_f, now)
-            if unread:
-                self.notes.append(
-                    f"inlet: {len(unread)} readings of {probe_id} in no "
-                    "unit this reads left out"
-                )
-            # Its outages split its draws, so none overlaps a draw.
-            draws, _ = demand_spans(got.states.get(demand_id, []), since, now)
-            runs: list[Span] | None = []
+            probe_unit = (await self.client.state(probe_id)).unit
+            pump_unit: str | None = None
             if pump_id is not None:
-                runs = await self._pump_runs(pump_id, got, since, now)
-                if runs is None:
+                try:
+                    pump_unit = (await self.client.state(pump_id)).unit
+                except HomeAssistantError as err:
+                    self.notes.append(
+                        f"inlet: the circulation's runs are unknown ({err})"
+                    )
                     return None
-            # A draw while the probe or the pump was unavailable may have
-            # overlapped a run unseen: the plateau skips it, as it skips
-            # one that overlaps a run.
-            busy_spans = busy(
-                runs or [],
-                unread,
-                *(got.outages.get(n, []) for n in (probe_id, pump_id) if n),
-            )
-            # In °F, as read: no unit preference is read here. The held
-            # grid and the plateau are the CPU work, through ``run``.
+            notes: list[str] = []
+            # The held grid and the plateau are the CPU work, through
+            # ``run``.
             cold = cast(
-                ColdSupply,
+                "ColdSupply | None",
                 await self.run(
-                    lambda: sa.cold_supply_f(
-                        held(probe, since, now),
-                        at=now,
-                        draws=draws,
-                        circulation=busy_spans,
-                        window=INLET_LOOKBACK,
+                    lambda: mains_plateau(
+                        got,
+                        probe_id,
+                        demand_id,
+                        pump_id,
+                        probe_unit=probe_unit,
+                        pump_unit=pump_unit,
+                        since=since,
+                        now=now,
+                        notes=notes,
                     )
                 ),
             )
-            if cold.t_cold_f is None:
-                hours = f"{INLET_LOOKBACK.total_seconds() / 3600:g}"
-                self.notes.append(
-                    f"inlet: no long draw in the last {hours} h to read "
-                    "the mains from"
-                )
-                return None
-            self.notes.append(f"inlet: the plateau of {cold.draws} long draws")
-            return cold.t_cold_f
+            self.notes.extend(notes)
+            return None if cold is None else cold.t_cold_f
 
         return cast("float | None", await self._guard("inlet", read, None))
-
-    async def _pump_runs(
-        self, pump_id: str, got: History, since: datetime, now: datetime
-    ) -> list[Span] | None:
-        """The pump's runs since ``since``, or None (and a note) when
-        they are unknown: no reading in force at ``since`` (a draw
-        before the first may have overlapped a run), or a speed in no
-        unit this reads."""
-        why = None
-        speed: list[Reading] = []
-        if not covers_start(got.readings.get(pump_id, []), since):
-            why = "no speed reading in force at the start"
-        else:
-            try:
-                unit = (await self.client.state(pump_id)).unit
-                speed, unread = got.converted(pump_id, unit, to_rpm, now)
-                if unread:
-                    # A reading left out could have been a run.
-                    why = f"{len(unread)} readings in no speed unit"
-            except (HomeAssistantError, ValueError) as err:
-                why = str(err)
-        if why is not None:
-            self.notes.append(
-                f"inlet: the circulation's runs are unknown ({why})"
-            )
-            return None
-        return pump_runs(speed, since, now)
 
 
 # ── over a recorded history, for the calibration ────────────────────
@@ -1831,6 +1879,13 @@ def _value(state: str, read: _Read, unit: str | None) -> Any:
         return None
 
 
+#: The heater's roles that say it heats: a window without one of them is
+#: unobserved.
+_HEATING = frozenset(
+    ("compressor_on", "upper_element_on", "lower_element_on", "heat_source")
+)
+
+
 async def read_heater_history(
     client: HomeAssistantClient,
     entities: HeaterEntities,
@@ -1846,9 +1901,10 @@ async def read_heater_history(
     Each number is taken from the unit it was recorded in. A state
     ``unavailable`` or ``unknown`` is an outage, and an outage of any
     entity leaves the heater unobserved over it: the integration's
-    entities go unavailable together. Raises ``HomeAssistantError`` when
-    a probe cannot be read, or the client gives no states
-    (``History.states``)."""
+    entities go unavailable together. So does a window that has nothing
+    of a heating flag (the compressor, an element, the heat source).
+    Raises ``HomeAssistantError`` when a probe cannot be read, or the
+    client gives no states (``History.states``)."""
     from nwp500.enums import CurrentOperationMode, ErrorCode, HeatSource
 
     if window <= timedelta(0):
@@ -1894,6 +1950,7 @@ async def read_heater_history(
             del roles[name]
     changes: dict[str, list[tuple[datetime, Any]]] = {n: [] for n in roles}
     unread: dict[str, int] = {}
+    blank: dict[str, int] = {}
     down: list[Span] = []
     heard: list[datetime] = []
     names = sorted({e.heard, *(entity for entity, _ in roles.values())})
@@ -1921,6 +1978,12 @@ async def read_heater_history(
             down.append((was, b))
         for name, (entity, read) in roles.items():
             series = changes[name]
+            if name in _HEATING and not got.states.get(entity):
+                # A window opens with the state in force: nothing is no
+                # read, and a flag held from before would credit heating
+                # across it.
+                down.append((a, b))
+                blank[name] = blank.get(name, 0) + 1
             was = None
             # The unit each number was recorded in, where the history
             # says; today's where it does not.
@@ -1961,6 +2024,10 @@ async def read_heater_history(
             )
     for name, count in unread.items():
         notes.append(f"{name}: {count} states this does not read, left out")
+    for name, count in blank.items():
+        notes.append(
+            f"{name}: nothing read in {count} windows, left unobserved"
+        )
     outages = busy(down)
     if outages:
         hours = sum((b - a).total_seconds() for a, b in outages) / 3600
@@ -1972,3 +2039,278 @@ async def read_heater_history(
         raise HomeAssistantError("the probes have no history over the record")
     rows = sa.ChangeRows(**changes, outages=tuple(outages))
     return HeaterHistory(rows, sorted(set(heard)), tuple(notes))
+
+
+# ── the heat book, kept current ─────────────────────────────────────
+
+#: How far back ``HomeAssistantBook`` holds the history: the oldest
+#: anchor a book reads (``BookParams.history_h``'s default).
+BOOK_WINDOW = timedelta(hours=72)
+
+
+@dataclass(frozen=True)
+class BookAnswer:
+    """``HomeAssistantBook.book``'s answer: the book (None without one),
+    whether its gallons convert at the mains, as ``time_to_ready``'s
+    ``inlet_measured`` takes it, and what it rests on."""
+
+    booked: Booked | None
+    inlet_measured: bool
+    notes: tuple[str, ...]
+
+
+def _unread_marked(
+    got: History, names: Iterable[str], start: datetime, end: datetime
+) -> History:
+    """``got`` with each of ``names`` it has nothing of (a read opens
+    with the value in force, so nothing is no read) unknown from
+    ``start`` to ``end``: an outage, and a state ``unknown``, so that a
+    value held from an earlier read does not carry across it."""
+    missing = [
+        n
+        for n in names
+        if not got.readings.get(n)
+        and not got.outages.get(n)
+        and not (got.states or {}).get(n)
+    ]
+    if not missing:
+        return got
+    outages = dict(got.outages) | {n: [(start, end)] for n in missing}
+    states = got.states
+    if states is not None:
+        states = dict(states) | {n: [(start, "unknown")] for n in missing}
+    return replace(got, outages=outages, states=states)
+
+
+class HomeAssistantBook:
+    """The tank's heat booked (``sim_adapters.book_from_changes``) from
+    Home Assistant and kept current: ``read`` reads the history once
+    over ``window``, then only what is new since the last read, and
+    holds it (``extended``, ``since``); ``book`` books from what it
+    holds, with no request.
+
+    ``flow`` is the household's hot water draw flow, the circulation's
+    water not in it, in any unit ``to_gpm`` reads, as delivered at the
+    taps through the mixing valve: the book prices a delivered gallon at
+    the valve's delivery line (``DrawParams.delivery_intercept_f`` and
+    ``delivery_slope``), not at the tank. ``heater`` is the heater's own
+    entities. Of ``entities``, ``circulation_speed`` gives the
+    circulation's runs, ``inlet`` the inlet the book converts at, and
+    with ``demand`` the mains (``mains_plateau``, ``on_the_mains``),
+    and ``air`` the air beside the heater; each optional, a book without
+    one losing only what it gives. A flow reported late reaches the
+    book late: it books what the history holds at ``read``."""
+
+    def __init__(
+        self,
+        client: HomeAssistantClient,
+        heater: HeaterEntities,
+        flow: str,
+        entities: Entities | None = None,
+        *,
+        window: timedelta = BOOK_WINDOW,
+    ) -> None:
+        if window <= timedelta(0):
+            raise ValueError(f"window {window} is not a positive span")
+        self.client = client
+        self.heater = heater
+        self.flow = flow
+        self.entities = entities or Entities()
+        self.window = window
+        self._heater_history: HeaterHistory | None = None
+        self._history: History | None = None
+        self._heater_read: datetime | None = None
+        self._heater_tried: datetime | None = None
+        self._read: datetime | None = None
+        self._tried: datetime | None = None
+        self._units: dict[str, str | None] = {}
+        self._notes: list[str] = []
+
+    @property
+    def _others(self) -> list[str]:
+        e = self.entities
+        return [
+            n
+            for n in (self.flow, e.circulation_speed, e.inlet, e.demand, e.air)
+            if n
+        ]
+
+    async def read(self, now: datetime) -> None:
+        """Read the history since the last read (the whole ``window``
+        the first time) and hold it, trimmed to ``window``. A read that
+        fails is noted, and the next reads again from where it would
+        have started."""
+        now = now.astimezone(UTC)
+        cut = now - self.window
+        self._notes = []
+        start = (
+            cut if self._heater_read is None else max(self._heater_read, cut)
+        )
+        self._heater_tried = now
+        try:
+            newer = await read_heater_history(
+                self.client, self.heater, start, now
+            )
+        except (HomeAssistantError, ValueError) as err:
+            self._notes.append(f"book: the heater's history not read ({err})")
+        else:
+            held_ = self._heater_history
+            whole = newer if held_ is None else held_.extended(newer)
+            self._heater_history = whole.since(cut)
+            self._heater_read = now
+        start = cut if self._read is None else max(self._read, cut)
+        self._tried = now
+        try:
+            got = await self.client.read_history(self._others, start, now)
+        except HomeAssistantError as err:
+            self._notes.append(f"book: the flow's history not read ({err})")
+        else:
+            # A read opens with the value in force: with neither a reading
+            # nor an outage, the flow is unread, and read again next time.
+            if not got.readings.get(self.flow) and not got.outages.get(
+                self.flow
+            ):
+                self._notes.append(f"book: no history of {self.flow} read")
+            else:
+                got = _unread_marked(got, self._others, start, now)
+                had = self._history
+                merged = got if had is None else had.extended(got)
+                self._history = merged.since(cut)
+                self._read = now
+        for n in self._others:
+            if n == self.entities.demand:
+                continue
+            try:
+                self._units[n] = (await self.client.state(n)).unit
+            except HomeAssistantError as err:
+                # Without its unit, its readings are left out of the book.
+                self._units.pop(n, None)
+                self._notes.append(f"book: {n}'s unit not read ({err})")
+
+    def book(self, at: datetime, params: HeaterParams) -> BookAnswer:
+        """The book at ``at`` from the history held, with no request:
+        CPU work, for an executor. None, and notes why, without the
+        heater's or the flow's history, or with no anchor."""
+        at = at.astimezone(UTC)
+        rows, got = self._heater_history, self._history
+        # The last heater read's notes, then this keeper's.
+        notes = [*(rows.notes if rows is not None else ()), *self._notes]
+        if rows is None or got is None:
+            notes.append("book: no history read")
+            return BookAnswer(None, False, tuple(notes))
+        if self._heater_tried != self._heater_read:
+            # Since the last heater read that worked, its flags are
+            # unknown: none held from before may credit heating.
+            notes.append(
+                "book: none past the heater's last read "
+                f"({cast(datetime, self._heater_read).isoformat()})"
+            )
+            return BookAnswer(None, False, tuple(notes))
+        since = at - self.window
+        e = self.entities
+        circulation = params.circulation
+        if circulation is not None and circulation.meter_share > 0.0:
+            # The flow is the household's draws, the circulation's water
+            # not in it: none of it is to be taken off as circulation.
+            params = replace(
+                params, circulation=replace(circulation, meter_share=0.0)
+            )
+            notes.append(
+                "book: the flow has no circulation in it, so the "
+                "circulation's meter_share is taken as 0"
+            )
+        # After a read that failed, nothing is known past the last that
+        # didn't: unknown, not held.
+        unseen: list[Span] = []
+        failed = self._tried is not None and self._tried != self._read
+        if failed and self._read is not None and self._read < at:
+            unseen = [(self._read, at)]
+            notes.append(f"book: nothing read since {self._read.isoformat()}")
+        try:
+            flow, unread = got.converted(
+                self.flow, self._units.get(self.flow), to_gpm, at
+            )
+        except ValueError as err:
+            notes.append(f"book: {self.flow}: {err}")
+            return BookAnswer(None, False, tuple(notes))
+        flow_out = busy(unread, got.outages.get(self.flow, []), unseen)
+        runs: list[Span] = []
+        if e.circulation_speed is not None:
+            known, why = known_runs(
+                got,
+                e.circulation_speed,
+                self._units.get(e.circulation_speed),
+                since,
+                at,
+            )
+            if known is None:
+                notes.append(
+                    f"book: the circulation's runs are unknown ({why}); "
+                    "booked with only its outages"
+                )
+            # While the pump was unavailable or unread, it may have run.
+            runs = busy(
+                known or [], got.outages.get(e.circulation_speed, []), unseen
+            )
+        inlet: list[Reading] = []
+        inlet_out: list[Span] = []
+        if e.inlet is not None:
+            try:
+                inlet, bad = got.converted(
+                    e.inlet, self._units.get(e.inlet), to_f, at
+                )
+                inlet_out = busy(bad, got.outages.get(e.inlet, []), unseen)
+            except ValueError as err:
+                notes.append(f"book: {e.inlet}: {err}")
+        air: list[Reading] = []
+        air_out: list[Span] = []
+        if e.air is not None:
+            try:
+                air, bad = got.converted(
+                    e.air, self._units.get(e.air), to_f, at
+                )
+                air_out = busy(bad, got.outages.get(e.air, []), unseen)
+            except ValueError as err:
+                notes.append(f"book: {e.air}: {err}")
+        try:
+            booked = sa.book_from_changes(
+                rows.rows,
+                rows.observed,
+                params,
+                at=at,
+                flow=flow,
+                circulation=runs,
+                inlet=inlet,
+                air=air,
+                flow_outages=flow_out,
+                inlet_outages=inlet_out,
+                air_outages=air_out,
+            )
+        except ValueError as err:
+            notes.append(f"book: {err}")
+            return BookAnswer(None, False, tuple(notes))
+        if booked is None:
+            notes.append("book: no anchor since the heater was last unheard")
+            return BookAnswer(None, False, tuple(notes))
+        if e.inlet is None or e.demand is None or not inlet:
+            return BookAnswer(booked, False, tuple(notes))
+        if got.states is None:
+            notes.append(
+                f"inlet: {e.demand} not read (no states in the history)"
+            )
+            return BookAnswer(booked, False, tuple(notes))
+        cold = mains_plateau(
+            got,
+            e.inlet,
+            e.demand,
+            e.circulation_speed,
+            probe_unit=self._units.get(e.inlet),
+            pump_unit=self._units.get(e.circulation_speed or ""),
+            since=at - min(INLET_LOOKBACK, self.window),
+            now=at,
+            notes=notes,
+        )
+        if cold is None:
+            return BookAnswer(booked, False, tuple(notes))
+        moved, measured = on_the_mains(booked, cold)
+        return BookAnswer(moved, measured, tuple(notes))

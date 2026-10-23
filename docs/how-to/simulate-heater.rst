@@ -944,9 +944,56 @@ again from memory:
 ``HeaterHistory`` and ``History`` both take ``extended`` and ``since``.
 A read opens with the value in force at its start; as each value holds
 until the next change, that row changes nothing. Where both reads have
-a row at one instant, the later read's is kept. ``since``
-keeps each value in force at the cut. 72 hours is ``BookParams.history_h``, the
+a row at one instant, the later read's is kept. ``since`` keeps each
+value in force at the cut. 72 hours is ``BookParams.history_h``, the
 oldest anchor a book reads.
+
+``sim_home_assistant.HomeAssistantBook`` does all of that from Home
+Assistant's entities:
+
+.. code-block:: python
+
+   keeper = ha.HomeAssistantBook(
+       client,
+       heater_entities,                 # ha.HeaterEntities
+       "sensor.hot_water_draw_flow",   # the household's draws
+       ha.Entities(
+           circulation_speed="sensor.circulation_pump_speed",
+           inlet="sensor.cold_supply_temperature",
+           demand="binary_sensor.hot_water_demand",
+       ),
+   )
+
+   await keeper.read(now)       # all 72 h the first time, then what's new
+   answer = await hass.async_add_executor_job(keeper.book, now, params)
+   readiness = sim.time_to_ready(
+       scenario, params, book=answer.booked,
+       inlet_measured=answer.inlet_measured,
+   )
+
+``read`` reads the history since the last read and holds it; a read
+that fails is noted, and the next one reads from where it would have
+started. Until then, ``book`` takes the flow as unknown since the last
+read that worked, rather than holding its last value, and after a
+failed read of the heater it gives no book. An optional
+entity whose unit can't be read is left out of the book. While the air
+entity is unavailable, or reads in a unit the book doesn't read, the
+book takes the default air (65 °F), as with no air entity. ``book`` books from what it holds, with no request, so it can
+run in an executor. ``answer.notes`` say what the book rests on, or why
+there is none.
+
+The flow is the household's hot water draws, without the circulation's
+water, in gal/min or any unit ``to_gpm`` reads. It is the water
+delivered at the taps, through the mixing valve: the book prices a
+delivered gallon at the valve's delivery line
+(``DrawParams.delivery_intercept_f`` and ``delivery_slope``), not as
+water withdrawn from the tank. As none of the flow is circulation,
+``book`` takes ``CirculationParams.meter_share`` as 0. A flow entity that reports a draw late
+reaches the book late: the book holds what the history holds at
+``read``. Each of the other entities is optional:
+``circulation_speed`` gives the circulation's runs, ``inlet`` the inlet
+the book converts at, ``inlet`` with ``demand`` the mains, and ``air``
+the air beside the heater.
 
 Without a meter, start one only when you know the tank is full and
 quiet (``sa.full_tank_book``).
