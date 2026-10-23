@@ -276,6 +276,7 @@ def as_changes(readings: list[Any]) -> tuple[sa.ChangeRows, list[datetime]]:
         compressor_on=rec.compressor,
         upper_element_on=rec.upper_element,
         lower_element_on=rec.lower_element,
+        heater_air_f=tuple((t, s.ambient_temperature) for t, s in readings),
     )
     return rows, [t for t, _ in readings]
 
@@ -674,3 +675,67 @@ class TestHeardSpans:
             sa.book_from_changes(rows, [], p, at=T0, flow=flow, heard=[])
             is None
         )
+
+
+class TestTheHeatersOwnAir:
+    def test_it_reads_only_after_the_run_settles(self) -> None:
+        step = timedelta(seconds=10)
+        # Idle at 80, then a 10 min run: 70 for its first 5, 50 after.
+        air = [80.0] * 6 + [70.0] * 30 + [50.0] * 30 + [80.0] * 6
+        comp = [False] * 6 + [True] * 60 + [False] * 6
+        got = sa.running_air(air, comp, step)
+        assert got[:36] == [None] * 36
+        assert got[37:66] == [50.0] * 29
+        # Held past the run, not the idle cabinet's.
+        assert got[66:] == [50.0] * 6
+
+    def _readings(
+        self, device_status_dict: dict[str, Any], hours: float
+    ) -> list[Any]:
+        out = []
+        t = T0 - timedelta(hours=hours)
+        recovery = T0 - timedelta(hours=4)
+        while t <= T0:
+            heating = recovery <= t < recovery + timedelta(minutes=30)
+            out.append(
+                (
+                    t,
+                    DeviceStatus.model_validate(
+                        device_status_dict
+                        | {
+                            "tankUpperTemperature": 600,
+                            "tankLowerTemperature": 598,
+                            "compUse": 2 if heating else 1,
+                            "heatUpperUse": 1,
+                            "heatLowerUse": 1,
+                            # 50 °F running, the cabinet's 80 idle.
+                            "ambientTemperature": 100 if heating else 267,
+                        }
+                    ),
+                )
+            )
+            t += timedelta(minutes=1)
+        return out
+
+    def test_without_an_air_reading_the_book_takes_it(
+        self, device_status_dict: dict[str, Any]
+    ) -> None:
+        p = site_example_params()
+        readings = self._readings(device_status_dict, 20)
+        flow = with_a_draw(meter(20), 2.0)
+        start = T0 - timedelta(hours=20)
+        own = sa.book_from_history(readings, p, at=T0, flow=flow)
+        at_50 = sa.book_from_history(
+            readings, p, at=T0, flow=flow, air=[(start, 50.0)]
+        )
+        at_65 = sa.book_from_history(
+            readings, p, at=T0, flow=flow, air=[(start, 65.0)]
+        )
+        assert own is not None and at_50 is not None and at_65 is not None
+        assert own.heat_btu == pytest.approx(at_50.heat_btu)
+        assert own.heat_btu != pytest.approx(at_65.heat_btu)
+        # And from the changes, as from the statuses.
+        rows, observed = as_changes(readings)
+        changed = sa.book_from_changes(rows, observed, p, at=T0, flow=flow)
+        assert changed is not None
+        assert changed.heat_btu == pytest.approx(own.heat_btu)

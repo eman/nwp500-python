@@ -1352,6 +1352,40 @@ class _Heater:
     compressor: list[bool]
     upper_element: list[bool]
     lower_element: list[bool]
+    #: The heater's own air reading (°F), running or idle; None without
+    #: one. The book reads it only while the compressor runs
+    #: (``running_air``).
+    air: list[float | None] | None = None
+
+
+#: A run's first minutes, when the heater's own air reading is still
+#: warm: at one installation, against a sensor beside the heater, about
+#: 2.7 °F in the first 2 minutes and 1.4 °F from 2 to 5, then 0.2 to
+#: 0.8 °F (up to about 2 °F from May to July).
+HEATER_AIR_SETTLE = timedelta(minutes=5)
+
+
+def running_air(
+    air: Sequence[float | None],
+    compressor: Sequence[bool],
+    step: timedelta,
+) -> list[float | None]:
+    """The air where the heater stands, on a grid of ``step``, from its
+    own reading (``air``): read once the compressor has run
+    ``HEATER_AIR_SETTLE``, when the evaporator fan draws that air past
+    the sensor, and held until the next such reading. Idle, the sensor
+    reads the cabinet, about 6 °F warm, so an idle reading is never
+    taken. None before the first."""
+    settle = math.ceil(HEATER_AIR_SETTLE / step)
+    out: list[float | None] = []
+    held: float | None = None
+    on_for = 0
+    for v, on in zip(air, compressor, strict=True):
+        on_for = on_for + 1 if on else 0
+        if on_for > settle and v is not None and math.isfinite(v):
+            held = v
+        out.append(held)
+    return out
 
 
 def run_flow(
@@ -1415,8 +1449,10 @@ def book_steps_from_history(
     compressor, either element) held until the next; the household
     meter's ``flow`` and ``circulation_flow`` held ``FLOW_HOLD``, 0
     past it; ``inlet`` (a probe) held ``INLET_HOLD``; ``air`` held
-    until the next (the book's default without it). Flows are per
-    minute and temperatures in the preferred units.
+    until the next. Without an ``air`` reading, the air is the heater's
+    own while its compressor runs (``running_air``), and the book's
+    default before the first. Flows are per minute and temperatures in
+    the preferred units.
 
     A step inside a ``circulation`` run is circulating at its last flow
     reading, this run's or an earlier one's; with none yet, the meter's
@@ -1459,6 +1495,11 @@ def book_steps_from_history(
         compressor=flag(lambda s: s.comp_use),
         upper_element=flag(lambda s: s.heat_upper_use),
         lower_element=flag(lambda s: s.heat_lower_use),
+        air=_held(
+            of(lambda s: _from_device(DeciCelsius(s.ambient_temperature_raw))),
+            grid,
+            None,
+        ),
     )
     return _book_steps_on(
         grid,
@@ -1536,6 +1577,7 @@ def book_steps_from_changes(
             for a, v in zip(flag(rows.upper_element_on), source, strict=True)
         ],
         lower_element=flag(rows.lower_element_on),
+        air=probe(rows.heater_air_f) if rows.heater_air_f else None,
     )
     return _book_steps_on(
         grid,
@@ -1620,10 +1662,15 @@ def _book_steps_on(
     run_flow = _held(series(circulation_flow, _volume_to_sim), grid, flow_hold)
     probe = _held(series(inlet, _to_sim), grid, inlet_hold)
     probe = _unknown_in(probe, grid, inlet_unknown)
-    # Unknown, the air is the default, not the last reading held.
-    amb = _unknown_in(
-        _held(series(air, _to_sim), grid, None), grid, air_unknown
-    )
+    airs = series(air, _to_sim)
+    if not airs and heater.air is not None:
+        # No air reading: the heater's own while its compressor runs.
+        amb = running_air(
+            heater.air, heater.compressor, timedelta(seconds=BOOK_GRID_S)
+        )
+    else:
+        # Unknown, the air is the default, not the last reading held.
+        amb = _unknown_in(_held(airs, grid, None), grid, air_unknown)
     runs = sorted(
         (a.astimezone(UTC), b.astimezone(UTC)) for a, b in circulation
     )
@@ -1758,7 +1805,9 @@ def book_from_changes(
     ``flow_outages``, ``inlet_outages`` and ``air_outages`` are the spans
     each was unknown (``History.outages``). A flow unknown is as a heater
     unheard: no anchor before it counts. An air unknown is
-    ``AMBIENT_DEFAULT_F``, as with no air reading. No anchor before the
+    ``AMBIENT_DEFAULT_F``. With no ``air`` reading at all, the air is the
+    heater's own while its compressor runs (``running_air``, from the
+    rows' ``heater_air_f``). No anchor before the
     flow's first reading counts either; a ValueError with no flow
     reading at all.
 

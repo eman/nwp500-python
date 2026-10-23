@@ -17,6 +17,12 @@ Added
   marks air taken from the heater's own reading while the compressor
   was idle, about 6 °F warm, and answers give the reason
   ``ambient_from_idle_cabinet``.
+- **The heater's own air in the book** (#236). With no air reading,
+  ``book_from_history``, ``book_from_changes`` and
+  ``HomeAssistantBook`` take the heater's own air reading once its
+  compressor has run 5 minutes (``sim_adapters.running_air``,
+  ``HEATER_AIR_SETTLE``), held until the next run, rather than 65 °F
+  throughout. ``HomeAssistantBook`` notes it.
 
 - **The heater's heard spans, given** (#230). ``book_from_changes``
   takes ``heard=``, the spans the heater was heard over, for a record

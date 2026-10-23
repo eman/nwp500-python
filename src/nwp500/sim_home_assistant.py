@@ -2399,6 +2399,11 @@ class HomeAssistantBook:
         except ValueError as err:
             notes.append(f"book: {err}")
             return BookAnswer(None, False, tuple(notes))
+        if not air and rows.rows.heater_air_f:
+            notes.append(
+                "book: the air is the heater's own reading while its "
+                "compressor runs"
+            )
         if booked is None:
             if any(a <= at <= b for a, b in flow_out):
                 notes.append(f"book: {self.flow} is unknown now")
