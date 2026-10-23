@@ -2040,6 +2040,29 @@ class BookAnswer:
     notes: tuple[str, ...]
 
 
+def _unread_marked(
+    got: History, names: Iterable[str], start: datetime, end: datetime
+) -> History:
+    """``got`` with each of ``names`` it has nothing of (a read opens
+    with the value in force, so nothing is no read) unknown from
+    ``start`` to ``end``: an outage, and a state ``unknown``, so that a
+    value held from an earlier read does not carry across it."""
+    missing = [
+        n
+        for n in names
+        if not got.readings.get(n)
+        and not got.outages.get(n)
+        and not (got.states or {}).get(n)
+    ]
+    if not missing:
+        return got
+    outages = dict(got.outages) | {n: [(start, end)] for n in missing}
+    states = got.states
+    if states is not None:
+        states = dict(states) | {n: [(start, "unknown")] for n in missing}
+    return replace(got, outages=outages, states=states)
+
+
 class HomeAssistantBook:
     """The tank's heat booked (``sim_adapters.book_from_changes``) from
     Home Assistant and kept current: ``read`` reads the history once
@@ -2128,6 +2151,7 @@ class HomeAssistantBook:
             ):
                 self._notes.append(f"book: no history of {self.flow} read")
             else:
+                got = _unread_marked(got, self._others, start, now)
                 had = self._history
                 merged = got if had is None else had.extended(got)
                 self._history = merged.since(cut)

@@ -965,3 +965,53 @@ class TestTheBookFourthReview:
         # Read again from the last read that held the flow.
         assert client.windows[-1][0] == END - 3 * H
         assert keeper.book(END, self.P).booked is not None
+
+
+class TestTheBookFifthReview:
+    P = sim.default_params()
+
+    def test_an_omitted_pump_is_unknown_not_held(self) -> None:
+        from dataclasses import replace
+
+        p = replace(
+            self.P,
+            circulation=sim.CirculationParams(
+                displaced_gal=1.0, flow_gpm=2.0, loss_btu_per_gal=50.0
+            ),
+        )
+
+        class Dropping(WindowedClient):
+            drop = False
+
+            async def read_history(
+                self, entities: Iterable[str], start: datetime, end: datetime
+            ) -> ha.History:
+                names = [
+                    n
+                    for n in entities
+                    if not (self.drop and n == "sensor.pump")
+                ]
+                return await super().read_history(names, start, end)
+
+        def heat(drop: bool) -> float:
+            client = Dropping(_book_rows(), BOOK_UNITS)
+            keeper = _keeper(client, circulation_speed="sensor.pump")
+            asyncio.run(keeper.read(END - 3 * H))
+            client.drop = drop
+            asyncio.run(keeper.read(END))
+            got = keeper.book(END, p)
+            assert got.booked is not None, got.notes
+            return got.booked.heat_btu
+
+        # Unread, the pump may have run: less heat than held idle.
+        assert heat(True) < heat(False)
+
+    def test_an_omitted_demand_is_an_unknown_state(self) -> None:
+        got = ha.History(
+            {FLOW: [(T0, 0.0)]}, {FLOW: []}, None, {FLOW: [(T0, "0.0")]}
+        )
+        marked = ha._unread_marked(got, [FLOW, "binary_sensor.demand"], T0, END)
+        assert marked.outages["binary_sensor.demand"] == [(T0, END)]
+        assert marked.states is not None
+        assert marked.states["binary_sensor.demand"] == [(T0, "unknown")]
+        assert marked.states[FLOW] == [(T0, "0.0")]
