@@ -137,6 +137,10 @@ class Entities:
     #: A weather entity with an hourly forecast, its ``temperature``
     #: attribute the outdoor air.
     weather: str | None = None
+    #: The household's hot water draw flow, the circulation's water not
+    #: in it, such as a draw detector's (``HomeAssistantBook``'s
+    #: ``flow``): with the heater's entities, the heat book.
+    draw_flow: str | None = None
 
 
 @dataclass(frozen=True)
@@ -169,6 +173,7 @@ def sources_from(doc: Mapping[str, Any], environ: Mapping[str, str]) -> Sources:
         demand = "binary_sensor.hot_water_demand"
         circulation_speed = "sensor.circulation_pump_speed"
         weather = "weather.forecast_home"
+        draw_flow = "sensor.hot_water_draw_flow"
 
         [home_assistant.heater]         # optional: the heater's own
         heard = "sensor.water_heater_last_status"

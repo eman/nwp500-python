@@ -10,7 +10,7 @@ import sys
 from collections.abc import Iterator
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import pytest
 
@@ -527,3 +527,138 @@ class TestTheSourcesWindow:
             sim_cli.Inputs(scenario=doc, live=True, start=later, hours=6),
             self.NOW,
         ) == (later, timedelta(hours=6))
+
+
+class _Keeper:
+    """A ``HomeAssistantBook`` that books ``booked`` without a request."""
+
+    def __init__(self, booked: sim.Booked | None) -> None:
+        self.booked = booked
+        self.asked: list[tuple[datetime, sim.HeaterParams]] = []
+
+    def book(self, at: datetime, params: sim.HeaterParams) -> Any:
+        from nwp500 import sim_home_assistant as ha
+
+        self.asked.append((at, params))
+        return ha.BookAnswer(self.booked, False, ("book: a note",))
+
+
+class TestTheHeatBook:
+    """With the sources' heater entities and draw flow, the run walks
+    from the tank's booked heat, and readiness reads it with the probes
+    apart."""
+
+    def _run(
+        self, keeper: Any, start: datetime = NOW, **given: Any
+    ) -> tuple[str, Any]:
+        out = io.StringIO()
+        result = sim_cli.run(
+            sim_cli.Inputs(
+                scenario=scenario_to_document(_scenario(start=start)), **given
+            ),
+            None,
+            NOW,
+            "table",
+            out,
+            keeper=keeper,
+        )
+        return " ".join(out.getvalue().split()), result
+
+    def test_without_a_book_the_probes_apart_read_nothing(self) -> None:
+        text, result = self._run(None)
+        assert "0.0 gal deliverable now (probes)" in text
+        assert "no_heat_book" in result.reasons
+
+    def test_the_book_answers(self) -> None:
+        keeper = _Keeper(sim.full_tank_book(130.0, 130.0))
+        text, result = self._run(keeper)
+        assert "deliverable now (energy)" in text
+        assert "no_heat_book" not in result.reasons
+        assert keeper.asked[0][0] == NOW
+
+    def test_the_bath_and_the_showers(self) -> None:
+        text, _ = self._run(None)
+        assert "Bath (28.7 gal): not ready, 28.7 gal short" in text
+        assert "Showers (12.0 gal): 0 ready" in text
+        text, _ = self._run(_Keeper(sim.full_tank_book(130.0, 130.0)))
+        assert (
+            "Bath (28.7 gal): not ready, 0.9 gal short; the heat pump" in text
+        )
+        assert "Showers (12.0 gal): 2 ready" in text
+
+    def test_the_bath_and_shower_volumes_given(self) -> None:
+        keeper = _Keeper(sim.full_tank_book(130.0, 130.0))
+        text, _ = self._run(keeper, bath=20.0, shower=9.0)
+        assert "Bath (20.0 gal): ready, 7.8 gal to spare" in text
+        assert "Showers (9.0 gal): 3 ready" in text
+
+    def test_the_volumes_are_in_the_preferred_unit(self) -> None:
+        set_unit_system("metric")
+        keeper = _Keeper(sim.full_tank_book(130.0, 130.0))
+        text, _ = self._run(keeper, shower=34.0679)
+        assert "Showers (34.1 L): 3 ready" in text
+
+    @pytest.mark.parametrize("name", ["bath", "shower"])
+    def test_a_volume_is_positive(self, name: str) -> None:
+        with pytest.raises(sim_cli.InputError, match=f"--{name}"):
+            given: dict[str, Any] = {name: 0.0}
+            sim_cli.Inputs(**given)
+
+    def test_the_table_reads_the_book_at_the_scenarios_inlet(self) -> None:
+        """At a 50 °F inlet, as the walk takes it: not the book's own."""
+        import dataclasses
+
+        book = sim.full_tank_book(130.0, 130.0)
+        s = _scenario(environment=sim.Environment(ambient_f=62.0, inlet_f=50.0))
+        out = io.StringIO()
+        sim_cli.run(
+            sim_cli.Inputs(scenario=scenario_to_document(s)),
+            None,
+            NOW,
+            "table",
+            out,
+            keeper=cast(Any, _Keeper(book)),
+        )
+        p = sim.default_params(2)
+        at_50 = sim.readiness(
+            s.state, s.settings, p, book=dataclasses.replace(book, inlet_f=50.0)
+        ).gal
+        own = sim.readiness(s.state, s.settings, p, book=book).gal
+        assert at_50 != own
+        assert f"{at_50:.1f} gal deliverable now" in " ".join(
+            out.getvalue().split()
+        )
+
+    def test_no_anchor_walks_without_it(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        _, result = self._run(_Keeper(None))
+        assert "no_heat_book" in result.reasons
+        assert "book: a note" in caplog.text
+
+    def test_a_scenario_not_starting_now_is_not_booked(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        keeper = _Keeper(sim.full_tank_book(130.0, 130.0))
+        _, result = self._run(keeper, start=NOW + timedelta(hours=1))
+        assert not keeper.asked
+        assert "no_heat_book" in result.reasons
+        assert "not now" in caplog.text
+
+    def test_no_keeper_without_the_heater_or_the_flow(self) -> None:
+        import asyncio
+
+        from nwp500 import sim_home_assistant as ha
+
+        heater = ha.HeaterEntities(
+            heard="sensor.heard", upper="sensor.u", lower="sensor.l"
+        )
+        for entities, h in (
+            (ha.Entities(draw_flow="sensor.draws"), None),
+            (ha.Entities(), heater),
+        ):
+            src = ha.Sources("http://ha.local", "t", entities, heater=h)
+            got = asyncio.run(
+                sim_cli.read_book(sim_cli.Inputs(sources=src), NOW)
+            )
+            assert got is None

@@ -1133,6 +1133,18 @@ _tz_option = click.option(
 )
 @_sources_option
 @click.option(
+    "--bath",
+    type=float,
+    help="The bath readiness is judged against, delivered, preferred unit "
+    "(default the parameters', 28.7 gal)",
+)
+@click.option(
+    "--shower",
+    type=float,
+    help="A shower, delivered, preferred unit (default the parameters', "
+    "12 gal)",
+)
+@click.option(
     "--format",
     "output_format",
     type=click.Choice(["table", "json", "csv"]),
@@ -1146,9 +1158,9 @@ def simulate_run(ctx: click.Context, output_format: str, **given: Any) -> None:
     inputs = _read_inputs(sim_cli, **given)
     now = datetime.now(UTC)
 
-    def walk(live: Any) -> None:
+    def walk(live: Any, keeper: Any = None) -> None:
         try:
-            sim_cli.run(inputs, live, now, output_format)
+            sim_cli.run(inputs, live, now, output_format, keeper=keeper)
         except sim_cli.InputError as e:
             raise click.UsageError(str(e)) from None
 
@@ -1163,9 +1175,10 @@ def simulate_run(ctx: click.Context, output_format: str, **given: Any) -> None:
             live = await sim_cli.compose_live(
                 mqtt, ctx.obj["api"], device, inputs, now
             )
+            keeper = await sim_cli.read_book(inputs, now)
         except sim_cli.InputError as e:
             raise click.UsageError(str(e)) from None
-        walk(live)
+        walk(live, keeper)
 
     ctx.exit(asyncio.run(_with_device(ctx, command)))
 

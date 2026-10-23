@@ -5,6 +5,24 @@ Changelog
 Unreleased
 ==========
 
+Fixed
+-----
+
+- **simulate run books the tank from Home Assistant.** Given the
+  sources' ``[home_assistant.heater]`` table and the new
+  ``draw_flow`` entity, the run walks from the tank's booked heat
+  (``HomeAssistantBook``), and "deliverable now" reads it: a tank with
+  its probes apart read 0 gal from the probes alone, the history
+  unused.
+
+Added
+-----
+
+- **simulate run's bath and showers.** The table gives the bath and
+  the whole showers the tank is ready for (``sim.time_to_ready``), and
+  when the heat pump has the bath ready; ``--bath`` and ``--shower``
+  give the volumes.
+
 Changed
 -------
 

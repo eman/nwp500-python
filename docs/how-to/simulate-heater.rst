@@ -141,6 +141,7 @@ pass it with ``--sources`` (or set ``NWP500_SOURCES``):
    demand = "binary_sensor.hot_water_demand"  # on while hot water is drawn
    circulation_speed = "sensor.circulation_pump_speed"
    weather = "weather.forecast_home"
+   draw_flow = "sensor.hot_water_draw_flow"  # the household's draws
 
    [home_assistant.heater]   # optional: the heater's own entities
    heard = "sensor.water_heater_last_status"
@@ -183,7 +184,25 @@ give:
   ``demand`` entity: a binary sensor that is on while the household
   draws hot water, with the circulation's water not among its draws. A
   circulation pump with no speed reading leaves no estimate, and a draw
-  before its first reading is skipped.
+  before its first reading is skipped;
+- **the heat book:** with the ``[home_assistant.heater]`` table and a
+  ``draw_flow`` entity (the household's hot water draw flow, the
+  circulation's water not in it), the tank's heat booked from the last
+  72 hours of the heater's readings and the draws
+  (``sim_home_assistant.HomeAssistantBook``). The run walks from it,
+  and "deliverable now" reads it (``energy``), whatever the gap between
+  the two probes. Without it, the probes alone answer only a full tank,
+  and a tank with the probes apart reads 0 (``probes``). With no full
+  tank in the 72 hours, or a scenario that doesn't start now, the run
+  walks without the book, and a warning says why.
+
+Under "deliverable now", the table gives the bath and the showers the
+tank is ready for (``sim.time_to_ready``): the bath ready with its
+margin, or how short it is and when the heat pump has it ready; and the
+whole showers, as a shower the tank can't finish isn't counted. Both are
+delivered volumes, past the mixing valve. ``--bath`` and ``--shower``
+give them in the preferred unit; without them, the parameters'
+(``ReadinessParams.bath_gal``, 28.7 gal, and ``shower_gal``, 12 gal).
 
 A reading's age is from when Home Assistant last heard the sensor
 report (``last_reported``). Over the REST API, Home Assistant serves
