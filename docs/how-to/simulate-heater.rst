@@ -159,10 +159,13 @@ give:
 
 - **the air:** the hourly forecast projected through the
   ``[location_air]`` model, shifted to pass through a reading beside the
-  heater that is at most an hour old. Without a model, that reading is
-  held over the span; without a fresh one, the projection is
-  unshifted. Fit a model for your own heater with
-  ``sim.location_air.fit``;
+  heater that is at most an hour old; without a fresh one, the
+  projection is unshifted. Without a ``[location_air]`` model, one is
+  fitted on the last 3 days of the ``air`` entity's readings against
+  the ``weather`` entity's outdoor temperature. It is used when the
+  readings span a day and follow the outdoor air at r 0.5 or more; a
+  note gives the fit. Otherwise, and without a ``weather`` entity, the
+  reading beside the heater is held over the span;
 - **the humidity:** a reading at most an hour old;
 - **the inlet:** the plateau of the long draws (11 minutes or more,
   circulation off) in the last 72 hours, from the inlet probe and the
@@ -181,6 +184,15 @@ Units come from each entity's ``unit_of_measurement``: the pump's speed
 in rpm or Hz. A part that can't be read, or is stale, keeps its
 default, and a warning on stderr says why. ``--ambient``, ``--inlet``
 and ``--environment`` override what the sources give.
+
+From Python, ``sim_home_assistant.HomeAssistantEnvironment`` reads the
+same parts. Given ``heater=``, a ``HeaterEntities`` with ``ambient`` and
+``compressor``, it fits the model without an ``air`` entity: on the
+heater's own air reading every 10 minutes while the compressor runs,
+where the reading was taken 2 minutes or more into the run (earlier, or
+idle, it reads the cabinet), and not while the sensor was unavailable.
+The latest such reading, if under an hour old, anchors the projection.
+``fitted_air`` holds the fit once ``read`` has run.
 
 
 Fetch what the heater reports

@@ -279,7 +279,10 @@ class FakeClient:
         forecast: tuple[list[ha.Reading], str | None] | None = None,
         fail: set[str] | None = None,
         outages: dict[str, list[ha.Span]] | None = None,
+        outdoor: list[ha.Reading] | None = None,
     ) -> None:
+        self.outdoor = outdoor
+        self.outdoor_calls = 0
         self.states = states or {}
         self.down = outages or {}
         self.series = history or {}
@@ -322,6 +325,14 @@ class FakeClient:
         if self.hours is None:
             raise ha.HomeAssistantError("no forecast")
         return self.hours
+
+    async def outdoor_history(
+        self, entity: str, start: datetime, end: datetime
+    ) -> list[ha.Reading]:
+        self.outdoor_calls += 1
+        if self.outdoor is None:
+            raise ha.HomeAssistantError("no history")
+        return self.outdoor
 
 
 def _numeric(row: tuple[datetime, Any]) -> bool:
@@ -1279,3 +1290,356 @@ class TestTheInletReadsNoPreference:
         monkeypatch.setattr(sa, "_finite", flipped)
         set_unit_system("us_customary")
         assert await self._inlet() == want
+
+
+def _outdoor(t: datetime) -> float:
+    """A day's swing of 20 °F about 50 °F."""
+    return 50.0 + 10.0 * math.sin(2 * math.pi * t.timestamp() / 86400)
+
+
+#: The outdoor air's history, hourly, from 4 days back, °F.
+OUTDOOR_HISTORY = [
+    (NOW - timedelta(hours=h), _outdoor(NOW - timedelta(hours=h)))
+    for h in range(96, -1, -1)
+]
+
+
+def _at_heater(t: datetime) -> float:
+    """``MODEL``'s air at the heater for ``_outdoor``."""
+    return MODEL.damping * _outdoor(t - MODEL.lag) + MODEL.offset_f
+
+
+HEATER = ha.HeaterEntities(
+    heard="sensor.heard",
+    upper="sensor.upper",
+    lower="sensor.lower",
+    compressor="binary_sensor.compressor",
+    ambient="sensor.heater_air",
+)
+
+
+def _fitting(
+    client: Any, heater: ha.HeaterEntities | None = None, **entities: Any
+) -> Any:
+    return ha.HomeAssistantEnvironment(
+        client,  # pyright: ignore[reportArgumentType]
+        ha.Entities(weather="weather.home", **entities),
+        start=NOW,
+        until=NOW + timedelta(hours=6),
+        now=NOW,
+        heater=heater,
+    )
+
+
+@pytest.mark.asyncio
+class TestTheAirFitted:
+    """With a weather entity and no model, the environment fits one."""
+
+    async def test_on_the_air_beside_the_heater(self) -> None:
+        series = [
+            (NOW - timedelta(minutes=m), _at_heater(NOW - timedelta(minutes=m)))
+            for m in range(3 * 1440, -1, -30)
+        ]
+        client = FakeClient(
+            {"sensor.air": _s("sensor.air", series[-1][1], "°F")},
+            {"sensor.air": series},
+            forecast=OUTDOOR,
+            outdoor=OUTDOOR_HISTORY,
+        )
+        source = _fitting(client, air="sensor.air")
+        env = await source.read()
+        fitted = source.fitted_air
+        assert fitted is not None
+        assert fitted.model.lag == MODEL.lag
+        assert fitted.model.damping == pytest.approx(MODEL.damping, abs=0.02)
+        assert isinstance(env.ambient_f, tuple)
+        assert any(
+            "fitted to the air beside the heater" in n for n in source.notes
+        )
+        assert any(
+            "anchored to the reading beside the heater" in n
+            for n in source.notes
+        )
+
+    async def test_on_the_heaters_own_reading_while_it_runs(self) -> None:
+        """Idle, the heater reads its cabinet, 6 °F warm: left out."""
+        compressor: list[Row] = []
+        air: list[Row] = []
+        for h in range(72, -1, -1):
+            at = NOW - timedelta(hours=h)
+            on = h % 3 == 1
+            compressor.append((at, "on" if on else "off"))
+            for m in range(0, 60, 5):
+                t = at + timedelta(minutes=m)
+                if t <= NOW:
+                    air.append((t, _at_heater(t) + (0.0 if on else 6.0)))
+        client = FakeClient(
+            {"sensor.heater_air": _s("sensor.heater_air", air[-1][1], "°F")},
+            {"sensor.heater_air": air, "binary_sensor.compressor": compressor},
+            forecast=OUTDOOR,
+            outdoor=OUTDOOR_HISTORY,
+        )
+        source = _fitting(client, HEATER)
+        env = await source.read()
+        fitted = source.fitted_air
+        assert fitted is not None
+        assert fitted.model.offset_f == pytest.approx(MODEL.offset_f, abs=1.0)
+        assert isinstance(env.ambient_f, tuple)
+        assert any(
+            "fitted to the heater's own air reading" in n for n in source.notes
+        )
+        assert any(
+            "anchored to the heater's own reading" in n for n in source.notes
+        )
+
+    async def test_a_day_of_readings_is_needed(self) -> None:
+        series = [
+            (NOW - timedelta(hours=h), 60.0 + h) for h in range(12, -1, -1)
+        ]
+        client = FakeClient(
+            {"sensor.air": _s("sensor.air", 60.0, "°F")},
+            {"sensor.air": series},
+            forecast=OUTDOOR,
+            outdoor=OUTDOOR_HISTORY,
+        )
+        source = _fitting(client, air="sensor.air")
+        env = await source.read()
+        assert source.fitted_air is None
+        assert env.ambient_f == 60.0
+        assert any("under the 24 h a fit needs" in n for n in source.notes)
+
+    async def test_a_loose_fit_is_not_used(self) -> None:
+        """Air that ignores the outdoor air: held, not projected."""
+        series = [
+            (NOW - timedelta(hours=h), 60.0 + (3.0 if h % 2 else -3.0))
+            for h in range(72, -1, -1)
+        ]
+        client = FakeClient(
+            {"sensor.air": _s("sensor.air", 63.0, "°F")},
+            {"sensor.air": series},
+            forecast=OUTDOOR,
+            outdoor=OUTDOOR_HISTORY,
+        )
+        source = _fitting(client, air="sensor.air")
+        env = await source.read()
+        assert source.fitted_air is None
+        assert env.ambient_f == 63.0
+        assert any("too loosely" in n for n in source.notes)
+
+    async def test_a_steady_air_has_no_fit(self) -> None:
+        """A steady air follows nothing: no fit."""
+        series = [(NOW - timedelta(hours=h), 60.0) for h in range(72, -1, -1)]
+        client = FakeClient(
+            {"sensor.air": _s("sensor.air", 60.0, "°F")},
+            {"sensor.air": series},
+            forecast=OUTDOOR,
+            outdoor=OUTDOOR_HISTORY,
+        )
+        source = _fitting(client, air="sensor.air")
+        env = await source.read()
+        assert source.fitted_air is None
+        assert env.ambient_f == 60.0
+        assert any("held one value" in n for n in source.notes)
+
+    async def test_only_readings_the_outdoor_history_covers(self) -> None:
+        """Outdoor air for the last hour only: the model would hold it
+        flat over three days of readings, so there is no fit."""
+        series = [
+            (NOW - timedelta(hours=72), 60.0),
+            (NOW - timedelta(hours=36), 60.1),
+            (NOW, 66.0),
+        ]
+        client = FakeClient(
+            {"sensor.air": _s("sensor.air", 66.0, "°F")},
+            {"sensor.air": series},
+            forecast=OUTDOOR,
+            outdoor=[(NOW - timedelta(hours=1), 50.0), (NOW, 60.0)],
+        )
+        source = _fitting(client, air="sensor.air")
+        await source.read()
+        assert source.fitted_air is None
+        assert any("outdoor history covers" in n for n in source.notes)
+
+    async def test_a_stale_heater_reading_is_no_anchor(self) -> None:
+        """Still running, but the heater's air last changed 2 h ago."""
+        compressor: list[Row] = [(NOW - timedelta(hours=72), "off")]
+        air: list[Row] = [(NOW - timedelta(hours=72), 80.0)]
+        for h in range(71, 1, -1):
+            at = NOW - timedelta(hours=h)
+            on = h % 3 == 1 or h == 2
+            compressor.append((at, "on" if on else "off"))
+            if on:
+                for m in range(3, 60, 5):
+                    t = at + timedelta(minutes=m)
+                    air.append((t, _at_heater(t)))
+            else:
+                air.append((at, _at_heater(at) + 6.0))
+        client = FakeClient(
+            {"sensor.heater_air": _s("sensor.heater_air", air[-1][1], "°F")},
+            {"sensor.heater_air": air, "binary_sensor.compressor": compressor},
+            forecast=OUTDOOR,
+            outdoor=OUTDOOR_HISTORY,
+        )
+        source = _fitting(client, HEATER)
+        await source.read()
+        assert source.fitted_air is not None
+        assert any("unanchored" in n for n in source.notes)
+
+    async def test_without_an_air_reading_there_is_nothing_to_fit(self) -> None:
+        client = FakeClient(forecast=OUTDOOR, outdoor=OUTDOOR_HISTORY)
+        source = _fitting(client)
+        env = await source.read()
+        assert env.ambient_defaulted
+        assert any("no air reading to fit" in n for n in source.notes)
+        assert client.outdoor_calls == 0
+
+    async def test_a_given_model_is_not_refitted(self) -> None:
+        client = FakeClient(forecast=OUTDOOR, outdoor=OUTDOOR_HISTORY)
+        source = _source(client, model=MODEL, weather="weather.home")
+        await source.read()
+        assert client.outdoor_calls == 0
+        assert source.fitted_air is None
+
+    async def test_fitted_once(self) -> None:
+        series = [
+            (NOW - timedelta(minutes=m), _at_heater(NOW - timedelta(minutes=m)))
+            for m in range(3 * 1440, -1, -30)
+        ]
+        client = FakeClient(
+            {"sensor.air": _s("sensor.air", series[-1][1], "°F")},
+            {"sensor.air": series},
+            forecast=OUTDOOR,
+            outdoor=OUTDOOR_HISTORY,
+        )
+        source = _fitting(client, air="sensor.air")
+        await source.read()
+        await source.read()
+        assert client.outdoor_calls == 1
+        assert sum("fitted to" in n for n in source.notes) == 1
+
+
+class TestOutdoorHistory:
+    @staticmethod
+    def row(minutes: int, temperature: Any, unit: str | None) -> dict[str, Any]:
+        stamp = (NOW - timedelta(minutes=minutes)).isoformat()
+        attributes: dict[str, Any] = {"temperature": temperature}
+        if unit is not None:
+            attributes["temperature_unit"] = unit
+        return {
+            "entity_id": "weather.home",
+            "state": "sunny",
+            "attributes": attributes,
+            "last_updated": stamp,
+        }
+
+    def test_each_row_with_its_own_unit(self) -> None:
+        doc = [
+            [
+                self.row(0, 20.0, "°C"),
+                self.row(60, 68.0, "°F"),
+                self.row(30, None, "°C"),
+                self.row(10, 21.0, None),
+            ]
+        ]
+        assert ha.parse_outdoor_history(doc, "weather.home") == [
+            (NOW - timedelta(minutes=60), 68.0, "°F"),
+            (NOW - timedelta(minutes=10), 21.0, None),
+            (NOW, 20.0, "°C"),
+        ]
+
+    def test_not_a_history(self) -> None:
+        with pytest.raises(ha.HomeAssistantError):
+            ha.parse_outdoor_history({}, "weather.home")
+
+    @pytest.mark.asyncio
+    async def test_the_client_converts_each_from_its_own_unit(self) -> None:
+        """The entity switched from °F to °C: each reading is read in
+        the unit it was recorded in, a row naming none in today's."""
+        history = [
+            [
+                self.row(60, 68.0, "°F"),
+                self.row(30, 21.0, None),
+                self.row(0, 20.0, "°C"),
+                self.row(5, 300.0, "K?"),
+            ]
+        ]
+        state = {
+            "entity_id": "weather.home",
+            "state": "sunny",
+            "attributes": {"temperature_unit": "°C"},
+        }
+
+        class Response:
+            status = 200
+
+            def __init__(self, body: Any) -> None:
+                self.body = body
+
+            async def json(self) -> Any:
+                return self.body
+
+            async def __aenter__(self) -> Any:
+                return self
+
+            async def __aexit__(self, *a: object) -> bool:
+                return False
+
+        class Session:
+            def request(self, method: str, url: str, **kw: Any) -> Any:
+                return Response(history if "/history/" in url else state)
+
+        client = ha.HomeAssistantClient(
+            "http://ha.invalid",
+            "t",
+            session=Session(),  # pyright: ignore[reportArgumentType]
+        )
+        got = await client.outdoor_history(
+            "weather.home", NOW - timedelta(hours=2), NOW
+        )
+        assert got == [
+            (NOW - timedelta(minutes=60), 68.0),
+            (NOW - timedelta(minutes=30), pytest.approx(69.8)),
+            (NOW, pytest.approx(68.0)),
+        ]
+
+
+class TestWhileRunning:
+    ON = NOW - timedelta(hours=1)
+    RUNS: ClassVar[list[tuple[datetime, str]]] = [
+        (NOW - timedelta(hours=1), "on"),
+        (NOW, "off"),
+    ]
+
+    def test_a_reading_from_before_the_run_settled_is_not_used(self) -> None:
+        air = [
+            (self.ON - timedelta(minutes=30), 80.0),  # idle, the cabinet
+            (self.ON + timedelta(minutes=1), 75.0),  # not yet settled
+            (self.ON + timedelta(minutes=25), 70.0),
+        ]
+        got, newest = ha._while_running(air, self.RUNS, NOW)  # pyright: ignore[reportPrivateUsage]
+        assert got
+        assert {v for _, v in got} == {70.0}
+        assert got[0][0] == self.ON + timedelta(minutes=32)
+        assert newest == air[-1]
+
+    def test_nothing_while_the_sensor_is_unknown(self) -> None:
+        air = [(self.ON + timedelta(minutes=3), 70.0)]
+        gap = (self.ON + timedelta(minutes=20), self.ON + timedelta(minutes=40))
+        got, _ = ha._while_running(air, self.RUNS, NOW, [gap])  # pyright: ignore[reportPrivateUsage]
+        assert got
+        assert not any(gap[0] <= t < gap[1] for t, _ in got)
+
+    def test_a_repeated_on_row_is_one_run(self) -> None:
+        """An attribute's update writes a row with the same state."""
+        runs = [(self.ON + timedelta(minutes=m), "on") for m in range(60)]
+        air = [(self.ON + timedelta(minutes=3), 70.0)]
+        got, _ = ha._while_running(air, runs, NOW)  # pyright: ignore[reportPrivateUsage]
+        assert len(got) == 5  # from 12 min, after the 3 min reading
+
+    def test_the_newest_reading_keeps_its_own_instant(self) -> None:
+        """Carried to 13:52, a reading from 12:03 is still from 12:03."""
+        on = NOW - timedelta(hours=2)
+        air = [(on + timedelta(minutes=3), 70.0)]
+        got, newest = ha._while_running(air, [(on, "on")], NOW)  # pyright: ignore[reportPrivateUsage]
+        assert got[-1][0] == NOW - timedelta(minutes=8)
+        assert newest == air[0]

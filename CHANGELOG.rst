@@ -5,6 +5,22 @@ Changelog
 Unreleased
 ==========
 
+Added
+-----
+- **The air from a weather entity without a model** (#214). With a
+  weather entity and no ``location_air`` model,
+  ``sim_home_assistant.HomeAssistantEnvironment`` fits one
+  (``sim.location_air.fit``) on the last 3 days
+  (``LOCATION_AIR_WINDOW``) of the air entity's readings, or with
+  ``heater=`` the heater's own air reading while its compressor runs,
+  against the weather entity's outdoor temperature, each reading from
+  the unit it was recorded in (``HomeAssistantClient.outdoor_history``,
+  ``parse_outdoor_history``). It projects the forecast through the fit
+  when the readings the outdoor history covers span a day and follow
+  the outdoor air at r 0.5 or more, and keeps it as ``fitted_air``.
+  ``nwp-cli simulate --sources`` fits one the same way when the sources
+  file has no ``[location_air]``.
+
 Fixed
 -----
 - ``sim.params.params_from_document`` raised ``TypeError`` for a list
