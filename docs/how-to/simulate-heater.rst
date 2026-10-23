@@ -914,7 +914,17 @@ with the instants the heater was heard from:
        at=now,
        flow=draws_gpm,        # gal/min, whatever the preferred units
        flow_outages=flow_down,  # when the flow entity was unavailable
+       circulation=runs,      # [(start, end), ...], if you circulate
+       circulation_flow=pump_flow,  # the loop's gal/min while it runs
    )
+
+``flow`` is the household's draws. If your meter also carries the
+circulation's water, separate the household's draws from it yourself
+and pass those, with ``CirculationParams.meter_share`` 0, so the book
+takes nothing off them again. Clean up the loop's flow before passing it
+too (drop readings below the pump's floor, or one taken mid-ramp): while
+a run is on, each step takes the last reading in force (a run before
+any reading takes ``CirculationParams.flow_gpm``).
 
 Like the history's rows, its ``flow``, ``circulation_flow``, ``inlet``
 and ``air`` are changes: each value holds until the next, so a steady
