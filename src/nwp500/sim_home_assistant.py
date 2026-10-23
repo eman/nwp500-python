@@ -2121,11 +2121,17 @@ class HomeAssistantBook:
         except HomeAssistantError as err:
             self._notes.append(f"book: the flow's history not read ({err})")
         else:
-            had = self._history
-            self._history = (got if had is None else had.extended(got)).since(
-                cut
-            )
-            self._read = now
+            # A read opens with the value in force: with neither a reading
+            # nor an outage, the flow is unread, and read again next time.
+            if not got.readings.get(self.flow) and not got.outages.get(
+                self.flow
+            ):
+                self._notes.append(f"book: no history of {self.flow} read")
+            else:
+                had = self._history
+                merged = got if had is None else had.extended(got)
+                self._history = merged.since(cut)
+                self._read = now
         for n in self._others:
             if n == self.entities.demand:
                 continue

@@ -707,7 +707,7 @@ class TestTheBookKeptCurrent:
         asyncio.run(keeper.read(END))
         got = keeper.book(END, self.P)
         assert got.booked is None
-        assert any("no flow reading in force" in n for n in got.notes)
+        assert f"book: no history of {FLOW} read" in got.notes
 
     def test_before_a_read_there_is_no_book(self) -> None:
         keeper = _keeper(WindowedClient(_book_rows(), BOOK_UNITS))
@@ -934,3 +934,34 @@ class TestThePumpThirdReview:
 
         # The outage is booked as the pump running: less heat than none.
         assert heat(True) < heat(False)
+
+
+class TestTheBookFourthReview:
+    P = sim.default_params()
+
+    def test_a_read_without_the_flow_is_read_again(self) -> None:
+        class Dropping(WindowedClient):
+            drop = False
+
+            async def read_history(
+                self, entities: Iterable[str], start: datetime, end: datetime
+            ) -> ha.History:
+                got = await super().read_history(entities, start, end)
+                if self.drop:
+                    got.readings[FLOW] = []
+                return got
+
+        client = Dropping(_book_rows(), BOOK_UNITS)
+        keeper = _keeper(client)
+        asyncio.run(keeper.read(END - 3 * H))
+        client.drop = True
+        asyncio.run(keeper.read(END))
+        got = keeper.book(END, self.P)
+        assert f"book: no history of {FLOW} read" in got.notes
+        # Not booked as if the flow held at zero through the draw.
+        assert got.booked is None
+        client.drop = False
+        asyncio.run(keeper.read(END))
+        # Read again from the last read that held the flow.
+        assert client.windows[-1][0] == END - 3 * H
+        assert keeper.book(END, self.P).booked is not None
