@@ -1829,10 +1829,12 @@ def _circulation_columns(
     whole history does. A run's flow is its last reading, this run's or
     an earlier one's; with none yet, the meter's over its share, else
     the priced flow."""
+    if not grid:
+        return [], [], []
     step = timedelta(seconds=BOOK_GRID_S)
     lead: list[datetime] = []
     open_group = next((g for g in joined if g[0] < grid[0] < g[1]), None)
-    if grid and open_group is not None:
+    if open_group is not None:
         k = math.ceil((grid[0] - open_group[0]) / step)
         lead = [grid[0] - j * step for j in range(k, 0, -1)]
     walk = [*lead, *grid]

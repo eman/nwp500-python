@@ -2400,11 +2400,15 @@ class HomeAssistantBook:
             notes.append(f"book: {err}")
             return BookAnswer(None, False, tuple(notes))
         if not air and rows.rows.heater_air_f:
+            # As the book takes it: unheard across its outages and the
+            # silences between the instants it was heard.
+            heard = sorted(t.astimezone(UTC) for t in rows.observed if t <= at)
+            silent = sa.silences(heard, sa.max_gap(heard)) if heard else []
             settled = sa.settled_air(
                 sa.compressor_changes(rows.rows),
                 rows.rows.heater_air_f,
                 until=at,
-                unheard=rows.rows.outages,
+                unheard=[*silent, *rows.rows.outages],
             )
             notes.append(
                 "book: the air is the heater's own reading while its "

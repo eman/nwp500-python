@@ -1701,6 +1701,21 @@ def fit_book(
                     f"the book's circuit volume on its bound, not a fit: "
                     f"{circuit:.4g} gal ({lo:g} to {hi:g})"
                 )
+            # Past the most any group of runs circulated, every volume
+            # books the same: the runs can't say which.
+            most = max(
+                (
+                    float(np.max(bk.run_before + bk.circulated))
+                    for bk in fitted
+                    if bk.steps
+                ),
+                default=0.0,
+            )
+            if circuit >= most - 1e-6:
+                return (
+                    f"the book's circuit volume {circuit:.4g} gal is past the "
+                    f"most a run circulated ({most:.4g} gal): not a fit"
+                )
         got, free, _ = solve(circuit)
         by_book: dict[int, list[tuple[int, int]]] = {}
         for _, i, pair, *_ in held:

@@ -712,3 +712,26 @@ def test_booking_takes_the_runs_flow_as_the_fit_does() -> None:
         if s.circulating
     )
     assert gal == pytest.approx(15 * 2.0 + 15 * 1.5)
+
+
+def test_a_volume_past_every_run_is_no_fit() -> None:
+    """One-minute runs, 2 gal each, walked at a 4 gal circuit: every
+    volume from 2 gal books them the same, so none is fitted and the
+    base's is held."""
+    got = fit(SITE, history(SITE, 16, CIRCUIT, run_min=1))
+    assert got.book_circuit_gal == SITE_CIRCULATION.book_circuit_gal
+    assert "past the most a run circulated" in got.why
+
+
+def test_an_empty_window_books_nothing() -> None:
+    runs = [(T0, T0 + timedelta(minutes=5))]
+    steps = sa.book_steps_from_changes(
+        sa.ChangeRows(upper_f=[(T0, 140.0)], lower_f=[(T0, 140.0)]),
+        start=T0 + timedelta(minutes=2),
+        end=T0 + timedelta(minutes=2),
+        flow=[(T0, 0.0)],
+        circulation=runs,
+        circulation_flow=sa.run_flow(runs, 1.0),
+        params=SITE,
+    )
+    assert steps == []
