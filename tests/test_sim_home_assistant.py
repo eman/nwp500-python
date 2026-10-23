@@ -1673,6 +1673,18 @@ class TestHeld:
             (NOW + timedelta(seconds=40), 2.0),
         ]
 
+    def test_across_a_clock_change_by_elapsed_time(self) -> None:
+        from zoneinfo import ZoneInfo
+
+        tz = ZoneInfo("America/Los_Angeles")
+        # 01:30 PDT, then the clock falls back to 01:00 PST.
+        start = datetime(2026, 11, 1, 1, 30, tzinfo=tz)
+        end = start.astimezone(UTC) + timedelta(hours=1)
+        got = ha.held([(start, 1.0)], start, end, timedelta(minutes=30))
+        assert [t - got[0][0] for t, _ in got] == [
+            timedelta(minutes=30 * k) for k in range(3)
+        ]
+
     def test_a_step_must_be_positive(self) -> None:
         with pytest.raises(ValueError, match="positive"):
             ha.held([], NOW, NOW, timedelta(0))

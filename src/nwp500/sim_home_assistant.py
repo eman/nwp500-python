@@ -561,13 +561,16 @@ def held(
     ``step`` from ``start`` to ``end`` would read them: the value in
     force at each instant, none before the first reading. A history
     writes no row for a report of the value it already holds, so a
-    probe steady over a span has one reading there, or none."""
+    probe steady over a span has one reading there, or none. The grid
+    is in UTC, every ``step`` of elapsed time across a clock change."""
     if step <= timedelta(0):
         raise ValueError("step must be positive")
     rows = sorted(readings, key=lambda r: r[0])
     out: list[Reading] = []
     i = -1
-    t = start
+    # In UTC: a local time steps by the wall clock, which skips or
+    # repeats an hour at a daylight-saving change.
+    t, end = start.astimezone(UTC), end.astimezone(UTC)
     while t <= end:
         while i + 1 < len(rows) and rows[i + 1][0] <= t:
             i += 1
