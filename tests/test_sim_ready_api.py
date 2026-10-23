@@ -768,3 +768,63 @@ class TestTheDefaultAir:
             "ambient_defaulted"
             not in time_to_ready(g, params, bath_gal=20.0).reasons
         )
+
+
+class TestTheScenariosInletInTheBook:
+    """The book converts heat to gallons at the scenario's inlet where
+    one is given, as the walk's draws take it."""
+
+    def _scenario(self, inlet: float | None) -> Scenario:
+        from nwp500.sim import Environment, HeaterState
+
+        return _scenario(
+            state=HeaterState(upper_f=140.9, lower_f=140.0),
+            environment=Environment(ambient_f=65.0, inlet_f=inlet),
+        )
+
+    def test_a_colder_inlet_is_fewer_gallons(
+        self, params: HeaterParams
+    ) -> None:
+        book = full_tank_book(140.9, 140.0, params.book_terms())
+        gal = {
+            inlet: time_to_ready(
+                self._scenario(inlet), params, book=book
+            ).deliverable_gal
+            for inlet in (50.0, 72.4)
+        }
+        assert gal[50.0] < gal[72.4]
+        # Without one, the book's own inlet.
+        assert time_to_ready(
+            self._scenario(None), params, book=book
+        ).deliverable_gal == pytest.approx(
+            time_to_ready(
+                self._scenario(book.inlet_f), params, book=book
+            ).deliverable_gal
+        )
+
+    def test_the_delivered_water_follows_the_inlet(self) -> None:
+        from nwp500.sim import Draw, DrawWindow, default_params
+
+        params = default_params()
+        book = full_tank_book(140.9, 140.0, params.book_terms())
+        loads = Loads(
+            draws=tuple(
+                Draw(at=at(1) + timedelta(minutes=i), gallons=2.5)
+                for i in range(16)
+            ),
+            windows=(
+                DrawWindow(
+                    start=at(1),
+                    end=at(1) + timedelta(minutes=20),
+                    expected_gal=40.0,
+                ),
+            ),
+        )
+
+        def coldest(inlet: float) -> float:
+            s = self._scenario(inlet).model_copy(update={"loads": loads})
+            window = simulate(s, params, book=book).windows[0]
+            assert window.delivery_min_f is not None
+            return window.delivery_min_f
+
+        assert coldest(40.0) < coldest(72.4)
