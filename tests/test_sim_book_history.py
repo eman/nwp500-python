@@ -876,3 +876,25 @@ class TestARunsGallonsForTheCircuit:
         whole = next(s for s in steps(a) if s.circulation_gpm == 1.2)
         assert sliced.run_gal_before == pytest.approx(0.8)
         assert sliced.run_gal_before == pytest.approx(whole.run_gal_before)
+
+    def test_a_window_in_a_gap_keeps_the_groups_gallons(self) -> None:
+        """One-minute runs at minutes 0 and 6, 1.2 gal/min: a window
+        from minute 2 has the first run's 1.2 gal behind the second, as
+        the whole history does."""
+        m = timedelta(minutes=1)
+        a = T0 - timedelta(hours=2)
+        runs = [(a, a + m), (a + 6 * m, a + 7 * m)]
+        second = a + 6 * m
+
+        def first_of_second(start: datetime) -> float:
+            steps = self._steps(runs, start)
+            k = next(
+                i
+                for i, s in enumerate(steps)
+                if s.circulating
+                and start + i * timedelta(seconds=sa.BOOK_GRID_S) >= second
+            )
+            return float(steps[k].run_gal_before)
+
+        assert first_of_second(a + 2 * m) == pytest.approx(1.2)
+        assert first_of_second(a + 2 * m) == pytest.approx(first_of_second(a))

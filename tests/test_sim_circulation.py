@@ -488,3 +488,24 @@ class TestTheBooksCircuitVolume:
         )
         got, on = loss.loss(a, a + timedelta(minutes=10))
         assert on and got == pytest.approx(1.0 * 8.34 * 89.0)
+
+    def test_overlapping_runs_circulate_once(self) -> None:
+        from nwp500.sim.circulation import CirculationLoss
+
+        a = at(0.0)
+        s30 = timedelta(seconds=30)
+
+        def total(runs: list[tuple[datetime, datetime]]) -> float:
+            loss = CirculationLoss(
+                runs,
+                flow_gpm=1.0,
+                loss_btu_per_gal=159.0,
+                circuit_gal=5.0,
+                upper_f=140.0,
+                air_at=lambda _: 65.0,
+            )
+            return loss.loss(a, a + 3 * s30)[0]
+
+        both = total([(a, a + 2 * s30), (a + s30, a + 3 * s30)])
+        assert both == pytest.approx(total([(a, a + 3 * s30)]))
+        assert both == pytest.approx(1.5 * 8.34 * 75.0)

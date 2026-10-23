@@ -190,6 +190,13 @@ class CirculationLoss:
     air_at: Callable[[datetime], float] | None = None
     gap: timedelta = RUN_GAP
 
+    def __post_init__(self) -> None:
+        # Runs that overlap or touch are one span of on-time: what both
+        # cover circulates once.
+        object.__setattr__(
+            self, "runs", tuple(merge_runs(self.runs, timedelta(0)))
+        )
+
     def edges(self, start: datetime, end: datetime) -> list[datetime]:
         return [x for run in self.runs for x in run if start < x < end]
 

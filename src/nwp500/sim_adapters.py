@@ -1826,8 +1826,9 @@ def _book_steps_on(
             if run is not None and run != current:
                 current = run
                 run_gal = 0.0
-                if not steps and run[0] < at:
-                    # A run already under way at the window's start.
+                if run[0] < grid[0]:
+                    # A group already under way at the window's start:
+                    # in a run, or in a gap between two.
                     run_gal, pre_settled = before(run, at)
                     settled = settled if pre_settled is None else pre_settled
             gpm, settled = run_gpm(run_flow[i], m, settled)
