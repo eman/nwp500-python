@@ -46,6 +46,7 @@ from typing import Any, cast
 from nwp500 import sim_adapters as sa
 from nwp500.exceptions import Nwp500Error
 from nwp500.sim import Environment
+from nwp500.sim.cold_supply import ColdSupply
 from nwp500.sim.location_air import (
     FIT_LAGS_H,
     FittedLocationAir,
@@ -91,6 +92,17 @@ LOCATION_AIR_MIN_R = 0.5
 RUN_SETTLE = timedelta(minutes=2)
 #: How long a request waits, seconds.
 DEFAULT_TIMEOUT = 10.0
+
+#: Runs a piece of CPU work and awaits its result: Home Assistant's
+#: ``hass.async_add_executor_job``, say, so the work leaves the event
+#: loop. ``inline`` runs it where it is.
+type Run = Callable[[Callable[[], Any]], Awaitable[Any]]
+
+
+async def inline(work: Callable[[], Any]) -> Any:
+    """``work()``, on the caller's own thread: the default ``Run``."""
+    return work()
+
 
 #: The states Home Assistant reports for a value it does not have.
 _NO_VALUE = frozenset({"unknown", "unavailable", "none", ""})
@@ -1052,6 +1064,7 @@ async def fit_location_air(
     *,
     now: datetime,
     heater: HeaterEntities | None = None,
+    run: Run = inline,
 ) -> tuple[FittedLocationAir | None, list[str]]:
     """The ``location_air`` model ``HomeAssistantEnvironment`` fits
     where it is given none, and notes on what it rests on: the last
@@ -1060,7 +1073,8 @@ async def fit_location_air(
     ``ambient`` and ``compressor``), against ``entities.weather``'s
     outdoor air. None, and a note why, without enough history or for a
     loose fit. A caller that reads the environment often fits on its
-    own cadence and passes the fit on as ``fitted_air``."""
+    own cadence and passes the fit on as ``fitted_air``. The arithmetic
+    (the samples, the fit) goes through ``run``."""
     notes: list[str] = []
     weather = entities.weather
     if weather is None:
@@ -1068,7 +1082,7 @@ async def fit_location_air(
         return None, notes
     try:
         fitted = await _fit(
-            client, entities, heater, weather, now.astimezone(UTC), notes
+            client, entities, heater, weather, now.astimezone(UTC), notes, run
         )
     except (HomeAssistantError, ValueError) as e:
         notes.append(f"air: not read ({e})")
@@ -1083,9 +1097,10 @@ async def _fit(
     weather: str,
     now: datetime,
     notes: list[str],
+    run: Run,
 ) -> FittedLocationAir | None:
     since = now - LOCATION_AIR_WINDOW
-    air = await _air_readings(client, entities, heater, since, now, notes)
+    air = await _air_readings(client, entities, heater, since, now, notes, run)
     if air is None:
         return None
     readings, what = air
@@ -1094,15 +1109,32 @@ async def _fit(
         return None
     if not _spans_a_day(readings, what, "", notes):
         return None
-    lag = timedelta(hours=max(FIT_LAGS_H))
     # From before the first reading by the longest lag a fit tries.
-    outdoor = await client.outdoor_history(weather, since - lag, now)
+    outdoor = await client.outdoor_history(weather, since - _MAX_LAG, now)
     if not outdoor:
         notes.append(f"air: no outdoor air recorded for {weather}")
         return None
+    return cast(
+        "FittedLocationAir | None",
+        await run(lambda: _fit_readings(readings, outdoor, what, notes)),
+    )
+
+
+#: The longest lag a fit tries.
+_MAX_LAG = timedelta(hours=max(FIT_LAGS_H))
+
+
+def _fit_readings(
+    readings: Sequence[Reading],
+    outdoor: Sequence[Reading],
+    what: str,
+    notes: list[str],
+) -> FittedLocationAir | None:
+    """The fit on ``readings`` against ``outdoor``, or None (and a note):
+    the CPU work of ``fit_location_air``."""
     # Only readings the outdoor history covers at every lag tried:
     # past its ends, the model holds the outdoor air flat.
-    first, last = outdoor[0][0] + lag, outdoor[-1][0]
+    first, last = outdoor[0][0] + _MAX_LAG, outdoor[-1][0]
     readings = [(t, v) for t, v in readings if first <= t <= last]
     if not readings:
         notes.append(
@@ -1161,6 +1193,7 @@ async def _air_readings(
     since: datetime,
     now: datetime,
     notes: list[str],
+    run: Run = inline,
 ) -> tuple[list[Reading], str] | None:
     """The air where the heater stands since ``since``, °F, and what it
     was read from: the air entity, or the heater's own reading every 10
@@ -1169,9 +1202,13 @@ async def _air_readings(
     if entities.air is not None:
         got = await client.read_history([entities.air], since, now)
         unit = (await client.state(entities.air)).unit
-        readings, _ = got.converted(entities.air, unit, to_f, now)
+        air = entities.air
+        readings = cast(
+            list[Reading],
+            await run(lambda: got.converted(air, unit, to_f, now)[0]),
+        )
         return readings, "the air beside the heater"
-    heard = await _heater_air(client, heater, since, now, notes)
+    heard = await _heater_air(client, heater, since, now, notes, run)
     if heard is None:
         notes.append(
             "air: no air reading to fit the outdoor air to (an air "
@@ -1187,6 +1224,7 @@ async def _heater_air(
     since: datetime,
     now: datetime,
     notes: list[str],
+    run: Run = inline,
 ) -> tuple[list[Reading], Reading | None] | None:
     """The heater's own air reading since ``since`` while its compressor
     ran (``_while_running``), and the newest reading those samples rest
@@ -1203,13 +1241,21 @@ async def _heater_air(
         )
         return None
     unit = (await client.state(heater.ambient)).unit
-    ambient, unread = got.converted(heater.ambient, unit, to_f, now)
-    return _while_running(
-        ambient,
+    ambient_id, compressor = (
+        heater.ambient,
         got.states.get(heater.compressor, []),
-        now,
-        busy(unread, got.outages.get(heater.ambient, [])),
     )
+
+    def work() -> tuple[list[Reading], Reading | None]:
+        ambient, unread = got.converted(ambient_id, unit, to_f, now)
+        return _while_running(
+            ambient,
+            compressor,
+            now,
+            busy(unread, got.outages.get(ambient_id, [])),
+        )
+
+    return cast("tuple[list[Reading], Reading | None]", await run(work))
 
 
 class HomeAssistantEnvironment:
@@ -1223,7 +1269,8 @@ class HomeAssistantEnvironment:
     it as ``fitted_air``. With a model and no fresh reading of the air
     beside the heater, the projection is anchored to ``heater``'s own
     air reading from its last hour, while its compressor ran, if
-    there is one."""
+    there is one. The CPU work (the fit, the samples of the heater's
+    air, the inlet's plateau) goes through ``run``."""
 
     def __init__(
         self,
@@ -1236,6 +1283,7 @@ class HomeAssistantEnvironment:
         location_air: LocationAirModel | None = None,
         heater: HeaterEntities | None = None,
         fitted_air: FittedLocationAir | None = None,
+        run: Run = inline,
     ) -> None:
         self.client = client
         self.entities = entities
@@ -1244,6 +1292,7 @@ class HomeAssistantEnvironment:
         self.now = start if now is None else now
         self.location_air = location_air
         self.heater = heater
+        self.run = run
         self.notes: list[str] = []
         #: The fit the air is projected through: the one given, or the
         #: one ``read`` fitted where no model was given; None when a
@@ -1360,7 +1409,11 @@ class HomeAssistantEnvironment:
         repeats its notes."""
         if self._fit_notes is None:
             self.fitted_air, self._fit_notes = await fit_location_air(
-                self.client, self.entities, now=self.now, heater=self.heater
+                self.client,
+                self.entities,
+                now=self.now,
+                heater=self.heater,
+                run=self.run,
             )
         self.notes.extend(self._fit_notes)
         return self.fitted_air
@@ -1375,7 +1428,12 @@ class HomeAssistantEnvironment:
             # From before the cut by the settling time: a run already on
             # at the cut then shows where it started, or settled.
             lambda: _heater_air(
-                self.client, self.heater, now - FRESH - RUN_SETTLE, now, notes
+                self.client,
+                self.heater,
+                now - FRESH - RUN_SETTLE,
+                now,
+                notes,
+                self.run,
             ),
             None,
         )
@@ -1445,13 +1503,19 @@ class HomeAssistantEnvironment:
                 unread,
                 *(got.outages.get(n, []) for n in (probe_id, pump_id) if n),
             )
-            # In °F, as read: no unit preference is read here.
-            cold = sa.cold_supply_f(
-                held(probe, since, now),
-                at=now,
-                draws=draws,
-                circulation=busy_spans,
-                window=INLET_LOOKBACK,
+            # In °F, as read: no unit preference is read here. The held
+            # grid and the plateau are the CPU work, through ``run``.
+            cold = cast(
+                ColdSupply,
+                await self.run(
+                    lambda: sa.cold_supply_f(
+                        held(probe, since, now),
+                        at=now,
+                        draws=draws,
+                        circulation=busy_spans,
+                        window=INLET_LOOKBACK,
+                    )
+                ),
             )
             if cold.t_cold_f is None:
                 hours = f"{INLET_LOOKBACK.total_seconds() / 3600:g}"

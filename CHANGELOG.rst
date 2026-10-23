@@ -14,6 +14,12 @@ Added
   it back as ``fitted_air``, projects through it, and notes its r and
   lag on every ``read`` without fitting again. A caller that reads
   every few minutes fits on its own cadence.
+- **The CPU work off the event loop** (#225). ``fit_location_air`` and
+  ``HomeAssistantEnvironment`` take ``run=`` (``Run``), which runs a
+  piece of work and awaits its result, such as Home Assistant's
+  ``hass.async_add_executor_job``. The fit, the samples of the heater's
+  air and the inlet's plateau go through it. Without it they run
+  inline (``inline``), as before.
 - **A history kept current** (#223). ``sim_home_assistant.HeaterHistory``,
   ``sim_home_assistant.History`` and ``sim_adapters.ChangeRows`` take
   ``extended(newer)``, which merges a later read in by instant (the
