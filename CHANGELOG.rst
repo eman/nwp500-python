@@ -14,6 +14,16 @@ Added
   it back as ``fitted_air``, projects through it, and notes its r and
   lag on every ``read`` without fitting again. A caller that reads
   every few minutes fits on its own cadence.
+- **The heat book kept current from Home Assistant** (#227).
+  ``sim_home_assistant.HomeAssistantBook`` holds the heater's and the
+  household flow's history, reading only what is new on each ``read``,
+  and books from it with no request (``book``, for an executor). The
+  flow is the household's draws as delivered through the mixing valve.
+  The circulation's speed, an inlet probe and the demand entity, each
+  optional, give the runs, the inlet and the conversion at the mains
+  (``BookAnswer.inlet_measured``). ``mains_plateau`` and ``known_runs``
+  are the inlet's plateau and the pump's runs from a ``History``, as
+  ``HomeAssistantEnvironment`` reads them.
 - **The CPU work off the event loop** (#225). ``fit_location_air`` and
   ``HomeAssistantEnvironment`` take ``run=`` (``Run``), which runs a
   piece of work and awaits its result, such as Home Assistant's
