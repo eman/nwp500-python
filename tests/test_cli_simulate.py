@@ -527,3 +527,83 @@ class TestTheSourcesWindow:
             sim_cli.Inputs(scenario=doc, live=True, start=later, hours=6),
             self.NOW,
         ) == (later, timedelta(hours=6))
+
+
+class _Keeper:
+    """A ``HomeAssistantBook`` that books ``booked`` without a request."""
+
+    def __init__(self, booked: sim.Booked | None) -> None:
+        self.booked = booked
+        self.asked: list[tuple[datetime, sim.HeaterParams]] = []
+
+    def book(self, at: datetime, params: sim.HeaterParams) -> Any:
+        from nwp500 import sim_home_assistant as ha
+
+        self.asked.append((at, params))
+        return ha.BookAnswer(self.booked, False, ("book: a note",))
+
+
+class TestTheHeatBook:
+    """With the sources' heater entities and draw flow, the run walks
+    from the tank's booked heat, and readiness reads it with the probes
+    apart."""
+
+    def _run(self, keeper: Any, start: datetime = NOW) -> tuple[str, Any]:
+        out = io.StringIO()
+        result = sim_cli.run(
+            sim_cli.Inputs(
+                scenario=scenario_to_document(_scenario(start=start))
+            ),
+            None,
+            NOW,
+            "table",
+            out,
+            keeper=keeper,
+        )
+        return " ".join(out.getvalue().split()), result
+
+    def test_without_a_book_the_probes_apart_read_nothing(self) -> None:
+        text, result = self._run(None)
+        assert "0.0 gal deliverable now (probes)" in text
+        assert "no_heat_book" in result.reasons
+
+    def test_the_book_answers(self) -> None:
+        keeper = _Keeper(sim.full_tank_book(130.0, 130.0))
+        text, result = self._run(keeper)
+        assert "deliverable now (energy)" in text
+        assert "no_heat_book" not in result.reasons
+        assert keeper.asked[0][0] == NOW
+
+    def test_no_anchor_walks_without_it(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        _, result = self._run(_Keeper(None))
+        assert "no_heat_book" in result.reasons
+        assert "book: a note" in caplog.text
+
+    def test_a_scenario_not_starting_now_is_not_booked(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        keeper = _Keeper(sim.full_tank_book(130.0, 130.0))
+        _, result = self._run(keeper, start=NOW + timedelta(hours=1))
+        assert not keeper.asked
+        assert "no_heat_book" in result.reasons
+        assert "not now" in caplog.text
+
+    def test_no_keeper_without_the_heater_or_the_flow(self) -> None:
+        import asyncio
+
+        from nwp500 import sim_home_assistant as ha
+
+        heater = ha.HeaterEntities(
+            heard="sensor.heard", upper="sensor.u", lower="sensor.l"
+        )
+        for entities, h in (
+            (ha.Entities(draw_flow="sensor.draws"), None),
+            (ha.Entities(), heater),
+        ):
+            src = ha.Sources("http://ha.local", "t", entities, heater=h)
+            got = asyncio.run(
+                sim_cli.read_book(sim_cli.Inputs(sources=src), NOW)
+            )
+            assert got is None

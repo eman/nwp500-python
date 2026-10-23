@@ -5,6 +5,16 @@ Changelog
 Unreleased
 ==========
 
+Fixed
+-----
+
+- **simulate run books the tank from Home Assistant.** Given the
+  sources' ``[home_assistant.heater]`` table and the new
+  ``draw_flow`` entity, the run walks from the tank's booked heat
+  (``HomeAssistantBook``), and "deliverable now" reads it: a tank with
+  its probes apart read 0 gal from the probes alone, the history
+  unused.
+
 Changed
 -------
 

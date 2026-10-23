@@ -228,6 +228,10 @@ class TestTheConfiguration:
         demand = {"entities": {"demand": DEMAND}}
         doc = {"home_assistant": self.DOC["home_assistant"] | demand}
         assert ha.sources_from(doc, {"HA_TOKEN": "x"}).entities.demand == DEMAND
+        flow = {"entities": {"draw_flow": "sensor.draws"}}
+        doc = {"home_assistant": self.DOC["home_assistant"] | flow}
+        got = ha.sources_from(doc, {"HA_TOKEN": "x"}).entities.draw_flow
+        assert got == "sensor.draws"
         assert s.url == "http://ha.local:8123"
         assert s.token == "secret"
         assert "secret" not in repr(s)

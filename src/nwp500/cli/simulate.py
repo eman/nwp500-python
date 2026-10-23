@@ -42,6 +42,7 @@ if TYPE_CHECKING:
     from nwp500.api_client import NavienAPIClient
     from nwp500.models import Device
     from nwp500.mqtt import NavienMqttClient
+    from nwp500.sim_home_assistant import HomeAssistantBook
 
 __author__ = "Emmanuel Levijarvi"
 __copyright__ = "Emmanuel Levijarvi"
@@ -268,6 +269,49 @@ async def compose_live(
     return composed
 
 
+async def read_book(inputs: Inputs, now: datetime) -> HomeAssistantBook | None:
+    """The heat book's keeper (``sim_home_assistant.HomeAssistantBook``)
+    with the history read to ``now``, when the sources name the heater's
+    entities and the draw flow; None otherwise. Its ``book`` makes no
+    request, so it books after the client is closed."""
+    src = inputs.sources
+    if src is None or src.heater is None or src.entities.draw_flow is None:
+        return None
+    from nwp500 import sim_home_assistant as ha
+
+    async with ha.HomeAssistantClient(src.url, src.token) as client:
+        keeper = ha.HomeAssistantBook(
+            client, src.heater, src.entities.draw_flow, src.entities
+        )
+        await keeper.read(now)
+    return keeper
+
+
+def booked(
+    keeper: HomeAssistantBook | None, built: Built, now: datetime
+) -> sim.Booked | None:
+    """The tank's booked heat at the scenario's start, from ``keeper``
+    (``read_book``): only for a scenario that starts ``now``, whose
+    state is the heater's now. Its notes are logged."""
+    if keeper is None:
+        return None
+    start = built.scenario.start
+    if start != now:
+        _logger.warning(
+            "book: the scenario starts at %s, not now: walked without "
+            "the heat book",
+            start.isoformat(),
+        )
+        return None
+    answer = keeper.book(now, built.params)
+    for note in answer.notes:
+        if answer.booked is None:
+            _logger.warning(note)
+        else:
+            _logger.info(note)
+    return answer.booked
+
+
 def window(inputs: Inputs, now: datetime) -> tuple[datetime, timedelta]:
     """The start and horizon ``build`` will give the scenario: a flag,
     then the scenario document's, then ``now`` and ``DEFAULT_HOURS``.
@@ -350,13 +394,17 @@ def energy_totals(
 
 
 def print_table(
-    built: Built, result: sim.SimulationResult, console: Console
+    built: Built,
+    result: sim.SimulationResult,
+    console: Console,
+    book: sim.Booked | None = None,
 ) -> None:
-    """The heating intervals, the energy by source, the readiness, the
-    draw windows (and which ran cold), the reasons and the defaults."""
+    """The heating intervals, the energy by source, the readiness (from
+    ``book`` when given), the draw windows (and which ran cold), the
+    reasons and the defaults."""
     s = built.scenario
     tz = s.tz
-    ready = sim.readiness(s.state, s.settings, built.params)
+    ready = sim.readiness(s.state, s.settings, built.params, book=book)
     console.print(
         f"[bold]{_local(s.start, tz)} to {_local(s.until, tz)}[/bold] ({tz}): "
         f"tank {_temp(s.state.upper_f)} upper, {_temp(s.state.lower_f)} "
@@ -457,13 +505,16 @@ def run(
     now: datetime,
     output_format: str,
     out: TextIO | None = None,
+    keeper: HomeAssistantBook | None = None,
 ) -> sim.SimulationResult:
-    """Build the scenario, walk it and print the result."""
+    """Build the scenario, walk it and print the result: from the tank's
+    booked heat when ``keeper`` (``read_book``) books one."""
     built = build(inputs, live, now)
     for note in built.notes:
         _logger.warning(note)
+    book = booked(keeper, built, now)
     try:
-        result = sim.simulate(built.scenario, built.params)
+        result = sim.simulate(built.scenario, built.params, book=book)
     except SimulationError as e:
         raise InputError(f"the scenario cannot be simulated: {e}") from None
     stream = out or sys.stdout
@@ -473,5 +524,5 @@ def run(
     elif output_format == "csv":
         write_csv(result, stream)
     else:
-        print_table(built, result, Console(file=stream))
+        print_table(built, result, Console(file=stream), book)
     return result
