@@ -321,11 +321,13 @@ def fit_ua_law(
     ua: Sequence[float],
     weights: Sequence[float] | None = None,
     ref_delta_t: float = UA_REF_DELTA_T_F,
+    exponent: float | None = None,
 ) -> tuple[float, float]:
     """``(ua_ref, exponent)`` of ``UA(dT) = ua_ref (dT / ref)^exponent``
     from per-window fits: weighted least squares in log space; the
     weighted mean and 0 (constant UA) when the windows do not span two
-    20 °F bands, or the exponent clamps to 0."""
+    20 °F bands, or the exponent clamps to 0. With ``exponent``, only
+    ``ua_ref`` is fitted, on that exponent."""
     dt = np.asarray(delta_t, dtype=float)
     u = np.asarray(ua, dtype=float)
     w = np.ones_like(dt) if weights is None else np.asarray(weights, float)
@@ -336,6 +338,10 @@ def fit_ua_law(
     if len(dt) == 0:
         raise ValueError("no usable windows to fit a UA law from")
     mean = float(np.average(u, weights=w))
+    if exponent is not None:
+        x = np.log(np.maximum(dt, UA_MIN_DELTA_T_F) / ref_delta_t)
+        level = np.average(np.log(u) - exponent * x, weights=w)
+        return float(np.exp(level)), exponent
     bands = np.floor(dt / _BAND_WIDTH_F)
     if len(dt) < _MIN_WINDOWS_FOR_LAW or len(np.unique(bands)) < (
         _MIN_BANDS_FOR_LAW
@@ -572,8 +578,11 @@ def fit_loss(
     windows: Sequence[StandbyWindow],
     tau_gap_hours: float,
     tank: TankParams = TankParams(),
+    exponent: float | None = None,
 ) -> LossFit | None:
-    """The standby loss on ``windows`` (``loss_windows`` of them).
+    """The standby loss on ``windows`` (``loss_windows`` of them), with
+    ``exponent`` the UA law's exponent held there and only its level
+    fitted.
 
     With ``MIN_BOTTOM_FIT_WINDOWS`` opening with a gap of at least
     ``MIN_BOTTOM_FIT_GAP_F``, the UA law and the bottom loss are fitted
@@ -587,19 +596,23 @@ def fit_loss(
     used = loss_windows(windows)
     if not used:
         return None
-    ua_ref, exponent = fit_ua_law(
+    ua_ref, first_exponent = fit_ua_law(
         [w.delta_t_mean_f for w in used],
         [w.ua_btu_hr_f for w in used],
         [w.duration_hours for w in used],
+        exponent=exponent,
     )
     stratified = [
         w for w in used if w.upper_f[0] - w.lower_f[0] >= MIN_BOTTOM_FIT_GAP_F
     ]
     if len(stratified) < MIN_BOTTOM_FIT_WINDOWS:
-        return LossFit(ua_ref, exponent, 0.0, None, len(used), len(stratified))
+        return LossFit(
+            ua_ref, first_exponent, 0.0, None, len(used), len(stratified)
+        )
     bands = np.floor(np.array([w.delta_t_mean_f for w in used]) / _BAND_WIDTH_F)
     with_exponent = (
-        len(used) >= _MIN_WINDOWS_FOR_LAW
+        exponent is None
+        and len(used) >= _MIN_WINDOWS_FOR_LAW
         and len(np.unique(bands)) >= _MIN_BANDS_FOR_LAW
     )
     hours = np.array([w.duration_hours for w in used], dtype=float)
@@ -610,7 +623,11 @@ def fit_loss(
     def law(x: np.ndarray) -> LossParams:
         return LossParams(
             ua_btu_hr_f=float(x[0]),
-            ua_exponent=float(x[3]) if with_exponent else 0.0,
+            ua_exponent=float(x[3])
+            if with_exponent
+            else 0.0
+            if exponent is None
+            else exponent,
             bottom_loss_btu_hr=float(x[1]),
             bottom_gate_f=float(x[2]),
         )
@@ -627,7 +644,7 @@ def fit_loss(
     if with_exponent:
         lo.append(UA_EXPONENT_BOUNDS[0])
         hi.append(UA_EXPONENT_BOUNDS[1])
-        x0.append(min(max(exponent, 0.05), UA_EXPONENT_BOUNDS[1] - 0.05))
+        x0.append(min(max(first_exponent, 0.05), UA_EXPONENT_BOUNDS[1] - 0.05))
     x0[0] = min(max(x0[0], lo[0] + 1e-6), hi[0] - 1e-6)
     found = least_squares(
         residuals,
@@ -680,6 +697,7 @@ def fit_standby(
     settle_minutes: float = SETTLE_MINUTES,
     tank: TankParams | None = None,
     loss: LossParams | None = None,
+    ua_exponent: float | None = None,
 ) -> StandbyFit:
     """The standby loss and the gap's time constant from the history's
     quiet windows: the gap's constant first, then the loss
@@ -688,7 +706,9 @@ def fit_standby(
     ``thermal_mass_btu_f``'s mass) is the walk's lower zone. ``loss``
     is the loss the parameters hold: where no loss is fitted (no window
     the loss can use), its bottom loss opens the gaps the constant is
-    fitted on, as the simulation will run them."""
+    fitted on, as the simulation will run them. With ``ua_exponent``,
+    the loss law's exponent is held there and only its level fitted
+    (``fit_loss``)."""
     if tank is None:
         tank = replace(
             TankParams(),
@@ -706,7 +726,7 @@ def fit_standby(
     # first on the gaps alone, until the constant settles.
     gaps = [(w.gap_hours, w.gap_f) for w in kept]
     tau, n_gap = fit_gap_tau(gaps)
-    found = fit_loss(kept, walk_tau(tank, tau), tank)
+    found = fit_loss(kept, walk_tau(tank, tau), tank, ua_exponent)
     if found is None and loss is not None and loss.bottom_loss_btu_hr > 0.0:
         # No loss to fit: the parameters keep theirs, so the constant is
         # fitted on the gaps their bottom loss opens.
@@ -720,7 +740,7 @@ def fit_standby(
         )
         before = tau
         tau, n_gap = fit_gap_tau(gaps, loss=opened, tank=tank)
-        found = fit_loss(kept, walk_tau(tank, tau), tank)
+        found = fit_loss(kept, walk_tau(tank, tau), tank, ua_exponent)
         if tau is None or abs(tau - before) <= _STANDBY_ROUNDS_RTOL * before:
             break
     tier1 = [c for c in ("drawing", "circulating") if c in history.columns]
@@ -1862,6 +1882,7 @@ def calibrate(
     draws: Sequence[tuple[datetime, float]] | None = None,
     circulation: Sequence[tuple[datetime, datetime]] | None = None,
     circulation_flow_at: Callable[[datetime], float | None] | None = None,
+    ua_exponent: float | None = None,
 ) -> Calibration:
     """``base`` refitted on ``history``: the standby loss law and the
     gap's time constant from its quiet windows, then the compressor on
@@ -1876,7 +1897,8 @@ def calibrate(
     ``metered_lead``), each run at the flow it ran at when
     ``circulation_flow_at`` says (``flow_lookup`` over ``measure_runs``);
     without them it keeps draw-free cycles.
-    ``withdrawn`` and ``lead`` replace either.
+    ``withdrawn`` and ``lead`` replace either. With ``ua_exponent``,
+    the standby loss law's exponent is held there (``fit_standby``).
 
     What could not be fitted keeps ``base``'s value, the best prior
     there is for the same product, and is named in the result's
@@ -1888,7 +1910,11 @@ def calibrate(
     (``INSTALLATION_TERMS``) is kept: they are fitted apart, and a
     caller applying its own fits drops each from ``unfitted``."""
     standby = fit_standby(
-        history, base.tank.thermal_mass_btu_f, tank=base.tank, loss=base.loss
+        history,
+        base.tank.thermal_mass_btu_f,
+        tank=base.tank,
+        loss=base.loss,
+        ua_exponent=ua_exponent,
     )
     params = with_standby(base, standby)
     rows = snapshots(

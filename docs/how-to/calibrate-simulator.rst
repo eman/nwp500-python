@@ -96,9 +96,23 @@ Idle, it reads the cabinet, about 6 °F warm. So give one of these:
   the heater's own flag is used instead. ``--air``, ``--ambient`` and
   ``--humidity`` override the sources.
 
-Without the air, the standby loss keeps the base's value and the report
-says so. When you give the air, the recoveries use it too; without it,
-they use the heater's own reading while the compressor runs.
+Without the air, the command fits the standby loss on the heater's own
+reading, taken once the compressor has run 5 minutes and drawn straight
+from one run's reading to the next across the idle span between them.
+Only quiet windows with a run within 6 hours of both ends are fitted:
+they fall mostly overnight, and a reading held from the day's last run
+would read the night warm. Those windows span too narrow a range of
+tank-to-air difference to fit the loss law's shape, so only its level is
+fitted, on the base's exponent. A note says how many windows qualified
+and what share of the quiet hours they hold. Expect the loss to read
+somewhat high: at one installation, against a sensor beside the heater,
+it read about 12 % high, as the night air dips below the line between
+an evening run and a morning one, and the running reading is itself a
+little warm. A sensor beside the heater (``--air``) avoids both.
+With no such reading at all, the standby loss keeps the base's value
+and the report says so. When you give the air, the recoveries use it
+too; without it, they use the heater's own reading while the compressor
+runs.
 
 ``--humidity`` takes the same kind of file, in %RH, for the
 evaporator; without it the command gives the fits 50 %.
@@ -205,7 +219,8 @@ read in order without holding every status:
        print(term.name, term.value, "fitted" if term.fitted else term.why)
 
 Give ``ambient`` instead of ``air`` for a constant, or neither: the
-standby loss then keeps the base's value. Without ``humidity`` the fits
+standby loss is then fitted on the heater's own reading between runs,
+and ``done.air`` is ``"heater"``. Without ``humidity`` the fits
 get 50 %. An input it cannot use raises ``CalibrationInputError``.
 
 On a desktop computer, 60 days of statuses (about 540,000) took about

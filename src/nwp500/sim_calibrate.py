@@ -74,6 +74,7 @@ __all__ = (
     "GAP_SAMPLES",
     "MIN_GAP",
     "NO_AIR_NOTE",
+    "HEATER_AIR_BRACKET",
     "CalibrationInputError",
     "Calibrated",
     "BookTermsFit",
@@ -102,8 +103,18 @@ DEFAULT_HUMIDITY_PCT = 50.0
 DEFAULT_BASE_NOTE = (
     "refitting the 65 gal defaults (give params for another tank size)"
 )
-#: The note when no air was given.
+#: The note when no air was given and the heater read none while its
+#: compressor ran.
 NO_AIR_NOTE = "no air given: the standby loss is not fitted"
+#: With no air given, a quiet window is fitted on the heater's own air
+#: only with a settled reading (``sim_adapters.HEATER_AIR_SETTLE``)
+#: this close before its start and after its end. Quiet windows fall
+#: mostly overnight, and a reading held from the day's last run reads
+#: them warm; one at each end, interpolated, follows the night down.
+#: At one installation, against a sensor beside the heater, its windows
+#: still read about 12 % high in UA: the night dips below the line, and
+#: the running reading is itself a little warm.
+HEATER_AIR_BRACKET = timedelta(hours=6)
 
 
 class CalibrationInputError(ValueError):
@@ -143,7 +154,8 @@ class Calibrated:
 
     calibration: cal.Calibration
     #: How the air where the heater stands was given (``readings``,
-    #: ``constant`` or ``source``), or None.
+    #: ``constant`` or ``source``), ``heater`` for the heater's own
+    #: reading while its compressor runs (no air given), or None.
     air: str | None
     n_statuses: int
     #: Readings further apart than this were taken as unobserved, and
@@ -396,7 +408,10 @@ def _judge(
 
 
 def _keep_better(
-    frame: pd.DataFrame, base: HeaterParams, recovery_air: str
+    frame: pd.DataFrame,
+    base: HeaterParams,
+    recovery_air: str,
+    ua_exponent: float | None = None,
 ) -> tuple[cal.Calibration, tuple[Judged, ...], HeldOut]:
     """``sim.calibration.calibrate``'s fits in its order, each group's
     latest evidence held out of its refit, and the refit kept only where
@@ -405,7 +420,11 @@ def _keep_better(
     unfitted = set(base.unfitted)
     judged: list[Judged] = []
     standby = cal.fit_standby(
-        frame, base.tank.thermal_mass_btu_f, tank=base.tank, loss=base.loss
+        frame,
+        base.tank.thermal_mass_btu_f,
+        tank=base.tank,
+        loss=base.loss,
+        ua_exponent=ua_exponent,
     )
     windows = sorted(standby.windows, key=lambda w: w.start)
     params = base
@@ -487,7 +506,7 @@ def _keep_better(
     train = law[: len(law) - n_held]
     held_windows = tuple(law[len(law) - n_held :])
     loss_fit = (
-        cal.fit_loss(train, walk_tau, base.tank)
+        cal.fit_loss(train, walk_tau, base.tank, ua_exponent)
         if train and not both_unfitted
         else None
     )
@@ -711,7 +730,7 @@ def air_unread_note(done: Calibrated) -> str:
         return ""
     why = (
         "no air given, and no heater ambient reading while the compressor runs"
-        if done.air is None
+        if done.air in (None, "heater")
         else "the air given does not cover them"
     )
     return (
@@ -849,6 +868,66 @@ def calibrate_changes(
     )
 
 
+def _air_between_runs(
+    frame: pd.DataFrame,
+) -> tuple[int, int, float] | None:
+    """With no air given, the heater's own as ``frame``'s air: its
+    readings once the compressor has run ``HEATER_AIR_SETTLE``,
+    interpolated linearly between runs over the quiet windows that a
+    reading brackets within ``HEATER_AIR_BRACKET`` at both ends. Every
+    other quiet window is marked ``air_unobserved``, out of the standby
+    fit. How many windows were bracketed, of how many, and their share
+    of the quiet hours; None with no such reading."""
+    if "heater_air_f" not in frame.columns:
+        return None
+    index = cast("pd.DatetimeIndex", frame.index)
+    at = [cast(datetime, t) for t in index]
+    on = frame["compressor_on"].fillna(False).to_numpy(dtype=bool)
+    air = frame["heater_air_f"].to_numpy(dtype=float)
+    times: list[float] = []
+    values: list[float] = []
+    since: datetime | None = None
+    for t, run, v in zip(at, on, air, strict=True):
+        since = (since or t) if run else None
+        if (
+            since is not None
+            and t - since >= sa.HEATER_AIR_SETTLE
+            and math.isfinite(v)
+        ):
+            times.append(t.timestamp())
+            values.append(float(v))
+    if not times:
+        return None
+    seconds = np.array([t.timestamp() for t in at])
+    read = np.asarray(times)
+    between = np.interp(seconds, read, values, left=np.nan, right=np.nan)
+    usable = np.zeros(len(frame), dtype=bool)
+    unseen = np.zeros(len(frame), dtype=bool)
+    reach = HEATER_AIR_BRACKET.total_seconds()
+    quiet = cal.quiet_windows(frame)
+    n = 0
+    hours = kept = 0.0
+    for start, end in quiet:
+        hours += (end - start).total_seconds()
+        inside = (seconds >= start.timestamp()) & (seconds < end.timestamp())
+        i = int(np.searchsorted(read, start.timestamp(), side="right"))
+        j = int(np.searchsorted(read, end.timestamp(), side="left"))
+        if (
+            i > 0
+            and j < len(read)
+            and start.timestamp() - read[i - 1] <= reach
+            and read[j] - end.timestamp() <= reach
+        ):
+            usable |= inside
+            n += 1
+            kept += (end - start).total_seconds()
+        else:
+            unseen |= inside
+    frame["air_f"] = np.where(usable, between, np.nan)
+    frame["air_unobserved"] = unseen
+    return n, len(quiet), kept / hours if hours else 0.0
+
+
 def _fit(
     frame: pd.DataFrame,
     base: HeaterParams,
@@ -946,14 +1025,32 @@ def _fit(
             "humidity_pct",
         ] = DEFAULT_HUMIDITY_PCT
     if how is None:
-        notes.append(NO_AIR_NOTE)
+        bracketed = _air_between_runs(frame)
+        if bracketed is None:
+            notes.append(NO_AIR_NOTE)
+        else:
+            how = "heater"
+            n, of, share = bracketed
+            notes.append(
+                "no air given: the standby loss is fitted on the heater's "
+                "own air while its compressor runs, interpolated between "
+                f"runs, on the base's exponent ({n} of {of} quiet windows, "
+                f"{share:.0%} of their hours, have a run within "
+                f"{HEATER_AIR_BRACKET.total_seconds() / 3600:g} h of both "
+                "ends)"
+            )
+    # On the heater's air, the windows that qualify span too narrow a
+    # ΔT to fit the law's shape: its level only, on the base's exponent.
+    exponent = base.loss.ua_exponent if how == "heater" else None
     n_runs, unread = _runs_without_air(frame, recovery_air)
     judged: tuple[Judged, ...] = ()
     held: HeldOut | None = None
     if keep_better:
-        fitted, judged, held = _keep_better(frame, base, recovery_air)
+        fitted, judged, held = _keep_better(frame, base, recovery_air, exponent)
     else:
-        fitted = cal.calibrate(frame, base, recovery_air=recovery_air)
+        fitted = cal.calibrate(
+            frame, base, recovery_air=recovery_air, ua_exponent=exponent
+        )
     done = Calibrated(
         fitted,
         how,
@@ -1081,6 +1178,11 @@ def report(done: Calibrated) -> list[Term]:
         why = ""
     elif done.air is None:
         why = "no air given"
+    elif done.air == "heater" and s.n_quiet == 0:
+        why = (
+            "no quiet window has a run within "
+            f"{HEATER_AIR_BRACKET.total_seconds() / 3600:g} h of both ends"
+        )
     elif not s.n_quiet:
         why = f"no quiet window of {cal.MIN_QUIET_HOURS:g} h or more"
     else:

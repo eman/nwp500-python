@@ -1434,3 +1434,57 @@ class TestAPartialAirRecordKeepsRecoveries:
         assert len(partial.calibration.recoveries) == len(
             alone.calibration.recoveries
         )
+
+
+class TestStandbyOnTheHeatersAir:
+    def test_with_no_air_given_it_fits_on_the_heaters(self) -> None:
+        frame = recovery_days(6)
+        base = sim.default_params()
+        given = sc._fit(frame.copy(), base, [], None, None, None, None)
+        own = sc._fit(
+            frame.drop(columns=["air_f"]), base, [], None, None, None, None
+        )
+        assert own.air == "heater"
+        assert own.calibration.standby.ua_ref is not None
+        assert own.calibration.standby.ua_ref == pytest.approx(
+            given.calibration.standby.ua_ref
+        )
+        assert sc.NO_AIR_NOTE not in own.notes
+        assert any(
+            "heater's own air" in n and "of their hours" in n for n in own.notes
+        )
+
+    def test_on_the_heaters_air_the_exponent_is_the_bases(self) -> None:
+        frame = recovery_days(6).drop(columns=["air_f"])
+        base = sim.default_params()
+        base = replace(base, loss=replace(base.loss, ua_exponent=0.28))
+        done = sc._fit(frame, base, [], None, None, None, None)
+        standby = done.calibration.standby
+        assert standby.ua_ref is not None
+        assert standby.ua_exponent == pytest.approx(0.28)
+
+    def test_between_runs_the_air_is_interpolated(self) -> None:
+        frame = recovery_days(3).drop(columns=["air_f"])
+        assert sc._air_between_runs(frame) is not None
+        # Day 1's quiet decay, between day 0's run (air 60) and day 1's
+        # (60 + 5 sin 1): a straight line from one to the other.
+        day = frame.index[0] + timedelta(days=1)
+        a, b = day - timedelta(hours=6), day + timedelta(hours=6)
+        mid = frame.loc[a:b, "air_f"].dropna()
+        assert len(mid) > 0
+        assert mid.is_monotonic_increasing
+        assert 60.0 < mid.iloc[len(mid) // 2] < 60.0 + 5.0 * np.sin(1.0)
+
+    def test_a_window_without_a_run_at_both_ends_is_not_fitted(self) -> None:
+        frame = recovery_days(6).drop(columns=["air_f"])
+        # The heater read its air on the first day's run only.
+        later = frame.index >= frame.index[0] + timedelta(days=1)
+        frame.loc[later, "heater_air_f"] = np.nan
+        done = sc._fit(frame, sim.default_params(), [], None, None, None, None)
+        assert done.air == "heater"
+        assert done.calibration.standby.ua_ref is None
+        why = {t.name: t.why for t in sc.report(done)}
+        assert any(
+            "no quiet window has a run within 6 h of both ends" in w
+            for w in why.values()
+        )

@@ -305,7 +305,7 @@ Recorded history
       fit_book, BookTermsFit, MIN_BOOK_PAIRS, MIN_RUN_PAIRS,
       score, Judged, HeldOut, GROUPS, air_unread_note,
       CalibrationInputError, DEFAULT_HUMIDITY_PCT,
-      DEFAULT_BASE_NOTE, NO_AIR_NOTE
+      DEFAULT_BASE_NOTE, NO_AIR_NOTE, HEATER_AIR_BRACKET
 
 
 Home Assistant sources

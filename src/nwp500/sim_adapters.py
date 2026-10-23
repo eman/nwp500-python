@@ -1715,14 +1715,12 @@ def with_circulation_terms(
     params: HeaterParams, runs: Sequence[tuple[datetime, datetime]]
 ) -> HeaterParams:
     """``params``, or with circulation runs to book and no circulation
-    terms, one installation's (``SITE_CIRCULATION``), with nothing of
-    the caller's flow taken as circulation (``meter_share`` 0): as the
-    walk prices runs, so that runs are never booked at no cost."""
+    terms, one installation's (``SITE_CIRCULATION``), which takes
+    nothing of the caller's flow as circulation (``meter_share`` 0): as
+    the walk prices runs, so that runs are never booked at no cost."""
     if not runs or params.circulation is not None:
         return params
-    return replace(
-        params, circulation=replace(SITE_CIRCULATION, meter_share=0.0)
-    )
+    return replace(params, circulation=SITE_CIRCULATION)
 
 
 def book_from_history(

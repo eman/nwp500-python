@@ -23,6 +23,15 @@ Added
   compressor has run 5 minutes (``sim_adapters.running_air``,
   ``HEATER_AIR_SETTLE``), held until the next run, rather than 65 °F
   throughout. ``HomeAssistantBook`` notes it.
+- **The standby loss from the heater's own air** (#236). With no air
+  given, calibration fits the standby loss on the heater's own reading
+  once its compressor has run 5 minutes, interpolated from one run to
+  the next, over the quiet windows with a run within
+  ``HEATER_AIR_BRACKET`` (6 h) of both ends: the law's level only, on
+  the base's exponent. ``Calibrated.air`` is ``"heater"``, and a note
+  says how many windows qualified and their share of the quiet hours.
+  It was left unfitted. ``fit_ua_law``, ``fit_loss``, ``fit_standby``
+  and ``calibration.calibrate`` take a fixed exponent.
 
 - **The heater's heard spans, given** (#230). ``book_from_changes``
   takes ``heard=``, the spans the heater was heard over, for a record
@@ -66,6 +75,11 @@ Added
 
 Changed
 -------
+
+- ``SITE_CIRCULATION.meter_share`` is 0. The book's flow is the
+  household's draws alone, which no circulation run passes, so the
+  example terms take nothing off it. A caller whose meter carries the
+  loop's water still sets its own share.
 
 - **Readiness with no evidence and no book** (#234). A tank whose probes
   are within the book's ``uniform_band_f`` reads its full-tank floor
