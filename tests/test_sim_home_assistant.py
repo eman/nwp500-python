@@ -1817,4 +1817,85 @@ class TestTheFitCarried:
         )
         ((names, since, until),) = client.history_calls
         assert set(names) == {"sensor.heater_air", "binary_sensor.compressor"}
-        assert until - since == ha.FRESH
+        assert until - since == ha.FRESH + ha.RUN_SETTLE
+
+    async def test_a_fresh_reading_between_grid_samples_anchors(self) -> None:
+        """On 7 min, the air updated 3 min in: the grid samples at 2 min
+        (before it) and 12 (not yet), but the reading is the anchor."""
+        on = NOW - timedelta(minutes=7)
+        client = FakeClient(
+            {"sensor.heater_air": _s("sensor.heater_air", 61.0, "°F")},
+            {
+                "sensor.heater_air": [
+                    (NOW - timedelta(hours=1), 67.0),
+                    (on + timedelta(minutes=3), 61.0),
+                ],
+                "binary_sensor.compressor": [
+                    (NOW - timedelta(hours=1), "off"),
+                    (on, "on"),
+                ],
+            },
+            forecast=OUTDOOR,
+        )
+        source = ha.HomeAssistantEnvironment(
+            client,  # type: ignore[arg-type]  # pyright: ignore[reportArgumentType]
+            ha.Entities(weather="weather.home"),
+            start=NOW,
+            until=NOW + timedelta(hours=6),
+            now=NOW,
+            location_air=MODEL,
+            heater=HEATER,
+        )
+        env = await source.read()
+        assert isinstance(env.ambient_f, tuple)
+        assert any(
+            "anchored to the heater's own reading" in n for n in source.notes
+        )
+        shift = 61.0 - MODEL.at(OUTDOOR[0], [on + timedelta(minutes=3)])[0]
+        assert env.ambient_f[0][1] == pytest.approx(
+            MODEL.at(OUTDOOR[0], [NOW])[0] + shift
+        )
+
+    async def test_a_run_on_at_the_cut_keeps_its_anchor(self) -> None:
+        """A history from the cut stamps the run's state at the cut; read
+        from earlier by the settling time, a reading just after the cut
+        is not taken for one in a new run's first minutes."""
+        cut = NOW - ha.FRESH - ha.RUN_SETTLE
+        reading = NOW - ha.FRESH + timedelta(minutes=1)
+
+        class FromTheCut(FakeClient):
+            async def read_history(
+                self, entities: Iterable[str], start: datetime, end: datetime
+            ) -> ha.History:
+                got = await super().read_history(entities, start, end)
+                # As a history from ``start`` gives it: the state in force
+                # stamped at ``start``.
+                states = {
+                    e: [(start, "on")]
+                    if e == "binary_sensor.compressor"
+                    else rows
+                    for e, rows in (got.states or {}).items()
+                }
+                return replace(got, states=states)
+
+        client = FromTheCut(
+            {"sensor.heater_air": _s("sensor.heater_air", 61.0, "°F")},
+            {
+                "sensor.heater_air": [(reading, 61.0)],
+                "binary_sensor.compressor": [(cut, "on")],
+            },
+            forecast=OUTDOOR,
+        )
+        source = ha.HomeAssistantEnvironment(
+            client,  # type: ignore[arg-type]  # pyright: ignore[reportArgumentType]
+            ha.Entities(weather="weather.home"),
+            start=NOW,
+            until=NOW + timedelta(hours=6),
+            now=NOW,
+            location_air=MODEL,
+            heater=HEATER,
+        )
+        await source.read()
+        assert any(
+            "anchored to the heater's own reading" in n for n in source.notes
+        )

@@ -919,12 +919,13 @@ def _while_running(
             changes.append((at, text))
     times = [t for t, _ in air]
     out: list[Reading] = []
-    newest: Reading | None = None
+    runs: list[Span] = []
     for i, (on_at, state) in enumerate(changes):
         if state != "on":
             continue
         stop = changes[i + 1][0] if i + 1 < len(changes) else end
         settled = on_at + RUN_SETTLE
+        runs.append((settled, stop))
         t = settled
         while t < stop:
             k = bisect_right(times, t)
@@ -934,9 +935,18 @@ def _while_running(
                 and not any(a <= t < b for a, b in unknown)
             ):
                 out.append((t, air[k - 1][1]))
-                if newest is None or air[k - 1][0] > newest[0]:
-                    newest = air[k - 1]
             t += step
+    # Off the grid: a reading taken between two samples is newer than
+    # either would show.
+    newest = next(
+        (
+            r
+            for r in reversed(air)
+            if any(a <= r[0] < b for a, b in runs)
+            and not any(a <= r[0] < b for a, b in unknown)
+        ),
+        None,
+    )
     return out, newest
 
 
@@ -1266,8 +1276,10 @@ class HomeAssistantEnvironment:
         notes: list[str] = []
         heard = await self._guard(
             "air",
+            # From before the cut by the settling time: a run already on
+            # at the cut then shows where it started, or settled.
             lambda: _heater_air(
-                self.client, self.heater, now - FRESH, now, notes
+                self.client, self.heater, now - FRESH - RUN_SETTLE, now, notes
             ),
             None,
         )
