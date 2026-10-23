@@ -489,3 +489,122 @@ class TestTheSilences:
         assert sa.max_gap(at) == sa.MIN_GAP
         assert sa.silences(at) == [(at[3], at[4])]
         assert sa.silences(at, timedelta(hours=1)) == []
+
+
+def _read(rows: sa.ChangeRows, start: datetime, end: datetime) -> sa.ChangeRows:
+    """``rows`` as a read from ``start`` to ``end`` gives them: the value
+    in force at ``start`` stamped at it, then the changes up to ``end``."""
+    from dataclasses import fields
+
+    out: dict[str, Any] = {}
+    for f in fields(rows):
+        if f.name == "outages":
+            continue
+        series = list(getattr(rows, f.name))
+        before = [v for t, v in series if t < start]
+        within = [(t, v) for t, v in series if start <= t <= end]
+        out[f.name] = ([(start, before[-1])] if before else []) + within
+    return sa.ChangeRows(**out)
+
+
+class TestAHistoryKeptCurrent:
+    """A caller that reads only what is new extends what it holds."""
+
+    def test_two_reads_book_as_one(
+        self, heater: Callable[..., list[Any]]
+    ) -> None:
+        p = site_example_params()
+        readings = heater(20, recovery_at=4)
+        rows, observed = as_changes(readings)
+        flow = with_a_draw(meter(20), 2.0)
+        whole = sa.book_from_changes(rows, observed, p, at=T0, flow=flow)
+        split = T0 - timedelta(hours=1)
+        first = _read(rows, T0 - timedelta(hours=20), split)
+        later = _read(rows, split, T0)
+        joined = first.extended(later)
+        got = sa.book_from_changes(joined, observed, p, at=T0, flow=flow)
+        assert whole is not None and got is not None
+        assert got.heat_btu == pytest.approx(whole.heat_btu)
+        assert got.anchor_age_h == pytest.approx(whole.anchor_age_h)
+
+    def test_trimmed_it_books_the_same(
+        self, heater: Callable[..., list[Any]]
+    ) -> None:
+        p = site_example_params()
+        rows, observed = as_changes(heater(20, recovery_at=4))
+        flow = with_a_draw(meter(20), 2.0)
+        whole = sa.book_from_changes(rows, observed, p, at=T0, flow=flow)
+        cut = T0 - timedelta(hours=10)
+        trimmed = rows.since(cut)
+        got = sa.book_from_changes(
+            trimmed, [t for t in observed if t >= cut], p, at=T0, flow=flow
+        )
+        assert whole is not None and got is not None
+        assert got.heat_btu == pytest.approx(whole.heat_btu)
+
+    def test_a_split_flow_books_as_the_full_one(
+        self, heater: Callable[..., list[Any]]
+    ) -> None:
+        """A draw split by the reads books the same gallons."""
+        p = site_example_params()
+        rows, observed = as_changes(heater(20, recovery_at=4))
+        draw = T0 - timedelta(hours=2)
+        full = with_a_draw(meter(20), 2.0)
+        # A read from mid-draw opens with the flow in force there.
+        split = draw + timedelta(minutes=2, seconds=45)
+        first = [r for r in full if r[0] < split]
+        later = [(split, 2.0), *(r for r in full if r[0] >= split)]
+        merged = sa.merge_changes(first, later)
+        want = sa.book_from_changes(rows, observed, p, at=T0, flow=full)
+        got = sa.book_from_changes(rows, observed, p, at=T0, flow=merged)
+        assert want is not None and got is not None
+        assert got.heat_btu == pytest.approx(want.heat_btu)
+
+    def test_change_only_reads_book_as_one(
+        self, heater: Callable[..., list[Any]]
+    ) -> None:
+        """A draw as changes, split mid-way by the reads, and a recovery
+        after an outage: the opening row repeats the value in force and
+        changes nothing, the recovery is kept."""
+        p = site_example_params()
+        rows, observed = as_changes(heater(20, recovery_at=4))
+        draw = T0 - timedelta(hours=2)
+        full = [
+            (T0 - timedelta(hours=20), 0.0),
+            (draw, 2.0),
+            (draw + timedelta(minutes=10), 0.0),
+        ]
+        split = draw + timedelta(minutes=5)
+        merged = sa.merge_changes(full[:2], [(split, 2.0), full[2]])
+        want = sa.book_from_changes(rows, observed, p, at=T0, flow=full)
+        got = sa.book_from_changes(rows, observed, p, at=T0, flow=merged)
+        assert want is not None and got is not None
+        assert got.heat_btu == pytest.approx(want.heat_btu)
+        gap = (draw + timedelta(minutes=2), draw + timedelta(minutes=10))
+        rec = [*full[:2], (gap[1], 2.0), (draw + timedelta(minutes=20), 0.0)]
+        joined = sa.merge_changes(rec[:2], rec[2:])
+        assert joined == rec
+
+    def test_the_later_read_wins_at_a_shared_instant(self) -> None:
+        a = [(T0, 1.0), (T0 + timedelta(minutes=5), 2.0)]
+        b = [(T0 + timedelta(minutes=5), 3.0), (T0 + timedelta(minutes=9), 4.0)]
+        assert sa.merge_changes(a, b) == [
+            (T0, 1.0),
+            (T0 + timedelta(minutes=5), 3.0),
+            (T0 + timedelta(minutes=9), 4.0),
+        ]
+
+    def test_since_keeps_the_value_in_force(self) -> None:
+        rows = [(T0, 1.0), (T0 + timedelta(minutes=5), 2.0)]
+        assert sa.changes_since(rows, T0 + timedelta(minutes=3)) == rows
+        assert sa.changes_since(rows, T0 + timedelta(minutes=6)) == rows[1:]
+
+    def test_outages_join_and_cut(self) -> None:
+        a = [(T0, T0 + timedelta(minutes=10))]
+        b = [(T0 + timedelta(minutes=10), T0 + timedelta(minutes=20))]
+        joined = sa.join_spans(a, b)
+        assert joined == [(T0, T0 + timedelta(minutes=20))]
+        assert sa.spans_since(joined, T0 + timedelta(minutes=15)) == [
+            (T0 + timedelta(minutes=15), T0 + timedelta(minutes=20))
+        ]
+        assert sa.spans_since(joined, T0 + timedelta(minutes=25)) == []

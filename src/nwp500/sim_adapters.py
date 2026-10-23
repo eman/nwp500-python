@@ -47,7 +47,7 @@ import itertools
 import math
 from array import array
 from collections.abc import Callable, Iterable, Mapping, Sequence
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, fields, replace
 from datetime import UTC, datetime, time, timedelta
 from typing import TYPE_CHECKING, Any, cast
 from zoneinfo import ZoneInfo
@@ -813,6 +813,82 @@ class ChangeRows:
     #: The spans a value was unknown (Home Assistant's ``unavailable``
     #: or ``unknown``): unobserved, like a gap between statuses.
     outages: Sequence[tuple[datetime, datetime]] = ()
+
+    def extended(self, newer: ChangeRows) -> ChangeRows:
+        """These changes with a later read's: each series merged by
+        instant, the later read's row winning at a shared instant (a
+        read repeats the value in force at its start), the outages
+        joined. A caller that reads only what is new keeps a history
+        current this way."""
+        return ChangeRows(
+            **{
+                f.name: merge_changes(
+                    getattr(self, f.name), getattr(newer, f.name)
+                )
+                for f in fields(self)
+                if f.name != "outages"
+            },
+            outages=join_spans(self.outages, newer.outages),
+        )
+
+    def since(self, start: datetime) -> ChangeRows:
+        """These changes from ``start``: in each series the rows from it
+        and the one in force at it, the outages that end after it."""
+        return ChangeRows(
+            **{
+                f.name: changes_since(getattr(self, f.name), start)
+                for f in fields(self)
+                if f.name != "outages"
+            },
+            outages=spans_since(self.outages, start),
+        )
+
+
+def merge_changes(older: Changes, newer: Changes) -> list[tuple[datetime, Any]]:
+    """Two reads of one series' changes as one, in time order (UTC);
+    at an instant both have, ``newer``'s row. A read opens with the
+    value in force at its start: in a history of changes, where a value
+    holds until the next, that row repeats it and changes nothing."""
+    rows = {t.astimezone(UTC): v for t, v in older}
+    rows.update((t.astimezone(UTC), v) for t, v in newer)
+    return sorted(rows.items(), key=lambda r: r[0])
+
+
+def changes_since(rows: Changes, start: datetime) -> list[tuple[datetime, Any]]:
+    """``rows`` from ``start``: the one in force at it (the last at or
+    before it), and those after."""
+    start = start.astimezone(UTC)
+    ordered = sorted(
+        ((t.astimezone(UTC), v) for t, v in rows), key=lambda r: r[0]
+    )
+    k = bisect.bisect_right([t for t, _ in ordered], start)
+    return ordered[max(k - 1, 0) :]
+
+
+def join_spans(
+    *spans: Iterable[tuple[datetime, datetime]],
+) -> list[tuple[datetime, datetime]]:
+    """``spans`` together, in UTC and time order, those that overlap or
+    touch joined."""
+    out: list[tuple[datetime, datetime]] = []
+    for a, b in sorted(
+        (a.astimezone(UTC), b.astimezone(UTC))
+        for group in spans
+        for a, b in group
+    ):
+        if out and a <= out[-1][1]:
+            out[-1] = (out[-1][0], max(out[-1][1], b))
+        else:
+            out.append((a, b))
+    return out
+
+
+def spans_since(
+    spans: Iterable[tuple[datetime, datetime]], start: datetime
+) -> list[tuple[datetime, datetime]]:
+    """``spans`` from ``start``: those that end after it, cut to it."""
+    start = start.astimezone(UTC)
+    return [(max(a, start), b) for a, b in join_spans(spans) if b > start]
 
 
 def _ns(instants: Iterable[datetime]) -> np.ndarray:
