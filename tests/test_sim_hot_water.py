@@ -50,6 +50,7 @@ from nwp500.sim.params import (  # noqa: E402
     ReadinessParams,
     params_from_document,
     params_to_document,
+    unknown_fields,
 )
 from nwp500.sim.tank_physics import TankPhysics  # noqa: E402
 from nwp500.unit_system import reset_unit_system, set_unit_system  # noqa: E402
@@ -310,6 +311,52 @@ class TestTheParameters:
         assert params_from_document(doc) == replace(
             params, readiness=ReadinessParams(), book=params.book
         )
+
+    @pytest.mark.parametrize(
+        ("part", "name", "value", "match"),
+        [
+            (None, "unfitted", None, "unfitted is None, not a list"),
+            (None, "unfitted", 5, "unfitted is 5, not a list"),
+            (None, "unfitted", "book", "not a list"),
+            ("draw", "domain_upper_f", 5, "domain_upper_f is 5, not a list"),
+            ("draw", "domain_upper_f", [1.0], "has 1 values, not 2"),
+            ("readiness", "evidence", 5, "evidence is 5, not a list"),
+            ("readiness", "evidence", [1.0], r"evidence\[0\] is 1.0"),
+            ("tank", "volume_gal", "65", "volume_gal is '65', not a number"),
+            ("tank", "volume_gal", None, "not a number"),
+            ("tank", "volume_gal", True, "not a number"),
+        ],
+    )
+    def test_a_value_of_the_wrong_type_is_a_value_error(
+        self,
+        params: HeaterParams,
+        part: str | None,
+        name: str,
+        value: object,
+        match: str,
+    ) -> None:
+        doc = params_to_document(params)
+        (doc if part is None else doc[part])[name] = value
+        with pytest.raises(ValueError, match=match):
+            params_from_document(doc)
+
+    def test_a_part_that_is_not_an_object_has_no_unknown_fields(
+        self, params: HeaterParams
+    ) -> None:
+        doc = {**params_to_document(params), "tank": 5}
+        assert unknown_fields(doc) == []
+        with pytest.raises(ValueError, match="part 'tank' is not an object"):
+            params_from_document(doc)
+
+    def test_a_null_range_and_a_whole_number_are_read(
+        self, params: HeaterParams
+    ) -> None:
+        doc = params_to_document(params)
+        doc["draw"]["domain_upper_f"] = None
+        doc["tank"]["volume_gal"] = 50
+        got = params_from_document(doc)
+        assert got.draw.domain_upper_f is None
+        assert got.tank.volume_gal == 50
 
     def test_the_example_evidence_is_refused_at_another_line(self) -> None:
         with pytest.raises(ValueError, match="105"):

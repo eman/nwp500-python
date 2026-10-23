@@ -2,6 +2,18 @@
 Changelog
 =========
 
+Unreleased
+==========
+
+Fixed
+-----
+- ``sim.params.params_from_document`` raised ``TypeError`` for a list
+  field given as something else (``unfitted``, the draw domain ranges,
+  readiness ``evidence``), past the ``ValueError`` it documents and
+  that ``sim_live.overlay`` and ``nwp-cli simulate`` handle. It read a
+  string, null or bool in a number field without complaint. Each is
+  now a ``ValueError`` naming the field (#212).
+
 Version 9.10.0 (2026-10-22)
 ===========================
 
