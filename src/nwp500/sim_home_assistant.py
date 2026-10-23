@@ -475,15 +475,14 @@ def parse_forecast(doc: Any, entity: str) -> tuple[list[Reading], str | None]:
 
 def parse_outdoor_history(
     doc: Any, entity: str
-) -> tuple[list[Reading], str | None]:
+) -> list[tuple[datetime, float, str | None]]:
     """A weather entity's outdoor air from ``/api/history/period``'s
-    answer: each row's instant and ``temperature`` attribute, in time
-    order, and the unit of the last row that names one
-    (``temperature_unit``). Rows without a number are left out."""
+    answer: each row's instant, ``temperature`` attribute and the unit
+    it was recorded in (``temperature_unit``, None where the row names
+    none), in time order. Rows without a number are left out."""
     if not isinstance(doc, list):
         raise HomeAssistantError("not a history")
-    readings: list[Reading] = []
-    unit: tuple[datetime, str] | None = None
+    out: list[tuple[datetime, float, str | None]] = []
     for series in doc:
         if not isinstance(series, list):
             continue
@@ -498,15 +497,19 @@ def parse_outdoor_history(
             if stamp is None or not isinstance(attributes, Mapping):
                 continue
             a = cast(Mapping[str, Any], attributes)
-            at = _instant(stamp)
             value = _number(a.get("temperature"))
-            if value is not None:
-                readings.append((at, value))
-            u = a.get("temperature_unit")
-            if isinstance(u, str) and (unit is None or at >= unit[0]):
-                unit = (at, u)
-    readings.sort(key=lambda x: x[0])
-    return readings, None if unit is None else unit[1]
+            if value is None:
+                continue
+            unit = a.get("temperature_unit")
+            out.append(
+                (
+                    _instant(stamp),
+                    value,
+                    unit if isinstance(unit, str) else None,
+                )
+            )
+    out.sort(key=lambda x: x[0])
+    return out
 
 
 def to_f(value: float, unit: str | None) -> float:
@@ -813,10 +816,11 @@ class HomeAssistantClient:
 
     async def outdoor_history(
         self, entity: str, start: datetime, end: datetime
-    ) -> tuple[list[Reading], str | None]:
-        """A weather entity's outdoor air from ``start`` to ``end``
-        (``parse_outdoor_history``), and its unit, the entity's own when
-        the history names none."""
+    ) -> list[Reading]:
+        """A weather entity's outdoor air from ``start`` to ``end``, °F,
+        each reading from the unit it was recorded in
+        (``parse_outdoor_history``), the entity's own unit where a row
+        names none. A reading in no unit ``to_f`` reads is left out."""
         doc = await self._json(
             "GET",
             f"/api/history/period/{start.astimezone(UTC).isoformat()}",
@@ -827,10 +831,18 @@ class HomeAssistantClient:
                 "significant_changes_only": "0",
             },
         )
-        readings, unit = parse_outdoor_history(doc, entity)
-        if unit is None:
-            unit = (await self._attributes(entity)).get("temperature_unit")
-        return readings, unit if isinstance(unit, str) else None
+        rows = parse_outdoor_history(doc, entity)
+        today: str | None = None
+        if any(u is None for _, _, u in rows):
+            u = (await self._attributes(entity)).get("temperature_unit")
+            today = u if isinstance(u, str) else None
+        out: list[Reading] = []
+        for t, v, u in rows:
+            try:
+                out.append((t, to_f(v, u or today)))
+            except ValueError:
+                continue
+        return out
 
     async def _attributes(self, entity: str) -> Mapping[str, Any]:
         doc = await self._json("GET", f"/api/states/{entity}")
@@ -849,21 +861,30 @@ def _while_running(
     air: Sequence[Reading],
     compressor: Sequence[tuple[datetime, str]],
     end: datetime,
+    unknown: Sequence[Span] = (),
     step: timedelta = timedelta(minutes=10),
 ) -> list[Reading]:
-    """``air``'s value in force every ``step`` from ``RUN_SETTLE`` into
-    each of ``compressor``'s runs (its ``on`` states) to its end, or
-    ``end`` for one still running."""
+    """``air``'s value in force every ``step`` through each of
+    ``compressor``'s runs (its ``on`` states) to its end, or ``end`` for
+    one still running, where that value was read ``RUN_SETTLE`` or more
+    into the run: one read earlier, or while idle, is not the air the
+    heater stands in. None inside ``unknown``, when the sensor said
+    nothing that was read."""
     times = [t for t, _ in air]
     out: list[Reading] = []
     for i, (on_at, state) in enumerate(compressor):
         if state.strip().lower() != "on":
             continue
         stop = compressor[i + 1][0] if i + 1 < len(compressor) else end
-        t = on_at + RUN_SETTLE
+        settled = on_at + RUN_SETTLE
+        t = settled
         while t < stop:
             k = bisect_right(times, t)
-            if k:
+            if (
+                k
+                and times[k - 1] >= settled
+                and not any(a <= t < b for a, b in unknown)
+            ):
                 out.append((t, air[k - 1][1]))
             t += step
     return out
@@ -1038,17 +1059,22 @@ class HomeAssistantEnvironment:
                 " h a fit needs"
             )
             return None
+        if len({v for _, v in readings}) < 2:
+            self.notes.append(
+                f"air: {what} held one value, so nothing to fit to"
+            )
+            return None
         # From before the first reading by the longest lag a fit tries.
-        rows, unit = await self.client.outdoor_history(
+        outdoor = await self.client.outdoor_history(
             weather, since - timedelta(hours=max(FIT_LAGS_H)), now
         )
-        outdoor = [(t, to_f(v, unit)) for t, v in rows]
         if not outdoor:
             self.notes.append(f"air: no outdoor air recorded for {weather}")
             return None
         fitted = fit_air(readings, outdoor)
         days = LOCATION_AIR_WINDOW.total_seconds() / 86400
-        if fitted.r < LOCATION_AIR_MIN_R:
+        # A steady air has no r (NaN): no fit either.
+        if not fitted.r >= LOCATION_AIR_MIN_R:
             self.notes.append(
                 f"air: {what} follows the outdoor air too loosely to "
                 f"project it (r {fitted.r:.2f}, under {LOCATION_AIR_MIN_R})"
@@ -1089,8 +1115,13 @@ class HomeAssistantEnvironment:
             )
             return None
         unit = (await self.client.state(h.ambient)).unit
-        ambient, _ = got.converted(h.ambient, unit, to_f, now)
-        samples = _while_running(ambient, got.states.get(h.compressor, []), now)
+        ambient, unread = got.converted(h.ambient, unit, to_f, now)
+        samples = _while_running(
+            ambient,
+            got.states.get(h.compressor, []),
+            now,
+            busy(unread, got.outages.get(h.ambient, [])),
+        )
         if samples and now - samples[-1][0] <= FRESH:
             self._heater_anchor = samples[-1]
         return samples, "the heater's own air reading"

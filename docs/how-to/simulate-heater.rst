@@ -189,8 +189,9 @@ From Python, ``sim_home_assistant.HomeAssistantEnvironment`` reads the
 same parts. Given ``heater=``, a ``HeaterEntities`` with ``ambient`` and
 ``compressor``, it fits the model without an ``air`` entity: on the
 heater's own air reading every 10 minutes while the compressor runs,
-from 2 minutes into each run (idle, that reading is the cabinet's). The
-latest such reading, if under an hour old, anchors the projection.
+where the reading was taken 2 minutes or more into the run (earlier, or
+idle, it reads the cabinet), and not while the sensor was unavailable.
+The latest such reading, if under an hour old, anchors the projection.
 ``fitted_air`` holds the fit once ``read`` has run.
 
 
