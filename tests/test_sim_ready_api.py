@@ -768,3 +768,135 @@ class TestTheDefaultAir:
             "ambient_defaulted"
             not in time_to_ready(g, params, bath_gal=20.0).reasons
         )
+
+
+class TestTheScenariosInletInTheBook:
+    """The book converts heat to gallons at the scenario's inlet where
+    one is given, as the walk's draws take it."""
+
+    def _scenario(self, inlet: float | None) -> Scenario:
+        from nwp500.sim import Environment, HeaterState
+
+        return _scenario(
+            state=HeaterState(upper_f=140.9, lower_f=140.0),
+            environment=Environment(ambient_f=65.0, inlet_f=inlet),
+        )
+
+    def test_a_colder_inlet_is_fewer_gallons(
+        self, params: HeaterParams
+    ) -> None:
+        book = full_tank_book(140.9, 140.0, params.book_terms())
+        gal = {
+            inlet: time_to_ready(
+                self._scenario(inlet), params, book=book
+            ).deliverable_gal
+            for inlet in (50.0, 72.4)
+        }
+        assert gal[50.0] < gal[72.4]
+        # Without one, the book's own inlet.
+        assert time_to_ready(
+            self._scenario(None), params, book=book
+        ).deliverable_gal == pytest.approx(
+            time_to_ready(
+                self._scenario(book.inlet_f), params, book=book
+            ).deliverable_gal
+        )
+
+    def test_the_delivered_water_follows_the_inlet(self) -> None:
+        from nwp500.sim import Draw, DrawWindow, default_params
+
+        params = default_params()
+        book = full_tank_book(140.9, 140.0, params.book_terms())
+        loads = Loads(
+            draws=tuple(
+                Draw(at=at(1) + timedelta(minutes=i), gallons=2.5)
+                for i in range(16)
+            ),
+            windows=(
+                DrawWindow(
+                    start=at(1),
+                    end=at(1) + timedelta(minutes=20),
+                    expected_gal=40.0,
+                ),
+            ),
+        )
+
+        def coldest(inlet: float) -> float:
+            s = self._scenario(inlet).model_copy(update={"loads": loads})
+            window = simulate(s, params, book=book).windows[0]
+            assert window.delivery_min_f is not None
+            return window.delivery_min_f
+
+        assert coldest(40.0) < coldest(72.4)
+
+
+class TestHeaterOnlyReadiness:
+    """With the default parameters (no evidence) and no book."""
+
+    def _ready(self, upper: float, lower: float, code: int = 2) -> Any:
+        from nwp500.sim import HeaterState, default_params
+
+        return time_to_ready(
+            _scenario(state=HeaterState(upper_f=upper, lower_f=lower)),
+            default_params(code),
+        )
+
+    def test_a_uniform_tank_reads_from_its_probes(self) -> None:
+        for code in (1, 2, 3):
+            r = self._ready(140.9, 140.0, code)
+            assert r.deliverable_gal > 0.0
+            assert "no_evidence_for_state" not in r.reasons
+
+    def test_bigger_tanks_hold_more(self) -> None:
+        gal = [
+            self._ready(140.9, 140.0, code).deliverable_gal
+            for code in (1, 2, 3)
+        ]
+        assert gal[0] < gal[1] < gal[2]
+
+    def test_a_stratified_tank_is_unknown_not_empty(self) -> None:
+        r = self._ready(140.0, 125.0)
+        assert r.deliverable_gal == 0.0
+        assert "no_evidence_for_state" in r.reasons
+        assert "colder_than_all_evidence" not in r.reasons
+
+
+class TestTheSecondReview:
+    def test_a_scenario_inlet_is_modelled_unless_said_measured(
+        self, params: HeaterParams
+    ) -> None:
+        from nwp500.sim import Environment, HeaterState
+
+        book = replace(
+            full_tank_book(140.9, 140.0, params.book_terms()),
+            inlet_measured_share=1.0,
+        )
+        state = HeaterState(upper_f=140.9, lower_f=140.0)
+        own = time_to_ready(_scenario(state=state), params, book=book)
+        assert "inlet_temp_modelled" not in own.reasons
+        given = _scenario(
+            state=state, environment=Environment(ambient_f=65.0, inlet_f=55.0)
+        )
+        assert (
+            "inlet_temp_modelled"
+            in time_to_ready(given, params, book=book).reasons
+        )
+        assert (
+            "inlet_temp_modelled"
+            not in time_to_ready(
+                given, params, book=book, inlet_measured=True
+            ).reasons
+        )
+
+    def test_the_uniform_edge_is_within_probe_resolution(self) -> None:
+        from nwp500.sim import HeaterState, default_params
+
+        # 1 °F apart, inside the 1.5 °F band; opposing 1 °F errors put
+        # it outside, where the gallons are unknown.
+        r = time_to_ready(
+            _scenario(state=HeaterState(upper_f=130.0, lower_f=129.0)),
+            default_params(),
+            bath_gal=5.0,
+        )
+        assert r.bath.ready
+        assert "bath_ready_within_probe_resolution" in r.reasons

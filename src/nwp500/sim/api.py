@@ -170,6 +170,19 @@ def _ambient_frame(
     return pd.DataFrame({"ambient_f": values}, index=stamps)
 
 
+def _at_the_inlet(
+    book: Booked | None, environment: Environment
+) -> Booked | None:
+    """``book`` converting heat to gallons at the scenario's inlet
+    (``Environment.inlet_f``) where one is given, as the walk's draws
+    take it (``cold_supply.on_the_mains`` for a plateau): the book's own
+    inlet is a probe's median over hours, which at rest reads the air
+    around the pipe."""
+    if book is None or environment.inlet_f is None:
+        return book
+    return dataclasses.replace(book, inlet_f=environment.inlet_f)
+
+
 #: No usable air reading was given: the answer ran at the default air.
 AMBIENT_DEFAULTED = "ambient_defaulted"
 
@@ -455,6 +468,7 @@ def simulate(
     s = scenario
     _check_setpoints(s)
     _check_draws(params, [*s.loads.draws, *lead_draws])
+    book = _at_the_inlet(book, s.environment)
     tz = ZoneInfo(s.tz)
     reasons: list[str] = []
     defaults: list[str] = []
@@ -1391,6 +1405,7 @@ def time_to_ready(
     """
     s = scenario
     p = params.readiness
+    book = _at_the_inlet(book, s.environment)
     defaults: list[str] = []
     bath_source: Literal["configured", "request"] = "request"
     if bath_gal is None:
@@ -1451,7 +1466,13 @@ def time_to_ready(
         booked=book,
         inlet_measured=book is not None
         and (
-            inlet_measured or book.inlet_measured_share >= INLET_MEASURED_SHARE
+            inlet_measured
+            # The book's own measured share, only while its own inlet
+            # converts: a scenario's inlet replaces it (``_at_the_inlet``).
+            or (
+                s.environment.inlet_f is None
+                and book.inlet_measured_share >= INLET_MEASURED_SHARE
+            )
         ),
         params=p,
         element_params=params.element,

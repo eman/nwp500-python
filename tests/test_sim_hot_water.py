@@ -270,13 +270,21 @@ class TestReadiness:
             Settings(setpoint_f=140.9),
             _no_evidence(params),
         )
-        assert d.gal == 0.0 and d.colder_than_evidence
+        # Unknown with no evidence, not none.
+        assert d.gal == 0.0 and d.no_evidence and not d.colder_than_evidence
 
     def test_any_other_state_needs_evidence(self, params: HeaterParams) -> None:
         state = HeaterState(upper_f=135.86, lower_f=135.5)
         settings = Settings(setpoint_f=140.9)
         bare = _no_evidence(params)
-        assert readiness(state, settings, bare).gal == 0.0
+        # With no evidence, a uniform tank reads from its probes, as the
+        # book's anchor does; a stratified one is unknown.
+        uniform = readiness(state, settings, bare)
+        assert uniform.basis == "probes" and uniform.gal > 0.0
+        drawn = readiness(
+            HeaterState(upper_f=135.86, lower_f=120.0), settings, bare
+        )
+        assert drawn.gal == 0.0 and drawn.no_evidence
         given = replace(bare, readiness=with_example_evidence(bare.readiness))
         assert given == params
         assert readiness(state, settings, given).gal == pytest.approx(

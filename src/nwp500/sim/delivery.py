@@ -117,16 +117,22 @@ def full_tank_floor_gal(
     ep: BookParams | None = None,
     *,
     heating: bool = False,
+    uniform: bool = False,
 ) -> float:
-    """A tank at its setpoint: the book's anchor heat at a 70 °F inlet,
-    less ``full_hidden_gal``; 0 for any other state, without a setpoint,
-    or while the heater runs (module docstring)."""
+    """A full tank: the book's anchor heat at a 70 °F inlet, less
+    ``full_hidden_gal``. Full is at its setpoint, or with ``uniform``
+    (no evidence to answer instead) both probes within the book's
+    ``uniform_band_f``, where two probes place the heat as the book's
+    anchor does. 0 for any other state, or while the heater runs
+    (module docstring)."""
     p = p or ReadinessParams()
     ep = ep or BookParams()
-    if (
-        heating
-        or setpoint_f is None
-        or min(upper_f, lower_f) < setpoint_f - p.full_setpoint_band_f
+    at_setpoint = (
+        setpoint_f is not None
+        and min(upper_f, lower_f) >= setpoint_f - p.full_setpoint_band_f
+    )
+    if heating or not (
+        at_setpoint or (uniform and abs(upper_f - lower_f) <= ep.uniform_band_f)
     ):
         return 0.0
     inlet = ep.inlet_default_f
@@ -141,14 +147,18 @@ class Deliverable:
 
     gal: float
     #: ``energy`` when the tank's booked heat answered (``sim.book``),
-    #: ``evidence`` when there was none to book from.
-    basis: Literal["energy", "evidence"]
+    #: ``evidence`` when there was none to book from, ``probes`` when
+    #: there was no evidence either and the full-tank floor answered.
+    basis: Literal["energy", "evidence", "probes"]
     thermocline_unlocated: bool
     #: Evidence basis only: the evidence's largest volume (not when the
     #: full-tank floor answered above it), and a tank cooler than every
     #: evidence draw, or with no evidence at all (0 for want of it).
     at_observed_max: bool
     colder_than_evidence: bool
+    #: With no evidence at all and a tank the floor can't read (not
+    #: full): the gallons are unknown, not none, and read 0.
+    no_evidence: bool = False
 
 
 def delivered_gal(
@@ -201,14 +211,20 @@ def deliverable(
             ep,
         )
         gal = delivered_gal(probe, upper_f, p)
-        basis: Literal["energy", "evidence"] = "energy"
+        basis: Literal["energy", "evidence", "probes"] = "energy"
     elif upper_f < p.line_f:
         gal = 0.0
         basis = "evidence"
     else:
         demonstrated = demonstrated_gal(upper_f, lower_f, p.evidence)
         floor = full_tank_floor_gal(
-            upper_f, lower_f, setpoint_f, p, ep, heating=heating
+            upper_f,
+            lower_f,
+            setpoint_f,
+            p,
+            ep,
+            heating=heating,
+            uniform=not p.evidence,
         )
         probe = max(demonstrated, floor)
         if unlocated:
@@ -219,8 +235,9 @@ def deliverable(
         # lifted back over the line (2026-04-14 04:02: an upper element
         # on a spent top), so it answers 0, as the reason says.
         gal = delivered_gal(probe, upper_f, p) if probe > 0.0 else 0.0
-        basis = "evidence"
+        basis = "evidence" if p.evidence else "probes"
     evidence = basis == "evidence"
+    unknown = basis == "probes" and probe == 0.0
     return Deliverable(
         gal=round(gal, 1),
         basis=basis,
@@ -234,6 +251,7 @@ def deliverable(
         colder_than_evidence=(
             evidence and upper_f >= p.line_f and max(demonstrated, floor) == 0.0
         ),
+        no_evidence=unknown,
     )
 
 

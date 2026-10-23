@@ -635,11 +635,14 @@ NWP500-65's installation; measure your own where you can.
      - 2.0 degF
      - Both probes this close to the setpoint, or above it, is a tank
        the heater has brought to its target: it has the full-tank floor.
+       With no evidence, a tank whose probes are within the book's
+       ``uniform_band_f`` of each other has it too, at any temperature.
    * - ``full_hidden_gal``
      - 13.5 gal
      - What the full-tank floor takes off for cold water from earlier
        draws hiding under a lower probe that reads full: the most a book
-       found, over 2,505 samples with the setpoint near 141 degF.
+       found, over 2,505 samples with the setpoint near 141 degF, on a
+       65 gal tank. The 50 and 80 gal defaults scale it by size.
    * - ``dip_f``, ``dip_min``
      - 3.4 degF, 3.0 min
      - The transient dip during a draw that is not running out: a
@@ -971,6 +974,10 @@ The ones about inputs and parameters:
        meter. The readiness answer says the first two, whether or not a
        recovery was needed; any answer with draws, the third. Fit them and drop each from
        ``HeaterParams.unfitted``.
+   * - ``no_evidence_for_state``
+     - No book, no evidence, and a tank that isn't full or uniform: two
+       probes can't place the heat in a stratified tank, so the
+       deliverable gallons are unknown, not none, and read 0.
    * - ``ambient_defaulted``
      - No usable air reading was given (``Environment.ambient_f`` missing,
        or its readings all missing), so the answer ran at the default
