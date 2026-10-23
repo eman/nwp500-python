@@ -76,6 +76,7 @@ def history(
     run_every: int = 1,
     runs_in: int | None = None,
     run_min: int | None = None,
+    same: bool = False,
 ) -> dict[str, Any]:
     """A history of ``cycles`` six-hour cycles walked by the book's own
     balance (``truth``, else ``params``' book), each run taking its
@@ -87,6 +88,8 @@ def history(
     the compressor's hours."""
 
     def runs_to(cycle: int) -> int:
+        if same:
+            return RUN[1]
         if run_min is not None:
             return RUN[0] + run_min
         if tied:
@@ -94,6 +97,8 @@ def history(
         return run_end(cycle)
 
     def recovers_to(cycle: int) -> int:
+        if same:
+            return RECOVERY[1]
         if tied:
             return RECOVERY[1] + 20 * (cycle % 2)
         return recovery_end(cycle)
@@ -746,3 +751,12 @@ def test_a_long_run_outside_the_pairs_is_no_support() -> None:
     got = fit(SITE, h)
     assert got.book_circuit_gal == SITE_CIRCULATION.book_circuit_gal
     assert "past the most a run circulated" in got.why
+
+
+def test_the_same_cycle_every_time_is_no_fit() -> None:
+    """Every cycle the same run after the same recovery, at one air:
+    the heat rate can take up any volume, so none is fitted."""
+    h = history(SITE, 16, CIRCUIT, same=True, air_f=AIR_F)
+    got = fit(SITE, h)
+    assert got.book_circuit_gal == SITE_CIRCULATION.book_circuit_gal
+    assert "can't be told from the book's terms" in got.why

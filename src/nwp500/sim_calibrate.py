@@ -1715,6 +1715,24 @@ def fit_book(
                     f"the book's circuit volume {circuit:.4g} gal is past the "
                     f"most a run circulated ({most:.4g} gal): not a fit"
                 )
+            # And what the volume moves, the book's terms must not make
+            # (the same runs after the same recoveries, say): else the
+            # heat rate could take up any volume.
+            step = max(1e-3, 0.01 * circuit)
+            k_up, x_at = system(train, circuit + step)
+            k_down, _ = system(train, max(lo, circuit - step))
+            moves = (k_up - k_down) / (circuit + step - max(lo, circuit - step))
+            _, free_at, _ = solve(circuit)
+            cols = np.column_stack([x_at[:, free_at], moves])
+            norms = np.linalg.norm(cols, axis=0)
+            if (
+                np.any(norms <= 1e-9)
+                or np.linalg.matrix_rank(cols / norms, tol=1e-6) < cols.shape[1]
+            ):
+                return (
+                    "the book's circuit volume can't be told from the book's "
+                    "terms on these pairs, not a fit"
+                )
         got, free, _ = solve(circuit)
         by_book: dict[int, list[tuple[int, int]]] = {}
         for _, i, pair, *_ in held:
