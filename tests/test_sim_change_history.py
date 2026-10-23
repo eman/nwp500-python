@@ -691,6 +691,31 @@ class TestTheBookKeptCurrent:
         ) in got.notes
         assert not any("heater's own" in n for n in default.notes)
 
+    def test_without_a_settled_reading_it_says_the_default(self) -> None:
+        from dataclasses import replace
+
+        heater = replace(BOOK_HEATER, ambient="sensor.heater_air")
+        # Its first reading after the only run: none while it ran.
+        rows = [
+            *_book_rows(),
+            _row("sensor.heater_air", END - 3 * H, "80.0", "°F"),
+        ]
+        units = BOOK_UNITS | {"sensor.heater_air": "°F"}
+        keeper = ha.HomeAssistantBook(
+            cast(ha.HomeAssistantClient, WindowedClient(rows, units)),
+            heater,
+            FLOW,
+            ha.Entities(),
+        )
+        asyncio.run(keeper.read(END))
+        got = keeper.book(END, self.P)
+        assert got.booked is not None
+        assert not any("is the heater's own" in n for n in got.notes)
+        assert (
+            "book: the heater's air not read while its compressor ran 5 "
+            "minutes: the air is the default, 65 °F"
+        ) in got.notes
+
     def test_later_reads_ask_only_for_what_is_new(self) -> None:
         once = WindowedClient(_book_rows(), BOOK_UNITS)
         whole = _keeper(once)

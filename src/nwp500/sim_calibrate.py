@@ -883,19 +883,19 @@ def _air_between_runs(
     index = cast("pd.DatetimeIndex", frame.index)
     at = [cast(datetime, t) for t in index]
     on = frame["compressor_on"].fillna(False).to_numpy(dtype=bool)
+    # A run's clock restarts after a span not recorded: its first
+    # minutes, whose air reads warm, may have passed there.
+    for column in ("excluded", "heater_unobserved"):
+        if column in frame.columns:
+            on = on & ~frame[column].fillna(False).to_numpy(dtype=bool)
     air = frame["heater_air_f"].to_numpy(dtype=float)
-    times: list[float] = []
-    values: list[float] = []
-    since: datetime | None = None
-    for t, run, v in zip(at, on, air, strict=True):
-        since = (since or t) if run else None
-        if (
-            since is not None
-            and t - since >= sa.HEATER_AIR_SETTLE
-            and math.isfinite(v)
-        ):
-            times.append(t.timestamp())
-            values.append(float(v))
+    settled = sa.settled_air(
+        [(t, bool(v)) for t, v in zip(at, on, strict=True)],
+        [(t, float(v)) for t, v in zip(at, air, strict=True)],
+        until=at[-1],
+    )
+    times = [t.timestamp() for t, _ in settled]
+    values = [v for _, v in settled]
     if not times:
         return None
     seconds = np.array([t.timestamp() for t in at])

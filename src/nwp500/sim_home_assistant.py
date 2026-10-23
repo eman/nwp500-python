@@ -46,7 +46,7 @@ from typing import Any, cast
 from nwp500 import sim_adapters as sa
 from nwp500.exceptions import Nwp500Error
 from nwp500.sim import Environment
-from nwp500.sim.book import Booked
+from nwp500.sim.book import AMBIENT_DEFAULT_F, Booked
 from nwp500.sim.cold_supply import ColdSupply, on_the_mains
 from nwp500.sim.location_air import (
     FIT_LAGS_H,
@@ -2400,9 +2400,19 @@ class HomeAssistantBook:
             notes.append(f"book: {err}")
             return BookAnswer(None, False, tuple(notes))
         if not air and rows.rows.heater_air_f:
+            settled = sa.settled_air(
+                sa.compressor_changes(rows.rows),
+                rows.rows.heater_air_f,
+                until=at,
+                unheard=rows.rows.outages,
+            )
             notes.append(
                 "book: the air is the heater's own reading while its "
                 "compressor runs"
+                if settled
+                else "book: the heater's air not read while its compressor "
+                f"ran {sa.HEATER_AIR_SETTLE.total_seconds() / 60:g} "
+                f"minutes: the air is the default, {AMBIENT_DEFAULT_F:g} °F"
             )
         if booked is None:
             if any(a <= at <= b for a, b in flow_out):

@@ -20,7 +20,7 @@ Added
 - **The heater's own air in the book** (#236). With no air reading,
   ``book_from_history``, ``book_from_changes`` and
   ``HomeAssistantBook`` take the heater's own air reading once its
-  compressor has run 5 minutes (``sim_adapters.running_air``,
+  compressor has run 5 minutes (``sim_adapters.settled_air``,
   ``HEATER_AIR_SETTLE``), held until the next run, rather than 65 °F
   throughout. ``HomeAssistantBook`` notes it.
 - **The standby loss from the heater's own air** (#236). With no air

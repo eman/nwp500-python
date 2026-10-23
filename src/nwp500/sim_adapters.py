@@ -1352,9 +1352,9 @@ class _Heater:
     compressor: list[bool]
     upper_element: list[bool]
     lower_element: list[bool]
-    #: The heater's own air reading (°F), running or idle; None without
-    #: one. The book reads it only while the compressor runs
-    #: (``running_air``).
+    #: The heater's own air (°F) as the book takes it without an air
+    #: reading: its settled readings while the compressor runs
+    #: (``settled_air``), each held until the next; None without them.
     air: list[float | None] | None = None
 
 
@@ -1365,26 +1365,89 @@ class _Heater:
 HEATER_AIR_SETTLE = timedelta(minutes=5)
 
 
-def running_air(
-    air: Sequence[float | None],
-    compressor: Sequence[bool],
-    step: timedelta,
-) -> list[float | None]:
-    """The air where the heater stands, on a grid of ``step``, from its
-    own reading (``air``): read once the compressor has run
-    ``HEATER_AIR_SETTLE``, when the evaporator fan draws that air past
-    the sensor, and held until the next such reading. Idle, the sensor
-    reads the cabinet, about 6 °F warm, so an idle reading is never
-    taken. None before the first."""
-    settle = math.ceil(HEATER_AIR_SETTLE / step)
-    out: list[float | None] = []
-    held: float | None = None
-    on_for = 0
-    for v, on in zip(air, compressor, strict=True):
-        on_for = on_for + 1 if on else 0
-        if on_for > settle and v is not None and math.isfinite(v):
-            held = v
-        out.append(held)
+def compressor_changes(rows: ChangeRows) -> list[tuple[datetime, bool]]:
+    """When the compressor ran, from ``rows``' flag, else its heat
+    source (as ``change_history`` takes it)."""
+    if rows.compressor_on:
+        return [(t, bool(v)) for t, v in rows.compressor_on]
+    pump = {int(HeatSource.HEATPUMP), int(HeatSource.HEATPUMP_HEATELEMENT)}
+    return [(t, v is not None and int(v) in pump) for t, v in rows.heat_source]
+
+
+def settled_air(
+    compressor: Iterable[tuple[datetime, bool]],
+    air: Iterable[tuple[datetime, float | None]],
+    *,
+    until: datetime,
+    unheard: Sequence[tuple[datetime, datetime]] = (),
+) -> list[tuple[datetime, float]]:
+    """The heater's own air readings that read the air around it, to
+    ``until``: once the compressor has run ``HEATER_AIR_SETTLE``, when
+    the evaporator fan draws that air past the sensor, the reading in
+    force then and each later one while it runs, each at its instant.
+    ``compressor`` and ``air`` are changes, each held until the next. A
+    run's clock restarts after a span the heater was ``unheard``: its
+    first minutes may have passed unrecorded. Idle, the sensor reads
+    the cabinet, about 6 °F warm, so no idle reading is taken."""
+    events: list[tuple[datetime, int, object]] = []
+    events += [(t.astimezone(UTC), 0, bool(v)) for t, v in compressor]
+    events += [(t.astimezone(UTC), 1, v) for t, v in air]
+    for a, b in unheard:
+        events += [(a.astimezone(UTC), 2, None), (b.astimezone(UTC), 3, None)]
+    events.sort(key=lambda e: (e[0], e[1]))
+    until = until.astimezone(UTC)
+    out: list[tuple[datetime, float]] = []
+    on, heard = False, True
+    value: float | None = None
+    since: datetime | None = None
+    due = False
+
+    def reading() -> float | None:
+        if value is None or not math.isfinite(value):
+            return None
+        return float(value)
+
+    def settle(by: datetime, *, at_end: bool = False) -> None:
+        # The reading in force when the run settled before ``by``; one
+        # that changes at that instant takes its place.
+        nonlocal due
+        if (
+            due
+            and since is not None
+            and (
+                since + HEATER_AIR_SETTLE < by
+                or (at_end and since + HEATER_AIR_SETTLE <= by)
+            )
+        ):
+            v = reading()
+            if v is not None:
+                out.append((since + HEATER_AIR_SETTLE, v))
+            due = False
+
+    for t, kind, v in events:
+        if t > until:
+            break
+        settle(t)
+        if kind == 0:
+            if bool(v) and not on and heard:
+                since, due = t, True
+            elif not v:
+                since, due = None, False
+            on = bool(v)
+        elif kind == 1:
+            value = None if v is None else float(cast(float, v))
+            if since is not None and t - since >= HEATER_AIR_SETTLE:
+                due = False
+                r = reading()
+                if r is not None:
+                    out.append((t, r))
+        elif kind == 2:
+            heard, since, due = False, None, False
+        else:
+            heard = True
+            if on:
+                since, due = t, True
+    settle(until, at_end=True)
     return out
 
 
@@ -1450,7 +1513,7 @@ def book_steps_from_history(
     meter's ``flow`` and ``circulation_flow`` held ``FLOW_HOLD``, 0
     past it; ``inlet`` (a probe) held ``INLET_HOLD``; ``air`` held
     until the next. Without an ``air`` reading, the air is the heater's
-    own while its compressor runs (``running_air``), and the book's
+    own while its compressor runs (``settled_air``), and the book's
     default before the first. Flows are per minute and temperatures in
     the preferred units.
 
@@ -1472,6 +1535,8 @@ def book_steps_from_history(
         return [
             bool(v) for v in _held(of(lambda s: float(bool(f(s)))), grid, None)
         ]
+
+    instants = [t for t, _ in statuses]
 
     heater = _Heater(
         upper=_held(
@@ -1496,7 +1561,18 @@ def book_steps_from_history(
         upper_element=flag(lambda s: s.heat_upper_use),
         lower_element=flag(lambda s: s.heat_lower_use),
         air=_held(
-            of(lambda s: _from_device(DeciCelsius(s.ambient_temperature_raw))),
+            settled_air(
+                [(t, bool(s.comp_use)) for t, s in statuses],
+                of(
+                    lambda s: _from_device(
+                        DeciCelsius(s.ambient_temperature_raw)
+                    )
+                ),
+                until=end,
+                unheard=silences(instants, max_gap(instants))
+                if instants
+                else (),
+            ),
             grid,
             None,
         ),
@@ -1527,6 +1603,7 @@ def book_steps_from_changes(
     params: HeaterParams | None = None,
     inlet_outages: Iterable[tuple[datetime, datetime]] = (),
     air_outages: Iterable[tuple[datetime, datetime]] = (),
+    unheard: Sequence[tuple[datetime, datetime]] = (),
 ) -> list[BookStep]:
     """``book_steps_from_history`` from a heater's values' changes
     (``ChangeRows``) instead of its statuses: each value held until its
@@ -1538,7 +1615,8 @@ def book_steps_from_changes(
     Without a compressor flag, the heat source says when the compressor
     runs, and it adds to the elements' flags, as in
     ``change_history``. Whether the heater was heard from over the span
-    is the caller's (``book_from_changes``)."""
+    is the caller's (``book_from_changes``); ``unheard``, the spans it
+    was not, restart a run's clock for its air (``settled_air``)."""
     grid = _book_grid(start, end)
 
     def held(changes: Changes) -> list[Any]:
@@ -1577,7 +1655,20 @@ def book_steps_from_changes(
             for a, v in zip(flag(rows.upper_element_on), source, strict=True)
         ],
         lower_element=flag(rows.lower_element_on),
-        air=probe(rows.heater_air_f) if rows.heater_air_f else None,
+        air=(
+            _held(
+                settled_air(
+                    compressor_changes(rows),
+                    rows.heater_air_f,
+                    until=end,
+                    unheard=unheard,
+                ),
+                grid,
+                None,
+            )
+            if rows.heater_air_f
+            else None
+        ),
     )
     return _book_steps_on(
         grid,
@@ -1665,9 +1756,7 @@ def _book_steps_on(
     airs = series(air, _to_sim)
     if not airs and heater.air is not None:
         # No air reading: the heater's own while its compressor runs.
-        amb = running_air(
-            heater.air, heater.compressor, timedelta(seconds=BOOK_GRID_S)
-        )
+        amb = heater.air
     else:
         # Unknown, the air is the default, not the last reading held.
         amb = _unknown_in(_held(airs, grid, None), grid, air_unknown)
@@ -1804,7 +1893,7 @@ def book_from_changes(
     each was unknown (``History.outages``). A flow unknown is as a heater
     unheard: no anchor before it counts. An air unknown is
     ``AMBIENT_DEFAULT_F``. With no ``air`` reading at all, the air is the
-    heater's own while its compressor runs (``running_air``, from the
+    heater's own while its compressor runs (``settled_air``, from the
     rows' ``heater_air_f``). No anchor before the
     flow's first reading counts either; a ValueError with no flow
     reading at all.
@@ -1871,6 +1960,7 @@ def book_from_changes(
             params=params,
             inlet_outages=inlet_unknown,
             air_outages=air_unknown,
+            unheard=[*unseen, *rows.outages],
         ),
         flows,
         params,

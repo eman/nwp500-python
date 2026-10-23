@@ -679,15 +679,34 @@ class TestHeardSpans:
 
 class TestTheHeatersOwnAir:
     def test_it_reads_only_after_the_run_settles(self) -> None:
-        step = timedelta(seconds=10)
-        # Idle at 80, then a 10 min run: 70 for its first 5, 50 after.
-        air = [80.0] * 6 + [70.0] * 30 + [50.0] * 30 + [80.0] * 6
-        comp = [False] * 6 + [True] * 60 + [False] * 6
-        got = sa.running_air(air, comp, step)
-        assert got[:36] == [None] * 36
-        assert got[37:66] == [50.0] * 29
-        # Held past the run, not the idle cabinet's.
-        assert got[66:] == [50.0] * 6
+        m = timedelta(minutes=1)
+        t0 = T0 - timedelta(hours=1)
+        compressor = [(t0, False), (t0 + 2 * m, True), (t0 + 12 * m, False)]
+        # Idle at 80, 70 for the run's first 5 minutes, 50 after.
+        air = [(t0, 80.0), (t0 + 2 * m, 70.0), (t0 + 7 * m, 50.0)]
+        air.append((t0 + 12 * m, 80.0))
+        got = sa.settled_air(compressor, air, until=T0)
+        assert got == [(t0 + 7 * m, 50.0)]
+
+    def test_the_reading_in_force_when_it_settles(self) -> None:
+        """A recorder of changes writes no row while the air holds."""
+        m = timedelta(minutes=1)
+        t0 = T0 - timedelta(hours=1)
+        compressor = [(t0, True), (t0 + 20 * m, False)]
+        got = sa.settled_air(compressor, [(t0, 55.0)], until=T0)
+        assert got == [(t0 + 5 * m, 55.0)]
+
+    def test_a_run_unheard_restarts_its_clock(self) -> None:
+        m = timedelta(minutes=1)
+        t0 = T0 - timedelta(hours=1)
+        compressor = [(t0, True), (t0 + 30 * m, False)]
+        air = [(t0, 70.0), (t0 + 6 * m, 60.0), (t0 + 9 * m, 52.0)]
+        # Unheard from 1 to 5 minutes into the run: heard again at 5, it
+        # settles at 10, not at 5.
+        got = sa.settled_air(
+            compressor, air, until=T0, unheard=[(t0 + m, t0 + 5 * m)]
+        )
+        assert got == [(t0 + 10 * m, 52.0)]
 
     def _readings(
         self, device_status_dict: dict[str, Any], hours: float
@@ -739,3 +758,21 @@ class TestTheHeatersOwnAir:
         changed = sa.book_from_changes(rows, observed, p, at=T0, flow=flow)
         assert changed is not None
         assert changed.heat_btu == pytest.approx(own.heat_btu)
+
+    def test_a_run_before_the_window_still_gives_its_air(
+        self, device_status_dict: dict[str, Any]
+    ) -> None:
+        """The run ends 4 h before ``T0``: a window from 3 h holds its
+        air, not the default."""
+        readings = self._readings(device_status_dict, 20)
+        start = T0 - timedelta(hours=3)
+        flow = meter(20)
+        steps = sa.book_steps_from_history(
+            readings, start=start, end=T0, flow=flow
+        )
+        assert {s.ambient_f for s in steps} == {50.0}
+        rows, _ = as_changes(readings)
+        changed = sa.book_steps_from_changes(
+            rows, start=start, end=T0, flow=flow
+        )
+        assert {s.ambient_f for s in changed} == {50.0}

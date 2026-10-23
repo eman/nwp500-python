@@ -1488,3 +1488,17 @@ class TestStandbyOnTheHeatersAir:
             "no quiet window has a run within 6 h of both ends" in w
             for w in why.values()
         )
+
+    def test_a_run_heard_again_partway_settles_from_then(self) -> None:
+        frame = recovery_days(3).drop(columns=["air_f"])
+        on = frame["compressor_on"].to_numpy(dtype=bool)
+        starts = np.flatnonzero(on & ~np.roll(on, 1))
+        excluded = frame.columns.get_loc("excluded")
+        air = frame.columns.get_loc("heater_air_f")
+        for i in starts:
+            # Unrecorded for the run's first 3 minutes, then its startup
+            # air, warm, for 4 more.
+            frame.iloc[i : i + 3, excluded] = True
+            frame.iloc[i + 3 : i + 7, air] = 95.0
+        assert sc._air_between_runs(frame) is not None
+        assert frame["air_f"].max() < 90.0
