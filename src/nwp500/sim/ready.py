@@ -396,14 +396,18 @@ def _flips_within_resolution(
     p: ReadinessParams,
     score: Scorer,
 ) -> bool:
-    """Whether a probe error of ``probe_resolution_f`` either way would
-    flip ``bath.ready``: near an evidence step, or near the cold-lower
-    cap, less than the probe can resolve decides the answer."""
+    """Whether a probe error of ``probe_resolution_f`` either way, on
+    each probe on its own, would flip ``bath.ready``: near an evidence
+    step, near the cold-lower cap, or near the edge of a uniform tank
+    (``delivery.full_tank_floor_gal``), less than the probe can resolve
+    decides the answer."""
     r = p.probe_resolution_f
-    for shift in (-r, r):
+    for up, low in itertools.product((-r, 0.0, r), repeat=2):
+        if up == low == 0.0:
+            continue
         other = score(
-            tank.upper_f + shift,
-            tank.lower_f + shift,
+            tank.upper_f + up,
+            tank.lower_f + low,
             NOTHING_ADDED,
             tank.heating,
         )

@@ -859,3 +859,44 @@ class TestHeaterOnlyReadiness:
         assert r.deliverable_gal == 0.0
         assert "no_evidence_for_state" in r.reasons
         assert "colder_than_all_evidence" not in r.reasons
+
+
+class TestTheSecondReview:
+    def test_a_scenario_inlet_is_modelled_unless_said_measured(
+        self, params: HeaterParams
+    ) -> None:
+        from nwp500.sim import Environment, HeaterState
+
+        book = replace(
+            full_tank_book(140.9, 140.0, params.book_terms()),
+            inlet_measured_share=1.0,
+        )
+        state = HeaterState(upper_f=140.9, lower_f=140.0)
+        own = time_to_ready(_scenario(state=state), params, book=book)
+        assert "inlet_temp_modelled" not in own.reasons
+        given = _scenario(
+            state=state, environment=Environment(ambient_f=65.0, inlet_f=55.0)
+        )
+        assert (
+            "inlet_temp_modelled"
+            in time_to_ready(given, params, book=book).reasons
+        )
+        assert (
+            "inlet_temp_modelled"
+            not in time_to_ready(
+                given, params, book=book, inlet_measured=True
+            ).reasons
+        )
+
+    def test_the_uniform_edge_is_within_probe_resolution(self) -> None:
+        from nwp500.sim import HeaterState, default_params
+
+        # 1 °F apart, inside the 1.5 °F band; opposing 1 °F errors put
+        # it outside, where the gallons are unknown.
+        r = time_to_ready(
+            _scenario(state=HeaterState(upper_f=130.0, lower_f=129.0)),
+            default_params(),
+            bath_gal=5.0,
+        )
+        assert r.bath.ready
+        assert "bath_ready_within_probe_resolution" in r.reasons

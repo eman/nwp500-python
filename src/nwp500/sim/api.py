@@ -1466,7 +1466,13 @@ def time_to_ready(
         booked=book,
         inlet_measured=book is not None
         and (
-            inlet_measured or book.inlet_measured_share >= INLET_MEASURED_SHARE
+            inlet_measured
+            # The book's own measured share, only while its own inlet
+            # converts: a scenario's inlet replaces it (``_at_the_inlet``).
+            or (
+                s.environment.inlet_f is None
+                and book.inlet_measured_share >= INLET_MEASURED_SHARE
+            )
         ),
         params=p,
         element_params=params.element,
