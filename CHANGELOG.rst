@@ -15,11 +15,11 @@ Added
   ``heater=`` the heater's own air reading while its compressor runs,
   against the weather entity's outdoor temperature, each reading from
   the unit it was recorded in (``HomeAssistantClient.outdoor_history``,
-  ``parse_outdoor_history``).
-  It projects the forecast through the fit when the readings span a
-  day and follow the outdoor air at r 0.5 or more, and keeps it as
-  ``fitted_air``. ``nwp-cli simulate --sources`` fits one the same way
-  when the sources file has no ``[location_air]``.
+  ``parse_outdoor_history``). It projects the forecast through the fit
+  when the readings the outdoor history covers span a day and follow
+  the outdoor air at r 0.5 or more, and keeps it as ``fitted_air``.
+  ``nwp-cli simulate --sources`` fits one the same way when the sources
+  file has no ``[location_air]``.
 
 Fixed
 -----
