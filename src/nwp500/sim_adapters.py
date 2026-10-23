@@ -739,8 +739,9 @@ def add_inputs(
     ``max_gap``: readings further apart than this are a span nobody
     observed (a recorder stopped and started again). The sample before
     such a span is marked water in use and excluded, so no quiet
-    window and no recovery spans it. Without it, every span between two
-    readings is taken as observed.
+    window and no recovery spans it, and ``unrecorded``, apart from the
+    other exclusions. Without it, every span between two readings is
+    taken as observed.
     """
     index = cast("pd.DatetimeIndex", frame.index)
     seconds = index.as_unit("ns").asi8 / 1e9
@@ -769,6 +770,7 @@ def add_inputs(
         for name in ("dhw_in_use", "drawing", "excluded"):
             if name in frame.columns:
                 frame[name] = frame[name].to_numpy(dtype=bool) | unobserved
+    frame["unrecorded"] = unobserved
     return frame
 
 
@@ -1619,8 +1621,10 @@ def book_steps_from_changes(
     runs, and it adds to the elements' flags, as in
     ``change_history``. Whether the heater was heard from over the span
     is the caller's (``book_from_changes``); ``unheard``, the spans it
-    was not, restart a run's clock for its air (``settled_air``)."""
+    was not, and ``rows.outages`` restart a run's clock for its air
+    (``settled_air``)."""
     grid = _book_grid(start, end)
+    unheard = [*unheard, *rows.outages]
 
     def held(changes: Changes) -> list[Any]:
         return _held(
@@ -1963,7 +1967,7 @@ def book_from_changes(
             params=params,
             inlet_outages=inlet_unknown,
             air_outages=air_unknown,
-            unheard=[*unseen, *rows.outages],
+            unheard=unseen,
         ),
         flows,
         params,

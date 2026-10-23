@@ -884,8 +884,10 @@ def _air_between_runs(
     at = [cast(datetime, t) for t in index]
     on = frame["compressor_on"].fillna(False).to_numpy(dtype=bool)
     # A run's clock restarts after a span not recorded: its first
-    # minutes, whose air reads warm, may have passed there.
-    for column in ("excluded", "heater_unobserved"):
+    # minutes, whose air reads warm, may have passed there. Only that:
+    # a run excluded from the recoveries (a hybrid mode) still reads the
+    # air.
+    for column in ("unrecorded", "heater_unobserved"):
         if column in frame.columns:
             on = on & ~frame[column].fillna(False).to_numpy(dtype=bool)
     air = frame["heater_air_f"].to_numpy(dtype=float)
@@ -1567,6 +1569,7 @@ def fit_book(
                 inlet=inlets,
                 air=airs,
                 params=with_terms,
+                unheard=silences(heard, max_gap(heard)),
             ),
             book_p,
             with_terms.circulation,

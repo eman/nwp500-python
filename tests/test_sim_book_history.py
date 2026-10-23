@@ -708,6 +708,23 @@ class TestTheHeatersOwnAir:
         )
         assert got == [(t0 + 10 * m, 52.0)]
 
+    def test_a_heater_outage_restarts_the_clock(self) -> None:
+        """A run across an outage of the heater's own record: from the
+        changes alone, its warm reading after the outage is no air."""
+        m = timedelta(minutes=1)
+        t0 = T0 - timedelta(hours=2)
+        rows = sa.ChangeRows(
+            upper_f=((t0, 140.0),),
+            lower_f=((t0, 139.0),),
+            compressor_on=((t0, 1.0), (t0 + 12 * m, 0.0)),
+            heater_air_f=((t0, 70.0), (t0 + 10 * m, 75.0)),
+            outages=((t0 + m, t0 + 10 * m),),
+        )
+        steps = sa.book_steps_from_changes(
+            rows, start=t0, end=T0, flow=[(t0, 0.0)]
+        )
+        assert {s.ambient_f for s in steps} == {65.0}
+
     def test_overlapping_unheard_spans_are_one(self) -> None:
         m = timedelta(minutes=1)
         t0 = T0 - timedelta(hours=1)

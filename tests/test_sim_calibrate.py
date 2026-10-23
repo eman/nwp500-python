@@ -1504,12 +1504,21 @@ class TestStandbyOnTheHeatersAir:
         frame = recovery_days(3).drop(columns=["air_f"])
         on = frame["compressor_on"].to_numpy(dtype=bool)
         starts = np.flatnonzero(on & ~np.roll(on, 1))
-        excluded = frame.columns.get_loc("excluded")
+        frame["unrecorded"] = False
+        unrecorded = frame.columns.get_loc("unrecorded")
         air = frame.columns.get_loc("heater_air_f")
         for i in starts:
             # Unrecorded for the run's first 3 minutes, then its startup
             # air, warm, for 4 more.
-            frame.iloc[i : i + 3, excluded] = True
+            frame.iloc[i : i + 3, unrecorded] = True
             frame.iloc[i + 3 : i + 7, air] = 95.0
         assert sc._air_between_runs(frame) is not None
         assert frame["air_f"].max() < 90.0
+
+    def test_a_run_excluded_from_the_recoveries_still_reads_it(self) -> None:
+        """A hybrid mode's samples are excluded from the recoveries, not
+        unrecorded: their runs still give the air."""
+        frame = recovery_days(6).drop(columns=["air_f"])
+        frame["excluded"] = True
+        done = sc._fit(frame, sim.default_params(), [], None, None, None, None)
+        assert done.air == "heater"
