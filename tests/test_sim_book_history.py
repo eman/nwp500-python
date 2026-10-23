@@ -608,3 +608,60 @@ class TestAHistoryKeptCurrent:
             (T0 + timedelta(minutes=15), T0 + timedelta(minutes=20))
         ]
         assert sa.spans_since(joined, T0 + timedelta(minutes=25)) == []
+
+
+class TestHeardSpans:
+    """A record with no instant per response says when the heater was
+    heard as spans (``heard=``)."""
+
+    H20 = T0 - timedelta(hours=20)
+
+    def test_one_span_books_as_the_instants_do(
+        self, heater: Callable[..., list[Any]]
+    ) -> None:
+        p = site_example_params()
+        rows, observed = as_changes(heater(20, recovery_at=4))
+        flow = with_a_draw(meter(20), 2.0)
+        want = sa.book_from_changes(rows, observed, p, at=T0, flow=flow)
+        got = sa.book_from_changes(
+            rows, [], p, at=T0, flow=flow, heard=[(self.H20, T0)]
+        )
+        assert want is not None and got is not None
+        assert got.heat_btu == pytest.approx(want.heat_btu)
+        assert got.anchor_age_h == pytest.approx(want.anchor_age_h)
+
+    def test_a_gap_between_spans_breaks_the_book(
+        self, heater: Callable[..., list[Any]]
+    ) -> None:
+        p = site_example_params()
+        rows, _ = as_changes(heater(20, recovery_at=4))
+        flow = with_a_draw(meter(20), 2.0)
+        # Unheard after the recovery's anchor: none before it counts.
+        gap = (T0 - timedelta(hours=3), T0 - timedelta(hours=2.5))
+        spans = [(self.H20, gap[0]), (gap[1], T0)]
+        assert (
+            sa.book_from_changes(rows, [], p, at=T0, flow=flow, heard=spans)
+            is None
+        )
+        # Touching spans are one.
+        whole = [(self.H20, gap[0]), (gap[0], T0)]
+        assert (
+            sa.book_from_changes(rows, [], p, at=T0, flow=flow, heard=whole)
+            is not None
+        )
+
+    def test_not_heard_at_the_instant_is_no_book(
+        self, heater: Callable[..., list[Any]]
+    ) -> None:
+        p = site_example_params()
+        rows, _ = as_changes(heater(20, recovery_at=4))
+        flow = with_a_draw(meter(20), 2.0)
+        early = [(self.H20, T0 - timedelta(minutes=1))]
+        assert (
+            sa.book_from_changes(rows, [], p, at=T0, flow=flow, heard=early)
+            is None
+        )
+        assert (
+            sa.book_from_changes(rows, [], p, at=T0, flow=flow, heard=[])
+            is None
+        )

@@ -7,6 +7,12 @@ Unreleased
 
 Added
 -----
+
+- **The heater's heard spans, given** (#230). ``book_from_changes``
+  takes ``heard=``, the spans the heater was heard over, for a record
+  that keeps no instant for each response. A gap between spans breaks
+  the book as a silence between instants does, and the heater is heard
+  at ``at`` only inside a span.
 - **The air fit carried across reads** (#221).
   ``sim_home_assistant.fit_location_air`` is the fit
   ``HomeAssistantEnvironment`` makes where it is given no model, with
