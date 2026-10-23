@@ -887,14 +887,19 @@ with the instants the heater was heard from:
        params,
        at=now,
        flow=draws_gpm,        # gal/min, whatever the preferred units
+       flow_outages=flow_down,  # when the flow entity was unavailable
    )
 
-Like the history's rows, its ``flow`` and ``circulation_flow`` are
-gal/min and its ``inlet`` and ``air`` °F, whatever the preferred units.
-A span the heater wasn't heard from (an outage, or a silence much
-longer than its usual reporting) breaks the book: it is walked only
-from an anchor after the last one, and is None while the heater isn't
-heard now.
+Like the history's rows, its ``flow``, ``circulation_flow``, ``inlet``
+and ``air`` are changes: each value holds until the next, so a steady
+draw is one row and an hour at 0 gal/min none. They are gal/min and °F,
+whatever the preferred units. A span the heater wasn't heard from (an
+outage, or a silence much longer than its usual reporting), or the flow
+was unknown (``flow_outages``, from the history's ``outages``), breaks
+the book: it is walked only from an anchor after the last one, and is
+None while the heater isn't heard now. With no flow reading in force
+at the start of the window it books over, it raises ``ValueError``.
+An inlet reading holds except through ``inlet_outages``.
 
 Without a meter, start one only when you know the tank is full and
 quiet (``sa.full_tank_book``).
