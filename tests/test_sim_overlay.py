@@ -203,3 +203,14 @@ class TestTheCabinetFlag:
         for s in (by_option, by_document):
             assert s.environment.ambient_f == same
             assert not s.environment.ambient_cabinet
+
+    def test_a_snapshot_keeps_its_own_flag(self) -> None:
+        """A document that gives the air with its source keeps it: a
+        snapshot of an idle heater replays as the cabinet's air."""
+        live = self._cabinet_live()
+        snapshot = scenario_to_document(live.scenario)
+        assert snapshot["scenario"]["environment"]["ambient_cabinet"] is True
+        replayed = sim_live.overlay(None, snapshot, now=NOW).scenario
+        assert replayed.environment.ambient_cabinet
+        over_live = sim_live.overlay(live, snapshot, now=NOW).scenario
+        assert over_live.environment.ambient_cabinet
