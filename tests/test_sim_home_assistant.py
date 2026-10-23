@@ -164,10 +164,19 @@ class TestPumpRuns:
         speed = [(_t(-10), 0.0), (_t(5), 2800.0), (_t(7), 2810.0), (_t(9), 0.0)]
         assert ha.pump_runs(speed, _t(0), _t(60)) == [(_t(5), _t(9))]
 
-    def test_a_silent_run_ends_after_five_minutes(self) -> None:
+    def test_a_steady_speed_holds_until_it_changes(self) -> None:
+        """A history of changes writes no row while the speed holds."""
+        speed = [(_t(-10), 0.0), (_t(5), 2800.0), (_t(50), 0.0)]
+        assert ha.pump_runs(speed, _t(0), _t(60)) == [(_t(5), _t(50))]
         assert ha.pump_runs([(_t(5), 2800.0)], _t(0), _t(60)) == [
-            (_t(5), _t(10))
+            (_t(5), _t(60))
         ]
+
+    def test_a_sampled_speed_silent_ends_after_stale(self) -> None:
+        got = ha.pump_runs(
+            [(_t(5), 2800.0)], _t(0), _t(60), stale=ha.PUMP_STALE
+        )
+        assert got == [(_t(5), _t(10))]
 
     def test_a_run_in_force_at_the_start(self) -> None:
         speed = [(_t(-1), 2800.0), (_t(2), 0.0)]
@@ -971,11 +980,14 @@ class TestTheSixthReview:
         on = datetime(2026, 11, 1, 1, 55, tzinfo=la)  # PDT
         off = datetime(2026, 11, 1, 1, 57, tzinfo=la, fold=1)  # PST, 62 min on
         start, end = on - timedelta(hours=1), off + timedelta(hours=1)
-        local = ha.pump_runs([(on, 1200.0), (off, 0.0)], start, end)
+        local = ha.pump_runs(
+            [(on, 1200.0), (off, 0.0)], start, end, stale=ha.PUMP_STALE
+        )
         utc = ha.pump_runs(
             [(on.astimezone(UTC), 1200.0), (off.astimezone(UTC), 0.0)],
             start.astimezone(UTC),
             end.astimezone(UTC),
+            stale=ha.PUMP_STALE,
         )
         assert local == utc
         ((a, b),) = local or []

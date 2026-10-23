@@ -69,7 +69,9 @@ Span = tuple[datetime, datetime]
 FRESH = timedelta(hours=1)
 #: A pump at or above this speed is running, rpm.
 PUMP_ON_RPM = 10.0
-#: A pump speed reading older than this is off.
+#: For a sampled speed (``pump_runs``' ``stale``): a run silent this
+#: long has ended. A history of changes writes no row for a steady
+#: speed, so its runs hold until the speed changes.
 PUMP_STALE = timedelta(seconds=300)
 #: How far back the inlet's plateau looks.
 INLET_LOOKBACK = timedelta(hours=72)
@@ -691,14 +693,17 @@ def pump_runs(
     end: datetime,
     *,
     on_rpm: float = PUMP_ON_RPM,
-    stale: timedelta = PUMP_STALE,
+    stale: timedelta | None = None,
 ) -> list[Span] | None:
     """The spans the pump ran from ``start`` to ``end``, from its speed
     (the reading in force at ``start`` first, as a history gives it): at
-    or above ``on_rpm`` is running, below is stopped, and a run silent
-    for longer than ``stale`` ended ``stale`` after its last reading.
-    None (unknown, not idle) when there is no reading at all. Instants
-    are read as UTC, so the silence holds across a change of clocks."""
+    or above ``on_rpm`` is running, below is stopped. Each speed holds
+    until the next, as a history of changes writes them; with ``stale``
+    (``PUMP_STALE`` for a sampled speed), a run silent for longer ended
+    ``stale`` after its last reading. The pump's outages are the
+    caller's. None (unknown, not idle) when there is no reading at all.
+    Instants are read as UTC, so a silence holds across a change of
+    clocks."""
     rows = sorted((t.astimezone(UTC), v) for t, v in speed)
     start, end = start.astimezone(UTC), end.astimezone(UTC)
     if not rows:
@@ -708,7 +713,9 @@ def pump_runs(
         if rpm < on_rpm:
             continue
         a = max(at, start)
-        b = min(at + stale, end) if nxt is None else min(nxt[0], at + stale)
+        b = end if nxt is None else nxt[0]
+        if stale is not None:
+            b = min(b, at + stale)
         b = min(b, end)
         if b > a:
             if runs and runs[-1][1] >= a:

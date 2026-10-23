@@ -551,13 +551,16 @@ NaN) is skipped, and the value before it holds; it doesn't count as the
 meter reporting.
 
 ``book_from_changes`` grids the changes the same way, each value held
-until its next change; without a compressor flag, the heat source says
-when the compressor runs. A value that holds writes no change, so only
-``observed`` says the heater was heard. A silence between those
-instants longer than ``max_gap`` of them (4 times their usual spacing,
-and at least 5 minutes), or one of ``rows.outages``, is a span nobody
-saw. The book is read only from after the last such span, and is None
-when the heater isn't heard at ``at``.
+until its next change, the flows, the inlet and the air too; without a
+compressor flag, the heat source says when the compressor runs. A value
+that holds writes no change, so only ``observed`` says the heater was
+heard. A silence between those instants longer than ``max_gap`` of them
+(4 times their usual spacing, and at least 5 minutes), one of
+``rows.outages``, or one of ``flow_outages`` is a span nobody saw. The
+book is read only from after the last such span, and is None when the
+heater isn't heard at ``at``. No flow reading in force at the start of
+the window it books over is a ``ValueError``. An inlet reading holds
+except through ``inlet_outages``.
 
 To build the steps yourself, pass them to ``book.book_steps``.
 ``BookStep.circulation_in_meter_gpm`` is
