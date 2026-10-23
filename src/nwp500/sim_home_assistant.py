@@ -2272,6 +2272,11 @@ class HomeAssistantBook:
                 air_out = busy(bad, got.outages.get(e.air, []), unseen)
             except ValueError as err:
                 notes.append(f"book: {e.air}: {err}")
+        if runs and params.circulation is None:
+            notes.append(
+                "book: the circulation's runs priced at one installation's "
+                "terms (CirculationParams)"
+            )
         try:
             booked = sa.book_from_changes(
                 rows.rows,

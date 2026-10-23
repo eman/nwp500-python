@@ -265,12 +265,8 @@ def _physics(
     frame = _ambient_frame(environment, start, until)
     flowing: CirculationDraws | None = None
     if circulation is not None:
-        terms = params.circulation
-        if terms is None:
-            raise ValueError(
-                "circulation runs need HeaterParams.circulation: what each "
-                "run displaces, its flow and the book's loss per gallon"
-            )
+        # Without terms of its own, the runs take one installation's.
+        terms = params.circulation or SITE_CIRCULATION
         if terms == SITE_CIRCULATION:
             defaults.append(
                 "circulation=one installation's (CirculationParams)"
@@ -526,7 +522,8 @@ def simulate(
     entries = _entries(s, tz, reasons)
     raw = _raw_writes(s, reasons)
     if ledger is None and book is not None:
-        terms = params.circulation
+        # As the walk's runs take them (``_physics``).
+        terms = params.circulation or SITE_CIRCULATION
         ledger = BookedHeatLedger(
             book,
             physics.ambient.at,
@@ -538,7 +535,7 @@ def simulate(
                 CirculationLoss(
                     circulation.runs, terms.flow_gpm, terms.loss_btu_per_gal
                 )
-                if circulation is not None and terms is not None
+                if circulation is not None
                 else None
             ),
         )

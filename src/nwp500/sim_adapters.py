@@ -95,6 +95,7 @@ from nwp500.sim import full_tank_book as sim_full_tank_book
 from nwp500.sim.book import AMBIENT_DEFAULT_F, book_steps
 from nwp500.sim.book import Step as BookStep
 from nwp500.sim.cold_supply import ColdSupply, ColdSupplyParams, plateau_t_cold
+from nwp500.sim.defaults import SITE_CIRCULATION
 from nwp500.sim.inputs import POWER_OFF, VACATION
 from nwp500.sim.location_air import (
     SITE_LOCATION_AIR,
@@ -1666,6 +1667,20 @@ def _book_steps_on(
     return steps
 
 
+def with_circulation_terms(
+    params: HeaterParams, runs: Sequence[tuple[datetime, datetime]]
+) -> HeaterParams:
+    """``params``, or with circulation runs to book and no circulation
+    terms, one installation's (``SITE_CIRCULATION``), with nothing of
+    the caller's flow taken as circulation (``meter_share`` 0): as the
+    walk prices runs, so that runs are never booked at no cost."""
+    if not runs or params.circulation is not None:
+        return params
+    return replace(
+        params, circulation=replace(SITE_CIRCULATION, meter_share=0.0)
+    )
+
+
 def book_from_history(
     readings: Iterable[tuple[datetime, DeviceStatus]],
     params: HeaterParams,
@@ -1698,6 +1713,7 @@ def book_from_history(
     # meter reporting.
     flows = sorted((t.astimezone(UTC), v) for t, v in _finite(flow))
     runs = list(circulation)
+    params = with_circulation_terms(params, runs)
     run_flow = list(circulation_flow)
     probe = list(inlet)
     airs = list(air)
@@ -1788,6 +1804,7 @@ def book_from_changes(
     # meter reporting.
     flows = sorted((t.astimezone(UTC), v) for t, v in _finite(flow))
     runs = list(circulation)
+    params = with_circulation_terms(params, runs)
     run_flow = list(circulation_flow)
     probe = list(inlet)
     airs = list(air)

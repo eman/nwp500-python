@@ -1116,3 +1116,44 @@ class TestTheBookEighthReview:
         client.fail = False
         asyncio.run(keeper.read(END))
         assert keeper.book(END, self.P).booked is not None
+
+
+class TestCirculationTermsDefaulted:
+    P = sim.default_params()
+
+    def test_runs_without_terms_are_priced_and_noted(self) -> None:
+        from dataclasses import replace
+
+        from nwp500.sim.defaults import SITE_CIRCULATION
+
+        assert self.P.circulation is None
+        rows = [
+            *[r for r in _book_rows() if r["entity_id"] != "sensor.pump"],
+            _row("sensor.pump", T0, "0", "rpm"),
+            _row(
+                "sensor.pump", END - 2 * H - timedelta(minutes=1), "2000", "rpm"
+            ),
+            _row("sensor.pump", END - H, "0", "rpm"),
+        ]
+
+        def book(p: Any) -> ha.BookAnswer:
+            keeper = _keeper(
+                WindowedClient(rows, BOOK_UNITS),
+                circulation_speed="sensor.pump",
+            )
+            asyncio.run(keeper.read(END))
+            return keeper.book(END, p)
+
+        bare = book(self.P)
+        site = book(
+            replace(
+                self.P, circulation=replace(SITE_CIRCULATION, meter_share=0.0)
+            )
+        )
+        assert bare.booked is not None and site.booked is not None
+        assert bare.booked.heat_btu == pytest.approx(site.booked.heat_btu)
+        assert any("one installation's terms" in n for n in bare.notes)
+        quiet = _keeper(WindowedClient(_book_rows(), BOOK_UNITS))
+        asyncio.run(quiet.read(END))
+        none = quiet.book(END, self.P).booked
+        assert none is not None and bare.booked.heat_btu < none.heat_btu

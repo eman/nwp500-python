@@ -197,11 +197,13 @@ class TestThroughTheAPI:
         joined = simulate(_scenario(loads=_loads(runs)), wide)
         assert joined.points[-1].lower_f > apart.points[-1].lower_f
 
-    def test_runs_need_the_installations_terms(
+    def test_runs_without_terms_take_the_example_terms(
         self, params: HeaterParams
     ) -> None:
-        with pytest.raises(ValueError, match=r"HeaterParams\.circulation"):
-            simulate(_scenario(), default_params())
+        """Params with no circulation terms price the runs at one
+        installation's and say so, rather than refusing."""
+        got = simulate(_scenario(), default_params())
+        assert any(d.startswith("circulation=") for d in got.defaults_used)
 
     def test_the_site_terms_are_named(self, params: HeaterParams) -> None:
         assert any(
