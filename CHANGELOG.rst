@@ -17,6 +17,36 @@ Added
   marks air taken from the heater's own reading while the compressor
   was idle, about 6 °F warm, and answers give the reason
   ``ambient_from_idle_cabinet``.
+- **The heater's own air in the book** (#236). With no air reading,
+  ``book_from_history``, ``book_from_changes`` and
+  ``HomeAssistantBook`` take the heater's own air reading once its
+  compressor has run 5 minutes (``sim_adapters.settled_air``,
+  ``HEATER_AIR_SETTLE``), held until the next run, rather than 65 °F
+  throughout. ``HomeAssistantBook`` notes it.
+- **The standby loss from the heater's own air** (#236). With no air
+  given, calibration fits the standby loss on the heater's own reading
+  once its compressor has run 5 minutes, interpolated from one run to
+  the next, over the quiet windows with a run within
+  ``HEATER_AIR_BRACKET`` (6 h) of both ends: the law's level only, on
+  the base's exponent. ``Calibrated.air`` is ``"heater"``, and a note
+  says how many windows qualified and their share of the quiet hours.
+  It was left unfitted. ``fit_ua_law``, ``fit_loss``, ``fit_standby``
+  and ``calibration.calibrate`` take a fixed exponent.
+- **The book prices a circulation run by a circuit volume.**
+  ``CirculationParams.book_circuit_gal``: with it, the heat book
+  charges a run its first gallons up to that volume, runs closer than
+  ``run_gap_min`` one run, each at the tank's upper probe less the air;
+  without it, ``loss_btu_per_gal`` per gallon as before. ``fit_book``
+  fits the volume in place of the loss per gallon (``book_circuit_gal``
+  on its result), and ``fit_book_terms`` with ``circuit=True``. At one
+  installation, over 284 re-anchors, the book's error on pairs with a
+  run fell 14 % against a refitted loss per gallon (1741 against 2023
+  BTU), and on held-out months from 3184 to 2454 BTU, the volume
+  steady at 1.1 to 1.5 gal where the loss per gallon moved from 59 to
+  120. It is an effective volume, apart from ``displaced_gal``.
+  ``SITE_CIRCULATION`` carries one installation's, and the book's
+  heat-pump rate and slope are refitted with it (4338 BTU/h, 66.0
+  BTU/h/°F; the UA stays 2.88).
 
 - **The heater's heard spans, given** (#230). ``book_from_changes``
   takes ``heard=``, the spans the heater was heard over, for a record
@@ -60,6 +90,11 @@ Added
 
 Changed
 -------
+
+- ``SITE_CIRCULATION.meter_share`` is 0. The book's flow is the
+  household's draws alone, which no circulation run passes, so the
+  example terms take nothing off it. A caller whose meter carries the
+  loop's water still sets its own share.
 
 - **Readiness with no evidence and no book** (#234). A tank whose probes
   are within the book's ``uniform_band_f`` reads its full-tank floor

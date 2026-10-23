@@ -466,7 +466,13 @@ nothing is charged.
      - The flow a run is priced at.
    * - ``loss_btu_per_gal``
      - The heat book's loss per gallon circulated while a run is on: the
-       pipe's own loss.
+       pipe's own loss. The book's form without ``book_circuit_gal``.
+   * - ``book_circuit_gal``
+     - The heat book's circuit volume: with it, a run costs the book its
+       first gallons up to this volume, each at the upper probe less the
+       air. An effective volume fitted on the book's re-anchors
+       (``fit_book``), smaller than ``displaced_gal``, and kept apart
+       from it.
    * - ``meter_share``
      - The share of a run's own flow a household flow meter also reads
        (default 0, a meter the circulation does not pass). A book from
@@ -481,13 +487,17 @@ Each run is a flowing draw of ``min(flow x minutes, displaced_gal)``
 gallons, its water returning at the air where the heater stands; runs
 closer than ``run_gap_min`` are one run, as ``displaced_gal`` was
 fitted.
-With a heat book, a run also costs the book ``loss_btu_per_gal`` per
-gallon circulated, and the book does not re-anchor across it.
+With a heat book, a run also costs the book its first
+``book_circuit_gal`` gallons, each at the tank's upper probe less the
+air (``loss_btu_per_gal`` per gallon circulated without it), and the
+book does not re-anchor across it. A projection takes the upper probe
+at the setpoint.
 ``DrawParams.lower_gate_f``, ``pool_f_per_hour`` and
 ``ungated_observability`` shape how the return reaches the lower probe;
 they act only with circulation. None of these has a default: they
 describe one installation's plumbing. ``site_example_params`` carries
-one installation's (6.2746 gal, 1.397 gal/min, 159 BTU/gal).
+one installation's (6.2746 gal, 1.397 gal/min, 159 BTU/gal, a 1.47 gal
+book circuit).
 
 
 The heat book: ``book``
@@ -908,11 +918,14 @@ the one seen over the retrains from 2026-08-08 to 2026-10-18.
        slow cooling of the water below it
        (:doc:`/explanation/standby-loss`).
    * - ``book.hp_btu_per_h``, ``book.hp_btu_per_h_per_f``, ``book.ua_btu_per_h_f``
-     - 4,252, 76.1, 2.88
-     - The book's heat-pump rate and standby, refitted on 2026-09-26 on
-       pairs of moments when the tank read full; against those anchors
-       its mean absolute error was 1,987 BTU, against 3,761 BTU with
-       textbook constants.
+     - 4,338, 66.0, 2.88
+     - The book's heat-pump rate and standby, refitted on 2026-10-23
+       with the circulation at a 1.47 gal circuit volume
+       (``CirculationParams.book_circuit_gal``), on 284 pairs of
+       moments when the tank read full from 2026-02-14, its air a room
+       sensor beside the heater; against those anchors its mean absolute
+       error was 2,207 BTU (2,403 with the loss per gallon). Fitted on
+       a 63.2 gal book (``book.tank_gal``).
    * - ``book.empty_btu``, ``book.zone_empty_btu``
      - 16,169, 12,636 BTU
      - The heat left at five recorded drawdowns to the line

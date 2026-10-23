@@ -94,6 +94,7 @@ from nwp500.sim import (
 from nwp500.sim import full_tank_book as sim_full_tank_book
 from nwp500.sim.book import AMBIENT_DEFAULT_F, book_steps
 from nwp500.sim.book import Step as BookStep
+from nwp500.sim.circulation import merge_runs
 from nwp500.sim.cold_supply import ColdSupply, ColdSupplyParams, plateau_t_cold
 from nwp500.sim.defaults import SITE_CIRCULATION
 from nwp500.sim.inputs import POWER_OFF, VACATION
@@ -104,6 +105,7 @@ from nwp500.sim.location_air import (
 from nwp500.sim.location_air import project as project_location_air
 from nwp500.sim.observed import Observed
 from nwp500.sim.observed import observe as observe_record
+from nwp500.sim.params import CirculationParams
 from nwp500.sim.profile import HeaterProfile
 from nwp500.sim.record import Record
 from nwp500.sim.schedules import weekly_runs
@@ -739,8 +741,9 @@ def add_inputs(
     ``max_gap``: readings further apart than this are a span nobody
     observed (a recorder stopped and started again). The sample before
     such a span is marked water in use and excluded, so no quiet
-    window and no recovery spans it. Without it, every span between two
-    readings is taken as observed.
+    window and no recovery spans it, and, with any such span,
+    ``unrecorded``, apart from the other exclusions. Without it, every
+    span between two readings is taken as observed.
     """
     index = cast("pd.DatetimeIndex", frame.index)
     seconds = index.as_unit("ns").asi8 / 1e9
@@ -769,6 +772,7 @@ def add_inputs(
         for name in ("dhw_in_use", "drawing", "excluded"):
             if name in frame.columns:
                 frame[name] = frame[name].to_numpy(dtype=bool) | unobserved
+        frame["unrecorded"] = unobserved
     return frame
 
 
@@ -1352,6 +1356,106 @@ class _Heater:
     compressor: list[bool]
     upper_element: list[bool]
     lower_element: list[bool]
+    #: The heater's own air (°F) as the book takes it without an air
+    #: reading: its settled readings while the compressor runs
+    #: (``settled_air``), each held until the next; None without them.
+    air: list[float | None] | None = None
+
+
+#: A run's first minutes, when the heater's own air reading is still
+#: warm: at one installation, against a sensor beside the heater, about
+#: 2.7 °F in the first 2 minutes and 1.4 °F from 2 to 5, then 0.2 to
+#: 0.8 °F (up to about 2 °F from May to July).
+HEATER_AIR_SETTLE = timedelta(minutes=5)
+
+
+def compressor_changes(rows: ChangeRows) -> list[tuple[datetime, bool]]:
+    """When the compressor ran, from ``rows``' flag, else its heat
+    source (as ``change_history`` takes it)."""
+    if rows.compressor_on:
+        return [(t, bool(v)) for t, v in rows.compressor_on]
+    pump = {int(HeatSource.HEATPUMP), int(HeatSource.HEATPUMP_HEATELEMENT)}
+    return [(t, v is not None and int(v) in pump) for t, v in rows.heat_source]
+
+
+def settled_air(
+    compressor: Iterable[tuple[datetime, bool]],
+    air: Iterable[tuple[datetime, float | None]],
+    *,
+    until: datetime,
+    unheard: Sequence[tuple[datetime, datetime]] = (),
+) -> list[tuple[datetime, float]]:
+    """The heater's own air readings that read the air around it, to
+    ``until``: once the compressor has run ``HEATER_AIR_SETTLE``, when
+    the evaporator fan draws that air past the sensor, the reading in
+    force then and each later one while it runs, each at its instant.
+    ``compressor`` and ``air`` are changes, each held until the next. A
+    run's clock restarts after a span the heater was ``unheard``: its
+    first minutes may have passed unrecorded. Idle, the sensor reads
+    the cabinet, about 6 °F warm, so no idle reading is taken."""
+    events: list[tuple[datetime, int, object]] = []
+    events += [(t.astimezone(UTC), 0, bool(v)) for t, v in compressor]
+    events += [(t.astimezone(UTC), 1, v) for t, v in air]
+    for a, b in unheard:
+        events += [(a.astimezone(UTC), 2, None), (b.astimezone(UTC), 3, None)]
+    events.sort(key=lambda e: (e[0], e[1]))
+    until = until.astimezone(UTC)
+    out: list[tuple[datetime, float]] = []
+    on = False
+    # Spans may overlap: heard again only once every one has ended.
+    deaf = 0
+    value: float | None = None
+    since: datetime | None = None
+    due = False
+
+    def reading() -> float | None:
+        if value is None or not math.isfinite(value):
+            return None
+        return float(value)
+
+    def settle(by: datetime, *, at_end: bool = False) -> None:
+        # The reading in force when the run settled before ``by``; one
+        # that changes at that instant takes its place.
+        nonlocal due
+        if (
+            due
+            and since is not None
+            and (
+                since + HEATER_AIR_SETTLE < by
+                or (at_end and since + HEATER_AIR_SETTLE <= by)
+            )
+        ):
+            v = reading()
+            if v is not None:
+                out.append((since + HEATER_AIR_SETTLE, v))
+            due = False
+
+    for t, kind, v in events:
+        if t > until:
+            break
+        settle(t)
+        if kind == 0:
+            if bool(v) and not on and not deaf:
+                since, due = t, True
+            elif not v:
+                since, due = None, False
+            on = bool(v)
+        elif kind == 1:
+            value = None if v is None else float(cast(float, v))
+            if since is not None and t - since >= HEATER_AIR_SETTLE:
+                due = False
+                r = reading()
+                if r is not None:
+                    out.append((t, r))
+        elif kind == 2:
+            deaf += 1
+            since, due = None, False
+        else:
+            deaf -= 1
+            if on and not deaf:
+                since, due = t, True
+    settle(until, at_end=True)
+    return out
 
 
 def run_flow(
@@ -1415,8 +1519,10 @@ def book_steps_from_history(
     compressor, either element) held until the next; the household
     meter's ``flow`` and ``circulation_flow`` held ``FLOW_HOLD``, 0
     past it; ``inlet`` (a probe) held ``INLET_HOLD``; ``air`` held
-    until the next (the book's default without it). Flows are per
-    minute and temperatures in the preferred units.
+    until the next. Without an ``air`` reading, the air is the heater's
+    own while its compressor runs (``settled_air``), and the book's
+    default before the first. Flows are per minute and temperatures in
+    the preferred units.
 
     A step inside a ``circulation`` run is circulating at its last flow
     reading, this run's or an earlier one's; with none yet, the meter's
@@ -1436,6 +1542,8 @@ def book_steps_from_history(
         return [
             bool(v) for v in _held(of(lambda s: float(bool(f(s)))), grid, None)
         ]
+
+    instants = [t for t, _ in statuses]
 
     heater = _Heater(
         upper=_held(
@@ -1459,6 +1567,22 @@ def book_steps_from_history(
         compressor=flag(lambda s: s.comp_use),
         upper_element=flag(lambda s: s.heat_upper_use),
         lower_element=flag(lambda s: s.heat_lower_use),
+        air=_held(
+            settled_air(
+                [(t, bool(s.comp_use)) for t, s in statuses],
+                of(
+                    lambda s: _from_device(
+                        DeciCelsius(s.ambient_temperature_raw)
+                    )
+                ),
+                until=end,
+                unheard=silences(instants, max_gap(instants))
+                if instants
+                else (),
+            ),
+            grid,
+            None,
+        ),
     )
     return _book_steps_on(
         grid,
@@ -1486,6 +1610,7 @@ def book_steps_from_changes(
     params: HeaterParams | None = None,
     inlet_outages: Iterable[tuple[datetime, datetime]] = (),
     air_outages: Iterable[tuple[datetime, datetime]] = (),
+    unheard: Sequence[tuple[datetime, datetime]] = (),
 ) -> list[BookStep]:
     """``book_steps_from_history`` from a heater's values' changes
     (``ChangeRows``) instead of its statuses: each value held until its
@@ -1497,8 +1622,11 @@ def book_steps_from_changes(
     Without a compressor flag, the heat source says when the compressor
     runs, and it adds to the elements' flags, as in
     ``change_history``. Whether the heater was heard from over the span
-    is the caller's (``book_from_changes``)."""
+    is the caller's (``book_from_changes``); ``unheard``, the spans it
+    was not, and ``rows.outages`` restart a run's clock for its air
+    (``settled_air``)."""
     grid = _book_grid(start, end)
+    unheard = [*unheard, *rows.outages]
 
     def held(changes: Changes) -> list[Any]:
         return _held(
@@ -1536,6 +1664,20 @@ def book_steps_from_changes(
             for a, v in zip(flag(rows.upper_element_on), source, strict=True)
         ],
         lower_element=flag(rows.lower_element_on),
+        air=(
+            _held(
+                settled_air(
+                    compressor_changes(rows),
+                    rows.heater_air_f,
+                    until=end,
+                    unheard=unheard,
+                ),
+                grid,
+                None,
+            )
+            if rows.heater_air_f
+            else None
+        ),
     )
     return _book_steps_on(
         grid,
@@ -1616,35 +1758,41 @@ def _book_steps_on(
         heater.upper_element,
         heater.lower_element,
     )
-    meter = _held(series(flow, _volume_to_sim), grid, flow_hold)
-    run_flow = _held(series(circulation_flow, _volume_to_sim), grid, flow_hold)
+    meters = series(flow, _volume_to_sim)
+    run_flows = series(circulation_flow, _volume_to_sim)
+    meter = _held(meters, grid, flow_hold)
     probe = _held(series(inlet, _to_sim), grid, inlet_hold)
     probe = _unknown_in(probe, grid, inlet_unknown)
-    # Unknown, the air is the default, not the last reading held.
-    amb = _unknown_in(
-        _held(series(air, _to_sim), grid, None), grid, air_unknown
-    )
+    airs = series(air, _to_sim)
+    if not airs and heater.air is not None:
+        # No air reading: the heater's own while its compressor runs.
+        amb = heater.air
+    else:
+        # Unknown, the air is the default, not the last reading held.
+        amb = _unknown_in(_held(airs, grid, None), grid, air_unknown)
     runs = sorted(
         (a.astimezone(UTC), b.astimezone(UTC)) for a, b in circulation
     )
+    # Runs closer than the gap are one run to the book's loop volume
+    # (``CirculationParams.book_circuit_gal``), as the walk takes them.
+    gap = timedelta(minutes=10.0 if terms is None else terms.run_gap_min)
+    joined = merge_runs(runs, gap)
+    on_col, gpm_col, before_col = _circulation_columns(
+        grid,
+        runs,
+        joined,
+        meters,
+        run_flows,
+        flow_hold,
+        terms,
+    )
     steps: list[BookStep] = []
-    settled: float | None = None
-    for i, at in enumerate(grid):
+    for i in range(len(grid)):
         u, lo, a_f, in_f = upper[i], lower[i], amb[i], probe[i]
         if u is None or lo is None:
             continue
         m = meter[i] or 0.0
-        on = any(a <= at < b for a, b in runs)
-        gpm = 0.0
-        if on:
-            if run_flow[i] is not None:
-                settled = run_flow[i]
-            if settled is not None:
-                gpm = settled
-            elif terms is not None and terms.meter_share > 0.0:
-                gpm = m / terms.meter_share
-            elif terms is not None:
-                gpm = terms.flow_gpm
+        on, gpm = on_col[i], gpm_col[i]
         steps.append(
             BookStep(
                 seconds=float(BOOK_GRID_S),
@@ -1659,23 +1807,94 @@ def _book_steps_on(
                 circulation_gpm=gpm,
                 inlet_measured=in_f is not None,
                 lower_element=bool(lo_el[i]),
+                run_gal_before=before_col[i],
             )
         )
     return steps
+
+
+def _circulation_columns(
+    grid: Sequence[datetime],
+    runs: Sequence[tuple[datetime, datetime]],
+    joined: Sequence[tuple[datetime, datetime]],
+    meters: Sequence[tuple[datetime, float]],
+    run_flows: Sequence[tuple[datetime, float]],
+    flow_hold: timedelta | None,
+    terms: CirculationParams | None,
+) -> tuple[list[bool], list[float], list[float]]:
+    """At each instant of ``grid``: whether a run is on, its flow, and
+    the gallons its group (``joined``) circulated before it. Walked from
+    the start of a group under way at the grid's start, whatever the
+    probes read, so a window booked from any instant counts a run as the
+    whole history does. A run's flow is its last reading, this run's or
+    an earlier one's; with none yet, the meter's over its share, else
+    the priced flow."""
+    if not grid:
+        return [], [], []
+    step = timedelta(seconds=BOOK_GRID_S)
+    lead: list[datetime] = []
+    open_group = next((g for g in joined if g[0] < grid[0] < g[1]), None)
+    if open_group is not None:
+        k = math.ceil((grid[0] - open_group[0]) / step)
+        lead = [grid[0] - j * step for j in range(k, 0, -1)]
+    walk = [*lead, *grid]
+    if not walk:
+        return [], [], []
+    held_meter = _held(meters, walk, flow_hold)
+    held_flow = _held(run_flows, walk, flow_hold)
+    # The flow an earlier run read last, as a walk from the first would
+    # carry it.
+    settled: float | None = None
+    for t, v in run_flows:
+        if t >= walk[0]:
+            break
+        if any(a <= t < b for a, b in runs):
+            settled = v
+    on_spans = merge_runs(runs, timedelta(0))
+    on_col: list[bool] = []
+    gpm_col: list[float] = []
+    before_col: list[float] = []
+    current: tuple[datetime, datetime] | None = None
+    run_gal = 0.0
+    s_i = g_i = 0
+    for t, m, f in zip(walk, held_meter, held_flow, strict=True):
+        while s_i < len(on_spans) and on_spans[s_i][1] <= t:
+            s_i += 1
+        while g_i < len(joined) and joined[g_i][1] <= t:
+            g_i += 1
+        on = s_i < len(on_spans) and on_spans[s_i][0] <= t
+        gpm = before = 0.0
+        if on:
+            group = joined[g_i] if g_i < len(joined) else None
+            if group != current:
+                current, run_gal = group, 0.0
+            if f is not None:
+                settled = f
+            if settled is not None:
+                gpm = settled
+            elif terms is not None and terms.meter_share > 0.0:
+                gpm = (m or 0.0) / terms.meter_share
+            elif terms is not None:
+                gpm = terms.flow_gpm
+            before = run_gal
+            run_gal += gpm * BOOK_GRID_S / 60.0
+        on_col.append(on)
+        gpm_col.append(gpm)
+        before_col.append(before)
+    n = len(lead)
+    return on_col[n:], gpm_col[n:], before_col[n:]
 
 
 def with_circulation_terms(
     params: HeaterParams, runs: Sequence[tuple[datetime, datetime]]
 ) -> HeaterParams:
     """``params``, or with circulation runs to book and no circulation
-    terms, one installation's (``SITE_CIRCULATION``), with nothing of
-    the caller's flow taken as circulation (``meter_share`` 0): as the
-    walk prices runs, so that runs are never booked at no cost."""
+    terms, one installation's (``SITE_CIRCULATION``), which takes
+    nothing of the caller's flow as circulation (``meter_share`` 0): as
+    the walk prices runs, so that runs are never booked at no cost."""
     if not runs or params.circulation is not None:
         return params
-    return replace(
-        params, circulation=replace(SITE_CIRCULATION, meter_share=0.0)
-    )
+    return replace(params, circulation=SITE_CIRCULATION)
 
 
 def book_from_history(
@@ -1758,7 +1977,9 @@ def book_from_changes(
     ``flow_outages``, ``inlet_outages`` and ``air_outages`` are the spans
     each was unknown (``History.outages``). A flow unknown is as a heater
     unheard: no anchor before it counts. An air unknown is
-    ``AMBIENT_DEFAULT_F``, as with no air reading. No anchor before the
+    ``AMBIENT_DEFAULT_F``. With no ``air`` reading at all, the air is the
+    heater's own while its compressor runs (``settled_air``, from the
+    rows' ``heater_air_f``). No anchor before the
     flow's first reading counts either; a ValueError with no flow
     reading at all.
 
@@ -1824,6 +2045,7 @@ def book_from_changes(
             params=params,
             inlet_outages=inlet_unknown,
             air_outages=air_unknown,
+            unheard=unseen,
         ),
         flows,
         params,

@@ -660,6 +660,94 @@ class TestTheBookKeptCurrent:
         assert got.booked.heat_btu == pytest.approx(want.heat_btu)
         assert not got.inlet_measured
 
+    def test_without_an_air_entity_the_heaters_own(self) -> None:
+        from dataclasses import replace
+
+        heater = replace(BOOK_HEATER, ambient="sensor.heater_air")
+        rows = [
+            *_book_rows(),
+            # 50 °F running, the cabinet's 80 idle.
+            _row("sensor.heater_air", T0, "80.0", "°F"),
+            _row("sensor.heater_air", END - 4 * H, "50.0", "°F"),
+            _row("sensor.heater_air", END - 3.5 * H, "80.0", "°F"),
+        ]
+        units = BOOK_UNITS | {"sensor.heater_air": "°F"}
+        own = ha.HomeAssistantBook(
+            cast(ha.HomeAssistantClient, WindowedClient(rows, units)),
+            heater,
+            FLOW,
+            ha.Entities(),
+        )
+        asyncio.run(own.read(END))
+        got = own.book(END, self.P)
+        plain = _keeper(WindowedClient(_book_rows(), BOOK_UNITS))
+        asyncio.run(plain.read(END))
+        default = plain.book(END, self.P)
+        assert got.booked is not None and default.booked is not None
+        assert got.booked.heat_btu != pytest.approx(default.booked.heat_btu)
+        assert (
+            "book: the air is the heater's own reading while its compressor "
+            "runs"
+        ) in got.notes
+        assert not any("heater's own" in n for n in default.notes)
+
+    def test_without_a_settled_reading_it_says_the_default(self) -> None:
+        from dataclasses import replace
+
+        heater = replace(BOOK_HEATER, ambient="sensor.heater_air")
+        # Its first reading after the only run: none while it ran.
+        rows = [
+            *_book_rows(),
+            _row("sensor.heater_air", END - 3 * H, "80.0", "°F"),
+        ]
+        units = BOOK_UNITS | {"sensor.heater_air": "°F"}
+        keeper = ha.HomeAssistantBook(
+            cast(ha.HomeAssistantClient, WindowedClient(rows, units)),
+            heater,
+            FLOW,
+            ha.Entities(),
+        )
+        asyncio.run(keeper.read(END))
+        got = keeper.book(END, self.P)
+        assert got.booked is not None
+        assert not any("is the heater's own" in n for n in got.notes)
+        assert (
+            "book: the heater's air not read while its compressor ran 5 "
+            "minutes: the air is the default, 65 °F"
+        ) in got.notes
+
+    def test_a_run_heard_only_across_a_silence_gives_no_air(self) -> None:
+        """Heard at the run's first minute and its last two, silent in
+        between: never five minutes heard, so the air is the default,
+        as the book takes it."""
+        from dataclasses import replace
+
+        heater = replace(BOOK_HEATER, ambient="sensor.heater_air")
+        run = END - 4 * H
+        silent = (run + timedelta(minutes=1), run + timedelta(minutes=28))
+        rows = [
+            r
+            for r in _book_rows()
+            if not (
+                r["entity_id"] == "sensor.last_status"
+                and silent[0]
+                < datetime.fromisoformat(r["last_updated"])
+                < silent[1]
+            )
+        ]
+        rows.append(_row("sensor.heater_air", run, "50.0", "°F"))
+        units = BOOK_UNITS | {"sensor.heater_air": "°F"}
+        keeper = ha.HomeAssistantBook(
+            cast(ha.HomeAssistantClient, WindowedClient(rows, units)),
+            heater,
+            FLOW,
+            ha.Entities(),
+        )
+        asyncio.run(keeper.read(END))
+        got = keeper.book(END, self.P)
+        assert not any("is the heater's own" in n for n in got.notes)
+        assert any("the air is the default" in n for n in got.notes)
+
     def test_later_reads_ask_only_for_what_is_new(self) -> None:
         once = WindowedClient(_book_rows(), BOOK_UNITS)
         whole = _keeper(once)

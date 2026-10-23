@@ -24,10 +24,12 @@ Two terms, kept apart on purpose:
   circuit. Runs closer than ``RUN_GAP`` are one run: a restart displaces
   water the last run warmed, and ``displaced_gal`` is fitted on runs
   merged that way.
-- **To the book** (``CirculationLoss``, a ``book.SpanLoss``):
-  ``loss_btu_per_gal`` for every gallon circulated while a run is on,
-  unsaturated: the pipe's own loss while circulating. A span with a run
-  on is not quiet, so the book does not re-anchor across it.
+- **To the book** (``CirculationLoss``, a ``book.SpanLoss``): with
+  ``CirculationParams.book_circuit_gal``, each run's gallons up to that
+  volume from its start, each at the tank's upper probe less the air;
+  without it, ``loss_btu_per_gal`` for every gallon circulated while a
+  run is on, unsaturated. A span with a run on is not quiet, so the book
+  does not re-anchor across it.
 """
 
 from collections.abc import Callable, Iterable, Sequence
@@ -35,6 +37,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 
 from nwp500.sim.decay import Draw
+from nwp500.sim.units import WATER_BTU_PER_GAL_F
 
 #: A run: when it starts and when it ends.
 Run = tuple[datetime, datetime]
@@ -162,28 +165,114 @@ class CirculationDraws:
         )
 
 
+#: The coldest air ``CirculationLoss.bound`` allows for, °F: the book's
+#: own bound on the walk (``book.loss_ceiling_btu``) takes the same.
+_COLDEST_AIR_F = -20.0
+
+
 @dataclass(frozen=True)
 class CirculationLoss:
-    """The runs' pipe loss to the heat book (``book.SpanLoss``):
-    ``loss_btu_per_gal`` per gallon circulated, over each span a run is
-    on at the start of."""
+    """The runs' pipe loss to the heat book (``book.SpanLoss``), over
+    each span a run is on at the start of: with ``circuit_gal``
+    (``CirculationParams.book_circuit_gal``), the gallons circulated since
+    the start of its group (runs closer than ``gap``, ``merge_runs``)
+    up to that volume, each at ``upper_f`` less ``air_at`` while they
+    flow (the tank's upper zone is taken at ``upper_f`` throughout);
+    without it, ``loss_btu_per_gal`` per gallon circulated. ``runs`` are
+    the runs as given, not merged: a gap between two circulates
+    nothing."""
 
     runs: Sequence[Run]
     flow_gpm: float
     loss_btu_per_gal: float
+    circuit_gal: float | None = None
+    upper_f: float = 0.0
+    air_at: Callable[[datetime], float] | None = None
+    gap: timedelta = RUN_GAP
+
+    def __post_init__(self) -> None:
+        # Runs that overlap or touch are one span of on-time: what both
+        # cover circulates once.
+        object.__setattr__(
+            self, "runs", tuple(merge_runs(self.runs, timedelta(0)))
+        )
 
     def edges(self, start: datetime, end: datetime) -> list[datetime]:
         return [x for run in self.runs for x in run if start < x < end]
+
+    def _running(self, a: datetime, b: datetime) -> float:
+        """Minutes a run was on over ``[a, b)``."""
+        return sum(
+            max(0.0, (min(r1, b) - max(r0, a)).total_seconds() / 60.0)
+            for r0, r1 in self.runs
+        )
+
+    def _charged(
+        self, start: datetime, end: datetime
+    ) -> tuple[float, datetime] | None:
+        """The gallons over ``[start, end)``, with a run on from
+        ``start``, within its group's first ``circuit_gal``, and the
+        middle of the time they flow; None with none."""
+        if self.circuit_gal is None:
+            return None
+        group = next(
+            (
+                g
+                for g in merge_runs(self.runs, self.gap)
+                if g[0] <= start < g[1]
+            ),
+            None,
+        )
+        flow = max(self.flow_gpm, 0.0)
+        if group is None or flow <= 0.0:
+            return None
+        before = flow * self._running(group[0], start)
+        gal = flow * self._running(start, end)
+        cap = self.circuit_gal
+        priced = max(0.0, min(before + gal, cap) - min(before, cap))
+        if priced <= 0.0:
+            return None
+        # The span starts with a run on, and its edges are the runs':
+        # the charged gallons flow from its start.
+        return priced, start + timedelta(minutes=priced / flow / 2.0)
 
     def loss(self, start: datetime, end: datetime) -> tuple[float, bool]:
         on = any(r0 <= start < r1 for r0, r1 in self.runs)
         if not on:
             return 0.0, False
+        if self.circuit_gal is not None:
+            charged = self._charged(start, end)
+            if charged is None:
+                return 0.0, True
+            gal, mid = charged
+            air = self.air_at(mid) if self.air_at is not None else 65.0
+            return gal * WATER_BTU_PER_GAL_F * max(
+                0.0, self.upper_f - air
+            ), True
         hours = (end - start).total_seconds() / 3600.0
         # As the book's loss was fitted: per gallon, flow x minutes.
         return self.loss_btu_per_gal * (self.flow_gpm * hours * 60.0), True
 
     def bound(self, start: datetime, end: datetime) -> float:
+        if self.circuit_gal is not None:
+            flow = max(self.flow_gpm, 0.0)
+            gal = 0.0
+            for group in merge_runs(self.runs, self.gap):
+                a, b = max(start, group[0]), min(end, group[1])
+                if b <= a:
+                    continue
+                before = flow * self._running(group[0], a)
+                cap = self.circuit_gal
+                gal += max(
+                    0.0,
+                    min(before + flow * self._running(a, b), cap)
+                    - min(before, cap),
+                )
+            return (
+                gal
+                * WATER_BTU_PER_GAL_F
+                * max(0.0, self.upper_f - _COLDEST_AIR_F)
+            )
         minutes = sum(
             max(0.0, (min(r1, end) - max(r0, start)).total_seconds() / 60.0)
             for r0, r1 in self.runs

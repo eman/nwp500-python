@@ -861,3 +861,12 @@ class TestTheLeadByInterval:
         before = h.index[h.index < T0 + timedelta(hours=2) - cal.DRAW_LEAD][-1]
         h.loc[before, "dhw_in_use"] = True
         assert cal.recoveries(h, air="heater_air_f")["draw_free"].item()
+
+
+class TestAFixedExponent:
+    def test_only_the_level_is_fitted(self) -> None:
+        dt = [55.0, 60.0, 70.0, 80.0]
+        ua = [5.0 * (d / 50.0) ** 0.28 for d in dt]
+        ref, exponent = cal.fit_ua_law(dt, ua, ref_delta_t=50.0, exponent=0.28)
+        assert exponent == 0.28
+        assert ref == pytest.approx(5.0)

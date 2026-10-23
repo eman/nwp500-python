@@ -96,9 +96,23 @@ Idle, it reads the cabinet, about 6 °F warm. So give one of these:
   the heater's own flag is used instead. ``--air``, ``--ambient`` and
   ``--humidity`` override the sources.
 
-Without the air, the standby loss keeps the base's value and the report
-says so. When you give the air, the recoveries use it too; without it,
-they use the heater's own reading while the compressor runs.
+Without the air, the command fits the standby loss on the heater's own
+reading, taken once the compressor has run 5 minutes and drawn straight
+from one run's reading to the next across the idle span between them.
+Only quiet windows with a run within 6 hours of both ends are fitted:
+they fall mostly overnight, and a reading held from the day's last run
+would read the night warm. Those windows span too narrow a range of
+tank-to-air difference to fit the loss law's shape, so only its level is
+fitted, on the base's exponent. A note says how many windows qualified
+and what share of the quiet hours they hold. Expect the loss to read
+somewhat high: at one installation, against a sensor beside the heater,
+it read about 12 % high, as the night air dips below the line between
+an evening run and a morning one, and the running reading is itself a
+little warm. A sensor beside the heater (``--air``) avoids both.
+With no such reading at all, the standby loss keeps the base's value
+and the report says so. When you give the air, the recoveries use it
+too; without it, they use the heater's own reading while the compressor
+runs.
 
 ``--humidity`` takes the same kind of file, in %RH, for the
 evaporator; without it the command gives the fits 50 %.
@@ -205,7 +219,8 @@ read in order without holding every status:
        print(term.name, term.value, "fitted" if term.fitted else term.why)
 
 Give ``ambient`` instead of ``air`` for a constant, or neither: the
-standby loss then keeps the base's value. Without ``humidity`` the fits
+standby loss is then fitted on the heater's own reading between runs,
+and ``done.air`` is ``"heater"``. Without ``humidity`` the fits
 get 50 %. An input it cannot use raises ``CalibrationInputError``.
 
 On a desktop computer, 60 days of statuses (about 540,000) took about
@@ -373,8 +388,11 @@ Fit the heat book
 
 The heat book (``book_from_changes``) counts the heat the tank holds
 from the compressor's heat rate and its slope with the air, the standby
-UA, and, with a circulation pump, the loop's loss per gallon
-(``CirculationParams.loss_btu_per_gal``). ``fit_book`` fits them
+UA, and, with a circulation pump, what each run takes: its first
+gallons, up to the book's circuit volume
+(``CirculationParams.book_circuit_gal``), each at the tank's upper
+probe less the air, the loop having cooled to the air since the last
+run. ``fit_book`` fits them
 together from the heater's history, the household's draws, and the
 pump's runs with the loop's flow. The draws and the loop's flow are
 yours to give, apart from each other: the fit takes every gallon of the
@@ -402,8 +420,8 @@ draws as hot water drawn, and each run at the loop's flow.
 
 ``draws`` and ``loop_flow`` are (instant, gal/min) readings and ``runs``
 the pump's (start, end) spans; ``record_inputs``' air is °F, as the fit
-takes it. ``fit.loss_btu_per_gal`` is the loop's loss for your
-``CirculationParams`` (None without one).
+takes it. ``fit.book_circuit_gal`` is the circuit volume for your
+``CirculationParams`` (None without a loop).
 
 The fit reads the pairs of quiet full tanks up to
 ``book.max_anchor_age_h`` apart, and fits each term for the least mean
@@ -415,18 +433,22 @@ pair:
   the others (the slope, with the air never off one temperature) stays
   at ``params.book``. The rest of the book (its draw line, the anchors'
   age, the valve's line) is ``params``'.
-- **The loop's loss per gallon:** on 10 pairs with a run between,
-  with the book's terms. With fewer, the loss is
-  ``params.circulation``'s, and without one, the pairs with a run are
-  left out. A pair with a run that has no flow reading is left out.
+- **The book's circuit volume:** on 10 pairs with a run between, with
+  the book's terms fitted at each volume tried. Runs closer than
+  ``run_gap_min`` are one run. It is an effective volume, smaller than
+  the loop's own (``displaced_gal``): at one installation 1.4 gal
+  against 6.4. Fit and keep them apart. With fewer pairs, the loop is
+  priced as ``params.circulation`` prices it, and without one, the
+  pairs with a run are left out. A pair with a run that has no flow
+  reading is left out.
 
 The fit needs 10 pairs. It holds out the latest fifth and replaces the
 base only when it books them no worse. A term on its bound
 (``sim.calibration.BOOK_TERM_BOUNDS``) is no fit: the book misses
 something between those anchors that the term is standing in for. The
-loop's loss on its bound, or one the pairs can't tell from the book's
-terms (runs that follow the recoveries), leaves the loss at the base's;
-any other term on its bound keeps the base. ``fit.kept`` says which it
+circuit volume on its bound (``sim.calibration.BOOK_CIRCUIT_GAL_BOUNDS``)
+leaves the loop at the base's; any other term on its bound keeps the
+base. ``fit.kept`` says which it
 kept and ``fit.why`` why. A span the heater wasn't heard from, a probe
 read nothing, or the draws were silent over an hour, breaks the book.
 
@@ -435,10 +457,10 @@ come slowly. With a pump running about once a day, one installation had
 5 in 14 days and 19 in 42: fit on four weeks or more, and raise Home
 Assistant's ``purge_keep_days`` to keep them.
 
-Book with the same inputs. Runs are priced with the loop's loss, in a
+Book with the same inputs. Runs are priced at the circuit volume, in a
 ``CirculationParams`` of your installation's with ``meter_share`` 0,
-since the draws hold none of the loop's water; without a loss, they
-can't be booked. ``sa.run_readings`` gives the book each run's flow as
+since the draws hold none of the loop's water; without one, they can't
+be booked. ``sa.run_readings`` gives the book each run's flow as
 the fit takes it: its own readings, the first from its start, and none
 read outside the runs.
 
@@ -447,13 +469,13 @@ read outside the runs.
    from nwp500.sim.params import CirculationParams
 
    book = None
-   loss = fit.loss_btu_per_gal
-   if loss is not None or not runs:
+   volume = fit.book_circuit_gal
+   if volume is not None or not runs:
        loop = None
-       if loss is not None:
+       if volume is not None:
            loop = CirculationParams(
-               displaced_gal=..., flow_gpm=..., loss_btu_per_gal=loss,
-               meter_share=0.0,
+               displaced_gal=..., flow_gpm=..., loss_btu_per_gal=...,
+               book_circuit_gal=volume, meter_share=0.0,
            )
        book = sa.book_from_changes(
            history.rows, history.observed, replace(params, circulation=loop),

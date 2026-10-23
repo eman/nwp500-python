@@ -280,6 +280,17 @@ class TestTheFit:
         assert fit.bottom_gate_f == pytest.approx(GATE, rel=0.15)
         assert fit.ua_exponent == pytest.approx(0.0, abs=0.02)
 
+    def test_a_planted_exponent_is_fitted_or_held(self) -> None:
+        shaped = replace(PLANTED, ua_exponent=0.3)
+        windows = windows_of(planted_starts(30), shaped)
+        free = cal.fit_loss(windows, TAU, TANK)
+        assert free is not None
+        assert free.ua_exponent == pytest.approx(0.3, abs=0.05)
+        held = cal.fit_loss(windows, TAU, TANK, exponent=0.3)
+        assert held is not None
+        assert held.ua_exponent == 0.3
+        assert held.ua_ref == pytest.approx(UA, rel=0.03)
+
     def test_too_few_stratified_windows_fit_the_jacket_law_alone(
         self,
     ) -> None:

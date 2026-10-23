@@ -1005,10 +1005,15 @@ that fails is noted, and the next one reads from where it would have
 started. Until then, ``book`` takes the flow as unknown since the last
 read that worked, rather than holding its last value, and after a
 failed read of the heater it gives no book. An optional
-entity whose unit can't be read is left out of the book. While the air
-entity is unavailable, or reads in a unit the book doesn't read, the
-book takes the default air (65 °F), as with no air entity. ``book`` books from what it holds, with no request, so it can
-run in an executor. ``answer.notes`` say what the book rests on, or why
+entity whose unit can't be read is left out of the book. With no air
+entity, or one that gives no reading, the book takes the heater's own
+air reading (``HeaterEntities.ambient``) once its compressor has run 5
+minutes, and holds it until the next run, and a note says so. Idle, that
+sensor reads the cabinet, about 6 °F warm, so an idle reading is never
+taken. Before the first run, and while an air entity that gives readings
+is unavailable or reads in a unit the book doesn't read, the book takes
+the default air (65 °F). ``book`` books from what it holds, with no
+request, so it can run in an executor. ``answer.notes`` say what the book rests on, or why
 there is none.
 
 The flow is the household's hot water draws, without the circulation's
@@ -1163,15 +1168,18 @@ to a day apart. Each pair's booked heat is checked against the probes':
        circulation=runs, circulation_flow=pump_flow, params=params,
    )
    book = calibration.RecordedBook(steps, p, params.circulation, start=since)
-   fit = calibration.fit_book_terms(book, book.reanchors(), p)
+   fit = calibration.fit_book_terms(book, book.reanchors(), p, circuit=True)
    p = replace(p, hp_btu_per_h=fit.hp_btu_per_h,
                hp_btu_per_h_per_f=fit.hp_btu_per_h_per_f,
                ua_btu_per_h_f=fit.ua_btu_per_h_f)
-   bands = calibration.book_error_bands(book, p, fit.loss_btu_per_gal)
-   empty, crossings = calibration.empty_point(book, p, fit.loss_btu_per_gal)
-   zone = calibration.zone_empty_point(book, p, fit.loss_btu_per_gal)
+   v = fit.book_circuit_gal
+   bands = calibration.book_error_bands(book, p, 0.0, v)
+   empty, crossings = calibration.empty_point(book, p, 0.0, circuit_gal=v)
+   zone = calibration.zone_empty_point(book, p, 0.0, circuit_gal=v)
 
-``book_error_btu(book, p, fit.loss_btu_per_gal)`` gives the book's
+With ``circuit=True`` the runs are priced at a circuit volume
+(``CirculationParams.book_circuit_gal``) fitted in place of a loss per
+gallon. ``book_error_btu(book, p, 0.0, v)`` gives the book's
 error bands: the 90th percentile of its error pooled over re-anchors an
 hour to ``max_anchor_age_h`` apart, and the 18 to 24 h band's past it,
 each rounded up to 100 BTU. ``cold_lower_cap(draws,

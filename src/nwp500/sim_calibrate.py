@@ -43,6 +43,7 @@ from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Any, cast
 
 import numpy as np
+from scipy.optimize import OptimizeResult, minimize_scalar
 
 from nwp500 import sim
 from nwp500 import sim_adapters as sa
@@ -74,6 +75,7 @@ __all__ = (
     "GAP_SAMPLES",
     "MIN_GAP",
     "NO_AIR_NOTE",
+    "HEATER_AIR_BRACKET",
     "CalibrationInputError",
     "Calibrated",
     "BookTermsFit",
@@ -102,8 +104,18 @@ DEFAULT_HUMIDITY_PCT = 50.0
 DEFAULT_BASE_NOTE = (
     "refitting the 65 gal defaults (give params for another tank size)"
 )
-#: The note when no air was given.
+#: The note when no air was given and the heater read none while its
+#: compressor ran.
 NO_AIR_NOTE = "no air given: the standby loss is not fitted"
+#: With no air given, a quiet window is fitted on the heater's own air
+#: only with a settled reading (``sim_adapters.HEATER_AIR_SETTLE``)
+#: this close before its start and after its end. Quiet windows fall
+#: mostly overnight, and a reading held from the day's last run reads
+#: them warm; one at each end, interpolated, follows the night down.
+#: At one installation, against a sensor beside the heater, its windows
+#: still read about 12 % high in UA: the night dips below the line, and
+#: the running reading is itself a little warm.
+HEATER_AIR_BRACKET = timedelta(hours=6)
 
 
 class CalibrationInputError(ValueError):
@@ -143,7 +155,8 @@ class Calibrated:
 
     calibration: cal.Calibration
     #: How the air where the heater stands was given (``readings``,
-    #: ``constant`` or ``source``), or None.
+    #: ``constant`` or ``source``), ``heater`` for the heater's own
+    #: reading while its compressor runs (no air given), or None.
     air: str | None
     n_statuses: int
     #: Readings further apart than this were taken as unobserved, and
@@ -396,7 +409,10 @@ def _judge(
 
 
 def _keep_better(
-    frame: pd.DataFrame, base: HeaterParams, recovery_air: str
+    frame: pd.DataFrame,
+    base: HeaterParams,
+    recovery_air: str,
+    ua_exponent: float | None = None,
 ) -> tuple[cal.Calibration, tuple[Judged, ...], HeldOut]:
     """``sim.calibration.calibrate``'s fits in its order, each group's
     latest evidence held out of its refit, and the refit kept only where
@@ -405,7 +421,11 @@ def _keep_better(
     unfitted = set(base.unfitted)
     judged: list[Judged] = []
     standby = cal.fit_standby(
-        frame, base.tank.thermal_mass_btu_f, tank=base.tank, loss=base.loss
+        frame,
+        base.tank.thermal_mass_btu_f,
+        tank=base.tank,
+        loss=base.loss,
+        ua_exponent=ua_exponent,
     )
     windows = sorted(standby.windows, key=lambda w: w.start)
     params = base
@@ -487,7 +507,7 @@ def _keep_better(
     train = law[: len(law) - n_held]
     held_windows = tuple(law[len(law) - n_held :])
     loss_fit = (
-        cal.fit_loss(train, walk_tau, base.tank)
+        cal.fit_loss(train, walk_tau, base.tank, ua_exponent)
         if train and not both_unfitted
         else None
     )
@@ -711,7 +731,7 @@ def air_unread_note(done: Calibrated) -> str:
         return ""
     why = (
         "no air given, and no heater ambient reading while the compressor runs"
-        if done.air is None
+        if done.air in (None, "heater")
         else "the air given does not cover them"
     )
     return (
@@ -849,6 +869,68 @@ def calibrate_changes(
     )
 
 
+def _air_between_runs(
+    frame: pd.DataFrame,
+) -> tuple[int, int, float] | None:
+    """With no air given, the heater's own as ``frame``'s air: its
+    readings once the compressor has run ``HEATER_AIR_SETTLE``,
+    interpolated linearly between runs over the quiet windows that a
+    reading brackets within ``HEATER_AIR_BRACKET`` at both ends. Every
+    other quiet window is marked ``air_unobserved``, out of the standby
+    fit. How many windows were bracketed, of how many, and their share
+    of the quiet hours; None with no such reading."""
+    if "heater_air_f" not in frame.columns:
+        return None
+    index = cast("pd.DatetimeIndex", frame.index)
+    at = [cast(datetime, t) for t in index]
+    on = frame["compressor_on"].fillna(False).to_numpy(dtype=bool)
+    # A run's clock restarts after a span not recorded: its first
+    # minutes, whose air reads warm, may have passed there. Only that:
+    # a run excluded from the recoveries (a hybrid mode) still reads the
+    # air.
+    for column in ("unrecorded", "heater_unobserved"):
+        if column in frame.columns:
+            on = on & ~frame[column].fillna(False).to_numpy(dtype=bool)
+    air = frame["heater_air_f"].to_numpy(dtype=float)
+    settled = sa.settled_air(
+        [(t, bool(v)) for t, v in zip(at, on, strict=True)],
+        [(t, float(v)) for t, v in zip(at, air, strict=True)],
+        until=at[-1],
+    )
+    times = [t.timestamp() for t, _ in settled]
+    values = [v for _, v in settled]
+    if not times:
+        return None
+    seconds = np.array([t.timestamp() for t in at])
+    read = np.asarray(times)
+    between = np.interp(seconds, read, values, left=np.nan, right=np.nan)
+    usable = np.zeros(len(frame), dtype=bool)
+    unseen = np.zeros(len(frame), dtype=bool)
+    reach = HEATER_AIR_BRACKET.total_seconds()
+    quiet = cal.quiet_windows(frame)
+    n = 0
+    hours = kept = 0.0
+    for start, end in quiet:
+        hours += (end - start).total_seconds()
+        inside = (seconds >= start.timestamp()) & (seconds < end.timestamp())
+        i = int(np.searchsorted(read, start.timestamp(), side="right"))
+        j = int(np.searchsorted(read, end.timestamp(), side="left"))
+        if (
+            i > 0
+            and j < len(read)
+            and start.timestamp() - read[i - 1] <= reach
+            and read[j] - end.timestamp() <= reach
+        ):
+            usable |= inside
+            n += 1
+            kept += (end - start).total_seconds()
+        else:
+            unseen |= inside
+    frame["air_f"] = np.where(usable, between, np.nan)
+    frame["air_unobserved"] = unseen
+    return n, len(quiet), kept / hours if hours else 0.0
+
+
 def _fit(
     frame: pd.DataFrame,
     base: HeaterParams,
@@ -946,14 +1028,32 @@ def _fit(
             "humidity_pct",
         ] = DEFAULT_HUMIDITY_PCT
     if how is None:
-        notes.append(NO_AIR_NOTE)
+        bracketed = _air_between_runs(frame)
+        if bracketed is None:
+            notes.append(NO_AIR_NOTE)
+        else:
+            how = "heater"
+            n, of, share = bracketed
+            notes.append(
+                "no air given: the standby loss is fitted on the heater's "
+                "own air while its compressor runs, interpolated between "
+                f"runs, on the base's exponent ({n} of {of} quiet windows, "
+                f"{share:.0%} of their hours, have a run within "
+                f"{HEATER_AIR_BRACKET.total_seconds() / 3600:g} h of both "
+                "ends)"
+            )
+    # On the heater's air, the windows that qualify span too narrow a
+    # ΔT to fit the law's shape: its level only, on the base's exponent.
+    exponent = base.loss.ua_exponent if how == "heater" else None
     n_runs, unread = _runs_without_air(frame, recovery_air)
     judged: tuple[Judged, ...] = ()
     held: HeldOut | None = None
     if keep_better:
-        fitted, judged, held = _keep_better(frame, base, recovery_air)
+        fitted, judged, held = _keep_better(frame, base, recovery_air, exponent)
     else:
-        fitted = cal.calibrate(frame, base, recovery_air=recovery_air)
+        fitted = cal.calibrate(
+            frame, base, recovery_air=recovery_air, ua_exponent=exponent
+        )
     done = Calibrated(
         fitted,
         how,
@@ -1081,6 +1181,11 @@ def report(done: Calibrated) -> list[Term]:
         why = ""
     elif done.air is None:
         why = "no air given"
+    elif done.air == "heater" and s.n_quiet == 0:
+        why = (
+            "no quiet window has a run within "
+            f"{HEATER_AIR_BRACKET.total_seconds() / 3600:g} h of both ends"
+        )
     elif not s.n_quiet:
         why = f"no quiet window of {cal.MIN_QUIET_HOURS:g} h or more"
     else:
@@ -1259,8 +1364,9 @@ _Pair = tuple[datetime, int, tuple[int, int], bool, bool]
 @dataclass(frozen=True)
 class BookTermsFit:
     """``fit_book``'s result: the book's terms to use (``book``, for
-    ``HeaterParams.book``) and the circulation loop's loss per gallon
-    (``loss_btu_per_gal``, for ``CirculationParams``; None without),
+    ``HeaterParams.book``), the circulation loop's book circuit volume
+    (``book_circuit_gal``, for ``CirculationParams``) and the base's
+    loss per gallon (``loss_btu_per_gal``; None without a loop),
     whether they are the base's or the refit's (``kept``), the re-anchor
     pairs read and those with a circulation run in them, the held-out
     error of the terms kept (mean absolute, BTU; None with nothing held
@@ -1273,6 +1379,9 @@ class BookTermsFit:
     run_pairs: int
     error_btu: float | None
     why: str
+    #: The book's circuit volume (``CirculationParams.book_circuit_gal``)
+    #: the terms were fitted with, gal; None for the loss per gallon.
+    book_circuit_gal: float | None = None
 
     def as_document(self) -> dict[str, Any]:
         """The fit as a document: ``book`` the terms' fields, and the
@@ -1283,6 +1392,7 @@ class BookTermsFit:
                 for f in dataclass_fields(self.book)
             },
             "loss_btu_per_gal": self.loss_btu_per_gal,
+            "book_circuit_gal": self.book_circuit_gal,
             "kept": self.kept,
             "pairs": self.pairs,
             "run_pairs": self.run_pairs,
@@ -1303,25 +1413,32 @@ def fit_book(
     air: Iterable[tuple[datetime, float]] = (),
 ) -> BookTermsFit:
     """The heat book's terms (``BookParams``) and a circulation loop's
-    loss per gallon from a heater's values' changes and the instants it
+    book circuit volume from a heater's values' changes and the instants it
     was heard from, the household's draws (``flow``), and the
     circulation pump's ``runs`` with the loop's flow
     (``circulation_flow``, apart from the draws). Like the rows, the
     flows are gal/min and ``inlet`` and ``air`` °F, whatever the
-    preferred units. ``params.book`` and ``params.circulation``'s loss
-    are the base.
+    preferred units. ``params.book`` and ``params.circulation``'s
+    pricing (its ``book_circuit_gal``, else its loss per gallon) are the
+    base.
 
     The book's terms are fitted together, on every pair of quiet full
     tanks (``sim.calibration.RecordedBook``'s re-anchors up to
     ``max_anchor_age_h`` apart) across the history: the compressor's
-    heat rate and its slope with the air, the standby UA and, with
-    ``MIN_RUN_PAIRS`` pairs with a run in them, the loop's loss per
-    gallon (``sim.calibration.BOOK_TERMS``), for the least mean absolute
-    error. A term the pairs can't tell apart from the others (the slope,
-    with the air never off one temperature) is held at the base. The
+    heat rate and its slope with the air and the standby UA
+    (``sim.calibration.BOOK_TERMS``), for the least mean absolute error,
+    and, with ``MIN_RUN_PAIRS`` pairs with a run in them, the loop's
+    book circuit volume (``CirculationParams.book_circuit_gal``, within
+    ``sim.calibration.BOOK_CIRCUIT_GAL_BOUNDS``): each run's gallons up
+    to it from its start, runs closer than ``run_gap_min`` one run, each
+    gallon at the upper probe less the air. The others are fitted
+    exactly at each volume, and the volume searched. A term the pairs
+    can't tell apart from the others (the slope, with the air never off
+    one temperature) is held at the base. The
     rest of the book (the draw line, the anchors' age, the valve's line)
-    is ``params``'. Without the loss fitted, it is the base's, and
-    without a base, the pairs with a run in them are left out. A run's
+    is ``params``'. Without the volume fitted, the loop is priced as the
+    base prices it, and without a base, the pairs with a run in them are
+    left out. A run's
     flow is its readings, the first from its start; readings outside
     the runs are not used, and the pairs with a run that has none are
     left out.
@@ -1340,6 +1457,7 @@ def fit_book(
 
     base = params.circulation
     base_loss = None if base is None else base.loss_btu_per_gal
+    base_circuit = None if base is None else base.book_circuit_gal
     book_p = params.book_terms()
 
     def finite(
@@ -1383,6 +1501,7 @@ def fit_book(
             seen_n["run_pairs"],
             error,
             why,
+            base_circuit,
         )
 
     if not flow_rows:
@@ -1465,6 +1584,7 @@ def fit_book(
                 inlet=inlets,
                 air=airs,
                 params=with_terms,
+                unheard=silences(heard, max_gap(heard)),
             ),
             book_p,
             with_terms.circulation,
@@ -1488,23 +1608,27 @@ def fit_book(
                 out.append((t1, i, (a0, a1), bool(inside), all(inside)))
         return sorted(out, key=lambda x: x[0])
 
-    def system(chosen: Sequence[_Pair]) -> tuple[np.ndarray, np.ndarray]:
+    def system(
+        chosen: Sequence[_Pair], circuit_gal: float | None = None
+    ) -> tuple[np.ndarray, np.ndarray]:
         """The chosen pairs' errors as ``k + x @ terms``, in their
-        order."""
+        order, the runs priced at ``circuit_gal`` where given."""
         rows: dict[int, list[int]] = {}
         for at, (_, i, *_) in enumerate(chosen):
             rows.setdefault(i, []).append(at)
         k = np.zeros(len(chosen))
         x = np.zeros((len(chosen), len(cal.BOOK_TERMS)))
         for i, ats in rows.items():
-            bk, bx = fitted[i].pair_terms(book_p, [chosen[at][2] for at in ats])
+            bk, bx = fitted[i].pair_terms(
+                book_p, [chosen[at][2] for at in ats], circuit_gal
+            )
             k[ats], x[ats] = bk, bx
         return k, x
 
     def attempt(fit_loss: bool, notes: list[str]) -> BookTermsFit | str:
-        """The fit with the loop's loss fitted or held at the base's;
-        why not, as a string, when only the loss is on its bound or
-        the pairs can't tell it from the book's terms."""
+        """The fit with the book's circuit volume fitted, or the loop
+        held at the base's terms; why not, as a string, when only the
+        volume is on its bound."""
         found = [f for f in pairs_of() if f[4]]
         if not fit_loss and base_loss is None:
             # Runs the book can't price: their pairs are left out.
@@ -1534,21 +1658,82 @@ def fit_book(
             ],
             dtype=float,
         )
-        k, x = system(train)
-        free = _independent(x, range(3 + fit_loss))
-        if fit_loss and 3 not in free:
-            return (
-                "the loop's loss can't be told from the book's terms on "
-                "these pairs, not a fit"
-            )
-        fixed = [j for j in range(4) if j not in free]
         bounds = cal.BOOK_TERM_BOUNDS
-        got = start.copy()
-        got[free] = cal.fit_terms_l1(
-            k + x[:, fixed] @ start[fixed],
-            x[:, free],
-            [bounds[j] for j in free],
-        )
+
+        def solve(
+            circuit_gal: float | None,
+        ) -> tuple[np.ndarray, list[int], float]:
+            """The book's terms on the training pairs with the runs
+            priced at ``circuit_gal`` (else the base's loss per gallon,
+            held), the terms fitted, and their training error."""
+            k, x = system(train, circuit_gal)
+            free = _independent(x, range(3))
+            fixed = [j for j in range(4) if j not in free]
+            got = start.copy()
+            got[free] = cal.fit_terms_l1(
+                k + x[:, fixed] @ start[fixed],
+                x[:, free],
+                [bounds[j] for j in free],
+            )
+            return got, free, float(np.mean(np.abs(k + x @ got)))
+
+        circuit = base_circuit
+        if fit_loss:
+            # The circuit volume is no linear term: the others are fitted
+            # exactly at each volume, and the volume searched.
+            lo, hi = cal.BOOK_CIRCUIT_GAL_BOUNDS
+            grid = np.linspace(lo, hi, 61)
+            scores = [solve(float(v))[2] for v in grid]
+            best = int(np.argmin(scores))
+            a = float(grid[max(best - 1, 0)])
+            b = float(grid[min(best + 1, len(grid) - 1)])
+
+            def score(v: float) -> float:
+                return solve(float(v))[2]
+
+            found_v = cast(
+                OptimizeResult,
+                minimize_scalar(score, bounds=(a, b), method="bounded"),
+            )
+            circuit = float(found_v.x)
+            if min(circuit - lo, hi - circuit) <= 1e-3 * (hi - lo):
+                return (
+                    f"the book's circuit volume on its bound, not a fit: "
+                    f"{circuit:.4g} gal ({lo:g} to {hi:g})"
+                )
+            # Past the most any group of runs circulated between the
+            # training pairs' anchors, every volume books them the same:
+            # the runs can't say which.
+            most = 0.0
+            for _, i, (a0, a1), *_ in train:
+                bk = fitted[i]
+                if a1 > a0:
+                    span = bk.run_before[a0:a1] + bk.circulated[a0:a1]
+                    most = max(most, float(np.max(span)))
+            if circuit >= most - 1e-6:
+                return (
+                    f"the book's circuit volume {circuit:.4g} gal is past the "
+                    f"most a run circulated ({most:.4g} gal): not a fit"
+                )
+            # And what the volume moves, the book's terms must not make
+            # (the same runs after the same recoveries, say): else the
+            # heat rate could take up any volume.
+            step = max(1e-3, 0.01 * circuit)
+            k_up, x_at = system(train, circuit + step)
+            k_down, _ = system(train, max(lo, circuit - step))
+            moves = (k_up - k_down) / (circuit + step - max(lo, circuit - step))
+            _, free_at, _ = solve(circuit)
+            cols = np.column_stack([x_at[:, free_at], moves])
+            norms = np.linalg.norm(cols, axis=0)
+            if (
+                np.any(norms <= 1e-9)
+                or np.linalg.matrix_rank(cols / norms, tol=1e-6) < cols.shape[1]
+            ):
+                return (
+                    "the book's circuit volume can't be told from the book's "
+                    "terms on these pairs, not a fit"
+                )
+        got, free, _ = solve(circuit)
         by_book: dict[int, list[tuple[int, int]]] = {}
         for _, i, pair, *_ in held:
             by_book.setdefault(i, []).append(pair)
@@ -1557,7 +1742,9 @@ def fit_book(
                 np.abs(
                     np.concatenate(
                         [
-                            fitted[i].errors(book_p, base_loss or 0.0, these)
+                            fitted[i].errors(
+                                book_p, base_loss or 0.0, these, base_circuit
+                            )
                             for i, these in by_book.items()
                         ]
                     )
@@ -1575,11 +1762,9 @@ def fit_book(
             f"{bounds[j][1]:g})"
             for j in on_bound
         )
-        if on_bound == [3]:
-            return f"the loop's loss on its bound, not a fit: {named}"
         if on_bound:
             return keep(because(f"on its bound, not a fit: {named}"), base_err)
-        kh, xh = system(held)
+        kh, xh = system(held, circuit)
         refit_err = float(np.mean(np.abs(kh + xh @ got)))
         versus = (
             f"held out, {refit_err:.0f} BTU against the base's {base_err:.0f}"
@@ -1593,12 +1778,13 @@ def fit_book(
                 hp_btu_per_h_per_f=float(got[1]),
                 ua_btu_per_h_f=float(got[2]),
             ),
-            float(got[3]) if fit_loss else base_loss,
+            base_loss,
             "refit",
             seen_n["pairs"],
             seen_n["run_pairs"],
             refit_err,
             because(versus),
+            circuit,
         )
 
     notes: list[str] = []
@@ -1611,7 +1797,7 @@ def fit_book(
     elif run_spans:
         notes = [
             f"{with_run} pairs with a run: {MIN_RUN_PAIRS} needed to fit "
-            "the loop's loss"
+            "the loop's circuit volume"
         ]
     # With the loss held, nothing is fitted on its bound but the book.
     return cast(BookTermsFit, attempt(False, notes))

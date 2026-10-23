@@ -276,6 +276,7 @@ def as_changes(readings: list[Any]) -> tuple[sa.ChangeRows, list[datetime]]:
         compressor_on=rec.compressor,
         upper_element_on=rec.upper_element,
         lower_element_on=rec.lower_element,
+        heater_air_f=tuple((t, s.ambient_temperature) for t, s in readings),
     )
     return rows, [t for t, _ in readings]
 
@@ -674,3 +675,280 @@ class TestHeardSpans:
             sa.book_from_changes(rows, [], p, at=T0, flow=flow, heard=[])
             is None
         )
+
+
+class TestTheHeatersOwnAir:
+    def test_it_reads_only_after_the_run_settles(self) -> None:
+        m = timedelta(minutes=1)
+        t0 = T0 - timedelta(hours=1)
+        compressor = [(t0, False), (t0 + 2 * m, True), (t0 + 12 * m, False)]
+        # Idle at 80, 70 for the run's first 5 minutes, 50 after.
+        air = [(t0, 80.0), (t0 + 2 * m, 70.0), (t0 + 7 * m, 50.0)]
+        air.append((t0 + 12 * m, 80.0))
+        got = sa.settled_air(compressor, air, until=T0)
+        assert got == [(t0 + 7 * m, 50.0)]
+
+    def test_the_reading_in_force_when_it_settles(self) -> None:
+        """A recorder of changes writes no row while the air holds."""
+        m = timedelta(minutes=1)
+        t0 = T0 - timedelta(hours=1)
+        compressor = [(t0, True), (t0 + 20 * m, False)]
+        got = sa.settled_air(compressor, [(t0, 55.0)], until=T0)
+        assert got == [(t0 + 5 * m, 55.0)]
+
+    def test_a_run_unheard_restarts_its_clock(self) -> None:
+        m = timedelta(minutes=1)
+        t0 = T0 - timedelta(hours=1)
+        compressor = [(t0, True), (t0 + 30 * m, False)]
+        air = [(t0, 70.0), (t0 + 6 * m, 60.0), (t0 + 9 * m, 52.0)]
+        # Unheard from 1 to 5 minutes into the run: heard again at 5, it
+        # settles at 10, not at 5.
+        got = sa.settled_air(
+            compressor, air, until=T0, unheard=[(t0 + m, t0 + 5 * m)]
+        )
+        assert got == [(t0 + 10 * m, 52.0)]
+
+    def test_a_heater_outage_restarts_the_clock(self) -> None:
+        """A run across an outage of the heater's own record: from the
+        changes alone, its warm reading after the outage is no air."""
+        m = timedelta(minutes=1)
+        t0 = T0 - timedelta(hours=2)
+        rows = sa.ChangeRows(
+            upper_f=((t0, 140.0),),
+            lower_f=((t0, 139.0),),
+            compressor_on=((t0, 1.0), (t0 + 12 * m, 0.0)),
+            heater_air_f=((t0, 70.0), (t0 + 10 * m, 75.0)),
+            outages=((t0 + m, t0 + 10 * m),),
+        )
+        steps = sa.book_steps_from_changes(
+            rows, start=t0, end=T0, flow=[(t0, 0.0)]
+        )
+        assert {s.ambient_f for s in steps} == {65.0}
+
+    def test_overlapping_unheard_spans_are_one(self) -> None:
+        m = timedelta(minutes=1)
+        t0 = T0 - timedelta(hours=1)
+        compressor = [(t0, True), (t0 + 22 * m, False)]
+        air = [(t0, 70.0), (t0 + 15 * m, 60.0), (t0 + 20 * m, 52.0)]
+        unheard = [(t0 + m, t0 + 10 * m), (t0 + 5 * m, t0 + 20 * m)]
+        # Heard again at 20 only: no 5 minutes heard before the run ends.
+        assert sa.settled_air(compressor, air, until=T0, unheard=unheard) == []
+
+    def _readings(
+        self, device_status_dict: dict[str, Any], hours: float
+    ) -> list[Any]:
+        out = []
+        t = T0 - timedelta(hours=hours)
+        recovery = T0 - timedelta(hours=4)
+        while t <= T0:
+            heating = recovery <= t < recovery + timedelta(minutes=30)
+            out.append(
+                (
+                    t,
+                    DeviceStatus.model_validate(
+                        device_status_dict
+                        | {
+                            "tankUpperTemperature": 600,
+                            "tankLowerTemperature": 598,
+                            "compUse": 2 if heating else 1,
+                            "heatUpperUse": 1,
+                            "heatLowerUse": 1,
+                            # 50 °F running, the cabinet's 80 idle.
+                            "ambientTemperature": 100 if heating else 267,
+                        }
+                    ),
+                )
+            )
+            t += timedelta(minutes=1)
+        return out
+
+    def test_without_an_air_reading_the_book_takes_it(
+        self, device_status_dict: dict[str, Any]
+    ) -> None:
+        p = site_example_params()
+        readings = self._readings(device_status_dict, 20)
+        flow = with_a_draw(meter(20), 2.0)
+        start = T0 - timedelta(hours=20)
+        own = sa.book_from_history(readings, p, at=T0, flow=flow)
+        at_50 = sa.book_from_history(
+            readings, p, at=T0, flow=flow, air=[(start, 50.0)]
+        )
+        at_65 = sa.book_from_history(
+            readings, p, at=T0, flow=flow, air=[(start, 65.0)]
+        )
+        assert own is not None and at_50 is not None and at_65 is not None
+        assert own.heat_btu == pytest.approx(at_50.heat_btu)
+        assert own.heat_btu != pytest.approx(at_65.heat_btu)
+        # And from the changes, as from the statuses.
+        rows, observed = as_changes(readings)
+        changed = sa.book_from_changes(rows, observed, p, at=T0, flow=flow)
+        assert changed is not None
+        assert changed.heat_btu == pytest.approx(own.heat_btu)
+
+    def test_a_run_before_the_window_still_gives_its_air(
+        self, device_status_dict: dict[str, Any]
+    ) -> None:
+        """The run ends 4 h before ``T0``: a window from 3 h holds its
+        air, not the default."""
+        readings = self._readings(device_status_dict, 20)
+        start = T0 - timedelta(hours=3)
+        flow = meter(20)
+        steps = sa.book_steps_from_history(
+            readings, start=start, end=T0, flow=flow
+        )
+        assert {s.ambient_f for s in steps} == {50.0}
+        rows, _ = as_changes(readings)
+        changed = sa.book_steps_from_changes(
+            rows, start=start, end=T0, flow=flow
+        )
+        assert {s.ambient_f for s in changed} == {50.0}
+
+
+class TestARunsGallonsForTheCircuit:
+    def _steps(
+        self, runs: list[tuple[datetime, datetime]], start: datetime
+    ) -> list[Any]:
+        from nwp500.sim import site_example_params
+
+        return sa.book_steps_from_changes(
+            sa.ChangeRows(
+                upper_f=[(T0 - timedelta(hours=3), 140.0)],
+                lower_f=[(T0 - timedelta(hours=3), 140.0)],
+            ),
+            start=start,
+            end=T0,
+            flow=[(T0 - timedelta(hours=3), 0.0)],
+            circulation=runs,
+            circulation_flow=sa.run_flow(runs, 1.2),
+            params=site_example_params(),
+        )
+
+    def test_runs_within_the_gap_are_one(self) -> None:
+        m = timedelta(minutes=1)
+        a = T0 - timedelta(hours=2)
+        near = [(a, a + 5 * m), (a + 10 * m, a + 15 * m)]
+        steps = self._steps(near, a)
+        second = next(
+            s for s in steps if s.circulating and s.run_gal_before > 5.9
+        )
+        assert second.run_gal_before == pytest.approx(6.0)
+        far = [(a, a + 5 * m), (a + 30 * m, a + 35 * m)]
+        firsts = [
+            s.run_gal_before
+            for s, prev in zip(self._steps(far, a)[1:], self._steps(far, a))
+            if s.circulating and not prev.circulating
+        ]
+        assert firsts == [0.0]
+
+    def test_a_run_under_way_at_the_start_counts_what_it_ran(self) -> None:
+        m = timedelta(minutes=1)
+        a = T0 - timedelta(hours=2)
+        steps = self._steps([(a, a + 10 * m)], a + 4 * m)
+        assert steps[0].circulating
+        assert steps[0].run_gal_before == pytest.approx(4 * 1.2)
+
+    def test_a_window_mid_run_takes_the_earlier_flow(self) -> None:
+        """0.2 gal/min for the run's first 4 minutes, then 1.2: a window
+        from the change has 0.8 gal behind it, as the whole history
+        does there."""
+        from nwp500.sim import site_example_params
+
+        m = timedelta(minutes=1)
+        a = T0 - timedelta(hours=2)
+        runs = [(a, a + 10 * m)]
+        flow = [(a, 0.2), (a + 4 * m, 1.2)]
+
+        def steps(start: datetime) -> list[Any]:
+            return sa.book_steps_from_changes(
+                sa.ChangeRows(
+                    upper_f=[(a - timedelta(hours=1), 140.0)],
+                    lower_f=[(a - timedelta(hours=1), 140.0)],
+                ),
+                start=start,
+                end=T0,
+                flow=[(a - timedelta(hours=1), 0.0)],
+                circulation=runs,
+                circulation_flow=flow,
+                params=site_example_params(),
+            )
+
+        sliced = steps(a + 4 * m)[0]
+        whole = next(s for s in steps(a) if s.circulation_gpm == 1.2)
+        assert sliced.run_gal_before == pytest.approx(0.8)
+        assert sliced.run_gal_before == pytest.approx(whole.run_gal_before)
+
+    def test_a_window_in_a_gap_keeps_the_groups_gallons(self) -> None:
+        """One-minute runs at minutes 0 and 6, 1.2 gal/min: a window
+        from minute 2 has the first run's 1.2 gal behind the second, as
+        the whole history does."""
+        m = timedelta(minutes=1)
+        a = T0 - timedelta(hours=2)
+        runs = [(a, a + m), (a + 6 * m, a + 7 * m)]
+        second = a + 6 * m
+
+        def first_of_second(start: datetime) -> float:
+            steps = self._steps(runs, start)
+            k = next(
+                i
+                for i, s in enumerate(steps)
+                if s.circulating
+                and start + i * timedelta(seconds=sa.BOOK_GRID_S) >= second
+            )
+            return float(steps[k].run_gal_before)
+
+        assert first_of_second(a + 2 * m) == pytest.approx(1.2)
+        assert first_of_second(a + 2 * m) == pytest.approx(first_of_second(a))
+
+    def test_a_window_carries_an_earlier_runs_flow(
+        self, device_status_dict: dict[str, Any]
+    ) -> None:
+        """Runs at minutes 0-1 and 20-30, the flow read 0.2 at minute 0
+        and 1.2 at 24: from the statuses, a window from minute 24 has
+        the 0.8 gal the whole history has there, the first run's
+        reading carried past its hold."""
+        from nwp500.sim import site_example_params
+
+        m = timedelta(minutes=1)
+        a = T0 - timedelta(hours=1)
+        status = DeviceStatus.model_validate(
+            device_status_dict
+            | {"tankUpperTemperature": 600, "tankLowerTemperature": 598}
+        )
+        readings = [(a + k * m, status) for k in range(61)]
+        runs = [(a, a + m), (a + 20 * m, a + 30 * m)]
+
+        def at_24(start: datetime) -> float:
+            steps = sa.book_steps_from_history(
+                readings,
+                start=start,
+                end=a + 60 * m,
+                flow=[(a + k * m, 0.0) for k in range(61)],
+                circulation=runs,
+                circulation_flow=[(a, 0.2), (a + 24 * m, 1.2)],
+                params=site_example_params(),
+            )
+            k = int((a + 24 * m - start) / timedelta(seconds=sa.BOOK_GRID_S))
+            return float(steps[k].run_gal_before)
+
+        assert at_24(a + 24 * m) == pytest.approx(0.8)
+        assert at_24(a + 24 * m) == pytest.approx(at_24(a))
+
+    def test_a_probe_unread_still_counts_the_runs_gallons(self) -> None:
+        """A run from minute 1 at 1.2 gal/min, the lower probe first
+        read at minute 4: its first step has 3.6 gal behind it."""
+        m = timedelta(minutes=1)
+        a = T0 - timedelta(hours=1)
+        runs = [(a + m, a + 20 * m)]
+        from nwp500.sim import site_example_params
+
+        steps = sa.book_steps_from_changes(
+            sa.ChangeRows(upper_f=[(a, 140.0)], lower_f=[(a + 4 * m, 140.0)]),
+            start=a,
+            end=a + 30 * m,
+            flow=[(a, 0.0)],
+            circulation=runs,
+            circulation_flow=sa.run_flow(runs, 1.2),
+            params=site_example_params(),
+        )
+        assert steps[0].circulating
+        assert steps[0].run_gal_before == pytest.approx(3 * 1.2)
