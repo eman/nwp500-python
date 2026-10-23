@@ -244,9 +244,6 @@ class TestFromTheHistory:
         readings = heater(20, recovery_at=4)
         with pytest.raises(ValueError, match="silent"):
             sa.book_from_history(readings, p, at=T0, flow=holed)
-        rows, observed = as_changes(readings)
-        with pytest.raises(ValueError, match="silent"):
-            sa.book_from_changes(rows, observed, p, at=T0, flow=holed)
 
     def test_a_missing_meter_reading_is_no_reading(
         self, heater: Callable[..., list[Any]]
@@ -415,16 +412,75 @@ class TestFromTheChanges:
         )
         assert sa.book_from_changes(rows, [], p, at=T0, flow=flow) is None
 
-    def test_a_silent_meter_is_refused(
+    def test_a_flow_holds_until_its_next_change(
+        self, heater: Callable[..., list[Any]]
+    ) -> None:
+        """A history of changes writes a row only when the flow changes:
+        a five-minute draw is two rows, and hours at 0 none."""
+        p = site_example_params()
+        readings = heater(20, recovery_at=4)
+        rows, observed = as_changes(readings)
+        sampled = with_a_draw(meter(20), 2.0)
+        draw = T0 - timedelta(hours=2)
+        changes = [
+            (T0 - timedelta(hours=20), 0.0),
+            (draw, 2.0),
+            (draw + timedelta(minutes=5), 0.0),
+        ]
+        want = sa.book_from_changes(rows, observed, p, at=T0, flow=sampled)
+        got = sa.book_from_changes(rows, observed, p, at=T0, flow=changes)
+        assert want is not None and got is not None
+        assert got.heat_btu == pytest.approx(want.heat_btu)
+
+    def test_no_flow_in_force_is_refused(
         self, heater: Callable[..., list[Any]]
     ) -> None:
         p = site_example_params()
         rows, observed = as_changes(heater(20, recovery_at=4))
-        gappy = [
-            r for r in meter(20) if not T0 - timedelta(hours=8) < r[0] < T0
-        ]
-        with pytest.raises(ValueError, match="silent"):
-            sa.book_from_changes(rows, observed, p, at=T0, flow=gappy)
+        late = [(T0 - timedelta(hours=1), 0.0)]
+        with pytest.raises(ValueError, match="no flow reading in force"):
+            sa.book_from_changes(rows, observed, p, at=T0, flow=late)
+
+    def test_a_flow_outage_is_as_the_heater_unheard(
+        self, heater: Callable[..., list[Any]]
+    ) -> None:
+        """No anchor before the flow was unknown counts: the recovery 4 h
+        ago is before an outage 3 h ago, so there is no book."""
+        p = site_example_params()
+        readings = heater(20, recovery_at=4)
+        rows, observed = as_changes(readings)
+        flow = [(T0 - timedelta(hours=20), 0.0), (T0 - timedelta(hours=3), 0.0)]
+        out = (T0 - timedelta(hours=3, minutes=10), T0 - timedelta(hours=3))
+        assert sa.book_from_changes(rows, observed, p, at=T0, flow=flow)
+        assert (
+            sa.book_from_changes(
+                rows, observed, p, at=T0, flow=flow, flow_outages=[out]
+            )
+            is None
+        )
+
+    def test_an_inlet_holds_but_not_through_its_outage(
+        self, heater: Callable[..., list[Any]]
+    ) -> None:
+        p = site_example_params()
+        rows, observed = as_changes(heater(20, recovery_at=4))
+        flow = [(T0 - timedelta(hours=20), 0.0)]
+        inlet = [(T0 - timedelta(hours=10), 55.0)]
+        held = sa.book_from_changes(
+            rows, observed, p, at=T0, flow=flow, inlet=inlet
+        )
+        assert held is not None and held.inlet_measured_share == 1.0
+        gap = (T0 - timedelta(hours=2), T0)
+        cut = sa.book_from_changes(
+            rows,
+            observed,
+            p,
+            at=T0,
+            flow=flow,
+            inlet=inlet,
+            inlet_outages=[gap],
+        )
+        assert cut is not None and cut.inlet_measured_share < 1.0
 
 
 class TestTheSilences:

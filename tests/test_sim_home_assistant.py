@@ -14,7 +14,7 @@ pytest.importorskip("pandas")
 
 from nwp500 import sim, sim_live
 from nwp500 import sim_home_assistant as ha
-from nwp500.sim.location_air import LocationAirModel
+from nwp500.sim.location_air import FittedLocationAir, LocationAirModel
 
 NOW = datetime(2026, 10, 18, 15, tzinfo=UTC)
 #: The household's hot water demand: on while it draws.
@@ -164,10 +164,19 @@ class TestPumpRuns:
         speed = [(_t(-10), 0.0), (_t(5), 2800.0), (_t(7), 2810.0), (_t(9), 0.0)]
         assert ha.pump_runs(speed, _t(0), _t(60)) == [(_t(5), _t(9))]
 
-    def test_a_silent_run_ends_after_five_minutes(self) -> None:
+    def test_a_steady_speed_holds_until_it_changes(self) -> None:
+        """A history of changes writes no row while the speed holds."""
+        speed = [(_t(-10), 0.0), (_t(5), 2800.0), (_t(50), 0.0)]
+        assert ha.pump_runs(speed, _t(0), _t(60)) == [(_t(5), _t(50))]
         assert ha.pump_runs([(_t(5), 2800.0)], _t(0), _t(60)) == [
-            (_t(5), _t(10))
+            (_t(5), _t(60))
         ]
+
+    def test_a_sampled_speed_silent_ends_after_stale(self) -> None:
+        got = ha.pump_runs(
+            [(_t(5), 2800.0)], _t(0), _t(60), stale=ha.PUMP_STALE
+        )
+        assert got == [(_t(5), _t(10))]
 
     def test_a_run_in_force_at_the_start(self) -> None:
         speed = [(_t(-1), 2800.0), (_t(2), 0.0)]
@@ -971,11 +980,14 @@ class TestTheSixthReview:
         on = datetime(2026, 11, 1, 1, 55, tzinfo=la)  # PDT
         off = datetime(2026, 11, 1, 1, 57, tzinfo=la, fold=1)  # PST, 62 min on
         start, end = on - timedelta(hours=1), off + timedelta(hours=1)
-        local = ha.pump_runs([(on, 1200.0), (off, 0.0)], start, end)
+        local = ha.pump_runs(
+            [(on, 1200.0), (off, 0.0)], start, end, stale=ha.PUMP_STALE
+        )
         utc = ha.pump_runs(
             [(on.astimezone(UTC), 1200.0), (off.astimezone(UTC), 0.0)],
             start.astimezone(UTC),
             end.astimezone(UTC),
+            stale=ha.PUMP_STALE,
         )
         assert local == utc
         ((a, b),) = local or []
@@ -1803,3 +1815,184 @@ class TestHistoryKeptCurrent:
         assert list(trimmed.rows.upper_f) == [(t[2], 130.0)]
         assert list(trimmed.rows.lower_f) == [(t[1], 139.0)]
         assert trimmed.observed == t[2:]
+
+
+def _heater_series() -> tuple[list[Row], list[Row]]:
+    """Three days of the heater's air and compressor: a run every third
+    hour, the last one in the past hour; idle, the air reads the
+    cabinet, 6 °F warm."""
+    compressor: list[Row] = []
+    air: list[Row] = []
+    for h in range(72, -1, -1):
+        at = NOW - timedelta(hours=h)
+        on = h % 3 == 1
+        compressor.append((at, "on" if on else "off"))
+        for m in range(0, 60, 5):
+            t = at + timedelta(minutes=m)
+            if t <= NOW:
+                air.append((t, _at_heater(t) + (0.0 if on else 6.0)))
+    return air, compressor
+
+
+def _heater_client(**kw: Any) -> FakeClient:
+    air, compressor = _heater_series()
+    return FakeClient(
+        {"sensor.heater_air": _s("sensor.heater_air", air[-1][1], "°F")},
+        {"sensor.heater_air": air, "binary_sensor.compressor": compressor},
+        forecast=OUTDOOR,
+        **kw,
+    )
+
+
+@pytest.mark.asyncio
+class TestTheFitCarried:
+    """A caller that reads often fits on its own cadence."""
+
+    async def test_fit_location_air_on_its_own(self) -> None:
+        client = _heater_client(outdoor=OUTDOOR_HISTORY)
+        fitted, notes = await ha.fit_location_air(
+            client,  # type: ignore[arg-type]  # pyright: ignore[reportArgumentType]
+            ha.Entities(weather="weather.home"),
+            now=NOW,
+            heater=HEATER,
+        )
+        assert fitted is not None
+        assert fitted.model.lag == MODEL.lag
+        assert any("fitted to the heater's own air reading" in n for n in notes)
+
+    async def test_without_a_weather_entity_there_is_none(self) -> None:
+        fitted, notes = await ha.fit_location_air(
+            FakeClient(),  # type: ignore[arg-type]  # pyright: ignore[reportArgumentType]
+            ha.Entities(),
+            now=NOW,
+        )
+        assert fitted is None
+        assert notes == ["air: no weather entity to fit the air to"]
+
+    async def test_a_fit_given_is_used_without_refitting(self) -> None:
+        fitted = FittedLocationAir(MODEL, 0.91, 400)
+        client = _heater_client(outdoor=OUTDOOR_HISTORY)
+        source = ha.HomeAssistantEnvironment(
+            client,  # type: ignore[arg-type]  # pyright: ignore[reportArgumentType]
+            ha.Entities(weather="weather.home"),
+            start=NOW,
+            until=NOW + timedelta(hours=6),
+            now=NOW,
+            heater=HEATER,
+            fitted_air=fitted,
+        )
+        for _ in range(2):
+            env = await source.read()
+            assert isinstance(env.ambient_f, tuple)
+            assert "air: the fitted model given (r 0.91, 2 h late)" in (
+                source.notes
+            )
+            assert any(
+                "anchored to the heater's own reading" in n
+                for n in source.notes
+            )
+        assert client.outdoor_calls == 0
+        assert source.fitted_air is fitted
+
+    async def test_a_model_given_anchors_to_the_heater(self) -> None:
+        """No air entity: each read anchors to the heater's newest
+        running reading, not only a read that fits."""
+        client = _heater_client()
+        source = ha.HomeAssistantEnvironment(
+            client,  # type: ignore[arg-type]  # pyright: ignore[reportArgumentType]
+            ha.Entities(weather="weather.home"),
+            start=NOW,
+            until=NOW + timedelta(hours=6),
+            now=NOW,
+            location_air=MODEL,
+            heater=HEATER,
+        )
+        env = await source.read()
+        assert isinstance(env.ambient_f, tuple)
+        assert any(
+            "anchored to the heater's own reading" in n for n in source.notes
+        )
+        ((names, since, until),) = client.history_calls
+        assert set(names) == {"sensor.heater_air", "binary_sensor.compressor"}
+        assert until - since == ha.FRESH + ha.RUN_SETTLE
+
+    async def test_a_fresh_reading_between_grid_samples_anchors(self) -> None:
+        """On 7 min, the air updated 3 min in: the grid samples at 2 min
+        (before it) and 12 (not yet), but the reading is the anchor."""
+        on = NOW - timedelta(minutes=7)
+        client = FakeClient(
+            {"sensor.heater_air": _s("sensor.heater_air", 61.0, "°F")},
+            {
+                "sensor.heater_air": [
+                    (NOW - timedelta(hours=1), 67.0),
+                    (on + timedelta(minutes=3), 61.0),
+                ],
+                "binary_sensor.compressor": [
+                    (NOW - timedelta(hours=1), "off"),
+                    (on, "on"),
+                ],
+            },
+            forecast=OUTDOOR,
+        )
+        source = ha.HomeAssistantEnvironment(
+            client,  # type: ignore[arg-type]  # pyright: ignore[reportArgumentType]
+            ha.Entities(weather="weather.home"),
+            start=NOW,
+            until=NOW + timedelta(hours=6),
+            now=NOW,
+            location_air=MODEL,
+            heater=HEATER,
+        )
+        env = await source.read()
+        assert isinstance(env.ambient_f, tuple)
+        assert any(
+            "anchored to the heater's own reading" in n for n in source.notes
+        )
+        shift = 61.0 - MODEL.at(OUTDOOR[0], [on + timedelta(minutes=3)])[0]
+        assert env.ambient_f[0][1] == pytest.approx(
+            MODEL.at(OUTDOOR[0], [NOW])[0] + shift
+        )
+
+    async def test_a_run_on_at_the_cut_keeps_its_anchor(self) -> None:
+        """A history from the cut stamps the run's state at the cut; read
+        from earlier by the settling time, a reading just after the cut
+        is not taken for one in a new run's first minutes."""
+        cut = NOW - ha.FRESH - ha.RUN_SETTLE
+        reading = NOW - ha.FRESH + timedelta(minutes=1)
+
+        class FromTheCut(FakeClient):
+            async def read_history(
+                self, entities: Iterable[str], start: datetime, end: datetime
+            ) -> ha.History:
+                got = await super().read_history(entities, start, end)
+                # As a history from ``start`` gives it: the state in force
+                # stamped at ``start``.
+                states = {
+                    e: [(start, "on")]
+                    if e == "binary_sensor.compressor"
+                    else rows
+                    for e, rows in (got.states or {}).items()
+                }
+                return replace(got, states=states)
+
+        client = FromTheCut(
+            {"sensor.heater_air": _s("sensor.heater_air", 61.0, "°F")},
+            {
+                "sensor.heater_air": [(reading, 61.0)],
+                "binary_sensor.compressor": [(cut, "on")],
+            },
+            forecast=OUTDOOR,
+        )
+        source = ha.HomeAssistantEnvironment(
+            client,  # type: ignore[arg-type]  # pyright: ignore[reportArgumentType]
+            ha.Entities(weather="weather.home"),
+            start=NOW,
+            until=NOW + timedelta(hours=6),
+            now=NOW,
+            location_air=MODEL,
+            heater=HEATER,
+        )
+        await source.read()
+        assert any(
+            "anchored to the heater's own reading" in n for n in source.notes
+        )

@@ -7,6 +7,13 @@ Unreleased
 
 Added
 -----
+- **The air fit carried across reads** (#221).
+  ``sim_home_assistant.fit_location_air`` is the fit
+  ``HomeAssistantEnvironment`` makes where it is given no model, with
+  its notes, as a call of its own. ``HomeAssistantEnvironment`` takes
+  it back as ``fitted_air``, projects through it, and notes its r and
+  lag on every ``read`` without fitting again. A caller that reads
+  every few minutes fits on its own cadence.
 - **A history kept current** (#223). ``sim_home_assistant.HeaterHistory``,
   ``sim_home_assistant.History`` and ``sim_adapters.ChangeRows`` take
   ``extended(newer)``, which merges a later read in by instant (the
@@ -16,6 +23,30 @@ Added
   new and books from what it holds. ``sim_adapters.merge_changes``,
   ``changes_since``, ``join_spans`` and ``spans_since`` do it for one
   series.
+
+Changed
+-------
+- With a model, given or fitted, and no fresh reading of the air beside
+  the heater, ``HomeAssistantEnvironment`` anchors the projection to
+  ``heater``'s newest air reading from the last hour while its
+  compressor ran, on every ``read``. It anchored to one only on the
+  read that fitted the model (#221).
+
+Fixed
+-----
+- ``sim_adapters.book_from_changes`` read its flow as a sampled meter:
+  a reading held 60 seconds (``FLOW_HOLD``) and the inlet's an hour,
+  and flow rows more than an hour apart refused the book as a silent
+  meter. A history of changes writes a row only when a value changes,
+  so a steady draw counted for a minute and an hour at 0 gal/min was
+  refused. Its flows, inlet and air now hold until the next change. It
+  takes ``flow_outages``, a span with no anchor before it counting, as
+  for a heater unheard, and ``inlet_outages``. No flow reading in force
+  at the window's start is a ``ValueError`` (#219).
+- ``sim_home_assistant.pump_runs`` ended a run 5 minutes after its last
+  speed reading. A pump at a steady speed writes no row, so a long run
+  read as 5 minutes. A speed now holds until it changes; ``stale``
+  (``PUMP_STALE``) keeps the old rule for a sampled speed (#219).
 
 Version 9.11.0 (2026-10-22)
 ===========================
