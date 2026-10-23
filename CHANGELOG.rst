@@ -2,6 +2,17 @@
 Changelog
 =========
 
+Unreleased
+==========
+
+Changed
+-------
+
+- **The package's metadata is in pyproject.toml.** Name, dependencies,
+  extras, classifiers and the ``nwp-cli`` entry point moved from
+  ``setup.cfg`` to the standard ``[project]`` table, and ``setup.py`` is
+  gone. The built package installs the same files and requirements.
+
 Version 9.12.0 (2026-10-23)
 ===========================
 

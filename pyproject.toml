@@ -1,7 +1,77 @@
 [build-system]
-# AVOID CHANGING REQUIRES: IT WILL BE UPDATED BY PYSCAFFOLD!
-requires = ["setuptools>=46.1.0", "setuptools_scm[toml]>=5"]
+requires = ["setuptools>=77", "setuptools_scm>=8"]
 build-backend = "setuptools.build_meta"
+
+[project]
+name = "nwp500-python"
+description = "A library for controlling Navien NWP500 Water Heaters via NaviLink"
+readme = { file = "README.rst", content-type = "text/x-rst; charset=UTF-8" }
+authors = [{ name = "Emmanuel Levijarvi", email = "emansl@gmail.com" }]
+license = "MIT"
+license-files = ["LICENSE.txt"]
+requires-python = ">=3.14"
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Programming Language :: Python",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.14",
+    "Programming Language :: Python :: 3 :: Only",
+]
+# The version comes from the git tag (setuptools_scm).
+dynamic = ["version"]
+dependencies = [
+    "aiohttp>=3.13.5",
+    "awsiotsdk>=1.29.0",
+    "pydantic>=2.0.0",
+]
+
+[project.optional-dependencies]
+# Command line interface with optional rich formatting
+cli = [
+    "click>=8.3.0",
+    "rich>=14.3.0",
+]
+# Bluetooth LE access to the heater's controller (installer data)
+ble = [
+    "bleak>=0.22.0",
+]
+# The optional heater simulator (nwp500.sim)
+sim = [
+    "numpy>=1.24.0",
+    "pandas>=2.0.0",
+    "scipy>=1.11.0",
+]
+testing = [
+    "nwp500-python[sim]",
+    "setuptools",
+    "pytest",
+    "pytest-cov",
+    "pytest-asyncio",
+    "hypothesis",
+]
+dev = [
+    "ruff>=0.1.0",
+    "pyright>=1.1.0",
+    "nwp500-python[testing]",
+]
+
+[project.scripts]
+nwp-cli = "nwp500.cli.__main__:run"
+
+[project.urls]
+Homepage = "https://github.com/eman/nwp500-python"
+Documentation = "https://nwp500-python.readthedocs.io/en/latest/"
+Source = "https://github.com/eman/nwp500-python"
+Tracker = "https://github.com/eman/nwp500-python/issues"
+
+[tool.setuptools]
+zip-safe = false
+include-package-data = true
+
+[tool.setuptools.packages.find]
+where = ["src"]
+exclude = ["tests"]
+namespaces = true
 
 [tool.setuptools_scm]
 # For smarter version schemes and other configuration options,

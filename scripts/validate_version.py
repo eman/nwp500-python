@@ -5,13 +5,15 @@ Version validation script for nwp500-python.
 This script checks for common version-related mistakes:
 1. Verifies that setup.cfg [pyscaffold] version hasn't been changed
 2. Ensures no hardcoded version strings exist in source code
-3. Validates that version is derived from git tags only
+3. Validates that pyproject.toml takes the version from git tags
+   (setuptools_scm)
 
 Run this as part of CI/CD or pre-commit hooks.
 """
 
 import re
 import sys
+import tomllib
 from pathlib import Path
 
 
@@ -120,21 +122,27 @@ def check_hardcoded_versions() -> bool:
     return True
 
 
-def check_setup_py() -> bool:
-    """Verify setup.py uses setuptools_scm correctly."""
-    setup_py = Path("setup.py")
+def check_scm_version() -> bool:
+    """Verify pyproject.toml takes the version from setuptools_scm."""
+    pyproject = Path("pyproject.toml")
 
-    if not setup_py.exists():
-        print("Warning: setup.py not found", file=sys.stderr)
-        return True
+    if not pyproject.exists():
+        print("Error: pyproject.toml not found", file=sys.stderr)
+        return False
 
-    content = setup_py.read_text()
+    config = tomllib.loads(pyproject.read_text())
+    project = config.get("project", {})
 
-    if "use_scm_version" not in content:
-        print("setup.py does not use setuptools_scm", file=sys.stderr)
-        print("", file=sys.stderr)
+    if "version" in project:
+        print("pyproject.toml hardcodes [project] version", file=sys.stderr)
+        return False
+
+    if "version" not in project.get("dynamic", []) or (
+        "setuptools_scm" not in config.get("tool", {})
+    ):
         print(
-            "setup.py should contain: setup(use_scm_version={...})",
+            "pyproject.toml should list version in [project] dynamic and "
+            "have a [tool.setuptools_scm] table",
             file=sys.stderr,
         )
         return False
@@ -150,7 +158,7 @@ def main() -> int:
     all_checks = [
         ("PyScaffold version", check_pyscaffold_version),
         ("Hardcoded versions", check_hardcoded_versions),
-        ("setup.py configuration", check_setup_py),
+        ("setuptools_scm configuration", check_scm_version),
     ]
 
     results = []
