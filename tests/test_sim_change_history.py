@@ -1015,3 +1015,32 @@ class TestTheBookFifthReview:
         assert marked.states is not None
         assert marked.states["binary_sensor.demand"] == [(T0, "unknown")]
         assert marked.states[FLOW] == [(T0, "0.0")]
+
+
+class TestTheBookSixthReview:
+    P = sim.default_params()
+
+    def test_an_omitted_compressor_is_no_heating_credited(self) -> None:
+        class Dropping(WindowedClient):
+            drop = False
+
+            async def read_history(
+                self, entities: Iterable[str], start: datetime, end: datetime
+            ) -> ha.History:
+                names = [
+                    n
+                    for n in entities
+                    if not (self.drop and n == "binary_sensor.compressor")
+                ]
+                return await super().read_history(names, start, end)
+
+        client = Dropping(_book_rows(), BOOK_UNITS)
+        keeper = _keeper(client)
+        # Read while the compressor runs, then omit it across its stop.
+        asyncio.run(keeper.read(END - 3.75 * H))
+        client.drop = True
+        asyncio.run(keeper.read(END))
+        got = keeper.book(END, self.P)
+        assert any("binary_sensor.compressor" in n for n in got.notes)
+        # Unobserved to the end: no book, not one heated throughout.
+        assert got.booked is None

@@ -2133,6 +2133,7 @@ class HomeAssistantBook:
         except (HomeAssistantError, ValueError) as err:
             self._notes.append(f"book: the heater's history not read ({err})")
         else:
+            newer = self._heating_marked(newer, start, now)
             held_ = self._heater_history
             whole = newer if held_ is None else held_.extended(newer)
             self._heater_history = whole.since(cut)
@@ -2165,6 +2166,33 @@ class HomeAssistantBook:
                 # Without its unit, its readings are left out of the book.
                 self._units.pop(n, None)
                 self._notes.append(f"book: {n}'s unit not read ({err})")
+
+    def _heating_marked(
+        self, newer: HeaterHistory, start: datetime, end: datetime
+    ) -> HeaterHistory:
+        """``newer`` unobserved from ``start`` to ``end`` when it has
+        nothing of a configured heating flag: a read opens with the
+        value in force, so nothing is no read, and a flag held from an
+        earlier read would credit heating across it."""
+        h = self.heater
+        missing = [
+            entity
+            for entity, changes in (
+                (h.compressor, newer.rows.compressor_on),
+                (h.upper_element, newer.rows.upper_element_on),
+                (h.lower_element, newer.rows.lower_element_on),
+                (h.heat_source, newer.rows.heat_source),
+            )
+            if entity and not changes
+        ]
+        if not missing:
+            return newer
+        self._notes.append(
+            f"book: no history of {', '.join(missing)} read; the heater "
+            "is unobserved over the read"
+        )
+        rows = replace(newer.rows, outages=(*newer.rows.outages, (start, end)))
+        return replace(newer, rows=rows)
 
     def book(self, at: datetime, params: HeaterParams) -> BookAnswer:
         """The book at ``at`` from the history held, with no request:
