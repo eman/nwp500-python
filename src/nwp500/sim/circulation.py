@@ -174,10 +174,13 @@ _COLDEST_AIR_F = -20.0
 class CirculationLoss:
     """The runs' pipe loss to the heat book (``book.SpanLoss``), over
     each span a run is on at the start of: with ``circuit_gal``
-    (``CirculationParams.book_circuit_gal``), the run's gallons up to
-    that volume from its start, each at ``upper_f`` less ``air_at`` (the
-    tank's upper zone is taken at ``upper_f`` throughout); without it,
-    ``loss_btu_per_gal`` per gallon circulated."""
+    (``CirculationParams.book_circuit_gal``), the gallons circulated since
+    the start of its group (runs closer than ``gap``, ``merge_runs``)
+    up to that volume, each at ``upper_f`` less ``air_at`` while they
+    flow (the tank's upper zone is taken at ``upper_f`` throughout);
+    without it, ``loss_btu_per_gal`` per gallon circulated. ``runs`` are
+    the runs as given, not merged: a gap between two circulates
+    nothing."""
 
     runs: Sequence[Run]
     flow_gpm: float
@@ -185,30 +188,57 @@ class CirculationLoss:
     circuit_gal: float | None = None
     upper_f: float = 0.0
     air_at: Callable[[datetime], float] | None = None
+    gap: timedelta = RUN_GAP
 
     def edges(self, start: datetime, end: datetime) -> list[datetime]:
         return [x for run in self.runs for x in run if start < x < end]
 
-    def _priced_gal(self, run: Run, start: datetime, end: datetime) -> float:
-        """The run's gallons over ``[start, end)`` within its first
-        ``circuit_gal``."""
+    def _running(self, a: datetime, b: datetime) -> float:
+        """Minutes a run was on over ``[a, b)``."""
+        return sum(
+            max(0.0, (min(r1, b) - max(r0, a)).total_seconds() / 60.0)
+            for r0, r1 in self.runs
+        )
+
+    def _charged(
+        self, start: datetime, end: datetime
+    ) -> tuple[float, datetime] | None:
+        """The gallons over ``[start, end)``, with a run on from
+        ``start``, within its group's first ``circuit_gal``, and the
+        middle of the time they flow; None with none."""
+        if self.circuit_gal is None:
+            return None
+        group = next(
+            (
+                g
+                for g in merge_runs(self.runs, self.gap)
+                if g[0] <= start < g[1]
+            ),
+            None,
+        )
         flow = max(self.flow_gpm, 0.0)
-        a, b = max(start, run[0]), min(end, run[1])
-        if b <= a or self.circuit_gal is None:
-            return 0.0
-        before = flow * (a - run[0]).total_seconds() / 60.0
-        gal = flow * (b - a).total_seconds() / 60.0
+        if group is None or flow <= 0.0:
+            return None
+        before = flow * self._running(group[0], start)
+        gal = flow * self._running(start, end)
         cap = self.circuit_gal
-        return max(0.0, min(before + gal, cap) - min(before, cap))
+        priced = max(0.0, min(before + gal, cap) - min(before, cap))
+        if priced <= 0.0:
+            return None
+        # The span starts with a run on, and its edges are the runs':
+        # the charged gallons flow from its start.
+        return priced, start + timedelta(minutes=priced / flow / 2.0)
 
     def loss(self, start: datetime, end: datetime) -> tuple[float, bool]:
-        run = next((r for r in self.runs if r[0] <= start < r[1]), None)
-        if run is None:
+        on = any(r0 <= start < r1 for r0, r1 in self.runs)
+        if not on:
             return 0.0, False
         if self.circuit_gal is not None:
-            mid = start + (end - start) / 2
+            charged = self._charged(start, end)
+            if charged is None:
+                return 0.0, True
+            gal, mid = charged
             air = self.air_at(mid) if self.air_at is not None else 65.0
-            gal = self._priced_gal(run, start, end)
             return gal * WATER_BTU_PER_GAL_F * max(
                 0.0, self.upper_f - air
             ), True
@@ -218,7 +248,19 @@ class CirculationLoss:
 
     def bound(self, start: datetime, end: datetime) -> float:
         if self.circuit_gal is not None:
-            gal = sum(self._priced_gal(r, start, end) for r in self.runs)
+            flow = max(self.flow_gpm, 0.0)
+            gal = 0.0
+            for group in merge_runs(self.runs, self.gap):
+                a, b = max(start, group[0]), min(end, group[1])
+                if b <= a:
+                    continue
+                before = flow * self._running(group[0], a)
+                cap = self.circuit_gal
+                gal += max(
+                    0.0,
+                    min(before + flow * self._running(a, b), cap)
+                    - min(before, cap),
+                )
             return (
                 gal
                 * WATER_BTU_PER_GAL_F

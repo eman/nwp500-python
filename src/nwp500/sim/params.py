@@ -921,11 +921,14 @@ class BookParams:
         default=63.2, metadata=_p(DEFAULT, "gal", INSTALLATION)
     )
     #: Compressor heat into the tank at a 65 °F ambient, and its slope.
+    #: With the standby UA, fitted together on one installation's 284
+    #: re-anchors with its circulation at a circuit volume
+    #: (``CirculationParams.book_circuit_gal``).
     hp_btu_per_h: float = field(
-        default=4252.0, metadata=_p(FITTED, "BTU/h", INSTALLATION)
+        default=4338.0, metadata=_p(FITTED, "BTU/h", INSTALLATION)
     )
     hp_btu_per_h_per_f: float = field(
-        default=76.1, metadata=_p(FITTED, "BTU/h/°F", INSTALLATION)
+        default=66.0, metadata=_p(FITTED, "BTU/h/°F", INSTALLATION)
     )
     element_w: float = field(
         default=5148.0, metadata=_p(MEASURED, "W", INSTALLATION)

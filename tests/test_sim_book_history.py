@@ -846,3 +846,33 @@ class TestARunsGallonsForTheCircuit:
         steps = self._steps([(a, a + 10 * m)], a + 4 * m)
         assert steps[0].circulating
         assert steps[0].run_gal_before == pytest.approx(4 * 1.2)
+
+    def test_a_window_mid_run_takes_the_earlier_flow(self) -> None:
+        """0.2 gal/min for the run's first 4 minutes, then 1.2: a window
+        from the change has 0.8 gal behind it, as the whole history
+        does there."""
+        from nwp500.sim import site_example_params
+
+        m = timedelta(minutes=1)
+        a = T0 - timedelta(hours=2)
+        runs = [(a, a + 10 * m)]
+        flow = [(a, 0.2), (a + 4 * m, 1.2)]
+
+        def steps(start: datetime) -> list[Any]:
+            return sa.book_steps_from_changes(
+                sa.ChangeRows(
+                    upper_f=[(a - timedelta(hours=1), 140.0)],
+                    lower_f=[(a - timedelta(hours=1), 140.0)],
+                ),
+                start=start,
+                end=T0,
+                flow=[(a - timedelta(hours=1), 0.0)],
+                circulation=runs,
+                circulation_flow=flow,
+                params=site_example_params(),
+            )
+
+        sliced = steps(a + 4 * m)[0]
+        whole = next(s for s in steps(a) if s.circulation_gpm == 1.2)
+        assert sliced.run_gal_before == pytest.approx(0.8)
+        assert sliced.run_gal_before == pytest.approx(whole.run_gal_before)

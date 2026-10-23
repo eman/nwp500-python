@@ -1757,8 +1757,10 @@ def _book_steps_on(
         heater.upper_element,
         heater.lower_element,
     )
-    meter = _held(series(flow, _volume_to_sim), grid, flow_hold)
-    run_flow = _held(series(circulation_flow, _volume_to_sim), grid, flow_hold)
+    meters = series(flow, _volume_to_sim)
+    run_flows = series(circulation_flow, _volume_to_sim)
+    meter = _held(meters, grid, flow_hold)
+    run_flow = _held(run_flows, grid, flow_hold)
     probe = _held(series(inlet, _to_sim), grid, inlet_hold)
     probe = _unknown_in(probe, grid, inlet_unknown)
     airs = series(air, _to_sim)
@@ -1779,6 +1781,39 @@ def _book_steps_on(
     settled: float | None = None
     current: tuple[datetime, datetime] | None = None
     run_gal = 0.0
+
+    def run_gpm(
+        on_flow: float | None, m: float, last: float | None
+    ) -> tuple[float, float | None]:
+        # A run's flow: its last reading, this run's or an earlier
+        # one's; with none yet, the meter's over its share, else the
+        # priced flow.
+        if on_flow is not None:
+            last = on_flow
+        if last is not None:
+            return last, last
+        if terms is not None and terms.meter_share > 0.0:
+            return m / terms.meter_share, last
+        return (terms.flow_gpm if terms is not None else 0.0), last
+
+    def before(
+        run: tuple[datetime, datetime], at: datetime
+    ) -> tuple[float, float | None]:
+        # What a run under way at the window's start circulated before
+        # it, on the book's grid back to the run's start, by the same
+        # rules as the steps: and the flow in force then.
+        step = timedelta(seconds=BOOK_GRID_S)
+        k = math.ceil((at - run[0]) / step)
+        pre = [at - j * step for j in range(k, 0, -1)]
+        pre_meter = _held(meters, pre, flow_hold)
+        pre_flow = _held(run_flows, pre, flow_hold)
+        gal, last = 0.0, None
+        for t, m, f in zip(pre, pre_meter, pre_flow, strict=True):
+            if any(a <= t < b for a, b in runs):
+                gpm, last = run_gpm(f, m or 0.0, last)
+                gal += gpm * BOOK_GRID_S / 60.0
+        return gal, last
+
     for i, at in enumerate(grid):
         u, lo, a_f, in_f = upper[i], lower[i], amb[i], probe[i]
         if u is None or lo is None:
@@ -1787,25 +1822,15 @@ def _book_steps_on(
         on = any(a <= at < b for a, b in runs)
         gpm = 0.0
         if on:
-            if run_flow[i] is not None:
-                settled = run_flow[i]
-            if settled is not None:
-                gpm = settled
-            elif terms is not None and terms.meter_share > 0.0:
-                gpm = m / terms.meter_share
-            elif terms is not None:
-                gpm = terms.flow_gpm
             run = next((r for r in joined if r[0] <= at < r[1]), None)
             if run is not None and run != current:
-                # A run already under way: what it ran before, at this
-                # flow.
                 current = run
-                seconds = sum(
-                    max(0.0, (min(b, at) - max(a, run[0])).total_seconds())
-                    for a, b in runs
-                    if a < at and b > run[0]
-                )
-                run_gal = gpm * seconds / 60.0
+                run_gal = 0.0
+                if not steps and run[0] < at:
+                    # A run already under way at the window's start.
+                    run_gal, pre_settled = before(run, at)
+                    settled = settled if pre_settled is None else pre_settled
+            gpm, settled = run_gpm(run_flow[i], m, settled)
         steps.append(
             BookStep(
                 seconds=float(BOOK_GRID_S),

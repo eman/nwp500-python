@@ -449,3 +449,42 @@ class TestTheBooksCircuitVolume:
         assert on and later == 0.0
         whole = loss.bound(at(0.0), at(1.0))
         assert whole == pytest.approx(1.5 * 8.34 * (140.0 + 20.0))
+
+    def test_runs_in_a_group_share_the_circuit(self) -> None:
+        """Two one-minute runs at 1 gal/min, 5 minutes apart, one group:
+        the first takes 1 gal of the 1.5 gal circuit, the second the
+        half left, and the gap between them circulates nothing."""
+        from nwp500.sim.circulation import CirculationLoss
+
+        a = at(0.0)
+        m = timedelta(minutes=1)
+        runs = [(a, a + m), (a + 6 * m, a + 7 * m)]
+        loss = CirculationLoss(
+            runs,
+            flow_gpm=1.0,
+            loss_btu_per_gal=159.0,
+            circuit_gal=1.5,
+            upper_f=140.0,
+            air_at=lambda _: 65.0,
+        )
+        assert loss.loss(a + m, a + 6 * m) == (0.0, False)
+        got = [loss.loss(r0, r1)[0] for r0, r1 in runs]
+        assert got == pytest.approx([1.0 * 8.34 * 75.0, 0.5 * 8.34 * 75.0])
+
+    def test_the_air_is_the_charged_gallons(self) -> None:
+        """A 10 minute run at 1 gal/min, a 1 gal circuit, the air rising
+        from 50 to 70 °F: the gallon flows in the first minute, at its
+        51 °F."""
+        from nwp500.sim.circulation import CirculationLoss
+
+        a = at(0.0)
+        loss = CirculationLoss(
+            [(a, a + timedelta(minutes=10))],
+            flow_gpm=1.0,
+            loss_btu_per_gal=159.0,
+            circuit_gal=1.0,
+            upper_f=140.0,
+            air_at=lambda t: 50.0 + 2.0 * (t - a).total_seconds() / 60.0,
+        )
+        got, on = loss.loss(a, a + timedelta(minutes=10))
+        assert on and got == pytest.approx(1.0 * 8.34 * 89.0)

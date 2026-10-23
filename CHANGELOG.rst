@@ -44,7 +44,9 @@ Added
   BTU), and on held-out months from 3184 to 2454 BTU, the volume
   steady at 1.1 to 1.5 gal where the loss per gallon moved from 59 to
   120. It is an effective volume, apart from ``displaced_gal``.
-  ``SITE_CIRCULATION`` carries one installation's.
+  ``SITE_CIRCULATION`` carries one installation's, and the book's
+  heat-pump rate and slope are refitted with it (4338 BTU/h, 66.0
+  BTU/h/°F; the UA stays 2.88).
 
 - **The heater's heard spans, given** (#230). ``book_from_changes``
   takes ``heard=``, the spans the heater was heard over, for a record

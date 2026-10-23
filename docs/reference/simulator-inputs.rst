@@ -918,11 +918,14 @@ the one seen over the retrains from 2026-08-08 to 2026-10-18.
        slow cooling of the water below it
        (:doc:`/explanation/standby-loss`).
    * - ``book.hp_btu_per_h``, ``book.hp_btu_per_h_per_f``, ``book.ua_btu_per_h_f``
-     - 4,252, 76.1, 2.88
-     - The book's heat-pump rate and standby, refitted on 2026-09-26 on
-       pairs of moments when the tank read full; against those anchors
-       its mean absolute error was 1,987 BTU, against 3,761 BTU with
-       textbook constants.
+     - 4,338, 66.0, 2.88
+     - The book's heat-pump rate and standby, refitted on 2026-10-23
+       with the circulation at a 1.47 gal circuit volume
+       (``CirculationParams.book_circuit_gal``), on 284 pairs of
+       moments when the tank read full from 2026-02-14, its air a room
+       sensor beside the heater; against those anchors its mean absolute
+       error was 2,207 BTU (2,403 with the loss per gallon). Fitted on
+       a 63.2 gal book (``book.tank_gal``).
    * - ``book.empty_btu``, ``book.zone_empty_btu``
      - 16,169, 12,636 BTU
      - The heat left at five recorded drawdowns to the line
