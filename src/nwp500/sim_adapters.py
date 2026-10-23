@@ -194,22 +194,17 @@ def heater_state(status: DeviceStatus) -> HeaterState:
 
 def settings(status: DeviceStatus) -> Settings:
     """The setpoint, the operation mode, the lower zone's start and stop
-    thresholds, and the upper zone's start threshold.
-
-    Raises:
-        ValueError: The heater reports Standby (0), a status-only mode
-            the simulator does not model.
-    """
+    thresholds, and the upper zone's start threshold. Standby (0), a
+    status-only mode, is Power Off: the NaviLink app counts the heater
+    off in either."""
+    mode = int(status.dhw_operation_setting)
     if status.dhw_operation_setting == DhwOperationSetting.STANDBY:
-        raise ValueError(
-            "the heater reports Standby (dhw_operation_setting 0), a mode "
-            "the simulator does not model"
-        )
+        mode = POWER_OFF
     return Settings(
         setpoint_f=_from_device(
             HalfCelsius(status.dhw_temperature_setting_raw)
         ),
-        mode=int(status.dhw_operation_setting),
+        mode=mode,
         hp_lower_on_f=_from_device(
             HalfCelsius(status.hp_lower_on_temp_setting_raw)
         ),
