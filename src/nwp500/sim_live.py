@@ -42,7 +42,9 @@ Example::
             heater=sim_live.LiveHeaterSource(mqtt, device),
             schedules=sim_live.LiveScheduleSource(mqtt, api, device),
         )
-        return sim.simulate(composed.scenario, composed.params)
+        # None without the feature info: the 65 gal defaults stand in.
+        params = composed.params or sim.default_params()
+        return sim.simulate(composed.scenario, params)
 """
 
 import asyncio

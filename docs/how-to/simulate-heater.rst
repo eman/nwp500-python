@@ -252,7 +252,10 @@ A scenario starts from four things the library already reads:
            heater=sim_live.LiveHeaterSource(mqtt, device),
            schedules=sim_live.LiveScheduleSource(mqtt, api, device),
        )
-       return sim.simulate(composed.scenario, composed.params)
+       # Without the feature info the tank size is unknown: the 65 gal
+       # defaults stand in.
+       params = composed.params or sim.default_params()
+       return sim.simulate(composed.scenario, params)
 
 ``environment=`` and ``loads=`` take any source with an ``async
 read()``; ``sim_live.Given(value)`` is one for a value in hand. Without
@@ -260,7 +263,7 @@ read()``; ``sim_live.Given(value)`` is one for a value in hand. Without
 gets no reply raises ``sim_live.LiveReadError``; so does the schedule
 source when TOU is on and its periods cannot be read. A missing
 feature info leaves ``composed.params`` None (the tank size is
-unknown). Change a part with ``composed.scenario.model_copy(update=...)``.
+unknown), so the example falls back to ``sim.default_params()``. Change a part with ``composed.scenario.model_copy(update=...)``.
 
 With the status, the feature info, the reservations and the TOU
 periods already read some other way, build the same parts from them:
