@@ -975,7 +975,9 @@ Assistant's entities:
 that fails is noted, and the next one reads from where it would have
 started. Until then, ``book`` takes the flow as unknown since the last
 read that worked, rather than holding its last value. An optional
-entity whose unit can't be read is left out of the book. ``book`` books from what it holds, with no request, so it can
+entity whose unit can't be read is left out of the book. While the air
+entity is unavailable, or reads in a unit the book doesn't read, the
+book takes the default air (65 °F), as with no air entity. ``book`` books from what it holds, with no request, so it can
 run in an executor. ``answer.notes`` say what the book rests on, or why
 there is none.
 

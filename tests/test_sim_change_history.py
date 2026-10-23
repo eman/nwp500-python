@@ -20,6 +20,7 @@ from nwp500 import sim_calibrate as sc
 from nwp500 import sim_home_assistant as ha
 from nwp500.enums import CurrentOperationMode, ErrorCode, HeatSource
 from nwp500.models import DeviceStatus
+from nwp500.sim.book import AMBIENT_DEFAULT_F
 from nwp500.temperature import DeciCelsius
 
 T0 = datetime(2026, 1, 5, tzinfo=UTC)
@@ -840,3 +841,52 @@ class TestTheBookFirstReview:
         got = keeper.book(END, self.P)
         assert got.booked is not None
         assert got.inlet_measured, got.notes
+
+
+class TestTheBookAir:
+    """An air unknown, unavailable or in no unit this reads, is the
+    default air, not the last reading held."""
+
+    P = sim.default_params()
+    OUT = END - 30 * H
+
+    def _heat(self, air_rows: list[dict[str, Any]], unit: str) -> float:
+        client = WindowedClient(
+            [*_book_rows(), *air_rows], BOOK_UNITS | {"sensor.air": unit}
+        )
+        keeper = _keeper(client, air="sensor.air")
+        asyncio.run(keeper.read(END))
+        got = keeper.book(END, self.P)
+        assert got.booked is not None, got.notes
+        return got.booked.heat_btu
+
+    def _default_from_out(self) -> float:
+        return self._heat(
+            [
+                _row("sensor.air", T0, "40.0", "°F"),
+                _row("sensor.air", self.OUT, str(AMBIENT_DEFAULT_F), "°F"),
+            ],
+            "°F",
+        )
+
+    def test_an_outage_is_the_default_air(self) -> None:
+        held = self._heat([_row("sensor.air", T0, "40.0", "°F")], "°F")
+        out = self._heat(
+            [
+                _row("sensor.air", T0, "40.0", "°F"),
+                _row("sensor.air", self.OUT, "unavailable"),
+            ],
+            "°F",
+        )
+        assert out == pytest.approx(self._default_from_out())
+        assert out != pytest.approx(held)
+
+    def test_a_reading_in_no_unit_is_the_default_air(self) -> None:
+        out = self._heat(
+            [
+                _row("sensor.air", T0, "40.0", "°F"),
+                _row("sensor.air", self.OUT, "300.0", "lux"),
+            ],
+            "°F",
+        )
+        assert out == pytest.approx(self._default_from_out())

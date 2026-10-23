@@ -1487,11 +1487,13 @@ def book_steps_from_changes(
     air: Iterable[tuple[datetime, float]] = (),
     params: HeaterParams | None = None,
     inlet_outages: Iterable[tuple[datetime, datetime]] = (),
+    air_outages: Iterable[tuple[datetime, datetime]] = (),
 ) -> list[BookStep]:
     """``book_steps_from_history`` from a heater's values' changes
     (``ChangeRows``) instead of its statuses: each value held until its
     next change, ``flow``, ``circulation_flow``, ``inlet`` and ``air``
-    too, an inlet reading not inside ``inlet_outages``. Like the rows,
+    too, an inlet reading not inside ``inlet_outages`` and an air reading
+    not inside ``air_outages``. Like the rows,
     ``flow`` and ``circulation_flow`` are gal/min and ``inlet`` and
     ``air`` °F, whatever the preferred units.
     Without a compressor flag, the heat source says when the compressor
@@ -1550,11 +1552,27 @@ def book_steps_from_changes(
         flow_hold=None,
         inlet_hold=None,
         inlet_unknown=list(inlet_outages),
+        air_unknown=list(air_outages),
     )
 
 
 def _at(row: tuple[datetime, Any]) -> datetime:
     return row[0]
+
+
+def _unknown_in(
+    values: list[float | None],
+    grid: Sequence[datetime],
+    spans: Iterable[tuple[datetime, datetime]],
+) -> list[float | None]:
+    """``values`` on ``grid``, None inside ``spans``."""
+    unknown = sorted((a.astimezone(UTC), b.astimezone(UTC)) for a, b in spans)
+    if not unknown:
+        return values
+    return [
+        None if any(a <= t < b for a, b in unknown) else v
+        for t, v in zip(grid, values, strict=True)
+    ]
 
 
 def _book_steps_on(
@@ -1571,13 +1589,15 @@ def _book_steps_on(
     flow_hold: timedelta | None = FLOW_HOLD,
     inlet_hold: timedelta | None = INLET_HOLD,
     inlet_unknown: Sequence[tuple[datetime, datetime]] = (),
+    air_unknown: Sequence[tuple[datetime, datetime]] = (),
 ) -> list[BookStep]:
     """The book's steps on ``grid``: ``heater``'s columns with the
     meter, the circulation, the inlet and the air
     (``book_steps_from_history``), in the preferred units, or with
     ``preferred`` False the simulator's (°F, gal/min). A flow reading
     holds ``flow_hold`` and an inlet reading ``inlet_hold`` (None: until
-    the next), an inlet reading none inside ``inlet_unknown``."""
+    the next), an inlet reading none inside ``inlet_unknown`` and an air
+    reading none inside ``air_unknown``."""
     p = (params if params is not None else default_params()).book_terms()
     terms = None if params is None else params.circulation
 
@@ -1601,15 +1621,11 @@ def _book_steps_on(
     meter = _held(series(flow, _volume_to_sim), grid, flow_hold)
     run_flow = _held(series(circulation_flow, _volume_to_sim), grid, flow_hold)
     probe = _held(series(inlet, _to_sim), grid, inlet_hold)
-    unknown = sorted(
-        (a.astimezone(UTC), b.astimezone(UTC)) for a, b in inlet_unknown
+    probe = _unknown_in(probe, grid, inlet_unknown)
+    # Unknown, the air is the default, not the last reading held.
+    amb = _unknown_in(
+        _held(series(air, _to_sim), grid, None), grid, air_unknown
     )
-    if unknown:
-        probe = [
-            None if any(a <= t < b for a, b in unknown) else v
-            for t, v in zip(grid, probe, strict=True)
-        ]
-    amb = _held(series(air, _to_sim), grid, None)
     runs = sorted(
         (a.astimezone(UTC), b.astimezone(UTC)) for a, b in circulation
     )
@@ -1716,6 +1732,7 @@ def book_from_changes(
     air: Iterable[tuple[datetime, float]] = (),
     flow_outages: Iterable[tuple[datetime, datetime]] = (),
     inlet_outages: Iterable[tuple[datetime, datetime]] = (),
+    air_outages: Iterable[tuple[datetime, datetime]] = (),
 ) -> Booked | None:
     """``book_from_history`` from a heater's values' changes (``rows``)
     instead of its statuses, with ``observed`` the instants it was heard
@@ -1724,9 +1741,10 @@ def book_from_changes(
     Assistant), with the same anchor search. Like the rows, ``flow``,
     ``circulation_flow``, ``inlet`` and ``air`` are changes, each value
     held until the next, in gal/min and °F whatever the preferred units.
-    ``flow_outages`` and ``inlet_outages`` are the spans each was
-    unknown (``History.outages``). A flow unknown is as a heater
-    unheard: no anchor before it counts. A ValueError when no flow
+    ``flow_outages``, ``inlet_outages`` and ``air_outages`` are the spans
+    each was unknown (``History.outages``). A flow unknown is as a heater
+    unheard: no anchor before it counts. An air unknown is
+    ``AMBIENT_DEFAULT_F``, as with no air reading. A ValueError when no flow
     reading is in force at the window's start.
 
     A value that holds writes no change, so only ``observed`` says the
@@ -1757,6 +1775,7 @@ def book_from_changes(
     probe = list(inlet)
     airs = list(air)
     inlet_unknown = list(inlet_outages)
+    air_unknown = list(air_outages)
     return _book_windows(
         lambda start: book_steps_from_changes(
             rows,
@@ -1769,6 +1788,7 @@ def book_from_changes(
             air=airs,
             params=params,
             inlet_outages=inlet_unknown,
+            air_outages=air_unknown,
         ),
         flows,
         params,

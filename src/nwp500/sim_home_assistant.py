@@ -2203,9 +2203,13 @@ class HomeAssistantBook:
             except ValueError as err:
                 notes.append(f"book: {e.inlet}: {err}")
         air: list[Reading] = []
+        air_out: list[Span] = []
         if e.air is not None:
             try:
-                air, _ = got.converted(e.air, self._units.get(e.air), to_f, at)
+                air, bad = got.converted(
+                    e.air, self._units.get(e.air), to_f, at
+                )
+                air_out = busy(bad, got.outages.get(e.air, []), unseen)
             except ValueError as err:
                 notes.append(f"book: {e.air}: {err}")
         try:
@@ -2220,6 +2224,7 @@ class HomeAssistantBook:
                 air=air,
                 flow_outages=flow_out,
                 inlet_outages=inlet_out,
+                air_outages=air_out,
             )
         except ValueError as err:
             notes.append(f"book: {err}")

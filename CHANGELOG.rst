@@ -23,7 +23,9 @@ Added
   optional, give the runs, the inlet and the conversion at the mains
   (``BookAnswer.inlet_measured``). ``mains_plateau`` and ``known_runs``
   are the inlet's plateau and the pump's runs from a ``History``, as
-  ``HomeAssistantEnvironment`` reads them.
+  ``HomeAssistantEnvironment`` reads them. ``book_from_changes`` and
+  ``book_steps_from_changes`` take ``air_outages``: while the air is
+  unknown the book takes the default air, not the last reading.
 - **The CPU work off the event loop** (#225). ``fit_location_air`` and
   ``HomeAssistantEnvironment`` take ``run=`` (``Run``), which runs a
   piece of work and awaits its result, such as Home Assistant's
