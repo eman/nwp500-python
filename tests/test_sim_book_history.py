@@ -898,3 +898,57 @@ class TestARunsGallonsForTheCircuit:
 
         assert first_of_second(a + 2 * m) == pytest.approx(1.2)
         assert first_of_second(a + 2 * m) == pytest.approx(first_of_second(a))
+
+    def test_a_window_carries_an_earlier_runs_flow(
+        self, device_status_dict: dict[str, Any]
+    ) -> None:
+        """Runs at minutes 0-1 and 20-30, the flow read 0.2 at minute 0
+        and 1.2 at 24: from the statuses, a window from minute 24 has
+        the 0.8 gal the whole history has there, the first run's
+        reading carried past its hold."""
+        from nwp500.sim import site_example_params
+
+        m = timedelta(minutes=1)
+        a = T0 - timedelta(hours=1)
+        status = DeviceStatus.model_validate(
+            device_status_dict
+            | {"tankUpperTemperature": 600, "tankLowerTemperature": 598}
+        )
+        readings = [(a + k * m, status) for k in range(61)]
+        runs = [(a, a + m), (a + 20 * m, a + 30 * m)]
+
+        def at_24(start: datetime) -> float:
+            steps = sa.book_steps_from_history(
+                readings,
+                start=start,
+                end=a + 60 * m,
+                flow=[(a + k * m, 0.0) for k in range(61)],
+                circulation=runs,
+                circulation_flow=[(a, 0.2), (a + 24 * m, 1.2)],
+                params=site_example_params(),
+            )
+            k = int((a + 24 * m - start) / timedelta(seconds=sa.BOOK_GRID_S))
+            return float(steps[k].run_gal_before)
+
+        assert at_24(a + 24 * m) == pytest.approx(0.8)
+        assert at_24(a + 24 * m) == pytest.approx(at_24(a))
+
+    def test_a_probe_unread_still_counts_the_runs_gallons(self) -> None:
+        """A run from minute 1 at 1.2 gal/min, the lower probe first
+        read at minute 4: its first step has 3.6 gal behind it."""
+        m = timedelta(minutes=1)
+        a = T0 - timedelta(hours=1)
+        runs = [(a + m, a + 20 * m)]
+        from nwp500.sim import site_example_params
+
+        steps = sa.book_steps_from_changes(
+            sa.ChangeRows(upper_f=[(a, 140.0)], lower_f=[(a + 4 * m, 140.0)]),
+            start=a,
+            end=a + 30 * m,
+            flow=[(a, 0.0)],
+            circulation=runs,
+            circulation_flow=sa.run_flow(runs, 1.2),
+            params=site_example_params(),
+        )
+        assert steps[0].circulating
+        assert steps[0].run_gal_before == pytest.approx(3 * 1.2)

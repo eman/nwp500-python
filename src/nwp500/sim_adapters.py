@@ -105,6 +105,7 @@ from nwp500.sim.location_air import (
 from nwp500.sim.location_air import project as project_location_air
 from nwp500.sim.observed import Observed
 from nwp500.sim.observed import observe as observe_record
+from nwp500.sim.params import CirculationParams
 from nwp500.sim.profile import HeaterProfile
 from nwp500.sim.record import Record
 from nwp500.sim.schedules import weekly_runs
@@ -1760,7 +1761,6 @@ def _book_steps_on(
     meters = series(flow, _volume_to_sim)
     run_flows = series(circulation_flow, _volume_to_sim)
     meter = _held(meters, grid, flow_hold)
-    run_flow = _held(run_flows, grid, flow_hold)
     probe = _held(series(inlet, _to_sim), grid, inlet_hold)
     probe = _unknown_in(probe, grid, inlet_unknown)
     airs = series(air, _to_sim)
@@ -1777,61 +1777,22 @@ def _book_steps_on(
     # (``CirculationParams.book_circuit_gal``), as the walk takes them.
     gap = timedelta(minutes=10.0 if terms is None else terms.run_gap_min)
     joined = merge_runs(runs, gap)
+    on_col, gpm_col, before_col = _circulation_columns(
+        grid,
+        runs,
+        joined,
+        meters,
+        run_flows,
+        flow_hold,
+        terms,
+    )
     steps: list[BookStep] = []
-    settled: float | None = None
-    current: tuple[datetime, datetime] | None = None
-    run_gal = 0.0
-
-    def run_gpm(
-        on_flow: float | None, m: float, last: float | None
-    ) -> tuple[float, float | None]:
-        # A run's flow: its last reading, this run's or an earlier
-        # one's; with none yet, the meter's over its share, else the
-        # priced flow.
-        if on_flow is not None:
-            last = on_flow
-        if last is not None:
-            return last, last
-        if terms is not None and terms.meter_share > 0.0:
-            return m / terms.meter_share, last
-        return (terms.flow_gpm if terms is not None else 0.0), last
-
-    def before(
-        run: tuple[datetime, datetime], at: datetime
-    ) -> tuple[float, float | None]:
-        # What a run under way at the window's start circulated before
-        # it, on the book's grid back to the run's start, by the same
-        # rules as the steps: and the flow in force then.
-        step = timedelta(seconds=BOOK_GRID_S)
-        k = math.ceil((at - run[0]) / step)
-        pre = [at - j * step for j in range(k, 0, -1)]
-        pre_meter = _held(meters, pre, flow_hold)
-        pre_flow = _held(run_flows, pre, flow_hold)
-        gal, last = 0.0, None
-        for t, m, f in zip(pre, pre_meter, pre_flow, strict=True):
-            if any(a <= t < b for a, b in runs):
-                gpm, last = run_gpm(f, m or 0.0, last)
-                gal += gpm * BOOK_GRID_S / 60.0
-        return gal, last
-
-    for i, at in enumerate(grid):
+    for i in range(len(grid)):
         u, lo, a_f, in_f = upper[i], lower[i], amb[i], probe[i]
         if u is None or lo is None:
             continue
         m = meter[i] or 0.0
-        on = any(a <= at < b for a, b in runs)
-        gpm = 0.0
-        if on:
-            run = next((r for r in joined if r[0] <= at < r[1]), None)
-            if run is not None and run != current:
-                current = run
-                run_gal = 0.0
-                if run[0] < grid[0]:
-                    # A group already under way at the window's start:
-                    # in a run, or in a gap between two.
-                    run_gal, pre_settled = before(run, at)
-                    settled = settled if pre_settled is None else pre_settled
-            gpm, settled = run_gpm(run_flow[i], m, settled)
+        on, gpm = on_col[i], gpm_col[i]
         steps.append(
             BookStep(
                 seconds=float(BOOK_GRID_S),
@@ -1846,12 +1807,80 @@ def _book_steps_on(
                 circulation_gpm=gpm,
                 inlet_measured=in_f is not None,
                 lower_element=bool(lo_el[i]),
-                run_gal_before=run_gal if on else 0.0,
+                run_gal_before=before_col[i],
             )
         )
-        if on:
-            run_gal += gpm * BOOK_GRID_S / 60.0
     return steps
+
+
+def _circulation_columns(
+    grid: Sequence[datetime],
+    runs: Sequence[tuple[datetime, datetime]],
+    joined: Sequence[tuple[datetime, datetime]],
+    meters: Sequence[tuple[datetime, float]],
+    run_flows: Sequence[tuple[datetime, float]],
+    flow_hold: timedelta | None,
+    terms: CirculationParams | None,
+) -> tuple[list[bool], list[float], list[float]]:
+    """At each instant of ``grid``: whether a run is on, its flow, and
+    the gallons its group (``joined``) circulated before it. Walked from
+    the start of a group under way at the grid's start, whatever the
+    probes read, so a window booked from any instant counts a run as the
+    whole history does. A run's flow is its last reading, this run's or
+    an earlier one's; with none yet, the meter's over its share, else
+    the priced flow."""
+    step = timedelta(seconds=BOOK_GRID_S)
+    lead: list[datetime] = []
+    open_group = next((g for g in joined if g[0] < grid[0] < g[1]), None)
+    if grid and open_group is not None:
+        k = math.ceil((grid[0] - open_group[0]) / step)
+        lead = [grid[0] - j * step for j in range(k, 0, -1)]
+    walk = [*lead, *grid]
+    if not walk:
+        return [], [], []
+    held_meter = _held(meters, walk, flow_hold)
+    held_flow = _held(run_flows, walk, flow_hold)
+    # The flow an earlier run read last, as a walk from the first would
+    # carry it.
+    settled: float | None = None
+    for t, v in run_flows:
+        if t >= walk[0]:
+            break
+        if any(a <= t < b for a, b in runs):
+            settled = v
+    on_spans = merge_runs(runs, timedelta(0))
+    on_col: list[bool] = []
+    gpm_col: list[float] = []
+    before_col: list[float] = []
+    current: tuple[datetime, datetime] | None = None
+    run_gal = 0.0
+    s_i = g_i = 0
+    for t, m, f in zip(walk, held_meter, held_flow, strict=True):
+        while s_i < len(on_spans) and on_spans[s_i][1] <= t:
+            s_i += 1
+        while g_i < len(joined) and joined[g_i][1] <= t:
+            g_i += 1
+        on = s_i < len(on_spans) and on_spans[s_i][0] <= t
+        gpm = before = 0.0
+        if on:
+            group = joined[g_i] if g_i < len(joined) else None
+            if group != current:
+                current, run_gal = group, 0.0
+            if f is not None:
+                settled = f
+            if settled is not None:
+                gpm = settled
+            elif terms is not None and terms.meter_share > 0.0:
+                gpm = (m or 0.0) / terms.meter_share
+            elif terms is not None:
+                gpm = terms.flow_gpm
+            before = run_gal
+            run_gal += gpm * BOOK_GRID_S / 60.0
+        on_col.append(on)
+        gpm_col.append(gpm)
+        before_col.append(before)
+    n = len(lead)
+    return on_col[n:], gpm_col[n:], before_col[n:]
 
 
 def with_circulation_terms(
