@@ -10,7 +10,7 @@ import sys
 from collections.abc import Iterator
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import pytest
 
@@ -548,11 +548,13 @@ class TestTheHeatBook:
     from the tank's booked heat, and readiness reads it with the probes
     apart."""
 
-    def _run(self, keeper: Any, start: datetime = NOW) -> tuple[str, Any]:
+    def _run(
+        self, keeper: Any, start: datetime = NOW, **given: Any
+    ) -> tuple[str, Any]:
         out = io.StringIO()
         result = sim_cli.run(
             sim_cli.Inputs(
-                scenario=scenario_to_document(_scenario(start=start))
+                scenario=scenario_to_document(_scenario(start=start)), **given
             ),
             None,
             NOW,
@@ -574,6 +576,34 @@ class TestTheHeatBook:
         assert "no_heat_book" not in result.reasons
         assert keeper.asked[0][0] == NOW
 
+    def test_the_bath_and_the_showers(self) -> None:
+        text, _ = self._run(None)
+        assert "Bath (28.7 gal): not ready, 28.7 gal short" in text
+        assert "Showers (12.0 gal): 0 ready" in text
+        text, _ = self._run(_Keeper(sim.full_tank_book(130.0, 130.0)))
+        assert (
+            "Bath (28.7 gal): not ready, 0.9 gal short; the heat pump" in text
+        )
+        assert "Showers (12.0 gal): 2 ready" in text
+
+    def test_the_bath_and_shower_volumes_given(self) -> None:
+        keeper = _Keeper(sim.full_tank_book(130.0, 130.0))
+        text, _ = self._run(keeper, bath=20.0, shower=9.0)
+        assert "Bath (20.0 gal): ready, 7.8 gal to spare" in text
+        assert "Showers (9.0 gal): 3 ready" in text
+
+    def test_the_volumes_are_in_the_preferred_unit(self) -> None:
+        set_unit_system("metric")
+        keeper = _Keeper(sim.full_tank_book(130.0, 130.0))
+        text, _ = self._run(keeper, shower=34.0679)
+        assert "Showers (34.1 L): 3 ready" in text
+
+    @pytest.mark.parametrize("name", ["bath", "shower"])
+    def test_a_volume_is_positive(self, name: str) -> None:
+        with pytest.raises(sim_cli.InputError, match=f"--{name}"):
+            given: dict[str, Any] = {name: 0.0}
+            sim_cli.Inputs(**given)
+
     def test_the_table_reads_the_book_at_the_scenarios_inlet(self) -> None:
         """At a 50 °F inlet, as the walk takes it: not the book's own."""
         import dataclasses
@@ -587,7 +617,7 @@ class TestTheHeatBook:
             NOW,
             "table",
             out,
-            keeper=_Keeper(book),
+            keeper=cast(Any, _Keeper(book)),
         )
         p = sim.default_params(2)
         at_50 = sim.readiness(

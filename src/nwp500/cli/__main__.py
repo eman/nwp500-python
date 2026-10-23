@@ -1133,6 +1133,18 @@ _tz_option = click.option(
 )
 @_sources_option
 @click.option(
+    "--bath",
+    type=float,
+    help="The bath readiness is judged against, delivered, preferred unit "
+    "(default the parameters', 28.7 gal)",
+)
+@click.option(
+    "--shower",
+    type=float,
+    help="A shower, delivered, preferred unit (default the parameters', "
+    "12 gal)",
+)
+@click.option(
     "--format",
     "output_format",
     type=click.Choice(["table", "json", "csv"]),

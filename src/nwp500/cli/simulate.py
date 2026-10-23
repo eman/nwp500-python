@@ -130,12 +130,20 @@ class Inputs:
     #: Where the air, its humidity and the inlet are read live
     #: (``sim_home_assistant.Sources``), when the heater is.
     sources: Any = None
+    #: The bath and the shower readiness is judged against, delivered,
+    #: in the preferred unit; None: the parameters'.
+    bath: float | None = None
+    shower: float | None = None
 
     def __post_init__(self) -> None:
         if self.ambient is not None and self.environment is not None:
             raise InputError("give --ambient or --environment, not both")
         if self.start is not None and self.start.tzinfo is None:
             raise InputError("--start needs its UTC offset")
+        for name in ("bath", "shower"):
+            value = getattr(self, name)
+            if value is not None and not value > 0.0:
+                raise InputError(f"--{name} must be a positive volume")
         if self.tz is not None:
             zone_name(self.tz)
         if self.scenario is not None:
@@ -399,15 +407,55 @@ def energy_totals(
     return compressor, element
 
 
+def hot_water_lines(
+    built: Built,
+    book: sim.Booked | None,
+    bath_gal: float | None = None,
+    shower_gal: float | None = None,
+) -> list[str]:
+    """The bath and the showers the tank is ready for now
+    (``sim.time_to_ready``): the bath's margin, or when the heat pump
+    has it ready; the whole showers. Volumes in gallons, None for the
+    parameters'."""
+    try:
+        r = sim.time_to_ready(
+            built.scenario,
+            built.params,
+            book=book,
+            bath_gal=bath_gal,
+            shower_gal=shower_gal,
+        )
+    except SimulationError as e:
+        return [f"Bath and showers: not computed ({e})"]
+    bath = r.bath
+    if bath.ready:
+        state = f"ready, {_volume(bath.margin_gal)} to spare"
+    elif bath.ready_at is not None:
+        state = (
+            f"not ready, {_volume(-bath.margin_gal)} short; the heat pump "
+            f"has it ready at {_local(bath.ready_at, built.scenario.tz)}"
+        )
+    else:
+        state = f"not ready, {_volume(-bath.margin_gal)} short"
+    showers = r.showers
+    return [
+        f"Bath ({_volume(bath.volume_gal)}): {state}",
+        f"Showers ({_volume(showers.volume_gal)}): "
+        f"{showers.ready_for_whole} ready",
+    ]
+
+
 def print_table(
     built: Built,
     result: sim.SimulationResult,
     console: Console,
     book: sim.Booked | None = None,
+    bath_gal: float | None = None,
+    shower_gal: float | None = None,
 ) -> None:
     """The heating intervals, the energy by source, the readiness (from
-    ``book`` when given), the draw windows (and which ran cold), the
-    reasons and the defaults."""
+    ``book`` when given) with the bath and the showers, the draw windows
+    (and which ran cold), the reasons and the defaults."""
     s = built.scenario
     tz = s.tz
     ready = sim.readiness(s.state, s.settings, built.params, book=book)
@@ -417,6 +465,8 @@ def print_table(
         f"lower, setpoint {_temp(s.settings.setpoint_f)}; "
         f"{_volume(ready.gal)} deliverable now ({ready.basis})"
     )
+    for line in hot_water_lines(built, book, bath_gal, shower_gal):
+        console.print(line)
 
     heating = Table(title="Heating")
     for col in ("Start", "End", "Source", "Why", "Target", "Stop", "Wh"):
@@ -530,5 +580,12 @@ def run(
     elif output_format == "csv":
         write_csv(result, stream)
     else:
-        print_table(built, result, Console(file=stream), book)
+        print_table(
+            built,
+            result,
+            Console(file=stream),
+            book,
+            None if inputs.bath is None else sa.to_sim_volume(inputs.bath),
+            None if inputs.shower is None else sa.to_sim_volume(inputs.shower),
+        )
     return result

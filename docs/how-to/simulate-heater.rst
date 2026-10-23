@@ -196,6 +196,14 @@ give:
   tank in the 72 hours, or a scenario that doesn't start now, the run
   walks without the book, and a warning says why.
 
+Under "deliverable now", the table gives the bath and the showers the
+tank is ready for (``sim.time_to_ready``): the bath ready with its
+margin, or how short it is and when the heat pump has it ready; and the
+whole showers, as a shower the tank can't finish isn't counted. Both are
+delivered volumes, past the mixing valve. ``--bath`` and ``--shower``
+give them in the preferred unit; without them, the parameters'
+(``ReadinessParams.bath_gal``, 28.7 gal, and ``shower_gal``, 12 gal).
+
 A reading's age is from when Home Assistant last heard the sensor
 report (``last_reported``). Over the REST API, Home Assistant serves
 that from a copy of the state it keeps until the state changes, and a

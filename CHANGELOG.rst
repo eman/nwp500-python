@@ -15,6 +15,14 @@ Fixed
   its probes apart read 0 gal from the probes alone, the history
   unused.
 
+Added
+-----
+
+- **simulate run's bath and showers.** The table gives the bath and
+  the whole showers the tank is ready for (``sim.time_to_ready``), and
+  when the heat pump has the bath ready; ``--bath`` and ``--shower``
+  give the volumes.
+
 Changed
 -------
 
