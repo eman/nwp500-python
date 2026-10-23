@@ -1041,6 +1041,46 @@ class TestTheBookSixthReview:
         client.drop = True
         asyncio.run(keeper.read(END))
         got = keeper.book(END, self.P)
-        assert any("binary_sensor.compressor" in n for n in got.notes)
+        assert any(
+            n.startswith("compressor_on: nothing read") for n in got.notes
+        )
         # Unobserved to the end: no book, not one heated throughout.
         assert got.booked is None
+
+    def test_a_compressor_omitted_from_one_window_is_unobserved(self) -> None:
+        class Dropping(WindowedClient):
+            async def read_history(
+                self, entities: Iterable[str], start: datetime, end: datetime
+            ) -> ha.History:
+                # The last day's window has nothing of the compressor.
+                names = [
+                    n
+                    for n in entities
+                    if not (
+                        start >= END - 24 * H
+                        and n == "binary_sensor.compressor"
+                    )
+                ]
+                return await super().read_history(names, start, end)
+
+        rows = [
+            r
+            for r in _book_rows()
+            if r["entity_id"] != "binary_sensor.compressor"
+        ] + [
+            _row("binary_sensor.compressor", T0, "off"),
+            # On through the second day's end, into the omitted window.
+            _row("binary_sensor.compressor", END - 25 * H, "on"),
+        ]
+        history = asyncio.run(
+            ha.read_heater_history(
+                cast(ha.HomeAssistantClient, Dropping(rows, BOOK_UNITS)),
+                BOOK_HEATER,
+                T0,
+                END,
+            )
+        )
+        assert (END - 24 * H, END) in history.rows.outages
+        assert "compressor_on: nothing read in 1 windows, left unobserved" in (
+            history.notes
+        )

@@ -1879,6 +1879,13 @@ def _value(state: str, read: _Read, unit: str | None) -> Any:
         return None
 
 
+#: The heater's roles that say it heats: a window without one of them is
+#: unobserved.
+_HEATING = frozenset(
+    ("compressor_on", "upper_element_on", "lower_element_on", "heat_source")
+)
+
+
 async def read_heater_history(
     client: HomeAssistantClient,
     entities: HeaterEntities,
@@ -1894,9 +1901,10 @@ async def read_heater_history(
     Each number is taken from the unit it was recorded in. A state
     ``unavailable`` or ``unknown`` is an outage, and an outage of any
     entity leaves the heater unobserved over it: the integration's
-    entities go unavailable together. Raises ``HomeAssistantError`` when
-    a probe cannot be read, or the client gives no states
-    (``History.states``)."""
+    entities go unavailable together. So does a window that has nothing
+    of a heating flag (the compressor, an element, the heat source).
+    Raises ``HomeAssistantError`` when a probe cannot be read, or the
+    client gives no states (``History.states``)."""
     from nwp500.enums import CurrentOperationMode, ErrorCode, HeatSource
 
     if window <= timedelta(0):
@@ -1942,6 +1950,7 @@ async def read_heater_history(
             del roles[name]
     changes: dict[str, list[tuple[datetime, Any]]] = {n: [] for n in roles}
     unread: dict[str, int] = {}
+    blank: dict[str, int] = {}
     down: list[Span] = []
     heard: list[datetime] = []
     names = sorted({e.heard, *(entity for entity, _ in roles.values())})
@@ -1969,6 +1978,12 @@ async def read_heater_history(
             down.append((was, b))
         for name, (entity, read) in roles.items():
             series = changes[name]
+            if name in _HEATING and not got.states.get(entity):
+                # A window opens with the state in force: nothing is no
+                # read, and a flag held from before would credit heating
+                # across it.
+                down.append((a, b))
+                blank[name] = blank.get(name, 0) + 1
             was = None
             # The unit each number was recorded in, where the history
             # says; today's where it does not.
@@ -2009,6 +2024,10 @@ async def read_heater_history(
             )
     for name, count in unread.items():
         notes.append(f"{name}: {count} states this does not read, left out")
+    for name, count in blank.items():
+        notes.append(
+            f"{name}: nothing read in {count} windows, left unobserved"
+        )
     outages = busy(down)
     if outages:
         hours = sum((b - a).total_seconds() for a, b in outages) / 3600
@@ -2133,7 +2152,6 @@ class HomeAssistantBook:
         except (HomeAssistantError, ValueError) as err:
             self._notes.append(f"book: the heater's history not read ({err})")
         else:
-            newer = self._heating_marked(newer, start, now)
             held_ = self._heater_history
             whole = newer if held_ is None else held_.extended(newer)
             self._heater_history = whole.since(cut)
@@ -2167,40 +2185,14 @@ class HomeAssistantBook:
                 self._units.pop(n, None)
                 self._notes.append(f"book: {n}'s unit not read ({err})")
 
-    def _heating_marked(
-        self, newer: HeaterHistory, start: datetime, end: datetime
-    ) -> HeaterHistory:
-        """``newer`` unobserved from ``start`` to ``end`` when it has
-        nothing of a configured heating flag: a read opens with the
-        value in force, so nothing is no read, and a flag held from an
-        earlier read would credit heating across it."""
-        h = self.heater
-        missing = [
-            entity
-            for entity, changes in (
-                (h.compressor, newer.rows.compressor_on),
-                (h.upper_element, newer.rows.upper_element_on),
-                (h.lower_element, newer.rows.lower_element_on),
-                (h.heat_source, newer.rows.heat_source),
-            )
-            if entity and not changes
-        ]
-        if not missing:
-            return newer
-        self._notes.append(
-            f"book: no history of {', '.join(missing)} read; the heater "
-            "is unobserved over the read"
-        )
-        rows = replace(newer.rows, outages=(*newer.rows.outages, (start, end)))
-        return replace(newer, rows=rows)
-
     def book(self, at: datetime, params: HeaterParams) -> BookAnswer:
         """The book at ``at`` from the history held, with no request:
         CPU work, for an executor. None, and notes why, without the
         heater's or the flow's history, or with no anchor."""
         at = at.astimezone(UTC)
-        notes = list(self._notes)
         rows, got = self._heater_history, self._history
+        # The last heater read's notes, then this keeper's.
+        notes = [*(rows.notes if rows is not None else ()), *self._notes]
         if rows is None or got is None:
             notes.append("book: no history read")
             return BookAnswer(None, False, tuple(notes))
