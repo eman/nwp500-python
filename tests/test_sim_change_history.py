@@ -890,3 +890,47 @@ class TestTheBookAir:
             "°F",
         )
         assert out == pytest.approx(self._default_from_out())
+
+
+class TestThePumpThirdReview:
+    P = sim.default_params()
+
+    def test_a_reading_in_no_unit_outside_the_span_is_no_matter(self) -> None:
+        rows = [
+            _row("sensor.pump", T0, "500", "lux"),
+            _row("sensor.pump", T0 + H, "0", "rpm"),
+        ]
+        client = WindowedClient(rows, BOOK_UNITS)
+        got = asyncio.run(client.read_history(["sensor.pump"], T0, END))
+        runs, why = ha.known_runs(got, "sensor.pump", "rpm", T0 + 2 * H, END)
+        assert runs == [] and why is None
+        runs, why = ha.known_runs(got, "sensor.pump", "rpm", T0, END)
+        assert runs is None and why == "1 readings in no speed unit"
+
+    def test_the_pumps_outages_count_when_its_runs_are_unknown(self) -> None:
+        from dataclasses import replace
+
+        p = replace(
+            self.P,
+            circulation=sim.CirculationParams(
+                displaced_gal=1.0, flow_gpm=2.0, loss_btu_per_gal=50.0
+            ),
+        )
+        rows = [r for r in _book_rows() if r["entity_id"] != "sensor.pump"] + [
+            # Unavailable from the start: the runs are unknown.
+            _row("sensor.pump", T0, "unavailable"),
+            _row("sensor.pump", END - H, "0", "rpm"),
+        ]
+
+        def heat(pump: bool) -> float:
+            keeper = _keeper(
+                WindowedClient(rows, BOOK_UNITS),
+                **({"circulation_speed": "sensor.pump"} if pump else {}),
+            )
+            asyncio.run(keeper.read(END))
+            got = keeper.book(END, p)
+            assert got.booked is not None, got.notes
+            return got.booked.heat_btu
+
+        # The outage is booked as the pump running: less heat than none.
+        assert heat(True) < heat(False)

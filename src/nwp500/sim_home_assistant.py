@@ -1020,9 +1020,11 @@ def known_runs(
         speed, unread = history.converted(pump, unit, to_rpm, now)
     except ValueError as err:
         return None, str(err)
-    if unread:
-        # A reading left out could have been a run.
-        return None, f"{len(unread)} readings in no speed unit"
+    # A reading left out could have been a run: one inside the span
+    # leaves the runs unknown.
+    inside = [(a, b) for a, b in unread if a < now and b > since]
+    if inside:
+        return None, f"{len(inside)} readings in no speed unit"
     return pump_runs(speed, since, now), None
 
 
@@ -2184,14 +2186,12 @@ class HomeAssistantBook:
             if known is None:
                 notes.append(
                     f"book: the circulation's runs are unknown ({why}); "
-                    "booked without them"
+                    "booked with only its outages"
                 )
-            else:
-                # While the pump was unavailable or unread, it may have
-                # run.
-                runs = busy(
-                    known, got.outages.get(e.circulation_speed, []), unseen
-                )
+            # While the pump was unavailable or unread, it may have run.
+            runs = busy(
+                known or [], got.outages.get(e.circulation_speed, []), unseen
+            )
         inlet: list[Reading] = []
         inlet_out: list[Span] = []
         if e.inlet is not None:
