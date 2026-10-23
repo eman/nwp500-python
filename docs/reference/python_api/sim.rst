@@ -313,7 +313,7 @@ Home Assistant sources
 
 .. automodule:: nwp500.sim_home_assistant
    :members: HomeAssistantEnvironment, HomeAssistantClient, record_inputs,
-      RecordInputs, INLET_LOOKBACK, LOCATION_AIR_WINDOW,
+      RecordInputs, INLET_LOOKBACK, PROBE_STEP, held, LOCATION_AIR_WINDOW,
       LOCATION_AIR_MIN_SPAN, LOCATION_AIR_MIN_R, RUN_SETTLE, Sources,
       Entities, sources_from, State, parse_state,
       parse_history, parse_outages, parse_states, History, history_for,

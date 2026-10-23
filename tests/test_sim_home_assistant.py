@@ -479,6 +479,20 @@ class TestTheInlet:
         assert set(names) == {"sensor.inlet", DEMAND}
         assert (since, until) == (NOW - timedelta(hours=72), NOW)
 
+    async def test_a_probe_steady_through_the_tail(self) -> None:
+        """A history writes only changes: a probe at the mains from
+        minute 5 to the end has one row there, and still a plateau."""
+        series = long_draw(ended_hours_ago=5)
+        end = NOW - timedelta(hours=5)
+        start = end - timedelta(minutes=15)
+        series["sensor.inlet"] = [
+            (start - timedelta(hours=1), 66.0),
+            (start + timedelta(minutes=5), 58.0),
+            (end + timedelta(minutes=20), 65.0),
+        ]
+        source = _source(FakeClient(UNITS, series), **INLET)
+        assert (await source.read()).inlet_f == pytest.approx(58.0)
+
     async def test_a_short_draw_has_none(self) -> None:
         client = FakeClient(UNITS, long_draw(ended_hours_ago=5, minutes=8))
         source = _source(client, **INLET)
@@ -1643,3 +1657,22 @@ class TestWhileRunning:
         got, newest = ha._while_running(air, [(on, "on")], NOW)  # pyright: ignore[reportPrivateUsage]
         assert got[-1][0] == NOW - timedelta(minutes=8)
         assert newest == air[0]
+
+
+class TestHeld:
+    def test_the_value_in_force_on_the_grid(self) -> None:
+        rows = [(NOW + timedelta(seconds=25), 2.0), (NOW, 1.0)]
+        got = ha.held(
+            rows, NOW - timedelta(seconds=10), NOW + timedelta(seconds=40)
+        )
+        assert got == [
+            (NOW, 1.0),
+            (NOW + timedelta(seconds=10), 1.0),
+            (NOW + timedelta(seconds=20), 1.0),
+            (NOW + timedelta(seconds=30), 2.0),
+            (NOW + timedelta(seconds=40), 2.0),
+        ]
+
+    def test_a_step_must_be_positive(self) -> None:
+        with pytest.raises(ValueError, match="positive"):
+            ha.held([], NOW, NOW, timedelta(0))
