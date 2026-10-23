@@ -574,6 +574,31 @@ class TestTheHeatBook:
         assert "no_heat_book" not in result.reasons
         assert keeper.asked[0][0] == NOW
 
+    def test_the_table_reads_the_book_at_the_scenarios_inlet(self) -> None:
+        """At a 50 °F inlet, as the walk takes it: not the book's own."""
+        import dataclasses
+
+        book = sim.full_tank_book(130.0, 130.0)
+        s = _scenario(environment=sim.Environment(ambient_f=62.0, inlet_f=50.0))
+        out = io.StringIO()
+        sim_cli.run(
+            sim_cli.Inputs(scenario=scenario_to_document(s)),
+            None,
+            NOW,
+            "table",
+            out,
+            keeper=_Keeper(book),
+        )
+        p = sim.default_params(2)
+        at_50 = sim.readiness(
+            s.state, s.settings, p, book=dataclasses.replace(book, inlet_f=50.0)
+        ).gal
+        own = sim.readiness(s.state, s.settings, p, book=book).gal
+        assert at_50 != own
+        assert f"{at_50:.1f} gal deliverable now" in " ".join(
+            out.getvalue().split()
+        )
+
     def test_no_anchor_walks_without_it(
         self, caplog: pytest.LogCaptureFixture
     ) -> None:

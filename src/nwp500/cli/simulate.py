@@ -11,6 +11,7 @@ This module needs the ``sim`` extra; ``__main__`` imports it only when a
 """
 
 import csv
+import dataclasses
 import json
 import logging
 import os
@@ -292,7 +293,9 @@ def booked(
 ) -> sim.Booked | None:
     """The tank's booked heat at the scenario's start, from ``keeper``
     (``read_book``): only for a scenario that starts ``now``, whose
-    state is the heater's now. Its notes are logged."""
+    state is the heater's now. Its gallons convert at the scenario's
+    inlet where one is given, as the walk takes it. Its notes are
+    logged."""
     if keeper is None:
         return None
     start = built.scenario.start
@@ -309,7 +312,10 @@ def booked(
             _logger.warning(note)
         else:
             _logger.info(note)
-    return answer.booked
+    inlet = built.scenario.environment.inlet_f
+    if answer.booked is None or inlet is None:
+        return answer.booked
+    return dataclasses.replace(answer.booked, inlet_f=inlet)
 
 
 def window(inputs: Inputs, now: datetime) -> tuple[datetime, timedelta]:
