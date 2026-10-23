@@ -313,9 +313,11 @@ Home Assistant sources
 
 .. automodule:: nwp500.sim_home_assistant
    :members: HomeAssistantEnvironment, HomeAssistantClient, record_inputs,
-      RecordInputs, INLET_LOOKBACK, Sources, Entities, sources_from, State, parse_state,
+      RecordInputs, INLET_LOOKBACK, LOCATION_AIR_WINDOW,
+      LOCATION_AIR_MIN_SPAN, LOCATION_AIR_MIN_R, RUN_SETTLE, Sources,
+      Entities, sources_from, State, parse_state,
       parse_history, parse_outages, parse_states, History, history_for,
-      parse_forecast, read_heater_history, HeaterEntities, HeaterHistory,
+      parse_forecast, parse_outdoor_history, read_heater_history, HeaterEntities, HeaterHistory,
       HISTORY_WINDOW, to_w, to_wh,
       pump_runs, demand_spans, busy, covers_start, percent,
       fresh, to_f, to_gpm, to_gal, to_rpm, HomeAssistantError

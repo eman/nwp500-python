@@ -14,9 +14,9 @@ this module, a ``sim_live`` source:
   ``sim_live.compose()``:
 
   - **the air:** the outdoor forecast projected through a
-    ``location_air`` model, anchored to a fresh reading of the air
-    beside the heater; without a model, that reading held over the
-    span;
+    ``location_air`` model, given or fitted on the recent history,
+    anchored to a fresh reading of the air beside the heater; without
+    a weather entity or a model, that reading held over the span;
   - **the humidity:** a fresh reading;
   - **the inlet:** the plateau of the long draws in the last 72 h, from
     the inlet probe, the household's draws (a demand entity) and the
@@ -37,6 +37,7 @@ from the caller's configuration (``sources_from``).
 import enum
 import logging
 import math
+from bisect import bisect_right
 from collections.abc import Awaitable, Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
@@ -45,7 +46,12 @@ from typing import Any, cast
 from nwp500 import sim_adapters as sa
 from nwp500.exceptions import Nwp500Error
 from nwp500.sim import Environment
-from nwp500.sim.location_air import LocationAirModel
+from nwp500.sim.location_air import (
+    FIT_LAGS_H,
+    FittedLocationAir,
+    LocationAirModel,
+)
+from nwp500.sim.location_air import fit as fit_air
 from nwp500.sim.location_air import project as project_air
 
 __author__ = "Emmanuel Levijarvi"
@@ -67,6 +73,17 @@ PUMP_ON_RPM = 10.0
 PUMP_STALE = timedelta(seconds=300)
 #: How far back the inlet's plateau looks.
 INLET_LOOKBACK = timedelta(hours=72)
+#: How far back the air beside the heater and the outdoor air are read
+#: to fit a ``location_air`` model where none is given.
+LOCATION_AIR_WINDOW = timedelta(days=3)
+#: The least span of readings such a fit is made on: a day, so it sees
+#: the outdoor air's daily swing.
+LOCATION_AIR_MIN_SPAN = timedelta(days=1)
+#: The least r (``FittedLocationAir.r``) such a fit is used at.
+LOCATION_AIR_MIN_R = 0.5
+#: The heater's own air reading is the air it stands in from this far
+#: into a compressor run (about 2.7 °F warm before), and not while idle.
+RUN_SETTLE = timedelta(minutes=2)
 #: How long a request waits, seconds.
 DEFAULT_TIMEOUT = 10.0
 
@@ -98,7 +115,8 @@ class Entities:
     demand: str | None = None
     #: The circulation pump's speed.
     circulation_speed: str | None = None
-    #: A weather entity with an hourly forecast.
+    #: A weather entity with an hourly forecast, its ``temperature``
+    #: attribute the outdoor air.
     weather: str | None = None
 
 
@@ -106,7 +124,8 @@ class Entities:
 class Sources:
     """Where the inputs are: Home Assistant's address and token, the
     entities, and the model that projects the air from the outdoor
-    forecast (None: hold a fresh reading)."""
+    forecast (None: one fitted from the recent history, as
+    ``HomeAssistantEnvironment`` fits it)."""
 
     url: str
     token: str = field(repr=False)
@@ -454,6 +473,42 @@ def parse_forecast(doc: Any, entity: str) -> tuple[list[Reading], str | None]:
     )
 
 
+def parse_outdoor_history(
+    doc: Any, entity: str
+) -> tuple[list[Reading], str | None]:
+    """A weather entity's outdoor air from ``/api/history/period``'s
+    answer: each row's instant and ``temperature`` attribute, in time
+    order, and the unit of the last row that names one
+    (``temperature_unit``). Rows without a number are left out."""
+    if not isinstance(doc, list):
+        raise HomeAssistantError("not a history")
+    readings: list[Reading] = []
+    unit: tuple[datetime, str] | None = None
+    for series in doc:
+        if not isinstance(series, list):
+            continue
+        for r in series:
+            if not isinstance(r, Mapping):
+                continue
+            row = cast(Mapping[str, Any], r)
+            if row.get("entity_id", entity) != entity:
+                break
+            stamp = row.get("last_updated") or row.get("last_changed")
+            attributes = row.get("attributes")
+            if stamp is None or not isinstance(attributes, Mapping):
+                continue
+            a = cast(Mapping[str, Any], attributes)
+            at = _instant(stamp)
+            value = _number(a.get("temperature"))
+            if value is not None:
+                readings.append((at, value))
+            u = a.get("temperature_unit")
+            if isinstance(u, str) and (unit is None or at >= unit[0]):
+                unit = (at, u)
+    readings.sort(key=lambda x: x[0])
+    return readings, None if unit is None else unit[1]
+
+
 def to_f(value: float, unit: str | None) -> float:
     """A temperature in ``unit`` (°F, °C or K), in °F."""
     u = (unit or "").strip().replace("º", "°")
@@ -756,6 +811,27 @@ class HomeAssistantClient:
             unit = (await self._attributes(entity)).get("temperature_unit")
         return hours, unit if isinstance(unit, str) else None
 
+    async def outdoor_history(
+        self, entity: str, start: datetime, end: datetime
+    ) -> tuple[list[Reading], str | None]:
+        """A weather entity's outdoor air from ``start`` to ``end``
+        (``parse_outdoor_history``), and its unit, the entity's own when
+        the history names none."""
+        doc = await self._json(
+            "GET",
+            f"/api/history/period/{start.astimezone(UTC).isoformat()}",
+            params={
+                "filter_entity_id": entity,
+                "end_time": end.astimezone(UTC).isoformat(),
+                # Every row, with its attributes: the temperature is one.
+                "significant_changes_only": "0",
+            },
+        )
+        readings, unit = parse_outdoor_history(doc, entity)
+        if unit is None:
+            unit = (await self._attributes(entity)).get("temperature_unit")
+        return readings, unit if isinstance(unit, str) else None
+
     async def _attributes(self, entity: str) -> Mapping[str, Any]:
         doc = await self._json("GET", f"/api/states/{entity}")
         attributes = doc.get("attributes") if isinstance(doc, dict) else None
@@ -769,11 +845,41 @@ class HomeAssistantClient:
 # ── the environment source ──────────────────────────────────────────
 
 
+def _while_running(
+    air: Sequence[Reading],
+    compressor: Sequence[tuple[datetime, str]],
+    end: datetime,
+    step: timedelta = timedelta(minutes=10),
+) -> list[Reading]:
+    """``air``'s value in force every ``step`` from ``RUN_SETTLE`` into
+    each of ``compressor``'s runs (its ``on`` states) to its end, or
+    ``end`` for one still running."""
+    times = [t for t, _ in air]
+    out: list[Reading] = []
+    for i, (on_at, state) in enumerate(compressor):
+        if state.strip().lower() != "on":
+            continue
+        stop = compressor[i + 1][0] if i + 1 < len(compressor) else end
+        t = on_at + RUN_SETTLE
+        while t < stop:
+            k = bisect_right(times, t)
+            if k:
+                out.append((t, air[k - 1][1]))
+            t += step
+    return out
+
+
 class HomeAssistantEnvironment:
     """An ``EnvironmentSource``: the air, its humidity and the inlet from
     Home Assistant, over ``start`` to ``until``, as of ``now`` (the
     driver's clock). ``notes`` say what each part rests on, or why it
-    was left to the default, once ``read`` has run."""
+    was left to the default, once ``read`` has run.
+
+    With a weather entity and no ``location_air`` model, ``read`` fits
+    one (``fitted_air``) on the last ``LOCATION_AIR_WINDOW``: the air
+    entity's readings, or without one the heater's own air reading
+    while its compressor runs (``heater``'s ``ambient`` and
+    ``compressor``), against the weather entity's outdoor air."""
 
     def __init__(
         self,
@@ -784,6 +890,7 @@ class HomeAssistantEnvironment:
         until: datetime,
         now: datetime | None = None,
         location_air: LocationAirModel | None = None,
+        heater: HeaterEntities | None = None,
     ) -> None:
         self.client = client
         self.entities = entities
@@ -791,7 +898,13 @@ class HomeAssistantEnvironment:
         self.until = until
         self.now = start if now is None else now
         self.location_air = location_air
+        self.heater = heater
         self.notes: list[str] = []
+        #: The model fitted where none was given, once ``read`` has run;
+        #: None when it was given, or none could be fitted.
+        self.fitted_air: FittedLocationAir | None = None
+        self._fit_notes: list[str] | None = None
+        self._heater_anchor: Reading | None = None
 
     async def read(self) -> Environment:
         """The environment; a part that cannot be read is left to the
@@ -839,15 +952,23 @@ class HomeAssistantEnvironment:
     async def _air(self) -> float | tuple[Reading, ...]:
         e = self.entities
         weather = e.weather
-        anchor: Reading | None = None
+        held: Reading | None = None
         if e.air is not None:
             state = await self._fresh_state("air", e.air)
             if state is not None and state.value is not None:
                 try:
-                    anchor = (state.at, to_f(state.value, state.unit))
+                    held = (state.at, to_f(state.value, state.unit))
                 except ValueError as err:
                     self.notes.append(f"air: {err}")
-        if weather is not None and self.location_air is not None:
+        model = self.location_air
+        anchor = held
+        if weather is not None and model is None:
+            fitted = await self._fit_air(weather)
+            if fitted is not None:
+                model = fitted.model
+                if anchor is None:
+                    anchor = self._heater_anchor
+        if weather is not None and model is not None:
             hours = await self._guard(
                 "outdoor forecast",
                 lambda: self.client.forecast(weather),
@@ -861,7 +982,7 @@ class HomeAssistantEnvironment:
                     outdoor = []
                     self.notes.append(f"outdoor forecast: {err}")
                 air = project_air(
-                    self.location_air,
+                    model,
                     outdoor,
                     self.start,
                     self.until,
@@ -871,16 +992,108 @@ class HomeAssistantEnvironment:
                     self.notes.append(
                         "air: projected from the outdoor forecast, "
                         + (
-                            "anchored to the reading beside the heater"
-                            if anchor
-                            else "unanchored"
+                            "unanchored"
+                            if anchor is None
+                            else "anchored to the reading beside the heater"
+                            if anchor is held
+                            else "anchored to the heater's own reading"
                         )
                     )
                     return air
-        if anchor is not None:
+        if held is not None:
             self.notes.append("air: the reading beside the heater, held")
-            return anchor[1]
+            return held[1]
         return math.nan
+
+    async def _fit_air(self, weather: str) -> FittedLocationAir | None:
+        """The ``location_air`` model fitted on the last
+        ``LOCATION_AIR_WINDOW``, or None (and a note): too little
+        history, or a poor fit. Fitted once; a later ``read`` reuses it."""
+        if self._fit_notes is None:
+            before = len(self.notes)
+            fitted = await self._guard(
+                "air", lambda: self._fit_air_now(weather), None
+            )
+            self.fitted_air = cast("FittedLocationAir | None", fitted)
+            self._fit_notes = self.notes[before:]
+        else:
+            self.notes.extend(self._fit_notes)
+        return self.fitted_air
+
+    async def _fit_air_now(self, weather: str) -> FittedLocationAir | None:
+        now = self.now.astimezone(UTC)
+        since = now - LOCATION_AIR_WINDOW
+        air = await self._air_history(since, now)
+        if air is None:
+            return None
+        readings, what = air
+        if not readings:
+            self.notes.append(f"air: no readings of {what} to fit to")
+            return None
+        span = readings[-1][0] - readings[0][0]
+        if span < LOCATION_AIR_MIN_SPAN:
+            self.notes.append(
+                f"air: {span.total_seconds() / 3600:.0f} h of {what}, "
+                f"under the {LOCATION_AIR_MIN_SPAN.total_seconds() / 3600:g}"
+                " h a fit needs"
+            )
+            return None
+        # From before the first reading by the longest lag a fit tries.
+        rows, unit = await self.client.outdoor_history(
+            weather, since - timedelta(hours=max(FIT_LAGS_H)), now
+        )
+        outdoor = [(t, to_f(v, unit)) for t, v in rows]
+        if not outdoor:
+            self.notes.append(f"air: no outdoor air recorded for {weather}")
+            return None
+        fitted = fit_air(readings, outdoor)
+        days = LOCATION_AIR_WINDOW.total_seconds() / 86400
+        if fitted.r < LOCATION_AIR_MIN_R:
+            self.notes.append(
+                f"air: {what} follows the outdoor air too loosely to "
+                f"project it (r {fitted.r:.2f}, under {LOCATION_AIR_MIN_R})"
+            )
+            return None
+        self.notes.append(
+            f"air: the outdoor air fitted to {what} over the last {days:g} "
+            f"days (r {fitted.r:.2f}, "
+            f"{fitted.model.lag.total_seconds() / 3600:g} h late)"
+        )
+        return fitted
+
+    async def _air_history(
+        self, since: datetime, now: datetime
+    ) -> tuple[list[Reading], str] | None:
+        """The air where the heater stands since ``since``, °F, and what
+        it was read from: the air entity, or the heater's own reading
+        every 10 minutes while its compressor runs, from ``RUN_SETTLE``
+        into each run. None (and a note) when neither is recorded."""
+        e, h = self.entities, self.heater
+        if e.air is not None:
+            got = await self.client.read_history([e.air], since, now)
+            unit = (await self.client.state(e.air)).unit
+            readings, _ = got.converted(e.air, unit, to_f, now)
+            return readings, "the air beside the heater"
+        if h is None or h.ambient is None or h.compressor is None:
+            self.notes.append(
+                "air: no air reading to fit the outdoor air to (an air "
+                "entity, or the heater's own air and compressor)"
+            )
+            return None
+        got = await self.client.read_history(
+            [h.ambient, h.compressor], since, now
+        )
+        if got.states is None:
+            self.notes.append(
+                f"air: {h.compressor} not read (no states in the history)"
+            )
+            return None
+        unit = (await self.client.state(h.ambient)).unit
+        ambient, _ = got.converted(h.ambient, unit, to_f, now)
+        samples = _while_running(ambient, got.states.get(h.compressor, []), now)
+        if samples and now - samples[-1][0] <= FRESH:
+            self._heater_anchor = samples[-1]
+        return samples, "the heater's own air reading"
 
     async def _humidity(self) -> float | None:
         e = self.entities
