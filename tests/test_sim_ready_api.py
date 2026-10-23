@@ -828,3 +828,34 @@ class TestTheScenariosInletInTheBook:
             return window.delivery_min_f
 
         assert coldest(40.0) < coldest(72.4)
+
+
+class TestHeaterOnlyReadiness:
+    """With the default parameters (no evidence) and no book."""
+
+    def _ready(self, upper: float, lower: float, code: int = 2) -> Any:
+        from nwp500.sim import HeaterState, default_params
+
+        return time_to_ready(
+            _scenario(state=HeaterState(upper_f=upper, lower_f=lower)),
+            default_params(code),
+        )
+
+    def test_a_uniform_tank_reads_from_its_probes(self) -> None:
+        for code in (1, 2, 3):
+            r = self._ready(140.9, 140.0, code)
+            assert r.deliverable_gal > 0.0
+            assert "no_evidence_for_state" not in r.reasons
+
+    def test_bigger_tanks_hold_more(self) -> None:
+        gal = [
+            self._ready(140.9, 140.0, code).deliverable_gal
+            for code in (1, 2, 3)
+        ]
+        assert gal[0] < gal[1] < gal[2]
+
+    def test_a_stratified_tank_is_unknown_not_empty(self) -> None:
+        r = self._ready(140.0, 125.0)
+        assert r.deliverable_gal == 0.0
+        assert "no_evidence_for_state" in r.reasons
+        assert "colder_than_all_evidence" not in r.reasons

@@ -51,6 +51,17 @@ Added
 Changed
 -------
 
+- **Readiness with no evidence and no book** (#234). A tank whose probes
+  are within the book's ``uniform_band_f`` reads its full-tank floor
+  from its probes (``Deliverable.basis`` ``probes``), at any
+  temperature. Any other tank reads 0 with the reason
+  ``no_evidence_for_state``, which says the gallons are unknown, not
+  none, in place of ``colder_than_all_evidence``.
+- The 50 and 80 gal defaults scale the book's empty point
+  (``BookParams.empty_btu``) and the full tank's hidden cold water
+  (``ReadinessParams.full_hidden_gal``) by tank size, as they scale its
+  volume (#234). Both were the 65 gal tank's at every size.
+
 - The simulate how-to's ``book_from_changes`` example passes the
   circulation's runs and flow, and says to pass the household's draws,
   separated from any circulation in the meter, with ``meter_share`` 0.
@@ -62,6 +73,11 @@ Changed
 
 Fixed
 -----
+
+- ``simulate`` and ``time_to_ready`` convert a book's heat to gallons at
+  the scenario's inlet (``Environment.inlet_f``) where one is given, as
+  the walk's draws take it (#234). The gallons ignored a measured inlet,
+  and with a book a colder inlet gave warmer delivered water.
 
 - **A heater read missing a heating flag is unobserved** (#227).
   ``read_heater_history`` reads a day at a time; a window with nothing
