@@ -1701,16 +1701,15 @@ def fit_book(
                     f"the book's circuit volume on its bound, not a fit: "
                     f"{circuit:.4g} gal ({lo:g} to {hi:g})"
                 )
-            # Past the most any group of runs circulated, every volume
-            # books the same: the runs can't say which.
-            most = max(
-                (
-                    float(np.max(bk.run_before + bk.circulated))
-                    for bk in fitted
-                    if bk.steps
-                ),
-                default=0.0,
-            )
+            # Past the most any group of runs circulated between the
+            # training pairs' anchors, every volume books them the same:
+            # the runs can't say which.
+            most = 0.0
+            for _, i, (a0, a1), *_ in train:
+                bk = fitted[i]
+                if a1 > a0:
+                    span = bk.run_before[a0:a1] + bk.circulated[a0:a1]
+                    most = max(most, float(np.max(span)))
             if circuit >= most - 1e-6:
                 return (
                     f"the book's circuit volume {circuit:.4g} gal is past the "

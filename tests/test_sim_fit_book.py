@@ -735,3 +735,14 @@ def test_an_empty_window_books_nothing() -> None:
         params=SITE,
     )
     assert steps == []
+
+
+def test_a_long_run_outside_the_pairs_is_no_support() -> None:
+    """The same one-minute runs, and one long run after the last anchor,
+    in no pair: it can't say what the pairs can't."""
+    h = history(SITE, 16, CIRCUIT, run_min=1)
+    end = h["observed"][-1]
+    h["runs"] = [*h["runs"], (end - timedelta(minutes=30), end)]
+    got = fit(SITE, h)
+    assert got.book_circuit_gal == SITE_CIRCULATION.book_circuit_gal
+    assert "past the most a run circulated" in got.why
