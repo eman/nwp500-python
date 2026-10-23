@@ -142,6 +142,13 @@ pass it with ``--sources`` (or set ``NWP500_SOURCES``):
    circulation_speed = "sensor.circulation_pump_speed"
    weather = "weather.forecast_home"
 
+   [home_assistant.heater]   # optional: the heater's own entities
+   heard = "sensor.water_heater_last_status"
+   upper = "sensor.water_heater_upper_tank_temperature"
+   lower = "sensor.water_heater_lower_tank_temperature"
+   compressor = "binary_sensor.water_heater_compressor"
+   ambient = "sensor.water_heater_ambient_temperature"
+
    [location_air]   # optional: air = damping x outdoor(t - lag) + offset
    damping = 0.638
    lag_hours = 2.0
@@ -162,7 +169,11 @@ give:
   heater that is at most an hour old; without a fresh one, the
   projection is unshifted. Without a ``[location_air]`` model, one is
   fitted on the last 3 days of the ``air`` entity's readings against
-  the ``weather`` entity's outdoor temperature. It is used when the
+  the ``weather`` entity's outdoor temperature. Without an ``air``
+  entity, or one that gives no fit, the ``[home_assistant.heater]``
+  table's ``ambient`` reading while its ``compressor`` runs is fitted
+  instead, and the projection is shifted to pass through its newest
+  such reading. It is used when the
   readings span a day and follow the outdoor air at r 0.5 or more; a
   note gives the fit. Otherwise, and without a ``weather`` entity, the
   reading beside the heater is held over the span;
@@ -171,7 +182,8 @@ give:
   circulation off) in the last 72 hours, from the inlet probe and the
   ``demand`` entity: a binary sensor that is on while the household
   draws hot water, with the circulation's water not among its draws. A
-  circulation pump with no speed reading leaves no estimate.
+  circulation pump with no speed reading leaves no estimate, and a draw
+  before its first reading is skipped.
 
 A reading's age is from when Home Assistant last heard the sensor
 report (``last_reported``). Over the REST API, Home Assistant serves
@@ -252,7 +264,10 @@ A scenario starts from four things the library already reads:
            heater=sim_live.LiveHeaterSource(mqtt, device),
            schedules=sim_live.LiveScheduleSource(mqtt, api, device),
        )
-       return sim.simulate(composed.scenario, composed.params)
+       # Without the feature info the tank size is unknown: the 65 gal
+       # defaults stand in.
+       params = composed.params or sim.default_params()
+       return sim.simulate(composed.scenario, params)
 
 ``environment=`` and ``loads=`` take any source with an ``async
 read()``; ``sim_live.Given(value)`` is one for a value in hand. Without
@@ -260,7 +275,7 @@ read()``; ``sim_live.Given(value)`` is one for a value in hand. Without
 gets no reply raises ``sim_live.LiveReadError``; so does the schedule
 source when TOU is on and its periods cannot be read. A missing
 feature info leaves ``composed.params`` None (the tank size is
-unknown). Change a part with ``composed.scenario.model_copy(update=...)``.
+unknown), so the example falls back to ``sim.default_params()``. Change a part with ``composed.scenario.model_copy(update=...)``.
 
 With the status, the feature info, the reservations and the TOU
 periods already read some other way, build the same parts from them:

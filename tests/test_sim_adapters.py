@@ -86,10 +86,15 @@ class TestTheHeater:
         assert s.hp_lower_on_f == pytest.approx(104.9)
         assert s.mode == 3
 
-    def test_a_standby_status_is_refused(self, status: DeviceStatus) -> None:
+    def test_a_standby_status_is_power_off(self, status: DeviceStatus) -> None:
+        """The NaviLink app counts the heater off in Standby, as in
+        Power Off: so does the simulator, which walks it heating off."""
+        from nwp500.sim.inputs import POWER_OFF
+
         standby_status = status.model_copy(update={"dhw_operation_setting": 0})
-        with pytest.raises(ValueError, match="Standby"):
-            sa.settings(standby_status)
+        assert sa.settings(standby_status).mode == POWER_OFF
+        power_off = status.model_copy(update={"dhw_operation_setting": 6})
+        assert sa.settings(standby_status) == sa.settings(power_off)
 
     @pytest.mark.parametrize("units", ["metric", "us_customary", None])
     def test_the_unit_preference_changes_nothing(

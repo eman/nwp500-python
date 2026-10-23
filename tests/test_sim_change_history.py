@@ -902,9 +902,11 @@ class TestThePumpThirdReview:
         ]
         client = WindowedClient(rows, BOOK_UNITS)
         got = asyncio.run(client.read_history(["sensor.pump"], T0, END))
-        runs, why = ha.known_runs(got, "sensor.pump", "rpm", T0 + 2 * H, END)
-        assert runs == [] and why is None
-        runs, why = ha.known_runs(got, "sensor.pump", "rpm", T0, END)
+        runs, unknown, why = ha.known_runs(
+            got, "sensor.pump", "rpm", T0 + 2 * H, END
+        )
+        assert runs == [] and unknown == [] and why is None
+        runs, _, why = ha.known_runs(got, "sensor.pump", "rpm", T0, END)
         assert runs is None and why == "1 readings in no speed unit"
 
     def test_the_pumps_outages_count_when_its_runs_are_unknown(self) -> None:
@@ -1116,3 +1118,168 @@ class TestTheBookEighthReview:
         client.fail = False
         asyncio.run(keeper.read(END))
         assert keeper.book(END, self.P).booked is not None
+
+
+class TestCirculationTermsDefaulted:
+    P = sim.default_params()
+
+    def test_runs_without_terms_are_priced_and_noted(self) -> None:
+        from dataclasses import replace
+
+        from nwp500.sim.defaults import SITE_CIRCULATION
+
+        assert self.P.circulation is None
+        rows = [
+            *[r for r in _book_rows() if r["entity_id"] != "sensor.pump"],
+            _row("sensor.pump", T0, "0", "rpm"),
+            _row(
+                "sensor.pump", END - 2 * H - timedelta(minutes=1), "2000", "rpm"
+            ),
+            _row("sensor.pump", END - H, "0", "rpm"),
+        ]
+
+        def book(p: Any) -> ha.BookAnswer:
+            keeper = _keeper(
+                WindowedClient(rows, BOOK_UNITS),
+                circulation_speed="sensor.pump",
+            )
+            asyncio.run(keeper.read(END))
+            return keeper.book(END, p)
+
+        bare = book(self.P)
+        site = book(
+            replace(
+                self.P, circulation=replace(SITE_CIRCULATION, meter_share=0.0)
+            )
+        )
+        assert bare.booked is not None and site.booked is not None
+        assert bare.booked.heat_btu == pytest.approx(site.booked.heat_btu)
+        assert any("one installation's terms" in n for n in bare.notes)
+        quiet = _keeper(WindowedClient(_book_rows(), BOOK_UNITS))
+        asyncio.run(quiet.read(END))
+        none = quiet.book(END, self.P).booked
+        assert none is not None and bare.booked.heat_btu < none.heat_btu
+
+
+class TestAShortPumpHistory:
+    P = sim.default_params()
+
+    def test_known_runs_from_the_first_reading(self) -> None:
+        rows = [
+            _row("sensor.pump", END - 30 * H, "0", "rpm"),
+            _row("sensor.pump", END - 2 * H, "2000", "rpm"),
+            _row("sensor.pump", END - H, "0", "rpm"),
+        ]
+        client = WindowedClient(rows, BOOK_UNITS)
+        got = asyncio.run(client.read_history(["sensor.pump"], T0, END))
+        runs, unknown, why = ha.known_runs(got, "sensor.pump", "rpm", T0, END)
+        assert why is None
+        assert runs == [(END - 2 * H, END - H)]
+        assert unknown == [(T0, END - 30 * H)]
+
+    def test_the_book_prices_the_runs_it_knows(self) -> None:
+        from dataclasses import replace
+
+        from nwp500.sim.defaults import SITE_CIRCULATION
+
+        p = replace(
+            self.P, circulation=replace(SITE_CIRCULATION, meter_share=0.0)
+        )
+        pump = [
+            _row("sensor.pump", END - 30 * H, "0", "rpm"),
+            _row(
+                "sensor.pump", END - 2 * H - timedelta(minutes=1), "2000", "rpm"
+            ),
+            _row("sensor.pump", END - H, "0", "rpm"),
+        ]
+        rows = [r for r in _book_rows() if r["entity_id"] != "sensor.pump"]
+
+        def heat(with_pump: bool) -> ha.BookAnswer:
+            keeper = _keeper(
+                WindowedClient(
+                    [*rows, *(pump if with_pump else [])], BOOK_UNITS
+                ),
+                **({"circulation_speed": "sensor.pump"} if with_pump else {}),
+            )
+            asyncio.run(keeper.read(END))
+            return keeper.book(END, p)
+
+        short, none = heat(True), heat(False)
+        assert short.booked is not None and none.booked is not None
+        assert short.booked.heat_btu < none.booked.heat_btu
+        assert any("known only from" in n for n in short.notes)
+
+
+class TestTheFlowsHistory:
+    P = sim.default_params()
+
+    def test_a_flow_recorded_only_lately_books_after_it(self) -> None:
+        # The flow sensor has 3 h of history; the recovery ended 3.5 h
+        # ago, so its anchor is before it.
+        rows = [r for r in _book_rows() if r["entity_id"] != FLOW] + [
+            _row(FLOW, END - 3 * H, "0.0", "gal/min"),
+            _row(FLOW, END - 2 * H, "2.0", "gal/min"),
+            _row(FLOW, END - 2 * H + timedelta(minutes=15), "0.0", "gal/min"),
+        ]
+        keeper = _keeper(WindowedClient(rows, BOOK_UNITS))
+        asyncio.run(keeper.read(END))
+        got = keeper.book(END, self.P)
+        # No anchor since the flow began: none, and the note says so,
+        # rather than an error.
+        assert got.booked is None
+        assert any("no anchor since" in n for n in got.notes)
+
+    def test_a_flow_unknown_now_says_so(self) -> None:
+        rows = [
+            *_book_rows(),
+            _row(FLOW, END - timedelta(minutes=10), "unavailable"),
+        ]
+        keeper = _keeper(WindowedClient(rows, BOOK_UNITS))
+        asyncio.run(keeper.read(END))
+        got = keeper.book(END, self.P)
+        assert got.booked is None
+        assert f"book: {FLOW} is unknown now" in got.notes
+
+
+class TestAPartialAirRecord:
+    def test_the_heaters_air_reads_the_runs_the_record_misses(self) -> None:
+        rows, heard = TestRunsWithoutAir._runs(air=True)
+        alone = sc.calibrate_changes(rows, heard)
+        # An air record that covers only the last day and a half.
+        record = ha.RecordInputs(
+            air=[
+                (T0 + timedelta(days=3, hours=12), 60.0),
+                (T0 + timedelta(days=5), 60.0),
+            ],
+            humidity=None,
+            drawing=None,
+            circulating=None,
+        )
+        partial = sc.calibrate_changes(rows, heard, record=record)
+        assert alone.n_runs_without_air == 0
+        assert partial.n_runs == alone.n_runs
+        assert partial.n_runs_without_air == 0
+
+
+class TestAnUnrecordedFlag:
+    def test_a_flag_with_no_history_is_left_out(self) -> None:
+        heater = ha.HeaterEntities(
+            heard=BOOK_HEATER.heard,
+            upper=BOOK_HEATER.upper,
+            lower=BOOK_HEATER.lower,
+            compressor=BOOK_HEATER.compressor,
+            lower_element="binary_sensor.lower_element",
+        )
+        history = asyncio.run(
+            ha.read_heater_history(
+                cast(
+                    ha.HomeAssistantClient,
+                    WindowedClient(_book_rows(), BOOK_UNITS),
+                ),
+                heater,
+                END - ha.BOOK_WINDOW,
+                END,
+            )
+        )
+        assert history.rows.outages == ()
+        assert "lower_element_on: no history over the record" in history.notes

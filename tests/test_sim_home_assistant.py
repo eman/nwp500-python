@@ -277,6 +277,44 @@ class TestTheConfiguration:
         with pytest.raises(ValueError, match="location_air"):
             ha.sources_from(doc, {"HA_TOKEN": "x"})
 
+    HEATER: ClassVar[dict[str, str]] = {
+        "heard": "sensor.last_status",
+        "upper": "sensor.upper",
+        "lower": "sensor.lower",
+        "compressor": "binary_sensor.compressor",
+        "ambient": "sensor.heater_air",
+    }
+
+    def test_the_heaters_entities(self) -> None:
+        assert ha.sources_from(self.DOC, {"HA_TOKEN": "x"}).heater is None
+        doc = {
+            "home_assistant": self.DOC["home_assistant"]
+            | {"heater": self.HEATER}
+        }
+        got = ha.sources_from(doc, {"HA_TOKEN": "x"}).heater
+        assert got == ha.HeaterEntities(**self.HEATER)
+
+    @pytest.mark.parametrize(
+        ("heater", "match"),
+        [
+            ({"heard": "sensor.x"}, "needs upper, lower"),
+            ({"garden": "sensor.x"}, "unknown heater entities"),
+            (
+                {"heard": "x", "upper": "sensor.u", "lower": "sensor.l"},
+                "entity id",
+            ),
+            ("sensor.x", "must be a table"),
+        ],
+    )
+    def test_what_is_wrong_with_the_heater_is_named(
+        self, heater: Any, match: str
+    ) -> None:
+        doc = {
+            "home_assistant": self.DOC["home_assistant"] | {"heater": heater}
+        }
+        with pytest.raises(ValueError, match=match):
+            ha.sources_from(doc, {"HA_TOKEN": "x"})
+
 
 class FakeClient:
     """Answers as Home Assistant would, from canned states and series."""
@@ -763,11 +801,10 @@ class TestReviewRegressionsLive:
         series["sensor.pump"] = [(NOW - timedelta(hours=1), 0.0)]
         client = FakeClient(UNITS, series)
         source = _source(client, circulation_speed="sensor.pump", **INLET)
+        # The draw was before the pump's first reading: skipped, as one
+        # that overlapped a run would be.
         assert (await source.read()).inlet_f is None
-        assert any(
-            n.startswith("inlet: the circulation's runs are unknown")
-            for n in source.notes
-        )
+        assert any(n.startswith("inlet: no long draw") for n in source.notes)
 
     async def test_an_omitted_entity_in_the_record_is_no_history(self) -> None:
         class Omits(FakeClient):
@@ -1230,7 +1267,7 @@ class TestTheThirteenthReview:
         )
         assert got.circulating is None
 
-    async def test_a_pump_read_four_minutes_late_is_unknown_for_the_inlet(
+    async def test_a_pump_read_four_minutes_late_is_unknown_only_before_it(
         self,
     ) -> None:
         series = long_draw(ended_hours_ago=5)
@@ -1240,7 +1277,9 @@ class TestTheThirteenthReview:
         source = _source(
             FakeClient(UNITS, series), circulation_speed="sensor.pump", **INLET
         )
-        assert (await source.read()).inlet_f is None
+        # Only the four minutes before it are unknown: the draw after
+        # them reads the mains.
+        assert (await source.read()).inlet_f == pytest.approx(58.0)
 
 
 @pytest.mark.asyncio
@@ -2062,3 +2101,34 @@ class TestTheWorkOffTheLoop:
         assert isinstance(env.ambient_f, tuple)
         # The heater's anchor samples, then the inlet's plateau.
         assert run.calls == 2
+
+
+@pytest.mark.asyncio
+class TestTheAirEntityFallsBack:
+    """An air entity that gives no fit leaves the heater's own air to
+    fit, rather than none."""
+
+    async def _fit(self, client: FakeClient) -> tuple[Any, list[str]]:
+        return await ha.fit_location_air(
+            client,  # type: ignore[arg-type]  # pyright: ignore[reportArgumentType]
+            ha.Entities(weather="weather.home", air="sensor.air"),
+            now=NOW,
+            heater=HEATER,
+        )
+
+    async def test_an_unreadable_air_entity(self) -> None:
+        fitted, notes = await self._fit(
+            _heater_client(outdoor=OUTDOOR_HISTORY, fail={"sensor.air"})
+        )
+        assert fitted is not None
+        assert "air: fitting to the heater's own air reading instead" in notes
+
+    async def test_an_air_entity_with_too_little_history(self) -> None:
+        client = _heater_client(outdoor=OUTDOOR_HISTORY)
+        client.states["sensor.air"] = _s("sensor.air", 60.0, "°F")
+        client.series["sensor.air"] = [
+            (NOW - timedelta(hours=h), 60.0 + h % 3) for h in range(12, 0, -1)
+        ]
+        fitted, notes = await self._fit(client)
+        assert fitted is not None
+        assert "air: fitting to the heater's own air reading instead" in notes

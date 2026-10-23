@@ -95,6 +95,7 @@ from nwp500.sim import full_tank_book as sim_full_tank_book
 from nwp500.sim.book import AMBIENT_DEFAULT_F, book_steps
 from nwp500.sim.book import Step as BookStep
 from nwp500.sim.cold_supply import ColdSupply, ColdSupplyParams, plateau_t_cold
+from nwp500.sim.defaults import SITE_CIRCULATION
 from nwp500.sim.inputs import POWER_OFF, VACATION
 from nwp500.sim.location_air import (
     SITE_LOCATION_AIR,
@@ -193,22 +194,17 @@ def heater_state(status: DeviceStatus) -> HeaterState:
 
 def settings(status: DeviceStatus) -> Settings:
     """The setpoint, the operation mode, the lower zone's start and stop
-    thresholds, and the upper zone's start threshold.
-
-    Raises:
-        ValueError: The heater reports Standby (0), a status-only mode
-            the simulator does not model.
-    """
+    thresholds, and the upper zone's start threshold. Standby (0), a
+    status-only mode, is Power Off: the NaviLink app counts the heater
+    off in either."""
+    mode = int(status.dhw_operation_setting)
     if status.dhw_operation_setting == DhwOperationSetting.STANDBY:
-        raise ValueError(
-            "the heater reports Standby (dhw_operation_setting 0), a mode "
-            "the simulator does not model"
-        )
+        mode = POWER_OFF
     return Settings(
         setpoint_f=_from_device(
             HalfCelsius(status.dhw_temperature_setting_raw)
         ),
-        mode=int(status.dhw_operation_setting),
+        mode=mode,
         hp_lower_on_f=_from_device(
             HalfCelsius(status.hp_lower_on_temp_setting_raw)
         ),
@@ -342,6 +338,8 @@ def environment(
     else:
         ambient_f = tuple((at, _to_sim(v)) for at, v in _finite(ambient))
     kw: dict[str, Any] = {"ambient_f": ambient_f}
+    if ambient is None and status is not None and not status.comp_use:
+        kw["ambient_cabinet"] = True
     if humidity is not None:
         kw["humidity"] = humidity
     if inlet is not None:
@@ -1666,6 +1664,20 @@ def _book_steps_on(
     return steps
 
 
+def with_circulation_terms(
+    params: HeaterParams, runs: Sequence[tuple[datetime, datetime]]
+) -> HeaterParams:
+    """``params``, or with circulation runs to book and no circulation
+    terms, one installation's (``SITE_CIRCULATION``), with nothing of
+    the caller's flow taken as circulation (``meter_share`` 0): as the
+    walk prices runs, so that runs are never booked at no cost."""
+    if not runs or params.circulation is not None:
+        return params
+    return replace(
+        params, circulation=replace(SITE_CIRCULATION, meter_share=0.0)
+    )
+
+
 def book_from_history(
     readings: Iterable[tuple[datetime, DeviceStatus]],
     params: HeaterParams,
@@ -1698,6 +1710,7 @@ def book_from_history(
     # meter reporting.
     flows = sorted((t.astimezone(UTC), v) for t, v in _finite(flow))
     runs = list(circulation)
+    params = with_circulation_terms(params, runs)
     run_flow = list(circulation_flow)
     probe = list(inlet)
     airs = list(air)
@@ -1745,8 +1758,9 @@ def book_from_changes(
     ``flow_outages``, ``inlet_outages`` and ``air_outages`` are the spans
     each was unknown (``History.outages``). A flow unknown is as a heater
     unheard: no anchor before it counts. An air unknown is
-    ``AMBIENT_DEFAULT_F``, as with no air reading. A ValueError when no flow
-    reading is in force at the window's start.
+    ``AMBIENT_DEFAULT_F``, as with no air reading. No anchor before the
+    flow's first reading counts either; a ValueError with no flow
+    reading at all.
 
     A value that holds writes no change, so only ``observed`` says the
     heater was heard: a silence between those instants longer than
@@ -1787,7 +1801,11 @@ def book_from_changes(
     # A missing reading is none: it neither moves water nor shows the
     # meter reporting.
     flows = sorted((t.astimezone(UTC), v) for t, v in _finite(flow))
+    if flows:
+        # Before the flow's first reading, its draws are unknown.
+        since = max(since, flows[0][0])
     runs = list(circulation)
+    params = with_circulation_terms(params, runs)
     run_flow = list(circulation_flow)
     probe = list(inlet)
     airs = list(air)

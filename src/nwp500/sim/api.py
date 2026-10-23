@@ -185,12 +185,19 @@ def _at_the_inlet(
 
 #: No usable air reading was given: the answer ran at the default air.
 AMBIENT_DEFAULTED = "ambient_defaulted"
+#: The air is the heater's idle cabinet reading, about 6 °F warm
+#: (``Environment.ambient_cabinet``).
+AMBIENT_FROM_CABINET = "ambient_from_idle_cabinet"
 
 
 def _ambient_reasons(environment: Environment) -> list[str]:
     """``ambient_defaulted`` when the air the answer ran at is the
-    default, not a reading (``Environment.ambient_defaulted``)."""
-    return [AMBIENT_DEFAULTED] if environment.ambient_defaulted else []
+    default, not a reading (``Environment.ambient_defaulted``), and
+    ``ambient_from_idle_cabinet`` when it is the heater's idle cabinet
+    reading (``Environment.ambient_cabinet``)."""
+    if environment.ambient_defaulted:
+        return [AMBIENT_DEFAULTED]
+    return [AMBIENT_FROM_CABINET] if environment.ambient_cabinet else []
 
 
 def _circulation(loads: Loads, params: HeaterParams) -> Circulation | None:
@@ -221,7 +228,9 @@ CIRCULATION_UNKNOWN = "circulation_unknown"
 def _circulation_unknown(
     params: HeaterParams, loads: Loads, until: datetime
 ) -> bool:
-    if params.circulation is None:
+    # Runs given to params without terms are an installation that
+    # circulates, priced at the example terms (``_physics``).
+    if params.circulation is None and loads.circulation is None:
         return False
     return loads.circulation is None or (
         loads.circulation_known_until is not None
@@ -265,12 +274,8 @@ def _physics(
     frame = _ambient_frame(environment, start, until)
     flowing: CirculationDraws | None = None
     if circulation is not None:
-        terms = params.circulation
-        if terms is None:
-            raise ValueError(
-                "circulation runs need HeaterParams.circulation: what each "
-                "run displaces, its flow and the book's loss per gallon"
-            )
+        # Without terms of its own, the runs take one installation's.
+        terms = params.circulation or SITE_CIRCULATION
         if terms == SITE_CIRCULATION:
             defaults.append(
                 "circulation=one installation's (CirculationParams)"
@@ -526,7 +531,8 @@ def simulate(
     entries = _entries(s, tz, reasons)
     raw = _raw_writes(s, reasons)
     if ledger is None and book is not None:
-        terms = params.circulation
+        # As the walk's runs take them (``_physics``).
+        terms = params.circulation or SITE_CIRCULATION
         ledger = BookedHeatLedger(
             book,
             physics.ambient.at,
@@ -538,7 +544,7 @@ def simulate(
                 CirculationLoss(
                     circulation.runs, terms.flow_gpm, terms.loss_btu_per_gal
                 )
-                if circulation is not None and terms is not None
+                if circulation is not None
                 else None
             ),
         )

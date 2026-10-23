@@ -257,6 +257,7 @@ async def compose_live(
             until=start + span,
             now=now,
             location_air=src.location_air,
+            heater=src.heater,
         )
         composed = await compose(environment)
     for note in environment.notes:

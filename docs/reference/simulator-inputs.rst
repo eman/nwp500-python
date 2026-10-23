@@ -982,6 +982,10 @@ The ones about inputs and parameters:
      - No usable air reading was given (``Environment.ambient_f`` missing,
        or its readings all missing), so the answer ran at the default
        air, 65 °F.
+   * - ``ambient_from_idle_cabinet``
+     - The air is the heater's own reading taken while its compressor
+       was idle (``Environment.ambient_cabinet``): its cabinet's, about
+       6 °F above the air around it.
    * - ``tau_gap_prior``
      - Draws opened a gap that closes on a prior time constant, not one
        fitted on this heater.

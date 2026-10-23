@@ -150,6 +150,9 @@ class Sources:
     token: str = field(repr=False)
     entities: Entities
     location_air: LocationAirModel | None = None
+    #: The heater's own entities, whose air while the compressor runs
+    #: fits and anchors the projection where no air entity does.
+    heater: HeaterEntities | None = None
 
 
 def sources_from(doc: Mapping[str, Any], environ: Mapping[str, str]) -> Sources:
@@ -166,6 +169,13 @@ def sources_from(doc: Mapping[str, Any], environ: Mapping[str, str]) -> Sources:
         demand = "binary_sensor.hot_water_demand"
         circulation_speed = "sensor.circulation_pump_speed"
         weather = "weather.forecast_home"
+
+        [home_assistant.heater]         # optional: the heater's own
+        heard = "sensor.water_heater_last_status"
+        upper = "sensor.water_heater_upper_tank_temperature"
+        lower = "sensor.water_heater_lower_tank_temperature"
+        compressor = "binary_sensor.water_heater_compressor"
+        ambient = "sensor.water_heater_ambient_temperature"
 
         [location_air]                  # optional
         damping = 0.638
@@ -219,7 +229,26 @@ def sources_from(doc: Mapping[str, Any], environ: Mapping[str, str]) -> Sources:
         token=token,
         entities=Entities(**raw),
         location_air=model,
+        heater=_heater_from(ha.get("heater")),
     )
+
+
+def _heater_from(raw: Any) -> HeaterEntities | None:
+    if raw is None:
+        return None
+    if not isinstance(raw, Mapping):
+        raise ValueError("home_assistant.heater must be a table")
+    raw = cast(Mapping[str, Any], raw)
+    unknown = sorted(set(raw) - set(HeaterEntities.__dataclass_fields__))
+    if unknown:
+        raise ValueError(f"unknown heater entities: {', '.join(unknown)}")
+    for name, value in raw.items():
+        if not isinstance(value, str) or "." not in value:
+            raise ValueError(f"heater.{name} must be an entity id")
+    missing = [n for n in ("heard", "upper", "lower") if n not in raw]
+    if missing:
+        raise ValueError(f"home_assistant.heater needs {', '.join(missing)}")
+    return HeaterEntities(**raw)
 
 
 # ── parsing: Home Assistant's answers, as values ────────────────────
@@ -1009,23 +1038,35 @@ def known_runs(
     unit: str | None,
     since: datetime,
     now: datetime,
-) -> tuple[list[Span] | None, str | None]:
+) -> tuple[list[Span] | None, list[Span], str | None]:
     """The pump's runs since ``since`` from its speed in ``history``
-    (``pump_runs``), or None and why they are unknown: no reading in
-    force at ``since`` (a draw before the first may have overlapped a
-    run), or a speed in no unit this reads."""
-    if not covers_start(history.readings.get(pump, []), since):
-        return None, "no speed reading in force at the start"
+    (``pump_runs``), the span before its first reading when that is
+    after ``since`` (unknown: it may have run then), and why the runs
+    are unknown altogether (None for them): no speed reading at all, or
+    one in no unit this reads."""
+    readings = history.readings.get(pump, [])
+    if not readings:
+        return None, [], "no speed reading"
+    unknown: list[Span] = []
+    # Before its first row, a reading or an outage (which the caller
+    # takes as a run), nothing is known of the pump.
+    heard = [
+        *(t for t, _ in readings),
+        *(a for a, _ in history.outages.get(pump, [])),
+    ]
+    first = min(t.astimezone(UTC) for t in heard)
+    if not covers_start(readings, since) and first > since:
+        unknown = [(since, min(first, now))]
     try:
         speed, unread = history.converted(pump, unit, to_rpm, now)
     except ValueError as err:
-        return None, str(err)
+        return None, [], str(err)
     # A reading left out could have been a run: one inside the span
     # leaves the runs unknown.
     inside = [(a, b) for a, b in unread if a < now and b > since]
     if inside:
-        return None, f"{len(inside)} readings in no speed unit"
-    return pump_runs(speed, since, now), None
+        return None, [], f"{len(inside)} readings in no speed unit"
+    return pump_runs(speed, since, now) or [], unknown, None
 
 
 def mains_plateau(
@@ -1059,11 +1100,13 @@ def mains_plateau(
     draws, _ = demand_spans(states.get(demand, []), since, now)
     runs: list[Span] = []
     if pump is not None:
-        known, why = known_runs(history, pump, pump_unit, since, now)
+        known, unknown, why = known_runs(history, pump, pump_unit, since, now)
         if known is None:
             notes.append(f"inlet: the circulation's runs are unknown ({why})")
             return None
-        runs = known
+        # Before the pump's first reading, a draw may have overlapped a
+        # run: skipped, as one that overlaps a run is.
+        runs = busy(known, unknown)
     # A draw while the probe or the pump was unavailable may have
     # overlapped a run unseen: the plateau skips it, as it skips one
     # that overlaps a run.
@@ -1160,23 +1203,48 @@ async def fit_location_air(
     ``LOCATION_AIR_WINDOW`` of the air entity's readings, or without one
     the heater's own air reading while its compressor runs (``heater``'s
     ``ambient`` and ``compressor``), against ``entities.weather``'s
-    outdoor air. None, and a note why, without enough history or for a
-    loose fit. A caller that reads the environment often fits on its
-    own cadence and passes the fit on as ``fitted_air``. The arithmetic
+    outdoor air. With an air entity that can't be read or gives no fit,
+    the heater's own reading is tried. None, and a note why, without
+    enough history or for a loose fit. A caller that reads the
+    environment often fits on its own cadence and passes the fit on as
+    ``fitted_air``. The arithmetic
     (the samples, the fit) goes through ``run``."""
     notes: list[str] = []
     weather = entities.weather
     if weather is None:
         notes.append("air: no weather entity to fit the air to")
         return None, notes
-    try:
-        fitted = await _fit(
-            client, entities, heater, weather, now.astimezone(UTC), notes, run
+    at = now.astimezone(UTC)
+    fitted = await _try_fit(client, entities, heater, weather, at, notes, run)
+    if (
+        fitted is None
+        and entities.air is not None
+        and heater is not None
+        and heater.ambient is not None
+        and heater.compressor is not None
+    ):
+        # The air entity gave no fit: the heater's own air may.
+        notes.append("air: fitting to the heater's own air reading instead")
+        fitted = await _try_fit(
+            client, replace(entities, air=None), heater, weather, at, notes, run
         )
+    return fitted, notes
+
+
+async def _try_fit(
+    client: HomeAssistantClient,
+    entities: Entities,
+    heater: HeaterEntities | None,
+    weather: str,
+    now: datetime,
+    notes: list[str],
+    run: Run,
+) -> FittedLocationAir | None:
+    try:
+        return await _fit(client, entities, heater, weather, now, notes, run)
     except (HomeAssistantError, ValueError) as e:
         notes.append(f"air: not read ({e})")
-        return None, notes
-    return fitted, notes
+        return None
 
 
 async def _fit(
@@ -1950,7 +2018,7 @@ async def read_heater_history(
             del roles[name]
     changes: dict[str, list[tuple[datetime, Any]]] = {n: [] for n in roles}
     unread: dict[str, int] = {}
-    blank: dict[str, int] = {}
+    blank: dict[str, list[Span]] = {}
     down: list[Span] = []
     heard: list[datetime] = []
     names = sorted({e.heard, *(entity for entity, _ in roles.values())})
@@ -1982,8 +2050,7 @@ async def read_heater_history(
                 # A window opens with the state in force: nothing is no
                 # read, and a flag held from before would credit heating
                 # across it.
-                down.append((a, b))
-                blank[name] = blank.get(name, 0) + 1
+                blank.setdefault(name, []).append((a, b))
             was = None
             # The unit each number was recorded in, where the history
             # says; today's where it does not.
@@ -2024,9 +2091,14 @@ async def read_heater_history(
             )
     for name, count in unread.items():
         notes.append(f"{name}: {count} states this does not read, left out")
-    for name, count in blank.items():
+    for name, spans in blank.items():
+        if not changes[name]:
+            # No history over the whole record: not recorded at all, so
+            # left out (``no history over the record``), not unobserved.
+            continue
+        down.extend(spans)
         notes.append(
-            f"{name}: nothing read in {count} windows, left unobserved"
+            f"{name}: nothing read in {len(spans)} windows, left unobserved"
         )
     outages = busy(down)
     if outages:
@@ -2057,6 +2129,29 @@ class BookAnswer:
     booked: Booked | None
     inlet_measured: bool
     notes: tuple[str, ...]
+
+
+def _heating_lost(
+    held: HeaterHistory, newer: HeaterHistory, start: datetime, end: datetime
+) -> HeaterHistory:
+    """``newer`` unobserved from ``start`` to ``end`` when it has nothing
+    of a heating flag ``held`` has history of: a read opens with the
+    value in force, so nothing is no read (``read_heater_history``
+    leaves out a flag it has no history of at all), and the flag held
+    from before would credit heating across it."""
+    lost = [
+        name
+        for name in _HEATING
+        if getattr(held.rows, name) and not getattr(newer.rows, name)
+    ]
+    if not lost:
+        return newer
+    rows = replace(newer.rows, outages=(*newer.rows.outages, (start, end)))
+    notes = (
+        *newer.notes,
+        *(f"{name}: nothing read, left unobserved" for name in sorted(lost)),
+    )
+    return replace(newer, rows=rows, notes=notes)
 
 
 def _unread_marked(
@@ -2155,6 +2250,8 @@ class HomeAssistantBook:
             self._notes.append(f"book: the heater's history not read ({err})")
         else:
             held_ = self._heater_history
+            if held_ is not None:
+                newer = _heating_lost(held_, newer, start, now)
             whole = newer if held_ is None else held_.extended(newer)
             self._heater_history = whole.since(cut)
             self._heater_read = now
@@ -2236,7 +2333,7 @@ class HomeAssistantBook:
         flow_out = busy(unread, got.outages.get(self.flow, []), unseen)
         runs: list[Span] = []
         if e.circulation_speed is not None:
-            known, why = known_runs(
+            known, unknown, why = known_runs(
                 got,
                 e.circulation_speed,
                 self._units.get(e.circulation_speed),
@@ -2247,6 +2344,14 @@ class HomeAssistantBook:
                 notes.append(
                     f"book: the circulation's runs are unknown ({why}); "
                     "booked with only its outages"
+                )
+            if unknown:
+                # Before the pump's first reading, the heat its runs
+                # took is unknown: no anchor before it counts.
+                flow_out = busy(flow_out, unknown)
+                notes.append(
+                    "book: the circulation's runs are known only from "
+                    f"{unknown[-1][1].isoformat()}"
                 )
             # While the pump was unavailable or unread, it may have run.
             runs = busy(
@@ -2272,6 +2377,11 @@ class HomeAssistantBook:
                 air_out = busy(bad, got.outages.get(e.air, []), unseen)
             except ValueError as err:
                 notes.append(f"book: {e.air}: {err}")
+        if runs and params.circulation is None:
+            notes.append(
+                "book: the circulation's runs priced at one installation's "
+                "terms (CirculationParams)"
+            )
         try:
             booked = sa.book_from_changes(
                 rows.rows,
@@ -2290,7 +2400,13 @@ class HomeAssistantBook:
             notes.append(f"book: {err}")
             return BookAnswer(None, False, tuple(notes))
         if booked is None:
-            notes.append("book: no anchor since the heater was last unheard")
+            if any(a <= at <= b for a, b in flow_out):
+                notes.append(f"book: {self.flow} is unknown now")
+            else:
+                notes.append(
+                    "book: no anchor since the heater or the flow was last "
+                    "unknown"
+                )
             return BookAnswer(None, False, tuple(notes))
         if e.inlet is None or e.demand is None or not inlet:
             return BookAnswer(booked, False, tuple(notes))

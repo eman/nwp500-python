@@ -900,3 +900,36 @@ class TestTheSecondReview:
         )
         assert r.bath.ready
         assert "bath_ready_within_probe_resolution" in r.reasons
+
+
+class TestCirculationWithoutItsTerms:
+    """Runs given to params with no circulation terms take one
+    installation's, and say so, rather than refusing."""
+
+    def test_the_runs_take_the_example_terms(self) -> None:
+        from nwp500.sim import CirculationRun, default_params, simulate
+        from nwp500.sim.defaults import SITE_CIRCULATION
+
+        bare = default_params()
+        assert bare.circulation is None
+        runs = (CirculationRun(start=at(0.5), end=at(1.5)),)
+        s = _scenario(loads=Loads(circulation=runs))
+        got = simulate(s, bare)
+        want = simulate(s, replace(bare, circulation=SITE_CIRCULATION))
+        assert got.simulation == want.simulation
+        assert (
+            "circulation=one installation's (CirculationParams)"
+            in got.defaults_used
+        )
+        # And they cost heat: not the same as no runs.
+        quiet = simulate(_scenario(), bare)
+        assert got.simulation != quiet.simulation
+
+    def test_runs_known_only_partway_say_so(self) -> None:
+        from nwp500.sim import CirculationRun, default_params, simulate
+
+        runs = (CirculationRun(start=at(0.5), end=at(1.5)),)
+        s = _scenario(
+            loads=Loads(circulation=runs, circulation_known_until=at(2.0))
+        )
+        assert "circulation_unknown" in simulate(s, default_params()).reasons

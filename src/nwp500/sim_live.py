@@ -42,7 +42,9 @@ Example::
             heater=sim_live.LiveHeaterSource(mqtt, device),
             schedules=sim_live.LiveScheduleSource(mqtt, api, device),
         )
-        return sim.simulate(composed.scenario, composed.params)
+        # None without the feature info: the 65 gal defaults stand in.
+        params = composed.params or sim.default_params()
+        return sim.simulate(composed.scenario, params)
 """
 
 import asyncio
@@ -378,7 +380,10 @@ async def compose(
         env = await environment.read()
         if env.ambient_defaulted:
             env = env.model_copy(
-                update={"ambient_f": reading.environment.ambient_f}
+                update={
+                    "ambient_f": reading.environment.ambient_f,
+                    "ambient_cabinet": reading.environment.ambient_cabinet,
+                }
             )
     parts: dict[str, Any] = {
         "start": start,
@@ -417,6 +422,19 @@ def zone_name(name: str) -> str:
     except ZoneInfoNotFoundError, ValueError:
         raise ValueError(f"unknown time zone {name!r}") from None
     return name
+
+
+def _air_without_its_source(*layers: Mapping[str, Any] | None) -> bool:
+    """Whether the last of ``layers`` (in the order laid) to give the
+    air gives it without saying whether it is the idle cabinet's
+    (``Environment.ambient_cabinet``): the flag laid under it then
+    describes air no longer used."""
+    last: Mapping[str, Any] | None = None
+    for layer in layers:
+        env = None if layer is None else layer.get("environment")
+        if isinstance(env, Mapping) and "ambient_f" in env:
+            last = cast(Mapping[str, Any], env)
+    return last is not None and "ambient_cabinet" not in last
 
 
 def overlay(
@@ -459,6 +477,16 @@ def overlay(
         data.update(replace)
     if over is not None:
         data = merge(data, over)
+    env = data.get("environment")
+    given = doc.get("scenario") if isinstance(doc, Mapping) else None
+    if isinstance(env, Mapping) and _air_without_its_source(
+        given, replace, over
+    ):
+        # The heater's idle cabinet reading only while its air stands.
+        data["environment"] = {
+            **cast(Mapping[str, Any], env),
+            "ambient_cabinet": False,
+        }
     data.setdefault("start", now)
     data.setdefault("horizon", DEFAULT_HORIZON)
     if "tz" not in data:

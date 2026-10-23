@@ -163,3 +163,54 @@ class TestOverlay:
         live = _live() if isinstance(doc, dict) and "params" in doc else None
         with pytest.raises(ValueError, match=match):
             sim_live.overlay(live, doc, now=NOW)
+
+
+class TestTheCabinetFlag:
+    def _cabinet_live(self) -> sim_live.Composed:
+        live = _live()
+        env = live.scenario.environment.model_copy(
+            update={"ambient_cabinet": True}
+        )
+        return sim_live.Composed(
+            live.scenario.model_copy(update={"environment": env}),
+            live.params,
+            live.heater,
+        )
+
+    def test_it_stands_while_the_air_does(self) -> None:
+        live = self._cabinet_live()
+        s = sim_live.overlay(live, now=NOW).scenario
+        assert s.environment.ambient_cabinet
+
+    def test_air_given_in_its_place_clears_it(self) -> None:
+        live = self._cabinet_live()
+        s = sim_live.overlay(
+            live, now=NOW, over={"environment": {"ambient_f": 60.0}}
+        ).scenario
+        assert s.environment.ambient_f == 60.0
+        assert not s.environment.ambient_cabinet
+
+    def test_the_same_air_given_clears_it_too(self) -> None:
+        """Given, the air is the caller's, whatever its value."""
+        live = self._cabinet_live()
+        same = live.scenario.environment.ambient_f
+        by_option = sim_live.overlay(
+            live, now=NOW, over={"environment": {"ambient_f": same}}
+        ).scenario
+        by_document = sim_live.overlay(
+            live, _doc({"environment": {"ambient_f": same}}), now=NOW
+        ).scenario
+        for s in (by_option, by_document):
+            assert s.environment.ambient_f == same
+            assert not s.environment.ambient_cabinet
+
+    def test_a_snapshot_keeps_its_own_flag(self) -> None:
+        """A document that gives the air with its source keeps it: a
+        snapshot of an idle heater replays as the cabinet's air."""
+        live = self._cabinet_live()
+        snapshot = scenario_to_document(live.scenario)
+        assert snapshot["scenario"]["environment"]["ambient_cabinet"] is True
+        replayed = sim_live.overlay(None, snapshot, now=NOW).scenario
+        assert replayed.environment.ambient_cabinet
+        over_live = sim_live.overlay(live, snapshot, now=NOW).scenario
+        assert over_live.environment.ambient_cabinet
