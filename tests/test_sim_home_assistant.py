@@ -1996,3 +1996,69 @@ class TestTheFitCarried:
         assert any(
             "anchored to the heater's own reading" in n for n in source.notes
         )
+
+
+class _Recorder:
+    """A ``Run`` that works each piece on a thread, as an executor
+    would, and counts them."""
+
+    def __init__(self) -> None:
+        self.calls = 0
+
+    async def __call__(self, work: Any) -> Any:
+        import asyncio
+
+        self.calls += 1
+        return await asyncio.to_thread(work)
+
+
+@pytest.mark.asyncio
+class TestTheWorkOffTheLoop:
+    async def test_the_fit_goes_through_run(self) -> None:
+        run = _Recorder()
+        inline, _ = await ha.fit_location_air(
+            _heater_client(outdoor=OUTDOOR_HISTORY),  # type: ignore[arg-type]  # pyright: ignore[reportArgumentType]
+            ha.Entities(weather="weather.home"),
+            now=NOW,
+            heater=HEATER,
+        )
+        threaded, notes = await ha.fit_location_air(
+            _heater_client(outdoor=OUTDOOR_HISTORY),  # type: ignore[arg-type]  # pyright: ignore[reportArgumentType]
+            ha.Entities(weather="weather.home"),
+            now=NOW,
+            heater=HEATER,
+            run=run,
+        )
+        assert threaded == inline
+        # The heater's samples, then the fit.
+        assert run.calls == 2
+        assert any("fitted to" in n for n in notes)
+
+    async def test_the_inlet_and_the_anchor_go_through_run(self) -> None:
+        run = _Recorder()
+        series = long_draw(ended_hours_ago=5)
+        air, compressor = _heater_series()
+        series |= {
+            "sensor.heater_air": air,
+            "binary_sensor.compressor": compressor,
+        }
+        client = FakeClient(
+            UNITS | {"sensor.heater_air": _s("sensor.heater_air", 70.0, "°F")},
+            series,
+            forecast=OUTDOOR,
+        )
+        source = ha.HomeAssistantEnvironment(
+            client,  # type: ignore[arg-type]  # pyright: ignore[reportArgumentType]
+            ha.Entities(weather="weather.home", **INLET),
+            start=NOW,
+            until=NOW + timedelta(hours=6),
+            now=NOW,
+            location_air=MODEL,
+            heater=HEATER,
+            run=run,
+        )
+        env = await source.read()
+        assert env.inlet_f == pytest.approx(58.0)
+        assert isinstance(env.ambient_f, tuple)
+        # The heater's anchor samples, then the inlet's plateau.
+        assert run.calls == 2

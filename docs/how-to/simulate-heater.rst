@@ -213,6 +213,13 @@ each time. Fit on your own cadence, and pass the fit on:
 Given ``fitted_air``, the environment projects through it, notes its r
 and lag on every ``read``, and doesn't fit again.
 
+The fit, the samples of the heater's air and the inlet's plateau are
+CPU work: the fit alone takes about 100 ms on 3 days of 30-second
+readings. To keep it off an event loop, pass ``run=``, a callable that
+runs a function and awaits its result, to ``fit_location_air`` and
+``HomeAssistantEnvironment``. In Home Assistant that is
+``hass.async_add_executor_job``. Without it, the work runs inline.
+
 
 Fetch what the heater reports
 =============================
