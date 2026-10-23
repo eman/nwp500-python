@@ -1791,14 +1791,12 @@ class TestHistoryKeptCurrent:
             ("a note",),
         )
         got = a.extended(b)
-        assert list(got.rows.upper_f) == [
-            (t[0], 140.0),
-            (t[1], 140.0),
-            (t[2], 130.0),
-        ]
+        # b's opening rows repeat the values in force: no changes.
+        assert list(got.rows.upper_f) == [(t[0], 140.0), (t[2], 130.0)]
+        assert list(got.rows.lower_f) == [(t[0], 139.0)]
         assert got.observed == t
         assert got.notes == ("a note",)
         trimmed = got.since(t[2])
         assert list(trimmed.rows.upper_f) == [(t[2], 130.0)]
-        assert list(trimmed.rows.lower_f) == [(t[1], 139.0)]
+        assert list(trimmed.rows.lower_f) == [(t[0], 139.0)]
         assert trimmed.observed == t[2:]

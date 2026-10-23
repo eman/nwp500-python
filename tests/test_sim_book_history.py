@@ -486,6 +486,40 @@ class TestAHistoryKeptCurrent:
         assert whole is not None and got is not None
         assert got.heat_btu == pytest.approx(whole.heat_btu)
 
+    def test_a_reads_opening_row_is_no_change(self) -> None:
+        """A read from minute 5 opens with the value in force there; it
+        repeats no change, so the merged rows are the full read's."""
+        full = [(T0, 2.0), (T0 + timedelta(minutes=10), 0.0)]
+        first = [(T0, 2.0)]
+        later = [
+            (T0 + timedelta(minutes=5), 2.0),
+            (T0 + timedelta(minutes=10), 0.0),
+        ]
+        assert sa.merge_changes(first, later) == full
+
+    def test_a_split_flow_books_as_the_full_one(
+        self, heater: Callable[..., list[Any]]
+    ) -> None:
+        """A draw split by the reads books the same gallons."""
+        p = site_example_params()
+        rows, observed = as_changes(heater(20, recovery_at=4))
+        draw = T0 - timedelta(hours=2)
+        end = draw + timedelta(minutes=10)
+        # The meter's zeros, and the draw as a change at each end.
+        full = sorted(
+            [(t, v) for t, v in meter(20) if not draw <= t < end]
+            + [(draw, 2.0)]
+        )
+        split = draw + timedelta(minutes=5)
+        first = [r for r in full if r[0] < split]
+        later = [(split, 2.0), *(r for r in full if r[0] >= split)]
+        merged = sa.merge_changes(first, later)
+        assert merged == full
+        want = sa.book_from_changes(rows, observed, p, at=T0, flow=full)
+        got = sa.book_from_changes(rows, observed, p, at=T0, flow=merged)
+        assert want is not None and got is not None
+        assert got.heat_btu == pytest.approx(want.heat_btu)
+
     def test_the_later_read_wins_at_a_shared_instant(self) -> None:
         a = [(T0, 1.0), (T0 + timedelta(minutes=5), 2.0)]
         b = [(T0 + timedelta(minutes=5), 3.0), (T0 + timedelta(minutes=9), 4.0)]

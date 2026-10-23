@@ -846,9 +846,20 @@ class ChangeRows:
 
 def merge_changes(older: Changes, newer: Changes) -> list[tuple[datetime, Any]]:
     """Two reads of one series' changes as one, in time order (UTC);
-    at an instant both have, ``newer``'s row."""
+    at an instant both have, ``newer``'s row. ``newer``'s first row,
+    where it repeats the value ``older`` has in force at its instant, is
+    a read's opening row (the value in force at its start), not a
+    change, and is left out: merged, the reads are as one read."""
     rows = {t.astimezone(UTC): v for t, v in older}
-    rows.update((t.astimezone(UTC), v) for t, v in newer)
+    later = sorted(
+        ((t.astimezone(UTC), v) for t, v in newer), key=lambda r: r[0]
+    )
+    if later and rows:
+        at, value = later[0]
+        before = [v for t, v in sorted(rows.items()) if t <= at]
+        if before and before[-1] == value and at not in rows:
+            later = later[1:]
+    rows.update(later)
     return sorted(rows.items(), key=lambda r: r[0])
 
 

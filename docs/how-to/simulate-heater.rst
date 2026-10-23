@@ -911,9 +911,10 @@ again from memory:
    last_read = now
 
 ``HeaterHistory`` and ``History`` both take ``extended`` and ``since``.
-Where both reads have a row at one instant (a read repeats the value in
-force at its start), the later read's is kept. ``since`` keeps each
-value in force at the cut. 72 hours is ``BookParams.history_h``, the
+A read opens with the value in force at its start, which is no change
+and is left out, so the reads merged book as one read would. Where both
+reads have a row at one instant, the later read's is kept. ``since``
+keeps each value in force at the cut. 72 hours is ``BookParams.history_h``, the
 oldest anchor a book reads.
 
 Without a meter, start one only when you know the tank is full and
