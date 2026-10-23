@@ -1747,6 +1747,20 @@ class TestHistoryKeptCurrent:
         assert older.extended(newer).units is None
         assert older.extended(newer).states is None
 
+    def test_missing_units_stay_todays(self) -> None:
+        """No unit recorded for an entity is today's unit, not a reading
+        recorded with none: trimmed or merged, it still converts."""
+        h = ha.History({"sensor.a": [(NOW, 20.0)]}, {}, {})
+        for got in (h.since(NOW), h.extended(ha.History({}, {}, {}))):
+            f, unread = got.converted("sensor.a", "°C", ha.to_f, NOW)
+            assert f == [(NOW, pytest.approx(68.0))]
+            assert unread == []
+
+    def test_a_recorded_unitless_reading_stays_unreadable(self) -> None:
+        h = ha.History({"sensor.a": [(NOW, 20.0)]}, {}, {"sensor.a": [None]})
+        f, unread = h.since(NOW).converted("sensor.a", "°C", ha.to_f, NOW)
+        assert f == [] and len(unread) == 1
+
     def test_since_keeps_the_value_in_force(self) -> None:
         t = [NOW + timedelta(minutes=m) for m in range(4)]
         h = ha.History(

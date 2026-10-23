@@ -355,14 +355,19 @@ class History:
         """This history with a later read's, entity by entity: the
         readings (with their units) and the states merged by instant,
         the later read's row winning at a shared instant, the outages
-        joined. Units or states that either read lacks are None."""
+        joined. Units or states that either read lacks are None; an
+        entity's units are kept only where every reading records one,
+        else its readings are in today's unit, as ``converted`` reads a
+        history without them."""
         names = sorted({*self.readings, *newer.readings})
         readings: dict[str, list[Reading]] = {}
         units: dict[str, list[str | None]] = {}
         for n in names:
             rows = sa.merge_changes(_with_units(self, n), _with_units(newer, n))
-            readings[n] = [(t, v) for t, (v, _) in rows]
-            units[n] = [u for _, (_, u) in rows]
+            readings[n] = [(t, v) for t, (v, _, _) in rows]
+            recorded = _unit_list(rows)
+            if recorded is not None:
+                units[n] = recorded
         states = None
         if self.states is not None and newer.states is not None:
             states = {
@@ -396,8 +401,10 @@ class History:
         units: dict[str, list[str | None]] = {}
         for n in self.readings:
             rows = sa.changes_since(_with_units(self, n), start)
-            readings[n] = [(t, v) for t, (v, _) in rows]
-            units[n] = [u for _, (_, u) in rows]
+            readings[n] = [(t, v) for t, (v, _, _) in rows]
+            recorded = _unit_list(rows)
+            if recorded is not None:
+                units[n] = recorded
         return History(
             readings,
             {n: sa.spans_since(s, start) for n, s in self.outages.items()},
@@ -442,15 +449,32 @@ class History:
 
 def _with_units(
     history: History, entity: str
-) -> list[tuple[datetime, tuple[float, str | None]]]:
-    """``entity``'s readings, each with the unit it was recorded in
-    (None where the history carries none)."""
+) -> list[tuple[datetime, tuple[float, str | None, bool]]]:
+    """``entity``'s readings, each with the unit it was recorded in and
+    whether the history records one for it: without (no units, or none
+    for this reading), ``converted`` reads it in today's unit, which an
+    explicit None (recorded with no unit) is not."""
     rows = history.readings.get(entity, [])
     units = None if history.units is None else history.units.get(entity)
     return [
-        (t, (v, None if units is None or i >= len(units) else units[i]))
+        (
+            t,
+            (v, units[i], True)
+            if units is not None and i < len(units)
+            else (v, None, False),
+        )
         for i, (t, v) in enumerate(rows)
     ]
+
+
+def _unit_list(
+    rows: Sequence[tuple[datetime, tuple[float, str | None, bool]]],
+) -> list[str | None] | None:
+    """The units of ``rows`` as ``History.units`` holds them, or None
+    (today's unit for each) unless every reading records its own."""
+    if not all(known for _, (_, _, known) in rows):
+        return None
+    return [u for _, (_, u, _) in rows]
 
 
 def parse_units(doc: Any) -> dict[str, list[str | None]]:
