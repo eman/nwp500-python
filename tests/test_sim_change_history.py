@@ -1259,3 +1259,27 @@ class TestAPartialAirRecord:
         assert alone.n_runs_without_air == 0
         assert partial.n_runs == alone.n_runs
         assert partial.n_runs_without_air == 0
+
+
+class TestAnUnrecordedFlag:
+    def test_a_flag_with_no_history_is_left_out(self) -> None:
+        heater = ha.HeaterEntities(
+            heard=BOOK_HEATER.heard,
+            upper=BOOK_HEATER.upper,
+            lower=BOOK_HEATER.lower,
+            compressor=BOOK_HEATER.compressor,
+            lower_element="binary_sensor.lower_element",
+        )
+        history = asyncio.run(
+            ha.read_heater_history(
+                cast(
+                    ha.HomeAssistantClient,
+                    WindowedClient(_book_rows(), BOOK_UNITS),
+                ),
+                heater,
+                END - ha.BOOK_WINDOW,
+                END,
+            )
+        )
+        assert history.rows.outages == ()
+        assert "lower_element_on: no history over the record" in history.notes

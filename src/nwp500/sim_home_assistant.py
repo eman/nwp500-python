@@ -1989,7 +1989,7 @@ async def read_heater_history(
             del roles[name]
     changes: dict[str, list[tuple[datetime, Any]]] = {n: [] for n in roles}
     unread: dict[str, int] = {}
-    blank: dict[str, int] = {}
+    blank: dict[str, list[Span]] = {}
     down: list[Span] = []
     heard: list[datetime] = []
     names = sorted({e.heard, *(entity for entity, _ in roles.values())})
@@ -2021,8 +2021,7 @@ async def read_heater_history(
                 # A window opens with the state in force: nothing is no
                 # read, and a flag held from before would credit heating
                 # across it.
-                down.append((a, b))
-                blank[name] = blank.get(name, 0) + 1
+                blank.setdefault(name, []).append((a, b))
             was = None
             # The unit each number was recorded in, where the history
             # says; today's where it does not.
@@ -2063,9 +2062,14 @@ async def read_heater_history(
             )
     for name, count in unread.items():
         notes.append(f"{name}: {count} states this does not read, left out")
-    for name, count in blank.items():
+    for name, spans in blank.items():
+        if not changes[name]:
+            # No history over the whole record: not recorded at all, so
+            # left out (``no history over the record``), not unobserved.
+            continue
+        down.extend(spans)
         notes.append(
-            f"{name}: nothing read in {count} windows, left unobserved"
+            f"{name}: nothing read in {len(spans)} windows, left unobserved"
         )
     outages = busy(down)
     if outages:
@@ -2096,6 +2100,29 @@ class BookAnswer:
     booked: Booked | None
     inlet_measured: bool
     notes: tuple[str, ...]
+
+
+def _heating_lost(
+    held: HeaterHistory, newer: HeaterHistory, start: datetime, end: datetime
+) -> HeaterHistory:
+    """``newer`` unobserved from ``start`` to ``end`` when it has nothing
+    of a heating flag ``held`` has history of: a read opens with the
+    value in force, so nothing is no read (``read_heater_history``
+    leaves out a flag it has no history of at all), and the flag held
+    from before would credit heating across it."""
+    lost = [
+        name
+        for name in _HEATING
+        if getattr(held.rows, name) and not getattr(newer.rows, name)
+    ]
+    if not lost:
+        return newer
+    rows = replace(newer.rows, outages=(*newer.rows.outages, (start, end)))
+    notes = (
+        *newer.notes,
+        *(f"{name}: nothing read, left unobserved" for name in sorted(lost)),
+    )
+    return replace(newer, rows=rows, notes=notes)
 
 
 def _unread_marked(
@@ -2194,6 +2221,8 @@ class HomeAssistantBook:
             self._notes.append(f"book: the heater's history not read ({err})")
         else:
             held_ = self._heater_history
+            if held_ is not None:
+                newer = _heating_lost(held_, newer, start, now)
             whole = newer if held_ is None else held_.extended(newer)
             self._heater_history = whole.since(cut)
             self._heater_read = now
