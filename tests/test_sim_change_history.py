@@ -1084,3 +1084,35 @@ class TestTheBookSixthReview:
         assert "compressor_on: nothing read in 1 windows, left unobserved" in (
             history.notes
         )
+
+
+class TestTheBookEighthReview:
+    P = sim.default_params()
+
+    def test_after_a_failed_heater_read_no_heating_is_credited(self) -> None:
+        class Failing(WindowedClient):
+            fail = False
+
+            async def read_history(
+                self, entities: Iterable[str], start: datetime, end: datetime
+            ) -> ha.History:
+                names = list(entities)
+                if self.fail and "sensor.upper" in names:
+                    raise ha.HomeAssistantError("down")
+                return await super().read_history(names, start, end)
+
+        client = Failing(_book_rows(), BOOK_UNITS)
+        keeper = _keeper(client)
+        # The compressor is on; a minute later the heater can't be read,
+        # though the flow can.
+        on = END - 3.75 * H
+        asyncio.run(keeper.read(on))
+        client.fail = True
+        later = on + timedelta(minutes=1)
+        asyncio.run(keeper.read(later))
+        got = keeper.book(later, self.P)
+        assert got.booked is None
+        assert any("none past the heater's last read" in n for n in got.notes)
+        client.fail = False
+        asyncio.run(keeper.read(END))
+        assert keeper.book(END, self.P).booked is not None

@@ -2120,6 +2120,7 @@ class HomeAssistantBook:
         self._heater_history: HeaterHistory | None = None
         self._history: History | None = None
         self._heater_read: datetime | None = None
+        self._heater_tried: datetime | None = None
         self._read: datetime | None = None
         self._tried: datetime | None = None
         self._units: dict[str, str | None] = {}
@@ -2145,6 +2146,7 @@ class HomeAssistantBook:
         start = (
             cut if self._heater_read is None else max(self._heater_read, cut)
         )
+        self._heater_tried = now
         try:
             newer = await read_heater_history(
                 self.client, self.heater, start, now
@@ -2195,6 +2197,14 @@ class HomeAssistantBook:
         notes = [*(rows.notes if rows is not None else ()), *self._notes]
         if rows is None or got is None:
             notes.append("book: no history read")
+            return BookAnswer(None, False, tuple(notes))
+        if self._heater_tried != self._heater_read:
+            # Since the last heater read that worked, its flags are
+            # unknown: none held from before may credit heating.
+            notes.append(
+                "book: none past the heater's last read "
+                f"({cast(datetime, self._heater_read).isoformat()})"
+            )
             return BookAnswer(None, False, tuple(notes))
         since = at - self.window
         e = self.entities
