@@ -708,6 +708,15 @@ class TestTheHeatersOwnAir:
         )
         assert got == [(t0 + 10 * m, 52.0)]
 
+    def test_overlapping_unheard_spans_are_one(self) -> None:
+        m = timedelta(minutes=1)
+        t0 = T0 - timedelta(hours=1)
+        compressor = [(t0, True), (t0 + 22 * m, False)]
+        air = [(t0, 70.0), (t0 + 15 * m, 60.0), (t0 + 20 * m, 52.0)]
+        unheard = [(t0 + m, t0 + 10 * m), (t0 + 5 * m, t0 + 20 * m)]
+        # Heard again at 20 only: no 5 minutes heard before the run ends.
+        assert sa.settled_air(compressor, air, until=T0, unheard=unheard) == []
+
     def _readings(
         self, device_status_dict: dict[str, Any], hours: float
     ) -> list[Any]:

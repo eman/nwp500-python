@@ -1440,14 +1440,25 @@ class TestStandbyOnTheHeatersAir:
     def test_with_no_air_given_it_fits_on_the_heaters(self) -> None:
         frame = recovery_days(6)
         base = sim.default_params()
-        given = sc._fit(frame.copy(), base, [], None, None, None, None)
-        own = sc._fit(
-            frame.drop(columns=["air_f"]), base, [], None, None, None, None
+        # The fixture's loss is constant: its exponent, held, is 0.
+        base = replace(base, loss=replace(base.loss, ua_exponent=0.0))
+        readings = [
+            (cast(datetime, t.to_pydatetime()), float(v))
+            for t, v in frame["air_f"].items()
+        ]
+        heater_only = frame.drop(columns=["air_f"])
+        given = sc._fit(
+            heater_only.copy(), base, [], readings, None, None, None
         )
+        own = sc._fit(heater_only.copy(), base, [], None, None, None, None)
+        assert given.air == "readings"
         assert own.air == "heater"
+        assert given.calibration.standby.ua_ref is not None
         assert own.calibration.standby.ua_ref is not None
+        # The fixture's air steps at midnight, and the heater's is drawn
+        # straight from one evening's run to the next: within 5 %.
         assert own.calibration.standby.ua_ref == pytest.approx(
-            given.calibration.standby.ua_ref
+            given.calibration.standby.ua_ref, rel=0.05
         )
         assert sc.NO_AIR_NOTE not in own.notes
         assert any(

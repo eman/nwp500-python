@@ -1397,7 +1397,9 @@ def settled_air(
     events.sort(key=lambda e: (e[0], e[1]))
     until = until.astimezone(UTC)
     out: list[tuple[datetime, float]] = []
-    on, heard = False, True
+    on = False
+    # Spans may overlap: heard again only once every one has ended.
+    deaf = 0
     value: float | None = None
     since: datetime | None = None
     due = False
@@ -1429,7 +1431,7 @@ def settled_air(
             break
         settle(t)
         if kind == 0:
-            if bool(v) and not on and heard:
+            if bool(v) and not on and not deaf:
                 since, due = t, True
             elif not v:
                 since, due = None, False
@@ -1442,10 +1444,11 @@ def settled_air(
                 if r is not None:
                     out.append((t, r))
         elif kind == 2:
-            heard, since, due = False, None, False
+            deaf += 1
+            since, due = None, False
         else:
-            heard = True
-            if on:
+            deaf -= 1
+            if on and not deaf:
                 since, due = t, True
     settle(until, at_end=True)
     return out
