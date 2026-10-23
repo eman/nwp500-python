@@ -49,7 +49,7 @@ python3 scripts/validate_version.py
 **Checks:**
 - Verifies `setup.cfg` `[pyscaffold]` version hasn't been modified (should be 4.6)
 - Ensures no hardcoded `__version__` strings in source code
-- Confirms `setup.py` uses `setuptools_scm`
+- Confirms `pyproject.toml` takes the version from `setuptools_scm`
 
 **When to run:**
 - Before creating a release

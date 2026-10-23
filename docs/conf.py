@@ -24,8 +24,7 @@ sys.path.insert(0, os.path.join(__location__, "../src"))
 # This hack is necessary since RTD does not issue `sphinx-apidoc` before running
 # `sphinx-build -b html . _build/html`. See Issue:
 # https://github.com/readthedocs/readthedocs.org/issues/1139
-# DON'T FORGET: Check the box "Install your project inside a virtualenv using
-# setup.py install" in the RTD Advanced Settings.
+# RTD installs the project itself (.readthedocs.yml, python.install).
 # Additionally it helps us to avoid running apidoc manually
 
 try:  # for Sphinx >= 1.7
