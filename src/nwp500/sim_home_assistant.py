@@ -565,11 +565,11 @@ def held(
     is in UTC, every ``step`` of elapsed time across a clock change."""
     if step <= timedelta(0):
         raise ValueError("step must be positive")
-    rows = sorted(readings, key=lambda r: r[0])
+    # In UTC: two local times in one zone compare, and step, by the wall
+    # clock, which skips or repeats an hour at a daylight-saving change.
+    rows = sorted((t.astimezone(UTC), v) for t, v in readings)
     out: list[Reading] = []
     i = -1
-    # In UTC: a local time steps by the wall clock, which skips or
-    # repeats an hour at a daylight-saving change.
     t, end = start.astimezone(UTC), end.astimezone(UTC)
     while t <= end:
         while i + 1 < len(rows) and rows[i + 1][0] <= t:

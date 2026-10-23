@@ -1685,6 +1685,24 @@ class TestHeld:
             timedelta(minutes=30 * k) for k in range(3)
         ]
 
+    def test_readings_in_the_repeated_hour_in_order(self) -> None:
+        """01:40 PDT comes before 01:10 PST, though its wall clock is later."""
+        from zoneinfo import ZoneInfo
+
+        tz = ZoneInfo("America/Los_Angeles")
+        first = datetime(2026, 11, 1, 1, 40, tzinfo=tz)
+        second = datetime(2026, 11, 1, 1, 10, fold=1, tzinfo=tz)
+        assert second.astimezone(UTC) > first.astimezone(UTC)
+        got = ha.held(
+            [(second, 2.0), (first, 1.0)],
+            first,
+            second.astimezone(UTC) + timedelta(minutes=10),
+            timedelta(minutes=10),
+        )
+        assert got[0][1] == 1.0
+        assert got[-1][1] == 2.0
+        assert [v for _, v in got].count(2.0) == 2
+
     def test_a_step_must_be_positive(self) -> None:
         with pytest.raises(ValueError, match="positive"):
             ha.held([], NOW, NOW, timedelta(0))
