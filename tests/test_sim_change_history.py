@@ -1239,3 +1239,23 @@ class TestTheFlowsHistory:
         got = keeper.book(END, self.P)
         assert got.booked is None
         assert f"book: {FLOW} is unknown now" in got.notes
+
+
+class TestAPartialAirRecord:
+    def test_the_heaters_air_reads_the_runs_the_record_misses(self) -> None:
+        rows, heard = TestRunsWithoutAir._runs(air=True)
+        alone = sc.calibrate_changes(rows, heard)
+        # An air record that covers only the last day and a half.
+        record = ha.RecordInputs(
+            air=[
+                (T0 + timedelta(days=3, hours=12), 60.0),
+                (T0 + timedelta(days=5), 60.0),
+            ],
+            humidity=None,
+            drawing=None,
+            circulating=None,
+        )
+        partial = sc.calibrate_changes(rows, heard, record=record)
+        assert alone.n_runs_without_air == 0
+        assert partial.n_runs == alone.n_runs
+        assert partial.n_runs_without_air == 0

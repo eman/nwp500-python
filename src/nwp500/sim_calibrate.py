@@ -919,13 +919,23 @@ def _fit(
     # A source's series, held past its ends or across an outage, would
     # stand for air nobody read: the air is left unknown there, and the
     # humidity takes the fits' own default.
+    recovery_air = "heater_air_f" if how is None else "air_f"
     if covers is not None and record is not None:
         unseen = _unobserved(index, covers, record.air_outages)
         frame.loc[unseen, "air_f"] = float("nan")
-        # And out of the standby fit, which would interpolate across,
-        # and out of any recovery, which would take an older reading.
+        # And out of the standby fit, which would interpolate across.
         frame["air_unobserved"] = unseen
-        frame["excluded"] = frame["excluded"].to_numpy(dtype=bool) | unseen
+        if "heater_air_f" in frame.columns:
+            # A recovery there reads the heater's own air instead.
+            frame["recovery_air_f"] = frame["air_f"].where(
+                ~unseen, frame["heater_air_f"]
+            )
+            recovery_air = "recovery_air_f"
+            unread = unseen & frame["recovery_air_f"].isna().to_numpy()
+        else:
+            unread = unseen
+        # Out of any recovery that would take an older reading.
+        frame["excluded"] = frame["excluded"].to_numpy(dtype=bool) | unread
     if rh_covers is not None and record is not None:
         frame.loc[
             _unobserved(index, rh_covers, record.humidity_outages),
@@ -933,7 +943,6 @@ def _fit(
         ] = DEFAULT_HUMIDITY_PCT
     if how is None:
         notes.append(NO_AIR_NOTE)
-    recovery_air = "heater_air_f" if how is None else "air_f"
     n_runs, unread = _runs_without_air(frame, recovery_air)
     judged: tuple[Judged, ...] = ()
     held: HeldOut | None = None
