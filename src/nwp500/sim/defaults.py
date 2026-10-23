@@ -57,6 +57,9 @@ SITE_CIRCULATION = CirculationParams(
     displaced_gal=6.2746,
     flow_gpm=1.397,
     loss_btu_per_gal=159.0,
+    # Fitted on the book's re-anchors with runs merged within 10 min:
+    # an effective volume, apart from ``displaced_gal``.
+    book_circuit_gal=1.47,
     # Its household meter read a run at 0.81 of the run's own flow
     # (median of 47 runs), but the flow the book takes is the
     # household's draws alone (``sim_home_assistant`` reads them from

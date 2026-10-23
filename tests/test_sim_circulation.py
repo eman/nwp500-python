@@ -45,6 +45,7 @@ from nwp500.sim.codec import (  # noqa: E402
     scenario_from_document,
     scenario_to_document,
 )
+from nwp500.sim.defaults import SITE_CIRCULATION  # noqa: E402
 from nwp500.sim.params import (  # noqa: E402
     CirculationParams,
     params_from_document,
@@ -218,9 +219,17 @@ class TestThroughTheAPI:
         quiet = simulate(_scenario(loads=Loads()), params, book=book)
         circulated = simulate(_scenario(), params, book=book)
         assert circulated.booked is not None and quiet.booked is not None
-        assert circulated.booked.states[-1].heat_btu < (
-            quiet.booked.states[-1].heat_btu
-        )
+        # After the first run, before the runs' heat brings on a
+        # recovery.
+        runs = _loads().circulation
+        assert runs is not None
+        after = runs[0].end
+
+        def heat_at(walk: Any) -> float:
+            k = next(i for i, t in enumerate(walk.instants) if t >= after)
+            return float(walk.states[k].heat_btu)
+
+        assert heat_at(circulated.booked) < heat_at(quiet.booked)
 
     def test_standby_charges_them_too(self, params: HeaterParams) -> None:
         s = _scenario()
@@ -395,3 +404,48 @@ class TestASplitCoast:
         end, split = whole.points[-1], b.points[-1]
         assert split.lower_f == pytest.approx(end.lower_f, abs=0.05)
         assert split.upper_f == pytest.approx(end.upper_f, abs=0.05)
+
+
+class TestTheBooksCircuitVolume:
+    TERMS = replace(SITE_CIRCULATION, book_circuit_gal=1.5)
+
+    def test_a_run_takes_its_first_gallons_at_the_tank_less_the_air(
+        self,
+    ) -> None:
+        from nwp500.sim.book import circulated_btu
+
+        def take(gal: float, before: float) -> float:
+            return circulated_btu(
+                gal,
+                self.TERMS,
+                before_gal=before,
+                upper_f=140.0,
+                ambient_f=65.0,
+            )
+
+        assert take(1.0, 0.0) == pytest.approx(1.0 * 8.34 * 75.0)
+        # Only the half gallon left before the circuit is hot.
+        assert take(1.0, 1.0) == pytest.approx(0.5 * 8.34 * 75.0)
+        assert take(1.0, 2.0) == 0.0
+        # Without the volume, the loss per gallon.
+        flat = replace(self.TERMS, book_circuit_gal=None)
+        assert circulated_btu(1.0, flat) == SITE_CIRCULATION.loss_btu_per_gal
+
+    def test_the_ledger_prices_projected_runs_so(self) -> None:
+        from nwp500.sim.circulation import CirculationLoss
+
+        run = (at(0.0), at(1.0))
+        loss = CirculationLoss(
+            [run],
+            flow_gpm=1.0,
+            loss_btu_per_gal=159.0,
+            circuit_gal=1.5,
+            upper_f=140.0,
+            air_at=lambda _: 65.0,
+        )
+        first, on = loss.loss(at(0.0), at(0.0) + timedelta(minutes=1))
+        assert on and first == pytest.approx(1.0 * 8.34 * 75.0)
+        later, on = loss.loss(at(0.5), at(0.6))
+        assert on and later == 0.0
+        whole = loss.bound(at(0.0), at(1.0))
+        assert whole == pytest.approx(1.5 * 8.34 * (140.0 + 20.0))

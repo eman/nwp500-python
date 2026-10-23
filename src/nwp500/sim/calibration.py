@@ -2219,6 +2219,8 @@ class RecordedBook:
                 for s in self.steps
             ]
         )
+        #: What each step's run had circulated before it, gal.
+        self.run_before = np.array([s.run_gal_before for s in self.steps])
         self.comp = np.array([s.compressor_on for s in self.steps], dtype=bool)
         self.el = np.array([s.element_on for s in self.steps], dtype=bool)
         heating = self.comp | self.el
@@ -2241,8 +2243,38 @@ class RecordedBook:
         last[self.anchors] = self.anchors
         self.last = pd.Series(last).ffill().to_numpy()
 
-    def cum(self, p: BookParams, loss_btu_per_gal: float) -> np.ndarray:
-        """The booked heat's running sum from the first step, BTU."""
+    def circuit_btu(self, circuit_gal: float) -> np.ndarray:
+        """Each step's circulation loss with the book's circuit volume
+        (``CirculationParams.book_circuit_gal``, ``book.circulated_btu``):
+        its gallons up to the volume from its run's start, each at the
+        upper probe less the air."""
+        before = self.run_before
+        priced = np.clip(
+            np.minimum(before + self.circulated, circuit_gal)
+            - np.minimum(before, circuit_gal),
+            0.0,
+            None,
+        )
+        return np.asarray(
+            priced * WATER_BTU_PER_GAL_F * np.clip(self.u - self.air, 0, None)
+        )
+
+    def _circulation_btu(
+        self, loss_btu_per_gal: float, circuit_gal: float | None
+    ) -> np.ndarray:
+        if circuit_gal is None:
+            return np.asarray(loss_btu_per_gal * self.circulated)
+        return self.circuit_btu(circuit_gal)
+
+    def cum(
+        self,
+        p: BookParams,
+        loss_btu_per_gal: float,
+        circuit_gal: float | None = None,
+    ) -> np.ndarray:
+        """The booked heat's running sum from the first step, BTU: the
+        circulation at ``circuit_gal`` (``circuit_btu``), else
+        ``loss_btu_per_gal`` per gallon."""
         h = self.seconds / 3600.0
         delivered = np.minimum(
             self.u, p.delivery_intercept_f + p.delivery_slope * self.u
@@ -2255,7 +2287,7 @@ class RecordedBook:
             - self.draw
             * WATER_BTU_PER_GAL_F
             * np.clip(delivered - self.inlet, 0, None)
-            - loss_btu_per_gal * self.circulated
+            - self._circulation_btu(loss_btu_per_gal, circuit_gal)
             - p.ua_btu_per_h_f
             * np.clip((self.u + self.l) / 2 - self.air, 0, None)
             * h
@@ -2275,11 +2307,15 @@ class RecordedBook:
         )
 
     def heat(
-        self, p: BookParams, loss_btu_per_gal: float
+        self,
+        p: BookParams,
+        loss_btu_per_gal: float,
+        circuit_gal: float | None = None,
     ) -> tuple[np.ndarray, np.ndarray]:
         """The booked heat at every step from its latest quiet anchor,
         and that anchor's age, hours; NaN before the first."""
-        cum, ep = self.cum(p, loss_btu_per_gal), self.probe_heat(p)
+        cum = self.cum(p, loss_btu_per_gal, circuit_gal)
+        ep = self.probe_heat(p)
         ok = ~np.isnan(self.last)
         la = np.where(ok, self.last, 0).astype(int)
         n = np.arange(len(self.steps))
@@ -2303,13 +2339,18 @@ class RecordedBook:
         return out
 
     def pair_terms(
-        self, p: BookParams, pairs: Sequence[tuple[int, int]]
+        self,
+        p: BookParams,
+        pairs: Sequence[tuple[int, int]],
+        circuit_gal: float | None = None,
     ) -> tuple[np.ndarray, np.ndarray]:
         """Each pair's error (``errors``) as ``k + x @ terms``, linear
         in the fitted terms (``BOOK_TERMS``: the compressor's heat rate,
         its slope with the air, the standby UA and circulation's loss
         per gallon), with ``p``'s others held: ``k`` per pair, BTU, and
-        ``x`` a row per pair."""
+        ``x`` a row per pair. With ``circuit_gal``, the circulation is
+        priced at that circuit volume in ``k`` (``circuit_btu``), not
+        linear in any term, and its column is 0."""
         h = self.seconds / 3600.0
         delivered = np.minimum(
             self.u, p.delivery_intercept_f + p.delivery_slope * self.u
@@ -2319,11 +2360,15 @@ class RecordedBook:
             * WATER_BTU_PER_GAL_F
             * np.clip(delivered - self.inlet, 0, None)
         )
+        if circuit_gal is not None:
+            fixed = fixed - self.circuit_btu(circuit_gal)
         columns = [
             self.comp * h,
             self.comp * (self.air - 65.0) * h,
             -np.clip((self.u + self.l) / 2 - self.air, 0, None) * h,
-            -self.circulated,
+            -self.circulated
+            if circuit_gal is None
+            else np.zeros(len(self.steps)),
         ]
 
         def cum(e: np.ndarray) -> np.ndarray:
@@ -2342,9 +2387,11 @@ class RecordedBook:
         p: BookParams,
         loss_btu_per_gal: float,
         pairs: Sequence[tuple[int, int]],
+        circuit_gal: float | None = None,
     ) -> np.ndarray:
         """The book less the probes at each pair's second anchor, BTU."""
-        cum, ep = self.cum(p, loss_btu_per_gal), self.probe_heat(p)
+        cum = self.cum(p, loss_btu_per_gal, circuit_gal)
+        ep = self.probe_heat(p)
         return np.array(
             [ep[a0] + cum[a1] - cum[a0] - ep[a1] for a0, a1 in pairs]
         )
@@ -2364,6 +2411,9 @@ BOOK_TERMS = (
     "loss_btu_per_gal",
 )
 BOOK_TERM_BOUNDS = ((2000.0, 9000.0), (-50.0, 200.0), (0.0, 20.0), (0.0, 500.0))
+#: The plausible bounds of the book's circuit volume
+#: (``CirculationParams.book_circuit_gal``), gal.
+BOOK_CIRCUIT_GAL_BOUNDS = (0.0, 30.0)
 
 
 @dataclass(frozen=True)
@@ -2377,6 +2427,9 @@ class BookFit:
     n_pairs: int
     mae_btu: float
     mean_btu: float
+    #: With ``circuit``, the circuit volume fitted in place of the loss
+    #: per gallon (``CirculationParams.book_circuit_gal``), gal.
+    book_circuit_gal: float | None = None
 
 
 def fit_book_terms(
@@ -2384,11 +2437,25 @@ def fit_book_terms(
     pairs: Sequence[tuple[int, int]],
     base: BookParams,
     loss_btu_per_gal: float = 0.0,
+    *,
+    circuit: bool = False,
 ) -> BookFit:
     """The compressor's heat rate and its slope with the air, the
     standby UA and circulation's loss per gallon minimising the mean
     absolute error at ``pairs`` (Nelder-Mead from three starts, within
-    plausible bounds)."""
+    plausible bounds). With ``circuit``, the circuit volume
+    (``RecordedBook.circuit_btu``, within ``BOOK_CIRCUIT_GAL_BOUNDS``)
+    in place of the loss per gallon."""
+    bounds = (
+        (*BOOK_TERM_BOUNDS[:3], BOOK_CIRCUIT_GAL_BOUNDS)
+        if circuit
+        else BOOK_TERM_BOUNDS
+    )
+
+    def errors(x: np.ndarray) -> np.ndarray:
+        if circuit:
+            return book.errors(terms(x), 0.0, pairs, float(x[3]))
+        return book.errors(terms(x), float(x[3]), pairs)
 
     def terms(x: np.ndarray) -> BookParams:
         return replace(
@@ -2399,27 +2466,33 @@ def fit_book_terms(
         )
 
     def loss(x: np.ndarray) -> float:
-        bounded = zip(x, BOOK_TERM_BOUNDS, strict=True)
+        bounded = zip(x, bounds, strict=True)
         if not all(lo <= v <= hi for v, (lo, hi) in bounded):
             return 1e12
-        return float(np.mean(np.abs(book.errors(terms(x), float(x[3]), pairs))))
+        return float(np.mean(np.abs(errors(x))))
 
+    starts = (
+        ([4300, 130, 4, 1.5], [3800, 80, 5, 4.0], [4800, 0, 3, 0.5])
+        if circuit
+        else ([4300, 130, 4, 50], [3800, 80, 5, 150], [4800, 0, 3, 0])
+    )
     best = None
-    for x0 in ([4300, 130, 4, 50], [3800, 80, 5, 150], [4800, 0, 3, 0]):
+    for x0 in starts:
         r = minimize(loss, x0, method="Nelder-Mead", options={"maxiter": 3000})
         if best is None or r.fun < best.fun:
             best = r
     assert best is not None
     x = best.x
-    err = book.errors(terms(x), float(x[3]), pairs)
+    err = errors(x)
     return BookFit(
         hp_btu_per_h=float(x[0]),
         hp_btu_per_h_per_f=float(x[1]),
         ua_btu_per_h_f=float(x[2]),
-        loss_btu_per_gal=float(x[3]),
+        loss_btu_per_gal=0.0 if circuit else float(x[3]),
         n_pairs=len(pairs),
         mae_btu=float(np.mean(np.abs(err))) if len(err) else float("nan"),
         mean_btu=float(np.mean(err)) if len(err) else float("nan"),
+        book_circuit_gal=float(x[3]) if circuit else None,
     )
 
 
@@ -2457,13 +2530,14 @@ def book_error_bands(
     book: RecordedBook,
     p: BookParams,
     loss_btu_per_gal: float,
+    circuit_gal: float | None = None,
 ) -> list[tuple[tuple[int, int], int, float, float, float]]:
     """The book's error on re-anchors up to ``history_h`` apart, by
     anchor age: ``((lo, hi), n, MAE, mean, p90 of |error|)``. Long pairs
     are quiet spans by construction (no full tank between), so their
     error reads low."""
     pairs = book.reanchors(p.history_h)
-    err = book.errors(p, loss_btu_per_gal, pairs)
+    err = book.errors(p, loss_btu_per_gal, pairs, circuit_gal)
     age = np.array([(b - a) * book.seconds / 3600 for a, b in pairs])
     out = []
     for lo_, hi_ in ERROR_BANDS_H:
@@ -2489,13 +2563,14 @@ def empty_point(
     *,
     line_f: float = 105.0,
     core_h: float = 12.0,
+    circuit_gal: float | None = None,
 ) -> tuple[float | None, list[tuple[datetime, float, float]]]:
     """The heat left when a drawdown first takes the upper probe below
     ``line_f``: each such crossing with a draw in the 10 minutes before
     it, an anchor within 24 h, and an hour since the last; the median of
     those with an anchor within ``core_h`` (``BookParams.empty_btu``),
     and every crossing as ``(when, anchor age h, heat BTU)``."""
-    heat, age = book.heat(p, loss_btu_per_gal)
+    heat, age = book.heat(p, loss_btu_per_gal, circuit_gal)
     below = book.u < line_f
     lead = int(600 / book.seconds)
     events: list[tuple[datetime, int, float, float]] = []
@@ -2516,7 +2591,10 @@ def empty_point(
 
 
 def book_error_btu(
-    book: RecordedBook, p: BookParams, loss_btu_per_gal: float
+    book: RecordedBook,
+    p: BookParams,
+    loss_btu_per_gal: float,
+    circuit_gal: float | None = None,
 ) -> tuple[float | None, float | None]:
     """``(error_btu, aged_error_btu)``, each rounded up to 100 BTU: the
     90th percentile of the book's error pooled over every re-anchor
@@ -2529,7 +2607,7 @@ def book_error_btu(
 
     pairs = book.reanchors(p.history_h)
     age = np.array([(b - a) * book.seconds / 3600 for a, b in pairs])
-    err = np.abs(book.errors(p, loss_btu_per_gal, pairs))
+    err = np.abs(book.errors(p, loss_btu_per_gal, pairs, circuit_gal))
     fresh = err[(age >= 1) & (age <= p.max_anchor_age_h)] if len(err) else err
     aged = err[(age >= 18) & (age < 24)] if len(err) else err
     return (
@@ -2566,12 +2644,15 @@ def zone_empty_point(
     *,
     line_f: float = 105.0,
     core_h: float = 12.0,
+    circuit_gal: float | None = None,
 ) -> float | None:
     """``empty_point`` in the drawable frame (``BookParams.
     zone_empty_btu``): the median, at the same core crossings, of the
     booked heat less what the cold region withholds."""
-    _, events = empty_point(book, p, loss_btu_per_gal, line_f=line_f)
-    heat, _ = book.heat(p, loss_btu_per_gal)
+    _, events = empty_point(
+        book, p, loss_btu_per_gal, line_f=line_f, circuit_gal=circuit_gal
+    )
+    heat, _ = book.heat(p, loss_btu_per_gal, circuit_gal)
     placed = heat - withheld_btu(book, p)
     core = [
         placed[int((t - book.start).total_seconds() / book.seconds)]

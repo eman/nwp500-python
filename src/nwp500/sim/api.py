@@ -542,7 +542,14 @@ def simulate(
             withheld=sorted(withheld_windows),
             extra=(
                 CirculationLoss(
-                    circulation.runs, terms.flow_gpm, terms.loss_btu_per_gal
+                    circulation.runs,
+                    terms.flow_gpm,
+                    terms.loss_btu_per_gal,
+                    circuit_gal=terms.book_circuit_gal,
+                    # The tank's upper zone over the projection, as the
+                    # heater holds it.
+                    upper_f=s.settings.setpoint_f,
+                    air_at=physics.ambient.at,
                 )
                 if circulation is not None
                 else None

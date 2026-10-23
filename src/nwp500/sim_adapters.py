@@ -94,6 +94,7 @@ from nwp500.sim import (
 from nwp500.sim import full_tank_book as sim_full_tank_book
 from nwp500.sim.book import AMBIENT_DEFAULT_F, book_steps
 from nwp500.sim.book import Step as BookStep
+from nwp500.sim.circulation import merge_runs
 from nwp500.sim.cold_supply import ColdSupply, ColdSupplyParams, plateau_t_cold
 from nwp500.sim.defaults import SITE_CIRCULATION
 from nwp500.sim.inputs import POWER_OFF, VACATION
@@ -1770,8 +1771,14 @@ def _book_steps_on(
     runs = sorted(
         (a.astimezone(UTC), b.astimezone(UTC)) for a, b in circulation
     )
+    # Runs closer than the gap are one run to the book's loop volume
+    # (``CirculationParams.book_circuit_gal``), as the walk takes them.
+    gap = timedelta(minutes=10.0 if terms is None else terms.run_gap_min)
+    joined = merge_runs(runs, gap)
     steps: list[BookStep] = []
     settled: float | None = None
+    current: tuple[datetime, datetime] | None = None
+    run_gal = 0.0
     for i, at in enumerate(grid):
         u, lo, a_f, in_f = upper[i], lower[i], amb[i], probe[i]
         if u is None or lo is None:
@@ -1788,6 +1795,17 @@ def _book_steps_on(
                 gpm = m / terms.meter_share
             elif terms is not None:
                 gpm = terms.flow_gpm
+            run = next((r for r in joined if r[0] <= at < r[1]), None)
+            if run is not None and run != current:
+                # A run already under way: what it ran before, at this
+                # flow.
+                current = run
+                seconds = sum(
+                    max(0.0, (min(b, at) - max(a, run[0])).total_seconds())
+                    for a, b in runs
+                    if a < at and b > run[0]
+                )
+                run_gal = gpm * seconds / 60.0
         steps.append(
             BookStep(
                 seconds=float(BOOK_GRID_S),
@@ -1802,8 +1820,11 @@ def _book_steps_on(
                 circulation_gpm=gpm,
                 inlet_measured=in_f is not None,
                 lower_element=bool(lo_el[i]),
+                run_gal_before=run_gal if on else 0.0,
             )
         )
+        if on:
+            run_gal += gpm * BOOK_GRID_S / 60.0
     return steps
 
 

@@ -802,3 +802,47 @@ class TestTheHeatersOwnAir:
             rows, start=start, end=T0, flow=flow
         )
         assert {s.ambient_f for s in changed} == {50.0}
+
+
+class TestARunsGallonsForTheCircuit:
+    def _steps(
+        self, runs: list[tuple[datetime, datetime]], start: datetime
+    ) -> list[Any]:
+        from nwp500.sim import site_example_params
+
+        return sa.book_steps_from_changes(
+            sa.ChangeRows(
+                upper_f=[(T0 - timedelta(hours=3), 140.0)],
+                lower_f=[(T0 - timedelta(hours=3), 140.0)],
+            ),
+            start=start,
+            end=T0,
+            flow=[(T0 - timedelta(hours=3), 0.0)],
+            circulation=runs,
+            circulation_flow=sa.run_flow(runs, 1.2),
+            params=site_example_params(),
+        )
+
+    def test_runs_within_the_gap_are_one(self) -> None:
+        m = timedelta(minutes=1)
+        a = T0 - timedelta(hours=2)
+        near = [(a, a + 5 * m), (a + 10 * m, a + 15 * m)]
+        steps = self._steps(near, a)
+        second = next(
+            s for s in steps if s.circulating and s.run_gal_before > 5.9
+        )
+        assert second.run_gal_before == pytest.approx(6.0)
+        far = [(a, a + 5 * m), (a + 30 * m, a + 35 * m)]
+        firsts = [
+            s.run_gal_before
+            for s, prev in zip(self._steps(far, a)[1:], self._steps(far, a))
+            if s.circulating and not prev.circulating
+        ]
+        assert firsts == [0.0]
+
+    def test_a_run_under_way_at_the_start_counts_what_it_ran(self) -> None:
+        m = timedelta(minutes=1)
+        a = T0 - timedelta(hours=2)
+        steps = self._steps([(a, a + 10 * m)], a + 4 * m)
+        assert steps[0].circulating
+        assert steps[0].run_gal_before == pytest.approx(4 * 1.2)

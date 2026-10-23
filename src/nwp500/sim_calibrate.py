@@ -43,6 +43,7 @@ from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Any, cast
 
 import numpy as np
+from scipy.optimize import OptimizeResult, minimize_scalar
 
 from nwp500 import sim
 from nwp500 import sim_adapters as sa
@@ -1363,8 +1364,9 @@ _Pair = tuple[datetime, int, tuple[int, int], bool, bool]
 @dataclass(frozen=True)
 class BookTermsFit:
     """``fit_book``'s result: the book's terms to use (``book``, for
-    ``HeaterParams.book``) and the circulation loop's loss per gallon
-    (``loss_btu_per_gal``, for ``CirculationParams``; None without),
+    ``HeaterParams.book``), the circulation loop's book circuit volume
+    (``book_circuit_gal``, for ``CirculationParams``) and the base's
+    loss per gallon (``loss_btu_per_gal``; None without a loop),
     whether they are the base's or the refit's (``kept``), the re-anchor
     pairs read and those with a circulation run in them, the held-out
     error of the terms kept (mean absolute, BTU; None with nothing held
@@ -1377,6 +1379,9 @@ class BookTermsFit:
     run_pairs: int
     error_btu: float | None
     why: str
+    #: The book's circuit volume (``CirculationParams.book_circuit_gal``)
+    #: the terms were fitted with, gal; None for the loss per gallon.
+    book_circuit_gal: float | None = None
 
     def as_document(self) -> dict[str, Any]:
         """The fit as a document: ``book`` the terms' fields, and the
@@ -1387,6 +1392,7 @@ class BookTermsFit:
                 for f in dataclass_fields(self.book)
             },
             "loss_btu_per_gal": self.loss_btu_per_gal,
+            "book_circuit_gal": self.book_circuit_gal,
             "kept": self.kept,
             "pairs": self.pairs,
             "run_pairs": self.run_pairs,
@@ -1407,25 +1413,32 @@ def fit_book(
     air: Iterable[tuple[datetime, float]] = (),
 ) -> BookTermsFit:
     """The heat book's terms (``BookParams``) and a circulation loop's
-    loss per gallon from a heater's values' changes and the instants it
+    book circuit volume from a heater's values' changes and the instants it
     was heard from, the household's draws (``flow``), and the
     circulation pump's ``runs`` with the loop's flow
     (``circulation_flow``, apart from the draws). Like the rows, the
     flows are gal/min and ``inlet`` and ``air`` °F, whatever the
-    preferred units. ``params.book`` and ``params.circulation``'s loss
-    are the base.
+    preferred units. ``params.book`` and ``params.circulation``'s
+    pricing (its ``book_circuit_gal``, else its loss per gallon) are the
+    base.
 
     The book's terms are fitted together, on every pair of quiet full
     tanks (``sim.calibration.RecordedBook``'s re-anchors up to
     ``max_anchor_age_h`` apart) across the history: the compressor's
-    heat rate and its slope with the air, the standby UA and, with
-    ``MIN_RUN_PAIRS`` pairs with a run in them, the loop's loss per
-    gallon (``sim.calibration.BOOK_TERMS``), for the least mean absolute
-    error. A term the pairs can't tell apart from the others (the slope,
-    with the air never off one temperature) is held at the base. The
+    heat rate and its slope with the air and the standby UA
+    (``sim.calibration.BOOK_TERMS``), for the least mean absolute error,
+    and, with ``MIN_RUN_PAIRS`` pairs with a run in them, the loop's
+    book circuit volume (``CirculationParams.book_circuit_gal``, within
+    ``sim.calibration.BOOK_CIRCUIT_GAL_BOUNDS``): each run's gallons up
+    to it from its start, runs closer than ``run_gap_min`` one run, each
+    gallon at the upper probe less the air. The others are fitted
+    exactly at each volume, and the volume searched. A term the pairs
+    can't tell apart from the others (the slope, with the air never off
+    one temperature) is held at the base. The
     rest of the book (the draw line, the anchors' age, the valve's line)
-    is ``params``'. Without the loss fitted, it is the base's, and
-    without a base, the pairs with a run in them are left out. A run's
+    is ``params``'. Without the volume fitted, the loop is priced as the
+    base prices it, and without a base, the pairs with a run in them are
+    left out. A run's
     flow is its readings, the first from its start; readings outside
     the runs are not used, and the pairs with a run that has none are
     left out.
@@ -1444,6 +1457,7 @@ def fit_book(
 
     base = params.circulation
     base_loss = None if base is None else base.loss_btu_per_gal
+    base_circuit = None if base is None else base.book_circuit_gal
     book_p = params.book_terms()
 
     def finite(
@@ -1487,6 +1501,7 @@ def fit_book(
             seen_n["run_pairs"],
             error,
             why,
+            base_circuit,
         )
 
     if not flow_rows:
@@ -1593,23 +1608,27 @@ def fit_book(
                 out.append((t1, i, (a0, a1), bool(inside), all(inside)))
         return sorted(out, key=lambda x: x[0])
 
-    def system(chosen: Sequence[_Pair]) -> tuple[np.ndarray, np.ndarray]:
+    def system(
+        chosen: Sequence[_Pair], circuit_gal: float | None = None
+    ) -> tuple[np.ndarray, np.ndarray]:
         """The chosen pairs' errors as ``k + x @ terms``, in their
-        order."""
+        order, the runs priced at ``circuit_gal`` where given."""
         rows: dict[int, list[int]] = {}
         for at, (_, i, *_) in enumerate(chosen):
             rows.setdefault(i, []).append(at)
         k = np.zeros(len(chosen))
         x = np.zeros((len(chosen), len(cal.BOOK_TERMS)))
         for i, ats in rows.items():
-            bk, bx = fitted[i].pair_terms(book_p, [chosen[at][2] for at in ats])
+            bk, bx = fitted[i].pair_terms(
+                book_p, [chosen[at][2] for at in ats], circuit_gal
+            )
             k[ats], x[ats] = bk, bx
         return k, x
 
     def attempt(fit_loss: bool, notes: list[str]) -> BookTermsFit | str:
-        """The fit with the loop's loss fitted or held at the base's;
-        why not, as a string, when only the loss is on its bound or
-        the pairs can't tell it from the book's terms."""
+        """The fit with the book's circuit volume fitted, or the loop
+        held at the base's terms; why not, as a string, when only the
+        volume is on its bound."""
         found = [f for f in pairs_of() if f[4]]
         if not fit_loss and base_loss is None:
             # Runs the book can't price: their pairs are left out.
@@ -1639,21 +1658,50 @@ def fit_book(
             ],
             dtype=float,
         )
-        k, x = system(train)
-        free = _independent(x, range(3 + fit_loss))
-        if fit_loss and 3 not in free:
-            return (
-                "the loop's loss can't be told from the book's terms on "
-                "these pairs, not a fit"
-            )
-        fixed = [j for j in range(4) if j not in free]
         bounds = cal.BOOK_TERM_BOUNDS
-        got = start.copy()
-        got[free] = cal.fit_terms_l1(
-            k + x[:, fixed] @ start[fixed],
-            x[:, free],
-            [bounds[j] for j in free],
-        )
+
+        def solve(
+            circuit_gal: float | None,
+        ) -> tuple[np.ndarray, list[int], float]:
+            """The book's terms on the training pairs with the runs
+            priced at ``circuit_gal`` (else the base's loss per gallon,
+            held), the terms fitted, and their training error."""
+            k, x = system(train, circuit_gal)
+            free = _independent(x, range(3))
+            fixed = [j for j in range(4) if j not in free]
+            got = start.copy()
+            got[free] = cal.fit_terms_l1(
+                k + x[:, fixed] @ start[fixed],
+                x[:, free],
+                [bounds[j] for j in free],
+            )
+            return got, free, float(np.mean(np.abs(k + x @ got)))
+
+        circuit = base_circuit
+        if fit_loss:
+            # The circuit volume is no linear term: the others are fitted
+            # exactly at each volume, and the volume searched.
+            lo, hi = cal.BOOK_CIRCUIT_GAL_BOUNDS
+            grid = np.linspace(lo, hi, 61)
+            scores = [solve(float(v))[2] for v in grid]
+            best = int(np.argmin(scores))
+            a = float(grid[max(best - 1, 0)])
+            b = float(grid[min(best + 1, len(grid) - 1)])
+
+            def score(v: float) -> float:
+                return solve(float(v))[2]
+
+            found_v = cast(
+                OptimizeResult,
+                minimize_scalar(score, bounds=(a, b), method="bounded"),
+            )
+            circuit = float(found_v.x)
+            if min(circuit - lo, hi - circuit) <= 1e-3 * (hi - lo):
+                return (
+                    f"the book's circuit volume on its bound, not a fit: "
+                    f"{circuit:.4g} gal ({lo:g} to {hi:g})"
+                )
+        got, free, _ = solve(circuit)
         by_book: dict[int, list[tuple[int, int]]] = {}
         for _, i, pair, *_ in held:
             by_book.setdefault(i, []).append(pair)
@@ -1662,7 +1710,9 @@ def fit_book(
                 np.abs(
                     np.concatenate(
                         [
-                            fitted[i].errors(book_p, base_loss or 0.0, these)
+                            fitted[i].errors(
+                                book_p, base_loss or 0.0, these, base_circuit
+                            )
                             for i, these in by_book.items()
                         ]
                     )
@@ -1680,11 +1730,9 @@ def fit_book(
             f"{bounds[j][1]:g})"
             for j in on_bound
         )
-        if on_bound == [3]:
-            return f"the loop's loss on its bound, not a fit: {named}"
         if on_bound:
             return keep(because(f"on its bound, not a fit: {named}"), base_err)
-        kh, xh = system(held)
+        kh, xh = system(held, circuit)
         refit_err = float(np.mean(np.abs(kh + xh @ got)))
         versus = (
             f"held out, {refit_err:.0f} BTU against the base's {base_err:.0f}"
@@ -1698,12 +1746,13 @@ def fit_book(
                 hp_btu_per_h_per_f=float(got[1]),
                 ua_btu_per_h_f=float(got[2]),
             ),
-            float(got[3]) if fit_loss else base_loss,
+            base_loss,
             "refit",
             seen_n["pairs"],
             seen_n["run_pairs"],
             refit_err,
             because(versus),
+            circuit,
         )
 
     notes: list[str] = []
@@ -1716,7 +1765,7 @@ def fit_book(
     elif run_spans:
         notes = [
             f"{with_run} pairs with a run: {MIN_RUN_PAIRS} needed to fit "
-            "the loop's loss"
+            "the loop's circuit volume"
         ]
     # With the loss held, nothing is fitted on its bound but the book.
     return cast(BookTermsFit, attempt(False, notes))

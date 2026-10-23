@@ -193,6 +193,10 @@ class Step:
     #: holds a run for a while after it stops. None: ``circulation_gpm``
     #: while circulating, else none.
     circulation_in_meter_gpm: float | None = None
+    #: Gallons the run had circulated before this step, runs closer
+    #: than ``CirculationParams.run_gap_min`` taken as one: what
+    #: ``CirculationParams.book_circuit_gal`` caps.
+    run_gal_before: float = 0.0
 
 
 def house_gpm(s: Step, circulation: CirculationParams | None = None) -> float:
@@ -207,9 +211,30 @@ def house_gpm(s: Step, circulation: CirculationParams | None = None) -> float:
     return s.flow_gpm
 
 
-def circulated_btu(gal: float, circulation: CirculationParams | None) -> float:
-    """Heat circulation takes for the gallons it circulates."""
-    return 0.0 if circulation is None else circulation.loss_btu_per_gal * gal
+def circulated_btu(
+    gal: float,
+    circulation: CirculationParams | None,
+    *,
+    before_gal: float = 0.0,
+    upper_f: float = 0.0,
+    ambient_f: float = 0.0,
+) -> float:
+    """Heat circulation takes for the ``gal`` it circulates, the run
+    having circulated ``before_gal`` already. With
+    ``CirculationParams.book_circuit_gal``, the gallons up to that volume
+    from the run's start, each at the tank's upper probe less the air:
+    the circuit's water cooled to the air since the last run, and once
+    the circuit is hot again it takes nothing more. Without it,
+    ``loss_btu_per_gal`` per gallon."""
+    if circulation is None:
+        return 0.0
+    circuit = circulation.book_circuit_gal
+    if circuit is None:
+        return circulation.loss_btu_per_gal * gal
+    priced = min(before_gal + gal, circuit) - min(before_gal, circuit)
+    return (
+        max(0.0, priced) * WATER_BTU_PER_GAL_F * max(0.0, upper_f - ambient_f)
+    )
 
 
 def step_heat_btu(
@@ -227,7 +252,11 @@ def step_heat_btu(
         heat -= draw_btu(house * s.seconds / 60.0, s.upper_f, s.inlet_f, p)
     if s.circulating:
         heat -= circulated_btu(
-            s.circulation_gpm * s.seconds / 60.0, circulation
+            s.circulation_gpm * s.seconds / 60.0,
+            circulation,
+            before_gal=s.run_gal_before,
+            upper_f=s.upper_f,
+            ambient_f=s.ambient_f,
         )
     heat -= standby_btu(h, s.upper_f, s.lower_f, s.ambient_f, p)
     return heat
@@ -502,7 +531,11 @@ class Booked:
         lost = standby_btu(h, s.upper_f, s.lower_f, s.ambient_f, p)
         if s.circulating:
             lost += circulated_btu(
-                s.circulation_gpm * s.seconds / 60.0, circulation
+                s.circulation_gpm * s.seconds / 60.0,
+                circulation,
+                before_gal=s.run_gal_before,
+                upper_f=s.upper_f,
+                ambient_f=s.ambient_f,
             )
         return replace(b.lost(lost), inlet_f=self.inlet_f)
 

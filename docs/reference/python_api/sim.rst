@@ -154,7 +154,7 @@ Hot water and the heat book
       clean_draws, CleanDraw, crossing,
       demonstrated, frontier, capacity, held_out, fit_evidence,
       EvidenceFit, cold_lower_cap, RecordedBook, fit_book_terms, BookFit,
-      fit_terms_l1, BOOK_TERMS, BOOK_TERM_BOUNDS,
+      fit_terms_l1, BOOK_TERMS, BOOK_TERM_BOUNDS, BOOK_CIRCUIT_GAL_BOUNDS,
       book_error_bands, book_error_btu, empty_point,
       zone_empty_point, withheld_btu, book_walk, long_draws,
       front_frame, fit_front, FrontFit, settle_tails, fit_front_settle,

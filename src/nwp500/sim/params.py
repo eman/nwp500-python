@@ -1044,9 +1044,20 @@ class CirculationParams:
     #: The flow a run is priced at, gal/min.
     flow_gpm: float = field(metadata=_p(MEASURED, "gal/min", INSTALLATION))
     #: The book's loss per gallon circulated while a run is on, BTU/gal:
-    #: the pipe's own loss, unsaturated.
+    #: the pipe's own loss, unsaturated. The book's form without
+    #: ``book_circuit_gal``.
     loss_btu_per_gal: float = field(
         metadata=_p(FITTED, "BTU/gal", INSTALLATION)
+    )
+    #: The book's circuit volume, gal: with it, the book prices a run as the
+    #: water it circulates up to this volume, each gallon at the upper
+    #: probe less the air (``book.circulated_btu``), the circuit having
+    #: cooled to the air since the last run; without it,
+    #: ``loss_btu_per_gal`` per gallon. An effective volume, fitted on
+    #: the book's re-anchors: not the circuit's own (``displaced_gal``),
+    #: and not to be fed from or into it.
+    book_circuit_gal: float | None = field(
+        default=None, metadata=_p(FITTED, "gal", INSTALLATION)
     )
     #: The share of a run's own flow a household flow meter also reads,
     #: for the heat book from a recorded history (``book.house_gpm``):

@@ -1168,15 +1168,18 @@ to a day apart. Each pair's booked heat is checked against the probes':
        circulation=runs, circulation_flow=pump_flow, params=params,
    )
    book = calibration.RecordedBook(steps, p, params.circulation, start=since)
-   fit = calibration.fit_book_terms(book, book.reanchors(), p)
+   fit = calibration.fit_book_terms(book, book.reanchors(), p, circuit=True)
    p = replace(p, hp_btu_per_h=fit.hp_btu_per_h,
                hp_btu_per_h_per_f=fit.hp_btu_per_h_per_f,
                ua_btu_per_h_f=fit.ua_btu_per_h_f)
-   bands = calibration.book_error_bands(book, p, fit.loss_btu_per_gal)
-   empty, crossings = calibration.empty_point(book, p, fit.loss_btu_per_gal)
-   zone = calibration.zone_empty_point(book, p, fit.loss_btu_per_gal)
+   v = fit.book_circuit_gal
+   bands = calibration.book_error_bands(book, p, 0.0, v)
+   empty, crossings = calibration.empty_point(book, p, 0.0, circuit_gal=v)
+   zone = calibration.zone_empty_point(book, p, 0.0, circuit_gal=v)
 
-``book_error_btu(book, p, fit.loss_btu_per_gal)`` gives the book's
+With ``circuit=True`` the runs are priced at a circuit volume
+(``CirculationParams.book_circuit_gal``) fitted in place of a loss per
+gallon. ``book_error_btu(book, p, 0.0, v)`` gives the book's
 error bands: the 90th percentile of its error pooled over re-anchors an
 hour to ``max_anchor_age_h`` apart, and the 18 to 24 h band's past it,
 each rounded up to 100 BTU. ``cold_lower_cap(draws,

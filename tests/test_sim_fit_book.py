@@ -1,5 +1,5 @@
-"""The heat book's terms and the circulation loop's loss from the
-book's re-anchors (``sim_calibrate.fit_book``).
+"""The heat book's terms and the circulation loop's book circuit volume
+from the book's re-anchors (``sim_calibrate.fit_book``).
 
 The histories are walked by the book's own heat balance, so the terms
 they were made with are the ones a fit should find.
@@ -51,6 +51,9 @@ def air_at(cycle: int) -> float:
 
 #: The loop's flow during a run, gal/min.
 RUN_GPM = 2.0
+#: The circuit volume the runs are walked with, gal: each run takes its
+#: first 4 gal at the tank less the air.
+CIRCUIT = 4.0
 
 
 def no_pump(params: HeaterParams, cycles: int, **kw: Any) -> dict[str, Any]:
@@ -61,9 +64,9 @@ def no_pump(params: HeaterParams, cycles: int, **kw: Any) -> dict[str, Any]:
 def history(
     params: HeaterParams,
     cycles: int,
-    loss: float,
+    circuit: float,
     *,
-    late_loss: float | None = None,
+    late_circuit: float | None = None,
     late_from: int = 0,
     tap_gpm: float = 0.0,
     draw_at_h: float | None = None,
@@ -75,8 +78,9 @@ def history(
     run_min: int | None = None,
 ) -> dict[str, Any]:
     """A history of ``cycles`` six-hour cycles walked by the book's own
-    balance (``truth``, else ``params``' book), each run taking ``loss``
-    per gallon (``late_loss`` from cycle ``late_from`` on), the air at
+    balance (``truth``, else ``params``' book), each run taking its
+    first ``circuit`` gallons at the tank less the air
+    (``late_circuit`` from cycle ``late_from`` on), the air at
     ``air_f`` throughout or else varying by cycle, and what ``fit_book``
     takes: the draws, and the runs with their flow. ``tied`` makes each
     run a quarter of its cycle's recovery, so the runs' gallons follow
@@ -106,6 +110,7 @@ def history(
     runs: list[tuple[datetime, datetime]] = []
     # A recovery first, so there is an anchor before the first run.
     first = (0, 30)
+    run_gal = 0.0
     for i in range(n):
         t = T0 + i * STEP
         minute = (i // 6) % CYCLE
@@ -129,11 +134,17 @@ def history(
         probe.append((t, temp))
         comp.append((t, heating))
         flow.append((t, tap))
-        per_gal = loss if late_loss is None or cycle < late_from else late_loss
+        volume = (
+            circuit
+            if late_circuit is None or cycle < late_from
+            else late_circuit
+        )
         circulated = RUN_GPM * per_step if running else 0.0
+        priced = min(run_gal + circulated, volume) - min(run_gal, volume)
+        run_gal = run_gal + circulated if running else 0.0
         e = (
             heating * (p.hp_btu_per_h + p.hp_btu_per_h_per_f * (air - 65.0)) * h
-            - per_gal * circulated
+            - priced * WATER_BTU_PER_GAL_F * max(temp - air, 0.0)
             - p.ua_btu_per_h_f * max(temp - air, 0.0) * h
         )
         if tap > p.draw_gpm:
@@ -241,7 +252,7 @@ class TestTheBook:
         assert math.isfinite(got.error_btu)
 
     def test_no_meter_keeps_the_base(self) -> None:
-        h = history(NO_BASE, 16, 150.0)
+        h = history(NO_BASE, 16, CIRCUIT)
         got = fit(NO_BASE, h | {"flow": []})
         assert got.kept == "base"
         assert "no draws" in got.why
@@ -249,20 +260,20 @@ class TestTheBook:
     def test_the_book_round_trips(self) -> None:
         from nwp500.sim.params import params_from_document, params_to_document
 
-        got = fit(SITE, history(SITE, 16, 150.0, truth=OTHER))
-        assert got.loss_btu_per_gal is not None
-        loop = replace(SITE_CIRCULATION, loss_btu_per_gal=got.loss_btu_per_gal)
+        got = fit(SITE, history(SITE, 16, CIRCUIT, truth=OTHER))
+        assert got.book_circuit_gal is not None
+        loop = replace(SITE_CIRCULATION, book_circuit_gal=got.book_circuit_gal)
         params = replace(SITE, book=got.book, circulation=loop)
         assert params_from_document(params_to_document(params)) == params
 
 
 class TestTheLoop:
-    def test_it_finds_the_loss_the_runs_took(self) -> None:
-        """Runs that took 150 BTU/gal, with no base: the loss is found
-        at the loop's flow."""
-        got = fit(NO_BASE, history(NO_BASE, 16, 150.0, truth=OTHER))
+    def test_it_finds_the_circuit_the_runs_took(self) -> None:
+        """Runs that took their first 4 gal, with no base: the volume is
+        found."""
+        got = fit(NO_BASE, history(NO_BASE, 16, CIRCUIT, truth=OTHER))
         assert got.kept == "refit", got.why
-        assert got.loss_btu_per_gal == pytest.approx(150.0, abs=1.0)
+        assert got.book_circuit_gal == pytest.approx(CIRCUIT, abs=0.05)
         assert_book(got.book, OTHER)
         # An anchor after the opening recovery and after each cycle's.
         assert (got.pairs, got.run_pairs) == (16, 16)
@@ -271,19 +282,19 @@ class TestTheLoop:
     def test_a_draw_during_a_run_is_a_draw(self) -> None:
         """A tap open for a minute of each run is booked as a draw, not
         as the run's loss."""
-        got = fit(SITE, history(SITE, 16, 150.0, tap_gpm=2.0))
-        assert got.loss_btu_per_gal == pytest.approx(150.0, abs=1.0)
+        got = fit(SITE, history(SITE, 16, CIRCUIT, tap_gpm=2.0))
+        assert got.book_circuit_gal == pytest.approx(CIRCUIT, abs=0.05)
 
     def test_a_missing_draws_reading_is_none(self) -> None:
-        h = history(SITE, 16, 150.0)
+        h = history(SITE, 16, CIRCUIT)
         flow: list[Any] = [*h["flow"], (T0 + timedelta(seconds=5), None)]
         got = fit(SITE, h | {"flow": sorted(flow, key=lambda r: r[0])})
-        assert got.loss_btu_per_gal == pytest.approx(150.0, abs=1.0)
+        assert got.book_circuit_gal == pytest.approx(CIRCUIT, abs=0.05)
 
     def test_an_outage_after_the_history_changes_nothing(self) -> None:
         """Heard until 80 h, the draws and the pump read on: an outage
         at 90 h doesn't book the unheard 10 h."""
-        h = history(SITE, 16, 150.0)
+        h = history(SITE, 16, CIRCUIT)
         end = T0 + timedelta(hours=80)
         h["observed"] = [t for t in h["observed"] if t <= end]
         rows = replace(
@@ -297,7 +308,7 @@ class TestTheLoop:
     def test_a_gap_in_the_draws_breaks_the_book(self) -> None:
         """A draw missing from the draws, between two anchors with a
         run: no pair spans the gap."""
-        h = history(SITE, 16, 150.0, draw_at_h=44.0)
+        h = history(SITE, 16, CIRCUIT, draw_at_h=44.0)
         whole = fit(SITE, h)
         gap = (T0 + timedelta(hours=43.5), T0 + timedelta(hours=44.7))
         flow = [r for r in h["flow"] if not gap[0] < r[0] < gap[1]]
@@ -305,27 +316,27 @@ class TestTheLoop:
         assert got.pairs == whole.pairs - 1
 
     def test_a_better_base_is_kept(self) -> None:
-        """The held-out runs took 100 BTU/gal, the earlier 150: a base
-        at 100 books them better than the refit."""
-        base = replace(SITE_CIRCULATION, loss_btu_per_gal=100.0)
+        """The held-out runs took 2.5 gal, the earlier 4: a base at 2.5
+        books them better than the refit."""
+        base = replace(SITE_CIRCULATION, book_circuit_gal=2.5)
         params = replace(NO_BASE, circulation=base)
         got = fit(
             params,
-            history(params, 16, 150.0, late_loss=100.0, late_from=13),
+            history(params, 16, CIRCUIT, late_circuit=2.5, late_from=13),
         )
         assert got.kept == "base"
-        assert got.loss_btu_per_gal == 100.0
+        assert got.book_circuit_gal == 2.5
         assert got.book == params.book
 
-    def test_a_loss_on_its_bound_holds_the_bases(self) -> None:
-        """Runs that took nothing: the loss falls on its bound of 0,
+    def test_a_volume_on_its_bound_holds_the_bases(self) -> None:
+        """Runs that took nothing: the volume falls on its bound of 0,
         which is no fit of the loop, so the base's is held."""
         got = fit(SITE, history(SITE, 16, 0.0))
-        assert got.loss_btu_per_gal == SITE_CIRCULATION.loss_btu_per_gal
-        assert "the loop's loss on its bound" in got.why
+        assert got.book_circuit_gal == SITE_CIRCULATION.book_circuit_gal
+        assert "the book's circuit volume on its bound" in got.why
 
     def test_a_silence_breaks_the_book(self) -> None:
-        h = history(SITE, 16, 150.0)
+        h = history(SITE, 16, CIRCUIT)
         gap = (T0 + timedelta(hours=40), T0 + timedelta(hours=44))
         whole = fit(SITE, h)
         h["observed"] = [t for t in h["observed"] if not gap[0] < t < gap[1]]
@@ -333,29 +344,30 @@ class TestTheLoop:
         assert got.pairs < whole.pairs
 
     def test_the_document(self) -> None:
-        got = fit(SITE, history(SITE, 16, 150.0))
+        got = fit(SITE, history(SITE, 16, CIRCUIT))
         doc = got.as_document()
         assert doc["loss_btu_per_gal"] == got.loss_btu_per_gal
+        assert doc["book_circuit_gal"] == got.book_circuit_gal
         assert BookParams(**doc["book"]) == got.book
         assert doc["kept"] == "refit"
         assert doc["run_pairs"] == got.run_pairs
         assert np.isfinite(doc["error_btu"])
 
-    def test_a_loss_on_its_bound_is_no_fit(self) -> None:
-        """Runs walked at 800 BTU/gal: the fit reaches the loss's bound
-        of 500, which says the book misses something, not what a run
-        takes."""
-        got = fit(SITE, history(SITE, 16, 800.0))
+    def test_a_volume_past_its_bound_is_no_fit(self) -> None:
+        """Runs walked at 45 gal, more than any run pumps: the fit
+        reaches the volume's bound of 30, which says the book misses
+        something, not what a run takes."""
+        got = fit(SITE, history(SITE, 16, 45.0))
         assert got.kept == "base"
-        assert got.loss_btu_per_gal == SITE_CIRCULATION.loss_btu_per_gal
+        assert got.book_circuit_gal == SITE_CIRCULATION.book_circuit_gal
         assert "bound" in got.why
-        got = fit(NO_BASE, history(NO_BASE, 16, 800.0))
-        assert (got.kept, got.loss_btu_per_gal) == ("base", None)
+        got = fit(NO_BASE, history(NO_BASE, 16, 45.0))
+        assert (got.kept, got.book_circuit_gal) == ("base", None)
 
     def test_a_first_fit_needs_pairs_to_judge_it_by(self) -> None:
         """12 runs over 3 days, but the heater unheard for a day: too
         few pairs to hold any out, so nothing is adopted."""
-        h = history(SITE, 12, 150.0)
+        h = history(SITE, 12, CIRCUIT)
         h["observed"] = [
             t
             for t in h["observed"]
@@ -364,7 +376,7 @@ class TestTheLoop:
         got = fit(SITE, h)
         assert got.pairs < 10
         assert got.kept == "base"
-        assert got.loss_btu_per_gal == SITE_CIRCULATION.loss_btu_per_gal
+        assert got.book_circuit_gal == SITE_CIRCULATION.book_circuit_gal
         assert "10 needed" in got.why
 
 
@@ -373,7 +385,7 @@ def test_the_pairs_errors_are_linear_in_the_terms() -> None:
     books it, for any terms."""
     from nwp500.sim import calibration as cal
 
-    h = history(SITE, 6, 150.0, truth=OTHER)
+    h = history(SITE, 6, CIRCUIT, truth=OTHER)
     terms = SITE.circulation
     assert terms is not None
     steps = sa.book_steps_from_changes(
@@ -390,12 +402,17 @@ def test_the_pairs_errors_are_linear_in_the_terms() -> None:
     book = cal.RecordedBook(steps, p, terms, start=T0)
     pairs = book.reanchors(p.max_anchor_age_h)
     k, x = book.pair_terms(p, pairs)
+    kc, xc = book.pair_terms(p, pairs, CIRCUIT)
     for hp, slope, ua, loss in ((4000, 50, 2, 100), (5000, -10, 6, 300)):
         q = replace(
             p, hp_btu_per_h=hp, hp_btu_per_h_per_f=slope, ua_btu_per_h_f=ua
         )
         assert k + x @ np.array([hp, slope, ua, loss]) == pytest.approx(
             book.errors(q, loss, pairs)
+        )
+        # At a circuit volume, the loss column is none of it.
+        assert kc + xc @ np.array([hp, slope, ua, loss]) == pytest.approx(
+            book.errors(q, 0.0, pairs, CIRCUIT)
         )
 
 
@@ -411,32 +428,31 @@ def test_the_air_at_one_temperature_holds_the_slope() -> None:
     assert got.book.ua_btu_per_h_f == pytest.approx(OTHER.ua_btu_per_h_f)
 
 
-def test_a_loss_the_pairs_cant_tell_apart_is_no_fit() -> None:
-    """Each run a quarter of its cycle's recovery: the runs' gallons
-    follow the compressor's hours, so the loss can't be told from the
-    heat rate. It is no fit, and the base's loss is held."""
-    h = history(SITE, 16, 150.0, tied=True)
+def test_runs_that_follow_the_recoveries_still_fit() -> None:
+    """Each run a quarter of its cycle's recovery: a loss per gallon
+    would follow the compressor's hours, but each run's first gallons
+    don't, so the volume is still told from the heat rate."""
+    h = history(SITE, 16, CIRCUIT, tied=True)
     got = fit(SITE, h)
-    assert got.loss_btu_per_gal == SITE_CIRCULATION.loss_btu_per_gal
-    assert "can't be told from the book's terms" in got.why
+    assert got.book_circuit_gal == pytest.approx(CIRCUIT, abs=0.05)
 
 
 def test_a_late_probe_starts_the_book_where_both_read() -> None:
     """The lower probe's history starts 3 h late, and runs come every
     other cycle: each pair's instants are its own, so the pairs with a
     run are told from those without and the loss is found."""
-    h = history(SITE, 24, 150.0, run_every=2)
+    h = history(SITE, 24, CIRCUIT, run_every=2)
     late = T0 + timedelta(hours=3)
     rows = replace(
         h["rows"], lower_f=[r for r in h["rows"].lower_f if r[0] >= late]
     )
     got = fit(SITE, h | {"rows": rows})
-    assert got.loss_btu_per_gal == pytest.approx(150.0, abs=1.0)
+    assert got.book_circuit_gal == pytest.approx(CIRCUIT, abs=0.05)
     # Readings before then that are none: the same.
     unread: list[Any] = [(T0, None), (T0 + timedelta(hours=1), math.nan)]
     rows = replace(rows, lower_f=[*unread, *rows.lower_f])
     got = fit(SITE, h | {"rows": rows})
-    assert got.loss_btu_per_gal == pytest.approx(150.0, abs=1.0)
+    assert got.book_circuit_gal == pytest.approx(CIRCUIT, abs=0.05)
     assert_book(got.book, SITE.book)
 
 
@@ -445,7 +461,7 @@ def test_runs_without_terms_still_break_the_quiet() -> None:
     each run still breaks the quiet before it, so every pair across one
     has a run in it and is left out, and the book is refitted on the 15
     without."""
-    h = history(NO_BASE, 24, 150.0, runs_in=9, truth=OTHER)
+    h = history(NO_BASE, 24, CIRCUIT, runs_in=9, truth=OTHER)
     got = fit(NO_BASE, h)
     assert got.loss_btu_per_gal is None
     assert (got.pairs, got.run_pairs) == (15, 0)
@@ -457,7 +473,7 @@ def test_a_probe_gap_breaks_the_book() -> None:
     """The lower probe unread from 2 h to 5 h, runs every other cycle:
     no pair crosses the gap, and the steps after it keep their own
     instants, so the loss is found."""
-    h = history(SITE, 24, 150.0, run_every=2)
+    h = history(SITE, 24, CIRCUIT, run_every=2)
     gap = (T0 + timedelta(hours=2), T0 + timedelta(hours=5))
     lower: list[Any] = [
         *(r for r in h["rows"].lower_f if r[0] < gap[0]),
@@ -465,7 +481,7 @@ def test_a_probe_gap_breaks_the_book() -> None:
         *(r for r in h["rows"].lower_f if r[0] >= gap[1]),
     ]
     got = fit(SITE, h | {"rows": replace(h["rows"], lower_f=lower)})
-    assert got.loss_btu_per_gal == pytest.approx(150.0, abs=1.0)
+    assert got.book_circuit_gal == pytest.approx(CIRCUIT, abs=0.05)
     assert_book(got.book, SITE.book)
 
 
@@ -479,7 +495,7 @@ def test_naive_probe_instants_are_read_as_the_adapters_read_them(
     monkeypatch.setenv("TZ", "UTC")
     time.tzset()
     try:
-        h = history(SITE, 16, 150.0)
+        h = history(SITE, 16, CIRCUIT)
         naive = replace(
             h["rows"],
             upper_f=[(t.replace(tzinfo=None), v) for t, v in h["rows"].upper_f],
@@ -555,7 +571,7 @@ def test_the_fits_balance_is_the_books() -> None:
     from nwp500.sim import calibration as cal
     from nwp500.sim.book import step_heat_btu
 
-    h = history(SITE, 6, 150.0, tap_gpm=2.0)
+    h = history(SITE, 6, CIRCUIT, tap_gpm=2.0)
     terms = SITE.circulation
     assert terms is not None
     steps = sa.book_steps_from_changes(
@@ -581,8 +597,11 @@ def test_the_fits_balance_is_the_books() -> None:
         - heat[a1]
         for a0, a1 in pairs
     ]
-    assert book.errors(p, terms.loss_btu_per_gal, pairs) == pytest.approx(want)
-    k, x = book.pair_terms(p, pairs)
+    circuit = terms.book_circuit_gal
+    assert book.errors(
+        p, terms.loss_btu_per_gal, pairs, circuit
+    ) == pytest.approx(want)
+    k, x = book.pair_terms(p, pairs, circuit)
     got = k + x @ np.array(
         [
             p.hp_btu_per_h,
@@ -598,7 +617,7 @@ def test_too_few_run_pairs_hold_the_bases_loss() -> None:
     """Runs in 12 cycles, but a silence leaves 8 pairs with a run, too
     few to fit the loop's loss on: the base's is held, and the book is
     refitted."""
-    h = history(SITE, 24, 150.0, runs_in=12, truth=OTHER)
+    h = history(SITE, 24, CIRCUIT, runs_in=12, truth=OTHER)
     h["observed"] = [
         t
         for t in h["observed"]
@@ -606,29 +625,29 @@ def test_too_few_run_pairs_hold_the_bases_loss() -> None:
     ]
     got = fit(SITE, h)
     assert got.run_pairs < sim_calibrate.MIN_RUN_PAIRS
-    assert "needed to fit the loop's loss" in got.why
-    assert got.loss_btu_per_gal == SITE_CIRCULATION.loss_btu_per_gal
+    assert "needed to fit the loop's circuit volume" in got.why
+    assert got.book_circuit_gal == SITE_CIRCULATION.book_circuit_gal
 
 
 def test_the_draws_hold_no_circulation() -> None:
     """A base whose meter share says a meter sees its runs, and a tap
     open in each run: the draws hold none of the runs' water, so the
     tap is all a draw, and the fit is the same as with no share."""
-    h = history(SITE, 16, 150.0, tap_gpm=2.0)
+    h = history(SITE, 16, CIRCUIT, tap_gpm=2.0)
     for share in (0.0, 1.0):
         loop = replace(SITE_CIRCULATION, meter_share=share)
         got = fit(replace(SITE, circulation=loop), h)
-        assert got.loss_btu_per_gal == pytest.approx(150.0, abs=1.0)
+        assert got.book_circuit_gal == pytest.approx(CIRCUIT, abs=0.05)
 
 
 def test_a_run_without_its_flow_leaves_its_pairs_out() -> None:
     """Runs with no flow reading can't be priced: every pair with one
     is left out, and the loss is the base's."""
-    h = history(SITE, 24, 150.0, run_every=2, truth=OTHER)
+    h = history(SITE, 24, CIRCUIT, run_every=2, truth=OTHER)
     got = fit(SITE, h | {"circulation_flow": []})
     assert got.run_pairs == 0
     assert got.pairs == fit(SITE, h).pairs - fit(SITE, h).run_pairs
-    assert got.loss_btu_per_gal == SITE_CIRCULATION.loss_btu_per_gal
+    assert got.book_circuit_gal == SITE_CIRCULATION.book_circuit_gal
     assert got.kept == "refit", got.why
     assert_book(got.book, OTHER)
 
@@ -636,18 +655,18 @@ def test_a_run_without_its_flow_leaves_its_pairs_out() -> None:
 def test_a_runs_first_reading_late_in_it_holds_from_its_start() -> None:
     """Each run's flow first read halfway through it: the run is booked
     at that flow from its start, as if read all through it."""
-    h = history(SITE, 16, 150.0)
+    h = history(SITE, 16, CIRCUIT)
     late = [(a + (b - a) / 2, RUN_GPM) for a, b in h["runs"]]
     got = fit(SITE, h | {"circulation_flow": late})
     assert got == fit(SITE, h)
-    assert got.loss_btu_per_gal == pytest.approx(150.0, abs=1.0)
+    assert got.book_circuit_gal == pytest.approx(CIRCUIT, abs=0.05)
 
 
 def test_readings_outside_the_runs_are_none_of_theirs() -> None:
     """The loop's flow read as 0 just before each run and never in it:
     the runs are unpriced, as with no readings at all, and still break
     the quiet anchors."""
-    h = history(SITE, 24, 150.0, run_every=2, truth=OTHER)
+    h = history(SITE, 24, CIRCUIT, run_every=2, truth=OTHER)
     zeros = [(a - timedelta(seconds=5), 0.0) for a, _ in h["runs"]]
     got = fit(SITE, h | {"circulation_flow": zeros})
     assert got == fit(SITE, h | {"circulation_flow": []})

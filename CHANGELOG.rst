@@ -32,6 +32,19 @@ Added
   says how many windows qualified and their share of the quiet hours.
   It was left unfitted. ``fit_ua_law``, ``fit_loss``, ``fit_standby``
   and ``calibration.calibrate`` take a fixed exponent.
+- **The book prices a circulation run by a circuit volume.**
+  ``CirculationParams.book_circuit_gal``: with it, the heat book
+  charges a run its first gallons up to that volume, runs closer than
+  ``run_gap_min`` one run, each at the tank's upper probe less the air;
+  without it, ``loss_btu_per_gal`` per gallon as before. ``fit_book``
+  fits the volume in place of the loss per gallon (``book_circuit_gal``
+  on its result), and ``fit_book_terms`` with ``circuit=True``. At one
+  installation, over 284 re-anchors, the book's error on pairs with a
+  run fell 14 % against a refitted loss per gallon (1741 against 2023
+  BTU), and on held-out months from 3184 to 2454 BTU, the volume
+  steady at 1.1 to 1.5 gal where the loss per gallon moved from 59 to
+  120. It is an effective volume, apart from ``displaced_gal``.
+  ``SITE_CIRCULATION`` carries one installation's.
 
 - **The heater's heard spans, given** (#230). ``book_from_changes``
   takes ``heard=``, the spans the heater was heard over, for a record
