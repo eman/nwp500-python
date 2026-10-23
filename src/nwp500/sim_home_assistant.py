@@ -2342,7 +2342,13 @@ class HomeAssistantBook:
             notes.append(f"book: {err}")
             return BookAnswer(None, False, tuple(notes))
         if booked is None:
-            notes.append("book: no anchor since the heater was last unheard")
+            if any(a <= at <= b for a, b in flow_out):
+                notes.append(f"book: {self.flow} is unknown now")
+            else:
+                notes.append(
+                    "book: no anchor since the heater or the flow was last "
+                    "unknown"
+                )
             return BookAnswer(None, False, tuple(notes))
         if e.inlet is None or e.demand is None or not inlet:
             return BookAnswer(booked, False, tuple(notes))

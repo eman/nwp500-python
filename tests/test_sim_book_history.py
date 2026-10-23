@@ -432,14 +432,23 @@ class TestFromTheChanges:
         assert want is not None and got is not None
         assert got.heat_btu == pytest.approx(want.heat_btu)
 
-    def test_no_flow_in_force_is_refused(
+    def test_the_book_starts_at_the_flows_first_reading(
         self, heater: Callable[..., list[Any]]
     ) -> None:
+        """Before the flow's first reading its draws are unknown: the
+        book anchors after it, not nowhere."""
         p = site_example_params()
-        rows, observed = as_changes(heater(20, recovery_at=4))
         late = [(T0 - timedelta(hours=1), 0.0)]
-        with pytest.raises(ValueError, match="no flow reading in force"):
-            sa.book_from_changes(rows, observed, p, at=T0, flow=late)
+        # A recovery 4 h ago is before it: no anchor.
+        rows, observed = as_changes(heater(20, recovery_at=4))
+        assert sa.book_from_changes(rows, observed, p, at=T0, flow=late) is None
+        # One 45 minutes ago is after it.
+        rows, observed = as_changes(heater(20, recovery_at=0.75))
+        got = sa.book_from_changes(rows, observed, p, at=T0, flow=late)
+        assert got is not None
+        assert got.anchor_age_h <= 1.0
+        with pytest.raises(ValueError, match="no flow reading"):
+            sa.book_from_changes(rows, observed, p, at=T0, flow=[])
 
     def test_a_flow_outage_is_as_the_heater_unheard(
         self, heater: Callable[..., list[Any]]

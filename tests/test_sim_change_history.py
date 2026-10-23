@@ -1208,3 +1208,34 @@ class TestAShortPumpHistory:
         assert short.booked is not None and none.booked is not None
         assert short.booked.heat_btu < none.booked.heat_btu
         assert any("known only from" in n for n in short.notes)
+
+
+class TestTheFlowsHistory:
+    P = sim.default_params()
+
+    def test_a_flow_recorded_only_lately_books_after_it(self) -> None:
+        # The flow sensor has 3 h of history; the recovery ended 3.5 h
+        # ago, so its anchor is before it.
+        rows = [r for r in _book_rows() if r["entity_id"] != FLOW] + [
+            _row(FLOW, END - 3 * H, "0.0", "gal/min"),
+            _row(FLOW, END - 2 * H, "2.0", "gal/min"),
+            _row(FLOW, END - 2 * H + timedelta(minutes=15), "0.0", "gal/min"),
+        ]
+        keeper = _keeper(WindowedClient(rows, BOOK_UNITS))
+        asyncio.run(keeper.read(END))
+        got = keeper.book(END, self.P)
+        # No anchor since the flow began: none, and the note says so,
+        # rather than an error.
+        assert got.booked is None
+        assert any("no anchor since" in n for n in got.notes)
+
+    def test_a_flow_unknown_now_says_so(self) -> None:
+        rows = [
+            *_book_rows(),
+            _row(FLOW, END - timedelta(minutes=10), "unavailable"),
+        ]
+        keeper = _keeper(WindowedClient(rows, BOOK_UNITS))
+        asyncio.run(keeper.read(END))
+        got = keeper.book(END, self.P)
+        assert got.booked is None
+        assert f"book: {FLOW} is unknown now" in got.notes

@@ -1761,8 +1761,9 @@ def book_from_changes(
     ``flow_outages``, ``inlet_outages`` and ``air_outages`` are the spans
     each was unknown (``History.outages``). A flow unknown is as a heater
     unheard: no anchor before it counts. An air unknown is
-    ``AMBIENT_DEFAULT_F``, as with no air reading. A ValueError when no flow
-    reading is in force at the window's start.
+    ``AMBIENT_DEFAULT_F``, as with no air reading. No anchor before the
+    flow's first reading counts either; a ValueError with no flow
+    reading at all.
 
     A value that holds writes no change, so only ``observed`` says the
     heater was heard: a silence between those instants longer than
@@ -1803,6 +1804,9 @@ def book_from_changes(
     # A missing reading is none: it neither moves water nor shows the
     # meter reporting.
     flows = sorted((t.astimezone(UTC), v) for t, v in _finite(flow))
+    if flows:
+        # Before the flow's first reading, its draws are unknown.
+        since = max(since, flows[0][0])
     runs = list(circulation)
     params = with_circulation_terms(params, runs)
     run_flow = list(circulation_flow)
