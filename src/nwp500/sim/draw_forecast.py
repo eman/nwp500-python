@@ -294,13 +294,13 @@ def heater_draw_windows(
 ) -> list[ForecastWindow]:
     """The heater's draw windows: every likely long draw (module
     constants). A window opens up to ``reach`` before its first
-    expected draw and closes up to ``reach`` after its last, since long
-    draws come that far either side of the slots that expect them, and
-    takes in every slot with a rate within ``reach`` of either end;
-    overlapping windows merge, and a long one is cut into ``longest``
-    pieces (a last piece expecting no draw joins the one before). None
-    of the long rates published: no windows, which is unknown, not
-    none."""
+    expected draw's slot and closes up to ``reach`` after the end of its
+    last's, since long draws come that far either side of the slots
+    that expect them, and takes in every slot with a rate within
+    ``reach`` of either end; overlapping windows merge, and a long one
+    is cut into ``longest`` pieces (a last piece expecting no draw
+    joins the one before). None of the long rates published: no
+    windows, which is unknown, not none."""
     if not any(_rate(s) is not None for s in slots):
         return []
     slots = sorted(slots, key=lambda s: s.valid_at)
