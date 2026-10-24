@@ -90,8 +90,9 @@ LOCATION_AIR_MIN_SPAN = timedelta(days=1)
 #: The least r (``FittedLocationAir.r``) such a fit is used at.
 LOCATION_AIR_MIN_R = 0.5
 #: The heater's own air reading is the air it stands in from this far
-#: into a compressor run (about 2.7 °F warm before), and not while idle.
-RUN_SETTLE = timedelta(minutes=2)
+#: into a compressor run, and not while idle: the book's settle
+#: (``sim_adapters.HEATER_AIR_SETTLE``).
+RUN_SETTLE = sa.HEATER_AIR_SETTLE
 #: How long a request waits, seconds.
 DEFAULT_TIMEOUT = 10.0
 

@@ -15,6 +15,21 @@ Fixed
   long draws and 30 minutes 89.8%; the five covered only at 60 fell
   either side of a 30-minute window. See :doc:`/how-to/simulate-heater`.
 
+- **The heater's idle air reading is corrected.** Idle, the heater's
+  own air sensor reads its cabinet: on the record (February to October)
+  6.2 °F above a sensor beside the heater on average, 9.3 in February to
+  4.8 in October. ``sim_adapters.environment(status)``, and so the live
+  scenario and a replay without recorded air, now take
+  ``IDLE_CABINET_WARM_F`` (6.2 °F) off an idle reading. That cuts the
+  average error from 6.3 to 2.2 °F. The ``ambient_from_idle_cabinet``
+  reason still names it. See :doc:`/reference/simulator-inputs`.
+
+- **The Home Assistant air fit settles 5 minutes into a run.**
+  ``sim_home_assistant.RUN_SETTLE`` was 2 minutes, against the book's 5
+  (``sim_adapters.HEATER_AIR_SETTLE``). It is now that constant. On the
+  record the reading runs a median 2.1 °F warm in a run's third minute
+  and 1.8 in its fifth.
+
 - **The fan airflow's source.** ``CompressorParams.fan_airflow_cfm``
   (229) was cited as the NWP500's specification. No airflow is
   published; the manual's 229 is the 50 gal model's shipping weight in
