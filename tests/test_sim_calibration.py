@@ -323,23 +323,25 @@ def physics_durations(
 
 class TestCompressor:
     def test_too_few_recoveries_fit_nothing(self) -> None:
-        df = physics_durations([100.0] * 4, [60.0] * 4, 0.08, 12.0)
+        df = physics_durations([100.0] * 4, [60.0] * 4, 0.025, 12.0)
         assert cal.fit_compressor(df, CompressorParams(), LossParams()) is None
 
     def test_it_recovers_known_physics(self) -> None:
         starts = [80.0, 90.0, 100.0, 110.0, 85.0, 95.0, 105.0, 115.0]
         air = [50.0, 80.0, 60.0, 70.0, 75.0, 55.0, 65.0, 85.0]
-        df = physics_durations(starts, air, 0.08, 12.0)
-        fit = cal.fit_compressor(df, CompressorParams(), LossParams())
+        df = physics_durations(starts, air, 0.025, 12.0)
+        fit = cal.fit_compressor(
+            df, CompressorParams(evap_approach_f=12.0), LossParams()
+        )
         assert fit is not None
-        assert fit.compressor_constant == pytest.approx(0.08, rel=0.02)
-        assert fit.evap_approach_f == pytest.approx(12.0, abs=0.5)
+        assert fit.compressor_constant == pytest.approx(0.025, rel=0.02)
+        assert fit.evap_approach_f == 12.0
         assert fit.mae_minutes < 1.0
         assert (fit.n_fitted, fit.n_heldout, fit.two_zone) == (8, 0, True)
         assert not fit.hit_bounds
 
     def test_without_gaps_it_fits_one_zone(self) -> None:
-        df = physics_durations([100.0] * 6, [60.0] * 6, 0.08, 12.0)
+        df = physics_durations([100.0] * 6, [60.0] * 6, 0.025, 12.0)
         fit = cal.fit_compressor(
             df.drop(columns="stratification_gap"),
             CompressorParams(),
@@ -354,16 +356,15 @@ class TestCompressor:
         starts = [80.0, 90.0, 100.0, 110.0, 85.0, 95.0, 105.0, 115.0]
         air = [50.0, 80.0, 60.0, 70.0, 75.0, 55.0, 65.0, 85.0]
         small = TankParams(volume_gal=50.0)
-        df = physics_durations(starts, air, 0.08, 12.0, tank=small)
-        fit = cal.fit_compressor(
-            df, CompressorParams(), LossParams(), tank=small
-        )
+        df = physics_durations(starts, air, 0.025, 12.0, tank=small)
+        at = CompressorParams(evap_approach_f=12.0)
+        fit = cal.fit_compressor(df, at, LossParams(), tank=small)
         assert fit is not None
-        assert fit.compressor_constant == pytest.approx(0.08, rel=0.02)
+        assert fit.compressor_constant == pytest.approx(0.025, rel=0.02)
         assert fit.mae_minutes < 1.0
-        wrong = cal.fit_compressor(df, CompressorParams(), LossParams())
+        wrong = cal.fit_compressor(df, at, LossParams())
         assert wrong is not None
-        assert wrong.compressor_constant != pytest.approx(0.08, rel=0.02)
+        assert wrong.compressor_constant != pytest.approx(0.025, rel=0.02)
 
     def test_a_cycles_path_is_walked_on_the_heaters_tank(self) -> None:
         row = {

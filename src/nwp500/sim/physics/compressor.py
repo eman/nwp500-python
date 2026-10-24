@@ -115,9 +115,8 @@ def evaporator_f(t_amb: float, approach_f: float, air_slope: float) -> float:
     of air. At one installation the NWP500's coil read
     6.7 + 0.596 · air over 377 runs (15 min or more in, air 48-86 °F),
     and a free fit on 142 recorded recoveries' durations chose a slope of
-    0.62. With the coil's slope and K and the approach refit, the 35
-    recoveries held out ran 32.0 min off on average, against 34.2 for a
-    fixed approach refit on the same ones."""
+    0.62. At the coil's slope and approach, with K refit, the 35
+    recoveries held out ran 33.7 min off on average."""
     return t_amb - approach_f - (1.0 - air_slope) * (t_amb - EVAP_REF_AIR_F)
 
 

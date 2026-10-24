@@ -750,6 +750,13 @@ class TestTheJudgement:
         assert [sc._split(n) for n in (9, 10, 12, 20, 50)] == [0, 2, 2, 4, 10]
 
 
+@pytest.fixture
+def pinned_compressor(monkeypatch: pytest.MonkeyPatch) -> None:
+    """``recovery_days``' recoveries fit K at about 0.04; a ceiling under
+    it pins the refit on its bound."""
+    monkeypatch.setattr(cal, "K_BOUNDS", (0.004, 0.02))
+
+
 def recovery_days(days: int) -> Any:
     """A frame of ``days``: a quiet decay, a draw, then a heat-pump
     recovery to 140 °F each day, a sample a minute, the heater drawing
@@ -1012,7 +1019,7 @@ class TestKeepBetterThirdReview:
         assert held.windows == ()
 
     def test_a_power_refit_that_wins_drops_the_compressors_reason(
-        self,
+        self, pinned_compressor: None
     ) -> None:
         frame = recovery_days(14)
         fitted, judged, held = sc._keep_better(
@@ -1061,7 +1068,7 @@ class TestKeepBetterFourthReview:
         )
 
     def test_power_fitted_over_a_kept_compressor_has_no_failure_reason(
-        self,
+        self, pinned_compressor: None
     ) -> None:
         # The compressor's refit is pinned, so the base's is kept; the
         # power, unfitted in the base, is fitted over it.
@@ -1103,7 +1110,9 @@ class TestKeepBetterFifthReview:
             m.setattr(cal, "cop_cycles", lambda *_: [cop] * 3)
             assert sc._cop_error(rows, params) is not None
 
-    def test_a_kept_compressor_shows_no_refit_error(self) -> None:
+    def test_a_kept_compressor_shows_no_refit_error(
+        self, pinned_compressor: None
+    ) -> None:
         frame = recovery_days(14)
         fitted, judged, held = sc._keep_better(
             frame, sim.default_params(), "air_f"
@@ -1310,8 +1319,8 @@ def physics_recoveries(
 
 
 #: Two compressor laws whose recoveries the fit leaves off its bounds.
-COMPRESSOR_LAW = (0.08, 9.0)
-OTHER_COMPRESSOR_LAW = (0.06, 14.0)
+COMPRESSOR_LAW = (0.025, 9.0)
+OTHER_COMPRESSOR_LAW = (0.019, 14.0)
 
 
 def _keep_compressor(

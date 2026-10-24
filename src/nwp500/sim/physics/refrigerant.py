@@ -1,13 +1,9 @@
 """R-134a refrigerant saturation property table and interpolation functions.
 
-Property values are derived from ASHRAE Standard 34 and cross-referenced
-against the observed telemetry ranges for the Navien NWP500 installation.
-Saturated vapor density, not Carnot COP, is what scales the modelled
-capacity with ambient.  It was chosen to explain a 1.7× cold/warm
-duration ratio between two calibration cycles, which does not generalize:
-across 217 heating cycles with a deficit of at least 10 °F the effective
-heating rate rises only ~1.18× from 53.6 to 75.1 °F ambient, and
-mid-cycle compressor power is flat across ambient (median 392-431 W).
+The values are CoolProp's (the table's comment). Saturated vapour
+density at the evaporator is what scales the modelled capacity with the
+air: the compressor moves a fixed volume, so its mass flow follows the
+suction gas's density.
 
 All temperatures are in °F, pressures in psia, densities in lb/ft³, and
 enthalpies in BTU/lb.
@@ -20,36 +16,49 @@ import numpy as np
 
 # ── Saturation property table ────────────────────────────────────────────────
 # Columns: T_f, P_sat_psia, rho_g_lb_ft3, h_f_btu_lb, h_g_btu_lb
-# Temperature range covers the operating envelope:
-#   evaporator: ~20°F (41°F ambient − 21°F approach) → 80°F (warm ambient)
-#   condenser:  ~130°F-165°F (T_lower + 10°F approach)
-#
-# Critical density values:
-#   40°F → 0.265 lb/ft³ (cold-cycle calibration point)
-#   80°F → 0.535 lb/ft³ (warm-cycle calibration point)
-#   Ratio ≈ 2.02×, far above the ~1.18× measured (module docstring).
+# From CoolProp 8.0.0 (Bell et al. 2014, the Tillner-Roth and Baehr 1994
+# equation of state for R-134a) every 5 °F, enthalpies on the ASHRAE
+# reference (h = 0 for saturated liquid at -40 °F). The range covers the
+# operating envelope: the evaporator from about 20 °F (cold air, the
+# approach) to 80 °F, and the condenser at the lower zone plus its
+# approach, clamped to 80-160 °F.
 
 _TABLE = np.array(
     [
         # T_f    P_sat    rho_g    h_f      h_g
-        [0.0, 21.3, 0.108, 26.6, 108.9],
-        [10.0, 26.4, 0.132, 30.3, 110.7],
-        [20.0, 33.2, 0.164, 34.0, 112.5],
-        [32.0, 42.5, 0.225, 38.8, 115.9],  # frost onset
-        [40.0, 49.8, 0.265, 43.5, 117.8],  # cold-cycle calibration
-        [50.0, 60.1, 0.316, 48.0, 119.9],
-        [53.0, 65.0, 0.342, 50.0, 120.5],  # cold-cycle mean evap
-        [60.0, 72.4, 0.384, 52.7, 121.9],
-        [70.0, 86.7, 0.454, 57.5, 123.8],
-        [80.0, 101.3, 0.535, 62.4, 124.4],  # warm-cycle mean evap
-        [90.0, 122.7, 0.634, 67.3, 125.4],
-        [100.0, 146.4, 0.747, 72.3, 125.9],
-        [110.0, 172.6, 0.876, 77.5, 125.7],
-        [120.0, 186.0, 1.050, 82.9, 125.1],  # typical condensing midpoint
-        [130.0, 210.6, 1.240, 88.6, 124.0],
-        [140.0, 238.2, 1.470, 94.6, 122.4],
-        [150.0, 268.6, 1.750, 100.9, 120.2],
-        [160.0, 302.2, 2.100, 107.5, 117.2],
+        [0.0, 21.17, 0.4634, 12.20, 103.09],
+        [5.0, 23.78, 0.5173, 13.75, 103.82],
+        [10.0, 26.63, 0.5761, 15.32, 104.55],
+        [15.0, 29.74, 0.6401, 16.89, 105.27],
+        [20.0, 33.12, 0.7095, 18.47, 105.99],
+        [25.0, 36.80, 0.7848, 20.06, 106.70],
+        [30.0, 40.78, 0.8663, 21.65, 107.40],
+        [35.0, 45.09, 0.9544, 23.26, 108.09],
+        [40.0, 49.74, 1.0495, 24.87, 108.78],
+        [45.0, 54.75, 1.1521, 26.50, 109.46],
+        [50.0, 60.13, 1.2627, 28.13, 110.14],
+        [55.0, 65.91, 1.3816, 29.78, 110.80],
+        [60.0, 72.11, 1.5095, 31.43, 111.45],
+        [65.0, 78.73, 1.6470, 33.10, 112.09],
+        [70.0, 85.80, 1.7946, 34.78, 112.72],
+        [75.0, 93.35, 1.9530, 36.47, 113.34],
+        [80.0, 101.39, 2.1229, 38.17, 113.94],
+        [85.0, 109.93, 2.3052, 39.89, 114.53],
+        [90.0, 119.01, 2.5007, 41.62, 115.11],
+        [95.0, 128.65, 2.7103, 43.36, 115.67],
+        [100.0, 138.85, 2.9352, 45.12, 116.21],
+        [105.0, 149.65, 3.1763, 46.90, 116.73],
+        [110.0, 161.07, 3.4351, 48.70, 117.24],
+        [115.0, 173.14, 3.7130, 50.51, 117.72],
+        [120.0, 185.86, 4.0116, 52.35, 118.18],
+        [125.0, 199.28, 4.3327, 54.20, 118.61],
+        [130.0, 213.41, 4.6786, 56.08, 119.02],
+        [135.0, 228.28, 5.0517, 57.98, 119.39],
+        [140.0, 243.92, 5.4549, 59.91, 119.73],
+        [145.0, 260.36, 5.8916, 61.87, 120.03],
+        [150.0, 277.61, 6.3657, 63.87, 120.29],
+        [155.0, 295.73, 6.8822, 65.89, 120.50],
+        [160.0, 314.73, 7.4471, 67.96, 120.65],
     ],
     dtype=float,
 )

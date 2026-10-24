@@ -1137,9 +1137,9 @@ and each says what it used:
 - **Standby loss**: the jacket's loss law, and how fast the zones
   mix, from windows of 3 hours or more with no heating and no hot water
   in use (45 minutes after either). It needs ``air``.
-- **The compressor**: its constant and the evaporator's approach, from
-  heat-pump recoveries that reached their target, against the loss
-  just fitted. ``recovery_air="air_f"`` takes the air over a recovery
+- **The compressor**: its constant, from heat-pump recoveries that
+  reached their target, against the loss just fitted, at the
+  evaporator approach the parameters carry (the coil's, 19.56 degF). ``recovery_air="air_f"`` takes the air over a recovery
   from the sensor's too; the default is the heater's own reading,
   taken while its compressor runs. With 10 recoveries or more, the
   latest fifth is held out, and ``heldout_mae_minutes`` says how well

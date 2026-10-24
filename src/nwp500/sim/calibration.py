@@ -771,15 +771,12 @@ def fit_standby(
     )
 
 
-# ── the compressor: constant and evaporator approach ─────────────────
+# ── the compressor: its constant ─────────────────────────────────────
 
-#: Starting point and bounds of the compressor fit: an unbounded fit on
-#: a mixed-season corpus collapsed the approach toward 0 °F to absorb
-#: model error, so a fit on a bound is reported, not trusted.
-INITIAL_K = 0.05
-INITIAL_APPROACH_F = 12.0
-K_BOUNDS = (0.02, 0.3)
-APPROACH_BOUNDS = (4.0, 20.0)
+#: Bounds of the compressor fit; a fit on a bound is reported, not
+#: trusted. K is a displacement rate: 0.004-0.08 ft³/s is a rotary
+#: compressor of about 2 to 40 cc at 3,500 rpm.
+K_BOUNDS = (0.004, 0.08)
 _BOUND_HIT_RTOL = 0.01
 #: The recoveries fitted, by duration, minutes.
 MIN_RECOVERY_MINUTES = 15.0
@@ -799,6 +796,7 @@ class CompressorFit:
     error on the recoveries fitted and on those held out."""
 
     compressor_constant: float
+    #: The approach it was fitted at, the compressor's own.
     evap_approach_f: float
     mae_minutes: float
     heldout_mae_minutes: float | None
@@ -904,9 +902,13 @@ def fit_compressor(
     two_zone: bool = True,
     tank: TankParams = TankParams(),
 ) -> CompressorFit | None:
-    """``compressor_constant`` and ``evap_approach_f`` minimising the
-    squared error of the physics' durations against recorded ones, each
-    integrated on ``tank`` (the heater's own: pass ``HeaterParams.tank``).
+    """``compressor_constant`` minimising the squared error of the
+    physics' durations against recorded ones, each integrated on
+    ``tank`` (the heater's own: pass ``HeaterParams.tank``), at
+    ``compressor``'s own ``evap_approach_f``. The durations do not
+    place the approach: on one installation's 142 recoveries the
+    approach and K together reached the same error from 6.9 °F, where
+    the evaporator coil read 19.6 °F below the air.
 
     ``recoveries``: exactly one row per heat-pump recovery (a recovery
     read twice, from overlapping windows say, is weighted twice and
@@ -931,8 +933,10 @@ def fit_compressor(
     )
     two_zone = two_zone and has_gaps
 
+    approach = compressor.evap_approach_f
+
     def predicted(
-        frame: pd.DataFrame, k: float, approach: float, gaps: bool = has_gaps
+        frame: pd.DataFrame, k: float, gaps: bool = has_gaps
     ) -> np.ndarray:
         return recovery_minutes(
             frame,
@@ -947,29 +951,21 @@ def fit_compressor(
 
     actual = np.asarray(fit_df["duration_minutes"], dtype=float)
 
-    def objective(x: np.ndarray) -> float:
-        k, approach = float(x[0]), float(x[1])
-        if not (
-            K_BOUNDS[0] <= k <= K_BOUNDS[1]
-            and APPROACH_BOUNDS[0] <= approach <= APPROACH_BOUNDS[1]
-        ):
-            return 1e12
-        return float(np.sum((predicted(fit_df, k, approach) - actual) ** 2))
+    def sse(k: float) -> float:
+        return float(np.sum((predicted(fit_df, k) - actual) ** 2))
 
-    found = minimize(
-        objective,
-        x0=np.array([INITIAL_K, INITIAL_APPROACH_F]),
-        method="Nelder-Mead",
-        bounds=[K_BOUNDS, APPROACH_BOUNDS],
-        options={"xatol": 1e-5, "fatol": 1.0, "maxiter": 2000},
+    found = cast(
+        OptimizeResult,
+        minimize_scalar(
+            sse, bounds=K_BOUNDS, method="bounded", options={"xatol": 1e-6}
+        ),
     )
-    k, approach = float(found.x[0]), float(found.x[1])
+    k = float(found.x)
     hit = any(
-        abs(value - bound) <= _BOUND_HIT_RTOL * max(abs(bound), 1e-9)
-        for value, bounds in ((k, K_BOUNDS), (approach, APPROACH_BOUNDS))
-        for bound in bounds
+        abs(k - bound) <= _BOUND_HIT_RTOL * max(abs(bound), 1e-9)
+        for bound in K_BOUNDS
     )
-    mae = float(np.mean(np.abs(predicted(fit_df, k, approach) - actual)))
+    mae = float(np.mean(np.abs(predicted(fit_df, k) - actual)))
     held_mae = None
     if n_held:
         # The held-out rows' gaps as recorded, wherever the column is.
@@ -979,7 +975,6 @@ def fit_compressor(
                     predicted(
                         held_df,
                         k,
-                        approach,
                         gaps="stratification_gap" in held_df.columns,
                     )
                     - np.asarray(held_df["duration_minutes"], dtype=float)

@@ -171,7 +171,7 @@ fitted or kept the base's value, and why:
        windows; it needs 20 windows that open with a gap of 2 °F or
        more. The bottom loss opens the gaps it relaxes, so the two are
        fitted in turn until the constant settles.
-   * - Compressor constant, evaporator approach
+   * - Compressor constant
      - Heat-pump recoveries that reached their target, against the loss
        just fitted. The error is the mean absolute error of the
        recovery durations, in minutes, also on the held-out recoveries.
@@ -269,8 +269,7 @@ Each group of terms holds out its latest evidence from its refit:
 - the zone gap time constant: its windows that open a gap, judged
   before the standby loss, which is then fitted and scored on the
   constant kept;
-- the compressor constant and the evaporator approach: its reached
-  recoveries;
+- the compressor constant: its reached recoveries;
 - the power scale: the metered compressor cycles it can use;
 - the COP terms: the cycles the COP fit can use (without a meter of
   draws, those no water was drawn around).

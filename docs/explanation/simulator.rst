@@ -66,8 +66,8 @@ The model
 =========
 
 **The compressor.** A vapour-compression model of the R-134a cycle:
-saturation properties from a refrigerant table, an evaporator approach
-to the intake air, a condenser approach to the tank, polytropic
+saturation properties from CoolProp's equation of state, an evaporator
+approach to the intake air as the coil reads it, a condenser approach to the tank, polytropic
 compression with clearance, the fan's airflow, and the latent load of
 humid air. It is integrated in 10-second steps until the lower
 thermistor reaches its target.

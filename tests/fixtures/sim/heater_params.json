@@ -12,7 +12,7 @@
   "ua_baseline_btu_hr_f": 5.0
  },
  "compressor": {
-  "compressor_constant": 0.10556,
+  "compressor_constant": 0.03137,
   "evap_approach_f": 9.93,
   "two_zone": false,
   "cond_approach_f": 10.0,
@@ -21,8 +21,8 @@
   "fan_airflow_cfm": 229.0
  },
  "power": {
-  "power_scale": 0.527,
-  "cop_scale": 2.21,
+  "power_scale": 1.7590,
+  "cop_scale": 0.6378,
   "startup_wh": 162.0,
   "cop_lift_coeff": 0.0,
   "cop_lift_ref_f": 62.0
