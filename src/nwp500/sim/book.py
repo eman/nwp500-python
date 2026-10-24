@@ -306,6 +306,8 @@ def mains_f(
     cp = ColdSupplyParams()
     plateaus: list[tuple[float, float]] = []
     run: list[tuple[float, Step]] = []
+    # Circulation at any point of a draw rules out the whole draw.
+    tainted = False
     t = 0.0
 
     def close() -> None:
@@ -326,14 +328,15 @@ def mains_f(
 
     for s in steps:
         t += s.seconds
-        drawing = house_gpm(s, circulation) > p.draw_gpm
-        if drawing and not s.circulating:
+        if house_gpm(s, circulation) > p.draw_gpm:
+            tainted = tainted or s.circulating
             run.append((t, s))
             continue
-        if not (drawing and s.circulating):
+        if not tainted:
             close()
-        run = []
-    close()
+        run, tainted = [], False
+    if not tainted:
+        close()
     recent = [v for end, v in plateaus if end >= t - cp.window_s]
     return float(median(recent)) if recent else None
 

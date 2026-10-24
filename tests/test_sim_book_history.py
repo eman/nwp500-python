@@ -149,9 +149,9 @@ class TestTheAnchor:
                 flow_gpm=2.0,
                 inlet_f=60.0,
                 inlet_measured=True,
-                circulating=i == 30,
+                circulating=i == 2,
             )
-            for i in range(80)
+            for i in range(100)
         ]
         b = book_steps(recovery_then([step(), *draw, step()]), P)
         assert b is not None
