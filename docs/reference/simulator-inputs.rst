@@ -891,7 +891,9 @@ the one seen over the retrains from 2026-08-08 to 2026-10-18.
      - 3.6 degF
      - A mode write into a compressor mode with the lower tank this far
        short started it: 19 of 19 out of an element mode; the most short
-       with no start was 2.70 degF.
+       with no start was 2.70 degF. Out of ``HEAT_PUMP`` the upper tank
+       must be short too: Energy Saver landing with it 18.7 degF above
+       the setpoint started nothing (2026-09-21).
    * - ``controller.energy_saver_write_seen_f``
      - 1.44 degF
      - The least shortfall at which a write into ``ENERGY_SAVER`` was

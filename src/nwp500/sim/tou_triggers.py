@@ -7,14 +7,17 @@ three ways, and the TOU window decides which applies:
 - **Outside the window**, when the lower tank falls to ``hp_lower_on``
   (104.9 °F), the trigger a projection always modelled. It also
   requires the upper tank below the setpoint, waiting while it is at or
-  above it (``heater_start``; a device test, 2026-10-03).
+  above it (``heater_start``; a device test, 2026-10-03, and Energy
+  Saver on 2026-09-21). In Energy Saver a draw's drop starts it there.
 - **Inside the window**, when the upper tank is more than
   ``UPPER_DEFICIT_F`` below the setpoint: at the opening, or later as it
   cools or a draw takes it there. The trigger keeps its name,
   ``upper_at_tou_open``, from when it was tested at the opening alone.
 - **At the window's close**, when the lower tank crossed ``hp_lower_on``
-  inside it. The lower trigger waits out the window: 9 of 9 closes with
-  the lower tank below it started at once. Of 19 in-window crossings
+  inside it. The lower trigger waits out the window: 11 of 11 closes
+  with the lower tank below it and the upper tank short of the setpoint
+  started at once (2026-04-08 to 10-24); the one with the upper tank
+  above the setpoint did not. Of 19 in-window crossings
   with the compressor off (raw rows, 2026-04-08 to 10-01), none started
   on the lower trigger before the close; the six that started early
   were the upper trigger (04-13, 07-28), mode writes ending a vacation
@@ -170,6 +173,7 @@ def autonomous_start(
     windows: Sequence[tuple[datetime, datetime]] = (),
     setpoint_f: float | None = None,
     lower_waits_for_upper_short: bool = False,
+    drop_starts: bool = False,
 ) -> tuple[datetime | None, Trigger | None]:
     """The first instant the heater would start itself, and why.
 
@@ -197,6 +201,12 @@ def autonomous_start(
     15 min before its closing entry (measured to 2026-10-03 21:30 UTC).
     That the start then follows the upper tank's fall below the setpoint
     is *assumed*: nothing has measured the release.
+
+    With ``drop_starts`` as well (Energy Saver's), a draw's drop at or
+    after the lower crossing also releases it. On 2026-09-21 Energy
+    Saver held a lower tank 18 °F under its setting for 9 h 54 min,
+    the upper tank 11-19 °F above a 107.6 °F setpoint, and started
+    2 min 17 s into a circulation run that took it from 88 to 83 °F.
     """
     if not trajectory:
         return None, None
@@ -212,9 +222,18 @@ def autonomous_start(
     ):
         # In a coast the lower tank only falls, so it is still under
         # the setting when the upper tank falls below the setpoint.
+        crossed = lower_at
         lower_at = _upper_crossing(
-            trajectory, setpoint_f, drops, lower_at, end + _INSTANT
+            trajectory, setpoint_f, drops, crossed, end + _INSTANT
         )
+        if drop_starts:
+            # In a coast the lower tank only falls, so a drop after
+            # the crossing lands under the setting.
+            dropped = min(
+                (d.at for d in drops if d.at >= crossed), default=None
+            )
+            if dropped is not None and (lower_at is None or dropped < lower_at):
+                lower_at = dropped
     if lower_at is not None:
         inside = next((w for w in windows if w[0] <= lower_at < w[1]), None)
         if inside is None:
@@ -249,15 +268,22 @@ def autonomous_start(
 
 #: The reason a projection carries when the lower trigger's hold (the
 #: upper tank at or above the setpoint) moved or dropped a start: it
-#: rests on one device run (2026-10-03).
+#: rests on two days, 2026-10-03 in ``heat_pump`` and 2026-09-21 in
+#: ``energy_saver``.
 LOWER_TRIGGER_HELD = "lower_trigger_held_uncertain"
 
 
-#: The one mode the hold rests on: ``heat_pump`` (the heater profile's
-#: default mode). The 104 crossings and the device test
-#: were all in it. Energy Saver is not held: on 2026-09-21 it started
-#: with the upper tank about 9 °F above a 107.6 °F setpoint.
-LOWER_HOLD_MODE = "heat_pump"
+#: The modes the hold rests on: ``heat_pump`` (the heater profile's
+#: default mode; the 104 crossings and the 2026-10-03 device test were
+#: in it) and ``energy_saver`` (2026-09-21, a lower tank 18 °F under its
+#: setting for 9 h 54 min with the upper tank above the setpoint).
+LOWER_HOLD_MODES = frozenset({"heat_pump", "energy_saver"})
+
+#: The mode whose held lower trigger a draw's drop starts: on
+#: 2026-09-21 a circulation run started Energy Saver with the upper
+#: tank 10 °F above the setpoint. In ``heat_pump`` draws took the lower
+#: tank from 104.9 to 99.5 °F and started nothing (2026-10-03).
+DROP_STARTS_MODE = "energy_saver"
 
 
 def heater_start(
@@ -273,7 +299,8 @@ def heater_start(
     and a simulation project it: the ``autonomous_start`` rules, with
     the lower trigger held while the upper tank is at or above
     ``setpoint_f`` (``lower_waits_for_upper_short``) in
-    ``LOWER_HOLD_MODE`` only.
+    ``LOWER_HOLD_MODES`` only, and in ``DROP_STARTS_MODE`` started by a
+    draw's drop (``drop_starts``).
     ``mode`` is the mode in force; None, a mode
     that could not be read, is taken as normal operation, the default
     ``heat_pump``, as every reader of the mode does. The third value
@@ -288,7 +315,7 @@ def heater_start(
         windows=windows,
         setpoint_f=setpoint_f,
     )
-    if mode is not None and mode != LOWER_HOLD_MODE:
+    if mode is not None and mode not in LOWER_HOLD_MODES:
         return unheld[0], unheld[1], False
     at, trigger = autonomous_start(
         trajectory,
@@ -297,6 +324,7 @@ def heater_start(
         windows=windows,
         setpoint_f=setpoint_f,
         lower_waits_for_upper_short=True,
+        drop_starts=mode == DROP_STARTS_MODE,
     )
     return at, trigger, (at, trigger) != unheld
 
