@@ -1059,7 +1059,12 @@ gallons count with ``flow_volume``:
 
 Read as delivered, a tank-water flow books about a quarter of each
 draw's heat too little (a 141 degF tank behind a valve delivering 122
-degF), and the book promises hot water that isn't there. As none of the flow is circulation,
+degF), and the book promises hot water that isn't there. The shipped
+empty points (``BookParams.empty_btu`` and ``zone_empty_btu``) were
+booked as delivered gallons, so with ``"tank"`` refit them on your
+record (``calibration.empty_point`` and ``zone_empty_point``, below);
+booked as tank water, the same
+drawdown leaves less heat at the line. As none of the flow is circulation,
 ``book`` takes ``CirculationParams.meter_share`` as 0. A flow entity that reports a draw late
 reaches the book late: the book holds what the history holds at
 ``read``. Each of the other entities is optional:
@@ -1204,6 +1209,7 @@ to a day apart. Each pair's booked heat is checked against the probes':
    steps = sa.book_steps_from_history(
        recorded, start=since, end=until, flow=meter_flow, air=air,
        circulation=runs, circulation_flow=pump_flow, params=params,
+       flow_volume="tank",   # what the meter's gallons count
    )
    book = calibration.RecordedBook(steps, p, params.circulation, start=since)
    fit = calibration.fit_book_terms(book, book.reanchors(), p, circuit=True)

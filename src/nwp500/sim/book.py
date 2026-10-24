@@ -30,7 +30,10 @@ after an anchor and doubles beyond.
 **The empty point** (``BookParams.empty_btu``) is the booked heat left
 when the upper probe crossed 105 °F in four drawdowns whose anchor was
 within 12 h, 14,219-19,590 BTU, median 16,169. Deliverable volume is the
-heat above it over the heat a delivered gallon takes.
+heat above it over the heat a delivered gallon takes. The point is
+booked heat, so it is in its debit's frame: those drawdowns were booked
+as delivered gallons, and a flow that counts tank water debits more, so
+its empty point is lower and is refit on its own record.
 
 **Where the heat lands.** The heat pump heats from the bottom up, so
 heating cannot build a hot top over a cold bottom: only a draw makes a

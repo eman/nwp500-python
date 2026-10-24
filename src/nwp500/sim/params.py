@@ -958,7 +958,11 @@ class BookParams:
     )
     #: Booked heat above the reference when the upper probe reaches the
     #: line (``ReadinessParams.line_f``): the median of five drawdowns,
-    #: 14,219-19,590 BTU.
+    #: 14,219-19,590 BTU. It and ``zone_empty_btu`` are in the frame of
+    #: the debit they were booked with, delivered gallons through the
+    #: valve: a book whose flow counts tank water (``flow_volume``)
+    #: debits more and needs both refit on its own record
+    #: (``calibration.empty_point``, ``zone_empty_point``).
     empty_btu: float = field(
         default=16169.0, metadata=_p(FITTED, "BTU", INSTALLATION)
     )
