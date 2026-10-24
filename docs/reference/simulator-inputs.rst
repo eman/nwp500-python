@@ -522,13 +522,15 @@ tank over the cold water of a recent draw. Start one only from what you know:
      - When
    * - ``sim.full_tank_book(upper_f, lower_f, params.book)``, or
        ``sim_adapters.full_tank_book(status, params)``
-     - The tank has been quiet since a recovery ended: it finished, and
-       nothing has been drawn since. The book's own anchor.
+     - The tank is full: quiet since a recovery ended (it finished, and
+       nothing has been drawn since), or the heat pump running alone
+       with the probes within ``book.uniform_band_f``, nothing drawn in
+       its last ``book.anchor_run_min``. The book's own anchors.
    * - ``sim_adapters.book_from_history(recorded, params, at=...,
        flow=...)``
      - You record the heater's statuses and meter the hot water: the
        book is walked from the last time the record shows the tank
-       full and quiet after a recovery (below).
+       full (below).
    * - ``sim_adapters.book_from_changes(rows, observed, params, at=...,
        flow=...)``
      - The same, from the heater's values' changes (``ChangeRows``) and
@@ -544,10 +546,16 @@ statuses (the probes, the compressor, either element) held until the
 next; the meter's ``flow`` and the circulation's own
 ``circulation_flow`` held 60 s; an ``inlet`` probe's readings held an
 hour; the ``air`` held until the next. It anchors on the latest step
-the tank reads full (``book.uniform_band_f``) with nothing heating,
-after a recovery and before anything was drawn or circulated; a
-recovery that ends during a draw anchors at its end. Then it books
-every step from the anchor: the heat pump's and the elements' heat in,
+the tank reads full (``book.uniform_band_f``) with nothing drawn or
+circulated in it: with nothing heating, after a recovery and before
+anything was drawn or circulated, or with the heat pump running alone.
+After a draw, the heat pump must first run ``book.anchor_run_min``
+(15 minutes of its running time) for its anchor, since until the cold
+front reaches the lower probe the probes show only part of a draw;
+with no anchor in the record, that run counts from its start. A
+quiet full-looking tank after a draw is no anchor, for the same
+reason. A recovery that ends during a draw anchors at its end. Then it
+books every step from the anchor: the heat pump's and the elements' heat in,
 standby and circulation out, and each draw (the meter less
 ``CirculationParams.meter_share`` of a run's flow, above
 ``book.draw_gpm``) through the mixing valve. It reads the last 18 hours
@@ -588,9 +596,11 @@ book: ``simulate(scenario, params,
 ledger=BookedHeatLedger(book, ambient_at, params.book, extra=loss))``.
 
 Once started, the walk re-anchors whenever the simulated tank comes
-back full: a recovery the heater ends itself, or quiet after one with
-the zones within ``book.uniform_band_f``. A ``Booked`` whose
-``anchor_age_h`` is past ``book.max_anchor_age_h`` is aged:
+back full: a recovery the heater ends itself, quiet after one with
+the zones within ``book.uniform_band_f``, or the heat pump running
+alone with the zones within it, past the same hold. The book carries
+the hold (``Booked.hold_s``), so a book from a record goes on with
+its own. A ``Booked`` whose ``anchor_age_h`` is past ``book.max_anchor_age_h`` is aged:
 ``reasons`` says ``heat_book_aged`` and a window's margin comes off by
 the book's error band.
 

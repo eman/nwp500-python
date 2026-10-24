@@ -382,9 +382,10 @@ def full_tank_book(
     inlet: float | None = None,
 ) -> Booked:
     """The heat book anchored on ``status``'s tank as full
-    (``sim.full_tank_book``), for a caller who knows it has been quiet
-    since a heating ended: a recovery finished and nothing drawn since.
-    ``inlet`` is the mains water, in the preferred unit."""
+    (``sim.full_tank_book``), for a caller who knows it is full: quiet
+    since a heating ended (a recovery finished and nothing drawn since),
+    or the compressor running with the probes within the book's band and
+    nothing drawn. ``inlet`` is the mains water, in the preferred unit."""
     return sim_full_tank_book(
         _from_device(DeciCelsius(status.tank_upper_temperature_raw)),
         _from_device(DeciCelsius(status.tank_lower_temperature_raw)),

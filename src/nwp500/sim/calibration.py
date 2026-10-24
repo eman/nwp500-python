@@ -58,7 +58,14 @@ from scipy.optimize import (
     minimize_scalar,
 )
 
-from nwp500.sim.book import Booked, full_tank, house_gpm, is_full
+from nwp500.sim.book import (
+    Booked,
+    anchor_held,
+    compressing,
+    full_tank,
+    house_gpm,
+    is_full,
+)
 from nwp500.sim.book import Step as BookStep
 from nwp500.sim.circulation import RUN_GAP
 from nwp500.sim.circulation import displaced_gal as circulation_displaced_gal
@@ -2743,6 +2750,7 @@ def book_walk(
     disturbed = (book.draw > 0) | (book.circulated > 0)
     was_h = was_d = clean = False
     moving = 0
+    run_s: float | None = 0.0
     b: Booked | None = None
     anchor_i: int | None = None
     rows: list[tuple[Any, ...]] = []
@@ -2761,6 +2769,10 @@ def book_walk(
         )
         full = is_full(s.upper_f, s.lower_f, p)
         new = None
+        if book.draw[i] > 0:
+            run_s = 0.0
+        elif s.compressor_on and run_s is not None:
+            run_s += s.seconds
         if disturbed[i] and not was_d:
             moving = i
         if heating[i]:
@@ -2774,6 +2786,11 @@ def book_walk(
         was_h, was_d = bool(heating[i]), bool(disturbed[i])
         if clean and not heating[i] and full:
             new = (i, i + 1)
+        quiet = not disturbed[i] and not s.circulating
+        if compressing(s) and anchor_held(run_s, p) and quiet and full:
+            new = (i, i + 1)
+        if new is not None and quiet:
+            run_s = None
         if new is not None:
             a, bf = new
             st = steps[a]

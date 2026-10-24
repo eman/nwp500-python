@@ -646,8 +646,10 @@ Two probes can say how much is left only when the tank is full, so
 without more to go on the answer is a full tank's (a floor that allows
 for cold water hiding under the lower probe) or 0. Give it more:
 
-- **A heat book**, if you know the tank has been quiet since a recovery
-  ended (``basis`` becomes ``energy``):
+- **A heat book**, if you know the tank is full: quiet since a recovery
+  ended, or the heat pump running with the probes within the book's
+  band and nothing drawn in its last 15 minutes (``basis`` becomes
+  ``energy``):
 
   .. code-block:: python
 
@@ -1053,8 +1055,8 @@ reaches the book late: the book holds what the history holds at
 the book converts at, ``inlet`` with ``demand`` the mains, and ``air``
 the air beside the heater.
 
-Without a meter, start one only when you know the tank is full and
-quiet (``sa.full_tank_book``).
+Without a meter, start one only when you know the tank is full
+(``sa.full_tank_book``).
 
 With an inlet probe on the cold supply, convert the book's gallons at
 the mains rather than at the probe's own median, which at rest reads
