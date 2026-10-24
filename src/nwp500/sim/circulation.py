@@ -6,8 +6,10 @@ Some installations circulate hot water from the tank around their
 plumbing and back, so a tap runs hot sooner. A run takes heat only
 while it runs: the water returning to the bottom of the tank has cooled
 in the pipe, and once the first ``CirculationParams.displaced_gal`` of
-it has come back, hot water is circulating and the zones are charged
-nothing more. With no runs given, nothing is charged.
+it has come back the zones are charged nothing more. The volume is an
+effective one: at one installation a run kept taking heat as long as it
+ran, and the fitted volume is above the typical run. With no runs
+given, nothing is charged.
 
 The runs are the caller's: a weekly schedule laid out as instants
 (``sim_adapters.circulation``), a record of when it ran, or a run asked
@@ -19,11 +21,15 @@ Two terms, kept apart on purpose:
 
 - **To the zones** (``CirculationDraws``, the core's ``FlowingDraws``):
   each run a flowing draw of ``min(flow x minutes, displaced_gal)``
-  gallons from its start, at ``flow_gpm``, its inflow at the air where
-  the heater stands, so it stops flowing once it has displaced the
-  circuit. Runs closer than ``RUN_GAP`` are one run: a restart displaces
-  water the last run warmed, and ``displaced_gal`` is fitted on runs
-  merged that way.
+  gallons from its start, at ``flow_gpm``, so it stops flowing once it
+  has displaced the circuit. Its inflow is the air where the heater
+  stands plus ``CirculationParams.return_rest_offset_f``, where the
+  return rests between runs. A run soon after another finds the pipe
+  still warm: its gallons are scaled by the share that has cooled since
+  the last run ended (``cooled_share``, on
+  ``CirculationParams.return_cool_tau_h``). Runs closer than
+  ``RUN_GAP`` are one run: a restart displaces water the last run
+  warmed, and ``displaced_gal`` is fitted on runs merged that way.
 - **To the book** (``CirculationLoss``, a ``book.SpanLoss``): with
   ``CirculationParams.book_circuit_gal``, each run's gallons up to that
   volume from its start, each at the tank's upper probe less the air;
@@ -32,6 +38,7 @@ Two terms, kept apart on purpose:
   does not re-anchor across it.
 """
 
+import math
 from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass
 from datetime import datetime, timedelta
@@ -54,6 +61,16 @@ def displaced_gal(minutes: float, displaced: float, flow_gpm: float) -> float:
     return min(flow_gpm * minutes, displaced)
 
 
+def cooled_share(rest_hours: float | None, cool_tau_h: float) -> float:
+    """The share of a run's displaced water that has cooled to the
+    return's rest, after ``rest_hours`` since the last run ended: the
+    pipe the last run warmed cools toward rest on ``cool_tau_h``. 1 with
+    no earlier run known, or no time constant (cooled at once)."""
+    if rest_hours is None or cool_tau_h <= 0.0:
+        return 1.0
+    return 1.0 - math.exp(-max(rest_hours, 0.0) / cool_tau_h)
+
+
 def merge_runs(runs: Iterable[Run], gap: timedelta = RUN_GAP) -> list[Run]:
     """``runs`` closer than ``gap`` joined into one, sorted."""
     merged: list[Run] = []
@@ -72,21 +89,31 @@ def run_draws(
     displaced: float,
     flow_gpm: float,
     return_f: Callable[[datetime], float],
+    cool_tau_h: float = 0.0,
 ) -> list[Draw]:
     """The merged ``runs`` overlapping ``[start, end)`` as the core's
     flowing draws, in start order: each run whole, not clipped to the
     span (the core charges a run already under way from its own start),
     ``displaced_gal`` of its length in gallons at ``flow_gpm`` from its
-    start to its end, its inflow ``return_f`` at each instant."""
+    start to its end, times its ``cooled_share`` since the run before it
+    in ``runs``, its inflow ``return_f`` at each instant."""
     if displaced <= 0.0 or flow_gpm <= 0.0:
         return []
     draws: list[Draw] = []
-    for run_start, run_end in sorted(
-        (r for r in runs if r[1] > start and r[0] < end),
-        key=lambda r: r[0],
-    ):
+    last_end: datetime | None = None
+    for run_start, run_end in sorted(runs, key=lambda r: r[0]):
+        rest = (
+            None
+            if last_end is None
+            else (run_start - last_end).total_seconds() / 3600.0
+        )
+        last_end = run_end if last_end is None else max(last_end, run_end)
+        if not (run_end > start and run_start < end):
+            continue
         minutes = (run_end - run_start).total_seconds() / 60.0
-        gallons = displaced_gal(minutes, displaced, flow_gpm)
+        gallons = displaced_gal(minutes, displaced, flow_gpm) * cooled_share(
+            rest, cool_tau_h
+        )
         if gallons <= 0.0:
             continue
         draws.append(
@@ -138,9 +165,14 @@ class CirculationDraws:
     circulation: Circulation
     displaced: float
     flow_gpm: float
-    #: The return's temperature at an instant: the air at the heater.
+    #: The return's temperature at an instant: where it rests between
+    #: runs, the air at the heater plus ``CirculationParams``'
+    #: ``return_rest_offset_f``.
     return_f: Callable[[datetime], float]
     minutes: float = 0.0
+    #: ``CirculationParams.return_cool_tau_h``: 0 takes the pipe as
+    #: cooled at once.
+    cool_tau_h: float = 0.0
 
     def __call__(self, start: datetime, end: datetime) -> list[Draw]:
         if self.displaced <= 0.0:
@@ -162,6 +194,7 @@ class CirculationDraws:
             self.displaced,
             self.flow_gpm,
             self.return_f,
+            self.cool_tau_h,
         )
 
 

@@ -1041,11 +1041,25 @@ class CirculationParams:
     carries to another; ``site_example_params`` has one's."""
 
     #: Gallons a run displaces before hot water comes back: an effective
-    #: volume, fitted with the return's cooling to the air between runs,
-    #: so refit it and the air it returns at together.
+    #: volume, fitted with ``return_rest_offset_f`` and
+    #: ``return_cool_tau_h`` (``calibration.fit_return``), so refit the
+    #: three together.
     displaced_gal: float = field(metadata=_p(FITTED, "gal", INSTALLATION))
     #: The flow a run is priced at, gal/min.
     flow_gpm: float = field(metadata=_p(MEASURED, "gal/min", INSTALLATION))
+    #: How far above the air at the heater the return rests between
+    #: runs, °F: the pipe runs through warmer or cooler space than the
+    #: heater's. 0 rests it at the air.
+    return_rest_offset_f: float = field(
+        default=0.0, metadata=_p(FITTED, "°F", INSTALLATION)
+    )
+    #: The time constant on which the pipe a run warmed cools back to
+    #: rest, hours: a run this soon after another displaces water about
+    #: two thirds cooled (``circulation.cooled_share``). 0 takes it as
+    #: cooled at once.
+    return_cool_tau_h: float = field(
+        default=0.0, metadata=_p(FITTED, "h", INSTALLATION)
+    )
     #: The book's loss per gallon circulated while a run is on, BTU/gal:
     #: the pipe's own loss, unsaturated. The book's form without
     #: ``book_circuit_gal``.

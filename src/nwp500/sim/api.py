@@ -279,12 +279,16 @@ def _physics(
             defaults.append(
                 "circulation=one installation's (CirculationParams)"
             )
+        air_at = AmbientSampler(frame).at
+        offset = terms.return_rest_offset_f
         flowing = CirculationDraws(
             circulation,
             terms.displaced_gal,
             terms.flow_gpm,
-            # The return comes back at the air where the heater stands.
-            AmbientSampler(frame).at,
+            # The return rests at the air where the heater stands, plus
+            # the installation's offset.
+            lambda t: air_at(t) + offset,
+            cool_tau_h=terms.return_cool_tau_h,
         )
     return TankPhysics(
         params,

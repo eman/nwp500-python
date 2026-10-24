@@ -1163,10 +1163,10 @@ and each says what it used:
   ``cal.fit_ungated_observability(cal.circulation_windows(history,
   runs, params, draws=meter_draws), displaced_gal, flow_gpm)``. It
   works on windows of circulation with no compressor and no unsized
-  draw (a NaN gallon count). Fit it at the same ``displaced_gal`` you
-  will use (``fit_displaced_gal``): a long run's modelled heat is
-  proportional to that volume, so the two are a pair. It needs 20
-  windows, and a factor outside 0.05-1 is refused.
+  draw (a NaN gallon count). Fit it at the same run terms you will use
+  (``fit_return``; pass ``rest_offset_f`` and ``cool_tau_h``): a run's
+  modelled heat rests on them, so they are a set. It needs 20 windows,
+  and a factor outside 0.05-1 is refused.
 
 A part without the evidence keeps the value it had, and is named in
 ``cal.params.unfitted``: ``compressor`` (too few recoveries, or a fit
@@ -1262,18 +1262,25 @@ line temperature), fit its terms too:
    runs = calibration.measure_runs(running, flow=pump_flow,
                                    return_f=return_line, upper_f=upper,
                                    air_f=air, compressor=compressor_runs)
+   displaced, offset, tau = calibration.fit_return(runs)
    circulation = replace(
        params.circulation,
-       displaced_gal=calibration.fit_displaced_gal(runs),
+       displaced_gal=displaced,
+       return_rest_offset_f=offset,
+       return_cool_tau_h=tau,
        flow_gpm=calibration.recent_flow_gpm(runs, until),
    )
 
 Each run's heat is measured as its flow times the drop from the upper
-zone to the return line. Runs with the compressor on are left out. The
-displaced volume is the one that prices those runs best.
+zone to the return line, and its rest as the hours since the run
+before it ended. Runs with the compressor on are left out of the fit
+but still end a rest. The three terms are the ones that price those
+runs best: the volume, how far above the air the return rests, and how
+fast the pipe cools back to that after a run. ``fit_displaced_gal``
+fits the volume alone, the return at the air.
 ``recent_flow_gpm`` is the median run flow over the last 14 days, since
-the flow is a setting that moves in steps. Either is None when the runs
-cannot say.
+the flow is a setting that moves in steps. ``fit_return`` and
+``recent_flow_gpm`` are None when the runs cannot say.
 
 The mixing fit reads gallons left before ``zone_empty_btu``, so set
 that first. The delivered water's lag (one bath's measurement) is the

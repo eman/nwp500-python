@@ -6,6 +6,7 @@ port; these hold the API to the core and the runs to their schedule.
 """
 
 import json
+import math
 from collections.abc import Iterable
 from dataclasses import replace
 from datetime import UTC, datetime, time, timedelta
@@ -37,6 +38,7 @@ from nwp500.sim.circulation import (
     Circulation,
     CirculationDraws,
     CirculationLoss,
+    cooled_share,
     merge_runs,
     run_draws,
 )
@@ -116,6 +118,25 @@ class TestTheRuns:
         )
         assert short.gallons == pytest.approx(3.0)
 
+    def test_a_run_soon_after_another_finds_the_pipe_warm(self) -> None:
+        assert cooled_share(None, 0.5) == 1.0
+        assert cooled_share(0.5, 0.0) == 1.0
+        assert cooled_share(0.5, 0.5) == pytest.approx(1 - math.exp(-1))
+        first = (at(0), at(0) + timedelta(minutes=2))
+        second = (at(0.5), at(0.5) + timedelta(minutes=2))
+        a, b = run_draws(
+            [first, second], at(0), at(2), 6.0, 1.5, lambda _: 68.0, 0.5
+        )
+        assert a.gallons == pytest.approx(3.0)
+        # The rest runs from the first run's end.
+        rest = (second[0] - first[1]).total_seconds() / 3600
+        assert b.gallons == pytest.approx(3.0 * cooled_share(rest, 0.5))
+        # A span holding the second alone still finds the first.
+        (only,) = run_draws(
+            [first, second], at(0.4), at(2), 6.0, 1.5, lambda _: 68.0, 0.5
+        )
+        assert only.gallons == b.gallons
+
     def test_a_run_under_way_is_charged_whole(self) -> None:
         (d,) = run_draws(
             [(at(0), at(1))], at(0.5), at(2), 6.0, 1.5, lambda _: 68.0
@@ -147,7 +168,11 @@ class TestThroughTheAPI:
         assert [p.lower_f for p in before] == [
             p.lower_f for p in quiet.points if p.at <= at(0.2)
         ]
-        assert circulated.points[-1].lower_f < quiet.points[-1].lower_f
+
+        def after_first(sim: Any) -> float:
+            return next(p.lower_f for p in sim.points if p.at >= at(0.5))
+
+        assert after_first(circulated) < after_first(quiet)
 
     def test_unknown_runs_say_so_and_quiet_ones_do_not(
         self, params: HeaterParams
@@ -184,13 +209,22 @@ class TestThroughTheAPI:
         self, params: HeaterParams
     ) -> None:
         """Runs 20 minutes apart are two runs at the default gap and one
-        at 30 minutes, which displaces its volume once."""
-        runs = ((at(0.2), at(0.3)), (at(0.633), at(0.733)))
-        apart = simulate(_scenario(loads=_loads(runs)), params)
-        wide = replace(
+        at 30 minutes, which displaces its volume once: a small volume,
+        the pipe cooled at once."""
+        small = replace(
             params,
             circulation=replace(
                 cast(CirculationParams, params.circulation),
+                displaced_gal=6.0,
+                return_cool_tau_h=0.0,
+            ),
+        )
+        runs = ((at(0.2), at(0.3)), (at(0.633), at(0.733)))
+        apart = simulate(_scenario(loads=_loads(runs)), small)
+        wide = replace(
+            small,
+            circulation=replace(
+                cast(CirculationParams, small.circulation),
                 run_gap_min=30.0,
             ),
         )
@@ -276,11 +310,13 @@ class TestThroughTheAPI:
         frame = pd.DataFrame({"ambient_f": [68.0] * len(stamps)}, index=stamps)
         c = params.circulation
         assert c is not None
+        air_at = AmbientSampler(frame).at
         flowing = CirculationDraws(
             Circulation(RUNS),
             c.displaced_gal,
             c.flow_gpm,
-            AmbientSampler(frame).at,
+            lambda t: air_at(t) + c.return_rest_offset_f,
+            cool_tau_h=c.return_cool_tau_h,
         )
         physics = TankPhysics(
             params,

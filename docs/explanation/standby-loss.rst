@@ -137,6 +137,22 @@ losing heat for as long as the pump runs: on this installation the heat
 book charges 159 BTU for each gallon circulated. Runs less than 10
 minutes apart count as one, because the loop has not cooled in between.
 
+The loop's water does not cool all the way to the air beside the
+heater, and a run soon after another finds it still warm. On 123 runs
+with the compressor off (2026-04-04 to 2026-10-24):
+
+* Before a run that followed 16 h or more without one, the return
+  probe read a median **6.9 degF** above the heater's air, and it
+  followed that air with a slope of 0.95 (49 runs).
+* A run within an hour of the last took a median **1,583 BTU**; one
+  after 8 h or more, **3,223 BTU**.
+* Fitted together, the return rests **7.84 degF** above the air and the
+  warmed pipe cools back to that on **0.46 h**.
+* The longest runs never brought hot water back: after 16 to 20 gal,
+  the return still read 17 to 38 degF under the tank's upper probe.
+  The fitted volume (19.4 gal) is therefore above the typical 4 minute
+  run (5.9 gal), and a run takes heat as long as it runs.
+
 The fitted volume of the same loop grew between two measurements:
 
 * **August.** Measured from the loop's flow and the difference between

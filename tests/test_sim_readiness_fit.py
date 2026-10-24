@@ -193,6 +193,42 @@ class TestCirculationFits:
         # Every run saturated far past the bounds: unconstrained.
         assert cal.fit_displaced_gal(self._runs(40.0)) is None
 
+    def test_the_return_terms_are_found_together(self) -> None:
+        rng = np.random.default_rng(5)
+        runs = []
+        for k in range(60):
+            minutes = float(rng.uniform(2, 12))
+            flow = float(rng.uniform(1.0, 2.2))
+            rest = float(rng.choice([0.2, 0.5, 1.0, 3.0, 12.0]))
+            air = float(rng.uniform(60, 85))
+            start = T0 + timedelta(hours=6 * k)
+            btu = cal.run_heat_btu(
+                minutes,
+                130.0,
+                air,
+                10.0,
+                flow,
+                rest_offset_f=7.0,
+                rest_h=rest,
+                cool_tau_h=0.5,
+            )
+            runs.append(
+                cal.MeasuredRun(
+                    start=start,
+                    end=start + timedelta(minutes=minutes),
+                    minutes=minutes,
+                    btu=btu,
+                    flow_gpm=flow,
+                    upper_f=130.0,
+                    air_f=air,
+                    rest_h=rest,
+                )
+            )
+        got = cal.fit_return(runs)
+        assert got is not None
+        assert got == pytest.approx((10.0, 7.0, 0.5), rel=0.02)
+        assert cal.fit_return(runs[:10]) is None
+
     def test_the_recent_flow_and_the_lookup(self) -> None:
         runs = self._runs(6.0)
         until = runs[-1].start
@@ -223,6 +259,15 @@ class TestCirculationFits:
         assert r.btu == pytest.approx(2.0 * 60 * 8.34 * 15.0 * 10 / 60)
         assert (r.flow_gpm, r.air_f) == (2.0, 66.0)
         assert r.upper_f is None  # no upper reading inside the run
+        assert r.rest_h is None  # no run before it
+        later = [a + timedelta(hours=2, seconds=30 * i) for i in range(5)]
+        both = cal.measure_runs(
+            running + later,
+            flow=[(t, 2.0) for t in running + later],
+            return_f=[(t, 115.0) for t in running + later],
+            upper_f=[(a - timedelta(minutes=1), 130.0)],
+        )
+        assert both[1].rest_h == pytest.approx(110 / 60)
         assert (
             cal.measure_runs(
                 running,

@@ -682,20 +682,20 @@ class TestMeteredPricing:
         p = site_example_params()
         w = cal.metered_withdrawn(p)
         drawn = w(self._row(draw_gal=10.0, draw_t_upper=130.0))
-        run = w(self._row(circulation_runs=((10.0, 130.0),)))
+        run = w(self._row(circulation_runs=((10.0, 130.0, None),)))
         assert drawn is not None and drawn > 0
         assert run is not None and run > 0
         both = w(
             self._row(
                 draw_gal=10.0,
                 draw_t_upper=130.0,
-                circulation_runs=((10.0, 130.0),),
+                circulation_runs=((10.0, 130.0, None),),
             )
         )
         assert both == pytest.approx(drawn + run)
         # Circulation without the installation's terms is unpriceable.
         bare = cal.metered_withdrawn(replace(p, circulation=None))
-        assert bare(self._row(circulation_runs=((10.0, 130.0),))) is None
+        assert bare(self._row(circulation_runs=((10.0, 130.0, None),))) is None
         lead = cal.metered_lead(p)
         assert cast(float, lead(self._row(draw_lead_gal=4.0))) > 0
         assert lead(self._row()) == 0.0
@@ -707,7 +707,7 @@ class TestMeteredPricing:
 
         p = site_example_params()
         row = self._row(
-            circulation_runs=((2.0, 135.0),),
+            circulation_runs=((2.0, 135.0, None),),
             start_time=pd.Timestamp("2026-07-10", tz="UTC"),
         )
         today = cal.metered_withdrawn(p)(row)
@@ -727,7 +727,7 @@ class TestMeteredPricing:
         rows = cal.snapshots(h, draws=draws, circulation=runs)
         row = next(rows.loc[rows.offset_minutes == 0].itertuples())
         assert row.draw_gal == 3.0 and row.draw_lead_gal == 2.0
-        assert row.circulation_runs == ((10.0, 135.0),)
+        assert row.circulation_runs == ((10.0, 135.0, None),)
         plain = cal.snapshots(h)
         assert plain.draw_gal.isna().all()
 
