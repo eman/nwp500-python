@@ -188,7 +188,7 @@ def test_without_a_valve_every_gallon_is_tank_water() -> None:
         ("draw", "inlet_temp_f", INSTALLATION),
         ("draw", "delivery_slope", INSTALLATION),
         ("book", "empty_btu", INSTALLATION),
-        ("readiness", "delivered_lag_gal", INSTALLATION),
+        ("readiness", "delivered_lag_gal", HEATER),
     ],
 )
 def test_each_parameter_says_what_it_describes(

@@ -8,6 +8,14 @@ Unreleased
 Fixed
 -----
 
+- **The outlet lag is the tank's.** ``ReadinessParams.delivered_lag_gal``
+  (5 gal) was described as mostly the pipe to the fixture. Both bath
+  figures behind it, 7.3 gal at the tub spout and 5.3 at the valve
+  outlet, were taken net of the pipe to each thermometer, and they
+  differ by calibration, not place. The lag is the tank water above the
+  upper probe, and the field is now labelled the heater's. The value is
+  unchanged. See :doc:`/reference/simulator-inputs`.
+
 - **The draw windows' reach rests on the record.** ``HEATER_DRAW_REACH``
   stays 60 minutes. Its reason was that a draw "can come that much
   earlier than any the forecast has seen", which nothing measured. On 44

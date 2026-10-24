@@ -10,8 +10,8 @@ before the **delivered** water falls below the line
 against the upper probe: the empty point is the heat left when it
 crossed, the evidence is draws it saw finish above the line. But the
 probe is not at the tap. The cold front rises from the bottom, so it
-reaches the probe first, and the water above the probe, and in the pipe
-to the fixture, still leaves hot: the delivered water crosses the line
+reaches the probe first, and the tank water above the probe still
+leaves hot: the delivered water crosses the line
 ``delivered_lag_gal`` gallons after the probe does. So the delivered
 answer is the probe line's plus the lag while the probe line has water
 left, and from the book, once it is spent, the lag less the gallons
