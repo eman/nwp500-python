@@ -147,12 +147,17 @@ def _lower_at(
         if not t0 <= at <= t1:
             continue
         cur_t, cur = t0, lower0
+        next_t, nxt = t1, lower1
         for d in sorted(impulses, key=lambda i: i.at):
             if t0 <= d.at <= at:
                 cur_t, cur = d.at, _lower_after(trajectory, d)
-        if at == cur_t or t1 == cur_t:
+            elif at < d.at <= t1:
+                # The coast runs to the next drop's start.
+                next_t, nxt = d.at, d.lower_before
+                break
+        if at == cur_t or next_t == cur_t:
             return cur
-        return cur + (lower1 - cur) * ((at - cur_t) / (t1 - cur_t))
+        return cur + (nxt - cur) * ((at - cur_t) / (next_t - cur_t))
     return trajectory[-1][2]
 
 

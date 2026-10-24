@@ -362,6 +362,20 @@ class TestTheCompressor:
         assert ahead is not None
         assert ahead.trigger_at == at(20) + (at(30) - at(20)) * (2.1 / 4.0)
 
+    def test_the_lower_zone_between_drops_runs_to_the_next_drops_start(
+        self,
+    ) -> None:
+        """Read back at an upper release, the lower zone's coast runs to
+        the next drop's start, as ``threshold_crossing`` walks it: the
+        crossing stays where the coast put it."""
+        coast = [(T0, 119.0, 106.0), (at(20), 118.8, 106.0)]
+        drops = [Impulse(at(10), 104.0, 103.0)]
+        ahead, _ = trigger_ahead(
+            fresh(setpoint=120.2), settings(), P, coast, drops, T0
+        )
+        assert ahead is not None
+        assert ahead.trigger_at == T0 + (at(10) - T0) * (1.1 / 2.0)
+
     def test_the_upper_zone_short_in_a_window_starts_it(self) -> None:
         """Inside a window the heater starts when the upper
         zone is more than 14.4 °F short of the setpoint: 17 of 17
