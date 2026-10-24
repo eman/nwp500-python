@@ -492,7 +492,10 @@ class ControllerParams:
       lower is the one short. Out of ``electric`` into ``heat_pump``, 5
       of 5 so (three of them no more than 2 °F short in the upper zone,
       two at or above the setpoint there), and 0 of 2 with the lower
-      zone above it;
+      zone above it. Out of ``heat_pump`` it needs the upper zone short
+      too: Energy Saver landing at a window's close with the upper zone
+      18.7 °F above the setpoint and the lower 20.9 °F under it started
+      nothing in 9 h 56 min (2026-09-21 04:00 UTC);
     - into ``heat_pump``, the upper zone more than
       ``mode_write_starts_f`` short: 7 of 7 out of ``energy_saver``.
       With neither, 1 of 10 started;
@@ -533,8 +536,9 @@ class ControllerParams:
     #: A mode write into ``heat_pump`` starts it with the upper zone
     #: more than this short.
     mode_write_starts_f: float = field(default=2.0, metadata=_p(MEASURED, "°F"))
-    #: Any mode write into a compressor mode starts it with the lower
-    #: zone this much or more short.
+    #: A mode write into a compressor mode starts it with the lower zone
+    #: this much or more short: out of an element mode whatever the
+    #: upper zone, otherwise with the upper zone short too.
     mode_write_lower_starts_f: float = field(
         default=3.6, metadata=_p(MEASURED, "°F")
     )

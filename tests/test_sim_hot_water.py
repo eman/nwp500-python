@@ -41,6 +41,7 @@ from nwp500.sim.codec import (
     scenario_from_document,
     scenario_to_document,
 )
+from nwp500.sim.decay import Draw as DecayDraw
 from nwp500.sim.delivery import (
     EXAMPLE_EVIDENCE,
     booked_deliverable,
@@ -157,6 +158,140 @@ class TestTheBookInASimulation:
         without = simulate(s, params)
         assert min(p.upper_f for p in with_book.points) < 105.0
         assert min(p.upper_f for p in without.points) > 130.0
+
+    def test_energy_saver_starts_on_a_draw_with_a_book(
+        self, params: HeaterParams
+    ) -> None:
+        """With a book the draw is taken at its instant, outside a
+        coast; its drop still releases Energy Saver's held lower trigger
+        (2026-09-21: the upper tank over the setpoint, the lower under
+        its setting, a draw started it)."""
+        held: dict[str, Any] = {
+            "state": HeaterState(upper_f=126.0, lower_f=87.0),
+            "settings": Settings(setpoint_f=107.6, hp_lower_on_f=104.9, mode=3),
+            "history": History(
+                compressor_stopped_at=at(-8.0), heated_at=at(-8.0)
+            ),
+        }
+        s = _scenario(
+            **held, loads=Loads(draws=(Draw(at=at(1.0), gallons=5.0),))
+        )
+        book = full_tank_book(126.0, 87.0, params.book)
+        for b in (None, book):
+            heating = simulate(s, params, book=b).simulation.heating
+            assert heating and heating[0].start.at == at(1.0)
+        quiet = _scenario(**held, loads=Loads())
+        assert simulate(quiet, params, book=book).simulation.heating == []
+
+    def test_a_release_the_lockout_defers_survives_the_next_draw(
+        self, params: HeaterParams
+    ) -> None:
+        """A draw releases Energy Saver's held lower trigger inside the
+        restart lockout; the next draw, a minute on, leaves the lower
+        zone over its setting. The start still comes when the lockout
+        ends."""
+        stop = at(1.0) - timedelta(minutes=2)
+        second = at(1.0) + timedelta(minutes=1)
+
+        class SecondLeavesItWarm(TankPhysics):
+            def draw(
+                self, at: datetime, upper_f: float, lower_f: float, gal: float
+            ) -> tuple[float, float]:
+                upper, lower = super().draw(at, upper_f, lower_f, gal)
+                return (upper, 106.0) if at == second else (upper, lower)
+
+        stamps = pd.date_range(at(-2), at(30), freq="1h")
+        frame = pd.DataFrame({"ambient_f": [68.0] * len(stamps)}, index=stamps)
+        physics = SecondLeavesItWarm(
+            params,
+            frame,
+            48.0,
+            draws_on=True,
+            tau_gap_hours=params.tank.stratification_gap_tau_h,  # type: ignore[arg-type]
+        )
+        book = full_tank_book(126.0, 87.0, params.book)
+        sim = walk(
+            start=stop + timedelta(minutes=1),
+            upper_f=126.0,
+            lower_f=87.0,
+            running=False,
+            until=at(3.0),
+            setpoint_f=107.6,
+            heater=Heater(
+                hp_lower_on_f=104.9, mode="energy_saver", element=params.element
+            ),
+            physics=physics,
+            draws=[(at(1.0), 5.0), (second, 1.0)],
+            stopped_at=stop,
+            heated_at=at(-8.0),
+            controller=params.controller,
+            ledger=BookedHeatLedger(
+                book, physics.ambient.at, params.book_terms()
+            ),
+        )
+        lockout = timedelta(seconds=params.controller.restart_lockout_s)
+        assert sim.heating and sim.heating[0].start.at == stop + lockout
+
+    def test_a_release_by_circulation_in_the_lockout_survives_a_draw(
+        self, params: HeaterParams
+    ) -> None:
+        """A circulation run releases Energy Saver's held lower trigger
+        inside the restart lockout, and a draw after it leaves the lower
+        zone over its setting: the start still comes when the lockout
+        ends."""
+        stop = at(1.0) - timedelta(minutes=2)
+        draw = at(1.0) + timedelta(minutes=3)
+        runs = [
+            DecayDraw(
+                at=at(1.0),
+                gallons=2.0,
+                inflow_f=70.0,
+                until=at(1.0) + timedelta(minutes=2),
+                gpm=1.0,
+            )
+        ]
+
+        class DrawLeavesItWarm(TankPhysics):
+            def draw(
+                self, at: datetime, upper_f: float, lower_f: float, gal: float
+            ) -> tuple[float, float]:
+                upper, _ = super().draw(at, upper_f, lower_f, gal)
+                return upper, 106.0
+
+        stamps = pd.date_range(at(-2), at(30), freq="1h")
+        frame = pd.DataFrame({"ambient_f": [68.0] * len(stamps)}, index=stamps)
+        physics = DrawLeavesItWarm(
+            params,
+            frame,
+            48.0,
+            draws_on=True,
+            tau_gap_hours=params.tank.stratification_gap_tau_h,  # type: ignore[arg-type]
+            flowing_draws=lambda a, b: [
+                r for r in runs if r.at < b and (r.until or r.at) > a
+            ],
+        )
+        book = full_tank_book(126.0, 87.0, params.book)
+        sim = walk(
+            start=stop + timedelta(minutes=1),
+            upper_f=126.0,
+            lower_f=87.0,
+            running=False,
+            until=at(3.0),
+            setpoint_f=107.6,
+            heater=Heater(
+                hp_lower_on_f=104.9, mode="energy_saver", element=params.element
+            ),
+            physics=physics,
+            draws=[(draw, 1.0)],
+            stopped_at=stop,
+            heated_at=at(-8.0),
+            controller=params.controller,
+            ledger=BookedHeatLedger(
+                book, physics.ambient.at, params.book_terms()
+            ),
+        )
+        lockout = timedelta(seconds=params.controller.restart_lockout_s)
+        assert sim.heating and sim.heating[0].start.at == stop + lockout
 
     def test_a_draw_moves_the_lower_zone_at_once_as_without_one(
         self, params: HeaterParams

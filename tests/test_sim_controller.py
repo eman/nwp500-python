@@ -67,6 +67,7 @@ from nwp500.sim.controller import (
     upper_on_crossing,
     wake_times,
 )
+from nwp500.sim.decay import Impulse
 from nwp500.sim.params import ControllerParams, ElementParams
 from nwp500.sim.physics.element import HeaterMode
 from nwp500.sim.tank_physics import Point
@@ -290,24 +291,90 @@ class TestTheCompressor:
     ) -> None:
         """A device test on 2026-10-03: the hold-off entry left the upper
         zone 14.04 °F above a 120.2 °F setpoint, the lower zone fell to
-        99.5 °F, and nothing started, in heat_pump. Energy Saver is not
-        held: on 2026-09-21 it started with the upper zone about 9 °F
-        above a 107.6 °F setpoint."""
+        99.5 °F, and nothing started, in heat_pump. Energy Saver held a
+        lower zone 18 °F under its setting for 9 h 54 min with the upper
+        zone above a 107.6 °F setpoint, and a circulation run's drop
+        started it (2026-09-21)."""
         coast = [(T0, 134.2, 106.0), (at(10), 134.0, 99.5)]
-        ahead, found = trigger_ahead(
-            fresh(setpoint=120.2), settings(), P, coast, [], T0
+        drop = [Impulse(at(20), 99.4, 95.0)]
+        longer = [*coast, (at(30), 133.8, 95.0)]
+        for mode in ("heat_pump", "energy_saver"):
+            ahead, found = trigger_ahead(
+                fresh(setpoint=120.2, mode=mode), settings(), P, coast, [], T0
+            )
+            assert ahead is None
+            assert found == (LOWER_TRIGGER_HELD,)
+        ahead, _ = trigger_ahead(
+            fresh(setpoint=120.2), settings(), P, longer, drop, T0
         )
         assert ahead is None
-        assert found == (LOWER_TRIGGER_HELD,)
+        ahead, _ = trigger_ahead(
+            fresh(setpoint=120.2, mode="energy_saver"),
+            settings(),
+            P,
+            longer,
+            drop,
+            T0,
+        )
+        assert ahead is not None and ahead.trigger == "lower"
+        assert ahead.trigger_at == at(20)
+
+    @pytest.mark.parametrize(
+        ("before", "after", "starts"),
+        [(108.0, 107.0, False), (108.0, 103.0, True), (103.0, 103.0, False)],
+    )
+    def test_energy_saver_starts_on_a_drop_landing_under_its_setting(
+        self, before: float, after: float, starts: bool
+    ) -> None:
+        """A lower zone the gap's relaxation warmed past the setting is
+        not released by a drop that leaves it there, nor one under it by
+        a draw that moved the upper zone alone."""
+        coast = [(T0, 134.2, 104.0), (at(10), 134.0, before)]
+        coast += [(at(20), 133.8, after)]
+        drop = [Impulse(at(15), before, after)]
         ahead, _ = trigger_ahead(
             fresh(setpoint=120.2, mode="energy_saver"),
             settings(),
             P,
             coast,
-            [],
+            drop,
             T0,
         )
-        assert ahead is not None and ahead.trigger == "lower"
+        assert (ahead is not None and ahead.trigger_at == at(15)) is starts
+
+    def test_a_held_lower_trigger_the_lower_zone_warmed_out_of_waits(
+        self,
+    ) -> None:
+        """The upper zone falls below the setpoint after the lower zone
+        has warmed back over its setting: the lower trigger alone
+        decides from there."""
+        coast = [(T0, 134.2, 104.0), (at(10), 121.0, 108.0)]
+        coast += [(at(20), 119.0, 107.0)]
+        drop = [Impulse(at(15), 108.0, 107.0)]
+        ahead, _ = trigger_ahead(
+            fresh(setpoint=120.2), settings(), P, coast, drop, T0
+        )
+        assert ahead is None
+        coast += [(at(30), 118.8, 103.0)]
+        ahead, _ = trigger_ahead(
+            fresh(setpoint=120.2), settings(), P, coast, drop, T0
+        )
+        assert ahead is not None
+        assert ahead.trigger_at == at(20) + (at(30) - at(20)) * (2.1 / 4.0)
+
+    def test_the_lower_zone_between_drops_runs_to_the_next_drops_start(
+        self,
+    ) -> None:
+        """Read back at an upper release, the lower zone's coast runs to
+        the next drop's start, as ``threshold_crossing`` walks it: the
+        crossing stays where the coast put it."""
+        coast = [(T0, 119.0, 106.0), (at(20), 118.8, 106.0)]
+        drops = [Impulse(at(10), 104.0, 103.0)]
+        ahead, _ = trigger_ahead(
+            fresh(setpoint=120.2), settings(), P, coast, drops, T0
+        )
+        assert ahead is not None
+        assert ahead.trigger_at == T0 + (at(10) - T0) * (1.1 / 2.0)
 
     def test_the_upper_zone_short_in_a_window_starts_it(self) -> None:
         """Inside a window the heater starts when the upper
@@ -706,7 +773,8 @@ class TestModeWrites:
         setpoint does (the reservation spec's
         ``entry_mode_in_tou_window: held`` and its device test of it; a
         device run at 02:15 UTC on 2026-09-20): held to the window's
-        close, and charged a start (the owner's rule)."""
+        close. Its start is judged as a write in the window is: the upper
+        zone here is 5 °F short."""
         s = settings(windows=[WINDOW])
         st, acts = step(
             fresh(),
@@ -797,6 +865,43 @@ class TestModeWrites:
         assert st.mode.held is None
         assert st.mode.commanded == "heat_pump"
 
+    @pytest.mark.parametrize("upper", [137.6, 167.5])
+    def test_a_held_write_starts_only_as_a_window_write_would(
+        self, upper: float
+    ) -> None:
+        """Two held Energy Saver writes, the upper zone 2.4 °F short and
+        27.5 °F above the setpoint, started nothing for hours
+        (2026-09-21 00:48 and 23:24 UTC)."""
+        st, acts = step(
+            fresh(),
+            ModeWrite(
+                at=T0, tank=tank(upper, 120), mode="energy_saver", owner="raw"
+            ),
+            settings(windows=[WINDOW]),
+        )
+        assert st.mode.held is not None
+        assert st.compressor.pending is None
+        assert "mode_write_start_projected" not in notes(acts)
+
+    def test_a_landing_over_the_setpoint_starts_nothing(self) -> None:
+        """Energy Saver landing at a window's close with the upper zone
+        18.7 °F above a 107.6 °F setpoint and the lower 20.9 °F under
+        it started nothing in 9 h 56 min (2026-09-21 04:00 UTC)."""
+        s = settings(windows=[WINDOW])
+        st, _ = step(
+            fresh(setpoint=107.6),
+            ModeWrite(
+                at=T0, tank=tank(126.3, 86.7), mode="energy_saver", owner="raw"
+            ),
+            s,
+        )
+        st, acts = step(
+            st, WindowCloses(at=WINDOW[1], tank=tank(126.3, 86.7)), s
+        )
+        assert st.mode.in_force == "energy_saver"
+        assert st.compressor.pending is None
+        assert of(acts, StartCompressor) == []
+
     def test_a_held_mode_lands_as_its_window_closes(self) -> None:
         """A held entry lands as its window ends (the reservation
         spec's device test saw its entry land as its window ended)."""
@@ -848,9 +953,12 @@ class TestModeWrites:
     @pytest.mark.parametrize(
         ("previous", "mode", "upper", "lower", "starts"),
         [
-            # The lower zone 3.6 °F short: 19 of 19 into a compressor
-            # mode, whatever the upper zone.
-            ("heat_pump", "energy_saver", 141.0, 136.4, True),
+            # The lower zone 3.6 °F short: 19 of 19 out of an element
+            # mode, whatever the upper zone; out of heat_pump with the
+            # upper zone above the setpoint, 0 of 1 (2026-09-21).
+            ("electric", "heat_pump", 141.0, 136.4, True),
+            ("heat_pump", "energy_saver", 141.0, 136.4, False),
+            ("heat_pump", "energy_saver", 139.8, 136.4, True),
             # Into heat_pump, the upper zone more than 2 °F short: 7 of
             # 7 out of Energy Saver; with neither, 1 of 10.
             ("energy_saver", "heat_pump", 137.9, 139.0, True),
@@ -1197,7 +1305,7 @@ def test_the_controller_wakes_at_its_own_instants() -> None:
         fresh(),
         EntryFires(
             at=T0,
-            tank=tank(138.0, 139.0),
+            tank=tank(130.0, 129.0),
             setpoint_f=140.0,
             mode="energy_saver",
         ),

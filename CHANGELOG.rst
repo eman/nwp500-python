@@ -8,6 +8,31 @@ Unreleased
 Fixed
 -----
 
+- **A held mode landing over the setpoint starts nothing.** On
+  2026-09-21 Energy Saver, held through a TOU window, landed at its
+  close with the upper tank 18.7 °F above a 107.6 °F setpoint and the
+  lower tank 20.9 °F under it. Nothing started for 9 h 56 min, and the
+  start came 2 min 17 s into a circulation run. The simulation started
+  the compressor at the landing, and again on the lower trigger, since
+  it treated Energy Saver's trigger as a plain level test. Three rules
+  change:
+
+  - A mode write starts the compressor on a short lower tank
+    (``mode_write_lower_starts_f``) out of an element mode whatever the
+    upper tank, as before (19 of 19), and otherwise only with the upper
+    tank short too.
+  - Energy Saver holds the lower trigger while the upper tank is at or
+    above the setpoint, as Heat Pump does, and a draw's drop under the
+    setting starts it. ``tou_triggers.LOWER_HOLD_MODE`` is now
+    ``LOWER_HOLD_MODES``, and ``autonomous_start`` takes
+    ``drop_starts``.
+  - A mode write held in a window is judged as a write in the window is
+    (``window_write_starts_f``). Before, it always charged a start. Two
+    held Energy Saver writes with the compressor off, 2.4 °F short and
+    27.5 °F over, started nothing for hours.
+
+  Documented in :doc:`/explanation/what-starts-a-recovery`.
+
 - **A recovery that ends during a draw books only what follows.** The
   book anchored at such a recovery's end and then booked the movement
   again from its start, on the premise that the probes at the anchor

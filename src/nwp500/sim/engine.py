@@ -91,6 +91,7 @@ from nwp500.sim.controller import (
     wake_times,
     window_at,
 )
+from nwp500.sim.decay import Impulse
 from nwp500.sim.extensions import (
     DrawsAhead,
     DrawTaken,
@@ -538,6 +539,10 @@ class _Engine:
         #: no bound shows a draw cannot move it, since the draw's own
         #: response is not bounded below.
         self._mixing = ledger is not None and ledger.zones.mixes
+        #: The drop of the draws ``_coast_draw`` last took at their
+        #: instant: the coast after them starts below it, so the trigger
+        #: search there is handed it (Energy Saver's release).
+        self._drop: Impulse | None = None
         #: Every draw taken so far, onset order: what the ledger prices.
         self.taken: list[Draw] = []
         #: Draws recorded before the start, for the first recovery if it
@@ -1396,12 +1401,16 @@ class _Engine:
     def _trigger_ahead(self, coast: Coast) -> ctl.Ahead | None:
         """The heater's own start on ``coast``
         (``controller.trigger_ahead``)."""
+        drop = self._drop
+        impulses = coast.impulses
+        if drop is not None and drop.at == self.t:
+            impulses = [drop, *impulses]
         ahead, notes = trigger_ahead(
             self.state,
             self.settings,
             self.params,
             [(p.at, p.upper_f, p.lower_f) for p in coast.points],
-            coast.impulses,
+            impulses,
             self.t,
         )
         self.reasons.update(notes)
@@ -1489,7 +1498,9 @@ class _Engine:
         ``_coast_until``'s own exceptions and the restart lockout), no
         Energy Saver element, and no draw the book takes the upper zone
         through (``_upper_cut``). None when something does: the caller
-        then coasts as it always did."""
+        then coasts as it always did. A trigger of its own on the coast
+        that the lockout puts at or past ``limit`` is carried as a
+        pending start."""
         coast = self._coast(limit)
         ahead = self._trigger_ahead(coast)
         if ahead is not None and ahead.starts_at < limit:
@@ -1499,6 +1510,19 @@ class _Engine:
             return None
         if self._upper_cut(coast.points, limit) is not None:
             return None
+        if ahead is not None and ahead.trigger_at <= limit:
+            # A trigger by ``limit`` that the restart lockout puts at or
+            # past it waits as a pending start, as ``_coast_until``
+            # carries one: the drop that set it (a flowing draw's, at
+            # the coast's end) is not on the coast from ``limit``.
+            self._dispatch(
+                ctl.TriggerDeferred(
+                    at=self.t,
+                    starts_at=ahead.starts_at,
+                    trigger=ahead.trigger,
+                    horizon=self.until,
+                )
+            )
         return coast
 
     def _coast_draw(self) -> None:
@@ -1512,6 +1536,8 @@ class _Engine:
             self.upper, self.lower = self.physics.draw(
                 self.t, self.upper, self.lower, gal
             )
+        if self.lower < lower:
+            self._drop = Impulse(self.t, lower, self.lower)
         self._follow_ledger(upper, lower)
         self.path.append(
             PathPoint(
@@ -1524,6 +1550,29 @@ class _Engine:
                 mode=self.mode,
             )
         )
+        if self._drop is not None and self._drop.at == self.t:
+            self._carry_release()
+
+    def _carry_release(self) -> None:
+        """A start the drop just taken calls for, inside the restart
+        lockout, waits as a pending start from now: the walk may next
+        stop at another draw, where this one's drop is no longer seen."""
+        ahead = self._trigger_ahead(
+            Coast([Point(self.t, self.upper, self.lower)])
+        )
+        if (
+            ahead is not None
+            and ahead.trigger_at == self.t
+            and ahead.starts_at > self.t
+        ):
+            self._dispatch(
+                ctl.TriggerDeferred(
+                    at=self.t,
+                    starts_at=ahead.starts_at,
+                    trigger=ahead.trigger,
+                    horizon=self.until,
+                )
+            )
 
     def _heating_now(self, until: datetime) -> list[HeatingInterval]:
         """``heating`` with the recovery and the element running now

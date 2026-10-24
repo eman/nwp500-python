@@ -836,7 +836,13 @@ def _mode_write_starts(s: _Step, mode: str, previous: str) -> bool:
     Inside a window a change to ``heat_pump`` (a dropped element mode)
     is judged as a setpoint write is there (``window_write_starts_f``):
     the one device run, a drop 9.5 °F short, started it 21-32 s later
-    (2026-09-20 01:35 UTC). The thin cases are flagged."""
+    (2026-09-20 01:35 UTC). A lower zone short of the setpoint
+    (``mode_write_lower_starts_f``) starts it out of an element mode,
+    whatever the upper zone, and otherwise only with the upper zone
+    short too: Energy Saver landing out of ``heat_pump`` at a window's
+    close, the upper zone 18.7 °F above the setpoint and the lower
+    20.9 °F under it, started nothing (2026-09-21 04:00 UTC). The thin
+    cases are flagged."""
     if s.disabled or mode not in COMPRESSOR_MODES:
         return False
     p = s.params
@@ -845,7 +851,8 @@ def _mode_write_starts(s: _Step, mode: str, previous: str) -> bool:
         if short <= p.window_write_starts_f:
             s.note("write_start_uncertain")
         return short > p.window_write_starts_f
-    if s.sp - s.lower >= p.mode_write_lower_starts_f - 1e-9:
+    lower_short = s.sp - s.lower >= p.mode_write_lower_starts_f - 1e-9
+    if lower_short and (short > 0.0 or previous in ELEMENT_MODES):
         return True
     if mode == HEAT_PUMP:
         if short <= p.mode_write_starts_f:
@@ -1070,8 +1077,7 @@ def _mode_write(
     23:24 UTC). Inside a TOU window a mode that is not the one in force
     is **held** (landing at the window's end unless withdrawn: a device
     run of 2026-09-20 02:15 UTC, and a device test whose entry landed as
-    its window ended; and charged a start in a mode that heats with the
-    compressor, an assumed rule until a device run measures it) when
+    its window ended) when
 
     - **an entry** writes it, whatever the mode
       (``docs/how-to/schedule-operation.rst``: an entry's mode does not
@@ -1086,6 +1092,12 @@ def _mode_write(
       and inside a window, five direct Electric to Heat Pump writes each
       took at once (the in-window High Demand or Electric to Heat Pump
       case of a write-response measurement: 1 of 1).
+
+    A held write into a mode that heats with the compressor starts it as
+    a write inside a window does (``window_write_starts_f``): two held
+    Energy Saver writes with the compressor off, one leaving the upper
+    zone 27.5 °F above the setpoint and one 2.4 °F short of it, started
+    nothing for hours (2026-09-21 00:48 and 23:24 UTC).
 
     In Vacation or powered off the simulation holds no rule for a write
     that leaves them: it is recorded, and takes nothing. ``afresh`` is
@@ -1111,9 +1123,9 @@ def _mode_write(
         s.modes(held=Held(mode, serves, window[1], ref))
         s.note("mode_write_held_projected")
         if (
-            mode in COMPRESSOR_MODES
-            and not s.state.compressor.running
+            not s.state.compressor.running
             and s.mode != ELECTRIC
+            and _mode_write_starts(s, mode, s.mode)
         ):
             s.note("mode_write_start_projected")
             s.pend(_write_start(s, serves))

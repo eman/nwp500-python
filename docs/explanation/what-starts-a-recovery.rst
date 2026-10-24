@@ -30,14 +30,16 @@ Summary
    * - Lower tank at its turn-on setting
      - Outside a TOU window, ``hp_lower_on_temp_setting`` read
        **104.9 degF** at every setpoint from 107.6 to 149 degF. It does
-       not follow the setpoint. In ``HEAT_PUMP`` it waits while the upper
-       tank is at or above the setpoint.
+       not follow the setpoint. In ``HEAT_PUMP`` and ``ENERGY_SAVER`` it
+       waits while the upper tank is at or above the setpoint; in
+       ``ENERGY_SAVER`` a draw's fall starts it there.
    * - A TOU window
      - ``hp_upper_on_temp_setting`` is raised to the setpoint. An upper
        tank more than **14.4 degF** short starts a cycle, at the opening
        or later in the window. The lower trigger waits for the window to
        close: it started nothing in the window, and every close with the
-       lower tank below its setting started the compressor (9 of 9).
+       lower tank below its setting and the upper tank short started the
+       compressor (11 of 11).
    * - A setpoint write
      - Outside a TOU window, a write that leaves the upper tank below the
        new setpoint started the compressor in **120 of 122** writes held
@@ -105,8 +107,10 @@ From every heat-pump start since 2026-04-08:
   close. The other six started early for other reasons: the upper trigger
   twice, a mode write ending ``VACATION`` twice, and a device test twice.
   The lower tank itself never started the heater inside the window. All
-  9 closes with the lower tank still below its setting started the
-  compressor at once.
+  11 closes to 2026-10-24 with the lower tank still below its setting
+  and the upper tank short of the setpoint started the compressor at
+  once. The one close with the upper tank above the setpoint, 18.7 degF
+  over on 2026-09-20, started nothing (below).
 
 **"Upper tank below** ``hp_upper_on_temp_setting`` **" is a condition,
 not a predictor.** In-window that setting equals the setpoint, so the
@@ -268,7 +272,7 @@ Lowering the setpoint
   trigger both explain it. An Energy Saver command was also outstanding
   throughout (see :ref:`reservations and mode writes during a tou
   window`), so the device's effective mode is uncertain.
-* **A start driven by a draw, no.** On 2026-09-21, with the setpoint still
+* **A draw started it in** ``ENERGY_SAVER``. On 2026-09-21, with the setpoint still
   107.6 degF, a recirculation-pump run on a cooled loop (a draw on the
   tank) took the lower zone from 88 to 84 degF between 06:54 and 06:56.
   The heat pump started at 06:55:55, with the lower zone at 86.2 degF. The
@@ -283,12 +287,13 @@ Lowering the setpoint
   the upper tank short, started within 30 s. On 2026-10-05, with no draw,
   the same entry held the compressor off for 3 h 59 min. The entries that
   restored the setpoint started it within 40 s.
-* **A lower zone that is merely low does not always start it.** Before
-  that pump run, the lower zone had sat near 87 degF for about 10 hours,
-  below its 104.9 degF setting, without a start, also in
-  ``ENERGY_SAVER``. A further fall did start one. The rule is therefore
-  not a simple level test on the lower probe. This is one observation,
-  and the mechanism is not established.
+* **In** ``ENERGY_SAVER`` **the lower trigger also waits while the upper
+  tank is at or above the setpoint, and a draw releases it.** Before
+  that pump run, the lower zone had sat near 87 degF for 9 h 54 min,
+  18 degF below its 104.9 degF setting, with the upper tank 11 to
+  19 degF above the setpoint, and nothing started. The held Energy Saver
+  landing at 21:00 started nothing either. The pump run's fall did start
+  it. This is one evening.
 
 To hold the heater off with the setpoint, put it **at or below the upper
 tank**: outside a window, none of 15 such lowerings started the
