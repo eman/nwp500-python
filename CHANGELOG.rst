@@ -8,6 +8,13 @@ Unreleased
 Fixed
 -----
 
+- **The draw windows' reach rests on the record.** ``HEATER_DRAW_REACH``
+  stays 60 minutes. Its reason was that a draw "can come that much
+  earlier than any the forecast has seen", which nothing measured. On 44
+  complete forecast issues (98 long draws), 60 minutes covered 94.9% of
+  long draws and 30 minutes 89.8%; the five covered only at 60 fell
+  either side of a 30-minute window. See :doc:`/how-to/simulate-heater`.
+
 - **The 50 and 80 gal models are scaled by rated storage.** Their tank
   volume, the book's count of it and its empty point were scaled from
   the 65's by nominal size (48.6 and 77.8 gal). The manual's

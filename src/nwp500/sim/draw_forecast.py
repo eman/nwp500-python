@@ -42,7 +42,14 @@ WEEKLY_ISSUE_SPAN = timedelta(days=7) - SLOT
 #: ``HEATER_DRAW_RATE``; qualifying slots ``HEATER_DRAW_GAP`` apart
 #: are one window, cut into pieces of ``HEATER_DRAW_LONGEST`` (the worst
 #: case asks the tank for a window's whole volume at its onset, which an
-#: uncut diffuse day could not meet).
+#: uncut diffuse day could not meet). On one installation's 44 complete
+#: issues (2026-09-11 to 10-24, 98 long draws), a 60-minute reach
+#: covered 94.9% of the long draws that came while each issue was the
+#: newest, against 89.8% at 30 minutes. Five draws were covered only
+#: at 60, none only at 30, and both covered 95.2% of each day's first.
+#: Of the five, three came 2 to 18 minutes before a 30-minute window
+#: opened and two 13 to 28 minutes after one closed. The windows took
+#: 14.7 hours a day, against 11.6.
 HEATER_DRAW_RATE = 0.05
 HEATER_DRAW_REACH = timedelta(minutes=60)
 HEATER_DRAW_GAP = timedelta(minutes=30)
@@ -287,12 +294,13 @@ def heater_draw_windows(
 ) -> list[ForecastWindow]:
     """The heater's draw windows: every likely long draw (module
     constants). A window opens up to ``reach`` before its first
-    expected draw, a draw can come that much earlier than any the
-    forecast has seen, and takes in every slot with a rate within
-    ``reach`` of either end; overlapping windows merge, and a long one
-    is cut into ``longest`` pieces (a last piece expecting no draw
-    joins the one before). None of the long rates published: no
-    windows, which is unknown, not none."""
+    expected draw and closes up to ``reach`` after its last, since long
+    draws come that far either side of the slots that expect them, and
+    takes in every slot with a rate within ``reach`` of either end;
+    overlapping windows merge, and a long one is cut into ``longest``
+    pieces (a last piece expecting no draw joins the one before). None
+    of the long rates published: no windows, which is unknown, not
+    none."""
     if not any(_rate(s) is not None for s in slots):
         return []
     slots = sorted(slots, key=lambda s: s.valid_at)
