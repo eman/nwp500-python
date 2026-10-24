@@ -8,6 +8,24 @@ Unreleased
 Fixed
 -----
 
+- **The evaporator moves 0.6 °F per °F of air, not one for one.** The
+  compressor's physics held the evaporator a fixed approach below the
+  air, so its capacity followed the air too closely. Over 377
+  compressor runs at one installation, the coil read 6.7 + 0.596 × the
+  air beside the heater (air 48-86 °F), and a free fit on 142 recorded
+  recoveries' durations chose a slope of 0.62. With the coil's slope and
+  the compressor constant and approach refit (0.0499 and 18.69 °F at
+  65 °F air), the 35 recoveries held out came out 32.0 min off on
+  average, against 34.2 for the fixed approach refit on the same split
+  and 36.5 as shipped. The bias below 60 °F air went from +14.3 to
+  +4.4 min, and above 75 °F from -7.6 to +3.5. The coil's live reading
+  (``active_cycle``'s ``evaporator_f``) now sits in the same frame: as
+  the evaporator it fits with an offset of 0.0 °F. Added:
+  ``CompressorParams.evap_air_slope`` (1, a fixed approach, for a
+  document without it) and ``physics.compressor.evaporator_f`` and
+  ``EVAP_REF_AIR_F``. ``evap_approach_f`` is now the approach at 65 °F
+  air.
+
 - **The heat book converts gallons at the mains, not the pipe at
   rest.** A book built from a record converted its heat to gallons at
   the inlet probe's median over the last 3 hours. At rest the probe

@@ -5,7 +5,8 @@ integrating the lower-zone temperature at 10-second steps until the
 lower thermostat setpoint is reached.
 
 The free parameters, ``compressor_constant`` (absorbs V_disp × N_RPM ×
-η_motor) and ``evap_approach_f`` (T_amb − T_evap at the coil), are fit
+η_motor) and ``evap_approach_f`` (T_amb − T_evap at the coil at 65 °F
+air; the coil moves ``CompressorParams.evap_air_slope`` per °F), are fit
 over the full training corpus by a calibration outside this package,
 which passes them in.
 """
@@ -104,6 +105,22 @@ class PhysicsPath:
     input_btu: tuple[float, ...]
 
 
+#: The air ``evap_approach_f`` is quoted at, °F.
+EVAP_REF_AIR_F = 65.0
+
+
+def evaporator_f(t_amb: float, approach_f: float, air_slope: float) -> float:
+    """The evaporating temperature in air ``t_amb``, °F: ``approach_f``
+    below the air at ``EVAP_REF_AIR_F``, moving ``air_slope`` °F per °F
+    of air. At one installation the NWP500's coil read
+    6.7 + 0.596 · air over 377 runs (15 min or more in, air 48-86 °F),
+    and a free fit on 142 recorded recoveries' durations chose a slope of
+    0.62. With the coil's slope and K and the approach refit, the 35
+    recoveries held out ran 32.0 min off on average, against 34.2 for a
+    fixed approach refit on the same ones."""
+    return t_amb - approach_f - (1.0 - air_slope) * (t_amb - EVAP_REF_AIR_F)
+
+
 @dataclass(frozen=True)
 class PhysicsResult:
     """A physics estimate and whether the integrator finished.
@@ -154,9 +171,10 @@ def predict_physics_detailed(
     Integrates the lower-zone tank temperature at ``_DT_SECONDS``-second
     steps.  Each step:
 
-    1. Compute evaporator temperature: T_evap = T_amb − evap_approach_f
-       (or use ``t_evap_override`` directly when the live coil temperature
-       is available mid-cycle)
+    1. Compute evaporator temperature (``evaporator_f``) from the air,
+       ``evap_approach_f`` and ``compressor.evap_air_slope`` (or use
+       ``t_evap_override`` directly when the live coil temperature is
+       available mid-cycle)
     2. Look up R-134a saturation properties at T_evap
     3. Compute condenser temperature: T_cond ≈ T_lower + cond_approach_f
     4. Compute pressure ratio r_p = P_cond / P_evap
@@ -178,13 +196,13 @@ def predict_physics_detailed(
         compressor_constant: Calibrated K = V_disp × N_RPM × η_motor (ft³/s).
             Use 0.0 to signal uncalibrated (returns NaN).
         evap_approach_f: T_amb − T_evap temperature approach at the
-            evaporator coil (°F).  Fitted, not measured, and it absorbs
-            structural error besides the coil's: 10-15 °F holds for
-            winter-only fits, and an all-season fit with compression
-            work lands near 18 °F.  Ignored when ``t_evap_override`` is
-            supplied.
+            evaporator coil with the air at ``EVAP_REF_AIR_F`` (°F),
+            moving with the air by ``compressor.evap_air_slope``
+            (``evaporator_f``).  Fitted on durations.  Ignored when
+            ``t_evap_override`` is supplied.
         compressor: The cycle's fixed constants (``cond_approach_f``,
-            ``clearance_ratio``, ``polytropic_exp``, ``fan_airflow_cfm``).
+            ``clearance_ratio``, ``polytropic_exp``, ``fan_airflow_cfm``,
+            ``evap_air_slope``).
             Its fitted pair and two-zone flag are not read: they are the
             arguments above and below, which calibration searches over.
         loss: Supplies ``ua_baseline_btu_hr_f``, the UA used when
@@ -193,8 +211,9 @@ def predict_physics_detailed(
         h_amb_start: Ambient relative humidity at cycle start (%).
             Used to compute dew point for latent heat term.
         t_evap_override: Live evaporator coil temperature (°F).  When
-            provided, bypasses the ``T_evap = T_amb − evap_approach_f``
-            estimate.  Use for mid-cycle inference where the coil temperature
+            provided, bypasses the ``evaporator_f`` estimate (the coil's
+            reading and the fitted estimate agree to 0.0 °F on the
+            record).  Use for mid-cycle inference where the coil temperature
             is a meaningful real-time signal (compressor actively running).
         ua_btu_hr_f: Standby-loss UA (BTU/hr·°F).  Pass the calibrated
             UA estimate so the physics and decay ODEs share one
@@ -284,7 +303,7 @@ def predict_physics_detailed(
     t_evap = (
         t_evap_override
         if t_evap_override is not None
-        else t_amb - evap_approach_f
+        else evaporator_f(t_amb, evap_approach_f, compressor.evap_air_slope)
     )
     t_evap_clamped = max(0.0, min(t_evap, 100.0))
     rho_g = vapor_density(t_evap_clamped)

@@ -83,8 +83,9 @@ def _nwp500_65() -> HeaterParams:
             ua_baseline_btu_hr_f=5.0,
         ),
         compressor=CompressorParams(
-            compressor_constant=0.05140793710947029,
-            evap_approach_f=18.553854238987046,
+            compressor_constant=0.049860911532305194,
+            evap_approach_f=18.690180808762094,
+            evap_air_slope=0.596,
             two_zone=True,
             cond_approach_f=10.0,
             clearance_ratio=0.05,

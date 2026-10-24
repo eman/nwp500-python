@@ -813,13 +813,17 @@ the one seen over the retrains from 2026-08-08 to 2026-10-18.
        separate fit on 146 windows gave 59 h (95 % CI 47-94 h).
      - 60.0-60.4 h
    * - ``compressor.compressor_constant``, ``compressor.evap_approach_f``
-     - 0.0514, 18.55 degF
-     - 162 recoveries, in time order; mean absolute error 29.3 min on
-       them and 38.6 min on the 40 that followed. The approach is a
-       fitted term, not a measured temperature: two pairs, near
-       (0.048, 12.9 degF) and (0.051, 18.6 degF), fit about equally
-       well, and retrains have landed on each.
-     - 0.047-0.052, 12.2-18.8 degF
+     - 0.0499, 18.69 degF
+     - 142 recoveries from 2026-02-18 to 09-01, with the evaporator
+       moving 0.596 degF per degF of air; mean absolute error 26.0 min
+       on them and 32.0 min on the 35 that followed.
+     - 0.047-0.052, 12.2-18.8 degF, with a fixed approach
+   * - ``compressor.evap_air_slope``
+     - 0.596
+     - The evaporator coil's reading against the air beside the heater
+       over 377 compressor runs, air 48-86 degF. A free fit on the
+       recoveries' durations chose 0.62. 1 is a fixed approach.
+     - Measured once, not refit
    * - ``power.power_scale``
      - 0.530
      - The heater's own power readings over 323 compressor cycles.
