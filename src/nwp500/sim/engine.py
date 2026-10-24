@@ -1498,7 +1498,9 @@ class _Engine:
         ``_coast_until``'s own exceptions and the restart lockout), no
         Energy Saver element, and no draw the book takes the upper zone
         through (``_upper_cut``). None when something does: the caller
-        then coasts as it always did."""
+        then coasts as it always did. A trigger of its own on the coast
+        that the lockout puts at or past ``limit`` is carried as a
+        pending start."""
         coast = self._coast(limit)
         ahead = self._trigger_ahead(coast)
         if ahead is not None and ahead.starts_at < limit:
@@ -1508,6 +1510,19 @@ class _Engine:
             return None
         if self._upper_cut(coast.points, limit) is not None:
             return None
+        if ahead is not None and ahead.trigger_at <= limit:
+            # A trigger by ``limit`` that the restart lockout puts at or
+            # past it waits as a pending start, as ``_coast_until``
+            # carries one: the drop that set it (a flowing draw's, at
+            # the coast's end) is not on the coast from ``limit``.
+            self._dispatch(
+                ctl.TriggerDeferred(
+                    at=self.t,
+                    starts_at=ahead.starts_at,
+                    trigger=ahead.trigger,
+                    horizon=self.until,
+                )
+            )
         return coast
 
     def _coast_draw(self) -> None:
