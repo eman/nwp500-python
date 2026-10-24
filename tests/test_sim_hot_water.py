@@ -158,6 +158,30 @@ class TestTheBookInASimulation:
         assert min(p.upper_f for p in with_book.points) < 105.0
         assert min(p.upper_f for p in without.points) > 130.0
 
+    def test_energy_saver_starts_on_a_draw_with_a_book(
+        self, params: HeaterParams
+    ) -> None:
+        """With a book the draw is taken at its instant, outside a
+        coast; its drop still releases Energy Saver's held lower trigger
+        (2026-09-21: the upper tank over the setpoint, the lower under
+        its setting, a draw started it)."""
+        held: dict[str, Any] = {
+            "state": HeaterState(upper_f=126.0, lower_f=87.0),
+            "settings": Settings(setpoint_f=107.6, hp_lower_on_f=104.9, mode=3),
+            "history": History(
+                compressor_stopped_at=at(-8.0), heated_at=at(-8.0)
+            ),
+        }
+        s = _scenario(
+            **held, loads=Loads(draws=(Draw(at=at(1.0), gallons=5.0),))
+        )
+        book = full_tank_book(126.0, 87.0, params.book)
+        for b in (None, book):
+            heating = simulate(s, params, book=b).simulation.heating
+            assert heating and heating[0].start.at == at(1.0)
+        quiet = _scenario(**held, loads=Loads())
+        assert simulate(quiet, params, book=book).simulation.heating == []
+
     def test_a_draw_moves_the_lower_zone_at_once_as_without_one(
         self, params: HeaterParams
     ) -> None:

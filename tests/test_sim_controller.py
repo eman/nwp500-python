@@ -319,6 +319,27 @@ class TestTheCompressor:
         assert ahead is not None and ahead.trigger == "lower"
         assert ahead.trigger_at == at(20)
 
+    @pytest.mark.parametrize(
+        ("after", "starts"), [(107.0, False), (103.0, True)]
+    )
+    def test_energy_saver_starts_on_a_drop_landing_under_its_setting(
+        self, after: float, starts: bool
+    ) -> None:
+        """A lower zone the gap's relaxation warmed past the setting is
+        not released by a drop that leaves it there."""
+        coast = [(T0, 134.2, 104.0), (at(10), 134.0, 108.0)]
+        coast += [(at(20), 133.8, after)]
+        drop = [Impulse(at(15), 108.0, after)]
+        ahead, _ = trigger_ahead(
+            fresh(setpoint=120.2, mode="energy_saver"),
+            settings(),
+            P,
+            coast,
+            drop,
+            T0,
+        )
+        assert (ahead is not None and ahead.trigger_at == at(15)) is starts
+
     def test_the_upper_zone_short_in_a_window_starts_it(self) -> None:
         """Inside a window the heater starts when the upper
         zone is more than 14.4 °F short of the setpoint: 17 of 17

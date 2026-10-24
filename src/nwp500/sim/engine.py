@@ -91,6 +91,7 @@ from nwp500.sim.controller import (
     wake_times,
     window_at,
 )
+from nwp500.sim.decay import Impulse
 from nwp500.sim.extensions import (
     DrawsAhead,
     DrawTaken,
@@ -538,6 +539,10 @@ class _Engine:
         #: no bound shows a draw cannot move it, since the draw's own
         #: response is not bounded below.
         self._mixing = ledger is not None and ledger.zones.mixes
+        #: The drop of the draws ``_coast_draw`` last took at their
+        #: instant: the coast after them starts below it, so the trigger
+        #: search there is handed it (Energy Saver's release).
+        self._drop: Impulse | None = None
         #: Every draw taken so far, onset order: what the ledger prices.
         self.taken: list[Draw] = []
         #: Draws recorded before the start, for the first recovery if it
@@ -1396,12 +1401,16 @@ class _Engine:
     def _trigger_ahead(self, coast: Coast) -> ctl.Ahead | None:
         """The heater's own start on ``coast``
         (``controller.trigger_ahead``)."""
+        drop = self._drop
+        impulses = coast.impulses
+        if drop is not None and drop.at == self.t:
+            impulses = [drop, *impulses]
         ahead, notes = trigger_ahead(
             self.state,
             self.settings,
             self.params,
             [(p.at, p.upper_f, p.lower_f) for p in coast.points],
-            coast.impulses,
+            impulses,
             self.t,
         )
         self.reasons.update(notes)
@@ -1512,6 +1521,8 @@ class _Engine:
             self.upper, self.lower = self.physics.draw(
                 self.t, self.upper, self.lower, gal
             )
+        if self.lower < lower:
+            self._drop = Impulse(self.t, lower, self.lower)
         self._follow_ledger(upper, lower)
         self.path.append(
             PathPoint(

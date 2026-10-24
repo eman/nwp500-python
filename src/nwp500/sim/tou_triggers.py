@@ -124,6 +124,18 @@ def _upper_at(
     return None
 
 
+def _lower_after(
+    trajectory: Sequence[tuple[datetime, float, float]], drop: Impulse
+) -> float:
+    """The lower tank just after ``drop``: its own value, else the
+    trajectory's at its instant (``Impulse``), else just before it."""
+    if drop.lower_after is not None:
+        return drop.lower_after
+    return next(
+        (lo for t, _, lo in trajectory if t == drop.at), drop.lower_before
+    )
+
+
 def _upper_crossing(
     trajectory: Sequence[tuple[datetime, float, float]],
     line: float,
@@ -227,10 +239,17 @@ def autonomous_start(
             trajectory, setpoint_f, drops, crossed, end + _INSTANT
         )
         if drop_starts:
-            # In a coast the lower tank only falls, so a drop after
-            # the crossing lands under the setting.
+            # The gap's relaxation can warm the lower tank after the
+            # crossing: a drop releases it only landing under the
+            # setting.
             dropped = min(
-                (d.at for d in drops if d.at >= crossed), default=None
+                (
+                    d.at
+                    for d in drops
+                    if d.at >= crossed
+                    and _lower_after(trajectory, d) < hp_lower_on
+                ),
+                default=None,
             )
             if dropped is not None and (lower_at is None or dropped < lower_at):
                 lower_at = dropped
