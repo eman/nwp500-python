@@ -48,7 +48,10 @@ or not, with the lag on it: never less than ``delivered_lag_gal``.
 Against one installation's book over a month, less ``full_hidden_gal``
 it read above the book in 11 of 2,689 answers, all post-draw tanks at
 rest, by at most 3.6 gal; while heating, never. Heating only adds heat,
-so a floor from the probes now stays a floor.
+so a floor from the probes now stays a floor. The empty point and
+``full_hidden_gal`` were calibrated at a setpoint near 141 °F; at a lower
+one the floor is lower than the tank delivers, by an amount no
+measurement has tested.
 
 **The book is read no higher than the tank can hold**: all of it at the
 warmer probe (``book.tank_max_btu``).

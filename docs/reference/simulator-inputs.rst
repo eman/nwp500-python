@@ -997,7 +997,9 @@ The ones about inputs and parameters:
      - No book and no evidence, and the lower probe at or above the
        line: the hot water reaches at least that low, so the deliverable
        gallons are the full-tank floor from the probes, plus the lag.
-       They're never less than ``delivered_lag_gal``.
+       They're never less than ``delivered_lag_gal``. The floor was
+       calibrated at a setpoint near 141 degF; at a lower setpoint it
+       reads low, by an amount no measurement has tested.
    * - ``ambient_defaulted``
      - No usable air reading was given (``Environment.ambient_f`` missing,
        or its readings all missing), so the answer ran at the default
