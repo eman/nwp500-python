@@ -7,13 +7,8 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any, cast
 
-import pytest
-
-pytest.importorskip("numpy")
-pytest.importorskip("pandas")
-pytest.importorskip("scipy")
-
 import numpy as np
+import pytest
 
 from nwp500 import sim, status_history
 from nwp500 import sim_adapters as sa

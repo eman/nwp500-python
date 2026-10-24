@@ -12,9 +12,6 @@ from typing import Any, cast
 
 import pytest
 
-pytest.importorskip("pandas")
-pytest.importorskip("scipy")
-
 from nwp500 import sim, status_history
 from nwp500 import sim_adapters as sa
 from nwp500 import sim_calibrate as sc

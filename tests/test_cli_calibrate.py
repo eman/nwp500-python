@@ -10,8 +10,6 @@ from typing import Any
 
 import pytest
 
-pytest.importorskip("pandas")
-pytest.importorskip("scipy")
 try:
     from click.testing import CliRunner
 

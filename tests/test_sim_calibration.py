@@ -12,14 +12,9 @@ from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from typing import Any, cast
 
-import pytest
-
-pytest.importorskip("numpy")
-pytest.importorskip("pandas")
-pytest.importorskip("scipy")
-
 import numpy as np
 import pandas as pd
+import pytest
 
 from nwp500 import sim_adapters as sa
 from nwp500.models import DeviceStatus

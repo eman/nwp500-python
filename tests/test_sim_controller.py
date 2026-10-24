@@ -11,9 +11,6 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-pytest.importorskip("numpy")
-pytest.importorskip("pandas")
-
 from nwp500.sim import controller
 from nwp500.sim.controller import (
     POWERED_ON_BY_ENTRY,

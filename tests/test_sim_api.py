@@ -12,11 +12,10 @@ from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
+import pandas as pd
 import pytest
 
-pd = pytest.importorskip("pandas")
-
-from nwp500.sim import (  # noqa: E402
+from nwp500.sim import (
     Commands,
     Draw,
     Environment,
@@ -34,21 +33,21 @@ from nwp500.sim import (  # noqa: E402
     simulate,
     standby,
 )
-from nwp500.sim.api import LOW_CONFIDENCE_FLOOR  # noqa: E402
-from nwp500.sim.engine import (  # noqa: E402
+from nwp500.sim.api import LOW_CONFIDENCE_FLOOR
+from nwp500.sim.engine import (
     Entry,
     Heater,
     RawWrite,
     SimulationError,
 )
-from nwp500.sim.engine import simulate as walk  # noqa: E402
-from nwp500.sim.extensions import RecoveryModel  # noqa: E402
-from nwp500.sim.heat_pump_recovery import (  # noqa: E402
+from nwp500.sim.engine import simulate as walk
+from nwp500.sim.extensions import RecoveryModel
+from nwp500.sim.heat_pump_recovery import (
     ModelDuration,
     RecoveryContext,
 )
-from nwp500.sim.params import HeaterParams  # noqa: E402
-from nwp500.sim.tank_physics import TankPhysics  # noqa: E402
+from nwp500.sim.params import HeaterParams
+from nwp500.sim.tank_physics import TankPhysics
 
 T0 = datetime(2026, 10, 4, 19, 0, tzinfo=UTC)
 AMBIENT_F = 68.0

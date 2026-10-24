@@ -7,8 +7,6 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-pytest.importorskip("pandas")
-
 from nwp500 import sim, sim_live
 from nwp500.exceptions import APIError
 from nwp500.models import (

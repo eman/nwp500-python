@@ -10,8 +10,6 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-pytest.importorskip("pandas")
-
 from nwp500.sim import calibration as cal
 from nwp500.sim.inputs import ELECTRIC, ENERGY_SAVER, HIGH_DEMAND
 from nwp500.sim.record import Record

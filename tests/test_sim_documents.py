@@ -7,8 +7,6 @@ from typing import Any
 
 import pytest
 
-pytest.importorskip("pandas")
-
 from nwp500 import sim
 from nwp500.sim import codec
 from nwp500.sim.profile import heater_profile

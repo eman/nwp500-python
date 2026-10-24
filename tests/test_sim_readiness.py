@@ -15,9 +15,6 @@ from dataclasses import dataclass, replace
 from typing import Any
 
 import pytest
-
-pytest.importorskip("pandas")
-
 from _sim_site import (  # type: ignore[import-not-found]  # test helper
     DEPLETION_THRESHOLD_F,
     EP,

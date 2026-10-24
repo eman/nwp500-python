@@ -12,8 +12,6 @@ from typing import Any
 
 import pytest
 
-pytest.importorskip("pandas")
-
 from nwp500.sim import (
     Commands,
     Draw,
