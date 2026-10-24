@@ -170,7 +170,7 @@ that line the delivered water fell by about 2 degF per gallon.
 **The lower probe's response follows the gap.** The same draw moves
 the lower probe further the wider the gap between the probes when it
 starts. The simulator moves the lower probe toward the inflow by the
-share ``1 - exp(-(gap + 1.5) / 30)`` of its distance from it per 9 gal
+share ``1 - exp(-(gap + 1.25) / 30)`` of its distance from it per 9 gal
 withdrawn, and the upper probe 0.05 degF per delivered gallon, walking
 the draw a quarter gallon at a time. It was fitted on 399 draws from
 2026-02-21 to 2026-07-31 with nothing heating or circulating and the
@@ -202,32 +202,32 @@ probe:
      - +0.15 degF
      - +0.26 degF
      - 1.68 degF
-     - 0.93 degF
+     - 0.91 degF
    * - 3-8 gal
      - 51
      - -0.59 degF
-     - -0.41 degF
+     - -0.28 degF
      - 3.70 degF
-     - 2.17 degF
+     - 2.12 degF
    * - 8-20 gal
      - 127
      - -2.79 degF
-     - -1.14 degF
+     - -1.12 degF
      - 6.72 degF
-     - 3.54 degF
+     - 3.52 degF
    * - Over 20 gal
      - 21
      - +5.37 degF
-     - +1.07 degF
+     - +1.27 degF
      - 8.78 degF
-     - 6.40 degF
+     - 6.48 degF
 
 The fixed response moved the lower probe too far in a mixed tank and
 not far enough in a stratified one: with the probes within 3 degF the
-bias went from -1.75 to -0.04 degF, and with them further apart from
-+1.62 to -0.14. On the 136 draws from 2026-08-01, held out of the fit,
-the lower probe's mean absolute error went from 2.79 to 1.95 degF and
-the upper probe's from 0.31 to 0.22, and the bias of the two probes'
+bias went from -1.75 to -0.03 degF, and with them further apart from
++1.62 to -0.10. On the 136 draws from 2026-08-01, held out of the fit,
+the lower probe's mean absolute error went from 2.79 to 1.91 degF and
+the upper probe's from 0.31 to 0.21, and the bias of the two probes'
 mean stayed within 0.2 degF. The largest draws keep the widest error.
 
 The upper probe is harder. Over 563 draws of 5 gal or more in 204 days,

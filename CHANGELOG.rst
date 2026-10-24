@@ -17,11 +17,11 @@ Fixed
   delivered gallon (``physics.draw.probes_after_draw``). On 535 clean
   draws from 2026-02-21 to 10-23, the lower probe's mean absolute error
   10 minutes after the draw went from 0.48 to 0.35 °F under 1 gal, 1.68
-  to 0.93 at 1-3 gal, 3.70 to 2.17 at 3-8 gal, 6.72 to 3.54 at 8-20 gal
-  and 8.78 to 6.40 over 20 gal; its bias went from -1.75 to -0.04 °F
-  with the probes within 3 °F and from +1.62 to -0.14 with them apart.
+  to 0.91 at 1-3 gal, 3.70 to 2.12 at 3-8 gal, 6.72 to 3.52 at 8-20 gal
+  and 8.78 to 6.48 over 20 gal; its bias went from -1.75 to -0.03 °F
+  with the probes within 3 °F and from +1.62 to -0.10 with them apart.
   On the 136 draws from 08-01, held out of the fit, the lower probe's
-  error went from 2.79 to 1.95 °F. Added: ``DrawParams.reach_gate_f``,
+  error went from 2.79 to 1.91 °F. Added: ``DrawParams.reach_gate_f``,
   ``reach_offset_f``, ``reach_gal`` and ``upper_f_per_gal``;
   ``physics.draw.probes_after_draw``, ``DEFAULT_REACH_GATE_F``,
   ``DEFAULT_REACH_OFFSET_F``, ``DEFAULT_REACH_GAL`` and

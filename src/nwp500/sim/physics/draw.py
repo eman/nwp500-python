@@ -186,22 +186,22 @@ LEGACY_TMV_DELIVERY_F = 128.0
 #: Draw          n    Bias, °F        MAE, °F
 #: ============  ===  ==============  ===========
 #: under 1 gal   281  +0.19 → +0.30   0.48 → 0.35
-#: 1-3 gal        55  +0.15 → +0.26   1.68 → 0.93
-#: 3-8 gal        51  −0.59 → −0.41   3.70 → 2.17
-#: 8-20 gal      127  −2.79 → −1.14   6.72 → 3.54
-#: over 20 gal    21  +5.37 → +1.07   8.78 → 6.40
+#: 1-3 gal        55  +0.15 → +0.26   1.68 → 0.91
+#: 3-8 gal        51  −0.59 → −0.28   3.70 → 2.12
+#: 8-20 gal      127  −2.79 → −1.12   6.72 → 3.52
+#: over 20 gal    21  +5.37 → +1.27   8.78 → 6.48
 #: ============  ===  ==============  ===========
 #:
-#: With the probes within 3 °F the bias goes from −1.75 to −0.04 °F,
-#: with them further apart from +1.62 to −0.14. On the 136 draws from
-#: 08-01, held out, the lower probe's MAE goes from 2.79 to 1.95 °F and
-#: the upper's from 0.31 to 0.22 (0.28 to 0.21 on all 535), and the
+#: With the probes within 3 °F the bias goes from −1.75 to −0.03 °F,
+#: with them further apart from +1.62 to −0.10. On the 136 draws from
+#: 08-01, held out, the lower probe's MAE goes from 2.79 to 1.91 °F and
+#: the upper's from 0.31 to 0.21 (0.28 to 0.20 on all 535), and the
 #: bias of the probes' mean stays within 0.2 °F.
 DEFAULT_REACH_GATE_F = 30.0
 
 #: °F added to the gap the reach is gated on, so a mixed tank's lower
 #: probe still moves a little; fitted with ``DEFAULT_REACH_GATE_F``.
-DEFAULT_REACH_OFFSET_F = 1.5
+DEFAULT_REACH_OFFSET_F = 1.25
 
 #: Gallons of the lower zone the water let in mixes with at the lower
 #: thermistor; fitted with ``DEFAULT_REACH_GATE_F``.
@@ -345,8 +345,10 @@ def probes_after_draw(
         ΔT_upper = upper_f_per_gal · V_delivered
 
     The draw is walked in pieces of at most a quarter of a delivered
-    gallon, each from the zones the last one left, so a draw split
-    into parts moves the zones as the whole does. Neither zone warms,
+    gallon, each from the zones the last one left: within a piece the
+    lower zone decays toward the inflow exponentially, at the reach and
+    hot fraction of the piece's midpoint, so a draw split into parts
+    moves the zones as the whole does. Neither zone warms,
     the lower one stops at the inflow, and the upper one at the lower.
     A tank at or under the inflow gives nothing and does not move.
 
@@ -367,16 +369,27 @@ def probes_after_draw(
         return t_upper, t_lower
     n = max(1, math.ceil(delivered_gal / _DRAW_PIECE_GAL))
     dv = delivered_gal / n
+
+    def rate(upper: float, lower: float) -> float:
+        # The lower zone's decay toward the inflow per delivered gallon.
+        hot = withdrawn_gal(
+            1.0, upper, delivery_temp_f(upper, intercept_f, slope), inflow_f
+        )
+        reach = 1.0 - math.exp(-max(upper - lower + offset_f, 0.0) / gate_f)
+        return reach * hot / reach_gal
+
+    def piece(upper: float, lower: float, k: float, gal: float) -> float:
+        return inflow_f + max(lower - inflow_f, 0.0) * math.exp(-k * gal)
+
     upper, lower = t_upper, t_lower
     for _ in range(n):
         if upper <= inflow_f:
             break
-        dw = withdrawn_gal(
-            dv, upper, delivery_temp_f(upper, intercept_f, slope), inflow_f
+        mid_upper = max(upper - upper_f_per_gal * dv / 2.0, lower)
+        mid_lower = min(
+            lower, piece(upper, lower, rate(upper, lower), dv / 2.0)
         )
-        reach = 1.0 - math.exp(-max(upper - lower + offset_f, 0.0) / gate_f)
-        room = max(lower - inflow_f, 0.0)
-        lower -= min(room, reach * room * dw / reach_gal)
+        lower = min(lower, piece(upper, lower, rate(mid_upper, mid_lower), dv))
         upper = max(upper - upper_f_per_gal * dv, min(lower, upper))
     return upper, lower
 

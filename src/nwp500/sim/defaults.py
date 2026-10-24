@@ -116,7 +116,7 @@ def _nwp500_65() -> HeaterParams:
         draw=DrawParams(
             observability=0.633,
             reach_gate_f=30.0,
-            reach_offset_f=1.5,
+            reach_offset_f=1.25,
             reach_gal=9.0,
             upper_f_per_gal=0.05,
             delivery_intercept_f=53.56,

@@ -451,7 +451,7 @@ class TestTheParameters:
         assert params_from_document(doc).draw == replace(
             params.draw,
             reach_gate_f=30.0,
-            reach_offset_f=1.5,
+            reach_offset_f=1.25,
             reach_gal=9.0,
             upper_f_per_gal=0.05,
         )

@@ -913,7 +913,7 @@ the one seen over the retrains from 2026-08-08 to 2026-10-18.
        draw's heat; without it no draw moves the tank.
    * - ``draw.reach_gate_f``, ``draw.reach_offset_f``,
        ``draw.reach_gal``, ``draw.upper_f_per_gal``
-     - 30.0 degF, 1.5 degF, 9.0 gal, 0.05 degF/gal
+     - 30.0 degF, 1.25 degF, 9.0 gal, 0.05 degF/gal
      - How a draw moves the probes: 399 draws from 2026-02-21 to 07-31
        with nothing heating or circulating around them, against the
        probes 10 minutes after each ended. Held-out accuracy in

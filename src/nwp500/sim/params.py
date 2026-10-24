@@ -336,7 +336,7 @@ class DrawParams:
         default=30.0, metadata=_p(FITTED, "°F", INSTALLATION, _VALVE_FRAME)
     )
     reach_offset_f: float = field(
-        default=1.5, metadata=_p(FITTED, "°F", INSTALLATION, _VALVE_FRAME)
+        default=1.25, metadata=_p(FITTED, "°F", INSTALLATION, _VALVE_FRAME)
     )
     #: Gallons the water let in mixes with at the lower thermistor.
     reach_gal: float = field(
@@ -390,6 +390,17 @@ class DrawParams:
     )
 
     def __post_init__(self) -> None:
+        """A gate or reach volume at or below zero divides by zero or
+        warms the lower zone, and a negative upper rate warms the
+        upper one."""
+        for name in ("reach_gate_f", "reach_gal"):
+            v = getattr(self, name)
+            if not (math.isfinite(v) and v > 0.0):
+                raise ValueError(f"{name} must be above 0 (got {v})")
+        for name in ("reach_offset_f", "upper_f_per_gal"):
+            v = getattr(self, name)
+            if not (math.isfinite(v) and v >= 0.0):
+                raise ValueError(f"{name} must be at least 0 (got {v})")
         # A document carries the ranges as lists.
         for name in ("domain_upper_f", "domain_volume_gal"):
             v = getattr(self, name)

@@ -1,11 +1,14 @@
 """The delivered-to-withdrawn conversion and how the probes move through
 a delivered draw."""
 
+import math
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import pytest
 
+from nwp500.sim.defaults import site_example_params
 from nwp500.sim.params import TankParams
 from nwp500.sim.physics.draw import (
     DEFAULT_INLET_TEMP_F,
@@ -123,7 +126,7 @@ class TestCalibration:
     def test_the_fitted_values_are_the_ones_the_report_publishes(self) -> None:
         assert pytest.approx(0.633) == DEFAULT_OBSERVABILITY
         assert pytest.approx(30.0) == DEFAULT_REACH_GATE_F
-        assert pytest.approx(1.5) == DEFAULT_REACH_OFFSET_F
+        assert pytest.approx(1.25) == DEFAULT_REACH_OFFSET_F
         assert pytest.approx(9.0) == DEFAULT_REACH_GAL
         assert pytest.approx(0.05) == DEFAULT_UPPER_F_PER_GAL
         assert pytest.approx(72.4) == DEFAULT_INLET_TEMP_F
@@ -225,6 +228,29 @@ class TestProbesAfterDraw:
         assert upper == pytest.approx(whole[0], abs=0.05)
         assert low == pytest.approx(whole[1], abs=0.05)
 
+    def test_a_draw_in_tenths_moves_the_zones_as_one(self) -> None:
+        """Two hundred tenths of a gallon as one 20 gal draw."""
+        whole = self.after(135.0, 134.0, 20.0)
+        upper, low = 135.0, 134.0
+        for _ in range(200):
+            upper, low = self.after(upper, low, 0.1)
+        assert upper == pytest.approx(whole[0], abs=0.05)
+        assert low == pytest.approx(whole[1], abs=0.05)
+
+    @pytest.mark.parametrize(
+        "field",
+        [
+            {"reach_gate_f": 0.0},
+            {"reach_gal": -9.0},
+            {"reach_offset_f": -1.0},
+            {"upper_f_per_gal": -0.05},
+            {"reach_gal": math.inf},
+        ],
+    )
+    def test_the_draw_terms_are_checked(self, field: dict[str, float]) -> None:
+        with pytest.raises(ValueError):
+            replace(site_example_params(2).draw, **field)
+
     @pytest.mark.parametrize(
         ("upper", "lower"),
         [(140.0, 139.0), (135.0, 100.0), (110.0, 80.0), (120.0, 125.0)],
@@ -279,8 +305,7 @@ class TestTheCoastsDraw:
     def coast(
         self, upper: float, lower: float, draws: list[tuple[datetime, float]]
     ) -> Any:
-        import pandas as pd
-
+        pd = pytest.importorskip("pandas")
         end = self.T0 + timedelta(minutes=1)
         air = pd.DataFrame(
             {"ambient_f": [65.0, 65.0]},
