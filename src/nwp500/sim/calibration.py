@@ -1613,8 +1613,8 @@ def metered_withdrawn(
     Draws through the calibrated draw term at their volume-weighted
     upper zone; each run through the circulation's displaced volume at
     the upper zone at its start, less the air, times
-    ``DrawParams.ungated_observability`` (the probes' share of the
-    circulation's heat). None when either record is missing, when draws
+    ``DrawParams.ungated_observability`` (the share of the run's heat
+    the probes show). None when either record is missing, when draws
     happened and the draw term is off, or when circulation ran and the
     installation has no circulation terms: an unknown withdrawal is not
     a zero one. ``flow_at`` prices a cycle's runs at the flow the
@@ -3688,9 +3688,12 @@ def fit_element_rates(
 # ── the probes' share of circulation's heat ─────────────────────────
 #
 # ``DrawParams.ungated_observability``: the run model's heat
-# (``run_heat_btu``) is physical, the flow's integral; the tank it is
-# charged to is described in the probes' frame, their mean times the
-# tank's mass. The factor between the two is measured on windows of
+# (``run_heat_btu``) is the run's, the flow's integral, all of it
+# counted as the tank's; the tank it is charged to is described in the
+# probes' frame, their mean times the tank's mass. Where the return
+# feeds the mixing valve's cold port as well as the tank's inlet, part
+# of the flow never enters the tank, so the factor is that split and
+# the probes' frame together. It is measured on windows of
 # circulation with nothing else going on, and **against the displaced
 # volume it will be used with**: a saturated run's heat is proportional
 # to it, so a factor fitted at one volume misprices those runs at

@@ -8,6 +8,14 @@ Unreleased
 Fixed
 -----
 
+- **The circulation share's story.** ``DrawParams.ungated_observability``
+  (0.398) was described as the probes' share of a run's heat. The loop
+  heat it divides counts all the loop's flow as the tank's, but the
+  return feeds the mixing valve's cold port as well as the tank's
+  inlet, and that split is not measured. The share is the split and
+  any probe shortfall together. The value is unchanged. See
+  :doc:`/explanation/standby-loss`.
+
 - **The outlet lag is the tank's.** ``ReadinessParams.delivered_lag_gal``
   (5 gal) was described as mostly the pipe to the fixture. Both bath
   figures behind it, 7.3 gal at the tub spout and 5.3 at the valve
