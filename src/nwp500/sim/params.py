@@ -298,7 +298,12 @@ class CompressorParams:
     clearance_ratio: float = field(default=0.05, metadata=_p(DEFAULT, "1"))
     #: Polytropic exponent for R-134a compression (1.15-1.20).
     polytropic_exp: float = field(default=1.17, metadata=_p(DEFAULT, "1"))
-    #: Evaporator fan airflow, from the NWP500's specification.
+    #: Evaporator fan airflow in the latent term (humid air condensing
+    #: on the coil). No airflow is published: the manual's 229 is the
+    #: 50 gal model's shipping weight in pounds. On 178 recorded
+    #: recoveries the term is 0-150 BTU/hr of about 4,000, humidity's
+    #: own effect on duration with the air held is not resolved
+    #: (t 1.3), and the term off scored 0.6 min worse held out.
     fan_airflow_cfm: float = field(
         default=229.0, metadata=_p(DEFAULT, "ft³/min")
     )
