@@ -1002,9 +1002,16 @@ class BookParams:
         default=4100.0, metadata=_p(FITTED, "BTU", INSTALLATION)
     )
     #: Both probes within this of each other: a full tank, the book's
-    #: anchor, once it has been quiet since a heating ended.
+    #: anchor, once it has been quiet since a heating ended, or as the
+    #: compressor runs (``anchor_run_min``).
     uniform_band_f: float = field(
         default=1.5, metadata=_p(FITTED, "°F", INSTALLATION)
+    )
+    #: The compressor's run since the last draw before a full tank
+    #: anchors the book as it runs: sooner, the probes still hide part
+    #: of the draw.
+    anchor_run_min: float = field(
+        default=15.0, metadata=_p(FITTED, "min", INSTALLATION)
     )
     #: An anchor younger than this is fresh.
     max_anchor_age_h: float = field(

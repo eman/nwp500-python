@@ -24,6 +24,17 @@ Fixed
   reads the full-tank floor from the probes, heating or not, plus
   ``delivered_lag_gal``, with the new reason ``estimated_from_probes``.
 
+- **The heat book anchors while the heat pump runs.** The book anchored
+  only when a recovery ended, so a book lost to a restart, or an old one
+  drifting, waited for the recovery's end, often hours. Now a step with
+  the heat pump running alone, both probes within ``uniform_band_f`` and
+  nothing drawn or circulated in it anchors too, once the heat pump has
+  run the new ``BookParams.anchor_run_min`` (15 minutes of its running
+  time) since a draw after the last anchor. The book walked along a
+  simulation anchors the same way. A quiet tank after a draw still
+  doesn't anchor: the probes show only part of a small draw until its
+  cold front reaches the lower probe.
+
 Version 9.12.1 (2026-10-23)
 ===========================
 

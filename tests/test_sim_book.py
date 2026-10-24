@@ -25,7 +25,7 @@ from _sim_site import (  # type: ignore[import-not-found]  # test helper
     walk_booked,
 )
 
-from nwp500.sim.book import BookedPath
+from nwp500.sim.book import BookedPath, Step, book_steps, full_tank
 from nwp500.sim.controller import Source, Start, StopReason
 from nwp500.sim.engine import Draw, HeatingInterval, PathPoint
 
@@ -331,6 +331,128 @@ class TestTheWalkResumes:
         assert a.carry is None
 
 
+#: Both zones within the book's band, the compressor mixing the tank.
+FULL: dict[str, float] = {"upper": 133.0, "lower": 132.3}
+
+
+def anchored(b: Booked) -> bool:
+    return b.anchor_age_h == 0.0 and b.cold_gal == 0.0
+
+
+class TestTheCompressorAnchors:
+    """A full tank anchors as the compressor runs alone, once it has run
+    ``anchor_run_min`` since a draw booked after the last anchor."""
+
+    def test_a_full_tank_anchors_once_it_has_run_the_hold(self) -> None:
+        path = walk(flat(0, 10, 14, 15, 30, **FULL), heat=[heating(0, 60)])
+        assert not anchored(path.before(m(14)))
+        assert anchored(path.before(m(15)))
+
+    def test_with_no_draw_booked_there_is_no_hold(self) -> None:
+        start = replace(AFTER_BATH, cold_gal=0.0)
+        path = walk(flat(0, 10, 30, **FULL), heat=[heating(0, 60)], start=start)
+        assert not anchored(path.before(m(0)))
+        assert anchored(path.before(m(10)))
+
+    def test_a_draw_holds_it_again(self) -> None:
+        start = replace(AFTER_BATH, cold_gal=0.0)
+        path = walk(
+            flat(0, 10, 20, 30, 34, 35, 50, **FULL),
+            heat=[heating(0, 60)],
+            draws=[(m(20), 1.0)],
+            start=start,
+        )
+        full = full_tank(133.0, 132.3, 70.0, EP).heat_btu
+        assert path.before(m(10)).heat_btu == pytest.approx(full)
+        assert path.before(m(34)).heat_btu != pytest.approx(full)
+        assert path.before(m(35)).heat_btu == pytest.approx(full)
+
+    def test_the_hold_is_compressor_time_not_wall_time(self) -> None:
+        points = [
+            *flat(0, 5, 39, upper=133.0, lower=120.0),
+            *flat(40, 49, 50, 55, **FULL),
+        ]
+        path = walk(points, heat=[heating(0, 5), heating(40, 60)])
+        assert not anchored(path.before(m(49)))
+        assert anchored(path.before(m(50)))
+
+    @pytest.mark.parametrize(
+        "heat",
+        [
+            [heating(0, 60, source="element", zone="lower")],
+            [heating(0, 60), heating(0, 60, source="element", zone="upper")],
+        ],
+        ids=["lower_element", "with_the_upper_element"],
+    )
+    def test_an_element_does_not_anchor(
+        self, heat: list[HeatingInterval]
+    ) -> None:
+        path = walk(flat(0, 20, 40, 50, **FULL), heat=heat)
+        assert not any(anchored(path.before(m(x))) for x in (20, 40))
+
+    def test_a_disturbed_span_does_not_anchor(self) -> None:
+        path = walk_with(
+            flat(0, 20, 40, 50, **FULL),
+            Circulation([(m(0), m(60))]),
+            heat=[heating(0, 60)],
+        )
+        assert not any(anchored(path.before(m(x))) for x in (20, 40))
+
+    def test_resumed_at_every_instant_it_is_the_whole_walk(self) -> None:
+        points = flat(0, 5, 12, 20, 26, 27, 28, 40, **FULL)
+        heat = [heating(0, 50)]
+        draws: list[Draw] = [(m(12), 1.0)]
+        whole = walk(points, heat=heat, draws=draws)
+        assert anchored(whole.before(m(27)))
+        carry = None
+        for pt in points:
+            first = walk_booked(
+                AFTER_BATH,
+                [p for p in points if p.at <= pt.at],
+                heat,
+                [d for d in draws if d[0] <= pt.at],
+                lambda _: 65.0,
+                carry=carry,
+                keep=pt.at,
+            )
+            carry = first.carry
+            rest = walk_booked(
+                AFTER_BATH, points, heat, draws, lambda _: 65.0, carry=carry
+            )
+            j = next(k for k, p in enumerate(points) if p.at == pt.at)
+            assert rest.states == whole.states[j:]
+
+    @pytest.mark.parametrize(
+        "rise_f", [0.5, 0.02], ids=["held", "uniform_late"]
+    )
+    def test_recorded_and_simulated_anchor_at_the_same_step(
+        self, rise_f: float
+    ) -> None:
+        """One recovery, recorded (``book_steps``) and simulated
+        (``walk_booked``), the lower probe rising into the band: the
+        first anchor is at the same step, the hold binding or not."""
+        lowers = [min(132.5, 125.0 + rise_f * i) for i in range(400)]
+        steps = [
+            Step(10.0, 133.0, lo, 0.0, True, False, 65.0, 70.0) for lo in lowers
+        ]
+        recorded = next(
+            j for j in range(len(steps)) if book_steps(steps[: j + 1], EP)
+        )
+        at = [T0 + timedelta(seconds=10 * (i + 1)) for i in range(len(steps))]
+        points = [
+            PathPoint(T0, 133.0, 125.0, 140.0, False, 0.0),
+            *(
+                PathPoint(x, 133.0, lo, 140.0, False, 0.0)
+                for x, lo in zip(at, lowers, strict=True)
+            ),
+        ]
+        path = walk(points, heat=[heating(0, 70)])
+        simulated = next(
+            i for i, x in enumerate(at) if anchored(path.before(x))
+        )
+        assert simulated == recorded
+
+
 class TestAWithheldWindow:
     """Over a withheld window a recovery runs and is credited no heat,
     in the book as in the zones."""
@@ -366,7 +488,7 @@ class TestAWithheldWindow:
             heat,
             [],
             lambda _: 65.0,
-            withheld=[(m(30), m(60))],
+            withheld=[(m(0), m(60))],
         )
         for at in (m(30), m(45), m(60)):
             assert path.before(at).anchor_age_h == AFTER_BATH.anchor_age_h
@@ -429,7 +551,7 @@ class TestAClientsOwnLoss:
     def test_a_disturbed_span_does_not_re_anchor(self) -> None:
         points = [*flat(0, 60), *flat(90, 120, upper=140.0, lower=139.5)]
         end = walk_with(
-            points, Circulation([(m(90), m(94))]), heat=[heating(0, 90)]
+            points, Circulation([(m(85), m(94))]), heat=[heating(0, 90)]
         ).states[-1]
         assert end.cold_gal > 0.0
 

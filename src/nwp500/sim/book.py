@@ -3,12 +3,20 @@ leaves through a draw.
 
 Two probes cannot say how much hot water is left once the hot/cold
 boundary sits between them, after a bath say. They can say it when the
-tank is **full**: at the end of a recovery, both probes within
-``BookParams.uniform_band_f`` and nothing drawn since, the tank's heat
-above a 70 °F reference is ``8.34 · V · (T_mean − 70)``. Only such a
-state anchors the book. A quiet moment after a draw does not: the
-draw's cold water sits below the lower probe, which reads hot, and an
-anchor there would forget the draw.
+tank is **full**, both probes within ``BookParams.uniform_band_f``,
+with the heat pump mixing the tank as it heats: the tank's heat above
+a 70 °F reference is ``8.34 · V · (T_mean − 70)``. So the book anchors
+at the end of a recovery with nothing drawn since, and at any step a
+recovery's compressor runs with the probes within the band and nothing
+drawn or circulated in it, once it has run ``anchor_run_min`` since a
+draw after the last anchor. A quiet moment after a draw does not anchor:
+the lower probe sees a draw, but until the cold front reaches it, about
+17 gal, the two probes show only about a third of a small draw's heat,
+and a draw under about 3 gal leaves them within the band. An anchor
+there would credit most of the draw back. Its cold water stays booked
+until the compressor has run, and the hold is for the same reason. An
+element run does not anchor either: the upper element heats only the
+top, and the lower leaves the water below it unheated.
 
 From the anchor the heat is booked: out by each draw through the mixing
 valve and by standby, in from the compressor and the elements. The
@@ -43,14 +51,17 @@ drawn (``Booked.observed``).
 
 **Its walk along a simulation** (``walk_booked``, ``BookedHeatLedger``).
 The book's start is the caller's: from their own record, or
-``full_tank_book`` when they know the tank has been quiet since a
-recovery ended. The library never judges that from the probes, which
-read full over hidden draw water. From the start the walk moves the book
-through what the simulation did: the draws at their instants, the
-compressor and the elements while they run, and standby. It re-anchors
-on a full tank at the end of a recovery the heater ended itself (its
-target, or the TOU cap), or quiet after one with the zones within the
-band. The engine runs this walk at each draw (``BookedHeatLedger``, the
+``full_tank_book`` when they know the tank is full: quiet since a
+recovery ended, or the compressor running with the probes within the
+band and nothing drawn. The library never judges a quiet tank full
+from the probes, which read full over a small draw. From the start the
+walk moves the book through what the simulation did: the draws at
+their instants, the compressor and the elements while they run, and
+standby. It re-anchors on a full tank at the end of a recovery the
+heater ended itself (its target, or the TOU cap), or quiet after one
+with the zones within the band, or with the zones within the band as
+the compressor runs alone, past the hold and nothing drawn at that
+instant. The engine runs this walk at each draw (``BookedHeatLedger``, the
 core's ``HeatLedger``), and a draw that spends the booked heat past the
 zone's empty point takes the upper zone down.
 
@@ -157,7 +168,8 @@ def standby_btu(
 
 def is_full(upper_f: float, lower_f: float, p: BookParams) -> bool:
     """Both probes within ``uniform_band_f``: with the heater just
-    finished and nothing moving since, the book's anchor."""
+    finished and nothing moving since, or the compressor running with
+    nothing moving, the book's anchor."""
     return abs(upper_f - lower_f) <= p.uniform_band_f
 
 
@@ -284,6 +296,18 @@ def inlet_now_f(steps: Sequence[Step], p: BookParams) -> float:
     return float(median(window))
 
 
+def compressing(s: Step) -> bool:
+    """The compressor running alone in ``s``: a step whose full tank
+    anchors the book while it heats."""
+    return s.compressor_on and not s.element_on
+
+
+def anchor_held(run_s: float | None, p: BookParams) -> bool:
+    """The compressor's run since the last draw past ``anchor_run_min``,
+    or no draw since the last anchor (``run_s`` None)."""
+    return run_s is None or run_s >= p.anchor_run_min * 60.0
+
+
 def _busy(
     s: Step, p: BookParams, circulation: CirculationParams | None
 ) -> tuple[bool, bool]:
@@ -300,12 +324,15 @@ def book_steps(
     circulation: CirculationParams | None = None,
 ) -> Booked | None:
     """The heat now, booked from a recorded history's last anchor: a
-    full tank (``is_full``), uniform and quiet, after a recovery ends
-    with no draw and no circulation since. A recovery that ends while
-    water or circulation moves anchors at its end, uniform there, the
-    movement booked from its start; the quiet steps after such a draw
-    do not anchor (the probes then read the draw's cold water as full).
-    None with no anchor within ``history_h``; older than
+    full tank (``is_full``) at a step the compressor runs alone with
+    nothing drawn or circulated in it, once it has run ``anchor_run_min``
+    since the last draw (or the history's start, before an anchor), or
+    uniform and quiet after a
+    recovery ends with no draw and no circulation since. A recovery
+    that ends while water or circulation moves anchors at its end,
+    uniform there, the movement booked from its start; the quiet steps
+    after such a draw do not anchor (the probes then show only part of
+    the draw). None with no anchor within ``history_h``; older than
     ``max_anchor_age_h`` the book is ``aged``."""
     p = p or BookParams()
     anchor = None
@@ -313,9 +340,17 @@ def book_steps(
     clean = False
     was_heating = was_disturbed = False
     moving_since = 0
+    # The compressor's run since the last draw, s (``anchor_run_min``),
+    # from the history's start until an anchor; None with no draw since
+    # the last anchor.
+    run_s: float | None = 0.0
     for i, st in enumerate(steps):
         heating, disturbed = _busy(st, p, circulation)
         full = is_full(st.upper_f, st.lower_f, p)
+        if house_gpm(st, circulation) > p.draw_gpm:
+            run_s = 0.0
+        elif st.compressor_on and run_s is not None:
+            run_s += st.seconds
         if disturbed and not was_disturbed:
             moving_since = i
         if heating:
@@ -329,6 +364,10 @@ def book_steps(
         was_heating, was_disturbed = heating, disturbed
         if clean and not heating and full:
             anchor, book_from = i, i + 1
+        if compressing(st) and anchor_held(run_s, p) and not disturbed and full:
+            anchor, book_from = i, i + 1
+        if anchor == i and not disturbed:
+            run_s = None
     if anchor is None:
         return None
     age_h = sum(s.seconds for s in steps[anchor + 1 :]) / 3600.0
@@ -847,6 +886,11 @@ class WalkCarry:
     #: Heat in over the span that ended at ``at``, any and at the bottom.
     heated: bool
     bottom: bool
+    #: The compressor running alone over that span, undisturbed.
+    compressing: bool = False
+    #: The compressor's run since the last draw, s (``anchor_run_min``);
+    #: None with no draw since the last anchor.
+    run_s: float | None = None
 
 
 @dataclass(frozen=True)
@@ -989,6 +1033,17 @@ def walk_booked(
         mid = a + (b - a) / 2
         return any(h.start.at <= mid < h.end for h in heating)
 
+    def compressor_on(a: datetime, b: datetime) -> tuple[bool, bool]:
+        """Whether the compressor runs over ``[a, b)``, and whether
+        alone."""
+        mid = a + (b - a) / 2
+        on = [
+            h.source == "compressor"
+            for h in heating
+            if h.start.at <= mid < h.end
+        ]
+        return any(on), bool(on) and all(on)
+
     def heat_in(a: datetime, b: datetime) -> tuple[float, float]:
         """Heat in over ``[a, b)``, (bottom, top), by source; none
         inside a withheld window."""
@@ -1023,6 +1078,14 @@ def walk_booked(
         extra.loss(a, b) if extra is not None else (0.0, False)
         for a, b in spans
     ]
+    # The compressor running, credited: alone and undisturbed, a full
+    # tank at the span's end anchors as it heats. In a withheld window
+    # the draws come first, so it neither anchors nor runs the hold.
+    compressor = [
+        compressor_on(a, b) if x[0] > 0.0 else (False, False)
+        for (a, b), x in zip(spans, inflow, strict=True)
+    ]
+    alone = [c[1] and not x[1] for c, x in zip(compressor, extras, strict=True)]
 
     state = start
     before: list[Booked] = []
@@ -1033,9 +1096,17 @@ def walk_booked(
     # stopped itself, at its target or the TOU cap, is full by the
     # heater's own rule, whatever gap the zones show then; any other
     # end, or any quiet instant after one, is full when the zones are
-    # within the book's band.
+    # within the book's band. So is an instant the compressor has run
+    # alone up to, ``anchor_run_min`` since the last draw (a start with
+    # a draw booked: since the walk's start), nothing drawn there.
     clean = False if carry is None else carry.clean
     drawn_yet = False if carry is None else carry.drawn
+    # A start that has booked a draw holds from the walk's start.
+    run_s = (
+        (0.0 if start.cold_gal > 0.0 else None)
+        if carry is None
+        else carry.run_s
+    )
 
     def heated_before(k: int) -> tuple[bool, bool]:
         """Heat in over the span ending at instant ``k`` (any, bottom):
@@ -1047,11 +1118,26 @@ def walk_booked(
             return carry.heated, carry.bottom
         return False, False
 
+    def alone_before(k: int) -> bool:
+        """The compressor alone over the span ending at instant ``k``,
+        as ``heated_before`` reads it."""
+        if k > 0:
+            return alone[k - 1]
+        return carry is not None and carry.compressing
+
     for k, at in enumerate(instants):
         prev_heat, prev_bottom = heated_before(k)
+        prev_alone = alone_before(k)
         if at == keep:
             kept = WalkCarry(
-                at, state, clean, drawn_yet, prev_heat, prev_bottom
+                at,
+                state,
+                clean,
+                drawn_yet,
+                prev_heat,
+                prev_bottom,
+                prev_alone,
+                run_s,
             )
         busy_next = k < len(spans) and (heats[k] or extras[k][1])
         disturbed = by_instant.get(at, 0.0) > 0.0 or busy_next
@@ -1062,13 +1148,24 @@ def walk_booked(
             ):
                 state = _anchored(state, *zones(at), p)
                 clean = False
+                run_s = None
         if clean and not disturbed and is_full(*zones(at), p):
             state = _anchored(state, *zones(at), p)
-        before.append(state)
+            run_s = None
         gal = by_instant.get(at, 0.0)
+        if (
+            prev_alone
+            and gal == 0.0
+            and anchor_held(run_s, p)
+            and is_full(*zones(at), p)
+        ):
+            state = _anchored(state, *zones(at), p)
+            run_s = None
+        before.append(state)
         if gal > 0.0:
             state = state.drawn(gal, zones(at)[0], p)
             clean = False
+            run_s = 0.0
         drawn_yet = drawn_yet or gal > 0.0
         if k > 0 or carry is not None:
             state = projected_release(
@@ -1092,6 +1189,8 @@ def walk_booked(
             clean = False
         if heats[k]:
             clean = False
+        if compressor[k][0] and run_s is not None:
+            run_s += (nxt - at).total_seconds()
         state = state.heated(bottom, top, p).lost(lost)
 
     index = {at: i for i, at in enumerate(instants)}
@@ -1343,13 +1442,12 @@ class BookedHeatLedger:
         ``loss_bound`` and any heat in ignored. Not across a re-anchor,
         which is no floor: none can have happened since that stand when
         nothing has stopped heating since (the engine's to rule out:
-        ``q.bound`` None), and what heated then is heating still."""
+        ``q.bound`` None) and nothing is heating now, since the
+        compressor re-anchors as it runs."""
         bound = q.bound
         if carry is None or bound is None or carry.clean:
             return False
-        if carry.heated and not any(
-            at <= carry.at for at in bound.running_since
-        ):
+        if bound.running_since or carry.heated:
             return False
         return zone_cannot_move(
             carry.state,
@@ -1380,11 +1478,13 @@ def full_tank_book(
     inlet_f: float | None = None,
 ) -> Booked:
     """A book anchored on a full tank at these zones (``full_tank``),
-    for a caller who knows the tank has been quiet since a heating ended:
-    a recovery finished and nothing drawn since. The library does not
-    judge that from the probes, which read full over the cold water of a
-    draw. ``inlet_f`` defaults to ``BookParams.inlet_default_f``, the
-    frame ``empty_btu`` was fitted in."""
+    for a caller who knows the tank is full: quiet since a heating
+    ended (a recovery finished and nothing drawn since), or the
+    compressor running with the zones within ``uniform_band_f`` and
+    nothing drawn. The library does not judge a quiet tank full from the
+    probes, which read full over a small draw. ``inlet_f`` defaults to
+    ``BookParams.inlet_default_f``, the frame ``empty_btu`` was fitted
+    in."""
     p = p or BookParams()
     return full_tank(
         upper_f,
