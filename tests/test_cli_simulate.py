@@ -564,9 +564,9 @@ class TestTheHeatBook:
         )
         return " ".join(out.getvalue().split()), result
 
-    def test_without_a_book_the_probes_apart_read_nothing(self) -> None:
+    def test_without_a_book_the_probes_apart_read_their_heat(self) -> None:
         text, result = self._run(None)
-        assert "0.0 gal deliverable now (probes)" in text
+        assert "12.7 gal deliverable now (probes)" in text
         assert "no_heat_book" in result.reasons
 
     def test_the_book_answers(self) -> None:
@@ -578,8 +578,8 @@ class TestTheHeatBook:
 
     def test_the_bath_and_the_showers(self) -> None:
         text, _ = self._run(None)
-        assert "Bath (28.7 gal): not ready, 28.7 gal short" in text
-        assert "Showers (12.0 gal): 0 ready" in text
+        assert "Bath (28.7 gal): not ready, 16.0 gal short" in text
+        assert "Showers (12.0 gal): 1 ready" in text
         text, _ = self._run(_Keeper(sim.full_tank_book(130.0, 130.0)))
         assert (
             "Bath (28.7 gal): not ready, 0.9 gal short; the heat pump" in text

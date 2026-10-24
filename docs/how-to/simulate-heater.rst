@@ -194,8 +194,8 @@ give:
   72 hours of the heater's readings and the draws
   (``sim_home_assistant.HomeAssistantBook``). The run walks from it,
   and "deliverable now" reads it (``energy``), whatever the gap between
-  the two probes. Without it, the probes alone answer only a full tank,
-  and a tank with the probes apart reads 0 (``probes``). With no full
+  the two probes. Without it, the probes answer from the heat they
+  place in the tank, apart or not (``probes``). With no full
   tank in the 72 hours, or a scenario that doesn't start now, the run
   walks without the book, and a warning says why.
 
@@ -645,9 +645,8 @@ the water falls below the line (105 degF by default).
    d = sim.readiness(sa.heater_state(status), sa.settings(status), params)
    print(f"{sa.volume(d.gal):.0f} {sa.volume_unit()} ({d.basis})")
 
-Two probes can say how much is left only when the tank is full, so
-without more to go on the answer is a full tank's (a floor that allows
-for cold water hiding under the lower probe) or 0. Give it more:
+Without more to go on, the answer is the tank's heat as its two probes
+place it (``basis`` ``probes``), heating or not. Give it more:
 
 - **A heat book**, if you know the tank is full: quiet since a recovery
   ended, or the heat pump running with the probes within the book's
@@ -1230,10 +1229,9 @@ With ``circuit=True`` the runs are priced at a circuit volume
 gallon. ``book_error_btu(book, p, 0.0, v)`` gives the book's
 error bands: the 90th percentile of its error pooled over re-anchors an
 hour to ``max_anchor_age_h`` apart, and the 18 to 24 h band's past it,
-each rounded up to 100 BTU. ``cold_lower_cap(draws,
-cutoff_f)`` is the evidence's cap after a cold lower zone. The cutoff
-itself, and the bath's volume, are yours to set: measure a bath by
-filling one to your usual level at the hot side's meter.
+each rounded up to 100 BTU. The bath's volume is yours to set:
+measure a bath by filling one to your usual level at the hot side's
+meter.
 
 How a draw moves the zones is fitted on the record's long draws too,
 the book walked continuously over it (``book_walk``):
@@ -1280,9 +1278,8 @@ cannot say.
 
 The mixing fit reads gallons left before ``zone_empty_btu``, so refit
 that first. The settle fit reads the front's place and width, so refit
-those before it. The delivered water's lag (one bath's measurement) and
-the heat hidden from a full tank's probes (a maximum over the record,
-not a fit) stay installation values.
+those before it. The delivered water's lag (one bath's measurement)
+stays an installation value.
 
 
 Fit the elements

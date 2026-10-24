@@ -232,22 +232,31 @@ plateaus (next section) instead, they were 26.3, 49.3 and 2.4: a mean
 little about the level.
 
 Without a full tank in the last 72 hours for the heat book to count
-from, the estimate leans on evidence: the longest draw the history
-shows from a tank in the same state or colder, counted to the upper
-probe's crossing. That is a low figure. No clean recorded draw took the
-upper probe below 105 degF (the lowest reached 107.2 degF), so for a
-full tank that had filled a 38 gal bath the evidence gives 33.4 gal at
-the probe. The estimate takes the larger of that and a full tank's
-floor, caps it at 6.5 gal when the lower probe reads 100 degF or less, and adds the
-lag to the delivered water (5 gal by default). The evidence's
-assumption, that a tank no colder delivers at least as
-much, failed on small differences: 15 of 22 later draws over-promised
-for a 2 degF fall, because two probes cannot place the boundary between
-the hot and the cold water. With the lower probe cold, heat that went
-into the bottom of the tank may not come out hot: on 2026-04-14 a draw
-from 139.6/78.4 degF (upper/lower) stayed above 129 degF for 15.7 gal,
-and ninety minutes later a 10 gal draw from 141.3/89.6 degF took the
-upper probe to 101 degF.
+from, the estimate reads the tank's heat from its two probes, as the
+book's anchor does, and adds the lag to the delivered water (5 gal by
+default). It does so for any state with the upper probe at or above the
+line, the probes together or apart, the heater running or not. Two
+drawdowns from uniform tanks delivered what the probes said, net of the
+heat added during them, and one from 136.4/111.4 degF (upper/lower)
+delivered 31.1 gal where the probes said 34.5.
+
+Evidence, where the caller has it, can raise the estimate: the longest
+draw the history shows from a tank in the same state or colder, counted
+to the upper probe's crossing. That is a low figure. No clean recorded
+draw took the upper probe below 105 degF (the lowest reached
+107.2 degF), so for a full tank that had filled a 38 gal bath the
+evidence gives 33.4 gal at the probe. Its assumption, that a tank no
+colder delivers at least as much, failed on small differences: 15 of 22
+later draws over-promised for a 2 degF fall.
+
+The probes over-read a tank whose upper element has just heated a thin
+top over a spent tank. On 2026-04-14 a draw from 139.6/78.4 degF
+stayed above 129 degF for 15.7 gal, where the probes say 15.3. Ninety
+minutes later a six-minute upper element run took the upper probe from
+126 to 141 degF, and a 10 gal draw from 141.3/89.6 degF took it to
+101 degF, where the probes say 22.9. The heat book counts that element's
+heat into a thin top layer, drawable only for its own heat, so a book
+answers it; the probes alone can't tell that top from a full one.
 The heat book's catch of recorded depletions is in :doc:`simulator`,
 under Accuracy.
 

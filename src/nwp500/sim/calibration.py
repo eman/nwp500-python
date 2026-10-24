@@ -2165,28 +2165,6 @@ def fit_evidence(
     )
 
 
-def cold_lower_cap(
-    draws: Sequence[CleanDraw],
-    cutoff_f: float,
-    *,
-    near_f: float = 110.0,
-    from_f: float = 115.0,
-) -> float | None:
-    """The evidence's cap after a cold lower zone
-    (``ReadinessParams.cold_lower_cap_gal``): of the draws from a lower
-    probe at or below ``cutoff_f`` that started at ``from_f`` or more and
-    took the upper probe to ``near_f``, the smallest volume credited
-    before it did, rounded down to half a gallon. None without one.
-    ``cutoff_f`` itself (``cold_lower_cutoff_f``) is read off the drops by
-    lower-probe band, a judgement, not a fit."""
-    hits = [
-        crossing(d, near_f)[0]
-        for d in draws
-        if d.l0 <= cutoff_f and d.u0 >= from_f and crossing(d, near_f)[1]
-    ]
-    return math.floor(min(hits) * 2) / 2 if hits else None
-
-
 # ── the heat book's own terms, from re-anchors on full tanks ────────
 
 

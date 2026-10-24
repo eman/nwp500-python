@@ -648,30 +648,6 @@ NWP500-65's installation; measure your own where you can.
        crossed the line; also the rate the book's upper zone falls past
        its empty point. Two crossings, 1.6 at the probe and 1.83-2.07 at
        a spout; the faster kept.
-   * - ``cold_lower_cutoff_f``
-     - 100 degF
-     - At or below this lower-probe reading the hot/cold boundary cannot
-       be placed between the probes: the answer says
-       ``thermocline_unlocated``.
-   * - ``cold_lower_cap_gal``
-     - 6.5 gal
-     - The cap on an evidence answer there (a book is never capped): the
-       least any of three draws from such a state gave before the upper
-       probe reached 110 degF.
-   * - ``full_setpoint_band_f``
-     - 2.0 degF
-     - Both probes this close to the setpoint, or above it, is a tank
-       the heater has brought to its target: it has the full-tank floor.
-       With no evidence, a tank whose probes are within the book's
-       ``uniform_band_f`` of each other has it too, at any temperature,
-       and so does a tank whose lower probe is at or above ``line_f``,
-       heating or not, with ``delivered_lag_gal`` on it.
-   * - ``full_hidden_gal``
-     - 13.5 gal
-     - What the full-tank floor takes off for cold water from earlier
-       draws hiding under a lower probe that reads full: the most a book
-       found, over 2,505 samples with the setpoint near 141 degF, on a
-       65 gal tank. The 50 and 80 gal defaults scale it by size.
    * - ``dip_f``, ``dip_min``
      - 3.4 degF, 3.0 min
      - The transient dip during a draw that is not running out: a
@@ -695,15 +671,23 @@ NWP500-65's installation; measure your own where you can.
      - Draws from your own record: ``(upper_f, lower_f, gallons)``, the
        probes before a draw with the heat pump and elements off and the
        gallons it delivered before the upper probe crossed the line,
-       reduced to its frontier. The answer without a book for a tank
-       that is not full. ``sim.delivery.EXAMPLE_EVIDENCE`` is one
+       reduced to its frontier. Without a book, the answer where it
+       shows more than the probes. ``sim.delivery.EXAMPLE_EVIDENCE`` is one
        installation's 19-draw frontier, which
        ``with_example_evidence`` sets (at a 105 degF line only).
 
-Without a book or evidence, ``readiness`` has an answer only for a full
-tank (the floor); any other state reads 0 with
-``colder_than_evidence``. ``site_example_params`` carries the site's
-evidence; ``default_params``, which has no mixing valve, carries none.
+Without a book, ``readiness`` reads the tank's heat from its two
+probes, as the book's anchor does (``sim.delivery.probes_gal``), for any
+state with the upper probe at or above ``line_f``, whether the probes
+agree or not and whether the heater runs or not, with
+``delivered_lag_gal`` on it. With evidence, the answer is the larger of
+that and the evidence's. An upper probe below the line reads 0.
+``site_example_params`` carries the site's evidence; ``default_params``,
+which has no mixing valve, carries none.
+
+A parameters document that still carries ``cold_lower_cutoff_f``,
+``cold_lower_cap_gal``, ``full_setpoint_band_f`` or ``full_hidden_gal``
+under ``readiness`` loads without them (``params.RETIRED_FIELDS``).
 
 ``params.book`` (``BookParams``) holds the book's own terms, fitted on
 the re-anchors of one NWP500-65's metered record: its compressor,
@@ -1008,17 +992,6 @@ The ones about inputs and parameters:
        meter. The readiness answer says the first two, whether or not a
        recovery was needed; any answer with draws, the third. Fit them and drop each from
        ``HeaterParams.unfitted``.
-   * - ``no_evidence_for_state``
-     - No book, no evidence, and a tank that isn't full or uniform, with
-       its lower probe below the line: two probes can't place the heat,
-       so the deliverable gallons are unknown, not none, and read 0.
-   * - ``estimated_from_probes``
-     - No book and no evidence, and the lower probe at or above the
-       line: the hot water reaches at least that low, so the deliverable
-       gallons are the full-tank floor from the probes, plus the lag.
-       They're never less than ``delivered_lag_gal``. The floor was
-       calibrated at a setpoint near 141 degF; at a lower setpoint it
-       reads low, by an amount no measurement has tested.
    * - ``ambient_defaulted``
      - No usable air reading was given (``Environment.ambient_f`` missing,
        or its readings all missing), so the answer ran at the default

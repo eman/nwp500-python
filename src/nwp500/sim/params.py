@@ -824,36 +824,6 @@ class ReadinessParams:
     fall_f_per_gal: float = field(
         default=2.0, metadata=_p(MEASURED, "°F/gal", INSTALLATION)
     )
-    #: At or below this lower-probe reading the thermocline cannot be
-    #: placed between the probes: the largest drops on the record start
-    #: here.
-    cold_lower_cutoff_f: float = field(
-        default=100.0, metadata=_p(FITTED, "°F", INSTALLATION)
-    )
-    #: The answer's cap there, from ``evidence`` only (a heat book is
-    #: not capped): the least any draw from such a state gave before the
-    #: upper probe reached 110 °F, three draws, rounded down.
-    cold_lower_cap_gal: float = field(
-        default=6.5, metadata=_p(MEASURED, "gal", INSTALLATION)
-    )
-    #: Both probes within this of the setpoint, or above it: a tank the
-    #: heater has brought to its target, which has the full-tank floor.
-    full_setpoint_band_f: float = field(
-        default=2.0, metadata=_p(DEFAULT, "°F", INSTALLATION)
-    )
-    #: What the full-tank floor takes off the tank's heat, in delivered
-    #: gallons: the most cold water from earlier draws was found hiding
-    #: under the lower probe of a tank that read full, over 2,505
-    #: five-minute samples with the setpoint near 141 °F.
-    full_hidden_gal: float = field(
-        default=13.5,
-        metadata=_p(
-            FITTED,
-            "gal",
-            INSTALLATION,
-            _PER_DELIVERED + "; may include circulation return water",
-        ),
-    )
     #: A draw's transient dip that is not running out: the delivered
     #: water may fall this far below the line, for this long, before the
     #: draw counts as cold (the NWP500's upper probe dips about 3.4 °F for
@@ -878,8 +848,10 @@ class ReadinessParams:
         default=12.0, metadata=_p(DEFAULT, "gal", INSTALLATION)
     )
     #: Draws that show how much a tank in a given state delivers before
-    #: the upper probe crosses ``line_f``: the readiness answer without a
-    #: heat book. Each is ``(upper_f, lower_f, gallons)``, reduced to its
+    #: the upper probe crosses ``line_f``: without a heat book, the
+    #: readiness answer where they show more than the probes
+    #: (``sim.delivery.probes_gal``). Each is ``(upper_f, lower_f,
+    #: gallons)``, reduced to its
     #: frontier. None by default: they are a household's own record.
     #: ``sim.delivery.EXAMPLE_EVIDENCE`` is one installation's.
     evidence: tuple[EvidenceDraw, ...] = field(
@@ -1094,9 +1066,9 @@ class CirculationParams:
 #: ``standby`` (the jacket's loss law) and ``gap_tau`` (the gap's time
 #: constant); and the installation's terms fitted from a meter's draws,
 #: ``book`` (``BookParams``: the heat book's terms and error bands),
-#: ``readiness`` (``ReadinessParams``: the delivered lag, hidden heat,
-#: cap and volumes) and ``draw`` (``DrawParams``: the draw response and
-#: its domain).
+#: ``readiness`` (``ReadinessParams``: the delivered lag, evidence and
+#: volumes) and ``draw`` (``DrawParams``: the draw response and its
+#: domain).
 UNFITTED_TERMS: tuple[str, ...] = (
     "compressor",
     "power",
@@ -1180,6 +1152,21 @@ PARTS: Mapping[str, type] = MappingProxyType(
 #: Parts that may be absent: None, not their defaults.
 OPTIONAL_PARTS = frozenset({"circulation"})
 
+#: Fields a part no longer has, by part: an older document's, read
+#: without them and without naming them (``unknown_fields``).
+RETIRED_FIELDS: Mapping[str, frozenset[str]] = MappingProxyType(
+    {
+        "readiness": frozenset(
+            {
+                "cold_lower_cutoff_f",
+                "cold_lower_cap_gal",
+                "full_setpoint_band_f",
+                "full_hidden_gal",
+            }
+        ),
+    }
+)
+
 
 def _plain(value: Any) -> Any:
     """A field's value as JSON holds it: a tuple as a list."""
@@ -1208,10 +1195,12 @@ def params_to_document(params: HeaterParams) -> dict[str, Any]:
 def unknown_fields(doc: Mapping[str, Any]) -> list[str]:
     """The parts and fields ``doc`` names that ``HeaterParams`` has not
     (``part`` or ``part.field``): what a newer writer added, which
-    ``params_from_document`` leaves out."""
+    ``params_from_document`` leaves out. Fields this code no longer has
+    (``RETIRED_FIELDS``) are left out without being named."""
     out = [k for k in doc if k not in ("schema", "unfitted") and k not in PARTS]
     for name, cls in PARTS.items():
-        known = {f.name for f in fields(cls)}
+        retired = RETIRED_FIELDS.get(name, frozenset())
+        known = {f.name for f in fields(cls)} | retired
         given = doc.get(name, {})
         if isinstance(given, Mapping):
             keys = cast(Mapping[str, Any], given)

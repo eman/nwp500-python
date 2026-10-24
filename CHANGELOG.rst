@@ -17,12 +17,29 @@ Fixed
   minute and the pump's speed five, so a draw or a run going in doesn't
   run on for the whole outage.
 
-- **A hot lower probe no longer reads 0 gal.** With no heat book and no
-  evidence, a tank that wasn't uniform or at its setpoint read 0 gal
-  (``no_evidence_for_state``), and so did any tank while heating, even
-  one hot past its lower probe. Now a lower probe at or above the line
-  reads the full-tank floor from the probes, heating or not, plus
-  ``delivered_lag_gal``, with the new reason ``estimated_from_probes``.
+- **Readiness reads the tank from its probes.** Without a heat book,
+  the deliverable gallons are now the tank's heat as its two probes
+  place it, as the book's anchor reads it, plus ``delivered_lag_gal``,
+  for any state with the upper probe at or above the line. A tank whose
+  probes read full no longer has 13.5 gal taken off; a tank with its
+  probes apart reads its probes' heat instead of 0; a cold lower probe
+  no longer caps the answer at 6.5 gal; and a running heater no longer
+  holds the answer back, now or along a projected recovery. With
+  evidence, the answer is the larger of the evidence's and the probes'.
+  On one installation, a drawdown from 136.4/111.4 °F delivered 31.1 gal
+  where this says 34.5, and two from uniform tanks matched it.
+  ``sim.delivery.probes_gal`` replaces ``full_tank_floor_gal`` and
+  ``hot_to_the_lower_probe``. Removed: ``ReadinessParams.full_hidden_gal``,
+  ``cold_lower_cutoff_f``, ``cold_lower_cap_gal`` and
+  ``full_setpoint_band_f``; ``calibration.cold_lower_cap``;
+  ``Deliverable.thermocline_unlocated``, ``colder_than_evidence``,
+  ``no_evidence`` and ``from_probes``; ``TankNow.heating``; the
+  ``setpoint_f`` and ``heating`` arguments of ``delivery.deliverable``;
+  and the reasons ``thermocline_unlocated``, ``colder_than_all_evidence``,
+  ``no_evidence_for_state`` and ``estimated_from_probes``
+  (``ready.NO_EVIDENCE_FOR_STATE``, ``ESTIMATED_FROM_PROBES``). A
+  parameters document that still carries the removed parameters loads
+  without them (``params.RETIRED_FIELDS``).
 
 - **The heat book anchors while the heat pump runs.** The book anchored
   only when a recovery ended, so a book lost to a restart, or an old one

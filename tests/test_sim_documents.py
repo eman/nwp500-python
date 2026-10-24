@@ -107,9 +107,7 @@ class TestToDocument:
         deliverable = sim.Deliverable(
             gal=math.nan,
             basis="energy",
-            thermocline_unlocated=False,
             at_observed_max=False,
-            colder_than_evidence=False,
         )
         assert codec.to_document(deliverable)["gal"] is None
 

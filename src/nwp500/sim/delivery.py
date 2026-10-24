@@ -16,54 +16,36 @@ to the fixture, still leaves hot: the delivered water crosses the line
 answer is the probe line's plus the lag while the probe line has water
 left, and from the book, once it is spent, the lag less the gallons
 drawn past it. Without a book, a probe below the line answers 0: nothing
-says how far past it the draw went; nor does a tank colder than every
-evidence draw get the lag, since the evidence vouches for no probe line
-there.
+says how far past it the draw went.
 
 **From the tank's booked heat** (``sim.book``) when the caller has a
 book: the heat above the empty point, less what a cold region withholds,
 per delivered gallon. On the installation the defaults come from, that
-is the answer 78 % of the time and the one that can see a bath's cold
-water the probes cannot.
+is the answer 78 % of the time.
 
-**From the evidence otherwise** (``ReadinessParams.evidence``, none by
-default): the longest draw the caller's record shows a tank in the same
-or a worse state (neither probe warmer) delivering, finishing with the
-heat pump and both elements off, from a settled start.
-``EXAMPLE_EVIDENCE`` is one installation's.
+**From the probes otherwise** (``probes_gal``): the tank's heat as its
+two probes place it, ``8.34 · V · (T_mean − 70)`` at a 70 °F inlet, as
+the book's anchor reads it, above the empty point per delivered gallon.
+That is the answer for any state with the upper probe at or above the
+line, the probes together or apart, heating or not: heating only adds
+heat. On one installation two drawdowns from uniform tanks delivered
+what it says, net of the heat added during them, and one from
+136.4/111.4 °F delivered 31.1 gal where it says 34.5, the lag included.
 
-**A full tank has a floor of its own.** When both probes are within
-``full_setpoint_band_f`` of the setpoint or above it, the tank reads as
-the book's anchor would, ``8.34 · V · (T_mean − 70)`` at a 70 °F inlet,
-less ``full_hidden_gal``: the most the book found such a tank to hold
-below what its probes said, the cold water of draws since its anchor
-sitting under the lower probe. The answer is the larger of that and the
-evidence's. Not while the heater runs: in a recovery's last minutes the
-probes reach the setpoint over water it is still warming.
-
-**A hot lower probe has the same floor.** With no book and no evidence,
-a lower probe at or above the line says the hot water reaches at least
-that low, so the tank reads the full-tank floor from its probes, heating
-or not, with the lag on it: never less than ``delivered_lag_gal``.
-Against one installation's book over a month, less ``full_hidden_gal``
-it read above the book in 11 of 2,689 answers, all post-draw tanks at
-rest, by at most 3.6 gal; while heating, never. Heating only adds heat,
-so a floor from the probes now stays a floor. The empty point and
-``full_hidden_gal`` were calibrated at a setpoint near 141 °F; at a lower
-one the floor is lower than the tank delivers, by an amount no
-measurement has tested.
+**With evidence** (``ReadinessParams.evidence``, none by default) the
+answer is the larger of the probes' and the longest draw the caller's
+record shows a tank in the same or a worse state (neither probe warmer)
+delivering, finishing with the heat pump and both elements off, from a
+settled start. ``EXAMPLE_EVIDENCE`` is one installation's.
 
 **The book is read no higher than the tank can hold**: all of it at the
 warmer probe (``book.tank_max_btu``).
 
-**With the lower probe cold** the boundary is anywhere between the
-probes, and heat booked into a cold bottom may not be drawable as hot:
-on 2026-04-14 a draw from 139.6/78.4 °F stayed above 129 °F for 15.7
-gal, and ninety minutes later a 10 gal top-up from 141.3/89.6 took the
-upper probe to 101 °F. At or below ``cold_lower_cutoff_f`` the answer
-carries ``thermocline_unlocated``. From the book, the heat that landed
-in the cold bottom is withheld; from the evidence, the answer is
-**capped** at ``cold_lower_cap_gal``.
+**Heat booked into a cold bottom** may not be drawable as hot: on
+2026-04-14 a draw from 139.6/78.4 °F stayed above 129 °F for 15.7 gal,
+and ninety minutes later a 10 gal top-up from 141.3/89.6 took the upper
+probe to 101 °F. From the book, the heat that landed in the cold bottom
+is withheld.
 
 **When it runs out** (``delivery_temp_f``): the drawable heat is what a
 draw can take before the upper probe crosses the line, and the lag is
@@ -121,50 +103,23 @@ def demonstrated_gal(
     )
 
 
-def hot_to_the_lower_probe(
-    lower_f: float, p: ReadinessParams | None = None
-) -> bool:
-    """The lower probe at or above the line: the hot water reaches at
-    least as low as it."""
-    p = p or ReadinessParams()
-    return lower_f >= p.line_f
-
-
-def full_tank_floor_gal(
+def probes_gal(
     upper_f: float,
     lower_f: float,
-    setpoint_f: float | None,
     p: ReadinessParams | None = None,
     ep: BookParams | None = None,
-    *,
-    heating: bool = False,
-    uniform: bool = False,
 ) -> float:
-    """A full tank: the book's anchor heat at a 70 °F inlet, less
-    ``full_hidden_gal``. Full is at its setpoint, or with ``uniform``
-    (no evidence to answer instead) both probes within the book's
-    ``uniform_band_f``, where two probes place the heat as the book's
-    anchor does, or the lower probe at or above ``line_f``, heating or
-    not (module docstring). 0 for any other state, or while the heater
-    runs."""
+    """The probe line's gallons from the probes alone: the tank's heat
+    as its two probes place it, the book's anchor at its default inlet,
+    over the heat a delivered gallon takes (module docstring). 0 with
+    the upper probe below the line."""
     p = p or ReadinessParams()
     ep = ep or BookParams()
-    at_setpoint = (
-        setpoint_f is not None
-        and min(upper_f, lower_f) >= setpoint_f - p.full_setpoint_band_f
-    )
-    if not (uniform and hot_to_the_lower_probe(lower_f, p)) and (
-        heating
-        or not (
-            at_setpoint
-            or (uniform and abs(upper_f - lower_f) <= ep.uniform_band_f)
-        )
-    ):
+    if upper_f < p.line_f:
         return 0.0
     inlet = ep.inlet_default_f
     heat = full_tank(upper_f, lower_f, inlet, ep).heat_btu
-    gal = deliverable_from_heat(heat, upper_f, inlet, ep)
-    return max(0.0, gal - p.full_hidden_gal)
+    return deliverable_from_heat(heat, upper_f, inlet, ep)
 
 
 @dataclass(frozen=True)
@@ -173,21 +128,12 @@ class Deliverable:
 
     gal: float
     #: ``energy`` when the tank's booked heat answered (``sim.book``),
-    #: ``evidence`` when there was none to book from, ``probes`` when
-    #: there was no evidence either and the full-tank floor answered.
+    #: ``evidence`` when there was none to book from and the caller has
+    #: evidence, ``probes`` when there was neither (``probes_gal``).
     basis: Literal["energy", "evidence", "probes"]
-    thermocline_unlocated: bool
-    #: Evidence basis only: the evidence's largest volume (not when the
-    #: full-tank floor answered above it), and a tank cooler than every
-    #: evidence draw, or with no evidence at all (0 for want of it).
+    #: Evidence basis only: the evidence answered (not the probes,
+    #: above it) at its largest volume.
     at_observed_max: bool
-    colder_than_evidence: bool
-    #: With no evidence at all and a tank the floor can't read (not
-    #: full): the gallons are unknown, not none, and read 0.
-    no_evidence: bool = False
-    #: With no book and no evidence, the lower probe at or above the
-    #: line answered (``hot_to_the_lower_probe``).
-    from_probes: bool = False
 
 
 def delivered_gal(
@@ -212,27 +158,20 @@ def deliverable(
     inlet_f: float | None = None,
     withheld_btu: float = 0.0,
     ep: BookParams | None = None,
-    setpoint_f: float | None = None,
-    heating: bool = False,
 ) -> Deliverable:
     """Deliverable gallons now, at the delivered line.
 
     With the tank's booked heat, the drawable heat (above the empty
     point, less what the cold region withholds) over the heat a
-    delivered gallon takes (the book's). Without it, the
-    demonstrated volume from the evidence, capped where the lower probe
-    is too cold for the heat below it to be drawn as hot, and no less
-    than the full-tank floor at ``setpoint_f`` unless ``heating``. With
-    no evidence either, a lower probe at or above the line answers the
-    full-tank floor, heating or not, and the lag on it.
-    Each is the probe's line; ``delivered_gal`` adds the lag. The
-    booked heat is read no higher than ``tank_max_btu``.
+    delivered gallon takes (the book's). Without it, the probes'
+    gallons (``probes_gal``), or the evidence's demonstrated volume
+    where that is larger. Each is the probe's line; ``delivered_gal``
+    adds the lag. The booked heat is read no higher than
+    ``tank_max_btu``.
     """
     p = p or ReadinessParams()
     ep = ep or BookParams()
-    unlocated = lower_f <= p.cold_lower_cutoff_f
-    demonstrated = floor = probe = 0.0
-    from_probes = False
+    demonstrated = probes = 0.0
     if heat_btu is not None:
         probe = probe_line_gal(
             heat_btu,
@@ -244,54 +183,22 @@ def deliverable(
         )
         gal = delivered_gal(probe, upper_f, p)
         basis: Literal["energy", "evidence", "probes"] = "energy"
-    elif upper_f < p.line_f:
-        gal = 0.0
-        basis = "evidence"
     else:
-        demonstrated = demonstrated_gal(upper_f, lower_f, p.evidence)
-        floor = full_tank_floor_gal(
-            upper_f,
-            lower_f,
-            setpoint_f,
-            p,
-            ep,
-            heating=heating,
-            uniform=not p.evidence,
-        )
-        probe = max(demonstrated, floor)
-        if unlocated:
-            probe = min(probe, p.cold_lower_cap_gal)
-        # The lag rides on a probe line the evidence vouches for, or on
-        # a lower probe at the line: the zone above it keeps delivering
-        # for the lag after the upper probe crosses. A tank colder than
-        # every evidence draw is not known to have any: it may be a draw
-        # already past its crossing that a transient lifted back over
-        # the line (2026-04-14 04:02: an upper element on a spent top,
-        # its lower probe cold), so it answers 0, as the reason says.
-        from_probes = not p.evidence and hot_to_the_lower_probe(lower_f, p)
-        gal = (
-            delivered_gal(probe, upper_f, p)
-            if probe > 0.0 or from_probes
-            else 0.0
-        )
         basis = "evidence" if p.evidence else "probes"
-    evidence = basis == "evidence"
-    unknown = basis == "probes" and probe == 0.0 and not from_probes
+        if upper_f < p.line_f:
+            gal = 0.0
+        else:
+            demonstrated = demonstrated_gal(upper_f, lower_f, p.evidence)
+            probes = probes_gal(upper_f, lower_f, p, ep)
+            gal = delivered_gal(max(demonstrated, probes), upper_f, p)
     return Deliverable(
         gal=round(gal, 1),
         basis=basis,
-        thermocline_unlocated=unlocated,
         at_observed_max=(
-            evidence
-            and bool(p.evidence)
-            and floor <= demonstrated
-            and probe >= observed_max_gal(p.evidence)
+            basis == "evidence"
+            and probes <= demonstrated
+            and demonstrated >= observed_max_gal(p.evidence)
         ),
-        colder_than_evidence=(
-            evidence and upper_f >= p.line_f and max(demonstrated, floor) == 0.0
-        ),
-        no_evidence=unknown,
-        from_probes=from_probes,
     )
 
 
@@ -491,17 +398,6 @@ def _at_onset(
     return delivery[k] if points[k].at == at else delivery[max(0, k - 1)]
 
 
-def _interval_at(points: Sequence[PathPoint], at: datetime) -> PathPoint | None:
-    """The point ending the simulated interval that holds ``at``: a
-    point carries the setpoint in force, and whether the heater ran,
-    over the interval up to it. The full-tank floor's, for a window read
-    without a book."""
-    for p0, p1 in itertools.pairwise(points):
-        if p0.at <= at <= p1.at:
-            return p1
-    return None
-
-
 @dataclass(frozen=True)
 class Depletion:
     """The delivery temperature over a span, judged with the dip
@@ -606,8 +502,8 @@ def _zone_delivery(
     the zone last crossed below the line, a draw at an instant that has
     two elements counted after the first (its step). A zone already
     below the line at the start has no crossing to count from: nothing
-    says how far past it the tank is, so it gets no lag, as the
-    evidence answers 0 there."""
+    says how far past it the tank is, so it gets no lag, as
+    ``deliverable`` answers 0 there."""
     ordered = sorted(draws)
     at = [d for d, _ in ordered]
     gal = list(itertools.accumulate(g for _, g in ordered))
@@ -701,15 +597,7 @@ def draw_windows(
         )
         band_gal = 0.0
         if booked is None:
-            there_now = _interval_at(sim.points, opened)
-            gal = deliverable(
-                upper,
-                lower,
-                p,
-                ep=ep,
-                setpoint_f=None if there_now is None else there_now.setpoint_f,
-                heating=there_now is not None and there_now.heating,
-            ).gal
+            gal = deliverable(upper, lower, p, ep=ep).gal
             at_onset = _at_onset(sim.points, delivery, opened, upper)
         else:
             there = booked.before(opened)

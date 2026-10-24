@@ -134,8 +134,8 @@ line (105 degF by default), from the book's heat above its empty point.
 The probe is not at the tap: the delivered water crosses the line some
 gallons after the upper probe does, the water above it and in the pipe
 to the fixture, so every answer carries that lag. Without a book, the
-answer is a full tank's floor, or evidence from the caller's own
-draws. A draw window runs cold when the delivered water falls more than
+answer is the tank's heat as its two probes place it, or evidence from
+the caller's own draws where it shows more. A draw window runs cold when the delivered water falls more than
 the heater's own transient dip below the line, or stays below it longer.
 
 

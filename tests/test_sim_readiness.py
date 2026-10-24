@@ -57,6 +57,10 @@ LAG = P.delivered_lag_gal
 P0 = replace(P, delivered_lag_gal=0.0)
 #: Hot enough to dominate every evidence point.
 FULL = (150.0, 150.0)
+#: The example evidence 30 gal higher: above what the probes say, so it
+#: answers.
+TALL = replace(P, evidence=tuple((u, lo, g + 30.0) for u, lo, g in EVIDENCE))
+TALL_MAX_GAL = OBSERVED_MAX_GAL + 30.0
 
 
 def deliverable(
@@ -99,6 +103,10 @@ def zone_delivery_f(
 
 def demonstrated_gal(upper: float, lower: float) -> float:
     return rd.demonstrated_gal(upper, lower, EVIDENCE)
+
+
+def probes_gal(upper: float, lower: float) -> float:
+    return rd.probes_gal(upper, lower, P, EP)
 
 
 # ── recorded steps, replayed with the book's terms ──────────────────
@@ -189,9 +197,15 @@ def _bath(gal: float = 30.0) -> Booked:
 
 
 class TestDeliverable:
-    def test_it_never_promises_more_than_history_has_shown(self) -> None:
+    def test_the_probes_answer_above_the_evidence(self) -> None:
         d = deliverable(*FULL)
-        assert d.gal == pytest.approx(OBSERVED_MAX_GAL + LAG, abs=0.05)
+        assert probes_gal(*FULL) > OBSERVED_MAX_GAL
+        assert d.gal == pytest.approx(probes_gal(*FULL) + LAG, abs=0.05)
+        assert d.basis == "evidence" and not d.at_observed_max
+
+    def test_evidence_above_the_probes_answers_to_its_largest(self) -> None:
+        d = deliverable(*FULL, TALL)
+        assert d.gal == pytest.approx(TALL_MAX_GAL + LAG, abs=0.05)
         assert d.at_observed_max
 
     def test_below_the_threshold_nothing_is_deliverable(self) -> None:
@@ -201,21 +215,27 @@ class TestDeliverable:
         coldest = min(u for u, _, _ in EVIDENCE)
         assert demonstrated_gal(coldest - 0.1, 150.0) == 0.0
 
-    def test_after_a_bath_it_does_not_promise_what_crashed(self) -> None:
-        """2026-04-14 03:58: a 10 gal top-up took the upper probe from
-        141.3 to 100.9 °F with the lower at 89.6."""
-        d = deliverable(141.26, 89.60)
-        assert d.thermocline_unlocated
-        assert d.gal <= P.cold_lower_cap_gal < 10.0
-
-    def test_the_cold_lower_cap_only_ever_lowers_the_evidence(self) -> None:
-        for upper, lower in ((147.0, 95.0), (128.0, 99.0)):
+    def test_a_cold_lower_probe_is_not_capped(self) -> None:
+        """The probes place the heat whatever the lower one reads."""
+        for upper, lower in ((141.26, 89.6), (147.0, 95.0), (128.0, 99.0)):
             d = deliverable(upper, lower)
-            raw = demonstrated_gal(upper, lower)
-            probe = min(raw, P.cold_lower_cap_gal)
-            assert d.gal == pytest.approx(
-                probe + LAG if probe > 0 else 0.0, abs=0.05
+            probe = max(
+                demonstrated_gal(upper, lower), probes_gal(upper, lower)
             )
+            assert probe > 6.5
+            assert d.gal == pytest.approx(probe + LAG, abs=0.05)
+
+    def test_a_stratified_tank_reads_its_probes_heat(self) -> None:
+        """A drawdown from 136.4/111.4 °F delivered 31.1 gal; the
+        probes' heat says 34.5 with the lag."""
+        bare = replace(P, evidence=())
+        d = deliverable(136.4, 111.4, bare)
+        assert d.basis == "probes"
+        assert d.gal == pytest.approx(34.5, abs=0.05)
+        heat = full_tank(136.4, 111.4, 70.0, EP).heat_btu
+        assert d.gal == pytest.approx(
+            deliverable_from_heat(heat, 136.4, 70.0) + LAG, abs=0.05
+        )
 
     def test_the_book_is_not_capped_its_cold_bottom_is_withheld(self) -> None:
         """From the book the cold lower probe does not cap the answer;
@@ -224,9 +244,8 @@ class TestDeliverable:
 
         full = deliverable_from_heat(38000.0, 147.0, 70.0)
         e = deliverable(147.0, 95.0, heat_btu=38000.0, inlet_f=70.0)
-        assert e.basis == "energy" and e.thermocline_unlocated
+        assert e.basis == "energy"
         assert e.gal == pytest.approx(full + LAG, abs=0.05)
-        assert e.gal > P.cold_lower_cap_gal
         w = deliverable(
             147.0, 95.0, heat_btu=38000.0, inlet_f=70.0, withheld_btu=8000.0
         )
@@ -241,25 +260,19 @@ class TestDeliverable:
         assert by_upper == sorted(by_upper)
         assert by_lower == sorted(by_lower)
 
-    def test_a_tank_at_its_setpoint_has_the_full_tank_floor(self) -> None:
+    def test_a_uniform_tank_reads_all_its_heat(self) -> None:
         """2026-09-28 14:41 PDT, a tank just off a recovery to
-        141.8 °F read 25.1 gal from the evidence, 0.18 °F under the 33.4
-        gal step, and a 22.4 gal bath then left the upper probe at
-        140.2. At its setpoint it has the floor; off it, the evidence."""
-        assert deliverable(141.08, 141.26, P0).gal == 25.1
-        d = deliverable(141.08, 141.26, P0, setpoint_f=141.8)
+        141.8 °F, 0.18 °F under the evidence's 33.4 gal step: a 22.4 gal
+        bath then left the upper probe at 140.2. Its probes' heat
+        answers, with nothing taken off."""
+        assert demonstrated_gal(141.08, 141.26) == 25.1
+        d = deliverable(141.08, 141.26, P0)
+        heat = full_tank(141.08, 141.26, 70.0, EP).heat_btu
         assert d.basis == "evidence"
-        assert 30.5 < d.gal == pytest.approx(35.7, abs=0.05)
-        assert deliverable(141.08, 141.26, P0, setpoint_f=143.2).gal == 25.1
-
-    def test_a_running_heater_withholds_the_floor(self) -> None:
-        """In a recovery's last minutes the probes reach the setpoint
-        over cold water the heater is still warming; the book clears at
-        the quiet end that follows."""
-        assert (
-            deliverable(141.08, 141.26, P0, setpoint_f=141.8, heating=True).gal
-            == 25.1
+        assert d.gal == pytest.approx(
+            deliverable_from_heat(heat, 141.08, 70.0), abs=0.05
         )
+        assert d.gal == pytest.approx(49.2, abs=0.05)
 
     def test_the_book_is_read_no_higher_than_the_tank_can_hold(self) -> None:
         """2026-09-28 17:56 PDT: the 13:29 anchor carried through a
@@ -274,10 +287,10 @@ class TestDeliverable:
         assert got == pytest.approx(whole, abs=0.05)
         assert got < deliverable_from_heat(b.heat_btu, 140.18, 76.66) - 5.0
 
-    def test_the_floor_above_the_evidence_is_not_its_cap(self) -> None:
-        """``at_observed_max`` says the evidence ran out; the floor
-        answering above it is not the evidence."""
-        d = deliverable(146.0, 146.0, setpoint_f=146.0)
+    def test_the_probes_above_the_evidence_are_not_its_cap(self) -> None:
+        """``at_observed_max`` says the evidence ran out; the probes
+        answering above it are not the evidence."""
+        d = deliverable(146.0, 146.0)
         assert d.gal > OBSERVED_MAX_GAL
         assert not d.at_observed_max
 
@@ -753,32 +766,20 @@ class TestTheDeliveredLine:
     def test_without_a_book_a_probe_below_the_line_is_empty(self) -> None:
         """Nothing says how far past its line the draw went."""
         assert deliverable(104.9, 104.0).gal == 0.0
-        u, lo, g = min(EVIDENCE, key=lambda e: e[0])
-        assert deliverable(u, lo).gal == pytest.approx(g + LAG, abs=0.05)
+        assert deliverable(104.9, 104.0, replace(P, evidence=())).gal == 0.0
 
-    def test_colder_than_all_evidence_promises_nothing(self) -> None:
-        """The lag rides on a probe line the evidence
-        vouches for. 2026-04-14 04:02 the upper element lifted a spent
-        top back to 105.4 °F: with no book that state must answer 0,
-        not the lag."""
-        d = deliverable(105.2, 95.0)
-        assert d.colder_than_evidence and d.gal == 0.0
+    def test_at_the_line_the_lag_is_left(self) -> None:
+        """A probe line with no heat above the empty point still has
+        the lag above it: the probe has not crossed."""
+        assert probes_gal(105.2, 95.0) == 0.0
+        assert deliverable(105.2, 95.0).gal == LAG
+        assert deliverable(105.2, 95.0, replace(P, evidence=())).gal == LAG
 
-    def test_the_full_tank_floor_carries_the_lag_once(self) -> None:
-        """35.7 gal on the probe's line, 40.7 delivered."""
-        d = deliverable(141.08, 141.26, setpoint_f=141.8)
-        assert d.gal == pytest.approx(35.7 + LAG, abs=0.05) == 40.7
-
-    def test_the_cold_lower_cap_is_on_the_probe_line_not_the_delivered(
-        self,
-    ) -> None:
-        """The cap is the evidence's, on the probe's line; the lag
-        comes after it."""
-        u, lo = 150.0, 99.5
-        assert demonstrated_gal(u, lo) > P.cold_lower_cap_gal
-        d = deliverable(u, lo)
-        assert d.thermocline_unlocated
-        assert d.gal == pytest.approx(P.cold_lower_cap_gal + LAG, abs=0.05)
+    def test_the_probes_carry_the_lag_once(self) -> None:
+        """49.2 gal on the probe's line, 54.2 delivered."""
+        d = deliverable(141.08, 141.26)
+        assert deliverable(141.08, 141.26, P0).gal == pytest.approx(49.2)
+        assert d.gal == pytest.approx(49.2 + LAG, abs=0.05) == 54.2
 
     def test_capped_at_observed_volume_reads_the_probe_line(self) -> None:
         """``at_observed_max`` says the evidence ran out: its largest
@@ -789,11 +790,12 @@ class TestTheDeliveredLine:
             if OBSERVED_MAX_GAL - LAG <= e[2] < OBSERVED_MAX_GAL
         ]
         assert below
-        u, lo, _ = max(below, key=lambda e: e[2])
-        d = deliverable(u, lo)
-        assert d.gal >= OBSERVED_MAX_GAL
+        u, lo, g = max(below, key=lambda e: e[2])
+        d = deliverable(u, lo, TALL)
+        assert d.gal == pytest.approx(g + 30.0 + LAG, abs=0.05)
+        assert d.gal >= TALL_MAX_GAL
         assert not d.at_observed_max
-        assert deliverable(*FULL).at_observed_max
+        assert deliverable(*FULL, TALL).at_observed_max
 
     def test_between_the_lines_the_delivery_is_at_the_line_not_under(
         self,
