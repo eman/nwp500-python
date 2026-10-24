@@ -969,8 +969,12 @@ the one seen over the retrains from 2026-08-08 to 2026-10-18.
 
 **Engineering values**, not measured on the heater: the condenser
 approach (10 degF), clearance ratio (0.05), polytropic exponent (1.17),
-the fan's airflow (229 CFM, the specification), the jacket loss
-fallback (5.0 BTU/hr per degF) and the lift reference (62 degF).
+the fan's airflow in the latent term (229 CFM; no airflow is
+published, and the manual's 229 is the 50 gal model's shipping weight
+in pounds), the jacket loss fallback (5.0 BTU/hr per degF) and the
+lift reference (62 degF). The latent term is up to about 150 BTU/hr
+of about 4,000; on the record, humidity's own effect on a recovery's
+duration, with the air held, is not resolved.
 
 ``params_to_document`` and ``params_from_document`` in
 ``nwp500.sim.params`` write and read parameters as a JSON document

@@ -8,6 +8,13 @@ Unreleased
 Fixed
 -----
 
+- **The fan airflow's source.** ``CompressorParams.fan_airflow_cfm``
+  (229) was cited as the NWP500's specification. No airflow is
+  published; the manual's 229 is the 50 gal model's shipping weight in
+  pounds. The value stays: on 178 recorded recoveries the latent term it
+  sizes is at most about 150 BTU/hr, humidity's own effect is not
+  resolved, and the term off scored 0.6 min worse held out.
+
 - **A held mode landing over the setpoint starts nothing.** On
   2026-09-21 Energy Saver, held through a TOU window, landed at its
   close with the upper tank 18.7 °F above a 107.6 °F setpoint and the
