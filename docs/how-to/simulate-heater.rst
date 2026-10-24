@@ -1209,7 +1209,6 @@ to a day apart. Each pair's booked heat is checked against the probes':
    steps = sa.book_steps_from_history(
        recorded, start=since, end=until, flow=meter_flow, air=air,
        circulation=runs, circulation_flow=pump_flow, params=params,
-       flow_volume="tank",   # what the meter's gallons count
    )
    book = calibration.RecordedBook(steps, p, params.circulation, start=since)
    fit = calibration.fit_book_terms(book, book.reanchors(), p, circuit=True)
@@ -1220,6 +1219,11 @@ to a day apart. Each pair's booked heat is checked against the probes':
    bands = calibration.book_error_bands(book, p, 0.0, v)
    empty, crossings = calibration.empty_point(book, p, 0.0, circuit_gal=v)
    zone = calibration.zone_empty_point(book, p, 0.0, circuit_gal=v)
+
+The steps read the meter as delivered gallons, as the readiness fit
+above does. For a flow that counts tank water, book it with
+``flow_volume="tank"`` here, so ``empty`` and ``zone`` come out in that
+frame.
 
 With ``circuit=True`` the runs are priced at a circuit volume
 (``CirculationParams.book_circuit_gal``) fitted in place of a loss per
