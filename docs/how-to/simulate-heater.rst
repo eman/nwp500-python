@@ -664,9 +664,10 @@ place it (``basis`` ``probes``), heating or not. Give it more:
   given state delivered (``ReadinessParams.evidence``,
   :doc:`/reference/simulator-inputs`).
 
-The gallons count the water in the pipe to your fixture
-(``ReadinessParams.delivered_lag_gal``). The default is one bath's at
-one installation; set your own.
+The gallons include the tank water above the upper probe, which still
+leaves hot after the probe crosses the line
+(``ReadinessParams.delivered_lag_gal``, 5 gal, from one bath on an
+NWP500-65). The water standing in your pipe is not in them.
 
 
 Ask when a bath will be ready
@@ -883,7 +884,9 @@ Each expected draw is a slot's rate times its per-draw mean, a
 fraction of a shower in most slots. It keeps that per-draw volume, so
 it is judged against the draws the parameters were fitted on, not
 against its own fraction. Each of the heater's draw windows opens up to
-an hour before its first likely long draw. With ``worst_case``, each
+an hour before the slot of its first likely long draw and closes up to
+an hour after the end of its last one's. At one installation an hour each side covered 95% of long
+draws, against 90% at half an hour. With ``worst_case``, each
 window's long draws come first, back to back from its opening, and no
 recovery is credited until they are done. ``result.windows`` then says
 whether the tank held through each.
@@ -1273,8 +1276,8 @@ the flow is a setting that moves in steps. Either is None when the runs
 cannot say.
 
 The mixing fit reads gallons left before ``zone_empty_btu``, so set
-that first. The delivered water's lag (one bath's measurement) stays
-an installation value.
+that first. The delivered water's lag (one bath's measurement) is the
+tank's, and no fit here moves it.
 
 
 Fit the elements

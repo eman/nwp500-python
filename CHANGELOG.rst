@@ -15,6 +15,21 @@ Fixed
   over 3 °F and rose to 1.26 °F above its start over the gap's last 2 to
   3 °F, so the hold stays. See :doc:`/explanation/simulator`.
 
+- **The outlet lag is the tank's.** ``ReadinessParams.delivered_lag_gal``
+  (5 gal) was described as mostly the pipe to the fixture. Both bath
+  figures behind it, 7.3 gal at the tub spout and 5.3 at the valve
+  outlet, were taken net of the pipe to each thermometer, and they
+  differ by calibration, not place. The lag is the tank water above the
+  upper probe, and the field is now labelled the heater's. The value is
+  unchanged. See :doc:`/reference/simulator-inputs`.
+
+- **The draw windows' reach rests on the record.** ``HEATER_DRAW_REACH``
+  stays 60 minutes. Its reason was that a draw "can come that much
+  earlier than any the forecast has seen", which nothing measured. On 44
+  complete forecast issues (98 long draws), 60 minutes covered 94.9% of
+  long draws and 30 minutes 89.8%; the five covered only at 60 fell
+  either side of a 30-minute window. See :doc:`/how-to/simulate-heater`.
+
 - **The heater's idle air reading is corrected.** Idle, the heater's
   own air sensor reads its cabinet: on the record (February to October)
   6.2 °F above a sensor beside the heater on average, 9.3 in February to
