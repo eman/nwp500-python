@@ -12,12 +12,11 @@ from datetime import UTC, datetime, time, timedelta
 from typing import Any, cast
 from zoneinfo import ZoneInfo
 
+import pandas as pd
 import pytest
 
-pd = pytest.importorskip("pandas")
-
-from nwp500 import sim_adapters as sa  # noqa: E402
-from nwp500.sim import (  # noqa: E402
+from nwp500 import sim_adapters as sa
+from nwp500.sim import (
     CirculationRun,
     Draw,
     Environment,
@@ -33,7 +32,7 @@ from nwp500.sim import (  # noqa: E402
     site_example_params,
     standby,
 )
-from nwp500.sim.circulation import (  # noqa: E402
+from nwp500.sim.circulation import (
     RUN_GAP,
     Circulation,
     CirculationDraws,
@@ -41,17 +40,17 @@ from nwp500.sim.circulation import (  # noqa: E402
     merge_runs,
     run_draws,
 )
-from nwp500.sim.codec import (  # noqa: E402
+from nwp500.sim.codec import (
     scenario_from_document,
     scenario_to_document,
 )
-from nwp500.sim.defaults import SITE_CIRCULATION  # noqa: E402
-from nwp500.sim.params import (  # noqa: E402
+from nwp500.sim.defaults import SITE_CIRCULATION
+from nwp500.sim.params import (
     CirculationParams,
     params_from_document,
     params_to_document,
 )
-from nwp500.sim.schedules import weekly_runs  # noqa: E402
+from nwp500.sim.schedules import weekly_runs
 
 T0 = datetime(2026, 10, 4, 19, 0, tzinfo=UTC)
 LA = ZoneInfo("America/Los_Angeles")

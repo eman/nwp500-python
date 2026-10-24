@@ -8,13 +8,9 @@ port; these hold their rules.
 from datetime import UTC, datetime, timedelta
 from typing import Any, cast
 
-import pytest
-
-pytest.importorskip("pandas")
-pytest.importorskip("scipy")
-
 import numpy as np
 import pandas as pd
+import pytest
 
 from nwp500.sim import calibration as cal
 from nwp500.sim.book import Step

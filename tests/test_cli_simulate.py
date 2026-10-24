@@ -14,7 +14,6 @@ from typing import Any, cast
 
 import pytest
 
-pytest.importorskip("pandas")
 try:
     from click.testing import CliRunner
 

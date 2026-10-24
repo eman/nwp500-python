@@ -11,8 +11,6 @@ from typing import Any
 
 import pytest
 
-pytest.importorskip("pandas")
-
 from nwp500 import sim_adapters as sa
 from nwp500.models import DeviceStatus
 from nwp500.sim import Schedules, TouPeriod, default_params, simulate

@@ -25,12 +25,11 @@ import pkgutil
 import types
 from pathlib import Path
 
+import numpy as np
+import pandas as pd
 import pytest
 
-np = pytest.importorskip("numpy")
-pd = pytest.importorskip("pandas")
-
-import nwp500.sim  # noqa: E402
+import nwp500.sim
 
 SIM_ROOT = Path(nwp500.sim.__file__).parent
 SOURCES = sorted(SIM_ROOT.rglob("*.py"))

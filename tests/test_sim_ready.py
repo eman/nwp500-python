@@ -12,9 +12,6 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import pytest
-
-pytest.importorskip("pandas")
-
 from _sim_site import EP  # type: ignore[import-not-found]  # test helper
 
 from nwp500.sim import delivery as rd

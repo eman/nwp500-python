@@ -10,8 +10,6 @@ from typing import Any, ClassVar, TypedDict, cast
 
 import pytest
 
-pytest.importorskip("pandas")
-
 from nwp500 import sim, sim_live
 from nwp500 import sim_home_assistant as ha
 from nwp500.sim.location_air import FittedLocationAir, LocationAirModel

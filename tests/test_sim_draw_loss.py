@@ -6,8 +6,10 @@ from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
+import pandas as pd
 import pytest
 
+from nwp500.sim import decay
 from nwp500.sim.defaults import site_example_params
 from nwp500.sim.params import TankParams
 from nwp500.sim.physics.draw import (
@@ -288,14 +290,6 @@ class TestProbesAfterDraw:
         assert self.after(135.0, 120.0, 0.0) == (135.0, 120.0)
 
 
-def _decay() -> Any:
-    """``sim.decay``, which needs pandas."""
-    pytest.importorskip("pandas")
-    from nwp500.sim import decay
-
-    return decay
-
-
 class TestTheCoastsDraw:
     """``project_decay`` charges a delivered draw as ``draw_step``
     does, and the bulk's fall is the draw's apparent heat."""
@@ -305,20 +299,19 @@ class TestTheCoastsDraw:
     def coast(
         self, upper: float, lower: float, draws: list[tuple[datetime, float]]
     ) -> Any:
-        pd = pytest.importorskip("pandas")
         end = self.T0 + timedelta(minutes=1)
         air = pd.DataFrame(
             {"ambient_f": [65.0, 65.0]},
             index=pd.DatetimeIndex([self.T0, end + timedelta(hours=1)]),
         )
-        return _decay().project_decay(
+        return decay.project_decay(
             upper, lower, air, 0.0, 1e9, end, self.T0, draws=draws, **CALIBRATED
         )
 
     @pytest.mark.parametrize("lower", [134.0, 112.0])
     def test_it_is_draw_steps(self, lower: float) -> None:
         out = self.coast(135.0, lower, [(self.T0, 12.0)])
-        upper, low = _decay().draw_step(135.0, lower, 12.0, **CALIBRATED)
+        upper, low = decay.draw_step(135.0, lower, 12.0, **CALIBRATED)
         assert out.t_upper == pytest.approx(upper, abs=1e-6)
         assert out.t_lower == pytest.approx(low, abs=1e-6)
 
@@ -338,6 +331,7 @@ class TestTheCoastsDraw:
         assert impulse.lower_after == pytest.approx(out.t_lower)
 
     def test_without_a_calibration_no_draw_moves_the_tank(self) -> None:
-        assert _decay().draw_step(
-            135.0, 118.0, 10.0, draw_observability=None
-        ) == (135.0, 118.0)
+        assert decay.draw_step(135.0, 118.0, 10.0, draw_observability=None) == (
+            135.0,
+            118.0,
+        )

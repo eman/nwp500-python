@@ -4,14 +4,9 @@ sees only while the tank is stratified (``sim.physics.tank``)."""
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 
-import pytest
-
-pytest.importorskip("numpy")
-pytest.importorskip("pandas")
-pytest.importorskip("scipy")
-
 import numpy as np
 import pandas as pd
+import pytest
 
 from nwp500 import sim
 from nwp500 import sim_calibrate as sc

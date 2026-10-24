@@ -6,8 +6,6 @@ from typing import Any
 
 import pytest
 
-pytest.importorskip("pandas")
-
 from nwp500 import sim, sim_live
 from nwp500.sim.codec import merge, scenario_to_document
 from nwp500.sim.params import params_to_document

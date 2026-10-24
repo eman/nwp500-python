@@ -5,8 +5,6 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-pytest.importorskip("pandas")
-
 from nwp500.sim import (
     Commands,
     Draw,

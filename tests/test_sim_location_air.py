@@ -12,8 +12,6 @@ from typing import Any
 
 import pytest
 
-pytest.importorskip("numpy")
-
 from nwp500 import sim_adapters as sa
 from nwp500.models import DeviceStatus
 from nwp500.sim.location_air import (

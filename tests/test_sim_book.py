@@ -11,9 +11,6 @@ from datetime import UTC, datetime, timedelta
 from typing import Any, Literal, cast
 
 import pytest
-
-pytest.importorskip("pandas")
-
 from _sim_site import (  # type: ignore[import-not-found]  # test helper
     EP,
     Booked,

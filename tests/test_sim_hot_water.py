@@ -13,12 +13,11 @@ from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
+import pandas as pd
 import pytest
 
-pd = pytest.importorskip("pandas")
-
-from nwp500 import sim_adapters as sa  # noqa: E402
-from nwp500.sim import (  # noqa: E402
+from nwp500 import sim_adapters as sa
+from nwp500.sim import (
     Draw,
     DrawWindow,
     Environment,
@@ -32,17 +31,17 @@ from nwp500.sim import (  # noqa: E402
     simulate,
     site_example_params,
 )
-from nwp500.sim.book import (  # noqa: E402
+from nwp500.sim.book import (
     BookedHeatLedger,
     deliverable_from_heat,
     full_tank,
 )
-from nwp500.sim.codec import (  # noqa: E402
+from nwp500.sim.codec import (
     result_to_document,
     scenario_from_document,
     scenario_to_document,
 )
-from nwp500.sim.delivery import (  # noqa: E402
+from nwp500.sim.delivery import (
     EXAMPLE_EVIDENCE,
     booked_deliverable,
     deliverable,
@@ -50,17 +49,17 @@ from nwp500.sim.delivery import (  # noqa: E402
     probes_gal,
     with_example_evidence,
 )
-from nwp500.sim.engine import Heater  # noqa: E402
-from nwp500.sim.engine import simulate as walk  # noqa: E402
-from nwp500.sim.params import (  # noqa: E402
+from nwp500.sim.engine import Heater
+from nwp500.sim.engine import simulate as walk
+from nwp500.sim.params import (
     HeaterParams,
     ReadinessParams,
     params_from_document,
     params_to_document,
     unknown_fields,
 )
-from nwp500.sim.tank_physics import TankPhysics  # noqa: E402
-from nwp500.unit_system import reset_unit_system, set_unit_system  # noqa: E402
+from nwp500.sim.tank_physics import TankPhysics
+from nwp500.unit_system import reset_unit_system, set_unit_system
 
 T0 = datetime(2026, 10, 4, 19, 0, tzinfo=UTC)
 FULL = (140.5, 139.6)

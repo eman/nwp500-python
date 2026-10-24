@@ -10,8 +10,6 @@ from typing import TYPE_CHECKING, Any, cast
 
 import pytest
 
-pytest.importorskip("pandas")
-
 from nwp500.sim import (
     Environment,
     HeaterState,

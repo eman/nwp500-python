@@ -7,19 +7,18 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
+import pandas as pd
 import pytest
 
-pd = pytest.importorskip("pandas")
-
-from nwp500.sim.heat_pump_recovery import (  # noqa: E402
+from nwp500.sim.heat_pump_recovery import (
     PHYSICS_TRUNCATED,
     ModelDuration,
     PhysicsRecovery,
     RecoveryContext,
     recovery,
 )
-from nwp500.sim.params import HeaterParams, params_from_document  # noqa: E402
-from nwp500.sim.tank_physics import TankPhysics  # noqa: E402
+from nwp500.sim.params import HeaterParams, params_from_document
+from nwp500.sim.tank_physics import TankPhysics
 
 FIXTURES = Path(__file__).with_name("fixtures") / "sim"
 T0 = datetime(2026, 10, 4, 19, 0, tzinfo=UTC)
