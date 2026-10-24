@@ -46,7 +46,7 @@ from typing import Any, cast
 from nwp500 import sim_adapters as sa
 from nwp500.exceptions import Nwp500Error
 from nwp500.sim import Environment
-from nwp500.sim.book import AMBIENT_DEFAULT_F, Booked
+from nwp500.sim.book import AMBIENT_DEFAULT_F, Booked, FlowVolume
 from nwp500.sim.cold_supply import ColdSupply, on_the_mains
 from nwp500.sim.location_air import (
     FIT_LAGS_H,
@@ -157,6 +157,8 @@ class Sources:
     #: The heater's own entities, whose air while the compressor runs
     #: fits and anchors the projection where no air entity does.
     heater: HeaterEntities | None = None
+    #: What ``entities.draw_flow``'s gallons count (``book.FlowVolume``).
+    draw_flow_volume: FlowVolume = "delivered"
 
 
 def sources_from(doc: Mapping[str, Any], environ: Mapping[str, str]) -> Sources:
@@ -165,6 +167,7 @@ def sources_from(doc: Mapping[str, Any], environ: Mapping[str, str]) -> Sources:
         [home_assistant]
         url = "http://homeassistant.local:8123"
         token_env = "HA_TOKEN"          # the variable holding the token
+        draw_flow_volume = "tank"       # optional: "delivered", the default
 
         [home_assistant.entities]
         air = "sensor.beside_the_heater_temperature"
@@ -187,7 +190,10 @@ def sources_from(doc: Mapping[str, Any], environ: Mapping[str, str]) -> Sources:
         lag_hours = 2.0
         offset_f = 24.5
 
-    The token is read from ``environ``, never from the file. Raises
+    The token is read from ``environ``, never from the file.
+    ``draw_flow_volume`` says what the draw flow's gallons count: the
+    water delivered through the mixing valve, or the tank's own water
+    (``sim_adapters.book_from_history``'s ``flow_volume``). Raises
     ``ValueError`` naming what is wrong."""
     ha = doc.get("home_assistant")
     if not isinstance(ha, Mapping):
@@ -202,6 +208,11 @@ def sources_from(doc: Mapping[str, Any], environ: Mapping[str, str]) -> Sources:
     token = environ.get(token_env)
     if not token:
         raise ValueError(f"the token variable {token_env} is not set")
+    volume = ha.get("draw_flow_volume", "delivered")
+    if volume not in ("delivered", "tank"):
+        raise ValueError(
+            'home_assistant.draw_flow_volume must be "delivered" or "tank"'
+        )
     raw = ha.get("entities", {})
     if not isinstance(raw, Mapping):
         raise ValueError("home_assistant.entities must be a table")
@@ -235,6 +246,7 @@ def sources_from(doc: Mapping[str, Any], environ: Mapping[str, str]) -> Sources:
         entities=Entities(**raw),
         location_air=model,
         heater=_heater_from(ha.get("heater")),
+        draw_flow_volume=volume,
     )
 
 
@@ -2206,10 +2218,12 @@ class HomeAssistantBook:
     holds, with no request.
 
     ``flow`` is the household's hot water draw flow, the circulation's
-    water not in it, in any unit ``to_gpm`` reads, as delivered at the
-    taps through the mixing valve: the book prices a delivered gallon at
-    the valve's delivery line (``DrawParams.delivery_intercept_f`` and
-    ``delivery_slope``), not at the tank. ``heater`` is the heater's own
+    water not in it, in any unit ``to_gpm`` reads. ``flow_volume`` says
+    what its gallons count. Delivered at the taps through the mixing
+    valve, the default, the book prices a gallon at the valve's delivery
+    line (``DrawParams.delivery_intercept_f`` and ``delivery_slope``);
+    the tank's own water (a meter or a detector on the heater's hot
+    outlet, ``"tank"``), at the upper probe. ``heater`` is the heater's own
     entities. Of ``entities``, ``circulation_speed`` gives the
     circulation's runs, ``inlet`` the inlet the book converts at, and
     with ``demand`` the mains (``mains_plateau``, ``on_the_mains``),
@@ -2228,12 +2242,14 @@ class HomeAssistantBook:
         entities: Entities | None = None,
         *,
         window: timedelta = BOOK_WINDOW,
+        flow_volume: FlowVolume = "delivered",
     ) -> None:
         if window <= timedelta(0):
             raise ValueError(f"window {window} is not a positive span")
         self.client = client
         self.heater = heater
         self.flow = flow
+        self.flow_volume: FlowVolume = flow_volume
         self.entities = entities or Entities()
         self.window = window
         self._heater_history: HeaterHistory | None = None
@@ -2420,6 +2436,7 @@ class HomeAssistantBook:
                 flow_outages=flow_out,
                 inlet_outages=inlet_out,
                 air_outages=air_out,
+                flow_volume=self.flow_volume,
             )
         except ValueError as err:
             notes.append(f"book: {err}")

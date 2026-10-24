@@ -92,7 +92,7 @@ from nwp500.sim import (
     default_params,
 )
 from nwp500.sim import full_tank_book as sim_full_tank_book
-from nwp500.sim.book import AMBIENT_DEFAULT_F, book_steps
+from nwp500.sim.book import AMBIENT_DEFAULT_F, FlowVolume, book_steps
 from nwp500.sim.book import Step as BookStep
 from nwp500.sim.circulation import merge_runs
 from nwp500.sim.cold_supply import ColdSupply, ColdSupplyParams, plateau_t_cold
@@ -1514,6 +1514,7 @@ def book_steps_from_history(
     inlet: Iterable[tuple[datetime, float]] = (),
     air: Iterable[tuple[datetime, float]] = (),
     params: HeaterParams | None = None,
+    flow_volume: FlowVolume = "delivered",
 ) -> list[BookStep]:
     """A recorded history on the book's grid (``BOOK_GRID_S``), from
     ``start`` to ``end``: the heater's statuses (the probes, the
@@ -1595,6 +1596,7 @@ def book_steps_from_history(
         air=air,
         params=params,
         preferred=True,
+        flow_volume=flow_volume,
     )
 
 
@@ -1612,6 +1614,7 @@ def book_steps_from_changes(
     inlet_outages: Iterable[tuple[datetime, datetime]] = (),
     air_outages: Iterable[tuple[datetime, datetime]] = (),
     unheard: Sequence[tuple[datetime, datetime]] = (),
+    flow_volume: FlowVolume = "delivered",
 ) -> list[BookStep]:
     """``book_steps_from_history`` from a heater's values' changes
     (``ChangeRows``) instead of its statuses: each value held until its
@@ -1694,6 +1697,7 @@ def book_steps_from_changes(
         inlet_hold=None,
         inlet_unknown=list(inlet_outages),
         air_unknown=list(air_outages),
+        flow_volume=flow_volume,
     )
 
 
@@ -1731,6 +1735,7 @@ def _book_steps_on(
     inlet_hold: timedelta | None = INLET_HOLD,
     inlet_unknown: Sequence[tuple[datetime, datetime]] = (),
     air_unknown: Sequence[tuple[datetime, datetime]] = (),
+    flow_volume: FlowVolume = "delivered",
 ) -> list[BookStep]:
     """The book's steps on ``grid``: ``heater``'s columns with the
     meter, the circulation, the inlet and the air
@@ -1738,7 +1743,8 @@ def _book_steps_on(
     ``preferred`` False the simulator's (°F, gal/min). A flow reading
     holds ``flow_hold`` and an inlet reading ``inlet_hold`` (None: until
     the next), an inlet reading none inside ``inlet_unknown`` and an air
-    reading none inside ``air_unknown``."""
+    reading none inside ``air_unknown``. ``flow_volume`` is what the
+    meter's gallons count (``book.FlowVolume``)."""
     p = (params if params is not None else default_params()).book_terms()
     terms = None if params is None else params.circulation
 
@@ -1809,6 +1815,7 @@ def _book_steps_on(
                 inlet_measured=in_f is not None,
                 lower_element=bool(lo_el[i]),
                 run_gal_before=before_col[i],
+                flow_volume=flow_volume,
             )
         )
     return steps
@@ -1908,6 +1915,7 @@ def book_from_history(
     circulation_flow: Iterable[tuple[datetime, float]] = (),
     inlet: Iterable[tuple[datetime, float]] = (),
     air: Iterable[tuple[datetime, float]] = (),
+    flow_volume: FlowVolume = "delivered",
 ) -> Booked | None:
     """The tank's booked heat at ``at`` from what was recorded before
     it (``book.book_steps``), for ``simulate`` and ``time_to_ready``'s
@@ -1923,7 +1931,11 @@ def book_from_history(
     ``circulation_flow`` its own flow; ``inlet`` an inlet probe's
     readings; ``air`` the air where the heater stands. Draws are what
     the meter reads less circulation's share of it
-    (``CirculationParams.meter_share``)."""
+    (``CirculationParams.meter_share``). ``flow_volume`` is what its
+    gallons count: ``"delivered"``, the water through the mixing valve
+    (each debited at the valve's delivery, its hot share drawn from the
+    tank), or ``"tank"``, the tank's own water, a meter or a detector on
+    the heater's hot outlet (each debited at the upper probe)."""
     at = at.astimezone(UTC)
     rows = list(readings)
     # A missing reading is none: it neither moves water nor shows the
@@ -1945,6 +1957,7 @@ def book_from_history(
             inlet=probe,
             air=airs,
             params=params,
+            flow_volume=flow_volume,
         ),
         flows,
         params,
@@ -1967,6 +1980,7 @@ def book_from_changes(
     inlet_outages: Iterable[tuple[datetime, datetime]] = (),
     air_outages: Iterable[tuple[datetime, datetime]] = (),
     heard: Iterable[tuple[datetime, datetime]] | None = None,
+    flow_volume: FlowVolume = "delivered",
 ) -> Booked | None:
     """``book_from_history`` from a heater's values' changes (``rows``)
     instead of its statuses, with ``observed`` the instants it was heard
@@ -1974,7 +1988,8 @@ def book_from_changes(
     (``sim_home_assistant.read_heater_history`` reads both from Home
     Assistant), with the same anchor search. Like the rows, ``flow``,
     ``circulation_flow``, ``inlet`` and ``air`` are changes, each value
-    held until the next, in gal/min and °F whatever the preferred units.
+    held until the next, in gal/min and °F whatever the preferred units,
+    the flow's gallons ``flow_volume``'s (``book_from_history``).
     ``flow_outages``, ``inlet_outages`` and ``air_outages`` are the spans
     each was unknown (``History.outages``). An air unknown is
     ``AMBIENT_DEFAULT_F``. With no ``air`` reading at all, the air is the
@@ -2051,6 +2066,7 @@ def book_from_changes(
             inlet_outages=inlet_unknown,
             air_outages=air_unknown,
             unheard=unseen,
+            flow_volume=flow_volume,
         ),
         flows,
         params,

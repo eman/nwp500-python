@@ -107,7 +107,7 @@ from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass, field, replace
 from datetime import datetime
 from statistics import median
-from typing import Protocol, cast
+from typing import Literal, Protocol, cast
 
 from nwp500.sim.engine import Draw, HeatingInterval, PathPoint
 from nwp500.sim.extensions import (
@@ -145,6 +145,33 @@ def draw_btu(
     return (
         gal * WATER_BTU_PER_GAL_F * max(0.0, delivery_f(upper_f, p) - inlet_f)
     )
+
+
+#: What a recorded flow counts: gallons delivered through the mixing
+#: valve, or gallons of tank water (a meter or a detector on the
+#: heater's hot outlet).
+FlowVolume = Literal["delivered", "tank"]
+
+
+def draw_out(
+    gal: float,
+    upper_f: float,
+    inlet_f: float,
+    p: BookParams | None = None,
+    volume: FlowVolume = "delivered",
+) -> tuple[float, float]:
+    """A draw of ``gal`` gallons at ``upper_f``: the heat it takes, BTU,
+    and the tank gallons the inlet replaces. Delivered gallons take the
+    valve's heat (``draw_btu``) and its hot share of tank water; tank
+    gallons are tank water, each at the upper zone."""
+    if volume == "tank":
+        return gal * WATER_BTU_PER_GAL_F * max(0.0, upper_f - inlet_f), gal
+    hot = (
+        (delivery_f(upper_f, p) - inlet_f) / (upper_f - inlet_f)
+        if upper_f > inlet_f
+        else 1.0
+    )
+    return draw_btu(gal, upper_f, inlet_f, p), gal * max(0.0, hot)
 
 
 def compressor_btu(hours: float, ambient_f: float, p: BookParams) -> float:
@@ -186,7 +213,7 @@ class Step:
     upper_f: float
     lower_f: float
     #: The household flow meter's reading, gal/min (0 without a meter:
-    #: no draw is booked).
+    #: no draw is booked), in ``flow_volume``'s gallons.
     flow_gpm: float
     compressor_on: bool
     element_on: bool
@@ -209,6 +236,8 @@ class Step:
     #: than ``CirculationParams.run_gap_min`` taken as one: what
     #: ``CirculationParams.book_circuit_gal`` caps.
     run_gal_before: float = 0.0
+    #: What ``flow_gpm`` counts (``FlowVolume``).
+    flow_volume: FlowVolume = "delivered"
 
 
 def house_gpm(s: Step, circulation: CirculationParams | None = None) -> float:
@@ -261,7 +290,8 @@ def step_heat_btu(
         heat += element_btu(h, p)
     house = house_gpm(s, circulation)
     if house > p.draw_gpm:
-        heat -= draw_btu(house * s.seconds / 60.0, s.upper_f, s.inlet_f, p)
+        gal = house * s.seconds / 60.0
+        heat -= draw_out(gal, s.upper_f, s.inlet_f, p, s.flow_volume)[0]
     if s.circulating:
         heat -= circulated_btu(
             s.circulation_gpm * s.seconds / 60.0,
@@ -465,21 +495,21 @@ class Booked:
         return self.heat_btu - self.withheld_btu(p) - p.empty_btu
 
     def drawn(
-        self, gal: float, upper_f: float, p: BookParams | None = None
+        self,
+        gal: float,
+        upper_f: float,
+        p: BookParams | None = None,
+        volume: FlowVolume = "delivered",
     ) -> Booked:
-        """After ``gal`` delivered gallons at ``upper_f``: the valve's
-        heat out, and the tank gallons it took (its hot share) replaced
-        by the inlet at the bottom, in the cold region."""
+        """After ``gal`` gallons at ``upper_f``, delivered or of tank
+        water (``draw_out``): their heat out, and the tank gallons they
+        took replaced by the inlet at the bottom, in the cold region."""
         p = p or BookParams()
         if gal <= 0.0:
             return self
         inlet = self.inlet_f
-        hot = (
-            (delivery_f(upper_f, p) - inlet) / (upper_f - inlet)
-            if upper_f > inlet
-            else 1.0
-        )
-        cold = min(p.tank_gal, self.cold_gal + gal * max(0.0, hot))
+        out, taken = draw_out(gal, upper_f, inlet, p, volume)
+        cold = min(p.tank_gal, self.cold_gal + taken)
         added = cold - self.cold_gal
         cold_f = (
             (self.cold_f * self.cold_gal + inlet * added) / cold
@@ -488,7 +518,7 @@ class Booked:
         )
         return replace(
             self,
-            heat_btu=self.heat_btu - draw_btu(gal, upper_f, inlet, p),
+            heat_btu=self.heat_btu - out,
             cold_gal=cold,
             cold_f=cold_f,
             # A new region has not been seen yet; a larger one has.
@@ -569,7 +599,7 @@ class Booked:
         house = house_gpm(s, circulation)
         drawing = house > p.draw_gpm
         if drawing:
-            b = b.drawn(house * s.seconds / 60.0, s.upper_f, p)
+            b = b.drawn(house * s.seconds / 60.0, s.upper_f, p, s.flow_volume)
         elif s.compressor_on:
             b = b.ran(s.seconds)
         b = b.observed(s.lower_f, p, drawing=drawing)

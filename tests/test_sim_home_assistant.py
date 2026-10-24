@@ -269,6 +269,20 @@ class TestTheConfiguration:
         with pytest.raises(ValueError, match=match):
             ha.sources_from(doc, environ)
 
+    def test_the_draw_flows_volume(self) -> None:
+        s = ha.sources_from(self.DOC, {"HA_TOKEN": "x"})
+        assert s.draw_flow_volume == "delivered"
+        doc = {
+            "home_assistant": self.DOC["home_assistant"]
+            | {"draw_flow_volume": "tank"}
+        }
+        assert ha.sources_from(doc, {"HA_TOKEN": "x"}).draw_flow_volume == (
+            "tank"
+        )
+        doc["home_assistant"]["draw_flow_volume"] = "mixed"
+        with pytest.raises(ValueError, match="draw_flow_volume"):
+            ha.sources_from(doc, {"HA_TOKEN": "x"})
+
     def test_the_token_variable_is_named(self) -> None:
         doc = {
             "home_assistant": self.DOC["home_assistant"]

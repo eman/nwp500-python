@@ -661,6 +661,48 @@ class TestTheBookKeptCurrent:
         assert got.booked.heat_btu == pytest.approx(want.heat_btu)
         assert not got.inlet_measured
 
+    def test_a_tank_flow_books_as_book_from_changes(self) -> None:
+        """``flow_volume="tank"`` goes through to the book: each gallon
+        tank water, more heat out than a delivered one through the
+        valve."""
+        p = sim.site_example_params()
+        client = WindowedClient(_book_rows(), BOOK_UNITS)
+        keeper = ha.HomeAssistantBook(
+            cast(ha.HomeAssistantClient, client),
+            BOOK_HEATER,
+            FLOW,
+            flow_volume="tank",
+        )
+        asyncio.run(keeper.read(END))
+        got = keeper.book(END, p).booked
+        history = asyncio.run(
+            ha.read_heater_history(
+                cast(ha.HomeAssistantClient, client),
+                BOOK_HEATER,
+                END - ha.BOOK_WINDOW,
+                END,
+            )
+        )
+        flow = asyncio.run(
+            client.read_history([FLOW], END - ha.BOOK_WINDOW, END)
+        )
+        readings, _ = flow.converted(FLOW, "gal/min", ha.to_gpm, END)
+
+        def want(volume: Any) -> Any:
+            return sa.book_from_changes(
+                history.rows,
+                history.observed,
+                p,
+                at=END,
+                flow=readings,
+                flow_volume=volume,
+            )
+
+        tank, delivered = want("tank"), want("delivered")
+        assert got is not None and tank is not None and delivered is not None
+        assert got.heat_btu == pytest.approx(tank.heat_btu)
+        assert tank.heat_btu < delivered.heat_btu
+
     def test_without_an_air_entity_the_heaters_own(self) -> None:
         from dataclasses import replace
 
