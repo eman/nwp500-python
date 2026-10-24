@@ -187,8 +187,9 @@ class Environment(_Value):
     #: The inlet (mains) water temperature, °F. None: the parameters'
     #: ``DrawParams.inlet_temp_f``.
     inlet_f: float | None = None
-    #: ``ambient_f`` is the heater's own reading while its compressor
-    #: was idle: its cabinet's, about 6 °F above the air around it.
+    #: ``ambient_f`` comes from the heater's own reading while its
+    #: compressor was idle, its cabinet's, less the cabinet's measured
+    #: warmth (``sim_adapters.IDLE_CABINET_WARM_F``, 6.2 °F).
     ambient_cabinet: bool = False
 
     @property

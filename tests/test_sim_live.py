@@ -226,7 +226,8 @@ class TestTheHeater:
         assert reading.state.upper_f == pytest.approx(137.48)
         assert reading.state.lower_f == pytest.approx(109.58)
         assert reading.settings.setpoint_f == pytest.approx(140.9)
-        assert reading.environment.ambient_f == pytest.approx(68.0)
+        # Idle, the 68.0 °F reading is the cabinet's, less its warmth.
+        assert reading.environment.ambient_f == pytest.approx(61.8)
         assert reading.params == sim.default_params(3)
         assert reading.status is status
         assert reading.feature is feature
@@ -526,11 +527,28 @@ class TestTheCabinetAir:
     async def test_an_idle_status_is_flagged(self, status: Any) -> None:
         from nwp500 import sim_adapters as sa
 
-        idle = status.model_copy(update={"comp_use": 0})
-        running = status.model_copy(update={"comp_use": 2})
+        idle = status.model_copy(update={"comp_use": False})
+        running = status.model_copy(update={"comp_use": True})
         assert sa.environment(idle).ambient_cabinet
         assert not sa.environment(running).ambient_cabinet
         assert not sa.environment(idle, ambient=60.0).ambient_cabinet
+
+    async def test_an_idle_reading_loses_the_cabinets_warmth(
+        self, status: Any
+    ) -> None:
+        """Idle, the reading is the cabinet's, a mean 6.2 °F above the
+        air beside the heater (2026-02-14 to 10-24)."""
+        from nwp500 import sim_adapters as sa
+
+        idle = status.model_copy(update={"comp_use": False})
+        running = status.model_copy(update={"comp_use": True})
+        unknown = status.model_copy(update={"comp_use": None})
+        air = float(sa.environment(running).ambient_f)
+        assert sa.environment(idle).ambient_f == pytest.approx(
+            air - sa.IDLE_CABINET_WARM_F
+        )
+        assert sa.environment(unknown).ambient_f == pytest.approx(air)
+        assert not sa.environment(unknown).ambient_cabinet
 
     async def test_the_reason_is_given(self, status: Any) -> None:
         from nwp500.sim.api import AMBIENT_FROM_CABINET, _ambient_reasons
