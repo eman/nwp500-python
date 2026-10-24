@@ -149,6 +149,21 @@ class TestTheAnchor:
         assert drawn is not None and quiet is not None
         assert drawn.heat_btu == pytest.approx(quiet.heat_btu)
 
+    def test_a_recovery_ending_in_a_draw_books_its_own_step(self) -> None:
+        """An anchor's probes read its step's start, so a draw in the
+        step a recovery ends in is booked."""
+        after = [step(flow_gpm=2.0)] + [step()] * 6
+        booked = book_steps(recovery_then(after), P)
+        b = full_tank(140.0, 139.5, P.inlet_default_f, P)
+        for s in after:
+            b = b.step(s, P)
+        assert booked is not None
+        assert booked.heat_btu == pytest.approx(b.heat_btu)
+        assert (
+            booked.heat_btu
+            < full_tank(140.0, 139.5, P.inlet_default_f, P).heat_btu - 100.0
+        )
+
     def test_no_long_draw_is_the_default(self) -> None:
         """A draw under 11 minutes has no plateau: the default, not the
         readings."""

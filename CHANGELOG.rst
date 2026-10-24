@@ -15,9 +15,9 @@ Fixed
   lower probe falls at once with a draw. On the record from 2026-02-14
   to 10-24 the rule fired 5 times, each a circulation run with at most
   0.03 gal of household draw, and walked to the next clean anchor it
-  scored a mean absolute error of 9.92 gal against 9.57 without it.
-  ``book_steps`` and ``calibration.book_walk`` now book from the anchor
-  on, as at every other anchor.
+  scored a mean absolute error of 9.92 gal against 9.55 without it.
+  ``book_steps`` and ``calibration.book_walk`` now book the movement
+  from the anchor's own step on, its probes reading the step's start.
 
 - **A draw window runs cold once its delivery falls below the line.**
   A window counted as depleted only when the delivery fell more than

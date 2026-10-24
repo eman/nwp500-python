@@ -2670,20 +2670,24 @@ def book_walk(
         elif was_h:
             clean = True
             if disturbed[i] and full:
-                new = i
+                new = (i, True)
         if disturbed[i]:
             clean = False
         was_h = bool(heating[i])
         if clean and not heating[i] and full:
-            new = i
+            new = (i, False)
         quiet = not disturbed[i] and not s.circulating
         if compressing(s) and anchor_held(run_s, p) and quiet and full:
-            new = i
+            new = (i, False)
         if new is not None and quiet:
             run_s = None
         if new is not None:
+            anchor_i, moving = new
             b = full_tank(s.upper_f, s.lower_f, p.inlet_default_f, p)
-            anchor_i = new
+            if moving:
+                # Its probes read the step's start: its movement is
+                # still to book.
+                b = b.step(s, p, circ)
         elif b is not None:
             b = b.step(s, p, circ)
         rows.append(

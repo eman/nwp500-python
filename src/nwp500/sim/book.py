@@ -390,12 +390,14 @@ def book_steps(
     uniform and quiet after a
     recovery ends with no draw and no circulation since. A recovery
     that ends while water or circulation moves anchors at its end,
-    uniform there, and books what moves after; the quiet steps after
-    such a draw do not anchor (the probes then show only part of the
-    draw). None with no anchor within ``history_h``; older than
-    ``max_anchor_age_h`` the book is ``aged``."""
+    uniform there, and books the movement from that step on (its probes
+    read the step's start); the quiet steps after such a draw do not
+    anchor (the probes then show only part of the draw). None with no
+    anchor within ``history_h``; older than ``max_anchor_age_h`` the
+    book is ``aged``."""
     p = p or BookParams()
     anchor = None
+    book_from = 0
     clean = False
     was_heating = False
     # The compressor's run since the last draw, s (``anchor_run_min``),
@@ -414,14 +416,14 @@ def book_steps(
         elif was_heating:
             clean = True
             if disturbed and full:
-                anchor = i
+                anchor, book_from = i, i
         if disturbed:
             clean = False
         was_heating = heating
         if clean and not heating and full:
-            anchor = i
+            anchor, book_from = i, i + 1
         if compressing(st) and anchor_held(run_s, p) and not disturbed and full:
-            anchor = i
+            anchor, book_from = i, i + 1
         if anchor == i and not disturbed:
             run_s = None
     if anchor is None:
@@ -431,7 +433,7 @@ def book_steps(
         return None
     a = steps[anchor]
     b = full_tank(a.upper_f, a.lower_f, p.inlet_default_f, p)
-    for s in steps[anchor + 1 :]:
+    for s in steps[book_from:]:
         b = b.step(s, p, circulation)
     mains = mains_f(steps, p, circulation)
     return replace(
