@@ -113,16 +113,49 @@ class TestTheAnchor:
         aged = book_steps(since_a_draw(int(hour * 0.75)), p)
         assert aged is not None and aged.aged(p)
 
-    def test_the_inlet_is_the_median_of_the_measured(self) -> None:
-        """Since the anchor (fixed by a draw): the measured readings'
-        median, not the last one."""
-        after = [step(), step(flow_gpm=2.0)] + [
-            step(inlet_f=60.0 + i % 3, inlet_measured=True) for i in range(31)
+    def test_the_inlet_is_a_long_draws_tail(self) -> None:
+        """The mains is the probe over a long draw's last 2 minutes,
+        not its first minutes (the stagnant pipe) or its readings at
+        rest (the air)."""
+        draw = [
+            step(
+                flow_gpm=2.0,
+                inlet_f=80.0 if i < 54 else 60.0 + i % 3,
+                inlet_measured=True,
+            )
+            for i in range(66)
         ]
-        b = book_steps(recovery_then(after), P)
+        rest = [step(inlet_f=85.0, inlet_measured=True)] * 30
+        b = book_steps(recovery_then([step(), *draw, *rest]), P)
         assert b is not None
         assert b.inlet_f == 61.0
-        assert b.inlet_measured_share == pytest.approx(31 / 33)
+        assert b.inlet_measured_share == 1.0
+
+    def test_no_long_draw_is_the_default(self) -> None:
+        """A draw under 11 minutes has no plateau: the default, not the
+        readings."""
+        draw = [step(flow_gpm=2.0, inlet_f=60.0, inlet_measured=True)] * 60
+        rest = [step(inlet_f=85.0, inlet_measured=True)] * 30
+        b = book_steps(recovery_then([step(), *draw, *rest]), P)
+        assert b is not None
+        assert b.inlet_f == P.inlet_default_f
+        assert b.inlet_measured_share == 0.0
+
+    def test_a_draw_with_circulation_is_not_the_mains(self) -> None:
+        """Circulation running through a draw feeds the cold line with
+        the loop's return."""
+        draw = [
+            step(
+                flow_gpm=2.0,
+                inlet_f=60.0,
+                inlet_measured=True,
+                circulating=i == 30,
+            )
+            for i in range(80)
+        ]
+        b = book_steps(recovery_then([step(), *draw, step()]), P)
+        assert b is not None
+        assert b.inlet_f == P.inlet_default_f
 
 
 def running(n: int, **kw: Any) -> list[Step]:
@@ -629,24 +662,26 @@ class TestFromTheChanges:
         self, heater: Callable[..., list[Any]]
     ) -> None:
         p = site_example_params()
-        rows, observed = as_changes(heater(20, recovery_at=4))
+        rows, _ = as_changes(heater(20, recovery_at=4))
         flow = [(T0 - timedelta(hours=20), 0.0)]
         inlet = [(T0 - timedelta(hours=10), 55.0)]
-        held = sa.book_from_changes(
-            rows, observed, p, at=T0, flow=flow, inlet=inlet
-        )
-        assert held is not None and held.inlet_measured_share == 1.0
-        gap = (T0 - timedelta(hours=2), T0)
-        cut = sa.book_from_changes(
-            rows,
-            observed,
-            p,
-            at=T0,
-            flow=flow,
-            inlet=inlet,
-            inlet_outages=[gap],
-        )
-        assert cut is not None and cut.inlet_measured_share < 1.0
+        start = T0 - timedelta(hours=8)
+
+        def measured(**kw: Any) -> list[bool]:
+            steps = sa.book_steps_from_changes(
+                rows,
+                start=start,
+                end=T0,
+                flow=flow,
+                inlet=inlet,
+                params=p,
+                **kw,
+            )
+            return [s.inlet_measured for s in steps]
+
+        assert all(measured())
+        cut = measured(inlet_outages=[(T0 - timedelta(hours=2), T0)])
+        assert any(cut) and not all(cut)
 
 
 def ago(h: float = 0, m: float = 0) -> datetime:

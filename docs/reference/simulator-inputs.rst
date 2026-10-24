@@ -370,7 +370,9 @@ The environment: ``Environment``
      - degF
      - the parameters' ``draw.inlet_temp_f``
      - The mains water temperature. **Not reported**: the device's
-       inlet field reads 0. It prices every draw.
+       inlet field reads 0. It prices every draw. The default is one
+       installation's September mains; give your own outside September
+       (:ref:`the mains by season <mains-by-season>`).
 
 
 Draws: ``Loads``
@@ -569,8 +571,11 @@ delivered gallons, so a tank-water flow takes ``empty_btu`` refit on
 its own record and ``zone_empty_btu`` as far below it. It reads the last
 18 hours (``book.max_anchor_age_h``) and, without an anchor there, the last 72
 (``book.history_h``), aged. The inlet it converts gallons at is the
-median of the probe's readings over the last 3 hours
-(``book.inlet_window_s``), the default without one. The meter must
+mains read from the long draws in those hours, as ``cold_supply`` reads
+it (the probe's median over the last 2 minutes of each household draw
+of 11 minutes or more with circulation off), and
+``book.inlet_default_f`` without one. The probe's readings at rest
+track the air around the pipe, not the mains. The meter must
 report at rest too: a silence over an hour in the window is refused,
 since it would read as a quiet full tank. A missing reading (None or
 NaN) is skipped, and the value before it holds; it doesn't count as the

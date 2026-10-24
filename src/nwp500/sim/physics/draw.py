@@ -134,7 +134,10 @@ DEFAULT_OBSERVABILITY = 0.633
 #: plateau of the cold-supply probe's long draws over 2026-09-19..26,
 #: seven draws, 71.3-73.1, bootstrap CI on the median [71.8, 73.0].
 #: It is the reference the whole corpus is held at, and the
-#: value served when the probe has no fresh plateau. The two move
+#: value served when the probe has no fresh plateau. A September
+#: value: the plateaus fell to 69.3-69.6 °F by 2026-10-20, and the
+#: lower probe's 68.0 and 69.4 °F in January and February bound the
+#: winter mains below that. The two move
 #: together: change one and refit the other, or neither means
 #: anything.
 DEFAULT_INLET_TEMP_F = 72.4

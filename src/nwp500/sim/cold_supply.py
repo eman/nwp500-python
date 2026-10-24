@@ -116,10 +116,9 @@ def on_the_mains(
     book: Booked | None, cold: ColdSupply
 ) -> tuple[Booked | None, bool]:
     """``book`` converting heat to gallons at the mains (``cold``'s
-    plateau), and whether it does: a book's own inlet is a probe's
-    median over hours, which at rest reads the air around the pipe, not
-    the mains (a 10-20 % swing in the gallons at one installation).
-    Unchanged with no plateau or no book. Pass the flag to
+    plateau), and whether it does: a book reads the mains from the
+    long draws in its own hours (``book.mains_f``), and this one from
+    ``window_s``. Unchanged with no plateau or no book. Pass the flag to
     ``time_to_ready``'s ``inlet_measured``."""
     if book is None:
         return None, False

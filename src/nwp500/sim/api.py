@@ -176,8 +176,7 @@ def _at_the_inlet(
     """``book`` converting heat to gallons at the scenario's inlet
     (``Environment.inlet_f``) where one is given, as the walk's draws
     take it (``cold_supply.on_the_mains`` for a plateau): the book's own
-    inlet is a probe's median over hours, which at rest reads the air
-    around the pipe."""
+    is the mains from the long draws in its hours, or the default."""
     if book is None or environment.inlet_f is None:
         return book
     return dataclasses.replace(book, inlet_f=environment.inlet_f)
