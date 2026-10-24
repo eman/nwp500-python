@@ -40,7 +40,9 @@ from nwp500.sim.codec import (  # noqa: E402
 )
 from nwp500.sim.delivery import (  # noqa: E402
     EXAMPLE_EVIDENCE,
+    deliverable,
     delivery_along,
+    full_tank_floor_gal,
     with_example_evidence,
 )
 from nwp500.sim.engine import Heater  # noqa: E402
@@ -260,29 +262,37 @@ class TestReadiness:
         assert d.basis == "evidence"
         assert d.gal == pytest.approx(39.6, abs=0.05)
 
-    def test_a_running_heater_withholds_the_floor(
+    def test_a_running_heater_keeps_the_probes_floor(
         self, params: HeaterParams
     ) -> None:
-        d = readiness(
+        """With no evidence, a lower probe above the line reads the
+        floor while heating too: heating only adds heat."""
+        settings = Settings(setpoint_f=140.9)
+        bare = _no_evidence(params)
+        running = readiness(
             HeaterState(
                 upper_f=FULL[0], lower_f=FULL[1], compressor_running=True
             ),
-            Settings(setpoint_f=140.9),
-            _no_evidence(params),
+            settings,
+            bare,
         )
-        # Unknown with no evidence, not none.
-        assert d.gal == 0.0 and d.no_evidence and not d.colder_than_evidence
+        idle = readiness(
+            HeaterState(upper_f=FULL[0], lower_f=FULL[1]), settings, bare
+        )
+        assert running.gal == idle.gal > 0.0
+        assert running.from_probes and not running.no_evidence
 
     def test_any_other_state_needs_evidence(self, params: HeaterParams) -> None:
         state = HeaterState(upper_f=135.86, lower_f=135.5)
         settings = Settings(setpoint_f=140.9)
         bare = _no_evidence(params)
         # With no evidence, a uniform tank reads from its probes, as the
-        # book's anchor does; a stratified one is unknown.
+        # book's anchor does; one whose lower probe is below the line is
+        # unknown.
         uniform = readiness(state, settings, bare)
         assert uniform.basis == "probes" and uniform.gal > 0.0
         drawn = readiness(
-            HeaterState(upper_f=135.86, lower_f=120.0), settings, bare
+            HeaterState(upper_f=135.86, lower_f=104.0), settings, bare
         )
         assert drawn.gal == 0.0 and drawn.no_evidence
         given = replace(bare, readiness=with_example_evidence(bare.readiness))
@@ -300,6 +310,48 @@ class TestReadiness:
         assert readiness(state, settings, params).gal - readiness(
             state, settings, none
         ).gal == pytest.approx(params.readiness.delivered_lag_gal)
+
+
+class TestAHotLowerProbe:
+    """No book and no evidence: a lower probe at or above the line reads
+    the full-tank floor from the probes, with the lag on it, heating or
+    not. On one installation's book terms."""
+
+    EP = site_example_params().book_terms()
+    P = ReadinessParams()
+
+    def answer(self, upper: float, lower: float, **kw: Any) -> Any:
+        return deliverable(upper, lower, self.P, ep=self.EP, **kw)
+
+    @pytest.mark.parametrize("heating", [False, True])
+    def test_a_tank_hot_past_its_lower_probe(self, heating: bool) -> None:
+        d = self.answer(116.6, 109.6, heating=heating)
+        # 19.6 gal less 13.5 on the probe's line, and the 5 gal lag.
+        assert d.gal == pytest.approx(11.1, abs=0.05)
+        assert d.basis == "probes" and d.from_probes and not d.no_evidence
+
+    def test_near_the_line_it_is_the_lag(self) -> None:
+        d = self.answer(108.0, 105.5)
+        assert d.gal == self.P.delivered_lag_gal and d.from_probes
+
+    def test_from_the_line_down(self) -> None:
+        line = self.P.line_f
+        assert self.answer(108.0, line).gal == self.P.delivered_lag_gal
+        below = self.answer(108.0, line - 0.1)
+        assert below.gal == 0.0 and below.no_evidence
+        assert not below.from_probes
+
+    def test_it_agrees_with_the_floor_at_the_setpoint(self) -> None:
+        floor = full_tank_floor_gal(141.8, 141.5, 141.8, self.P, self.EP)
+        d = self.answer(141.8, 141.5, setpoint_f=141.8)
+        assert d.gal == pytest.approx(
+            floor + self.P.delivered_lag_gal, abs=0.05
+        )
+
+    def test_evidence_answers_instead(self) -> None:
+        given = with_example_evidence(self.P)
+        d = deliverable(116.6, 109.6, given, ep=self.EP, heating=True)
+        assert d.basis == "evidence" and not d.from_probes
 
 
 class TestTheParameters:

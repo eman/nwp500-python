@@ -854,11 +854,20 @@ class TestHeaterOnlyReadiness:
         ]
         assert gal[0] < gal[1] < gal[2]
 
-    def test_a_stratified_tank_is_unknown_not_empty(self) -> None:
-        r = self._ready(140.0, 125.0)
+    def test_a_tank_cold_at_the_lower_probe_is_unknown_not_empty(
+        self,
+    ) -> None:
+        r = self._ready(140.0, 104.0)
         assert r.deliverable_gal == 0.0
         assert "no_evidence_for_state" in r.reasons
+        assert "estimated_from_probes" not in r.reasons
         assert "colder_than_all_evidence" not in r.reasons
+
+    def test_a_hot_lower_probe_reads_from_the_probes(self) -> None:
+        r = self._ready(140.0, 125.0)
+        assert r.deliverable_gal > 0.0
+        assert "estimated_from_probes" in r.reasons
+        assert "no_evidence_for_state" not in r.reasons
 
 
 class TestTheSecondReview:
@@ -888,13 +897,13 @@ class TestTheSecondReview:
             ).reasons
         )
 
-    def test_the_uniform_edge_is_within_probe_resolution(self) -> None:
+    def test_the_line_edge_is_within_probe_resolution(self) -> None:
         from nwp500.sim import HeaterState, default_params
 
-        # 1 °F apart, inside the 1.5 °F band; opposing 1 °F errors put
-        # it outside, where the gallons are unknown.
+        # The lower probe 0.5 °F above the line: a 1 °F error puts it
+        # below, where the gallons are unknown.
         r = time_to_ready(
-            _scenario(state=HeaterState(upper_f=130.0, lower_f=129.0)),
+            _scenario(state=HeaterState(upper_f=130.0, lower_f=105.5)),
             default_params(),
             bath_gal=5.0,
         )

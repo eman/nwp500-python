@@ -55,6 +55,10 @@ ALWAYS: tuple[str, ...] = (
 #: the deliverable gallons are unknown, not none (``Deliverable``).
 NO_EVIDENCE_FOR_STATE = "no_evidence_for_state"
 
+#: No book and no evidence: the deliverable gallons are the full-tank
+#: floor from a lower probe at or above the line (``Deliverable``).
+ESTIMATED_FROM_PROBES = "estimated_from_probes"
+
 TrajectoryOutcome = Literal["ok", "not_scheduled", "unavailable", "idle"]
 
 
@@ -202,8 +206,8 @@ def assess(
     (a book, and ``inlet_measured`` False); ``bath_volume_inferred``
     (``bath_source`` ``configured``); ``shower_volume_default``;
     ``thermocline_unlocated``; ``capped_at_observed_volume``;
-    ``colder_than_all_evidence``; ``no_evidence_for_state``;
-    ``bath_ready_within_estimate_error``
+    ``colder_than_all_evidence``; ``no_evidence_for_state`` or
+    ``estimated_from_probes``; ``bath_ready_within_estimate_error``
     (a book's error band) or ``bath_ready_within_probe_resolution``
     (without one); ``draw_in_progress``; ``element_running``;
     ``tou_window_in_force``; and, the bath not ready,
@@ -234,6 +238,8 @@ def assess(
         reasons.append("colder_than_all_evidence")
     if d.no_evidence:
         reasons.append(NO_EVIDENCE_FOR_STATE)
+    if d.from_probes:
+        reasons.append(ESTIMATED_FROM_PROBES)
 
     ready = d.gal >= bath_gal
     if booked is not None:
