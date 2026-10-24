@@ -159,6 +159,22 @@ class TestTheBookInASimulation:
         assert min(p.upper_f for p in with_book.points) < 105.0
         assert min(p.upper_f for p in without.points) > 130.0
 
+    def test_a_draw_moves_the_lower_zone_at_once_as_without_one(
+        self, params: HeaterParams
+    ) -> None:
+        """A draw of a few gallons takes the lower zone down at its
+        onset by its calibrated response, with a book as without one."""
+        s = _scenario(loads=Loads(draws=(Draw(at=at(0.5), gallons=5.0),)))
+        book = full_tank_book(*FULL, params.book)
+        booked = simulate(s, params, book=book).points
+        plain = {p.at: p.lower_f for p in simulate(s, params).points}
+        before, after = [p for p in booked if p.at == at(0.5)]
+        assert after.lower_f < before.lower_f - 4.0
+        later = [p for p in booked if p.at > at(0.5)]
+        assert later
+        for p in later:
+            assert p.lower_f == pytest.approx(plain[p.at], abs=1e-9)
+
     def test_without_a_book_the_result_says_so(
         self, params: HeaterParams
     ) -> None:
@@ -394,6 +410,18 @@ class TestTheParameters:
         assert params_from_document(doc) == replace(
             params, readiness=ReadinessParams(), book=params.book
         )
+
+    def test_a_document_with_the_retired_front_terms_loads(
+        self, params: HeaterParams
+    ) -> None:
+        """An older writer's front and settling terms are read past, and
+        not named as unknown."""
+        doc = json.loads(json.dumps(params_to_document(params)))
+        doc["book"].update(
+            lower_probe_gal=25.0, front_width_gal=32.0, front_settle_min=300.0
+        )
+        assert params_from_document(doc) == params
+        assert unknown_fields(doc) == []
 
     @pytest.mark.parametrize(
         ("part", "name", "value", "match"),

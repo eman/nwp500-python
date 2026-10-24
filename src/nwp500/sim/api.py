@@ -407,13 +407,12 @@ def simulate(
     start_hold: Callable[[float | None], float] | None = None,
     running_hold: float = 0.0,
     lead_draws: Sequence[Draw] = (),
-    draw_hold_factor: float = 0.0,
     physics_usable: bool | None = None,
 ) -> SimulationResult:
     """Walk ``scenario`` from its start to its end on ``params``.
 
     ``recovery`` replaces the physics duration of each heat-pump
-    recovery with its own (``extensions.RecoveryModel``). The five
+    recovery with its own (``extensions.RecoveryModel``). The four
     inputs after it are what such a model was trained with:
 
     - ``start_hold``: how long a compressor start holds before the lower
@@ -424,33 +423,29 @@ def simulate(
       running;
     - ``lead_draws``: draws recorded before the start, which a
       draw-free model reads as the first recovery's ``draw_load`` when
-      it begins within ``engine.DRAW_LEAD`` of them; read only with a
-      positive ``draw_hold_factor``. Like the scenario's draws, they
-      need a fitted draw response (``draw_model_unsupported``), and
-      those the model reads carry the draw and inlet reasons
-      (``draw_uncalibrated``, ``inlet_temp_modelled``);
-    - ``draw_hold_factor``: ``(1 − k) / k`` at the draw observability
-      ``k``: a recovery holds that many times the time a draw sets it
-      back, for the share of the draw the probes miss; 0.0 none;
+      it begins within ``engine.DRAW_LEAD`` of them. Like the
+      scenario's draws, they need a fitted draw response
+      (``draw_model_unsupported``), and those the model reads carry the
+      draw and inlet reasons (``draw_uncalibrated``,
+      ``inlet_temp_modelled``);
     - ``physics_usable``: whether the physics duration may be served;
       None, when the compressor is calibrated (a positive constant).
 
     With no model, or one that declines, the served duration adds no
     start hold and the lead draws are not read. The holds still mark
     where the lower zone starts to climb, which placing a recovery again
-    after a draw and a draw hold count from. ``draw_hold_factor`` holds
-    a recovery for the walk's own draws either way.
+    after a draw counts from.
 
     ``book`` is the tank's booked heat at the start (``sim.book``): from
     the caller's own record, or ``book.full_tank_book`` when they know
     the tank has been quiet since a recovery ended. With it, the walk
     carries the book (``book.BookedHeatLedger``): a draw that spends the
-    booked heat takes the upper zone down, the lower zone follows the
-    cold front, and the delivery and the draw windows read the book.
-    Without it the zones take each draw's calibrated response and the
-    delivery is the upper zone's, and ``reasons`` says
-    ``no_heat_book``. ``ledger`` is any other ``extensions.HeatLedger``
-    in its place.
+    booked heat takes the upper zone below its calibrated response, and
+    the delivery and the draw windows read the book. The lower zone
+    takes each draw's calibrated response either way. Without it the
+    upper zone does too, the delivery is the upper zone's, and
+    ``reasons`` says ``no_heat_book``. ``ledger`` is any other
+    ``extensions.HeatLedger`` in its place.
 
     ``inlet_measured``: the scenario's inlet (``Environment.inlet_f``) is
     the mains as measured (``cold_supply``); without it, a scenario with
@@ -600,7 +595,6 @@ def simulate(
         withheld_windows=sorted(withheld_windows),
         start_hold=start_hold,
         running_hold=running_hold,
-        draw_hold_factor=draw_hold_factor,
         lead_draws=[(d.at, d.gallons) for d in lead_draws],
     )
     walked = (
@@ -612,10 +606,8 @@ def simulate(
         sim.points, draws, walked, params.readiness, params.book_terms()
     )
     # Lead draws the model read are priced as the scenario's own are.
-    lead_read = (
-        recovery is not None
-        and draw_hold_factor > 0.0
-        and _lead_read(sim.heating, lead_draws, s.start)
+    lead_read = recovery is not None and _lead_read(
+        sim.heating, lead_draws, s.start
     )
     if lead_read and not s.loads.draws and not inlet_measured:
         reasons.append("inlet_temp_modelled")

@@ -1233,27 +1233,22 @@ each rounded up to 100 BTU. The bath's volume is yours to set:
 measure a bath by filling one to your usual level at the hot side's
 meter.
 
-How a draw moves the zones is fitted on the record's long draws too,
-the book walked continuously over it (``book_walk``):
+How a draw moves the upper zone is fitted on the record's long draws
+too, the book walked continuously over it (``book_walk``):
 
 .. code-block:: python
 
    walk = calibration.book_walk(book, zone_empty_btu=p.zone_empty_btu)
    draws = calibration.long_draws(walk)
    split = since + (until - since) * 0.7   # the later draws are held out
-   front = calibration.fit_front(
-       calibration.front_frame(walk, draws, params, split=split))
-   settle = calibration.fit_front_settle(
-       calibration.settle_tails(walk, draws, params, split=split))
    mix = calibration.fit_zone_mix(
        calibration.mixing_frame(walk, draws, split=split))
 
-``front`` is where the lower probe sits in the cold front and how wide
-the front is (``lower_probe_gal``, ``front_width_gal``). ``settle`` is
-how fast the lower zone settles after a draw (``front_settle_min``).
 ``mix`` is how the upper zone falls through a long draw
-(``zone_mix_f_per_gal``, ``zone_mix_gal``). Each reports its error on
-the training and held-out draws and a day bootstrap's interval.
+(``zone_mix_f_per_gal``, ``zone_mix_gal``). It reports its error on the
+training and held-out draws and a day bootstrap's interval. The lower
+zone takes each draw's calibrated response (``DrawParams``), with a
+book or without one.
 
 With circulation's own telemetry (its running samples, flow and return
 line temperature), fit its terms too:
@@ -1277,9 +1272,8 @@ the flow is a setting that moves in steps. Either is None when the runs
 cannot say.
 
 The mixing fit reads gallons left before ``zone_empty_btu``, so refit
-that first. The settle fit reads the front's place and width, so refit
-those before it. The delivered water's lag (one bath's measurement)
-stays an installation value.
+that first. The delivered water's lag (one bath's measurement) stays
+an installation value.
 
 
 Fit the elements

@@ -142,19 +142,13 @@ class Physics(Protocol):
         end: datetime,
         draws: Sequence[Delivered | Draw],
         heated_at: datetime | None = None,
-        draw_lower: bool = True,
     ) -> Coast:
         """Standby from ``start`` to ``end``: jacket loss, the flowing
         draws the physics was given, and exactly ``draws`` (delivered
         gallons at their onsets, all in ``[start, end)``; a pair is at
         the inlet). ``heated_at`` is when the tank last heated, by the
         compressor or an element, which a flowing draw's standby pool
-        is counted from; None when it is not known.
-        ``draw_lower=False`` leaves the lower zone where each draw found
-        it, the upper zone taking the draw's own response: with a book,
-        the engine takes the lower zone through a draw by the front
-        (``_follow_ledger``), and the coast carries only the draws a bound
-        shows leave the front below the probe (``_ledger_cut``)."""
+        is counted from; None when it is not known."""
         ...
 
     def heat(
@@ -295,7 +289,6 @@ class TankPhysics:
         end: datetime,
         draws: Sequence[Delivered | Draw],
         heated_at: datetime | None = None,
-        draw_lower: bool = True,
     ) -> Coast:
         p = self.params
         flowing = (
@@ -331,7 +324,6 @@ class TankPhysics:
             tmv_delivery_intercept_f=p.draw.delivery_intercept_f,
             tmv_delivery_slope=p.draw.delivery_slope,
             draw_gap_open_f_per_gal=p.draw.gap_open_f_per_gal,
-            draw_lower=draw_lower,
             ambient=self.ambient,
             tank=p.tank,
         )

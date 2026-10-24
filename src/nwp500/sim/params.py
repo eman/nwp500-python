@@ -956,19 +956,6 @@ class BookParams:
     zone_mix_gal: float = field(
         default=14.0, metadata=_p(FITTED, "gal", INSTALLATION, _PER_DELIVERED)
     )
-    #: Where the lower probe reads the cold region, tank gallons from
-    #: the bottom, and the width of the front it reads through. Fitted
-    #: on 316 draws of 5 gal or more.
-    lower_probe_gal: float = field(
-        default=25.0, metadata=_p(FITTED, "gal", INSTALLATION)
-    )
-    front_width_gal: float = field(
-        default=32.0, metadata=_p(FITTED, "gal", INSTALLATION)
-    )
-    #: The lower probe's settling after a draw, minutes (time constant).
-    front_settle_min: float = field(
-        default=300.0, metadata=_p(FITTED, "min", INSTALLATION)
-    )
     #: The book's 90th-percentile error within ``max_anchor_age_h`` of
     #: its anchor, and past it.
     error_btu: float = field(
@@ -1151,11 +1138,13 @@ PARTS: Mapping[str, type] = MappingProxyType(
 
 #: Parts that may be absent: None, not their defaults.
 OPTIONAL_PARTS = frozenset({"circulation"})
-
 #: Fields a part no longer has, by part: an older document's, read
 #: without them and without naming them (``unknown_fields``).
 RETIRED_FIELDS: Mapping[str, frozenset[str]] = MappingProxyType(
     {
+        "book": frozenset(
+            {"lower_probe_gal", "front_width_gal", "front_settle_min"}
+        ),
         "readiness": frozenset(
             {
                 "cold_lower_cutoff_f",

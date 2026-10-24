@@ -286,24 +286,24 @@
  },
  "recovering_draws": {
   "fields": {
-   "heating": "2d3966340670624d",
+   "heating": "20180772966cf75a",
    "mode_writes": "4f53cda18c2baa0c",
    "modes": "ce5a5d38e681c9b6",
-   "points": "499204b3aca16ee6",
+   "points": "d59ac5f545cf3f7e",
    "writes": "4f53cda18c2baa0c"
   },
-  "sha256": "8c10fda7563833894514d2a7665321e16cbfde591e45658f1f7ffbb39e006ece",
+  "sha256": "3d9e3646cd22c8af397978ecac66bb3bacc7971cdc57d322c6a4126e21e46805",
   "summary": {
    "heating": [
     [
      "2026-10-04T19:00:00+00:00",
      "running",
      null,
-     "2026-10-04T20:29:52.022963+00:00",
+     "2026-10-04T20:21:25.777315+00:00",
      "compressor",
      null,
      "target",
-     1252.906372
+     1142.593329
     ],
     [
      "2026-10-05T04:00:00+00:00",
@@ -313,15 +313,15 @@
      "compressor",
      null,
      "horizon",
-     839.65
+     839.06
     ]
    ],
    "last": {
     "at": "2026-10-05T05:00:00+00:00",
-    "lower_f": 137.61,
+    "lower_f": 137.543,
     "mode": "heat_pump",
     "setpoint_f": 140.9,
-    "upper_f": 137.61
+    "upper_f": 137.543
    },
    "modes": [
     [

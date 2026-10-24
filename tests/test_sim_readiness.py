@@ -26,11 +26,7 @@ from _sim_site import (  # type: ignore[import-not-found]  # test helper
     deliverable_from_heat,
     delivery_f,
     element_btu,
-    front_cannot_move,
-    front_share,
-    front_start_gal,
     full_tank,
-    lower_after_draw_f,
     standby_btu,
     tank_max_btu,
     zone_after_draw_f,
@@ -39,10 +35,6 @@ from _sim_site import (  # type: ignore[import-not-found]  # test helper
 
 from nwp500.sim import delivery as rd
 from nwp500.sim.params import ReadinessParams
-from nwp500.sim.physics.draw import (
-    settled_lower_f,
-    unsettled_after_f,
-)
 
 TANK_BTU_PER_F = 8.34 * EP.tank_gal
 EVIDENCE = rd.EXAMPLE_EVIDENCE
@@ -637,86 +629,6 @@ class TestTheZoneThroughADraw:
             105.0
             + P.fall_f_per_gal * (EP.empty_btu - EP.zone_empty_btu) / per_gal
         )
-
-
-class TestTheLowerZoneThroughADraw:
-    """The lower zone after a draw is the front's,
-    from where the booked cold region puts it against the lower probe
-    (``lower_probe_gal`` up, ``front_width_gal`` wide)."""
-
-    @staticmethod
-    def _region(cold_gal: float, cold_f: float = 70.0) -> Booked:
-        return Booked(30000.0, 1.0, 70.0, cold_gal=cold_gal, cold_f=cold_f)
-
-    def test_the_probe_reads_hot_until_the_front_reaches_it(self) -> None:
-
-        start = EP.lower_probe_gal - EP.front_width_gal / 2.0
-        assert front_start_gal(EP) == start == 9.0
-        assert front_share(0.0, EP) == front_share(start, EP) == 1.0
-        assert front_share(EP.lower_probe_gal, EP) == 0.5
-        assert front_share(start + EP.front_width_gal, EP) == 0.0
-        assert front_share(63.2, EP) == 0.0
-        # Linear across the front.
-        assert front_share(17.0, EP) == pytest.approx(0.75)
-
-    def test_a_draw_below_the_front_leaves_the_zone_alone(self) -> None:
-
-        before = self._region(0.0)
-        after = before.drawn(10.0, 140.0, EP)
-        assert 0.0 < after.cold_gal < 9.0
-        assert lower_after_draw_f(before, after, 140.0, 131.0, EP) == 131.0
-
-    def test_one_across_it_takes_the_share_it_crossed(self) -> None:
-
-        before = self._region(15.0)
-        after = before.drawn(10.0, 140.0, EP)
-        crossed = front_share(15.0, EP) - front_share(after.cold_gal, EP)
-        assert 0.1 < crossed < 0.5
-        assert lower_after_draw_f(before, after, 140.0, 127.0, EP) == (
-            pytest.approx(127.0 - crossed * (140.0 - after.cold_f))
-        )
-
-    def test_never_below_the_region_nor_warmed(self) -> None:
-
-        before = self._region(30.0)
-        after = before.drawn(20.0, 140.0, EP)
-        assert lower_after_draw_f(before, after, 140.0, 80.0, EP) == 70.0
-        # A zone already colder than the region stays where it was.
-        assert lower_after_draw_f(before, after, 140.0, 65.0, EP) == 65.0
-
-    def test_it_reads_the_front_and_settles_to_the_colder(self) -> None:
-
-        # The front far below the probe: the zone stays at 130 and
-        # settles to the calibrated response priced from where it was
-        # settling (128 less a 6 °F drop).
-        assert settled_lower_f(130.0, 122.0, 72.0) == (130.0, 8.0)
-        # The front past the calibrated level: it is the settled one.
-        assert settled_lower_f(120.0, 124.0, 72.0) == (120.0, 0.0)
-        # Never below the inlet, nor above the front.
-        assert settled_lower_f(90.0, 60.0, 72.0) == (90.0, 18.0)
-        assert settled_lower_f(65.0, 50.0, 72.0) == (65.0, 0.0)
-
-    def test_one_time_constant(self) -> None:
-
-        tau = EP.front_settle_min
-        assert unsettled_after_f(8.0, 0.0, tau) == 8.0
-        assert unsettled_after_f(8.0, tau, tau) == pytest.approx(
-            8.0 / 2.718281828
-        )
-        assert unsettled_after_f(0.0, 30.0, tau) == 0.0
-
-    def test_the_bound_holds_while_the_front_cannot_reach(self) -> None:
-
-        before = self._region(3.0)
-        assert front_cannot_move(before, 5.9, EP)
-        assert not front_cannot_move(before, 6.0, EP)
-        # Wherever it says so, no draw of those gallons moves the zone.
-        for gal in (1.0, 3.0, 5.9):
-            for upper in (105.0, 125.0, 150.0):
-                after = before.drawn(gal, upper, EP)
-                assert (
-                    lower_after_draw_f(before, after, upper, 120.0, EP) == 120.0
-                )
 
 
 class TestTheDeliveredLine:

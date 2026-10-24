@@ -157,8 +157,7 @@ Hot water and the heat book
       fit_terms_l1, BOOK_TERMS, BOOK_TERM_BOUNDS, BOOK_CIRCUIT_GAL_BOUNDS,
       book_error_bands, book_error_btu, empty_point,
       zone_empty_point, withheld_btu, book_walk, long_draws,
-      front_frame, fit_front, FrontFit, settle_tails, fit_front_settle,
-      SettleFit, mixing_frame, fit_zone_mix, ZoneMixFit, MeasuredRun,
+      mixing_frame, fit_zone_mix, ZoneMixFit, MeasuredRun,
       measure_runs, run_heat_btu, fit_displaced_gal, recent_flow_gpm,
       flow_lookup, circulation_windows, CirculationWindow,
       fit_ungated_observability, element_stints, fit_element_lag, ElementLagFit,
@@ -260,8 +259,8 @@ The pieces the entry points are built from.
 
 .. automodule:: nwp500.sim.physics.draw
    :members: delivery_temp_f, hot_fraction, draw_energy_btu,
-      withdrawn_gal, gap_opened_f, lower_zone_drop_f, settled_lower_f,
-      unsettled_after_f, DEFAULT_OBSERVABILITY, DEFAULT_INLET_TEMP_F,
+      withdrawn_gal, gap_opened_f, lower_zone_drop_f,
+      DEFAULT_OBSERVABILITY, DEFAULT_INLET_TEMP_F,
       DEFAULT_TMV_DELIVERY_INTERCEPT_F, DEFAULT_TMV_DELIVERY_SLOPE,
       DEFAULT_GAP_OPEN_F_PER_GAL, DEFAULT_DOMAIN_T_UPPER_F,
       DEFAULT_DOMAIN_VOLUME_GAL, DEFAULT_LOWER_GATE_F,

@@ -506,10 +506,11 @@ The heat book: ``book``
 ``simulate(scenario, params, book=...)`` takes the tank's booked heat at
 the start (``sim.Booked``): how much heat the tank holds above a 70 degF
 reference and where a draw's cold water lies. With it, a draw that
-spends the booked heat takes the upper zone down and the lower zone
-follows the cold front; without it, each draw moves the zones by its
-calibrated response only, which holds the upper zone up through a draw
-that empties the tank, and ``reasons`` says ``no_heat_book``.
+spends the booked heat takes the upper zone down; without it, the upper
+zone takes each draw's calibrated response only, which holds it up
+through a draw that empties the tank, and ``reasons`` says
+``no_heat_book``. The lower zone takes each draw's calibrated response
+either way.
 
 The heater cannot tell you the starting book: two probes read a full
 tank over the cold water of a recent draw. Start one only from what you know:
@@ -691,8 +692,8 @@ under ``readiness`` loads without them (``params.RETIRED_FIELDS``).
 
 ``params.book`` (``BookParams``) holds the book's own terms, fitted on
 the re-anchors of one NWP500-65's metered record: its compressor,
-element and standby heat, the empty point, how the upper zone mixes
-down through a draw and where the lower probe reads the cold front.
+element and standby heat, the empty point and how the upper zone mixes
+down through a draw.
 Its ``delivery_intercept_f`` and ``delivery_slope`` are the mixing
 valve's line, which the simulator takes from ``draw``'s.
 
@@ -936,12 +937,6 @@ the one seen over the retrains from 2026-08-08 to 2026-10-18.
        in a draw's cold water. Booked as delivered gallons: a flow that
        counts tank water (``flow_volume="tank"``) books less heat left
        at the line, so refit both on your record.
-   * - ``book.lower_probe_gal``, ``book.front_width_gal``,
-       ``book.front_settle_min``
-     - 25 gal, 32 gal, 300 min
-     - 316 draws over 119 days. A refit on the full record to
-       2026-10-03 gave 24, 32 and 360-420 min, inside the original
-       intervals.
    * - ``book.zone_mix_f_per_gal``, ``book.zone_mix_gal``
      - 1.25 degF/gal, 14 gal
      - 112 draws. A refit on the full record gave 0.65 degF/gal over

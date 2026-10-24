@@ -90,15 +90,10 @@ So a draw also takes the zone no warmer than where it found it less the
 integral of ``zone_mix_f_per_gal · exp(-left / zone_mix_gal)`` over its
 gallons; the colder of that and the line stands.
 
-**The lower zone through a draw** (``lower_after_draw_f``). The
-calibrated draw takes the lower zone down about a degree per delivered
-gallon, wherever the cold water is. The probe does not: it sits about
-25 tank gallons up, and reads the cold region only once its front gets
-there. Over the record's long draws it reads within a degree of the
-upper probe until the region is about 9 gal, then falls through a front
-about 32 gal wide to the region's own temperature. So with a book the
-lower zone at each draw moves by the share of the front the draw moved
-past the probe (``front_share``), in place of the calibrated response.
+**The lower zone through a draw** is the calibrated draw's
+(``sim.decay.draw_step``), with a book as without one: the lower probe
+falls on every draw at once, and neither rebounds nor keeps falling
+after it. The book has no say over it.
 """
 
 from __future__ import annotations
@@ -118,7 +113,6 @@ from nwp500.sim.extensions import (
     DrawsAhead,
     DrawTaken,
     LedgerZones,
-    Stand,
     UpperAhead,
 )
 from nwp500.sim.params import BookParams, CirculationParams
@@ -782,60 +776,6 @@ def zone_mixed_f(
     return min(upper_f, max(lower_f, upper_before_f - drop))
 
 
-def front_share(cold_gal: float, ep: BookParams | None = None) -> float:
-    """Where the lower probe reads, between the cold region (0) and the
-    hot water above it (1), with the region ``cold_gal`` tank gallons:
-    1 until the front reaches the probe, falling linearly across
-    ``front_width_gal`` centred on ``lower_probe_gal``, 0 past it."""
-    ep = ep or BookParams()
-    if ep.front_width_gal <= 0.0:
-        return 1.0 if cold_gal < ep.lower_probe_gal else 0.0
-    share = 0.5 - (cold_gal - ep.lower_probe_gal) / ep.front_width_gal
-    return min(1.0, max(0.0, share))
-
-
-def front_start_gal(ep: BookParams | None = None) -> float:
-    """The cold region's volume at which the front first reaches the
-    lower probe (``front_share`` falls below 1)."""
-    ep = ep or BookParams()
-    return ep.lower_probe_gal - max(0.0, ep.front_width_gal) / 2.0
-
-
-def lower_after_draw_f(
-    before: Booked,
-    after: Booked,
-    upper_f: float,
-    lower_f: float,
-    ep: BookParams | None = None,
-) -> float:
-    """The lower zone just after a draw, from where the booked cold
-    region puts the front (module docstring, *The lower zone through a
-    draw*): ``lower_f``, the zone before it, less the front's passage
-    over the probe, the share it crossed (``front_share`` before, less
-    after) of the span from the region to ``upper_f``, the water above
-    it. A draw that leaves the front below the probe moves the zone not
-    at all; it never goes below the region, and is never warmed."""
-    ep = ep or BookParams()
-    crossed = front_share(before.cold_gal, ep) - front_share(after.cold_gal, ep)
-    drop = crossed * (upper_f - after.cold_f)
-    if drop <= 0.0:
-        return lower_f
-    return max(min(lower_f, after.cold_f), lower_f - drop)
-
-
-def front_cannot_move(
-    booked: Booked, gal: float, ep: BookParams | None = None
-) -> bool:
-    """Whether no draw can move the lower zone (``lower_after_draw_f``)
-    from ``booked`` through ``gal`` more delivered gallons: the region
-    grows by at most the gallons delivered (each takes its hot share of
-    a gallon from the tank, never more) and nothing else grows it, so
-    while that bound leaves it short of ``front_start_gal`` the front
-    has not reached the probe. For the engine to skip walking the book
-    (``engine._follow_ledger``); it never decides a move."""
-    return booked.cold_gal + max(0.0, gal) < front_start_gal(ep)
-
-
 def zone_cannot_move(
     booked: Booked,
     gal: float,
@@ -1301,11 +1241,8 @@ class BookedHeatLedger:
 
     @property
     def zones(self) -> LedgerZones:
-        """The lower zone's settling after the front moves it, and
-        whether every draw may mix the upper zone down."""
+        """Whether every draw may mix the upper zone down."""
         return LedgerZones(
-            settle_min=self.p.front_settle_min,
-            inlet_f=self.p.inlet_default_f,
             mixes=self.p.zone_mix_f_per_gal > 0.0 and self.p.zone_mix_gal > 0.0,
         )
 
@@ -1341,32 +1278,19 @@ class BookedHeatLedger:
 
     def after_draw(self, q: DrawTaken) -> AfterDraw:
         """The book walked along the path to the draws at ``q.at``, as
-        the walk after the simulation walks it, unless a bound shows
-        neither zone can move (``_zone_far``, ``_front_far``; with
-        mixing, none does). The lower zone is the front's: from
-        ``q.lower_f``, by the share of the front the draws moved past the
-        probe (``lower_after_draw_f``). The upper zone goes down to the
-        colder of ``zone_after_draw_f`` and ``zone_mixed_f`` (the mixing
-        above the front, from ``q.upper_f``) of the booked state after
-        them when that is below the draws' own response, over the lower
-        zone the engine then reads (the front's, no warmer than the upper
-        zone, or their own response while the heater runs)."""
+        the walk after the simulation walks it, unless a bound shows the
+        upper zone cannot move (``_zone_far``; with mixing, none does).
+        The upper zone goes down to the colder of ``zone_after_draw_f``
+        and ``zone_mixed_f`` (the mixing above the front, from
+        ``q.upper_f``) of the booked state after them when that is below
+        the draws' own response, over the lower zone's own response."""
         carry = cast("WalkCarry | None", q.stand)
-        upper_far = self._zone_far(carry, q)
-        if upper_far and (q.heating or self._front_far(carry, q.drawn_gal)):
-            # The front is still below the probe, or the heater runs:
-            # the front has no say over the lower zone.
-            return AfterDraw(lower_f=q.lower_f)
+        if self._zone_far(carry, q):
+            return AfterDraw()
         walked = self.walk(q.path, q.intervals, q.draws, carry, q.at)
         stand = walked.carry
-        inlet = walked.states[-1].inlet_f if walked.states else None
         after = walked.states[-1]
-        front = lower_after_draw_f(
-            walked.before(q.at), after, q.upper_f, q.lower_f, self.p
-        )
-        if upper_far:
-            return AfterDraw(front, stand=stand, inlet_f=inlet)
-        lower = q.drawn_lower_f if q.heating else min(front, q.drawn_upper_f)
+        lower = q.drawn_lower_f
         line = zone_after_draw_f(
             after,
             q.drawn_upper_f,
@@ -1382,22 +1306,8 @@ class BookedHeatLedger:
             ),
         )
         if zone >= q.drawn_upper_f - _ZONE_MOVED_F:
-            return AfterDraw(front, stand=stand, inlet_f=inlet)
-        spent = line < q.drawn_upper_f - _ZONE_MOVED_F
-        return AfterDraw(front, zone, spent, stand, inlet)
-
-    def front_moves_at(
-        self, stand: Stand, drawn_gal: float, pending: Sequence[Draw]
-    ) -> datetime | None:
-        """``front_cannot_move`` from where the walk stood, through every
-        draw since and every pending one to each onset."""
-        carry = cast("WalkCarry", stand)
-        gal = drawn_gal
-        for at, g in pending:
-            gal += g
-            if not front_cannot_move(carry.state, gal, self.p):
-                return at
-        return None
+            return AfterDraw(stand=stand)
+        return AfterDraw(zone, stand)
 
     def upper_moves_at(self, q: DrawsAhead) -> UpperAhead:
         """The book walked along the path ahead (to the first onset only
@@ -1406,17 +1316,14 @@ class BookedHeatLedger:
         ``after_draw`` reads one: the first whose zone goes below the
         draw's own response on the coast."""
         stand = cast("WalkCarry | None", q.stand)
-        inlet: float | None = None
 
         def walk(
             path: Sequence[PathPoint], draws: Sequence[Draw]
         ) -> BookedPath:
-            nonlocal stand, inlet
+            nonlocal stand
             walked = self.walk(path, q.intervals, draws, stand, q.at)
             if walked.carry is not None:
                 stand = walked.carry
-            if walked.states:
-                inlet = walked.states[-1].inlet_f
             return walked
 
         gal: dict[datetime, float] = {}
@@ -1445,7 +1352,7 @@ class BookedHeatLedger:
                     self.p,
                     line_f=self.line_f,
                 ):
-                    return UpperAhead(None, stand, inlet)
+                    return UpperAhead(None, stand)
                 walked = walk(q.path, [*q.taken, *q.pending])
                 whole = True
             here = point_at(q.points, at)
@@ -1465,8 +1372,8 @@ class BookedHeatLedger:
                 ),
             )
             if zone < upper - _ZONE_MOVED_F:
-                return UpperAhead(at, stand, inlet)
-        return UpperAhead(None, stand, inlet)
+                return UpperAhead(at, stand)
+        return UpperAhead(None, stand)
 
     def _zone_far(self, carry: WalkCarry | None, q: DrawTaken) -> bool:
         """Whether, by a bound and without walking, the draws just taken
@@ -1492,15 +1399,6 @@ class BookedHeatLedger:
             self.p,
             line_f=self.line_f,
         )
-
-    def _front_far(self, carry: WalkCarry | None, drawn_gal: float) -> bool:
-        """Whether, by a bound and without walking, the draws since the
-        stand leave the front below the lower probe
-        (``front_cannot_move``). Only draws grow the cold region, so no
-        re-anchor, release or heat since can defeat it."""
-        if carry is None:
-            return False
-        return front_cannot_move(carry.state, drawn_gal, self.p)
 
 
 def full_tank_book(
