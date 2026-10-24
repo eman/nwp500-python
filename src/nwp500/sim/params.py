@@ -934,13 +934,17 @@ class BookParams:
     #: the debit they were booked with, delivered gallons through the
     #: valve: a book whose flow counts tank water (``flow_volume``)
     #: debits more and needs both refit on its own record
-    #: (``calibration.empty_point``, ``zone_empty_point``).
+    #: (``calibration.empty_point``, and ``zone_empty_btu`` as far below
+    #: it).
     empty_btu: float = field(
         default=16169.0, metadata=_p(FITTED, "BTU", INSTALLATION)
     )
-    #: The same point refit so it centres those crossings rather than
-    #: catching them all early: where a draw takes the upper zone
-    #: across the line. Readiness and the delivery keep ``empty_btu``.
+    #: Where a draw takes the upper zone across the line: 3,533 BTU
+    #: below ``empty_btu``, so the zone centres those crossings rather
+    #: than catching them all early. Fitted as the median of the same
+    #: crossings' booked heat when the book held back the heat in a
+    #: draw's cold water; no fit gives it now. Readiness and the
+    #: delivery keep ``empty_btu``.
     zone_empty_btu: float = field(
         default=12636.0, metadata=_p(FITTED, "BTU", INSTALLATION)
     )
@@ -979,11 +983,6 @@ class BookParams:
     #: An anchor younger than this is fresh.
     max_anchor_age_h: float = field(
         default=18.0, metadata=_p(FITTED, "h", INSTALLATION)
-    )
-    #: The cold region a draw leaves rejoins the hot water once the heat
-    #: landing in it takes it past this.
-    cold_release_f: float = field(
-        default=100.0, metadata=_p(FITTED, "°F", INSTALLATION)
     )
     #: How old an anchor a book from a recorded history still carries,
     #: aged: a coverage bound, not a fit.
@@ -1143,7 +1142,12 @@ OPTIONAL_PARTS = frozenset({"circulation"})
 RETIRED_FIELDS: Mapping[str, frozenset[str]] = MappingProxyType(
     {
         "book": frozenset(
-            {"lower_probe_gal", "front_width_gal", "front_settle_min"}
+            {
+                "lower_probe_gal",
+                "front_width_gal",
+                "front_settle_min",
+                "cold_release_f",
+            }
         ),
         "readiness": frozenset(
             {

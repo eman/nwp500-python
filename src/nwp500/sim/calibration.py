@@ -2607,52 +2607,6 @@ def book_error_btu(
     )
 
 
-def withheld_btu(
-    book: RecordedBook, p: BookParams, inlet_f: float | None = None
-) -> np.ndarray:
-    """The cold region's withheld heat at every step: ``Booked.step``
-    walked from each quiet anchor, as a served book walks it."""
-    anchor = np.zeros(len(book.steps), dtype=bool)
-    anchor[book.anchors] = True
-    ref = p.reference_f if inlet_f is None else inlet_f
-    out = np.zeros(len(book.steps))
-    b = Booked(0.0, 0.0, ref, cold_f=p.reference_f)
-    for i, st in enumerate(book.steps):
-        if anchor[i]:
-            b = Booked(0.0, 0.0, ref, cold_f=p.reference_f)
-        if math.isnan(st.upper_f) or math.isnan(st.lower_f):
-            out[i] = out[i - 1] if i else 0.0
-            continue
-        b = b.step(replace(st, inlet_f=ref), p, book.circulation)
-        out[i] = b.withheld_btu(p)
-    return out
-
-
-def zone_empty_point(
-    book: RecordedBook,
-    p: BookParams,
-    loss_btu_per_gal: float,
-    *,
-    line_f: float = 105.0,
-    core_h: float = 12.0,
-    circuit_gal: float | None = None,
-) -> float | None:
-    """``empty_point`` in the drawable frame (``BookParams.
-    zone_empty_btu``): the median, at the same core crossings, of the
-    booked heat less what the cold region withholds."""
-    _, events = empty_point(
-        book, p, loss_btu_per_gal, line_f=line_f, circuit_gal=circuit_gal
-    )
-    heat, _ = book.heat(p, loss_btu_per_gal, circuit_gal)
-    placed = heat - withheld_btu(book, p)
-    core = [
-        placed[int((t - book.start).total_seconds() / book.seconds)]
-        for t, a, _ in events
-        if a <= core_h
-    ]
-    return float(np.median(core)) if core else None
-
-
 # ── the book's response to a draw: the upper zone's mixing ─────────
 #
 # Fitted as it was in the analysis behind the shipped values (its
@@ -2681,13 +2635,12 @@ def book_walk(
 ) -> pd.DataFrame:
     """The record's book walked continuously over its steps, re-anchoring
     as ``book_steps`` does: per step the probes, the household flow,
-    circulation, heating, the air, the book before the step (``heat``,
-    ``withheld``, ``cold_gal``, ``cold_f``, ``age_h``; NaN without an
-    anchor within ``history_h``) and the cold region after it
-    (``cold_gal_after``, ``cold_f_after``). With ``zone_empty_btu``,
-    also ``left_z``: the booked gallons left before it, at the upper
-    probe and the inlet (the measured inlet's trailing 3 h median, else
-    70 degF), and ``hgal``, the gallons drawn in the step."""
+    circulation, heating, the air and the book before the step (``heat``
+    and ``age_h``; NaN without an anchor within ``history_h``). With
+    ``zone_empty_btu``, also ``left_z``: the booked gallons left before
+    it, at the upper probe and the inlet (the measured inlet's trailing
+    3 h median, else 70 degF), and ``hgal``, the gallons drawn in the
+    step."""
     p, circ = book.p, book.circulation
     steps = book.steps
     heating = book.comp | book.el
@@ -2706,11 +2659,7 @@ def book_walk(
             else (i - anchor_i - 1) * book.seconds / 3600
         )
         ok = b is not None and age is not None and age <= p.history_h
-        before = (
-            (b.heat_btu, b.withheld_btu(p), b.cold_gal, b.cold_f, age)
-            if ok and b is not None
-            else (nan, nan, nan, nan, nan)
-        )
+        before = (b.heat_btu, age) if ok and b is not None else (nan, nan)
         full = is_full(s.upper_f, s.lower_f, p)
         new = None
         if book.draw[i] > 0:
@@ -2748,7 +2697,6 @@ def book_walk(
             anchor_i = a
         elif b is not None:
             b = b.step(s, p, circ)
-        after = (b.cold_gal, b.cold_f) if b is not None else (nan, nan)
         rows.append(
             (
                 book.at(i),
@@ -2762,7 +2710,6 @@ def book_walk(
                 s.inlet_f,
                 s.inlet_measured,
                 *before,
-                *after,
             )
         )
     d = pd.DataFrame(
@@ -2779,12 +2726,7 @@ def book_walk(
             "inlet",
             "inlet_meas",
             "heat",
-            "withheld",
-            "cold_gal",
-            "cold_f",
             "age_h",
-            "cold_gal_after",
-            "cold_f_after",
         ],
     )
     per_step = book.seconds / 60.0
@@ -2799,9 +2741,7 @@ def book_walk(
         per_gal = WATER_BTU_PER_GAL_F * (delivered - inlet3h)
         top = np.maximum(d.up, d.lo)
         cap = WATER_BTU_PER_GAL_F * p.tank_gal * (top - p.reference_f)
-        d["left_z"] = (
-            np.minimum(d.heat, cap) - d.withheld - zone_empty_btu
-        ) / per_gal
+        d["left_z"] = (np.minimum(d.heat, cap) - zone_empty_btu) / per_gal
     return d
 
 

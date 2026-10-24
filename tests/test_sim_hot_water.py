@@ -423,6 +423,16 @@ class TestTheParameters:
         assert params_from_document(doc) == params
         assert unknown_fields(doc) == []
 
+    def test_a_document_with_the_retired_cold_release_loads(
+        self, params: HeaterParams
+    ) -> None:
+        """An older writer's ``cold_release_f`` is read past, and not
+        named as unknown: the book holds no heat back."""
+        doc = json.loads(json.dumps(params_to_document(params)))
+        doc["book"]["cold_release_f"] = 100.0
+        assert params_from_document(doc) == params
+        assert unknown_fields(doc) == []
+
     @pytest.mark.parametrize(
         ("part", "name", "value", "match"),
         [

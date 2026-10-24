@@ -31,9 +31,6 @@ loss_ceiling_btu = _book.loss_ceiling_btu
 class Booked(_book.Booked):
     """``book.Booked``, its terms the site's unless given."""
 
-    def withheld_btu(self, p: BookParams | None = None) -> float:
-        return super().withheld_btu(p or EP)
-
     def drawable_btu(self, p: BookParams | None = None) -> float:
         return super().drawable_btu(p or EP)
 
@@ -41,23 +38,6 @@ class Booked(_book.Booked):
         self, gal: float, upper_f: float, p: BookParams | None = None
     ) -> _book.Booked:
         return super().drawn(gal, upper_f, p or EP)
-
-    def heated(
-        self,
-        bottom_btu: float = 0.0,
-        top_btu: float = 0.0,
-        p: BookParams | None = None,
-    ) -> _book.Booked:
-        return super().heated(bottom_btu, top_btu, p or EP)
-
-    def observed(
-        self,
-        lower_f: float,
-        p: BookParams | None = None,
-        *,
-        drawing: bool = False,
-    ) -> _book.Booked:
-        return super().observed(lower_f, p or EP, drawing=drawing)
 
     def deliverable_gal(
         self, upper_f: float, p: BookParams | None = None

@@ -1060,9 +1060,9 @@ Read as delivered, a tank-water flow books about a quarter of each
 draw's heat too little (a 141 degF tank behind a valve delivering 122
 degF), and the book promises hot water that isn't there. The shipped
 empty points (``BookParams.empty_btu`` and ``zone_empty_btu``) were
-booked as delivered gallons, so with ``"tank"`` refit them on your
-record (``calibration.empty_point`` and ``zone_empty_point``, below);
-booked as tank water, the same
+booked as delivered gallons, so with ``"tank"`` refit ``empty_btu`` on
+your record (``calibration.empty_point``, below) and keep
+``zone_empty_btu`` as far below it; booked as tank water, the same
 drawdown leaves less heat at the line. As none of the flow is circulation,
 ``book`` takes ``CirculationParams.meter_share`` as 0. A flow entity that reports a draw late
 reaches the book late: the book holds what the history holds at
@@ -1217,12 +1217,12 @@ to a day apart. Each pair's booked heat is checked against the probes':
    v = fit.book_circuit_gal
    bands = calibration.book_error_bands(book, p, 0.0, v)
    empty, crossings = calibration.empty_point(book, p, 0.0, circuit_gal=v)
-   zone = calibration.zone_empty_point(book, p, 0.0, circuit_gal=v)
 
 The steps read the meter as delivered gallons, as the readiness fit
 above does. For a flow that counts tank water, book it with
-``flow_volume="tank"`` here, so ``empty`` and ``zone`` come out in that
-frame.
+``flow_volume="tank"`` here, so ``empty`` comes out in that frame, and
+set ``zone_empty_btu`` as far below it as the shipped pair are (3,533
+BTU).
 
 With ``circuit=True`` the runs are priced at a circuit volume
 (``CirculationParams.book_circuit_gal``) fitted in place of a loss per
@@ -1271,7 +1271,7 @@ displaced volume is the one that prices those runs best.
 the flow is a setting that moves in steps. Either is None when the runs
 cannot say.
 
-The mixing fit reads gallons left before ``zone_empty_btu``, so refit
+The mixing fit reads gallons left before ``zone_empty_btu``, so set
 that first. The delivered water's lag (one bath's measurement) stays
 an installation value.
 

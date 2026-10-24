@@ -1813,7 +1813,6 @@ def _book_steps_on(
                 circulating=on,
                 circulation_gpm=gpm,
                 inlet_measured=in_f is not None,
-                lower_element=bool(lo_el[i]),
                 run_gal_before=before_col[i],
                 flow_volume=flow_volume,
             )

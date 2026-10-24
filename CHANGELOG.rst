@@ -8,6 +8,29 @@ Unreleased
 Fixed
 -----
 
+- **The heat book counts all its heat.** The book held back the heat
+  that landed in a draw's cold water, the heat pump's and the lower
+  element's, until that water passed 100 °F, or until the lower probe,
+  having read it below 100 °F, read 100 °F again. On the two recorded drawdowns where it held
+  heat back, its answer at the start under-read the gallons delivered
+  to the line by about 9 gal; counting all of it read within about 4.
+  Now all booked heat is drawable, the deliverable gallons, readiness
+  and the upper zone through a draw alike, and a spent tank's delivery
+  falls to the inlet. Removed: ``BookParams.cold_release_f``;
+  ``Booked.cold_gal``, ``cold_f``, ``cold_seen``, ``withheld_btu`` and
+  ``observed``; ``book.projected_release``; ``book.Step.lower_element``;
+  ``WalkCarry.drawn`` and ``bottom``; the ``withheld_btu`` arguments of
+  ``book.deliverable_from_heat``, ``probe_line_gal`` and
+  ``delivery.deliverable``; ``calibration.withheld_btu`` and
+  ``zone_empty_point`` (with nothing held back it is ``empty_point``'s
+  median); and ``book_walk``'s ``withheld``, ``cold_gal``, ``cold_f``,
+  ``cold_gal_after`` and ``cold_f_after`` columns. ``Booked.heated``
+  takes one heat, ``ready.Added`` has one ``heat_btu`` in place of
+  ``bottom_btu`` and ``top_btu``, and ``book.draw_out`` returns the
+  heat alone. ``zone_empty_btu`` keeps its value. A parameters document
+  that still carries ``cold_release_f`` loads, and ``unknown_fields``
+  doesn't name it.
+
 - **With a heat book, a draw moves the lower probe at once.** With a
   book, the simulated lower probe held where a draw found it until the
   book's cold region reached about 9 gal, then settled over 5 hours
