@@ -74,8 +74,12 @@ thermistor reaches its target.
 
 **The tank, in two zones.** The condenser coil wraps the lower part of
 the tank, so while the tank is stratified a recovery warms the lower
-zone (about half the tank's mass). Once the gap between the zones
-closes, the tank heats as one body. In standby the gap relaxes on a
+zone (about half the tank's mass) and holds the upper zone where it
+started. Once the gap between the zones closes, the tank heats as one
+body. On 30 compressor-only recoveries the upper probe fell a median
+0.5 degF while the gap was over 3 degF, then rose to 1.3 degF above its
+start over the gap's last 2 to 3 degF, as the zones mixed; after that
+the two probes rose together. In standby the gap relaxes on a
 fitted time constant. Standby loss follows a jacket law,
 ``UA(dT) = ua_ref * (max(dT, 5) / 50) ^ n``, with the ambient as the
 other side, on the whole tank. A bottom loss ``Q_b`` leaves the lower
