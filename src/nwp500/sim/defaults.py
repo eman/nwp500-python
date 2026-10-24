@@ -5,8 +5,8 @@ on 2026-10-11 from its own record, with the constants measured by
 targeted device runs and the engineering constants the fit assumes
 (each field's ``Provenance`` says which: ``provenance_of``). The 50 and
 80 gal models get the same parameters with the tank's volume scaled by
-nominal size, and nothing else: their compressor, elements, jacket loss
-and controller are the 65's until one of them is measured.
+rated storage, and nothing else: their compressor, elements, jacket
+loss and controller are the 65's until one of them is measured.
 
 The fit is one unit's, in one place, and part of it describes that
 place rather than the heater (``params.Scope``): the draw terms were
@@ -41,7 +41,9 @@ VOLUME_65 = 2
 VOLUME_80 = 3
 
 #: Nominal gallons by ``volume_code``.
-NOMINAL_GAL = ((VOLUME_50, 50.0), (VOLUME_65, 65.0), (VOLUME_80, 80.0))
+#: Rated storage volume by model, gallons: the manual's specification
+#: table (45.2, 63.2 and 76.1 for the 50, 65 and 80 gal models).
+RATED_GAL = ((VOLUME_50, 45.2), (VOLUME_65, 63.2), (VOLUME_80, 76.1))
 
 #: One installation's thermostatic mixing valve: delivered water at
 #: 53.56 + 0.485 × the upper zone, °F, never above the tank. Measured
@@ -182,15 +184,16 @@ def site_example_params(volume_code: int = VOLUME_65) -> HeaterParams:
     snapshot of its fit of 2026-10-11. Several of its values move with
     every refit there (the circulation's displaced volume and flow, the
     compressor and power fits), so read it as an example, not as that
-    installation's current state. The 50 and 80 gal models scale
-    by nominal size its tank volume (the tank's, and the heat book's
-    count of it) and the book's empty point (``BookParams.empty_btu``,
-    about 256 BTU per gallon of it), and nothing else. Its readiness
+    installation's current state. The 50 and 80 gal models scale by
+    rated storage (``RATED_GAL``) its tank volume (the tank's, and the
+    heat book's count of it) and the book's empty point
+    (``BookParams.empty_btu``, about 256 BTU per gallon of it), and
+    nothing else. Its readiness
     evidence is the site's 19-draw frontier
     (``delivery.EXAMPLE_EVIDENCE``), measured on the 65 gal tank, which
     the model served for every heater."""
-    nominal = dict(NOMINAL_GAL)
-    if volume_code not in nominal:
+    rated = dict(RATED_GAL)
+    if volume_code not in rated:
         raise ValueError(f"unknown volume_code {volume_code!r}")
     site = _nwp500_65()
     base = replace(
@@ -200,7 +203,7 @@ def site_example_params(volume_code: int = VOLUME_65) -> HeaterParams:
     )
     if volume_code == VOLUME_65:
         return base
-    scale = nominal[volume_code] / nominal[VOLUME_65]
+    scale = rated[volume_code] / rated[VOLUME_65]
     return replace(
         base,
         tank=replace(base.tank, volume_gal=base.tank.volume_gal * scale),
