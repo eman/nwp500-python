@@ -8,6 +8,13 @@ Unreleased
 Fixed
 -----
 
+- **The upper zone's hold through a recovery rests on the record.** The
+  two-zone model warms the lower zone alone while the tank is
+  stratified and holds the upper where it started. On 30 compressor-only
+  recoveries the upper probe fell a median 0.54 °F while the gap was
+  over 3 °F and rose to 1.26 °F above its start over the gap's last 2 to
+  3 °F, so the hold stays. See :doc:`/explanation/simulator`.
+
 - **The heater's idle air reading is corrected.** Idle, the heater's
   own air sensor reads its cabinet: on the record (February to October)
   6.2 °F above a sensor beside the heater on average, 9.3 in February to
