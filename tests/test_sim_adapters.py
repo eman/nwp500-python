@@ -322,7 +322,8 @@ class TestThePreferredUnits:
         self, device_status_dict: dict[str, Any]
     ) -> None:
         s = DeviceStatus.model_validate(
-            device_status_dict | {"ambientTemperature": 200}  # 20.0 degC
+            # 20.0 degC, read while the compressor runs.
+            device_status_dict | {"ambientTemperature": 200, "compUse": 2}
         )
         for units in ("metric", "us_customary", None):
             set_unit_system(units)
