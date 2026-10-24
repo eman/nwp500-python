@@ -354,7 +354,8 @@ The environment: ``Environment``
        (``sim_adapters.environment(status)``): the air the heater stands
        in only while the compressor runs (at one installation, within
        about 0.35 degF from August to October and up to about 2 degF warm
-       from May to July), its cabinet while idle (about 6 degF warm).
+       from May to July), its cabinet while idle, and
+       ``environment(status)`` takes 6.2 degF off an idle reading.
        ``sim_adapters.location_air`` projects the air from an outdoor
        forecast, anchored to a running reading (``sim.location_air``). **Not reported ahead of
        time**: for the hours to come, pass a forecast or a sensor's
@@ -1015,9 +1016,11 @@ The ones about inputs and parameters:
        or its readings all missing), so the answer ran at the default
        air, 65 °F.
    * - ``ambient_from_idle_cabinet``
-     - The air is the heater's own reading taken while its compressor
-       was idle (``Environment.ambient_cabinet``): its cabinet's, about
-       6 °F above the air around it.
+     - The air comes from the heater's own reading taken while its
+       compressor was idle (``Environment.ambient_cabinet``): its
+       cabinet's, less 6.2 °F, the cabinet's mean warmth at one
+       installation. Corrected so, it was within 2.2 °F of the air on
+       average (5 to 9 °F warm raw, by season).
    * - ``tau_gap_prior``
      - Draws opened a gap that closes on a prior time constant, not one
        fitted on this heater.
