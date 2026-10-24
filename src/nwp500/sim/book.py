@@ -318,6 +318,7 @@ def book_steps(
     book_from = 0
     clean = False
     was_heating = was_disturbed = False
+    was_heard = True
     moving_since = 0
     for i, st in enumerate(steps):
         heating, disturbed = _busy(st, p, circulation)
@@ -326,13 +327,15 @@ def book_steps(
             moving_since = i
         if heating:
             clean = False
-        elif was_heating:
+        elif was_heating and was_heard:
+            # A recovery seen to end: heard on both sides of it.
             clean = True
             if disturbed and full and st.heard:
                 anchor, book_from = i, moving_since
         if disturbed or not st.heard:
             clean = False
         was_heating, was_disturbed = heating, disturbed
+        was_heard = st.heard
         if clean and not heating and full:
             anchor, book_from = i, i + 1
     if anchor is None:

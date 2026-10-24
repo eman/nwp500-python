@@ -690,6 +690,22 @@ class TestNoAnchorAcrossAGap:
         whole = book_steps(recovery_then(heard), P)
         assert whole is not None and whole.anchor_age_h == 0.0
 
+    def test_a_recovery_ending_in_its_last_step_anchors_nothing(
+        self,
+    ) -> None:
+        """Heating in the gap's last step and idle in the first heard
+        one: the recovery's end was not seen, so the quiet steps after
+        it do not anchor."""
+        after = (
+            [step()] * 10
+            + [step(heard=False)] * 2
+            + [step(compressor_on=True, heard=False)]
+            + [step()] * 10
+        )
+        b = book_steps(recovery_then(after), P)
+        assert b is not None
+        assert b.anchor_age_h == pytest.approx(13 * 10 / 3600)
+
     def test_a_recovery_after_it_anchors(self) -> None:
         after = (
             [step(heard=False)] * 3

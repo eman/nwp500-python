@@ -891,6 +891,12 @@ class TestAPumpOutageInARestart:
         ]
         assert self.heat(out) < self.heat(ran)
 
+    def test_one_still_open_may_have_run(self) -> None:
+        """Unavailable from two minutes before the read: no reading says
+        it came back stopped."""
+        out = [_row("sensor.pump", END - timedelta(minutes=2), "unavailable")]
+        assert self.heat(out) < self.heat([])
+
     def test_a_long_outage_may_have_run(self) -> None:
         out = [
             _row("sensor.pump", END - H, "unavailable"),

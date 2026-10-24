@@ -2182,18 +2182,19 @@ def _unread_marked(
     return replace(got, outages=outages, states=states)
 
 
-def _stopped_across(outage: Span, runs: Sequence[Span]) -> bool:
-    """Whether the pump was stopped at both edges of ``outage``, one no
-    longer than ``sim_adapters.BRIDGE_MAX``: then it ran nothing across
-    it, as the book takes the heating across such a gap."""
+def _stopped_across(outage: Span, speed: Sequence[Reading]) -> bool:
+    """Whether the pump read stopped at both edges of ``outage``, one no
+    longer than ``sim_adapters.BRIDGE_MAX``: the speed in force as it
+    began, and one read as it ended. Then it ran nothing across it, as
+    the book takes the heating across such a gap. An outage still open
+    when the history was read has no reading at its end."""
     a, b = (t.astimezone(UTC) for t in outage)
     if b - a > sa.BRIDGE_MAX:
         return False
-    return not any(
-        ra.astimezone(UTC) <= t < rb.astimezone(UTC)
-        for t in (a, b)
-        for ra, rb in runs
-    )
+    rows = sorted((t.astimezone(UTC), v) for t, v in speed)
+    before = [v for t, v in rows if t <= a]
+    after = [v for t, v in rows if t == b]
+    return bool(before and after) and max(before[-1], *after) < PUMP_ON_RPM
 
 
 class HomeAssistantBook:
@@ -2381,7 +2382,14 @@ class HomeAssistantBook:
             # edges of.
             outages = got.outages.get(e.circulation_speed, [])
             if known is not None:
-                outages = [o for o in outages if not _stopped_across(o, known)]
+                # Converts, as known_runs found.
+                speed, _ = got.converted(
+                    e.circulation_speed,
+                    self._units.get(e.circulation_speed),
+                    to_rpm,
+                    at,
+                )
+                outages = [o for o in outages if not _stopped_across(o, speed)]
             runs = busy(known or [], outages, unseen)
         inlet: list[Reading] = []
         inlet_out: list[Span] = []
