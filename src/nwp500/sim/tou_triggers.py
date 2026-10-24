@@ -240,14 +240,16 @@ def autonomous_start(
         )
         if drop_starts:
             # The gap's relaxation can warm the lower tank after the
-            # crossing: a drop releases it only landing under the
+            # crossing, and a draw can move the upper zone alone: a drop
+            # releases it only taking the lower tank down, under the
             # setting.
             dropped = min(
                 (
                     d.at
                     for d in drops
                     if d.at >= crossed
-                    and _lower_after(trajectory, d) < hp_lower_on
+                    and _lower_after(trajectory, d)
+                    < min(hp_lower_on, d.lower_before)
                 ),
                 default=None,
             )

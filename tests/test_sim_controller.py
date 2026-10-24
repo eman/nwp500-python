@@ -320,16 +320,18 @@ class TestTheCompressor:
         assert ahead.trigger_at == at(20)
 
     @pytest.mark.parametrize(
-        ("after", "starts"), [(107.0, False), (103.0, True)]
+        ("before", "after", "starts"),
+        [(108.0, 107.0, False), (108.0, 103.0, True), (103.0, 103.0, False)],
     )
     def test_energy_saver_starts_on_a_drop_landing_under_its_setting(
-        self, after: float, starts: bool
+        self, before: float, after: float, starts: bool
     ) -> None:
         """A lower zone the gap's relaxation warmed past the setting is
-        not released by a drop that leaves it there."""
-        coast = [(T0, 134.2, 104.0), (at(10), 134.0, 108.0)]
+        not released by a drop that leaves it there, nor one under it by
+        a draw that moved the upper zone alone."""
+        coast = [(T0, 134.2, 104.0), (at(10), 134.0, before)]
         coast += [(at(20), 133.8, after)]
-        drop = [Impulse(at(15), 108.0, after)]
+        drop = [Impulse(at(15), before, after)]
         ahead, _ = trigger_ahead(
             fresh(setpoint=120.2, mode="energy_saver"),
             settings(),
