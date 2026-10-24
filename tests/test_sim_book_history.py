@@ -351,20 +351,20 @@ class TestFromTheChanges:
         assert got.heat_btu == pytest.approx(want.heat_btu)
         assert got.anchor_age_h == pytest.approx(want.anchor_age_h)
 
-    def test_an_anchor_before_a_silence_does_not_count(
+    def test_a_silence_is_walked_across(
         self, heater: Callable[..., list[Any]]
     ) -> None:
         """Unheard from 3 h to 2.5 h ago, after the only recovery: the
-        heat that left meanwhile is unknown, so there is no book."""
+        book walks across it, the values held, as if it were heard."""
         p = site_example_params()
         rows, observed = as_changes(heater(20, recovery_at=4))
         flow = with_a_draw(meter(20), 2.0)
-        assert (
-            sa.book_from_changes(
-                rows, unheard(observed, 3, 2.5), p, at=T0, flow=flow
-            )
-            is None
+        want = sa.book_from_changes(rows, observed, p, at=T0, flow=flow)
+        got = sa.book_from_changes(
+            rows, unheard(observed, 3, 2.5), p, at=T0, flow=flow
         )
+        assert want is not None and got is not None
+        assert got.heat_btu == pytest.approx(want.heat_btu)
 
     def test_a_silence_before_the_anchor_changes_nothing(
         self, heater: Callable[..., list[Any]]
@@ -379,7 +379,7 @@ class TestFromTheChanges:
         assert want is not None and got is not None
         assert got.heat_btu == pytest.approx(want.heat_btu)
 
-    def test_an_outage_is_a_silence(
+    def test_an_outage_is_walked_across(
         self, heater: Callable[..., list[Any]]
     ) -> None:
         p = site_example_params()
@@ -389,7 +389,10 @@ class TestFromTheChanges:
             rows,
             outages=((T0 - timedelta(hours=3), T0 - timedelta(hours=2.5)),),
         )
-        assert sa.book_from_changes(out, observed, p, at=T0, flow=flow) is None
+        want = sa.book_from_changes(rows, observed, p, at=T0, flow=flow)
+        got = sa.book_from_changes(out, observed, p, at=T0, flow=flow)
+        assert want is not None and got is not None
+        assert got.heat_btu == pytest.approx(want.heat_btu)
 
     def test_a_heater_not_heard_now_has_no_book(
         self, heater: Callable[..., list[Any]]
@@ -451,20 +454,27 @@ class TestFromTheChanges:
         with pytest.raises(ValueError, match="no flow reading"):
             sa.book_from_changes(rows, observed, p, at=T0, flow=[])
 
-    def test_a_flow_outage_is_as_the_heater_unheard(
+    def test_a_flow_outage_is_walked_across(
         self, heater: Callable[..., list[Any]]
     ) -> None:
-        """No anchor before the flow was unknown counts: the recovery 4 h
-        ago is before an outage 3 h ago, so there is no book."""
+        """The recovery 4 h ago is before a flow outage 3 h ago: the book
+        walks across it, the flow held."""
         p = site_example_params()
         readings = heater(20, recovery_at=4)
         rows, observed = as_changes(readings)
         flow = [(T0 - timedelta(hours=20), 0.0), (T0 - timedelta(hours=3), 0.0)]
         out = (T0 - timedelta(hours=3, minutes=10), T0 - timedelta(hours=3))
-        assert sa.book_from_changes(rows, observed, p, at=T0, flow=flow)
+        want = sa.book_from_changes(rows, observed, p, at=T0, flow=flow)
+        got = sa.book_from_changes(
+            rows, observed, p, at=T0, flow=flow, flow_outages=[out]
+        )
+        assert want is not None and got is not None
+        assert got.heat_btu == pytest.approx(want.heat_btu)
+        # Unknown now, the book is.
+        now = (T0 - timedelta(minutes=5), T0)
         assert (
             sa.book_from_changes(
-                rows, observed, p, at=T0, flow=flow, flow_outages=[out]
+                rows, observed, p, at=T0, flow=flow, flow_outages=[now]
             )
             is None
         )
@@ -491,6 +501,123 @@ class TestFromTheChanges:
             inlet_outages=[gap],
         )
         assert cut is not None and cut.inlet_measured_share < 1.0
+
+
+def ago(h: float = 0, m: float = 0) -> datetime:
+    return T0 - timedelta(hours=h, minutes=m)
+
+
+class TestARestart:
+    """Home Assistant restarting leaves the heater and the flow unknown
+    for a few minutes: the book walks across, the values held. The
+    record: a recovery 4 h to 3.5 h ago, a 2 gal/min draw 2 h ago for
+    five minutes."""
+
+    P = site_example_params()
+
+    @pytest.fixture
+    def record(
+        self, heater: Callable[..., list[Any]]
+    ) -> tuple[sa.ChangeRows, list[datetime]]:
+        return as_changes(heater(20, recovery_at=4))
+
+    def book(self, record: Any, gap: tuple[datetime, datetime]) -> Any:
+        rows, observed = record
+        return sa.book_from_changes(
+            replace(rows, outages=(gap,)),
+            observed,
+            self.P,
+            at=T0,
+            flow=with_a_draw(meter(20), 2.0),
+            flow_outages=[gap],
+        )
+
+    def whole(self, record: Any) -> Any:
+        rows, observed = record
+        return sa.book_from_changes(
+            rows, observed, self.P, at=T0, flow=with_a_draw(meter(20), 2.0)
+        )
+
+    @pytest.mark.parametrize(
+        "gap",
+        [
+            pytest.param((ago(1, 3), ago(1)), id="quiet"),
+            pytest.param((ago(2, 1), ago(1, 58)), id="water running"),
+            pytest.param((ago(3, 31), ago(3, 28)), id="heating ends inside"),
+            pytest.param((ago(4, 1), ago(3, 58)), id="heating starts inside"),
+            pytest.param((ago(3), ago(1)), id="two hours"),
+        ],
+    )
+    def test_it_keeps_the_book(
+        self, record: Any, gap: tuple[datetime, datetime]
+    ) -> None:
+        assert self.book(record, gap) is not None
+
+    def test_a_quiet_gap_books_as_if_heard(self, record: Any) -> None:
+        got, want = self.book(record, (ago(1, 3), ago(1))), self.whole(record)
+        assert want is not None and got is not None
+        assert got.heat_btu == pytest.approx(want.heat_btu)
+
+    def test_a_draw_going_in_is_held_only_as_a_reading(
+        self, record: Any
+    ) -> None:
+        """Half an hour unknown from inside a draw: the draw is held
+        ``FLOW_HOLD``, as one more reading would be, not across the
+        gap."""
+        rows, observed = record
+        draw = [(ago(20), 0.0), (ago(2), 2.0)]
+        gap = (ago(1, 59), ago(1, 29))
+        got = sa.book_from_changes(
+            rows,
+            observed,
+            self.P,
+            at=T0,
+            flow=[*draw, (ago(1, 29), 0.0)],
+            flow_outages=[gap],
+        )
+        ended = sa.book_from_changes(
+            rows,
+            observed,
+            self.P,
+            at=T0,
+            flow=[*draw, (gap[0] + sa.FLOW_HOLD, 0.0)],
+        )
+        assert got is not None and ended is not None
+        assert got.heat_btu == pytest.approx(ended.heat_btu)
+
+    def test_outages_given_once_hold_the_same(self, record: Any) -> None:
+        rows, observed = record
+        flow = [(ago(20), 0.0), (ago(2), 2.0), (ago(1, 29), 0.0)]
+        gap = (ago(1, 59), ago(1, 29))
+        listed = sa.book_from_changes(
+            rows, observed, self.P, at=T0, flow=flow, flow_outages=[gap]
+        )
+        once = sa.book_from_changes(
+            rows, observed, self.P, at=T0, flow=flow, flow_outages=iter([gap])
+        )
+        assert listed is not None and once is not None
+        assert once.heat_btu == pytest.approx(listed.heat_btu)
+
+    def test_an_outage_before_the_first_reading_adds_none(
+        self, record: Any
+    ) -> None:
+        """The flow first read an hour ago, unknown before: the recovery
+        3.5 h ago is before the flow's history, so there is no book."""
+        rows, observed = record
+        got = sa.book_from_changes(
+            rows,
+            observed,
+            self.P,
+            at=T0,
+            flow=[(ago(1), 0.0)],
+            flow_outages=[(ago(5), ago(1))],
+        )
+        assert got is None
+
+    def test_unknown_now_there_is_none_until_it_is_heard(
+        self, record: Any
+    ) -> None:
+        assert self.book(record, (ago(m=2), T0 + timedelta(minutes=1))) is None
 
 
 class TestTheSilences:
@@ -640,25 +767,19 @@ class TestHeardSpans:
         assert got.heat_btu == pytest.approx(want.heat_btu)
         assert got.anchor_age_h == pytest.approx(want.anchor_age_h)
 
-    def test_a_gap_between_spans_breaks_the_book(
+    def test_a_gap_between_spans_is_walked_across(
         self, heater: Callable[..., list[Any]]
     ) -> None:
         p = site_example_params()
         rows, _ = as_changes(heater(20, recovery_at=4))
         flow = with_a_draw(meter(20), 2.0)
-        # Unheard after the recovery's anchor: none before it counts.
         gap = (T0 - timedelta(hours=3), T0 - timedelta(hours=2.5))
         spans = [(self.H20, gap[0]), (gap[1], T0)]
-        assert (
-            sa.book_from_changes(rows, [], p, at=T0, flow=flow, heard=spans)
-            is None
-        )
-        # Touching spans are one.
-        whole = [(self.H20, gap[0]), (gap[0], T0)]
-        assert (
-            sa.book_from_changes(rows, [], p, at=T0, flow=flow, heard=whole)
-            is not None
-        )
+        whole = [(self.H20, T0)]
+        got = sa.book_from_changes(rows, [], p, at=T0, flow=flow, heard=spans)
+        want = sa.book_from_changes(rows, [], p, at=T0, flow=flow, heard=whole)
+        assert want is not None and got is not None
+        assert got.heat_btu == pytest.approx(want.heat_btu)
 
     def test_not_heard_at_the_instant_is_no_book(
         self, heater: Callable[..., list[Any]]

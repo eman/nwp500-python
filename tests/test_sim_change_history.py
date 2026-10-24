@@ -6,6 +6,7 @@ entity history (``sim_home_assistant.read_heater_history``), the frame
 import asyncio
 import math
 from collections.abc import Iterable
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from typing import Any, cast
 
@@ -825,6 +826,65 @@ class TestTheBookKeptCurrent:
         assert keeper.book(END, self.P).booked is not None
 
 
+class TestARestart:
+    P = sim.default_params()
+
+    def test_the_book_is_walked_across_it(self) -> None:
+        """Home Assistant restarting an hour ago: the heater unavailable
+        for three minutes, the flow for four. The book holds."""
+        back = END - H + timedelta(minutes=3)
+        restart = [
+            _row("sensor.last_status", END - H, "unavailable"),
+            _row("sensor.upper", END - H, "unavailable"),
+            _row("sensor.upper", back, "140.0", "°F"),
+            _row(FLOW, END - H, "unavailable"),
+            _row(FLOW, back + timedelta(minutes=1), "0.0", "gal/min"),
+        ]
+        whole = _keeper(WindowedClient(_book_rows(), BOOK_UNITS))
+        asyncio.run(whole.read(END))
+        keeper = _keeper(WindowedClient(_book_rows() + restart, BOOK_UNITS))
+        asyncio.run(keeper.read(END))
+        want = whole.book(END, self.P)
+        got = keeper.book(END, self.P)
+        assert want.booked is not None and got.booked is not None, got.notes
+        assert got.booked.heat_btu == pytest.approx(want.booked.heat_btu)
+
+
+class TestAPumpOutageInARun:
+    P = replace(
+        sim.default_params(),
+        circulation=sim.CirculationParams(
+            displaced_gal=1.0, flow_gpm=2.0, loss_btu_per_gal=50.0
+        ),
+    )
+
+    def heat(self, pump: list[dict[str, Any]]) -> float:
+        rows = [r for r in _book_rows() if r["entity_id"] != "sensor.pump"]
+        keeper = _keeper(
+            WindowedClient(rows + pump, BOOK_UNITS),
+            circulation_speed="sensor.pump",
+        )
+        asyncio.run(keeper.read(END))
+        got = keeper.book(END, self.P)
+        assert got.booked is not None, got.notes
+        return got.booked.heat_btu
+
+    def test_a_run_going_in_holds_only_as_a_sampled_speed(self) -> None:
+        start, down = END - 2 * H, END - 2 * H + timedelta(minutes=2)
+        outage = [
+            _row("sensor.pump", T0, "0", "rpm"),
+            _row("sensor.pump", start, "2000", "rpm"),
+            _row("sensor.pump", down, "unavailable"),
+            _row("sensor.pump", END - H, "0", "rpm"),
+        ]
+        stopped = [
+            _row("sensor.pump", T0, "0", "rpm"),
+            _row("sensor.pump", start, "2000", "rpm"),
+            _row("sensor.pump", down + ha.PUMP_STALE, "0", "rpm"),
+        ]
+        assert self.heat(outage) == pytest.approx(self.heat(stopped))
+
+
 class TestTheBookFirstReview:
     P = sim.default_params()
 
@@ -1022,8 +1082,8 @@ class TestThePumpThirdReview:
             assert got.booked is not None, got.notes
             return got.booked.heat_btu
 
-        # The outage is booked as the pump running: less heat than none.
-        assert heat(True) < heat(False)
+        # Across its outage the pump's speed holds: no run.
+        assert heat(True) == pytest.approx(heat(False))
 
 
 class TestTheBookFourthReview:
@@ -1093,8 +1153,8 @@ class TestTheBookFifthReview:
             assert got.booked is not None, got.notes
             return got.booked.heat_btu
 
-        # Unread, the pump may have run: less heat than held idle.
-        assert heat(True) < heat(False)
+        # Unread, the pump's speed holds, idle.
+        assert heat(True) == pytest.approx(heat(False))
 
     def test_an_omitted_demand_is_an_unknown_state(self) -> None:
         got = ha.History(
@@ -1315,7 +1375,7 @@ class TestTheFlowsHistory:
         # No anchor since the flow began: none, and the note says so,
         # rather than an error.
         assert got.booked is None
-        assert any("no anchor since" in n for n in got.notes)
+        assert any("no anchor in the history" in n for n in got.notes)
 
     def test_a_flow_unknown_now_says_so(self) -> None:
         rows = [

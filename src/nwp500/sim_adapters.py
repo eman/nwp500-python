@@ -1975,8 +1975,7 @@ def book_from_changes(
     ``circulation_flow``, ``inlet`` and ``air`` are changes, each value
     held until the next, in gal/min and °F whatever the preferred units.
     ``flow_outages``, ``inlet_outages`` and ``air_outages`` are the spans
-    each was unknown (``History.outages``). A flow unknown is as a heater
-    unheard: no anchor before it counts. An air unknown is
+    each was unknown (``History.outages``). An air unknown is
     ``AMBIENT_DEFAULT_F``. With no ``air`` reading at all, the air is the
     heater's own while its compressor runs (``settled_air``, from the
     rows' ``heater_air_f``). No anchor before the
@@ -1986,15 +1985,18 @@ def book_from_changes(
     A value that holds writes no change, so only ``observed`` says the
     heater was heard: a silence between those instants longer than
     ``max_gap`` of them, or one of ``rows.outages``, is a span nobody
-    saw, and no anchor before it counts (the heat that left meanwhile is
-    unknown). The book is from after the last such span; None when the
-    heater is not heard at ``at``, or there is no anchor since.
+    saw. The book walks across it, and across a span the flow was
+    unknown, as if it were seen, each value held from before it (a Home
+    Assistant restart's few minutes, say), the flow for ``FLOW_HOLD``
+    and then none. None when the heater is not
+    heard at ``at`` or the flow is unknown then, or with no anchor.
 
     A record with no instant per response gives ``heard`` instead: the
     spans the heater was heard over. Then ``observed`` is not read, a
     gap between two spans is one nobody saw, and the heater is heard at
     ``at`` only inside a span."""
     at = at.astimezone(UTC)
+    flow_outages = list(flow_outages)
     unseen: list[tuple[datetime, datetime]]
     if heard is not None:
         spans = [(a, b) for a, b in join_spans(heard) if a <= at]
@@ -2013,15 +2015,17 @@ def book_from_changes(
             return None
         since = instants[0]
         unseen = silences(instants, gap)
+    # A gap is walked across, its values held: only one still open now
+    # leaves the book unknown.
     for a, b in [*unseen, *rows.outages, *flow_outages]:
-        a, b = a.astimezone(UTC), b.astimezone(UTC)
-        if a <= at:
-            if b >= at:
-                return None
-            since = max(since, b)
+        if a.astimezone(UTC) <= at <= b.astimezone(UTC):
+            return None
     # A missing reading is none: it neither moves water nor shows the
     # meter reporting.
     flows = sorted((t.astimezone(UTC), v) for t, v in _finite(flow))
+    # Unknown, the flow holds as a reading does, then is none: a draw
+    # going in most likely ended within minutes.
+    flows = _ended_in(flows, flow_outages, FLOW_HOLD)
     if flows:
         # Before the flow's first reading, its draws are unknown.
         since = max(since, flows[0][0])
@@ -2053,6 +2057,24 @@ def book_from_changes(
         since,
         max_silence=None,
     )
+
+
+def _ended_in(
+    flows: list[tuple[datetime, float]],
+    gaps: Iterable[tuple[datetime, datetime]],
+    hold: timedelta,
+) -> list[tuple[datetime, float]]:
+    """``flows`` (in time order) at 0 from ``hold`` into each of
+    ``gaps`` with a reading in force at its start and none inside it,
+    to its end. Before the first reading the flow stays unknown."""
+    stops = [
+        (a + hold, 0.0)
+        for a, b in join_spans(gaps)
+        if a + hold < b
+        and any(t <= a for t, _ in flows)
+        and not any(a < t < b for t, _ in flows)
+    ]
+    return sorted([*flows, *stops], key=lambda r: r[0]) if stops else flows
 
 
 def _book_windows(

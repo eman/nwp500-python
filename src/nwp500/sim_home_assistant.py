@@ -2182,6 +2182,22 @@ def _unread_marked(
     return replace(got, outages=outages, states=states)
 
 
+def _without(spans: Sequence[Span], cut: Sequence[Span]) -> list[Span]:
+    """``spans`` less what of them is inside ``cut``."""
+    out: list[Span] = []
+    for span in spans:
+        pieces = [span]
+        for c, d in cut:
+            pieces = [
+                (x, y)
+                for a, b in pieces
+                for x, y in ((a, min(b, c)), (max(a, d), b))
+                if y > x
+            ]
+        out.extend(pieces)
+    return out
+
+
 class HomeAssistantBook:
     """The tank's heat booked (``sim_adapters.book_from_changes``) from
     Home Assistant and kept current: ``read`` reads the history once
@@ -2199,7 +2215,10 @@ class HomeAssistantBook:
     with ``demand`` the mains (``mains_plateau``, ``on_the_mains``),
     and ``air`` the air beside the heater; each optional, a book without
     one losing only what it gives. A flow reported late reaches the
-    book late: it books what the history holds at ``read``."""
+    book late: it books what the history holds at ``read``. Across a
+    span an entity was unavailable, a restart's say, the book holds its
+    value from before: the flow for ``sim_adapters.FLOW_HOLD`` and the
+    pump's speed for ``PUMP_STALE``, then none."""
 
     def __init__(
         self,
@@ -2351,17 +2370,18 @@ class HomeAssistantBook:
                     "booked with only its outages"
                 )
             if unknown:
-                # Before the pump's first reading, the heat its runs
-                # took is unknown: no anchor before it counts.
-                flow_out = busy(flow_out, unknown)
                 notes.append(
                     "book: the circulation's runs are known only from "
                     f"{unknown[-1][1].isoformat()}"
                 )
-            # While the pump was unavailable or unread, it may have run.
-            runs = busy(
-                known or [], got.outages.get(e.circulation_speed, []), unseen
-            )
+            # Across the pump's outages its speed holds, as a sampled
+            # speed does, for PUMP_STALE: a run going in is over by then.
+            stale = [
+                (a + PUMP_STALE, b)
+                for a, b in got.outages.get(e.circulation_speed, [])
+                if a + PUMP_STALE < b
+            ]
+            runs = busy(_without(known or [], stale), unseen)
         inlet: list[Reading] = []
         inlet_out: list[Span] = []
         if e.inlet is not None:
@@ -2428,8 +2448,8 @@ class HomeAssistantBook:
                 notes.append(f"book: {self.flow} is unknown now")
             else:
                 notes.append(
-                    "book: no anchor since the heater or the flow was last "
-                    "unknown"
+                    "book: no anchor in the history, or the heater not "
+                    "heard now"
                 )
             return BookAnswer(None, False, tuple(notes))
         if e.inlet is None or e.demand is None or not inlet:
