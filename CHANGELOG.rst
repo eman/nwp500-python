@@ -45,7 +45,11 @@ Fixed
   new ``flow_volume``: ``"delivered"``, the default and the reading
   until now, or ``"tank"``, each gallon priced at the upper probe less
   the inlet. ``simulate run`` reads it from ``[home_assistant]``'s
-  ``draw_flow_volume``.
+  ``draw_flow_volume``. The shipped empty points
+  (``BookParams.empty_btu``, ``zone_empty_btu``) were booked as
+  delivered gallons, so a tank-water book takes them refit on its own
+  record (``calibration.empty_point``, ``zone_empty_point``): booked as
+  tank water, a drawdown leaves less heat at the line.
 
 Version 9.12.1 (2026-10-23)
 ===========================

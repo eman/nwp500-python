@@ -562,7 +562,10 @@ standby and circulation out, and each draw (the meter less
 gallon is the water at the taps, priced at the mixing valve's delivery,
 its hot share drawn from the tank; with ``flow_volume="tank"``, it is
 the tank's own water (a meter or a detector on the heater's hot
-outlet), priced at the upper probe less the inlet. It reads the last
+outlet), priced at the upper probe less the inlet. The book's empty
+points (``book.empty_btu``, ``book.zone_empty_btu``) were booked as
+delivered gallons, so a tank-water flow takes them refit on its own
+record. It reads the last
 18 hours (``book.max_anchor_age_h``) and, without an anchor there, the last 72
 (``book.history_h``), aged. The inlet it converts gallons at is the
 median of the probe's readings over the last 3 hours
@@ -946,7 +949,9 @@ the one seen over the retrains from 2026-08-08 to 2026-10-18.
      - 16,169, 12,636 BTU
      - The heat left at five recorded drawdowns to the line
        (14,237-19,616 BTU), counted all ways and leaving out heat held
-       in a draw's cold water.
+       in a draw's cold water. Booked as delivered gallons: a flow that
+       counts tank water (``flow_volume="tank"``) books less heat left
+       at the line, so refit both on your record.
    * - ``book.lower_probe_gal``, ``book.front_width_gal``,
        ``book.front_settle_min``
      - 25 gal, 32 gal, 300 min

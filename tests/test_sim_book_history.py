@@ -227,6 +227,37 @@ class TestTheFlowsVolume:
         assert debit[0] < 140.0
         assert debit[1] == 140.0
 
+    def test_tank_water_refits_the_empty_point_lower(self) -> None:
+        """The empty points are in their debit's frame: the same
+        drawdown, its flow counting tank water, leaves less booked heat
+        at the line."""
+        from nwp500.sim import calibration as cal
+
+        def record(volume: Any) -> Any:
+            fall = [
+                step(
+                    flow_gpm=3.0,
+                    flow_volume=volume,
+                    upper_f=140.0 - i,
+                    lower_f=max(70.0, 139.5 - 3 * i),
+                )
+                for i in range(40)
+            ]
+            return cal.RecordedBook(
+                recovery_then([step()] * 30 + fall), VALVE, start=T0
+            )
+
+        delivered, tank = record("delivered"), record("tank")
+        empty, crossings = cal.empty_point(tank, VALVE, 0.0)
+        assert len(crossings) == 1
+        valve_empty, _ = cal.empty_point(delivered, VALVE, 0.0)
+        assert empty is not None and valve_empty is not None
+        assert empty < valve_empty - 1000
+        zone = cal.zone_empty_point(tank, VALVE, 0.0)
+        valve_zone = cal.zone_empty_point(delivered, VALVE, 0.0)
+        assert zone is not None and valve_zone is not None
+        assert zone < valve_zone - 1000
+
     def test_the_history_books_tank_water(
         self, heater: Callable[..., list[Any]]
     ) -> None:
