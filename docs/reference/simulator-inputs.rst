@@ -654,11 +654,6 @@ NWP500-65's installation; measure your own where you can.
        crossed the line; also the rate the book's upper zone falls past
        its empty point. Two crossings, 1.6 at the probe and 1.83-2.07 at
        a spout; the faster kept.
-   * - ``dip_f``, ``dip_min``
-     - 3.4 degF, 3.0 min
-     - The transient dip during a draw that is not running out: a
-       window is cold only if the delivery falls further below the line,
-       or stays below it longer. The NWP500's upper probe's.
    * - ``probe_resolution_f``
      - 1.0 degF
      - A probe error this size either way that would flip "the bath is

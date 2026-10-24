@@ -786,8 +786,7 @@ the tank could supply it:
 
 ``deliverable_gal`` and ``margin_gal`` are the tank at the window's
 onset against the gallons expected; ``depleted`` says the delivered
-water fell more than 3.4 degF below the line, or stayed below it more
-than 3 minutes (the heater's own dip during a draw is not running out).
+water fell below the line.
 
 Pass a ``book`` for ``depleted`` to mean anything. Without one, each
 draw moves the zones by its calibrated response, which holds the upper

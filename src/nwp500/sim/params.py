@@ -855,12 +855,6 @@ class ReadinessParams:
     fall_f_per_gal: float = field(
         default=2.0, metadata=_p(MEASURED, "°F/gal", INSTALLATION)
     )
-    #: A draw's transient dip that is not running out: the delivered
-    #: water may fall this far below the line, for this long, before the
-    #: draw counts as cold (the NWP500's upper probe dips about 3.4 °F for
-    #: about 3 min during a draw).
-    dip_f: float = field(default=3.4, metadata=_p(MEASURED, "°F"))
-    dip_min: float = field(default=3.0, metadata=_p(MEASURED, "min"))
     #: How far a probe reading can be off and still describe the same
     #: tank: the element's own decisions sit 1.4 °F from the probe's. A
     #: bath answer that a probe error this size would flip says
@@ -1182,6 +1176,8 @@ RETIRED_FIELDS: Mapping[str, frozenset[str]] = MappingProxyType(
                 "cold_lower_cap_gal",
                 "full_setpoint_band_f",
                 "full_hidden_gal",
+                "dip_f",
+                "dip_min",
             }
         ),
     }
