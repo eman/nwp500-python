@@ -166,6 +166,22 @@ class TestTheCompressorsAnchor:
         assert b is not None
         assert b.anchor_age_h == pytest.approx(5 * 10 / 3600)
 
+    @pytest.mark.parametrize("gpm", [1.4, 0.0], ids=["metered", "unmetered"])
+    def test_the_calibrations_walk_anchors_as_book_steps_does(
+        self, gpm: float
+    ) -> None:
+        """``calibration.book_walk``: the compressor anchors after its
+        hold, and not while circulating, its flow metered or not."""
+        from nwp500.sim.calibration import RecordedBook, book_walk
+
+        steps = running(HOLD) + running(
+            5, circulating=True, circulation_gpm=gpm
+        )
+        walk = book_walk(RecordedBook(steps, P, LOOP, start=T0))
+        assert walk.age_h.isna().iloc[:HOLD].all()
+        assert walk.age_h.iloc[HOLD] == 0.0
+        assert walk.age_h.iloc[-1] == pytest.approx(4 * 10 / 3600)
+
 
 class TestTheHouseholdsFlow:
     def test_the_meter_less_circulations_share(self) -> None:

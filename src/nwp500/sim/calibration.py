@@ -2786,7 +2786,7 @@ def book_walk(
         was_h, was_d = bool(heating[i]), bool(disturbed[i])
         if clean and not heating[i] and full:
             new = (i, i + 1)
-        quiet = not disturbed[i]
+        quiet = not disturbed[i] and not s.circulating
         if compressing(s) and anchor_held(run_s, p) and quiet and full:
             new = (i, i + 1)
         if new is not None and quiet:

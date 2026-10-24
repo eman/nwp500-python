@@ -391,6 +391,7 @@ def book_steps(
         anchor_age_h=age_h,
         inlet_f=inlet_now_f(since, p),
         inlet_measured_share=share,
+        hold_s=run_s,
     )
 
 
@@ -427,6 +428,10 @@ class Booked:
     #: The lower probe has read below ``cold_release_f`` since the region
     #: formed: it has seen the cold water, so it can see it go.
     cold_seen: bool = False
+    #: The compressor's run since a draw booked after the anchor, s,
+    #: which holds its anchor (``BookParams.anchor_run_min``); None with
+    #: no draw since the anchor.
+    hold_s: float | None = None
 
     def aged(self, p: BookParams | None = None) -> bool:
         """Booked from an anchor older than ``max_anchor_age_h``."""
@@ -488,6 +493,7 @@ class Booked:
             cold_f=cold_f,
             # A new region has not been seen yet; a larger one has.
             cold_seen=self.cold_seen and self.cold_gal > 0.0,
+            hold_s=0.0,
         )
 
     def heated(
@@ -514,6 +520,12 @@ class Booked:
             cold_f=cold_f,
             cold_seen=seen,
         )
+
+    def ran(self, seconds: float) -> Booked:
+        """After the compressor has run ``seconds``: its hold runs."""
+        if self.hold_s is None:
+            return self
+        return replace(self, hold_s=self.hold_s + seconds)
 
     def lost(self, btu: float) -> Booked:
         """Standby loss, out of the drawable heat."""
@@ -558,6 +570,8 @@ class Booked:
         drawing = house > p.draw_gpm
         if drawing:
             b = b.drawn(house * s.seconds / 60.0, s.upper_f, p)
+        elif s.compressor_on:
+            b = b.ran(s.seconds)
         b = b.observed(s.lower_f, p, drawing=drawing)
         bottom = compressor_btu(h, s.ambient_f, p) if s.compressor_on else 0.0
         top = 0.0
@@ -888,9 +902,6 @@ class WalkCarry:
     bottom: bool
     #: The compressor running alone over that span, undisturbed.
     compressing: bool = False
-    #: The compressor's run since the last draw, s (``anchor_run_min``);
-    #: None with no draw since the last anchor.
-    run_s: float | None = None
 
 
 @dataclass(frozen=True)
@@ -1097,16 +1108,10 @@ def walk_booked(
     # heater's own rule, whatever gap the zones show then; any other
     # end, or any quiet instant after one, is full when the zones are
     # within the book's band. So is an instant the compressor has run
-    # alone up to, ``anchor_run_min`` since the last draw (a start with
-    # a draw booked: since the walk's start), nothing drawn there.
+    # alone up to, past the book's hold (``Booked.hold_s``), nothing
+    # drawn there.
     clean = False if carry is None else carry.clean
     drawn_yet = False if carry is None else carry.drawn
-    # A start that has booked a draw holds from the walk's start.
-    run_s = (
-        (0.0 if start.cold_gal > 0.0 else None)
-        if carry is None
-        else carry.run_s
-    )
 
     def heated_before(k: int) -> tuple[bool, bool]:
         """Heat in over the span ending at instant ``k`` (any, bottom):
@@ -1137,7 +1142,6 @@ def walk_booked(
                 prev_heat,
                 prev_bottom,
                 prev_alone,
-                run_s,
             )
         busy_next = k < len(spans) and (heats[k] or extras[k][1])
         disturbed = by_instant.get(at, 0.0) > 0.0 or busy_next
@@ -1148,24 +1152,20 @@ def walk_booked(
             ):
                 state = _anchored(state, *zones(at), p)
                 clean = False
-                run_s = None
         if clean and not disturbed and is_full(*zones(at), p):
             state = _anchored(state, *zones(at), p)
-            run_s = None
         gal = by_instant.get(at, 0.0)
         if (
             prev_alone
             and gal == 0.0
-            and anchor_held(run_s, p)
+            and anchor_held(state.hold_s, p)
             and is_full(*zones(at), p)
         ):
             state = _anchored(state, *zones(at), p)
-            run_s = None
         before.append(state)
         if gal > 0.0:
             state = state.drawn(gal, zones(at)[0], p)
             clean = False
-            run_s = 0.0
         drawn_yet = drawn_yet or gal > 0.0
         if k > 0 or carry is not None:
             state = projected_release(
@@ -1189,8 +1189,8 @@ def walk_booked(
             clean = False
         if heats[k]:
             clean = False
-        if compressor[k][0] and run_s is not None:
-            run_s += (nxt - at).total_seconds()
+        if compressor[k][0]:
+            state = state.ran((nxt - at).total_seconds())
         state = state.heated(bottom, top, p).lost(lost)
 
     index = {at: i for i, at in enumerate(instants)}

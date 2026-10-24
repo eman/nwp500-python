@@ -598,9 +598,9 @@ ledger=BookedHeatLedger(book, ambient_at, params.book, extra=loss))``.
 Once started, the walk re-anchors whenever the simulated tank comes
 back full: a recovery the heater ends itself, quiet after one with
 the zones within ``book.uniform_band_f``, or the heat pump running
-alone with the zones within it, past the same hold (counted from the
-walk's start when the book it starts from holds a draw). A ``Booked``
-whose ``anchor_age_h`` is past ``book.max_anchor_age_h`` is aged:
+alone with the zones within it, past the same hold. The book carries
+the hold (``Booked.hold_s``), so a book from a record goes on with
+its own. A ``Booked`` whose ``anchor_age_h`` is past ``book.max_anchor_age_h`` is aged:
 ``reasons`` says ``heat_book_aged`` and a window's margin comes off by
 the book's error band.
 

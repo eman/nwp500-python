@@ -335,6 +335,10 @@ class TestTheWalkResumes:
 FULL: dict[str, float] = {"upper": 133.0, "lower": 132.3}
 
 
+#: After a bath, the compressor not yet run since it.
+HELD = replace(AFTER_BATH, hold_s=0.0)
+
+
 def anchored(b: Booked) -> bool:
     return b.anchor_age_h == 0.0 and b.cold_gal == 0.0
 
@@ -344,23 +348,22 @@ class TestTheCompressorAnchors:
     ``anchor_run_min`` since a draw booked after the last anchor."""
 
     def test_a_full_tank_anchors_once_it_has_run_the_hold(self) -> None:
-        path = walk(flat(0, 10, 14, 15, 30, **FULL), heat=[heating(0, 60)])
+        path = walk(
+            flat(0, 10, 14, 15, 30, **FULL), heat=[heating(0, 60)], start=HELD
+        )
         assert not anchored(path.before(m(14)))
         assert anchored(path.before(m(15)))
 
-    def test_with_no_draw_booked_there_is_no_hold(self) -> None:
-        start = replace(AFTER_BATH, cold_gal=0.0)
-        path = walk(flat(0, 10, 30, **FULL), heat=[heating(0, 60)], start=start)
+    def test_with_no_draw_since_the_anchor_there_is_no_hold(self) -> None:
+        path = walk(flat(0, 10, 30, **FULL), heat=[heating(0, 60)])
         assert not anchored(path.before(m(0)))
         assert anchored(path.before(m(10)))
 
     def test_a_draw_holds_it_again(self) -> None:
-        start = replace(AFTER_BATH, cold_gal=0.0)
         path = walk(
             flat(0, 10, 20, 30, 34, 35, 50, **FULL),
             heat=[heating(0, 60)],
             draws=[(m(20), 1.0)],
-            start=start,
         )
         full = full_tank(133.0, 132.3, 70.0, EP).heat_btu
         assert path.before(m(10)).heat_btu == pytest.approx(full)
@@ -372,7 +375,7 @@ class TestTheCompressorAnchors:
             *flat(0, 5, 39, upper=133.0, lower=120.0),
             *flat(40, 49, 50, 55, **FULL),
         ]
-        path = walk(points, heat=[heating(0, 5), heating(40, 60)])
+        path = walk(points, heat=[heating(0, 5), heating(40, 60)], start=HELD)
         assert not anchored(path.before(m(49)))
         assert anchored(path.before(m(50)))
 
@@ -446,11 +449,41 @@ class TestTheCompressorAnchors:
                 for x, lo in zip(at, lowers, strict=True)
             ),
         ]
-        path = walk(points, heat=[heating(0, 70)])
+        # No anchor in the history: its hold runs from the start.
+        path = walk(points, heat=[heating(0, 70)], start=HELD)
         simulated = next(
             i for i, x in enumerate(at) if anchored(path.before(x))
         )
         assert simulated == recorded
+
+    @pytest.mark.parametrize("released", [False, True])
+    def test_a_recorded_hold_goes_on_into_the_simulation(
+        self, released: bool
+    ) -> None:
+        """A recorded book 5 minutes of compressor into its hold: the
+        simulation anchors after the other 10, with the draw's cold
+        region still booked or released."""
+
+        def rec(n: int, lower: float, flow: float = 0.0, on: bool = False):
+            return [Step(10.0, 133.0, lower, flow, on, False, 65.0, 70.0)] * n
+
+        steps = [
+            *rec(20, 125.0, on=True),
+            *rec(5, 132.3),
+            *rec(6, 132.3, flow=2.0),
+            *rec(30, 132.3, on=True),
+        ]
+        book = book_steps(steps, EP)
+        assert book is not None
+        assert book.hold_s == pytest.approx(300.0)
+        assert book.anchor_age_h > 0.0
+        if released:
+            book = replace(book, cold_gal=0.0)
+        path = walk(
+            flat(0, 9, 10, 20, **FULL), heat=[heating(0, 30)], start=book
+        )
+        assert not anchored(path.before(m(9)))
+        assert anchored(path.before(m(10)))
 
 
 class TestAWithheldWindow:
