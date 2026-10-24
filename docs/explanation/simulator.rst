@@ -132,8 +132,8 @@ can still read full.
 water past the mixing valve before the delivered water falls below the
 line (105 degF by default), from the book's heat above its empty point.
 The probe is not at the tap: the delivered water crosses the line some
-gallons after the upper probe does, the water above it and in the pipe
-to the fixture, so every answer carries that lag. Without a book, the
+gallons after the upper probe does, the tank water above it, so every
+answer carries that lag. Without a book, the
 answer is the tank's heat as its two probes place it, or evidence from
 the caller's own draws where it shows more. A draw window runs cold when the delivered water falls below the line.
 
@@ -399,6 +399,6 @@ Limitations
 - **The book's starting point.** The heater reports the probes, not
   how much of the tank is cold water from the last draw. A book starts
   from the caller's knowledge, or not at all.
-- **The installation.** The pipe to the fixture, the mixing valve's
-  setting and the household's draws are the installation's: the
-  readiness defaults are one installation's (``ReadinessParams``).
+- **The installation.** The mixing valve's setting and the household's
+  draws are the installation's: the readiness defaults are one
+  installation's (``ReadinessParams``).

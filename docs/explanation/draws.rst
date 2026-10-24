@@ -164,8 +164,11 @@ fell to 104 degF. Both probes report in 0.18 degF steps, so a draw of
 
 **The upper probe sits below the outlet.** In one bath on 2026-09-29,
 the water at the tub spout crossed 105 degF 7.3 gal after the upper
-probe did, and the water at the valve's outlet 5.3 gal after. Near
-that line the delivered water fell by about 2 degF per gallon.
+probe did, and the water at the valve's outlet 5.3 gal after, each net
+of the pipe from the tank to its thermometer. The gap is the tank water
+above the probe; the two figures differ because the spout read
+2.74 degF above the gauge. Near that line the delivered water fell by
+about 2 degF per gallon.
 
 **The lower probe's response follows the gap.** The same draw moves
 the lower probe further the wider the gap between the probes when it

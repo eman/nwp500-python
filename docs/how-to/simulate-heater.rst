@@ -664,9 +664,10 @@ place it (``basis`` ``probes``), heating or not. Give it more:
   given state delivered (``ReadinessParams.evidence``,
   :doc:`/reference/simulator-inputs`).
 
-The gallons count the water in the pipe to your fixture
-(``ReadinessParams.delivered_lag_gal``). The default is one bath's at
-one installation; set your own.
+The gallons include the tank water above the upper probe, which still
+leaves hot after the probe crosses the line
+(``ReadinessParams.delivered_lag_gal``, 5 gal, from one bath on an
+NWP500-65). The water standing in your pipe is not in them.
 
 
 Ask when a bath will be ready
@@ -1275,8 +1276,8 @@ the flow is a setting that moves in steps. Either is None when the runs
 cannot say.
 
 The mixing fit reads gallons left before ``zone_empty_btu``, so set
-that first. The delivered water's lag (one bath's measurement) stays
-an installation value.
+that first. The delivered water's lag (one bath's measurement) is the
+tank's, and no fit here moves it.
 
 
 Fit the elements
