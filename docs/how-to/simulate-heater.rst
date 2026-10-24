@@ -223,8 +223,8 @@ From Python, ``sim_home_assistant.HomeAssistantEnvironment`` reads the
 same parts. Given ``heater=``, a ``HeaterEntities`` with ``ambient`` and
 ``compressor``, it fits the model without an ``air`` entity: on the
 heater's own air reading every 10 minutes while the compressor runs,
-where the reading was taken 2 minutes or more into the run (earlier, or
-idle, it reads the cabinet), and not while the sensor was unavailable.
+where the reading was taken 5 minutes or more into the run (earlier it
+still reads warm, and idle it reads the cabinet), and not while the sensor was unavailable.
 With a model, given or fitted, and no fresh reading beside the heater,
 each ``read`` anchors the projection to the heater's newest such
 reading from the last hour. ``fitted_air`` holds the fit once ``read``
@@ -803,7 +803,9 @@ Each of these replaces a default with a fact:
 
 **The air ahead of time.** The device reports the air at its intake
 now, and only while the compressor runs is that the air the heater
-stands in: idle, it reads its own cabinet, about 6 degF warm. Project
+stands in: idle, it reads its own cabinet, and
+``environment(status)`` takes 6.2 degF off it (within about 2 degF on
+average at one installation, from 5 to 9 degF warm raw). Project
 the air from an outdoor forecast instead, anchored to the last reading
 taken while the compressor ran:
 
@@ -1353,8 +1355,8 @@ heater's own, read with this library. With ``air``, the air is the
 recorded readings as 10-minute means from 6 hours before ``at``, and
 ``humidity=``
 goes with it. Without it, the heater's own reading at ``at`` holds,
-and that reads the cabinet, about 6 degF warm, while the compressor is
-idle. ``environment=`` replaces either.
+while the compressor is idle that reads the cabinet, and 6.2 degF is
+taken off it. ``environment=`` replaces either.
 
 
 Compare with the recorded day

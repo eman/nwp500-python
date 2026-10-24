@@ -8,6 +8,20 @@ Unreleased
 Fixed
 -----
 
+- **The heater's idle air reading is corrected.** Idle, the heater's
+  own air sensor reads its cabinet: on the record (February to October)
+  6.2 °F above a sensor beside the heater on average, 9.3 in February to
+  4.8 in October. ``sim_adapters.environment(status)``, and so the live
+  scenario and a replay without recorded air, now take
+  ``IDLE_CABINET_WARM_F`` (6.2 °F) off an idle reading. That cuts the
+  average error from 6.3 to 2.2 °F. The ``ambient_from_idle_cabinet``
+  reason still names it. See :doc:`/reference/simulator-inputs`.
+- **The Home Assistant air fit settles 5 minutes into a run.**
+  ``sim_home_assistant.RUN_SETTLE`` was 2 minutes, against the book's 5
+  (``sim_adapters.HEATER_AIR_SETTLE``). It is now that constant. On the
+  record the reading runs a median 2.1 °F warm in a run's third minute
+  and 1.8 in its fifth.
+
 - **A held mode landing over the setpoint starts nothing.** On
   2026-09-21 Energy Saver, held through a TOU window, landed at its
   close with the upper tank 18.7 °F above a 107.6 °F setpoint and the

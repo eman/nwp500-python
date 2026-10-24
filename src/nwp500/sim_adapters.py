@@ -313,6 +313,14 @@ def _finite(
     ]
 
 
+#: How warm the heater's own air reading runs while its compressor is
+#: idle, when it reads the cabinet: the mean over 2026-02-14 to 10-24
+#: against a sensor beside the heater, °F (median 6.56; 9.3 in February
+#: to 4.8 in October). Taken off, the reading is within 2.2 °F on
+#: average, against 6.3 raw and 7.2 at the 65 °F default.
+IDLE_CABINET_WARM_F = 6.2
+
+
 def environment(
     status: DeviceStatus | None = None,
     *,
@@ -325,7 +333,7 @@ def environment(
     as ``location_air``'s projection. Without it, ``status``'s own
     reading of the air at its intake now (``ambient_temperature_raw``)
     holds for the whole span; while the compressor is idle that reading
-    is the cabinet's, about 6 °F warm (``location_air_reading``).
+    is the cabinet's, and ``IDLE_CABINET_WARM_F`` is taken off it.
     ``humidity`` is %RH; ``inlet`` the mains water, in the preferred
     unit. Each left out is the simulator's default, which its result
     names in ``defaults_used``."""
@@ -335,6 +343,8 @@ def environment(
         ambient_f: float | tuple[tuple[datetime, float], ...] = _from_device(
             DeciCelsius(status.ambient_temperature_raw)
         )
+        if not status.comp_use:
+            ambient_f -= IDLE_CABINET_WARM_F
     elif isinstance(ambient, int | float):
         ambient_f = _to_sim(float(ambient))
     else:
@@ -1364,9 +1374,10 @@ class _Heater:
 
 
 #: A run's first minutes, when the heater's own air reading is still
-#: warm: at one installation, against a sensor beside the heater, about
-#: 2.7 °F in the first 2 minutes and 1.4 °F from 2 to 5, then 0.2 to
-#: 0.8 °F (up to about 2 °F from May to July).
+#: warm: at one installation, against a sensor beside the heater
+#: (2026-02-14 to 10-24), a median 3.7 °F in the first minute, 2.6 in
+#: the second, 2.1 in the third and 1.8 in the fifth, then 1.5 at 5-7
+#: and 0.8 from 10 to 60 minutes.
 HEATER_AIR_SETTLE = timedelta(minutes=5)
 
 

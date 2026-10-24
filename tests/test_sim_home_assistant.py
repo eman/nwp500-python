@@ -1700,11 +1700,11 @@ class TestWhileRunning:
         got, newest = ha._while_running(air, self.RUNS, NOW)  # pyright: ignore[reportPrivateUsage]
         assert got
         assert {v for _, v in got} == {70.0}
-        assert got[0][0] == self.ON + timedelta(minutes=32)
+        assert got[0][0] == self.ON + timedelta(minutes=25)
         assert newest == air[-1]
 
     def test_nothing_while_the_sensor_is_unknown(self) -> None:
-        air = [(self.ON + timedelta(minutes=3), 70.0)]
+        air = [(self.ON + timedelta(minutes=6), 70.0)]
         gap = (self.ON + timedelta(minutes=20), self.ON + timedelta(minutes=40))
         got, _ = ha._while_running(air, self.RUNS, NOW, [gap])  # pyright: ignore[reportPrivateUsage]
         assert got
@@ -1713,16 +1713,16 @@ class TestWhileRunning:
     def test_a_repeated_on_row_is_one_run(self) -> None:
         """An attribute's update writes a row with the same state."""
         runs = [(self.ON + timedelta(minutes=m), "on") for m in range(60)]
-        air = [(self.ON + timedelta(minutes=3), 70.0)]
+        air = [(self.ON + timedelta(minutes=6), 70.0)]
         got, _ = ha._while_running(air, runs, NOW)  # pyright: ignore[reportPrivateUsage]
-        assert len(got) == 5  # from 12 min, after the 3 min reading
+        assert len(got) == 5  # from 15 min, after the 6 min reading
 
     def test_the_newest_reading_keeps_its_own_instant(self) -> None:
-        """Carried to 13:52, a reading from 12:03 is still from 12:03."""
+        """Carried to 14:55, a reading from 13:06 is still from 13:06."""
         on = NOW - timedelta(hours=2)
-        air = [(on + timedelta(minutes=3), 70.0)]
+        air = [(on + timedelta(minutes=6), 70.0)]
         got, newest = ha._while_running(air, [(on, "on")], NOW)  # pyright: ignore[reportPrivateUsage]
-        assert got[-1][0] == NOW - timedelta(minutes=8)
+        assert got[-1][0] == NOW - timedelta(minutes=5)
         assert newest == air[0]
 
 
@@ -1972,15 +1972,15 @@ class TestTheFitCarried:
         assert until - since == ha.FRESH + ha.RUN_SETTLE
 
     async def test_a_fresh_reading_between_grid_samples_anchors(self) -> None:
-        """On 7 min, the air updated 3 min in: the grid samples at 2 min
-        (before it) and 12 (not yet), but the reading is the anchor."""
-        on = NOW - timedelta(minutes=7)
+        """On 12 min, the air updated 6 min in: the grid samples at 5 min
+        (before it) and 15 (not yet), but the reading is the anchor."""
+        on = NOW - timedelta(minutes=12)
         client = FakeClient(
             {"sensor.heater_air": _s("sensor.heater_air", 61.0, "°F")},
             {
                 "sensor.heater_air": [
                     (NOW - timedelta(hours=1), 67.0),
-                    (on + timedelta(minutes=3), 61.0),
+                    (on + timedelta(minutes=6), 61.0),
                 ],
                 "binary_sensor.compressor": [
                     (NOW - timedelta(hours=1), "off"),
@@ -2003,7 +2003,7 @@ class TestTheFitCarried:
         assert any(
             "anchored to the heater's own reading" in n for n in source.notes
         )
-        shift = 61.0 - MODEL.at(OUTDOOR[0], [on + timedelta(minutes=3)])[0]
+        shift = 61.0 - MODEL.at(OUTDOOR[0], [on + timedelta(minutes=6)])[0]
         assert env.ambient_f[0][1] == pytest.approx(
             MODEL.at(OUTDOOR[0], [NOW])[0] + shift
         )
