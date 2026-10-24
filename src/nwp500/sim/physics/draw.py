@@ -408,8 +408,8 @@ def probes_after_draw(
 #: September's included.
 DEFAULT_LOWER_GATE_F = 5.0
 
-#: The standby pool, °F of reach per hour the tank has stood unheated,
-#: added to the gap a flowing draw is gated on (``lower_zone_drop_f``).
+#: °F of reach per hour the tank has stood unheated, added to the gap a
+#: flowing draw is gated on (``lower_zone_drop_f``).
 #: Fitted 2026-09-25 through the coast with the gate on the same 101
 #: runs to 08-31, at the 10 h gap constant and each run's measured
 #: flow: 0.015 at the gate above (bootstrap 95 % CI 0.010 to >= 0.040,
@@ -447,21 +447,20 @@ def lower_zone_drop_f(
     at its inflow temperature::
 
         drop = reach · (1 − e^(−V / V_lower)) · (T_lower − T_in)
-        reach = 1 − e^(−(gap + pool) / gate)
-        pool = rate · hours since the heater last stopped
+        reach = 1 − e^(−(gap + stood) / gate)
+        stood = rate · hours since the heater last stopped
 
-    ``reach`` is the share of the water that gets to the lower
-    thermistor: none in a freshly heated, mixed tank, where it pools
-    below the probe, and nearly all once the thermocline sits at it.
+    ``reach`` is the share of the inflow's cooling the lower thermistor
+    shows: little in a freshly heated, mixed tank, and nearly all once
+    the thermocline sits at it.
     ``V_lower`` is not fitted: a free fit of this closed form, gated on
     the gap before the draw, put it at 33.2 gal against the zone's 31.6.
 
-    ``pool`` is cold water the probes cannot see. A tank that has stood
-    unheated for hours reads mixed, but a draw then lifts water that
-    cooled below the probe: on the 48 runs into a mixed tank the drop
-    was 0.7 °F within 3 h of the heater stopping and 3.6 °F after
-    14 h (n = 5). The rate is ``DEFAULT_POOL_F_PER_HOUR``, fitted with
-    the gate as a pair.
+    ``stood`` is the time since heating. A tank that has stood unheated
+    for hours reads mixed, but its lower probe falls further on a run:
+    on the 48 runs into a mixed tank the drop was 0.7 °F within 3 h of
+    the heater stopping and 3.6 °F after 14 h (n = 5). The rate is
+    ``DEFAULT_POOL_F_PER_HOUR``, fitted with the gate as a pair.
 
     What was tested and is **not** here: the volume of cold water let
     in below the probe since the last recovery, the probe reading the
@@ -488,8 +487,8 @@ def lower_zone_drop_f(
         gate_f: ``DEFAULT_LOWER_GATE_F``, as the parameters carry it.
             ``0.0`` is the ungated charge, which this does not describe,
             and returns 0.0.
-        pool_f: The standby pool, °F: the rate times the hours the tank
-            has stood unheated. ``0.0``, unknown, is the gap alone.
+        pool_f: ``stood``, °F: the rate times the hours the tank has
+            stood unheated. ``0.0``, unknown, is the gap alone.
         tank: The tank, whose lower zone (``lower_zone_volume_gal``,
             half of it) the water mixes into.
 

@@ -551,8 +551,8 @@ the tank reads full (``book.uniform_band_f``) with nothing drawn or
 circulated in it: with nothing heating, after a recovery and before
 anything was drawn or circulated, or with the heat pump running alone.
 After a draw, the heat pump must first run ``book.anchor_run_min``
-(15 minutes of its running time) for its anchor, since until the cold
-front reaches the lower probe the probes show only part of a draw;
+(15 minutes of its running time) for its anchor, since until then the
+probes show only part of a draw's heat;
 with no anchor in the record, that run counts from its start. A
 quiet full-looking tank after a draw is no anchor, for the same
 reason. A recovery that ends during a draw anchors at its end. Then it

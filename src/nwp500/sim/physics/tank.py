@@ -58,8 +58,8 @@ there.
 That is heat leaving at the bottom, into the lower zone, where water
 cooled outside the tank comes back in. It is
 the same pattern ``physics.draw.lower_zone_drop_f`` measures for cold
-water let in at the bottom: in a mixed tank it pools below the lower
-probe, unseen, and the probe sees it once the thermocline reaches it.
+water let in at the bottom: a mixed tank's lower probe shows little of
+it, and a stratified one's nearly all.
 So the bottom loss ``Q_b`` (``LossParams.bottom_loss_btu_hr``) is
 charged to the lower zone alone, and the probe sees the share::
 

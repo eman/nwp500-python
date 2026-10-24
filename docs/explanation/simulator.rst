@@ -81,8 +81,8 @@ fitted time constant. Standby loss follows a jacket law,
 other side, on the whole tank. A bottom loss ``Q_b`` leaves the lower
 zone alone: the lower probe sees the share ``1 - exp(-gap / gate)`` of
 it, so a stratified tank's lower zone falls faster and its gap opens,
-while a mixed tank hides it below the probe. With ``Q_b = 0`` the loss
-is the jacket law alone.
+while a mixed tank's lower probe shows little of it. With ``Q_b = 0``
+the loss is the jacket law alone.
 
 **The elements.** They follow the device's own rules
 (:doc:`heating-elements`): per-mode entry thresholds, a dead time,
@@ -125,8 +125,8 @@ once, with a book or without one, as the lower probe falls on every
 draw. Without a book the upper zone takes its calibrated response too,
 which is what the probe shows on an ordinary draw and holds the upper
 zone up through one that empties the tank. The library starts a
-book only from what the caller knows: probes reading full can hide the
-cold water of a recent draw.
+book only from what the caller knows: after a small draw the probes
+can still read full.
 
 **Hot water at the tap** (``sim.delivery``). Deliverable gallons are the
 water past the mixing valve before the delivered water falls below the
@@ -238,8 +238,8 @@ What carries to another installation, and what does not:
   together, or not at all. The **book's** and **readiness's** terms are
   that installation's too, and its evidence over-promises on an
   installation without a valve.
-- **Circulation** (the gate, the pool, the return water's share) acts
-  only when a circulation schedule is given.
+- **Circulation** (the gate, the hours stood, the return water's
+  share) acts only when a circulation schedule is given.
 
 A caller with its own calibration passes its own ``HeaterParams``.
 
