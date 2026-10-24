@@ -281,10 +281,14 @@ class CompressorParams:
     compressor_constant: float = field(
         default=0.0, metadata=_p(FITTED, "ft³/s", note=_IN_RECOVERY)
     )
-    #: T_amb − T_evap at the coil, °F.
+    #: T_amb − T_evap at the coil with the air at 65 °F, °F.
     evap_approach_f: float = field(
         default=12.0, metadata=_p(FITTED, "°F", note=_IN_RECOVERY)
     )
+    #: How far T_evap moves per °F of air (``physics.compressor``): 1 is
+    #: a fixed approach. The NWP500's coil moved 0.596 °F per °F over
+    #: 377 compressor runs at one installation, air at 48-86 °F.
+    evap_air_slope: float = field(default=1.0, metadata=_p(MEASURED, "1"))
     #: Whether ``compressor_constant`` was fitted under the two-zone
     #: integration.
     two_zone: bool = field(default=False, metadata=_p(FITTED, "flag"))
