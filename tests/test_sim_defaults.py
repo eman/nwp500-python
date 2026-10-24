@@ -36,16 +36,16 @@ def test_the_65_round_trips_as_a_document() -> None:
     assert params_from_document(params_to_document(p)) == p
 
 
-@pytest.mark.parametrize(("code", "gal"), [(1, 50.0), (3, 80.0)])
+@pytest.mark.parametrize(("code", "gal"), [(1, 45.2), (3, 76.1)])
 def test_other_sizes_scale_the_tank_and_its_empty_point(
     code: int, gal: float
 ) -> None:
     """The tank volume, and the empty point that is per gallon of it,
-    scale by nominal size; nothing else does."""
+    scale by the manual's rated storage; nothing else does."""
     base, other = default_params(2), default_params(code)
-    scale = gal / 65.0
-    assert other.tank.volume_gal == pytest.approx(63.2 * scale)
-    assert other.book.tank_gal == pytest.approx(63.2 * scale)
+    scale = gal / 63.2
+    assert other.tank.volume_gal == pytest.approx(gal)
+    assert other.book.tank_gal == pytest.approx(gal)
     assert other.book.empty_btu == pytest.approx(base.book.empty_btu * scale)
     assert replace(other, tank=base.tank, book=base.book) == base
 
