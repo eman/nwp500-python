@@ -16,6 +16,7 @@ Fixed
   ``IDLE_CABINET_WARM_F`` (6.2 °F) off an idle reading. That cuts the
   average error from 6.3 to 2.2 °F. The ``ambient_from_idle_cabinet``
   reason still names it. See :doc:`/reference/simulator-inputs`.
+
 - **The Home Assistant air fit settles 5 minutes into a run.**
   ``sim_home_assistant.RUN_SETTLE`` was 2 minutes, against the book's 5
   (``sim_adapters.HEATER_AIR_SETTLE``). It is now that constant. On the
