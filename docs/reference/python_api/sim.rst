@@ -258,10 +258,11 @@ The pieces the entry points are built from.
 
 .. automodule:: nwp500.sim.physics.draw
    :members: delivery_temp_f, hot_fraction, draw_energy_btu,
-      withdrawn_gal, gap_opened_f, lower_zone_drop_f,
+      withdrawn_gal, probes_after_draw, lower_zone_drop_f,
       DEFAULT_OBSERVABILITY, DEFAULT_INLET_TEMP_F,
       DEFAULT_TMV_DELIVERY_INTERCEPT_F, DEFAULT_TMV_DELIVERY_SLOPE,
-      DEFAULT_GAP_OPEN_F_PER_GAL, DEFAULT_DOMAIN_T_UPPER_F,
+      DEFAULT_REACH_GATE_F, DEFAULT_REACH_OFFSET_F, DEFAULT_REACH_GAL,
+      DEFAULT_UPPER_F_PER_GAL, DEFAULT_DOMAIN_T_UPPER_F,
       DEFAULT_DOMAIN_VOLUME_GAL, DEFAULT_LOWER_GATE_F,
       DEFAULT_POOL_F_PER_HOUR
 

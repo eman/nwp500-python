@@ -27,13 +27,14 @@ import pandas as pd
 from nwp500.sim.params import UA_REF_DELTA_T_F, TankParams
 from nwp500.sim.physics.draw import (
     DEFAULT_INLET_TEMP_F,
+    DEFAULT_REACH_GAL,
+    DEFAULT_REACH_GATE_F,
+    DEFAULT_REACH_OFFSET_F,
+    DEFAULT_UPPER_F_PER_GAL,
     NO_VALVE_INTERCEPT_F,
     NO_VALVE_SLOPE,
-    delivery_temp_f,
-    draw_energy_btu,
-    gap_opened_f,
     lower_zone_drop_f,
-    withdrawn_gal,
+    probes_after_draw,
 )
 from nwp500.sim.physics.tank import bottom_loss_drop_f, ua_at
 from nwp500.sim.units import DEFAULT_AMBIENT_F, WATER_BTU_PER_GAL_F
@@ -240,7 +241,10 @@ def project_decay(
     draw_inlet_temp_f: float = DEFAULT_INLET_TEMP_F,
     tmv_delivery_intercept_f: float = NO_VALVE_INTERCEPT_F,
     tmv_delivery_slope: float = NO_VALVE_SLOPE,
-    draw_gap_open_f_per_gal: float = 0.0,
+    draw_reach_gate_f: float = DEFAULT_REACH_GATE_F,
+    draw_reach_offset_f: float = DEFAULT_REACH_OFFSET_F,
+    draw_reach_gal: float = DEFAULT_REACH_GAL,
+    draw_upper_f_per_gal: float = DEFAULT_UPPER_F_PER_GAL,
     lower_gate_f: float = 0.0,
     pool_f_per_hour: float = 0.0,
     ungated_observability: float = 1.0,
@@ -277,10 +281,12 @@ def project_decay(
             charged for the part of it inside the window, from its own
             start even when that precedes ``now``. None or empty is
             the quiet tank.
-        draw_observability: Share of a delivered draw's enthalpy the
-            probes register. None, a tank with no draw calibration,
-            charges no delivered draw; flowing draws are charged
-            whatever it is.
+        draw_observability: The draw calibration's price of a
+            delivered draw's heat (``sim.physics.draw.draw_energy_btu``).
+            None, a tank with no draw calibration, charges no delivered
+            draw; flowing draws are charged whatever it is. Set, a
+            delivered draw moves the zones by
+            ``sim.physics.draw.probes_after_draw``.
         draw_inlet_temp_f: The inlet, °F: the inflow of a draw that
             names none.
         tmv_delivery_intercept_f: Mixing-valve delivery line,
@@ -288,8 +294,15 @@ def project_decay(
             delivered draw's upper zone.  The defaults are the legacy
             constant 128 °F; a calibration supplies the fitted line.
         tmv_delivery_slope: °F of delivery per °F of upper zone.
-        draw_gap_open_f_per_gal: The front a withdrawn gallon of a
-            delivered draw opens, °F.
+        draw_reach_gate_f: The gap, °F, at which a delivered draw's
+            inflow reaches the lower thermistor with share ``1 - 1/e``,
+            with ``draw_reach_offset_f`` added to it
+            (``sim.physics.draw.probes_after_draw``).
+        draw_reach_offset_f: °F added to the gap the reach is gated on.
+        draw_reach_gal: Gallons a delivered draw's inflow mixes with at
+            the lower thermistor.
+        draw_upper_f_per_gal: °F the upper zone falls per delivered
+            gallon.
         lower_gate_f: Where a flowing draw's heat lands
             (``sim.physics.draw.lower_zone_drop_f``). Set, the
             incoming water is mixed into the lower zone alone, gated
@@ -362,10 +375,10 @@ def project_decay(
     # replaces, evaluated on the same numbers, so the quiet path is
     # bit-identical.
     #
-    # A draw moves the reference: it opens the gap, and the relaxation
-    # restarts from the wider one. Without this the gap could only
-    # ever close, and a front the model exists to represent would
-    # decay as if it had always been there.
+    # A draw moves the reference: it sets the gap, and the relaxation
+    # restarts from the one it leaves. Without this the gap could only
+    # ever close, and a gap a draw opened would decay as if it had
+    # always been there.
     gap_ref = gap_0
     gap_ref_at = 0.0
 
@@ -462,7 +475,7 @@ def project_decay(
         # is anchored to `now`.  A chained projection cut off-grid
         # therefore applied the same draw at a different instant,
         # against a tank that had coasted a different distance and
-        # with the front restarting from a different elapsed time.
+        # with the gap restarting from a different elapsed time.
         # Those are three separate grid-dependent quantities, all
         # scaling with draw volume, and at three times the corpus
         # rate they put chained and single projections 0.11 °F apart.
@@ -500,51 +513,32 @@ def project_decay(
                 gap_here = gap_at(sub_elapsed)
                 t_upper_here = t_bulk + gap_here / 2.0
                 t_lower_here = t_bulk - gap_here / 2.0
-                t_delivery = delivery_temp_f(
-                    t_upper_here,
-                    tmv_delivery_intercept_f,
-                    tmv_delivery_slope,
-                )
-                energy = draw_energy_btu(
-                    delivered_gal,
-                    t_upper_here,
-                    t_delivery,
-                    inflow_f,
-                    draw_observability
-                    if draw_observability is not None
-                    else 0.0,
-                )
                 draw_volume_total += delivered_gal
-                if energy <= 0.0:
-                    continue
-                draw_heat_btu += energy
-                bulk_drop = energy / thermal_mass_btu_f
-                t_bulk -= bulk_drop
-                # The front: cold in at the bottom widens the gap, and
-                # the relaxation restarts from the wider one. The drop
-                # this draw just caused is passed in because the gap
-                # is split evenly about the bulk, so an opening wider
-                # than twice the drop would *raise* the upper zone,
-                # which no draw can do, and which the fitted
-                # coefficient produces below about 122 °F without the
-                # bound.
-                opened = gap_opened_f(
-                    withdrawn_gal(
-                        delivered_gal,
-                        t_upper_here,
-                        t_delivery,
-                        inflow_f,
-                    ),
-                    draw_gap_open_f_per_gal,
-                    bulk_drop,
+                upper_after, lower_after = probes_after_draw(
+                    t_upper_here,
                     t_lower_here,
+                    delivered_gal,
                     inflow_f,
+                    intercept_f=tmv_delivery_intercept_f,
+                    slope=tmv_delivery_slope,
+                    gate_f=draw_reach_gate_f,
+                    offset_f=draw_reach_offset_f,
+                    reach_gal=draw_reach_gal,
+                    upper_f_per_gal=draw_upper_f_per_gal,
                 )
-                if opened > 0.0:
-                    gap_ref = gap_at(sub_elapsed) + opened
-                    gap_ref_at = sub_elapsed
-                # The drop, where it happened.  The front is part of
-                # it: the lower zone after is read off the widened gap.
+                bulk_after = (upper_after + lower_after) / 2.0
+                if bulk_after >= t_bulk:
+                    continue
+                # The bulk is the zones' mean after the draw, and its
+                # fall over the tank's mass is the draw's apparent
+                # heat. The relaxation restarts from the gap the draw
+                # left.
+                draw_heat_btu += (t_bulk - bulk_after) * thermal_mass_btu_f
+                t_bulk = bulk_after
+                gap_ref = upper_after - lower_after
+                gap_ref_at = sub_elapsed
+                # The drop, where it happened: the lower zone after is
+                # read off the gap the draw left.
                 impulses.append(
                     Impulse(
                         sub_start,
@@ -873,49 +867,42 @@ def draw_step(
     t_lower: float,
     delivered_gal: float,
     *,
-    draw_observability: float,
+    draw_observability: float | None,
     draw_inlet_temp_f: float = DEFAULT_INLET_TEMP_F,
     tmv_delivery_intercept_f: float = NO_VALVE_INTERCEPT_F,
     tmv_delivery_slope: float = NO_VALVE_SLOPE,
-    draw_gap_open_f_per_gal: float = 0.0,
-    tank: TankParams = TankParams(),
+    draw_reach_gate_f: float = DEFAULT_REACH_GATE_F,
+    draw_reach_offset_f: float = DEFAULT_REACH_OFFSET_F,
+    draw_reach_gal: float = DEFAULT_REACH_GAL,
+    draw_upper_f_per_gal: float = DEFAULT_UPPER_F_PER_GAL,
 ) -> tuple[float, float]:
     """The tank just after one delivered draw, as ``project_decay``
-    charges it at an onset: the heat the withdrawn water carried out of
-    the bulk, and the front it opens at the bottom.
+    charges it at an onset: the zones
+    ``sim.physics.draw.probes_after_draw`` leaves.
 
     For a draw that lands inside a recovery, where the
     tank is not coasting and the integrator above does not run. The
     arithmetic is the coast's, term for term, so a draw costs the tank
     the same whichever kind of segment it falls in.
+    ``draw_observability`` None, a tank with no draw calibration,
+    leaves the tank as it was, as the coast does.
     ``draw_inlet_temp_f`` is the draw's inflow, the inlet's for a
     fixture.
     """
-    bulk = (t_upper + t_lower) / 2.0
-    gap = t_upper - t_lower
-    t_delivery = delivery_temp_f(
-        t_upper, tmv_delivery_intercept_f, tmv_delivery_slope
-    )
-    energy = draw_energy_btu(
-        delivered_gal,
-        t_upper,
-        t_delivery,
-        draw_inlet_temp_f,
-        draw_observability,
-    )
-    if energy <= 0.0:
+    if draw_observability is None:
         return t_upper, t_lower
-    bulk_drop = energy / tank.thermal_mass_btu_f
-    bulk -= bulk_drop
-    opened = gap_opened_f(
-        withdrawn_gal(delivered_gal, t_upper, t_delivery, draw_inlet_temp_f),
-        draw_gap_open_f_per_gal,
-        bulk_drop,
+    return probes_after_draw(
+        t_upper,
         t_lower,
+        delivered_gal,
         draw_inlet_temp_f,
+        intercept_f=tmv_delivery_intercept_f,
+        slope=tmv_delivery_slope,
+        gate_f=draw_reach_gate_f,
+        offset_f=draw_reach_offset_f,
+        reach_gal=draw_reach_gal,
+        upper_f_per_gal=draw_upper_f_per_gal,
     )
-    gap = max(gap, 0.0) + max(opened, 0.0)
-    return bulk + gap / 2.0, bulk - gap / 2.0
 
 
 def threshold_crossing(

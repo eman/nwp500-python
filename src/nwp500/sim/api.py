@@ -748,7 +748,7 @@ def _refusal(physics: PhysicsRecovery) -> SimulationError:
 
 def _check_draws(params: HeaterParams, draws: Sequence[Draw]) -> None:
     """Refuse draws the parameters cannot move the tank for: without a
-    fitted draw response (``DrawParams.observability``) a draw would
+    draw calibration (``DrawParams.observability``) a draw would
     leave the tank as it was, an answer that looks like one."""
     if draws and params.draw.observability is None:
         raise SimulationError(

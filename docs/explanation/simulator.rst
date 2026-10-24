@@ -232,8 +232,8 @@ What carries to another installation, and what does not:
   The compressor terms were fitted with that installation's draws and
   circulation runs inside its recoveries, so a recovery without them
   comes out a little long.
-- **The draw terms** (observability, the gap a draw opens, the inlet
-  temperature) were fitted together through that installation's mixing
+- **The draw terms** (observability, how far a draw moves each probe,
+  the inlet temperature) were fitted together through that installation's mixing
   valve, on its mains and its household's metered draws. Change them
   together, or not at all. The **book's** and **readiness's** terms are
   that installation's too, and its evidence over-promises on an
