@@ -1129,8 +1129,12 @@ class TestKeepBetterFifthReview:
             held=held,
         )
         terms = _terms(done)
-        for name in ("Compressor constant", "Evaporator approach (°F)"):
-            assert terms[name].error == "-"
+        assert terms["Compressor constant"].error == "-"
+        approach = terms["Evaporator approach (°F)"]
+        assert not approach.fitted and approach.error == "-"
+        assert approach.value == sc._num(
+            fitted.params.compressor.evap_approach_f
+        )
 
 
 def gap_windows(taus: list[float]) -> tuple[cal.StandbyWindow, ...]:
