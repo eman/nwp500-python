@@ -681,12 +681,11 @@ def readiness(
     on (``sim.delivery``).
 
     With ``book``, the tank's booked heat answers (``basis`` ``energy``).
-    Without it, the evidence in ``params.readiness.evidence`` (none by
-    default) and the full-tank floor answer (``evidence``): a tank at
-    its setpoint and not heating has the floor; any other state needs
-    evidence, and reads 0 with ``colder_than_evidence`` without it.
+    Without it, the tank's heat as its two probes place it
+    (``delivery.probes_gal``, ``probes``), or the evidence in
+    ``params.readiness.evidence`` (none by default) where it shows more
+    (``evidence``).
     """
-    heating = state.compressor_running or state.element_running
     if book is not None:
         return booked_deliverable(
             book,
@@ -696,12 +695,7 @@ def readiness(
             params.book_terms(),
         )
     return deliverable(
-        state.upper_f,
-        state.lower_f,
-        params.readiness,
-        ep=params.book_terms(),
-        setpoint_f=settings.setpoint_f,
-        heating=heating,
+        state.upper_f, state.lower_f, params.readiness, ep=params.book_terms()
     )
 
 
@@ -1401,7 +1395,7 @@ def time_to_ready(
     (``sim.ready``).
 
     ``book`` is the tank's booked heat now, as for ``simulate``;
-    without it the answer is the full-tank floor's or the evidence's.
+    without it the answer is the probes' or the evidence's.
     ``bath_gal`` and ``shower_gal`` default to
     ``ReadinessParams.bath_gal`` and ``shower_gal``, named in
     ``defaults_used`` and in ``reasons`` (``bath_volume_inferred``,
@@ -1456,14 +1450,7 @@ def time_to_ready(
             book, tank.upper_f, tank.lower_f, p, params.book_terms()
         )
         if book is not None
-        else deliverable(
-            tank.upper_f,
-            tank.lower_f,
-            p,
-            ep=params.book_terms(),
-            setpoint_f=s.settings.setpoint_f,
-            heating=tank.heating,
-        )
+        else deliverable(tank.upper_f, tank.lower_f, p, ep=params.book_terms())
     )
     # The recovery is only needed when the bath is not ready now.
     nxt = Recovery("unavailable")

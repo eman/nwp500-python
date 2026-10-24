@@ -37,6 +37,9 @@ LAG = P.delivered_lag_gal
 P0 = replace(P, delivered_lag_gal=0.0)
 #: Hot enough to dominate every evidence point.
 FULL = (150.0, 150.0)
+#: The example evidence 30 gal higher: above what the probes say, so its
+#: steps decide.
+TALL = replace(P, evidence=tuple((u, lo, g + 30.0) for u, lo, g in EVIDENCE))
 
 
 def deliverable(
@@ -83,14 +86,14 @@ class TestWholeShowers:
 
 
 class TestAssess:
-    def test_colder_than_every_evidence_draw_says_so(self) -> None:
-        """A warm tank below all the evidence answers 0 for want of
-        evidence, and must say that rather than look empty."""
+    def test_below_every_evidence_draw_the_probes_answer(self) -> None:
+        """A warm tank below all the evidence reads its probes' heat,
+        with the lag."""
+        assert rd.demonstrated_gal(118.0, 110.0, EVIDENCE) == 0.0
         a = _assess(_tank(118.0, 110.0))
-        # No lag either: the evidence vouches for no probe line.
-        assert a["deliverable_gal"] == 0.0
-        assert "colder_than_all_evidence" in a["reasons"]
-        assert "colder_than_all_evidence" not in _assess(_tank())["reasons"]
+        probes = rd.probes_gal(118.0, 110.0, P, EP)
+        assert probes > 0.0
+        assert a["deliverable_gal"] == pytest.approx(probes + LAG, abs=0.05)
 
     def test_an_idle_heater_has_no_time_and_says_why(self) -> None:
         a = _assess(_tank(125.0, 110.0), Recovery("idle"))
@@ -108,32 +111,32 @@ class TestAssess:
         assert a["bath"]["ready_in_minutes"] == 0.0
         assert a["bath"]["ready_at"] == NOW
         assert a["bath"]["margin_gal"] == pytest.approx(
-            OBSERVED_MAX_GAL + LAG - 30.5, abs=0.05
+            rd.probes_gal(*FULL, P, EP) + LAG - 30.5, abs=0.05
         )
 
-    def test_a_stale_book_on_a_tank_at_its_setpoint_runs_the_bath(self) -> None:
-        """2026-09-28 14:41 PDT: with no book the evidence said 25.1 gal and
-        not ready; the floor at the setpoint says ready, now, in every
-        mode."""
+    def test_a_uniform_tank_without_a_book_runs_the_bath(self) -> None:
+        """2026-09-28 14:41 PDT: with no book the evidence said 25.1
+        gal; the probes' heat says ready, now, in every mode."""
         a = _assess(_tank(141.08, 141.26), setpoint_f=141.8, params=P0)
         assert "no_heat_book" in a["reasons"]
-        assert a["deliverable_gal"] == pytest.approx(35.7)
+        assert a["deliverable_gal"] == pytest.approx(49.2)
         assert a["bath"]["ready"] is True
         assert {r["ready_in_minutes"] for r in a["bath"]["by_mode"]} == {0.0}
 
-    def test_a_running_compressor_withholds_the_floor_now(self) -> None:
-        a = _assess(
-            _tank(141.08, 141.26, compressor_on=True),
+    def test_a_running_compressor_does_not_change_the_answer(self) -> None:
+        idle = _assess(_tank(141.08, 141.26), setpoint_f=141.8, params=P0)
+        running = _assess(
+            _tank(141.08, 141.26, compressor_on=True, element_on=True),
             setpoint_f=141.8,
             params=P0,
         )
-        assert a["deliverable_gal"] == 25.1
-        assert a["bath"]["ready"] is False
+        assert running["deliverable_gal"] == idle["deliverable_gal"] == 49.2
+        assert running["bath"]["ready"] is True
 
-    def test_a_projected_recovery_has_the_floor_only_at_its_end(self) -> None:
-        """The floor waits for the heater to stop, in a projection as
-        in the live state: a 35 gal bath the evidence never covers is
-        ready when the recovery ends, not as it passes setpoint - 2."""
+    def test_a_projected_recovery_is_scored_as_it_heats(self) -> None:
+        """Each projected moment is scored from its probes, the heater
+        running or not: a bath the tank covers 10 minutes into the
+        recovery is ready then, not when it ends."""
         pts = [
             (
                 NOW + timedelta(minutes=i),
@@ -143,33 +146,44 @@ class TestAssess:
             for i in range(21)
         ]
         rec = Recovery("ok", pts, input_wh=[0.0] + [30.0] * 20)
+        _, u, lo = pts[10]
+        bath = deliverable(u, lo, P0).gal
         a = _assess(
             _tank(139.0, 138.0, compressor_on=True),
             rec,
             setpoint_f=141.8,
-            bath_gal=35.0,
+            bath_gal=bath,
             params=P0,
         )
         assert a["bath"]["ready"] is False
-        assert _modes(a)["heat_pump"]["ready_in_minutes"] == 20.0
+        assert _modes(a)["heat_pump"]["ready_in_minutes"] == 10.0
 
     def test_ready_is_decided_on_the_numbers_it_reports(self) -> None:
         """A bath 0.04 gal over the deliverable volume is reported at the
         same one-decimal value; it must read ready with a zero margin,
         not show two equal numbers and say not ready."""
-        gal = round(OBSERVED_MAX_GAL + LAG, 1)
+        gal = deliverable(*FULL).gal
         a = _assess(_tank(), bath_gal=gal + 0.04, bath_source="request")
         assert a["bath"]["volume_gal"] == gal
         assert a["bath"]["ready"] is True
         assert a["bath"]["margin_gal"] == 0.0
 
     def test_near_an_evidence_step_it_says_the_probe_decides(self) -> None:
-        u, lo, g = max(EVIDENCE, key=lambda e: e[2])
-        on_step = _assess(_tank(u + 0.5, lo + 0.5), bath_gal=g + LAG)
+        u, lo, g = max(TALL.evidence, key=lambda e: e[2])
+        on_step = _assess(
+            _tank(u + 0.5, lo + 0.5), bath_gal=g + LAG, params=TALL
+        )
         assert on_step["bath"]["ready"] is True
         assert "bath_ready_within_probe_resolution" in on_step["reasons"]
         clear = _assess(_tank(), bath_gal=5.0)
         assert "bath_ready_within_probe_resolution" not in clear["reasons"]
+
+    def test_near_the_probes_answer_it_says_the_probe_decides(self) -> None:
+        bare = replace(P, evidence=())
+        gal = deliverable(125.0, 110.0, bare).gal
+        a = _assess(_tank(125.0, 110.0), bath_gal=gal, params=bare)
+        assert a["bath"]["ready"] is True
+        assert "bath_ready_within_probe_resolution" in a["reasons"]
 
     def test_time_to_ready_is_the_first_state_that_covers_the_bath(
         self,
@@ -191,7 +205,7 @@ class TestAssess:
 
     def test_a_recovery_that_never_covers_it_says_so(self) -> None:
         points = [(NOW + timedelta(minutes=10), 126.0, 112.0)]
-        a = _assess(_tank(125.0, 110.0), Recovery("ok", points))
+        a = _assess(_tank(125.0, 110.0), Recovery("ok", points), bath_gal=40.0)
         assert a["bath"]["ready_in_minutes"] is None
         assert "bath_not_reached_by_full_recovery" in a["reasons"]
 
@@ -200,6 +214,7 @@ class TestAssess:
         a = _assess(
             _tank(125.0, 110.0, tou_window=True),
             Recovery("ok", points, tou_capped=True),
+            bath_gal=40.0,
         )
         assert a["bath"]["ready_in_minutes"] is None
         assert "bath_waits_for_tou_window_end" in a["reasons"]
@@ -292,7 +307,11 @@ class TestByMode:
             ],
             input_wh=[0.0] + [300.0] * n,
         )
-        m = _modes(_assess(_tank(120.0, 139.0), slow_upper, setpoint_f=141.8))
+        m = _modes(
+            _assess(
+                _tank(120.0, 139.0), slow_upper, setpoint_f=141.8, bath_gal=53.0
+            )
+        )
         assert m["high_demand"]["ready_in_minutes"] is not None
         hp = m["heat_pump"]["ready_in_minutes"]
         for mode in ("high_demand", "energy_saver"):
@@ -332,7 +351,9 @@ class TestByMode:
         (2026-10-02): its energy stops there, while the zone
         coasts on to the setpoint at the same rate, so a ready time past
         the off point costs no more element."""
-        m = _modes(_assess(_tank(125.0, 110.0), _hp(), setpoint_f=141.8))
+        m = _modes(
+            _assess(_tank(125.0, 110.0), _hp(), setpoint_f=141.8, bath_gal=40.0)
+        )
         es = m["energy_saver"]
         t = es["ready_in_minutes"]
         ep = ElementParams()
@@ -362,7 +383,7 @@ class TestByMode:
         min (its 1.21-min lag and 0.9 of rise), lower 2.8. The finished
         tank covers a bath of what it delivers even though no whole
         minute does."""
-        full = deliverable(141.8, 141.8, setpoint_f=141.8).gal
+        full = deliverable(141.8, 141.8).gal
         assert full >= 30.5
         m = _modes(
             _assess(

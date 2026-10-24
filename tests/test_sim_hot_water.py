@@ -32,7 +32,11 @@ from nwp500.sim import (  # noqa: E402
     simulate,
     site_example_params,
 )
-from nwp500.sim.book import BookedHeatLedger  # noqa: E402
+from nwp500.sim.book import (  # noqa: E402
+    BookedHeatLedger,
+    deliverable_from_heat,
+    full_tank,
+)
 from nwp500.sim.codec import (  # noqa: E402
     result_to_document,
     scenario_from_document,
@@ -40,9 +44,10 @@ from nwp500.sim.codec import (  # noqa: E402
 )
 from nwp500.sim.delivery import (  # noqa: E402
     EXAMPLE_EVIDENCE,
+    booked_deliverable,
     deliverable,
     delivery_along,
-    full_tank_floor_gal,
+    probes_gal,
     with_example_evidence,
 )
 from nwp500.sim.engine import Heater  # noqa: E402
@@ -205,11 +210,11 @@ class TestDrawWindows:
         self, params: HeaterParams
     ) -> None:
         """The zones alone hold the upper zone up through the draw, so
-        the delivery does not fall; the full-tank floor still prices the
+        the delivery does not fall; the probes' heat still prices the
         window short."""
         (w,) = simulate(_scenario(), params).windows
         assert not w.depleted
-        assert w.margin_gal is not None and w.margin_gal < -30.0
+        assert w.margin_gal is not None and w.margin_gal < -20.0
 
     def test_a_window_the_tank_can_supply_does_not(
         self, params: HeaterParams
@@ -251,54 +256,58 @@ class TestReadiness:
         assert d.basis == "energy"
         assert d.gal == pytest.approx(53.1, abs=0.05)
 
-    def test_without_one_a_full_tank_has_its_floor(
+    def test_without_one_a_full_tank_reads_as_its_book(
         self, params: HeaterParams
     ) -> None:
+        """The probes' heat is the book's anchor: nothing taken off."""
         d = readiness(
             HeaterState(upper_f=FULL[0], lower_f=FULL[1]),
             Settings(setpoint_f=140.9),
             params,
         )
         assert d.basis == "evidence"
-        assert d.gal == pytest.approx(39.6, abs=0.05)
+        assert d.gal == pytest.approx(53.1, abs=0.05)
 
-    def test_a_running_heater_keeps_the_probes_floor(
-        self, params: HeaterParams
+    @pytest.mark.parametrize(
+        "running", [{"compressor_running": True}, {"element_running": True}]
+    )
+    def test_a_running_heater_reads_the_same(
+        self, params: HeaterParams, running: dict[str, bool]
     ) -> None:
-        """With no evidence, a lower probe above the line reads the
-        floor while heating too: heating only adds heat."""
+        """Heating only adds heat: the probes answer as they read."""
         settings = Settings(setpoint_f=140.9)
         bare = _no_evidence(params)
-        running = readiness(
-            HeaterState(
-                upper_f=FULL[0], lower_f=FULL[1], compressor_running=True
-            ),
-            settings,
-            bare,
-        )
-        idle = readiness(
-            HeaterState(upper_f=FULL[0], lower_f=FULL[1]), settings, bare
-        )
-        assert running.gal == idle.gal > 0.0
-        assert running.from_probes and not running.no_evidence
+        for upper, lower in (FULL, (136.4, 111.4), (128.0, 95.0)):
+            heating = readiness(
+                HeaterState(upper_f=upper, lower_f=lower, **running),
+                settings,
+                bare,
+            )
+            idle = readiness(
+                HeaterState(upper_f=upper, lower_f=lower), settings, bare
+            )
+            assert heating.gal == idle.gal > params.readiness.delivered_lag_gal
+            assert heating.basis == "probes"
 
-    def test_any_other_state_needs_evidence(self, params: HeaterParams) -> None:
+    def test_any_state_reads_its_probes(self, params: HeaterParams) -> None:
         state = HeaterState(upper_f=135.86, lower_f=135.5)
         settings = Settings(setpoint_f=140.9)
         bare = _no_evidence(params)
-        # With no evidence, a uniform tank reads from its probes, as the
-        # book's anchor does; one whose lower probe is below the line is
-        # unknown.
-        uniform = readiness(state, settings, bare)
-        assert uniform.basis == "probes" and uniform.gal > 0.0
-        drawn = readiness(
-            HeaterState(upper_f=135.86, lower_f=104.0), settings, bare
-        )
-        assert drawn.gal == 0.0 and drawn.no_evidence
+        lag = params.readiness.delivered_lag_gal
+        ep = params.book_terms()
+        for upper, lower in ((135.86, 135.5), (135.86, 104.0)):
+            d = readiness(
+                HeaterState(upper_f=upper, lower_f=lower), settings, bare
+            )
+            gal = probes_gal(upper, lower, params.readiness, ep)
+            assert d.basis == "probes"
+            assert d.gal == pytest.approx(gal + lag, abs=0.05)
+        # The evidence answers only where it shows more: 23.6 gal here,
+        # under the probes' 44.7.
         given = replace(bare, readiness=with_example_evidence(bare.readiness))
         assert given == params
         assert readiness(state, settings, given).gal == pytest.approx(
-            23.6 + params.readiness.delivered_lag_gal
+            probes_gal(135.86, 135.5, params.readiness, ep) + lag, abs=0.05
         )
 
     def test_the_lag_is_the_installations(self, params: HeaterParams) -> None:
@@ -312,10 +321,9 @@ class TestReadiness:
         ).gal == pytest.approx(params.readiness.delivered_lag_gal)
 
 
-class TestAHotLowerProbe:
-    """No book and no evidence: a lower probe at or above the line reads
-    the full-tank floor from the probes, with the lag on it, heating or
-    not. On one installation's book terms."""
+class TestFromTheProbes:
+    """No book: the tank's heat as its two probes place it, with the lag
+    on it. On one installation's book terms."""
 
     EP = site_example_params().book_terms()
     P = ReadinessParams()
@@ -323,35 +331,50 @@ class TestAHotLowerProbe:
     def answer(self, upper: float, lower: float, **kw: Any) -> Any:
         return deliverable(upper, lower, self.P, ep=self.EP, **kw)
 
-    @pytest.mark.parametrize("heating", [False, True])
-    def test_a_tank_hot_past_its_lower_probe(self, heating: bool) -> None:
-        d = self.answer(116.6, 109.6, heating=heating)
-        # 19.6 gal less 13.5 on the probe's line, and the 5 gal lag.
-        assert d.gal == pytest.approx(11.1, abs=0.05)
-        assert d.basis == "probes" and d.from_probes and not d.no_evidence
+    def test_a_stratified_tank_reads_its_probes_heat(self) -> None:
+        """A drawdown from 136.4/111.4 °F delivered 31.1 gal."""
+        d = self.answer(136.4, 111.4)
+        assert d.basis == "probes"
+        assert d.gal == pytest.approx(34.5, abs=0.05)
 
-    def test_near_the_line_it_is_the_lag(self) -> None:
-        d = self.answer(108.0, 105.5)
-        assert d.gal == self.P.delivered_lag_gal and d.from_probes
+    def test_a_uniform_full_tank_reads_all_its_heat(self) -> None:
+        """Nothing taken off: the same answer as a book anchored on the
+        same probes."""
+        inlet = self.EP.inlet_default_f
+        heat = full_tank(141.8, 141.5, inlet, self.EP).heat_btu
+        d = self.answer(141.8, 141.5)
+        assert d.gal == pytest.approx(
+            deliverable_from_heat(heat, 141.8, inlet, self.EP)
+            + self.P.delivered_lag_gal,
+            abs=0.05,
+        )
+        book = full_tank_book(141.8, 141.5, self.EP)
+        assert (
+            d.gal == booked_deliverable(book, 141.8, 141.5, self.P, self.EP).gal
+        )
+
+    def test_a_cold_lower_probe_is_not_capped(self) -> None:
+        d = self.answer(141.26, 89.6)
+        gal = probes_gal(141.26, 89.6, self.P, self.EP)
+        assert gal > 6.5
+        assert d.gal == pytest.approx(gal + self.P.delivered_lag_gal, abs=0.05)
 
     def test_from_the_line_down(self) -> None:
         line = self.P.line_f
-        assert self.answer(108.0, line).gal == self.P.delivered_lag_gal
-        below = self.answer(108.0, line - 0.1)
-        assert below.gal == 0.0 and below.no_evidence
-        assert not below.from_probes
+        assert probes_gal(line, 95.0, self.P, self.EP) == 0.0
+        assert self.answer(line, 95.0).gal == self.P.delivered_lag_gal
+        assert self.answer(line - 0.1, 104.0).gal == 0.0
+        assert probes_gal(line - 0.1, 150.0, self.P, self.EP) == 0.0
 
-    def test_it_agrees_with_the_floor_at_the_setpoint(self) -> None:
-        floor = full_tank_floor_gal(141.8, 141.5, 141.8, self.P, self.EP)
-        d = self.answer(141.8, 141.5, setpoint_f=141.8)
-        assert d.gal == pytest.approx(
-            floor + self.P.delivered_lag_gal, abs=0.05
-        )
-
-    def test_evidence_answers_instead(self) -> None:
+    def test_evidence_answers_where_it_shows_more(self) -> None:
+        more = replace(self.P, evidence=((110.0, 100.0, 40.0),))
+        d = deliverable(116.6, 109.6, more, ep=self.EP)
+        assert d.basis == "evidence"
+        assert d.gal == 40.0 + self.P.delivered_lag_gal
         given = with_example_evidence(self.P)
-        d = deliverable(116.6, 109.6, given, ep=self.EP, heating=True)
-        assert d.basis == "evidence" and not d.from_probes
+        d = deliverable(116.6, 109.6, given, ep=self.EP)
+        assert d.basis == "evidence"
+        assert d.gal == self.answer(116.6, 109.6).gal
 
 
 class TestTheParameters:
@@ -399,6 +422,25 @@ class TestTheParameters:
         (doc if part is None else doc[part])[name] = value
         with pytest.raises(ValueError, match=match):
             params_from_document(doc)
+
+    def test_an_older_document_with_retired_fields_loads(
+        self, params: HeaterParams
+    ) -> None:
+        """Saved documents still carry the readiness fields this code no
+        longer has: they load without them and are not named unknown."""
+        doc = params_to_document(params)
+        doc["readiness"].update(
+            cold_lower_cutoff_f=100.0,
+            cold_lower_cap_gal=6.5,
+            full_setpoint_band_f=2.0,
+            full_hidden_gal=13.5,
+        )
+        doc = json.loads(json.dumps(doc))
+        assert params_from_document(doc) == params
+        assert unknown_fields(doc) == []
+        doc["readiness"]["newer_f"] = 1.0
+        assert unknown_fields(doc) == ["readiness.newer_f"]
+        assert params_from_document(doc) == params
 
     def test_a_part_that_is_not_an_object_has_no_unknown_fields(
         self, params: HeaterParams

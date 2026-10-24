@@ -96,14 +96,6 @@ class TestTheEvidence:
         assert cal.capacity(136.0, 126.0, ev) == 12.0
         assert cal.capacity(120.0, 100.0, ev) == 0.0
 
-    def test_the_cap_after_a_cold_lower_zone(self) -> None:
-        up = np.full(400, 135.0)
-        up[140:] = 109.0
-        cold = cal.clean_draws(a_draw(upper_f=up, lower_f=np.full(400, 95.0)))
-        cap = cal.cold_lower_cap(cold, 100.0)
-        assert cap is not None and cap == np.floor(cap * 2) / 2
-        assert cal.cold_lower_cap(cold, 90.0) is None
-
 
 class TestTheBooksTerms:
     def test_re_anchors_need_an_hour_between(self) -> None:

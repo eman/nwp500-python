@@ -255,7 +255,7 @@ class TestNextRecovery:
 
 
 class TestTimeToReady:
-    def test_a_full_tank_at_its_setpoint_is_ready_in_every_mode(
+    def test_a_full_tank_is_ready_in_every_mode(
         self, params: HeaterParams
     ) -> None:
         s = _scenario(
@@ -266,12 +266,12 @@ class TestTimeToReady:
         assert r.bath.ready
         assert {m.ready_in_minutes for m in r.bath.by_mode} == {0.0}
         assert r.defaults_used == ("bath_gal=28.7", "shower_gal=12.0")
-        assert r.showers.ready_for_whole == 3
+        assert r.showers.ready_for_whole == 4
 
     def test_a_short_tank_has_a_time_in_each_mode(
         self, params: HeaterParams
     ) -> None:
-        r = time_to_ready(_scenario(), params, bath_gal=20.0)
+        r = time_to_ready(_scenario(), params, bath_gal=40.0)
         assert not r.bath.ready
         rows = {m.mode: m for m in r.bath.by_mode}
         assert r.bath.ready_in_minutes == rows["heat_pump"].ready_in_minutes
@@ -331,7 +331,9 @@ class TestTimeToReady:
 
     def test_vacation_reaches_nothing(self, params: HeaterParams) -> None:
         r = time_to_ready(
-            _scenario(settings=Settings(setpoint_f=140.9, mode=5)), params
+            _scenario(settings=Settings(setpoint_f=140.9, mode=5)),
+            params,
+            bath_gal=40.0,
         )
         assert "heating_not_scheduled" in r.reasons
         assert not any(m.reachable_now for m in r.bath.by_mode)
@@ -593,8 +595,8 @@ class TestARecoveryModel:
                 upper_f=128.0, lower_f=100.0, compressor_running=True
             )
         )
-        fast = time_to_ready(s, params, bath_gal=20.0, recovery=_Fixed(60.0))
-        slow = time_to_ready(s, params, bath_gal=20.0, recovery=_Fixed(240.0))
+        fast = time_to_ready(s, params, bath_gal=40.0, recovery=_Fixed(60.0))
+        slow = time_to_ready(s, params, bath_gal=40.0, recovery=_Fixed(240.0))
         assert fast.bath.ready_in_minutes is not None
         assert slow.bath.ready_in_minutes is not None
         assert fast.bath.ready_in_minutes < slow.bath.ready_in_minutes
@@ -833,11 +835,13 @@ class TestTheScenariosInletInTheBook:
 class TestHeaterOnlyReadiness:
     """With the default parameters (no evidence) and no book."""
 
-    def _ready(self, upper: float, lower: float, code: int = 2) -> Any:
+    def _ready(
+        self, upper: float, lower: float, code: int = 2, **state: Any
+    ) -> Any:
         from nwp500.sim import HeaterState, default_params
 
         return time_to_ready(
-            _scenario(state=HeaterState(upper_f=upper, lower_f=lower)),
+            _scenario(state=HeaterState(upper_f=upper, lower_f=lower, **state)),
             default_params(code),
         )
 
@@ -845,7 +849,6 @@ class TestHeaterOnlyReadiness:
         for code in (1, 2, 3):
             r = self._ready(140.9, 140.0, code)
             assert r.deliverable_gal > 0.0
-            assert "no_evidence_for_state" not in r.reasons
 
     def test_bigger_tanks_hold_more(self) -> None:
         gal = [
@@ -854,20 +857,31 @@ class TestHeaterOnlyReadiness:
         ]
         assert gal[0] < gal[1] < gal[2]
 
-    def test_a_tank_cold_at_the_lower_probe_is_unknown_not_empty(
-        self,
+    @pytest.mark.parametrize(
+        ("upper", "lower"), [(140.0, 125.0), (140.0, 104.0), (118.0, 95.0)]
+    )
+    def test_any_state_reads_its_probes_heat(
+        self, upper: float, lower: float
     ) -> None:
-        r = self._ready(140.0, 104.0)
-        assert r.deliverable_gal == 0.0
-        assert "no_evidence_for_state" in r.reasons
-        assert "estimated_from_probes" not in r.reasons
-        assert "colder_than_all_evidence" not in r.reasons
+        from nwp500.sim import default_params
+        from nwp500.sim.delivery import probes_gal
 
-    def test_a_hot_lower_probe_reads_from_the_probes(self) -> None:
-        r = self._ready(140.0, 125.0)
-        assert r.deliverable_gal > 0.0
-        assert "estimated_from_probes" in r.reasons
-        assert "no_evidence_for_state" not in r.reasons
+        p = default_params()
+        r = self._ready(upper, lower)
+        gal = probes_gal(upper, lower, p.readiness, p.book_terms())
+        assert gal > 0.0
+        assert r.deliverable_gal == pytest.approx(
+            gal + p.readiness.delivered_lag_gal, abs=0.05
+        )
+
+    def test_a_running_heater_reads_the_same(self) -> None:
+        idle = self._ready(130.0, 112.0)
+        for running in (
+            {"compressor_running": True},
+            {"element_running": True},
+        ):
+            r = self._ready(130.0, 112.0, **running)
+            assert r.deliverable_gal == idle.deliverable_gal > 0.0
 
 
 class TestTheSecondReview:
@@ -900,10 +914,10 @@ class TestTheSecondReview:
     def test_the_line_edge_is_within_probe_resolution(self) -> None:
         from nwp500.sim import HeaterState, default_params
 
-        # The lower probe 0.5 °F above the line: a 1 °F error puts it
-        # below, where the gallons are unknown.
+        # The upper probe 0.5 °F above the line: a 1 °F error puts it
+        # below, where the probe line is spent.
         r = time_to_ready(
-            _scenario(state=HeaterState(upper_f=130.0, lower_f=105.5)),
+            _scenario(state=HeaterState(upper_f=105.5, lower_f=100.0)),
             default_params(),
             bath_gal=5.0,
         )

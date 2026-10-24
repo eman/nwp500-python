@@ -51,14 +51,6 @@ ALWAYS: tuple[str, ...] = (
     "upper_probe_stand_in",
 )
 
-#: No evidence, no book, and a tank the full-tank floor can't read:
-#: the deliverable gallons are unknown, not none (``Deliverable``).
-NO_EVIDENCE_FOR_STATE = "no_evidence_for_state"
-
-#: No book and no evidence: the deliverable gallons are the full-tank
-#: floor from a lower probe at or above the line (``Deliverable``).
-ESTIMATED_FROM_PROBES = "estimated_from_probes"
-
 TrajectoryOutcome = Literal["ok", "not_scheduled", "unavailable", "idle"]
 
 
@@ -74,12 +66,6 @@ class TankNow:
     #: The air the tank stands in, °F; None when it is not known.
     ambient_f: float | None = None
     compressor_on: bool = False
-
-    @property
-    def heating(self) -> bool:
-        """The heater running now: the full-tank floor waits for it to
-        stop."""
-        return self.compressor_on or self.element_on
 
 
 @dataclass(frozen=True)
@@ -205,9 +191,7 @@ def assess(
     ``no_heat_book`` or ``heat_book_aged``; ``inlet_temp_modelled``
     (a book, and ``inlet_measured`` False); ``bath_volume_inferred``
     (``bath_source`` ``configured``); ``shower_volume_default``;
-    ``thermocline_unlocated``; ``capped_at_observed_volume``;
-    ``colder_than_all_evidence``; ``no_evidence_for_state`` or
-    ``estimated_from_probes``; ``bath_ready_within_estimate_error``
+    ``capped_at_observed_volume``; ``bath_ready_within_estimate_error``
     (a book's error band) or ``bath_ready_within_probe_resolution``
     (without one); ``draw_in_progress``; ``element_running``;
     ``tou_window_in_force``; and, the bath not ready,
@@ -216,8 +200,8 @@ def assess(
     ``bath_not_reached_by_full_recovery``."""
     p = params or ReadinessParams()
     bp = book_params or BookParams()
-    score = _scorer(booked, tank, p, setpoint_f, bp)
-    d = score(tank.upper_f, tank.lower_f, NOTHING_ADDED, tank.heating)
+    score = _scorer(booked, tank, p, bp)
+    d = score(tank.upper_f, tank.lower_f, NOTHING_ADDED)
     bath_gal = round(bath_gal, 1)  # compared as it is reported
     reasons = list(ALWAYS)
     if booked is None:
@@ -230,16 +214,8 @@ def assess(
         reasons.append("bath_volume_inferred")
     if shower_source == "default":
         reasons.append("shower_volume_default")
-    if d.thermocline_unlocated:
-        reasons.append("thermocline_unlocated")
     if d.at_observed_max:
         reasons.append("capped_at_observed_volume")
-    if d.colder_than_evidence:
-        reasons.append("colder_than_all_evidence")
-    if d.no_evidence:
-        reasons.append(NO_EVIDENCE_FOR_STATE)
-    if d.from_probes:
-        reasons.append(ESTIMATED_FROM_PROBES)
 
     ready = d.gal >= bath_gal
     if booked is not None:
@@ -346,32 +322,25 @@ class Added:
 
 NOTHING_ADDED = Added()
 
-#: ``(upper, lower, added, heating)``: heating withholds the full-tank
-#: floor from an answer without a book.
-Scorer = Callable[[float, float, Added, bool], Deliverable]
+#: Deliverable volume at ``(upper, lower, added)`` (``_scorer``).
+Scorer = Callable[[float, float, Added], Deliverable]
 
 
 def _scorer(
     booked: Booked | None,
     tank: TankNow,
     p: ReadinessParams,
-    setpoint_f: float | None = None,
     ep: BookParams | None = None,
 ) -> Scorer:
     """Deliverable volume at a tank state ``added`` has moved the booked
     state to since now: from the booked state when there is one, else
-    from the evidence and the full-tank floor at the setpoint (which
-    cannot use added heat, and do not need to: they read the state).
-    The draws are drawn first: they are the coast's, which comes before
-    any heating."""
+    from the probes and the evidence (which cannot use added heat, and
+    do not need to: they read the state). The draws are drawn first:
+    they are the coast's, which comes before any heating."""
 
-    def score(
-        upper: float, lower: float, added: Added, heating: bool
-    ) -> Deliverable:
+    def score(upper: float, lower: float, added: Added) -> Deliverable:
         if booked is None:
-            return deliverable(
-                upper, lower, p, ep=ep, setpoint_f=setpoint_f, heating=heating
-            )
+            return deliverable(upper, lower, p, ep=ep)
         state = (
             booked.drawn(added.drawn_gal, tank.upper_f, ep)
             .heated(added.bottom_btu, added.top_btu, ep)
@@ -404,19 +373,14 @@ def _flips_within_resolution(
 ) -> bool:
     """Whether a probe error of ``probe_resolution_f`` either way, on
     each probe on its own, would flip ``bath.ready``: near an evidence
-    step, near the cold-lower cap, or near the edge of a uniform tank
-    (``delivery.full_tank_floor_gal``), less than the probe can resolve
-    decides the answer."""
+    step, or with the bath that close to the probes' gallons
+    (``delivery.probes_gal``), less than the probe can resolve decides
+    the answer."""
     r = p.probe_resolution_f
     for up, low in itertools.product((-r, 0.0, r), repeat=2):
         if up == low == 0.0:
             continue
-        other = score(
-            tank.upper_f + up,
-            tank.lower_f + low,
-            NOTHING_ADDED,
-            tank.heating,
-        )
+        other = score(tank.upper_f + up, tank.lower_f + low, NOTHING_ADDED)
         if (other.gal >= bath_gal) != ready:
             return True
     return False
@@ -621,9 +585,7 @@ def _by_mode(
             if state is None:
                 break
             u, lo, wh, added = state
-            # The projection heats until its end, where the floor may
-            # answer for the tank it leaves.
-            if score(u, lo, added, t < end).gal >= bath_gal:
+            if score(u, lo, added).gal >= bath_gal:
                 row["ready_in_minutes"] = round(t, 1)
                 row["ready_at"] = now + timedelta(minutes=t)
                 row["energy_kwh"] = round(wh / 1000.0, 2)

@@ -157,8 +157,7 @@ def default_params(volume_code: int = VOLUME_65) -> HeaterParams:
     device's: 1 for 50 gal, 2 for 65, 3 for 80): ``site_example_params``
     with no mixing valve (``NO_VALVE``), no circulation and no readiness
     evidence (the site's was metered through its valve, and over-promises
-    without one: a tank that is neither full nor uniform reads 0, as
-    unknown (``no_evidence_for_state``), until your own is measured).
+    without one: the probes answer alone until your own is measured).
     Every other installation term is still that site's, labelled so
     (``params.scope_of``) and named in ``unfitted``
     (``INSTALLATION_TERMS``), so every answer they reach says
@@ -181,12 +180,11 @@ def site_example_params(volume_code: int = VOLUME_65) -> HeaterParams:
     compressor and power fits), so read it as an example, not as that
     installation's current state. The 50 and 80 gal models scale
     by nominal size its tank volume (the tank's, and the heat book's
-    count of it), the book's empty point (``BookParams.empty_btu``,
-    about 256 BTU per gallon of it) and the cold water hiding under a
-    full tank's lower probe (``ReadinessParams.full_hidden_gal``, about
-    21 % of it), and nothing else. Its readiness evidence is the
-    site's 19-draw frontier (``delivery.EXAMPLE_EVIDENCE``), measured
-    on the 65 gal tank, which the model served for every heater."""
+    count of it) and the book's empty point (``BookParams.empty_btu``,
+    about 256 BTU per gallon of it), and nothing else. Its readiness
+    evidence is the site's 19-draw frontier
+    (``delivery.EXAMPLE_EVIDENCE``), measured on the 65 gal tank, which
+    the model served for every heater."""
     nominal = dict(NOMINAL_GAL)
     if volume_code not in nominal:
         raise ValueError(f"unknown volume_code {volume_code!r}")
@@ -206,9 +204,5 @@ def site_example_params(volume_code: int = VOLUME_65) -> HeaterParams:
             base.book,
             tank_gal=base.book.tank_gal * scale,
             empty_btu=base.book.empty_btu * scale,
-        ),
-        readiness=replace(
-            base.readiness,
-            full_hidden_gal=base.readiness.full_hidden_gal * scale,
         ),
     )

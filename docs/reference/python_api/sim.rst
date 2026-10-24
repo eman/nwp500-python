@@ -127,16 +127,16 @@ Parameters
    :members: TankParams, LossParams, CompressorParams, PowerParams,
       ElementParams, DrawParams, ControllerParams, ReadinessParams,
       BookParams, Provenance, provenance_of, unit_of, params_to_document,
-      params_from_document, unknown_fields, FITTED, MEASURED, DEFAULT,
-      HEATER, INSTALLATION, UNFITTED_TERMS, INSTALLATION_TERMS,
-      UA_REF_DELTA_T_F, UA_MIN_DELTA_T_F
+      params_from_document, unknown_fields, RETIRED_FIELDS, FITTED,
+      MEASURED, DEFAULT, HEATER, INSTALLATION, UNFITTED_TERMS,
+      INSTALLATION_TERMS, UA_REF_DELTA_T_F, UA_MIN_DELTA_T_F
 
 
 Hot water and the heat book
 ===========================
 
 .. automodule:: nwp500.sim.delivery
-   :members: deliverable, booked_deliverable, delivery_temp_f,
+   :members: deliverable, probes_gal, booked_deliverable, delivery_temp_f,
       zone_delivery_f, delivery_along, depletion, draw_windows,
       draw_domain_judgement, EXAMPLE_EVIDENCE, with_example_evidence
 
@@ -153,7 +153,7 @@ Hot water and the heat book
       fit_compressor, CompressorFit, split_recoveries, recovery_minutes,
       clean_draws, CleanDraw, crossing,
       demonstrated, frontier, capacity, held_out, fit_evidence,
-      EvidenceFit, cold_lower_cap, RecordedBook, fit_book_terms, BookFit,
+      EvidenceFit, RecordedBook, fit_book_terms, BookFit,
       fit_terms_l1, BOOK_TERMS, BOOK_TERM_BOUNDS, BOOK_CIRCUIT_GAL_BOUNDS,
       book_error_bands, book_error_btu, empty_point,
       zone_empty_point, withheld_btu, book_walk, long_draws,

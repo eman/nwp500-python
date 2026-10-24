@@ -37,23 +37,17 @@ def test_the_65_round_trips_as_a_document() -> None:
 
 
 @pytest.mark.parametrize(("code", "gal"), [(1, 50.0), (3, 80.0)])
-def test_other_sizes_scale_the_tank_and_its_readiness_terms(
+def test_other_sizes_scale_the_tank_and_its_empty_point(
     code: int, gal: float
 ) -> None:
-    """The tank volume, and the empty point and hidden gallons that are
-    per gallon of it, scale by nominal size; nothing else does."""
+    """The tank volume, and the empty point that is per gallon of it,
+    scale by nominal size; nothing else does."""
     base, other = default_params(2), default_params(code)
     scale = gal / 65.0
     assert other.tank.volume_gal == pytest.approx(63.2 * scale)
     assert other.book.tank_gal == pytest.approx(63.2 * scale)
     assert other.book.empty_btu == pytest.approx(base.book.empty_btu * scale)
-    assert other.readiness.full_hidden_gal == pytest.approx(
-        base.readiness.full_hidden_gal * scale
-    )
-    assert (
-        replace(other, tank=base.tank, book=base.book, readiness=base.readiness)
-        == base
-    )
+    assert replace(other, tank=base.tank, book=base.book) == base
 
 
 def test_an_unknown_size_is_refused() -> None:
