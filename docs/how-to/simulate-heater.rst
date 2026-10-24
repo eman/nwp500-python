@@ -883,7 +883,9 @@ Each expected draw is a slot's rate times its per-draw mean, a
 fraction of a shower in most slots. It keeps that per-draw volume, so
 it is judged against the draws the parameters were fitted on, not
 against its own fraction. Each of the heater's draw windows opens up to
-an hour before its first likely long draw. With ``worst_case``, each
+an hour before the slot of its first likely long draw and closes up to
+an hour after the end of its last one's. At one installation an hour each side covered 95% of long
+draws, against 90% at half an hour. With ``worst_case``, each
 window's long draws come first, back to back from its opening, and no
 recovery is credited until they are done. ``result.windows`` then says
 whether the tank held through each.

@@ -8,6 +8,13 @@ Unreleased
 Fixed
 -----
 
+- **The draw windows' reach rests on the record.** ``HEATER_DRAW_REACH``
+  stays 60 minutes. Its reason was that a draw "can come that much
+  earlier than any the forecast has seen", which nothing measured. On 44
+  complete forecast issues (98 long draws), 60 minutes covered 94.9% of
+  long draws and 30 minutes 89.8%; the five covered only at 60 fell
+  either side of a 30-minute window. See :doc:`/how-to/simulate-heater`.
+
 - **The heater's idle air reading is corrected.** Idle, the heater's
   own air sensor reads its cabinet: on the record (February to October)
   6.2 °F above a sensor beside the heater on average, 9.3 in February to
