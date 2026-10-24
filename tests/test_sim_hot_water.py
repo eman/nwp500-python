@@ -182,6 +182,55 @@ class TestTheBookInASimulation:
         quiet = _scenario(**held, loads=Loads())
         assert simulate(quiet, params, book=book).simulation.heating == []
 
+    def test_a_release_the_lockout_defers_survives_the_next_draw(
+        self, params: HeaterParams
+    ) -> None:
+        """A draw releases Energy Saver's held lower trigger inside the
+        restart lockout; the next draw, a minute on, leaves the lower
+        zone over its setting. The start still comes when the lockout
+        ends."""
+        stop = at(1.0) - timedelta(minutes=2)
+        second = at(1.0) + timedelta(minutes=1)
+
+        class SecondLeavesItWarm(TankPhysics):
+            def draw(
+                self, at: datetime, upper_f: float, lower_f: float, gal: float
+            ) -> tuple[float, float]:
+                upper, lower = super().draw(at, upper_f, lower_f, gal)
+                return (upper, 106.0) if at == second else (upper, lower)
+
+        stamps = pd.date_range(at(-2), at(30), freq="1h")
+        frame = pd.DataFrame({"ambient_f": [68.0] * len(stamps)}, index=stamps)
+        physics = SecondLeavesItWarm(
+            params,
+            frame,
+            48.0,
+            draws_on=True,
+            tau_gap_hours=params.tank.stratification_gap_tau_h,  # type: ignore[arg-type]
+        )
+        book = full_tank_book(126.0, 87.0, params.book)
+        sim = walk(
+            start=stop + timedelta(minutes=1),
+            upper_f=126.0,
+            lower_f=87.0,
+            running=False,
+            until=at(3.0),
+            setpoint_f=107.6,
+            heater=Heater(
+                hp_lower_on_f=104.9, mode="energy_saver", element=params.element
+            ),
+            physics=physics,
+            draws=[(at(1.0), 5.0), (second, 1.0)],
+            stopped_at=stop,
+            heated_at=at(-8.0),
+            controller=params.controller,
+            ledger=BookedHeatLedger(
+                book, physics.ambient.at, params.book_terms()
+            ),
+        )
+        lockout = timedelta(seconds=params.controller.restart_lockout_s)
+        assert sim.heating and sim.heating[0].start.at == stop + lockout
+
     def test_a_draw_moves_the_lower_zone_at_once_as_without_one(
         self, params: HeaterParams
     ) -> None:

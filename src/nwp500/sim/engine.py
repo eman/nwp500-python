@@ -1535,6 +1535,29 @@ class _Engine:
                 mode=self.mode,
             )
         )
+        if self._drop is not None and self._drop.at == self.t:
+            self._carry_release()
+
+    def _carry_release(self) -> None:
+        """A start the drop just taken calls for, inside the restart
+        lockout, waits as a pending start from now: the walk may next
+        stop at another draw, where this one's drop is no longer seen."""
+        ahead = self._trigger_ahead(
+            Coast([Point(self.t, self.upper, self.lower)])
+        )
+        if (
+            ahead is not None
+            and ahead.trigger_at == self.t
+            and ahead.starts_at > self.t
+        ):
+            self._dispatch(
+                ctl.TriggerDeferred(
+                    at=self.t,
+                    starts_at=ahead.starts_at,
+                    trigger=ahead.trigger,
+                    horizon=self.until,
+                )
+            )
 
     def _heating_now(self, until: datetime) -> list[HeatingInterval]:
         """``heating`` with the recovery and the element running now

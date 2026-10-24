@@ -342,6 +342,26 @@ class TestTheCompressor:
         )
         assert (ahead is not None and ahead.trigger_at == at(15)) is starts
 
+    def test_a_held_lower_trigger_the_lower_zone_warmed_out_of_waits(
+        self,
+    ) -> None:
+        """The upper zone falls below the setpoint after the lower zone
+        has warmed back over its setting: the lower trigger alone
+        decides from there."""
+        coast = [(T0, 134.2, 104.0), (at(10), 121.0, 108.0)]
+        coast += [(at(20), 119.0, 107.0)]
+        drop = [Impulse(at(15), 108.0, 107.0)]
+        ahead, _ = trigger_ahead(
+            fresh(setpoint=120.2), settings(), P, coast, drop, T0
+        )
+        assert ahead is None
+        coast += [(at(30), 118.8, 103.0)]
+        ahead, _ = trigger_ahead(
+            fresh(setpoint=120.2), settings(), P, coast, drop, T0
+        )
+        assert ahead is not None
+        assert ahead.trigger_at == at(20) + (at(30) - at(20)) * (2.1 / 4.0)
+
     def test_the_upper_zone_short_in_a_window_starts_it(self) -> None:
         """Inside a window the heater starts when the upper
         zone is more than 14.4 °F short of the setpoint: 17 of 17

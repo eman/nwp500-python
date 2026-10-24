@@ -136,6 +136,42 @@ def _lower_after(
     )
 
 
+def _lower_at(
+    trajectory: Sequence[tuple[datetime, float, float]],
+    at: datetime,
+    impulses: Sequence[Impulse],
+) -> float:
+    """The lower tank at ``at``, after any drop there: a coast between
+    drops, as ``threshold_crossing`` walks it."""
+    for (t0, _, lower0), (t1, _, lower1) in itertools.pairwise(trajectory):
+        if not t0 <= at <= t1:
+            continue
+        cur_t, cur = t0, lower0
+        for d in sorted(impulses, key=lambda i: i.at):
+            if t0 <= d.at <= at:
+                cur_t, cur = d.at, _lower_after(trajectory, d)
+        if at == cur_t or t1 == cur_t:
+            return cur
+        return cur + (lower1 - cur) * ((at - cur_t) / (t1 - cur_t))
+    return trajectory[-1][2]
+
+
+def _from(
+    trajectory: Sequence[tuple[datetime, float, float]],
+    at: datetime,
+    impulses: Sequence[Impulse],
+) -> list[tuple[datetime, float, float]]:
+    """``trajectory`` from ``at`` on, the tank there after any drop at
+    its instant."""
+    upper = _upper_at(trajectory, at, impulses)
+    first = (
+        at,
+        math.nan if upper is None else upper,
+        _lower_at(trajectory, at, impulses),
+    )
+    return [first, *(p for p in trajectory if p[0] > at)]
+
+
 def _upper_crossing(
     trajectory: Sequence[tuple[datetime, float, float]],
     line: float,
@@ -212,7 +248,8 @@ def autonomous_start(
     120.2 °F, 2026-10-03), fell to 99.5 °F and started nothing in the
     15 min before its closing entry (measured to 2026-10-03 21:30 UTC).
     That the start then follows the upper tank's fall below the setpoint
-    is *assumed*: nothing has measured the release.
+    is *assumed*: nothing has measured the release. A lower tank warmed
+    back over the setting by then waits for its next crossing.
 
     With ``drop_starts`` as well (Energy Saver's), a draw's drop at or
     after the lower crossing also releases it. On 2026-09-21 Energy
@@ -232,12 +269,22 @@ def autonomous_start(
         and setpoint_f is not None
         and math.isfinite(setpoint_f)
     ):
-        # In a coast the lower tank only falls, so it is still under
-        # the setting when the upper tank falls below the setpoint.
         crossed = lower_at
         lower_at = _upper_crossing(
             trajectory, setpoint_f, drops, crossed, end + _INSTANT
         )
+        if (
+            lower_at is not None
+            and _lower_at(trajectory, lower_at, drops) >= hp_lower_on
+        ):
+            # The gap's relaxation warmed the lower tank back over the
+            # setting first. The upper tank only falls in a coast, so
+            # from here the lower trigger alone decides.
+            lower_at = threshold_crossing(
+                _from(trajectory, lower_at, drops),
+                hp_lower_on,
+                [d for d in drops if d.at > lower_at],
+            )
         if drop_starts:
             # The gap's relaxation can warm the lower tank after the
             # crossing, and a draw can move the upper zone alone: a drop
