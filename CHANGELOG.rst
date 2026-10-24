@@ -8,6 +8,17 @@ Unreleased
 Fixed
 -----
 
+- **A recovery that ends during a draw books only what follows.** The
+  book anchored at such a recovery's end and then booked the movement
+  again from its start, on the premise that the probes at the anchor
+  showed none of it, the cold water lying below the lower probe. The
+  lower probe falls at once with a draw. On the record from 2026-02-14
+  to 10-24 the rule fired 5 times, each a circulation run with at most
+  0.03 gal of household draw, and walked to the next clean anchor it
+  scored a mean absolute error of 9.92 gal against 9.57 without it.
+  ``book_steps`` and ``calibration.book_walk`` now book from the anchor
+  on, as at every other anchor.
+
 - **A draw window runs cold once its delivery falls below the line.**
   A window counted as depleted only when the delivery fell more than
   3.4 °F below the line or stayed below it more than 3 minutes, an
@@ -20,6 +31,7 @@ Fixed
   about 1.7 gal past the line. Removed: ``ReadinessParams.dip_f`` and
   ``dip_min``. A parameters document that still carries them loads, and
   ``unknown_fields`` doesn't name them.
+
 - **The evaporator moves 0.6 °F per °F of air, not one for one.** The
   compressor's physics held the evaporator a fixed approach below the
   air, so its capacity followed the air too closely. Over 377

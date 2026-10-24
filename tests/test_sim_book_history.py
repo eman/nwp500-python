@@ -131,6 +131,24 @@ class TestTheAnchor:
         assert b.inlet_f == 61.0
         assert b.inlet_measured_share == 1.0
 
+    def test_a_recovery_ending_in_a_draw_books_only_what_follows(
+        self,
+    ) -> None:
+        """The probes at the anchor already show the water drawn while
+        the recovery ran: the draw before the anchor is not booked
+        again."""
+
+        def history(flowing: float) -> list[Step]:
+            heating = [
+                step(compressor_on=True, lower_f=120.0 + i, flow_gpm=flowing)
+                for i in range(20)
+            ]
+            return heating + [step(flow_gpm=2.0)] * 6 + [step()] * 6
+
+        drawn, quiet = book_steps(history(2.0), P), book_steps(history(0.0), P)
+        assert drawn is not None and quiet is not None
+        assert drawn.heat_btu == pytest.approx(quiet.heat_btu)
+
     def test_no_long_draw_is_the_default(self) -> None:
         """A draw under 11 minutes has no plateau: the default, not the
         readings."""

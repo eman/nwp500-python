@@ -2645,8 +2645,7 @@ def book_walk(
     steps = book.steps
     heating = book.comp | book.el
     disturbed = (book.draw > 0) | (book.circulated > 0)
-    was_h = was_d = clean = False
-    moving = 0
+    was_h = clean = False
     run_s: float | None = 0.0
     b: Booked | None = None
     anchor_i: int | None = None
@@ -2666,35 +2665,25 @@ def book_walk(
             run_s = 0.0
         elif s.compressor_on and run_s is not None:
             run_s += s.seconds
-        if disturbed[i] and not was_d:
-            moving = i
         if heating[i]:
             clean = False
         elif was_h:
             clean = True
             if disturbed[i] and full:
-                new = (i, moving)
+                new = i
         if disturbed[i]:
             clean = False
-        was_h, was_d = bool(heating[i]), bool(disturbed[i])
+        was_h = bool(heating[i])
         if clean and not heating[i] and full:
-            new = (i, i + 1)
+            new = i
         quiet = not disturbed[i] and not s.circulating
         if compressing(s) and anchor_held(run_s, p) and quiet and full:
-            new = (i, i + 1)
+            new = i
         if new is not None and quiet:
             run_s = None
         if new is not None:
-            a, bf = new
-            st = steps[a]
-            b = full_tank(st.upper_f, st.lower_f, p.inlet_default_f, p)
-            for x in steps[bf:a]:
-                b = b.step(
-                    replace(x, compressor_on=False, element_on=False), p, circ
-                )
-            for x in steps[max(bf, a) : i + 1]:
-                b = b.step(x, p, circ)
-            anchor_i = a
+            b = full_tank(s.upper_f, s.lower_f, p.inlet_default_f, p)
+            anchor_i = new
         elif b is not None:
             b = b.step(s, p, circ)
         rows.append(
