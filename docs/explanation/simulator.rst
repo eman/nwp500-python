@@ -214,8 +214,9 @@ installation's heat book, readiness and draw terms as not fitted
 ``book_uncalibrated``, ``readiness_uncalibrated`` or
 ``draw_uncalibrated`` until an installation's own meter fits them. The 50 and
 80 gal models get the same parameters with the tank's volume scaled by
-nominal size, and nothing else: their compressors, elements and jacket
-loss have not been measured.
+rated storage (45.2 and 76.1 gal against the 65's 63.2), and nothing
+else: their compressors, elements and jacket loss have not been
+measured.
 
 What carries to another installation, and what does not:
 

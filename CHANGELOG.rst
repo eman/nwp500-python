@@ -8,6 +8,12 @@ Unreleased
 Fixed
 -----
 
+- **The 50 and 80 gal models are scaled by rated storage.** Their tank
+  volume, the book's count of it and its empty point were scaled from
+  the 65's by nominal size (48.6 and 77.8 gal). The manual's
+  specification table rates them at 45.2 and 76.1 gal, against the
+  65's 63.2. ``defaults.NOMINAL_GAL`` is now ``RATED_GAL``.
+
 - **A held mode landing over the setpoint starts nothing.** On
   2026-09-21 Energy Saver, held through a TOU window, landed at its
   close with the upper tank 18.7 °F above a 107.6 °F setpoint and the
