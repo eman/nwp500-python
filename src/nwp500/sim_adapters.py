@@ -333,7 +333,8 @@ def environment(
     as ``location_air``'s projection. Without it, ``status``'s own
     reading of the air at its intake now (``ambient_temperature_raw``)
     holds for the whole span; while the compressor is idle that reading
-    is the cabinet's, and ``IDLE_CABINET_WARM_F`` is taken off it.
+    is the cabinet's, and ``IDLE_CABINET_WARM_F`` is taken off it (not
+    when the status leaves the compressor's state unknown).
     ``humidity`` is %RH; ``inlet`` the mains water, in the preferred
     unit. Each left out is the simulator's default, which its result
     names in ``defaults_used``."""
@@ -343,14 +344,14 @@ def environment(
         ambient_f: float | tuple[tuple[datetime, float], ...] = _from_device(
             DeciCelsius(status.ambient_temperature_raw)
         )
-        if not status.comp_use:
+        if status.comp_use is False:
             ambient_f -= IDLE_CABINET_WARM_F
     elif isinstance(ambient, int | float):
         ambient_f = _to_sim(float(ambient))
     else:
         ambient_f = tuple((at, _to_sim(v)) for at, v in _finite(ambient))
     kw: dict[str, Any] = {"ambient_f": ambient_f}
-    if ambient is None and status is not None and not status.comp_use:
+    if ambient is None and status is not None and status.comp_use is False:
         kw["ambient_cabinet"] = True
     if humidity is not None:
         kw["humidity"] = humidity
