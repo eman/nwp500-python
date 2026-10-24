@@ -119,12 +119,13 @@ heat from there: out by each draw through the mixing valve and by
 standby, in from the compressor and the elements, with a draw's cold
 water kept as a region at the bottom, where the heat pump's heat lands
 and is held back until the region rejoins the hot water. At each draw
-it moves the zones the probes would show: the upper zone falls as the
-water above the rising front mixes and, once the booked heat is spent,
-to the line and below; the lower zone follows the front past its probe.
-Without a book each draw moves the zones by its calibrated response
-only, which is what the probes show on an ordinary draw and holds the
-upper zone up through one that empties the tank. The library starts a
+it moves the upper zone the probe would show: it falls as the water
+above the rising front mixes and, once the booked heat is spent, to the
+line and below. The lower zone takes each draw's calibrated response at
+once, with a book or without one, as the lower probe falls on every
+draw. Without a book the upper zone takes its calibrated response too,
+which is what the probe shows on an ordinary draw and holds the upper
+zone up through one that empties the tank. The library starts a
 book only from what the caller knows: probes reading full can hide the
 cold water of a recent draw.
 
@@ -310,12 +311,6 @@ with, beside ``recovery=``:
    first recovery's start are its ``draw_load``: what they took off the
    tank, over the recovery's deficit.
 
-``draw_hold_factor``
-   ``(1 − k) / k`` at the probes' draw observability ``k``: a recovery
-   holds that many times the time a draw sets it back, for the share of
-   the draw the probes miss. Lead draws are read only when it is
-   positive.
-
 ``physics_usable``
    Whether the physics duration may be served; by default, when the
    compressor is calibrated. A model may still answer from the
@@ -324,9 +319,7 @@ with, beside ``recovery=``:
 With no model, or one that declines, the served duration adds no start
 hold and the lead draws are not read. The holds still mark where the
 lower zone starts to climb: a recovery placed again after a draw inside
-its hold, and a draw hold, count from there. ``draw_hold_factor``
-applies either way: a recovery the walk's own draws set back holds for
-them.
+its hold counts from there.
 
 
 Accuracy

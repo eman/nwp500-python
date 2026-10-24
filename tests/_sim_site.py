@@ -124,30 +124,6 @@ def zone_mixed_f(
     )
 
 
-def lower_after_draw_f(
-    before: _book.Booked,
-    after: _book.Booked,
-    upper_f: float,
-    lower_f: float,
-    ep: BookParams | None = None,
-) -> float:
-    return _book.lower_after_draw_f(before, after, upper_f, lower_f, ep or EP)
-
-
-def front_share(cold_gal: float, ep: BookParams | None = None) -> float:
-    return _book.front_share(cold_gal, ep or EP)
-
-
-def front_start_gal(ep: BookParams | None = None) -> float:
-    return _book.front_start_gal(ep or EP)
-
-
-def front_cannot_move(
-    b: _book.Booked, gal: float, ep: BookParams | None = None
-) -> bool:
-    return _book.front_cannot_move(b, gal, ep or EP)
-
-
 def walk_booked(
     start: _book.Booked,
     points: Any,

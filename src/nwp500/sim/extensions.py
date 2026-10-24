@@ -7,7 +7,8 @@ Each is a ``Protocol``.
   core serves the physics alone.
 - ``HeatLedger``: the tank's heat by bookkeeping, walked along the
   engine's path. A book kept from metered draws is one. With none,
-  every draw is its own calibrated response.
+  every draw is its own calibrated response; with one, the upper zone
+  can go below it.
 """
 
 from __future__ import annotations
@@ -49,17 +50,8 @@ class Stand(Protocol):
 
 @dataclass(frozen=True)
 class LedgerZones:
-    """What the engine's lower-zone settling reads of a ledger's tank
-    model (``sim.physics.draw.settled_lower_f``, ``unsettled_after_f``).
+    """What the engine reads of a ledger's tank model once."""
 
-    The lower zone reads the ledger's front after a draw, and settles
-    from there toward the colder of the front and its calibrated level
-    on one time constant, never below the inlet."""
-
-    #: The settling's time constant, minutes.
-    settle_min: float
-    #: The inlet the zone settles no lower than, until a walk says.
-    inlet_f: float
     #: Whether every draw may mix the upper zone down (the ledger's
     #: rate is not zero): then no bound shows a draw cannot move it.
     mixes: bool
@@ -93,8 +85,6 @@ class DrawTaken:
     #: Their calibrated response from it (``Physics.draw``).
     drawn_upper_f: float
     drawn_lower_f: float
-    #: A compressor recovery or an element run is under way.
-    heating: bool
     #: The path since the stand, to ``at`` with the tank before them.
     path: Sequence[PathPoint]
     #: Every heating so far, those running taken to ``at``.
@@ -110,21 +100,14 @@ class DrawTaken:
 
 @dataclass(frozen=True)
 class AfterDraw:
-    """A ledger's say over the zones after the draws at an instant."""
+    """A ledger's say over the upper zone after the draws at an instant.
+    The lower zone is the draws' own response."""
 
-    #: The lower zone's reading: the front's, which the engine settles
-    #: from (``LedgerZones``).
-    lower_f: float
     #: The upper zone, where the ledger takes it below the draws' own
     #: response; None leaves their response.
     upper_f: float | None = None
-    #: Taken past the zone's empty point, not mixed down only: the
-    #: draws' heat is then the zone's.
-    spent: bool = False
-    #: Where its walk now stands, and the inlet it stood on; None for
-    #: either: unchanged.
+    #: Where its walk now stands; None: unchanged.
     stand: Stand | None = None
-    inlet_f: float | None = None
 
 
 @dataclass(frozen=True)
@@ -161,7 +144,6 @@ class UpperAhead:
 
     at: datetime | None
     stand: Stand | None = None
-    inlet_f: float | None = None
 
 
 class HeatLedger(Protocol):
@@ -170,12 +152,13 @@ class HeatLedger(Protocol):
     a draw's cold water only once it reaches them; the ledger sees it
     from the onset.
 
-    The engine asks it five things, all pure:
+    The engine asks it four things, all pure:
 
-    - ``after_draw``: the tank after a draw, given the booked heat. At
-      the clock (the zones' new readings), and ahead of it, where a
-      coast must stop to take a draw at its instant: the lower zone
-      (``front_moves_at``) and the upper (``upper_moves_at``);
+    - ``zones``: what it reads of the ledger's tank model once;
+    - ``after_draw``: the upper zone after a draw, given the booked
+      heat, at the clock;
+    - ``upper_moves_at``: ahead of the clock, where a coast must stop to
+      take a draw at its instant;
     - ``loss_bound``: the most standby and draws can take from it over
       a span, which lets the engine skip a walk a bound decides.
 
@@ -187,15 +170,7 @@ class HeatLedger(Protocol):
     def zones(self) -> LedgerZones: ...
 
     def after_draw(self, q: DrawTaken) -> AfterDraw:
-        """The zones after the draws at ``q.at``."""
-        ...
-
-    def front_moves_at(
-        self, stand: Stand, drawn_gal: float, pending: Sequence[Draw]
-    ) -> datetime | None:
-        """The first onset in ``pending`` at which a bound cannot show
-        the front still below the lower probe, from ``stand`` through
-        ``drawn_gal`` gallons since and the pending draws to there."""
+        """The upper zone after the draws at ``q.at``."""
         ...
 
     def upper_moves_at(self, q: DrawsAhead) -> UpperAhead:

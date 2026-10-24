@@ -69,7 +69,6 @@ from nwp500.sim.book import (
 from nwp500.sim.book import Step as BookStep
 from nwp500.sim.circulation import RUN_GAP
 from nwp500.sim.circulation import displaced_gal as circulation_displaced_gal
-from nwp500.sim.decay import draw_step
 from nwp500.sim.heating_trajectory import path_cop
 from nwp500.sim.inputs import ELECTRIC, ENERGY_SAVER, HIGH_DEMAND
 from nwp500.sim.params import (
@@ -1947,7 +1946,7 @@ def calibrate(
         power = fit_power(rows, params, withdrawn=withdrawn, lead=lead)
         params = with_power(params, power)
     # The installation's terms are fitted apart (``fit_book_terms``,
-    # ``fit_evidence``, ``fit_front``): ``base``'s record of them holds.
+    # ``fit_evidence``, ``fit_zone_mix``): ``base``'s record of them holds.
     unfitted = [t for t in base.unfitted if t in INSTALLATION_TERMS]
     if compressor is None or compressor.hit_bounds:
         unfitted += ["compressor", "power"]
@@ -2654,15 +2653,12 @@ def zone_empty_point(
     return float(np.median(core)) if core else None
 
 
-# ── the book's response to a draw: the front and the zones' mixing ──
+# ── the book's response to a draw: the upper zone's mixing ─────────
 #
-# Fitted as they were in the analyses behind the shipped values (their
-# scripts, recovered), on frames built from the library's own pieces.
-# Two stand-ins, named where they act: the long draws are the record's
-# own runs of household flow (the list they were drawn from is not
-# recovered), and the front fit's base lower zone is the calibrated
-# draw response chained from each draw's onset probes, in place of a
-# full replay's.
+# Fitted as it was in the analysis behind the shipped values (its
+# script, recovered), on frames built from the library's own pieces.
+# One stand-in: the long draws are the record's own runs of household
+# flow (the list they were drawn from is not recovered).
 
 #: A long draw: household flow above the book's draw line, gaps under
 #: ``LONG_DRAW_JOIN_S`` joined, ``MIN_LONG_DRAW_GAL`` or more.
@@ -2672,49 +2668,12 @@ MIN_LONG_DRAW_GAL = 5.0
 MIN_MIX_DRAW_GAL = 15.0
 #: The zones' own rate below the mixing, °F per delivered gallon.
 OWN_RATE_F_PER_GAL = 0.03
-#: The grids the fits search.
+#: The grid the fit searches.
 ZONE_MIX_GRID = tuple(
     (s, lam)
     for s in (0.5, 0.65, 0.8, 1.0, 1.25, 1.5, 1.8)
     for lam in (8, 10, 12, 14, 16, 18, 20, 23, 26, 30)
 )
-FRONT_GRID = tuple(
-    (float(vp), w)
-    for vp in range(16, 35)
-    for w in (16, 20, 24, 28, 32, 36, 40, 48)
-)
-SETTLE_TAUS = (5, 10, 15, 20, 30, 45, 60, 90, 120, 180, 240, 360, 600)
-SETTLE_TAUS_FINE = (
-    3,
-    5,
-    7,
-    10,
-    15,
-    20,
-    25,
-    30,
-    40,
-    50,
-    60,
-    75,
-    90,
-    120,
-    150,
-    180,
-    240,
-    300,
-    360,
-    480,
-    600,
-)
-#: The finer grid the settling constant was read from, minutes.
-SETTLE_TAUS_READ = (200, 240, 270, 300, 330, 360, 420)
-#: The settle fit's line for a draw, gal/min, and its tails: from the
-#: draw's last flowing step to the first heating, circulation or draw,
-#: at most ``SETTLE_TAIL``, scored every ``SETTLE_EVERY`` steps.
-SETTLE_DRAW_GPM = 0.5
-SETTLE_TAIL = timedelta(hours=6)
-SETTLE_EVERY = 30
 
 
 def book_walk(
@@ -3009,298 +2968,6 @@ def fit_zone_mix(
         mae_held=float(e[~tr].mean()) if (~tr).any() else float("nan"),
         s_interval=tuple(np.percentile(pk[:, 0], [2.5, 50, 97.5])),
         lam_interval=tuple(np.percentile(pk[:, 1], [2.5, 50, 97.5])),
-    )
-
-
-def _draw_kw(params: HeaterParams) -> dict[str, Any]:
-    d = params.draw
-    return {
-        "draw_observability": d.observability
-        if d.observability is not None
-        else 1.0,
-        "draw_inlet_temp_f": d.inlet_temp_f,
-        "tmv_delivery_intercept_f": d.delivery_intercept_f,
-        "tmv_delivery_slope": d.delivery_slope,
-        "draw_gap_open_f_per_gal": d.gap_open_f_per_gal,
-        "tank": params.tank,
-    }
-
-
-def front_frame(
-    walk: pd.DataFrame,
-    draws: Sequence[tuple[datetime, datetime, float]],
-    params: HeaterParams,
-    *,
-    split: datetime,
-) -> pd.DataFrame:
-    """Every step of each long draw from its onset to its end: the base
-    zones (``up``, ``lo``: the calibrated draw response chained from the
-    onset probes, a stand-in for a full replay's), the lower probe
-    (``pl``), the book's cold region after the step, the day and whether
-    it is held out."""
-    t = _epochs(walk)
-    per_step = (
-        (walk.t.iloc[1] - walk.t.iloc[0]).total_seconds() / 60.0
-        if len(walk) > 1
-        else 10 / 60
-    )
-    kw = _draw_kw(params)
-    rows = []
-    for a, b, _ in draws:
-        i = int(np.searchsorted(t, a.timestamp()))
-        j = int(np.searchsorted(t, b.timestamp()))
-        w = walk.iloc[i : j + 1]
-        if w.empty:
-            continue
-        pu, plo = float(w.up.iloc[0]), float(w.lo.iloc[0])
-        for k in range(len(w)):
-            r = w.iloc[k]
-            if k > 0 and r.house > params.book.draw_gpm:
-                pu, plo = draw_step(pu, plo, r.house * per_step, **kw)
-            rows.append(
-                (
-                    a,
-                    pd.Timestamp(a).strftime("%Y-%m-%d"),
-                    r.t,
-                    pu,
-                    plo,
-                    r.lo,
-                    r.cold_gal_after,
-                    r.cold_f_after,
-                )
-            )
-    f = pd.DataFrame(
-        rows, columns=["ev", "day", "t", "up", "lo", "pl", "cold_gal", "cold_f"]
-    )
-    f = cast(
-        pd.DataFrame,
-        f.loc[np.isfinite(f.cold_gal) & np.isfinite(f.pl)].reset_index(
-            drop=True
-        ),
-    )
-    f["held"] = [pd.Timestamp(e) >= pd.Timestamp(split) for e in f.ev]
-    return f
-
-
-@dataclass(frozen=True)
-class FrontFit:
-    """Where the lower probe sits in the cold front and how wide the
-    front is (``BookParams.lower_probe_gal``, ``front_width_gal``): the
-    best on the training draws, its errors, and the day bootstrap's
-    2.5 / 50 / 97.5 percentiles."""
-
-    lower_probe_gal: float
-    front_width_gal: float
-    mae_train: float
-    mae_held: float
-    place_interval: tuple[float, float, float]
-    width_interval: tuple[float, float, float]
-
-
-def _front_run(f: pd.DataFrame, vp: float, w: float) -> np.ndarray:
-    """The lower zone through each draw: the base's rise kept (heat, or
-    the gap closing), each fall the front's passage over the probe band
-    instead, floored at the cold region."""
-    lo, up = f.lo.to_numpy(), f.up.to_numpy()
-    cg, cf = f.cold_gal.to_numpy(), f.cold_f.to_numpy()
-    ev = f.ev.to_numpy()
-    starts = np.r_[True, ev[1:] != ev[:-1]]
-    th = np.clip(0.5 - (cg - vp) / w, 0.0, 1.0)
-    out = np.empty_like(lo)
-    for i in range(len(lo)):
-        if starts[i]:
-            out[i] = lo[i]
-            continue
-        dphys = lo[i] - lo[i - 1]
-        dfront = min(-(th[i - 1] - th[i]) * (up[i] - cf[i]), 0.0)
-        step = dphys + dfront if dphys >= 0.0 else dfront
-        out[i] = max(min(cf[i], out[i - 1]), out[i - 1] + step)
-    return np.asarray(out)
-
-
-def fit_front(
-    frame: pd.DataFrame,
-    *,
-    grid: Sequence[tuple[float, float]] = FRONT_GRID,
-    n_boot: int = 200,
-    seed: int = 1,
-) -> FrontFit:
-    """The front's place and width minimising the mean absolute error
-    against the lower probe on the training draws (``front_frame``),
-    then a day bootstrap: ``n_boot`` resamples of the training days,
-    each's best kept."""
-    pl = frame.pl.to_numpy()
-    tr = ~frame.held.to_numpy(dtype=bool)
-    days = frame.day.to_numpy()
-    E = {g: np.abs(_front_run(frame, *g) - pl) for g in grid}
-
-    def mae(g: tuple[float, float], at: np.ndarray) -> float:
-        return float(E[g][at].mean())
-
-    best = min(grid, key=lambda g: mae(g, tr))
-    rng = np.random.default_rng(seed)
-    keys = np.unique(days[tr])
-    idx = {k: np.flatnonzero((days == k) & tr) for k in keys}
-    picks = []
-    for _ in range(n_boot):
-        ii = np.concatenate([idx[k] for k in rng.choice(keys, len(keys))])
-        picks.append(min(grid, key=lambda g: mae(g, ii)))
-    return FrontFit(
-        lower_probe_gal=best[0],
-        front_width_gal=float(best[1]),
-        mae_train=float(E[best][tr].mean()),
-        mae_held=float(E[best][~tr].mean()) if (~tr).any() else float("nan"),
-        place_interval=tuple(
-            np.percentile([p[0] for p in picks], [2.5, 50, 97.5])
-        ),
-        width_interval=tuple(
-            np.percentile([p[1] for p in picks], [2.5, 50, 97.5])
-        ),
-    )
-
-
-def settle_tails(
-    walk: pd.DataFrame,
-    draws: Sequence[tuple[datetime, datetime, float]],
-    params: HeaterParams,
-    *,
-    split: datetime,
-) -> list[dict[str, Any]]:
-    """The quiet tail after each long draw: from its last flowing step
-    to the first heating, circulation or draw, at most ``SETTLE_TAIL``,
-    every ``SETTLE_EVERY`` steps; the front (``lower_probe_gal``,
-    ``front_width_gal``) and the calibrated response at the draw's end,
-    both coasting by the decay's standby (its UA, the tank's mass)."""
-    vp, w = params.book.lower_probe_gal, params.book.front_width_gal
-    ua = (
-        params.loss.ua_btu_hr_f
-        if params.loss.ua_btu_hr_f is not None
-        else params.loss.ua_baseline_btu_hr_f
-    )
-    mass = params.tank.thermal_mass_btu_f
-    kw = _draw_kw(params)
-    t = _epochs(walk)
-    per_step = (
-        (walk.t.iloc[1] - walk.t.iloc[0]).total_seconds() / 60.0
-        if len(walk) > 1
-        else 10 / 60
-    )
-
-    def theta(c: float) -> float:
-        return min(1.0, max(0.0, 0.5 - (c - vp) / w))
-
-    tails = []
-    for a, b, _ in draws:
-        i = int(np.searchsorted(t, a.timestamp()))
-        stop_at = min(b + SETTLE_TAIL, cast(datetime, walk.t.iloc[-1]))
-        j = int(np.searchsorted(t, stop_at.timestamp(), side="right"))
-        df = walk.iloc[i:j]
-        heat = np.flatnonzero((df.comp | df.elem).to_numpy())
-        if len(heat):
-            df = df.iloc[: heat[0]]
-        if df.empty or np.isnan(df.cold_gal_after.iloc[0]):
-            continue
-        flow = (df.house > SETTLE_DRAW_GPM).to_numpy()
-        inside = (df.t <= pd.Timestamp(b)).to_numpy()
-        idx = np.flatnonzero(flow & inside)
-        if len(idx) == 0:
-            continue
-        e = idx[-1]
-        pu, plo = float(df.up.iloc[0]), float(df.lo.iloc[0])
-        front = plo
-        prev_c = df.cold_gal_after.iloc[0]
-        for k in range(1, e + 1):
-            c = df.cold_gal_after.iloc[k]
-            if flow[k]:
-                pu, plo = draw_step(pu, plo, df.house.iloc[k] * per_step, **kw)
-                dd = (theta(prev_c) - theta(c)) * (
-                    df.up.iloc[k] - df.cold_f_after.iloc[k]
-                )
-                if dd > 0:
-                    front = max(min(front, df.cold_f_after.iloc[k]), front - dd)
-            prev_c = c
-        tail = df.iloc[e + 1 :]
-        stop = np.flatnonzero(
-            (tail.house > SETTLE_DRAW_GPM).to_numpy()
-            | tail.circulating.to_numpy(dtype=bool)
-        )
-        if len(stop):
-            tail = tail.iloc[: stop[0]]
-        tail = tail.iloc[::SETTLE_EVERY]
-        if len(tail) < 2:
-            continue
-        hrs = ((tail.t - df.t.iloc[e]).dt.total_seconds() / 3600).to_numpy()
-        mean = (tail.up + tail.lo).to_numpy() / 2
-        drift = np.cumsum(
-            np.r_[0, np.diff(hrs)] * ua * (mean - tail.air.to_numpy()) / mass
-        )
-        tails.append(
-            {
-                "ev": a,
-                "day": pd.Timestamp(a).strftime("%Y-%m-%d"),
-                "held": pd.Timestamp(a) >= pd.Timestamp(split),
-                "hrs": hrs,
-                "pl": tail.lo.to_numpy(),
-                "drift": drift,
-                "front": front,
-                "phys": plo,
-            }
-        )
-    return tails
-
-
-def _settle_model(t: dict[str, Any], tau: float) -> np.ndarray:
-    s = min(t["front"], t["phys"])
-    if tau == 0:
-        z = np.full_like(t["hrs"], s)
-    elif np.isinf(tau):
-        z = np.full_like(t["hrs"], t["front"])
-    else:
-        z = s + (t["front"] - s) * np.exp(-t["hrs"] * 60 / tau)
-    return np.asarray(z - t["drift"])
-
-
-def _settle_err(tails: Sequence[dict[str, Any]], tau: float) -> float:
-    e = [np.abs(_settle_model(t, tau) - t["pl"]) for t in tails]
-    return float(np.concatenate(e).mean()) if e else float("nan")
-
-
-@dataclass(frozen=True)
-class SettleFit:
-    """The lower zone's settling after a draw (``BookParams.
-    front_settle_min``): the best on the training tails over
-    ``SETTLE_TAUS``, and over ``SETTLE_TAUS_READ`` (the finer grid the
-    shipped value was read from), and the day bootstrap's
-    2.5 / 50 / 97.5 percentiles over ``SETTLE_TAUS_FINE``."""
-
-    front_settle_min: float
-    front_settle_min_fine: float
-    mae_train: float
-    mae_held: float
-    interval: tuple[float, float, float]
-
-
-def fit_front_settle(
-    tails: Sequence[dict[str, Any]], *, n_boot: int = 200, seed: int = 0
-) -> SettleFit:
-    """The settling constant from ``settle_tails``."""
-    tr = [t for t in tails if not t["held"]]
-    te = [t for t in tails if t["held"]]
-    best = min(SETTLE_TAUS, key=lambda x: _settle_err(tr, x))
-    fine = min(SETTLE_TAUS_READ, key=lambda x: _settle_err(tr, x))
-    days = sorted({t["day"] for t in tr})
-    by = {d: [t for t in tr if t["day"] == d] for d in days}
-    rng = np.random.default_rng(seed)
-    picks = []
-    for _ in range(n_boot):
-        smp = [t for d in rng.choice(days, len(days)) for t in by[d]]
-        picks.append(min(SETTLE_TAUS_FINE, key=lambda x: _settle_err(smp, x)))
-    return SettleFit(
-        front_settle_min=float(best),
-        front_settle_min_fine=float(fine),
-        mae_train=_settle_err(tr, best),
-        mae_held=_settle_err(te, best),
-        interval=tuple(np.percentile(picks, [2.5, 50, 97.5])),
     )
 
 

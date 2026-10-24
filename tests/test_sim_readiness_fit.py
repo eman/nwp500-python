@@ -137,38 +137,8 @@ class TestTheBooksTerms:
 
 
 class TestTheDrawResponseFits:
-    """Each fit, given probes its own model made, finds the values that
-    made them; ``long_draws`` joins short gaps."""
-
-    def _frame(self, n_draws: int = 8) -> pd.DataFrame:
-        rows = []
-        for k in range(n_draws):
-            ev = T0 + timedelta(days=k)
-            cold = 0.0
-            for i in range(60):
-                cold += 0.8
-                rows.append(
-                    (ev, f"{ev:%Y-%m-%d}", 130.0 - 0.02 * i, 120.0, cold, 70.0)
-                )
-        f = pd.DataFrame(
-            rows, columns=["ev", "day", "up", "lo", "cold_gal", "cold_f"]
-        )
-        f["held"] = [e >= T0 + timedelta(days=6) for e in f.ev]
-        return f
-
-    def test_the_front_finds_its_place_and_width(self) -> None:
-        f = self._frame()
-        f["pl"] = cal._front_run(f, 24.0, 32.0)
-        fit = cal.fit_front(f, n_boot=20)
-        assert (fit.lower_probe_gal, fit.front_width_gal) == (24.0, 32)
-        assert fit.mae_train == 0.0
-
-    def test_the_front_keeps_a_rise_and_floors_at_the_cold(self) -> None:
-        f = self._frame(1)
-        f.loc[f.index[30:], "lo"] = 125.0  # heat: a rise
-        out = cal._front_run(f, 24.0, 32.0)
-        assert out[30] > out[29]
-        assert (out >= 70.0).all()
+    """The mixing fit, given probes its own model made, finds the
+    values that made them; ``long_draws`` joins short gaps."""
 
     def test_the_mixing_finds_its_pair(self) -> None:
         rows = [
@@ -182,25 +152,6 @@ class TestTheDrawResponseFits:
         f["up"] = cal._mix_run(f, 1.25, 14, line_f=105.0, fall=2.0)
         fit = cal.fit_zone_mix(f, n_boot=20)
         assert (fit.zone_mix_f_per_gal, fit.zone_mix_gal) == (1.25, 14.0)
-
-    def test_the_settling_finds_its_time_constant(self) -> None:
-        tails = []
-        for k in range(10):
-            hrs = np.arange(0, 6, 1 / 12)
-            t = {
-                "ev": T0 + timedelta(days=k),
-                "day": f"{T0 + timedelta(days=k):%Y-%m-%d}",
-                "held": k >= 8,
-                "hrs": hrs,
-                "drift": 0.01 * hrs,
-                "front": 110.0,
-                "phys": 100.0,
-            }
-            t["pl"] = cal._settle_model(t, 120)
-            tails.append(t)
-        fit = cal.fit_front_settle(tails, n_boot=20)
-        assert fit.front_settle_min == 120.0
-        assert fit.mae_train == 0.0
 
     def test_long_draws_join_short_gaps(self) -> None:
         t = [T0 + timedelta(seconds=10 * i) for i in range(200)]

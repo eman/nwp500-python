@@ -8,6 +8,31 @@ Unreleased
 Fixed
 -----
 
+- **With a heat book, a draw moves the lower probe at once.** With a
+  book, the simulated lower probe held where a draw found it until the
+  book's cold region reached about 9 gal, then settled over 5 hours
+  toward the draw's calibrated response, which left it 3 to 10 °F warm
+  after draws of 3 to 20 gal. The recorded lower probe falls on every
+  draw at once and neither rebounds nor keeps falling. Now a draw moves
+  the lower probe by its calibrated draw response at once, as it does
+  without a book; the book still takes the upper probe down. Removed
+  with the old behavior: ``BookParams.lower_probe_gal``,
+  ``front_width_gal`` and ``front_settle_min``; their fits
+  ``calibration.front_frame``, ``fit_front``, ``FrontFit``,
+  ``settle_tails``, ``fit_front_settle`` and ``SettleFit``;
+  ``book.front_share``, ``front_start_gal``, ``lower_after_draw_f`` and
+  ``front_cannot_move``; ``physics.draw.settled_lower_f`` and
+  ``unsettled_after_f``; ``HeatLedger.front_moves_at``,
+  ``LedgerZones.settle_min`` and ``inlet_f``, ``AfterDraw.lower_f``,
+  ``spent`` and ``inlet_f``, ``UpperAhead.inlet_f`` and
+  ``DrawTaken.heating``; and ``draw_lower`` of ``TankPhysics.coast``
+  and ``decay.project_decay``. ``simulate``'s ``draw_hold_factor`` is
+  gone too: it held a recovery for a share of each draw the probes were
+  taken to miss, which nothing measured. A recovery model now reads
+  ``lead_draws`` without it. A parameters document that still carries
+  the removed ``book`` terms loads, and ``unknown_fields`` doesn't name
+  them.
+
 - **A Home Assistant restart no longer loses the heat book.** A restart
   leaves the heater and the flow unknown for a few minutes, and the book
   broke there: there was no book until the next anchor, often hours

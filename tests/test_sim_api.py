@@ -444,35 +444,13 @@ class TestAModelsInputs:
         self, params: HeaterParams
     ) -> None:
         s = _scenario(state=COLD)
-        got, want, model = self._both(
-            params, s, lead_draws=(EARLY, *LEAD), draw_hold_factor=0.5
-        )
+        got, want, model = self._both(params, s, lead_draws=(EARLY, *LEAD))
         assert got == want
         assert model.asked[0].draw_load > 0.0
         # Without the draw before the lead, the same load.
         alone = _Model()
-        simulate(
-            s, params, recovery=alone, lead_draws=LEAD, draw_hold_factor=0.5
-        )
+        simulate(s, params, recovery=alone, lead_draws=LEAD)
         assert alone.asked[0].draw_load == model.asked[0].draw_load
-
-    def test_lead_draws_need_a_hold_factor(self, params: HeaterParams) -> None:
-        s = _scenario(state=COLD)
-        got, want, model = self._both(params, s, lead_draws=LEAD)
-        assert got == want
-        assert model.asked[0].draw_load == 0.0
-
-    def test_the_draw_hold_factor(self, params: HeaterParams) -> None:
-        s = _scenario(
-            state=COLD,
-            loads=Loads(draws=(Draw(at=at(0.5), gallons=10.0),)),
-        )
-        got, want, _ = self._both(params, s, draw_hold_factor=0.5)
-        assert got == want
-        assert got != simulate(s, params, recovery=_Model()).simulation
-        # The physics alone holds for the draw too.
-        alone = simulate(s, params, draw_hold_factor=0.5).simulation
-        assert alone != simulate(s, params).simulation
 
     def test_with_no_model_the_holds_change_nothing(
         self, params: HeaterParams
@@ -501,9 +479,7 @@ class TestAModelsInputs:
         self, params: HeaterParams
     ) -> None:
         s = _scenario(state=COLD)
-        got = simulate(
-            s, params, recovery=_Model(), lead_draws=LEAD, draw_hold_factor=0.5
-        ).reasons
+        got = simulate(s, params, recovery=_Model(), lead_draws=LEAD).reasons
         assert "draw_uncalibrated" in got
         assert "inlet_temp_modelled" in got
         measured = simulate(
@@ -511,7 +487,6 @@ class TestAModelsInputs:
             params,
             recovery=_Model(),
             lead_draws=LEAD,
-            draw_hold_factor=0.5,
             inlet_measured=True,
         ).reasons
         assert "inlet_temp_modelled" not in measured
@@ -519,16 +494,10 @@ class TestAModelsInputs:
     @pytest.mark.parametrize(
         "kw",
         [
-            # No hold factor: the draws are not read.
-            {"recovery": _Model(), "lead_draws": LEAD},
             # No model: nothing reads them.
-            {"lead_draws": LEAD, "draw_hold_factor": 0.5},
+            {"lead_draws": LEAD},
             # Before the lead: the recovery does not reach back to it.
-            {
-                "recovery": _Model(),
-                "lead_draws": (EARLY,),
-                "draw_hold_factor": 0.5,
-            },
+            {"recovery": _Model(), "lead_draws": (EARLY,)},
         ],
     )
     def test_lead_draws_not_read_carry_none(

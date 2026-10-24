@@ -162,7 +162,6 @@ CASES: dict[str, dict[str, Any]] = {
         ],
         running_hold=4.5,
         start_hold=_start_hold,
-        draw_hold_factor=0.5,
         marks=[at(0.4), at(5.2)],
     ),
     # Raw writes replayed as made, from Energy Saver with its element

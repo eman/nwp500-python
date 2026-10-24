@@ -241,7 +241,6 @@ def project_decay(
     tmv_delivery_intercept_f: float = NO_VALVE_INTERCEPT_F,
     tmv_delivery_slope: float = NO_VALVE_SLOPE,
     draw_gap_open_f_per_gal: float = 0.0,
-    draw_lower: bool = True,
     lower_gate_f: float = 0.0,
     pool_f_per_hour: float = 0.0,
     ungated_observability: float = 1.0,
@@ -291,12 +290,6 @@ def project_decay(
         tmv_delivery_slope: °F of delivery per °F of upper zone.
         draw_gap_open_f_per_gal: The front a withdrawn gallon of a
             delivered draw opens, °F.
-        draw_lower: False leaves the lower zone where each delivered
-            draw found it, and the upper zone takes the draw's own
-            response (the gap restarting from the two): for a caller
-            with a booked state, which takes the lower zone through a
-            draw by the cold front instead.
-            True, the default, is the draw as it always was.
         lower_gate_f: Where a flowing draw's heat lands
             (``sim.physics.draw.lower_zone_drop_f``). Set, the
             incoming water is mixed into the lower zone alone, gated
@@ -550,17 +543,6 @@ def project_decay(
                 if opened > 0.0:
                     gap_ref = gap_at(sub_elapsed) + opened
                     gap_ref_at = sub_elapsed
-                if not draw_lower:
-                    # The lower zone stays where the draw found it, the
-                    # upper takes its response: no drop to report. A
-                    # small gap does not invert: the lower zone is no
-                    # warmer than the upper.
-                    upper_after = t_bulk + gap_at(sub_elapsed) / 2.0
-                    lower_after = min(t_lower_here, upper_after)
-                    t_bulk = (upper_after + lower_after) / 2.0
-                    gap_ref = upper_after - lower_after
-                    gap_ref_at = sub_elapsed
-                    continue
                 # The drop, where it happened.  The front is part of
                 # it: the lower zone after is read off the widened gap.
                 impulses.append(
