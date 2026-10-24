@@ -113,15 +113,15 @@ class TestTheHeater:
         state = sa.heater_state(s)
         assert state.element_running and not state.compressor_running
 
-    @pytest.mark.parametrize(("code", "gal"), [(1, 50), (2, 65), (3, 80)])
+    @pytest.mark.parametrize(("code", "gal"), [(1, 45.2), (2, 63.2), (3, 76.1)])
     def test_the_parameters_follow_the_tank_size(
-        self, code: int, gal: int
+        self, code: int, gal: float
     ) -> None:
         p = sa.params(
             DeviceFeature.model_validate(FEATURE | {"volumeCode": code})
         )
         assert p == default_params(code)
-        assert p.tank.volume_gal == pytest.approx(63.2 * gal / 65)
+        assert p.tank.volume_gal == pytest.approx(gal)
 
 
 class TestTheSchedules:
