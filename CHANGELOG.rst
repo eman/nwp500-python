@@ -8,6 +8,14 @@ Unreleased
 Fixed
 -----
 
+- **The outlet lag is the tank's.** ``ReadinessParams.delivered_lag_gal``
+  (5 gal) was described as mostly the pipe to the fixture. Both bath
+  figures behind it, 7.3 gal at the tub spout and 5.3 at the valve
+  outlet, were taken net of the pipe to each thermometer, and they
+  differ by calibration, not place. The lag is the tank water above the
+  upper probe, and the field is now labelled the heater's. The value is
+  unchanged. See :doc:`/reference/simulator-inputs`.
+
 - **The fan airflow's source.** ``CompressorParams.fan_airflow_cfm``
   (229) was cited as the NWP500's specification. No airflow is
   published; the manual's 229 is the 50 gal model's shipping weight in

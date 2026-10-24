@@ -848,14 +848,17 @@ class ReadinessParams:
         default=105.0, metadata=_p(DEFAULT, "°F", INSTALLATION)
     )
     #: Delivered gallons the tap still gets at or above the line once
-    #: the upper probe has crossed it: the water between the probe and
-    #: the tap, which the rising cold front reaches after the probe.
-    #: Mostly the installation's pipe run to the fixture. Measured once
-    #: (n = 1), at one bath's tub spout: 7.3 gal at the spout and 5.3 at
-    #: a gauge on the valve outlet; the lower, rounded down. 0 answers
-    #: at the probe itself.
+    #: the upper probe has crossed it: the tank water above the probe,
+    #: which leaves hot until the rising cold front reaches the tank's
+    #: outlet. The valve passes that water through near the line, so
+    #: tank and delivered gallons agree over it. Measured once (n = 1),
+    #: on one NWP500-65 bath: 7.3 gal on a thermometer at the tub spout
+    #: and 5.3 on a gauge at the valve outlet, each net of its own pipe
+    #: run. They differ by calibration (the spout read 2.74 °F above the
+    #: gauge), not by place; the lower, rounded down, is kept. The pipe
+    #: to the fixture is not in it. 0 answers at the probe itself.
     delivered_lag_gal: float = field(
-        default=5.0, metadata=_p(MEASURED, "gal", INSTALLATION)
+        default=5.0, metadata=_p(MEASURED, "gal", HEATER)
     )
     #: How fast the delivered water falls per delivered gallon once it
     #: has crossed the line, °F/gal; also the rate the heat book's

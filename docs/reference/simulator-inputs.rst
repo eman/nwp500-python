@@ -623,8 +623,8 @@ Readiness: ``ReadinessParams``
 
 ``params.readiness`` says what counts as hot water at the tap and how
 the delivered water follows the upper probe. Most of it describes the
-**installation**, not the heater: the pipe to the fixture, the mixing
-valve and the household's draws. The defaults were measured at one
+**installation**, not the heater: the mixing valve and the household's
+draws. ``delivered_lag_gal`` is the tank's. The defaults were measured at one
 NWP500-65's installation; measure your own where you can.
 
 .. list-table::
@@ -642,12 +642,15 @@ NWP500-65's installation; measure your own where you can.
    * - ``delivered_lag_gal``
      - 5.0 gal
      - Gallons the tap still gets at or above the line after the upper
-       probe has crossed it: the water above the probe and in the pipe
-       to the fixture. **Provisional, n = 1**: one bath, 7.3 gal at the
-       tub spout and 5.3 at a gauge on the valve outlet, the lower kept.
+       probe has crossed it: the tank water above the probe. The pipe to
+       the fixture is not in it. **Provisional, n = 1**: one bath on an
+       NWP500-65, 7.3 gal at the tub spout and 5.3 at a gauge on the
+       valve outlet, each net of its pipe run, the lower kept. The two
+       differ by calibration (the spout read 2.74 degF above the gauge).
        To measure yours: draw a bath from a full tank, logging the upper
        probe and the water at the tap; it is the gallons between the
-       two crossing the line. 0 answers at the probe.
+       two crossing the line, less the gallons from the tank to the
+       thermometer. 0 answers at the probe.
    * - ``fall_f_per_gal``
      - 2.0 degF/gal
      - How fast the delivered water falls per gallon once it has
