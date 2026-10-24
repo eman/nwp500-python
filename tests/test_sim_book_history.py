@@ -558,6 +558,33 @@ class TestARestart:
         assert want is not None and got is not None
         assert got.heat_btu == pytest.approx(want.heat_btu)
 
+    def test_a_draw_going_in_is_held_only_as_a_reading(
+        self, record: Any
+    ) -> None:
+        """Half an hour unknown from inside a draw: the draw is held
+        ``FLOW_HOLD``, as one more reading would be, not across the
+        gap."""
+        rows, observed = record
+        draw = [(ago(20), 0.0), (ago(2), 2.0)]
+        gap = (ago(1, 59), ago(1, 29))
+        got = sa.book_from_changes(
+            rows,
+            observed,
+            self.P,
+            at=T0,
+            flow=[*draw, (ago(1, 29), 0.0)],
+            flow_outages=[gap],
+        )
+        ended = sa.book_from_changes(
+            rows,
+            observed,
+            self.P,
+            at=T0,
+            flow=[*draw, (gap[0] + sa.FLOW_HOLD, 0.0)],
+        )
+        assert got is not None and ended is not None
+        assert got.heat_btu == pytest.approx(ended.heat_btu)
+
     def test_unknown_now_there_is_none_until_it_is_heard(
         self, record: Any
     ) -> None:

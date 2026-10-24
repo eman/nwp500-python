@@ -13,7 +13,9 @@ Fixed
   broke there: there was no book until the next anchor, often hours
   later. ``book_from_changes`` and ``HomeAssistantBook`` now walk across
   a span the heater wasn't heard or an entity was unavailable, holding
-  each value from before it, as if it were seen.
+  each value from before it, as if it were seen. The flow holds a
+  minute and the pump's speed five, so a draw or a run going in doesn't
+  run on for the whole outage.
 
 - **A hot lower probe no longer reads 0 gal.** With no heat book and no
   evidence, a tank that wasn't uniform or at its setpoint read 0 gal

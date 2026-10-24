@@ -967,7 +967,11 @@ whatever the preferred units. Across a span the heater wasn't heard
 from (an outage, or a silence much longer than its usual reporting), or
 the flow was unknown (``flow_outages``, from the history's
 ``outages``), such as a Home Assistant restart's few minutes, the book
-holds each value from before it and walks on. The book is None while
+holds each value from before it and walks on. The flow holds only
+``FLOW_HOLD`` (a minute), as a reading does, and is 0 after: a draw
+going in most likely ended within minutes, and holding it would charge
+a draw nobody made. ``HomeAssistantBook`` holds the pump's speed across
+its outages for ``PUMP_STALE`` (five minutes) the same way. The book is None while
 the heater isn't heard now or the flow is unknown now. A record that
 keeps no instant for each of the heater's responses passes ``heard=``,
 the spans the heater was heard over, and an empty ``observed``: the

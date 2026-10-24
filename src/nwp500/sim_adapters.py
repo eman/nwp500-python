@@ -1987,7 +1987,8 @@ def book_from_changes(
     ``max_gap`` of them, or one of ``rows.outages``, is a span nobody
     saw. The book walks across it, and across a span the flow was
     unknown, as if it were seen, each value held from before it (a Home
-    Assistant restart's few minutes, say). None when the heater is not
+    Assistant restart's few minutes, say), the flow for ``FLOW_HOLD``
+    and then none. None when the heater is not
     heard at ``at`` or the flow is unknown then, or with no anchor.
 
     A record with no instant per response gives ``heard`` instead: the
@@ -2021,6 +2022,9 @@ def book_from_changes(
     # A missing reading is none: it neither moves water nor shows the
     # meter reporting.
     flows = sorted((t.astimezone(UTC), v) for t, v in _finite(flow))
+    # Unknown, the flow holds as a reading does, then is none: a draw
+    # going in most likely ended within minutes.
+    flows = _ended_in(flows, flow_outages, FLOW_HOLD)
     if flows:
         # Before the flow's first reading, its draws are unknown.
         since = max(since, flows[0][0])
@@ -2052,6 +2056,21 @@ def book_from_changes(
         since,
         max_silence=None,
     )
+
+
+def _ended_in(
+    flows: list[tuple[datetime, float]],
+    gaps: Iterable[tuple[datetime, datetime]],
+    hold: timedelta,
+) -> list[tuple[datetime, float]]:
+    """``flows`` (in time order) at 0 from ``hold`` into each of
+    ``gaps`` with no reading inside it, to its end."""
+    stops = [
+        (a + hold, 0.0)
+        for a, b in join_spans(gaps)
+        if a + hold < b and not any(a < t < b for t, _ in flows)
+    ]
+    return sorted([*flows, *stops], key=lambda r: r[0]) if stops else flows
 
 
 def _book_windows(

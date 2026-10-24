@@ -6,6 +6,7 @@ entity history (``sim_home_assistant.read_heater_history``), the frame
 import asyncio
 import math
 from collections.abc import Iterable
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from typing import Any, cast
 
@@ -847,6 +848,41 @@ class TestARestart:
         got = keeper.book(END, self.P)
         assert want.booked is not None and got.booked is not None, got.notes
         assert got.booked.heat_btu == pytest.approx(want.booked.heat_btu)
+
+
+class TestAPumpOutageInARun:
+    P = replace(
+        sim.default_params(),
+        circulation=sim.CirculationParams(
+            displaced_gal=1.0, flow_gpm=2.0, loss_btu_per_gal=50.0
+        ),
+    )
+
+    def heat(self, pump: list[dict[str, Any]]) -> float:
+        rows = [r for r in _book_rows() if r["entity_id"] != "sensor.pump"]
+        keeper = _keeper(
+            WindowedClient(rows + pump, BOOK_UNITS),
+            circulation_speed="sensor.pump",
+        )
+        asyncio.run(keeper.read(END))
+        got = keeper.book(END, self.P)
+        assert got.booked is not None, got.notes
+        return got.booked.heat_btu
+
+    def test_a_run_going_in_holds_only_as_a_sampled_speed(self) -> None:
+        start, down = END - 2 * H, END - 2 * H + timedelta(minutes=2)
+        outage = [
+            _row("sensor.pump", T0, "0", "rpm"),
+            _row("sensor.pump", start, "2000", "rpm"),
+            _row("sensor.pump", down, "unavailable"),
+            _row("sensor.pump", END - H, "0", "rpm"),
+        ]
+        stopped = [
+            _row("sensor.pump", T0, "0", "rpm"),
+            _row("sensor.pump", start, "2000", "rpm"),
+            _row("sensor.pump", down + ha.PUMP_STALE, "0", "rpm"),
+        ]
+        assert self.heat(outage) == pytest.approx(self.heat(stopped))
 
 
 class TestTheBookFirstReview:
