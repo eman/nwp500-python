@@ -185,11 +185,10 @@ gap before the run, ten minutes after each run:
 The upper probe's change is about its standby over the same ten minutes.
 The lower probe's drop does not mix back: from 10 to 60 minutes after a
 run it fell a further 0.45 degF (18 runs), no more than standby. In a
-stratified tank the cold return lands in the lower probe's zone. In a
-mixed one most of it sits below the probe. A tank the probes read as
-mixed still holds water that cooled below the lower probe while it stood:
-the lower probe fell a median 0.7 degF after runs within 3 h of a
-recovery (26 runs), and 3.6 degF after 14 h (5 runs).
+stratified tank the lower probe shows most of the cold return; in a
+mixed one, little of it. The longer a tank the probes read as mixed has
+stood, the more its lower probe falls: a median 0.7 degF after runs
+within 3 h of a recovery (26 runs), and 3.6 degF after 14 h (5 runs).
 
 Pooled over 136 windows at the 6.38 gal loop, the two probes' mean
 fell by about **0.44** of the heat the loop measurement gives for the

@@ -256,8 +256,8 @@ class LossParams:
     #: Heat lost at the bottom of the tank, into the lower zone,
     #: BTU/hr, on top of the UA law's loss from the whole tank. The
     #: lower probe sees the share ``1 - exp(-gap / bottom_gate_f)`` of
-    #: it: a mixed tank hides it below the probe, a stratified one shows
-    #: it as a falling lower zone and an opening gap
+    #: it: little in a mixed tank, and in a stratified one a falling
+    #: lower zone and an opening gap
     #: (``physics.tank.bottom_loss_reach``). 0.0, what a fit from before
     #: the bottom loss carries, is none, to the bit.
     bottom_loss_btu_hr: float = field(
@@ -365,8 +365,9 @@ class DrawParams:
     lower_gate_f: float = field(
         metadata=_p(FITTED, "°F", INSTALLATION, _CIRCULATION)
     )
-    #: The standby pool's growth, °F per hour unheated, added to the gap
-    #: the inflow is gated on.
+    #: °F per hour the tank has stood unheated, added to the gap the
+    #: inflow is gated on: a tank that has stood longer shows more of a
+    #: run on its lower probe.
     pool_f_per_hour: float = field(
         metadata=_p(FITTED, "°F/h", INSTALLATION, _CIRCULATION)
     )
@@ -955,7 +956,7 @@ class BookParams:
         default=1.0, metadata=_p(FITTED, "1", INSTALLATION, _VALVE_LINE)
     )
     #: Booked heat above the reference when the upper probe reaches the
-    #: line (``ReadinessParams.line_f``): the median of five drawdowns,
+    #: line (``ReadinessParams.line_f``): the median of four drawdowns,
     #: 14,219-19,590 BTU. It and ``zone_empty_btu`` are in the frame of
     #: the debit they were booked with, delivered gallons through the
     #: valve: a book whose flow counts tank water (``flow_volume``)
@@ -968,9 +969,10 @@ class BookParams:
     #: Where a draw takes the upper zone across the line: 3,533 BTU
     #: below ``empty_btu``, so the zone centres those crossings rather
     #: than catching them all early. Fitted as the median of the same
-    #: crossings' booked heat when the book held back the heat in a
-    #: draw's cold water; no fit gives it now. Readiness and the
-    #: delivery keep ``empty_btu``.
+    #: crossings' booked heat on an earlier book; refit on 144 draws
+    #: against the current one, no other value or zone law does better
+    #: on both halves of the record. Readiness and the delivery keep
+    #: ``empty_btu``.
     zone_empty_btu: float = field(
         default=12636.0, metadata=_p(FITTED, "BTU", INSTALLATION)
     )
@@ -1001,8 +1003,8 @@ class BookParams:
         default=1.5, metadata=_p(FITTED, "°F", INSTALLATION)
     )
     #: The compressor's run since the last draw before a full tank
-    #: anchors the book as it runs: sooner, the probes still hide part
-    #: of the draw.
+    #: anchors the book as it runs: sooner, the probes still show only
+    #: part of the draw's heat.
     anchor_run_min: float = field(
         default=15.0, metadata=_p(FITTED, "min", INSTALLATION)
     )

@@ -10,11 +10,12 @@ at the end of a recovery with nothing drawn since, and at any step a
 recovery's compressor runs with the probes within the band and nothing
 drawn or circulated in it, once it has run ``anchor_run_min`` since a
 draw after the last anchor. A quiet moment after a draw does not anchor:
-the lower probe sees a draw, but until the cold front reaches it, about
-17 gal, the two probes show only about a third of a small draw's heat,
-and a draw under about 3 gal leaves them within the band. An anchor
-there would credit most of the draw back. Its cold water stays booked
-until the compressor has run, and the hold is for the same reason. An
+the lower probe falls at once, but in a mixed tank by only about a
+third of a small draw's heat, and a draw under about 3 gal leaves the
+probes within the band. An anchor there would credit most of the draw
+back; on the record it would have over-credited by 0.35-3.9 gal. The
+draw stays booked until the compressor has run, and the hold is for
+the same reason. An
 element run does not anchor either: the upper element heats only the
 top, and the lower leaves the water below it unheated.
 
@@ -388,9 +389,9 @@ def book_steps(
         return None
     a = steps[anchor]
     b = full_tank(a.upper_f, a.lower_f, p.inlet_default_f, p)
-    # The movement's part before the recovery ended: its hot water left
-    # and its cold water lies below the probes, which read the heat that
-    # went in meanwhile at the anchor already.
+    # The movement's part before the recovery ended: its hot water left,
+    # and the probes at the anchor already read the heat that went in
+    # meanwhile.
     for s in steps[book_from:anchor]:
         b = b.step(
             replace(s, compressor_on=False, element_on=False), p, circulation

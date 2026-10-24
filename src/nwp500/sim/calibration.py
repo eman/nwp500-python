@@ -1667,8 +1667,8 @@ def metered_withdrawn(
 
 def metered_lead(params: HeaterParams) -> Withdrawn:
     """With a meter: the apparent heat of the draws in the ``DRAW_LEAD``
-    before a cycle, Wh, at the upper zone at its start, whose cold water
-    the start reading had not yet seen. None when the record is missing,
+    before a cycle, Wh, at the upper zone at its start, which the start
+    reading shows only part of. None when the record is missing,
     or when draws happened and the draw term is off."""
     d = params.draw
 
@@ -1800,8 +1800,8 @@ def fit_cop_scale(
     """``((scale, startup_wh, lead_share, lift_coeff), cycles)`` for the
     apparent COP, the heat a cycle stored (the full tank's mass times
     the rise of the probes' mean) plus what ``withdrawn`` says draws
-    took during it, and ``lead`` those just before it, whose cold water
-    the start reading had not yet seen (``cop_cycles``). ``(None, n)``
+    took during it, and ``lead`` those just before it, which the start
+    reading shows only part of (``cop_cycles``). ``(None, n)``
     with fewer than ``MIN_POWER_EVENTS``.
 
     Without a meter the default keeps only the cycles no water was
