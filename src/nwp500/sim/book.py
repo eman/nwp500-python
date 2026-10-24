@@ -288,26 +288,72 @@ def step_heat_btu(
     return heat
 
 
-def inlet_now_f(steps: Sequence[Step], p: BookParams) -> float:
+def mains_f(
+    steps: Sequence[Step],
+    p: BookParams,
+    circulation: CirculationParams | None = None,
+) -> float | None:
+    """The mains from the long draws in ``steps``, as
+    ``cold_supply.plateau_t_cold`` reads it: each household draw of
+    ``settle_s + tail_s`` or more with circulation off throughout gives
+    the median measured inlet over its last ``tail_s`` (none before
+    ``settle_s``), kept within ``plausible_f``; the answer is the median
+    of those that ended within ``window_s`` of the last step. None with
+    no such draw. The probe's readings at rest are not the mains: the
+    pipe stagnates and tracks the air."""
+    from nwp500.sim.cold_supply import ColdSupplyParams
+
+    cp = ColdSupplyParams()
+    plateaus: list[tuple[float, float]] = []
+    run: list[tuple[float, Step]] = []
+    # Circulation at any point of a draw rules out the whole draw.
+    tainted = False
+    t = 0.0
+
+    def close() -> None:
+        if not run:
+            return
+        onset, end = run[0][0] - run[0][1].seconds, run[-1][0]
+        if end - onset < cp.settle_s + cp.tail_s:
+            return
+        tail_from = max(onset + cp.settle_s, end - cp.tail_s)
+        readings = [
+            s.inlet_f for at, s in run if at > tail_from and s.inlet_measured
+        ]
+        if len(readings) < cp.min_readings:
+            return
+        plateau = float(median(readings))
+        if cp.plausible_f[0] <= plateau <= cp.plausible_f[1]:
+            plateaus.append((end, plateau))
+
+    for s in steps:
+        t += s.seconds
+        if house_gpm(s, circulation) > p.draw_gpm:
+            tainted = tainted or s.circulating
+            run.append((t, s))
+            continue
+        if not tainted:
+            close()
+        run, tainted = [], False
+    if not tainted:
+        close()
+    recent = [v for end, v in plateaus if end >= t - cp.window_s]
+    return float(median(recent)) if recent else None
+
+
+def inlet_now_f(
+    steps: Sequence[Step],
+    p: BookParams,
+    circulation: CirculationParams | None = None,
+) -> float:
     """The inlet a draw would meet, for the conversion from heat to
-    gallons: the median of the measured readings over the last
-    ``inlet_window_s``, not the last one (a probe on the pipe wanders
-    with the air at rest, about a 14 % swing in the gallons at a hot
-    tank). The last step's value without one measured, and
-    ``inlet_default_f`` with no steps."""
-    if not steps:
-        return p.inlet_default_f
-    window: list[float] = []
-    elapsed = 0.0
-    for s in reversed(steps):
-        if s.inlet_measured:
-            window.append(s.inlet_f)
-        elapsed += s.seconds
-        if elapsed >= p.inlet_window_s:
-            break
-    if not window:
-        return steps[-1].inlet_f
-    return float(median(window))
+    gallons: the mains from the long draws in ``steps`` (``mains_f``),
+    else ``inlet_default_f``. Not the probe's readings at rest: over
+    2026-09-21 to 10-24 at one installation, a 3 h median of them sat
+    a standard deviation of 4.8 °F from the long draws' mains, up to
+    14 °F, and moved the gallons by up to 41 %."""
+    found = mains_f(steps, p, circulation)
+    return p.inlet_default_f if found is None else found
 
 
 def compressing(s: Step) -> bool:
@@ -398,13 +444,12 @@ def book_steps(
         )
     for s in steps[max(book_from, anchor) :]:
         b = b.step(s, p, circulation)
-    since = steps[anchor:]
-    share = sum(1 for s in since if s.inlet_measured) / len(since)
+    mains = mains_f(steps, p, circulation)
     return replace(
         b,
         anchor_age_h=age_h,
-        inlet_f=inlet_now_f(since, p),
-        inlet_measured_share=share,
+        inlet_f=p.inlet_default_f if mains is None else mains,
+        inlet_measured_share=0.0 if mains is None else 1.0,
         hold_s=run_s,
     )
 
@@ -431,8 +476,8 @@ class Booked:
     heat_btu: float
     anchor_age_h: float
     inlet_f: float
-    #: Share of the time since the anchor with a measured inlet, for a
-    #: book built from a record.
+    #: For a book built from a record: 1 when ``inlet_f`` is the mains
+    #: read from its long draws (``mains_f``), 0 when it is the default.
     inlet_measured_share: float = 0.0
     #: The compressor's run since a draw booked after the anchor, s,
     #: which holds its anchor (``BookParams.anchor_run_min``); None with

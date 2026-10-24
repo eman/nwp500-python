@@ -112,8 +112,8 @@ _VALVE_LINE = (
     "delivery at the tank's own temperature"
 )
 _MAINS = (
-    "one installation's mains, a probe's median over one week of "
-    "2026-09; coupled with observability"
+    "one installation's September mains, the median plateau of a "
+    "probe's long draws over 2026-09-19..26; coupled with observability"
 )
 _CIRCULATION = (
     "fitted on one installation's circulation return water; acts only "
@@ -1021,13 +1021,6 @@ class BookParams:
     draw_gpm: float = field(
         default=0.3, metadata=_p(DEFAULT, "gal/min", INSTALLATION)
     )
-    #: How far back a recorded book reads the inlet for its conversion
-    #: to gallons: a probe on the pipe wanders with the air at rest, and
-    #: the median over this window steadies the answer without lagging
-    #: the mains.
-    inlet_window_s: float = field(
-        default=10800.0, metadata=_p(DEFAULT, "s", INSTALLATION)
-    )
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -1176,6 +1169,7 @@ RETIRED_FIELDS: Mapping[str, frozenset[str]] = MappingProxyType(
                 "front_width_gal",
                 "front_settle_min",
                 "cold_release_f",
+                "inlet_window_s",
             }
         ),
         "readiness": frozenset(

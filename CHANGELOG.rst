@@ -8,6 +8,23 @@ Unreleased
 Fixed
 -----
 
+- **The heat book converts gallons at the mains, not the pipe at
+  rest.** A book built from a record converted its heat to gallons at
+  the inlet probe's median over the last 3 hours. At rest the probe
+  tracks the air around the pipe. Now the book reads the mains from the
+  long draws in its own record, as ``cold_supply`` does: the probe's
+  median over the last 2 minutes of each household draw of 11 minutes
+  or more with circulation off. Without one it takes
+  ``BookParams.inlet_default_f``. Over 2026-09-21 to 10-24, against the
+  plateaus, the inlet's mean error went from 3.85 °F (up to 14.2) to
+  0.97 °F (up to 3.3). ``Booked.inlet_measured_share`` is now 1 when the
+  inlet is read from a long draw and 0 when it is the default. Added:
+  ``book.mains_f``. Removed: ``BookParams.inlet_window_s``. A parameters
+  document that still carries it loads, and ``unknown_fields`` doesn't
+  name it. The docs now give the mains by season
+  (:doc:`/explanation/draws`): ``draw.inlet_temp_f``, 72.4 °F, is a
+  September value.
+
 - **A draw's probe response follows the tank's gap.** A delivered draw
   moved the probes the same way whatever the tank's state: the bulk
   fell by its apparent heat and the gap opened 1.235 °F per withdrawn

@@ -318,7 +318,30 @@ The at-rest reading misleads. On later draws the plateaus sat at
 71.2-72.8 degF, while the probe's 3-hour median ran 3.4 degF below them
 with the air under 68 degF and 5.7 degF above them with the air over
 80 degF. Converting heat to gallons at that median swung the gallons
-available by 10-20 %. :doc:`/how-to/simulate-heater` reads the plateau.
+available by 10-20 %. :doc:`/how-to/simulate-heater` reads the plateau,
+and the heat book reads it from the long draws in its own record.
+
+.. _mains-by-season:
+
+The mains by season
+-------------------
+
+The default inlet, 72.4 degF, is the median of those September
+plateaus, and the mains moves with the season:
+
+* **October.** The plateaus fell about 0.085 degF a day, from 72.5 degF
+  on 2026-10-01 to 69.3-69.6 degF by 10-20.
+* **January and February.** There was no probe yet, but the lower probe
+  bounds the mains: no water in the tank is colder than the water let
+  in. On the deepest draws since the probe went in, the lower probe
+  bottomed out at least 5 degF above the plateau. In January and
+  February it fell to 68.0 and 69.4 degF, so the mains then was at most
+  that, and likely nearer 63-64 degF.
+
+Every 1 degF of inlet moves a delivered gallon's heat by about 2 %, so a
+winter mains 9 degF under the default makes each draw take about a fifth
+more heat than the default says. Give ``Environment.inlet_f`` outside
+September.
 
 
 Limits
