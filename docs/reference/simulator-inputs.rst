@@ -646,7 +646,9 @@ NWP500-65's installation; measure your own where you can.
      - Both probes this close to the setpoint, or above it, is a tank
        the heater has brought to its target: it has the full-tank floor.
        With no evidence, a tank whose probes are within the book's
-       ``uniform_band_f`` of each other has it too, at any temperature.
+       ``uniform_band_f`` of each other has it too, at any temperature,
+       and so does a tank whose lower probe is at or above ``line_f``,
+       heating or not, with ``delivered_lag_gal`` on it.
    * - ``full_hidden_gal``
      - 13.5 gal
      - What the full-tank floor takes off for cold water from earlier
@@ -988,9 +990,14 @@ The ones about inputs and parameters:
        recovery was needed; any answer with draws, the third. Fit them and drop each from
        ``HeaterParams.unfitted``.
    * - ``no_evidence_for_state``
-     - No book, no evidence, and a tank that isn't full or uniform: two
-       probes can't place the heat in a stratified tank, so the
-       deliverable gallons are unknown, not none, and read 0.
+     - No book, no evidence, and a tank that isn't full or uniform, with
+       its lower probe below the line: two probes can't place the heat,
+       so the deliverable gallons are unknown, not none, and read 0.
+   * - ``estimated_from_probes``
+     - No book and no evidence, and the lower probe at or above the
+       line: the hot water reaches at least that low, so the deliverable
+       gallons are the full-tank floor from the probes, plus the lag.
+       They're never less than ``delivered_lag_gal``.
    * - ``ambient_defaulted``
      - No usable air reading was given (``Environment.ambient_f`` missing,
        or its readings all missing), so the answer ran at the default

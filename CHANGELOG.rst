@@ -2,6 +2,19 @@
 Changelog
 =========
 
+Unreleased
+==========
+
+Fixed
+-----
+
+- **A hot lower probe no longer reads 0 gal.** With no heat book and no
+  evidence, a tank that wasn't uniform or at its setpoint read 0 gal
+  (``no_evidence_for_state``), and so did any tank while heating, even
+  one hot past its lower probe. Now a lower probe at or above the line
+  reads the full-tank floor from the probes, heating or not, plus
+  ``delivered_lag_gal``, with the new reason ``estimated_from_probes``.
+
 Version 9.12.1 (2026-10-23)
 ===========================
 
