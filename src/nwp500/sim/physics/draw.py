@@ -6,8 +6,8 @@ draw says otherwise. Two kinds are modelled, additive, neither
 containing the other:
 
 - a draw **delivered** through the mixing valve at its onset, a
-  fixture's: its heat (:func:`draw_energy_btu`) and the front it opens
-  (:func:`gap_opened_f`), below;
+  fixture's: its heat (:func:`draw_energy_btu`) and how the two probes
+  move (:func:`probes_after_draw`), below;
 - a draw that **flows** straight from the tank over a span, whose
   inflow mixes into the lower zone (:func:`lower_zone_drop_f`, at the
   end of this module).
@@ -45,11 +45,11 @@ upper zone falls *below* `T_del`, where the valve has nothing to blend
 with; on the measured line that is below about 104 °F.
 
 That leaves one unknown the corpus cannot resolve as physics. `T_cold`
-and the **observability** of a draw (the share of its enthalpy two tank
-thermistors register) enter the data only as a product, because the
-tank sits above `T_del` on every clean draw and the conversion then
-barely varies. Fitting `T_cold` alone returns 97 °F, which is the
-stratification bias wearing groundwater's clothes.
+and the **observability** of a draw (the share of its enthalpy the
+two tank thermistors' mean registers) enter the data only as a
+product, because the tank sits above `T_del` on every clean draw and
+the conversion then barely varies. Fitting `T_cold` alone returns
+97 °F, which is the stratification bias wearing groundwater's clothes.
 
 So `k` is fitted against a **reference** `T_cold`, and the two move
 together. That is consistency rather than compromise, because every
@@ -61,12 +61,14 @@ r = 0.9988). A physically parameterised draw term would have been the
 odd one out, reporting about 1/k ≈ 1.6x more energy removed than the
 appliance's own accounting recognises, and a scheduler differencing
 a draw's heat against `available_energy_wh`, which is why the two
-share a unit, would have been badly wrong.
+share a unit, would have been badly wrong. `k` prices a draw's heat
+(:func:`draw_energy_btu`), as the calibration reads it; how the probes
+move through a draw is the law below, which does not use it.
 
 **The reference is measured (2026-09-26).** A probe on the cold
 supply reads `T_cold` from the plateau of long draws: 71.3-73.1 °F
 over its first week, median 72.4, where the draw term had assumed 60.
-`k` and the gap coefficient are refitted against 72.4, so parameters
+`k` and the probes' response are fitted against 72.4, so parameters
 fitted on them may be given the live plateau in place of the
 reference, and a projection then need not flag its inlet as modelled.
 Swapping the
@@ -76,21 +78,24 @@ history is held at the reference: the probe's week cannot show a
 season, and its plateaus move only 0.08 °F per °F of the air at the
 heater.
 
-**The front.** A draw does not cool the tank uniformly. It pulls hot
-water off the top and admits cold at the bottom, so the upper-lower gap
-*opens* by roughly the cold volume admitted, and then relaxes on the
-stratification time constant, `tau_gap_hours`. It is fitted each
+**The probes through a delivered draw.** The water withdrawn is
+replaced at the bottom by water at the inflow, and the lower probe
+falls toward the inflow by a share that grows with the gap at the
+draw: the same draw moves it much further in a tank with its probes
+apart than in a mixed one (:func:`probes_after_draw`). The upper probe
+falls a few hundredths of a degree per gallon. The gap then relaxes on
+the stratification time constant, `tau_gap_hours`. It is fitted each
 retrain on quiet windows and carried with the fitted parameters.
 Parameters without one project on the 60 h prior, and a projection
 whose window contains a draw should then say it used the prior.
-Fitted or not, one
-exponential is a two-zone approximation of a thermocline, so
-`t_lower_f` after a draw stays the field to trust least.
+Fitted or not, one exponential is a two-zone approximation of a
+thermocline, so `t_lower_f` after a draw stays the field to trust
+least.
 
-``draw_gap_open_f_per_gal = 0.0`` disables the front and
-``observability = None`` in the parameters disables the term entirely,
-which is what parameters fitted before this existed carry, so the
-projection reverts exactly to the behaviour that shipped without it.
+``observability = None`` in the parameters disables delivered draws
+entirely, which is what parameters fitted before this existed carry,
+so the projection reverts exactly to the behaviour that shipped
+without it.
 """
 
 import math
@@ -98,7 +103,13 @@ import math
 from nwp500.sim.params import TankParams
 from nwp500.sim.units import WATER_BTU_PER_GAL_F
 
-#: Share of a draw's enthalpy the two tank thermistors register.
+#: Share of a draw's enthalpy the two tank thermistors' mean registers,
+#: the apparent frame the standby law and the appliance's own energy
+#: field measure heat in. It prices a delivered draw's heat
+#: (``draw_energy_btu``), as the calibration's compressor and
+#: efficiency fits read it, and in the parameters it is what turns
+#: delivered draws on. How the probes move through a draw is
+#: ``probes_after_draw``'s, which does not use it.
 #:
 #: First fitted 2026-09-12 on 508 compressor-off episodes with no other
 #: water moving
@@ -157,19 +168,52 @@ NO_VALVE_SLOPE = 1.0
 #: conversion exactly.
 LEGACY_TMV_DELIVERY_F = 128.0
 
-#: °F of stratification gap opened per gallon withdrawn. First fitted
-#: on the same 508 episodes against 128 °F: 1.043, 95 % CI
-#: [0.936, 1.158]. The measured delivery line lowers the hot fraction
-#: (at a 139 °F tank 0.77 of a delivered gallon comes from the tank,
-#: not 0.86), so the same openings mean more °F per withdrawn gallon:
-#: ×1.119, to 1.167. A 72.4 °F inlet lowers it again (0.73 at
-#: 139 °F): ×1.058 on the rebuilt corpus (bootstrap [1.058, 1.058]),
-#: to 1.235. The response is mildly *convex* rather than
-#: saturating: a power fit puts the exponent at 1.57, CI [1.11, 2.07],
-#: because the thermocline has to reach the lower thermistor before
-#: the gap opens at all, so this linear coefficient under-reads the
-#: largest draws.
-DEFAULT_GAP_OPEN_F_PER_GAL = 1.235
+#: Stratification gap, °F, over which the water a delivered draw lets
+#: in at the bottom comes to reach the lower thermistor
+#: (``probes_after_draw``): with ``DEFAULT_REACH_OFFSET_F`` added to the
+#: gap, it reaches it with share ``1 − 1/e`` at this one. Fitted 2026-10-24 with
+#: the offset, ``DEFAULT_REACH_GAL`` and ``DEFAULT_UPPER_F_PER_GAL`` on
+#: the 399 clean delivered draws from 2026-02-21 to 07-31 (nothing
+#: heating or circulating and the heater heard throughout, from 15 min
+#: before to 30 min after; no other draw within 30 min), at the
+#: reference inlet, against the probes 10 min after the draw's end.
+#: The lower probe then, on all 535 such draws to 2026-10-23, against
+#: the law it replaced (the bulk falling by ``DEFAULT_OBSERVABILITY``
+#: of the draw's heat and the gap opening 1.235 °F per withdrawn gallon
+#: about it), the bias the model less the probe:
+#:
+#: ============  ===  ==============  ===========
+#: Draw          n    Bias, °F        MAE, °F
+#: ============  ===  ==============  ===========
+#: under 1 gal   281  +0.19 → +0.30   0.48 → 0.35
+#: 1-3 gal        55  +0.15 → +0.26   1.68 → 0.93
+#: 3-8 gal        51  −0.59 → −0.41   3.70 → 2.17
+#: 8-20 gal      127  −2.79 → −1.14   6.72 → 3.54
+#: over 20 gal    21  +5.37 → +1.07   8.78 → 6.40
+#: ============  ===  ==============  ===========
+#:
+#: With the probes within 3 °F the bias goes from −1.75 to −0.04 °F,
+#: with them further apart from +1.62 to −0.14. On the 136 draws from
+#: 08-01, held out, the lower probe's MAE goes from 2.79 to 1.95 °F and
+#: the upper's from 0.31 to 0.22 (0.28 to 0.21 on all 535), and the
+#: bias of the probes' mean stays within 0.2 °F.
+DEFAULT_REACH_GATE_F = 30.0
+
+#: °F added to the gap the reach is gated on, so a mixed tank's lower
+#: probe still moves a little; fitted with ``DEFAULT_REACH_GATE_F``.
+DEFAULT_REACH_OFFSET_F = 1.5
+
+#: Gallons of the lower zone the water let in mixes with at the lower
+#: thermistor; fitted with ``DEFAULT_REACH_GATE_F``.
+DEFAULT_REACH_GAL = 9.0
+
+#: °F the upper thermistor falls per delivered gallon; fitted with
+#: ``DEFAULT_REACH_GATE_F``.
+DEFAULT_UPPER_F_PER_GAL = 0.05
+
+#: Delivered gallons per piece ``probes_after_draw`` walks a draw in, so
+#: a draw split into parts moves the probes as the whole does.
+_DRAW_PIECE_GAL = 0.25
 
 #: Pre-draw upper-zone range the fit saw, °F: 508 episodes
 #: spanning 122.2-147.9. The delivery line was measured only over
@@ -265,9 +309,8 @@ def withdrawn_gal(
     """Hot water taken from the tank, in gallons.
 
     The energy above does not need this (the substitution cancels it),
-    but the **front** does: what opens the stratification gap is the
-    cold water admitted at the bottom, which equals the hot water that
-    left the top.
+    but the lower probe's response does (``probes_after_draw``): the
+    water let in at the bottom equals the hot water that left the top.
     """
     if volume_delivered_gal <= 0.0:
         return 0.0
@@ -276,45 +319,66 @@ def withdrawn_gal(
     )
 
 
-def gap_opened_f(
-    withdrawn_volume_gal: float,
-    open_f_per_gal: float,
-    bulk_drop_f: float,
-    t_lower_f: float,
-    t_cold_f: float,
-) -> float:
-    """How far a draw opens the upper-lower gap, in °F.
+def probes_after_draw(
+    t_upper: float,
+    t_lower: float,
+    delivered_gal: float,
+    inflow_f: float,
+    *,
+    intercept_f: float = NO_VALVE_INTERCEPT_F,
+    slope: float = NO_VALVE_SLOPE,
+    gate_f: float = DEFAULT_REACH_GATE_F,
+    offset_f: float = DEFAULT_REACH_OFFSET_F,
+    reach_gal: float = DEFAULT_REACH_GAL,
+    upper_f_per_gal: float = DEFAULT_UPPER_F_PER_GAL,
+) -> tuple[float, float]:
+    """The two zones just after a delivered draw, ``(t_upper, t_lower)``,
+    °F.
 
-    Linear in the withdrawn volume, and then bounded twice, because
-    the coefficient alone will happily produce a tank that no draw
-    could make.
+    The hot water withdrawn (``withdrawn_gal``) is replaced at the
+    bottom by water at ``inflow_f``, and the lower probe falls toward
+    it by a share that grows with the gap at the draw; the upper probe
+    falls a little per delivered gallon::
 
-    **A draw cannot warm any part of the tank.** The gap is split
-    evenly about the bulk, so an opening larger than twice the bulk
-    drop raises the upper zone, and with the fitted coefficient that
-    is not a corner case: it happens below about 122 °F, which is the
-    depleted-tank regime this term exists to describe. Measured
-    before the cap, a 9.5 gal draw against a 110 °F tank *heated* the
-    top by 0.8 °F. Capping at twice the drop means the worst a draw
-    can do is leave the top untouched and put the whole loss into the
-    bottom, which is also what the corpus shows it doing: an 11.5 gal
-    draw moves the upper thermistor 0.36 °F and the lower 6.8 °F.
+        reach = 1 − e^(−(gap + offset) / gate)
+        ΔT_lower = reach · (T_lower − T_in) · V_withdrawn / V_reach
+        ΔT_upper = upper_f_per_gal · V_delivered
 
-    **The lower zone cannot go below the water coming in**, so the
-    opening is also capped at the room it has. Note what this bounds
-    and what it does not: only the gap half. The bulk drop is applied
-    separately and is not bounded here, so a single implausibly large
-    event can still carry `t_lower` below the inlet. Aggregate slot
-    events are a few gallons and real mornings are tens, so this is a
-    latent edge rather than a live one, but it is an edge, and the
-    docstring used to claim otherwise.
+    The draw is walked in pieces of at most a quarter of a delivered
+    gallon, each from the zones the last one left, so a draw split
+    into parts moves the zones as the whole does. Neither zone warms,
+    the lower one stops at the inflow, and the upper one at the lower.
+    A tank at or under the inflow gives nothing and does not move.
+
+    Args:
+        t_upper: Upper zone before the draw, °F.
+        t_lower: Lower zone before the draw, °F.
+        delivered_gal: The draw, metered, gallons.
+        inflow_f: The water replacing it, °F.
+        intercept_f: The mixing valve's delivery line
+            (``delivery_temp_f``), evaluated at each piece's upper zone.
+        slope: °F of delivery per °F of upper zone.
+        gate_f: ``DEFAULT_REACH_GATE_F``.
+        offset_f: ``DEFAULT_REACH_OFFSET_F``.
+        reach_gal: ``DEFAULT_REACH_GAL``.
+        upper_f_per_gal: ``DEFAULT_UPPER_F_PER_GAL``.
     """
-    if withdrawn_volume_gal <= 0.0 or open_f_per_gal <= 0.0:
-        return 0.0
-    opened = open_f_per_gal * withdrawn_volume_gal
-    no_warming = max(0.0, 2.0 * bulk_drop_f)
-    headroom = max(0.0, 2.0 * (t_lower_f - t_cold_f))
-    return min(opened, no_warming, headroom)
+    if delivered_gal <= 0.0:
+        return t_upper, t_lower
+    n = max(1, math.ceil(delivered_gal / _DRAW_PIECE_GAL))
+    dv = delivered_gal / n
+    upper, lower = t_upper, t_lower
+    for _ in range(n):
+        if upper <= inflow_f:
+            break
+        dw = withdrawn_gal(
+            dv, upper, delivery_temp_f(upper, intercept_f, slope), inflow_f
+        )
+        reach = 1.0 - math.exp(-max(upper - lower + offset_f, 0.0) / gate_f)
+        room = max(lower - inflow_f, 0.0)
+        lower -= min(room, reach * room * dw / reach_gal)
+        upper = max(upper - upper_f_per_gal * dv, min(lower, upper))
+    return upper, lower
 
 
 #: Stratification gap, °F, over which water let in at the bottom comes

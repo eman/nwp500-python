@@ -87,16 +87,17 @@ class TestDraws:
         upper, lower = _physics().draw(T0, 130.0, 110.0, 10.0)
         assert upper + lower < 240.0
 
-    def test_a_larger_tank_loses_less_to_the_same_draw(self) -> None:
+    def test_the_draw_terms_are_the_parameters(self) -> None:
+        """A wider reach gate moves the lower zone less for the same
+        draw; the upper zone falls by the parameters' rate."""
         p = _params()
-        big = dataclasses.replace(
-            p, tank=dataclasses.replace(p.tank, volume_gal=80.0)
+        wide = dataclasses.replace(
+            p, draw=dataclasses.replace(p.draw, reach_gate_f=60.0)
         )
-        small_drop = 240.0 - sum(_physics(p).draw(T0, 130.0, 110.0, 10.0))
-        big_drop = 240.0 - sum(_physics(big).draw(T0, 130.0, 110.0, 10.0))
-        assert big_drop == pytest.approx(
-            small_drop * p.tank.volume_gal / 80.0, rel=0.02
-        )
+        upper, lower = _physics(p).draw(T0, 130.0, 110.0, 10.0)
+        _, wide_lower = _physics(wide).draw(T0, 130.0, 110.0, 10.0)
+        assert 110.0 - wide_lower < 110.0 - lower
+        assert upper == pytest.approx(130.0 - 10.0 * p.draw.upper_f_per_gal)
 
 
 class TestRecoveryReasons:

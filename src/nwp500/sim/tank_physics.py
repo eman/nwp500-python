@@ -323,7 +323,10 @@ class TankPhysics:
             draw_inlet_temp_f=self.draw_inlet_temp_f,
             tmv_delivery_intercept_f=p.draw.delivery_intercept_f,
             tmv_delivery_slope=p.draw.delivery_slope,
-            draw_gap_open_f_per_gal=p.draw.gap_open_f_per_gal,
+            draw_reach_gate_f=p.draw.reach_gate_f,
+            draw_reach_offset_f=p.draw.reach_offset_f,
+            draw_reach_gal=p.draw.reach_gal,
+            draw_upper_f_per_gal=p.draw.upper_f_per_gal,
             ambient=self.ambient,
             tank=p.tank,
         )
@@ -493,6 +496,8 @@ class TankPhysics:
             draw_inlet_temp_f=self.draw_inlet_temp_f,
             tmv_delivery_intercept_f=d.delivery_intercept_f,
             tmv_delivery_slope=d.delivery_slope,
-            draw_gap_open_f_per_gal=d.gap_open_f_per_gal,
-            tank=self.params.tank,
+            draw_reach_gate_f=d.reach_gate_f,
+            draw_reach_offset_f=d.reach_offset_f,
+            draw_reach_gal=d.reach_gal,
+            draw_upper_f_per_gal=d.upper_f_per_gal,
         )

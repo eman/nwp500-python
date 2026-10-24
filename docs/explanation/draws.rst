@@ -167,39 +167,68 @@ the water at the tub spout crossed 105 degF 7.3 gal after the upper
 probe did, and the water at the valve's outlet 5.3 gal after. Near
 that line the delivered water fell by about 2 degF per gallon.
 
-**A two-zone model of the probes has limits.** Fitted on the draws
-before 2026-06-23 and scored on the draws after, a model of the lower
-probe after a draw had a mean absolute error of 3.09 degF, against
-5.32 for assuming no change. By draw:
+**The lower probe's response follows the gap.** The same draw moves
+the lower probe further the wider the gap between the probes when it
+starts. The simulator moves the lower probe toward the inflow by the
+share ``1 - exp(-(gap + 1.5) / 30)`` of its distance from it per 9 gal
+withdrawn, and the upper probe 0.05 degF per delivered gallon, walking
+the draw a quarter gallon at a time. It was fitted on 399 draws from
+2026-02-21 to 2026-07-31 with nothing heating or circulating and the
+heater heard throughout, from 15 minutes before to 30 minutes after,
+and no other draw within 30 minutes. The table scores the lower probe
+10 minutes after each draw ended, on all 535 such draws to 2026-10-23,
+against the response it replaced (the gap opening 1.235 degF per
+withdrawn gallon whatever the tank's state). Bias is the model less the
+probe:
 
 .. list-table::
    :header-rows: 1
-   :widths: 40 20 20 20
+   :widths: 20 10 17 17 18 18
 
-   * - Draws
+   * - Draw
      - n
-     - Model
-     - No change
-   * - Long
-     - 69
-     - 5.33 degF
-     - 9.73 degF
-   * - Short
-     - 84
-     - 1.24 degF
-     - 1.69 degF
-   * - Tank well mixed (gap under 2 degF)
-     - 90
-     - 3.32 degF
-     - 3.67 degF
-   * - Gap over 10 degF
-     - 27
-     - 2.20 degF
-     - 5.43 degF
+     - Bias before
+     - Bias now
+     - Error before
+     - Error now
+   * - Under 1 gal
+     - 281
+     - +0.19 degF
+     - +0.30 degF
+     - 0.48 degF
+     - 0.35 degF
+   * - 1-3 gal
+     - 55
+     - +0.15 degF
+     - +0.26 degF
+     - 1.68 degF
+     - 0.93 degF
+   * - 3-8 gal
+     - 51
+     - -0.59 degF
+     - -0.41 degF
+     - 3.70 degF
+     - 2.17 degF
+   * - 8-20 gal
+     - 127
+     - -2.79 degF
+     - -1.14 degF
+     - 6.72 degF
+     - 3.54 degF
+   * - Over 20 gal
+     - 21
+     - +5.37 degF
+     - +1.07 degF
+     - 8.78 degF
+     - 6.40 degF
 
-A well-mixed tank, the usual state overnight, gains least. The gap a
-draw opens grows faster than the volume: per gallon it is larger for
-the biggest draws.
+The fixed response moved the lower probe too far in a mixed tank and
+not far enough in a stratified one: with the probes within 3 degF the
+bias went from -1.75 to -0.04 degF, and with them further apart from
++1.62 to -0.14. On the 136 draws from 2026-08-01, held out of the fit,
+the lower probe's mean absolute error went from 2.79 to 1.95 degF and
+the upper probe's from 0.31 to 0.22, and the bias of the two probes'
+mean stayed within 0.2 degF. The largest draws keep the widest error.
 
 The upper probe is harder. Over 563 draws of 5 gal or more in 204 days,
 a two-zone model's upper zone, moved only by each draw's calibrated

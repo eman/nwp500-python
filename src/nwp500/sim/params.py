@@ -322,14 +322,29 @@ class DrawParams:
     carries it: a delivered draw's terms (``draw_*``), and how a flowing draw's
     inflow mixes into the lower zone (the last three)."""
 
-    #: Share of a draw's enthalpy the probes register. None: the
-    #: consumer's default (``physics.draw.DEFAULT_OBSERVABILITY``).
+    #: Share of a draw's enthalpy the probes' mean registers: the price
+    #: of a delivered draw's heat (``physics.draw.draw_energy_btu``).
+    #: None: no delivered draw moves the tank.
     observability: float | None = field(
         metadata=_p(FITTED, "1", INSTALLATION, _VALVE_FRAME)
     )
-    #: Stratification gap a gallon drawn opens, °F/gal.
-    gap_open_f_per_gal: float = field(
-        metadata=_p(FITTED, "°F/gal", INSTALLATION, _VALVE_FRAME)
+    #: The gap, °F, at which the water a delivered draw lets in reaches
+    #: the lower thermistor with share ``1 − 1/e``, with
+    #: ``reach_offset_f`` added to it
+    #: (``physics.draw.probes_after_draw``).
+    reach_gate_f: float = field(
+        default=30.0, metadata=_p(FITTED, "°F", INSTALLATION, _VALVE_FRAME)
+    )
+    reach_offset_f: float = field(
+        default=1.5, metadata=_p(FITTED, "°F", INSTALLATION, _VALVE_FRAME)
+    )
+    #: Gallons the water let in mixes with at the lower thermistor.
+    reach_gal: float = field(
+        default=9.0, metadata=_p(FITTED, "gal", INSTALLATION, _VALVE_FRAME)
+    )
+    #: °F the upper thermistor falls per delivered gallon.
+    upper_f_per_gal: float = field(
+        default=0.05, metadata=_p(FITTED, "°F/gal", INSTALLATION, _VALVE_FRAME)
     )
     #: The mixing valve's delivery line: intercept + slope × T_upper,
     #: never above the tank. Intercept 0 and slope 1 is no valve.
@@ -1141,6 +1156,7 @@ OPTIONAL_PARTS = frozenset({"circulation"})
 #: without them and without naming them (``unknown_fields``).
 RETIRED_FIELDS: Mapping[str, frozenset[str]] = MappingProxyType(
     {
+        "draw": frozenset({"gap_open_f_per_gal"}),
         "book": frozenset(
             {
                 "lower_probe_gal",

@@ -8,6 +8,36 @@ Unreleased
 Fixed
 -----
 
+- **A draw's probe response follows the tank's gap.** A delivered draw
+  moved the probes the same way whatever the tank's state: the bulk
+  fell by its apparent heat and the gap opened 1.235 °F per withdrawn
+  gallon. The recorded lower probe falls further the wider the gap at
+  the draw. Now the water let in reaches the lower probe by a share
+  that grows with the gap, and the upper probe falls 0.05 °F per
+  delivered gallon (``physics.draw.probes_after_draw``). On 535 clean
+  draws from 2026-02-21 to 10-23, the lower probe's mean absolute error
+  10 minutes after the draw went from 0.48 to 0.35 °F under 1 gal, 1.68
+  to 0.93 at 1-3 gal, 3.70 to 2.17 at 3-8 gal, 6.72 to 3.54 at 8-20 gal
+  and 8.78 to 6.40 over 20 gal; its bias went from -1.75 to -0.04 °F
+  with the probes within 3 °F and from +1.62 to -0.14 with them apart.
+  On the 136 draws from 08-01, held out of the fit, the lower probe's
+  error went from 2.79 to 1.95 °F. Added: ``DrawParams.reach_gate_f``,
+  ``reach_offset_f``, ``reach_gal`` and ``upper_f_per_gal``;
+  ``physics.draw.probes_after_draw``, ``DEFAULT_REACH_GATE_F``,
+  ``DEFAULT_REACH_OFFSET_F``, ``DEFAULT_REACH_GAL`` and
+  ``DEFAULT_UPPER_F_PER_GAL``; and the ``draw_reach_gate_f``,
+  ``draw_reach_offset_f``, ``draw_reach_gal`` and
+  ``draw_upper_f_per_gal`` arguments of ``decay.project_decay`` and
+  ``decay.draw_step``. ``draw_step``'s ``draw_observability`` takes
+  None, which leaves the tank as it was. Removed:
+  ``DrawParams.gap_open_f_per_gal``; ``physics.draw.gap_opened_f`` and
+  ``DEFAULT_GAP_OPEN_F_PER_GAL``; the ``draw_gap_open_f_per_gal``
+  arguments of ``decay.project_decay`` and ``decay.draw_step``; and
+  ``draw_step``'s ``tank``. ``DrawParams.observability`` still prices a
+  draw's heat and turns delivered draws on. A parameters document that
+  still carries ``gap_open_f_per_gal`` loads, and ``unknown_fields``
+  doesn't name it.
+
 - **The heat book counts all its heat.** The book held back the heat
   that landed in a draw's cold water, the heat pump's and the lower
   element's, until that water passed 100 °F, or until the lower probe,

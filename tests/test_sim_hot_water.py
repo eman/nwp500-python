@@ -169,7 +169,7 @@ class TestTheBookInASimulation:
         booked = simulate(s, params, book=book).points
         plain = {p.at: p.lower_f for p in simulate(s, params).points}
         before, after = [p for p in booked if p.at == at(0.5)]
-        assert after.lower_f < before.lower_f - 4.0
+        assert after.lower_f < before.lower_f - 1.0
         later = [p for p in booked if p.at > at(0.5)]
         assert later
         for p in later:
@@ -431,6 +431,30 @@ class TestTheParameters:
         doc = json.loads(json.dumps(params_to_document(params)))
         doc["book"]["cold_release_f"] = 100.0
         assert params_from_document(doc) == params
+        assert unknown_fields(doc) == []
+
+    def test_a_document_with_the_retired_gap_opening_loads(
+        self, params: HeaterParams
+    ) -> None:
+        """An older writer's ``draw.gap_open_f_per_gal`` is read past,
+        and not named as unknown; the draw's response takes the
+        defaults."""
+        doc = json.loads(json.dumps(params_to_document(params)))
+        for name in (
+            "reach_gate_f",
+            "reach_offset_f",
+            "reach_gal",
+            "upper_f_per_gal",
+        ):
+            del doc["draw"][name]
+        doc["draw"]["gap_open_f_per_gal"] = 1.235
+        assert params_from_document(doc).draw == replace(
+            params.draw,
+            reach_gate_f=30.0,
+            reach_offset_f=1.5,
+            reach_gal=9.0,
+            upper_f_per_gal=0.05,
+        )
         assert unknown_fields(doc) == []
 
     @pytest.mark.parametrize(

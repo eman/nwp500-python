@@ -906,11 +906,18 @@ the one seen over the retrains from 2026-08-08 to 2026-10-18.
    * - Field
      - Value
      - Evidence
-   * - ``draw.observability``, ``draw.gap_open_f_per_gal``
-     - 0.633, 1.235 degF/gal
+   * - ``draw.observability``
+     - 0.633
      - Draws with the compressor off, metered, refitted on 2026-09-26
-       with the inlet probe (earlier fits 0.454 and 0.505, 1.043 and
-       1.167). Held-out accuracy in :doc:`/explanation/draws`.
+       with the inlet probe (earlier fits 0.454 and 0.505). It prices a
+       draw's heat; without it no draw moves the tank.
+   * - ``draw.reach_gate_f``, ``draw.reach_offset_f``,
+       ``draw.reach_gal``, ``draw.upper_f_per_gal``
+     - 30.0 degF, 1.5 degF, 9.0 gal, 0.05 degF/gal
+     - How a draw moves the probes: 399 draws from 2026-02-21 to 07-31
+       with nothing heating or circulating around them, against the
+       probes 10 minutes after each ended. Held-out accuracy in
+       :doc:`/explanation/draws`.
    * - ``draw.inlet_temp_f``, the valve line
      - 72.4 degF, (53.56, 0.485)
      - Long-draw plateaus on the cold supply, and five plateaus at the
