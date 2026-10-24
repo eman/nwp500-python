@@ -1443,7 +1443,8 @@ def fit_book(
     ``book`` keeps its own no-valve default there
     (``HeaterParams.book_terms``). The empty points are ``params``' too,
     booked as delivered gallons; with ``flow_volume="tank"``, refit
-    them (``sim.calibration.empty_point``, ``zone_empty_point``).
+    them (``sim.calibration.empty_point``, and ``zone_empty_btu`` as far
+    below it).
     Without the volume fitted, the loop
     is priced as the base prices it, and without a base, the pairs with
     a run in them are left out. A run's

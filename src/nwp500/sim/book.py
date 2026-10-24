@@ -35,22 +35,16 @@ booked heat, so it is in its debit's frame: those drawdowns were booked
 as delivered gallons, and a flow that counts tank water debits more, so
 its empty point is lower and is refit on its own record.
 
-**Where the heat lands.** The heat pump heats from the bottom up, so
-heating cannot build a hot top over a cold bottom: only a draw makes a
-cold bottom. Its cold water is booked as a **cold region**, the tank
-gallons the draws displaced since the tank was last full, at their mixed
-temperature. Compressor heat, and the lower element's, lands there:
-booked, but **withheld**, because water below the line cannot be drawn
-above it, until the region passes ``cold_release_f`` and rejoins the hot
-water. The upper element's heat lands in a thin top layer, so it is
-drawable, but only its own heat: a hot top says nothing about the volume
-under it. On 2026-03-31 a bath left the lower probe at 82 °F and the
-heat pump then took it to 98 °F with the upper near 137; on 04-14 a
-six-minute upper-element run lifted the upper probe 126 -> 141 °F over a
-lower at 88. Counted as drawable, both over-promised; withheld, both are
-caught. The lower probe can release the region too, once it has read
-below ``cold_release_f`` and reads at or above it again with nothing
-drawn (``Booked.observed``).
+**All the booked heat is drawable.** The compressor's heat and the
+elements' count in full, wherever in the tank they land. On the
+record's drawdowns that took the upper probe below the line, four usable
+from February to October, the deliverable answer at each drawdown's
+start read within 3.8 gal on average of the gallons delivered to the
+crossing, net of the heat added during it, the lag included. Holding
+back the heat that landed in a draw's cold water, as the book once did,
+under-read the two of them where it held any back (2026-03-31, after a
+bath and a heat-pump recovery, and 04-14, after a six-minute upper
+element run over a cold bottom) by 9.3 gal on average.
 
 **Its walk along a simulation** (``walk_booked``, ``BookedHeatLedger``).
 The book's start is the caller's: from their own record, or
@@ -76,8 +70,9 @@ degrees: through a 54 gal bath it left the zone at 139.6 °F against the
 probe's 104. So at each draw the zone is taken no warmer than the line
 plus ``fall_f_per_gal`` per delivered gallon the booked heat gives
 before ``zone_empty_btu``, and less per gallon past it, no colder than
-the lower zone. ``zone_empty_btu`` is the empty point refit to centre
-the five recorded crossings; the served point calls them early by
+the lower zone. ``zone_empty_btu`` is 3,533 BTU below the empty point:
+the median of the same crossings' booked heat when the book held back
+the heat in a draw's cold water. The served point calls them early by
 design, and a zone taken down there misplaced most draws that came near
 it without crossing.
 
@@ -156,19 +151,13 @@ def draw_out(
     inlet_f: float,
     p: BookParams | None = None,
     volume: FlowVolume = "delivered",
-) -> tuple[float, float]:
-    """A draw of ``gal`` gallons at ``upper_f``: the heat it takes, BTU,
-    and the tank gallons the inlet replaces. Delivered gallons take the
-    valve's heat (``draw_btu``) and its hot share of tank water; tank
-    gallons are tank water, each at the upper zone."""
+) -> float:
+    """The heat a draw of ``gal`` gallons at ``upper_f`` takes, BTU.
+    Delivered gallons take the valve's heat (``draw_btu``); tank gallons
+    are tank water, each at the upper zone."""
     if volume == "tank":
-        return gal * WATER_BTU_PER_GAL_F * max(0.0, upper_f - inlet_f), gal
-    hot = (
-        (delivery_f(upper_f, p) - inlet_f) / (upper_f - inlet_f)
-        if upper_f > inlet_f
-        else 1.0
-    )
-    return draw_btu(gal, upper_f, inlet_f, p), gal * max(0.0, hot)
+        return gal * WATER_BTU_PER_GAL_F * max(0.0, upper_f - inlet_f)
+    return draw_btu(gal, upper_f, inlet_f, p)
 
 
 def compressor_btu(hours: float, ambient_f: float, p: BookParams) -> float:
@@ -221,9 +210,6 @@ class Step:
     circulation_gpm: float = 0.0
     #: Whether ``inlet_f`` was measured (an inlet probe).
     inlet_measured: bool = False
-    #: The element on is the lower one, whose heat lands at the bottom
-    #: as the compressor's does; otherwise the upper, at the top.
-    lower_element: bool = False
     #: Circulation's flow over the span ``flow_gpm`` was read over, 0
     #: where it was off: a meter's figure over a trailing window still
     #: holds a run for a while after it stops. None: ``circulation_gpm``
@@ -288,7 +274,7 @@ def step_heat_btu(
     house = house_gpm(s, circulation)
     if house > p.draw_gpm:
         gal = house * s.seconds / 60.0
-        heat -= draw_out(gal, s.upper_f, s.inlet_f, p, s.flow_volume)[0]
+        heat -= draw_out(gal, s.upper_f, s.inlet_f, p, s.flow_volume)
     if s.circulating:
         heat -= circulated_btu(
             s.circulation_gpm * s.seconds / 60.0,
@@ -426,21 +412,20 @@ def full_tank(
     upper_f: float, lower_f: float, inlet_f: float, p: BookParams
 ) -> Booked:
     """The book's anchor: a full tank's heat is what its probes say,
-    ``8.34 · V · (T_mean − reference)``, with no cold region."""
+    ``8.34 · V · (T_mean − reference)``."""
     mean = (upper_f + lower_f) / 2.0
     return Booked(
         heat_btu=WATER_BTU_PER_GAL_F * p.tank_gal * (mean - p.reference_f),
         anchor_age_h=0.0,
         inlet_f=inlet_f,
-        cold_f=p.reference_f,
     )
 
 
 @dataclass(frozen=True)
 class Booked:
-    """The tank's heat above the reference now, where it lies, and what
-    it rests on: the state readiness answers from and a simulation
-    walks. One set of operations moves it, each the book's own term."""
+    """The tank's heat above the reference now, and what it rests on:
+    the state readiness answers from and a simulation walks. One set of
+    operations moves it, each the book's own term."""
 
     heat_btu: float
     anchor_age_h: float
@@ -448,13 +433,6 @@ class Booked:
     #: Share of the time since the anchor with a measured inlet, for a
     #: book built from a record.
     inlet_measured_share: float = 0.0
-    #: The cold region: tank gallons the draws displaced since the tank
-    #: was last full, and their temperature (module docstring).
-    cold_gal: float = 0.0
-    cold_f: float = 70.0
-    #: The lower probe has read below ``cold_release_f`` since the region
-    #: formed: it has seen the cold water, so it can see it go.
-    cold_seen: bool = False
     #: The compressor's run since a draw booked after the anchor, s,
     #: which holds its anchor (``BookParams.anchor_run_min``); None with
     #: no draw since the anchor.
@@ -470,26 +448,11 @@ class Booked:
         p = p or BookParams()
         return p.aged_error_btu if self.aged(p) else p.error_btu
 
-    def withheld_btu(self, p: BookParams | None = None) -> float:
-        """Booked heat in the cold region, above the reference: not
-        drawable while the region is below ``cold_release_f``. Negative
-        for a region colder than the reference (a winter inlet): the
-        draw charged the book down to that inlet, and this hands back
-        the part below the reference, so a draw costs the drawable heat
-        only the hot water that left. Never seen: the record's inlet has
-        been ~70 °F."""
-        p = p or BookParams()
-        if self.cold_gal <= 0.0:
-            return 0.0
-        return (
-            WATER_BTU_PER_GAL_F * self.cold_gal * (self.cold_f - p.reference_f)
-        )
-
     def drawable_btu(self, p: BookParams | None = None) -> float:
         """Heat a draw can take before the upper probe falls below the
         depletion line; negative once a draw has taken more."""
         p = p or BookParams()
-        return self.heat_btu - self.withheld_btu(p) - p.empty_btu
+        return self.heat_btu - p.empty_btu
 
     def drawn(
         self,
@@ -499,54 +462,17 @@ class Booked:
         volume: FlowVolume = "delivered",
     ) -> Booked:
         """After ``gal`` gallons at ``upper_f``, delivered or of tank
-        water (``draw_out``): their heat out, and the tank gallons they
-        took replaced by the inlet at the bottom, in the cold region."""
+        water: their heat out (``draw_out``)."""
         p = p or BookParams()
         if gal <= 0.0:
             return self
-        inlet = self.inlet_f
-        out, taken = draw_out(gal, upper_f, inlet, p, volume)
-        cold = min(p.tank_gal, self.cold_gal + taken)
-        added = cold - self.cold_gal
-        cold_f = (
-            (self.cold_f * self.cold_gal + inlet * added) / cold
-            if cold > 0.0
-            else self.cold_f
-        )
-        return replace(
-            self,
-            heat_btu=self.heat_btu - out,
-            cold_gal=cold,
-            cold_f=cold_f,
-            # A new region has not been seen yet; a larger one has.
-            cold_seen=self.cold_seen and self.cold_gal > 0.0,
-            hold_s=0.0,
-        )
+        out = draw_out(gal, upper_f, self.inlet_f, p, volume)
+        return replace(self, heat_btu=self.heat_btu - out, hold_s=0.0)
 
-    def heated(
-        self,
-        bottom_btu: float = 0.0,
-        top_btu: float = 0.0,
-        p: BookParams | None = None,
-    ) -> Booked:
-        """Heat in: ``bottom_btu`` (the compressor, the lower element)
-        into the cold region while there is one, ``top_btu`` (the upper
-        element) into the thin top layer. The region rejoins the hot
-        water once past ``cold_release_f``."""
-        p = p or BookParams()
-        cold_gal, cold_f = self.cold_gal, self.cold_f
-        seen = self.cold_seen
-        if cold_gal > 0.0 and bottom_btu > 0.0:
-            cold_f += bottom_btu / (WATER_BTU_PER_GAL_F * cold_gal)
-            if cold_f >= p.cold_release_f:
-                cold_gal, cold_f, seen = 0.0, p.reference_f, False
-        return replace(
-            self,
-            heat_btu=self.heat_btu + bottom_btu + top_btu,
-            cold_gal=cold_gal,
-            cold_f=cold_f,
-            cold_seen=seen,
-        )
+    def heated(self, btu: float) -> Booked:
+        """Heat in, from the compressor or an element: all of it
+        drawable."""
+        return replace(self, heat_btu=self.heat_btu + btu)
 
     def ran(self, seconds: float) -> Booked:
         """After the compressor has run ``seconds``: its hold runs."""
@@ -558,56 +484,25 @@ class Booked:
         """Standby loss, out of the drawable heat."""
         return replace(self, heat_btu=self.heat_btu - btu)
 
-    def observed(
-        self,
-        lower_f: float,
-        p: BookParams | None = None,
-        *,
-        drawing: bool = False,
-    ) -> Booked:
-        """The lower probe's reading, read against the cold region
-        (module docstring). Below ``cold_release_f`` it has seen
-        the region. Seen, and at or above the line again with nothing
-        being drawn, it has seen the region rejoin, whatever heat the
-        book had placed in it: the region is released. A region the
-        probe never read below the line (a shower from a full tank, its
-        cold water under the probe) is not."""
-        p = p or BookParams()
-        if self.cold_gal <= 0.0:
-            return self
-        if lower_f < p.cold_release_f:
-            return self if self.cold_seen else replace(self, cold_seen=True)
-        if drawing or not self.cold_seen:
-            return self
-        return replace(
-            self, cold_gal=0.0, cold_f=p.reference_f, cold_seen=False
-        )
-
     def step(
         self,
         s: Step,
         p: BookParams | None = None,
         circulation: CirculationParams | None = None,
     ) -> Booked:
-        """One recorded step: ``step_heat_btu``'s terms, placed."""
+        """One recorded step: ``step_heat_btu``'s terms."""
         p = p or BookParams()
         h = s.seconds / 3600.0
         b = replace(self, inlet_f=s.inlet_f)
         house = house_gpm(s, circulation)
-        drawing = house > p.draw_gpm
-        if drawing:
+        if house > p.draw_gpm:
             b = b.drawn(house * s.seconds / 60.0, s.upper_f, p, s.flow_volume)
         elif s.compressor_on:
             b = b.ran(s.seconds)
-        b = b.observed(s.lower_f, p, drawing=drawing)
-        bottom = compressor_btu(h, s.ambient_f, p) if s.compressor_on else 0.0
-        top = 0.0
+        heat = compressor_btu(h, s.ambient_f, p) if s.compressor_on else 0.0
         if s.element_on:
-            if s.lower_element:
-                bottom += element_btu(h, p)
-            else:
-                top = element_btu(h, p)
-        b = b.heated(bottom, top, p)
+            heat += element_btu(h, p)
+        b = b.heated(heat)
         lost = standby_btu(h, s.upper_f, s.lower_f, s.ambient_f, p)
         if s.circulating:
             lost += circulated_btu(
@@ -623,13 +518,7 @@ class Booked:
         self, upper_f: float, p: BookParams | None = None
     ) -> float:
         """Delivered gallons the drawable heat makes at ``upper_f``."""
-        return deliverable_from_heat(
-            self.heat_btu,
-            upper_f,
-            self.inlet_f,
-            p,
-            withheld_btu=self.withheld_btu(p),
-        )
+        return deliverable_from_heat(self.heat_btu, upper_f, self.inlet_f, p)
 
 
 def deliverable_from_heat(
@@ -637,17 +526,14 @@ def deliverable_from_heat(
     upper_f: float,
     inlet_f: float,
     p: BookParams | None = None,
-    *,
-    withheld_btu: float = 0.0,
 ) -> float:
-    """Delivered gallons the heat above the empty point, less what the
-    cold region withholds, will make, each taking
-    ``8.34 · (T_delivered − T_inlet)``. Not capped here."""
+    """Delivered gallons the heat above the empty point will make, each
+    taking ``8.34 · (T_delivered − T_inlet)``. Not capped here."""
     p = p or BookParams()
     per_gal = WATER_BTU_PER_GAL_F * (delivery_f(upper_f, p) - inlet_f)
     if per_gal <= 0 or not math.isfinite(heat_btu):
         return 0.0
-    return max(0.0, (heat_btu - withheld_btu - p.empty_btu) / per_gal)
+    return max(0.0, (heat_btu - p.empty_btu) / per_gal)
 
 
 # ── What the engine asks of it at a draw ────────────────────────────
@@ -681,7 +567,6 @@ def probe_line_gal(
     upper_f: float,
     lower_f: float,
     inlet_f: float,
-    withheld_btu: float = 0.0,
     ep: BookParams | None = None,
     *,
     empty_btu: float | None = None,
@@ -698,7 +583,7 @@ def probe_line_gal(
         return -math.inf
     heat = min(heat_btu, tank_max_btu(upper_f, lower_f, ep))
     empty = ep.empty_btu if empty_btu is None else empty_btu
-    return (heat - withheld_btu - empty) / per_gal
+    return (heat - empty) / per_gal
 
 
 def zone_after_draw_f(
@@ -722,7 +607,6 @@ def zone_after_draw_f(
         upper_f,
         lower_f,
         booked.inlet_f,
-        booked.withheld_btu(ep),
         ep,
         empty_btu=ep.zone_empty_btu,
     )
@@ -766,7 +650,6 @@ def zone_mixed_f(
         upper_f,
         lower_f,
         booked.inlet_f,
-        booked.withheld_btu(ep),
         ep,
         empty_btu=ep.zone_empty_btu,
     )
@@ -792,35 +675,20 @@ def zone_cannot_move(
     ``lost_btu`` of standby, with the zone anywhere in
     ``[upper_lo_f, upper_hi_f]``; True only when that is certain.
 
-    A floor under the heat less what the cold region withholds: draws
-    priced at the hottest zone, any withheld heat dropped (a release
-    can lift a winter region's negative share to none), and every
-    gallon's inlet above the reference withheld; heat going in only
-    raises it, since the bottom's lands in the region it is withheld
-    from. The tank's ceiling (``tank_max_btu``) is taken at the zone,
-    less the most a region below ``cold_release_f`` can withhold. A
-    re-anchor is no floor: the caller rules one out. For the engine to
-    skip walking the book where it is far from the zone's empty point;
-    it never decides a move."""
+    A floor under the heat: draws priced at the hottest zone; heat
+    going in only raises it. The tank's ceiling (``tank_max_btu``) is
+    taken at the zone. A re-anchor is no floor: the caller rules one
+    out. For the engine to skip walking the book where it is far from
+    the zone's empty point; it never decides a move."""
     ep = ep or BookParams()
     inlet = booked.inlet_f
     hot = max(0.0, delivery_f(upper_hi_f, ep) - inlet)
-    floor = (
-        booked.heat_btu
-        - max(0.0, booked.withheld_btu(ep))
-        - gal * WATER_BTU_PER_GAL_F * (hot + max(0.0, inlet - ep.reference_f))
-        - lost_btu
-    )
-    region = min(ep.tank_gal, booked.cold_gal + gal)
-    withheld_max = max(
-        booked.withheld_btu(ep),
-        WATER_BTU_PER_GAL_F * region * (ep.cold_release_f - ep.reference_f),
-    )
+    floor = booked.heat_btu - gal * WATER_BTU_PER_GAL_F * hot - lost_btu
     u = upper_lo_f
     while True:
         per_gal = WATER_BTU_PER_GAL_F * (delivery_f(u, ep) - inlet)
         if per_gal > 0.0:
-            ceiling = tank_max_btu(u, u, ep) - withheld_max
+            ceiling = tank_max_btu(u, u, ep)
             left = (min(floor, ceiling) - ep.zone_empty_btu) / per_gal
             if line_f + fall_f_per_gal * left < u:
                 return False
@@ -869,10 +737,8 @@ class WalkCarry:
     at: datetime
     state: Booked
     clean: bool
-    drawn: bool
-    #: Heat in over the span that ended at ``at``, any and at the bottom.
+    #: Heat in over the span that ended at ``at``.
     heated: bool
-    bottom: bool
     #: The compressor running alone over that span, undisturbed.
     compressing: bool = False
 
@@ -900,40 +766,6 @@ class BookedPath:
         return self.befores[max(0, i)]
 
 
-def projected_release(
-    state: Booked,
-    lower_f: float,
-    p: BookParams | None = None,
-    *,
-    heating: bool,
-    drawn: bool,
-) -> Booked:
-    """``state`` once a projected lower zone reads ``lower_f``.
-
-    The book believes the lower probe (``Booked.observed``): a
-    cold region the probe read below ``cold_release_f`` rejoins once it
-    reads at or above it with nothing being drawn. A projection whose
-    lower zone gets there must release it the same way, or it answers
-    later than the book will when the tank arrives: replayed over cold
-    bottoms without this, readiness ran a mean +14.7 min late
-    (2026-10-03).
-
-    Only while ``heating`` and with nothing ``drawn`` in the projection,
-    or a draw running now. The lower zone then rises from the probe's
-    own reading by the heat going in, which is the trajectory readiness
-    projects. A modelled zone after a modelled draw reads warm where the
-    probe would read the cold front (releasing there turned
-    2026-09-21's forecast depletion into a miss), and mid-draw the probe
-    reads the water above the incoming cold, which the book holds on
-    too.
-
-    It only releases: a region the probe has not read below the line is
-    not marked seen by a modelled zone, whose reading is no probe's."""
-    if not state.cold_seen or drawn or not heating:
-        return state
-    return state.observed(lower_f, p)
-
-
 def walk_booked(
     start: Booked,
     points: Sequence[PathPoint],
@@ -951,13 +783,8 @@ def walk_booked(
 
     Draws are taken at their instants, at the simulated upper zone then
     (before the step). Between instants, the compressor's heat and the
-    lower element's land at the bottom, the upper element's in the top
-    layer, and standby (at the simulated zones' mean, to the ambient)
-    comes out of the drawable heat. After the start,
-    while the compressor or the lower element heats and nothing has been
-    drawn, the simulated lower zone releases a cold region the probe saw
-    (``projected_release``); the start is the book's own, which has
-    already read the live probe.
+    elements' go in, and standby (at the simulated zones' mean, to the
+    ambient) comes out of the drawable heat.
 
     ``carry`` resumes a walk where an earlier one stood (``WalkCarry``):
     ``points`` then begin at ``carry.at`` and ``start`` is not read, and
@@ -1028,35 +855,30 @@ def walk_booked(
         ]
         return any(on), bool(on) and all(on)
 
-    def heat_in(a: datetime, b: datetime) -> tuple[float, float]:
-        """Heat in over ``[a, b)``, (bottom, top), by source; none
-        inside a withheld window."""
+    def heat_in(a: datetime, b: datetime) -> float:
+        """Heat in over ``[a, b)``; none inside a withheld window."""
         mid = a + (b - a) / 2
         hours = (b - a).total_seconds() / 3600.0
-        bottom = top = 0.0
         if any(w0 <= mid < w1 for w0, w1 in withheld):
-            return bottom, top
+            return 0.0
+        heat = 0.0
         for h in heating:
             if not h.start.at <= mid < h.end:
                 continue
             if h.source == "compressor":
-                bottom += compressor_btu(hours, ambient_at(mid), p)
-            elif h.zone == "lower":
-                bottom += element_btu(hours, p)
+                heat += compressor_btu(hours, ambient_at(mid), p)
             else:
-                top += element_btu(hours, p)
-        return bottom, top
+                heat += element_btu(hours, p)
+        return heat
 
     spans = list(itertools.pairwise(instants))
     inflow = [heat_in(a, b) for a, b in spans]
     # The heater running, which the anchor rule reads as not quiet,
     # whether its heat is credited or withheld.
     heats = [
-        sum(x) > 0.0 or (bool(withheld) and running(a, b))
+        x > 0.0 or (bool(withheld) and running(a, b))
         for x, (a, b) in zip(inflow, spans, strict=True)
     ]
-    # Heat into the bottom: what lifts the lower zone (``projected_release``).
-    bottom_heats = [x[0] > 0.0 for x in inflow]
     # A client's own loss over each span, and whether it disturbs it.
     extras = [
         extra.loss(a, b) if extra is not None else (0.0, False)
@@ -1066,7 +888,7 @@ def walk_booked(
     # tank at the span's end anchors as it heats. In a withheld window
     # the draws come first, so it neither anchors nor runs the hold.
     compressor = [
-        compressor_on(a, b) if x[0] > 0.0 else (False, False)
+        compressor_on(a, b) if x > 0.0 else (False, False)
         for (a, b), x in zip(spans, inflow, strict=True)
     ]
     alone = [c[1] and not x[1] for c, x in zip(compressor, extras, strict=True)]
@@ -1084,17 +906,13 @@ def walk_booked(
     # alone up to, past the book's hold (``Booked.hold_s``), nothing
     # drawn there.
     clean = False if carry is None else carry.clean
-    drawn_yet = False if carry is None else carry.drawn
 
-    def heated_before(k: int) -> tuple[bool, bool]:
-        """Heat in over the span ending at instant ``k`` (any, bottom):
-        the carry's at a resumed walk's first instant, none at a fresh
-        walk's."""
+    def heated_before(k: int) -> bool:
+        """Heat in over the span ending at instant ``k``: the carry's at
+        a resumed walk's first instant, none at a fresh walk's."""
         if k > 0:
-            return heats[k - 1], bottom_heats[k - 1]
-        if carry is not None:
-            return carry.heated, carry.bottom
-        return False, False
+            return heats[k - 1]
+        return carry is not None and carry.heated
 
     def alone_before(k: int) -> bool:
         """The compressor alone over the span ending at instant ``k``,
@@ -1104,18 +922,10 @@ def walk_booked(
         return carry is not None and carry.compressing
 
     for k, at in enumerate(instants):
-        prev_heat, prev_bottom = heated_before(k)
+        prev_heat = heated_before(k)
         prev_alone = alone_before(k)
         if at == keep:
-            kept = WalkCarry(
-                at,
-                state,
-                clean,
-                drawn_yet,
-                prev_heat,
-                prev_bottom,
-                prev_alone,
-            )
+            kept = WalkCarry(at, state, clean, prev_heat, prev_alone)
         busy_next = k < len(spans) and (heats[k] or extras[k][1])
         disturbed = by_instant.get(at, 0.0) > 0.0 or busy_next
         if prev_heat and not (k < len(spans) and heats[k]):
@@ -1139,22 +949,12 @@ def walk_booked(
         if gal > 0.0:
             state = state.drawn(gal, zones(at)[0], p)
             clean = False
-        drawn_yet = drawn_yet or gal > 0.0
-        if k > 0 or carry is not None:
-            state = projected_release(
-                state,
-                zones(at)[1],
-                p,
-                heating=prev_bottom,
-                drawn=drawn_yet,
-            )
         after[at] = state
         if k == len(spans):
             break
         nxt = instants[k + 1]
         mid = at + (nxt - at) / 2
         hours = (nxt - at).total_seconds() / 3600.0
-        bottom, top = inflow[k]
         upper, lower = zones(mid)
         lost = standby_btu(hours, upper, lower, ambient_at(mid), p)
         lost += extras[k][0]
@@ -1164,7 +964,7 @@ def walk_booked(
             clean = False
         if compressor[k][0]:
             state = state.ran((nxt - at).total_seconds())
-        state = state.heated(bottom, top, p).lost(lost)
+        state = state.heated(inflow[k]).lost(lost)
 
     index = {at: i for i, at in enumerate(instants)}
     states = []

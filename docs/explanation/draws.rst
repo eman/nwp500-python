@@ -254,9 +254,12 @@ top over a spent tank. On 2026-04-14 a draw from 139.6/78.4 degF
 stayed above 129 degF for 15.7 gal, where the probes say 15.3. Ninety
 minutes later a six-minute upper element run took the upper probe from
 126 to 141 degF, and a 10 gal draw from 141.3/89.6 degF took it to
-101 degF, where the probes say 22.9. The heat book counts that element's
-heat into a thin top layer, drawable only for its own heat, so a book
-answers it; the probes alone can't tell that top from a full one.
+101 degF, where the probes say 22.9. The heat book answers it: it
+counts that element's 1,757 BTU, about four delivered gallons, on top
+of what the first draw left, where the probes alone can't tell that top
+from a full one. From the book the second draw read 15.7 gal at its
+start against 14.3 delivered to the crossing, net of the heat added,
+the lag included.
 The heat book's catch of recorded depletions is in :doc:`simulator`,
 under Accuracy.
 

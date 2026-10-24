@@ -505,7 +505,7 @@ The heat book: ``book``
 
 ``simulate(scenario, params, book=...)`` takes the tank's booked heat at
 the start (``sim.Booked``): how much heat the tank holds above a 70 degF
-reference and where a draw's cold water lies. With it, a draw that
+reference. With it, a draw that
 spends the booked heat takes the upper zone down; without it, the upper
 zone takes each draw's calibrated response only, which holds it up
 through a draw that empties the tank, and ``reasons`` says
@@ -565,8 +565,8 @@ its hot share drawn from the tank; with ``flow_volume="tank"``, it is
 the tank's own water (a meter or a detector on the heater's hot
 outlet), priced at the upper probe less the inlet. The book's empty
 points (``book.empty_btu``, ``book.zone_empty_btu``) were booked as
-delivered gallons, so a tank-water flow takes them refit on its own
-record. It reads the last
+delivered gallons, so a tank-water flow takes ``empty_btu`` refit on
+its own record and ``zone_empty_btu`` as far below it. It reads the last
 18 hours (``book.max_anchor_age_h``) and, without an anchor there, the last 72
 (``book.history_h``), aged. The inlet it converts gallons at is the
 median of the probe's readings over the last 3 hours
@@ -933,10 +933,13 @@ the one seen over the retrains from 2026-08-08 to 2026-10-18.
    * - ``book.empty_btu``, ``book.zone_empty_btu``
      - 16,169, 12,636 BTU
      - The heat left at five recorded drawdowns to the line
-       (14,237-19,616 BTU), counted all ways and leaving out heat held
-       in a draw's cold water. Booked as delivered gallons: a flow that
+       (14,237-19,616 BTU). ``zone_empty_btu`` is where a draw takes the
+       upper zone across the line, 3,533 BTU lower so the zone centres
+       the crossings: their median when the book held back the heat in
+       a draw's cold water. Booked as delivered gallons: a flow that
        counts tank water (``flow_volume="tank"``) books less heat left
-       at the line, so refit both on your record.
+       at the line, so refit ``empty_btu`` on your record and keep
+       ``zone_empty_btu`` as far below it.
    * - ``book.zone_mix_f_per_gal``, ``book.zone_mix_gal``
      - 1.25 degF/gal, 14 gal
      - 112 draws. A refit on the full record gave 0.65 degF/gal over

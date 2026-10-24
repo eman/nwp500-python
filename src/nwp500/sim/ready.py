@@ -25,7 +25,6 @@ from nwp500.sim.book import (
     BTU_PER_WH,
     Booked,
     delivery_f,
-    projected_release,
 )
 from nwp500.sim.delivery import (
     Deliverable,
@@ -91,8 +90,7 @@ class Recovery:
     #: taken off pro rata over the coast.
     coast_btu: float = 0.0
     #: The draws before then, delivered gallons, taken the same way: the
-    #: book takes their heat and puts their cold water at the bottom
-    #: (``book.Booked.drawn``).
+    #: book takes their heat (``book.Booked.drawn``).
     coast_draw_gal: float = 0.0
     #: The book's compressor heat rate, by the air now. The recovery
     #: adds heat at this rate from its start to its end: the book's own
@@ -293,28 +291,24 @@ def assess(
 
 @dataclass(frozen=True)
 class Added:
-    """What a projection does to the booked state from now, placed as
-    the book places it (``sim.book``): heat in at the bottom (the
-    compressor, the lower element) and at the top (the upper element),
-    heat out to standby, and delivered gallons drawn."""
+    """What a projection does to the booked state from now (``sim.book``):
+    heat in from the compressor and the elements, heat out to standby,
+    and delivered gallons drawn."""
 
-    bottom_btu: float = 0.0
-    top_btu: float = 0.0
+    heat_btu: float = 0.0
     lost_btu: float = 0.0
     drawn_gal: float = 0.0
 
     def __add__(self, other: Added) -> Added:
         return Added(
-            self.bottom_btu + other.bottom_btu,
-            self.top_btu + other.top_btu,
+            self.heat_btu + other.heat_btu,
             self.lost_btu + other.lost_btu,
             self.drawn_gal + other.drawn_gal,
         )
 
     def scaled(self, f: float) -> Added:
         return Added(
-            self.bottom_btu * f,
-            self.top_btu * f,
+            self.heat_btu * f,
             self.lost_btu * f,
             self.drawn_gal * f,
         )
@@ -343,22 +337,9 @@ def _scorer(
             return deliverable(upper, lower, p, ep=ep)
         state = (
             booked.drawn(added.drawn_gal, tank.upper_f, ep)
-            .heated(added.bottom_btu, added.top_btu, ep)
+            .heated(added.heat_btu)
             .lost(added.lost_btu)
         )
-        if added != NOTHING_ADDED:
-            # As the book releases it on the probe, and as a simulation's
-            # walk does: only while heat goes in at the bottom,
-            # and held after a projected draw or through one running
-            # now, whose end the projection does not know (the answer
-            # after it releases it).
-            state = projected_release(
-                state,
-                lower,
-                ep,
-                heating=added.bottom_btu > 0.0,
-                drawn=tank.drawing or added.drawn_gal > 0.0,
-            )
         return booked_deliverable(state, upper, lower, p, ep)
 
     return score
@@ -453,13 +434,13 @@ def _mode_state(
     top: float | None = None,
 ) -> tuple[float, float, float, Added] | None:
     """Tank state, input energy (Wh) and what has been added to the
-    booked state, placed, ``t`` minutes into ``mode``.
+    booked state ``t`` minutes into ``mode``.
 
-    Heat pump: its trajectory, its heat at the bottom. Energy Saver and
-    High Demand: the upper element heats the upper zone at its measured
-    rate, its heat in the top layer, while the heat pump carries the
-    lower zone along its trajectory. Electric: the upper element, then
-    the lower, whose heat lands at the bottom, and no heat pump.
+    Heat pump: its trajectory and its heat. Energy Saver and High
+    Demand: the upper element heats the upper zone at its measured
+    rate, while the heat pump carries the lower zone along its
+    trajectory. Electric: the upper element, then the lower, and no
+    heat pump.
     ``upper_min`` is when the upper element stops (None: it does not
     start), which in Energy Saver is short of the setpoint: its input
     ends there while the zone coasts on at the same rate to ``top``,
@@ -473,7 +454,7 @@ def _mode_state(
         if hp is None:
             return None
         u, lo, wh, heat = _at(hp, t)
-        return u, lo, wh, coast + Added(bottom_btu=heat)
+        return u, lo, wh, coast + Added(heat_btu=heat)
     if setpoint is None:
         return None
     el_w = ep.element_w
@@ -482,7 +463,7 @@ def _mode_state(
         if t <= up_done:
             u = min(setpoint, tank.upper_f + upper_rise_f(ep, t))
             wh = el_w * t / 60.0
-            return u, tank.lower_f, wh, coast + Added(top_btu=wh * BTU_PER_WH)
+            return u, tank.lower_f, wh, coast + Added(heat_btu=wh * BTU_PER_WH)
         lo_t = t - up_done
         lo_need = max(0.0, setpoint - tank.lower_f) / ep.lower_f_per_min
         lo_on = min(lo_t, lo_need)
@@ -494,15 +475,12 @@ def _mode_state(
             u,
             lo,
             top_wh + low_wh,
-            coast
-            + Added(
-                bottom_btu=low_wh * BTU_PER_WH, top_btu=top_wh * BTU_PER_WH
-            ),
+            coast + Added(heat_btu=(top_wh + low_wh) * BTU_PER_WH),
         )
     if hp is None:
         return None
     hu, hl, hwh, heat = _at(hp, t)
-    added = coast + Added(bottom_btu=heat)
+    added = coast + Added(heat_btu=heat)
     if upper_min is None:
         return hu, hl, hwh, added
     ceiling = setpoint if top is None else min(setpoint, top)
@@ -512,7 +490,7 @@ def _mode_state(
         max(hu, eu),
         hl,
         hwh + el_wh,
-        added + Added(top_btu=el_wh * BTU_PER_WH),
+        added + Added(heat_btu=el_wh * BTU_PER_WH),
     )
 
 

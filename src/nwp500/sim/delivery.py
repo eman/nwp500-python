@@ -19,9 +19,9 @@ drawn past it. Without a book, a probe below the line answers 0: nothing
 says how far past it the draw went.
 
 **From the tank's booked heat** (``sim.book``) when the caller has a
-book: the heat above the empty point, less what a cold region withholds,
-per delivered gallon. On the installation the defaults come from, that
-is the answer 78 % of the time.
+book: the heat above the empty point per delivered gallon. On the
+installation the defaults come from, that is the answer 78 % of the
+time.
 
 **From the probes otherwise** (``probes_gal``): the tank's heat as its
 two probes place it, ``8.34 · V · (T_mean − 70)`` at a 70 °F inlet, as
@@ -41,21 +41,18 @@ settled start. ``EXAMPLE_EVIDENCE`` is one installation's.
 **The book is read no higher than the tank can hold**: all of it at the
 warmer probe (``book.tank_max_btu``).
 
-**Heat booked into a cold bottom** may not be drawable as hot: on
-2026-04-14 a draw from 139.6/78.4 °F stayed above 129 °F for 15.7 gal,
-and ninety minutes later a 10 gal top-up from 141.3/89.6 took the upper
-probe to 101 °F. From the book, the heat that landed in the cold bottom
-is withheld.
+**Heat booked into a cold bottom is drawable**: the compressor's heat
+and the elements' count in full, wherever they land (``sim.book``).
 
 **When it runs out** (``delivery_temp_f``): the drawable heat is what a
 draw can take before the upper probe crosses the line, and the lag is
 what the delivered water holds on after, so the delivery temperature is
 the upper zone while either is left (the line itself while only the lag
 is and the zone reads below it), the line when both are spent, and
-``fall_f_per_gal`` lower per delivered gallon past it, down to the cold
-region's temperature. A simulation's delivery (``delivery_along``) and
-its windows' ``deliverable_gal`` read the same state, so the two agree on
-whether and when the tank runs out. Without a book the delivery is the
+``fall_f_per_gal`` lower per delivered gallon past it, down to the
+inlet. A simulation's delivery (``delivery_along``) and its windows'
+``deliverable_gal`` read the same state, so the two agree on whether and
+when the tank runs out. Without a book the delivery is the
 upper zone's on the same line (``zone_delivery_f``).
 
 **A draw runs cold** (``depletion``) when the delivery falls more than
@@ -156,18 +153,16 @@ def deliverable(
     *,
     heat_btu: float | None = None,
     inlet_f: float | None = None,
-    withheld_btu: float = 0.0,
     ep: BookParams | None = None,
 ) -> Deliverable:
     """Deliverable gallons now, at the delivered line.
 
     With the tank's booked heat, the drawable heat (above the empty
-    point, less what the cold region withholds) over the heat a
-    delivered gallon takes (the book's). Without it, the probes'
-    gallons (``probes_gal``), or the evidence's demonstrated volume
-    where that is larger. Each is the probe's line; ``delivered_gal``
-    adds the lag. The booked heat is read no higher than
-    ``tank_max_btu``.
+    point) over the heat a delivered gallon takes (the book's). Without
+    it, the probes' gallons (``probes_gal``), or the evidence's
+    demonstrated volume where that is larger. Each is the probe's line;
+    ``delivered_gal`` adds the lag. The booked heat is read no higher
+    than ``tank_max_btu``.
     """
     p = p or ReadinessParams()
     ep = ep or BookParams()
@@ -178,7 +173,6 @@ def deliverable(
             upper_f,
             lower_f,
             ep.inlet_default_f if inlet_f is None else inlet_f,
-            withheld_btu,
             ep,
         )
         gal = delivered_gal(probe, upper_f, p)
@@ -221,7 +215,6 @@ def booked_deliverable(
         p,
         heat_btu=booked.heat_btu,
         inlet_f=booked.inlet_f,
-        withheld_btu=booked.withheld_btu(ep),
         ep=ep,
     )
 
@@ -239,11 +232,10 @@ def delivery_temp_f(
     delivered line has water left (the line itself, not below it, while
     only the lag is left under a zone that reads below it); the line
     once it is spent, falling ``fall_f_per_gal`` per delivered gallon
-    drawn past it, to no colder than the water coming up from the cold
-    region. It is below the line exactly when ``booked_deliverable`` is
-    zero at the same probes: the same heat, read no higher than
-    ``tank_max_btu`` at ``lower_f`` (the upper alone without it), and
-    the same lag."""
+    drawn past it, to no colder than the inlet. It is below the line
+    exactly when ``booked_deliverable`` is zero at the same probes: the
+    same heat, read no higher than ``tank_max_btu`` at ``lower_f`` (the
+    upper alone without it), and the same lag."""
     p = p or ReadinessParams()
     ep = ep or BookParams()
     probe = probe_line_gal(
@@ -251,7 +243,6 @@ def delivery_temp_f(
         upper_f,
         upper_f if lower_f is None else lower_f,
         booked.inlet_f,
-        booked.withheld_btu(ep),
         ep,
     )
     if probe == -math.inf:
@@ -262,16 +253,14 @@ def delivery_temp_f(
     # Reported to a tenth of a gallon: what rounds to none is spent.
     if left >= _GAL_RESOLUTION:
         return max(upper_f, p.line_f)
-    past = max(0.0, -left)
-    floor = booked.cold_f if booked.cold_gal > 0.0 else booked.inlet_f
-    fallen = _fallen_f(past, p)
+    fallen = _fallen_f(max(0.0, -left), p)
     # With a lag the delivered water is warmer than the probe (one
     # measured bath's spout crossed the line with the probe at ~94.5 °F),
     # so it
     # falls from the line per gallon, not to the zone. With none, the
     # probe is the delivery and bounds it.
     top = upper_f if p.delivered_lag_gal <= 0.0 else math.inf
-    return min(top, max(floor, fallen))
+    return min(top, max(booked.inlet_f, fallen))
 
 
 def _fallen_f(past_gal: float, p: ReadinessParams) -> float:

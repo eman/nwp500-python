@@ -5,7 +5,6 @@ each thing the simulation did once, at the book's terms, and places it
 where the book places it.
 """
 
-import itertools
 from collections.abc import Sequence
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
@@ -30,14 +29,12 @@ from nwp500.sim.controller import Source, Start, StopReason
 from nwp500.sim.engine import Draw, HeatingInterval, PathPoint
 
 T0 = datetime(2026, 9, 26, 12, 0, tzinfo=UTC)
-#: After a bath: 30 gal of inlet water at the bottom, 10 gal drawable.
+#: After a bath: 10 gal drawable.
 PER_GAL = 8.34 * (53.56 + 0.485 * 130.0 - 70.0)
 AFTER_BATH = Booked(
     heat_btu=EP.empty_btu + 10.0 * PER_GAL,
     anchor_age_h=3.0,
     inlet_f=70.0,
-    cold_gal=30.0,
-    cold_f=70.0,
 )
 
 
@@ -115,13 +112,16 @@ class TestTheWalk:
                 standby_btu(1 / 60, 130.0, 100.0, 65.0, EP)
             )
         assert path.states[-1].heat_btu == pytest.approx(steps.heat_btu)
-        assert path.states[-1].cold_f == pytest.approx(steps.cold_f)
 
-    def test_compressor_heat_lands_in_the_cold_bottom(self) -> None:
+    def test_compressor_heat_after_a_draw_is_drawable(self) -> None:
+        """All the booked heat counts: the compressor's after a bath is
+        drawable in full."""
         path = walk(flat(0, 60), heat=[heating(0, 60)])
-        end = path.states[-1]
-        assert end.heat_btu > AFTER_BATH.heat_btu + 3000.0
-        assert end.deliverable_gal(130.0) < AFTER_BATH.deliverable_gal(130.0)
+        gained = path.states[-1].deliverable_gal(130.0) - (
+            AFTER_BATH.deliverable_gal(130.0)
+        )
+        heat = compressor_btu(1.0, 65.0, EP) - standby(60)
+        assert gained == pytest.approx(heat / PER_GAL, abs=0.01)
 
     def test_the_upper_elements_heat_is_drawable(self) -> None:
         path = walk(flat(0, 10), heat=[heating(0, 10, "element", "upper")])
@@ -131,11 +131,13 @@ class TestTheWalk:
         heat = EP.element_w * 3.412 / 6.0 - standby(10)
         assert gained == pytest.approx(heat / PER_GAL, abs=0.01)
 
-    def test_the_lower_elements_is_not(self) -> None:
+    def test_and_the_lower_elements(self) -> None:
         path = walk(flat(0, 10), heat=[heating(0, 10, "element", "lower")])
-        assert path.states[-1].deliverable_gal(130.0) < (
+        gained = path.states[-1].deliverable_gal(130.0) - (
             AFTER_BATH.deliverable_gal(130.0)
         )
+        heat = EP.element_w * 3.412 / 6.0 - standby(10)
+        assert gained == pytest.approx(heat / PER_GAL, abs=0.01)
 
     def test_a_draw_is_taken_at_its_instant_between_its_two_elements(
         self,
@@ -143,7 +145,6 @@ class TestTheWalk:
         points = [*flat(0, 30), *flat(30, 60, upper=129.0)]
         path = walk(points, draws=[(m(30), 6.0)])
         before, after = path.states[1], path.states[2]
-        assert before.cold_gal == AFTER_BATH.cold_gal
         assert before.deliverable_gal(130.0) - after.deliverable_gal(
             130.0
         ) == pytest.approx(6.0, abs=0.01)
@@ -157,48 +158,16 @@ class TestTheWalk:
             4.0 + standby(60) / PER_GAL, abs=0.01
         )
 
-    def test_the_walk_does_not_release_on_the_modelled_lower_zone(self) -> None:
-        """The modelled lower zone reads warm and fired mid-draw; a walk
-        release turned 2026-09-21's forecast depletion into a miss. A
-        seen region stays, whatever the modelled lower zone reads."""
-        seen = replace(AFTER_BATH, cold_seen=True)
-        end = walk(flat(0, 30, 60, lower=110.0), start=seen).states[-1]
-        assert end.cold_gal == AFTER_BATH.cold_gal
-
-    def test_a_recovery_lifting_the_lower_zone_releases_a_seen_region(
-        self,
-    ) -> None:
-        """Through the same function as the book's own release: while
-        the compressor heats and nothing has
-        been drawn, the lower zone reaching the line releases a region
-        the probe saw; one it never saw stays."""
-        seen = replace(AFTER_BATH, cold_seen=True)
-        points = [*flat(0, 30, lower=90.0), *flat(60, 90, lower=101.0)]
-        path = walk(points, heat=[heating(0, 90)], start=seen)
-        assert [s.cold_gal for s in path.states] == [30.0, 30.0, 0.0, 0.0]
-        unseen = walk(points, heat=[heating(0, 90)]).states[-1]
-        assert unseen.cold_gal > 0.0
-
-    def test_not_after_a_draw_in_the_walk(self) -> None:
-        """After a modelled draw the modelled lower zone reads warm where
-        the probe would read the cold front: no release on it."""
-        seen = replace(AFTER_BATH, cold_seen=True)
-        points = [*flat(0, 30, lower=90.0), *flat(60, 90, lower=101.0)]
-        path = walk(
-            points, heat=[heating(0, 90)], draws=[(m(30), 2.0)], start=seen
-        )
-        assert path.states[-1].cold_gal > 0.0
-
     def test_a_recovery_that_ends_full_re_anchors_as_the_book_does(
         self,
     ) -> None:
         """Where the simulated recovery ends with both zones in the
         book's uniform band and nothing moves after, the tank is full:
-        its heat is what the zones say, and the cold region is gone."""
+        its heat is what the zones say."""
         points = [*flat(0, 60), *flat(90, 120, upper=140.0, lower=139.5)]
         path = walk(points, heat=[heating(0, 90)])
         end = path.states[-1]
-        assert end.cold_gal == 0.0
+        assert anchored(end)
         assert end.heat_btu == pytest.approx(
             8.34 * EP.tank_gal * (139.75 - 70.0)
         )
@@ -208,11 +177,11 @@ class TestTheWalk:
         end = walk(points, heat=[heating(0, 90)], draws=[(m(90), 1.0)]).states[
             -1
         ]
-        assert end.cold_gal > 0.0
+        assert not anchored(end)
 
     def test_nor_a_tank_the_recovery_left_stratified(self) -> None:
         points = [*flat(0, 60), *flat(90, 120, upper=140.0, lower=130.0)]
-        assert walk(points, heat=[heating(0, 90)]).states[-1].cold_gal > 0.0
+        assert not anchored(walk(points, heat=[heating(0, 90)]).states[-1])
 
     def test_a_recovery_the_heater_ended_itself_re_anchors_stratified(
         self,
@@ -220,13 +189,12 @@ class TestTheWalk:
         """The heater's own stop (its target, or the TOU cap) is the event
         the book anchors on in the record: the tank is full by the
         heater's rule. The modelled zones may still show a gap then (the
-        two-zone shape); the anchor is their mean, and the cold
-        region is gone."""
+        two-zone shape); the anchor is their mean."""
         points = [*flat(0, 60), *flat(90, 120, upper=146.0, lower=120.0)]
         for stop in ("target", "cap"):
             path = walk(points, heat=[heating(0, 90, stop=stop)])
             at_end = path.states[2]
-            assert at_end.cold_gal == 0.0, stop
+            assert anchored(at_end), stop
             assert at_end.heat_btu == pytest.approx(
                 8.34 * EP.tank_gal * (133.0 - 70.0)
             )
@@ -239,19 +207,19 @@ class TestTheWalk:
         points = [*flat(0, 60), *flat(90, 120, upper=146.0, lower=113.0)]
         for stop in ("write", "mode", "horizon"):
             end = walk(points, heat=[heating(0, 90, stop=stop)]).states[-1]
-            assert end.cold_gal > 0.0, stop
+            assert not anchored(end), stop
 
     def test_the_upper_elements_target_is_not_a_full_tank(self) -> None:
         points = [*flat(0, 10), *flat(15, 30, upper=146.0, lower=100.0)]
         path = walk(points, heat=[heating(0, 15, "element", "upper", "target")])
-        assert path.states[-1].cold_gal > 0.0
+        assert not anchored(path.states[-1])
 
 
 def busy_day() -> tuple[list[PathPoint], list[HeatingInterval], list[Draw]]:
-    """A day of the walk's every term: a seen cold bottom, recoveries
-    the heater ended itself and ones a write ended, both elements,
-    twenty draws (some inside recoveries), and stretches where the
-    zones are within the band, so it anchors and releases."""
+    """A day of the walk's every term: recoveries the heater ended
+    itself and ones a write ended, both elements, twenty draws (some
+    inside recoveries), and stretches where the zones are within the
+    band, so it anchors."""
     points: list[PathPoint] = []
     upper, lower = 130.0, 95.0
     heat = [
@@ -292,14 +260,10 @@ class TestTheWalkResumes:
 
     def test_resumed_at_every_instant_it_is_the_whole_walk(self) -> None:
         points, heat, draws = busy_day()
-        start = replace(AFTER_BATH, cold_seen=True)
+        start = AFTER_BATH
         whole = walk(points, heat=heat, draws=draws, start=start)
-        # It anchors and it releases somewhere in the day.
+        # It anchors somewhere in the day.
         assert any(x.anchor_age_h == 0.0 for x in whole.states)
-        assert any(
-            a.cold_gal > 0.0 and b.cold_gal == 0.0
-            for a, b in itertools.pairwise(whole.states)
-        )
         carry = None
         for i, pt in enumerate(points):
             prefix = [p for p in points if p.at <= pt.at]
@@ -340,7 +304,7 @@ HELD = replace(AFTER_BATH, hold_s=0.0)
 
 
 def anchored(b: Booked) -> bool:
-    return b.anchor_age_h == 0.0 and b.cold_gal == 0.0
+    return b.anchor_age_h == 0.0
 
 
 class TestTheCompressorAnchors:
@@ -456,13 +420,9 @@ class TestTheCompressorAnchors:
         )
         assert simulated == recorded
 
-    @pytest.mark.parametrize("released", [False, True])
-    def test_a_recorded_hold_goes_on_into_the_simulation(
-        self, released: bool
-    ) -> None:
+    def test_a_recorded_hold_goes_on_into_the_simulation(self) -> None:
         """A recorded book 5 minutes of compressor into its hold: the
-        simulation anchors after the other 10, with the draw's cold
-        region still booked or released."""
+        simulation anchors after the other 10."""
 
         def rec(n: int, lower: float, flow: float = 0.0, on: bool = False):
             return [Step(10.0, 133.0, lower, flow, on, False, 65.0, 70.0)] * n
@@ -477,8 +437,6 @@ class TestTheCompressorAnchors:
         assert book is not None
         assert book.hold_s == pytest.approx(300.0)
         assert book.anchor_age_h > 0.0
-        if released:
-            book = replace(book, cold_gal=0.0)
         path = walk(
             flat(0, 9, 10, 20, **FULL), heat=[heating(0, 30)], start=book
         )
@@ -586,7 +544,7 @@ class TestAClientsOwnLoss:
         end = walk_with(
             points, Circulation([(m(85), m(94))]), heat=[heating(0, 90)]
         ).states[-1]
-        assert end.cold_gal > 0.0
+        assert not anchored(end)
 
     def test_it_anchors_as_the_heating_ends_before_a_later_run(self) -> None:
         """The book anchors on the first quiet step after a recovery; a
@@ -595,7 +553,7 @@ class TestAClientsOwnLoss:
         path = walk_with(
             points, Circulation([(m(100), m(110))]), heat=[heating(0, 90)]
         )
-        assert path.states[2].cold_gal == 0.0
+        assert anchored(path.states[2])
         assert path.states[2].heat_btu == pytest.approx(
             8.34 * EP.tank_gal * (139.75 - 70.0)
         )
@@ -614,7 +572,7 @@ class TestAClientsOwnLoss:
     def test_resumed_at_every_instant_it_is_still_the_whole_walk(self) -> None:
         points, heat, draws = busy_day()
         run = Circulation([(m(a), m(a + 6)) for a in (100, 380, 610, 880)])
-        start = replace(AFTER_BATH, cold_seen=True)
+        start = AFTER_BATH
         whole = walk_with(points, run, heat=heat, draws=draws, start=start)
         carry = None
         for pt in points[::7]:

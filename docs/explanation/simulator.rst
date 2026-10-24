@@ -116,10 +116,9 @@ according to how stratified the tank is.
 once the hot/cold boundary sits between them; they can when the tank is
 full. The book (``sim.book``) starts from a full tank and books the
 heat from there: out by each draw through the mixing valve and by
-standby, in from the compressor and the elements, with a draw's cold
-water kept as a region at the bottom, where the heat pump's heat lands
-and is held back until the region rejoins the hot water. At each draw
-it moves the upper zone the probe would show: it falls as the water
+standby, in from the compressor and the elements, all of it drawable
+wherever it lands, in a draw's cold water at the bottom too. At each
+draw it moves the upper zone the probe would show: it falls as the water
 above the rising front mixes and, once the booked heat is spent, to the
 line and below. The lower zone takes each draw's calibrated response at
 once, with a book or without one, as the lower probe falls on every
@@ -373,10 +372,17 @@ fitted on.
   scored July-September: mean absolute error 1,987 BTU (about 5 gal),
   against 3,761 BTU with textbook constants; flat to 18 h after an
   anchor and about double beyond;
-- the five recorded crossings of the line: all caught, 0.8-12.7 gal
-  early, in sample (the book's form was chosen with all five in view;
-  fitted without them, 2 of 5); draws of 5 gal or more that did not
-  cross, called empty before they ended: 14 of 446 (3.1 %);
+- the five recorded crossings of the line, with the book as it was when
+  it held back the heat in a draw's cold water: all caught, 0.8-12.7
+  gal early, in sample (the book's form was chosen with all five in
+  view; fitted without them, 2 of 5); draws of 5 gal or more that did
+  not cross, called empty before they ended: 14 of 446 (3.1 %);
+- the deliverable answer from the book at the start of the four usable
+  drawdowns to the line, February to October, against the gallons
+  delivered to the crossing net of the heat added, the lag included:
+  3.8 gal mean absolute error (7.4 gal under to 5.7 over). Holding
+  back the heat in a draw's cold water under-read the two drawdowns
+  where it held any back by 9.3 gal on average;
 - the outlet lag: one measurement (5.3-7.3 gal, 5.0 used).
 
 

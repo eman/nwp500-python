@@ -198,14 +198,11 @@ VALVE = site_example_params().book_terms()
 
 class TestTheFlowsVolume:
     def test_tank_water_is_debited_at_the_upper_probe(self) -> None:
-        out, taken = draw_out(10.0, 140.0, 70.0, VALVE, "tank")
-        assert out == pytest.approx(10.0 * 8.34 * 70.0)
-        assert taken == 10.0
-        out, taken = draw_out(10.0, 140.0, 70.0, VALVE)
-        assert out == pytest.approx(draw_btu(10.0, 140.0, 70.0, VALVE))
-        assert 0.0 < taken < 10.0
-        # Its hot share of the tank's water: the same heat.
-        assert out == pytest.approx(taken * 8.34 * 70.0)
+        tank = draw_out(10.0, 140.0, 70.0, VALVE, "tank")
+        assert tank == pytest.approx(10.0 * 8.34 * 70.0)
+        delivered = draw_out(10.0, 140.0, 70.0, VALVE)
+        assert delivered == pytest.approx(draw_btu(10.0, 140.0, 70.0, VALVE))
+        assert delivered < tank
 
     @pytest.mark.parametrize("volume", ["delivered", "tank"])
     def test_a_step_books_what_its_heat_says(self, volume: Any) -> None:
@@ -214,9 +211,6 @@ class TestTheFlowsVolume:
         after = b.step(s, VALVE)
         assert after.heat_btu - b.heat_btu == pytest.approx(
             step_heat_btu(s, VALVE)
-        )
-        assert after.cold_gal == pytest.approx(
-            draw_out(2.0 * 10 / 60, 140.0, 70.0, VALVE, volume)[1]
         )
 
     def test_the_fit_prices_tank_water_at_the_upper_probe(self) -> None:
@@ -228,9 +222,9 @@ class TestTheFlowsVolume:
         assert debit[1] == 140.0
 
     def test_tank_water_refits_the_empty_point_lower(self) -> None:
-        """The empty points are in their debit's frame: the same
-        drawdown, its flow counting tank water, leaves less booked heat
-        at the line."""
+        """The empty point is in its debit's frame: the same drawdown,
+        its flow counting tank water, leaves less booked heat at the
+        line."""
         from nwp500.sim import calibration as cal
 
         def record(volume: Any) -> Any:
@@ -253,10 +247,6 @@ class TestTheFlowsVolume:
         valve_empty, _ = cal.empty_point(delivered, VALVE, 0.0)
         assert empty is not None and valve_empty is not None
         assert empty < valve_empty - 1000
-        zone = cal.zone_empty_point(tank, VALVE, 0.0)
-        valve_zone = cal.zone_empty_point(delivered, VALVE, 0.0)
-        assert zone is not None and valve_zone is not None
-        assert zone < valve_zone - 1000
 
     def test_the_history_books_tank_water(
         self, heater: Callable[..., list[Any]]
@@ -275,7 +265,6 @@ class TestTheFlowsVolume:
         tank, delivered = booked("tank"), booked("delivered")
         assert tank is not None and delivered is not None
         assert tank.heat_btu < delivered.heat_btu
-        assert tank.cold_gal > delivered.cold_gal
 
 
 class TestTheHouseholdsFlow:
