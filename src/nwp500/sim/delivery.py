@@ -55,10 +55,8 @@ inlet. A simulation's delivery (``delivery_along``) and its windows'
 when the tank runs out. Without a book the delivery is the
 upper zone's on the same line (``zone_delivery_f``).
 
-**A draw runs cold** (``depletion``) when the delivery falls more than
-``dip_f`` below the line, or stays below it for longer than
-``dip_min``: the heater's own transient dip during a draw is not
-running out.
+**A draw runs cold** (``depletion``) when the delivery falls below the
+line.
 """
 
 import itertools
@@ -389,15 +387,14 @@ def _at_onset(
 
 @dataclass(frozen=True)
 class Depletion:
-    """The delivery temperature over a span, judged with the dip
-    tolerance."""
+    """The delivery temperature over a span, and whether it fell below
+    the line."""
 
     #: The lowest delivery over the span, °F.
     min_f: float
     #: The longest stretch below the line, minutes.
     below_min: float
-    #: Below the line by more than ``dip_f``, or for longer than
-    #: ``dip_min``: the draw ran cold.
+    #: Below the line at any point: the draw ran cold.
     depleted: bool
 
 
@@ -408,13 +405,11 @@ def depletion(
     delivery: Sequence[float],
     p: ReadinessParams | None = None,
 ) -> Depletion:
-    """The delivery temperature over ``[a, b]``, judged with the dip
-    tolerance (``ReadinessParams.dip_f``, ``dip_min``: the heater's
-    transient dip during a draw): depleted when it falls more than
-    ``dip_f`` below the line, or stays below it for longer than
-    ``dip_min`` minutes. ``delivery`` is its value at each element of
-    ``points`` (``delivery_along``). Linear between the path's elements;
-    a draw's step is two elements at one instant."""
+    """The delivery temperature over ``[a, b]``: depleted when it falls
+    below the line (``ReadinessParams.line_f``). ``delivery`` is its
+    value at each element of ``points`` (``delivery_along``). Linear
+    between the path's elements; a draw's step is two elements at one
+    instant."""
     p = p or ReadinessParams()
     threshold_f = p.line_f
     values = list(delivery)
@@ -457,9 +452,7 @@ def depletion(
     if below_since is not None:
         longest = max(longest, path[-1][0] - below_since)
     minutes = longest.total_seconds() / 60.0
-    return Depletion(
-        low, minutes, low < threshold_f - p.dip_f or minutes > p.dip_min
-    )
+    return Depletion(low, minutes, low < threshold_f)
 
 
 def delivery_along(
@@ -523,7 +516,7 @@ def _zone_delivery(
 class DrawWindowResult:
     """A draw window as the simulation found it: the tank at its onset,
     the deliverable gallons and the delivery there, and the delivery
-    over the window, judged with the dip tolerance."""
+    over the window (``depletion``)."""
 
     start: datetime
     end: datetime

@@ -8,6 +8,18 @@ Unreleased
 Fixed
 -----
 
+- **A draw window runs cold once its delivery falls below the line.**
+  A window counted as depleted only when the delivery fell more than
+  3.4 °F below the line or stayed below it more than 3 minutes, an
+  allowance for the upper probe dipping during a draw. That dip was
+  measured during an Electric recovery on 2026-09-20, with no draw, and
+  no draw on the record shows one: on 535 clean draws the upper probe's
+  fall by the draw's end was a median 0.00-0.72 °F by size, and none
+  came back 1 °F or more within 10 minutes. The simulated delivery has
+  no transient either, so the allowance only hid real crossings, up to
+  about 1.7 gal past the line. Removed: ``ReadinessParams.dip_f`` and
+  ``dip_min``. A parameters document that still carries them loads, and
+  ``unknown_fields`` doesn't name them.
 - **The evaporator moves 0.6 °F per °F of air, not one for one.** The
   compressor's physics held the evaporator a fixed approach below the
   air, so its capacity followed the air too closely. Over 377
