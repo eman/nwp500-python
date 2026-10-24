@@ -1792,6 +1792,7 @@ def _book_steps_on(
         terms,
     )
     gaps = sorted((a.astimezone(UTC), b.astimezone(UTC)) for a, b in bridged)
+    width = timedelta(seconds=BOOK_GRID_S)
     steps: list[BookStep] = []
     for i in range(len(grid)):
         u, lo, a_f, in_f = upper[i], lower[i], amb[i], probe[i]
@@ -1814,7 +1815,10 @@ def _book_steps_on(
                 inlet_measured=in_f is not None,
                 lower_element=bool(lo_el[i]),
                 run_gal_before=before_col[i],
-                heard=not any(a <= grid[i] < b for a, b in gaps),
+                # Not heard when any of the step's span is in a gap.
+                heard=not any(
+                    a < grid[i] + width and grid[i] < b for a, b in gaps
+                ),
             )
         )
     return steps

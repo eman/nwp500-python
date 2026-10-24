@@ -635,6 +635,19 @@ class TestARestartGap:
         )
         assert got is not None and got.bridged == ((ago(1, 3), ago(0, 58)),)
 
+    def test_a_gap_between_grid_points_anchors_nothing(
+        self, record: Any
+    ) -> None:
+        """Four seconds unknown between two of the book's 10 s steps: the
+        step it falls in is not heard, so the quiet full tank after it
+        does not anchor and the gap stays named."""
+        rows, observed = record
+        quiet = [(ago(20), 0.0)]
+        gap = (ago(1, 0, 15), ago(1, 0, 11))
+        got = self.book(replace(rows, outages=(gap,)), observed, flow=quiet)
+        assert got is not None and got.bridged == (gap,)
+        assert got.anchor_age_h >= 1.0
+
     def test_a_gap_before_the_anchor_is_not_named(self, record: Any) -> None:
         rows, observed = record
         got = self.book(
