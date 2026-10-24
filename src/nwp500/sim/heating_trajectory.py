@@ -190,7 +190,9 @@ def build_heating_trajectory(
         two_zone: Whether the integrator tracked the stratification gap.
             When it did, the upper zone is ``t_lower + gap``: the
             condenser warms the bottom, and the top is unchanged until
-            the gap closes. When it did not, the upper zone is held at
+            the gap closes (on the record, within 0.6 °F until the last
+            2 to 3 °F of gap, then up to about 1.3 °F above its start
+            as the zones mix). When it did not, the upper zone is held at
             its starting value until the lower zone overtakes it.
         power_scale: Metered / modelled input power, fitted.
             The integrator's own power has the right shape and the

@@ -8,6 +8,13 @@ Unreleased
 Fixed
 -----
 
+- **The upper zone's hold through a recovery rests on the record.** The
+  two-zone model warms the lower zone alone while the tank is
+  stratified and holds the upper where it started. On 30 compressor-only
+  recoveries the upper probe fell a median 0.54 °F while the gap was
+  over 3 °F and rose to 1.26 °F above its start over the gap's last 2 to
+  3 °F, so the hold stays. See :doc:`/explanation/simulator`.
+
 - **The fan airflow's source.** ``CompressorParams.fan_airflow_cfm``
   (229) was cited as the NWP500's specification. No airflow is
   published; the manual's 229 is the 50 gal model's shipping weight in
