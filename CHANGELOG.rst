@@ -15,6 +15,13 @@ Fixed
   long draws and 30 minutes 89.8%; the five covered only at 60 fell
   either side of a 30-minute window. See :doc:`/how-to/simulate-heater`.
 
+- **The fan airflow's source.** ``CompressorParams.fan_airflow_cfm``
+  (229) was cited as the NWP500's specification. No airflow is
+  published; the manual's 229 is the 50 gal model's shipping weight in
+  pounds. The value stays: on 178 recorded recoveries the latent term it
+  sizes is at most about 150 BTU/hr, humidity's own effect is not
+  resolved, and the term off scored 0.6 min worse held out.
+
 - **The 50 and 80 gal models are scaled by rated storage.** Their tank
   volume, the book's count of it and its empty point were scaled from
   the 65's by nominal size (48.6 and 77.8 gal). The manual's
