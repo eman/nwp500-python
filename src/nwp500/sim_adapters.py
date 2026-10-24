@@ -1996,6 +1996,7 @@ def book_from_changes(
     gap between two spans is one nobody saw, and the heater is heard at
     ``at`` only inside a span."""
     at = at.astimezone(UTC)
+    flow_outages = list(flow_outages)
     unseen: list[tuple[datetime, datetime]]
     if heard is not None:
         spans = [(a, b) for a, b in join_spans(heard) if a <= at]
@@ -2064,11 +2065,14 @@ def _ended_in(
     hold: timedelta,
 ) -> list[tuple[datetime, float]]:
     """``flows`` (in time order) at 0 from ``hold`` into each of
-    ``gaps`` with no reading inside it, to its end."""
+    ``gaps`` with a reading in force at its start and none inside it,
+    to its end. Before the first reading the flow stays unknown."""
     stops = [
         (a + hold, 0.0)
         for a, b in join_spans(gaps)
-        if a + hold < b and not any(a < t < b for t, _ in flows)
+        if a + hold < b
+        and any(t <= a for t, _ in flows)
+        and not any(a < t < b for t, _ in flows)
     ]
     return sorted([*flows, *stops], key=lambda r: r[0]) if stops else flows
 

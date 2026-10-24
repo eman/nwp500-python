@@ -585,6 +585,35 @@ class TestARestart:
         assert got is not None and ended is not None
         assert got.heat_btu == pytest.approx(ended.heat_btu)
 
+    def test_outages_given_once_hold_the_same(self, record: Any) -> None:
+        rows, observed = record
+        flow = [(ago(20), 0.0), (ago(2), 2.0), (ago(1, 29), 0.0)]
+        gap = (ago(1, 59), ago(1, 29))
+        listed = sa.book_from_changes(
+            rows, observed, self.P, at=T0, flow=flow, flow_outages=[gap]
+        )
+        once = sa.book_from_changes(
+            rows, observed, self.P, at=T0, flow=flow, flow_outages=iter([gap])
+        )
+        assert listed is not None and once is not None
+        assert once.heat_btu == pytest.approx(listed.heat_btu)
+
+    def test_an_outage_before_the_first_reading_adds_none(
+        self, record: Any
+    ) -> None:
+        """The flow first read an hour ago, unknown before: the recovery
+        3.5 h ago is before the flow's history, so there is no book."""
+        rows, observed = record
+        got = sa.book_from_changes(
+            rows,
+            observed,
+            self.P,
+            at=T0,
+            flow=[(ago(1), 0.0)],
+            flow_outages=[(ago(5), ago(1))],
+        )
+        assert got is None
+
     def test_unknown_now_there_is_none_until_it_is_heard(
         self, record: Any
     ) -> None:
