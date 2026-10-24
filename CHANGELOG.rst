@@ -28,8 +28,8 @@ Fixed
   fits ``compressor_constant`` alone, at the parameters'
   ``evap_approach_f``. ``CompressorParams.evap_approach_f`` defaults to
   the coil's 19.56 °F and is labelled measured. ``K_BOUNDS`` is
-  0.004-0.08, and ``INITIAL_APPROACH_F`` and ``APPROACH_BOUNDS`` are
-  gone. See :doc:`/reference/simulator-inputs`.
+  0.004-0.08, and ``INITIAL_K``, ``INITIAL_APPROACH_F`` and
+  ``APPROACH_BOUNDS`` are gone. See :doc:`/reference/simulator-inputs`.
 
 - **The outlet lag is the tank's.** ``ReadinessParams.delivered_lag_gal``
   (5 gal) was described as mostly the pipe to the fixture. Both bath
