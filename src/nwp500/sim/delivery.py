@@ -21,8 +21,7 @@ says how far past it the draw went.
 **From the tank's booked heat** (``sim.book``) when the caller has a
 book: the heat above the empty point, less what a cold region withholds,
 per delivered gallon. On the installation the defaults come from, that
-is the answer 78 % of the time and the one that can see a bath's cold
-water the probes cannot.
+is the answer 78 % of the time.
 
 **From the probes otherwise** (``probes_gal``): the tank's heat as its
 two probes place it, ``8.34 · V · (T_mean − 70)`` at a 70 °F inlet, as
