@@ -197,11 +197,6 @@ class Step:
     #: than ``CirculationParams.run_gap_min`` taken as one: what
     #: ``CirculationParams.book_circuit_gal`` caps.
     run_gal_before: float = 0.0
-    #: The heater and the flow were known over the step. A step its
-    #: caller walked across a gap in the record (held values, standing in
-    #: for what nobody saw) anchors nothing, and no anchor is taken after
-    #: it until a recovery ends: a draw inside the gap would go unseen.
-    heard: bool = True
 
 
 def house_gpm(s: Step, circulation: CirculationParams | None = None) -> float:
@@ -309,16 +304,14 @@ def book_steps(
     with no draw and no circulation since. A recovery that ends while
     water or circulation moves anchors at its end, uniform there, the
     movement booked from its start; the quiet steps after such a draw
-    do not anchor (the probes then read the draw's cold water as full),
-    nor do a step not ``heard`` and the quiet steps after it. None with
-    no anchor within ``history_h``; older than ``max_anchor_age_h`` the
-    book is ``aged``."""
+    do not anchor (the probes then read the draw's cold water as full).
+    None with no anchor within ``history_h``; older than
+    ``max_anchor_age_h`` the book is ``aged``."""
     p = p or BookParams()
     anchor = None
     book_from = 0
     clean = False
     was_heating = was_disturbed = False
-    was_heard = True
     moving_since = 0
     for i, st in enumerate(steps):
         heating, disturbed = _busy(st, p, circulation)
@@ -327,15 +320,13 @@ def book_steps(
             moving_since = i
         if heating:
             clean = False
-        elif was_heating and was_heard:
-            # A recovery seen to end: heard on both sides of it.
+        elif was_heating:
             clean = True
-            if disturbed and full and st.heard:
+            if disturbed and full:
                 anchor, book_from = i, moving_since
-        if disturbed or not st.heard:
+        if disturbed:
             clean = False
         was_heating, was_disturbed = heating, disturbed
-        was_heard = st.heard
         if clean and not heating and full:
             anchor, book_from = i, i + 1
     if anchor is None:
@@ -397,10 +388,6 @@ class Booked:
     #: The lower probe has read below ``cold_release_f`` since the region
     #: formed: it has seen the cold water, so it can see it go.
     cold_seen: bool = False
-    #: Gaps in the record since the anchor that the book was walked
-    #: across, the values held (``Step.heard``): a draw inside one is not
-    #: booked.
-    bridged: tuple[tuple[datetime, datetime], ...] = ()
 
     def aged(self, p: BookParams | None = None) -> bool:
         """Booked from an anchor older than ``max_anchor_age_h``."""

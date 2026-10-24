@@ -12,12 +12,8 @@ Fixed
   leaves the heater and the flow unknown for a few minutes, and the book
   broke there: there was no book until the next anchor, often hours
   later. ``book_from_changes`` and ``HomeAssistantBook`` now walk across
-  a span of at most 15 minutes (``BRIDGE_MAX``, ``bridge_max=``) when no
-  draw is running at either edge and the heating is the same at both
-  edges. ``Booked.bridged`` lists those spans, and ``HomeAssistantBook``
-  adds a note for each. A draw that starts and ends inside one isn't
-  booked. A circulation outage that short, with the pump stopped at
-  both edges, no longer counts as the pump running.
+  a span the heater wasn't heard or an entity was unavailable, holding
+  each value from before it, as if it were seen.
 
 - **A hot lower probe no longer reads 0 gal.** With no heat book and no
   evidence, a tank that wasn't uniform or at its setpoint read 0 gal

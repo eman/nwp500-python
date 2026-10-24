@@ -2182,21 +2182,6 @@ def _unread_marked(
     return replace(got, outages=outages, states=states)
 
 
-def _stopped_across(outage: Span, speed: Sequence[Reading]) -> bool:
-    """Whether the pump read stopped at both edges of ``outage``, one no
-    longer than ``sim_adapters.BRIDGE_MAX``: the speed in force as it
-    began, and one read as it ended. Then it ran nothing across it, as
-    the book takes the heating across such a gap. An outage still open
-    when the history was read has no reading at its end."""
-    a, b = (t.astimezone(UTC) for t in outage)
-    if b - a > sa.BRIDGE_MAX:
-        return False
-    rows = sorted((t.astimezone(UTC), v) for t, v in speed)
-    before = [v for t, v in rows if t <= a]
-    after = [v for t, v in rows if t == b]
-    return bool(before and after) and max(before[-1], *after) < PUMP_ON_RPM
-
-
 class HomeAssistantBook:
     """The tank's heat booked (``sim_adapters.book_from_changes``) from
     Home Assistant and kept current: ``read`` reads the history once
@@ -2214,11 +2199,9 @@ class HomeAssistantBook:
     with ``demand`` the mains (``mains_plateau``, ``on_the_mains``),
     and ``air`` the air beside the heater; each optional, a book without
     one losing only what it gives. A flow reported late reaches the
-    book late: it books what the history holds at ``read``. A short span
-    the heater or the flow was unknown, a restart's, is walked across
-    (``sim_adapters.BRIDGE_MAX``), and a note says so. The pump's
-    outages are runs, except one as short that it was stopped at both
-    edges of."""
+    book late: it books what the history holds at ``read``. Across a
+    span an entity was unavailable, a restart's say, the book holds its
+    value from before."""
 
     def __init__(
         self,
@@ -2370,27 +2353,13 @@ class HomeAssistantBook:
                     "booked with only its outages"
                 )
             if unknown:
-                # Before the pump's first reading, the heat its runs
-                # took is unknown: no anchor before it counts.
-                flow_out = busy(flow_out, unknown)
                 notes.append(
                     "book: the circulation's runs are known only from "
                     f"{unknown[-1][1].isoformat()}"
                 )
-            # While the pump was unavailable or unread, it may have run,
-            # except over a restart's short outage it was stopped at both
-            # edges of.
-            outages = got.outages.get(e.circulation_speed, [])
-            if known is not None:
-                # Converts, as known_runs found.
-                speed, _ = got.converted(
-                    e.circulation_speed,
-                    self._units.get(e.circulation_speed),
-                    to_rpm,
-                    at,
-                )
-                outages = [o for o in outages if not _stopped_across(o, speed)]
-            runs = busy(known or [], outages, unseen)
+            # Across the pump's outages its speed holds, as the book holds
+            # every value across a gap.
+            runs = busy(known or [], unseen)
         inlet: list[Reading] = []
         inlet_out: list[Span] = []
         if e.inlet is not None:
@@ -2457,16 +2426,10 @@ class HomeAssistantBook:
                 notes.append(f"book: {self.flow} is unknown now")
             else:
                 notes.append(
-                    "book: no anchor since the heater or the flow was last "
-                    "unknown"
+                    "book: no anchor in the history, or the heater not "
+                    "heard now"
                 )
             return BookAnswer(None, False, tuple(notes))
-        for a, b in booked.bridged:
-            notes.append(
-                f"book: walked across {(b - a).total_seconds() / 60:.0f} "
-                f"minutes unknown from {a.isoformat()}; a draw inside it "
-                "is not booked"
-            )
         if e.inlet is None or e.demand is None or not inlet:
             return BookAnswer(booked, False, tuple(notes))
         if got.states is None:

@@ -963,28 +963,18 @@ any reading takes ``CirculationParams.flow_gpm``).
 Like the history's rows, its ``flow``, ``circulation_flow``, ``inlet``
 and ``air`` are changes: each value holds until the next, so a steady
 draw is one row and an hour at 0 gal/min none. They are gal/min and °F,
-whatever the preferred units. A span the heater wasn't heard from (an
-outage, or a silence much longer than its usual reporting), or the flow
-was unknown (``flow_outages``, from the history's ``outages``), breaks
-the book: it is walked only from an anchor after the last one, and is
-None while the heater isn't heard now. A record that keeps no instant
-for each of the heater's responses passes ``heard=``, the spans the
-heater was heard over, and an empty ``observed``: a gap between two
-spans breaks the book the same way, and the heater is heard now only
-inside a span. With no flow reading in force
+whatever the preferred units. Across a span the heater wasn't heard
+from (an outage, or a silence much longer than its usual reporting), or
+the flow was unknown (``flow_outages``, from the history's
+``outages``), such as a Home Assistant restart's few minutes, the book
+holds each value from before it and walks on. The book is None while
+the heater isn't heard now or the flow is unknown now. A record that
+keeps no instant for each of the heater's responses passes ``heard=``,
+the spans the heater was heard over, and an empty ``observed``: the
+book walks across a gap between two spans the same way, and the heater
+is heard now only inside a span. With no flow reading in force
 at the start of the window it books over, it raises ``ValueError``.
 An inlet reading holds except through ``inlet_outages``.
-
-A short span, such as the few minutes a Home Assistant restart leaves
-the heater and the flow unknown, doesn't break the book. The book walks
-across it, holding the values, when the span is no longer than
-``sa.BRIDGE_MAX`` (15 minutes; pass ``bridge_max=`` for another bound),
-no draw is running at either edge, and the compressor and the elements
-are the same at both edges. Spans that overlap count as one.
-``Booked.bridged`` lists the spans the book walked across since its
-anchor. A draw that starts and ends inside one isn't booked, so the book
-reads high by that draw until the next anchor. No anchor is taken inside
-a span it walks across, or after it until a recovery ends.
 
 To keep a book current as you walk every few minutes, keep the history
 rather than the book. Read only what is new since your last read,
@@ -1042,10 +1032,7 @@ minutes, and holds it until the next run, and a note says so. Idle, that
 sensor reads the cabinet, about 6 °F warm, so an idle reading is never
 taken. Before the first run, and while an air entity that gives readings
 is unavailable or reads in a unit the book doesn't read, the book takes
-the default air (65 °F). A restart's short gap is walked across as above, with a note
-for each. While the circulation entity is unavailable, the book takes
-the pump as possibly running, except across an outage of at most
-``BRIDGE_MAX`` with the pump stopped at both edges. ``book`` books from what it holds, with no
+the default air (65 °F). ``book`` books from what it holds, with no
 request, so it can run in an executor. ``answer.notes`` say what the book rests on, or why
 there is none.
 
