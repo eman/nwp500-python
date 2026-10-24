@@ -2229,6 +2229,10 @@ class RecordedBook:
         #: What each step's run had circulated before it, gal.
         self.run_before = np.array([s.run_gal_before for s in self.steps])
         self.comp = np.array([s.compressor_on for s in self.steps], dtype=bool)
+        #: Each step's flow counts tank water (``BookStep.flow_volume``).
+        self.tank = np.array(
+            [s.flow_volume == "tank" for s in self.steps], dtype=bool
+        )
         self.el = np.array([s.element_on for s in self.steps], dtype=bool)
         heating = self.comp | self.el
         disturbed = (self.draw > 0) | (self.circulated > 0)
@@ -2249,6 +2253,15 @@ class RecordedBook:
         last = np.full(len(self.steps), np.nan)
         last[self.anchors] = self.anchors
         self.last = pd.Series(last).ffill().to_numpy()
+
+    def debit_f(self, p: BookParams) -> np.ndarray:
+        """What each step's flow takes its heat at, as the book debits it
+        (``book.draw_out``): the valve's delivery for delivered gallons,
+        the upper probe for tank water."""
+        delivered = np.minimum(
+            self.u, p.delivery_intercept_f + p.delivery_slope * self.u
+        )
+        return np.where(self.tank, self.u, delivered)
 
     def circuit_btu(self, circuit_gal: float) -> np.ndarray:
         """Each step's circulation loss with the book's circuit volume
@@ -2283,9 +2296,6 @@ class RecordedBook:
         circulation at ``circuit_gal`` (``circuit_btu``), else
         ``loss_btu_per_gal`` per gallon."""
         h = self.seconds / 3600.0
-        delivered = np.minimum(
-            self.u, p.delivery_intercept_f + p.delivery_slope * self.u
-        )
         e = (
             self.comp
             * (p.hp_btu_per_h + p.hp_btu_per_h_per_f * (self.air - 65.0))
@@ -2293,7 +2303,7 @@ class RecordedBook:
             + self.el * p.element_w * BTU_PER_WH_BOOK * h
             - self.draw
             * WATER_BTU_PER_GAL_F
-            * np.clip(delivered - self.inlet, 0, None)
+            * np.clip(self.debit_f(p) - self.inlet, 0, None)
             - self._circulation_btu(loss_btu_per_gal, circuit_gal)
             - p.ua_btu_per_h_f
             * np.clip((self.u + self.l) / 2 - self.air, 0, None)
@@ -2359,13 +2369,10 @@ class RecordedBook:
         priced at that circuit volume in ``k`` (``circuit_btu``), not
         linear in any term, and its column is 0."""
         h = self.seconds / 3600.0
-        delivered = np.minimum(
-            self.u, p.delivery_intercept_f + p.delivery_slope * self.u
-        )
         fixed = self.el * p.element_w * BTU_PER_WH_BOOK * h - (
             self.draw
             * WATER_BTU_PER_GAL_F
-            * np.clip(delivered - self.inlet, 0, None)
+            * np.clip(self.debit_f(p) - self.inlet, 0, None)
         )
         if circuit_gal is not None:
             fixed = fixed - self.circuit_btu(circuit_gal)

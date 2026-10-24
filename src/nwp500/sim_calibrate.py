@@ -49,6 +49,7 @@ from nwp500 import sim
 from nwp500 import sim_adapters as sa
 from nwp500.models import DeviceStatus
 from nwp500.sim import calibration as cal
+from nwp500.sim.book import FlowVolume
 from nwp500.sim.params import (
     UNFITTED_TERMS,
     BookParams,
@@ -1411,6 +1412,7 @@ def fit_book(
     circulation_flow: Iterable[tuple[datetime, float | None]] = (),
     inlet: Iterable[tuple[datetime, float]] = (),
     air: Iterable[tuple[datetime, float]] = (),
+    flow_volume: FlowVolume = "delivered",
 ) -> BookTermsFit:
     """The heat book's terms (``BookParams``) and a circulation loop's
     book circuit volume from a heater's values' changes and the instants it
@@ -1418,9 +1420,10 @@ def fit_book(
     circulation pump's ``runs`` with the loop's flow
     (``circulation_flow``, apart from the draws). Like the rows, the
     flows are gal/min and ``inlet`` and ``air`` °F, whatever the
-    preferred units. ``params.book`` and ``params.circulation``'s
-    pricing (its ``book_circuit_gal``, else its loss per gallon) are the
-    base.
+    preferred units, and ``flow_volume`` is what the draws' gallons
+    count (``sim_adapters.book_from_history``), as the book will debit
+    them. ``params.book`` and ``params.circulation``'s pricing (its
+    ``book_circuit_gal``, else its loss per gallon) are the base.
 
     The book's terms are fitted together, on every pair of quiet full
     tanks (``sim.calibration.RecordedBook``'s re-anchors up to
@@ -1436,9 +1439,11 @@ def fit_book(
     can't tell apart from the others (the slope, with the air never off
     one temperature) is held at the base. The
     rest of the book (the draw line, the anchors' age, the valve's line)
-    is ``params``'. Without the volume fitted, the loop is priced as the
-    base prices it, and without a base, the pairs with a run in them are
-    left out. A run's
+    is ``params``'; the valve's line is ``params.draw``'s, so the fitted
+    ``book`` keeps its own no-valve default there
+    (``HeaterParams.book_terms``). Without the volume fitted, the loop
+    is priced as the base prices it, and without a base, the pairs with
+    a run in them are left out. A run's
     flow is its readings, the first from its start; readings outside
     the runs are not used, and the pairs with a run that has none are
     left out.
@@ -1585,6 +1590,7 @@ def fit_book(
                 air=airs,
                 params=with_terms,
                 unheard=silences(heard, max_gap(heard)),
+                flow_volume=flow_volume,
             ),
             book_p,
             with_terms.circulation,

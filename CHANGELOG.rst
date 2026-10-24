@@ -35,6 +35,18 @@ Fixed
   doesn't anchor: the probes show only part of a small draw until its
   cold front reaches the lower probe.
 
+- **A draw flow can count tank water.** The heat book read every
+  gallon of its flow as delivered through the mixing valve, debiting
+  only its hot share of tank water. A flow from a meter or a detector
+  on the heater's hot outlet counts tank gallons, so the book debited
+  about a quarter of each draw too little (a 141 °F tank behind a valve
+  delivering 122 °F) and promised hot water that wasn't there. ``book_from_history``,
+  ``book_from_changes``, ``fit_book`` and ``HomeAssistantBook`` take a
+  new ``flow_volume``: ``"delivered"``, the default and the reading
+  until now, or ``"tank"``, each gallon priced at the upper probe less
+  the inlet. ``simulate run`` reads it from ``[home_assistant]``'s
+  ``draw_flow_volume``.
+
 Version 9.12.1 (2026-10-23)
 ===========================
 

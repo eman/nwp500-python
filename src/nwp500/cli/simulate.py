@@ -290,7 +290,11 @@ async def read_book(inputs: Inputs, now: datetime) -> HomeAssistantBook | None:
 
     async with ha.HomeAssistantClient(src.url, src.token) as client:
         keeper = ha.HomeAssistantBook(
-            client, src.heater, src.entities.draw_flow, src.entities
+            client,
+            src.heater,
+            src.entities.draw_flow,
+            src.entities,
+            flow_volume=src.draw_flow_volume,
         )
         await keeper.read(now)
     return keeper

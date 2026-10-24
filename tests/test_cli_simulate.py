@@ -645,6 +645,47 @@ class TestTheHeatBook:
         assert "no_heat_book" in result.reasons
         assert "not now" in caplog.text
 
+    def test_the_keeper_takes_the_draw_flows_volume(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        import asyncio
+
+        from nwp500 import sim_home_assistant as ha
+
+        class Client:
+            def __init__(self, *_: object) -> None:
+                pass
+
+            async def __aenter__(self) -> Client:
+                return self
+
+            async def __aexit__(self, *_: object) -> None:
+                pass
+
+        made: list[dict[str, Any]] = []
+
+        class Keeper:
+            def __init__(self, *args: object, **kw: Any) -> None:
+                made.append(kw)
+
+            async def read(self, now: datetime) -> None:
+                pass
+
+        monkeypatch.setattr(ha, "HomeAssistantClient", Client)
+        monkeypatch.setattr(ha, "HomeAssistantBook", Keeper)
+        heater = ha.HeaterEntities(
+            heard="sensor.heard", upper="sensor.u", lower="sensor.l"
+        )
+        src = ha.Sources(
+            "http://ha.local",
+            "t",
+            ha.Entities(draw_flow="sensor.draws"),
+            heater=heater,
+            draw_flow_volume="tank",
+        )
+        asyncio.run(sim_cli.read_book(sim_cli.Inputs(sources=src), NOW))
+        assert made == [{"flow_volume": "tank"}]
+
     def test_no_keeper_without_the_heater_or_the_flow(self) -> None:
         import asyncio
 

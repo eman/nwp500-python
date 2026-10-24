@@ -133,6 +133,7 @@ pass it with ``--sources`` (or set ``NWP500_SOURCES``):
    [home_assistant]
    url = "http://homeassistant.local:8123"
    token_env = "HA_TOKEN"   # the variable holding a long-lived token
+   draw_flow_volume = "tank"   # optional: what draw_flow counts
 
    [home_assistant.entities]
    air = "sensor.beside_the_heater_temperature"
@@ -187,7 +188,9 @@ give:
   before its first reading is skipped;
 - **the heat book:** with the ``[home_assistant.heater]`` table and a
   ``draw_flow`` entity (the household's hot water draw flow, the
-  circulation's water not in it), the tank's heat booked from the last
+  circulation's water not in it; ``draw_flow_volume`` says whether its
+  gallons are ``"delivered"`` through the mixing valve, the default, or
+  the ``"tank"``'s own water), the tank's heat booked from the last
   72 hours of the heater's readings and the draws
   (``sim_home_assistant.HomeAssistantBook``). The run walks from it,
   and "deliverable now" reads it (``energy``), whatever the gap between
@@ -1043,11 +1046,20 @@ request, so it can run in an executor. ``answer.notes`` say what the book rests 
 there is none.
 
 The flow is the household's hot water draws, without the circulation's
-water, in gal/min or any unit ``to_gpm`` reads. It is the water
-delivered at the taps, through the mixing valve: the book prices a
-delivered gallon at the valve's delivery line
-(``DrawParams.delivery_intercept_f`` and ``delivery_slope``), not as
-water withdrawn from the tank. As none of the flow is circulation,
+water, in gal/min or any unit ``to_gpm`` reads. Say which water its
+gallons count with ``flow_volume``:
+
+- ``"delivered"`` (the default): the water at the taps, through the
+  mixing valve. The book prices a gallon at the valve's delivery line
+  (``DrawParams.delivery_intercept_f`` and ``delivery_slope``), and
+  takes only its hot share from the tank.
+- ``"tank"``: the tank's own water, as a meter or a draw detector on
+  the heater's hot outlet counts it. The book prices a gallon at the
+  upper probe less the inlet, and the inlet replaces every gallon.
+
+Read as delivered, a tank-water flow books about a quarter of each
+draw's heat too little (a 141 degF tank behind a valve delivering 122
+degF), and the book promises hot water that isn't there. As none of the flow is circulation,
 ``book`` takes ``CirculationParams.meter_share`` as 0. A flow entity that reports a draw late
 reaches the book late: the book holds what the history holds at
 ``read``. Each of the other entities is optional:

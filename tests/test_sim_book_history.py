@@ -19,7 +19,15 @@ from nwp500 import sim_adapters as sa
 from nwp500.enums import HeatSource
 from nwp500.models import DeviceStatus
 from nwp500.sim import site_example_params
-from nwp500.sim.book import Step, book_steps, house_gpm
+from nwp500.sim.book import (
+    Step,
+    book_steps,
+    draw_btu,
+    draw_out,
+    full_tank,
+    house_gpm,
+    step_heat_btu,
+)
 from nwp500.sim.params import BookParams, CirculationParams
 from nwp500.unit_system import reset_unit_system, set_unit_system
 
@@ -181,6 +189,62 @@ class TestTheCompressorsAnchor:
         assert walk.age_h.isna().iloc[:HOLD].all()
         assert walk.age_h.iloc[HOLD] == 0.0
         assert walk.age_h.iloc[-1] == pytest.approx(4 * 10 / 3600)
+
+
+#: The site's book terms: a mixing valve, so a delivered gallon is not
+#: a tank gallon.
+VALVE = site_example_params().book_terms()
+
+
+class TestTheFlowsVolume:
+    def test_tank_water_is_debited_at_the_upper_probe(self) -> None:
+        out, taken = draw_out(10.0, 140.0, 70.0, VALVE, "tank")
+        assert out == pytest.approx(10.0 * 8.34 * 70.0)
+        assert taken == 10.0
+        out, taken = draw_out(10.0, 140.0, 70.0, VALVE)
+        assert out == pytest.approx(draw_btu(10.0, 140.0, 70.0, VALVE))
+        assert 0.0 < taken < 10.0
+        # Its hot share of the tank's water: the same heat.
+        assert out == pytest.approx(taken * 8.34 * 70.0)
+
+    @pytest.mark.parametrize("volume", ["delivered", "tank"])
+    def test_a_step_books_what_its_heat_says(self, volume: Any) -> None:
+        s = step(flow_gpm=2.0, flow_volume=volume, inlet_f=70.0)
+        b = full_tank(140.0, 139.5, 70.0, VALVE)
+        after = b.step(s, VALVE)
+        assert after.heat_btu - b.heat_btu == pytest.approx(
+            step_heat_btu(s, VALVE)
+        )
+        assert after.cold_gal == pytest.approx(
+            draw_out(2.0 * 10 / 60, 140.0, 70.0, VALVE, volume)[1]
+        )
+
+    def test_the_fit_prices_tank_water_at_the_upper_probe(self) -> None:
+        from nwp500.sim.calibration import RecordedBook
+
+        steps = [step(flow_gpm=2.0), step(flow_gpm=2.0, flow_volume="tank")]
+        debit = RecordedBook(steps, VALVE, start=T0).debit_f(VALVE)
+        assert debit[0] < 140.0
+        assert debit[1] == 140.0
+
+    def test_the_history_books_tank_water(
+        self, heater: Callable[..., list[Any]]
+    ) -> None:
+        p = site_example_params()
+
+        def booked(volume: Any) -> Any:
+            return sa.book_from_history(
+                heater(20, recovery_at=4),
+                p,
+                at=T0,
+                flow=with_a_draw(meter(20), 2.0),
+                flow_volume=volume,
+            )
+
+        tank, delivered = booked("tank"), booked("delivered")
+        assert tank is not None and delivered is not None
+        assert tank.heat_btu < delivered.heat_btu
+        assert tank.cold_gal > delivered.cold_gal
 
 
 class TestTheHouseholdsFlow:

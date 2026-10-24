@@ -558,8 +558,12 @@ reason. A recovery that ends during a draw anchors at its end. Then it
 books every step from the anchor: the heat pump's and the elements' heat in,
 standby and circulation out, and each draw (the meter less
 ``CirculationParams.meter_share`` of a run's flow, above
-``book.draw_gpm``) through the mixing valve. It reads the last 18 hours
-(``book.max_anchor_age_h``) and, without an anchor there, the last 72
+``book.draw_gpm``). With ``flow_volume="delivered"``, the default, a
+gallon is the water at the taps, priced at the mixing valve's delivery,
+its hot share drawn from the tank; with ``flow_volume="tank"``, it is
+the tank's own water (a meter or a detector on the heater's hot
+outlet), priced at the upper probe less the inlet. It reads the last
+18 hours (``book.max_anchor_age_h``) and, without an anchor there, the last 72
 (``book.history_h``), aged. The inlet it converts gallons at is the
 median of the probe's readings over the last 3 hours
 (``book.inlet_window_s``), the default without one. The meter must
