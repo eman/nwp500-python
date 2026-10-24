@@ -1611,6 +1611,7 @@ def book_steps_from_changes(
     inlet_outages: Iterable[tuple[datetime, datetime]] = (),
     air_outages: Iterable[tuple[datetime, datetime]] = (),
     unheard: Sequence[tuple[datetime, datetime]] = (),
+    bridged: Sequence[tuple[datetime, datetime]] = (),
 ) -> list[BookStep]:
     """``book_steps_from_history`` from a heater's values' changes
     (``ChangeRows``) instead of its statuses: each value held until its
@@ -1624,7 +1625,8 @@ def book_steps_from_changes(
     ``change_history``. Whether the heater was heard from over the span
     is the caller's (``book_from_changes``); ``unheard``, the spans it
     was not, and ``rows.outages`` restart a run's clock for its air
-    (``settled_air``)."""
+    (``settled_air``). The steps inside ``bridged``, the gaps the book
+    is walked across (``book_from_changes``), are not ``heard``."""
     grid = _book_grid(start, end)
     unheard = [*unheard, *rows.outages]
 
@@ -1693,6 +1695,7 @@ def book_steps_from_changes(
         inlet_hold=None,
         inlet_unknown=list(inlet_outages),
         air_unknown=list(air_outages),
+        bridged=bridged,
     )
 
 
@@ -1730,6 +1733,7 @@ def _book_steps_on(
     inlet_hold: timedelta | None = INLET_HOLD,
     inlet_unknown: Sequence[tuple[datetime, datetime]] = (),
     air_unknown: Sequence[tuple[datetime, datetime]] = (),
+    bridged: Sequence[tuple[datetime, datetime]] = (),
 ) -> list[BookStep]:
     """The book's steps on ``grid``: ``heater``'s columns with the
     meter, the circulation, the inlet and the air
@@ -1737,7 +1741,8 @@ def _book_steps_on(
     ``preferred`` False the simulator's (°F, gal/min). A flow reading
     holds ``flow_hold`` and an inlet reading ``inlet_hold`` (None: until
     the next), an inlet reading none inside ``inlet_unknown`` and an air
-    reading none inside ``air_unknown``."""
+    reading none inside ``air_unknown``, and a step inside ``bridged``
+    not ``heard``."""
     p = (params if params is not None else default_params()).book_terms()
     terms = None if params is None else params.circulation
 
@@ -1786,6 +1791,7 @@ def _book_steps_on(
         flow_hold,
         terms,
     )
+    gaps = sorted((a.astimezone(UTC), b.astimezone(UTC)) for a, b in bridged)
     steps: list[BookStep] = []
     for i in range(len(grid)):
         u, lo, a_f, in_f = upper[i], lower[i], amb[i], probe[i]
@@ -1808,6 +1814,7 @@ def _book_steps_on(
                 inlet_measured=in_f is not None,
                 lower_element=bool(lo_el[i]),
                 run_gal_before=before_col[i],
+                heard=not any(a <= grid[i] < b for a, b in gaps),
             )
         )
     return steps
@@ -1897,6 +1904,14 @@ def with_circulation_terms(
     return replace(params, circulation=SITE_CIRCULATION)
 
 
+#: The longest span the heater was unheard or the flow unknown that the
+#: book walks across (``book_from_changes``): a Home Assistant restart
+#: leaves them unknown for 1 to 5 minutes. Of 178 meter silences over
+#: 90 s in 90 days of one installation's record, 173 were no longer;
+#: the rest were outages.
+BRIDGE_MAX = timedelta(minutes=15)
+
+
 def book_from_history(
     readings: Iterable[tuple[datetime, DeviceStatus]],
     params: HeaterParams,
@@ -1966,6 +1981,7 @@ def book_from_changes(
     inlet_outages: Iterable[tuple[datetime, datetime]] = (),
     air_outages: Iterable[tuple[datetime, datetime]] = (),
     heard: Iterable[tuple[datetime, datetime]] | None = None,
+    bridge_max: timedelta = BRIDGE_MAX,
 ) -> Booked | None:
     """``book_from_history`` from a heater's values' changes (``rows``)
     instead of its statuses, with ``observed`` the instants it was heard
@@ -1990,6 +2006,15 @@ def book_from_changes(
     unknown). The book is from after the last such span; None when the
     heater is not heard at ``at``, or there is no anchor since.
 
+    A span the heater was unheard or the flow unknown (a Home Assistant
+    restart, say), those that overlap taken as one, is walked across
+    instead, its values held, when it is no longer than ``bridge_max``,
+    no draw is in force at either edge (the flow at most
+    ``BookParams.draw_gpm``), and the compressor and the elements run
+    the same at both. No anchor is taken inside it, nor after it until
+    a recovery ends, and ``Booked.bridged`` names it. A draw that starts
+    and ends inside it is not booked.
+
     A record with no instant per response gives ``heard`` instead: the
     spans the heater was heard over. Then ``observed`` is not read, a
     gap between two spans is one nobody saw, and the heater is heard at
@@ -2013,15 +2038,25 @@ def book_from_changes(
             return None
         since = instants[0]
         unseen = silences(instants, gap)
-    for a, b in [*unseen, *rows.outages, *flow_outages]:
-        a, b = a.astimezone(UTC), b.astimezone(UTC)
-        if a <= at:
-            if b >= at:
-                return None
-            since = max(since, b)
     # A missing reading is none: it neither moves water nor shows the
     # meter reporting.
     flows = sorted((t.astimezone(UTC), v) for t, v in _finite(flow))
+    draw_gpm = params.book_terms().draw_gpm
+    bridged: list[tuple[datetime, datetime]] = []
+    for a, b in join_spans(
+        [
+            (a, b)
+            for a, b in [*unseen, *rows.outages, *flow_outages]
+            if a.astimezone(UTC) <= at
+        ]
+    ):
+        if b >= at:
+            return None
+        if _bridges(rows, flows, (a, b), draw_gpm, bridge_max):
+            bridged.append((a, b))
+        else:
+            since = max(since, b)
+    bridged = [(a, b) for a, b in bridged if b > since]
     if flows:
         # Before the flow's first reading, its draws are unknown.
         since = max(since, flows[0][0])
@@ -2032,7 +2067,7 @@ def book_from_changes(
     airs = list(air)
     inlet_unknown = list(inlet_outages)
     air_unknown = list(air_outages)
-    return _book_windows(
+    found = _book_windows(
         lambda start: book_steps_from_changes(
             rows,
             start=start,
@@ -2046,6 +2081,7 @@ def book_from_changes(
             inlet_outages=inlet_unknown,
             air_outages=air_unknown,
             unheard=unseen,
+            bridged=bridged,
         ),
         flows,
         params,
@@ -2053,6 +2089,59 @@ def book_from_changes(
         since,
         max_silence=None,
     )
+    if found is None:
+        return None
+    anchored = at - timedelta(hours=found.anchor_age_h)
+    return replace(
+        found, bridged=tuple((a, b) for a, b in bridged if b > anchored)
+    )
+
+
+def _in_force(changes: Iterable[tuple[datetime, Any]], t: datetime) -> Any:
+    """The value of ``changes`` (in time order) in force at ``t``: the
+    last at or before it, None before the first."""
+    value = None
+    for at, v in changes:
+        if at.astimezone(UTC) > t:
+            break
+        value = v
+    return value
+
+
+def _heating_at(rows: ChangeRows, t: datetime) -> tuple[bool, bool, bool]:
+    """Whether the compressor, the upper element and the lower element
+    ran at ``t``, as ``book_steps_from_changes`` takes them."""
+    source = _in_force(rows.heat_source, t)
+    element = {
+        int(HeatSource.HEATELEMENT),
+        int(HeatSource.HEATPUMP_HEATELEMENT),
+    }
+    return (
+        bool(_in_force(compressor_changes(rows), t)),
+        bool(_in_force(rows.upper_element_on, t))
+        or (source is not None and int(source) in element),
+        bool(_in_force(rows.lower_element_on, t)),
+    )
+
+
+def _bridges(
+    rows: ChangeRows,
+    flows: Sequence[tuple[datetime, float]],
+    gap: tuple[datetime, datetime],
+    draw_gpm: float,
+    bridge_max: timedelta,
+) -> bool:
+    """Whether the book walks across ``gap`` (``book_from_changes``): no
+    longer than ``bridge_max``, no draw in force at either edge, and the
+    same heating at both."""
+    a, b = gap
+    if b - a > bridge_max:
+        return False
+    for t in (a, b):
+        f = _in_force(flows, t)
+        if f is None or f > draw_gpm:
+            return False
+    return _heating_at(rows, a) == _heating_at(rows, b)
 
 
 def _book_windows(

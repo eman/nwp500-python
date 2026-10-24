@@ -2,6 +2,22 @@
 Changelog
 =========
 
+Unreleased
+==========
+
+Fixed
+-----
+
+- **A Home Assistant restart no longer loses the heat book.** A restart
+  leaves the heater and the flow unknown for a few minutes, and the book
+  broke there: there was no book until the next anchor, often hours
+  later. ``book_from_changes`` and ``HomeAssistantBook`` now walk across
+  a span of at most 15 minutes (``BRIDGE_MAX``, ``bridge_max=``) when no
+  draw is running at either edge and the heating is the same at both
+  edges. ``Booked.bridged`` lists those spans, and ``HomeAssistantBook``
+  adds a note for each. A draw that starts and ends inside one isn't
+  booked.
+
 Version 9.12.1 (2026-10-23)
 ===========================
 

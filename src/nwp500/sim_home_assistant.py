@@ -2199,7 +2199,9 @@ class HomeAssistantBook:
     with ``demand`` the mains (``mains_plateau``, ``on_the_mains``),
     and ``air`` the air beside the heater; each optional, a book without
     one losing only what it gives. A flow reported late reaches the
-    book late: it books what the history holds at ``read``."""
+    book late: it books what the history holds at ``read``. A short span
+    the heater or the flow was unknown, a restart's, is walked across
+    (``sim_adapters.BRIDGE_MAX``), and a note says so."""
 
     def __init__(
         self,
@@ -2432,6 +2434,12 @@ class HomeAssistantBook:
                     "unknown"
                 )
             return BookAnswer(None, False, tuple(notes))
+        for a, b in booked.bridged:
+            notes.append(
+                f"book: walked across {(b - a).total_seconds() / 60:.0f} "
+                f"minutes unknown from {a.isoformat()}; a draw inside it "
+                "is not booked"
+            )
         if e.inlet is None or e.demand is None or not inlet:
             return BookAnswer(booked, False, tuple(notes))
         if got.states is None:

@@ -975,6 +975,17 @@ inside a span. With no flow reading in force
 at the start of the window it books over, it raises ``ValueError``.
 An inlet reading holds except through ``inlet_outages``.
 
+A short span, such as the few minutes a Home Assistant restart leaves
+the heater and the flow unknown, doesn't break the book. The book walks
+across it, holding the values, when the span is no longer than
+``sa.BRIDGE_MAX`` (15 minutes; pass ``bridge_max=`` for another bound),
+no draw is running at either edge, and the compressor and the elements
+are the same at both edges. Spans that overlap count as one.
+``Booked.bridged`` lists the spans the book walked across since its
+anchor. A draw that starts and ends inside one isn't booked, so the book
+reads high by that draw until the next anchor. No anchor is taken inside
+a span it walks across, or after it until a recovery ends.
+
 To keep a book current as you walk every few minutes, keep the history
 rather than the book. Read only what is new since your last read,
 extend what you hold with it, trim it to the book's window, and book
@@ -1031,7 +1042,8 @@ minutes, and holds it until the next run, and a note says so. Idle, that
 sensor reads the cabinet, about 6 °F warm, so an idle reading is never
 taken. Before the first run, and while an air entity that gives readings
 is unavailable or reads in a unit the book doesn't read, the book takes
-the default air (65 °F). ``book`` books from what it holds, with no
+the default air (65 °F). A restart's short gap is walked across as above, with a note
+for each. ``book`` books from what it holds, with no
 request, so it can run in an executor. ``answer.notes`` say what the book rests on, or why
 there is none.
 

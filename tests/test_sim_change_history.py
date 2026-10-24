@@ -825,6 +825,33 @@ class TestTheBookKeptCurrent:
         assert keeper.book(END, self.P).booked is not None
 
 
+class TestARestart:
+    P = sim.default_params()
+
+    def test_the_book_is_walked_across_it_and_noted(self) -> None:
+        """Home Assistant restarting an hour ago: the heater unavailable
+        for three minutes, the flow for four. The book carries across."""
+        back = END - H + timedelta(minutes=3)
+        restart = [
+            _row("sensor.upper", END - H, "unavailable"),
+            _row("sensor.upper", back, "140.0", "°F"),
+            _row(FLOW, END - H, "unavailable"),
+            _row(FLOW, back + timedelta(minutes=1), "0.0", "gal/min"),
+        ]
+        whole = _keeper(WindowedClient(_book_rows(), BOOK_UNITS))
+        asyncio.run(whole.read(END))
+        keeper = _keeper(WindowedClient(_book_rows() + restart, BOOK_UNITS))
+        asyncio.run(keeper.read(END))
+        want = whole.book(END, self.P)
+        got = keeper.book(END, self.P)
+        assert want.booked is not None and got.booked is not None
+        assert got.booked.heat_btu == pytest.approx(want.booked.heat_btu)
+        assert (
+            "book: walked across 4 minutes unknown from "
+            f"{(END - H).isoformat()}; a draw inside it is not booked"
+        ) in got.notes
+
+
 class TestTheBookFirstReview:
     P = sim.default_params()
 
