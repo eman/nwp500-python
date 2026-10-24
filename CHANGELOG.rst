@@ -16,7 +16,8 @@ Fixed
   draw is running at either edge and the heating is the same at both
   edges. ``Booked.bridged`` lists those spans, and ``HomeAssistantBook``
   adds a note for each. A draw that starts and ends inside one isn't
-  booked.
+  booked. A circulation outage that short, with the pump stopped at
+  both edges, no longer counts as the pump running.
 
 Version 9.12.1 (2026-10-23)
 ===========================

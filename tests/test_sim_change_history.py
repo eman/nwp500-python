@@ -6,6 +6,7 @@ entity history (``sim_home_assistant.read_heater_history``), the frame
 import asyncio
 import math
 from collections.abc import Iterable
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from typing import Any, cast
 
@@ -850,6 +851,52 @@ class TestARestart:
             "book: walked across 4 minutes unknown from "
             f"{(END - H).isoformat()}; a draw inside it is not booked"
         ) in got.notes
+
+
+class TestAPumpOutageInARestart:
+    P = replace(
+        sim.default_params(),
+        circulation=sim.CirculationParams(
+            displaced_gal=1.0, flow_gpm=2.0, loss_btu_per_gal=50.0
+        ),
+    )
+
+    def heat(self, outage: list[dict[str, Any]]) -> float:
+        keeper = _keeper(
+            WindowedClient(_book_rows() + outage, BOOK_UNITS),
+            circulation_speed="sensor.pump",
+        )
+        asyncio.run(keeper.read(END))
+        got = keeper.book(END, self.P)
+        assert got.booked is not None, got.notes
+        return got.booked.heat_btu
+
+    def test_stopped_at_both_edges_it_ran_nothing(self) -> None:
+        out = [
+            _row("sensor.pump", END - H, "unavailable"),
+            _row("sensor.pump", END - H + timedelta(minutes=3), "0", "rpm"),
+        ]
+        assert self.heat(out) == pytest.approx(self.heat([]))
+
+    def test_running_at_an_edge_it_may_have_run(self) -> None:
+        back = END - H + timedelta(minutes=3)
+        out = [
+            _row("sensor.pump", END - H, "unavailable"),
+            _row("sensor.pump", back, "2000", "rpm"),
+            _row("sensor.pump", back + timedelta(minutes=1), "0", "rpm"),
+        ]
+        ran = [
+            _row("sensor.pump", back, "2000", "rpm"),
+            _row("sensor.pump", back + timedelta(minutes=1), "0", "rpm"),
+        ]
+        assert self.heat(out) < self.heat(ran)
+
+    def test_a_long_outage_may_have_run(self) -> None:
+        out = [
+            _row("sensor.pump", END - H, "unavailable"),
+            _row("sensor.pump", END - H + timedelta(minutes=20), "0", "rpm"),
+        ]
+        assert self.heat(out) < self.heat([])
 
 
 class TestTheBookFirstReview:

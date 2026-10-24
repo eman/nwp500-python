@@ -2182,6 +2182,20 @@ def _unread_marked(
     return replace(got, outages=outages, states=states)
 
 
+def _stopped_across(outage: Span, runs: Sequence[Span]) -> bool:
+    """Whether the pump was stopped at both edges of ``outage``, one no
+    longer than ``sim_adapters.BRIDGE_MAX``: then it ran nothing across
+    it, as the book takes the heating across such a gap."""
+    a, b = (t.astimezone(UTC) for t in outage)
+    if b - a > sa.BRIDGE_MAX:
+        return False
+    return not any(
+        ra.astimezone(UTC) <= t < rb.astimezone(UTC)
+        for t in (a, b)
+        for ra, rb in runs
+    )
+
+
 class HomeAssistantBook:
     """The tank's heat booked (``sim_adapters.book_from_changes``) from
     Home Assistant and kept current: ``read`` reads the history once
@@ -2201,7 +2215,9 @@ class HomeAssistantBook:
     one losing only what it gives. A flow reported late reaches the
     book late: it books what the history holds at ``read``. A short span
     the heater or the flow was unknown, a restart's, is walked across
-    (``sim_adapters.BRIDGE_MAX``), and a note says so."""
+    (``sim_adapters.BRIDGE_MAX``), and a note says so. The pump's
+    outages are runs, except one as short that it was stopped at both
+    edges of."""
 
     def __init__(
         self,
@@ -2360,10 +2376,13 @@ class HomeAssistantBook:
                     "book: the circulation's runs are known only from "
                     f"{unknown[-1][1].isoformat()}"
                 )
-            # While the pump was unavailable or unread, it may have run.
-            runs = busy(
-                known or [], got.outages.get(e.circulation_speed, []), unseen
-            )
+            # While the pump was unavailable or unread, it may have run,
+            # except over a restart's short outage it was stopped at both
+            # edges of.
+            outages = got.outages.get(e.circulation_speed, [])
+            if known is not None:
+                outages = [o for o in outages if not _stopped_across(o, known)]
+            runs = busy(known or [], outages, unseen)
         inlet: list[Reading] = []
         inlet_out: list[Span] = []
         if e.inlet is not None:

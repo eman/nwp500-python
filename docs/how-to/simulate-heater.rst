@@ -1043,7 +1043,9 @@ sensor reads the cabinet, about 6 °F warm, so an idle reading is never
 taken. Before the first run, and while an air entity that gives readings
 is unavailable or reads in a unit the book doesn't read, the book takes
 the default air (65 °F). A restart's short gap is walked across as above, with a note
-for each. ``book`` books from what it holds, with no
+for each. While the circulation entity is unavailable, the book takes
+the pump as possibly running, except across an outage of at most
+``BRIDGE_MAX`` with the pump stopped at both edges. ``book`` books from what it holds, with no
 request, so it can run in an executor. ``answer.notes`` say what the book rests on, or why
 there is none.
 
