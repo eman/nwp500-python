@@ -848,8 +848,10 @@ failed.** See also :doc:`../explanation/heating-elements`.
   every opening with an element mode in force: 18 of 18 from January to
   October 2026, 15 at the window's scheduled start (14:00 or 15:00) and
   3 at TOU being switched back on inside a window, each back to
-  ``HEAT_PUMP`` within 2 seconds. A schedule that wants the element
-  through a window has to write the mode again after it opens.
+  ``HEAT_PUMP`` within 2 seconds. Writing the mode again inside the
+  window may not bring it back: an element mode written there can be
+  held until the window ends, like the writes above. Switching TOU off let
+  a held mode take effect (2026-09-19, above).
 * ``dhw_operation_setting`` **reports the configured mode, not activity.**
   It has read ``ENERGY_SAVER`` on a mode taking effect both with the tank
   0.36 degF below its setpoint (from the unit's April history) and 18.7
