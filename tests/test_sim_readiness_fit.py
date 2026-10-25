@@ -5,6 +5,7 @@ The fits are held to their source by the parity check run with the
 port; these hold their rules.
 """
 
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from typing import Any, cast
 
@@ -193,6 +194,85 @@ class TestCirculationFits:
         # Every run saturated far past the bounds: unconstrained.
         assert cal.fit_displaced_gal(self._runs(40.0)) is None
 
+    def test_the_return_terms_are_found_together(self) -> None:
+        rng = np.random.default_rng(5)
+        runs = []
+        for k in range(60):
+            minutes = float(rng.uniform(2, 12))
+            flow = float(rng.uniform(1.0, 2.2))
+            rest = float(rng.choice([0.2, 0.5, 1.0, 3.0, 12.0]))
+            air = float(rng.uniform(60, 85))
+            start = T0 + timedelta(hours=6 * k)
+            btu = cal.run_heat_btu(
+                minutes,
+                130.0,
+                air,
+                10.0,
+                flow,
+                rest_offset_f=7.0,
+                rest_h=rest,
+                cool_tau_h=0.5,
+            )
+            runs.append(
+                cal.MeasuredRun(
+                    start=start,
+                    end=start + timedelta(minutes=minutes),
+                    minutes=minutes,
+                    btu=btu,
+                    flow_gpm=flow,
+                    upper_f=130.0,
+                    air_f=air,
+                    rest_h=rest,
+                )
+            )
+        got = cal.fit_return(runs)
+        assert got is not None
+        assert got == pytest.approx((10.0, 7.0, 0.5), rel=0.02)
+        assert cal.fit_return(runs[:10]) is None
+        # No rest known: the cooling is not seen.
+        assert cal.fit_return([replace(r, rest_h=None) for r in runs]) is None
+        # No run longer than the volume: the volume is not seen.
+        short = [
+            replace(
+                r,
+                minutes=2.0,
+                flow_gpm=1.0,
+                btu=cal.run_heat_btu(
+                    2.0,
+                    130.0,
+                    cast(float, r.air_f),
+                    10.0,
+                    1.0,
+                    rest_offset_f=7.0,
+                    rest_h=r.rest_h,
+                    cool_tau_h=0.5,
+                ),
+            )
+            for r in runs
+        ]
+        assert cal.fit_return(short) is None
+        # One rest and one tank-to-air difference throughout: the offset
+        # and the cooling trade off.
+        alike = [
+            replace(
+                r,
+                air_f=70.0,
+                rest_h=1.0,
+                btu=cal.run_heat_btu(
+                    r.minutes,
+                    130.0,
+                    70.0,
+                    10.0,
+                    cast(float, r.flow_gpm),
+                    rest_offset_f=7.0,
+                    rest_h=1.0,
+                    cool_tau_h=0.5,
+                ),
+            )
+            for r in runs
+        ]
+        assert cal.fit_return(alike) is None
+
     def test_the_recent_flow_and_the_lookup(self) -> None:
         runs = self._runs(6.0)
         until = runs[-1].start
@@ -223,6 +303,25 @@ class TestCirculationFits:
         assert r.btu == pytest.approx(2.0 * 60 * 8.34 * 15.0 * 10 / 60)
         assert (r.flow_gpm, r.air_f) == (2.0, 66.0)
         assert r.upper_f is None  # no upper reading inside the run
+        assert r.rest_h is None  # no run before it
+        later = [a + timedelta(hours=2, seconds=30 * i) for i in range(5)]
+        both = cal.measure_runs(
+            running + later,
+            flow=[(t, 2.0) for t in running + later],
+            return_f=[(t, 115.0) for t in running + later],
+            upper_f=[(a - timedelta(minutes=1), 130.0)],
+        )
+        assert both[1].rest_h == pytest.approx(110 / 60)
+        # A run of one sample is not measured, but it ends a rest.
+        blip = [a + timedelta(hours=1)]
+        three = cal.measure_runs(
+            running + blip + later,
+            flow=[(t, 2.0) for t in running + blip + later],
+            return_f=[(t, 115.0) for t in running + blip + later],
+            upper_f=[(a - timedelta(minutes=1), 130.0)],
+        )
+        assert len(three) == 2
+        assert three[1].rest_h == pytest.approx(1.0)
         assert (
             cal.measure_runs(
                 running,

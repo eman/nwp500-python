@@ -8,6 +8,25 @@ Unreleased
 Fixed
 -----
 
+- **A circulation run's return is not at the air.** The run model took
+  the returning water at the air beside the heater and the pipe as
+  cooled between runs. On 123 runs with the compressor off (April to
+  October), the return rested about 7 °F above the heater's air, and a
+  run within an hour of another took about half the heat of one after
+  a long rest. ``CirculationParams`` gains ``return_rest_offset_f`` and
+  ``return_cool_tau_h`` (defaults 0, the old form): the inflow is the
+  air plus the offset, and a run's gallons are scaled by the share of
+  the pipe cooled since the last run (``circulation.cooled_share``).
+  ``calibration.fit_return`` fits the volume and both terms together;
+  ``measure_runs`` records each run's rest, and ``run_heat_btu``,
+  ``metered_withdrawn`` and ``fit_ungated_observability`` take the
+  terms. The site's terms are 19.36 gal, 7.84 °F and 0.464 h, a
+  cross-validated error of 268 BTU a run against 767 for the old form.
+  The volume is effective: the long runs on the record never brought
+  hot water back. Snapshot and window runs are now ``(minutes, upper,
+  rest hours, minutes run before)``, and a run a snapshot takes up
+  partway is priced from where it was. See :doc:`/reference/simulator-inputs` and
+
 - **The R-134a properties are CoolProp's.** The refrigerant table,
   cited as "ASHRAE Standard 34" (a safety classification, not a property
   table), had the saturated vapour density about 4x low and the liquid

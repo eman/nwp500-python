@@ -463,8 +463,17 @@ nothing is charged.
      - What it is
    * - ``displaced_gal``
      - Gallons a run displaces before hot water comes back: an
-       effective volume, fitted together with the air the return
-       cools to between runs.
+       effective volume, fitted together with the two return terms
+       below (``fit_return``).
+   * - ``return_rest_offset_f``
+     - How far above the air at the heater the return rests between
+       runs (default 0: at the air). The pipe can run through warmer
+       or cooler space than the heater stands in.
+   * - ``return_cool_tau_h``
+     - The time constant on which the pipe a run warmed cools back to
+       rest (default 0: at once). A run this soon after another
+       displaces water about two thirds cooled, and its gallons are
+       scaled by that share.
    * - ``flow_gpm``
      - The flow a run is priced at.
    * - ``loss_btu_per_gal``
@@ -487,9 +496,10 @@ nothing is charged.
        gap, so change them together.
 
 Each run is a flowing draw of ``min(flow x minutes, displaced_gal)``
-gallons, its water returning at the air where the heater stands; runs
-closer than ``run_gap_min`` are one run, as ``displaced_gal`` was
-fitted.
+gallons times the share of the pipe cooled since the last run ended,
+its water returning at the air where the heater stands plus
+``return_rest_offset_f``; runs closer than ``run_gap_min`` are one run,
+as ``displaced_gal`` was fitted.
 With a heat book, a run also costs the book its first
 ``book_circuit_gal`` gallons, each at the tank's upper probe less the
 air (``loss_btu_per_gal`` per gallon circulated without it), and the
@@ -499,8 +509,9 @@ at the setpoint.
 ``ungated_observability`` shape how the return reaches the lower probe;
 they act only with circulation. None of these has a default: they
 describe one installation's plumbing. ``site_example_params`` carries
-one installation's (6.2746 gal, 1.397 gal/min, 159 BTU/gal, a 1.47 gal
-book circuit).
+one installation's (19.36 gal, a return resting 7.84 degF above the air
+and cooling on 0.464 h, 1.397 gal/min, 159 BTU/gal, a 1.47 gal book
+circuit).
 
 
 The heat book: ``book``
@@ -855,14 +866,30 @@ the one seen over the retrains from 2026-08-08 to 2026-10-18.
        on 139 runs: the share of the loop's heat the probes showed. The
        return feeds the mixing valve's cold port as well as the tank's
        inlet, and that split is not measured, so the share is the split
-       and any shortfall of the probes together. September's measurement on 136 windows was 0.44
+       and any shortfall of the probes together. It was fitted at the
+       run model's earlier terms (a return at the air, the pipe cooled
+       between runs); on the same windows the current terms move it by
+       +10 % (165 windows since April) to -5 % (50 since September).
+       September's measurement on 136 windows was 0.44
        (90 % CI 0.38-0.50, :doc:`/explanation/standby-loss`).
      - 0.395-0.44, falling as windows accrue
    * - ``SITE_CIRCULATION``
-     - 6.2746 gal, 1.397 gal/min
-     - The loop's volume from 139 runs (mean absolute error 865 BTU a
-       run); the flow is the median over the 14 days before.
-     - 6.22-6.27 gal
+     - 19.36 gal, +7.84 degF, 0.464 h, 1.397 gal/min
+     - The run model's three terms fitted together (``fit_return``) on
+       123 runs with the compressor off, 2026-04-04 to 2026-10-24. In
+       five-fold cross-validation the mean absolute error is 268 BTU a
+       run, against 767 for a return at the air (that form refits at
+       6.36 gal). Before a run after 16 h or more, the return probe
+       read a median 6.9 degF above the heater's air, following it
+       with a slope of 0.95. Runs within an hour of another took a
+       median 1,583 BTU, against 3,223 after 8 h. The record's long
+       runs never brought hot water back (the return still 17-38 degF
+       under the tank after 16-20 gal), so the volume is effective and
+       above the typical 4 min (5.9 gal) run. The longest measured run
+       (19.8 gal) sets it: ``fit_return`` refuses a set of runs none of
+       which is longer than the volume found. The flow is the median
+       over the 14 days before a retrain.
+     - folds 14.6-19.5 gal, 7.3-8.2 degF, 0.45-0.51 h
 
 **Measured on the heater**
 

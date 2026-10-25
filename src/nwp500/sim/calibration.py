@@ -67,7 +67,7 @@ from nwp500.sim.book import (
     is_full,
 )
 from nwp500.sim.book import Step as BookStep
-from nwp500.sim.circulation import RUN_GAP
+from nwp500.sim.circulation import RUN_GAP, cooled_share, merge_runs
 from nwp500.sim.circulation import displaced_gal as circulation_displaced_gal
 from nwp500.sim.heating_trajectory import path_cop
 from nwp500.sim.inputs import ELECTRIC, ENERGY_SAVER, HIGH_DEMAND
@@ -1096,10 +1096,12 @@ def _in_cycle(
 ) -> dict[str, object]:
     """A snapshot's metered draws and circulation runs: the delivered
     gallons from ``at`` to ``end`` and the volume-weighted upper zone
-    they left at, and each run
-    over the span (merged within ``_RUN_GAP``) as ``(minutes, the upper
-    zone at its start)``. None for what was not given: an unrecorded
-    meter or circulation is not an idle one."""
+    they left at, and each run over the span (merged within
+    ``_RUN_GAP``) as ``(minutes in the span, the upper zone where the
+    span takes it up, hours since the run before it ended, minutes it had
+    run before the span)``, the hours None for the first run given. None
+    for what was not given: an unrecorded meter or circulation is not an
+    idle one."""
     out: dict[str, object] = {
         "draw_gal": None,
         "draw_t_upper": None,
@@ -1119,22 +1121,24 @@ def _in_cycle(
                 sum(u * g for u, g in weighted if u is not None) / gal
             )
     if circulation is not None:
-        runs = sorted(
-            (max(a, at), min(b, end))
-            for a, b in circulation
-            if a < end and b > at
-        )
-        merged: list[tuple[datetime, datetime]] = []
-        for a, b in runs:
-            if merged and a - merged[-1][1] <= _RUN_GAP:
-                merged[-1] = (merged[-1][0], b)
-            else:
-                merged.append((a, b))
-        out["circulation_runs"] = tuple(
-            ((b - a).total_seconds() / 60.0, u)
-            for a, b in merged
-            if b > a and (u := upper_at(a)) is not None
-        )
+        merged = merge_runs(circulation, _RUN_GAP)
+        found: list[tuple[float, float, float | None, float]] = []
+        for i, (a0, b0) in enumerate(merged):
+            a, b = max(a0, at), min(b0, end)
+            if b <= a or (u := upper_at(a)) is None:
+                continue
+            rest = (
+                (a0 - merged[i - 1][1]).total_seconds() / 3600.0 if i else None
+            )
+            found.append(
+                (
+                    (b - a).total_seconds() / 60.0,
+                    u,
+                    rest,
+                    (a - a0).total_seconds() / 60.0,
+                )
+            )
+        out["circulation_runs"] = tuple(found)
     return out
 
 
@@ -1575,8 +1579,8 @@ def metered_withdrawn(
     """With a meter: the apparent heat a cycle's draws and circulation
     took (``snapshots``' ``draw_gal`` and ``circulation_runs``), Wh.
     Draws through the calibrated draw term at their volume-weighted
-    upper zone; each run through the circulation's displaced volume at
-    the upper zone at its start, less the air, times
+    upper zone; each run through the run model (``run_heat_btu``) at the
+    upper zone at its start, times
     ``DrawParams.ungated_observability`` (the share of the run's heat
     the probes show). None when either record is missing, when draws
     happened and the draw term is off, or when circulation ran and the
@@ -1604,12 +1608,17 @@ def metered_withdrawn(
             if flow_at is not None and at is not None and not pd.isna(at):
                 then = flow_at(cast(datetime, pd.Timestamp(at).to_pydatetime()))
                 flow = then if then is not None else c.flow_gpm
-            for minutes, upper in runs:
-                displaced = circulation_displaced_gal(
-                    minutes, c.displaced_gal, flow
-                )
-                btu += d.ungated_observability * max(
-                    0.0, displaced * WATER_BTU_PER_GAL_F * (upper - float(air))
+            for minutes, upper, rest, before in runs:
+                btu += d.ungated_observability * run_heat_btu(
+                    minutes,
+                    upper,
+                    float(air),
+                    c.displaced_gal,
+                    flow,
+                    rest_offset_f=c.return_rest_offset_f,
+                    rest_h=rest,
+                    cool_tau_h=c.return_cool_tau_h,
+                    before_min=before,
                 )
         if float(gal) > 0.0:
             upper = row.get("draw_t_upper")
@@ -2844,7 +2853,8 @@ RUN_FLOW_WITHIN = timedelta(days=1)
 class MeasuredRun:
     """One circulation run with the compressor off, and the heat it took
     measured: its flow times the drop from the upper zone to the return
-    line, the median over its running samples, times its minutes."""
+    line, the median over its running samples, times its minutes; and
+    the hours since the run before it ended (None for the first)."""
 
     start: datetime
     end: datetime
@@ -2853,6 +2863,7 @@ class MeasuredRun:
     flow_gpm: float | None
     upper_f: float | None
     air_f: float | None
+    rest_h: float | None = None
 
 
 def _held_at(
@@ -2888,7 +2899,8 @@ def measure_runs(
     flow (gal/min) and the return line (degF), each fresh within
     ``RETURN_MAX_AGE`` of a running sample, against the upper zone in
     force then; its upper zone the first reading in it, its air the
-    median of those in it."""
+    median of those in it, its rest the hours since the run before it
+    ended, a run left out included."""
     on = sorted(running)
     clusters: list[list[datetime]] = []
     for t in on:
@@ -2899,8 +2911,16 @@ def measure_runs(
     flow, return_f = sorted(flow), sorted(return_f)
     upper_f, air_f = sorted(upper_f), sorted(air_f)
     out: list[MeasuredRun] = []
-    for a, b in ((c[0], c[1]) for c in clusters if c[1] > c[0]):
-        if any(not (b <= s or e <= a) for s, e in compressor):
+    last_end: datetime | None = None
+    for a, b in ((c[0], c[1]) for c in clusters):
+        rest = (
+            None
+            if last_end is None
+            else (a - last_end).total_seconds() / 3600.0
+        )
+        # A run of one sample is not measured, but it ran.
+        last_end = b
+        if b <= a or any(not (b <= s or e <= a) for s, e in compressor):
             continue
         samples = [t for t in on if a <= t <= b]
         ups = _held_at(upper_f, samples)
@@ -2929,6 +2949,7 @@ def measure_runs(
                 flow_gpm=float(np.median(fresh_flow)) if fresh_flow else None,
                 upper_f=first_up,
                 air_f=float(np.median(airs)) if airs else None,
+                rest_h=rest,
             )
         )
     return out
@@ -2940,14 +2961,126 @@ def run_heat_btu(
     air_f: float,
     displaced: float,
     flow_gpm: float,
+    *,
+    rest_offset_f: float = 0.0,
+    rest_h: float | None = None,
+    cool_tau_h: float = 0.0,
+    before_min: float = 0.0,
 ) -> float:
-    """The heat a run takes for its displaced volume: the gallons it
-    displaces (``circulation.displaced_gal``) at the upper zone less the
-    air, never negative."""
+    """The heat a run takes for its displaced volume over ``minutes``
+    of it, after ``before_min`` it had already run: the gallons it
+    displaces in them (``circulation.displaced_gal``), times the share
+    cooled since the run before (``circulation.cooled_share``), at the
+    upper zone less the return's rest (the air plus ``rest_offset_f``),
+    never negative."""
     if displaced <= 0.0 or minutes <= 0.0 or flow_gpm <= 0.0:
         return 0.0
-    gal = circulation_displaced_gal(minutes, displaced, flow_gpm)
-    return max(0.0, gal * WATER_BTU_PER_GAL_F * (upper_f - air_f))
+    gal = (
+        circulation_displaced_gal(before_min + minutes, displaced, flow_gpm)
+        - circulation_displaced_gal(before_min, displaced, flow_gpm)
+    ) * cooled_share(rest_h, cool_tau_h)
+    return max(
+        0.0, gal * WATER_BTU_PER_GAL_F * (upper_f - air_f - rest_offset_f)
+    )
+
+
+#: Physically admissible rest offsets, °F, and cooling time constants,
+#: hours, for ``fit_return``.
+REST_OFFSET_BOUNDS = (-20.0, 30.0)
+COOL_TAU_BOUNDS = (0.02, 24.0)
+#: The least ratio of the smallest to the largest singular value of the
+#: fitted heat's sensitivities to ``fit_return``'s three terms, each
+#: scaled by its bounds, for the runs to tell the terms apart. The
+#: record's runs give about 0.03; runs that cannot tell them apart (no
+#: rest known, none longer than the volume, one rest and one tank-to-air
+#: difference throughout) give 1e-14 or less.
+MIN_TERM_INDEPENDENCE = 1e-6
+
+
+def fit_return(
+    runs: Sequence[MeasuredRun],
+) -> tuple[float, float, float] | None:
+    """``CirculationParams``' ``(displaced_gal, return_rest_offset_f,
+    return_cool_tau_h)`` together: the three minimising the mean absolute
+    error of ``run_heat_btu`` against each run's measured heat, at its
+    own flow and rest. None with fewer than ``MIN_RUNS_TO_FIT`` usable
+    runs, a fit pinned on a bound, or runs that cannot tell the three
+    apart (``MIN_TERM_INDEPENDENCE``): with no rest known the cooling is
+    not seen, with no run longer than the volume the volume is not, and
+    with one rest and one tank-to-air difference throughout the offset
+    and the cooling trade off."""
+    usable = [
+        (r.minutes, r.upper_f, r.air_f, r.flow_gpm, r.btu, r.rest_h)
+        for r in runs
+        if r.minutes > 0
+        and r.flow_gpm
+        and r.btu
+        and r.btu > 0
+        and r.upper_f is not None
+        and r.air_f is not None
+        and r.upper_f > r.air_f
+    ]
+    if len(usable) < MIN_RUNS_TO_FIT:
+        return None
+    bounds = (DISPLACED_BOUNDS, REST_OFFSET_BOUNDS, COOL_TAU_BOUNDS)
+
+    def heat(x: Sequence[float]) -> np.ndarray:
+        volume, offset, tau = x
+        return np.array(
+            [
+                run_heat_btu(
+                    m,
+                    up,
+                    air,
+                    volume,
+                    f,
+                    rest_offset_f=offset,
+                    rest_h=rest,
+                    cool_tau_h=tau,
+                )
+                for m, up, air, f, _, rest in usable
+            ]
+        )
+
+    measured = np.array([u[4] for u in usable])
+
+    def mae(x: np.ndarray) -> float:
+        return float(np.mean(np.abs(heat([float(v) for v in x]) - measured)))
+
+    # The objective has flat stretches, so several starts.
+    tries = [
+        cast(
+            OptimizeResult,
+            minimize(
+                mae,
+                np.array(x0),
+                method="Nelder-Mead",
+                bounds=bounds,
+                options={"xatol": 1e-4, "fatol": 0.1, "maxiter": 4000},
+            ),
+        )
+        for x0 in ((6.0, 0.0, 1.0), (8.0, 5.0, 1.0), (12.0, 8.0, 2.0))
+    ]
+    found = tries[int(np.argmin([float(r.fun) for r in tries]))]
+    x = [float(v) for v in found.x]
+    # Within a thousandth of the range of a bound is on it.
+    if any(
+        not lo + (hi - lo) / 1000 < v < hi - (hi - lo) / 1000
+        for v, (lo, hi) in zip(x, bounds, strict=True)
+    ):
+        return None
+    # Each term's effect on the fitted heat, by central difference.
+    columns = []
+    for k, (lo, hi) in enumerate(bounds):
+        step = (hi - lo) * 1e-4
+        up, down = list(x), list(x)
+        up[k] += step
+        down[k] -= step
+        columns.append((heat(up) - heat(down)) / 2 * 1e4)
+    sv = np.linalg.svd(np.column_stack(columns), compute_uv=False)
+    if not sv[0] > 0.0 or sv[-1] / sv[0] < MIN_TERM_INDEPENDENCE:
+        return None
+    return x[0], x[1], x[2]
 
 
 def fit_displaced_gal(runs: Sequence[MeasuredRun]) -> float | None:
@@ -3630,13 +3763,15 @@ OBSERVABILITY_BOUNDS = (0.05, 1.0)
 
 @dataclass(frozen=True)
 class CirculationWindow:
-    """One window's evidence, independent of the displaced volume: its
-    runs ``(minutes, upper zone at start)``, the air over it, the heat
+    """One window's evidence, independent of the run model's terms: its
+    runs as ``snapshots`` gives them (``(minutes, upper zone, hours
+    since the run before, minutes run before the window)``),
+    the air over it, the heat
     the probes lost to the runs (the mean's fall times the tank's mass,
     less standby and the draws' heat), BTU, its length, the gallons
     drawn in it, and the flow its runs ran at (None: the caller's)."""
 
-    runs: tuple[tuple[float, float], ...]
+    runs: tuple[tuple[float, float, float | None, float], ...]
     air_f: float
     apparent_btu: float
     hours: float
@@ -3744,7 +3879,9 @@ def circulation_windows(
             )
         out.append(
             CirculationWindow(
-                runs=cast(tuple[tuple[float, float], ...], runs),
+                runs=cast(
+                    tuple[tuple[float, float, float | None, float], ...], runs
+                ),
                 air_f=amb,
                 apparent_btu=(m0 - m1) * params.tank.thermal_mass_btu_f
                 - standby
@@ -3761,10 +3898,14 @@ def fit_ungated_observability(
     windows: Sequence[CirculationWindow],
     displaced_gal: float,
     flow_gpm: float,
+    *,
+    rest_offset_f: float = 0.0,
+    cool_tau_h: float = 0.0,
 ) -> tuple[float, int] | None:
     """``DrawParams.ungated_observability``: the windows' apparent heat
-    over the run model's (``run_heat_btu``) at ``displaced_gal``, a ratio
-    of sums, and the windows it rests on. None with fewer than
+    over the run model's (``run_heat_btu``) at ``displaced_gal``,
+    ``rest_offset_f`` and ``cool_tau_h``, a ratio of sums, and the
+    windows it rests on. None with fewer than
     ``MIN_OBSERVABILITY_WINDOWS`` carrying modelled heat, or a ratio
     outside ``OBSERVABILITY_BOUNDS``."""
     if displaced_gal <= 0.0:
@@ -3779,8 +3920,12 @@ def fit_ungated_observability(
                     w.air_f,
                     displaced_gal,
                     w.flow_gpm if w.flow_gpm is not None else flow_gpm,
+                    rest_offset_f=rest_offset_f,
+                    rest_h=rest,
+                    cool_tau_h=cool_tau_h,
+                    before_min=before,
                 )
-                for minutes, upper in w.runs
+                for minutes, upper, rest, before in w.runs
             ),
         )
         for w in windows
