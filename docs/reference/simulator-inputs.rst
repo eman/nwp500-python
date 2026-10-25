@@ -1032,7 +1032,11 @@ approach (10 degF), clearance ratio (0.05), polytropic exponent (1.17),
 the fan's airflow in the latent term (229 CFM; no airflow is
 published, and the manual's 229 is the 50 gal model's shipping weight
 in pounds), the jacket loss fallback (5.0 BTU/hr per degF) and the
-lift reference (62 degF). The latent term is up to about 150 BTU/hr
+lift reference (62 degF). The record cannot fit the first three: the
+compressor constant absorbs each, and refitting it with the condenser
+approach at 5 to 20 degF, the clearance at 0.02 to 0.08 or the exponent
+at 1.10 to 1.25 moved the held-out recovery error by under 0.7 min
+(33.1 to 34.3 on 35 recoveries). The latent term is up to about 150 BTU/hr
 of about 4,000; on the record, a recovery's duration moves a mean
 1.2 min between its own humidity and 50 % (at most 3 %).
 
