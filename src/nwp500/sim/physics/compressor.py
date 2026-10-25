@@ -33,7 +33,8 @@ from nwp500.sim.physics.tank import bottom_loss_reach, ua_at
 # tank's (≈ 527) once the gap closes.  Once the stratification gap closes
 # the tank is one body, and the same heat has to warm all of it.  Measured
 # across 269 recovery traces, the effective mass resisting the lower probe
-# is 0.44-0.48 × full tank while stratified and 0.96 × once mixed, and
+# is 0.44-0.48 × full tank while stratified and 0.96 × once mixed (the
+# compressor constant absorbs the difference from 0.5; ``TankParams``), and
 # 57 % of all heating steps are in the mixed regime, where integrating at
 # half-tank mass runs the tank up roughly twice as fast as it does.
 # The upper zone is held where it started until the gap closes. On 30

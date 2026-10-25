@@ -117,10 +117,6 @@ from nwp500.sim.tou_triggers import Window
 #: delivered gallons (the core's ``Draw(at, gallons)``).
 Draw = Delivered
 
-#: A raise this close to the setpoint it replaces is inside the probe's
-#: and the device's decision lag: no plan can claim it.
-RESOLUTION_F = 2.0
-
 #: The heater's setpoint range as the model knows it: the NWP500's
 #: 104.9-149.9 °F. No plan declaration carries its own bounds; the
 #: heater and this library enforce the device's real limits. A caller

@@ -978,7 +978,9 @@ the flow was unknown (``flow_outages``, from the history's
 holds each value from before it and walks on. The flow holds only
 ``FLOW_HOLD`` (a minute), as a reading does, and is 0 after: a draw
 going in most likely ended within minutes, and holding it would charge
-a draw nobody made. ``HomeAssistantBook`` holds the pump's speed across
+a draw nobody made. On one installation's meter, February to October
+2026, a draw was running at 4 of its silences (each 3 to 5 minutes);
+2 had ended by the next report and 2 ran on. ``HomeAssistantBook`` holds the pump's speed across
 its outages for ``PUMP_STALE`` (five minutes) the same way. The book is None while
 the heater isn't heard now or the flow is unknown now. A record that
 keeps no instant for each of the heater's responses passes ``heard=``,

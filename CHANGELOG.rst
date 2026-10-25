@@ -8,6 +8,25 @@ Unreleased
 Changed
 -------
 
+- **Hand-set values checked against the record.** None changes.
+  ``TankParams.lower_zone_share`` 0.5 stays: refitting the compressor
+  constant at 0.435-0.5 moved the held-out recovery error by under
+  0.7 min. ``ControllerParams.tou_cap_f`` 3.6 °F stays at the device's
+  threshold: the probe's 3.42 °F at a capped stop is one probe step
+  past it, as a full recovery ends past its setpoint.
+  ``ReadinessParams.probe_resolution_f`` is a round 1 °F and is now
+  tagged as a default, not a measurement. The unused
+  ``engine.RESOLUTION_F`` is gone. The humidity default of 50 % stays:
+  holding every recovery there instead of its own reading moved the
+  mean duration error by 0.4 min. ``calibration.SETTLE_MINUTES`` 45
+  stays: ``ua_ref`` was 4.44-4.48 at 30 to 90 min. The recovery screen
+  (``MIN_MINUTES_PER_F``, ``MAX_MINUTES_PER_F``) stays: fitting with
+  the 12 it drops moved the compressor constant 0.2 %.
+  ``sim_adapters.FLOW_HOLD``, ``sim_home_assistant.PUMP_ON_RPM`` and
+  ``PUMP_STALE`` say what the record shows of them. See
+  :doc:`/reference/simulator-inputs` and
+  :doc:`/explanation/standby-loss`.
+
 - **A window opening drops a running element mode: from the record.**
   The simulator drops an element mode to the heat pump at a window's
   start, which was assumed from one device run at a TOU switch-on. The

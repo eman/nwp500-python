@@ -203,7 +203,13 @@ class TankParams:
     #: 65).
     volume_gal: float = field(default=63.2, metadata=_p(DEFAULT, "gal"))
     #: The share of the tank the two-zone model gives the lower zone,
-    #: the stratum the condenser coil wraps.
+    #: the stratum the condenser coil wraps. The recoveries put the
+    #: stratified tank's share at 0.435-0.475
+    #: (``docs/explanation/recovery-speed.rst``) and the draw fit's free
+    #: lower zone at 33.2 gal (0.525). Refitting the compressor constant
+    #: at 0.435, 0.455, 0.475 and 0.5 (177 recoveries, 35 held out) gave
+    #: held-out duration errors of 34.3, 33.9, 33.7 and 33.7 min: the
+    #: constant absorbs the share, so 0.5 stays.
     lower_zone_share: float = field(
         default=0.5, metadata=_p(DEFAULT, "fraction")
     )
@@ -561,6 +567,10 @@ class ControllerParams:
     #: How far short of its target a recovery ending in a TOU window
     #: stops, judged at its end: the device references its deficit
     #: counter 2 °C under the setpoint while the window is in force.
+    #: The probe reads 1.9 °C (3.42 °F) short at the stop, one 0.1 °C
+    #: step past the threshold; a recovery reaching its setpoint ends
+    #: with the probe 0.5-2 °F over it in the same way, and the
+    #: simulator stops both at the threshold.
     #: Judging at the start caught 17 of 59 capped cycles against 43 at
     #: the end (``docs/explanation/tou-recovery-cap.rst``).
     tou_cap_f: float = field(default=3.6, metadata=_p(MEASURED, "°F"))
@@ -875,10 +885,12 @@ class ReadinessParams:
         default=2.0, metadata=_p(MEASURED, "°F/gal", INSTALLATION)
     )
     #: How far a probe reading can be off and still describe the same
-    #: tank: the element's own decisions sit 1.4 °F from the probe's. A
-    #: bath answer that a probe error this size would flip says
+    #: tank: a round 1 °F, between the probe's jitter of about 0.36 °F
+    #: either way and the element's own decisions, which sit 1.4 °F from
+    #: the probe's (``docs/explanation/heating-elements.rst``). A bath
+    #: answer that a probe error this size would flip says
     #: ``bath_ready_within_probe_resolution``.
-    probe_resolution_f: float = field(default=1.0, metadata=_p(MEASURED, "°F"))
+    probe_resolution_f: float = field(default=1.0, metadata=_p(DEFAULT, "°F"))
     #: The bath readiness is judged against, delivered gallons: the
     #: larger of two hot-only fills to one household's usual bath level,
     #: read on a meter (22.4 and 28.7 gal). The level is a household's

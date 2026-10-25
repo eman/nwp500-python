@@ -97,7 +97,9 @@ Interval = tuple[datetime, datetime]
 
 #: How long after heating, a draw or a circulation run the tank is still
 #: settling and is not fitted. At one installation, 0 -> 45 min took the
-#: fitted UA's spread from 5.63 ± 3.32 to 4.88 ± 1.15 over 24 windows.
+#: fitted UA's spread from 5.63 ± 3.32 to 4.88 ± 1.15 over 24 windows;
+#: over February to October 2026, ``ua_ref`` was 4.44-4.48 at 30, 45, 60
+#: and 90 min (``docs/explanation/standby-loss.rst``).
 SETTLE_MINUTES = 45.0
 #: The shortest quiet window fitted, hours.
 MIN_QUIET_HOURS = 3.0
@@ -1007,6 +1009,10 @@ INTERRUPTED_WINDOW = (timedelta(minutes=-2), timedelta(minutes=1))
 #: The rates a recovery may imply, minutes per °F of the lower zone's
 #: rise: faster than the heat pump can heat is a mislabelled cycle,
 #: slower an undetected interruption; and an absolute backstop, minutes.
+#: At one installation (February to October 2026) the kept ran 3.8-18.7;
+#: the upper bound dropped 12, each a rise of 0.2-6.3 °F near the
+#: setpoint, and fitting with them moved the compressor constant 0.2 %
+#: and the held-out error 0.1 min.
 MIN_MINUTES_PER_F = 2.0
 MAX_MINUTES_PER_F = 20.0
 MAX_RECOVERY_LABEL_MINUTES = 600.0
