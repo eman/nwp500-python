@@ -8,6 +8,12 @@ Unreleased
 Changed
 -------
 
+- **The heat book prices its runs as cooled to the air, on the
+  record.** Pricing each run at the loop's return instead, the pipe
+  resting 7.84 °F over the air and cooling on 0.464 h, books the fitted
+  pairs no better (17,018 BTU mean absolute error against 16,991 on 87
+  pairs). The book is unchanged. See :doc:`/how-to/calibrate-simulator`.
+
 - **The compressor's engineering values are not fittable on the
   record.** The condenser approach (10 °F), clearance ratio (0.05) and
   polytropic exponent (1.17) stay. The compressor constant absorbs

@@ -436,7 +436,12 @@ pair:
   the book's terms fitted at each volume tried. Runs closer than
   ``run_gap_min`` are one run. It is an effective volume, smaller than
   the loop's own (``displaced_gal``): at one installation 1.4 gal
-  against 6.4. Fit and keep them apart. With fewer pairs, the loop is
+  against 6.4. Fit and keep them apart. Its runs are priced as cooled
+  to the air: at that installation, pricing them at the loop's return
+  (``fit_return``: the pipe resting 7.84 degF over the air and cooling
+  on 0.464 h) booked the 87 pairs the fit takes no better, a mean
+  absolute error of 17,018 BTU against 16,991, on 109 pairs with 51
+  runs. With fewer pairs, the loop is
   priced as ``params.circulation`` prices it, and without one, the
   pairs with a run are left out. A pair with a run that has no flow
   reading is left out.
