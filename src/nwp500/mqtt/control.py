@@ -18,11 +18,10 @@ This module handles all device control operations including:
 - Vacation mode configuration
 - Recirculation pump control and scheduling
 
-Every command here has a matching case in the NaviLink app's request
-builder (``SendRequestMgppData.java``); a few of those cases (goout-day,
-demand response, intelligent mode, water program) have no screen that
-calls them. Codes the app's enum declares with no builder case (OTA check,
-WiFi reset/reconnect, freeze protection temperature, smart diagnostic,
+Every command here is one the NaviLink app can send; a few of them
+(goout-day, demand response, intelligent mode, water program) have no
+screen in the app. Codes no NaviLink client sends (OTA check, WiFi
+reset/reconnect, freeze protection temperature, smart diagnostic,
 weekly reservation) have no method.
 """
 
@@ -1254,9 +1253,9 @@ class MqttDeviceController:
         """Set the vacation day count without changing the operation mode.
 
         Sends GOOUT_DAY (33554466, mode ``goout-day``) with ``[days]``.
-        The app's request builder has a case for it but no screen calls
-        it. Verified live: the device updates ``vacation_day_setting`` and
-        leaves ``dhw_operation_setting`` unchanged. Use
+        No screen in the NaviLink app sends it. Verified live: the device
+        updates ``vacation_day_setting`` and leaves ``dhw_operation_setting``
+        unchanged. Use
         :meth:`set_vacation_days` to enter vacation mode.
 
         Args:

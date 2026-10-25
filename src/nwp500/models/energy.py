@@ -58,8 +58,8 @@ class MonthlyEnergyData(NavienBaseModel):
     The daily query returns one entry per requested month with ``month``
     set and one ``data`` item per day. The monthly query returns one entry
     per requested year with ``month`` absent and one ``data`` item per
-    month (twelve). The app's model also declares ``day`` for the hourly
-    query, which the NWP500 did not answer in testing.
+    month (twelve). A ``day`` for the hourly query is defined, but the
+    NWP500 did not answer it in testing.
     """
 
     year: int

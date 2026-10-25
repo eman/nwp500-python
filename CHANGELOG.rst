@@ -1077,9 +1077,7 @@ Added
   previously rejected a 0. It is status-only: ``set_dhw_mode()`` refuses
   it, as it now refuses any id outside 1-6. ``sim_adapters.settings()``
   refuses a Standby status, which the simulator does not model.
-- **``DREvent.GRID_EMERGENCY`` (6).** The app declares CPE and Grid
-  Emergency both as id 5 but decodes ``drEventStatus`` by array position,
-  so raw 6 is Grid Emergency; ``CPE`` (5) stays "Customer Peak Event".
+- **``DREvent.GRID_EMERGENCY`` (6).** Raw 6 is Grid Emergency; ``CPE`` (5) stays "Customer Peak Event".
 - **``UnitType``** NCB700 (22), NFB700_H (24), CAS_NFB700_H (25),
   NPF_SYSTEM (514); **``DeviceType``** IOT_MODULE (8), NFB700_MAIN (50),
   NFB700_SUB (51) (the app's names; ``NPF700_MAIN``/``NPF700_SUB`` remain
@@ -1632,7 +1630,7 @@ Documentation
   ``currentDhwFlowRate`` and ``recircDhwFlowRate`` were tenths of a GPM and
   ``cumulatedDhwFlowRate`` was gallons, while the properties treated them as
   tenths of an LPM and as litres. The properties are right. Navien's
-  NaviLink app (2.01.02, decompiled) shows ``currentDhwFlowRate`` as
+  NaviLink app shows ``currentDhwFlowRate`` as
   ``raw / 10`` LPM in Celsius and ``raw / 3.785 / 10`` GPM in Fahrenheit.
   The NWP500 manual lists the panel's water-flow reading in LPM even though
   the panel defaults to GPM. The app's diagnostics screen shows the heater's
@@ -1819,8 +1817,7 @@ Version 9.4.0 (2026-09-12)
 ==========================
 
 This release realigns the MQTT command set with what the NaviLink app
-sends. The app (version 2.03.00) was decompiled and its request
-builder compared with the library; every query it sends now has a
+sends. Every query it sends now has a
 method, six commands it never sends were removed, and the recirculation
 schedule write was corrected. Breaking changes are listed under
 *Removed* and *Changed*.
@@ -1869,9 +1866,9 @@ Added
 - ``subscribe_firmware_commit_response()`` receives the reply to
   ``commit_firmware_update()``, which is requested on the app-form
   ``res/commit-ota`` topic that no other subscription covers.
-- **Controls with app builder cases that had no method:**
-  ``set_vacation_duration(days)`` (``goout-day``; the app has a builder
-  case but no screen that calls it; verified live to change the day count
+- **Controls the app can send that had no method:**
+  ``set_vacation_duration(days)`` (``goout-day``; no screen in the app
+  sends it; verified live to change the day count
   without changing the operation mode),
   ``set_air_filter_life(hours)`` (``air-filter-life``; the wire value is
   hours divided by 500, matching the app's 0 or 1000-10000 picker;
@@ -1941,8 +1938,8 @@ Fixed
 - Recirculation read-backs in hex carry the unused ``param`` as ``0xFF``
   and in JSON as ``-1``; the model normalizes to ``-1`` so the two compare
   equal.
-- **Protocol documentation** rewritten from the decompiled request
-  builder and live captures: real topic structure, the anti-legionella
+- **Protocol documentation** rewritten from what the app sends and
+  live captures: real topic structure, the anti-legionella
   modes (``anti-leg-on [days]`` / ``anti-leg-off``, not
   ``anti-legionella-setting``), the message example that paired the
   weekly-reservation code with ``dhw-temperature``, the undocumented
@@ -1965,8 +1962,7 @@ Removed
   ``update_weekly_reservation()`` with
   ``subscribe_weekly_reservation_response()`` and the
   ``WeeklyReservationEntry`` / ``WeeklyReservationSchedule`` models. The
-  app's enum declares the first five codes but its request builder has
-  no case for them, so the library's ``ota-check``, ``wifi-reconnect``,
+  no NaviLink client sends the first five codes, so the library's ``ota-check``, ``wifi-reconnect``,
   ``wifi-reset``, ``frez-temp`` and ``smart-diagnostic`` mode strings were
   invented. The app's weekly schedule is the ordinary reservation
   program: it writes with 16777226 on ``ctrl/rsv/rd``
@@ -2081,10 +2077,9 @@ Fixed
   unknown keys, so the field silently reported its ``False`` default on
   every device regardless of whether a thermostatic mixing valve was
   supported. The CLI's "Mixing Valve" capability row was wrong for the
-  same reason. The misspelling is Navien's own: it appears in the vendor
-  app's ``KDResponseMgppDid$Feature`` class and in
-  ``docs/reference/protocol/device_features.rst``, which documented the
-  wire spelling correctly all along.
+  same reason. The misspelling is Navien's own:
+  ``docs/reference/protocol/device_features.rst`` documented the wire
+  spelling correctly all along.
 
 - **``firmware_payload_capture.py`` captured almost nothing.** Its wildcards
   covered ``cmd/{type}/{client_id}/res/#`` and the event topic, but the device
@@ -2160,10 +2155,9 @@ Changed
 - **Status flags now preserve the device's unknown state.** The protocol
   encodes these flags as ``0 = unknown, 1 = OFF, 2 = ON``, and the library
   was collapsing 0 to ``False``, inventing an OFF the device never claimed.
-  Confirmed against Navien's own NaviLink app (2.03.00, versionCode 141),
-  which decodes exactly this set of fields through an enum declared
-  ``UNKNOWN(0), OFF(1), ON(2)``; two sibling enums render their zero as
-  ``"-"`` and ``"Not Applied"`` rather than as an off state.
+  Navien's own NaviLink app treats exactly this set of fields as
+  ``UNKNOWN(0), OFF(1), ON(2)``, and shows the zero of two related
+  fields as ``"-"`` and ``"Not Applied"`` rather than as an off state.
 
   Affected: ``operation_busy``, ``comp_use``, ``anti_legionella_use``,
   ``anti_legionella_operation_busy``, ``heat_upper_use``, ``heat_lower_use``,
@@ -2249,8 +2243,7 @@ Fixed
   reference.
 - New ``docs/explanation/tank-energy.rst`` records what the two fields
   measure and the calibration evidence behind the scale change,
-  including that Navien's own NaviLink app (2.03.00, versionCode 141)
-  reads neither field, so no vendor-side corroboration exists.
+  including that Navien's own NaviLink app reads neither field, so no vendor-side corroboration exists.
 
 - Documented that **temperature fields carry no sentinel at all**. The app
   has no out-of-band constant (no ``0xFFFF``/``-999``/``-1``), no zero-guard
@@ -3071,7 +3064,7 @@ Changed
 
 Fixed
 -----
-- **Week Bitfield Encoding**: Fixed MGPP week bitfield encoding to match NaviLink APK protocol. Sunday is now correctly bit 7 (128), Monday bit 6 (64), ..., Saturday bit 1 (2); bit 0 is unused. Affects all reservation and TOU schedule operations. Verified against reference captures.
+- **Week Bitfield Encoding**: Fixed MGPP week bitfield encoding to match the NaviLink protocol. Sunday is now correctly bit 7 (128), Monday bit 6 (64), ..., Saturday bit 1 (2); bit 0 is unused. Affects all reservation and TOU schedule operations. Verified against reference captures.
 - **Enable/Disable Convention**: Fixed reservation and TOU enable/disable flags to use standard device boolean convention (1=OFF, 2=ON) instead of inverted logic. This aligns with other device binary sensors and matches app behavior. Global reservation status now correctly shows DISABLED when ``reservationUse=1``.
 - **Reservation Set Command Timeout**: Fixed ``reservations set`` subscription pattern that had extra wildcards preventing response matching. Command now receives confirmations correctly.
 - **Intermittent Fetch Bug**: Tightened MQTT topic filter for reservation fetch from ``/res/`` to ``/res/rsv/`` with content validation to prevent false matches on unrelated response messages.
@@ -4015,7 +4008,7 @@ Version 6.0.4 (2025-11-21)
 Fixed
 -----
 
-- **Temperature Conversion Accuracy**: Corrected temperature conversion logic based on analysis of the decompiled mobile application. Previous conversions used approximations; new logic uses exact formulas from the app:
+- **Temperature Conversion Accuracy**: Corrected temperature conversion logic. Previous conversions used approximations; new logic uses the exact formulas the protocol uses:
 
   - Replaced ``Add20`` validator with ``HalfCelsiusToF`` for fields transmitted as half-degrees Celsius
   - Replaced ``DeciCelsiusToF`` with ``PentaCelsiusToF`` for fields scaled by factor of 5

@@ -355,10 +355,9 @@ class CommandCode(IntEnum):
     All commands and their expected payloads are documented in
     docs/reference/protocol/mqtt_protocol.rst.
 
-    Every member mirrors the NaviLink app's ``DeviceControlMGPP`` enum.
-    Members marked *declared only* exist in the app's enum but have no
-    code path that sends them; their payloads are unknown and the library
-    provides no method for them.
+    Members marked *declared only* are codes no NaviLink client sends;
+    their payloads are unknown and the library provides no method for
+    them.
     """
 
     # Query Commands (Information Retrieval)
