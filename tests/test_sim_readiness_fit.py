@@ -251,6 +251,27 @@ class TestCirculationFits:
             for r in runs
         ]
         assert cal.fit_return(short) is None
+        # One rest and one tank-to-air difference throughout: the offset
+        # and the cooling trade off.
+        alike = [
+            replace(
+                r,
+                air_f=70.0,
+                rest_h=1.0,
+                btu=cal.run_heat_btu(
+                    r.minutes,
+                    130.0,
+                    70.0,
+                    10.0,
+                    cast(float, r.flow_gpm),
+                    rest_offset_f=7.0,
+                    rest_h=1.0,
+                    cool_tau_h=0.5,
+                ),
+            )
+            for r in runs
+        ]
+        assert cal.fit_return(alike) is None
 
     def test_the_recent_flow_and_the_lookup(self) -> None:
         runs = self._runs(6.0)

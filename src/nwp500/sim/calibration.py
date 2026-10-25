@@ -2988,6 +2988,13 @@ def run_heat_btu(
 #: hours, for ``fit_return``.
 REST_OFFSET_BOUNDS = (-20.0, 30.0)
 COOL_TAU_BOUNDS = (0.02, 24.0)
+#: The least ratio of the smallest to the largest singular value of the
+#: fitted heat's sensitivities to ``fit_return``'s three terms, each
+#: scaled by its bounds, for the runs to tell the terms apart. The
+#: record's runs give about 0.03; runs that cannot tell them apart (no
+#: rest known, none longer than the volume, one rest and one tank-to-air
+#: difference throughout) give 1e-14 or less.
+MIN_TERM_INDEPENDENCE = 1e-6
 
 
 def fit_return(
@@ -2997,9 +3004,11 @@ def fit_return(
     return_cool_tau_h)`` together: the three minimising the mean absolute
     error of ``run_heat_btu`` against each run's measured heat, at its
     own flow and rest. None with fewer than ``MIN_RUNS_TO_FIT`` usable
-    runs, none with a known rest (the cooling is then not seen), none
-    longer than the volume found (the volume is then not seen), or a
-    fit pinned on a bound (the runs do not constrain it)."""
+    runs, a fit pinned on a bound, or runs that cannot tell the three
+    apart (``MIN_TERM_INDEPENDENCE``): with no rest known the cooling is
+    not seen, with no run longer than the volume the volume is not, and
+    with one rest and one tank-to-air difference throughout the offset
+    and the cooling trade off."""
     usable = [
         (r.minutes, r.upper_f, r.air_f, r.flow_gpm, r.btu, r.rest_h)
         for r in runs
@@ -3011,16 +3020,14 @@ def fit_return(
         and r.air_f is not None
         and r.upper_f > r.air_f
     ]
-    if len(usable) < MIN_RUNS_TO_FIT or not any(
-        u[5] is not None and u[5] > 0.0 for u in usable
-    ):
+    if len(usable) < MIN_RUNS_TO_FIT:
         return None
     bounds = (DISPLACED_BOUNDS, REST_OFFSET_BOUNDS, COOL_TAU_BOUNDS)
 
-    def mae(x: np.ndarray) -> float:
-        volume, offset, tau = (float(v) for v in x)
-        return sum(
-            abs(
+    def heat(x: Sequence[float]) -> np.ndarray:
+        volume, offset, tau = x
+        return np.array(
+            [
                 run_heat_btu(
                     m,
                     up,
@@ -3031,36 +3038,47 @@ def fit_return(
                     rest_h=rest,
                     cool_tau_h=tau,
                 )
-                - measured
-            )
-            for m, up, air, f, measured, rest in usable
-        ) / len(usable)
+                for m, up, air, f, _, rest in usable
+            ]
+        )
+
+    measured = np.array([u[4] for u in usable])
+
+    def mae(x: np.ndarray) -> float:
+        return float(np.mean(np.abs(heat([float(v) for v in x]) - measured)))
 
     # The objective has flat stretches, so several starts.
-    found = min(
-        (
-            cast(
-                OptimizeResult,
-                minimize(
-                    mae,
-                    np.array(x0),
-                    method="Nelder-Mead",
-                    bounds=bounds,
-                    options={"xatol": 1e-4, "fatol": 0.1, "maxiter": 4000},
-                ),
-            )
-            for x0 in ((6.0, 0.0, 1.0), (8.0, 5.0, 1.0), (12.0, 8.0, 2.0))
-        ),
-        key=lambda r: float(r.fun),
-    )
-    x = tuple(float(v) for v in found.x)
+    tries = [
+        cast(
+            OptimizeResult,
+            minimize(
+                mae,
+                np.array(x0),
+                method="Nelder-Mead",
+                bounds=bounds,
+                options={"xatol": 1e-4, "fatol": 0.1, "maxiter": 4000},
+            ),
+        )
+        for x0 in ((6.0, 0.0, 1.0), (8.0, 5.0, 1.0), (12.0, 8.0, 2.0))
+    ]
+    found = tries[int(np.argmin([float(r.fun) for r in tries]))]
+    x = [float(v) for v in found.x]
     # Within a thousandth of the range of a bound is on it.
     if any(
         not lo + (hi - lo) / 1000 < v < hi - (hi - lo) / 1000
         for v, (lo, hi) in zip(x, bounds, strict=True)
     ):
         return None
-    if not any(m * f > x[0] for m, _, _, f, _, _ in usable):
+    # Each term's effect on the fitted heat, by central difference.
+    columns = []
+    for k, (lo, hi) in enumerate(bounds):
+        step = (hi - lo) * 1e-4
+        up, down = list(x), list(x)
+        up[k] += step
+        down[k] -= step
+        columns.append((heat(up) - heat(down)) / 2 * 1e4)
+    sv = np.linalg.svd(np.column_stack(columns), compute_uv=False)
+    if not sv[0] > 0.0 or sv[-1] / sv[0] < MIN_TERM_INDEPENDENCE:
         return None
     return x[0], x[1], x[2]
 
