@@ -380,9 +380,13 @@ class DrawParams:
     pool_f_per_hour: float = field(
         metadata=_p(FITTED, "°F/h", INSTALLATION, _CIRCULATION)
     )
-    #: Share of a flowing draw's heat the probes register under the
-    #: ungated charge (``lower_gate_f = 0.0``, parameters from before
-    #: the lower-zone law).
+    #: Share of a circulation run's heat the tank's probes show under
+    #: the ungated charge (``lower_gate_f = 0.0``, parameters from
+    #: before the lower-zone law). An effective share: the run's heat
+    #: counts all its flow as the tank's, but the return can feed the
+    #: mixing valve's cold port as well as the tank's inlet, and at one
+    #: installation that split is not measured. The share is that split
+    #: and any shortfall of the probes together.
     ungated_observability: float = field(
         metadata=_p(FITTED, "1", INSTALLATION, _CIRCULATION)
     )

@@ -209,7 +209,11 @@ within 3 h of a recovery (26 runs), and 3.6 degF after 14 h (5 runs).
 Pooled over 136 windows at the 6.38 gal loop, the two probes' mean
 fell by about **0.44** of the heat the loop measurement gives for the
 runs (90 % CI 0.38-0.50, read 30 minutes after the last run,
-2026-09-18). That share held from 15 minutes to 2 hours after a run. At
+2026-09-18). The loop measurement counts all the loop's flow as the
+tank's, but the return feeds the mixing valve's cold port as well as
+the tank's cold inlet, and how it splits between the two is not
+measured. The 0.44 is that split and any shortfall of the probes
+together. That share held from 15 minutes to 2 hours after a run. At
 4 hours it read 0.56, on 32 windows.
 
 A run into a stratified tank can take the lower probe to its turn-on
