@@ -748,8 +748,10 @@ def _start_compressor(
     """The compressor starts. A start holds before the lower zone
     climbs, the longer the longer the compressor was off;
     one already running at the walk's start holds for what is left of
-    its own. Then Energy Saver's element reads the upper zone, as at
-    any instant of a stint (``_read_upper``)."""
+    its own. Then the element's later start reads the upper zone, as at
+    any instant of a stint (``_read_upper``); not for one running at the
+    walk's start, which the walk reads once an element on then is
+    restored (``ElementWasOn``)."""
     c = s.state.compressor
     if hold is None:
         hold = 0.0
@@ -767,7 +769,8 @@ def _start_compressor(
         capped_until=None,
     )
     s.act(StartCompressor(start, startup, hold))
-    _read_upper(s)
+    if start.cause != "running":
+        _read_upper(s)
 
 
 def _stop_compressor(s: _Step, reason: StopReason) -> None:
