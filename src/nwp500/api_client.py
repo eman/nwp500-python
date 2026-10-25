@@ -125,8 +125,8 @@ class NavienAPIClient:
         """The signed-in user's type, defaulting to owner (``"O"``).
 
         The sign-in response carries ``userInfo.userType`` (``"O"`` owner,
-        ``"M"`` member, or an installer type) and the NaviLink app sends
-        that value on the TOU endpoints. It is empty when the auth client
+        ``"M"`` member, or an installer type), and the TOU endpoints take
+        that value. It is empty when the auth client
         restored a session without a sign-in response.
         """
         user = self._auth_client.current_user
@@ -398,7 +398,7 @@ class NavienAPIClient:
             additional_value: Additional device identifier
             controller_id: Controller serial number from the device feature
             user_type: User type; defaults to the signed-in user's type
-                (``"O"`` when unknown), as the NaviLink app sends
+                (``"O"`` when unknown)
 
         Returns:
             TOUInfo object
@@ -593,15 +593,14 @@ class NavienAPIClient:
         """
         Remove the TOU rate plan from a device.
 
-        Sends ``DELETE /device/tou``. The NaviLink app serialises the same
-        ``TouRequest`` it uses for ``PUT`` and appends it to the URL as a
-        query string (a DELETE carries no body), so this method passes the
-        fields as query parameters.
+        Sends ``DELETE /device/tou``. The cloud takes the same fields as
+        the ``PUT`` request, as a query string (a DELETE carries no body),
+        so this method passes them as query parameters.
 
-        The app identifies the device by ``controllerId`` when the plan was
-        registered over Bluetooth (``registerPath == "bt"``) and by
-        ``macAddress``/``additionalValue`` otherwise; both are sent here
-        when ``controller_id`` is given.
+        A plan registered over Bluetooth (``registerPath == "bt"``) is
+        identified by ``controllerId``, any other plan by
+        ``macAddress``/``additionalValue``; both are sent here when
+        ``controller_id`` is given.
 
         Args:
             mac_address: Device MAC address
@@ -645,8 +644,8 @@ class NavienAPIClient:
         """
         Look up the manufacture ID the TOU service knows for a device.
 
-        Sends ``GET /device/tou/manufacture-id``. The NaviLink app treats
-        ``"000000000000000"`` as "not available".
+        Sends ``GET /device/tou/manufacture-id``.
+        ``"000000000000000"`` means "not available".
 
         ``controller_id`` is the controller serial number reported in the
         device feature (``DeviceFeature.controller_serial_number``), the
@@ -736,10 +735,10 @@ class NavienAPIClient:
         Enable or disable push notifications for a device.
 
         Sends ``POST /user/set-push-settings``. Flags are encoded 1 (on)
-        or 2 (off). The app always sends every flag the account has, so a
+        or 2 (off). The request carries every flag the account has, so a
         flag left ``None`` keeps its current value, read first with
         :meth:`get_push_settings`; one the cloud does not report (a member
-        account's descaling flag) is omitted, as the app omits it.
+        account's descaling flag) is omitted.
 
         Args:
             mac_address: Device MAC address
@@ -826,7 +825,7 @@ class NavienAPIClient:
         Record the date the air filter was replaced.
 
         Sends ``POST /device/filter/change-info``. The date is formatted
-        ``YYYY-M-D`` without zero padding, as the NaviLink app sends it.
+        ``YYYY-M-D`` without zero padding.
         This only updates the cloud's maintenance log; to reset the
         device's own filter timer use
         :meth:`nwp500.NavienMqttClient.reset_air_filter`.
@@ -982,12 +981,12 @@ class NavienAPIClient:
         Read the unit display preferences stored for a device.
 
         Sends ``GET /device/preferences/format``. The cloud answers with
-        a list; the NaviLink app uses the first entry.
+        a list; the first entry is the one in use.
 
         Not accepted for the NWP500: the cloud answers
         ``400 COMMON_BAD_REQUEST`` for device type 52 whatever the
-        parameters (checked live). The app only calls it for the
-        IoT-module hydro unit (device type 8).
+        parameters (checked live). The endpoint is for the IoT-module
+        hydro unit (device type 8).
 
         Args:
             mac_address: Device MAC address
@@ -1033,14 +1032,13 @@ class NavienAPIClient:
         """
         Store the unit display preferences for a device.
 
-        Sends ``POST /device/preferences/format``. The NaviLink app writes
-        ``"F"``/``"C"`` for temperature and ``"P"`` (psi)/``"M"`` (metric)
-        for pressure.
+        Sends ``POST /device/preferences/format``. Temperature is
+        ``"F"``/``"C"`` and pressure ``"P"`` (psi)/``"M"`` (metric).
 
         Not accepted for the NWP500: the cloud answers
         ``400 COMMON_BAD_REQUEST`` for device type 52 whatever the
-        parameters (checked live). The app only calls it for the
-        IoT-module hydro unit (device type 8).
+        parameters (checked live). The endpoint is for the IoT-module
+        hydro unit (device type 8).
 
         Args:
             mac_address: Device MAC address
@@ -1108,9 +1106,9 @@ class NavienAPIClient:
         """
         Describe a firmware image by its code and version.
 
-        Sends ``POST /firmware/info``. The NaviLink app passes
-        ``cur_sw_code`` with ``downloaded_version`` (when one is pending and
-        differs from the current one) or ``cur_version`` from
+        Sends ``POST /firmware/info``. Pass ``cur_sw_code`` with
+        ``downloaded_version`` (when one is pending and differs from the
+        current one) or ``cur_version`` from
         :class:`~nwp500.models.FirmwareInfo`.
 
         Args:
@@ -1148,9 +1146,9 @@ class NavienAPIClient:
         """
         List the faults the cloud has recorded for a device.
 
-        Sends ``POST /device/error/list``. The NaviLink app calls this from
-        its installer-only error list and sends the signed-in user's ID as
-        ``installerId``. An owner account is rejected with
+        Sends ``POST /device/error/list``. This is an installer-level
+        call, with the signed-in user's ID sent as ``installerId``. An
+        owner account is rejected with
         ``404 COMMON_NOT_AUTHORIZED`` (checked live), so this only works
         when signed in as the device's installer. Pass ``continuous_key``
         (the last entry's ``error_occurred_time``) to fetch the next page.
@@ -1210,8 +1208,8 @@ class NavienAPIClient:
         """
         Rename a device or update its installation details.
 
-        Sends ``POST /device/change-info``. Following the NaviLink app,
-        ``installType`` is omitted when empty, the ``location`` object is
+        Sends ``POST /device/change-info``. ``installType`` is omitted
+        when empty, the ``location`` object is
         omitted when it has no state, city or address, and within it empty
         strings and zero coordinates are left out.
 
@@ -1244,7 +1242,7 @@ class NavienAPIClient:
         body: dict[str, Any] = {"userId": user_email, "deviceInfo": device_info}
 
         if location and (location.state or location.city or location.address):
-            # The app drops empty strings and 0.0 coordinates.
+            # Empty strings and 0.0 coordinates are left out.
             body["location"] = {
                 key: value
                 for key, value in (
@@ -1272,9 +1270,8 @@ class NavienAPIClient:
         """
         List devices in the trimmed ``/device/simple-list`` form.
 
-        The NaviLink app uses this for its product-management list (with
-        ``targetUserId`` equal to the signed-in user) and for an installer
-        viewing an owner's devices (``targetUserId`` = the owner).
+        ``targetUserId`` is the signed-in user for their own devices, or
+        the owner when an installer lists an owner's devices.
 
         Args:
             target_user_id: Whose devices to list (default: the signed-in
@@ -1314,14 +1311,14 @@ class NavienAPIClient:
 
     async def get_app_version(self, os: str = "A") -> AppVersionInfo:
         """
-        Query the NaviLink app versions the cloud expects.
+        Query the client versions the cloud expects.
 
         Sends ``POST /app/version`` without authentication, on this
         client's session. Before sign-in, use the module-level
         :func:`get_app_version`, which needs no client.
 
         Args:
-            os: Platform code; the app sends ``"A"`` (Android)
+            os: Platform code, ``"A"`` for Android
 
         Returns:
             AppVersionInfo object
@@ -1370,16 +1367,15 @@ async def get_app_version(
     base_url: str = API_BASE_URL,
 ) -> AppVersionInfo:
     """
-    Query the NaviLink app versions the cloud expects, before sign-in.
+    Query the client versions the cloud expects, before sign-in.
 
-    Sends ``POST /app/version`` without authentication, as the app does on
-    its splash screen. A 403 whose data carries ``serverCheckText`` is a
-    maintenance notice and is returned as an
+    Sends ``POST /app/version`` without authentication. A 403 whose data
+    carries ``serverCheckText`` is a maintenance notice and is returned as an
     :class:`~nwp500.models.AppVersionInfo` with ``server_check_text`` set;
     any other failure raises.
 
     Args:
-        os: Platform code; the app sends ``"A"`` (Android)
+        os: Platform code, ``"A"`` for Android
         session: Session to send on; a temporary one is opened if omitted
         base_url: Base URL for the API
 

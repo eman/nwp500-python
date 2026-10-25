@@ -2,10 +2,9 @@ Read the Controller over Bluetooth
 ==================================
 
 The NWP500 has a Bluetooth LE service that carries the controller's native
-data protocol. The NaviLink app uses it to read device info and write
-time-of-use plans, and Navien's service app uses it to read and change the
-installer parameters (Installer Menu > Parameter Settings). The
-:mod:`nwp500.ble` package speaks that protocol.
+data protocol. It carries device info reads, time-of-use plan writes,
+and reads and changes of the installer parameters (Installer Menu >
+Parameter Settings). The :mod:`nwp500.ble` package speaks that protocol.
 
 .. warning::
 
@@ -117,10 +116,9 @@ these classes:
 ``SSD`` (17), ``EHD`` (32), ``TSD``/``TCD``/``TDD``/``TAD`` (38-41),
 ``TOU_PLAN`` (170, the stored time-of-use plan), ``SFHD`` (210), ``DID``
 (240), ``MSCD`` (243) and ``MSWD`` (244). It does **not** answer the
-parameter classes 51-54 that the service app uses on boilers, with any
-expected length or sub-address, so its installer parameters live behind
-a class the heat-pump-specific service app knows and this library does
-not yet. :data:`nwp500.ble.NWP500_RESPONDING_CLASSES` lists the
+parameter classes 51-54 that carry the installer parameters on boilers,
+with any expected length or sub-address, so its installer parameters live
+behind a class this library does not know yet. :data:`nwp500.ble.NWP500_RESPONDING_CLASSES` lists the
 responding set. ``TOU_PLAN`` stores a write in its own format (see
 `Write the time-of-use plan`_), and is the only class written so far
 (:data:`nwp500.ble.NWP500_WRITABLE_CLASSES`). The other responding classes
@@ -139,8 +137,8 @@ temperatures, as in the status block (2026-10-20).
 Min Operation Temp is readable but not writable here: it is DID byte 17
 (:meth:`~nwp500.ble.DeviceInfoBlock.min_operation_temperature`), confirmed equal
 to the device's ``heatMinOpTemperature`` over MQTT. The writable parameter
-class is selected from a per-model table the service app downloads from
-Navien's server, so it is not reachable from this interface alone.
+class is selected from a per-model table on Navien's server, so it is
+not reachable from this interface alone.
 
 The address byte is ignored by every answering class except ``TOU_PLAN``,
 where it is a slot index (see below).
@@ -181,8 +179,8 @@ to twelve intervals:
    plan = await ble.read_tou_records()
    await ble.write_tou_records(plan[:4])
 
-The write is the NaviLink app's: an 8-byte clock header (year, month, day,
-weekday, time) and then the records, in the layout the controller returns
+The write is an 8-byte clock header (year, month, day, weekday, time)
+and then the records, in the layout the controller returns
 on a read (:func:`~nwp500.ble.build_tou_write`). The heater answers ``01``
 when it stores them. On the unit checked it behaved as follows:
 
@@ -209,21 +207,18 @@ replaces the whole plan. The heater does not report a Bluetooth write to
 the cloud, so :meth:`~nwp500.NavienAPIClient.get_tou_info` keeps returning
 the cloud's earlier copy. On the unit checked, a write into an empty table
 also turned TOU scheduling on, and clearing the table turned it off; check
-``tou_status`` afterwards. NaviLink's own Bluetooth path sends a longer
-plan as several pages at address 0, which on this heater leaves only the
-last page stored.
+``tou_status`` afterwards. A longer plan sent as several pages at
+address 0 leaves only the last page stored on this heater.
 
 Read live status
 ----------------
 
 The heater does not answer a read of the real-time monitoring class
 (``RTMD``, 48). It pushes that block instead, once it receives the
-class-50 session command 200 that Navien's service apps send on
-connecting: a 156-byte block about every 300 ms. A read ends the stream:
+class-50 session command 200: a 156-byte block about every 300 ms. A read ends the stream:
 the heater answers it and pushes no more blocks until the next command.
-The service app's monitoring graph sends 202 for its Stop button, which on
-the heater runs the stream at about one block a second instead, and 201
-stops it.
+Session command 202 runs the stream at about one block a second
+instead, and 201 stops it.
 
 :meth:`~nwp500.ble.NavienBleClient.read_status` starts the stream and
 returns the newest block as a :class:`~nwp500.ble.RealTimeStatus`, and
@@ -269,9 +264,8 @@ Read the DIP-switch block
 ``SSD`` (17) is not live status.
 :meth:`~nwp500.ble.NavienBleClient.read_sub_status` decodes ``SSD`` into
 :class:`~nwp500.ble.SubStatus`, with two 16-bit DIP-switch words, using
-the layout the UK service toolkit reads on boilers. That layout is
-unconfirmed on the heat pump. The toolkit expects a 60-byte block and an
-NWP500 sends 59, and what each bit means is not known. The unit checked
+the boiler layout. That layout is unconfirmed on the heat pump. The
+boiler block is 60 bytes and an NWP500 sends 59, and what each bit means is not known. The unit checked
 read ``0x0004`` and ``0x0000``. ``python -m nwp500.ble read`` prints both
 words under the ``SSD`` line.
 
@@ -310,7 +304,7 @@ carries them is known, compare those values, in half-degrees Celsius for
 temperatures, against the block bytes to find each parameter's offset.
 A change is then a read of the block, one byte edited, and a
 :meth:`~nwp500.ble.NavienBleClient.write_block` of that class, which is
-how the service app applies parameter changes on boilers.
+how parameter changes are applied on boilers.
 
 Protocol summary
 ----------------

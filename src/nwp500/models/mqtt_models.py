@@ -7,14 +7,13 @@ from .._base import NavienBaseModel
 from ..enums import DeviceType
 
 #: Value the library sends in ``event.connection.os`` of app-connection
-#: messages. The NaviLink Android app sends ``"A"``; nothing that reads the
-#: topic (the app's ``EventStatus`` model, which only has ``status`` and
-#: ``sessionNumber``) looks at ``os``, and AWS IoT delivers the message to
+#: messages. ``"A"`` is Android's tag. Only ``status`` and ``sessionNumber``
+#: carry meaning on the topic, and AWS IoT delivers the message to
 #: subscribers unchanged, so the library identifies itself as ``"P"``
-#: (Python) instead of impersonating the app.
+#: (Python) instead of using Android's tag.
 APP_CONNECTION_OS = "P"
 
-#: ``protocolVersion`` of app-connection messages, as the app sends it.
+#: ``protocolVersion`` of app-connection messages.
 APP_CONNECTION_PROTOCOL_VERSION = 1
 
 
@@ -46,10 +45,9 @@ class MqttCommand(NavienBaseModel):
 class ControlFailCode(IntEnum):
     """``failCode`` values of a control failure (``res/ctrl-fail``).
 
-    The NaviLink app (2.04.00, ``z4/f1.java``) interprets exactly one
-    value: 2, for which it shows "DHW control interval exceeded" and
-    refreshes the screen. Any other value is ignored by the app, so its
-    meaning is unknown; the library keeps such values as plain ``int``.
+    One value is known: 2, "DHW control interval exceeded". Any other
+    value has no known meaning; the library keeps such values as plain
+    ``int``.
     """
 
     DHW_CONTROL_INTERVAL_EXCEEDED = 2
@@ -91,9 +89,8 @@ class ControlFailResponse(NavienBaseModel):
     """A control failure published on ``res/ctrl-fail``.
 
     Sent on ``cmd/{deviceType}/navilink-{mac}/res/ctrl-fail`` when the
-    device rejects a control command. Mirrors the app's
-    ``ControlFailData``: the envelope names the client whose command
-    failed (``clientID``, ``sessionID``, ``requestTopic``) and
+    device rejects a control command. The envelope names the client whose
+    command failed (``clientID``, ``sessionID``, ``requestTopic``) and
     ``response`` carries the device identity and the ``failCode``.
     """
 
@@ -123,11 +120,11 @@ class AppConnectionStatus(NavienBaseModel):
     """The ``connection`` object of an app-connection message.
 
     ``status`` is 1 while the publishing client is connected and 0 in
-    the Last-Will the broker publishes when it drops. The app treats any
-    value at or below 0 as disconnected. ``os`` is set by the publisher
-    (``"A"`` for the Android app, :data:`APP_CONNECTION_OS` for this
-    library); ``sessionNumber`` appears in the app's parsing model for
-    the device ``connection`` event and is kept when present.
+    the Last-Will the broker publishes when it drops. Any value at or
+    below 0 means disconnected. ``os`` is set by the publisher
+    (``"A"`` for Android, :data:`APP_CONNECTION_OS` for this
+    library); ``sessionNumber``, which the device's ``connection``
+    event carries, is kept when present.
     """
 
     status: int
@@ -136,7 +133,7 @@ class AppConnectionStatus(NavienBaseModel):
 
     @property
     def connected(self) -> bool:
-        """``True`` when ``status`` is above 0, as the app decides."""
+        """``True`` when ``status`` is above 0."""
         return self.status > 0
 
 
@@ -156,7 +153,7 @@ class AppConnectionEvent(NavienBaseModel):
     Published by a client when it connects to a device
     (``connection.status`` 1) and by the broker as that client's
     Last-Will when its connection is lost without a DISCONNECT
-    (``connection.status`` 0). Mirrors the app's ``RequestLastWill``.
+    (``connection.status`` 0).
     """
 
     client_id: str | None = Field(default=None, alias="clientID")

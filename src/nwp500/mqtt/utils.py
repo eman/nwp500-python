@@ -222,19 +222,15 @@ class MqttConnectionConfig:
 
         send_session_end_on_disconnect: Publish the ``st/end`` session-end
             query to each subscribed device when ``disconnect()`` is
-            called, as the NaviLink app does when it leaves a device. Its
-            effect on other clients connected to the same device is not
-            known; turn it off to disconnect without it.
+            called. Its effect on other clients connected to the same
+            device is not known; turn it off to disconnect without it.
 
         last_will_device: Device whose ``app-connection`` event topic
-            receives this client's MQTT Last-Will. The NaviLink app
-            registers one for the device it is attached to; the broker
-            publishes it (``connection.status`` 0) if the connection is
-            lost without a DISCONNECT, so other clients watching the topic
-            learn the client dropped. A will names one topic, so one
-            device. ``None`` (the default) registers no will. A NaviLink
-            app subscribed to the topic shows a "device disconnected"
-            notice when it receives one.
+            receives this client's MQTT Last-Will. The broker publishes it
+            (``connection.status`` 0) if the connection is lost without a
+            DISCONNECT, so other clients watching the topic learn the client
+            dropped. A will names one topic, so one device. ``None`` (the
+            default) registers no will.
     """
 
     endpoint: str = AWS_IOT_ENDPOINT

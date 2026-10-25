@@ -9,8 +9,7 @@ class TOUSchedule(NavienBaseModel):
     """Time of Use schedule information."""
 
     season: int = 0
-    #: Season label carried by the NaviLink app's ``TouSchedule``; absent
-    #: from most responses.
+    #: Season label; absent from most responses.
     nickname: str | None = None
     intervals: list[dict[str, Any]] = Field(
         default_factory=list, alias="interval"

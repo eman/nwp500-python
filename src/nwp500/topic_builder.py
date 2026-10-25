@@ -11,7 +11,7 @@ Topic schema::
     Response (control ack):      cmd/{device_type}/navilink-{mac}/
                                  {client_id}/res
     Response (query result):     cmd/{device_type}/{client_id}/res/{suffix}
-    Response (app form):         cmd/{device_type}/{home_seq}/{user_seq}/
+    Response (account-keyed):    cmd/{device_type}/{home_seq}/{user_seq}/
                                  {client_id}/res/{suffix}
     Response (device-keyed):     cmd/{device_type}/navilink-{mac}/res/{suffix}
     Response (control failure):  cmd/{device_type}/navilink-{mac}/res/ctrl-fail
@@ -79,7 +79,7 @@ class MqttTopicBuilder:
         client_id: str,
         suffix: str,
     ) -> str:
-        """Build a response topic in the NaviLink app's five-segment form.
+        """Build a response topic in the five-segment form.
 
         The NaviLink cloud decodes some device replies (the packed hex of
         the ``td/rd`` diagnostics query) into JSON only when the requested
@@ -113,9 +113,8 @@ class MqttTopicBuilder:
     def control_fail_response_topic(device_type: str, mac_address: str) -> str:
         """Build the device-keyed topic that carries control failures.
 
-        The NaviLink app subscribes to it for the NWP500 and shows a popup
-        when ``failCode`` is 2. The ``command_topic(..., "#")`` wildcard
-        subscription receives it.
+        ``failCode`` 2 means the DHW control interval was exceeded. The
+        ``command_topic(..., "#")`` wildcard subscription receives it.
 
         Format: ``cmd/{device_type}/navilink-{mac}/res/ctrl-fail``
         """

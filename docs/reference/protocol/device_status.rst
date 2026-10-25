@@ -51,7 +51,7 @@ This document lists the fields found in the ``status`` object of device status m
    * - ``minorCode``
      - integer
      - None
-     - Secondary alarm code, shown by the NaviLink app as ``R%03d`` alongside ``errorCode``. 0 = none. 101 is the one code the app lets the user reset from its alarm screen. Exposed as ``DeviceStatus.minor_code``.
+     - Secondary alarm code, formatted as ``R%03d`` alongside ``errorCode``. 0 = none. Exposed as ``DeviceStatus.minor_code``.
      - None
    * - ``operationMode``
      - CurrentOperationMode
@@ -261,12 +261,12 @@ This document lists the fields found in the ``status`` object of device status m
    * - ``currentHeatUse``
      - integer
      - None
-     - Heat source currently running: 0 = none/unknown, 1 = heat pump, 2 = electric element, 3 = both. Matches the NaviLink app's ``HPWHHeatSource``.
+     - Heat source currently running: 0 = none/unknown, 1 = heat pump, 2 = electric element, 3 = both.
      - ``HeatSource`` enum
    * - ``currentInletTemperature``
      - float
      - °F
-     - Cold water inlet temperature. The NWP500 always reports 0 here and the NaviLink app never displays it for this model; see :doc:`/explanation/unknown-values`.
+     - Cold water inlet temperature. The NWP500 always reports 0 here, so treat it as unavailable; see :doc:`/explanation/unknown-values`.
      - HalfCelsiusToF
    * - ``currentStatenum``
      - integer
@@ -341,12 +341,12 @@ This document lists the fields found in the ``status`` object of device status m
    * - ``airFilterAlarmElapsed``
      - integer
      - hours
-     - Reported but never read by the NaviLink app; semantics unconfirmed. Remaining filter life comes from ``cumulatedOpTimeEvaFan``.
+     - Semantics unconfirmed. Remaining filter life comes from ``cumulatedOpTimeEvaFan``.
      - None
    * - ``cumulatedOpTimeEvaFan``
      - integer
      - hours
-     - Evaporator fan run time since the last air-filter reset. The NaviLink app shows remaining filter life as ``airFilterAlarmPeriod - cumulatedOpTimeEvaFan`` (``DeviceStatus.air_filter_remaining_hours``). The lifetime total is the diagnostics field of the same name.
+     - Evaporator fan run time since the last air-filter reset. Remaining filter life is ``airFilterAlarmPeriod - cumulatedOpTimeEvaFan`` (``DeviceStatus.air_filter_remaining_hours``). The lifetime total is the diagnostics field of the same name.
      - None
    * - ``cumulatedDhwFlowRate``
      - integer
@@ -446,7 +446,7 @@ This document lists the fields found in the ``status`` object of device status m
    * - ``drOverrideStatus``
      - integer
      - None
-     - Demand Response override flag in the device's on/off convention: 0 = unknown, 1 = off, 2 = on ("DR applied" in the NaviLink app). Not an hour count. ``DeviceStatus.dr_override_active`` is True when it is 2.
+     - Demand Response override flag in the device's on/off convention: 0 = unknown, 1 = off, 2 = on. Not an hour count. ``DeviceStatus.dr_override_active`` is True when it is 2.
      - None
    * - ``touOverrideStatus``
      - integer
@@ -556,7 +556,7 @@ Field Definitions
     * 5 = ``VACATION`` (Vacation mode)
     * 6 = ``POWER_OFF`` (Device is powered off)
 
-  * Set by: User via app, CLI, or MQTT command
+  * Set by: User via the front panel, CLI, or MQTT command
   * Changes: Only when user explicitly changes the mode or powers device off/on
   * Meaning: "When heating is needed, use this mode" OR "I'm powered off" (if value is 6)
   * Value 6 (``POWER_OFF``) indicates the device was powered off via the power-off command. This is how to distinguish between "powered off" and "on but idle".

@@ -155,7 +155,7 @@ class MqttSubscriptionManager:
         self._state_tracker = DeviceStateTracker(event_emitter)
 
         # Devices passed to any subscription, keyed by MAC. disconnect()
-        # sends each one an st/end, as the NaviLink app does.
+        # sends each one an st/end.
         self._devices: dict[str, Device] = {}
 
     @property
@@ -991,7 +991,7 @@ class MqttSubscriptionManager:
         """Subscribe to installer diagnostics responses (``td/rd``).
 
         Pairs with :meth:`~nwp500.NavienMqttClient.request_diagnostics`.
-        The cloud publishes the decoded JSON on the app-form response topic
+        The cloud publishes the decoded JSON on the account-keyed response topic
         only, so that is the topic subscribed here.
         """
         return await self._subscribe_response(
@@ -1151,7 +1151,7 @@ class MqttSubscriptionManager:
 
         Pairs with
         :meth:`~nwp500.NavienMqttClient.commit_firmware_update`, which asks
-        for the reply on the app-form topic as the NaviLink app does. The
+        for the reply on the account-keyed topic. The
         reply's shape has not been observed, so the callback receives the
         raw ``response`` object.
         """

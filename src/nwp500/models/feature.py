@@ -95,10 +95,7 @@ class DeviceFeature(NavienBaseModel):
         )
     )
     wifi_sw_version: int = Field(
-        description=(
-            "WiFi module firmware version - "
-            "handles app connectivity and cloud communication"
-        )
+        description=("WiFi module firmware version, for cloud communication")
     )
     controller_sw_code: int = Field(
         description=(
@@ -202,10 +199,9 @@ class DeviceFeature(NavienBaseModel):
     )
     mixing_valve_use: CapabilityFlag = Field(
         # The device spells this "Value", not "Valve" - the misspelling is
-        # Navien's own (see KDResponseMgppDid$Feature in the vendor app and
-        # docs/reference/protocol/device_features.rst). Correcting it here
-        # makes the field silently fall back to its default, because the
-        # base model ignores unknown keys.
+        # Navien's own (see docs/reference/protocol/device_features.rst).
+        # Correcting it here makes the field silently fall back to its
+        # default, because the base model ignores unknown keys.
         alias="mixingValueUse",
         default=False,
         description=("Thermostatic mixing valve support (2=supp, 1=not)"),

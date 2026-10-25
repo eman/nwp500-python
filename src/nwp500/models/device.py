@@ -17,10 +17,9 @@ def push_flag_to_python(value: Any) -> bool | None:
     """Convert a push-notification flag to a tri-state Python bool.
 
     The ``/user/get-push-settings`` and ``/device/info`` ``alarmInfo`` flags
-    use the **opposite** encoding to the device's on/off flags: the NaviLink
-    app sends ``isChecked() ? 1 : 2``, so 1 is *on* and 2 is *off*. 0 is
-    "not reported" (the app omits a 0 from the request body) and maps to
-    ``None`` rather than a fabricated off, following
+    use the **opposite** encoding to the device's on/off flags: 1 is *on*
+    and 2 is *off*. 0 is "not reported" (a 0 is left out of the request
+    body) and maps to ``None`` rather than a fabricated off, following
     :func:`nwp500.converters.device_tristate_to_python`.
     """
     if value is None:
@@ -50,7 +49,7 @@ PushFlag = Annotated[bool | None, BeforeValidator(push_flag_to_python)]
 
 
 def _null_to_zero(value: Any) -> Any:
-    """``null`` reads as 0, as the NaviLink app's JSON parser reads it."""
+    """``null`` reads as 0."""
     return 0 if value is None else value
 
 
@@ -61,8 +60,8 @@ NullableInt = Annotated[int, BeforeValidator(_null_to_zero)]
 def epoch_ms_to_python(value: Any) -> Any:
     """Read a timestamp as epoch milliseconds.
 
-    The NaviLink app reads ``errorOccuredTime`` as a number. The same key
-    on ``/device/list`` is an ISO 8601 string, so a string is accepted
+    ``errorOccuredTime`` is a number on ``/device/error/list``. The same
+    key on ``/device/list`` is an ISO 8601 string, so a string is accepted
     too: a numeric one as is, an ISO 8601 one converted (UTC when it
     carries no offset).
     """
@@ -173,8 +172,8 @@ class PushSettings(NavienBaseModel):
     def to_request_dict(self) -> dict[str, int]:
         """Flags encoded as the API expects (1=on, 2=off), unset ones omitted.
 
-        Mirrors the NaviLink app, which leaves a key out of
-        ``/user/set-push-settings`` when its value is 0.
+        A key whose value is 0 is left out of
+        ``/user/set-push-settings``.
         """
         encoded = {
             "isErrorAlarm": python_to_push_flag(self.is_error_alarm),
@@ -206,8 +205,8 @@ class Device(NavienBaseModel):
 class FirmwareDeviceGroup(NavienBaseModel):
     """Firmware group membership reported by ``/device/firmware/info``.
 
-    The NaviLink app reads ``deviceGroup`` as an object with ``groupSeq``
-    and ``unitNum``; the cloud sends ``null`` for a stand-alone unit.
+    ``deviceGroup`` is an object with ``groupSeq`` and ``unitNum``; the
+    cloud sends ``null`` for a stand-alone unit.
     """
 
     group_seq: int | None = None
@@ -223,11 +222,11 @@ class FirmwareInfo(NavienBaseModel):
     cur_sw_code: int = 0
     cur_version: int = 0
     downloaded_version: int | None = None
-    #: An object per the app's parser. A bare string is still accepted
+    #: An object. A bare string is still accepted
     #: because earlier docs showed one; ``None`` for a stand-alone unit.
     device_group: FirmwareDeviceGroup | str | None = None
     #: Unit number within the group, sent at the top level by some
-    #: responses (the app reads both this and ``deviceGroup.unitNum``).
+    #: responses alongside ``deviceGroup.unitNum``.
     device_group_unit_no: int | None = None
 
 
@@ -235,19 +234,18 @@ class FirmwareDetail(NavienBaseModel):
     """Description of one firmware image, from ``POST /firmware/info``.
 
     Looked up by the ``swCode``/``swVersion`` pair that
-    :class:`FirmwareInfo` reports; the NaviLink app shows ``description``
-    on its update screen and ``run_time`` as the estimated update time.
+    :class:`FirmwareInfo` reports.
     """
 
     description: str | None = None
-    #: The integer fields read ``null`` as 0, as the app does.
+    #: The integer fields read ``null`` as 0.
     model_number: NullableInt = 0
     model_type: NullableInt = 0
     product_family: NullableInt = 0
     #: When the image was registered, as the cloud sends it (epoch
     #: milliseconds).
     register_at: NullableInt = 0
-    #: Estimated update duration in minutes (added in NaviLink 2.04.00).
+    #: Estimated update duration in minutes.
     run_time: NullableInt = 0
     sw_code: NullableInt = 0
     sw_version: NullableInt = 0
@@ -256,9 +254,8 @@ class FirmwareDetail(NavienBaseModel):
 class DisplayPreferences(NavienBaseModel):
     """Unit display preferences from ``/device/preferences/format``.
 
-    The NaviLink app compares ``temperatureDisplayFormat`` against ``"F"``
-    (the other value it writes is ``"C"``) and ``pressureDisplayFormat``
-    against ``"P"`` (psi; the alternative it writes is ``"M"``).
+    ``temperatureDisplayFormat`` is ``"F"`` or ``"C"``;
+    ``pressureDisplayFormat`` is ``"P"`` (psi) or ``"M"`` (metric).
     """
 
     model_type_code: int | None = None
@@ -271,9 +268,7 @@ class DisplayPreferences(NavienBaseModel):
 class SimpleDevice(NavienBaseModel):
     """One entry of ``POST /device/simple-list``.
 
-    A trimmed device record: identifiers, type and name only. The app uses
-    it for the product-management list and for an installer viewing an
-    owner's devices.
+    A trimmed device record: identifiers, type and name only.
     """
 
     mac_address: str = ""
@@ -295,13 +290,13 @@ class DeviceErrorHistoryEntry(NavienBaseModel):
     )
     sub_error: int = 0
     #: Epoch milliseconds. Spelled "Occured" by the API; the Python name is
-    #: spelled correctly. The app passes the last entry's value back as
+    #: spelled correctly. Pass the last entry's value back as
     #: ``continuousKey`` to fetch the next page. An ISO 8601 string is
     #: converted (see :func:`epoch_ms_to_python`).
     error_occurred_time: Annotated[
         int | None, BeforeValidator(epoch_ms_to_python)
     ] = Field(default=None, alias="errorOccuredTime")
-    #: The list's ``timeZone`` (an IANA name), which the app formats the
+    #: The list's ``timeZone`` (an IANA name), the zone to show the
     #: times in. ``None`` when the cloud sends none.
     time_zone: str | None = None
 

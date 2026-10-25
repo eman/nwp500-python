@@ -168,8 +168,8 @@ disconnect()
    Disconnect from MQTT broker and cleanup all resources.
 
    Stops all periodic tasks, sends the session-end query (``st/end``) to
-   every device passed to a ``subscribe_*`` method, as the NaviLink app
-   does when it leaves a device, then closes the connection. The
+   every device passed to a ``subscribe_*`` method, then closes the
+   connection. The
    session-end publishes go straight to the connection (never into the
    offline command queue), stop if the connection drops, are bounded by a
    short timeout, and never fail the disconnect. Set
@@ -462,7 +462,7 @@ set_vacation_days()
 .. py:method:: set_vacation_days(device, days)
 
    Enter vacation mode for ``days`` days (1-99). Sends ``dhw-mode`` with
-   ``[5, days]``, which is what the NaviLink app's vacation flow does.
+   ``[5, days]``.
 
    **Capability Required:** ``holiday_use``
 
@@ -472,7 +472,7 @@ set_vacation_duration()
 .. py:method:: set_vacation_duration(device, days)
 
    Set the vacation day count (1-99) without changing the operation mode.
-   Sends the app's ``goout-day`` command (33554466). Verified live: the
+   Sends the ``goout-day`` command (33554466). Verified live: the
    device updates ``vacation_day_setting`` and leaves the operation mode
    unchanged.
 
@@ -566,7 +566,7 @@ configure_recirculation_schedule()
 .. py:method:: configure_recirculation_schedule(device, schedule)
 
    Write the recirculation pump schedule. Publishes RECIR_RESERVATION
-   (33554440) on ``ctrl/recirc-rsv/rd`` with the app's
+   (33554440) on ``ctrl/recirc-rsv/rd`` with the
    ``reservationUse``/``reservation`` envelope and asks for the written
    schedule back on ``recirc-rsv/rd``. That echo is unverified (the only
    unit tested has no recirculation pump). The schedule is checked
@@ -687,10 +687,9 @@ request_energy_usage_monthly()
 
 .. py:method:: request_energy_usage_monthly(device, years)
 
-   Request per-month energy usage for whole years. The NaviLink app sends
-   this for the previous and current year. Each ``usage`` entry of the
-   response is a year (``month`` is ``None``) whose ``data`` holds twelve
-   months; see :meth:`~nwp500.models.EnergyUsageResponse.get_year_data`.
+   Request per-month energy usage for whole years. Each ``usage`` entry
+   of the response is a year (``month`` is ``None``) whose ``data`` holds
+   twelve months; see :meth:`~nwp500.models.EnergyUsageResponse.get_year_data`.
 
    :param years: Years to query, e.g. ``[2025, 2026]``; each 2000-2099,
      duplicates dropped
@@ -711,9 +710,8 @@ request_energy_usage_hourly()
 
 .. py:method:: request_energy_usage_hourly(device, year, month, days)
 
-   Request per-hour energy usage for specific days, as the NaviLink app
-   does. The NWP500 firmware tested never answered this query, so expect
-   a timeout on that model.
+   Request per-hour energy usage for specific days. The NWP500 firmware
+   tested never answered this query, so expect a timeout on that model.
 
 subscribe_energy_usage_hourly()
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -733,9 +731,10 @@ request_diagnostics()
    Request the installer diagnostics counters (``st/td/rd``): lifetime
    energy and fault counters, hot-water draw statistics and component run
    times. The NaviLink cloud decodes the device's packed reply into JSON
-   only for the app-form reply topic, which this method requests. The
-   app shows this screen to installer accounts only, but the gate is in
-   the app and a consumer account's unit answers.
+   only for the account-keyed reply topic
+   (``cmd/{deviceType}/{homeSeq}/{userSeq}/{clientId}/res/...``), which
+   this method requests. This is an installer-level query, but the device does not
+   check the account type: a consumer account's unit answers.
 
 subscribe_diagnostics()
 ^^^^^^^^^^^^^^^^^^^^^^^
@@ -788,7 +787,7 @@ subscribe_control_fail_response()
    acknowledging it on the control ack topic. The callback receives the
    parsed :class:`~nwp500.models.mqtt_models.ControlFailResponse`,
    envelope included: ``client_id`` says whose command failed and
-   ``fail_code`` why. The only code the NaviLink app interprets is
+   ``fail_code`` why. The only code with a defined meaning is
    :attr:`~nwp500.models.mqtt_models.ControlFailCode.DHW_CONTROL_INTERVAL_EXCEEDED`
    (2): the previous DHW control was too recent, so wait and resend.
 
@@ -838,8 +837,8 @@ commit_firmware_update()
 .. py:method:: commit_firmware_update(device, payload)
 
    Commit a previously downloaded firmware update. Publishes on
-   ``ctrl/commit-ota`` with the reply requested on the app-form
-   ``res/commit-ota`` topic, as the NaviLink app's firmware screen does.
+   ``ctrl/commit-ota`` with the reply requested on the account-keyed
+   ``res/commit-ota`` topic.
    Subscribe with :meth:`subscribe_firmware_commit_response` first to
    receive that reply. Not exercised against a device.
 
@@ -891,8 +890,8 @@ set_air_filter_life()
 .. py:method:: set_air_filter_life(device, hours)
 
    Set the air filter service interval: ``0`` to disable the alarm, or
-   1000 to 10000 evaporator-fan hours in 500-hour steps (the values the
-   NaviLink app offers). The device reports it back as
+   1000 to 10000 evaporator-fan hours in 500-hour steps. The device
+   reports it back as
    ``DeviceStatus.air_filter_alarm_period``.
 
    :raises ParameterValidationError: If ``hours`` is not an accepted value.
@@ -902,8 +901,8 @@ reset_condenser_fault()
 
 .. py:method:: reset_condenser_fault(device)
 
-   Clear a condenser fault. The NaviLink app exposes this to installer
-   accounts only; the gate is in the app. A consumer account's unit
+   Clear a condenser fault. This is an installer-level control, but the
+   device does not check the account type: a consumer account's unit
    acknowledges the command; the clearing effect was not observable
    because no fault was present.
 
@@ -980,14 +979,12 @@ signal_app_connection()
 .. py:method:: signal_app_connection(device)
 
    Announce this client's presence on
-   ``evt/{deviceType}/navilink-{mac}/app-connection``. The payload is
-   the NaviLink app's ``RequestLastWill`` shape with
-   ``event.connection.status`` 1 (see
+   ``evt/{deviceType}/navilink-{mac}/app-connection``. The payload is a
+   connection event with ``event.connection.status`` 1 (see
    :class:`~nwp500.models.mqtt_models.AppConnectionEvent`); the
    Last-Will registered through ``last_will_device`` is the same message
-   with status 0. The app itself only registers the will and, for the
-   NWP500, does not subscribe to the topic, so this is read by other
-   library clients using :meth:`subscribe_app_connection`. Optional.
+   with status 0. Other library clients read it with
+   :meth:`subscribe_app_connection`. Optional.
 
    :param device: Device object
    :type device: Device
@@ -1005,17 +1002,14 @@ Last-Will (``last_will_device``)
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Set ``MqttConnectionConfig.last_will_device`` to register an MQTT
-Last-Will, as the NaviLink app does. The broker publishes it on the
-device's ``app-connection`` topic with ``event.connection.status`` 0 if
-the connection is lost without a DISCONNECT, so other clients watching
-the topic learn this one dropped. A will names one topic, so one device;
+Last-Will. The broker publishes it on the device's ``app-connection``
+topic with ``event.connection.status`` 0 if the connection is lost
+without a DISCONNECT, so other clients watching the topic learn this one
+dropped. A will names one topic, so one device;
 every rebuilt connection (reconnects included) carries it again. A
 graceful :meth:`disconnect` does not trigger it.
 
-The NaviLink app shows a "device disconnected" notice when it receives
-a status-0 event on this topic. The Android app does not subscribe to
-it for the NWP500, but an app build that does would show the notice
-whenever this client drops. The will is off by default.
+The will is off by default.
 
 .. code-block:: python
 

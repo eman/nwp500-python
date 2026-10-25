@@ -22,8 +22,8 @@ class OnOffFlag(IntEnum):
     anti-legionella, and many other boolean device settings.
 
     ``UNKNOWN`` is the device's own sentinel, not a library invention. The
-    NaviLink app decodes these fields through an enum declared
-    ``UNKNOWN(0), OFF(1), ON(2)``, reserving 0 and starting real values at 1.
+    protocol codes these fields ``UNKNOWN(0), OFF(1), ON(2)``, reserving 0
+    and starting real values at 1.
     See :doc:`/explanation/unknown-values`.
     """
 
@@ -59,9 +59,8 @@ class DhwOperationSetting(IntEnum):
     values appear in the dhw_operation_setting field and are set via user
     commands.
 
-    Mirrors the NaviLink app's ``MgppOperationMode``. ``STANDBY`` (0) is a
-    status-only value: the app tests for it but never sends it, and the
-    ``dhw-mode`` command accepts 1-6 only.
+    ``STANDBY`` (0) is a status-only value: the device reports it but it is
+    never sent, and the ``dhw-mode`` command accepts 1-6 only.
     """
 
     STANDBY = 0  # Status only; reported, never sent
@@ -108,10 +107,8 @@ class DREvent(IntEnum):
     Allows utilities to manage grid load by signaling water heaters
     to reduce consumption (shed) or pre-heat (load up) before peak periods.
 
-    The NaviLink app's ``HPWHDREvent`` declares both ``CPE`` and
-    ``GRID_ENERGY`` with id 5, but decodes ``drEventStatus`` by array
-    position (``values()[raw]``), so raw 5 renders "CPE" and raw 6 renders
-    "Grid Emergency". The members here follow the raw values.
+    In ``drEventStatus``, raw 5 is "CPE" and raw 6 is "Grid Emergency".
+    The members here follow the raw values.
     """
 
     UNKNOWN = 0  # Not Applied
@@ -124,7 +121,7 @@ class DREvent(IntEnum):
 
 
 class WaterLevel(IntEnum):
-    """Hot water level indicator (displayed as gauge in app).
+    """Hot water level indicator.
 
     Note: IDs are non-sequential, likely represent bit positions
     for multi-level displays.
@@ -147,10 +144,9 @@ class FilterChange(IntEnum):
 class RecirculationMode(IntEnum):
     """Recirculation pump operation mode.
 
-    Mirrors the NaviLink app's ``MgppRecirculationOperationMode``, which
-    both sends these ids with the ``recirc-mode`` command and decodes the
-    ``recircOperationMode`` status field through them. ``ALWAYS`` is kept
-    as an alias of ``ALWAYS_ON``.
+    The same ids are sent with the ``recirc-mode`` command and reported in
+    the ``recircOperationMode`` status field. ``ALWAYS`` is kept as an
+    alias of ``ALWAYS_ON``.
     """
 
     UNKNOWN = 0
@@ -164,7 +160,7 @@ class RecirculationMode(IntEnum):
 class ReservationMode(IntEnum):
     """Operation mode carried by a weekly-schedule (reservation) entry.
 
-    Mirrors the NaviLink app's ``MgppReservationMode``. The ids 1-4 match
+    The ids 1-4 match
     :class:`DhwOperationSetting`, but 5 is ``POWER_OFF`` here (there is no
     vacation entry in the schedule) and 0 marks an unused slot.
     """
@@ -240,7 +236,7 @@ class TempFormulaType(IntEnum):
 
     Different device models use slightly different rounding algorithms
     when converting internal Celsius values to Fahrenheit, so that
-    the mobile app matches the device's built-in display.
+    the converted value matches the device's built-in display.
 
     Type 0: Asymmetric ceiling/floor rounding based on raw value remainder
     Type 1: Standard rounding to nearest integer
@@ -326,10 +322,9 @@ class UnitType(IntEnum):
 class DeviceType(IntEnum):
     """Communication device type.
 
-    Mirrors the NaviLink app's ``deviceType`` enum. The NWP500 reports 52,
-    which the app names ``DefineData.HPWH_MODEL`` (heat pump water
-    heater); ``HPWH`` is the matching alias. ``NPF700_MAIN``/``NPF700_SUB``
-    are kept as aliases of the app's ``NFB700_*`` names.
+    The NWP500 reports 52 (heat pump water heater); ``HPWH`` is the
+    matching alias. ``NPF700_MAIN``/``NPF700_SUB`` are kept as aliases of
+    the ``NFB700_*`` names.
     """
 
     NAVILINK = 1  # Standard NaviLink WiFi module
@@ -339,7 +334,7 @@ class DeviceType(IntEnum):
     NPF700_MAIN = 50  # Alias of NFB700_MAIN (earlier name)
     NFB700_SUB = 51  # NFB700 sub-controller
     NPF700_SUB = 51  # Alias of NFB700_SUB (earlier name)
-    NPF700_WIFI = 52  # NWP500 heat pump water heater (app: HPWH_MODEL)
+    NPF700_WIFI = 52  # NWP500 heat pump water heater
     HPWH = 52  # Alias of NPF700_WIFI
 
 
@@ -355,15 +350,14 @@ class CommandCode(IntEnum):
     All commands and their expected payloads are documented in
     docs/reference/protocol/mqtt_protocol.rst.
 
-    Every member mirrors the NaviLink app's ``DeviceControlMGPP`` enum.
-    Members marked *declared only* exist in the app's enum but have no
-    code path that sends them; their payloads are unknown and the library
+    Members marked *declared only* are codes the protocol defines but no
+    client is known to send; their payloads are unknown and the library
     provides no method for them.
     """
 
     # Query Commands (Information Retrieval)
     DEVICE_INFO_REQUEST = 16777217  # st/did: device feature information
-    SESSION_END = 16777218  # st/end: app sends this when leaving a device
+    SESSION_END = 16777218  # st/end: sent when leaving a device
     STATUS_REQUEST = 16777219  # st: current device status
     RESERVATION_READ = 16777222  # st/rsv/rd: read the reservation schedule
     ENERGY_USAGE_HOURLY_QUERY = 16777224  # st/energy-usage-hourly-query/rd
@@ -386,7 +380,7 @@ class CommandCode(IntEnum):
     DHW_TEMPERATURE = 33554464  # Set DHW temperature
 
     # Control Commands - Scheduling
-    RESERVATION_WEEKLY = 33554438  # declared only; the app's weekly
+    RESERVATION_WEEKLY = 33554438  # declared only; the weekly
     #   schedule is written with RESERVATION_MANAGEMENT on ctrl/rsv/rd
     TOU_RESERVATION = 33554439  # ctrl/tou/rd: Time-of-Use schedule
     RECIR_RESERVATION = 33554440  # ctrl/recirc-rsv/rd: recirculation schedule
@@ -413,7 +407,7 @@ class CommandCode(IntEnum):
     WATER_FILTER_RESET = 33554461  # mode "water-filter-reset"
     PRE_FILTER_RESET = 33554462  # mode "pre-filter-reset"
 
-    # Condenser fault reset (reset_condenser_fault); installer-level in app
+    # Condenser fault reset (reset_condenser_fault); installer-level
     COND_FAULT_RESET = 33554463  # mode "cond-fault-reset"
 
     # Control Commands - Vacation/Away

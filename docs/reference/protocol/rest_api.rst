@@ -154,9 +154,8 @@ Refresh access token using refresh token.
 POST /auth/session/refresh
 ^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Renew the AWS (SigV4) credentials used for MQTT without a password. The
-NaviLink app calls this when the MQTT connection fails with an
-authentication error.
+Renew the AWS (SigV4) credentials used for MQTT without a password.
+Call this when the MQTT connection fails with an authentication error.
 
 **Authentication Required:** Yes (``authorization: <accessToken>``)
 
@@ -183,15 +182,14 @@ authentication error.
      }
    }
 
-Each ``data`` key is optional; the app overwrites only the keys present
-and keeps its stored values for the rest. JWT tokens are not returned.
+Each ``data`` key is optional; overwrite only the keys present and keep
+the stored values for the rest. JWT tokens are not returned.
 
 POST /user/secured-sign-in
 ^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Sign in with a previously issued access token instead of the password. The
-NaviLink app tries this first on auto-login and falls back to
-``/user/sign-in`` if it fails or no token is stored.
+Sign in with a previously issued access token instead of the password.
+Fall back to ``/user/sign-in`` if it fails or no token is stored.
 
 **Authentication Required:** Yes (``authorization: <accessToken>``)
 
@@ -362,17 +360,18 @@ Get firmware information for a device.
      }
    }
 
-``deviceGroup`` is ``null`` for a stand-alone unit; the NaviLink app reads
-it as ``{"groupSeq": 7, "unitNum": 2}`` for a grouped one and also reads a
-top-level ``deviceGroupUnitNo`` (:py:class:`nwp500.models.FirmwareInfo`).
+``deviceGroup`` is ``null`` for a stand-alone unit and
+``{"groupSeq": 7, "unitNum": 2}`` for a grouped one; the response can also
+carry a top-level ``deviceGroupUnitNo``
+(:py:class:`nwp500.models.FirmwareInfo`).
 
 POST /firmware/info
 ^^^^^^^^^^^^^^^^^^^
 
 Describe one firmware image by the ``curSwCode``/``curVersion`` (or
-``downloadedVersion``) pair from ``/device/firmware/info``. The NaviLink
-app shows ``description`` on its update screen and ``runTime`` as the
-estimated update duration in minutes (new in NaviLink 2.04.00).
+``downloadedVersion``) pair from ``/device/firmware/info``.
+``description`` describes the update and ``runTime`` is the estimated
+update duration in minutes.
 
 **Authentication Required:** Yes
 
@@ -433,9 +432,9 @@ Rename a device or update its installation type and location.
      }
    }
 
-The app omits ``installType`` when empty, omits ``location`` entirely
-unless at least one of ``state``/``city``/``address`` is set, and inside it
-leaves out empty strings and zero coordinates.
+``installType`` is left out when empty, ``location`` is left out entirely
+unless at least one of ``state``/``city``/``address`` is set, and empty
+strings and zero coordinates inside it are left out.
 
 **Response (200 OK):** ``{"code": 200, "msg": "SUCCESS"}``
 
@@ -444,9 +443,9 @@ Python: :py:meth:`nwp500.NavienAPIClient.update_device_info`.
 POST /device/simple-list
 ^^^^^^^^^^^^^^^^^^^^^^^^
 
-A trimmed device list. The app uses it for its product-management screen
-(``targetUserId`` = the signed-in user) and for an installer viewing an
-owner's devices (``targetUserId`` = the owner's ID).
+A trimmed device list: the signed-in user's own devices
+(``targetUserId`` = the signed-in user), or for an installer, an owner's
+devices (``targetUserId`` = the owner's ID).
 
 **Authentication Required:** Yes
 
@@ -484,9 +483,8 @@ Python: :py:meth:`nwp500.NavienAPIClient.list_simple_devices`.
 POST /device/error/list
 ^^^^^^^^^^^^^^^^^^^^^^^
 
-Faults the cloud has recorded for a device. The NaviLink app only calls
-this from its installer error-list screen and sends the signed-in user's
-ID as ``installerId``; whether the backend accepts an owner's ID is
+Faults the cloud has recorded for a device. ``installerId`` is the
+signed-in installer's ID; whether the backend accepts an owner's ID is
 untested. Pages are keyed by the last entry's ``errorOccuredTime``, sent
 back as ``continuousKey`` (omitted on the first page).
 
@@ -536,8 +534,7 @@ POST /device/filter/change-info and POST /device/cip/change-info
 
 Record the date the air filter was replaced, or a CIP (clean-in-place /
 descaling) service was done. Both take the same body. ``maintenanceDate``
-is ``YYYY-M-D`` **without zero padding**: the app concatenates its date
-picker's integers.
+is ``YYYY-M-D`` **without zero padding** (``2025-3-7``).
 
 **Authentication Required:** Yes
 
@@ -589,23 +586,23 @@ List the dates recorded above, newest first.
      ]
    }
 
-The app reads ``registerAt`` as an integer; its unit is not documented.
+``registerAt`` is an integer; its unit is not documented.
 Python: :py:meth:`nwp500.NavienAPIClient.get_filter_history`,
 :py:meth:`nwp500.NavienAPIClient.get_cip_history`.
 
 GET /device/preferences/format
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Unit display preferences stored for a device. The app serialises its
-request object and appends it to the URL as a query string.
+Unit display preferences stored for a device. The request is sent as a
+URL query string.
 
 **Authentication Required:** Yes
 
 .. note::
 
    Not accepted for the NWP500: the cloud answers ``400 COMMON_BAD_REQUEST``
-   for device type 52 whatever the parameters (checked live). The app only
-   calls this for the IoT-module hydro unit (device type 8).
+   for device type 52 whatever the parameters (checked live). The
+   endpoint serves the IoT-module hydro unit (device type 8).
 
 **Query Parameters:**
 
@@ -630,9 +627,9 @@ request object and appends it to the URL as a query string.
      ]
    }
 
-The app uses the first entry. ``temperatureDisplayFormat`` is ``"F"`` or
+The first entry applies. ``temperatureDisplayFormat`` is ``"F"`` or
 ``"C"``; ``pressureDisplayFormat`` is ``"P"`` (psi) or ``"M"`` (metric).
-Those four are the only values the app compares against or writes.
+Those four are the only known values.
 
 POST /device/preferences/format
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -644,8 +641,8 @@ Store the display preferences.
 .. note::
 
    Not accepted for the NWP500: the cloud answers ``400 COMMON_BAD_REQUEST``
-   for device type 52 whatever the parameters (checked live). The app only
-   calls this for the IoT-module hydro unit (device type 8).
+   for device type 52 whatever the parameters (checked live). The
+   endpoint serves the IoT-module hydro unit (device type 8).
 
 .. code-block:: json
 
@@ -665,13 +662,12 @@ Python: :py:meth:`nwp500.NavienAPIClient.get_display_preferences`,
 DELETE /device/tou
 ^^^^^^^^^^^^^^^^^^
 
-Remove the TOU rate plan from a device. The app serialises the same
-``TouRequest`` object it sends to ``PUT /device/tou`` and appends it to the
-URL as a query string (a DELETE has no body). It sends ``userId``,
-``userType``, ``registerPath`` and ``sourceType`` from the current plan,
-then ``controllerId`` for a plan registered over Bluetooth
-(``registerPath`` = ``"bt"``) or ``macAddress`` and ``additionalValue``
-otherwise.
+Remove the TOU rate plan from a device. The parameters are the fields
+``PUT /device/tou`` takes, sent as a URL query string (a DELETE has no
+body): ``userId``, ``userType``, ``registerPath`` and ``sourceType`` from
+the current plan, then ``controllerId`` for a plan registered over
+Bluetooth (``registerPath`` = ``"bt"``) or ``macAddress`` and
+``additionalValue`` otherwise.
 
 **Authentication Required:** Yes
 
@@ -690,8 +686,8 @@ Python: :py:meth:`nwp500.NavienAPIClient.delete_tou`.
 GET /device/tou/manufacture-id
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-The manufacture ID the TOU service holds for a device. The app shows
-"N/A" when it is ``"000000000000000"``.
+The manufacture ID the TOU service holds for a device.
+``"000000000000000"`` means no ID is set.
 
 **Authentication Required:** Yes
 
@@ -821,7 +817,8 @@ sign-in response, adding the phone number and e-mail.
      }
    }
 
-The app treats a ``null`` last name as ``""``. Python:
+``userLastName`` can be ``null``; the library reads it as ``""``.
+Python:
 :py:meth:`nwp500.NavienAPIClient.get_user_profile`.
 
 POST /user/get-push-settings
@@ -853,17 +850,15 @@ Which push notifications are enabled for one device.
 
 .. important::
 
-   **1 = on, 2 = off.** The NaviLink app sends ``isChecked() ? 1 : 2``.
-   This is the reverse of the device's own on/off flags (1 = off,
+   **1 = on, 2 = off.** This is the reverse of the device's own on/off flags (1 = off,
    2 = on) documented in :doc:`data_conversions`.
 
 POST /user/set-push-settings
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Same body as ``get-push-settings`` plus any of ``isErrorAlarm``,
-``isDescalingAlarm`` and ``isEtcAlarm`` as 1 or 2. The app leaves a key
-out when it has nothing to say (it omits ``isDescalingAlarm`` for a
-member account).
+``isDescalingAlarm`` and ``isEtcAlarm`` as 1 or 2. Each key is
+optional.
 
 **Response (200 OK):** ``{"code": 200, "msg": "SUCCESS"}``
 
@@ -876,12 +871,12 @@ App Endpoints
 POST /app/version
 ^^^^^^^^^^^^^^^^^
 
-Latest and minimum supported NaviLink versions. The app calls this on its
-splash screen, **without** an ``authorization`` header.
+Latest and minimum supported client versions. Sent **without** an
+``authorization`` header.
 
 **Authentication Required:** No
 
-**Request Body:** ``{"os": "A"}`` (Android; the only value the app sends)
+**Request Body:** ``{"os": "A"}`` (``"A"`` for Android)
 
 **Response (200 OK):**
 
@@ -894,8 +889,8 @@ splash screen, **without** an ``authorization`` header.
    }
 
 **Maintenance (403):** when the backend is down for maintenance the
-response is a 403 whose ``data.serverCheckText`` carries the notice the
-app displays (with literal ``\n`` sequences for line breaks):
+response is a 403 whose ``data.serverCheckText`` carries the maintenance
+notice (with literal ``\n`` sequences for line breaks):
 
 .. code-block:: json
 

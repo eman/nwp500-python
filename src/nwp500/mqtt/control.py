@@ -18,12 +18,8 @@ This module handles all device control operations including:
 - Vacation mode configuration
 - Recirculation pump control and scheduling
 
-Every command here has a matching case in the NaviLink app's request
-builder (``SendRequestMgppData.java``); a few of those cases (goout-day,
-demand response, intelligent mode, water program) have no screen that
-calls them. Codes the app's enum declares with no builder case (OTA check,
-WiFi reset/reconnect, freeze protection temperature, smart diagnostic,
-weekly reservation) have no method.
+Some protocol codes (OTA check, WiFi reset/reconnect, freeze protection
+temperature, smart diagnostic, weekly reservation) have no method here.
 """
 
 import logging
@@ -65,8 +61,7 @@ _logger = logging.getLogger(__name__)
 MIN_ENERGY_YEAR = 2000
 MAX_ENERGY_YEAR = 2099
 
-#: Most recirculation schedule entries the NaviLink app lets a user create
-#: (``BottomSheetDialogWeeklyMgpp``).
+#: Most entries a recirculation schedule write may hold.
 MAX_RECIRCULATION_ENTRIES = 20
 
 
@@ -78,7 +73,7 @@ def validate_recirculation_schedule(schedule: RecirculationSchedule) -> None:
     """Check a recirculation schedule before it is written to the device.
 
     The model itself accepts any integers so that device read-backs always
-    parse; writes are held to the ranges the app's editor can produce.
+    parse; writes are held to the ranges below.
 
     Raises:
         ParameterValidationError: On too many entries, a non-integer field,
@@ -519,10 +514,10 @@ class MqttDeviceController:
             response_topic_suffix: Optional suffix for custom response topic
             response_form: Which response topic shape to request when
                 ``response_topic_suffix`` is set: ``"client"`` for
-                ``cmd/{dt}/{client_id}/res/{suffix}``, ``"app"`` for the
-                NaviLink app's ``cmd/{dt}/{homeSeq}/{userSeq}/{client_id}/
-                res/{suffix}`` (the cloud only decodes some replies for this
-                shape), ``"device"`` for ``cmd/{dt}/navilink-{mac}/res/
+                ``cmd/{dt}/{client_id}/res/{suffix}``, ``"app"`` for
+                ``cmd/{dt}/{homeSeq}/{userSeq}/{client_id}/res/{suffix}``
+                (the cloud only decodes some replies for this shape),
+                ``"device"`` for ``cmd/{dt}/navilink-{mac}/res/
                 {suffix}``.
             **payload_kwargs: Additional fields for the request payload
 
@@ -662,8 +657,8 @@ class MqttDeviceController:
                     "Vacation mode requires vacation_days",
                     parameter="vacation_days",
                 )
-            # 1-99 days: the NaviLink app's vacation picker and the
-            # front panel (User's Information Manual 3.4.5) both allow 99.
+            # 1-99 days: the front panel (User's Information Manual
+            # 3.4.5) allows 99.
             self._validate_range("vacation_days", vacation_days, 1, 99)
             param = [mode_id, vacation_days]
         else:
@@ -933,8 +928,7 @@ class MqttDeviceController:
         """
         Request per-month energy usage for whole years.
 
-        The NaviLink app sends this for the previous and current year. The
-        response has one ``usage`` entry per year (``month`` absent) whose
+        The response has one ``usage`` entry per year (``month`` absent) whose
         ``data`` list holds twelve per-month items, plus lifetime totals.
 
         Args:
@@ -972,7 +966,7 @@ class MqttDeviceController:
         """
         Request per-hour energy usage for specific days.
 
-        Mirrors the NaviLink app's hourly query. The NWP500 firmware tested
+        The NWP500 firmware tested
         never answered this query (four attempts, both response-topic
         forms), so treat a timeout as the expected outcome on that model.
         Subscribe with ``subscribe_energy_usage_hourly`` to receive a reply
@@ -1014,13 +1008,13 @@ class MqttDeviceController:
 
         Sends DIAGNOSTICS_REQUEST (16777228) on ``st/td/rd``. The device
         replies with packed hex; the NaviLink cloud decodes it into JSON on
-        ``res/td/rd`` only when the response topic has the app's
-        five-segment form, which this method requests. Subscribe with
+        ``res/td/rd`` only when the response topic has the five-segment
+        form, which this method requests. Subscribe with
         ``subscribe_diagnostics`` to receive a
         :class:`~nwp500.models.DeviceDiagnostics`.
 
-        In the app this screen is installer-only, but the gate is in the
-        app; a consumer account's unit answers.
+        These are installer counters, but a consumer account's unit
+        answers.
 
         Args:
             device: Device object
@@ -1084,9 +1078,8 @@ class MqttDeviceController:
         """
         Tell the device the client is done with it.
 
-        Sends SESSION_END (16777218) on ``st/end``. The NaviLink app sends
-        this whenever it leaves a device screen. No reply to it has been
-        observed. :meth:`~nwp500.NavienMqttClient.disconnect` sends it
+        Sends SESSION_END (16777218) on ``st/end``. No reply to it has
+        been observed. :meth:`~nwp500.NavienMqttClient.disconnect` sends it
         automatically for every device the client subscribed to, unless
         ``MqttConnectionConfig.send_session_end_on_disconnect`` is off.
 
@@ -1117,16 +1110,14 @@ class MqttDeviceController:
         """
         Announce this client's presence on the app-connection topic.
 
-        Publishes the NaviLink app's ``RequestLastWill`` shape with
+        Publishes the Last-Will payload shape with
         ``event.connection.status`` 1 on
         ``evt/{deviceType}/navilink-{mac}/app-connection``. The same shape
         with status 0 is what the broker publishes as a Last-Will when a
         client drops (see ``MqttConnectionConfig.last_will_device``).
 
-        The app itself only registers the Last-Will; it does not publish
-        a status 1 announcement, and NaviLink 2.04 does not subscribe to
-        the topic for the NWP500, so this is read only by other library
-        clients that use ``subscribe_app_connection()``.
+        The announcement is read by library clients that use
+        ``subscribe_app_connection()``.
 
         Args:
             device: Device object
@@ -1187,9 +1178,9 @@ class MqttDeviceController:
         """Set the air filter service interval.
 
         Sends AIR_FILTER_LIFE (33554474, mode ``air-filter-life``). The
-        NaviLink app offers 0 (alarm off) or 1000-10000 evaporator-fan
-        hours in 500-hour steps and sends ``hours / 500`` as the parameter;
-        the device reports the interval back as ``air_filter_alarm_period``
+        interval is 0 (alarm off) or 1000-10000 evaporator-fan hours in
+        500-hour steps, sent as ``hours / 500`` in the parameter; the
+        device reports the interval back as ``air_filter_alarm_period``
         in hours (verified live: sending 3000 reads back as 3000).
 
         Args:
@@ -1200,8 +1191,8 @@ class MqttDeviceController:
             Publish packet ID
 
         Raises:
-            ParameterValidationError: If ``hours`` is not one of the
-                app's accepted values.
+            ParameterValidationError: If ``hours`` is not 0 or
+                1000-10000 in steps of 500.
         """
         if not _is_int(hours) or (
             hours != 0 and not (1000 <= hours <= 10000 and hours % 500 == 0)
@@ -1221,9 +1212,8 @@ class MqttDeviceController:
     async def reset_condenser_fault(self, device: Device) -> int:
         """Clear a condenser fault.
 
-        Sends COND_FAULT_RESET (33554463, mode ``cond-fault-reset``). The
-        NaviLink app exposes this on the status screen to installer
-        accounts only; the gate is in the app. A consumer account's unit
+        Sends COND_FAULT_RESET (33554463, mode ``cond-fault-reset``). This
+        is an installer-level control, but a consumer account's unit
         acknowledges the command with a status object (verified live; no
         fault was present, so the clearing effect itself is unverified).
 
@@ -1241,9 +1231,9 @@ class MqttDeviceController:
     async def set_vacation_days(self, device: Device, days: int) -> int:
         """Enter vacation mode for ``days`` days (1-99).
 
-        Sends ``dhw-mode`` with ``[5, days]``, which is what the NaviLink
-        app's vacation flow does. To change the day count without changing
-        the operation mode, see :meth:`set_vacation_duration`.
+        Sends ``dhw-mode`` with ``[5, days]``. To change the day count
+        without changing the operation mode, see
+        :meth:`set_vacation_duration`.
         """
         return await self.set_dhw_mode(
             device, DhwOperationSetting.VACATION.value, vacation_days=days
@@ -1254,8 +1244,7 @@ class MqttDeviceController:
         """Set the vacation day count without changing the operation mode.
 
         Sends GOOUT_DAY (33554466, mode ``goout-day``) with ``[days]``.
-        The app's request builder has a case for it but no screen calls
-        it. Verified live: the device updates ``vacation_day_setting`` and
+        Verified live: the device updates ``vacation_day_setting`` and
         leaves ``dhw_operation_setting`` unchanged. Use
         :meth:`set_vacation_days` to enter vacation mode.
 
@@ -1287,9 +1276,9 @@ class MqttDeviceController:
     ) -> int:
         """Configure the recirculation pump schedule.
 
-        Sends RECIR_RESERVATION (33554440) on ``ctrl/recirc-rsv/rd`` with
-        the same ``reservationUse``/``reservation`` envelope the app uses,
-        and asks for the schedule back on ``recirc-rsv/rd`` (see
+        Sends RECIR_RESERVATION (33554440) on ``ctrl/recirc-rsv/rd`` with a
+        ``reservationUse``/``reservation`` envelope, and asks for the
+        schedule back on ``recirc-rsv/rd`` (see
         ``subscribe_recirculation_schedule_response``). That echo has not
         been observed on a unit with a recirculation pump.
 
@@ -1346,8 +1335,7 @@ class MqttDeviceController:
         Sends the OTA_COMMIT command (33554442) with a special
         ``commitOta`` structure (not the standard mode/param format) on
         ``ctrl/commit-ota``, asking for the reply on ``res/commit-ota`` in
-        the app's reply-topic form, as the NaviLink app's firmware screen
-        does (``setPublishMgppControlOTA``).
+        the five-segment reply-topic form.
 
         Args:
             device: Device to update

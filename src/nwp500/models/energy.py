@@ -10,11 +10,11 @@ class EnergyUsageBase(NavienBaseModel):
     heat_element_usage: int = Field(default=0, alias="heUsage")
     heat_pump_time: int = Field(default=0, alias="hpTime")
     heat_element_time: int = Field(default=0, alias="heTime")
-    #: Declared in the NaviLink app's usage model; the NWP500 does not
-    #: report it (raw int, semantics unknown).
+    #: Part of the usage record; the NWP500 does not report it (raw int,
+    #: semantics unknown).
     ep_usage: int = Field(default=0, alias="epUsage")
-    #: Declared in the NaviLink app's usage model; the NWP500 does not
-    #: report it (raw int, semantics unknown).
+    #: Part of the usage record; the NWP500 does not report it (raw int,
+    #: semantics unknown).
     water_usage: int = Field(default=0, alias="waterUsage")
 
     @property
@@ -58,8 +58,8 @@ class MonthlyEnergyData(NavienBaseModel):
     The daily query returns one entry per requested month with ``month``
     set and one ``data`` item per day. The monthly query returns one entry
     per requested year with ``month`` absent and one ``data`` item per
-    month (twelve). The app's model also declares ``day`` for the hourly
-    query, which the NWP500 did not answer in testing.
+    month (twelve). A ``day`` for the hourly query is defined, but the
+    NWP500 did not answer it in testing.
     """
 
     year: int

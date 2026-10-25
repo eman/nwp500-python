@@ -190,8 +190,8 @@ class RawCelsius(Temperature):
         match formula_type:
             case TempFormulaType.ASYMMETRIC:
                 # Asymmetric Rounding: check remainder of raw value.
-                # Use the truncated remainder (like the firmware/app's
-                # Java % operator), NOT Python's floored modulo: for
+                # Use the truncated remainder (as the firmware computes
+                # it), NOT Python's floored modulo: for
                 # negative raw values Python's % is always non-negative
                 # (-11 % 10 == 9), which would apply floor where the
                 # firmware applies ceil, giving off-by-one Fahrenheit

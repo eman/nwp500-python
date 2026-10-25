@@ -1126,6 +1126,123 @@ The ones about inputs and parameters:
    * - ``no_heat_book``, ``heat_book_aged``
      - Without a book the delivery is the upper zone's; an aged one
        carries its error band.
+   * - ``recovery_path_linear``
+     - A recovery's path is a straight line from start to end, with its
+       energy unknown: a recovery model gave the duration and the
+       physics had no path to stretch onto it (its integration failed
+       or was truncated, or the model clamped the duration).
+   * - ``recorded_write_not_modelled``
+     - A recorded write into Vacation or Power Off was left out of a
+       replay, its setpoint too.
+
+The ones about the heater's own rules, each resting on the device runs
+:doc:`/explanation/what-starts-a-recovery`,
+:doc:`/explanation/tou-recovery-cap` and
+:doc:`/explanation/heating-elements` describe:
+
+.. list-table::
+   :header-rows: 1
+   :widths: 34 66
+
+   * - Reason
+     - What it says
+   * - ``tou_cap_projected``
+     - The TOU cap stopped a recovery short of its target: at the
+       cap's level inside a window, as a window opened, or before it
+       heated at all.
+   * - ``mode_write_held_projected``, ``mode_write_start_projected``
+     - A mode write inside a TOU window was held to the window's close,
+       and (the second) started the compressor, as a write inside a
+       window does.
+   * - ``heat_pump_entry_held_spec_only``
+     - A reservation entry's Heat Pump write inside a window was held:
+       that rests on the documented rule for entries, measured only on
+       an element mode's entry.
+   * - ``element_mode_dropped_projected``
+     - A TOU window's opening dropped an element mode to Heat Pump.
+   * - ``write_start_uncertain``
+     - A setpoint or mode write, or a window's drop of an element mode,
+       left the tank where the record doesn't settle whether it starts
+       the compressor.
+   * - ``deficit_inside_the_start_threshold_bracket``
+     - The upper zone's deficit on entering an element mode lies
+       between the deficits seen to start the element and not to.
+   * - ``element_model_small_n``, ``lower_element_nine_runs``,
+       ``element_start_on_setpoint_raise_n1``
+     - The element model rests on few runs: the lower element's on
+       nine, Energy Saver's start on a setpoint raise on one.
+   * - ``upper_zone_dips_during_the_lower_phase``
+     - The upper zone dips while the lower element runs, and the model
+       holds it.
+
+The ones ``element_mode`` adds about its own answer:
+
+.. list-table::
+   :header-rows: 1
+   :widths: 34 66
+
+   * - Reason
+     - What it says
+   * - ``energy_saver_later_starts_not_modelled``
+     - The answer is one recovery: Energy Saver's later starts in the
+       stint are not in it.
+   * - ``upper_element_does_not_start``
+     - The upper zone is short of the setpoint, but not by the mode's
+       entry deficit: the upper element does not start.
+   * - ``upper_zone_coasts_short_of_the_setpoint``
+     - Energy Saver's upper element stops short and its coast doesn't
+       reach the setpoint: there is no time to the setpoint.
+   * - ``ready_target_above_setpoint``
+     - The ready temperature asked for is above the setpoint, where the
+       element stops: it is never reached.
+   * - ``hp_lower_not_given``
+     - In High Demand or Energy Saver, the heat pump's minutes for the
+       lower zone were not given, so there is no full recovery time.
+   * - ``lower_zone_not_projected_under_heat_pump``
+     - Outside Electric, the lower zone's heating after the elements
+       is the heat pump's, and is not projected.
+   * - ``truncated_by_switch_back``,
+       ``switch_back_lands_before_the_recovery_finishes``
+     - ``switch_back_after_minutes`` ends the stint before the elements
+       finish, and (the second) before the ready time, the setpoint or
+       the full recovery is reached.
+   * - ``plan_ends_when_the_elements_stop_not_at_switch_back``
+     - The switch back comes after the elements finish: the answer ends
+       when they stop, not at the switch back.
+
+The ones about readiness:
+
+.. list-table::
+   :header-rows: 1
+   :widths: 34 66
+
+   * - Reason
+     - What it says
+   * - ``capped_at_observed_volume``
+     - The answer is the evidence's largest recorded volume: the tank
+       may hold more than anyone drew from it.
+   * - ``bath_ready_within_estimate_error``
+     - The deliverable gallons are within the heat book's error band of
+       the bath.
+   * - ``draw_in_progress``
+     - Hot water is being drawn now: the probes are moving.
+   * - ``heating_not_scheduled``
+     - Not ready, and heating is disabled (Vacation or Power Off).
+   * - ``heating_not_triggered``
+     - Not ready, and the heater would not start itself within 24 h.
+   * - ``time_to_ready_unavailable``
+     - Not ready, and the next recovery couldn't be worked out.
+   * - ``bath_waits_for_tou_window_end``
+     - Not ready, and the TOU cap stops the recovery short of the bath
+       until the window ends.
+   * - ``bath_not_reached_by_full_recovery``
+     - Not ready, and even a full recovery doesn't cover the bath.
+
+A bath or shower volume not given is named in ``defaults_used``
+(``bath_gal=``, ``shower_gal=``), not in ``reasons``. The readiness
+model's standing caveats (the outlet lag rests on one measurement, the
+line is a choice, and the upper probe stands in for the outlet) are
+left out of ``Readiness.reasons``.
 
 
 Errors

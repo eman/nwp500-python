@@ -52,7 +52,7 @@ class ReservationEntry(NavienBaseModel):
         - mode: :class:`~nwp500.enums.ReservationMode` id. 1-4 match the
           DHW operation modes; 5 is Power Off (not Vacation, as in
           :class:`~nwp500.enums.DhwOperationSetting`) and 0 marks an
-          unused slot. Mirrors the NaviLink app's ``MgppReservationMode``.
+          unused slot.
         - param: temperature in half-degrees Celsius
 
     Unit-aware note:
@@ -111,7 +111,7 @@ class ReservationEntry(NavienBaseModel):
         """Human-readable operation mode name.
 
         Resolved through :class:`~nwp500.enums.ReservationMode`, so mode
-        5 reads "Power Off" as it does in the NaviLink app.
+        5 reads "Power Off".
         """
         try:
             return RESERVATION_MODE_TEXT.get(
@@ -191,25 +191,21 @@ class RecirculationScheduleEntry(NavienBaseModel):
 
     Used with the RECIR_RESERVATION command (33554440), published on
     ``ctrl/recirc-rsv/rd`` and read back with RECIRC_RESERVATION_READ
-    (16777231) on ``st/recirc-rsv/rd``. The NaviLink app builds these
-    entries with the same ``Reservation`` class as the temperature
-    schedule, so the wire fields are identical to
-    :class:`ReservationEntry`:
+    (16777231) on ``st/recirc-rsv/rd``. The wire fields are identical to
+    the temperature schedule's :class:`ReservationEntry`:
 
         - enable: 2=enabled, 1=disabled (device boolean)
         - week: bitfield of active days (Sun=bit7, Mon=bit6, ..., Sat=bit1)
         - hour: 0-23
         - min: 0-59
-        - mode: in the app's schedule editor this is the on/off toggle for
-          the entry (2=pump on, 1=pump off)
-        - param: unused for recirculation; the app constructs entries
-          with ``-1``. The hex read-back carries it as the byte ``0xFF``,
+        - mode: the on/off toggle for the entry (2=pump on, 1=pump off)
+        - param: unused for recirculation; entries are written with
+          ``-1``. The hex read-back carries it as the byte ``0xFF``,
           which is normalized to ``-1`` so both read-back forms compare
           equal.
 
-    The ``mode``/``param`` semantics are inferred from the app's shared
-    schedule dialog and have not been confirmed against a unit with
-    recirculation fitted.
+    The ``mode``/``param`` semantics have not been confirmed against a
+    unit with recirculation fitted.
     """
 
     # Strict: a bool or float must not be coerced into a protocol integer
@@ -231,7 +227,7 @@ class RecirculationScheduleEntry(NavienBaseModel):
     @field_validator("param", mode="before")
     @classmethod
     def _unsigned_byte_param(cls, value: Any) -> Any:
-        """Map the hex read-back's unsigned 0xFF to the app's ``-1``.
+        """Map the hex read-back's unsigned 0xFF to ``-1``.
 
         Only a real ``int`` is normalized; a float such as ``255.0`` (or a
         bool) passes through unchanged so the strict check rejects it.

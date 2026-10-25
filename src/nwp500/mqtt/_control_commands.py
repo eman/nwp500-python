@@ -142,7 +142,7 @@ class DeviceControlCommandsMixin:
         return await controller.request_recirculation_schedule(device)
 
     async def signal_app_connection(self, device: Device) -> int:
-        """Signal that the app has connected."""
+        """Announce this client on the device's app-connection topic."""
         return await self._device_controller.signal_app_connection(device)
 
     async def enable_demand_response(self, device: Device) -> int:
@@ -170,7 +170,7 @@ class DeviceControlCommandsMixin:
         return await self._device_controller.set_air_filter_life(device, hours)
 
     async def reset_condenser_fault(self, device: Device) -> int:
-        """Clear a condenser fault (installer-level in the app)."""
+        """Clear a condenser fault (an installer-level control)."""
         return await self._device_controller.reset_condenser_fault(device)
 
     async def configure_reservation_water_program(self, device: Device) -> int:

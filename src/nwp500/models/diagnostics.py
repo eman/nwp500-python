@@ -1,14 +1,14 @@
 """Installer diagnostics counters (``st/td/rd`` query).
 
-The NaviLink app's installer screen requests these with command 16777228
-on ``st/td/rd``. The device answers on ``res/td`` with packed hex strings;
+An installer-level query: command 16777228 on ``st/td/rd`` requests
+these. The device answers on ``res/td`` with packed hex strings;
 the NaviLink cloud decodes them into JSON objects and republishes on
-``res/td/rd`` **only when the response topic has the app's five-segment
+``res/td/rd`` **only when the response topic has the five-segment
 form** ``cmd/{deviceType}/{homeSeq}/{userSeq}/{clientId}/res/td/rd``. The
 library requests that form, so consumers receive the decoded objects.
 
-Field names mirror the wire keys (including the vendor's misspellings,
-which are kept as aliases). Units are not documented by the vendor; the
+Field names mirror the wire keys (misspelled wire keys are kept as
+aliases). Units are not documented by the vendor; the
 values that could be cross-checked against other device data are noted on
 the fields. Everything is a raw integer counter.
 """
@@ -64,10 +64,9 @@ class DiagnosticsEventCounters(NavienBaseModel):
 class DiagnosticsDhwUsage(NavienBaseModel):
     """Hot water draw statistics (wire object ``tdData``).
 
-    Units are the NaviLink app's labels on its diagnostics screen, which
-    shows these values unconverted in either unit setting: ``*_total_flow``
-    in litres, ``*_total_time`` in hours, ``average_recovery_time`` in
-    minutes, and ``num_of_*`` as counts. All zero, draw counts included, on
+    The values are not converted for the unit setting: ``*_total_flow``
+    is in litres, ``*_total_time`` in hours, ``average_recovery_time`` in
+    minutes, and ``num_of_*`` are counts. All zero, draw counts included, on
     the unit this was checked against.
     """
 

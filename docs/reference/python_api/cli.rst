@@ -299,8 +299,8 @@ vacation-duration
 ^^^^^^^^^^^^^^^^^
 
 Set the vacation day count (1-99) without entering vacation mode. Sends
-the NaviLink app's ``goout-day`` command; the device updates its vacation
-day setting and leaves the operation mode unchanged.
+the ``goout-day`` command; the device updates its vacation day setting
+and leaves the operation mode unchanged.
 
 .. code-block:: bash
 
@@ -368,8 +368,7 @@ filter-life
 ^^^^^^^^^^^
 
 Set the air filter service interval in evaporator-fan hours: ``0`` to
-disable the alarm, otherwise 1000 to 10000 in steps of 500 (the values
-the NaviLink app offers).
+disable the alarm, otherwise 1000 to 10000 in steps of 500.
 
 .. code-block:: bash
 
@@ -381,8 +380,8 @@ the NaviLink app offers).
 reset-condenser-fault
 ^^^^^^^^^^^^^^^^^^^^^
 
-Clear a condenser fault. The NaviLink app exposes this to installer
-accounts only; the gate is in the app. A consumer account's unit
+Clear a condenser fault. This is an installer-level control, but the
+device does not check the account type: a consumer account's unit
 acknowledges the command.
 
 .. code-block:: bash
@@ -548,8 +547,8 @@ Read or write the recirculation pump schedule. Requires the
 
 Each entry has ``enable`` (2 on, 1 off), ``week`` (day bitfield, Sunday
 128 down to Saturday 2), ``hour``, ``min`` and ``mode`` (2 pump on, 1 pump
-off). The mode semantics are inferred from the NaviLink app and not
-confirmed on a unit with recirculation.
+off). The mode semantics are not confirmed on a unit with
+recirculation.
 
 The JSON is checked before connecting: at most 20 entries, only the keys
 above, integers in range. After a write the command waits for the device

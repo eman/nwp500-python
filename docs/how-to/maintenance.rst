@@ -25,11 +25,10 @@ device features first so the client can inspect capability flags.
 Installer Diagnostics
 =====================
 
-The NaviLink app's installer screen shows lifetime counters the device
-keeps: heat pump and element energy, days since installation, fault
-event counts, demand-response operation times, hot-water draw statistics
-and component run times and start counts. The gate is in the app, so a
-consumer account's unit answers the query.
+The device keeps lifetime counters: heat pump and element energy, days
+since installation, fault event counts, demand-response operation times,
+hot-water draw statistics and component run times and start counts. They
+are installer data, but a consumer account's unit answers the query.
 
 .. code-block:: python
 
@@ -108,9 +107,8 @@ Maintenance Log
 
 Separately from the device's own filter timer, the Navien cloud keeps a
 log of when the air filter was replaced and when a CIP (clean-in-place,
-the descaling flush) service was done. The NaviLink app's product
-management screen writes to it with a date picker and lists the history
-underneath. The same endpoints are available on the REST client.
+the descaling flush) service was done. The REST client reads and writes
+it.
 
 Recording a replacement date only updates the cloud's log; it does not
 reset the device's filter timer. Do both after servicing the filter.
@@ -131,9 +129,8 @@ reset the device's filter timer. Do both after servicing the filter.
    # Log a descaling flush.
    await api.record_cip_change(info.mac_address, info.additional_value, date(2025, 3, 7))
 
-The date is sent as ``YYYY-M-D`` without zero padding (``2025-3-7``),
-exactly as the app formats it; pass a :class:`datetime.date` and the
-library does the formatting.
+The date is sent as ``YYYY-M-D`` without zero padding (``2025-3-7``);
+pass a :class:`datetime.date` and the library does the formatting.
 
 Reading the history back returns the newest entries first:
 
@@ -147,7 +144,7 @@ Reading the history back returns the newest entries first:
 
 Each :class:`~nwp500.models.MaintenanceHistoryEntry` carries the date as
 the cloud returns it and ``register_at``, the record's creation stamp,
-whose unit the app does not interpret. Both calls page with ``offset`` and
+whose unit is not known. Both calls page with ``offset`` and
 ``count`` (default 20).
 
 Related cloud-side data readable without MQTT:
@@ -158,9 +155,8 @@ for the scheduled descaling window.
 Condenser Fault Reset
 =====================
 
-Clears a condenser fault. The NaviLink app exposes this on its status
-screen to installer accounts only; the gate is in the app. A consumer
-account's unit acknowledges the command; the clearing effect could not be
+Clears a condenser fault. This is an installer-level control, but a
+consumer account's unit acknowledges the command; the clearing effect could not be
 observed because no fault was present.
 
 .. code-block:: python
@@ -169,8 +165,8 @@ observed because no fault was present.
 
 CLI: ``nwp-cli reset-condenser-fault``.
 
-Commands the App Never Sends
-============================
+Unsupported Commands
+====================
 
 An OTA check, WiFi reconnect and reset, setting the freeze-protection
 temperature and triggering a smart diagnostic aren't supported: their

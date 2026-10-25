@@ -4,6 +4,7 @@
 sphinx>=3.2.1
 # sphinx_rtd_theme
 sphinxcontrib-openapi>=0.8.0
+sphinxcontrib-mermaid>=1.0.0
 click>=8.3.0
 rich>=14.3.0
 numpy>=1.24.0

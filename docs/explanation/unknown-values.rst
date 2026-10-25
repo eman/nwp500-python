@@ -15,72 +15,36 @@ carries no special meaning at all for temperatures.
    :depth: 2
 
 
-Where the evidence comes from
-=============================
-
-Navien's own Android client, NaviLink, was decompiled: version 2.03.00,
-versionCode 141, published March 2026, and re-checked against 2.04.00,
-versionCode 201, published October 2026, which changed nothing in the
-NWP500 protocol. The app is a first-party decoder
-for the same MQTT payloads this library parses, so its enum tables and
-its null-handling are direct evidence of intent rather than inference
-from observed traffic.
-
-Two cautions apply to everything below. The app is a *consumer* of the
-protocol, not its specification, and it ignores a great deal of what the
-device sends. Absence of handling in the app is therefore weak evidence
-on its own; presence of an explicit sentinel is strong evidence.
-
-
 Enum-coded flags: zero is a sentinel
 ====================================
 
-The app decodes many status fields through enums in ``KDEnum.java``. The
-generic on/off flag is declared:
-
-.. code:: java
-
-   public enum MgppOnOFFFlag {
-       UNKNOWN(0, "Unknown"),
-       OFF(1, "OFF"),
-       ON(2, "ON");
-   }
-
-Zero is reserved and real values start at 1. Eight of the app's enums do
-this, and two render their zero as something a user would read as
-"no data":
+Many status fields are enum-coded, and in most of them zero is reserved
+for "unknown". The generic on/off flag is 0 unknown, 1 off, 2 on
+(:class:`~nwp500.enums.OnOffFlag`): real values start at 1. Eight
+families do this:
 
 .. list-table::
    :header-rows: 1
-   :widths: 42 20 38
+   :widths: 60 40
 
-   * - App enum
-     - Zero member
-     - Display text
-   * - ``MgppOnOFFFlag``
+   * - Values
+     - Zero
+   * - On/off flags (:class:`~nwp500.enums.OnOffFlag`)
      - ``UNKNOWN``
-     - "Unknown"
-   * - ``HPWHHeatSource``
+   * - Heat source (:class:`~nwp500.enums.HeatSource`)
      - ``UNKNOWN``
-     - **"-"**
-   * - ``HPWHDREvent``
+   * - Demand Response event (:class:`~nwp500.enums.DREvent`)
      - ``UNKNOWN``
-     - **"Not Applied"**
-   * - ``MgppRecirculationOperationMode``
+   * - Recirculation mode (:class:`~nwp500.enums.RecirculationMode`)
      - ``UNKNOWN``
-     - "Unknown"
-   * - ``MgppDHWControlTypeFlag``
+   * - DHW control type (:class:`~nwp500.enums.DHWControlTypeFlag`)
      - ``UNKNOWN``
-     - "Unknown"
-   * - ``HydroElectricalEfficiencyMode``
+   * - Efficiency mode
      - ``UNKNOWN``
-     - "Unknown"
-   * - ``MgppReservationMode``
+   * - Reservation mode (:class:`~nwp500.enums.ReservationMode`)
      - ``NOT_RESERVATION``
-     - "NOT RESERVATION"
-   * - ``firmwareType``
-     - ``Unknown``
-     - "Unknown"
+   * - Firmware type (:class:`~nwp500.enums.FirmwareType`)
+     - ``UNKNOWN``
 
 
 Enums where zero is a value
@@ -92,18 +56,13 @@ The rule is not global, and this is where a blanket converter goes wrong:
    :header-rows: 1
    :widths: 42 58
 
-   * - App enum
+   * - Values
      - Zero means
-   * - ``MgppOperationMode``
+   * - Current operation mode
+       (:class:`~nwp500.enums.CurrentOperationMode`)
      - ``STANDBY``, a real, common state
-   * - ``OperationMode``
-     - ``STANDBY``
-   * - ``HydroOperationMode``
-     - ``STOP``
-   * - ``HydroFsmState``
-     - ``INIT``
-   * - ``FilterChange``
-     - ``NORMAL``: filter is fine
+   * - Filter change (:class:`~nwp500.enums.FilterChange`)
+     - ``NORMAL``: the filter is fine
 
 A device sitting in standby reports 0 constantly. Treating that as
 "unknown" would blank the operating mode most of the time.
@@ -112,10 +71,10 @@ A device sitting in standby reports 0 constantly. Treating that as
 What this library does
 ----------------------
 
-:class:`~nwp500.enums.OnOffFlag` carries the vendor's ``UNKNOWN = 0``
-member. The app decodes nine status fields through ``MgppOnOFFFlag``;
-eight of them exist here as flags and are typed
-:data:`~nwp500.models.status.DeviceTriState`, which maps 0 to ``None``:
+:class:`~nwp500.enums.OnOffFlag` carries the protocol's ``UNKNOWN = 0``
+member. Nine status fields are on/off flags; eight of them exist here as
+flags and are typed :data:`~nwp500.models.status.DeviceTriState`, which
+maps 0 to ``None``:
 
 - ``operation_busy``
 - ``comp_use``
@@ -127,8 +86,8 @@ eight of them exist here as flags and are typed
 - ``recirc_reservation_use``
 
 The ninth is ``drOverrideStatus``, which this library keeps as a raw
-``int`` for compatibility; the app shows "DR applied" when it is 2, and
-``DeviceStatus.dr_override_active`` gives the same reading.
+``int`` for compatibility; 2 means a Demand Response override is
+applied, and ``DeviceStatus.dr_override_active`` gives that reading.
 
 Every other flag keeps :data:`~nwp500.models.status.DeviceBool`.
 
@@ -136,22 +95,11 @@ Every other flag keeps :data:`~nwp500.models.status.DeviceBool`.
 Capability flags: zero means "not fitted"
 =========================================
 
-The DID/feature ``Use`` flags are a third case, and the app treats them
-differently from status flags: it does not decode them through an enum
-at all, and checks them directly:
-
-.. code:: java
-
-   if (... feature.getRecirculationUse() == 0) {
-       this.viewDataBinding.layoutHotButton.setVisibility(8);
-       this.viewDataBinding.linearLayoutControlRecirculation.setVisibility(8);
-       return;
-   }
-
-Zero hides the entire recirculation UI. For a capability flag, zero means
-"this device does not have the feature", which is a definite answer, not
-an absent one. ``False`` is the faithful mapping and
-:data:`~nwp500.models.feature.CapabilityFlag` is unchanged.
+The DID/feature ``Use`` flags are a third case. They are not enum-coded:
+zero means "this device does not have the feature", which is a definite
+answer, not an absent one: a ``recirculationUse`` of 0 means the unit
+has no recirculation. ``False`` is the faithful mapping and :data:`~nwp500.models.feature.CapabilityFlag` is
+unchanged.
 
 
 Temperatures carry no sentinel
@@ -160,53 +108,40 @@ Temperatures carry no sentinel
 This is the important negative result, because it is the one that has
 been guessed wrong before.
 
-- **No out-of-band values.** No ``0xFFFF``, ``-999`` or ``-1`` appears
-  anywhere in the app's status handling. The only ``65535`` constants in
-  the app are CRC16 masks and infrared remote-control codes.
-- **No zero-guard in any display path.** The only ``== 0`` comparisons on
-  the status screen are ``errorCode``, ``minorCode``, ``waterSprayStatus``
-  and ``airFilterAlarmPeriod``. Not one is a temperature.
-- **The formatter is unconditional.** ``getTempText()`` converts and
-  prints whatever arrives, so a device reporting 0 would render as
-  32 degF. The app has no notion of an unavailable temperature.
+- **No out-of-band values.** The protocol has no ``0xFFFF``, ``-999`` or
+  ``-1`` for a temperature it cannot read.
+- **Zero is not reserved.** A temperature field that reads 0 converts
+  like any other reading. The protocol has no notion of an unavailable
+  temperature.
 
 So a temperature of zero means zero. The library does not map any
 temperature field to ``None``.
 
 
-Absent and zero are indistinguishable
-=====================================
+Absent fields
+=============
 
-All 126 numeric fields in the app's status model are declared as
-primitive ``int``, with no boxed ``Integer`` among them. A
-field missing from the JSON therefore deserializes to ``0``, and the
-vendor's own client cannot tell "not reported" from "reported as zero"
-either.
-
-There is consequently no protocol-level concept of "unreported" to
-recover. Where a field is absent from the payload, that is
-visible to this library through Pydantic's own missing-field handling,
-not through any sentinel.
+The protocol has no marker for "not reported". Where a field is absent
+from the payload, that shows through Pydantic's own missing-field
+handling, not through any sentinel.
 
 
-Fields the app never displays
-=============================
+Fields that may read 0
+======================
 
-Several fields that look like natural candidates for N/A handling are
-not rendered by the app for this device type. They exist as
-getters on the status model with no UI call site:
+Several fields that look like natural candidates for N/A handling belong
+to sensors or features a given unit may not have:
 
 ``outsideTemperature``, ``mixingRate``, ``currentInletTemperature``,
 ``dhwTemperature2``, ``recircTemperature``, ``recircFaucetTemperature``,
-``recircDhwFlowRate``, ``heLowerOnTempSetting``.
+``recircDhwFlowRate``, ``heLowerOnTempSetting``,
+``cumulatedDhwFlowRate``.
 
-``cumulatedDhwFlowRate`` goes further: the app's status model does not
-declare it at all.
-
-Observing that one of these "is always 0" in a capture is not evidence
-that 0 is a sentinel. It is equally consistent with the sensor being
-absent, the feature being unfitted, or the field being unused on this
-model. The app makes no determination, so neither does this library.
+The NWP500 always reports 0 for ``currentInletTemperature``. Observing
+that one of these "is always 0" in a capture is not evidence that 0 is
+a sentinel. It is equally consistent with the sensor being absent, the
+feature being unfitted, or the field being unused on this model. The
+protocol makes no determination, so neither does this library.
 
 ``cumulatedDhwFlowRate`` is the clearest case. On the unit these docs were
 checked against it reads 0 after 392 days in service, and so does every
@@ -215,10 +150,9 @@ included, although the heater was in regular use. The firmware on that
 unit is not keeping draw accounting, so its 0 does not mean that no water
 has been used.
 
-The one place the app does treat a numeric zero as "not configured" is
-``airFilterAlarmPeriod``, and it handles it by substituting a different
-*message* ("filter setup needed") rather than blanking a value: a
-per-field UI decision, not a converter-level rule.
+One numeric field does use zero for "not configured":
+``airFilterAlarmPeriod`` reads 0 when no filter period has been set.
+That is a property of that one field, not a converter-level rule.
 
 
 Migration
@@ -260,5 +194,5 @@ See also
 ========
 
 - :doc:`tank-energy`: the other case where the protocol's own names
-  mislead, worked out from the same teardown
+  mislead
 - :doc:`../reference/protocol/data_conversions`: protocol field conversions

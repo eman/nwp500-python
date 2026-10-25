@@ -57,14 +57,14 @@ def device_bool_to_python(value: Any) -> bool:
 
     Device protocol uses: 1 = OFF/False, 2 = ON/True, 0 = unknown/absent.
 
-    The 1/2 encoding is not arbitrary. The vendor's own client decodes these
-    fields through an enum declared ``UNKNOWN(0), OFF(1), ON(2)``, so 0 is a
-    reserved sentinel rather than a value.
+    The 1/2 encoding is not arbitrary. The protocol codes these fields
+    ``UNKNOWN(0), OFF(1), ON(2)``, so 0 is a reserved sentinel rather than a
+    value.
 
     This converter collapses 0 to ``False``, which is correct for **capability
-    flags** (:data:`~nwp500.models.feature.CapabilityFlag`): the NaviLink app
-    hides a feature's entire UI when its ``Use`` flag reads 0, so 0 there means
-    "this device does not have the feature" and ``False`` is faithful.
+    flags** (:data:`~nwp500.models.feature.CapabilityFlag`): a ``Use`` flag
+    that reads 0 means "this device does not have the feature", so ``False``
+    is faithful.
 
     For **status flags**, where 0 means "the device is not reporting this right
     now", collapsing to ``False`` invents an OFF the device never claimed. Use
@@ -94,17 +94,15 @@ def device_tristate_to_python(value: Any) -> bool | None:
     reserved 0 maps to ``None`` instead of being flattened into ``False``.
 
     The device distinguishes three states and the library should not throw one
-    away. The NaviLink app decodes the affected status fields through
-    ``KDEnum.MgppOnOFFFlag``, which is declared ``UNKNOWN(0), OFF(1), ON(2)``;
-    two of the app's sibling enums render their zero as ``"-"`` and
-    ``"Not Applied"`` rather than as an off state.
+    away. The affected status fields are on/off flags coded 0 unknown,
+    1 off, 2 on.
 
     ``None`` is the right shape for the downstream consumer too: Home Assistant
     renders it as "Unknown" instead of recording a fabricated OFF into the
     history database.
 
-    Note this applies only to flags the vendor itself decodes as an on/off
-    enum. It is **not** a general rule about zero - see
+    Note this applies only to flags the protocol codes as an on/off enum.
+    It is **not** a general rule about zero: see
     :func:`device_bool_to_python` for capability flags; temperature fields
     carry no sentinel at all.
 

@@ -9,7 +9,7 @@ from .device import NullableInt
 
 
 def _null_to_empty(value: Any) -> Any:
-    """``null`` reads as an empty string, as the NaviLink app reads it."""
+    """``null`` reads as an empty string."""
     return "" if value is None else value
 
 
@@ -27,8 +27,8 @@ class UserProfile(NavienBaseModel):
     #: ``"O"`` owner, ``"M"`` member, or an installer type.
     user_type: NullableStr = ""
     user_first_name: NullableStr = ""
-    #: The cloud sends ``null`` for an account without a last name; the
-    #: NaviLink app treats that as an empty string, as does this model.
+    #: The cloud sends ``null`` for an account without a last name; this
+    #: model reads it as an empty string.
     user_last_name: NullableStr = ""
     user_phone_number: str | None = None
     user_seq: NullableInt = 0
