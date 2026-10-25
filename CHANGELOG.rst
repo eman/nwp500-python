@@ -8,6 +8,14 @@ Unreleased
 Fixed
 -----
 
+- **The circulation share's story.** ``DrawParams.ungated_observability``
+  (0.398) was described as the probes' share of a run's heat. The loop
+  heat it divides counts all the loop's flow as the tank's, but the
+  return feeds the mixing valve's cold port as well as the tank's
+  inlet, and that split is not measured. The share is the split and
+  any probe shortfall together. The value is unchanged. See
+  :doc:`/explanation/standby-loss`.
+
 - **The upper zone's hold through a recovery rests on the record.** The
   two-zone model warms the lower zone alone while the tank is
   stratified and holds the upper where it started. On 30 compressor-only
