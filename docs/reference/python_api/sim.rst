@@ -33,6 +33,8 @@ Entry points
 
 .. autofunction:: nwp500.sim.full_tank_book
 
+.. autofunction:: nwp500.sim.recovery_as_of
+
 
 Scenario
 ========
@@ -74,6 +76,9 @@ Scenario
    :members:
 
 .. autoclass:: nwp500.sim.Write
+   :members:
+
+.. autoclass:: nwp500.sim.CirculationRun
    :members:
 
 
@@ -129,7 +134,23 @@ Parameters
       BookParams, Provenance, provenance_of, unit_of, params_to_document,
       params_from_document, unknown_fields, RETIRED_FIELDS, FITTED,
       MEASURED, DEFAULT, HEATER, INSTALLATION, UNFITTED_TERMS,
-      INSTALLATION_TERMS, UA_REF_DELTA_T_F, UA_MIN_DELTA_T_F
+      INSTALLATION_TERMS, UA_REF_DELTA_T_F, UA_MIN_DELTA_T_F,
+      CirculationParams
+
+.. automodule:: nwp500.sim.defaults
+   :members: site_example_params, with_valve, SITE_VALVE, NO_VALVE,
+      RATED_GAL
+
+
+Extension points
+================
+
+.. automodule:: nwp500.sim.extensions
+   :members: RecoveryModel, HeatLedger, Stand, LedgerZones, ZoneBound,
+      DrawTaken, AfterDraw, DrawsAhead, UpperAhead
+
+.. automodule:: nwp500.sim.api
+   :members: counter_measures_to_setpoint, tou_marked, marked_windows
 
 
 Hot water and the heat book
@@ -325,7 +346,8 @@ Home Assistant sources
       RecordInputs, INLET_LOOKBACK, PROBE_STEP, held, LOCATION_AIR_WINDOW,
       LOCATION_AIR_MIN_SPAN, LOCATION_AIR_MIN_R, RUN_SETTLE, Sources,
       Entities, sources_from, State, parse_state,
-      parse_history, parse_outages, parse_states, History, history_for,
+      parse_history, parse_units, parse_outages, parse_states, History,
+      history_for,
       parse_forecast, parse_outdoor_history, read_heater_history, HeaterEntities, HeaterHistory,
       HISTORY_WINDOW, to_w, to_wh,
       pump_runs, demand_spans, busy, covers_start, percent,
