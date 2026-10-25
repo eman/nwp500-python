@@ -140,7 +140,7 @@ where :math:`V` is the storage volume (63.2 gal for the 65 gal model),
 so :math:`m` is about 527 BTU/degF, and each zone holds half of it.
 
 **Standby.** Heat leaves through the jacket to the air beside the
-heater, at :math:`T_a`:
+heater, at :math:`T_a`, with :math:`t` in hours:
 
 .. math::
 
@@ -220,7 +220,8 @@ evaporator's approach at 65 degF air and :math:`s` its slope:
 
    \eta_v = 1 - c\left(r_p^{1/n} - 1\right), \qquad
    \dot m = K\,\rho_g(T_e)\,\eta_v, \qquad
-   w = \frac{n}{n-1}\,\frac{P_{\text{sat}}(T_e)}{\rho_g(T_e)}
+   w = \frac{144}{778.16}\,\frac{n}{n-1}\,
+   \frac{P_{\text{sat}}(T_e)}{\rho_g(T_e)}
    \left(r_p^{(n-1)/n} - 1\right)
 
 .. math::
@@ -230,10 +231,14 @@ evaporator's approach at 65 degF air and :math:`s` its slope:
 
 .. math::
 
-   m_z \frac{dT_L}{dt} = \dot Q_h - UA(\Delta T)\,\Delta T
-   - Q_b\left(1 - e^{-g/g_b}\right), \qquad
+   m_z \frac{dT_L}{dt} = \dot Q_h
+   - \frac{UA(\Delta T)\,\Delta T
+   + Q_b\left(1 - e^{-g/g_b}\right)}{3600}, \qquad
    m_z = \begin{cases} m/2 & g > 0 \\ m & g = 0 \end{cases}
 
+Pressures are in psia and the gas density in lb/ft³, so
+:math:`144/778.16` turns the work into BTU/lb; the heat flows are per
+second, and the losses, quoted per hour, are divided by 3600.
 While :math:`g > 0` the gap closes by what the lower zone gains, so the
 upper zone holds. :math:`\dot Q_{\text{lat}}` is the latent heat of
 the fan's air cooled to the coil, nonzero only when :math:`T_e` is
@@ -267,7 +272,10 @@ fitted durations already include it.
 
 **Power and efficiency.** The cycle's own compression work
 :math:`W = \int \dot m\, w\, dt`, times a fitted ``power_scale``, is
-the electricity. The efficiency is fitted apart from it, on the heat
+the electricity. When a ``RecoveryModel`` serves a different duration,
+the work is stretched to the served climb at the same power, and a
+start's hold draws the path's starting power, so a recovery that takes
+longer uses more energy. The efficiency is fitted apart from it, on the heat
 stored :math:`Q` (the tank's mass times the rise of its mean, net of
 the standby loss) over the same unscaled work:
 
@@ -683,7 +691,9 @@ An installation's sensors
    * - A flow meter on the hot line
      - The draws, in delivered gallons (or tank gallons, with
        ``flow_volume="tank"``), which move the tank and debit the heat
-       book. A reading holds 60 seconds and then counts as no flow.
+       book. From statuses a reading holds 60 seconds and then counts
+       as no flow; from a change history it holds until the next
+       change.
        Without one there is no heat book (``no_heat_book``), and in a
        fit the heater's "in use" flag stands in for the quiet test.
    * - The circulation pump
