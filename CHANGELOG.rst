@@ -8,6 +8,15 @@ Unreleased
 Changed
 -------
 
+- **The recovery fit's held-out error is draws inside recoveries.**
+  The latest recoveries come out about 25 min short at every
+  compressor fit tried. Those with under 2 gal of hot water and 5
+  minutes of circulation inside them come out 0.1 min short (20 of
+  35); each hot gallon inside a recovery adds about 4.7 min. The fit is
+  unchanged: fitted on the draw-light recoveries alone, the constant
+  scores worse on the held-out draw-light ones (14.2 min against 11.6).
+  See :doc:`/explanation/simulator`.
+
 - **The compressor's engineering values are not fittable on the
   record.** The condenser approach (10 °F), clearance ratio (0.05) and
   polytropic exponent (1.17) stay. The compressor constant absorbs
