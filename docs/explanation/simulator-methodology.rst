@@ -64,6 +64,22 @@ physics: a coast when nothing heats, a recovery when the compressor
 runs, with an element's heat laid over either. Then it hands the event
 to the controller.
 
+.. only:: html
+
+   .. mermaid::
+
+      flowchart TD
+          A["Scenario: state, settings, schedules, air, draws, writes"] --> B["Next event: fixed instants, and crossings on the tank's predicted path"]
+          B --> C{"Compressor running?"}
+          C -- yes --> D["Move the tank along the recovery's path"]
+          C -- no --> E["Coast: standby loss, draws, circulation"]
+          D --> F["controller.transition(state, event)"]
+          E --> F
+          F --> G["Carry out the actions: start, stop, retarget, set the mode"]
+          G --> H{"At the horizon?"}
+          H -- no --> B
+          H -- yes --> I["Result: path, heating intervals, energy, reasons"]
+
 **The controller.** ``sim.controller`` is the firmware as a pure
 function: ``transition(state, event, settings, params)`` returns the
 heater's new state and the actions it takes (start the compressor, stop
@@ -71,6 +87,24 @@ an element, set a mode). It reads the tank only through the event it is
 given and through predicted paths, and keeps no state of its own. Its
 rules and the evidence for each are in :doc:`what-starts-a-recovery`,
 :doc:`tou-recovery-cap` and :doc:`heating-elements`.
+
+The compressor's part of the state moves through these phases; a start
+that comes due while it is locked out waits as a pending start until
+the lockout ends:
+
+.. only:: html
+
+   .. mermaid::
+
+      stateDiagram-v2
+          [*] --> idle
+          idle --> holding: start, with a hold
+          idle --> heating: start, no hold
+          holding --> heating: the hold ends
+          heating --> locked_out: stop at the target, a write or a mode
+          heating --> capped: TOU cap stop
+          capped --> idle: the window closes
+          locked_out --> idle: 330 s after the stop
 
 **Finding a crossing.** Paths are kept as points: every 10 minutes on a
 coast, and on a 10-minute grid for a recovery. A crossing of a threshold
@@ -95,27 +129,54 @@ The tank
 
 **State.** The tank is two zones of equal mass: the upper, which the
 upper probe reads, and the lower, which the lower probe reads. The walk
-carries them as a mean temperature and a gap: upper = mean + gap / 2,
-lower = mean - gap / 2. The tank's thermal mass is its storage volume
-(63.2 gal for the 65 gal model) times 8.34 BTU per gallon per degF,
-about 527 BTU/degF.
+carries them as a mean temperature :math:`\bar T` and a gap :math:`g`:
+
+.. math::
+
+   T_U = \bar T + \tfrac{g}{2}, \qquad T_L = \bar T - \tfrac{g}{2},
+   \qquad m = 8.34\,V
+
+where :math:`V` is the storage volume (63.2 gal for the 65 gal model),
+so :math:`m` is about 527 BTU/degF, and each zone holds half of it.
 
 **Standby.** Heat leaves through the jacket to the air beside the
-heater at ``UA(dT) x dT``, where dT is the tank's mean over the air.
-``UA`` follows ``ua_ref x (max(dT, 5) / 50) ^ n``; at the current fit
-``n`` is 0, so ``UA`` is a constant. A coast is stepped every 10 minutes
-(explicit Euler on the mean), with ``UA`` evaluated at each step.
+heater, at :math:`T_a`:
 
-**The bottom loss.** A second loss, ``Q_b``, leaves the lower zone
-alone. The lower probe sees ``1 - exp(-gap / gate)`` of it: nearly all
-of it in a stratified tank, little in a mixed one. So a stratified
+.. math::
+
+   m \frac{d\bar T}{dt} = -\,UA(\Delta T)\,\Delta T, \qquad
+   \Delta T = \bar T - T_a, \qquad
+   UA(\Delta T) = UA_{\text{ref}}
+   \left(\frac{\max(\Delta T, 5)}{50}\right)^{n}
+
+At the current fit :math:`n = 0`, so :math:`UA` is a constant. A coast
+is stepped every 10 minutes (explicit Euler on :math:`\bar T`), with
+:math:`UA` evaluated at each step.
+
+**The bottom loss.** A second loss, :math:`Q_b`, leaves the lower zone
+alone. The lower probe sees a share of it that grows with the gap, over
+a fitted gate :math:`g_b`:
+
+.. math::
+
+   \frac{m}{2} \frac{dT_L}{dt} = -\,Q_b \left(1 - e^{-g / g_b}\right)
+
+so it sees nearly all of it in a stratified tank and little in a mixed
+one. So a stratified
 tank's lower zone falls faster than its upper and the gap opens, as the
 record shows. :doc:`standby-loss` has the fits.
 
-**The gap relaxes.** With nothing heating or drawing, the gap closes as
-``gap(t) = gap_0 x exp(-t / tau)``, in closed form. A draw, the bottom
-loss or a circulation run resets ``gap_0`` to the gap it leaves, and
-the relaxation starts again from there.
+**The gap relaxes.** With nothing heating or drawing, the gap closes in
+closed form on the time constant :math:`\tau`
+(``stratification_gap_tau_h``):
+
+.. math::
+
+   g(t) = g_0\, e^{-(t - t_0)/\tau}
+
+A draw, the bottom loss or a circulation run resets :math:`g_0` and
+:math:`t_0` to the gap it leaves, and the relaxation starts again from
+there.
 
 **The air.** The ambient is given as readings (or one value) and
 interpolated onto a 10-minute grid. A coast reads it at each step; a
@@ -145,6 +206,39 @@ compression cycle, integrated on the lower zone in 10-second steps:
 6. The standby loss and the bottom loss are taken off, and the lower
    zone rises by the net heat over the zone's mass.
 
+In symbols, with :math:`K` the compressor constant, :math:`n` the
+polytropic exponent, :math:`c` the clearance ratio, :math:`a` the
+evaporator's approach at 65 degF air and :math:`s` its slope:
+
+.. math::
+
+   T_e = T_a - a - (1 - s)(T_a - 65), \qquad
+   T_c = T_L + \Delta T_{\text{cond}}, \qquad
+   r_p = \frac{P_{\text{sat}}(T_c)}{P_{\text{sat}}(T_e)}
+
+.. math::
+
+   \eta_v = 1 - c\left(r_p^{1/n} - 1\right), \qquad
+   \dot m = K\,\rho_g(T_e)\,\eta_v, \qquad
+   w = \frac{n}{n-1}\,\frac{P_{\text{sat}}(T_e)}{\rho_g(T_e)}
+   \left(r_p^{(n-1)/n} - 1\right)
+
+.. math::
+
+   \dot Q_h = \dot m \left(h_g(T_e) + w - h_f(T_c)\right)
+   + \dot Q_{\text{lat}}
+
+.. math::
+
+   m_z \frac{dT_L}{dt} = \dot Q_h - UA(\Delta T)\,\Delta T
+   - Q_b\left(1 - e^{-g/g_b}\right), \qquad
+   m_z = \begin{cases} m/2 & g > 0 \\ m & g = 0 \end{cases}
+
+While :math:`g > 0` the gap closes by what the lower zone gains, so the
+upper zone holds. :math:`\dot Q_{\text{lat}}` is the latent heat of
+the fan's air cooled to the coil, nonzero only when :math:`T_e` is
+below the air's dew point.
+
 It stops when the lower zone reaches the target (``hp_lower_off``), or
 after 30 hours, reported as truncated. ``compressor_constant`` is the
 one term fitted on durations. The evaporator's approach and slope are
@@ -171,11 +265,19 @@ is asked with it, serves a duration that includes it, and the path
 stays flat for it. With the physics alone there is no hold, since the
 fitted durations already include it.
 
-**Power and efficiency.** The cycle's own compression work, times a
-fitted ``power_scale``, is the electricity. The efficiency is fitted
-apart from it: the heat stored (the tank's mass times the rise of its
-mean, net of the standby loss) over the cycle's own unscaled work,
-times a fitted ``cop_scale`` and an exponential lift term. Start-up energy is recorded once per start.
+**Power and efficiency.** The cycle's own compression work
+:math:`W = \int \dot m\, w\, dt`, times a fitted ``power_scale``, is
+the electricity. The efficiency is fitted apart from it, on the heat
+stored :math:`Q` (the tank's mass times the rise of its mean, net of
+the standby loss) over the same unscaled work:
+
+.. math::
+
+   \text{COP} = s_{\text{cop}}\, \frac{Q}{W}\,
+   e^{-\gamma\,(\bar T - T_a - 62)}
+
+with ``cop_scale`` :math:`s_{\text{cop}}` and the lift term
+:math:`\gamma` fitted. Start-up energy is recorded once per start.
 :doc:`recovery-speed` has the measurements.
 
 **A learned duration.** A ``RecoveryModel`` (``sim.extensions``) may
@@ -203,18 +305,34 @@ Draws
 **Delivered gallons.** A draw is given in gallons on the delivered
 line, after the mixing valve, because that is what a flow meter on the
 hot line reads. The valve blends tank water with cold water to its
-line, ``delivered = intercept + slope x upper``, never above the tank.
-The tank's share of a delivered gallon is ``(delivered - inlet) /
-(upper - inlet)``. With no valve (``NO_VALVE``) every delivered gallon
-is tank water.
+line, never above the tank, and the tank's share :math:`h` of a
+delivered gallon follows:
+
+.. math::
+
+   T_{\text{del}} = \min\left(T_U,\; b + k\,T_U\right), \qquad
+   h = \frac{T_{\text{del}} - T_{\text{in}}}{T_U - T_{\text{in}}}
+
+with the valve's intercept :math:`b` and slope :math:`k`. With no valve
+(``NO_VALVE``, :math:`b = 0`, :math:`k = 1`) every delivered gallon is
+tank water.
 
 **How a draw moves the probes.** Cold water enters at the bottom, so a
-draw moves the lower zone first and most. Per delivered gallon, the
-lower zone falls toward the incoming water at a rate set by how much of
-the draw reaches the probe: ``reach = 1 - exp(-(gap + offset) /
-gate)``. A mixed tank (small gap) hides much of a small draw from the
-lower probe; a stratified one shows it. The upper zone falls a fixed
-small amount per gallon. A draw is walked a quarter gallon at a time,
+draw moves the lower zone first and most. Per delivered gallon
+:math:`V`, the lower zone falls toward the incoming water at a rate set
+by how much of the draw reaches the probe, and the upper zone falls a
+fixed small amount:
+
+.. math::
+
+   \frac{dT_L}{dV} = -\,\frac{r\,h}{V_r}\left(T_L - T_{\text{in}}\right),
+   \qquad r = 1 - e^{-(g + \delta)/g_r}, \qquad
+   \frac{dT_U}{dV} = -\beta
+
+with the fitted reach volume :math:`V_r`, offset :math:`\delta`, gate
+:math:`g_r` and upper fall :math:`\beta`. A mixed tank (small gap)
+hides much of a small draw from the lower probe; a stratified one shows
+it. A draw is walked a quarter gallon at a time,
 so a draw split in two moves the tank as the whole draw does.
 :doc:`draws` has the fit and its held-out scores.
 
@@ -235,12 +353,20 @@ Circulation
 
 A recirculation loop's pump pulls tank water around the house and
 returns it, cooled, to the tank. A run is priced as a flowing draw: its
-gallons are the loop volume it displaced, scaled by how far the pipe
-had cooled since the last run (``1 - exp(-rest / tau)``), and its
-return comes back at the air plus a fitted offset. Only the lower zone
-moves on a gated run; an ungated one charges a share of its heat to
-both zones. Runs closer than 10 minutes count as one. The terms and
-their fits are in :doc:`standby-loss`.
+gallons are the loop volume :math:`V_{\text{loop}}` it displaced,
+scaled by how far the pipe had cooled in the :math:`t_{\text{rest}}`
+since the last run, and its return comes back at the air plus a fitted
+offset:
+
+.. math::
+
+   V_{\text{run}} = \min\left(\dot V\,t_{\text{run}},\;
+   V_{\text{loop}}\right)\left(1 - e^{-t_{\text{rest}}/\tau_c}\right),
+   \qquad T_{\text{return}} = T_a + \Delta T_{\text{rest}}
+
+Only the lower zone moves on a gated run; an ungated one charges a
+share of its heat to both zones. Runs closer than 10 minutes count as
+one. The terms and their fits are in :doc:`standby-loss`.
 
 
 The heat book
@@ -256,7 +382,23 @@ is known full. From there it debits each draw (by delivered gallons
 through the valve, or tank gallons at the upper zone), standby loss and
 circulation, and credits the compressor's heat (a fitted rate that
 rises with the air) and the elements'. Credited heat is drawable
-wherever it lands.
+wherever it lands:
+
+.. math::
+
+   H(t_0) = 8.34\,V\left(\bar T - 70\right), \qquad
+   \frac{dH}{dt} = \dot q_{hp}(T_a) + \dot q_{el}
+   - UA_b \max(0, \bar T - T_a) - \dot q_{\text{draw}}
+   - \dot q_{\text{circ}}
+
+.. math::
+
+   \dot q_{hp}(T_a) = q_0 + q_1\,(T_a - 65), \qquad
+   \dot q_{\text{draw}} = 8.34\,\dot V_{\text{del}}
+   \left(T_{\text{del}}(T_U) - T_{\text{in}}\right)
+
+where :math:`q_0`, :math:`q_1` and the book's own :math:`UA_b` are its
+fitted terms (``BookParams``).
 
 **Anchors.** A book starts, and restarts, only where the tank is known
 full: both probes within ``uniform_band_f`` at the end of a recovery
@@ -281,8 +423,15 @@ and then is none.
 **How much is left.** The empty point (``empty_btu``) is the booked
 heat left when the upper probe crossed the line in recorded drawdowns.
 Deliverable gallons are the heat above it over the heat a delivered
-gallon takes. Along a walk the book also moves the upper zone the probe
-would show as the tank empties, and re-anchors where the walk's tank
+gallon takes:
+
+.. math::
+
+   D = \frac{H - H_{\text{empty}}}
+   {8.34\left(T_{\text{del}}(T_U) - T_{\text{in}}\right)}
+
+Along a walk the book also moves the upper zone the probe would show
+as the tank empties, and re-anchors where the walk's tank
 is full: at the end of a recovery the heater stopped itself, quiet
 after one with the zones within the band, or with the compressor
 running alone past the hold.
@@ -302,8 +451,7 @@ the line, the water above it still leaves hot, so the tap runs cold
 ``delivered_lag_gal`` gallons later (measured once, 5.3 to 7.3 gal;
 5.0 used).
 
-**Deliverable gallons.** With a book: the booked heat above the empty
-point, plus the lag. Without one: the tank's heat as the two probes
+**Deliverable gallons.** With a book: :math:`D` above, plus the lag. Without one: the tank's heat as the two probes
 place it, or the most that recorded draws delivered from probes no
 warmer than now (``evidence``), whichever is more, plus the lag; with
 the upper probe already below the line, none.
@@ -399,6 +547,47 @@ How the sensors are used
 The heater's own readings are the only required input; everything else
 improves an answer where it is given and has a stated default where it
 is not.
+
+.. only:: html
+
+   .. mermaid::
+
+      flowchart LR
+          subgraph heater["The heater"]
+              P["Tank probes"]
+              F["Running flags, heat source"]
+              A["Air reading"]
+              W["Power, energy count"]
+              S["Setpoint, thresholds, mode, TOU"]
+          end
+          subgraph site["The installation"]
+              AS["Air sensor, humidity"]
+              IN["Cold supply probe"]
+              FM["Hot line flow meter"]
+              CP["Circulation pump"]
+              OF["Outdoor forecast"]
+          end
+          P --> SC["Scenario"]
+          F --> SC
+          S --> SC
+          A --> SC
+          AS --> SC
+          OF --> SC
+          CP --> SC
+          FM --> SC
+          P --> BK["Heat book"]
+          F --> BK
+          A --> BK
+          FM --> BK
+          IN --> BK
+          CP --> BK
+          P --> CAL["Calibration"]
+          F --> CAL
+          A --> CAL
+          W --> CAL
+          AS --> CAL
+          FM --> CAL
+          CP --> CAL
 
 The heater's readings
 ---------------------
@@ -502,8 +691,8 @@ An installation's sensors
        above. Without them, an installation that circulates says
        ``circulation_unknown``.
    * - An outdoor forecast
-     - The air ahead of time: ``air = damping x outdoor(t - lag) +
-       offset``, fitted from the air beside the heater (without that
+     - The air ahead of time,
+       :math:`T_a(t) = d\,T_{\text{out}}(t - \lambda) + c`, fitted from the air beside the heater (without that
        sensor, the heater's running readings) against the outdoor
        history, and shifted to pass through the heater's last running
        reading.

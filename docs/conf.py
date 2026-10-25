@@ -72,6 +72,7 @@ extensions = [
     "sphinx.ext.mathjax",
     "sphinx.ext.napoleon",
     "sphinxcontrib.openapi",
+    "sphinxcontrib.mermaid",
 ]
 
 # Suppress warnings for classes/functions exported in multiple modules
