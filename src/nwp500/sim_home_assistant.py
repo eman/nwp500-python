@@ -70,11 +70,14 @@ Span = tuple[datetime, datetime]
 
 #: A reading older than this is not used.
 FRESH = timedelta(hours=1)
-#: A pump at or above this speed is running, rpm.
+#: A pump at or above this speed is running, rpm. One installation's
+#: pump read 0 or at least 1,374, never between (February to October
+#: 2026).
 PUMP_ON_RPM = 10.0
 #: For a sampled speed (``pump_runs``' ``stale``): a run silent this
-#: long has ended. A history of changes writes no row for a steady
-#: speed, so its runs hold until the speed changes.
+#: long has ended (one installation's pump was sampled every 10 s while
+#: it ran). A history of changes writes no row for a steady speed, so
+#: its runs hold until the speed changes.
 PUMP_STALE = timedelta(seconds=300)
 #: How far back the inlet's plateau looks.
 INLET_LOOKBACK = timedelta(hours=72)

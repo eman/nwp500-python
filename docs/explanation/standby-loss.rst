@@ -117,6 +117,46 @@ heating and runs, starting 45 minutes after the last of them, left 24
 windows at 4.78 (standard deviation 1.19). :doc:`../how-to/calibrate-simulator`
 uses that rule.
 
+How long to wait matters little past half an hour. Over February to
+October 2026 the fitted ``ua_ref`` was:
+
+.. list-table::
+   :header-rows: 1
+   :widths: 25 25 25 25
+
+   * - Wait after the last event
+     - Quiet windows
+     - Mean window ``UA`` (sd)
+     - ``ua_ref``
+   * - 0 min
+     - 369
+     - 5.26 (1.47)
+     - 4.49
+   * - 15 min
+     - 353
+     - 5.08 (1.29)
+     - 4.46
+   * - 30 min
+     - 331
+     - 4.97 (1.15)
+     - 4.44
+   * - 45 min
+     - 313
+     - 5.01 (1.12)
+     - 4.47
+   * - 60 min
+     - 297
+     - 5.01 (1.10)
+     - 4.47
+   * - 90 min
+     - 271
+     - 5.02 (1.03)
+     - 4.48
+
+From 30 minutes on, the mean window settles at about 5.0 and the law's
+level moves under 1 %; 45 minutes keeps that with the windows a longer
+wait would drop.
+
 
 Circulation runs
 ================

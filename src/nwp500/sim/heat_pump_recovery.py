@@ -28,7 +28,9 @@ from nwp500.sim.physics.compressor import (
 if TYPE_CHECKING:
     from nwp500.sim.extensions import RecoveryModel
 
-#: The humidity the integrator assumes when none is known, %.
+#: The humidity the integrator assumes when none is known, %: near one
+#: installation's 53 % mean, and 0.4 min on its recoveries' mean
+#: duration error against their own readings.
 DEFAULT_HUMIDITY = 50.0
 
 #: The reason a truncated integration carries: its duration is the

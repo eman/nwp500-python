@@ -1320,6 +1320,9 @@ def replay(
 #: The grid a recorded history is booked on, seconds.
 BOOK_GRID_S = 10
 #: How long a flow reading holds (the household meter's, circulation's).
+#: At one installation the meter fell silent during a draw 4 times in
+#: eight months, each for 3-5 min: 2 of the draws had ended when it
+#: came back and 2 ran on, and it reports no volume for the silence.
 FLOW_HOLD = timedelta(seconds=60)
 #: How long an inlet probe's reading holds.
 INLET_HOLD = timedelta(hours=1)

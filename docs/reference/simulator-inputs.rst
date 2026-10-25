@@ -366,7 +366,10 @@ The environment: ``Environment``
      - %RH
      - 50
      - **Not reported.** It changes the compressor's output through the
-       evaporator's latent load.
+       evaporator's latent load. At one installation the air beside the
+       heater averaged 53 % (monthly 45-70 %); holding every recovery
+       at 50 % instead of its own reading moved the mean duration error
+       by 0.4 min (27.5 to 27.9 over 178 recoveries).
    * - ``inlet_f``
      - degF
      - the parameters' ``draw.inlet_temp_f``
@@ -1027,8 +1030,8 @@ the fan's airflow in the latent term (229 CFM; no airflow is
 published, and the manual's 229 is the 50 gal model's shipping weight
 in pounds), the jacket loss fallback (5.0 BTU/hr per degF) and the
 lift reference (62 degF). The latent term is up to about 150 BTU/hr
-of about 4,000; on the record, humidity's own effect on a recovery's
-duration, with the air held, is not resolved.
+of about 4,000; on the record, a recovery's duration moves a mean
+1.2 min between its own humidity and 50 % (at most 3 %).
 
 ``params_to_document`` and ``params_from_document`` in
 ``nwp500.sim.params`` write and read parameters as a JSON document
