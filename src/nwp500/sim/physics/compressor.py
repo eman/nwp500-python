@@ -36,6 +36,12 @@ from nwp500.sim.physics.tank import bottom_loss_reach, ua_at
 # is 0.44-0.48 × full tank while stratified and 0.96 × once mixed, and
 # 57 % of all heating steps are in the mixed regime, where integrating at
 # half-tank mass runs the tank up roughly twice as fast as it does.
+# The upper zone is held where it started until the gap closes. On 30
+# compressor-only recoveries (2026-04 to 10, no metered flow, gap 5.6 to
+# 46 °F at the start) the upper probe fell a median 0.54 °F while the
+# gap was over 3 °F, and rose to 1.26 °F above its start as the gap
+# closed its last 2 to 3 °F, where the zones mix; after closure the two
+# probes rose together (10.4 and 12.2 °F).
 # Latent heat of vaporization of water at typical condensation temperatures
 _H_FG_WATER_BTU_LB = 1054.0
 # Runaway-integration guard, in minutes.
