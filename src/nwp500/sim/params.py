@@ -855,8 +855,8 @@ class ReadinessParams:
     """What counts as hot water at the tap, and how the delivered water
     follows the upper probe (``sim.delivery``).
 
-    Most of these describe an installation, not the heater: the pipe
-    between the heater and the tap, the mixing valve and the household's
+    Most of these describe an installation, not the heater: the line
+    the household calls hot, the mixing valve and the household's
     draws. The defaults were measured at one NWP500-65's installation;
     each field says on how much. Measure your own where you can
     (the simulator reference's *Readiness* section says how).

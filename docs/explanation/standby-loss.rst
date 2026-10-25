@@ -24,14 +24,15 @@ Summary
    * - Loss
      - Observed behaviour
    * - Jacket loss
-     - ``UA`` of about **3.3 BTU/hr per degF** with the tank 13 degF above
-       the air, rising to about **5.0** at 85 degF. For a 140 degF tank
-       in 65 degF air that is about **0.7 degF an hour**.
+     - ``UA`` of **4.48 BTU/hr per degF** at any difference between the
+       tank and the air, and **90.8 BTU/hr** more from the bottom while
+       the tank is stratified. For a mixed 140 degF tank in 65 degF air
+       that is about **0.64 degF an hour**.
    * - A circulation run
-     - About **5 degF** of the whole tank for a typical run at the loop
-       volume fitted in September (6.38 gal), of which the probes show
-       about 0.44. In August, at a smaller fitted loop, a median
-       1,126 BTU (about 2.1 degF).
+     - Priced on an effective loop of **19.36 gal**, its return at the
+       air plus 7.84 degF, of which the probes show **0.263**. At the
+       loop fitted in September (6.38 gal), a typical run was about
+       5 degF of the whole tank, and the probes showed 0.44 of it.
    * - Where a run's heat shows
      - Ten minutes after a run, the lower probe had fallen **0.9 degF** in
        a mixed tank and **7.0 degF** in a stratified one. The upper probe
@@ -42,7 +43,7 @@ Summary
        the constant is **26.7 h**.
 
 All figures come from one NWP500-65 and its recorded status history to
-2026-09-24, with the air beside the heater measured separately. The
+2026-10-24, with the air beside the heater measured separately. The
 circulation figures are that installation's loop.
 
 

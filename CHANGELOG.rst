@@ -129,6 +129,7 @@ Fixed
   hot water back. Snapshot and window runs are now ``(minutes, upper,
   rest hours, minutes run before)``, and a run a snapshot takes up
   partway is priced from where it was. See :doc:`/reference/simulator-inputs` and
+  :doc:`/explanation/standby-loss`.
 
 - **The R-134a properties are CoolProp's.** The refrigerant table,
   cited as "ASHRAE Standard 34" (a safety classification, not a property
@@ -154,11 +155,11 @@ Fixed
   ``APPROACH_BOUNDS`` are gone. See :doc:`/reference/simulator-inputs`.
 
 - **The circulation share's story.** ``DrawParams.ungated_observability``
-  (0.398) was described as the probes' share of a run's heat. The loop
-  heat it divides counts all the loop's flow as the tank's, but the
-  return feeds the mixing valve's cold port as well as the tank's
-  inlet, and that split is not measured. The share is the split and
-  any probe shortfall together. The value is unchanged. See
+  was described as the probes' share of a run's heat. The loop heat it
+  divides counts all the loop's flow as the tank's, but the return
+  feeds the mixing valve's cold port as well as the tank's inlet, and
+  that split is not measured. The share is the split and any probe
+  shortfall together (its refit to 0.263 is above). See
   :doc:`/explanation/standby-loss`.
 
 - **The upper zone's hold through a recovery rests on the record.** The
@@ -267,7 +268,8 @@ Fixed
   air beside the heater (air 48-86 °F), and a free fit on 142 recorded
   recoveries' durations chose a slope of 0.62. With the coil's slope and
   the compressor constant and approach refit (0.0499 and 18.69 °F at
-  65 °F air), the 35 recoveries held out came out 32.0 min off on
+  65 °F air, on the old refrigerant table; both are replaced above),
+  the 35 recoveries held out came out 32.0 min off on
   average, against 34.2 for the fixed approach refit on the same split
   and 36.5 as shipped. The bias below 60 °F air went from +14.3 to
   +4.4 min, and above 75 °F from -7.6 to +3.5. The coil's live reading
@@ -414,8 +416,8 @@ Fixed
   run the new ``BookParams.anchor_run_min`` (15 minutes of its running
   time) since a draw after the last anchor. The book walked along a
   simulation anchors the same way. A quiet tank after a draw still
-  doesn't anchor: the probes show only part of a small draw until its
-  cold front reaches the lower probe.
+  doesn't anchor: in a mixed tank the lower probe shows only about a
+  third of a small draw's heat.
 
 - **A draw flow can count tank water.** The heat book read every
   gallon of its flow as delivered through the mixing valve, debiting
@@ -430,8 +432,9 @@ Fixed
   ``draw_flow_volume``. The shipped empty points
   (``BookParams.empty_btu``, ``zone_empty_btu``) were booked as
   delivered gallons, so a tank-water book takes them refit on its own
-  record (``calibration.empty_point``, ``zone_empty_point``): booked as
-  tank water, a drawdown leaves less heat at the line.
+  record (``calibration.empty_point``, keeping ``zone_empty_btu`` as far
+  below it): booked as tank water, a drawdown leaves less heat at the
+  line.
 
 Removed
 -------

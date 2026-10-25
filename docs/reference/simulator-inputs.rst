@@ -554,8 +554,8 @@ tank over the cold water of a recent draw. Start one only from what you know:
      - The same, from the heater's values' changes (``ChangeRows``) and
        the instants it was heard from, as Home Assistant records them,
        with the flows in gal/min and the temperatures in °F.
-       Only an anchor after the last span the heater wasn't heard from
-       counts.
+       A span the heater wasn't heard from is walked across, its values
+       held.
    * - A ``Booked`` from your own record
      - You keep a book of the tank's heat some other way.
 
@@ -603,8 +603,8 @@ that holds writes no change, so only ``observed`` says the heater was
 heard. A silence between those instants longer than ``max_gap`` of them
 (4 times their usual spacing, and at least 5 minutes), one of
 ``rows.outages``, or one of ``flow_outages`` is a span nobody saw. The
-book is read only from after the last such span, and is None when the
-heater isn't heard at ``at``. No flow reading in force at the start of
+book walks across it, each value held from before it, and is None when
+such a span is still open at ``at``. No flow reading in force at the start of
 the window it books over is a ``ValueError``. An inlet reading holds
 except through ``inlet_outages``.
 
@@ -760,16 +760,16 @@ where it matters, the frame it was fitted in (``params.note_of``):
      - Parameters
    * - 1
      - NWP500-50
-     - The 65's, with the tank volume (``tank`` and ``book``) scaled to
-       50 gal nominal.
+     - The 65's, with the tank volume (``tank`` and ``book``) scaled by
+       rated storage, 45.2 gal against the 65's 63.2.
    * - 2
      - NWP500-65
-     - Fitted on one NWP500-65 at 240 V, 2026-10-11, at one
+     - Fitted on one NWP500-65 at 240 V, 2026-10-11 to 10-24, at one
        installation; without its mixing valve.
    * - 3
      - NWP500-80
-     - The 65's, with the tank volume (``tank`` and ``book``) scaled to
-       80 gal nominal.
+     - The 65's, with the tank volume (``tank`` and ``book``) scaled by
+       rated storage, 76.1 gal against the 65's 63.2.
 
 Any other code raises ``ValueError``. The defaults belong to one tank
 in one place: its jacket loss reflects the air around that tank, its
@@ -801,8 +801,10 @@ Where the defaults come from
 
 Every value in ``site_example_params(2)``, with what it was measured or
 fitted on. "Retrain" values come from the weekly refit of one NWP500-65's
-record on 2026-10-11, over the record to that date (from 2025-12-28).
-They move a little at each retrain as the record grows; the range is
+record on 2026-10-11, over the record to that date (from 2025-12-28),
+except where a row gives its own span: the standby, gap, compressor,
+circulation and ungated share rows were refit on the record to
+2026-10-24. They move a little at each retrain as the record grows; the range is
 the one seen over the retrains from 2026-08-08 to 2026-10-18.
 
 **Fitted at each retrain**
@@ -1012,8 +1014,8 @@ the one seen over the retrains from 2026-08-08 to 2026-10-18.
        a 63.2 gal book (``book.tank_gal``).
    * - ``book.empty_btu``, ``book.zone_empty_btu``
      - 16,169, 12,636 BTU
-     - The heat left at five recorded drawdowns to the line
-       (14,237-19,616 BTU). ``zone_empty_btu`` is where a draw takes the
+     - The heat left at four recorded drawdowns to the line
+       (14,219-19,590 BTU). ``zone_empty_btu`` is where a draw takes the
        upper zone across the line, 3,533 BTU lower so the zone centres
        the crossings: their median when the book held back the heat in
        a draw's cold water. Booked as delivered gallons: a flow that

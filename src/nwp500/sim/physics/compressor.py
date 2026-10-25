@@ -4,11 +4,11 @@ Models the R-134a vapor compression cycle coupled to the stratified tank,
 integrating the lower-zone temperature at 10-second steps until the
 lower thermostat setpoint is reached.
 
-The free parameters, ``compressor_constant`` (absorbs V_disp × N_RPM ×
-η_motor) and ``evap_approach_f`` (T_amb − T_evap at the coil at 65 °F
-air; the coil moves ``CompressorParams.evap_air_slope`` per °F), are fit
-over the full training corpus by a calibration outside this package,
-which passes them in.
+``compressor_constant`` (absorbs V_disp × N_RPM × η_motor) is fitted on
+the recorded recoveries' durations (``sim.calibration.fit_compressor``).
+``evap_approach_f`` (T_amb − T_evap at the coil at 65 °F air; the coil
+moves ``CompressorParams.evap_air_slope`` per °F) is the coil's
+measured reading, held by that fit.
 """
 
 from dataclasses import dataclass

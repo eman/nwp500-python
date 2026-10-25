@@ -142,7 +142,7 @@ Hot water and the heat book
 
 .. automodule:: nwp500.sim.circulation
    :members: Circulation, CirculationDraws, CirculationLoss, merge_runs,
-      run_draws, RUN_GAP
+      run_draws, RUN_GAP, cooled_share
 
 .. automodule:: nwp500.sim.location_air
    :members: LocationAirModel, SITE_LOCATION_AIR, project, fit,
@@ -202,7 +202,8 @@ Hot water and the heat book
 .. automodule:: nwp500.sim.book
    :members: Booked, BookedHeatLedger, SpanLoss, full_tank_book,
       full_tank, walk_booked, loss_ceiling_btu, BookedPath, Step,
-      book_steps, house_gpm, step_heat_btu, inlet_now_f
+      book_steps, house_gpm, step_heat_btu, inlet_now_f, mains_f,
+      draw_out
 
 
 The engine and the physics
@@ -235,7 +236,8 @@ The pieces the entry points are built from.
 
 .. automodule:: nwp500.sim.tou_triggers
    :members: autonomous_start, heater_start, in_window, while_enabled,
-      Trigger, LOWER_TRIGGER_HELD, UPPER_DEFICIT_F
+      Trigger, LOWER_TRIGGER_HELD, UPPER_DEFICIT_F, LOWER_HOLD_MODES,
+      DROP_STARTS_MODE
 
 .. automodule:: nwp500.sim.schedules
    :members: TouRule, tou_rules, tou_windows, rule_windows, Firing,
@@ -243,7 +245,7 @@ The pieces the entry points are built from.
 
 .. automodule:: nwp500.sim.physics.compressor
    :members: predict_physics_detailed, predict_physics, PhysicsPath,
-      PhysicsResult, MAX_MINUTES
+      PhysicsResult, MAX_MINUTES, evaporator_f, EVAP_REF_AIR_F
 
 .. automodule:: nwp500.sim.physics.refrigerant
    :members: sat_pressure, vapor_density, liquid_enthalpy,
