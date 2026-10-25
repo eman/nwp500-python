@@ -300,7 +300,12 @@ class CompressorParams:
     #: Whether ``compressor_constant`` was fitted under the two-zone
     #: integration.
     two_zone: bool = field(default=False, metadata=_p(FITTED, "flag"))
-    #: T_cond ≈ T_lower + this, °F.
+    #: T_cond ≈ T_lower + this, °F. This and the next two are
+    #: engineering values: the compressor constant absorbs each, and
+    #: refitting it with the approach at 5-20 °F, the clearance at
+    #: 0.02-0.08 or the exponent at 1.10-1.25 moved the held-out
+    #: recovery error by under 0.7 min (33.1-34.3, 35 held out at one
+    #: installation), so the durations cannot fit them.
     cond_approach_f: float = field(default=10.0, metadata=_p(DEFAULT, "°F"))
     #: Clearance volume ratio, in the volumetric efficiency.
     clearance_ratio: float = field(default=0.05, metadata=_p(DEFAULT, "1"))

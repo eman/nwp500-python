@@ -17,6 +17,13 @@ Changed
   scores worse on the held-out draw-light ones (14.2 min against 11.6).
   See :doc:`/explanation/simulator`.
 
+- **The compressor's engineering values are not fittable on the
+  record.** The condenser approach (10 °F), clearance ratio (0.05) and
+  polytropic exponent (1.17) stay. The compressor constant absorbs
+  each: refitting it with each moved over a wide range changed the
+  held-out recovery error by under 0.7 min. See
+  :doc:`/reference/simulator-inputs`.
+
 - **Hand-set values checked against the record.** None changes.
   ``TankParams.lower_zone_share`` 0.5 stays: refitting the compressor
   constant at 0.435-0.5 moved the held-out recovery error by under
@@ -46,6 +53,17 @@ Changed
 
 Fixed
 -----
+
+- **The ungated circulation share is the library's own fit.**
+  ``site_example_params``' ``DrawParams.ungated_observability`` was
+  0.398, measured outside the library at the run model's earlier
+  terms, and the library's ``fit_ungated_observability`` never
+  reproduced it (0.200 at those terms on the same record). It is now
+  0.263, that fit on 165 windows from April to October at the current
+  run model; 0.117 on the windows since September. It prices the runs
+  inside a metered COP cycle: held out, the latest 45 cycles' median
+  error is 6.1 % against 6.3 % with 0.398. See
+  :doc:`/explanation/standby-loss`.
 
 - **High Demand's element restarts later in a stint.** After the entry
   run the simulator never ran High Demand's element again. On the
