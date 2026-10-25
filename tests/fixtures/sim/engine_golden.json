@@ -1,32 +1,32 @@
 {
  "coast_into_tou": {
   "fields": {
-   "heating": "42d11339b3bc6162",
+   "heating": "dee0fadfdcf852c7",
    "mode_writes": "4f53cda18c2baa0c",
    "modes": "ce5a5d38e681c9b6",
-   "points": "219f4c5b2c8abc5b",
+   "points": "b9063c3b0c1de852",
    "writes": "4f53cda18c2baa0c"
   },
-  "sha256": "7668f2c68c2a5b61400c770fc46a947cfa5bc98949b7efc20217dac3b46c8170",
+  "sha256": "e9e34ec80e62cec129965f01e62fa3f8b6b9c24c929e1bf4702a7eba951bb70f",
   "summary": {
    "heating": [
     [
      "2026-10-05T00:40:51.079612+00:00",
      "heater",
      "upper_at_tou_open",
-     "2026-10-05T01:12:31.079612+00:00",
+     "2026-10-05T01:12:11.079612+00:00",
      "compressor",
      null,
      "cap",
-     481.19
+     479.71
     ]
    ],
    "last": {
     "at": "2026-10-05T05:00:00+00:00",
-    "lower_f": 134.898482,
+    "lower_f": 134.919108,
     "mode": "heat_pump",
     "setpoint_f": 140.9,
-    "upper_f": 134.898482
+    "upper_f": 134.919108
    },
    "modes": [
     [
@@ -41,13 +41,13 @@
  },
  "entries_every_mode": {
   "fields": {
-   "heating": "4c411e81a4bd9f52",
+   "heating": "3f3a44bc5d234214",
    "mode_writes": "a417ab1edcec7f9b",
    "modes": "433b93ee1b350f06",
-   "points": "6b3b5df15668d894",
+   "points": "5633196d5eaf43d3",
    "writes": "821f72d283748b0b"
   },
-  "sha256": "3295b59688f37db72465f3e7baf65dd6131c962cd15512f7cd3b5bbb1af623c1",
+  "sha256": "411781befdc94272bb7e1a9be7651e42e58bec52b0634520db70886b9976e2c4",
   "summary": {
    "heating": [
     [
@@ -64,11 +64,11 @@
      "2026-10-04T19:30:30+00:00",
      "write",
      null,
-     "2026-10-04T20:22:50+00:00",
+     "2026-10-04T20:21:30+00:00",
      "compressor",
      null,
      "target",
-     799.95
+     786.85
     ],
     [
      "2026-10-04T20:30:30+00:00",
@@ -78,35 +78,35 @@
      "compressor",
      null,
      "target",
-     2.93
+     2.96
     ],
     [
      "2026-10-04T21:30:00+00:00",
      "write",
      null,
-     "2026-10-04T21:31:31.510074+00:00",
+     "2026-10-04T21:31:32.751853+00:00",
      "element",
      "upper",
      "target",
-     130.859406
+     132.63515
     ],
     [
-     "2026-10-04T21:31:31.510074+00:00",
+     "2026-10-04T21:31:32.751853+00:00",
      "heater",
      "electric_lower_after_upper",
-     "2026-10-04T21:31:59.210697+00:00",
+     "2026-10-04T21:32:02.271413+00:00",
      "element",
      "lower",
      "target",
-     39.611891
+     42.212971
     ]
    ],
    "last": {
     "at": "2026-10-05T07:00:00+00:00",
-    "lower_f": 137.214825,
+    "lower_f": 137.21494,
     "mode": "heat_pump",
     "setpoint_f": 140.9,
-    "upper_f": 137.214825
+    "upper_f": 137.21494
    },
    "modes": [
     [
@@ -191,13 +191,13 @@
  },
  "raw_writes_element": {
   "fields": {
-   "heating": "fe0beb811293ed09",
+   "heating": "d38e97748600f3b7",
    "mode_writes": "71c236b6f12cfe41",
    "modes": "347ea922ad62e7ab",
-   "points": "106a2e8cca98366b",
+   "points": "33e3decfd00e831e",
    "writes": "38b28717e3968940"
   },
-  "sha256": "8f47f44241db118c1852bf5483a141681983c405fa48de916e1e757bccea33b6",
+  "sha256": "ed0cf43c5bdb96287003018b7becc457543f0dacc484e89f68d13019bf5c69a3",
   "summary": {
    "heating": [
     [
@@ -218,25 +218,25 @@
      "compressor",
      null,
      "write",
-     585.45
+     582.72
     ],
     [
      "2026-10-04T20:30:30+00:00",
      "write",
      null,
-     "2026-10-04T20:48:30+00:00",
+     "2026-10-04T20:45:30+00:00",
      "compressor",
      null,
      "target",
-     285.92
+     242.48
     ]
    ],
    "last": {
     "at": "2026-10-05T05:00:00+00:00",
-    "lower_f": 132.911143,
+    "lower_f": 132.855356,
     "mode": "heat_pump",
     "setpoint_f": 140.9,
-    "upper_f": 134.030332
+    "upper_f": 134.020717
    },
    "modes": [
     [
@@ -276,24 +276,24 @@
  },
  "recovering_draws": {
   "fields": {
-   "heating": "a334ee0c2837e5a9",
+   "heating": "509a1386a9c7cc4d",
    "mode_writes": "4f53cda18c2baa0c",
    "modes": "ce5a5d38e681c9b6",
-   "points": "1da1a2277cc66c61",
+   "points": "ba1ef35c20d58795",
    "writes": "4f53cda18c2baa0c"
   },
-  "sha256": "ee109c124c03c6c5a70a118e222aa515f52fa97239f65d8a14cda11aa0bc67bb",
+  "sha256": "e5be8e8ae22a49fc7f0c37d0743c06ebeed608a0ca0fe576d40968c1d6fa86d0",
   "summary": {
    "heating": [
     [
      "2026-10-04T19:00:00+00:00",
      "running",
      null,
-     "2026-10-04T20:32:44.338563+00:00",
+     "2026-10-04T20:27:38.406244+00:00",
      "compressor",
      null,
      "target",
-     1276.874331
+     1209.289769
     ],
     [
      "2026-10-05T04:00:00+00:00",
@@ -303,15 +303,15 @@
      "compressor",
      null,
      "horizon",
-     752.38
+     745.68
     ]
    ],
    "last": {
     "at": "2026-10-05T05:00:00+00:00",
-    "lower_f": 128.148,
+    "lower_f": 130.242,
     "mode": "heat_pump",
     "setpoint_f": 140.9,
-    "upper_f": 128.148
+    "upper_f": 130.242
    },
    "modes": [
     [
@@ -320,38 +320,38 @@
      "horizon"
     ]
    ],
-   "points": 77,
+   "points": 80,
    "writes": []
   }
  },
  "withheld_windows": {
   "fields": {
-   "heating": "b01fc0c0505b3bf9",
+   "heating": "bb957c41aacc4db4",
    "mode_writes": "4f53cda18c2baa0c",
    "modes": "8cfcacb71730221e",
-   "points": "5fdc5cf4b26b876b",
+   "points": "b0b3286fc099e33b",
    "writes": "4f53cda18c2baa0c"
   },
-  "sha256": "d04cc801de7fc1ca50455d72e94112f9dfdcc4ce7953b10f43673265b63e8dd8",
+  "sha256": "45f39206275b4ff05278eec242e648d5ea2f8f9ebd500aa4d2b247af97189c4d",
   "summary": {
    "heating": [
     [
      "2026-10-04T20:00:00+00:00",
      "heater",
      "lower",
-     "2026-10-04T21:52:47.454269+00:00",
+     "2026-10-04T21:48:25.228092+00:00",
      "compressor",
      null,
      "target",
-     1402.864092
+     1311.903304
     ]
    ],
    "last": {
     "at": "2026-10-05T09:00:00+00:00",
-    "lower_f": 111.668908,
+    "lower_f": 111.622651,
     "mode": "heat_pump",
     "setpoint_f": 140.9,
-    "upper_f": 127.945741
+    "upper_f": 127.85639
    },
    "modes": [
     [

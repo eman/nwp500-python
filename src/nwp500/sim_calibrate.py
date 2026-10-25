@@ -1101,7 +1101,7 @@ _GROUP_TERMS = {
         "Bottom loss gate (°F)",
     ),
     "gap_tau": ("Zone gap time constant (h)",),
-    "compressor": ("Compressor constant", "Evaporator approach (°F)"),
+    "compressor": ("Compressor constant",),
     "power_scale": ("Input power scale",),
     "cop": (
         "COP scale",
@@ -1121,7 +1121,6 @@ def _values(params: HeaterParams) -> dict[str, float | None]:
         loss.bottom_gate_f,
         params.tank.stratification_gap_tau_h,
         params.compressor.compressor_constant,
-        params.compressor.evap_approach_f,
         power.power_scale,
         power.cop_scale,
         power.startup_wh,
@@ -1290,13 +1289,14 @@ def report(done: Calibrated) -> list[Term]:
             comp is not None and not comp.hit_bounds,
             comp_why,
         ),
+        # Measured on the coil and held: no fit moves it.
         Term(
             "Evaporator approach (°F)",
-            _num(comp.evap_approach_f if comp else None),
-            comp_samples,
-            comp_error,
-            comp is not None and not comp.hit_bounds,
-            comp_why,
+            _num(c.params.compressor.evap_approach_f),
+            "-",
+            "-",
+            False,
+            "measured on the coil: held",
         ),
     ]
     p = c.power

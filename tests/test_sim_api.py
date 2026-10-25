@@ -562,7 +562,7 @@ class TestWhatTheResultSays:
     ) -> None:
         weak = replace(
             params,
-            compressor=replace(params.compressor, compressor_constant=0.01),
+            compressor=replace(params.compressor, compressor_constant=0.003),
         )
         s = _scenario(
             state=HeaterState(

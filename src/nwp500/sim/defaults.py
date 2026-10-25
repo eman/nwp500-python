@@ -85,8 +85,9 @@ def _nwp500_65() -> HeaterParams:
             ua_baseline_btu_hr_f=5.0,
         ),
         compressor=CompressorParams(
-            compressor_constant=0.049860911532305194,
-            evap_approach_f=18.690180808762094,
+            compressor_constant=0.016044331314777758,
+            # The coil's reading, 6.7 + 0.596 x air, at 65 °F air.
+            evap_approach_f=19.56,
             evap_air_slope=0.596,
             two_zone=True,
             cond_approach_f=10.0,
@@ -95,10 +96,10 @@ def _nwp500_65() -> HeaterParams:
             fan_airflow_cfm=229.0,
         ),
         power=PowerParams(
-            power_scale=0.5299928954425356,
-            cop_scale=2.1838863347798503,
+            power_scale=1.6398153371062745,
+            cop_scale=0.6876494994589271,
             startup_wh=160.29537801006768,
-            cop_lift_coeff=0.005,
+            cop_lift_coeff=0.002,
             cop_lift_ref_f=62.0,
         ),
         element=ElementParams(

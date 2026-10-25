@@ -811,12 +811,20 @@ the one seen over the retrains from 2026-08-08 to 2026-10-18.
      - 155 quiet windows that opened with a gap of 2 degF or more. A
        separate fit on 146 windows gave 59 h (95 % CI 47-94 h).
      - 60.0-60.4 h
-   * - ``compressor.compressor_constant``, ``compressor.evap_approach_f``
-     - 0.0499, 18.69 degF
-     - 142 recoveries from 2026-02-18 to 09-01, with the evaporator
-       moving 0.596 degF per degF of air; mean absolute error 26.0 min
-       on them and 32.0 min on the 35 that followed.
-     - 0.047-0.052, 12.2-18.8 degF, with a fixed approach
+   * - ``compressor.compressor_constant``
+     - 0.0160 ft³/s
+     - 142 recoveries from 2026-02-18 to 09-01, at the coil's approach;
+       mean absolute error 25.3 min on them and 33.7 min on the 35 that
+       followed (the old refrigerant table: 25.9 and 32.2, a difference
+       the paired errors don't resolve). A rotary compressor of about
+       8 cc at 3,500 rpm.
+     - Refit on the CoolProp table once
+   * - ``compressor.evap_approach_f``
+     - 19.56 degF
+     - The evaporator coil's reading, 6.7 + 0.596 x air, at 65 degF air.
+       Held by the compressor fit: the durations don't place it (with K
+       free they reach the same error from 6.9 degF).
+     - Measured once, not refit
    * - ``compressor.evap_air_slope``
      - 0.596
      - The evaporator coil's reading against the air beside the heater
@@ -824,18 +832,23 @@ the one seen over the retrains from 2026-08-08 to 2026-10-18.
        recoveries' durations chose 0.62. 1 is a fixed approach.
      - Measured once, not refit
    * - ``power.power_scale``
-     - 0.530
-     - The heater's own power readings over 323 compressor cycles.
-     - 0.528-0.551
+     - 1.640
+     - The heater's own power readings over 323 compressor cycles: the
+       metered input is 1.64 times the model's polytropic work, about
+       61 % compression efficiency. Carried from the old table's 0.530
+       by the two models' power on 83 metered cycles.
+     - 0.528-0.551 on the old table
    * - ``power.cop_scale``, ``power.startup_wh``, ``power.cop_lift_coeff``
-     - 2.184, 160.3 Wh, 0.005
+     - 0.688, 160.3 Wh, 0.002
      - 257 cycles against an energy meter on the heater's circuit. The
        lift term corrects the model's efficiency for the gap between the
        tank and the air, which the refrigerant model alone under-states.
        No error is recorded for these coefficients. An evaluation of the
        same fit on 2026-09-18, on the record to then, gave a median error
        of 4.8 % per recovery (Accuracy in :doc:`/explanation/simulator`).
-     - 2.08-2.22, 158-171 Wh, 0.004-0.0065
+     - 2.08-2.22, 158-171 Wh, 0.004-0.0065 on the old table. Carried
+       to this one by the two models' COP on 178 recoveries, which
+       differ by 1.156 - 0.003 per degF of lift in log
    * - ``draw.ungated_observability``
      - 0.398
      - 156 windows around circulation runs, at a loop of 6.27 gal fitted

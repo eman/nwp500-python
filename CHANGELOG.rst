@@ -8,6 +8,29 @@ Unreleased
 Fixed
 -----
 
+- **The R-134a properties are CoolProp's.** The refrigerant table,
+  cited as "ASHRAE Standard 34" (a safety classification, not a property
+  table), had the saturated vapour density about 4x low and the liquid
+  enthalpy 14 to 40 BTU/lb high, so the condenser's latent heat fell to
+  9.7 BTU/lb at 160 °F against a true 52.7. It is now CoolProp 8.0.0's
+  every 5 °F. On the record's mixed-tank heating, the model's rate now
+  falls 24 BTU/hr per °F of tank and rises 48 per °F of air, against
+  the record's 28 and 53 (the old table: 12 and 34). The site's
+  compressor constant is refit to 0.0160 ft³/s, a compressor of about
+  8 cc at 3,500 rpm (the old 0.0499 was four times that, to make up the
+  density). The power scale is carried to 1.640 and the COP terms to
+  0.688 and 0.002. The durations score the same: 27.0 min mean error
+  on 177 recoveries, against 27.2.
+- **The compressor fit holds the evaporator approach.** With the true
+  properties the durations no longer place the approach: K and the
+  approach together reached the site's error from 6.9 °F, where the
+  evaporator coil reads 19.6 °F below the air. ``fit_compressor`` now
+  fits ``compressor_constant`` alone, at the parameters'
+  ``evap_approach_f``. ``CompressorParams.evap_approach_f`` defaults to
+  the coil's 19.56 °F and is labelled measured. ``K_BOUNDS`` is
+  0.004-0.08, and ``INITIAL_K``, ``INITIAL_APPROACH_F`` and
+  ``APPROACH_BOUNDS`` are gone. See :doc:`/reference/simulator-inputs`.
+
 - **The circulation share's story.** ``DrawParams.ungated_observability``
   (0.398) was described as the probes' share of a run's heat. The loop
   heat it divides counts all the loop's flow as the tank's, but the

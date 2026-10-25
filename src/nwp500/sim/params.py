@@ -272,19 +272,21 @@ class LossParams:
 class CompressorParams:
     """The R-134a vapour-compression cycle (``physics.compressor``).
 
-    The fitted pair and the two-zone flag come from a calibration. The
-    integrator takes those two as arguments, because calibration
-    searches over them; it reads the four fixed constants from here.
+    The constant and the two-zone flag come from a calibration. The
+    integrator takes the constant and the approach as arguments,
+    because calibration searches over the constant; it reads the rest
+    from here.
     """
 
     #: K = V_disp × N_RPM × η_motor, ft³/s. 0.0 is uncalibrated.
     compressor_constant: float = field(
         default=0.0, metadata=_p(FITTED, "ft³/s", note=_IN_RECOVERY)
     )
-    #: T_amb − T_evap at the coil with the air at 65 °F, °F.
-    evap_approach_f: float = field(
-        default=12.0, metadata=_p(FITTED, "°F", note=_IN_RECOVERY)
-    )
+    #: T_amb − T_evap at the coil with the air at 65 °F, °F. The
+    #: NWP500's coil read 6.7 + 0.596 · air over 377 compressor runs at
+    #: one installation, 19.56 below 65 °F air. The compressor fit holds
+    #: it (``calibration.fit_compressor``).
+    evap_approach_f: float = field(default=19.56, metadata=_p(MEASURED, "°F"))
     #: How far T_evap moves per °F of air (``physics.compressor``): 1 is
     #: a fixed approach. The NWP500's coil moved 0.596 °F per °F over
     #: 377 compressor runs at one installation, air at 48-86 °F.
