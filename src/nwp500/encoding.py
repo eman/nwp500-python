@@ -15,7 +15,7 @@ from .exceptions import ParameterValidationError, RangeValidationError
 
 _logger = logging.getLogger(__name__)
 
-# MGPP Week Bitfield Encoding (from NaviLink APK KDEnum.MgppReservationWeek).
+# MGPP Week Bitfield Encoding.
 # Uses a single byte where bits 1-7 represent days; bit 0 is unused.
 #
 #   Bit 7 (128) = Sunday

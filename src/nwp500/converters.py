@@ -94,10 +94,9 @@ def device_tristate_to_python(value: Any) -> bool | None:
     reserved 0 maps to ``None`` instead of being flattened into ``False``.
 
     The device distinguishes three states and the library should not throw one
-    away. The NaviLink app decodes the affected status fields through
-    ``KDEnum.MgppOnOFFFlag``, which is declared ``UNKNOWN(0), OFF(1), ON(2)``;
-    two of the app's sibling enums render their zero as ``"-"`` and
-    ``"Not Applied"`` rather than as an off state.
+    away. The affected status fields are on/off flags coded 0 unknown,
+    1 off, 2 on; the NaviLink app shows the zero of two related fields
+    as ``"-"`` and ``"Not Applied"`` rather than as an off state.
 
     ``None`` is the right shape for the downstream consumer too: Home Assistant
     renders it as "Unknown" instead of recording a fabricated OFF into the

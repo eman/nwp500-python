@@ -46,10 +46,10 @@ class MqttCommand(NavienBaseModel):
 class ControlFailCode(IntEnum):
     """``failCode`` values of a control failure (``res/ctrl-fail``).
 
-    The NaviLink app (2.04.00, ``z4/f1.java``) interprets exactly one
-    value: 2, for which it shows "DHW control interval exceeded" and
-    refreshes the screen. Any other value is ignored by the app, so its
-    meaning is unknown; the library keeps such values as plain ``int``.
+    The NaviLink app interprets exactly one value: 2, for which it shows
+    "DHW control interval exceeded" and refreshes the screen. Any other
+    value is ignored by the app, so its meaning is unknown; the library
+    keeps such values as plain ``int``.
     """
 
     DHW_CONTROL_INTERVAL_EXCEEDED = 2
@@ -91,9 +91,8 @@ class ControlFailResponse(NavienBaseModel):
     """A control failure published on ``res/ctrl-fail``.
 
     Sent on ``cmd/{deviceType}/navilink-{mac}/res/ctrl-fail`` when the
-    device rejects a control command. Mirrors the app's
-    ``ControlFailData``: the envelope names the client whose command
-    failed (``clientID``, ``sessionID``, ``requestTopic``) and
+    device rejects a control command. The envelope names the client whose
+    command failed (``clientID``, ``sessionID``, ``requestTopic``) and
     ``response`` carries the device identity and the ``failCode``.
     """
 
@@ -126,8 +125,8 @@ class AppConnectionStatus(NavienBaseModel):
     the Last-Will the broker publishes when it drops. The app treats any
     value at or below 0 as disconnected. ``os`` is set by the publisher
     (``"A"`` for the Android app, :data:`APP_CONNECTION_OS` for this
-    library); ``sessionNumber`` appears in the app's parsing model for
-    the device ``connection`` event and is kept when present.
+    library); ``sessionNumber``, which the device's ``connection``
+    event carries, is kept when present.
     """
 
     status: int

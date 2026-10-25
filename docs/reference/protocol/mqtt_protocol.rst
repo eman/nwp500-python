@@ -3,12 +3,9 @@ MQTT Protocol
 ======================
 
 This document describes the MQTT protocol used for real-time communication
-with Navien NWP500 devices via AWS IoT Core. Everything here was taken from
-the NaviLink Android app's request builder (``SendRequestMgppData.java``,
-version 2.03.00, re-checked against 2.04.00, versionCode 201, published
-October 2026, with no change to the NWP500 protocol) and confirmed against
-captured traffic and live queries to an NWP500 wherever a capture exists;
-the exceptions are marked.
+with Navien NWP500 devices via AWS IoT Core. Everything here is what the
+NaviLink app sends, confirmed against captured traffic and live queries
+to an NWP500 wherever a capture exists; the exceptions are marked.
 
 .. warning::
    This document describes the underlying MQTT protocol. Most users should use the
@@ -456,10 +453,9 @@ Firmware Updates
 Declared but never sent
 ~~~~~~~~~~~~~~~~~~~~~~~
 
-The app's enum also declares OTA Check (33554443), WiFi Reconnect
-(33554446), WiFi Reset (33554447), Freeze Protection Temperature
-(33554451) and Smart Diagnostic (33554455). Its request builder has no
-case for any of them, so no NaviLink client ever publishes these codes and
+Five more codes exist: OTA Check (33554443), WiFi Reconnect (33554446),
+WiFi Reset (33554447), Freeze Protection Temperature (33554451) and
+Smart Diagnostic (33554455). No NaviLink client publishes them, and
 their payloads are unknown. Versions of this library before 9.4 sent
 made-up ``mode`` strings for them; those methods were removed.
 
@@ -636,13 +632,13 @@ Vacation Duration
    }
 
 .. note::
-   The app's builder sets only ``mode`` and ``param`` for this command;
+   The NaviLink app sends only ``mode`` and ``param`` for this command;
    the library sends ``paramStr`` as well, which the device accepts.
    Verified live: ``vacationDaySetting`` changes and
-   ``dhwOperationSetting`` does not. The app has a builder case for this
-   command but no screen that calls it (the same is true of the demand
-   response and intelligent-mode commands); it enters vacation mode
-   through ``dhw-mode [5, days]``.
+   ``dhwOperationSetting`` does not. No screen in the app sends this
+   command (the same is true of the demand response and
+   intelligent-mode commands); it enters vacation mode through
+   ``dhw-mode [5, days]``.
 
 Intelligent/Adaptive Mode
 --------------------------
@@ -1021,9 +1017,9 @@ live with 2025 alone, 2026 alone, both, and one month).
      }
    }
 
-Usage values are watt-hours; times are hours. The app's model also
-declares ``epUsage`` and ``waterUsage`` per item and ``day`` per entry,
-which the NWP500 does not send.
+Usage values are watt-hours; times are hours. ``epUsage`` and
+``waterUsage`` per item and ``day`` per entry are defined, but the NWP500
+does not send them.
 
 Diagnostics Response
 --------------------
@@ -1164,8 +1160,7 @@ Control Failure Response
 When the device refuses a control command it publishes on its own topic,
 ``cmd/52/navilink-{mac}/res/ctrl-fail``, which the
 ``cmd/52/navilink-{mac}/#`` wildcard subscription receives. The NaviLink
-app (2.04.00) subscribes to this topic for the NWP500 and parses the
-message as ``ControlFailData``:
+app subscribes to this topic for the NWP500. The message:
 
 .. code-block:: json
 
@@ -1239,17 +1234,14 @@ any value at or below 0 as "disconnected" (the app's screens show a
 "device disconnected" notice on it). ``os`` is the publisher's platform
 tag: ``"A"`` for the Android app, ``"P"`` for this library. Nothing that
 reads the topic looks at ``os``, and AWS IoT delivers the message either
-way, so the library does not impersonate the app. The app's parsing model
-(``EventStatus``) also allows a ``sessionNumber`` in ``connection``, which
-is shared with the device's own ``evt/52/navilink-{mac}/connection``
-event.
+way, so the library does not impersonate the app. A ``connection`` may
+also carry a ``sessionNumber``, as the device's own
+``evt/52/navilink-{mac}/connection`` event does.
 
-Two caveats from the app's code. First, the app only registers the will;
-it never publishes a ``status`` 1 announcement itself. Second, NaviLink
-2.04 does not subscribe to ``app-connection`` for device type 52 (its
-NWP500 screens handle the message, but the subscription list for type 52
-omits the topic), so for the NWP500 the topic is read only by other
-library clients. The will is QoS 1 and not retained.
+Two caveats. First, the app only registers the will; it never publishes
+a ``status`` 1 announcement itself. Second, the NaviLink app does not
+subscribe to ``app-connection`` for the NWP500, so for the NWP500 the
+topic is read only by other library clients. The will is QoS 1 and not retained.
 
 The library registers the same will when
 ``MqttConnectionConfig.last_will_device`` is set, publishes the ``status``

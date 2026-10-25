@@ -129,9 +129,8 @@ DREvent
 Demand Response event status. Allows utilities to manage grid load by signaling
 water heaters to reduce consumption (shed) or pre-heat (load up) before peak periods.
 
-Raw 5 is ``CPE`` (Customer Peak Event) and raw 6 is ``GRID_EMERGENCY``. The
-NaviLink app declares both with id 5 but decodes the field by array position,
-so the two are distinct on the wire.
+Raw 5 is ``CPE`` (Customer Peak Event) and raw 6 is ``GRID_EMERGENCY``:
+the two are distinct on the wire.
 
 WaterLevel
 ~~~~~~~~~~

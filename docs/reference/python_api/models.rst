@@ -913,8 +913,8 @@ Energy data for a single day (or month, in a monthly-query entry).
    * ``heat_pump_usage`` (int): Heat pump usage (Wh)
    * ``heat_element_time`` (int): Heat element time (hours)
    * ``heat_pump_time`` (int): Heat pump time (hours)
-   * ``ep_usage`` (int), ``water_usage`` (int): Declared in the app's model;
-     the NWP500 does not report them (always ``0``)
+   * ``ep_usage`` (int), ``water_usage`` (int): The NWP500 does not
+     report them (always ``0``)
 
    **Computed Properties:**
 

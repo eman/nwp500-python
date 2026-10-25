@@ -174,7 +174,7 @@ slope is stronger evidence for the quantum than either alone.
 
 Converting that to Watt-hours needs a water mass, and this is where care
 is required: a "65 gallon" tank does not hold 65 gallons of water. The
-nameplate is an upper bound. The vendor's own app hard-codes it, mapping
+nameplate is an upper bound. The vendor's own app shows it, mapping
 ``volumeCode`` 1/2/3 to 189.2 L, **246.0 L** and 302.8 L (see
 `In the NaviLink app`_), and the water in the tank must come in under
 it. Rather than assume nominal volume and derive an odd-looking quantum,
@@ -341,28 +341,11 @@ anything. For a charge figure with defined meaning, use
 In the NaviLink app
 ===================
 
-Nothing. Navien's own NaviLink app never reads either field.
-
-Decompiling the current release (version 2.03.00, versionCode 141,
-published March 2026; re-checked against 2.04.00, versionCode 201,
-published October 2026, with no change) gives 8,101 Java sources, and
-neither
-``totalEnergyCapacity`` nor ``availableEnergyCapacity`` appears in any of
-them. Neither string appears in the raw dex string pool either, which
-rules out the names having been lost to obfuscation. The app's status
-model, ``KDResponseMgppStatus.Status``, declares about 140 fields
-(``dhwChargePer``, ``tankUpperTemperature``, ``tankLowerTemperature``,
-``currentInstPower`` and ``mixingRate`` among them), and neither energy
-field is among them. The app requests no field subset, so
-the device sends both and the app discards them on deserialization.
-
-As a control, ``dhwChargePer`` and ``tankUpperTemperature`` *are* present
-in the dex strings, so the search itself works.
-
-So there is no vendor label, scale factor or formula to check the
-conclusions above against: the evidence here is the only account of
-these two fields. It also explains why the protocol names mislead:
-nothing Navien ships has to act on them.
+Nothing. Navien's own NaviLink app never shows either field, so there is
+no vendor label, scale factor or formula to check the conclusions above
+against: the evidence here is the only account of these two fields. It
+also explains why the protocol names mislead: nothing Navien ships has
+to act on them.
 
 The app does corroborate the surrounding facts this page leans on:
 
@@ -372,16 +355,14 @@ The app does corroborate the surrounding facts this page leans on:
 
    * - What the app does
      - What it confirms
-   * - ``MgppStatusFragment.getVolume()`` maps ``volumeCode`` 1/2/3 to
-       "50"/"65"/"80" gallons and 189.2/246.0/302.8 L, displayed under
-       the label "Volume"
+   * - Its status screen shows ``volumeCode`` 1/2/3 as "50"/"65"/"80"
+       gallons and 189.2/246.0/302.8 L, under the label "Volume"
      - The nominal volume the quantum candidates are judged against is
        the vendor's own figure, not an assumption of ours
-   * - ``MgppControlFragment.makeTempMap()`` reads
-       ``dhwTemperatureMin / 2.0f`` as degC before converting
-     - ``dhwTemperatureMin`` is in half-degrees C, so 40.5 degC /
-       104.9 degF is the exact value the regression lands on. The app
-       rounds for display and shows 105 degF
+   * - Its temperature control reads ``dhwTemperatureMin`` as
+       half-degrees C
+     - 40.5 degC / 104.9 degF is the exact value the regression lands
+       on. The app rounds for display and shows 105 degF
    * - The status screen labels ``dhwTemperature`` "DHW Temp." next to
        "Upper Temp." and "Lower Temp.", and gives ``dischargeTemperature``
        a separate "Discharge Temp." row

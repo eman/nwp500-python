@@ -202,10 +202,9 @@ class DeviceFeature(NavienBaseModel):
     )
     mixing_valve_use: CapabilityFlag = Field(
         # The device spells this "Value", not "Valve" - the misspelling is
-        # Navien's own (see KDResponseMgppDid$Feature in the vendor app and
-        # docs/reference/protocol/device_features.rst). Correcting it here
-        # makes the field silently fall back to its default, because the
-        # base model ignores unknown keys.
+        # Navien's own (see docs/reference/protocol/device_features.rst).
+        # Correcting it here makes the field silently fall back to its
+        # default, because the base model ignores unknown keys.
         alias="mixingValueUse",
         default=False,
         description=("Thermostatic mixing valve support (2=supp, 1=not)"),
