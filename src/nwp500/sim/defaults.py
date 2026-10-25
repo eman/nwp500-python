@@ -139,7 +139,7 @@ def _nwp500_65() -> HeaterParams:
             inlet_from_probe=True,
             lower_gate_f=5.0,
             pool_f_per_hour=0.015,
-            ungated_observability=0.398008155230017,
+            ungated_observability=0.26307054260699586,
         ),
         controller=ControllerParams(
             write_start_lag_s=30.0,
