@@ -150,7 +150,7 @@ heater, at :math:`T_a`, with :math:`t` in hours:
    m \frac{d\bar T}{dt} = -\,UA(\Delta T)\,\Delta T, \qquad
    \Delta T = \bar T - T_a, \qquad
    UA(\Delta T) = UA_{\text{ref}}
-   \left(\frac{\max(\Delta T, 5)}{50}\right)^{n}
+   \left(\frac{\max(|\Delta T|, 5)}{50}\right)^{n}
 
 At the current fit :math:`n = 0`, so :math:`UA` is a constant. A coast
 is stepped every 10 minutes (explicit Euler on :math:`\bar T`), with
