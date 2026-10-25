@@ -8,6 +8,18 @@ Unreleased
 Fixed
 -----
 
+- **High Demand's element restarts later in a stint.** After the entry
+  run the simulator never ran High Demand's element again. On the
+  record it restarts the upper element with the upper zone about 4 °F
+  short of the setpoint (the four restarts of 2026-04-26/27 at 3.78 to
+  4.14 °F, each about 3 minutes to the setpoint), the measured
+  ``ElementParams.upper_reengages_below_setpoint_f`` (4.1 °F) that
+  nothing read. The controller now starts it there
+  (``controller.later_upper_on``, trigger ``high_demand_upper_short``,
+  also in ``attribution``). Electric's later starts are still not
+  modelled and still flagged: no Electric stint on record ran half an
+  hour. See :doc:`/explanation/simulator`.
+
 - **A circulation run's return is not at the air.** The run model took
   the returning water at the air beside the heater and the pipe as
   cooled between runs. On 123 runs with the compressor off (April to
