@@ -667,9 +667,10 @@ def _row(s: DeviceStatus) -> tuple[float | bool, ...]:
         _from_device(DeciCelsius(s.ambient_temperature_raw))
         if s.comp_use
         else float("nan"),
-        float("nan")
-        if s.comp_use
-        else _from_device(DeciCelsius(s.ambient_temperature_raw)),
+        # The cabinet's only with the compressor known idle.
+        _from_device(DeciCelsius(s.ambient_temperature_raw))
+        if s.comp_use is False
+        else float("nan"),
     )
 
 
