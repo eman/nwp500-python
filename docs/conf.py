@@ -194,6 +194,10 @@ html_theme_options = {
 # so a file named "default.css" will overwrite the builtin "default.css".
 html_static_path = ["_static"]
 
+# The theme has no dark mode: marking the page light keeps the Mermaid
+# diagrams light when the browser prefers dark.
+html_js_files = ["light-page.js"]
+
 # If not '', a 'Last updated on:' timestamp is inserted at every page bottom,
 # using the given strftime format.
 # html_last_updated_fmt = '%b %d, %Y'
