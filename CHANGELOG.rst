@@ -8,6 +8,12 @@ Unreleased
 Changed
 -------
 
+- **The heat book prices its runs as cooled to the air, on the
+  record.** Pricing each run at the loop's return instead, the pipe
+  resting 7.84 °F over the air and cooling on 0.464 h, books the fitted
+  pairs no better (17,018 BTU mean absolute error against 16,991 on 87
+  pairs). The book is unchanged. See :doc:`/how-to/calibrate-simulator`.
+
 - **The recovery fit's held-out error is draws inside recoveries.**
   The latest recoveries come out about 25 min short at every
   compressor fit tried. Those with under 2 gal of hot water and 5
