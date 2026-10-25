@@ -10,8 +10,10 @@ how much hot water the tank can deliver, and whether a draw runs cold. It also e
 writes, a new reservation schedule, TOU on or off.
 
 :doc:`/how-to/simulate-heater` walks through using it, from fetching
-the heater's data to evaluating a change, and
-:doc:`/reference/simulator-inputs` lists every input it takes.
+the heater's data to evaluating a change,
+:doc:`simulator-methodology` explains the methods and how each sensor
+is used, and :doc:`/reference/simulator-inputs` lists every input it
+takes.
 
 .. contents::
    :local:
