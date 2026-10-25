@@ -815,18 +815,24 @@ the one seen over the retrains from 2026-08-08 to 2026-10-18.
      - Value
      - Fitted on, and its error
      - Range over retrains
-   * - ``loss.ua_btu_hr_f``, ``loss.ua_exponent``
-     - 4.605, 0.186
-     - 393 quiet windows, tank 11.2-90.7 degF above the air; each window
-       kept only if it tracks the probes within 2 degF. The August
-       evaluation of the same rule on 301 windows gave 4.47 and 0.227
+   * - ``loss.ua_btu_hr_f``, ``loss.ua_exponent``,
+       ``loss.bottom_loss_btu_hr``, ``loss.bottom_gate_f``
+     - 4.483, 0; 90.8 BTU/hr, 1.83 degF
+     - 378 quiet windows, 2026-02-14 to 10-24, the bottom loss on the 64
+       that were stratified; each window kept only if it tracks the
+       probes within 2 degF. On the 56 latest held out, the probes'
+       fall is tracked within 0.068 degF/h, against 0.096 for the
+       earlier law without a bottom loss, 4.605 and 0.186
        (:doc:`/explanation/standby-loss`).
-     - 4.47-4.61, 0.184-0.225; both move steadily as windows accrue
+     - 4.47-4.61 and 0.184-0.225 without a bottom loss
    * - ``tank.stratification_gap_tau_h``
-     - 60.06 h
-     - 155 quiet windows that opened with a gap of 2 degF or more. A
-       separate fit on 146 windows gave 59 h (95 % CI 47-94 h).
-     - 60.0-60.4 h
+     - 50.9 h
+     - 127 quiet windows that opened with a gap of 2 degF or more, the
+       bottom loss opening the gaps it relaxes. On the 32 latest held
+       out, a mean squared error of 1.58 degF² against 1.78 for the
+       earlier 60.06 h without a bottom loss. A separate fit on 146
+       windows gave 59 h (95 % CI 47-94 h).
+     - 50.9-60.4 h
    * - ``compressor.compressor_constant``
      - 0.0160 ft³/s
      - 142 recoveries from 2026-02-18 to 09-01, at the coil's approach;

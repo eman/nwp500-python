@@ -86,13 +86,15 @@ def _nwp500_65() -> HeaterParams:
         tank=TankParams(
             volume_gal=63.2,
             lower_zone_share=0.5,
-            stratification_gap_tau_h=60.063706561480814,
+            stratification_gap_tau_h=50.91288903998964,
         ),
         loss=LossParams(
-            ua_btu_hr_f=4.60509822193756,
-            ua_exponent=0.18641936047758134,
+            ua_btu_hr_f=4.482756204771071,
+            ua_exponent=2.4838799049548713e-16,
             ua_ref_delta_t_f=50.0,
             ua_baseline_btu_hr_f=5.0,
+            bottom_loss_btu_hr=90.83634299259268,
+            bottom_gate_f=1.8315130798400514,
         ),
         compressor=CompressorParams(
             compressor_constant=0.016044331314777758,
@@ -192,7 +194,8 @@ def default_params(volume_code: int = VOLUME_65) -> HeaterParams:
 def site_example_params(volume_code: int = VOLUME_65) -> HeaterParams:
     """One NWP500-65 installation's parameters, its mixing valve
     (``SITE_VALVE``) and circulation (``SITE_CIRCULATION``) included: a
-    snapshot of its fit of 2026-10-11. Several of its values move with
+    snapshot of its fit of 2026-10-11, the standby loss and the zone
+    gap's time constant refitted on 2026-10-24. Several of its values move with
     every refit there (the circulation's displaced volume and flow, the
     compressor and power fits), so read it as an example, not as that
     installation's current state. The 50 and 80 gal models scale by

@@ -170,6 +170,9 @@ class TestTheRecovery:
 
     def test_no_bottom_loss_is_the_recovery_before_it(self) -> None:
         params = sim.default_params()
+        params = replace(
+            params, loss=replace(params.loss, bottom_loss_btu_hr=0.0)
+        )
         before = predict_physics_detailed(
             t_start_lower=100.0,
             hp_lower_off=130.0,
@@ -342,12 +345,16 @@ class TestTheFit:
 
 class TestTheParameters:
     def test_a_document_from_before_it_has_none(self) -> None:
-        doc = params_to_document(sim.default_params())
+        d = sim.default_params()
+        none = replace(
+            d, loss=replace(d.loss, bottom_loss_btu_hr=0.0, bottom_gate_f=1.0)
+        )
+        doc = params_to_document(none)
         for name in ("bottom_loss_btu_hr", "bottom_gate_f"):
             del doc["loss"][name]
         loss = params_from_document(doc).loss
         assert loss.bottom_loss_btu_hr == 0.0
-        assert params_from_document(doc) == sim.default_params()
+        assert params_from_document(doc) == none
 
     def test_it_round_trips(self) -> None:
         params = replace(sim.default_params(), loss=PLANTED)

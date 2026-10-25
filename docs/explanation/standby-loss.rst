@@ -58,9 +58,20 @@ no circulation run) covering a tank-to-air difference of 11.2 to
 
 Across the 301 windows ``UA`` averaged 4.87 BTU/hr per degF (standard
 deviation 1.26). The same rule, refitted on 393 windows to 2026-10-11,
-gave ``4.61 * (dT / 50) ^ 0.186``, the simulator's default
-(:doc:`/reference/simulator-inputs`); the law has moved steadily that
-way as windows accrued. Computed from the fit, with the tank's thermal mass of
+gave ``4.61 * (dT / 50) ^ 0.186``; the law has moved steadily that
+way as windows accrued.
+
+Fitted with a bottom loss as well (378 windows to 2026-10-24), heat
+leaving the lower zone that the lower probe sees only while the tank is
+stratified, the law goes flat: ``UA`` 4.48 BTU/hr per degF at any
+difference, and 90.8 BTU/hr at the bottom, seen as ``1 - exp(-gap /
+1.83 degF)`` of it. On the 56 latest windows held out it tracks the
+probes' fall within 0.068 degF/h, against 0.096 for the rising law, and
+the simulator uses it (:doc:`/reference/simulator-inputs`). In a mixed
+tank, where the probe sees none of the bottom loss, the flat law loses
+58 BTU/hr at 13 degF above the air against the rising law's 47, and 336
+against 372 at 75 degF. Computed from the rising law, with the
+tank's thermal mass of
 527 BTU/degF:
 
 .. list-table::
@@ -279,7 +290,10 @@ with the lower probe below the upper. With nothing heating or drawing,
 the gap closes exponentially on a time constant of about **59 h** (146
 quiet windows that started with a gap of at least 2 degF; bootstrap 95 %
 CI 47-94 h; fitted on 2026-09-22). A gap of 10 degF is about 9 degF
-six hours later and about 6.7 degF a day later.
+six hours later and about 6.7 degF a day later. Fitted with the bottom
+loss opening the gaps it relaxes (127 windows to 2026-10-24) it is
+50.9 h, which the simulator uses: on the 32 latest windows held out it
+scores better than 60 h.
 
 
 Projecting the tank's cooling
