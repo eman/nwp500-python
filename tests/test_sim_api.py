@@ -327,6 +327,28 @@ class TestSimulateIsTheEngine:
         assert got == want
         assert "element" in {h.source for h in got.heating}
 
+    @pytest.mark.parametrize(("mode", "upper"), [(3, 103.0), (4, 136.0)])
+    def test_both_running_at_the_start_run_on(
+        self, params: HeaterParams, mode: int, upper: float
+    ) -> None:
+        """An element on at the walk's start, with the compressor, runs
+        on from its own on-edge: the upper zone under the mode's later
+        start does not begin it afresh."""
+        s = _scenario(
+            state=HeaterState(
+                upper_f=upper,
+                lower_f=upper - 20.0,
+                compressor_running=True,
+                element_running=True,
+                element_running_since=at(-0.05),
+            ),
+            settings=Settings(setpoint_f=140.9, mode=mode, hp_lower_on_f=105.0),
+        )
+        got = simulate(s, params).simulation
+        assert {h.start.cause for h in got.heating if h.start.at == T0} == {
+            "running"
+        }
+
     def test_draws(self, params: HeaterParams) -> None:
         showers = tuple(
             Draw(at=at(0.4) + timedelta(minutes=i), gallons=1.6)

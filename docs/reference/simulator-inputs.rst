@@ -931,7 +931,10 @@ the one seen over the retrains from 2026-08-08 to 2026-10-18.
        (:doc:`/explanation/heating-elements`).
    * - ``element.upper_reengages_below_setpoint_f``
      - 4.1 degF
-     - 12 High Demand restarts mid-stint (90 % CI 3.8-4.5 degF).
+     - 12 High Demand restarts mid-stint (90 % CI 3.8-4.5 degF); the
+       four of 2026-04-26/27 came at 3.78-4.14 degF short, each about
+       3 minutes to the setpoint. The simulator starts High Demand's
+       upper element there later in a stint.
    * - ``controller.write_start_lag_s``, ``restart_lockout_s``,
        ``window_write_starts_f``
      - 30 s, 330 s, 4.0 degF

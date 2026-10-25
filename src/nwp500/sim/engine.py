@@ -1231,7 +1231,8 @@ class _Engine:
     # ── elements ──
 
     def _element_trigger(self) -> None:
-        """Energy Saver's element reads the upper zone now."""
+        """The element's later start reads the upper zone now
+        (``controller.later_upper_on``)."""
         self._dispatch(ctl.UpperRead(at=self.t, tank=self._tank()))
 
     def _begin_element(
@@ -1492,7 +1493,7 @@ class _Engine:
         """The coast from now to ``limit`` when nothing on it acts before
         ``limit``: no start of the heater's own (``heater_start``, after
         ``_coast_until``'s own exceptions and the restart lockout), no
-        Energy Saver element, and no draw the book takes the upper zone
+        later element start, and no draw the book takes the upper zone
         through (``_upper_cut``). None when something does: the caller
         then coasts as it always did. A trigger of its own on the coast
         that the lockout puts at or past ``limit`` is carried as a
