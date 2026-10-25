@@ -218,6 +218,9 @@ The pieces the entry points are built from.
       energy_by_source, DRAW_LEAD, HEATER_SETPOINT_MIN_F,
       HEATER_SETPOINT_MAX_F
 
+.. automodule:: nwp500.sim.controller
+   :members:
+
 .. automodule:: nwp500.sim.tank_physics
    :members: TankPhysics, Physics, Point, Coast, Heat, point_at,
       ambient_window_mean, REFINE_TOL_MINUTES

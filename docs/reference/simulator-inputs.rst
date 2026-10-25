@@ -603,8 +603,9 @@ that holds writes no change, so only ``observed`` says the heater was
 heard. A silence between those instants longer than ``max_gap`` of them
 (4 times their usual spacing, and at least 5 minutes), one of
 ``rows.outages``, or one of ``flow_outages`` is a span nobody saw. The
-book walks across it, each value held from before it, and is None when
-such a span is still open at ``at``. No flow reading in force at the start of
+book walks across it, each value held from before it, the flow for
+``FLOW_HOLD`` (60 s) and then none, and is None when such a span is
+still open at ``at``. No flow reading in force at the start of
 the window it books over is a ``ValueError``. An inlet reading holds
 except through ``inlet_outages``.
 
