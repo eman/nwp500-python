@@ -1310,12 +1310,13 @@ def _mode_write_event(s: _Step, ev: ModeWrite) -> None:
 
 def _window_opens(s: _Step, ev: WindowOpens) -> None:
     """The heater drops a running element mode at a window's start:
-    back to the heat pump, as it did within 11 s of TOU being switched
-    on in-window (a device run, 2026-09-20 01:35 UTC). At a window's
-    start it is *assumed* to do the same; crossing a price-band boundary
-    is untested. It re-evaluates, as that run's compressor start
-    21-32 s later shows. The mode returns only when a later write sets
-    it again."""
+    back to the heat pump. On the record it did so at all 18 openings
+    with an element mode in force (15 window starts at 14:00 or 15:00
+    and 3 TOU switch-ons inside a window, 2026-01-01 to 10-02, each
+    within 2 s), and within 11 s in a device run (2026-09-20 01:35
+    UTC). Crossing a price-band boundary is untested. It re-evaluates,
+    as that run's compressor start 21-32 s later shows. The mode
+    returns only when a later write sets it again."""
     if s.mode not in ELEMENT_MODES:
         return
     s.note("element_mode_dropped_projected")
