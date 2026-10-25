@@ -132,7 +132,6 @@ class TestTheFits:
             cop_scale=None,
             startup_wh=None,
             cop_lift_coeff=None,
-            lead_share=None,
             n_cop=4,
         )
         fitted = replace(
@@ -1094,7 +1093,7 @@ class TestKeepBetterFifthReview:
         whole = cal.power_cycles(rows, params)
         assert len(whole) == 3
         assert sc._power_error(rows, params) is not None
-        cop = cal.CopCycle(T0, 1000.0, 0.0, 3.0, 500.0, 60.0)
+        cop = cal.CopCycle(T0, 1000.0, 3.0, 500.0, 60.0)
         with pytest.MonkeyPatch.context() as m:
             m.setattr(cal, "power_cycles", lambda *_: whole[:2])
             m.setattr(cal, "cop_cycles", lambda *_: [cop, cop])
@@ -1191,7 +1190,7 @@ def cop_cycles_by(law_at: Any) -> Any:
             metered = startup + heat / (
                 scale * cop * float(np.exp(-k * (lift - ref)))
             )
-            out.append(cal.CopCycle(t, heat, 0.0, cop, metered, lift))
+            out.append(cal.CopCycle(t, heat, cop, metered, lift))
         return out
 
     return cycles
