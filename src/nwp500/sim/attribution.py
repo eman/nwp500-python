@@ -20,7 +20,8 @@ write (``sim.record.Record.starts``' starts, ``writes``' writes).
   at or within ``UPPER_SLACK_F`` of ``UPPER_DEFICIT_F`` short of the
   setpoint; ``lower_at_tou_close`` within it after one closes; ``lower``
   with the lower zone at or within ``LOWER_SLACK_F`` of ``hp_lower_on``;
-  for an element, ``energy_saver_upper_on`` in Energy Saver and
+  for an element, ``energy_saver_upper_on`` in Energy Saver,
+  ``high_demand_upper_short`` for High Demand's upper element and
   ``electric_lower_after_upper`` for Electric's lower element. A start
   none of them fits keeps a null trigger: the record shows the heater
   started and no modelled rule says why.
@@ -33,7 +34,7 @@ from datetime import datetime, timedelta
 from typing import Literal
 
 from nwp500.sim.controller import ElementTrigger
-from nwp500.sim.inputs import ELECTRIC, ENERGY_SAVER
+from nwp500.sim.inputs import ELECTRIC, ENERGY_SAVER, HIGH_DEMAND
 from nwp500.sim.params import ControllerParams
 from nwp500.sim.record import Recorded
 from nwp500.sim.tou_triggers import UPPER_DEFICIT_F, Trigger
@@ -165,6 +166,8 @@ def _trigger(
         mode = mode_at(s.at)
         if mode == ENERGY_SAVER and s.zone == "upper":
             return "energy_saver_upper_on"
+        if mode == HIGH_DEMAND and s.zone == "upper":
+            return "high_demand_upper_short"
         if mode == ELECTRIC and s.zone == "lower":
             return "electric_lower_after_upper"
         return None

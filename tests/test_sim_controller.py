@@ -1153,6 +1153,30 @@ class TestTheElements:
             "energy_saver_upper_on"
         )
 
+    def test_high_demands_element_reengages_4_1_f_short(self) -> None:
+        """High Demand's upper element restarts later in a stint with the
+        upper zone ``upper_reengages_below_setpoint_f`` (4.1 °F) short of
+        the setpoint: the four of 2026-04-26/27 came at 3.78-4.14 °F."""
+        _, acts = step(
+            fresh(mode="high_demand", setpoint=140.9),
+            UpperRead(at=T0, tank=tank(136.76, 114.0)),
+        )
+        assert of(acts, StartElement)[0].start == Start(
+            T0, "heater", trigger="high_demand_upper_short", source="element"
+        )
+        _, acts = step(
+            fresh(mode="high_demand", setpoint=140.9),
+            UpperRead(at=T0, tank=tank(137.3, 114.0)),
+        )
+        assert not of(acts, StartElement)
+        st = fresh(mode="high_demand", setpoint=140.9)
+        points = [Point(T0, 137.8, 120.0), Point(at(10), 135.8, 118.0)]
+        assert upper_on_crossing(st, settings(), points) == at(5.0)
+        _, acts = step(st, UpperOnCrossed(at=at(5.0), tank=tank(136.8, 119.0)))
+        assert of(acts, StartElement)[0].start.trigger == (
+            "high_demand_upper_short"
+        )
+
     def test_a_setpoint_raise_in_energy_saver_starts_the_element(self) -> None:
         """In Energy Saver a raise leaving the upper zone the entry
         deficit short started the element (n = 1, the 2026-09 heating
@@ -1281,19 +1305,17 @@ class TestTheElements:
         _, acts = step(fresh(), ElementWasOn(at=T0, tank=tank(130, 120)))
         assert acts == ()
 
-    def test_later_starts_are_modelled_for_energy_saver_only(self) -> None:
-        """Mid-stint re-engagement is measured for Energy
-        Saver alone (16 of 21 starts just under 104.9 °F); High
-        Demand's and Electric's later starts are not projected, and the
-        projection says so."""
+    def test_later_starts_are_not_modelled_for_electric(self) -> None:
+        """Mid-stint re-engagement is measured for Energy Saver and High
+        Demand; Electric never ran half an hour on record, so its later
+        starts are not projected, and the projection says so."""
         _, acts = step(
-            fresh(mode="high_demand"), Begins(at=T0, tank=tank(130, 120))
+            fresh(mode="electric"), Begins(at=T0, tank=tank(130, 120))
         )
         assert "element_later_starts_not_modelled" in notes(acts)
-        _, acts = step(
-            fresh(mode="energy_saver"), Begins(at=T0, tank=tank(130, 120))
-        )
-        assert "element_later_starts_not_modelled" not in notes(acts)
+        for mode in ("energy_saver", "high_demand"):
+            _, acts = step(fresh(mode=mode), Begins(at=T0, tank=tank(130, 120)))
+            assert "element_later_starts_not_modelled" not in notes(acts)
 
 
 def test_the_controller_wakes_at_its_own_instants() -> None:

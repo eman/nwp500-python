@@ -643,9 +643,10 @@ class ElementParams:
     #: expressed as a temperature instead (see
     #: ``energy_saver_reengages_at_f``), but which of the two forms the
     #: device uses is unresolved in both modes.
-    #: Recorded because the entry figure above is routinely mistaken
-    #: for it; nothing in this module projects a re-engagement, and no
-    #: device run has tested one.
+    #: The controller starts High Demand's upper element here later in a
+    #: stint (``controller.later_upper_on``); the four restarts of
+    #: 2026-04-26/27 came at 3.78-4.14 °F short and ran to the
+    #: setpoint. No device run has tested it.
     upper_reengages_below_setpoint_f: float = field(
         default=4.1, metadata=_p(MEASURED, "°F")
     )
