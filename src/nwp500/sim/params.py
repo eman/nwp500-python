@@ -908,6 +908,17 @@ class ReadinessParams:
     shower_gal: float = field(
         default=12.0, metadata=_p(DEFAULT, "gal", INSTALLATION)
     )
+    #: A bath's top-up, delivered gallons: hot water run into a filled
+    #: tub to warm it. Read from one household's hot-side meter, not
+    #: measured as a fill of its own: of six tub fills (March to May
+    #: 2026, told from showers by the spout's 3.4 GPM against a
+    #: shower's 1.2), three had a draw at the spout's rate 15 to 90 min
+    #: later, of 4.5, 8.5 and 10.2 gal. The largest is kept, as for
+    #: ``bath_gal``: a top-up set too small promises water the tank
+    #: can't give.
+    top_up_gal: float = field(
+        default=10.2, metadata=_p(MEASURED, "gal", INSTALLATION)
+    )
     #: Draws that show how much a tank in a given state delivers before
     #: the upper probe crosses ``line_f``: without a heat book, the
     #: readiness answer where they show more than the probes
