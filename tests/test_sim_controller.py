@@ -930,8 +930,8 @@ class TestModeWrites:
         11 s of TOU being switched on in-window (a device run at
         01:35 UTC on 2026-09-20),
         and the drop, 9.5 °F short, started the compressor 21-32 s
-        later, judged as a write in a window is. At a window's start it
-        is assumed to do the same."""
+        later, judged as a write in a window is. The record shows the
+        same at all 18 openings with an element mode in force."""
         s = settings(windows=[(T0, at(300))])
         st, acts = step(
             fresh(mode="energy_saver"),
