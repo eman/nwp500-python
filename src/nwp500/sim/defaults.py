@@ -40,7 +40,6 @@ VOLUME_50 = 1
 VOLUME_65 = 2
 VOLUME_80 = 3
 
-#: Nominal gallons by ``volume_code``.
 #: Rated storage volume by model, gallons: the manual's specification
 #: table (45.2, 63.2 and 76.1 for the 50, 65 and 80 gal models).
 RATED_GAL = ((VOLUME_50, 45.2), (VOLUME_65, 63.2), (VOLUME_80, 76.1))

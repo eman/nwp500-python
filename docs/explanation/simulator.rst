@@ -105,8 +105,9 @@ according to how stratified the tank is.
 (:doc:`what-starts-a-recovery`, :doc:`tou-recovery-cap`):
 
 - the compressor starts when the lower thermistor falls to
-  ``hp_lower_on`` (in Heat Pump, only with the upper zone below the
-  setpoint), after a setpoint write that leaves the upper zone short,
+  ``hp_lower_on`` (in Heat Pump and Energy Saver, only with the upper
+  zone below the setpoint, though in Energy Saver a draw's drop starts
+  it), after a setpoint write that leaves the upper zone short,
   after a mode write, or inside a TOU window when the upper zone is
   more than 14.4 degF short;
 - inside a TOU window the lower trigger is held until the window
@@ -207,8 +208,8 @@ household's draws. ``params.note_of`` names the frame a value was
 fitted in where it matters: a sensor it was fitted against, hardware it
 was fitted through.
 
-The values come from one NWP500-65, fitted on 2026-10-11 from 240 V
-operation at one installation. ``site_example_params(volume_code)`` is
+The values come from one NWP500-65, fitted between 2026-10-11 and
+10-24 from 240 V operation at one installation. ``site_example_params(volume_code)`` is
 that installation whole, its thermostatic mixing valve included.
 ``default_params(volume_code)`` is the same with **no mixing valve**:
 the one draw setting with no fitted numbers in it, and the one that
@@ -332,13 +333,14 @@ Accuracy
 ========
 
 Measured on one NWP500-65. The recovery-duration figures are those of
-the fit the default parameters come from (2026-10-11): cross-validated
-over its record, and held out on the 40 recoveries after the 162 it was
-fitted on.
+the fit the default parameters come from (2026-10-24): fitted on 142
+recoveries from 2026-02-18 to 09-01, and held out on the 35 that
+followed.
 
 - a heat-pump recovery's duration, from physics alone: mean absolute
-  error about 28 min, and 38.6 min held out in time order. Scored by the time a recovery had left (28 recoveries over
-  45 days to 2026-09-06, an earlier fit): with under 30 min left,
+  error 25.3 min on the fitted recoveries, and 33.7 min held out in
+  time order. Scored by the time a recovery had left (28 recoveries
+  over 45 days to 2026-09-06, an earlier fit): with under 30 min left,
   4.4 min; with over 180 min left, 55.9 min, a mean 44 min short.
   Under about 60-90 min left, physics alone is the better estimate
   of the two. Most of the held-out error is water moving during the
@@ -377,10 +379,11 @@ fitted on.
   out, 0.13 min, ready a little later than predicted.
   Element energy on the 7 whole runs: mean absolute error 0.045 kWh,
   7 % high;
-- the lower zone after a draw, fitted before 2026-06-23 and scored on
-  the draws after: mean absolute error 3.09 degF, against 5.32 for
-  assuming no change; 5.33 degF on long draws and 1.24 degF on short
-  ones; a well-mixed tank gains least (:doc:`draws`);
+- the lower zone 10 minutes after a draw, fitted on 399 draws to
+  2026-07-31 and scored on the 136 from 2026-08-01: mean absolute error
+  1.91 degF, against 2.79 for the fixed response it replaced; 0.35 degF
+  under 1 gal and 3.52 degF at 8-20 gal over all 535 draws
+  (:doc:`draws`);
 - the heat book against the tank's re-anchors, fitted February-June and
   scored July-September: mean absolute error 1,987 BTU (about 5 gal),
   against 3,761 BTU with textbook constants; flat to 18 h after an

@@ -158,6 +158,8 @@ ElementPhase = Literal["off", "dead_time", "heating"]
 
 @dataclass(frozen=True)
 class Start:
+    """A start: when, what caused it, and what it serves."""
+
     at: datetime
     cause: StartCause
     #: The heater's own trigger, when ``cause`` is ``heater``.
@@ -182,6 +184,8 @@ class Tank:
 
 @dataclass(frozen=True)
 class Compressor:
+    """The compressor's state (``phase`` and the instants it keeps)."""
+
     phase: CompressorPhase = "idle"
     #: The start of the run in progress; None while it is off.
     start: Start | None = None
@@ -206,6 +210,8 @@ class Compressor:
 
 @dataclass(frozen=True)
 class Element:
+    """The elements' state: the phase and the zone heating."""
+
     phase: ElementPhase = "off"
     zone: Zone | None = None
     #: When its zone starts to rise: the on-edge plus the dead time for
@@ -231,6 +237,8 @@ class Held:
 
 @dataclass(frozen=True)
 class ModeState:
+    """The mode in force, the one last written, and a held write."""
+
     #: The mode in force.
     in_force: HeaterMode
     #: The one last written, which a held write makes differ from it.
@@ -242,6 +250,8 @@ class ModeState:
 
 @dataclass(frozen=True)
 class State:
+    """The heater's state between events."""
+
     setpoint_f: float
     mode: ModeState
     compressor: Compressor = field(default_factory=Compressor)
@@ -304,6 +314,8 @@ def initial_state(
 
 @dataclass(frozen=True, kw_only=True)
 class Event:
+    """Something that happens at ``at``, for ``transition`` to apply."""
+
     at: datetime
     #: The probes at ``at``; the engine fills it for an event it is
     #: handed back (``Then``).
@@ -368,6 +380,8 @@ class SetpointWrite(Event):
 
 @dataclass(frozen=True, kw_only=True)
 class ModeWrite(Event):
+    """A direct mode write, or an entry's (``owner``)."""
+
     mode: HeaterMode
     owner: Owner
     serves: str | None = None
@@ -375,12 +389,12 @@ class ModeWrite(Event):
 
 @dataclass(frozen=True, kw_only=True)
 class WindowOpens(Event):
-    pass
+    """A TOU window opens."""
 
 
 @dataclass(frozen=True, kw_only=True)
 class WindowCloses(Event):
-    pass
+    """A TOU window closes."""
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -434,17 +448,17 @@ class RecoveryDone(Event):
 
 @dataclass(frozen=True, kw_only=True)
 class LockoutEnds(Event):
-    pass
+    """The restart lockout ends."""
 
 
 @dataclass(frozen=True, kw_only=True)
 class StartHoldEnds(Event):
-    pass
+    """The start's hold ends: the compressor heats."""
 
 
 @dataclass(frozen=True, kw_only=True)
 class DeadTimeEnds(Event):
-    pass
+    """The upper element's dead time ends: its zone rises."""
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -464,12 +478,16 @@ class Note:
 
 @dataclass(frozen=True)
 class SetpointSet:
+    """The setpoint in force changed."""
+
     at: datetime
     setpoint_f: float
 
 
 @dataclass(frozen=True)
 class StartCompressor:
+    """The compressor starts."""
+
     start: Start
     #: A start from off, charged its start-up; False for one running at
     #: the walk's start.
@@ -480,6 +498,8 @@ class StartCompressor:
 
 @dataclass(frozen=True)
 class StopCompressor:
+    """The compressor stops, and why."""
+
     at: datetime
     reason: StopReason
 
@@ -493,6 +513,8 @@ class Retarget:
 
 @dataclass(frozen=True)
 class StartElement:
+    """An element starts in ``zone``; its zone rises from ``live_at``."""
+
     start: Start
     zone: Zone
     live_at: datetime
@@ -509,6 +531,8 @@ class ElementRetarget:
 
 @dataclass(frozen=True)
 class StopElement:
+    """The running element stops, and why."""
+
     at: datetime
     reason: StopReason
     #: The mode whose upper element stopped short of the setpoint, so
@@ -519,6 +543,8 @@ class StopElement:
 
 @dataclass(frozen=True)
 class ModeSet:
+    """The mode in force changed, and how the last one ended."""
+
     at: datetime
     mode: HeaterMode
     ended_by: ModeEnd
@@ -526,6 +552,8 @@ class ModeSet:
 
 @dataclass(frozen=True)
 class RecordModeWrite:
+    """A mode write to record, whether or not it took."""
+
     at: datetime
     mode: HeaterMode
     owner: Owner
@@ -534,34 +562,47 @@ class RecordModeWrite:
 
 @dataclass(frozen=True)
 class ModeHeld:
+    """Mode write ``ref`` is held to its window's close."""
+
     ref: int
 
 
 @dataclass(frozen=True)
 class ModeTook:
+    """Mode write ``ref`` took effect."""
+
     ref: int
     at: datetime
 
 
 @dataclass(frozen=True)
 class ModeWithdrawn:
+    """Held mode write ``ref`` was withdrawn by a later one."""
+
     ref: int
     at: datetime
 
 
 @dataclass(frozen=True)
 class Dropped:
+    """The heater dropped element mode ``mode`` at a window's start."""
+
     at: datetime
     mode: HeaterMode
 
 
 @dataclass(frozen=True)
 class EntryFired:
+    """Reservation entry ``ref`` fired."""
+
     ref: int
 
 
 @dataclass(frozen=True)
 class EntrySkipped:
+    """Reservation entry ``ref`` was skipped, heating disabled
+    (``disabled``)."""
+
     ref: int
 
 
@@ -1446,6 +1487,7 @@ _HANDLERS: Final[Mapping[type[Event], Callable[[_Step, Event], None]]] = (
 
 
 def window_at(at: datetime, windows: Sequence[Window]) -> Window | None:
+    """The window ``at`` falls in; None outside them."""
     return next((w for w in windows if w[0] <= at < w[1]), None)
 
 

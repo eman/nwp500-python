@@ -1080,9 +1080,11 @@ the air beside the heater.
 Without a meter, start one only when you know the tank is full
 (``sa.full_tank_book``).
 
-With an inlet probe on the cold supply, convert the book's gallons at
-the mains rather than at the probe's own median, which at rest reads
-the air around the pipe:
+The book reads the mains from the long draws in its own record
+(``book.mains_f``), or uses ``params.book.inlet_default_f`` without
+one. With
+an inlet probe on the cold supply, convert its gallons at the probe's
+plateau over a longer window instead:
 
 .. code-block:: python
 
@@ -1105,8 +1107,8 @@ with circulation off) over the last 72 hours, read from minute 9 of each
 draw, once the probe has passed the stagnant pipe. There is none
 without such a draw, and the book keeps its own inlet.
 
-**Your installation's readiness terms.** The pipe to your fixture, the
-line you call hot, your own draws: ``ReadinessParams``
+**Your installation's readiness terms.** The line you call hot, the
+tank water the tap still gets past it, your own draws: ``ReadinessParams``
 (:doc:`/reference/simulator-inputs`).
 
 **Your heater's own parameters.** The defaults are one NWP500-65's.

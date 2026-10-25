@@ -174,6 +174,9 @@ fitted or kept the base's value, and why:
        just fitted. The error is the mean absolute error of the
        recovery durations, in minutes, also on the held-out recoveries.
        A fit pinned on a bound is reported and not applied.
+   * - Evaporator approach
+     - Not fitted: the coil's measured reading, held by the compressor
+       fit (the durations don't place it).
    * - Input power scale, COP scale, start-up energy, COP lift
      - The heater's own power readings over each compressor cycle,
        against the compressor just fitted. The COP uses only cycles
@@ -217,8 +220,8 @@ read in order without holding every status:
        print(term.name, term.value, "fitted" if term.fitted else term.why)
 
 Give ``ambient`` instead of ``air`` for a constant, or neither: the
-standby loss is then fitted on the heater's own reading between runs,
-and ``done.air`` is ``"heater"``. Without ``humidity`` the fits
+standby loss is then fitted on the heater's idle reading less its
+cabinet's warmth (above), and ``done.air`` is ``"heater"``. Without ``humidity`` the fits
 get 50 %. An input it cannot use raises ``CalibrationInputError``.
 
 On a desktop computer, 60 days of statuses (about 540,000) took about
@@ -433,8 +436,8 @@ pair:
 - **The book's circuit volume:** on 10 pairs with a run between, with
   the book's terms fitted at each volume tried. Runs closer than
   ``run_gap_min`` are one run. It is an effective volume, smaller than
-  the loop's own (``displaced_gal``): at one installation 1.4 gal
-  against 6.4. Fit and keep them apart. Its runs are priced as cooled
+  the loop's own (``displaced_gal``): at one installation 1.47 gal
+  against 19.36. Fit and keep them apart. Its runs are priced as cooled
   to the air: at that installation, pricing them at the loop's return
   (``fit_return``: the pipe resting 7.84 degF over the air and cooling
   on 0.464 h) booked the 87 pairs the fit takes no better, a mean

@@ -7,13 +7,13 @@ the spans nobody observed, adds the air where the heater stands and its
 humidity, and runs the fits; ``report`` says what each fit found, or why
 a term kept the base's value.
 
-The standby fit needs the air where the heater stands, which the heater
-does not read while idle: an air sensor's readings beside it, a
-constant for a heater in conditioned space, or what a Home Assistant
-source recorded (``sim_home_assistant.record_inputs``). Filling the gaps
-from the heater's own readings while its compressor runs, or projecting
-an outdoor history (``sim.location_air``), biases the fit, so neither is
-offered; without the air the standby loss keeps the base's value. Given,
+The standby fit needs the air where the heater stands: an air
+sensor's readings beside it, a constant for a heater in conditioned
+space, or what a Home Assistant source recorded
+(``sim_home_assistant.record_inputs``). Without it, the fit reads the
+heater's own reading while its compressor is idle, the cabinet's, less
+``sim_adapters.IDLE_CABINET_WARM_F``, and fits only the loss's level;
+with no such reading, the standby loss keeps the base's value. Given,
 the same air is the recoveries' too.
 
 The statuses are taken one at a time, so a long recording read through
@@ -776,8 +776,10 @@ def calibrate(
     The air where the heater stands is ``air`` (a sensor's readings) or
     ``ambient`` (a constant), in the preferred unit, and ``humidity``
     that air's, %. Given, the air is both the standby fit's and the
-    recoveries'; without it, the standby loss is not fitted and
-    recoveries use the heater's own reading while its compressor runs.
+    recoveries'; without it, the standby loss is fitted on the heater's
+    idle reading less ``sim_adapters.IDLE_CABINET_WARM_F`` (its level
+    only), and recoveries use the heater's own reading while its
+    compressor runs.
     ``record`` (``sim_home_assistant.RecordInputs``) is what a live
     source recorded over the history, °F: its air and humidity where
     none was given, and its draws and circulation runs, which make the
