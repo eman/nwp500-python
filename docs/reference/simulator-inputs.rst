@@ -853,7 +853,11 @@ the one seen over the retrains from 2026-08-08 to 2026-10-18.
        on 139 runs: the share of the loop's heat the probes showed. The
        return feeds the mixing valve's cold port as well as the tank's
        inlet, and that split is not measured, so the share is the split
-       and any shortfall of the probes together. September's measurement on 136 windows was 0.44
+       and any shortfall of the probes together. It was fitted at the
+       run model's earlier terms (a return at the air, the pipe cooled
+       between runs); on the same windows the current terms move it by
+       +10 % (165 windows since April) to -5 % (50 since September).
+       September's measurement on 136 windows was 0.44
        (90 % CI 0.38-0.50, :doc:`/explanation/standby-loss`).
      - 0.395-0.44, falling as windows accrue
    * - ``SITE_CIRCULATION``
