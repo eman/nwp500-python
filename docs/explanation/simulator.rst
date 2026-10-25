@@ -341,7 +341,13 @@ fitted on.
   45 days to 2026-09-06, an earlier fit): with under 30 min left,
   4.4 min; with over 180 min left, 55.9 min, a mean 44 min short.
   Under about 60-90 min left, physics alone is the better estimate
-  of the two;
+  of the two. Most of the held-out error is water moving during the
+  recovery, which the duration fit does not see and a walk takes
+  apart: at the current fit (2026-10-24) the 35 latest recoveries came
+  out a mean 25 min short, and the 20 of them with under 2 gal of hot
+  water drawn and under 5 minutes of circulation inside them 0.1 min
+  short. Over 119 recoveries each hot gallon drawn inside one added
+  about 4.7 min to it and each minute of circulation about 1.3 min;
 - replaying recorded writes, with a recovery model trained on the
   heater's record:
   recorded starts reproduced over six days held out, 31 of 40; daily
