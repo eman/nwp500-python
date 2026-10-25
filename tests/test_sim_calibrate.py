@@ -88,16 +88,14 @@ class TestTheFits:
         done = sc.calibrate(_read(history), ambient=(AIR_F - 32) / 1.8)
         assert done.calibration.standby.ua_ref == pytest.approx(UA, rel=0.05)
 
-    def test_without_air_the_standby_loss_keeps_the_base(
+    def test_without_air_the_standby_loss_is_fitted_on_the_cabinet(
         self, history: str
     ) -> None:
         done = sc.calibrate(_read(history))
-        assert done.air is None
-        assert "standby" in done.calibration.params.unfitted
-        loss = _terms(done)["Standby loss (UA at ref ΔT, BTU/h·°F)"]
-        assert not loss.fitted
-        assert loss.why == "no air given"
-        assert any("no air given" in n for n in done.notes)
+        assert done.air == "heater"
+        assert "standby" not in done.calibration.params.unfitted
+        assert _terms(done)["Standby loss (UA at ref ΔT, BTU/h·°F)"].fitted
+        assert any("compressor is idle" in n for n in done.notes)
 
     def test_each_fit_without_evidence_says_why(self, history: str) -> None:
         terms = _terms(sc.calibrate(_read(history), ambient=AIR_F))
@@ -547,7 +545,9 @@ class TestTheInputs:
 
     def test_the_notes_name_no_options(self, history: str) -> None:
         done = sc.calibrate(_read(history))
-        assert done.notes == (sc.DEFAULT_BASE_NOTE, sc.NO_AIR_NOTE)
+        assert done.notes[0] == sc.DEFAULT_BASE_NOTE
+        assert len(done.notes) == 2
+        assert "compressor is idle" in done.notes[1]
         assert not any("--" in n for n in done.notes)
 
     def test_a_generator_over_day_files_is_read_once(
@@ -810,6 +810,9 @@ def recovery_days(days: int) -> Any:
                         comp | draw, (140 - lo) * 50.0, 0.0
                     ),
                     "heater_air_f": np.where(comp, air, np.nan),
+                    "heater_cabinet_f": np.where(
+                        comp, np.nan, air + sa.IDLE_CABINET_WARM_F
+                    ),
                     "air_f": air,
                     "humidity_pct": 50.0,
                 },
@@ -1470,14 +1473,17 @@ class TestStandbyOnTheHeatersAir:
         assert own.air == "heater"
         assert given.calibration.standby.ua_ref is not None
         assert own.calibration.standby.ua_ref is not None
-        # The fixture's air steps at midnight, and the heater's is drawn
-        # straight from one evening's run to the next: within 5 %.
-        assert own.calibration.standby.ua_ref == pytest.approx(
-            given.calibration.standby.ua_ref, rel=0.05
+        # The fixture's cabinet reads its air plus the cabinet's warmth:
+        # each window's loss is the one on the air given.
+        assert [w.ua_btu_hr_f for w in own.calibration.standby.windows] == (
+            pytest.approx(
+                [w.ua_btu_hr_f for w in given.calibration.standby.windows]
+            )
         )
         assert sc.NO_AIR_NOTE not in own.notes
         assert any(
-            "heater's own air" in n and "of their hours" in n for n in own.notes
+            "compressor is idle" in n and "of their hours" in n
+            for n in own.notes
         )
 
     def test_on_the_heaters_air_the_exponent_is_the_bases(self) -> None:
@@ -1489,51 +1495,33 @@ class TestStandbyOnTheHeatersAir:
         assert standby.ua_ref is not None
         assert standby.ua_exponent == pytest.approx(0.28)
 
-    def test_between_runs_the_air_is_interpolated(self) -> None:
-        frame = recovery_days(3).drop(columns=["air_f"])
-        assert sc._air_between_runs(frame) is not None
-        # Day 1's quiet decay, between day 0's run (air 60) and day 1's
-        # (60 + 5 sin 1): a straight line from one to the other.
-        day = frame.index[0] + timedelta(days=1)
-        a, b = day - timedelta(hours=6), day + timedelta(hours=6)
-        mid = frame.loc[a:b, "air_f"].dropna()
-        assert len(mid) > 0
-        assert mid.is_monotonic_increasing
-        assert 60.0 < mid.iloc[len(mid) // 2] < 60.0 + 5.0 * np.sin(1.0)
+    def test_without_the_heaters_reading_it_keeps_the_base(self) -> None:
+        frame = recovery_days(3).drop(columns=["air_f", "heater_cabinet_f"])
+        done = sc._fit(frame, sim.default_params(), [], None, None, None, None)
+        assert done.air is None
+        assert sc.NO_AIR_NOTE in done.notes
+        assert "standby" in done.calibration.params.unfitted
 
-    def test_a_window_without_a_run_at_both_ends_is_not_fitted(self) -> None:
+    def test_the_air_is_the_cabinets_less_its_warmth(self) -> None:
+        frame = recovery_days(3).drop(columns=["air_f"])
+        assert sc._air_from_cabinet(frame) is not None
+        # Day 1's quiet decay, at that day's air.
+        day = frame.index[0] + timedelta(days=1)
+        quiet = frame.loc[day : day + timedelta(hours=10), "air_f"].dropna()
+        assert len(quiet) > 0
+        assert quiet.to_numpy() == pytest.approx(60.0 + 5.0 * np.sin(1.0))
+
+    def test_a_window_without_the_idle_reading_is_not_fitted(self) -> None:
         frame = recovery_days(6).drop(columns=["air_f"])
-        # The heater read its air on the first day's run only.
-        later = frame.index >= frame.index[0] + timedelta(days=1)
-        frame.loc[later, "heater_air_f"] = np.nan
+        # Unheard for an hour inside each quiet window.
+        hour = (frame.index - frame.index[0]).total_seconds() / 3600 % 24
+        unheard = ((hour >= 8) & (hour < 9)) | ((hour >= 20) & (hour < 21))
+        frame.loc[unheard, "heater_cabinet_f"] = np.nan
         done = sc._fit(frame, sim.default_params(), [], None, None, None, None)
         assert done.air == "heater"
         assert done.calibration.standby.ua_ref is None
         why = {t.name: t.why for t in sc.report(done)}
         assert any(
-            "no quiet window has a run within 6 h of both ends" in w
+            "no quiet window has the heater's idle reading throughout" in w
             for w in why.values()
         )
-
-    def test_a_run_heard_again_partway_settles_from_then(self) -> None:
-        frame = recovery_days(3).drop(columns=["air_f"])
-        on = frame["compressor_on"].to_numpy(dtype=bool)
-        starts = np.flatnonzero(on & ~np.roll(on, 1))
-        frame["unrecorded"] = False
-        unrecorded = frame.columns.get_loc("unrecorded")
-        air = frame.columns.get_loc("heater_air_f")
-        for i in starts:
-            # Unrecorded for the run's first 3 minutes, then its startup
-            # air, warm, for 4 more.
-            frame.iloc[i : i + 3, unrecorded] = True
-            frame.iloc[i + 3 : i + 7, air] = 95.0
-        assert sc._air_between_runs(frame) is not None
-        assert frame["air_f"].max() < 90.0
-
-    def test_a_run_excluded_from_the_recoveries_still_reads_it(self) -> None:
-        """A hybrid mode's samples are excluded from the recoveries, not
-        unrecorded: their runs still give the air."""
-        frame = recovery_days(6).drop(columns=["air_f"])
-        frame["excluded"] = True
-        done = sc._fit(frame, sim.default_params(), [], None, None, None, None)
-        assert done.air == "heater"
