@@ -1055,9 +1055,8 @@ def _snapshots(start: datetime, end: datetime) -> list[datetime]:
     return out
 
 
-#: Draws this long before a recovery leave its start reading short of
-#: their cold water: a cycle is draw-free only with none from this long
-#: before it to its end.
+#: A cycle is draw-free only with no water in use from this long before
+#: it to its end.
 DRAW_LEAD = timedelta(minutes=30)
 
 _SNAPSHOT_COLUMNS = (
@@ -1079,7 +1078,6 @@ _SNAPSHOT_COLUMNS = (
     "draw_free",
     "draw_gal",
     "draw_t_upper",
-    "draw_lead_gal",
     "circulation_runs",
 )
 
@@ -1103,14 +1101,13 @@ def _in_cycle(
 ) -> dict[str, object]:
     """A snapshot's metered draws and circulation runs: the delivered
     gallons from ``at`` to ``end`` and the volume-weighted upper zone
-    they left at, those in the ``DRAW_LEAD`` before ``at``, and each run
+    they left at, and each run
     over the span (merged within ``_RUN_GAP``) as ``(minutes, the upper
     zone at its start)``. None for what was not given: an unrecorded
     meter or circulation is not an idle one."""
     out: dict[str, object] = {
         "draw_gal": None,
         "draw_t_upper": None,
-        "draw_lead_gal": None,
         "circulation_runs": None,
     }
 
@@ -1126,9 +1123,6 @@ def _in_cycle(
             out["draw_t_upper"] = (
                 sum(u * g for u, g in weighted if u is not None) / gal
             )
-        out["draw_lead_gal"] = float(
-            sum(g for t, g in draws if at - DRAW_LEAD <= t < at)
-        )
     if circulation is not None:
         runs = sorted(
             (max(a, at), min(b, end))
@@ -1472,7 +1466,6 @@ class PowerFit:
     cop_scale: float | None
     startup_wh: float | None
     cop_lift_coeff: float | None
-    lead_share: float | None
     n_cop: int
 
 
@@ -1522,26 +1515,16 @@ def solve_cop_scale(
     heat_wh: np.ndarray,
     modelled_cop: np.ndarray,
     metered_wh: np.ndarray,
-    lead_wh: np.ndarray | None = None,
-) -> tuple[float, float, float] | None:
-    """``(scale, startup_wh, lead_share)`` for ``metered = startup +
-    (heat + lead_share x lead) / (scale x COP)``, by least squares
-    weighted ``1 / metered``; ``startup`` at least 0, ``lead_share`` in
-    [0, 1]."""
+) -> tuple[float, float] | None:
+    """``(scale, startup_wh)`` for ``metered = startup + heat / (scale x
+    COP)``, by least squares weighted ``1 / metered``; ``startup`` at
+    least 0."""
     h, c, e = (
         np.asarray(v, dtype=float) for v in (heat_wh, modelled_cop, metered_wh)
     )
-    x_lead = np.zeros_like(h) if lead_wh is None else np.asarray(lead_wh, float)
     w = np.sqrt(1.0 / e)
-
-    def solve(
-        intercept: bool, share: float | None
-    ) -> tuple[float, float, float] | None:
-        # share None: fitted; a number: held there.
-        heat = h + (0.0 if share is None else share) * x_lead
-        cols = [heat / c]
-        if share is None:
-            cols.append(x_lead / c)
+    for intercept in (True, False):
+        cols = [h / c]
         if intercept:
             cols.insert(0, np.ones_like(h))
         coef, *_ = np.linalg.lstsq(
@@ -1551,20 +1534,8 @@ def solve_cop_scale(
         inv = float(coef[1 if intercept else 0])
         if not inv > 0.0:
             return None
-        got = share if share is not None else float(coef[-1]) / inv
-        return 1.0 / inv, startup, got
-
-    fits_lead = bool(np.any(x_lead > 0.0))
-    for intercept in (True, False):
-        solved = solve(intercept, None if fits_lead else 0.0)
-        if solved is None:
-            return None
-        if fits_lead and not 0.0 <= solved[2] <= 1.0:
-            solved = solve(intercept, min(1.0, max(0.0, solved[2])))
-            if solved is None:
-                return None
-        if solved[1] >= 0.0:
-            return solved
+        if startup >= 0.0:
+            return 1.0 / inv, startup
     return None
 
 
@@ -1572,28 +1543,26 @@ def solve_cop_fit(
     heat_wh: Sequence[float],
     modelled_cop: Sequence[float],
     metered_wh: Sequence[float],
-    lead_wh: Sequence[float] | None,
     lift_f: Sequence[float],
-) -> tuple[float, float, float, float] | None:
-    """``(scale, startup_wh, lead_share, lift_coeff)``: ``solve_cop_scale``
-    at each ``COP_LIFT_GRID`` coefficient, the least weighted squared
-    error in the meter kept."""
+) -> tuple[float, float, float] | None:
+    """``(scale, startup_wh, lift_coeff)``: ``solve_cop_scale`` at each
+    ``COP_LIFT_GRID`` coefficient, the least weighted squared error in
+    the meter kept."""
     c0 = np.asarray(modelled_cop, dtype=float)
     lift = np.asarray(lift_f, dtype=float)
     e = np.asarray(metered_wh, dtype=float)
     h = np.asarray(heat_wh, dtype=float)
-    x_lead = np.zeros_like(h) if lead_wh is None else np.asarray(lead_wh, float)
-    best: tuple[float, tuple[float, float, float, float]] | None = None
+    best: tuple[float, tuple[float, float, float]] | None = None
     for gamma in COP_LIFT_GRID:
         c = c0 * np.exp(-gamma * (lift - COP_LIFT_REF_F))
-        solved = solve_cop_scale(h, c, e, x_lead)
+        solved = solve_cop_scale(h, c, e)
         if solved is None:
             continue
-        a, startup, share = solved
-        pred = startup + (h + share * x_lead) / (a * c)
+        a, startup = solved
+        pred = startup + h / (a * c)
         sse = float((((pred - e) ** 2) / e).sum())
         if best is None or sse < best[0]:
-            best = (sse, (a, startup, share, gamma))
+            best = (sse, (a, startup, gamma))
     return None if best is None else best[1]
 
 
@@ -1665,38 +1634,6 @@ def metered_withdrawn(
     return withdrawn
 
 
-def metered_lead(params: HeaterParams) -> Withdrawn:
-    """With a meter: the apparent heat of the draws in the ``DRAW_LEAD``
-    before a cycle, Wh, at the upper zone at its start, which the start
-    reading shows only part of. None when the record is missing,
-    or when draws happened and the draw term is off."""
-    d = params.draw
-
-    def lead(row: Mapping[str, Any]) -> float | None:
-        gal = row.get("draw_lead_gal")
-        if gal is None or pd.isna(gal):
-            return None
-        if float(gal) <= 0.0:
-            return 0.0
-        upper = row.get("t_start_upper")
-        if d.observability is None or upper is None or pd.isna(upper):
-            return None
-        return (
-            draw_energy_btu(
-                float(gal),
-                float(upper),
-                delivery_temp_f(
-                    float(upper), d.delivery_intercept_f, d.delivery_slope
-                ),
-                d.inlet_temp_f,
-                d.observability,
-            )
-            / BTU_PER_WH
-        )
-
-    return lead
-
-
 def draw_free_withdrawn(row: Mapping[str, Any]) -> float | None:
     """Without a meter: nothing withdrawn from a cycle with no water in
     use from ``DRAW_LEAD`` before it to its end, and unknown otherwise."""
@@ -1706,13 +1643,12 @@ def draw_free_withdrawn(row: Mapping[str, Any]) -> float | None:
 @dataclass(frozen=True)
 class CopCycle:
     """One cycle's figures for the apparent COP: when it started, the
-    heat it stored plus what draws took, the lead draws' heat, the
-    integrator's COP, the metered energy (Wh) and the lift (°F).
+    heat it stored plus what draws took, the integrator's COP, the
+    metered energy (Wh) and the lift (°F).
     ``start`` is None where the rows carry no ``start_time``."""
 
     start: datetime | None
     heat_wh: float
-    lead_wh: float
     modelled_cop: float
     metered_wh: float
     lift_f: float
@@ -1723,7 +1659,6 @@ def cop_cycles(
     params: HeaterParams,
     *,
     withdrawn: Withdrawn = draw_free_withdrawn,
-    lead: Withdrawn | None = None,
 ) -> list[CopCycle]:
     """The cycles ``fit_cop_scale`` fits on, and their figures."""
     needed = [
@@ -1752,9 +1687,6 @@ def cop_cycles(
         took = withdrawn(row)
         if took is None or not math.isfinite(took):
             continue
-        lead_wh = 0.0 if lead is None else lead(row)
-        if lead_wh is None or not math.isfinite(lead_wh):
-            continue
         path = path_to_end(row, params)
         if path is None:
             continue
@@ -1781,7 +1713,6 @@ def cop_cycles(
             CopCycle(
                 start=row.get("start_time"),
                 heat_wh=stored + took,
-                lead_wh=lead_wh,
                 modelled_cop=modelled,
                 metered_wh=metered,
                 lift_f=mean - float(air),
@@ -1795,20 +1726,18 @@ def fit_cop_scale(
     params: HeaterParams,
     *,
     withdrawn: Withdrawn = draw_free_withdrawn,
-    lead: Withdrawn | None = None,
-) -> tuple[tuple[float, float, float, float] | None, int]:
-    """``((scale, startup_wh, lead_share, lift_coeff), cycles)`` for the
-    apparent COP, the heat a cycle stored (the full tank's mass times
-    the rise of the probes' mean) plus what ``withdrawn`` says draws
-    took during it, and ``lead`` those just before it, which the start
-    reading shows only part of (``cop_cycles``). ``(None, n)``
-    with fewer than ``MIN_POWER_EVENTS``.
+) -> tuple[tuple[float, float, float] | None, int]:
+    """``((scale, startup_wh, lift_coeff), cycles)`` for the apparent
+    COP, the heat a cycle stored (the full tank's mass times the rise of
+    the probes' mean) plus what ``withdrawn`` says draws took during it
+    (``cop_cycles``). ``(None, n)`` with fewer than
+    ``MIN_POWER_EVENTS``.
 
     Without a meter the default keeps only the cycles no water was
     drawn around: the heat drawn during a cycle is otherwise missing
     from its heat and pulls the scale low.
     """
-    cycles = cop_cycles(rows, params, withdrawn=withdrawn, lead=lead)
+    cycles = cop_cycles(rows, params, withdrawn=withdrawn)
     n = len(cycles)
     if n < MIN_POWER_EVENTS:
         return None, n
@@ -1817,7 +1746,6 @@ def fit_cop_scale(
             [c.heat_wh for c in cycles],
             [c.modelled_cop for c in cycles],
             [c.metered_wh for c in cycles],
-            [c.lead_wh for c in cycles],
             [c.lift_f for c in cycles],
         ),
         n,
@@ -1829,20 +1757,18 @@ def fit_power(
     params: HeaterParams,
     *,
     withdrawn: Withdrawn = draw_free_withdrawn,
-    lead: Withdrawn | None = None,
 ) -> PowerFit:
     """Both power fits on ``snapshots`` rows, every cycle whether or not
     it reached its target (a capped cycle is as good a sample of heat
     per Wh as any), on ``params``' compressor and loss."""
     scale, n_power = fit_power_scale(rows, params)
-    cop, n_cop = fit_cop_scale(rows, params, withdrawn=withdrawn, lead=lead)
+    cop, n_cop = fit_cop_scale(rows, params, withdrawn=withdrawn)
     return PowerFit(
         power_scale=scale,
         n_power=n_power,
         cop_scale=None if cop is None else cop[0],
         startup_wh=None if cop is None else cop[1],
-        cop_lift_coeff=None if cop is None else cop[3],
-        lead_share=None if cop is None else cop[2],
+        cop_lift_coeff=None if cop is None else cop[2],
         n_cop=n_cop,
     )
 
@@ -1884,7 +1810,6 @@ def calibrate(
     *,
     recovery_air: str = "heater_air_f",
     withdrawn: Withdrawn | None = None,
-    lead: Withdrawn | None = None,
     draws: Sequence[tuple[datetime, float]] | None = None,
     circulation: Sequence[tuple[datetime, datetime]] | None = None,
     circulation_flow_at: Callable[[datetime], float | None] | None = None,
@@ -1899,11 +1824,10 @@ def calibrate(
     is reported but not applied, and no power is fitted on it.
     With a meter's ``draws`` (``(instant, delivered gallons)``) and
     ``circulation``'s runs (an empty list for none), the COP fit prices
-    the heat each cycle's draws and runs took (``metered_withdrawn``,
-    ``metered_lead``), each run at the flow it ran at when
-    ``circulation_flow_at`` says (``flow_lookup`` over ``measure_runs``);
-    without them it keeps draw-free cycles.
-    ``withdrawn`` and ``lead`` replace either. With ``ua_exponent``,
+    the heat each cycle's draws and runs took (``metered_withdrawn``),
+    each run at the flow it ran at when ``circulation_flow_at`` says
+    (``flow_lookup`` over ``measure_runs``); without them it keeps
+    draw-free cycles. ``withdrawn`` replaces either. With ``ua_exponent``,
     the standby loss law's exponent is held there (``fit_standby``).
 
     What could not be fitted keeps ``base``'s value, the best prior
@@ -1941,9 +1865,7 @@ def calibrate(
                 if metered
                 else draw_free_withdrawn
             )
-        if lead is None and metered:
-            lead = metered_lead(params)
-        power = fit_power(rows, params, withdrawn=withdrawn, lead=lead)
+        power = fit_power(rows, params, withdrawn=withdrawn)
         params = with_power(params, power)
     # The installation's terms are fitted apart (``fit_book_terms``,
     # ``fit_evidence``, ``fit_zone_mix``): ``base``'s record of them holds.

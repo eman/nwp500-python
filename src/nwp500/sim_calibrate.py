@@ -301,9 +301,8 @@ def _power_error(cycles: pd.DataFrame, params: HeaterParams) -> float | None:
 
 def _cop_error(cycles: pd.DataFrame, params: HeaterParams) -> float | None:
     """The COP terms' squared error in each cycle's metered energy,
-    weighted ``1 / metered``, as ``solve_cop_fit`` fits them. The
-    parameters hold no lead share, so none is counted. None unless
-    ``params`` model every cycle, as for ``_power_error``."""
+    weighted ``1 / metered``, as ``solve_cop_fit`` fits them. None
+    unless ``params`` model every cycle, as for ``_power_error``."""
     p = params.power
     rows = cal.cop_cycles(cycles, params)
     if p.cop_scale is None or not rows or len(rows) < _n_cycles(cycles):
@@ -642,8 +641,7 @@ def _keep_better(
             n_power=n_power,
             cop_scale=None if cop is None else cop[0],
             startup_wh=None if cop is None else cop[1],
-            cop_lift_coeff=None if cop is None else cop[3],
-            lead_share=None if cop is None else cop[2],
+            cop_lift_coeff=None if cop is None else cop[2],
             n_cop=n_cop,
         )
         refit = cal.with_power(params, power)

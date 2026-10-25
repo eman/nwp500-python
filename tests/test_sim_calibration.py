@@ -632,13 +632,13 @@ class TestPower:
             )
             metered.append(150.0 + heat / (1.3 * cop))
         rows["metered_input_wh"] = metered
-        (scale, startup, share, lift), n = cast(
-            tuple[tuple[float, float, float, float], int],
+        (scale, startup, lift), n = cast(
+            tuple[tuple[float, float, float], int],
             cal.fit_cop_scale(rows, params),
         )
         assert scale == pytest.approx(1.3, rel=1e-6)
         assert startup == pytest.approx(150.0, rel=1e-6)
-        assert lift == 0.0 and share == 0.0 and n == 14
+        assert lift == 0.0 and n == 14
 
     def test_without_a_meter_only_draw_free_cycles_count(self) -> None:
         params = self._fitted()
@@ -649,7 +649,7 @@ class TestPower:
 
     def test_the_fit_applies_where_it_had_the_evidence(self) -> None:
         base = default_params()
-        fit = cal.PowerFit(0.6, 12, None, None, None, None, 4)
+        fit = cal.PowerFit(0.6, 12, None, None, None, 4)
         got = cal.with_power(base, fit)
         assert got.power.power_scale == 0.6
         assert got.power.cop_scale == base.power.cop_scale
@@ -663,7 +663,6 @@ class TestMeteredPricing:
         return {
             "draw_gal": 0.0,
             "draw_t_upper": None,
-            "draw_lead_gal": 0.0,
             "circulation_runs": (),
             "t_amb_mean": 65.0,
             "t_start_upper": 130.0,
@@ -696,9 +695,6 @@ class TestMeteredPricing:
         # Circulation without the installation's terms is unpriceable.
         bare = cal.metered_withdrawn(replace(p, circulation=None))
         assert bare(self._row(circulation_runs=((10.0, 130.0),))) is None
-        lead = cal.metered_lead(p)
-        assert cast(float, lead(self._row(draw_lead_gal=4.0))) > 0
-        assert lead(self._row()) == 0.0
 
     def test_a_run_is_priced_at_the_flow_it_ran_at(self) -> None:
         """A slower circulation displaces its volume later, so a short
@@ -726,7 +722,7 @@ class TestMeteredPricing:
         runs = [(start + timedelta(minutes=30), start + timedelta(minutes=40))]
         rows = cal.snapshots(h, draws=draws, circulation=runs)
         row = next(rows.loc[rows.offset_minutes == 0].itertuples())
-        assert row.draw_gal == 3.0 and row.draw_lead_gal == 2.0
+        assert row.draw_gal == 3.0
         assert row.circulation_runs == ((10.0, 135.0),)
         plain = cal.snapshots(h)
         assert plain.draw_gal.isna().all()
