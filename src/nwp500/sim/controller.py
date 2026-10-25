@@ -65,8 +65,9 @@ lockout); the upper zone at ``he_upper_on`` (``UpperRead``,
   whatever the mode; a direct write's, an element mode's), landing at
   the window's end unless withdrawn, and charged a start; a running
   element mode is dropped at a window's start.
-- **The elements:** on entry to a mode at the mode's deficit, in
-  Energy Saver also as the upper zone reaches ``he_upper_on``, and on a
+- **The elements:** on entry to a mode at the mode's deficit, later in
+  a stint as the upper zone reaches Energy Saver's ``he_upper_on`` or
+  falls High Demand's re-engagement short of the setpoint, and on a
   setpoint raise; each runs to its off point (Energy Saver's upper
   element 1.62 °F short of the setpoint), Electric's lower element
   after its upper.
@@ -133,11 +134,15 @@ POWERED_ON_BY_ENTRY = "powered_on_by_entry"
 StartCause = Literal["heater", "write", "running"]
 Source = Literal["compressor", "element"]
 #: What started an element, when the heater did: Energy Saver's upper
-#: zone reaching ``he_upper_on`` later in a stint; Electric's lower
-#: element taking over from the upper; a dropped element mode's
-#: re-evaluation (a compressor start).
+#: zone reaching ``he_upper_on`` later in a stint; High Demand's upper
+#: zone falling ``upper_reengages_below_setpoint_f`` short later in a
+#: stint; Electric's lower element taking over from the upper; a
+#: dropped element mode's re-evaluation (a compressor start).
 ElementTrigger = Literal[
-    "energy_saver_upper_on", "electric_lower_after_upper", "mode_dropped"
+    "energy_saver_upper_on",
+    "high_demand_upper_short",
+    "electric_lower_after_upper",
+    "mode_dropped",
 ]
 StopReason = Literal["target", "cap", "write", "mode", "horizon"]
 #: How a mode interval ended: a write, the heater dropping the mode at a
@@ -404,13 +409,14 @@ class StartDue(Event):
 
 @dataclass(frozen=True, kw_only=True)
 class UpperRead(Event):
-    """The upper zone read at an instant, for Energy Saver's element."""
+    """The upper zone read at an instant, for a later element start in
+    Energy Saver or High Demand."""
 
 
 @dataclass(frozen=True, kw_only=True)
 class UpperOnCrossed(Event):
-    """A coast took the upper zone down to ``he_upper_on`` in Energy
-    Saver (found by ``upper_on_crossing``)."""
+    """A coast took the upper zone down to where the mode's element
+    starts later in a stint (found by ``upper_on_crossing``)."""
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -742,8 +748,10 @@ def _start_compressor(
     """The compressor starts. A start holds before the lower zone
     climbs, the longer the longer the compressor was off;
     one already running at the walk's start holds for what is left of
-    its own. Then Energy Saver's element reads the upper zone, as at
-    any instant of a stint (``_read_upper``)."""
+    its own. Then the element's later start reads the upper zone, as at
+    any instant of a stint (``_read_upper``); not for one running at the
+    walk's start, which the walk reads once an element on then is
+    restored (``ElementWasOn``)."""
     c = s.state.compressor
     if hold is None:
         hold = 0.0
@@ -761,7 +769,8 @@ def _start_compressor(
         capped_until=None,
     )
     s.act(StartCompressor(start, startup, hold))
-    _read_upper(s)
+    if start.cause != "running":
+        _read_upper(s)
 
 
 def _stop_compressor(s: _Step, reason: StopReason) -> None:
@@ -964,25 +973,42 @@ def _stop_element(s: _Step, reason: StopReason) -> None:
         )
 
 
+def later_upper_on(
+    mode: HeaterMode, setpoint_f: float, element: ElementParams
+) -> tuple[float, ElementTrigger] | None:
+    """Where the upper element starts later in a stint, and why: in
+    Energy Saver as the upper zone reaches ``he_upper_on``, an absolute
+    104.9 °F (23 mid-stint starts a median 0.36 °F below it; a device run
+    of 2026-09-21 13:54 UTC at a 107.6 °F setpoint engaged at 103.64,
+    where a setpoint-relative rule said 71.6); in High Demand as it falls
+    ``upper_reengages_below_setpoint_f`` short of the setpoint (4.1 °F,
+    12 starts; the four of 2026-04-26/27 at 3.78-4.14). None in the other
+    modes: Electric's is not measured."""
+    if mode == ENERGY_SAVER:
+        return element.energy_saver_reengages_at_f, "energy_saver_upper_on"
+    if mode == HIGH_DEMAND:
+        return (
+            setpoint_f - element.upper_reengages_below_setpoint_f,
+            "high_demand_upper_short",
+        )
+    return None
+
+
 def _read_upper(s: _Step) -> None:
-    """Energy Saver's element later in a stint: on as the upper zone
-    reaches ``he_upper_on``, an absolute 104.9 °F in this mode (23
-    mid-stint starts a median 0.36 °F below it; a device run of
-    2026-09-21 13:54 UTC at a 107.6 °F setpoint engaged at 103.64, where
-    a setpoint-relative rule said 71.6)."""
+    """The upper element later in a stint (``later_upper_on``): on with
+    the upper zone at or under the mode's level."""
+    later = later_upper_on(s.mode, s.sp, s.settings.element)
     if (
-        s.disabled
-        or s.mode != ENERGY_SAVER
+        later is None
+        or s.disabled
         or s.state.element.running
         or s.upper >= s.sp - ELEMENT_DONE_F
-        or s.upper > s.settings.element.energy_saver_reengages_at_f
+        or s.upper > later[0]
     ):
         return
     _start_element(
         s,
-        Start(
-            s.at, "heater", trigger="energy_saver_upper_on", source="element"
-        ),
+        Start(s.at, "heater", trigger=later[1], source="element"),
         "upper",
     )
 
@@ -1166,9 +1192,9 @@ def _set_mode(s: _Step, mode: HeaterMode, ended_by: ModeEnd) -> None:
         s.pend(None)
     if s.state.element.running and mode not in ELEMENT_MODES:
         _stop_element(s, "mode")
-    if mode in (HIGH_DEMAND, ELECTRIC):
-        # The model is the entry; what starts the element later in a
-        # stint is measured for Energy Saver only.
+    if mode == ELECTRIC:
+        # The model is the entry; what starts Electric's element later
+        # in a stint is not measured.
         s.note("element_later_starts_not_modelled")
 
 
@@ -1179,7 +1205,7 @@ def _begins(s: _Step, ev: Begins) -> None:
     """The walk begins. A compressor running then, outside Electric and
     with heating enabled, runs on, holding for what is left of its
     start's hold."""
-    if s.mode in (HIGH_DEMAND, ELECTRIC) and not s.disabled:
+    if s.mode == ELECTRIC and not s.disabled:
         s.note("element_later_starts_not_modelled")
     if ev.running and not s.disabled and s.mode != ELECTRIC:
         _start_compressor(
@@ -1351,14 +1377,15 @@ def _upper_read(s: _Step, ev: UpperRead) -> None:
 
 
 def _upper_on_crossed(s: _Step, ev: UpperOnCrossed) -> None:
-    """A coast took the upper zone to ``he_upper_on`` in Energy Saver:
-    the element starts there (``_read_upper``'s rule, met on the
-    path)."""
+    """A coast took the upper zone to the mode's later start
+    (``later_upper_on``): the element starts there (``_read_upper``'s
+    rule, met on the path)."""
+    later = later_upper_on(s.mode, s.sp, s.settings.element)
+    if later is None:
+        return
     _start_element(
         s,
-        Start(
-            s.at, "heater", trigger="energy_saver_upper_on", source="element"
-        ),
+        Start(s.at, "heater", trigger=later[1], source="element"),
         "upper",
     )
 
@@ -1500,16 +1527,15 @@ def trigger_ahead(
 def upper_on_crossing(
     state: State, settings: Settings, points: Sequence[Point]
 ) -> datetime | None:
-    """Where a coast in Energy Saver takes the upper zone down to
-    ``he_upper_on`` with no element running (``_read_upper``); None when
-    it does not."""
-    if (
-        disabled(state, settings)
-        or state.mode.in_force != ENERGY_SAVER
-        or state.element.running
-    ):
+    """Where a coast takes the upper zone down to the mode's later
+    element start (``later_upper_on``) with no element running
+    (``_read_upper``); None when it does not."""
+    later = later_upper_on(
+        state.mode.in_force, state.setpoint_f, settings.element
+    )
+    if later is None or disabled(state, settings) or state.element.running:
         return None
-    on = settings.element.energy_saver_reengages_at_f
+    on = later[0]
     for p0, p1 in pairwise(points):
         if p0.upper_f > on >= p1.upper_f and p1.upper_f < state.setpoint_f:
             f = (p0.upper_f - on) / (p0.upper_f - p1.upper_f)

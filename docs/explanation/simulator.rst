@@ -90,8 +90,11 @@ the loss is the jacket law alone.
 
 **The elements.** They follow the device's own rules
 (:doc:`heating-elements`): per-mode entry thresholds, a dead time,
-upper before lower, and Energy Saver re-engaging at an absolute
-104.9 degF.
+upper before lower, Energy Saver re-engaging at an absolute
+104.9 degF, and High Demand re-engaging 4.1 degF short of the setpoint.
+Electric's later starts are not measured (it never ran half an hour on
+record), so a walk in Electric heats only on entry and says so
+(``element_later_starts_not_modelled``).
 
 **Draws.** A draw is gallons on the delivered (mixed) line. The tank
 gives up the hot share of them through the mixing valve, and the cold

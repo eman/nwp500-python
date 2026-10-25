@@ -14,8 +14,8 @@ thermostat, and how far that holds depends on the mode and the moment:
   engages as the probe reaches ``heUpperOnTempSetting``. That is from this
   unit's history and confirmed by a commanded run.
 * **Later in a stint, in** ``HIGH_DEMAND`` **they do not**: it re-engages
-  about 2.1 degC below its ON setting. That is from history only.
-  ``ELECTRIC`` is uncharacterised.
+  about 2.1 degC below its ON setting. That is from history only, and
+  the simulator follows it. ``ELECTRIC`` is uncharacterised.
 
 The fields also look wrong as a thermostat taken literally: in Electric
 and High Demand the on and off settings are **the same value**, and every
