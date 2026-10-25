@@ -33,9 +33,11 @@ Four ideas run through the whole simulator:
 - **Events, not time steps.** Nothing the firmware decides happens
   between events, so the walk jumps from one event to the next and lets
   the physics carry the tank across each span.
-- **Fitted against the record, scored on later records.** Every fitted
-  term is fitted on the earlier part of a record and scored on the part
-  after it, in time order, so a term that only fits its own data shows.
+- **Fitted against the record, scored on later records.** The
+  compressor and heat book fits hold out the latest part of a record and
+  are scored on it, in time order, so a term that only fits its own data
+  shows; with ``keep_better`` the other main terms are scored the same
+  way.
 - **Say what an answer rests on.** Each answer lists its ``reasons``
   (where it may be less than it seems) and ``defaults_used`` (every
   input it assumed), so a caller can tell a measured answer from an
@@ -94,9 +96,9 @@ The tank
 **State.** The tank is two zones of equal mass: the upper, which the
 upper probe reads, and the lower, which the lower probe reads. The walk
 carries them as a mean temperature and a gap: upper = mean + gap / 2,
-lower = mean - gap / 2. The tank's thermal mass is its rated storage
-times 8.34 BTU per gallon per degF, about 527 BTU/degF for the 65 gal
-model.
+lower = mean - gap / 2. The tank's thermal mass is its storage volume
+(63.2 gal for the 65 gal model) times 8.34 BTU per gallon per degF,
+about 527 BTU/degF.
 
 **Standby.** Heat leaves through the jacket to the air beside the
 heater at ``UA(dT) x dT``, where dT is the tank's mean over the air.
@@ -145,9 +147,10 @@ compression cycle, integrated on the lower zone in 10-second steps:
 
 It stops when the lower zone reaches the target (``hp_lower_off``), or
 after 30 hours, reported as truncated. ``compressor_constant`` is the
-one term fitted on durations; the other cycle values are engineering
-values the record cannot separate from it
-(:doc:`/reference/simulator-inputs`).
+one term fitted on durations. The evaporator's approach and slope are
+the coil's own reading; the condenser approach, the clearance, the
+exponent and the fan's airflow are engineering values the record cannot
+separate from it (:doc:`/reference/simulator-inputs`).
 
 **Two zones in a recovery.** The condenser coil wraps the lower part of
 the tank. While there is a gap, the heat goes into the lower zone's
@@ -155,18 +158,24 @@ mass and the upper zone holds; once the gap closes, the tank heats as
 one body.
 
 **The air over the recovery.** A recovery's duration depends on the air
-it runs in, and the air depends on how long it runs. The recovery is
-integrated at the air at its start, then again at the mean air over the
-first answer's span, and kept once the duration moves 2 minutes or less.
+it runs in, and the air depends on how long it runs. The walk
+integrates the recovery at the air at its start, then once more at the
+mean air over the first answer's span, and keeps the second.
+``forecast`` repeats this up to three more times, stopping once the
+duration moves 2 minutes or less.
 
 **The start's hold.** After a start the compressor runs some minutes
-before the lower zone climbs. The path stays flat for that hold, which
-depends on how long the compressor was off.
+before the lower zone climbs. A caller with a ``RecoveryModel`` can pass
+``start_hold``, that hold by how long the compressor was off: the model
+is asked with it, serves a duration that includes it, and the path
+stays flat for it. With the physics alone there is no hold, since the
+fitted durations already include it.
 
 **Power and efficiency.** The cycle's own compression work, times a
-fitted ``power_scale``, is the electricity. The heat delivered over that
-input, times a fitted ``cop_scale`` and an exponential lift term, is
-the efficiency. Start-up energy is recorded once per start.
+fitted ``power_scale``, is the electricity. The efficiency is fitted
+apart from it: the heat stored (the tank's mass times the rise of its
+mean, net of the standby loss) over the cycle's own unscaled work,
+times a fitted ``cop_scale`` and an exponential lift term. Start-up energy is recorded once per start.
 :doc:`recovery-speed` has the measurements.
 
 **A learned duration.** A ``RecoveryModel`` (``sim.extensions``) may
@@ -215,8 +224,10 @@ same frame as the standby fit. It is a pricing term; the probes'
 response above does not use it.
 
 **The fitted range.** The draw terms were fitted over a range of upper
-zone temperatures and draw volumes. A walk with a draw outside it says
-``draw_out_of_domain``.
+zone temperatures and draw volumes. A walk with draws says
+``draw_out_of_domain`` when its largest draw is outside the fitted
+volumes, or the upper zone leaves the fitted range anywhere along the
+walk.
 
 
 Circulation
@@ -249,25 +260,32 @@ wherever it lands.
 
 **Anchors.** A book starts, and restarts, only where the tank is known
 full: both probes within ``uniform_band_f`` at the end of a recovery
-with nothing drawn since, or with the compressor running alone and
-nothing drawn or circulated for ``anchor_run_min``. A quiet tank after a
-draw is not an anchor: the lower probe shows only part of a small draw
-in a mixed tank, and an anchor there would credit the draw back. The
-book's error grows with the time since its anchor, so an anchor older
-than ``max_anchor_age_h`` is marked aged and carries a wider band.
+with nothing drawn or circulated since, or with the compressor running
+alone, nothing drawn or circulating at that step, once it has run
+``anchor_run_min`` since the last draw. A quiet tank after a draw is
+not an anchor: the lower probe shows only part of a small draw in a
+mixed tank, and an anchor there would credit the draw back. The book's
+error is flat for ``max_anchor_age_h`` (18 h) after its anchor and
+larger beyond, so an older anchor is marked aged and carries a wider
+band.
 
 **Reading a record.** ``book_from_history`` and ``book_from_changes``
-put the recorded statuses, the meter and the air on a 10-second grid,
-hold each value until the next, and walk the book from the last anchor.
-A span nobody heard is walked across with its values held, the flow for
-60 seconds and then none.
+put the recorded statuses, the meter and the air on a 10-second grid
+and walk the book from the last anchor. From statuses, a meter reading
+holds 60 seconds and an inlet reading an hour, and a meter silent for
+more than an hour is refused; from changes, each value holds until the
+next. A span the heater went unheard is walked across with its values
+held; across a span the meter was unknown, the flow holds 60 seconds
+and then is none.
 
 **How much is left.** The empty point (``empty_btu``) is the booked
 heat left when the upper probe crossed the line in recorded drawdowns.
 Deliverable gallons are the heat above it over the heat a delivered
 gallon takes. Along a walk the book also moves the upper zone the probe
-would show as the tank empties, and re-anchors where the walk's own
-recovery ends with the tank full.
+would show as the tank empties, and re-anchors where the walk's tank
+is full: at the end of a recovery the heater stopped itself, quiet
+after one with the zones within the band, or with the compressor
+running alone past the hold.
 
 **From outside.** Any ``HeatLedger`` (``sim.extensions``) can stand in
 for the book.
@@ -287,41 +305,48 @@ the line, the water above it still leaves hot, so the tap runs cold
 **Deliverable gallons.** With a book: the booked heat above the empty
 point, plus the lag. Without one: the tank's heat as the two probes
 place it, or the most that recorded draws delivered from probes no
-warmer than now (``evidence``), whichever is more, plus the lag.
+warmer than now (``evidence``), whichever is more, plus the lag; with
+the upper probe already below the line, none.
 
 **Ready for a bath.** ``time_to_ready`` compares the deliverable
-gallons with the bath. If the tank is short, it runs the recovery the
-heater would run next: it coasts the tank on the standby model to the
-heater's own trigger, runs the recovery from there, and finds the
-minute the bath is covered, for the heat pump and for each element
-mode. An answer within the book's error band, or one that a 1 degF
-probe error would flip, says so.
+gallons with the bath. If the tank is short, it finds the first minute
+the bath is covered along the heat pump's next recovery (from now if
+the compressor runs, else from the heater's own trigger after a coast
+on the standby model), and in each element mode as if written now. An
+answer within the book's error band, or one that a 1 degF probe error
+would flip, says so.
 
 
 Fitting and checking the parameters
 ===================================
 
 ``sim_calibrate.calibrate`` fits a heater's parameters from its
-recorded statuses; :doc:`/how-to/calibrate-simulator` shows how to run
-it. The methods, in the order they run:
+recorded statuses, and ``sim_calibrate.fit_book`` the heat book's;
+:doc:`/how-to/calibrate-simulator` shows how to run them. The methods,
+in the order they run:
 
 **The frame.** One row per status, each holding until the next: the
 probes, the running flags, the power, the energy count, the target, and
 the heater's air reading. A silence longer than four times the usual
 spacing (and at least 5 minutes) marks the span unobserved. The air
-beside the heater, the humidity, and the draws and circulation runs are
-added where given.
+beside the heater and the humidity are added where given, and the
+draws and circulation runs where both are.
 
 **Quiet windows.** Spans of 3 hours or more with nothing heating and no
 water moving, starting 45 minutes after the last of either. Each window
-is fitted on its own first; a window whose fit doesn't track the probes
-within 2 degF is dropped.
+is fitted on its own first; a window whose fit misses the probes' mean
+by 2 degF RMS or more is dropped.
 
-**Standby loss.** The loss law, the bottom loss and its gate are fitted
-together by least squares with a soft L1 loss, so outlying windows
-weigh less, on where each window's two probes ended, each walked from
-its start as the simulation walks it. The exponent is fitted only when the windows span two 20 degF bands
-of tank-to-air difference.
+**Standby loss.** Only windows that open with a gap of 10 degF or less
+are used. With 10 or more that open with a gap of 1 degF or more, the
+loss law, the bottom loss and its gate are fitted together by least
+squares with a soft L1 loss, so outlying windows weigh less, on where
+each window's two probes ended, each walked from its start as the
+simulation walks it. With fewer, the law is fitted on the windows' own
+``UA`` values and there is no bottom loss. The exponent is fitted only
+with 4 or more windows across two 20 degF bands of tank-to-air
+difference and an air sensor; on the heater's own reading it stays at
+the base's.
 
 **The gap's time constant.** Fitted on the windows that open with a gap
 of 2 degF or more, by a bounded search. The bottom loss opens the gaps
@@ -329,30 +354,35 @@ the constant closes, so the two fits alternate until the constant moves
 0.5 % or less.
 
 **The compressor.** Recoveries that reached their target, with no
-element in them and not cut short (the heater's energy count still
-above 500 Wh at its end). ``compressor_constant`` is the value whose
+element in them. A recovery whose energy-to-setpoint count is still
+above 500 Wh at its end was cut short and is left out. ``compressor_constant`` is the value whose
 predicted durations best match the recorded ones (a bounded search on
 the squared error). A fit pinned on a bound is reported, not applied.
 
 **Power and efficiency.** On the compressor cycles' metered energy:
 ``power_scale`` is the ratio of metered to modelled energy; ``cop_scale``
 and the start-up energy come from a weighted linear fit; the lift term
-from a grid search. The efficiency uses only cycles with no hot water
-drawn, since a draw's heat isn't known without a meter.
+from a grid search. The efficiency uses only cycles with no water in
+use around them. ``sim.calibration.calibrate``, given a meter's draws
+and the circulation runs, prices that heat instead.
 
-**The installation's terms.** The heat book's terms are fitted on pairs
-of anchors (the heat booked between two full-tank moments against the
+**The installation's terms.** ``sim_calibrate.fit_book`` fits the heat
+book's terms on pairs of anchors (the heat booked between two full-tank moments against the
 change the probes show) by an L1 linear program; a term the pairs can't
 tell apart from the others stays at the base. The circulation's terms,
 the draw response and the readiness evidence have fits of their own
 (:doc:`/how-to/simulate-heater`).
 
-**Held out, in time order.** The compressor and heat book fits hold
-out the latest fifth of their data (with 10 items or more) and report
-the error there as well as on what they were fitted on. With
-``keep_better``, every group of terms is refitted on its earlier four
-fifths, and the refit replaces the base's value only where it scores
-better on the latest fifth.
+**Held out, in time order.** The compressor fit holds out the latest
+fifth of its recoveries (with 10 or more) and reports the error there
+as well as on what it was fitted on. The heat book's fit needs 10
+pairs, holds out the latest fifth, and replaces the base only when it
+books those no worse. With ``keep_better``, the standby loss, the gap's
+constant, the compressor, the power scale and the efficiency are each
+refitted on their earlier four fifths, and a refit replaces the base's
+value only where it scores better on the latest fifth; with fewer than
+10 items the base is kept. A group the base lists as unfitted takes its
+refit without that comparison, fitted on all its data.
 
 **Provenance.** Every parameter records whether it was ``measured`` on
 the heater by a targeted run, ``fitted`` from its record, or an
@@ -393,9 +423,12 @@ The heater's readings
        element in it, or in the 10 minutes before it, is left out of the
        compressor fit.
    * - The heater's air reading
-     - While the compressor runs, the air drawn over the coil: used from
-       5 minutes into a run, when it has settled, within about 0.35
-       degF of a sensor beside the heater. While it is idle, the
+     - While the compressor runs, the air drawn over the coil. The heat
+       book and the Home Assistant air fit use it from 5 minutes into a
+       run, once it has settled; the compressor fit takes its mean over
+       the run. From August to October it read within about 0.35 degF
+       of a sensor beside the heater, up to about 2 degF warm from May
+       to July. While it is idle, the
        cabinet's own warmth: about 6 degF warm, so 6.2 degF
        (``IDLE_CABINET_WARM_F``) is taken off and the answer says
        ``ambient_from_idle_cabinet``. With the compressor's state
@@ -422,8 +455,8 @@ The heater's readings
        force.
    * - The mode, TOU switch and status flags
      - The mode in force and the TOU switch. A hybrid operating mode,
-       an anti-legionella cycle or an error code excludes those samples
-       from the fits. The "hot water in use" flag is the quiet test
+       an anti-legionella cycle or an error code keeps a recovery out of
+       the compressor and power fits. The "hot water in use" flag is the quiet test
        where no meter is given; it also fires on circulation.
 
 Readings the simulator does not use: the inlet temperature field (it
@@ -444,8 +477,8 @@ An installation's sensors
      - How the simulator uses it
    * - Air beside the heater
      - The ambient for the standby loss and the recoveries, and the
-       circulation return's rest temperature. In a fit, its readings
-       count only over the span they cover. Without it: the heater's
+       circulation return's rest temperature. In a fit from Home
+       Assistant, its readings count only over the span they cover. Without it: the heater's
        own reading as above, or 65 degF with ``ambient_defaulted``.
    * - Humidity of that air
      - The coil's latent load, through the air's dew point. Without it:
@@ -454,8 +487,9 @@ An installation's sensors
    * - A probe on the cold supply
      - The mains temperature, but never its raw reading: at rest the
        pipe tracks the air. The mains is the median plateau of long
-       draws (11 minutes or more, circulation off), read from minute 9,
-       over the last 72 hours. Without it: the parameters' inlet (one
+       draws (11 minutes or more, circulation off) that ended in the last
+       72 hours; each draw's plateau is the median of its last 2
+       minutes, none earlier than minute 9. Without it: the parameters' inlet (one
        installation's September mains) with ``inlet_temp_modelled``.
    * - A flow meter on the hot line
      - The draws, in delivered gallons (or tank gallons, with
@@ -469,8 +503,10 @@ An installation's sensors
        ``circulation_unknown``.
    * - An outdoor forecast
      - The air ahead of time: ``air = damping x outdoor(t - lag) +
-       offset``, fitted from the heater's running readings against the
-       outdoor history, and shifted to pass through a current reading.
+       offset``, fitted from the air beside the heater (without that
+       sensor, the heater's running readings) against the outdoor
+       history, and shifted to pass through the heater's last running
+       reading.
        Not used in calibration: unanchored, it ran about 6 degF cold.
 
 Where a sensor's record has a gap, the value before it holds across a

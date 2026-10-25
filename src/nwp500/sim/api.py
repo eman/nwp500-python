@@ -1393,8 +1393,7 @@ def time_to_ready(
     without it the answer is the probes' or the evidence's.
     ``bath_gal`` and ``shower_gal`` default to
     ``ReadinessParams.bath_gal`` and ``shower_gal``, named in
-    ``defaults_used`` and in ``reasons`` (``bath_volume_inferred``,
-    ``shower_volume_default``). ``shower_from_forecast``: the
+    ``defaults_used``. ``shower_from_forecast``: the
     ``shower_gal`` given is a draw forecast's
     (``draw_forecast.shower_gal``). ``drawing``: water is being drawn
     now.
