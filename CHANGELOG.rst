@@ -24,7 +24,8 @@ Fixed
   cross-validated error of 268 BTU a run against 767 for the old form.
   The volume is effective: the long runs on the record never brought
   hot water back. Snapshot and window runs are now ``(minutes, upper,
-  rest hours)``. See :doc:`/reference/simulator-inputs` and
+  rest hours, minutes run before)``, and a run a snapshot takes up
+  partway is priced from where it was. See :doc:`/reference/simulator-inputs` and
   :doc:`/explanation/standby-loss`.
 
 - **The upper zone's hold through a recovery rests on the record.** The
