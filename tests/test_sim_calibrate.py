@@ -638,11 +638,19 @@ def days_of_quiet(
 
 
 def _fitted(ua: float) -> sim.HeaterParams:
-    """The defaults with a standby loss of ``ua``, taken as fitted."""
+    """The defaults with a standby loss of ``ua``, taken as fitted, no
+    bottom loss and a gap that relaxes on 60 h."""
     base = sim.default_params()
     return replace(
         base,
-        loss=replace(base.loss, ua_btu_hr_f=ua, ua_exponent=0.0),
+        tank=replace(base.tank, stratification_gap_tau_h=60.0),
+        loss=replace(
+            base.loss,
+            ua_btu_hr_f=ua,
+            ua_exponent=0.0,
+            bottom_loss_btu_hr=0.0,
+            bottom_gate_f=1.0,
+        ),
         unfitted=tuple(t for t in base.unfitted if t != "standby"),
     )
 

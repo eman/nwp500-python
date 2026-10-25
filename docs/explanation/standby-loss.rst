@@ -37,8 +37,9 @@ Summary
        a mixed tank and **7.0 degF** in a stratified one. The upper probe
        moved no more than standby alone.
    * - The gap between the probes
-     - With nothing heating or drawing, it closes on a time constant of
-       about **59 h**.
+     - With nothing heating or drawing, it appears to close on a time
+       constant of about **59 h**; with the bottom loss reopening it,
+       the constant is **26.7 h**.
 
 All figures come from one NWP500-65 and its recorded status history to
 2026-09-24, with the air beside the heater measured separately. The
@@ -58,9 +59,21 @@ no circulation run) covering a tank-to-air difference of 11.2 to
 
 Across the 301 windows ``UA`` averaged 4.87 BTU/hr per degF (standard
 deviation 1.26). The same rule, refitted on 393 windows to 2026-10-11,
-gave ``4.61 * (dT / 50) ^ 0.186``, the simulator's default
-(:doc:`/reference/simulator-inputs`); the law has moved steadily that
-way as windows accrued. Computed from the fit, with the tank's thermal mass of
+gave ``4.61 * (dT / 50) ^ 0.186``; the law has moved steadily that
+way as windows accrued.
+
+Fitted with a bottom loss as well (378 windows to 2026-10-24), heat
+leaving the lower zone that the lower probe sees only while the tank is
+stratified, the law goes flat: ``UA`` 4.48 BTU/hr per degF at any
+difference, and 90.8 BTU/hr at the bottom, seen as ``1 - exp(-gap /
+1.83 degF)`` of it. With the gap's constant fitted alongside it (see
+below), on the 56 latest windows held out it tracks the probes' fall
+within 0.066 degF/h, against 0.096 for the rising law, and the
+simulator uses it (:doc:`/reference/simulator-inputs`). In a mixed
+tank, where the probe sees none of the bottom loss, the flat law loses
+58 BTU/hr at 13 degF above the air against the rising law's 47, and 336
+against 372 at 75 degF. Computed from the rising law, with the
+tank's thermal mass of
 527 BTU/degF:
 
 .. list-table::
@@ -280,6 +293,13 @@ the gap closes exponentially on a time constant of about **59 h** (146
 quiet windows that started with a gap of at least 2 degF; bootstrap 95 %
 CI 47-94 h; fitted on 2026-09-22). A gap of 10 degF is about 9 degF
 six hours later and about 6.7 degF a day later.
+
+That fit takes the gap as relaxing alone. With the bottom loss opening
+it again while the tank is stratified (127 windows to 2026-10-24), the
+gap relaxes faster than it appears to: the constant is **26.7 h**, which
+the simulator uses. On the 32 latest windows held out, its mean squared
+error is 0.69 degF², against 1.78 for 60 h without a bottom loss and
+3.71 for 50.9 h with one.
 
 
 Projecting the tank's cooling

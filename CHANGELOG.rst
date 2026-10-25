@@ -54,6 +54,20 @@ Changed
 Fixed
 -----
 
+- **The site's standby loss and gap constant are the refits that
+  score better held out.** ``site_example_params`` kept the earlier
+  standby law (``UA`` 4.605, exponent 0.186, no bottom loss) and gap
+  constant (60.06 h), though the calibration with ``keep_better`` on
+  the record replaces both. Fitted on 378 quiet windows to 2026-10-24,
+  the law is a flat ``UA`` of 4.48 BTU/hr per °F with a 90.8 BTU/hr
+  bottom loss (gate 1.83 °F). The gap constant, fitted on 127 windows
+  with that bottom loss opening the gaps it relaxes, is 26.7 h. Held
+  out, the pair tracks the probes' fall within 0.066 °F/h against
+  0.096 (56 windows) and the gap at 0.69 °F² against 1.78 (32
+  windows). Recalibrated with them as the base, every group keeps
+  them. The compressor, power and COP terms keep theirs (the refits
+  scored no better). See :doc:`/explanation/standby-loss`.
+
 - **The ungated circulation share is the library's own fit.**
   ``site_example_params``' ``DrawParams.ungated_observability`` was
   0.398, measured outside the library at the run model's earlier
