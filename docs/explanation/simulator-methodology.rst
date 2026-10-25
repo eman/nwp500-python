@@ -682,12 +682,15 @@ An installation's sensors
        50 %, named in ``defaults_used``. On the record it moves a
        recovery's duration by a mean 1.2 min.
    * - A probe on the cold supply
-     - The mains temperature, but never its raw reading: at rest the
-       pipe tracks the air. The mains is the median plateau of long
-       draws (11 minutes or more, circulation off) that ended in the last
-       72 hours; each draw's plateau is the median of its last 2
-       minutes, none earlier than minute 9. Without it: the parameters' inlet (one
-       installation's September mains) with ``inlet_temp_modelled``.
+     - Two uses. A recorded draw debits the heat book at the inlet
+       reading of its own step. The mains, which turns the book's heat
+       into gallons ahead, is never a raw reading, since at rest the
+       pipe tracks the air: it is the median plateau of long draws
+       (11 minutes or more, circulation off) that ended in the last
+       72 hours, each draw's plateau the median of its last 2 minutes,
+       none earlier than minute 9. Without the probe: the parameters'
+       inlet (one installation's September mains) with
+       ``inlet_temp_modelled``.
    * - A flow meter on the hot line
      - The draws, in delivered gallons (or tank gallons, with
        ``flow_volume="tank"``), which move the tank and debit the heat
@@ -702,10 +705,12 @@ An installation's sensors
        ``circulation_unknown``.
    * - An outdoor forecast
      - The air ahead of time,
-       :math:`T_a(t) = d\,T_{\text{out}}(t - \lambda) + c`, fitted from the air beside the heater (without that
-       sensor, the heater's running readings) against the outdoor
-       history, and shifted to pass through the heater's last running
-       reading.
+       :math:`T_a(t) = d\,T_{\text{out}}(t - \lambda) + c`, fitted
+       from the air beside the heater (without that sensor, the
+       heater's running readings) against the outdoor history. It is
+       shifted to pass through a fresh reading beside the heater, or
+       failing that the heater's own reading from the last hour while
+       its compressor ran; with neither it stays unanchored.
        Not used in calibration: unanchored, it ran about 6 degF cold.
 
 Where a sensor's record has a gap, the value before it holds across a
