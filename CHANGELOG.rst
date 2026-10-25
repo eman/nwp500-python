@@ -8,6 +8,13 @@ Unreleased
 Changed
 -------
 
+- **The compressor's engineering values are not fittable on the
+  record.** The condenser approach (10 °F), clearance ratio (0.05) and
+  polytropic exponent (1.17) stay. The compressor constant absorbs
+  each: refitting it with each moved over a wide range changed the
+  held-out recovery error by under 0.7 min. See
+  :doc:`/reference/simulator-inputs`.
+
 - **Hand-set values checked against the record.** None changes.
   ``TankParams.lower_zone_share`` 0.5 stays: refitting the compressor
   constant at 0.435-0.5 moved the held-out recovery error by under
