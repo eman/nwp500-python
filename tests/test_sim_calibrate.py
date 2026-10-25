@@ -132,7 +132,6 @@ class TestTheFits:
             cop_scale=None,
             startup_wh=None,
             cop_lift_coeff=None,
-            lead_share=None,
             n_cop=4,
         )
         fitted = replace(
@@ -750,6 +749,13 @@ class TestTheJudgement:
         assert [sc._split(n) for n in (9, 10, 12, 20, 50)] == [0, 2, 2, 4, 10]
 
 
+@pytest.fixture
+def pinned_compressor(monkeypatch: pytest.MonkeyPatch) -> None:
+    """``recovery_days``' recoveries fit K at about 0.04; a ceiling under
+    it pins the refit on its bound."""
+    monkeypatch.setattr(cal, "K_BOUNDS", (0.004, 0.02))
+
+
 def recovery_days(days: int) -> Any:
     """A frame of ``days``: a quiet decay, a draw, then a heat-pump
     recovery to 140 °F each day, a sample a minute, the heater drawing
@@ -1012,7 +1018,7 @@ class TestKeepBetterThirdReview:
         assert held.windows == ()
 
     def test_a_power_refit_that_wins_drops_the_compressors_reason(
-        self,
+        self, pinned_compressor: None
     ) -> None:
         frame = recovery_days(14)
         fitted, judged, held = sc._keep_better(
@@ -1061,7 +1067,7 @@ class TestKeepBetterFourthReview:
         )
 
     def test_power_fitted_over_a_kept_compressor_has_no_failure_reason(
-        self,
+        self, pinned_compressor: None
     ) -> None:
         # The compressor's refit is pinned, so the base's is kept; the
         # power, unfitted in the base, is fitted over it.
@@ -1094,7 +1100,7 @@ class TestKeepBetterFifthReview:
         whole = cal.power_cycles(rows, params)
         assert len(whole) == 3
         assert sc._power_error(rows, params) is not None
-        cop = cal.CopCycle(T0, 1000.0, 0.0, 3.0, 500.0, 60.0)
+        cop = cal.CopCycle(T0, 1000.0, 3.0, 500.0, 60.0)
         with pytest.MonkeyPatch.context() as m:
             m.setattr(cal, "power_cycles", lambda *_: whole[:2])
             m.setattr(cal, "cop_cycles", lambda *_: [cop, cop])
@@ -1103,7 +1109,9 @@ class TestKeepBetterFifthReview:
             m.setattr(cal, "cop_cycles", lambda *_: [cop] * 3)
             assert sc._cop_error(rows, params) is not None
 
-    def test_a_kept_compressor_shows_no_refit_error(self) -> None:
+    def test_a_kept_compressor_shows_no_refit_error(
+        self, pinned_compressor: None
+    ) -> None:
         frame = recovery_days(14)
         fitted, judged, held = sc._keep_better(
             frame, sim.default_params(), "air_f"
@@ -1120,8 +1128,12 @@ class TestKeepBetterFifthReview:
             held=held,
         )
         terms = _terms(done)
-        for name in ("Compressor constant", "Evaporator approach (°F)"):
-            assert terms[name].error == "-"
+        assert terms["Compressor constant"].error == "-"
+        approach = terms["Evaporator approach (°F)"]
+        assert not approach.fitted and approach.error == "-"
+        assert approach.value == (
+            f"{fitted.params.compressor.evap_approach_f:.3g}"
+        )
 
 
 def gap_windows(taus: list[float]) -> tuple[cal.StandbyWindow, ...]:
@@ -1191,7 +1203,7 @@ def cop_cycles_by(law_at: Any) -> Any:
             metered = startup + heat / (
                 scale * cop * float(np.exp(-k * (lift - ref)))
             )
-            out.append(cal.CopCycle(t, heat, 0.0, cop, metered, lift))
+            out.append(cal.CopCycle(t, heat, cop, metered, lift))
         return out
 
     return cycles
@@ -1310,8 +1322,8 @@ def physics_recoveries(
 
 
 #: Two compressor laws whose recoveries the fit leaves off its bounds.
-COMPRESSOR_LAW = (0.08, 9.0)
-OTHER_COMPRESSOR_LAW = (0.06, 14.0)
+COMPRESSOR_LAW = (0.025, 9.0)
+OTHER_COMPRESSOR_LAW = (0.019, 14.0)
 
 
 def _keep_compressor(

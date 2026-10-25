@@ -323,23 +323,25 @@ def physics_durations(
 
 class TestCompressor:
     def test_too_few_recoveries_fit_nothing(self) -> None:
-        df = physics_durations([100.0] * 4, [60.0] * 4, 0.08, 12.0)
+        df = physics_durations([100.0] * 4, [60.0] * 4, 0.025, 12.0)
         assert cal.fit_compressor(df, CompressorParams(), LossParams()) is None
 
     def test_it_recovers_known_physics(self) -> None:
         starts = [80.0, 90.0, 100.0, 110.0, 85.0, 95.0, 105.0, 115.0]
         air = [50.0, 80.0, 60.0, 70.0, 75.0, 55.0, 65.0, 85.0]
-        df = physics_durations(starts, air, 0.08, 12.0)
-        fit = cal.fit_compressor(df, CompressorParams(), LossParams())
+        df = physics_durations(starts, air, 0.025, 12.0)
+        fit = cal.fit_compressor(
+            df, CompressorParams(evap_approach_f=12.0), LossParams()
+        )
         assert fit is not None
-        assert fit.compressor_constant == pytest.approx(0.08, rel=0.02)
-        assert fit.evap_approach_f == pytest.approx(12.0, abs=0.5)
+        assert fit.compressor_constant == pytest.approx(0.025, rel=0.02)
+        assert fit.evap_approach_f == 12.0
         assert fit.mae_minutes < 1.0
         assert (fit.n_fitted, fit.n_heldout, fit.two_zone) == (8, 0, True)
         assert not fit.hit_bounds
 
     def test_without_gaps_it_fits_one_zone(self) -> None:
-        df = physics_durations([100.0] * 6, [60.0] * 6, 0.08, 12.0)
+        df = physics_durations([100.0] * 6, [60.0] * 6, 0.025, 12.0)
         fit = cal.fit_compressor(
             df.drop(columns="stratification_gap"),
             CompressorParams(),
@@ -354,16 +356,15 @@ class TestCompressor:
         starts = [80.0, 90.0, 100.0, 110.0, 85.0, 95.0, 105.0, 115.0]
         air = [50.0, 80.0, 60.0, 70.0, 75.0, 55.0, 65.0, 85.0]
         small = TankParams(volume_gal=50.0)
-        df = physics_durations(starts, air, 0.08, 12.0, tank=small)
-        fit = cal.fit_compressor(
-            df, CompressorParams(), LossParams(), tank=small
-        )
+        df = physics_durations(starts, air, 0.025, 12.0, tank=small)
+        at = CompressorParams(evap_approach_f=12.0)
+        fit = cal.fit_compressor(df, at, LossParams(), tank=small)
         assert fit is not None
-        assert fit.compressor_constant == pytest.approx(0.08, rel=0.02)
+        assert fit.compressor_constant == pytest.approx(0.025, rel=0.02)
         assert fit.mae_minutes < 1.0
-        wrong = cal.fit_compressor(df, CompressorParams(), LossParams())
+        wrong = cal.fit_compressor(df, at, LossParams())
         assert wrong is not None
-        assert wrong.compressor_constant != pytest.approx(0.08, rel=0.02)
+        assert wrong.compressor_constant != pytest.approx(0.025, rel=0.02)
 
     def test_a_cycles_path_is_walked_on_the_heaters_tank(self) -> None:
         row = {
@@ -632,13 +633,13 @@ class TestPower:
             )
             metered.append(150.0 + heat / (1.3 * cop))
         rows["metered_input_wh"] = metered
-        (scale, startup, share, lift), n = cast(
-            tuple[tuple[float, float, float, float], int],
+        (scale, startup, lift), n = cast(
+            tuple[tuple[float, float, float], int],
             cal.fit_cop_scale(rows, params),
         )
         assert scale == pytest.approx(1.3, rel=1e-6)
         assert startup == pytest.approx(150.0, rel=1e-6)
-        assert lift == 0.0 and share == 0.0 and n == 14
+        assert lift == 0.0 and n == 14
 
     def test_without_a_meter_only_draw_free_cycles_count(self) -> None:
         params = self._fitted()
@@ -649,7 +650,7 @@ class TestPower:
 
     def test_the_fit_applies_where_it_had_the_evidence(self) -> None:
         base = default_params()
-        fit = cal.PowerFit(0.6, 12, None, None, None, None, 4)
+        fit = cal.PowerFit(0.6, 12, None, None, None, 4)
         got = cal.with_power(base, fit)
         assert got.power.power_scale == 0.6
         assert got.power.cop_scale == base.power.cop_scale
@@ -663,7 +664,6 @@ class TestMeteredPricing:
         return {
             "draw_gal": 0.0,
             "draw_t_upper": None,
-            "draw_lead_gal": 0.0,
             "circulation_runs": (),
             "t_amb_mean": 65.0,
             "t_start_upper": 130.0,
@@ -699,9 +699,6 @@ class TestMeteredPricing:
             bare(self._row(circulation_runs=((10.0, 130.0, None, 0.0),)))
             is None
         )
-        lead = cal.metered_lead(p)
-        assert cast(float, lead(self._row(draw_lead_gal=4.0))) > 0
-        assert lead(self._row()) == 0.0
 
     def test_a_run_under_way_is_priced_from_where_it_was(self) -> None:
         """A snapshot that takes a run up partway charges only what the
@@ -750,7 +747,7 @@ class TestMeteredPricing:
         runs = [(start + timedelta(minutes=30), start + timedelta(minutes=40))]
         rows = cal.snapshots(h, draws=draws, circulation=runs)
         row = next(rows.loc[rows.offset_minutes == 0].itertuples())
-        assert row.draw_gal == 3.0 and row.draw_lead_gal == 2.0
+        assert row.draw_gal == 3.0
         assert row.circulation_runs == ((10.0, 135.0, None, 0.0),)
         plain = cal.snapshots(h)
         assert plain.draw_gal.isna().all()
