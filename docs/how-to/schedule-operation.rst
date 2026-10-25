@@ -842,9 +842,14 @@ failed.** See also :doc:`../explanation/heating-elements`.
   inside a window
   should write the mode it now wants, rather than leave the held one to
   land.
-* **Turning TOU back on inside a window drops a running element mode.** On
-  2026-09-19, switching TOU on while Energy Saver was running took the
-  device out of it within about 11 seconds. This is one run.
+* **A window opening drops a running element mode.** On 2026-09-19,
+  switching TOU on while Energy Saver was running took the device out
+  of it within about 11 seconds. The unit's history shows the same at
+  every opening with an element mode in force: 18 of 18 from January to
+  October 2026, 15 at the window's scheduled start (14:00 or 15:00) and
+  3 at TOU being switched back on inside a window, each back to
+  ``HEAT_PUMP`` within 2 seconds. A schedule that wants the element
+  through a window has to write the mode again after it opens.
 * ``dhw_operation_setting`` **reports the configured mode, not activity.**
   It has read ``ENERGY_SAVER`` on a mode taking effect both with the tank
   0.36 degF below its setpoint (from the unit's April history) and 18.7

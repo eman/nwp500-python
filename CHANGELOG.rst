@@ -5,6 +5,17 @@ Changelog
 Unreleased
 ==========
 
+Changed
+-------
+
+- **A window opening drops a running element mode: from the record.**
+  The simulator drops an element mode to the heat pump at a window's
+  start, which was assumed from one device run at a TOU switch-on. The
+  record has 18 openings with an element mode in force (2026-01-01 to
+  10-02): every one dropped it within 2 s, 15 at the window's scheduled
+  start and 3 at TOU switched back on inside a window. The model is
+  unchanged. See :doc:`/how-to/schedule-operation`.
+
 Fixed
 -----
 
