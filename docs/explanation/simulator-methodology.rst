@@ -112,10 +112,13 @@ is placed by linear interpolation between the two points around it. A
 draw that takes the lower zone past the threshold places the crossing at
 the draw's own instant.
 
-**A running recovery is predicted once.** When a draw, a pause or a
-write interrupts a recovery, the tank is put back on the same predicted
-path where the path's lower zone matches the tank's. The recovery is
-predicted again only when the tank is colder than where it started, or
+**A running recovery is predicted once per target.** A recovery keeps
+its origin and predicts one path from it for each target it heats to,
+so a setpoint raise, or a Time-of-Use cap's lower target, adds a path
+from the same origin. When a draw, a pause or a write interrupts a
+recovery, the tank is put back on its target's path where the path's
+lower zone matches the tank's. The origin moves, and every path is
+predicted again, only when the tank is colder than where it started, or
 the heat book moved the upper zone.
 
 **Details the firmware imposes.** Setpoints are rounded to the device's
