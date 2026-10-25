@@ -37,7 +37,7 @@ def quiet(
 ) -> list[status_history.TimedStatus]:
     """A quiet tank cooling at ``UA`` toward ``AIR_F`` from 130 °F, a
     status every 30 s."""
-    raw = status | {"compUse": 0, "dhwUse": 0, "heatUpperUse": 0}
+    raw = status | {"compUse": 1, "dhwUse": 0, "heatUpperUse": 0}
     raw |= {"antiLegionellaOperationBusy": 0, "currentHeatUse": 0}
     out, tank, gap = [], 130.0, 4.0
     step = timedelta(seconds=30)
@@ -120,6 +120,21 @@ class TestTheFrame:
             a = from_statuses[column].to_numpy()
             b = from_changes[column].to_numpy()
             assert ((a == b) | (a != a) & (b != b)).all(), column
+
+    def test_the_cabinet_only_with_the_compressor_known_idle(
+        self, device_status_dict: dict[str, Any]
+    ) -> None:
+        readings = quiet(device_status_dict, hours=1)
+        t, s = readings[0]
+        raw = device_status_dict | {
+            "compUse": 0,
+            "tankUpperTemperature": s.tank_upper_temperature_raw,
+            "tankLowerTemperature": s.tank_lower_temperature_raw,
+        }
+        readings[0] = (t, DeviceStatus.model_validate(raw))
+        frame = sa.history(readings)
+        assert math.isnan(frame["heater_cabinet_f"].iloc[0])
+        assert not math.isnan(frame["heater_cabinet_f"].iloc[1])
 
     def test_a_value_holds_until_its_next_change(self) -> None:
         rows = sa.ChangeRows(

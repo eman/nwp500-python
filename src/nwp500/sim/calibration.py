@@ -28,6 +28,8 @@ Its columns, °F where a temperature:
   from one that finished;
 - ``heater_air_f``: the heater's own air reading while its compressor
   runs, NaN otherwise (``sim_adapters.location_air_reading``);
+- ``heater_cabinet_f``: the same reading while the compressor is idle,
+  the cabinet's, NaN otherwise;
 - ``air_f``: the air where the heater stands throughout, for the
   standby loss: a sensor's, or ``location_air``'s projection;
 - optionally ``humidity_pct`` (the air's, for the evaporator; 50

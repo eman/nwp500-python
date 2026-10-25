@@ -89,7 +89,7 @@ class TestTheFits:
     def test_the_notes_name_the_options(self, history: str) -> None:
         done = cal_cli.calibrate(cal_cli.read_history(history))
         assert any("give --params" in n for n in done.notes)
-        assert any("(--air, --ambient or --sources)" in n for n in done.notes)
+        assert any("compressor is idle" in n for n in done.notes)
 
     def test_the_parameters_are_a_document(self, history: str) -> None:
         base = sim.default_params(1)
@@ -210,6 +210,6 @@ class TestTheCommand:
         out = io.StringIO()
         cal_cli.run(done, None, out)
         text = out.getvalue()
-        assert "base: no air given" in text
+        assert "the cabinet's less its warmth" in text
         assert "gaps of over" not in text
-        assert "Unfitted: compressor, power, standby, gap_tau" in text
+        assert "Unfitted: compressor, power, gap_tau" in text

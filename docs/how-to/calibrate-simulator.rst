@@ -97,18 +97,16 @@ Idle, it reads the cabinet, about 6 °F warm. So give one of these:
   ``--humidity`` override the sources.
 
 Without the air, the command fits the standby loss on the heater's own
-reading, taken once the compressor has run 5 minutes and drawn straight
-from one run's reading to the next across the idle span between them.
-Only quiet windows with a run within 6 hours of both ends are fitted:
-they fall mostly overnight, and a reading held from the day's last run
-would read the night warm. Those windows span too narrow a range of
-tank-to-air difference to fit the loss law's shape, so only its level is
-fitted, on the base's exponent. A note says how many windows qualified
-and what share of the quiet hours they hold. Expect the loss to read
-somewhat high: at one installation, against a sensor beside the heater,
-it read about 12 % high, as the night air dips below the line between
-an evening run and a morning one, and the running reading is itself a
-little warm. A sensor beside the heater (``--air``) avoids both.
+reading while its compressor is idle. That reading is the cabinet's,
+and 6.2 degF is taken off it for the cabinet's warmth
+(``sim_adapters.IDLE_CABINET_WARM_F``). A quiet window the heater wasn't
+heard from throughout is left out, and a note says how many windows
+were read and what share of the quiet hours they hold. The cabinet's
+warmth rises a little with the tank's, which would bend the loss law's
+shape, so only its level is fitted, on the base's exponent. At one
+installation, against a sensor beside the heater, the loss came out
+0.7 % high over 378 windows (2026-02-14 to 10-24), and 2.2 % low on
+the later half with the warmth measured on the earlier half alone.
 With no such reading at all, the standby loss keeps the base's value
 and the report says so. When you give the air, the recoveries use it
 too; without it, they use the heater's own reading while the compressor

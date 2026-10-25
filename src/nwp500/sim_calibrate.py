@@ -76,7 +76,6 @@ __all__ = (
     "GAP_SAMPLES",
     "MIN_GAP",
     "NO_AIR_NOTE",
-    "HEATER_AIR_BRACKET",
     "CalibrationInputError",
     "Calibrated",
     "BookTermsFit",
@@ -108,15 +107,6 @@ DEFAULT_BASE_NOTE = (
 #: The note when no air was given and the heater read none while its
 #: compressor ran.
 NO_AIR_NOTE = "no air given: the standby loss is not fitted"
-#: With no air given, a quiet window is fitted on the heater's own air
-#: only with a settled reading (``sim_adapters.HEATER_AIR_SETTLE``)
-#: this close before its start and after its end. Quiet windows fall
-#: mostly overnight, and a reading held from the day's last run reads
-#: them warm; one at each end, interpolated, follows the night down.
-#: At one installation, against a sensor beside the heater, its windows
-#: still read about 12 % high in UA: the night dips below the line, and
-#: the running reading is itself a little warm.
-HEATER_AIR_BRACKET = timedelta(hours=6)
 
 
 class CalibrationInputError(ValueError):
@@ -157,7 +147,8 @@ class Calibrated:
     calibration: cal.Calibration
     #: How the air where the heater stands was given (``readings``,
     #: ``constant`` or ``source``), ``heater`` for the heater's own
-    #: reading while its compressor runs (no air given), or None.
+    #: reading (no air given: the cabinet's for the standby loss, the
+    #: running one for the recoveries), or None.
     air: str | None
     n_statuses: int
     #: Readings further apart than this were taken as unobserved, and
@@ -868,64 +859,38 @@ def calibrate_changes(
     )
 
 
-def _air_between_runs(
+def _air_from_cabinet(
     frame: pd.DataFrame,
 ) -> tuple[int, int, float] | None:
-    """With no air given, the heater's own as ``frame``'s air: its
-    readings once the compressor has run ``HEATER_AIR_SETTLE``,
-    interpolated linearly between runs over the quiet windows that a
-    reading brackets within ``HEATER_AIR_BRACKET`` at both ends. Every
-    other quiet window is marked ``air_unobserved``, out of the standby
-    fit. How many windows were bracketed, of how many, and their share
-    of the quiet hours; None with no such reading."""
-    if "heater_air_f" not in frame.columns:
+    """With no air given, the heater's own as ``frame``'s air over the
+    quiet windows: its reading while the compressor is idle, the
+    cabinet's, less ``sim_adapters.IDLE_CABINET_WARM_F``. A quiet window
+    with no such reading throughout is marked ``air_unobserved``, out of
+    the standby fit. How many windows were read, of how many, and their
+    share of the quiet hours; None with no such reading."""
+    if "heater_cabinet_f" not in frame.columns:
         return None
-    index = cast("pd.DatetimeIndex", frame.index)
-    at = [cast(datetime, t) for t in index]
-    on = frame["compressor_on"].fillna(False).to_numpy(dtype=bool)
-    # A run's clock restarts after a span not recorded: its first
-    # minutes, whose air reads warm, may have passed there. Only that:
-    # a run excluded from the recoveries (a hybrid mode) still reads the
-    # air.
-    for column in ("unrecorded", "heater_unobserved"):
-        if column in frame.columns:
-            on = on & ~frame[column].fillna(False).to_numpy(dtype=bool)
-    air = frame["heater_air_f"].to_numpy(dtype=float)
-    settled = sa.settled_air(
-        [(t, bool(v)) for t, v in zip(at, on, strict=True)],
-        [(t, float(v)) for t, v in zip(at, air, strict=True)],
-        until=at[-1],
+    cabinet = frame["heater_cabinet_f"].to_numpy(dtype=float)
+    if not np.isfinite(cabinet).any():
+        return None
+    seconds = np.array(
+        [t.timestamp() for t in cast("pd.DatetimeIndex", frame.index)]
     )
-    times = [t.timestamp() for t, _ in settled]
-    values = [v for _, v in settled]
-    if not times:
-        return None
-    seconds = np.array([t.timestamp() for t in at])
-    read = np.asarray(times)
-    between = np.interp(seconds, read, values, left=np.nan, right=np.nan)
     usable = np.zeros(len(frame), dtype=bool)
     unseen = np.zeros(len(frame), dtype=bool)
-    reach = HEATER_AIR_BRACKET.total_seconds()
     quiet = cal.quiet_windows(frame)
     n = 0
     hours = kept = 0.0
     for start, end in quiet:
         hours += (end - start).total_seconds()
         inside = (seconds >= start.timestamp()) & (seconds < end.timestamp())
-        i = int(np.searchsorted(read, start.timestamp(), side="right"))
-        j = int(np.searchsorted(read, end.timestamp(), side="left"))
-        if (
-            i > 0
-            and j < len(read)
-            and start.timestamp() - read[i - 1] <= reach
-            and read[j] - end.timestamp() <= reach
-        ):
+        if np.isfinite(cabinet[inside]).all():
             usable |= inside
             n += 1
             kept += (end - start).total_seconds()
         else:
             unseen |= inside
-    frame["air_f"] = np.where(usable, between, np.nan)
+    frame["air_f"] = np.where(usable, cabinet - sa.IDLE_CABINET_WARM_F, np.nan)
     frame["air_unobserved"] = unseen
     return n, len(quiet), kept / hours if hours else 0.0
 
@@ -1027,22 +992,21 @@ def _fit(
             "humidity_pct",
         ] = DEFAULT_HUMIDITY_PCT
     if how is None:
-        bracketed = _air_between_runs(frame)
-        if bracketed is None:
+        read = _air_from_cabinet(frame)
+        if read is None:
             notes.append(NO_AIR_NOTE)
         else:
             how = "heater"
-            n, of, share = bracketed
+            n, of, share = read
             notes.append(
                 "no air given: the standby loss is fitted on the heater's "
-                "own air while its compressor runs, interpolated between "
-                f"runs, on the base's exponent ({n} of {of} quiet windows, "
-                f"{share:.0%} of their hours, have a run within "
-                f"{HEATER_AIR_BRACKET.total_seconds() / 3600:g} h of both "
-                "ends)"
+                "own reading while its compressor is idle, less "
+                f"{sa.IDLE_CABINET_WARM_F:g} °F for the cabinet's warmth, "
+                f"on the base's exponent ({n} of {of} quiet windows, "
+                f"{share:.0%} of their hours, have it throughout)"
             )
-    # On the heater's air, the windows that qualify span too narrow a
-    # ΔT to fit the law's shape: its level only, on the base's exponent.
+    # On the cabinet's air, whose warmth rises with the tank's, the law's
+    # shape bends: its level only, on the base's exponent.
     exponent = base.loss.ua_exponent if how == "heater" else None
     n_runs, unread = _runs_without_air(frame, recovery_air)
     judged: tuple[Judged, ...] = ()
@@ -1180,10 +1144,7 @@ def report(done: Calibrated) -> list[Term]:
     elif done.air is None:
         why = "no air given"
     elif done.air == "heater" and s.n_quiet == 0:
-        why = (
-            "no quiet window has a run within "
-            f"{HEATER_AIR_BRACKET.total_seconds() / 3600:g} h of both ends"
-        )
+        why = "no quiet window has the heater's idle reading throughout"
     elif not s.n_quiet:
         why = f"no quiet window of {cal.MIN_QUIET_HOURS:g} h or more"
     else:

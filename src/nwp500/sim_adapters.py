@@ -643,6 +643,7 @@ _COLUMNS = (
     ("power_w", "d"),
     ("energy_to_setpoint_wh", "d"),
     ("heater_air_f", "d"),
+    ("heater_cabinet_f", "d"),
 )
 
 
@@ -665,6 +666,10 @@ def _row(s: DeviceStatus) -> tuple[float | bool, ...]:
         float(s.energy_to_setpoint),
         _from_device(DeciCelsius(s.ambient_temperature_raw))
         if s.comp_use
+        else float("nan"),
+        # The cabinet's only with the compressor known idle.
+        _from_device(DeciCelsius(s.ambient_temperature_raw))
+        if s.comp_use is False
         else float("nan"),
     )
 
@@ -1017,6 +1022,10 @@ def change_history(
         "energy_to_setpoint_wh": optional(rows.energy_to_setpoint_wh),
         "heater_air_f": np.where(
             compressor, _held_at(rows.heater_air_f, at, nan, float), nan
+        ),
+        # The same reading while the compressor is idle: the cabinet's.
+        "heater_cabinet_f": np.where(
+            compressor, nan, _held_at(rows.heater_air_f, at, nan, float)
         ),
     }
     # ``history``'s columns, in its order, less the values not given.

@@ -60,6 +60,20 @@ Changed
 Fixed
 -----
 
+- **Without an air sensor, the standby loss is fitted on the heater's
+  idle reading.** It was fitted on the heater's running reading,
+  interpolated from one run to the next, on the quiet windows with a
+  run within ``HEATER_AIR_BRACKET`` (6 h, now removed) of both ends.
+  The night air dips below that line: at one installation, against a
+  sensor beside the heater, those windows read 3.9 °F warm on average
+  (7.8 °F on windows over 12 h), and the loss 5 % high on 150 of 378
+  windows, 21 % high on 54 from 2026-06-25. The idle reading, the
+  cabinet's less ``sim_adapters.IDLE_CABINET_WARM_F``, reads every
+  window: the loss comes out 0.7 % high on all 378, and 0.3 % low on
+  the 188 from 2026-06-25 (2.2 % low with the cabinet's warmth measured
+  before then). The frame has a new column, ``heater_cabinet_f``. See
+  :doc:`/how-to/calibrate-simulator`.
+
 - **The site's standby loss and gap constant are the refits that
   score better held out.** ``site_example_params`` kept the earlier
   standby law (``UA`` 4.605, exponent 0.186, no bottom loss) and gap

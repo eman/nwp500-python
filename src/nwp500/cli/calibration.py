@@ -159,8 +159,8 @@ def print_report(done: Calibrated, console: Console) -> None:
             "readings": "Air: the readings given",
             "constant": "Air: the constant given",
             "source": "Air: the sources' record beside the heater",
-            "heater": "Air: none given; the heater's own reading while its "
-            "compressor runs",
+            "heater": "Air: none given; the heater's own reading, the "
+            "cabinet's less its warmth while the compressor is idle",
             None: "Air: none given; recoveries use the heater's own reading",
         }[done.air]
     )
