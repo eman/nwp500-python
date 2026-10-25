@@ -434,11 +434,13 @@ and then is none.
 **How much is left.** The empty point (``empty_btu``) is the booked
 heat left when the upper probe crossed the line in recorded drawdowns.
 Deliverable gallons are the heat above it over the heat a delivered
-gallon takes:
+gallon takes, with the heat read no higher than a whole tank at the
+warmer probe (``tank_max_btu``); the ceiling bounds the read, not the
+booked heat:
 
 .. math::
 
-   D = \frac{H - H_{\text{empty}}}
+   D = \frac{\min\left(H, H_{\max}(T_U, T_L)\right) - H_{\text{empty}}}
    {8.34\left(T_{\text{del}}(T_U) - T_{\text{in}}\right)}
 
 Along a walk the book also moves the upper zone the probe would show
@@ -617,7 +619,9 @@ The heater's readings
      - Whether a recovery is in progress; its last stop starts the
        restart lockout and dates the last heating. In a record it
        defines the recovery runs and decides which air reading a
-       sample is (below). Without it, the heat source stands in.
+       sample is (below). In a change history without it, the heat
+       source stands in; from statuses an unknown flag counts as
+       stopped.
    * - The elements' running flags and the heat source
      - Whether an element is running and since when. A recovery with an
        element in it, or in the 10 minutes before it, is left out of the
