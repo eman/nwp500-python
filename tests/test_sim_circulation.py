@@ -130,7 +130,11 @@ class TestTheRuns:
         assert a.gallons == pytest.approx(3.0)
         # The rest runs from the first run's end.
         rest = (second[0] - first[1]).total_seconds() / 3600
-        assert b.gallons == pytest.approx(3.0 * cooled_share(rest, 0.5))
+        share = cooled_share(rest, 0.5)
+        assert b.gallons == pytest.approx(3.0 * share)
+        # The flow is scaled with it: the run keeps its two minutes.
+        assert b.gpm == pytest.approx(1.5 * share)
+        assert b.gallons / b.gpm == pytest.approx(2.0)
         # A span holding the second alone still finds the first.
         (only,) = run_draws(
             [first, second], at(0.4), at(2), 6.0, 1.5, lambda _: 68.0, 0.5

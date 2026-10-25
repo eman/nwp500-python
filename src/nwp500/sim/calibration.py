@@ -3067,7 +3067,8 @@ def fit_return(
     return_cool_tau_h)`` together: the three minimising the mean absolute
     error of ``run_heat_btu`` against each run's measured heat, at its
     own flow and rest. None with fewer than ``MIN_RUNS_TO_FIT`` usable
-    runs, or a fit pinned on a bound (the runs do not constrain it)."""
+    runs, none with a known rest (the cooling is then not seen), or a
+    fit pinned on a bound (the runs do not constrain it)."""
     usable = [
         (r.minutes, r.upper_f, r.air_f, r.flow_gpm, r.btu, r.rest_h)
         for r in runs
@@ -3079,7 +3080,9 @@ def fit_return(
         and r.air_f is not None
         and r.upper_f > r.air_f
     ]
-    if len(usable) < MIN_RUNS_TO_FIT:
+    if len(usable) < MIN_RUNS_TO_FIT or not any(
+        u[5] is not None and u[5] > 0.0 for u in usable
+    ):
         return None
     bounds = (DISPLACED_BOUNDS, REST_OFFSET_BOUNDS, COOL_TAU_BOUNDS)
 

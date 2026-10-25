@@ -5,6 +5,7 @@ The fits are held to their source by the parity check run with the
 port; these hold their rules.
 """
 
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from typing import Any, cast
 
@@ -228,6 +229,8 @@ class TestCirculationFits:
         assert got is not None
         assert got == pytest.approx((10.0, 7.0, 0.5), rel=0.02)
         assert cal.fit_return(runs[:10]) is None
+        # No rest known: the cooling is not seen.
+        assert cal.fit_return([replace(r, rest_h=None) for r in runs]) is None
 
     def test_the_recent_flow_and_the_lookup(self) -> None:
         runs = self._runs(6.0)

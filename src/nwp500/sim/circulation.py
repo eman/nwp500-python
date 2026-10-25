@@ -95,8 +95,9 @@ def run_draws(
     flowing draws, in start order: each run whole, not clipped to the
     span (the core charges a run already under way from its own start),
     ``displaced_gal`` of its length in gallons at ``flow_gpm`` from its
-    start to its end, times its ``cooled_share`` since the run before it
-    in ``runs``, its inflow ``return_f`` at each instant."""
+    start to its end, gallons and flow both times its ``cooled_share``
+    since the run before it in ``runs``, its inflow ``return_f`` at each
+    instant."""
     if displaced <= 0.0 or flow_gpm <= 0.0:
         return []
     draws: list[Draw] = []
@@ -111,18 +112,19 @@ def run_draws(
         if not (run_end > start and run_start < end):
             continue
         minutes = (run_end - run_start).total_seconds() / 60.0
-        gallons = displaced_gal(minutes, displaced, flow_gpm) * cooled_share(
-            rest, cool_tau_h
-        )
+        share = cooled_share(rest, cool_tau_h)
+        gallons = displaced_gal(minutes, displaced, flow_gpm) * share
         if gallons <= 0.0:
             continue
+        # The share scales the flow too, so the run keeps its own clock:
+        # a snapshot priced over part of it charges what the core does.
         draws.append(
             Draw(
                 run_start,
                 gallons,
                 inflow_f=return_f,
                 until=run_end,
-                gpm=flow_gpm,
+                gpm=flow_gpm * share,
             )
         )
     return draws
