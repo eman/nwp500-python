@@ -314,7 +314,9 @@ def project_decay(
             (``sim.physics.draw.DEFAULT_POOL_F_PER_HOUR``). Only with
             ``lower_gate_f``; ``0.0`` is the gap alone.
         ungated_observability: Share of a flowing draw's heat the
-            apparent-frame tank registers under the ungated charge.
+            apparent-frame tank shows under the ungated charge. Where
+            part of a flow passes the tank (to the mixing valve's cold
+            port), the share includes that.
             ``1.0`` charges the whole of it.
         last_heated_at: When the heater last stopped heating (the
             compressor's last off-edge), which the pool is counted

@@ -165,7 +165,7 @@ Hot water and the heat book
       energy_saver_off_deficit, upper_start_edge, fit_power,
       PowerFit, fit_power_scale, power_cycles, cop_cycles, CopCycle,
       fit_cop_scale, solve_cop_fit, solve_cop_scale, draw_free_withdrawn,
-      metered_withdrawn, metered_lead,
+      metered_withdrawn,
       path_to_end, with_power, snapshots, recoveries, quiet_windows,
       busy_intervals, fit_window, fit_ua_law, fit_gap_tau, with_standby,
       fit_loss, LossFit, loss_windows, standby_ends, standby_error,

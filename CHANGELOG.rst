@@ -31,6 +31,14 @@ Fixed
   0.004-0.08, and ``INITIAL_K``, ``INITIAL_APPROACH_F`` and
   ``APPROACH_BOUNDS`` are gone. See :doc:`/reference/simulator-inputs`.
 
+- **The circulation share's story.** ``DrawParams.ungated_observability``
+  (0.398) was described as the probes' share of a run's heat. The loop
+  heat it divides counts all the loop's flow as the tank's, but the
+  return feeds the mixing valve's cold port as well as the tank's
+  inlet, and that split is not measured. The share is the split and
+  any probe shortfall together. The value is unchanged. See
+  :doc:`/explanation/standby-loss`.
+
 - **The upper zone's hold through a recovery rests on the record.** The
   two-zone model warms the lower zone alone while the tank is
   stratified and holds the upper where it started. On 30 compressor-only
@@ -302,6 +310,26 @@ Fixed
   delivered gallons, so a tank-water book takes them refit on its own
   record (``calibration.empty_point``, ``zone_empty_point``): booked as
   tank water, a drawdown leaves less heat at the line.
+
+Removed
+-------
+
+- **The COP fit's lead share.** With a meter, the COP fit charged a
+  share of the draws in the 30 minutes before each cycle, because the
+  start reading was taken to miss their cold water. The probes see a
+  draw's cold water at once, and on the record the term did not earn
+  its place: trained on 221 metered cycles (2026-02-14 to 2026-10-24)
+  and scored on the latest 55, it fitted a share of 0.19 and scored a
+  median relative error of 0.077 against 0.082 without it, and a mean
+  of 0.116 against 0.112. ``calibration.metered_lead``,
+  ``PowerFit.lead_share``, ``CopCycle.lead_wh``, the snapshots'
+  ``draw_lead_gal`` and the ``lead`` arguments of ``calibrate``,
+  ``fit_power``, ``fit_cop_scale`` and ``cop_cycles`` are gone;
+  ``solve_cop_scale`` returns ``(scale, startup_wh)`` and
+  ``solve_cop_fit`` ``(scale, startup_wh, lift_coeff)``. A draw in the
+  30 minutes before a cycle still keeps it out of the draw-free fit
+  (``DRAW_LEAD``). The site's COP terms were fitted without a meter
+  and are unchanged.
 
 Version 9.12.1 (2026-10-23)
 ===========================
