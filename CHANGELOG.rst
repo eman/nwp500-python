@@ -51,11 +51,13 @@ Fixed
   constant (60.06 h), though the calibration with ``keep_better`` on
   the record replaces both. Fitted on 378 quiet windows to 2026-10-24,
   the law is a flat ``UA`` of 4.48 BTU/hr per °F with a 90.8 BTU/hr
-  bottom loss (gate 1.83 °F): on the 56 latest windows held out it
-  tracks the probes' fall within 0.068 °F/h against 0.096. The gap
-  constant is 50.9 h on 127 windows, 1.58 °F² against 1.78 on the 32
-  held out. The compressor, power and COP terms keep theirs (the
-  refits scored no better). See :doc:`/explanation/standby-loss`.
+  bottom loss (gate 1.83 °F). The gap constant, fitted on 127 windows
+  with that bottom loss opening the gaps it relaxes, is 26.7 h. Held
+  out, the pair tracks the probes' fall within 0.066 °F/h against
+  0.096 (56 windows) and the gap at 0.69 °F² against 1.78 (32
+  windows). Recalibrated with them as the base, every group keeps
+  them. The compressor, power and COP terms keep theirs (the refits
+  scored no better). See :doc:`/explanation/standby-loss`.
 
 - **The ungated circulation share is the library's own fit.**
   ``site_example_params``' ``DrawParams.ungated_observability`` was

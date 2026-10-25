@@ -86,7 +86,7 @@ def _nwp500_65() -> HeaterParams:
         tank=TankParams(
             volume_gal=63.2,
             lower_zone_share=0.5,
-            stratification_gap_tau_h=50.91288903998964,
+            stratification_gap_tau_h=26.714600938534186,
         ),
         loss=LossParams(
             ua_btu_hr_f=4.482756204771071,

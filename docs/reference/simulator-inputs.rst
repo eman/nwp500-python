@@ -820,19 +820,20 @@ the one seen over the retrains from 2026-08-08 to 2026-10-18.
      - 4.483, 0; 90.8 BTU/hr, 1.83 degF
      - 378 quiet windows, 2026-02-14 to 10-24, the bottom loss on the 64
        that were stratified; each window kept only if it tracks the
-       probes within 2 degF. On the 56 latest held out, the probes'
-       fall is tracked within 0.068 degF/h, against 0.096 for the
-       earlier law without a bottom loss, 4.605 and 0.186
+       probes within 2 degF. On the 56 latest held out, at the gap
+       constant below, the probes' fall is tracked within 0.066 degF/h,
+       against 0.096 for the earlier law without a bottom loss, 4.605
+       and 0.186, at 60.06 h
        (:doc:`/explanation/standby-loss`).
      - 4.47-4.61 and 0.184-0.225 without a bottom loss
    * - ``tank.stratification_gap_tau_h``
-     - 50.9 h
+     - 26.7 h
      - 127 quiet windows that opened with a gap of 2 degF or more, the
        bottom loss opening the gaps it relaxes. On the 32 latest held
-       out, a mean squared error of 1.58 degF² against 1.78 for the
-       earlier 60.06 h without a bottom loss. A separate fit on 146
-       windows gave 59 h (95 % CI 47-94 h).
-     - 50.9-60.4 h
+       out, a mean squared error of 0.69 degF² against 1.78 for the
+       earlier 60.06 h without a bottom loss. Fitted without one, on
+       146 windows, it was 59 h (95 % CI 47-94 h).
+     - 60.0-60.4 h without a bottom loss
    * - ``compressor.compressor_constant``
      - 0.0160 ft³/s
      - 142 recoveries from 2026-02-18 to 09-01, at the coil's approach;
