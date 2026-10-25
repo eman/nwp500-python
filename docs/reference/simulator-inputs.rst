@@ -671,7 +671,9 @@ NWP500-65's installation; measure your own where you can.
        a spout; the faster kept.
    * - ``probe_resolution_f``
      - 1.0 degF
-     - A probe error this size either way that would flip "the bath is
+     - A round figure between the probe's jitter (about 0.36 degF
+       either way) and the element's decisions, 1.4 degF from the
+       probe's (:doc:`/explanation/heating-elements`). A probe error this size either way that would flip "the bath is
        ready" puts ``bath_ready_within_probe_resolution`` in
        ``time_to_ready``'s reasons.
    * - ``bath_gal``
@@ -905,7 +907,9 @@ the one seen over the retrains from 2026-08-08 to 2026-10-18.
      - The heater's own energy fields put the tank at 156.6 Wh per degF
        (:doc:`/explanation/tank-energy`). Recoveries heat 0.44-0.48 of
        the tank while it is stratified and 0.96 once mixed, over 269
-       recoveries (:doc:`/explanation/recovery-speed`).
+       recoveries (:doc:`/explanation/recovery-speed`). The share
+       is a round 0.5: refitting the compressor constant at 0.435-0.5
+       moved the held-out recovery error by under 0.7 min (33.7-34.3).
    * - ``element.element_w``
      - 5,148 W
      - Element-only minutes in the record (90 % CI 5,104-5,176 W,
@@ -948,7 +952,10 @@ the one seen over the retrains from 2026-08-08 to 2026-10-18.
    * - ``controller.tou_cap_f``
      - 3.6 degF
      - The device's 2 degC reduced target; capped recoveries stopped
-       3.42 degF short (:doc:`/explanation/tou-recovery-cap`).
+       3.42 degF short (:doc:`/explanation/tou-recovery-cap`), one
+       0.1 degC probe step past it, as a recovery reaching its setpoint
+       ends with the probe 0.5-2 degF over it. Both stop at the
+       threshold in the simulator.
 
 **Fitted at one installation** (``unfitted`` in ``default_params``)
 

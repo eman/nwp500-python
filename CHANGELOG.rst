@@ -5,6 +5,19 @@ Changelog
 Unreleased
 ==========
 
+Changed
+-------
+
+- **Three hand-set values checked against the record.** None changes.
+  ``TankParams.lower_zone_share`` 0.5 stays: refitting the compressor
+  constant at 0.435-0.5 moved the held-out recovery error by under
+  0.7 min. ``ControllerParams.tou_cap_f`` 3.6 °F stays at the device's
+  threshold: the probe's 3.42 °F at a capped stop is one probe step
+  past it, as a full recovery ends past its setpoint.
+  ``ReadinessParams.probe_resolution_f`` is a round 1 °F and is now
+  tagged as a default, not a measurement. The unused
+  ``engine.RESOLUTION_F`` is gone. See :doc:`/reference/simulator-inputs`.
+
 Fixed
 -----
 
