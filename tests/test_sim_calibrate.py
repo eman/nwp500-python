@@ -1132,8 +1132,8 @@ class TestKeepBetterFifthReview:
         assert terms["Compressor constant"].error == "-"
         approach = terms["Evaporator approach (°F)"]
         assert not approach.fitted and approach.error == "-"
-        assert approach.value == sc._num(
-            fitted.params.compressor.evap_approach_f
+        assert approach.value == (
+            f"{fitted.params.compressor.evap_approach_f:.3g}"
         )
 
 
